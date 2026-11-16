@@ -214,6 +214,7 @@ add_test(NAME native_f64_text COMMAND test_native_f64_text)
 set_tests_properties(native_f64_text PROPERTIES LABELS "unit;native-runtime;ownership;float" TIMEOUT 30)
 add_executable(test_native_module_state test_module_state.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_module_state.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_capture_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_place.c"

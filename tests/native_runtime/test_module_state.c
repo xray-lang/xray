@@ -7,9 +7,11 @@
  * test_module_state.c - Real fixed values, snapshots and atomic State publication
  */
 #include "runtime/native/xnative_module_state.h"
+#include "runtime/native/xnative_capture_backing.h"
 #include "runtime/native/xnative_array_ops.h"
 #include "runtime/native/xnative_map_backing.h"
 #include "xray_native_values.h"
+#include "xray_native_function.h"
 #include "base/xmalloc.h"
 #include <stdalign.h>
 #include <stdio.h>
@@ -60,6 +62,12 @@ typedef struct Audit {
     XrtModuleRef *retiring_reference;
     XrtModuleState *retiring_state;
     size_t retirement_checks;
+    void *function_watched;
+    const XrtFunction *function_payload;
+    XrtFunction function_expected;
+    XrtModuleRef *function_reference;
+    XrtModuleState *function_state;
+    size_t function_checks;
 } Audit;
 static bool provider_retain(void *context) { ++((Audit *)context)->leases; return true; }
 static void provider_drop(void *context) { CHECK(((Audit *)context)->leases); --((Audit *)context)->leases; }
@@ -71,6 +79,17 @@ static void *provider_allocate(void *context, size_t bytes) {
 }
 static void provider_free(void *context, void *memory, size_t bytes) {
     Audit *a = context;
+    if (memory == a->function_watched) {
+        CHECK(a->function_payload->entry == a->function_expected.entry &&
+            a->function_payload->environment == a->function_expected.environment &&
+            a->function_payload->owner == a->function_expected.owner);
+        BAD(xrt_module_replace(a->function_reference,&a->function_expected));
+        const void *unchanged = a;
+        BAD(xrt_module_borrow(a->function_reference,&unchanged)); CHECK(unchanged == a);
+        xrt_module_state_clear(a->function_state);
+        CHECK(a->function_payload->owner == a->function_expected.owner);
+        ++a->function_checks; a->function_watched = NULL;
+    }
     if (a->retiring_reference) {
         const void *unchanged = a;
         BAD(xrt_module_borrow(a->retiring_reference,&unchanged)); CHECK(unchanged == a);
@@ -383,8 +402,157 @@ static void deep_nullable(void) {
     CHECK(!audit.leases && !audit.blocks && !audit.bytes);
     puts("deep inline Nullable traversal is iterative and needs no managed frame");
 }
+
+typedef struct FunctionCode {
+    size_t references, *retirements;
+    struct { uint32_t ordinal; } entries[2];
+    char literal[8];
+} FunctionCode;
+static bool function_code_retain(void *context) {
+    FunctionCode *code = context; CHECK(code->references); ++code->references; return true;
+}
+static void function_code_drop(void *context) {
+    FunctionCode *code = context; CHECK(code->references);
+    if (!--code->references) { ++*code->retirements; xr_free(code); }
+}
+static void check_function(const XrtFunction *value, XrtFunction expected) {
+    CHECK(value->entry == expected.entry && value->environment == expected.environment && value->owner == expected.owner);
+}
+static void function_state(void) {
+    Audit creator = {0}, receiver = {0}; size_t code_retirements = 0;
+    XrtBillingOwner *cb = billing_new(&creator,SIZE_MAX), *rb = billing_new(&receiver,SIZE_MAX);
+    FunctionCode *code = xr_malloc(sizeof(*code)); CHECK(code);
+    *code = (FunctionCode){.references=1,.retirements=&code_retirements,.entries={{7},{8}},.literal="literal"};
+    XrtManagedLease lease = {code,function_code_retain,function_code_drop};
+    const size_t leaves[] = {offsetof(XrtFunction,owner),offsetof(XrtFunction,owner),0};
+    const XrtValueImageSlot capture = {1,0,0,4};
+    const XrtValueImageType rows[] = {
+        {.kind=XRT_VALUE_I64,.size=8,.alignment=8},
+        {.kind=XRT_VALUE_FUNCTION,.size=sizeof(XrtFunction),.alignment=alignof(XrtFunction),.owned_count=1,.result=1},
+        {.kind=XRT_VALUE_FUNCTION,.size=sizeof(XrtFunction),.alignment=alignof(XrtFunction),
+            .first_owned=1,.owned_count=1,.result=1,.flags=XRT_VALUE_NO_SUSPEND},
+        {.kind=XRT_VALUE_ENVIRONMENT,.alignment=1,.entry_ordinal=7,.entry_signature=3},
+        {.kind=XRT_VALUE_CELL,.size=8,.alignment=8,.first_owned=2,.owned_count=1,.element=1},
+        {.kind=XRT_VALUE_ENVIRONMENT,.size=8,.alignment=8,.capture_count=1,.entry_ordinal=8,.entry_signature=3}};
+    const XrtValueImage raw = {rows,6,&capture,1,NULL,0,leaves,3,"seed",4};
+    XrtValueImagePlans *producer = NULL; OK(xrt_value_image_bind(cb,&raw,lease,&producer));
+    const XrtValuePlan *source_signature = NULL,*zero_plan = NULL,*captured_plan = NULL,*cell_plan = NULL;
+    OK(xrt_value_image_get(producer,3,&source_signature)); OK(xrt_value_image_get(producer,4,&zero_plan));
+    OK(xrt_value_image_get(producer,6,&captured_plan)); OK(xrt_value_image_get(producer,5,&cell_plan));
+    XrtCaptureType *zero_type = NULL,*captured_type = NULL,*cell_type = NULL;
+    OK(xrt_capture_type_new(cb,zero_plan,&zero_type)); OK(xrt_capture_type_new(cb,captured_plan,&captured_type));
+    OK(xrt_capture_type_new(cb,cell_plan,&cell_type));
+    XrtManagedRoot *root = NULL; XrtManagedFrame *frame = NULL;
+    OK(xrt_managed_root_new(cb,&root)); OK(xrt_managed_frame_enter(root,5,&frame));
+    int64_t seed = 42;
+    OK(xrt_environment_create(frame,0,zero_type,NULL)); OK(xrt_environment_create(frame,1,captured_type,&seed));
+    OK(xrt_i64_cell_create(frame,2,cell_type,17));
+    XrtBackingTypes foreign = {0}; OK(xrt_backing_types_init(cb,&foreign));
+    OK(xrt_string_backing_create(frame,3,&foreign,"other",5,0));
+    XrtFunction first = {&code->entries[0],(uintptr_t)(borrow(frame,0)+1),borrow(frame,0)};
+    XrtFunction second = {&code->entries[1],(uintptr_t)(borrow(frame,1)+1),borrow(frame,1)};
+    XrtModuleSpec module = {0};
+    XrtModuleSlotSpec slots[] = {{0,2,XRT_MODULE_SLOT_MUTABLE,0,sizeof(XrtFunction),alignof(XrtFunction)},
+        {0,2,0,sizeof(XrtFunction),sizeof(XrtFunction),alignof(XrtFunction)}};
+    XrtModuleLayoutSpec spec = {&raw,&module,1,NULL,0,slots,2,sizeof(XrtFunction)*2,alignof(XrtFunction)};
+    XrtModuleLayout *layout = NULL; XrtBillingStats baseline = xrt_billing_owner_stats(rb);
+    size_t layout_sites = 0;
+    for (;; ++layout_sites) {
+        xrt_billing_owner_fail_after(rb,layout_sites);
+        XrtManagedStatus status = xrt_module_layout_new(rb,&spec,(XrtManagedLease){0},&layout);
+        if (status == XRT_MANAGED_OK) break;
+        CHECK(status == XRT_MANAGED_OOM && !layout); same_bill(rb,baseline); CHECK(layout_sites < 100);
+    }
+    xrt_billing_owner_fail_after(rb,SIZE_MAX);
+    const XrtValuePlan *state_signature = NULL; OK(xrt_module_layout_plan(layout,2,&state_signature));
+    CHECK(state_signature != source_signature);
+    for (uint32_t type = 4; type <= 5; ++type) {
+        XrtModuleSlotSpec invalid = {0,type,0,0,rows[type-1].size,rows[type-1].alignment};
+        XrtModuleLayoutSpec rejected = {&raw,&module,1,NULL,0,&invalid,1,invalid.size,invalid.alignment};
+        XrtModuleLayout *empty = NULL; XrtBillingStats before = xrt_billing_owner_stats(rb);
+        BAD(xrt_module_layout_new(rb,&rejected,(XrtManagedLease){0},&empty)); CHECK(!empty); same_bill(rb,before);
+    }
+    baseline = xrt_billing_owner_stats(rb); XrtModuleState *state = NULL; size_t state_sites = 0;
+    for (;; ++state_sites) {
+        xrt_billing_owner_fail_after(rb,state_sites);
+        XrtManagedStatus status = xrt_module_state_new(layout,rb,&state);
+        if (status == XRT_MANAGED_OK) break;
+        CHECK(status == XRT_MANAGED_OOM && !state); same_bill(rb,baseline); CHECK(state_sites < 100);
+    }
+    xrt_billing_owner_fail_after(rb,0);
+    const XrtValuePlan *paired = NULL; OK(xrt_module_state_plan(state,2,&paired)); CHECK(paired == state_signature);
+    BAD(xrt_module_state_plan(state,2,&paired)); CHECK(paired == state_signature);
+    paired = NULL; OK(xrt_module_state_plan(state,4,&paired)); CHECK(paired != zero_plan);
+    XrtValuePlanSpec env_shape; OK(xrt_value_plan_view(paired,&env_shape)); CHECK(env_shape.kind == XRT_VALUE_ENVIRONMENT);
+    paired = NULL; BAD(xrt_module_state_plan(NULL,2,&paired)); CHECK(!paired);
+    BAD(xrt_module_state_plan(state,0,&paired)); BAD(xrt_module_state_plan(state,7,&paired)); CHECK(!paired);
+    XrtModuleAccess access; OK(xrt_module_cache(state,0,&access));
+    size_t calls = receiver.calls + creator.calls;
+    BAD(xrt_module_replace(access.reference,&first));
+    OK(xrt_module_begin(state,0)); XrtModuleRef *reference = NULL;
+    XrtFunction bad[] = {first,first,first,first,first};
+    bad[0].entry = NULL; bad[1].owner = NULL; bad[2].owner = borrow(frame,2);
+    bad[2].environment = (uintptr_t)(bad[2].owner+1); bad[3].environment = 0;
+    bad[4].owner = borrow(frame,3); bad[4].environment = (uintptr_t)(bad[4].owner+1);
+    for (size_t i = 0; i < sizeof(bad)/sizeof(*bad); ++i) {
+        BAD(xrt_module_construct(state,0,&bad[i],&reference)); CHECK(!reference);
+        CHECK(atomic_load(&first.owner->references) == 1);
+    }
+    /* The caller has already admitted NoSuspend weakening. Independent plans
+     * and the actual stronger Env signature do not change this value's type. */
+    OK(xrt_module_construct(state,0,&first,&reference)); OK(xrt_module_publish(reference));
+    OK(xrt_module_initialize(state,1,&first)); OK(xrt_module_ready(state,0));
+    const void *payload = NULL; OK(xrt_module_borrow(reference,&payload)); check_function(payload,first);
+    XrtExternalOwner external = {0}; OK(xrt_module_external_owner(reference,0,&external));
+    CHECK(external.owner == (XrtManagedHeader **)((uint8_t *)payload+offsetof(XrtFunction,owner)) &&
+        *external.owner == first.owner);
+    XrtExternalOwner absent = {0}; BAD(xrt_module_external_owner(reference,1,&absent)); CHECK(!absent.owner);
+    XrtPlace temporary = {.frame=frame,.slot=4,.nulls=XRT_PLACE_NONNULL};
+    XrtPlace state_owner = {.external=&external,.nulls=XRT_PLACE_NONNULL};
+    BAD(xrt_place_move_replace(temporary,state_owner,NULL));
+    int32_t original_references = atomic_load(&first.owner->references);
+    OK(xrt_place_copy_replace(temporary,state_owner,NULL));
+    CHECK(borrow(frame,4) == first.owner && atomic_load(&first.owner->references) == original_references+1);
+    XrtEnvironmentBorrow pinned = {0}; OK(xrt_environment_borrow_owned(borrow(frame,4),&pinned));
+    CHECK(pinned.payload == (const void *)first.environment);
+    OK(xrt_managed_slot_drop(frame,4)); CHECK(atomic_load(&first.owner->references) == original_references);
+    XrtModuleRef *immutable = NULL; OK(xrt_module_reference(state,1,&immutable)); BAD(xrt_module_replace(immutable,&second));
+    for (size_t i = 0; i < sizeof(bad)/sizeof(*bad); ++i) { BAD(xrt_module_replace(reference,&bad[i])); check_function(payload,first); }
+    int32_t held = atomic_load(&first.owner->references);
+    const int32_t limits[] = {INT32_MAX,-INT32_MAX};
+    for (size_t i = 0; i < sizeof(limits)/sizeof(*limits); ++i) {
+        atomic_store(&first.owner->references,limits[i]);
+        CHECK(xrt_module_replace(reference,&first) == XRT_MANAGED_REFCOUNT);
+        CHECK(atomic_load(&first.owner->references) == limits[i]); check_function(payload,first);
+    }
+    atomic_store(&first.owner->references,held);
+    XrtFunction snapshot = {0}; OK(xrt_module_copy(reference,&snapshot)); check_function(&snapshot,first);
+    OK(xrt_module_replace(reference,&second)); check_function(payload,second); check_function(&snapshot,first);
+    OK(xrt_managed_slot_drop(frame,1));
+    creator.function_watched = second.owner; creator.function_payload = payload; creator.function_expected = first;
+    creator.function_reference = reference; creator.function_state = state;
+    OK(xrt_module_replace(reference,&snapshot)); CHECK(creator.function_checks == 1); check_function(payload,first);
+    CHECK(calls == receiver.calls + creator.calls);
+    xrt_capture_type_drop(&zero_type); xrt_capture_type_drop(&captured_type); xrt_capture_type_drop(&cell_type);
+    xrt_backing_types_drop(&foreign); xrt_value_image_drop(&producer);
+    OK(xrt_managed_root_destroy(&root)); xrt_billing_owner_drop(cb);
+    CHECK(xrt_value_plan_retain((XrtValuePlan *)state_signature));
+    xrt_module_layout_drop(&layout); function_code_drop(code);
+    CHECK(!code_retirements && creator.leases && creator.blocks && creator.bytes);
+    XrtEnvironmentBorrow recovered = {0}; OK(xrt_environment_borrow_owned(snapshot.owner,&recovered));
+    XrtValuePlanSpec recovered_shape; OK(xrt_value_plan_view(recovered.plan,&recovered_shape));
+    CHECK(recovered_shape.entry.ordinal == 7 && recovered_shape.code.context == code && !strcmp(code->literal,"literal"));
+    xrt_module_state_drop(&state); xrt_billing_owner_drop(rb);
+    CHECK(receiver.leases && receiver.bytes && receiver.blocks && !code_retirements);
+    OK(xrt_value_plan_view(state_signature,&recovered_shape));
+    xrt_value_drop(state_signature,&snapshot);
+    xrt_value_plan_drop((XrtValuePlan *)state_signature);
+    CHECK(!receiver.leases && !receiver.bytes && !receiver.blocks);
+    CHECK(code_retirements == 1 && !creator.leases && !creator.bytes && !creator.blocks);
+    printf("Function State: independent plans, Env/code retirement, guarded storage and OOM rollback %zu/%zu PASS\n",layout_sites,state_sites);
+}
 int main(void) {
     atomic_record(); family_borrows(); array_state_guards(); allocation_failures(); scalar_admission();
-    metadata_and_rejection(); deep_nullable();
+    metadata_and_rejection(); deep_nullable(); function_state();
     puts("fixed module State kernel passed"); return 0;
 }
