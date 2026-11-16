@@ -1,0 +1,9 @@
+fn sample(choose:bool)->i64 {
+    var values = [11,22,33]
+    const part:Slice<i64> = values[0:2]
+    const other:Array<i64> = choose ? [10] : [20]
+    const text:string = choose ? "yes" : "no"
+    return part[0] + other[0] + len(text)
+}
+print(sample(false))
+print(sample(true))
