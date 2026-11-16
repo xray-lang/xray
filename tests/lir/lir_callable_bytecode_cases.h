@@ -30,7 +30,7 @@ static void callable_raw_reset(CallableRawFixture *raw) {
     raw->module=*original;
     raw->module.code_lease=(XrRbcCodeLease){0};
     memcpy(raw->functions,original->functions,original->function_count*sizeof(*raw->functions));
-    memcpy(raw->codes,original->borrowed_value_codes,original->function_count*sizeof(*raw->codes));
+    for (size_t n=0;n<original->function_count;++n) raw->codes[n]=original->borrowed_value_codes[n];
     memcpy(raw->entries,original->borrowed_callable_entries,original->function_count*sizeof(*raw->entries));
     raw->code=*raw->original_code; raw->homes=*raw->original_code->homes;
     memcpy(raw->values,raw->homes.values,((size_t)raw->code.value_count+1)*sizeof(*raw->values));
