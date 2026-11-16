@@ -163,6 +163,76 @@ static void root_transfers(void) {
     CHECK(atomic_load(&fixture.audit.allocations) == allocations);
     fixture_done(&fixture);
 }
+static void frame_move_transfers(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedHeader *one=make(&fixture,0,1);
+    make(&fixture,1,2);
+    fixture.audit.observed_destination=owner_field(&fixture,1); fixture.audit.expected=one;
+    fixture.audit.observed_source=owner_field(&fixture,0);
+    fixture.audit.reenter=slot(&fixture,1); fixture.audit.watch=true;
+    OK(xrt_place_frame_move_replace(fixture.frame,1,0));
+    fixture.audit.watch=false;
+    CHECK(!*owner_field(&fixture,0) && *owner_field(&fixture,1)==one &&
+        xr_signed_rc_read(&one->references)==1 && atomic_load(&fixture.audit.retired)==1);
+    atomic_store(&one->references,INT32_MAX);
+    OK(xrt_place_frame_move_replace(fixture.frame,1,1));
+    CHECK(*owner_field(&fixture,1)==one && xr_signed_rc_read(&one->references)==INT32_MAX);
+    atomic_store(&one->references,1);
+    BAD(xrt_place_frame_move_replace(fixture.frame,0,0));
+    BAD(xrt_place_frame_move_replace(fixture.frame,1,0));
+    BAD(xrt_place_frame_move_replace(NULL,1,0));
+    BAD(xrt_place_frame_move_replace(fixture.frame,20,1));
+    BAD(xrt_place_frame_move_replace(fixture.frame,1,20));
+    CHECK(*owner_field(&fixture,1)==one && !*owner_field(&fixture,0));
+    OK(xrt_place_copy_replace(slot(&fixture,2),slot(&fixture,1),NULL));
+    CHECK(xr_signed_rc_read(&one->references)==2);
+    OK(xrt_place_frame_move_replace(fixture.frame,2,1));
+    CHECK(*owner_field(&fixture,2)==one && !*owner_field(&fixture,1) &&
+        xr_signed_rc_read(&one->references)==1 && atomic_load(&fixture.audit.retired)==1);
+    XrtManagedHeader *three=make(&fixture,3,3), *pending=NULL;
+    OK(xrt_managed_slot_prepare(fixture.frame,3,fixture.ops,sizeof(Payload),&pending));
+    ((Payload *)pending)->value=4;
+    BAD(xrt_place_frame_move_replace(fixture.frame,3,2));
+    CHECK(*owner_field(&fixture,3)==three && *owner_field(&fixture,2)==one);
+    BAD(xrt_place_frame_move_replace(fixture.frame,2,3));
+    CHECK(*owner_field(&fixture,3)==three && *owner_field(&fixture,2)==one);
+    OK(xrt_managed_slot_abort(fixture.frame,3));
+    size_t allocations=atomic_load(&fixture.audit.allocations);
+    xrt_billing_owner_fail_after(fixture.billing,0); xrt_billing_owner_close(fixture.billing);
+    OK(xrt_place_frame_move_replace(fixture.frame,4,2));
+    CHECK(*owner_field(&fixture,4)==one && !*owner_field(&fixture,2) &&
+        *owner_field(&fixture,3)==three && xr_signed_rc_read(&one->references)==1 &&
+        atomic_load(&fixture.audit.allocations)==allocations);
+    fixture_done(&fixture);
+}
+static void frame_move_inline_owner(void) {
+    typedef struct Wide { uint64_t before[2]; XrtManagedHeader *owner; uint64_t after; } Wide;
+    typedef struct Homes { Wide source, destination; } Homes;
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedFrame *outer=fixture.frame;
+    fixture.frame=NULL;
+    size_t offsets[]={offsetof(Homes,source.owner),offsetof(Homes,destination.owner)};
+    XrtManagedFrameSpec spec={2,sizeof(Homes),alignof(Homes),offsets};
+    OK(xrt_managed_frame_enter_layout(fixture.root,&spec,&fixture.frame));
+    void *payload=NULL; size_t bytes=0;
+    OK(xrt_managed_frame_payload(fixture.frame,&payload,&bytes));
+    CHECK(bytes==sizeof(Homes));
+    Homes *homes=payload;
+    homes->source.before[0]=1; homes->source.before[1]=2; homes->source.after=3;
+    homes->destination.before[0]=4; homes->destination.before[1]=5; homes->destination.after=6;
+    XrtManagedHeader *one=make(&fixture,0,1);
+    make(&fixture,1,2);
+    OK(xrt_place_frame_move_replace(fixture.frame,1,0));
+    CHECK(!homes->source.owner && homes->destination.owner==one &&
+        homes->source.before[0]==1 && homes->source.before[1]==2 && homes->source.after==3 &&
+        homes->destination.before[0]==4 && homes->destination.before[1]==5 && homes->destination.after==6);
+    OK(xrt_managed_frame_leave(fixture.root,fixture.frame));
+    fixture.frame=outer;
+    CHECK(atomic_load(&fixture.audit.retired)==2);
+    fixture_done(&fixture);
+}
 static void external_transfers(void) {
     Fixture fixture;
     fixture_init(&fixture);
@@ -697,7 +767,8 @@ int main(void) {
     duplicate_copy_publication(); copy_overflow_rollback(); mixed_edge_overlap();
     external_edge_copies(); nullable_edge_copies(); single_edge_boundaries();
     inline_home_transfers();
-    root_transfers(); external_transfers(); edges_and_domains(); edge_guards_and_retirement(); escaped_lifetime();
+    root_transfers(); frame_move_transfers(); frame_move_inline_owner(); external_transfers();
+    edges_and_domains(); edge_guards_and_retirement(); escaped_lifetime();
     puts("stable places: guarded replacement, whole-edge transfers and complete owner/code retirement passed");
     return 0;
 }

@@ -68,6 +68,12 @@ XRAY_API XrtManagedStatus xrt_place_copy_replace(XrtPlace destination, XrtPlace 
     const XrtPlacePublication *);
 XRAY_API XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace source,
     const XrtPlacePublication *);
+/* Same transaction for two real slots in one Frame, with a NULLABLE target,
+ * NONNULL source and no payload callback. This changes only the C call shape;
+ * slot validation, exclusive publication, self moves and failure rollback are
+ * identical to the descriptor form. It grants no additional access authority. */
+XRAY_API XrtManagedStatus xrt_place_frame_move_replace(XrtManagedFrame *, size_t destination,
+    size_t source);
 
 typedef enum XrtPlaceTransfer {
     XRT_PLACE_TRANSFER_COPY = 1, XRT_PLACE_TRANSFER_MOVE
