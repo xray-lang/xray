@@ -22,7 +22,10 @@ static SliceBoundaryFixture slice_boundary_root_fixture(XrLirType element, XrLir
         .type=XR_LIR_ARRAY,.intrinsic=id,.operands=values,.operand_count=3});
     XrLirValue cell=slice_boundary_value(&c,block,(XrLirInstruction){.op=XR_LIR_CELL_NEW,
         .type=XR_LIR_ARRAY_CELL,.operands=&array,.operand_count=1});
-    OK(xr_lir_set_array_shape(c.module,cell,&(XrLirArrayShape){element}));
+    /* Constructed values receive their family from the catalog and input.
+     * The explicit shape setter belongs only to unbound formal parameters. */
+    const XrLirFunctionData *entry=&c.module->functions[root->id-1];
+    CHECK(entry->values[array.id-1].array_element==element && entry->values[cell.id-1].array_element==element);
     XrLirValue first=slice_boundary_value(&c,block,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=0});
     XrLirValue last=slice_boundary_value(&c,block,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=3});
     XrLirValue range[]={cell,first,last}; OK(xr_lir_slice_operation(c.module,XR_LIR_SLICE_OP_NEW,element,XR_LIR_ARRAY_CELL,&id));
