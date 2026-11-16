@@ -111,7 +111,75 @@ static void module_export_unused_slice(void) {
     xr_xir_compile_artifact_free(artifact); xr_xir_compile_construction_free(construction);
     xir_effects_module_export_free(owned); effect_mark_check(baseline);
 }
+static void module_export_instance_rows(const XrXirArtifact *closed, uint32_t source_function,
+    XirModuleEffectExportView view) {
+    const XrXirProvenance *provenance=closed->module.provenance;
+    CHECK(provenance && provenance->kind==XR_XIR_EVIDENCE_INSTANCE && provenance->count==view.function_count &&
+        view.module_access_complete && view.slot_count==1 && view.function_count==closed->module.function_count);
+    unsigned families=0, instances=0;
+    for (uint32_t f=0;f<view.function_count;++f) {
+        const XirModuleEffectFunction *row=&view.functions[f];
+        const XrXirFunction *actual=&closed->module.functions[f];
+        CHECK(row->parameter_count==actual->parameter_count && row->value_count==
+            (size_t)actual->parameter_count+actual->instruction_count &&
+            row->module==closed->module.declarations->functions[f].module &&
+            row->capture_count==closed->module.declarations->functions[f].capture_count);
+        if (provenance->origins[f].function!=source_function) continue;
+        const XrXirTypeNode *type=xr_xir_type_node(closed->module.types,actual->parameters[0]);
+        CHECK(type && type->kind==XR_XIR_TYPE_SLICE && row->parameter_count==2 &&
+            module_export_contains(view,row->result_origin,XIR_MODULE_EFFECT_PARAMETER,0) &&
+            module_export_contains(view,row->write,XIR_MODULE_EFFECT_SLOT,0));
+        unsigned family=type->element==XR_XIR_I64 ? 1u : type->element==XR_XIR_U8 ? 2u : 0u;
+        CHECK(family && !(families&family)); families|=family; ++instances;
+    }
+    CHECK(families==3 && instances==2);
+}
+static void module_export_instance_failures(XrXirArtifact *closed) {
+    XirModuleEffectExport *owned=NULL; attempts=0;
+    CHECK(xir_effects_module_export_copy(closed,&owned)==XR_XIR_OK && owned);
+    size_t sites=attempts; CHECK(sites); xir_effects_module_export_free(owned); owned=NULL;
+    EffectMark baseline=effect_mark(); XrCompileResourceStats memory=effect_stats(&closed->context);
+    for (size_t point=0;point<sites;++point) {
+        attempts=0; injected=false; fail_at=point;
+        XrXirStatus status=xir_effects_module_export_copy(closed,&owned); fail_at=SIZE_MAX;
+        if (status!=XR_XIR_OUT_OF_MEMORY || owned || !injected)
+            fprintf(stderr,"Instance module export allocation%zu/%zu status%u injected%d\n",point,sites,(unsigned)status,injected);
+        CHECK(status==XR_XIR_OUT_OF_MEMORY && !owned && injected);
+        effect_mark_check(baseline); CHECK(effect_stats(&closed->context).held_bytes==memory.held_bytes);
+    }
+    XrXirProvenance *provenance=(XrXirProvenance *)closed->module.provenance;
+    XrXirOrigin *origins=(XrXirOrigin *)provenance->origins;
+    uint32_t origin=origins[0].function; origins[0].function=UINT32_MAX;
+    CHECK(xir_effects_module_export_copy(closed,&owned)==XR_XIR_BAD_STRUCTURE && !owned);
+    origins[0].function=origin; effect_mark_check(baseline);
+    XrXirSlot *slots=(XrXirSlot *)closed->module.declarations->slots;
+    uint32_t module=slots[0].module; slots[0].module=UINT32_MAX;
+    CHECK(xir_effects_module_export_copy(closed,&owned)==XR_XIR_BAD_STRUCTURE && !owned);
+    slots[0].module=module; effect_mark_check(baseline);
+    printf("Instance module export: %zu real allocation failures preserve empty output and refund\n",sites);
+}
+static void module_export_instances(void) {
+    EffectMark baseline=effect_mark();
+    XrXirArtifact *source=root_source("slice_module_instances.xr",XR_XIR_OK), *closed=NULL;
+    uint32_t identity=root_find(&source->module,"identity");
+    CHECK(identity<source->module.function_count && xr_xir_compile_specialize(source,&closed,NULL,NULL)==XR_XIR_OK && closed);
+    XirModuleEffectExport *owned=NULL; XirModuleEffectExportView view;
+    CHECK(xir_effects_module_export_copy(closed,&owned)==XR_XIR_OK && owned);
+    CHECK(xir_effects_module_export_view(owned,&view)==XR_XIR_OK);
+    module_export_instance_rows(closed,identity,view); xir_effects_module_export_free(owned); owned=NULL;
+    module_export_instance_failures(closed);
+    CHECK(xir_effects_module_export_copy(closed,&owned)==XR_XIR_OK && owned);
+    CHECK(xir_effects_module_export_view(owned,&view)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(source); source=NULL;
+    module_export_instance_rows(closed,identity,view);
+    xr_xir_compile_artifact_free(closed); closed=NULL;
+    CHECK(xir_effects_module_export_view(owned,&view)==XR_XIR_OK && view.module_access_complete && view.slot_count==1);
+    bool returned=false;
+    for (uint32_t f=0;f<view.function_count;++f)
+        returned|=module_export_contains(view,view.functions[f].result_origin,XIR_MODULE_EFFECT_PARAMETER,0);
+    CHECK(returned); xir_effects_module_export_free(owned); effect_mark_check(baseline);
+}
 static void module_effect_export_cases(void) {
-    module_export_retirement(); module_export_slice_sources(); module_export_unused_slice();
+    module_export_retirement(); module_export_slice_sources(); module_export_unused_slice(); module_export_instances();
 }
 #endif
