@@ -38,10 +38,23 @@ static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStac
     if (access.index==XR_LIR_SLICE_OP_NEW) {
         /* Entry has already allocated every Frame and setup. The checked source
          * borrow now reaches allocation-free temporary retention without a gap. */
-        XrtExternalOwner external; XrtPlace binding; const XrtManagedHeader *header=NULL;
-        status=rbc_value_binding_place(module,stack,rbc_value_origin(activation,args[0]),&external,&binding);
-        if (status==XRT_MANAGED_OK) status=xrt_place_borrow(binding,&header);
-        return status==XRT_MANAGED_OK ? xrt_array_slice_range_bind(&destination,kind,(const XrtArrayBacking *)header,start,limit) : status;
+        const XrtArrayBacking *backing=NULL;
+        RbcValueOrigin origin=rbc_value_origin(activation,args[0]);
+        if (access.source==XR_LIR_STATE_REF) {
+            XrRbcRegister *reference=rbc_value_register(stack,origin.activation,origin.value);
+            XrtValueKind expected=kind==XRT_BACKING_ARRAY_I64 ? XRT_VALUE_ARRAY_I64 : XRT_VALUE_ARRAY_U8;
+            if (!reference || !reference->state_ref || reference->state_ref->kind!=expected ||
+                reference->state_ref->size!=sizeof(backing)) return XRT_MANAGED_ARGUMENT;
+            const void *borrowed=NULL;
+            status=xrt_module_borrow(reference->state_ref->reference,&borrowed);
+            if (status==XRT_MANAGED_OK) memcpy(&backing,borrowed,sizeof(backing));
+        } else {
+            XrtExternalOwner external; XrtPlace binding; const XrtManagedHeader *header=NULL;
+            status=rbc_value_binding_place(module,stack,origin,&external,&binding);
+            if (status==XRT_MANAGED_OK) status=xrt_place_borrow(binding,&header);
+            backing=(const XrtArrayBacking *)header;
+        }
+        return status==XRT_MANAGED_OK ? xrt_array_slice_range_bind(&destination,kind,backing,start,limit) : status;
     }
     RbcValuePayload payload;
     status=rbc_value_payload(module,stack,rbc_value_origin(activation,args[0]),&payload);

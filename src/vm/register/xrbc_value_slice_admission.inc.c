@@ -51,7 +51,8 @@ static bool rbc_value_slice(const XrRbcModule *module,const XrRbcValueCode *code
 }
 static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess access) {
-    if (!xr_rbc_module_code_owner(module) || access.source || access.other ||
+    if (!xr_rbc_module_code_owner(module) || access.other ||
+        (access.source && (access.index!=XR_LIR_SLICE_OP_NEW || access.source!=XR_LIR_STATE_REF)) ||
         access.index<=XR_LIR_SLICE_OP_NONE || access.index>XR_LIR_SLICE_OP_CLEANUP) return false;
     if (access.index==XR_LIR_SLICE_OP_CLEANUP) {
         if (access.result || access.first || access.count || !code->homes || !code->homes->events ||
@@ -76,7 +77,12 @@ static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcVa
     const XrLirValueHome *home=rbc_value_home(code,value);
     XrtValueKind kind=rbc_value_kind(module,code,value);
     if (access.index==XR_LIR_SLICE_OP_NEW) {
-        if (!rbc_value_binding_valid(module,code,function,args[0]) || rbc_value_kind(module,code,args[0])!=
+        if (access.source==XR_LIR_STATE_REF) {
+            const XrLirHomeBinding *binding=rbc_value_binding(code,args[0]);
+            if (!binding || binding->kind!=XR_LIR_HOME_BINDING_STATE_BORROW || binding->source!=args[0] ||
+                !rbc_value_scalar(code,function,args[0],XR_RBC_STATE_REF)) return false;
+        } else if (!rbc_value_binding_valid(module,code,function,args[0])) return false;
+        if (rbc_value_kind(module,code,args[0])!=
             (kind==XRT_VALUE_SLICE_I64 ? XRT_VALUE_ARRAY_I64 : XRT_VALUE_ARRAY_U8)) return false;
     } else if (construct && (!rbc_value_slice(module,code,args[0]) || rbc_value_home(code,args[0])->type!=home->type)) return false;
     if (construct || access.index==XR_LIR_SLICE_OP_END) {

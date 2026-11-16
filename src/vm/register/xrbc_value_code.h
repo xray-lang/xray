@@ -57,6 +57,8 @@ typedef struct XrRbcValueAccess {
     /* ARRAY/MAP index is the verified catalog role, first/count its complete
      * SSA operands. A mutator's window selects its common pending workspace. */
     /* SLICE index is its closed role, first/count its full SSA operand span.
+     * Only NEW over a real State reference uses source=XR_LIR_STATE_REF as the
+     * received closed READ binding role, not another SSA operand or write cap.
      * window is a one-based common loan event for construction/END, zero for
      * readers and materialization. Natural bytes never carry a keeper owner. */
     /* STRING_APPEND_OWNED index is its one-based APPEND_TRANSFER event.
