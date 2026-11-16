@@ -597,7 +597,8 @@ static bool source_semantic_prepare(SourceContext *ctx) {
                 ctx->bodies[f].initialization_regions,&location);
     if (status==XR_XIR_OK) {
         XrXirRootRefiner refiner=source_semantic_refiner(ctx);
-        status=xir_effects_prepare_verified_input(&ctx->compile,input,&refiner,&ctx->semantic_prepare);
+        location=(XrXirDiagnostic){XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+        status=xir_effects_prepare_verified_input(&ctx->compile,input,&refiner,&ctx->semantic_prepare,&location);
     }
     if (status==XR_XIR_OK) return true;
     if (ctx->diagnostic.status==XR_XIR_OK) source_check_failure(ctx,location,status);

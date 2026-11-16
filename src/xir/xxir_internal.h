@@ -214,7 +214,7 @@ typedef struct XrXirRootRefiner {
 /* Ordinary admission precedes collection. Preparation owns numeric equations
  * and synchronous observer output, with no public effect facts yet. */
 XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext *,
-    XirEffectInput, const XrXirRootRefiner *, XrXirEffects **);
+    XirEffectInput, const XrXirRootRefiner *, XrXirEffects **,XrXirDiagnostic *);
 /* A finish consumes its private owner on every outcome. All Source callbacks
  * finish before a successful independent result becomes visible. */
 XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext *,

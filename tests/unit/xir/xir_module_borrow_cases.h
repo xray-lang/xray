@@ -232,7 +232,7 @@ static void module_borrow_sparse_growth(void) {
     EffectMark baseline=effect_mark();
     EffectCheckedRoots *roots=NULL;
     attempts=0;
-    CHECK(effect_checked_roots_build(&effect_context,&module,NULL,NULL,NULL,&roots,true)==XR_XIR_OK);
+    CHECK(effect_checked_roots_build(&effect_context,&module,NULL,NULL,NULL,&roots,true,NULL)==XR_XIR_OK);
     size_t sites=attempts;
     CHECK(roots->module_index_capacity>=512 && roots->module_members==count*2);
     for (uint32_t s=0;s<count;++s) {
@@ -245,7 +245,7 @@ static void module_borrow_sparse_growth(void) {
     effect_mark_check(baseline);
     for (size_t point=0;point<sites;++point) {
         attempts=0;injected=false;fail_at=point;roots=NULL;
-        CHECK(effect_checked_roots_build(&effect_context,&module,NULL,NULL,NULL,&roots,true)==XR_XIR_OUT_OF_MEMORY);
+        CHECK(effect_checked_roots_build(&effect_context,&module,NULL,NULL,NULL,&roots,true,NULL)==XR_XIR_OUT_OF_MEMORY);
         CHECK(injected && !roots);fail_at=SIZE_MAX;
         effect_mark_check(baseline);
     }
@@ -258,7 +258,7 @@ static void module_borrow_owner_cases(void) {
     module_borrow_fixture(&fixture,true);
     EffectCheckedRoots *roots=NULL;
     attempts=0;
-    CHECK(effect_checked_roots_build(&effect_context,&fixture.module,NULL,NULL,NULL,&roots,true)==XR_XIR_OK);
+    CHECK(effect_checked_roots_build(&effect_context,&fixture.module,NULL,NULL,NULL,&roots,true,NULL)==XR_XIR_OK);
     size_t sites=attempts;
     XrXirEffects effects={.resources=effect_context.resources,.count=3,.checked_roots=roots};
     XirModuleBorrowConflict conflict={0};
@@ -276,14 +276,14 @@ static void module_borrow_owner_cases(void) {
     module_borrow_fixture(&fixture,true);
     for (size_t point=0;point<sites;++point) {
         attempts=0;injected=false;fail_at=point;roots=NULL;
-        CHECK(effect_checked_roots_build(&effect_context,&fixture.module,NULL,NULL,NULL,&roots,true)==XR_XIR_OUT_OF_MEMORY);
+        CHECK(effect_checked_roots_build(&effect_context,&fixture.module,NULL,NULL,NULL,&roots,true,NULL)==XR_XIR_OUT_OF_MEMORY);
         CHECK(injected && !roots);fail_at=SIZE_MAX;
         effect_mark_check(baseline);
     }
     XrXirCompileContext finite=effect_owner_new((XrCompileResourceLimits){XR_COMPILE_MEMORY_FINITE,128,true});
     uint64_t held=effect_stats(&finite).held_bytes;
     roots=NULL;
-    CHECK(effect_checked_roots_build(&finite,&fixture.module,NULL,NULL,NULL,&roots,true)==XR_XIR_MEMORY_LIMIT && !roots);
+    CHECK(effect_checked_roots_build(&finite,&fixture.module,NULL,NULL,NULL,&roots,true,NULL)==XR_XIR_MEMORY_LIMIT && !roots);
     effect_owner_free(&finite,held);
 
     for (uint32_t variant=0;variant<2;++variant) {

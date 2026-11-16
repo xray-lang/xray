@@ -91,7 +91,7 @@ static XrXirStatus callback_entry_owner_case(bool unbound) {
     XrXirModule module = {.stage = XR_XIR_CHECKED, .types = &types, .functions = functions,
         .function_count = 4, .declarations = &declarations};
     EffectCheckedRoots *roots = NULL;
-    XrXirStatus status = effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false);
+    XrXirStatus status = effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false,NULL);
     CallbackEntryOracle oracle = {.owner = roots, .unbound = unbound};
     if (status == XR_XIR_OK) status = xir_execution_visit_callback_entries(roots, callback_entry_oracle, &oracle);
     if (status == XR_XIR_OK) CHECK(oracle.count == 1);
@@ -255,8 +255,8 @@ static XrXirStatus callback_receiver_owner_case(bool callable_contents, bool gro
     XrXirModule module = {.stage = XR_XIR_CHECKED, .types = &types, .functions = functions,
         .function_count = 5, .declarations = &declarations};
     EffectCheckedRoots *roots = NULL;
-    XrXirStatus status = grow ? effect_checked_roots_collect(&effect_context, &module, NULL, NULL, NULL, &roots, true) :
-        effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false);
+    XrXirStatus status = grow ? effect_checked_roots_collect(&effect_context, &module, NULL, NULL, NULL, &roots, true,NULL) :
+        effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false,NULL);
     if (grow) {
         if (status == XR_XIR_OK) status = callback_origin_rebind(roots);
         effect_checked_roots_free(roots);

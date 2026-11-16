@@ -604,7 +604,7 @@ static XrXirStatus nonescape_fixture_facts(const XrXirCompileContext *context,
     if(status==XR_XIR_OK) {
         XrXirRootRefiner refiner={.context=&owner,.observe=nonescape_fixture_observe,
             .points=nonescape_fixture_points,.prepare=nonescape_fixture_finish};
-        status=xir_effects_prepare_verified_input(context,input,&refiner,&pending);
+        status=xir_effects_prepare_verified_input(context,input,&refiner,&pending,NULL);
     }
     xr_xir_compile_effects_free(pending);
     xr_hir_escape_builder_free(owner.builder);

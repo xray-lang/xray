@@ -161,7 +161,7 @@ static void view_loan_affine_availability(ViewLoanAffineCase kind) {
     XrXirDeclarations declarations = {.modules=&source_module, .module_count=1, .functions=identities};
     XrXirModule module = {.types=&types, .functions=functions, .function_count=2, .declarations=&declarations};
     EffectCheckedRoots *roots = NULL;
-    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false) == XR_XIR_OK);
+    CHECK(effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false,NULL) == XR_XIR_OK);
     if (roots->terms) roots->terms->remaining = &effect_context;
     uint32_t intrinsic[] = {0,1,2,3,4,5,6,7,8};
     XirRestrictionFormulaRow formulas[9] = {{0}};

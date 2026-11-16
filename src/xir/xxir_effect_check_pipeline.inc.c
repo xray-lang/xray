@@ -578,11 +578,12 @@ XR_FUNC XrXirStatus xir_effects_suspend_trace(const XrXirEffects *effects,
 }
 
 XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext *memory,
-    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output) {
+    XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(memory) || !input.module || !output || *output)
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = effect_input_shape(memory, input);
     if (status != XR_XIR_OK) return status;
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *effects = xir_compile_calloc(memory, 1, sizeof(*effects), &status);
     if (!effects) return status;
     atomic_init(&effects->references, 1);
@@ -593,12 +594,14 @@ XR_FUNC XrXirStatus xir_effects_prepare_verified_input(const XrXirCompileContext
     if (status == XR_XIR_OK && refiner && refiner->begin)
         status = refiner->begin(refiner->context, effects);
     if (status == XR_XIR_OK) status = effect_checked_roots_build(memory, input.module,
-        effects->outcomes_work.contracts, input.control, refiner, &effects->checked_roots, false);
+        effects->outcomes_work.contracts, input.control, refiner, &effects->checked_roots, false,&location);
     if (status == XR_XIR_OK && refiner && refiner->prepare) {
         XirRestrictionReceiver receiver = {effects->checked_roots, effect_check_restrictions_receive};
         status = refiner->prepare(refiner->context, effects->checked_roots, effects->checked_roots->storage, &receiver);
     }
     if (status != XR_XIR_OK) {
+        location.status=status;
+        if (diagnostic) *diagnostic=location;
         xr_xir_compile_effects_free(effects);
         return status;
     }
@@ -768,7 +771,7 @@ static XrXirStatus effect_checked_construct(const XrXirCompileContext *memory,
     XirEffectInput input, const XrXirRootRefiner *refiner, XrXirEffects **output, XrXirDiagnostic *diagnostic) {
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirEffects *pending = NULL;
-    XrXirStatus status = xir_effects_prepare_verified_input(memory, input, refiner, &pending);
+    XrXirStatus status = xir_effects_prepare_verified_input(memory, input, refiner, &pending,diagnostic);
     if (status == XR_XIR_OK)
         status = xir_effects_finish_prepared_input(memory, input, refiner, &pending, output, diagnostic);
     xr_xir_compile_effects_free(pending);
