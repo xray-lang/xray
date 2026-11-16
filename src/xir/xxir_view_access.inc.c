@@ -587,6 +587,12 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
             if (status!=XR_XIR_OK) return status;
         } else if (cell || object || type==XR_XIR_BUFFER_STORAGE || place!=XR_XIR_PLACE_NONE) {
             /* Binding observes and retains identity; invocation has its own access obligations. */
+            if (op->op==XR_XIR_FUNCTION_REF && cell &&
+                view_access_scalar_storage(xr_xir_cell_element(types,type))) {
+                /* A scalar Cell capture transports only its identity, not a
+                 * referent read or write. Actual accesses remain checked. */
+                continue;
+            }
             bool read=op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_CLASS_METHOD_REF ||
                 role==XR_XIR_OPERAND_READ || (receiver_read && p==0);
             bool write=(call && !(receiver_read && p==0)) || op->op==XR_XIR_CELL_TAKE || op->op==XR_XIR_CELL_WRITE_TAKE || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE ||
