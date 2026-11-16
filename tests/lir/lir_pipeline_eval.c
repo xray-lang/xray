@@ -598,10 +598,10 @@ int main(int argc, char **argv) {
                     fprintf(stderr," b%u i%u op=%u result=v%u type=%u callee=f%u bits=%" PRIu64 " source=%u:%u args",
                         block.id,n+1,(unsigned)op.op,op.result,op.type,op.callee,op.bits,op.source.line,op.source.column);
                     for (uint32_t p=0;p<op.operand_count;++p) fprintf(stderr," v%u",op.operands[p]);
-                    for (uint32_t e=0;e<op.edge_count;++e) {
-                        fprintf(stderr," edge%u=b%u(",e+1,op.edges[e].target);
-                        for (uint32_t p=0;p<op.edges[e].argument_count;++p)
-                            fprintf(stderr,"v%u%s",op.edges[e].arguments[p],p+1<op.edges[e].argument_count ? "," : "");
+                    for (uint32_t edge_index=0;edge_index<op.edge_count;++edge_index) {
+                        fprintf(stderr," edge%u=b%u(",edge_index+1,op.edges[edge_index].target);
+                        for (uint32_t p=0;p<op.edges[edge_index].argument_count;++p)
+                            fprintf(stderr,"v%u%s",op.edges[edge_index].arguments[p],p+1<op.edges[edge_index].argument_count ? "," : "");
                         fputc(')',stderr);
                     }
                     fputc('\n',stderr);
