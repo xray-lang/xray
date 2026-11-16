@@ -13,6 +13,7 @@
 #ifndef XLIR_CALLABLE_FACTS_H
 #define XLIR_CALLABLE_FACTS_H
 #include "xlir_callable.h"
+#include "xlir_cell.h"
 
 typedef struct XrLirCallableFacts XrLirCallableFacts;
 
@@ -21,6 +22,10 @@ typedef enum XrLirCallableTransport {
     XR_LIR_CALLABLE_TRANSPORT_BORROW, XR_LIR_CALLABLE_TRANSPORT_OWNED,
     XR_LIR_CALLABLE_TRANSPORT_MIXED
 } XrLirCallableTransport;
+typedef enum XrLirScopedValueKind {
+    XR_LIR_SCOPED_VALUE_NONE, XR_LIR_SCOPED_VALUE_FUNCTION,
+    XR_LIR_SCOPED_VALUE_SCOPE, XR_LIR_SCOPED_VALUE_CELL
+} XrLirScopedValueKind;
 
 typedef struct XrLirCallableValueFact {
     XrLirType type;
@@ -40,6 +45,11 @@ typedef struct XrLirCallableValueFact {
      * remains unchanged. Mixed owning/borrowed joins need explicit handling. */
     XrLirCallableTransport transport;
     bool materialize;
+    /* Cell identities consume the same verified lexical geometry without
+     * becoming callable values or sharing the Fn transport classifier. */
+    XrLirScopedValueKind kind;
+    XrLirType cell_payload;
+    XrLirCellTransport cell_transport;
 } XrLirCallableValueFact;
 
 typedef struct XrLirCallableFunctionFacts {

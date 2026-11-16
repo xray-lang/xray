@@ -34,7 +34,10 @@ typedef enum XrLirOwnershipFactKind {
     XR_LIR_OWNERSHIP_CALLABLE_MATERIALIZE,
     XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT,
     XR_LIR_OWNERSHIP_VIEW_VALUE,
-    XR_LIR_OWNERSHIP_VIEW_END
+    XR_LIR_OWNERSHIP_VIEW_END,
+    XR_LIR_OWNERSHIP_CELL_VALUE,
+    XR_LIR_OWNERSHIP_CELL_OPERATION,
+    XR_LIR_OWNERSHIP_CELL_SCOPE_EXIT
 } XrLirOwnershipFactKind;
 
 /* Transfer semantics belong to the verified event, not to a type's possible
@@ -92,6 +95,14 @@ typedef struct XrLirOwnershipFact {
     /* CLEANUP is a resource target and has no ordinary SSA operand read. */
     uint32_t view_operation;
     XrLirOwnershipTransferMode hold_transfer_mode;
+    /* CELL_VALUE describes a real Cell identity and lexical owner; NEW/COPY/
+     * BIND keep the source live. A local KEEP moves, a borrowed KEEP copies.
+     * CELL_OPERATION value is the actual Cell SSA; target_value is its
+     * initializer, read result, replacement or Map payload-ref result.
+     * The payload type is exact and does not grant mutation permission. */
+    XrLirCellOperation cell_operation;
+    XrLirType cell_payload;
+    XrLirCellTransport cell_transport;
 } XrLirOwnershipFact;
 
 enum XrLirOwnershipUnmodeled {

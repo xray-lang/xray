@@ -41,6 +41,10 @@ typedef struct XrLirValueHome {
      * the Frame retires it. SIZE_MAX means no cache, including all formals.
      * Its actual owner offset is part of the same sealed Frame inventory. */
     size_t literal_cache_offset, literal_cache_owner;
+    /* Cell's actual payload plan is in this same receiving layout image.
+     * Borrowed Cell formals have no owner slot, offset or temporary. */
+    uint32_t cell_payload_type;
+    XrLirCellTransport cell_transport;
 } XrLirValueHome;
 typedef struct XrLirHomeBytes { size_t offset, size; } XrLirHomeBytes;
 typedef struct XrLirHomeTransfer {
@@ -64,7 +68,9 @@ typedef struct XrLirHomeCall {
 
 typedef enum XrLirHomeBindingKind {
     XR_LIR_HOME_BINDING_NONE, XR_LIR_HOME_BINDING_LOCAL, XR_LIR_HOME_BINDING_PARAMETER,
-    XR_LIR_HOME_BINDING_CELL_BORROW, XR_LIR_HOME_BINDING_STATE_BORROW
+    XR_LIR_HOME_BINDING_CELL_BORROW, XR_LIR_HOME_BINDING_STATE_BORROW,
+    /* source is the actual constructed Cell SSA, not a snapshot Map owner. */
+    XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW
 } XrLirHomeBindingKind;
 typedef struct XrLirHomeBinding {
     XrLirHomeBindingKind kind;
@@ -102,6 +108,10 @@ typedef struct XrLirHomeEvent {
     /* CLEANUP may retire an empty/already-ended target; no natural value is
      * read. A Frame absent on this path implies no keeper was published. */
     XrLirOwnershipTransferMode hold_transfer_mode;
+    XrLirCellOperation cell_operation;
+    /* One-based receiving Cell and payload image ids, not compiler type ids. */
+    uint32_t cell_type, cell_payload_type;
+    XrLirCellTransport cell_transport;
 } XrLirHomeEvent;
 
 typedef struct XrLirValueHomes {
