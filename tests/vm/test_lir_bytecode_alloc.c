@@ -1004,9 +1004,36 @@ static void record_compiler_failures(void) {
     attempts = 0;
 }
 #include "lir_slice_alloc_cases.h"
+static void compacted_frame_scalar_cells(void) {
+    uint32_t words[8]={0},sources[8]={0}; XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_BITS};
+    XrRbcCompileDiagnostic diagnostic={0};
+    RbcLirCompiler c={.code=words,.code_capacity=8,.source_ids=sources,.source_id_capacity=8,
+        .cell_kinds=kinds,.cell_count=2,.diagnostic=&diagnostic};
+    const XrRbcOperands instructions[]={
+        {XR_RBC_JMP,0,0,0,0}, {XR_RBC_LOADI,0,0,0,17}, {XR_RBC_CELL_NEW,0,0,0,0}, {XR_RBC_RET,0,0,0,0},
+        {XR_RBC_LOADI,0,0,0,42}, {XR_RBC_CELL_NEW,0,0,0,1}, {XR_RBC_CELL_READ,1,0,0,0}, {XR_RBC_RET,1,0,0,0}};
+    // Finished LIR rejects unreachable blocks. Exercise the actual compiler
+    // compactor with its emitted dead constructor instead of bypassing finish.
+    for (size_t n=0;n<8;++n) {
+        XrRbcOperands op=instructions[n]; c.current_source_id=(uint32_t)n+1;
+        CHECK(rbc_lir_emit(&c,op.op,op.a,op.b,op.c,op.immediate));
+    }
+    CHECK(xr_rbc_jump(words,0,4,8)); CHECK(rbc_lir_compact_jumps(&c)); CHECK(rbc_lir_cells_compact(&c));
+    CHECK(c.code_count==4 && c.cell_count==1 && (words[1]&255)==XR_RBC_CELL_NEW && !(words[1]>>16));
+    for (uint32_t n=0;n<4;++n) CHECK(sources[n]==n+5);
+    XrRbcFunction function={.code=words,.code_count=c.code_count,.register_count=2,.cell_count=c.cell_count};
+    XrRbcModule module={.functions=&function,.function_count=1}; XrtLocationOwner *locations=NULL;
+    CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
+    XrRbcExecution *execution=NULL; CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_OK);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution); uint64_t result=0;
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&result) && result==42);
+    xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome); xrt_locations_release(locations);
+    CHECK(!live_allocations);
+}
 int main(void) {
     // Keep the last completed allocation fixture visible even after a fatal abort.
     CHECK(!setvbuf(stdout,NULL,_IONBF,0));
+    compacted_frame_scalar_cells();
     owned_program_admission();
     record_compiler_failures();
     map_compiler_failures();
