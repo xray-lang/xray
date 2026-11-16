@@ -285,6 +285,14 @@ static XrXirStatus effect_relocation_edges(EffectRelocation *relocation) {
         while (roots->module_index[at]) at = (at + 1) & mask;
         roots->module_index[at] = m + 1;
     }
+    for (uint32_t n=0;n<roots->callback_loans;++n) {
+        XirModuleCallbackLoan *relation=&roots->callback_loan[n].relation;
+        if (relation->witness_function==UINT32_MAX) continue;
+        if (relation->witness_function>=roots->templates) return XR_XIR_BAD_STRUCTURE;
+        relation->witness_instruction=effect_relocation_instruction(relocation,
+            relation->witness_function,relation->witness_instruction);
+    }
+    roots->callback_loans_closed=false;
     for (uint32_t d = 0; d < roots->dependencies; ++d) {
         roots->dependency[d].source = effect_relocation_node(relocation, roots->dependency[d].source);
         roots->dependency[d].target = effect_relocation_node(relocation, roots->dependency[d].target);
