@@ -135,6 +135,11 @@ XRAY_API XrtManagedStatus xrt_place_move_replace(XrtPlace destination, XrtPlace 
     const XrtPlacePublication *publication) {
     return place_replace(destination, source, false, publication);
 }
+XRAY_API XrtManagedStatus xrt_place_frame_move_replace(XrtManagedFrame *frame, size_t destination,
+    size_t source) {
+    return place_replace((XrtPlace){.frame=frame, .slot=destination, .nulls=XRT_PLACE_NULLABLE},
+        (XrtPlace){.frame=frame, .slot=source, .nulls=XRT_PLACE_NONNULL}, false, NULL);
+}
 
 static XrtPlace edge_place(const XrtPlaceEdge *edges, size_t index) {
     size_t row = index / 3;

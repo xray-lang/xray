@@ -60,8 +60,12 @@ static void c_array_require(LirC *c, uint32_t source) {
 }
 static void c_values_publish_leaf(LirC *c, uint32_t value, uint32_t source) {
     const XrLirValueHome *home=&c->homes->values[value];
-    c_format(c, "    { XrtManagedStatus status = xrt_place_move_replace((XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NULLABLE},\n", home->first_owner);
-    c_format(c, "        (XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL}, NULL);\n", home->temporary_first_owner);
+    XR_CHECK(c->homes->owned_frame_needed && home->owner_count==1 && !home->parameter &&
+        home->first_owner<c->homes->frame.slot_count && home->temporary_first_owner<c->homes->frame.slot_count &&
+        home->first_owner!=home->temporary_first_owner,
+        "leaf publication uses distinct real owner slots in its one stable Frame");
+    c_format(c, "    { XrtManagedStatus status = xrt_place_frame_move_replace(xrl_frame, %zu, %zu);\n",
+        home->first_owner,home->temporary_first_owner);
     c_array_require(c,source); c_text(c, "    }\n");
 }
 /* Borrowed input stays protected by its actual caller or source home. Retain
