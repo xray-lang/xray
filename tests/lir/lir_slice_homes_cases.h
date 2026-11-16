@@ -9,6 +9,7 @@
 #include "lir/xlir_internal.h"
 #include "lir/xlir_view.h"
 #include "lir/xlir_verify.h"
+#include "lir_slice_state_read_fixture.h"
 static XrLirValue slice_role(CArrayFixture *c, XrLirBlock block, XrLirSliceOperation role,
     XrLirType result, const XrLirValue *args, uint32_t count) {
     uint32_t id = 0;
@@ -134,6 +135,45 @@ static void slice_conditional_cleanup(XrLirType element, bool malformed) {
     xr_lir_module_destroy(c.module);
 
 }
+static void slice_state_read_cases(XrLirType element, bool mutable) {
+    SliceStateReadFixture c = slice_state_read_fixture(element,mutable,true);
+    OK(xr_lir_module_finish(c.module,NULL));
+    XrLirFunctionData *function = &c.module->functions[c.root.id-1];
+    for (uint32_t b = 0; b < function->block_count; ++b)
+        for (uint32_t i = 0; i < function->blocks[b].instruction_count; ++i) {
+            XrLirOp op = function->blocks[b].instructions[i].view.op;
+            CHECK(op != XR_LIR_ARRAY_BORROW && op != XR_LIR_CELL_NEW);
+        }
+    XrtBillingOwner *billing = NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+    XrLirValueLayoutKey roots[] = {{XR_LIR_ARRAY,element,0},{function->values[c.view.id-1].type,0,0},{XR_LIR_I64,0,0}};
+    XrLirValueLayouts *set = NULL; HOME(xr_lir_value_layouts_create(c.module,roots,3,billing,&set));
+    XrLirOwnershipPlan *plan = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
+    XrLirValueHomesRequest request = {c.module,c.root,set,plan}; XrLirValueHomes *homes = NULL;
+    HOME(xr_lir_value_homes_create(&request,&homes));
+    CHECK(homes->bindings && c.reference.id < homes->value_count);
+    const XrLirHomeBinding *binding = &homes->bindings[c.reference.id];
+    CHECK(binding->kind == XR_LIR_HOME_BINDING_STATE_BORROW && binding->source == c.reference.id &&
+        binding->offset == SIZE_MAX && binding->first_owner == SIZE_MAX && !binding->parameter);
+    CHECK(homes->values[c.view.id].view_workspace && !homes->values[c.view.id].owner_count);
+    XrLirValueLayoutKey key; const XrtValuePlan *payload = NULL;
+    HOME(xr_lir_value_layouts_at(set,binding->type-1,&key,&payload));
+    CHECK(key.type == XR_LIR_ARRAY && key.array_element == element && payload);
+    xr_lir_value_homes_destroy(homes); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(set);
+    CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
+    XrLirValueData *reference = &function->values[c.reference.id-1];
+    XrLirType saved = reference->state_reference.payload; reference->state_reference.payload = XR_LIR_STRING;
+    CHECK(xr_lir_verify(c.module,NULL) == XR_LIR_VERIFY_ERROR); reference->state_reference.payload = saved;
+    XrLirType other = element == XR_LIR_I64 ? XR_LIR_U8 : XR_LIR_I64;
+    reference->state_reference.array_element = other;
+    CHECK(xr_lir_verify(c.module,NULL) == XR_LIR_VERIFY_ERROR); reference->state_reference.array_element = element;
+    const XrLirValueData *view = &function->values[c.view.id-1];
+    XrLirInstructionView *make = &function->blocks[view->block-1].instructions[view->instruction].view;
+    uint32_t role = make->intrinsic;
+    OK(xr_lir_slice_operation(c.module,XR_LIR_SLICE_OP_NEW,other,XR_LIR_STATE_REF,&make->intrinsic));
+    CHECK(xr_lir_verify(c.module,NULL) == XR_LIR_VERIFY_ERROR); make->intrinsic = role;
+    OK(xr_lir_verify(c.module,NULL)); xr_lir_module_destroy(c.module);
+}
 static void slice_homes(void) {
     for (uint32_t mode = 0; mode < 2; ++mode) {
         XrLirModule *empty = NULL; OK(xr_lir_module_create(NULL, &empty)); XrLirFunction function = {0};
@@ -146,6 +186,8 @@ static void slice_homes(void) {
     }
     const XrLirType elements[] = {XR_LIR_I64, XR_LIR_U8};
     for (size_t family = 0; family < 2; ++family) {
+        slice_state_read_cases(elements[family],false);
+        slice_state_read_cases(elements[family],true);
         slice_conditional_cleanup(elements[family], false);
         slice_conditional_cleanup(elements[family], true);
         XrLirModule *module = slice_fixture(elements[family], 0); OK(xr_lir_module_finish(module, NULL));
