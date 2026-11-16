@@ -225,6 +225,10 @@ static void observe(void *data) {
 int main(void) {
     XrtLocationOwner *locations=NULL;
     REQUIRE(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations)==XRT_LOCATION_OK);
+    XrtBillingOwner *control=NULL;
+    REQUIRE(xrt_billing_owner_new(NULL,SIZE_MAX,&control)==XRT_MANAGED_OK);
+    XrtBillingStats empty=xrt_billing_owner_stats(control);
+    REQUIRE(empty.bytes && empty.blocks==1);
     for (enum Fault fault=NO_FAULT; fault<FAULT_COUNT; fault=(enum Fault)(fault+1)) {
         memset(&probe,0,sizeof(probe)); probe.fault=fault;
         Observation observation={0}; XrtExecutionFailure failure={0};
@@ -234,7 +238,12 @@ int main(void) {
         REQUIRE(xrt_value_root_empty(&observation.values));
         xrt_billing_owner_fail_after(probe.billing,SIZE_MAX);
         XrtBillingStats final=xrt_billing_owner_stats(probe.billing);
-        REQUIRE(!final.bytes && !final.blocks);
+        /* The observer still owns the billing handle. Its actual control
+         * allocation remains charged until that final handle is dropped. */
+        if (final.bytes!=empty.bytes || final.blocks!=empty.blocks)
+            fprintf(stderr,"Slice refund mode %u: final %zu/%zu, control %zu/%zu\n",
+                (unsigned)fault,final.bytes,final.blocks,empty.bytes,empty.blocks);
+        REQUIRE(final.bytes==empty.bytes && final.blocks==empty.blocks);
         if (fault==NO_FAULT) REQUIRE(status==XRT_EXECUTION_COMPLETED && probe.completed && !probe.injected);
         else {
             XrXirValueStatus expected=(fault<=ARRAY_ALLOCATE ? XR_XIR_VALUE_OOM :
@@ -243,10 +252,14 @@ int main(void) {
                 failure.kind==XRT_FAILURE_VALUE && failure.detail.value.status==expected);
             if (fault==FIRST_FRAME_ALLOCATE || fault==LATE_FRAME_ALLOCATE || fault>=RETURN_RETAIN) REQUIRE(probe.checked==1);
         }
-        printf("{\"mode\":%u,\"execution\":%u,\"injected\":%zu,\"checked\":%zu,\"stageDrops\":%zu,\"returns\":%zu,\"edges\":%zu,\"bytes\":%zu,\"blocks\":%zu}\n",
-            (unsigned)fault,(unsigned)status,probe.injected,probe.checked,probe.stage_drops,probe.returns,probe.edges,final.bytes,final.blocks);
+        printf("{\"mode\":%u,\"execution\":%u,\"injected\":%zu,\"checked\":%zu,\"stageDrops\":%zu,\"returns\":%zu,\"edges\":%zu,\"bytes\":%zu,\"blocks\":%zu,\"controlBytes\":%zu,\"controlBlocks\":%zu}\n",
+            (unsigned)fault,(unsigned)status,probe.injected,probe.checked,probe.stage_drops,probe.returns,probe.edges,
+            final.bytes,final.blocks,empty.bytes,empty.blocks);
+        REQUIRE(fflush(stdout)==0);
         xrt_billing_owner_drop(probe.billing);
+        probe.billing=NULL;
     }
+    xrt_billing_owner_drop(control);
     xrt_locations_release(locations);
     return 0;
 }
