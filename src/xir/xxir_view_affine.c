@@ -169,7 +169,7 @@ static XrXirStatus affine_callable_loans(AffineCheck *a,uint32_t instruction,uin
     XrXirDiagnosticReason reason=XR_XIR_DIAGNOSTIC_NONE;
     XrXirStatus status=xir_view_loan_transport_use(a->loans,&use,&reason);
     if (status==XR_XIR_UNRESOLVED) {
-        if (!a->pending_loans && pending) {
+        if (!a->pending_loans && pending && reason!=XR_XIR_DIAGNOSTIC_NONE) {
             *pending=a->location;pending->instruction=instruction;
             pending->status=status;pending->reason=reason;
         }
