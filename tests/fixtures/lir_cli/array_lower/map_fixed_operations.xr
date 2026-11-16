@@ -1,7 +1,7 @@
-var state=#{"same":1,"other":7,"same":42}
+var state={"same":1,"other":7,...{"same":42}}
 fn snapshot(items:Map<string,i64>)->Map<string,i64>{return items}
 fn add(items:ref Map<string,i64>,key:string,value:i64){items.set(key,value)}
-fn local()->Map<string,i64>{var items=#{"x":2}
+fn local()->Map<string,i64>{var items={"x":2}
 const saved=items
 add(ref items,"x",99)
 print(saved["x"])
@@ -20,7 +20,7 @@ print(changed["x"])
 state.clear()
 print(len(state))
 print(len(old))
-fn replace_key()->string{state=#{"fresh":17}
+fn replace_key()->string{state={"fresh":17}
 return "after"}
 state.set(replace_key(),42)
 print(state["fresh"])

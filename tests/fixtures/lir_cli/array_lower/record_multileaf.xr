@@ -1,7 +1,15 @@
+struct Child {
+    right: string
+    score: i64
+}
+struct Row {
+    left: string
+    child: Child
+}
 fn snapshot<T>(value:T)->T { return value }
-var current={left:"first",child:{right:"second",score:41}}
+var current=Row{left:"first",child:Child{right:"second",score:41}}
 const before=snapshot(current)
-current={left:"replacement",child:{right:"next",score:99}}
+current=Row{left:"replacement",child:Child{right:"next",score:99}}
 const returned=snapshot(before)
 print(returned.left)
 print(returned.child.right)
@@ -12,7 +20,7 @@ print(current.child.score)
 var i=0
 var total=0
 while(i<2000) {
-    const row={left:"left ${i}",child:{right:"right ${i}",score:i}}
+    const row=Row{left:"left ${i}",child:Child{right:"right ${i}",score:i}}
     const saved=snapshot(row)
     total=total+saved.child.score
     i=i+1

@@ -94,6 +94,10 @@ static XrLirModule *roles_fixture(XrLirType element,bool map) {
     }
     OK(xr_lir_define_function(c.module,function)); XrLirBlock block={0};
     OK(xr_lir_add_block(c.module,function,NULL,0,&block)); OK(xr_lir_set_entry(c.module,function,block));
+    if (map) {
+        XrLirValue empty=role(&c,block,XR_LIR_MAP_OP_NEW,XR_LIR_MAP_STRING_I64,NULL,0);
+        ca_effect(&c,block,XR_LIR_MAP_DROP,empty);
+    }
     XrLirValue snapshot=ca_value(&c,block,XR_LIR_CELL_READ,value_type,&inputs[0],1),write[]={inputs[0],snapshot};
     XrLirInstruction instruction={.op=XR_LIR_CELL_WRITE,.type=XR_LIR_UNIT,.operands=write,.operand_count=2};
     OK(xr_lir_emit_effect(c.module,block,&instruction)); ca_effect(&c,block,map ? XR_LIR_MAP_DROP : XR_LIR_ARRAY_DROP,snapshot);
