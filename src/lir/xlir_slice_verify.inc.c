@@ -114,7 +114,7 @@ static bool lir_slice_write_conflict(const LirSliceFlow *flow, LirSliceRoot root
 }
 static bool lir_slice_instruction_conflict(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *v, const LirSliceFlow *flow) {
-    if (v->op == XR_LIR_CALL || v->op == XR_LIR_CALL_INDIRECT) {
+    if (v->op == XR_LIR_CALL || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_REF) {
         for (uint32_t a = 0; a < v->operand_count; ++a) {
             uint32_t value = v->operands[a];
             LirSliceRoot root = f->values[value - 1].type == XR_LIR_STATE ?
@@ -140,6 +140,13 @@ static XrLirStatus lir_slice_block(const XrLirModule *m, const XrLirFunctionData
     const XrLirBlockData *block = &f->blocks[b];
     for (uint32_t i = 0; i < block->instruction_count; ++i) {
         const XrLirInstructionView *v = &block->instructions[i].view;
+        if (check && v->op == XR_LIR_CALL_INDIRECT) {
+            for (size_t n = 0; n < flow->count; ++n) if (flow->scratch[n] & 2u) {
+                xr_lir_internal_error(d, "indirect call with a live Slice requires captured binding effect facts", function, b + 1, i + 1, &v->source);
+                if (d) d->status = XR_LIR_UNSUPPORTED;
+                return XR_LIR_UNSUPPORTED;
+            }
+        }
         if (check && lir_slice_instruction_conflict(m, f, v, flow))
             return xr_lir_internal_error(d, "Array binding write conflicts with a live readonly Slice loan", function, b + 1, i + 1, &v->source);
         for (uint32_t a = 0; check && a < v->operand_count; ++a) {
