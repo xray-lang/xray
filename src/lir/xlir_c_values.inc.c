@@ -224,6 +224,7 @@ static void c_values_function(LirC *c) {
     c->string_event_cursor = c->string_workspace_cursor = 0;
     c->map_stage_event_cursor = c->map_stage_workspace_cursor = 0;
     c->view_call_cursor = c->view_event_cursor = 0;
+    c->array_frame_block = 0;
 }
 static bool c_values_owned_type(LirC *c, XrLirType type) {
     return c_managed_leaf(type) || (type >= XR_LIR_TYPE_COUNT &&
@@ -243,6 +244,7 @@ static bool c_values_declare(LirC *c, uint32_t value) {
 }
 static void c_values_ensure(LirC *c, uint32_t source) {
     XR_CHECK(c->homes && c->homes->owned_frame_needed, "owned production has a stable receiving frame");
+    if (c->array_frame_block && c->array_frame_block == c->block) return;
     c_text(c, "    if (!xrl_frame) {\n");
     c_format(c, "        xrl_root = xrt_native_managed_root(UINT32_C(%" PRIu32 "));\n", source);
     c_format(c, "        XrtManagedStatus status = xrl_frame_%" PRIu32 "_enter(xrl_root, &xrl_frame, &xrl_payload);\n", c->function.id);
