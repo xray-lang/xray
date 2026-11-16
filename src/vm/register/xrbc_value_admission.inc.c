@@ -115,7 +115,10 @@ static bool rbc_value_pod(const XrRbcModule *module,const XrRbcValueCode *code,
     return aggregate.type==result-1 && (kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FIXED_U8 || kind==XRT_VALUE_TUPLE_I64) &&
         home->size==module->aggregate_types[result-1].physical.size;
 }
-static bool rbc_value_edge_valid(const XrRbcValueCode *code, XrRbcValueAccess access) {
+#include "xrbc_value_array_admission.inc.c"
+#include "xrbc_value_map_admission.inc.c"
+#include "xrbc_value_slice_admission.inc.c"
+static bool rbc_value_edge_valid(const XrRbcModule *module,const XrRbcValueCode *code, XrRbcValueAccess access) {
     if (access.first > code->argument_count || access.count > (code->argument_count - access.first) / 2 ||
         (access.count && !code->arguments)) return false;
     const XrLirHomeEdge *edge = NULL;
@@ -136,7 +139,12 @@ static bool rbc_value_edge_valid(const XrRbcValueCode *code, XrRbcValueAccess ac
             XrLirHomeTransfer transfer = code->homes->transfers[edge->first + typed++];
             if (transfer.source != source || transfer.target != target || to->parameter ||
                 to->temporary_offset == SIZE_MAX) return false;
-            if (to->transport!=XR_LIR_CALLABLE_TRANSPORT_NONE) {
+            if (rbc_value_slice(module,code,target)) {
+                if (!rbc_value_slice(module,code,source) || transfer.transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
+                    transfer.hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_COPY ||
+                    transfer.source_workspace!=from->view_workspace || transfer.target_workspace!=to->view_workspace) return false;
+            } else if (transfer.hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE || transfer.source_workspace || transfer.target_workspace) return false;
+            else if (to->transport!=XR_LIR_CALLABLE_TRANSPORT_NONE) {
                 if (to->borrow_source || transfer.transfer_mode!=(from->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED ?
                         XR_LIR_OWNERSHIP_TRANSFER_COPY : XR_LIR_OWNERSHIP_TRANSFER_BORROW)) return false;
             } else if (transfer.transfer_mode!=(to->owner_count ?
@@ -145,8 +153,6 @@ static bool rbc_value_edge_valid(const XrRbcValueCode *code, XrRbcValueAccess ac
     }
     return typed == (edge ? edge->count : 0);
 }
-#include "xrbc_value_array_admission.inc.c"
-#include "xrbc_value_map_admission.inc.c"
 static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess access) {
     if (access.other || !rbc_value_id(code,access.source) || !rbc_value_string(module,code,access.result,true) ||
@@ -201,13 +207,14 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     if (a.operation!=XR_RBC_VALUE_CALL && a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY &&
         a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_RECORD_NEW &&
         a.operation!=XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_FUNCTION_CALL &&
-        a.operation!=XR_RBC_VALUE_FUNCTION_ALIAS && (a.first || a.count || a.window)) return false;
+        a.operation!=XR_RBC_VALUE_FUNCTION_ALIAS && a.operation!=XR_RBC_VALUE_SLICE && (a.first || a.count || a.window)) return false;
     if (a.operation!=XR_RBC_VALUE_STRING_LITERAL && a.operation!=XR_RBC_VALUE_STATE_CONSTRUCT &&
         a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_CALL &&
         a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY && a.operation!=XR_RBC_VALUE_MAP &&
         a.operation!=XR_RBC_VALUE_DISPLAY && a.operation!=XR_RBC_VALUE_RECORD_FIELD && a.operation!=XR_RBC_VALUE_RETURN &&
         a.operation<XR_RBC_VALUE_FUNCTION_NEW && a.index) return false;
     switch (a.operation) {
+    case XR_RBC_VALUE_SLICE: return rbc_value_slice_access_valid(module,code,function,a);
     case XR_RBC_VALUE_FUNCTION_NEW: case XR_RBC_VALUE_FUNCTION_CALL:
     case XR_RBC_VALUE_FUNCTION_ALIAS: case XR_RBC_VALUE_FUNCTION_SCOPE_EXIT:
         return rbc_value_function_access_valid(module,code,function,a);
@@ -312,7 +319,7 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_BINDING_WRITE: case XR_RBC_VALUE_BINDING_DROP:
         return rbc_value_binding_access_valid(module,code,function,a);
     case XR_RBC_VALUE_EDGE:
-        return !a.result && !a.source && !a.other && rbc_value_edge_valid(code,a);
+        return !a.result && !a.source && !a.other && rbc_value_edge_valid(module,code,a);
     default: return false;
     }
 }

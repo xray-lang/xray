@@ -118,14 +118,6 @@ typedef enum XrRbcRegisterKind {
     XR_RBC_SET_I64, XR_RBC_SET_I64_CELL, XR_RBC_SET_I64_REF
 } XrRbcRegisterKind;
 
-typedef enum XrRbcViewOperation {
-    XR_RBC_VIEW_NONE,
-#define XR_LIR_VIEW_OP(name, symbol, result, count, a, b, c, d, e, f) XR_RBC_VIEW_##name,
-#include "lir/xlir_view_ops.def"
-#undef XR_LIR_VIEW_OP
-    XR_RBC_VIEW_FRAME_ENTER, XR_RBC_VIEW_FRAME_LEAVE
-} XrRbcViewOperation;
-
 typedef enum XrRbcArrayOperation {
     XR_RBC_ARRAY_NEW, XR_RBC_ARRAY_LEN, XR_RBC_ARRAY_GET, XR_RBC_ARRAY_SET, XR_RBC_ARRAY_PUSH,
     XR_RBC_ARRAY_RETAIN, XR_RBC_ARRAY_DROP, XR_RBC_ARRAY_TAKE,
@@ -143,14 +135,6 @@ typedef enum XrRbcArrayOperation {
  * locations, so a constructor need not fit all payloads in a call window. */
 typedef struct XrRbcArrayLocation { uint32_t index; bool spill; } XrRbcArrayLocation;
 
-/* Library calls retain their actual typed locations. Only activation enter
- * carries immediate counts; all library arguments are real value operands. */
-typedef struct XrRbcViewAccess {
-    XrRbcViewOperation operation;
-    XrRbcArrayLocation result, operands[6];
-    uint32_t count;
-    uint64_t bits;
-} XrRbcViewAccess;
 typedef struct XrRbcArrayAccess {
     XrRbcArrayOperation operation;
     XrRbcRegisterKind kind;

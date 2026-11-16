@@ -224,6 +224,11 @@ static bool rbc_lir_callable_type(const XrLirModule *module, XrLirType type) {
     XrLirCallableType signature;
     return type >= XR_LIR_TYPE_COUNT && xr_lir_callable_type_view(module, type, &signature) == XR_LIR_OK;
 }
+static bool rbc_lir_slice_type(const XrLirModule *module, XrLirType type) {
+    XrLirTypeView shape = {0};
+    return type >= XR_LIR_TYPE_COUNT && xr_lir_type_view(module,type,&shape) == XR_LIR_OK &&
+        shape.kind == XR_LIR_TYPE_SLICE && (shape.element == XR_LIR_I64 || shape.element == XR_LIR_U8);
+}
 static bool rbc_lir_captured_cell(const XrLirModule *module, XrLirType type) {
     XrLirCellType cell;
     return xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK && (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64);
@@ -450,6 +455,15 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     const XrLirFunctionView *v, XrRbcCompileDiagnostic *d, RbcLirOutputValues *output) {
     d->function = f.id;
     d->block = d->instruction = 0;
+    if (rbc_lir_slice_type(input,v->result)) {
+        rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"Slice results require a complete caller loan hook",(XrLirSource){0});
+        return false;
+    }
+    for (uint32_t p=0;p<v->parameter_count;++p)
+        if (rbc_lir_slice_type(input,v->parameter_types[p])) {
+            rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"Slice parameters require a complete borrowed call hook",(XrLirSource){0});
+            return false;
+        }
     for (uint32_t p = 0; p < v->callable_parameter_count; ++p) {
         XrLirCallableParameter contract = v->callable_parameters[p].contract;
         if (contract.mode != XR_PARAM_READ) {
@@ -505,7 +519,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
              type != XR_LIR_MAP_STRING_I64 && type != XR_LIR_MAP_STRING_I64_CELL && type != XR_LIR_MAP_STRING_I64_REF &&
              type!=XR_LIR_SET_I64 && type!=XR_LIR_SET_I64_CELL && type!=XR_LIR_SET_I64_REF &&
              type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF && type != XR_LIR_STRING_REF &&
-             !xr_lir_boxed_type(input, type) && !rbc_lir_aggregate_type(input, type) && !rbc_lir_callable_type(input, type) && !rbc_lir_captured_cell(input, type) &&
+             !xr_lir_boxed_type(input, type) && !rbc_lir_aggregate_type(input, type) && !rbc_lir_callable_type(input, type) && !rbc_lir_captured_cell(input, type) && !rbc_lir_slice_type(input,type) &&
              !(type == XR_LIR_PTR && output->literals[value]) &&
              !(type == XR_LIR_U64 && output->lengths[value]))) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
@@ -581,6 +595,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_FUNCTION_SCOPE_ENTER: case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND: return true;
     case XR_LIR_CALL_INTRINSIC: {
         XrLirArrayIntrinsic shape = {0};
+        XrLirSliceIntrinsic slice = {0};
+        if (xr_lir_slice_intrinsic_view(input,i->intrinsic,&slice) == XR_LIR_OK && slice.id) return true;
         if (rbc_lir_map_role(input,i)) return true;
         if (xr_lir_array_intrinsic_view(input,i->intrinsic,&shape) == XR_LIR_OK && shape.id) return true;
         return xr_lir_range_point(input,i) || xr_lir_display_point(input,i);

@@ -14,6 +14,12 @@ static bool rbc_value_flow_read(RbcStringAdmission *state, const XrRbcValueCode 
     uint32_t value, RbcValueEdgeState *output) {
     if (!rbc_value_id(code,value)) return false;
     const XrLirValueHome *home=rbc_value_home(code,value);
+    if (rbc_value_slice(state->module,code,value)) {
+        /* Only the authentic shared producer grants this logical loan. The
+         * receiving CFG transports its natural type, not another lifetime. */
+        *output=(RbcValueEdgeState){.value={0,RBC_SLICE_BORROWED}};
+        return true;
+    }
     if (rbc_value_function(state->module,code,value,false)) {
         RbcFunctionFlow *functions=rbc_function_liveness(state);
         if (!functions) return false;
@@ -45,6 +51,7 @@ static bool rbc_value_flow_write(RbcStringAdmission *state, const XrRbcValueCode
     uint32_t value, RbcValueEdgeState incoming) {
     if (!rbc_value_id(code,value)) return false;
     const XrLirValueHome *home=rbc_value_home(code,value);
+    if (rbc_value_slice(state->module,code,value)) return incoming.value.state==RBC_SLICE_BORROWED;
     if (rbc_value_function(state->module,code,value,false)) {
         RbcFunctionFlow *functions=rbc_function_liveness(state);
         if (!functions || !incoming.scope || incoming.scope>3) return false;
@@ -124,6 +131,20 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     XrRbcValueAccess access=code->accesses[index];
     RbcValueEdgeState incoming={0};
     switch (access.operation) {
+    case XR_RBC_VALUE_SLICE: {
+        const uint32_t *args=code->arguments+access.first;
+        if (access.index==XR_LIR_SLICE_OP_NEW) {
+            if (!rbc_value_flow_binding(state,code,args[0],false) ||
+                !rbc_value_flow_bits(state,code,args[1]) || !rbc_value_flow_bits(state,code,args[2])) return false;
+        } else {
+            if (!rbc_value_flow_read(state,code,args[0],&incoming) || incoming.value.state!=RBC_SLICE_BORROWED) return false;
+            for (uint32_t p=1;p<access.count;++p) if (!rbc_value_flow_bits(state,code,args[p])) return false;
+        }
+        if (access.index==XR_LIR_SLICE_OP_END) return true;
+        bool construct=access.index==XR_LIR_SLICE_OP_NEW || access.index==XR_LIR_SLICE_OP_REBORROW || access.index==XR_LIR_SLICE_OP_BIND;
+        return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){
+            .value={0,construct ? RBC_SLICE_BORROWED : RBC_BITS}});
+    }
     case XR_RBC_VALUE_FUNCTION_NEW: {
         const XrRbcFunction *callee=&state->module->functions[access.index];
         for (uint32_t p=0;p<access.count;++p) {

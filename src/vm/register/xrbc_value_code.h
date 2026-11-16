@@ -35,7 +35,7 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_RECORD_NEW, XR_RBC_VALUE_RECORD_FIELD, XR_RBC_VALUE_NULLABLE_NONE,
     XR_RBC_VALUE_NULLABLE_SOME, XR_RBC_VALUE_NULLABLE_IS_SOME, XR_RBC_VALUE_NULLABLE_UNWRAP,
     XR_RBC_VALUE_FUNCTION_NEW, XR_RBC_VALUE_FUNCTION_CALL, XR_RBC_VALUE_FUNCTION_ALIAS,
-    XR_RBC_VALUE_FUNCTION_SCOPE_EXIT
+    XR_RBC_VALUE_FUNCTION_SCOPE_EXIT, XR_RBC_VALUE_SLICE
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -52,6 +52,9 @@ typedef struct XrRbcValueAccess {
      * UINT32_MAX when there is no common typed edge, never ambiguous edge zero. */
     /* ARRAY/MAP index is the verified catalog role, first/count its complete
      * SSA operands. A mutator's window selects its common pending workspace. */
+    /* SLICE index is its closed role, first/count its full SSA operand span.
+     * window is a one-based common loan event for construction/END, zero for
+     * readers and materialization. Natural bytes never carry a keeper owner. */
     uint32_t index, first, count, window;
 } XrRbcValueAccess;
 

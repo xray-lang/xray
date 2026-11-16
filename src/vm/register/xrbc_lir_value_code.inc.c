@@ -55,7 +55,7 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
     XrLirClosureTarget target={0};
     if (xr_lir_closure_target_view(c->input,c->function,&target)==XR_LIR_OK && target.callable) return true;
     for (uint32_t v = 1; v <= c->view.value_count; ++v)
-        if (rbc_lir_callable_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_inline_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_value_type(c,v) == XR_LIR_STRING || rbc_lir_value_type(c,v) == XR_LIR_ARRAY ||
+        if (rbc_lir_slice_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_callable_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_inline_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_value_type(c,v) == XR_LIR_STRING || rbc_lir_value_type(c,v) == XR_LIR_ARRAY ||
             rbc_lir_value_type(c,v) == XR_LIR_ARRAY_CELL || rbc_lir_value_type(c,v) == XR_LIR_ARRAY_REF ||
             rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64 || rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_CELL ||
             rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_REF) return true;
@@ -188,6 +188,20 @@ static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *
     return true;
 }
 #include "xrbc_lir_value_callable.inc.c"
+static bool rbc_lir_slice_access(RbcLirCompiler *c, const XrLirInstructionView *instruction,
+    XrLirSliceIntrinsic shape, XrRbcValueAccess *access) {
+    *access=(XrRbcValueAccess){.operation=XR_RBC_VALUE_SLICE,.result=instruction->result,
+        .index=(uint32_t)shape.operation,.count=instruction->operand_count};
+    if (!rbc_lir_value_arguments(c,instruction->operands,instruction->operand_count,&access->first)) return false;
+    bool construct=shape.operation==XR_LIR_SLICE_OP_NEW || shape.operation==XR_LIR_SLICE_OP_REBORROW ||
+        shape.operation==XR_LIR_SLICE_OP_BIND;
+    if (construct || shape.operation==XR_LIR_SLICE_OP_END) {
+        uint32_t value=construct ? instruction->result : instruction->operands[0];
+        access->window=rbc_lir_callable_event(c,construct ? XR_LIR_OWNERSHIP_VIEW_VALUE : XR_LIR_OWNERSHIP_VIEW_END,value);
+        if (!access->window) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Slice operation lost its common loan event");
+    }
+    return true;
+}
 static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionView *i, bool *handled) {
     *handled = false;
     if (!c->typed_values) return true;
@@ -229,6 +243,11 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         break;
     }
     case XR_LIR_CALL_INTRINSIC: {
+        XrLirSliceIntrinsic slice={0};
+        if (xr_lir_slice_intrinsic_view(c->input,i->intrinsic,&slice)==XR_LIR_OK && slice.id) {
+            if (!rbc_lir_slice_access(c,i,slice,&access)) return false;
+            break;
+        }
         if (xr_lir_display_point(c->input,i)) {
             if (!rbc_lir_value_display(c,i,&access)) return false;
             break;
