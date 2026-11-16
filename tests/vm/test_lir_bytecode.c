@@ -1402,7 +1402,7 @@ static void frame_drop(XrLirModule *m,XrLirBlock block,XrLirValue value,bool cel
         .type=XR_LIR_UNIT,.operands=&value,.operand_count=1};
     OK(xr_lir_emit_effect(m,block,&op));
 }
-static void test_unbound_string_cell_rejection(void) {
+static void test_string_binding_aliases(void) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
     XrLirType bit=XR_LIR_I1,cells[]={XR_LIR_STRING_CELL,XR_LIR_STRING_CELL};
     XrLirFunction root=test_function(m,"frame_alias_caller",&bit,1,XR_LIR_I64);
@@ -1431,10 +1431,20 @@ static void test_unbound_string_cell_rejection(void) {
     OK(xr_lir_emit_value(m,body,&op,&read));
     op=(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&read,.operand_count=1};
     OK(xr_lir_emit_value(m,body,&op,&length));frame_drop(m,body,read,false);test_return(m,body,length);
-    OK(xr_lir_module_finish(m,NULL));XrRbcProgram *program=NULL;
-    CHECK(xr_rbc_compile(m,root,&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED && !program);
+    OK(xr_lir_module_finish(m,NULL));XrRbcProgram *program=compile(m,root);
     xr_lir_module_destroy(m);
-
+    uint64_t flag=0;
+    CHECK(run(program,&flag,1)==3);
+    flag=1;
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,&flag,1,&execution)==XR_RBC_OK);
+    xr_rbc_program_destroy(program);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    uint64_t bits=0;
+    CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK &&
+        xr_rbc_outcome_bits(outcome,&bits) && bits==5);
+    xr_rbc_outcome_free(&outcome);
 }
 
 static void test_typed_spill_copy_cycle(void) {
@@ -1515,7 +1525,7 @@ int main(void) {
     test_many_spilled_conditions();
     test_typed_spill_copy_cycle();
     test_backward_owned_dag();
-    test_unbound_string_cell_rejection();
+    test_string_binding_aliases();
     test_scalar_spill_branches();
     test_scalar_spills();
     test_sequential_string_owners();
