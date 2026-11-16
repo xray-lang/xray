@@ -43,6 +43,16 @@ static inline bool lir_definition_type(const XrLirModule *module, XrLirType type
     return xr_lir_callable_type_view(module, type, &signature) == XR_LIR_OK;
 }
 
+/* A natural readonly loan is an internal definition signature, not an owning
+ * State payload or a new external ABI. Its producer and caller facts are
+ * checked separately by the common verifier and consumed by typed backends. */
+static inline bool lir_definition_signature_type(const XrLirModule *module,XrLirType type) {
+    if (lir_definition_type(module,type)) return true;
+    XrLirTypeView view={0};
+    return xr_lir_type_view(module,type,&view)==XR_LIR_OK && view.kind==XR_LIR_TYPE_SLICE &&
+        (view.element==XR_LIR_I64 || view.element==XR_LIR_U8);
+}
+
 static inline bool lir_definition_cell_captures(const XrLirModule *module,
     XrLirFunction function, const XrLirFunctionView *view) {
     XrLirClosureTarget closure = {0};
@@ -74,10 +84,10 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
         XrLirFunctionView view;
         if (xr_lir_function_at(module, i, &function) != XR_LIR_OK ||
             xr_lir_function_view(module, function, &view) != XR_LIR_OK ||
-            !lir_definition_type(module, view.result) ||
+            !lir_definition_signature_type(module, view.result) ||
             !lir_definition_cell_captures(module, function, &view)) return false;
         for (uint32_t p = 0; p < view.parameter_count; ++p)
-            if (!lir_definition_type(module, view.parameter_types[p])) return false;
+            if (!lir_definition_signature_type(module, view.parameter_types[p])) return false;
         if (view.kind != XR_LIR_FUNCTION_DEFINITION &&
             !lir_builtin_signature(view.result, view.parameter_types, view.parameter_count)) return false;
         if (view.result == XR_LIR_ARRAY) {
