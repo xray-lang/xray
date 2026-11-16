@@ -729,6 +729,8 @@ XR_FUNC XrLirStatus xr_lir_internal_slice_cleanup_batch(XrLirModule *m, XrLirFun
     if (!items || function.module != m || !function.id || function.id > m->function_count)
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirFunctionData *f = &m->functions[function.id - 1];
+    if (!f->defined || f->kind != XR_LIR_FUNCTION_DEFINITION || !f->block_count)
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     size_t block_extent = f->block_count;
     if (block_extent == SIZE_MAX) return lir_fail(m, XR_LIR_UNSUPPORTED);
     ++block_extent;
