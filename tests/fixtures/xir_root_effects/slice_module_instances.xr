@@ -1,13 +1,12 @@
 var counts = [0]
-fn identity<T>(part:Slice<T>, marker:T)->Slice<T> {
+fn identity<T>(part:Slice<i64>, marker:T)->Slice<i64> {
     counts[0] = counts[0] + 1
     return part
 }
 fn main() {
     var integers:Array<i64> = [11,22]
-    var bytes:Array<u8> = [3,4]
     print(len(identity<i64>(integers[0:2], 0)))
-    print(len(identity<u8>(bytes[0:2], 0 as u8)))
+    print(len(identity<u8>(integers[0:2], 0 as u8)))
     print(counts[0])
 }
 main()

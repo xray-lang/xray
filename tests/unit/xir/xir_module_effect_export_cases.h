@@ -126,10 +126,12 @@ static void module_export_instance_rows(const XrXirArtifact *closed, uint32_t so
             row->capture_count==closed->module.declarations->functions[f].capture_count);
         if (provenance->origins[f].function!=source_function) continue;
         const XrXirTypeNode *type=xr_xir_type_node(closed->module.types,actual->parameters[0]);
-        CHECK(type && type->kind==XR_XIR_TYPE_SLICE && row->parameter_count==2 &&
+        CHECK(type && type->kind==XR_XIR_TYPE_SLICE && type->element==XR_XIR_I64 && row->parameter_count==2 &&
             module_export_contains(view,row->result_origin,XIR_MODULE_EFFECT_PARAMETER,0) &&
             module_export_contains(view,row->write,XIR_MODULE_EFFECT_SLOT,0));
-        unsigned family=type->element==XR_XIR_I64 ? 1u : type->element==XR_XIR_U8 ? 2u : 0u;
+        /* Distinct marker types instantiate the same source declaration;
+         * the loan itself stays within the concrete Slice admission. */
+        unsigned family=actual->parameters[1]==XR_XIR_I64 ? 1u : actual->parameters[1]==XR_XIR_U8 ? 2u : 0u;
         CHECK(family && !(families&family)); families|=family; ++instances;
     }
     CHECK(families==3 && instances==2);
