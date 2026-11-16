@@ -1,0 +1,17 @@
+var shared: i64 = 1
+
+fn invoke(value: ref i64, action: fn() -> i64) -> i64 {
+    return action() + value
+}
+
+fn sample() -> i64 {
+    var values = [11, 22, 33]
+    const part: Slice<i64> = values[1:3]
+    const action = fn() -> i64 {
+        shared = shared + 1
+        return shared
+    }
+    return invoke(ref shared, action) + part[0] + len(part)
+}
+
+print(sample())
