@@ -289,12 +289,29 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         /* The common verifier ends only this independent formal loan. */
         *handled=true; return true;
     case XR_LIR_SLICE_CLEANUP:
-        if (!i->bits || i->bits>UINT32_MAX)
+        if (!i->bits || i->bits>UINT32_MAX || !c->homes || !c->homes->values || i->bits>c->homes->value_count)
             return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Slice cleanup lost its resource target");
         access=(XrRbcValueAccess){.operation=XR_RBC_VALUE_SLICE,.index=XR_LIR_SLICE_OP_CLEANUP,
             .window=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_VIEW_END,(uint32_t)i->bits)};
         if (!access.window)
             return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Slice cleanup lost its common keeper event");
+        {
+            const XrLirHomeEvent *event=&c->homes->events[access.window-1];
+            const XrLirValueHome *home=&c->homes->values[(uint32_t)i->bits];
+            if (event->view_operation!=XR_LIR_SLICE_OP_CLEANUP || event->target ||
+                event->view_storage!=XR_LIR_SLICE_STORAGE_LOCAL_KEEPER ||
+                event->view_workspace!=home->view_workspace ||
+                event->transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE ||
+                event->hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE ||
+                (uint32_t)event->view_cleanup>XR_LIR_SLICE_CLEANUP_UNCONSTRUCTED)
+                return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Slice cleanup disagrees with its common keeper event");
+            /* The verified common plan still ends the loan.
+             * Its private keeper cannot exist on this path, so emit no access
+             * instead of publishing a runtime flag that could skip a clear. */
+            if (event->view_cleanup==XR_LIR_SLICE_CLEANUP_UNCONSTRUCTED) {
+                *handled=true; return true;
+            }
+        }
         break;
     case XR_LIR_FUNCTION_REF: case XR_LIR_FUNCTION_WEAKEN: case XR_LIR_FUNCTION_BIND:
     case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_CALL_INDIRECT:
