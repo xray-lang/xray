@@ -10,7 +10,7 @@ static XrLirValue slice_role(CArrayFixture *c, XrLirBlock block, XrLirSliceOpera
     XrLirType result, const XrLirValue *args, uint32_t count) {
     uint32_t id = 0;
     XrLirType binding = 0;
-    if (role == XR_LIR_SLICE_OP_NEW) OK(xr_lir_value_type(c->module, args[0], &binding));
+    if (role == XR_LIR_SLICE_OP_NEW) binding = c->module->functions[args[0].function - 1].values[args[0].id - 1].type;
     OK(xr_lir_slice_operation(c->module, role, c->element, binding, &id));
     XrLirInstruction op = {.op=XR_LIR_CALL_INTRINSIC,.type=result,.intrinsic=id,.operands=args,.operand_count=count};
     XrLirValue value = {0};
@@ -20,7 +20,7 @@ static XrLirValue slice_role(CArrayFixture *c, XrLirBlock block, XrLirSliceOpera
 }
 static void slice_write(CArrayFixture *c, XrLirBlock block, XrLirValue binding, bool alias) {
     if (alias) binding = ca_value(c, block, XR_LIR_ARRAY_BORROW, XR_LIR_ARRAY_REF, &binding, 1);
-    XrLirType type; OK(xr_lir_value_type(c->module, binding, &type)); uint32_t id = 0;
+    XrLirType type = c->module->functions[binding.function - 1].values[binding.id - 1].type; uint32_t id = 0;
     OK(xr_lir_array_mutator(c->module, c->element, type, XR_LIR_ARRAY_OP_SET, &id));
     XrLirValue args[] = {binding, ca_constant(c, block, 0), number(c, block, c->element, 99)};
     XrLirInstruction write = {.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_UNIT,.intrinsic=id,.operands=args,.operand_count=3};
@@ -47,11 +47,13 @@ static XrLirModule *slice_fixture(XrLirType element, uint32_t invalid) {
     (void)slice_role(&c, join, XR_LIR_SLICE_OP_LEN, XR_LIR_I64, &original, 1);
     (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &original, 1);
     XrLirValue bound = slice_role(&c, join, XR_LIR_SLICE_OP_BIND, slice, &left, 1);
-    if (invalid >= 2) slice_write(&c, join, binding, invalid == 3);
+    if (invalid == 2 || invalid == 3) slice_write(&c, join, binding, invalid == 3);
     XrLirValue length = slice_role(&c, join, XR_LIR_SLICE_OP_LEN, XR_LIR_I64, invalid == 1 ? &original : &bound, 1);
-    (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &left, 1);
-    (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &right, 1);
-    (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &bound, 1);
+    if (invalid != 4) {
+        (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &left, 1);
+        (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &right, 1);
+        (void)slice_role(&c, join, XR_LIR_SLICE_OP_END, XR_LIR_UNIT, &bound, 1);
+    }
     ca_return(&c, join, length);
     return c.module;
 }
@@ -129,5 +131,7 @@ static void slice_homes(void) {
             else CHECK(status == XR_LIR_OK);
             xr_lir_module_destroy(module);
         }
+        module = slice_fixture(elements[family], 4); OK(xr_lir_module_finish(module, NULL));
+        xr_lir_module_destroy(module);
     }
 }

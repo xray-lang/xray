@@ -76,8 +76,10 @@ static void kernel(XrtBackingArrayKind kind) {
     xrt_backing_types_drop(&types);
     xrt_billing_owner_close(billing);
     OK(xrt_array_slice_read_bits(&storage->child.value, kind, 0, &bits)); CHECK(bits == 33);
+    OK(xrt_array_slice_reborrow(&primary, kind, &storage->child.value, 0, 1));
     OK(xrt_array_slice_clear(&child));
     CHECK(xrt_array_slice_length(&storage->child.value, &length) == XRT_MANAGED_ARGUMENT);
+    CHECK(storage->value.hold == header);
     OK(xrt_managed_root_destroy(&root));
     XrtBillingStats final = xrt_billing_owner_stats(billing); CHECK(!final.bytes && !final.blocks);
     xrt_billing_owner_drop(billing);

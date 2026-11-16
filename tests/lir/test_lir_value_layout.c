@@ -370,8 +370,8 @@ static void slice_layouts(void) {
             LIR(xr_lir_slice_intrinsic_view(module, id, &projection));
             CHECK(projection.id == id && projection.operation == (XrLirSliceOperation)role &&
                 projection.element == element && projection.binding_type == binding);
-            XrLirIntrinsic entry; LIR(xr_lir_intrinsic_view(module, id, &entry));
-            CHECK(entry.parameters[0] == (binding ? binding : slices[family]));
+            const XrLirIntrinsic *entry = xr_lir_internal_slice_intrinsic(module, id);
+            CHECK(entry && entry->parameters[0] == (binding ? binding : slices[family]));
         }
         uint32_t id = 0;
         LIR(xr_lir_slice_operation(module, XR_LIR_SLICE_OP_NEW, element, XR_LIR_ARRAY_REF, &id));

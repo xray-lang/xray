@@ -14,14 +14,15 @@
 #define VIEW_TRY(call) do { status = (call); if (status != XR_LIR_OK) goto failed; } while (0)
 static XrLirStatus view_fixture_call(XrLirModule *m, XrLirBlock block,
     XrLirSliceOperation role, const XrLirValue *args, uint32_t count, XrLirValue *result) {
-    uint32_t id = 0; XrLirIntrinsic signature;
+    uint32_t id = 0;
     XrLirStatus status = xr_lir_slice_operation(m, role, XR_LIR_I64,
         role == XR_LIR_SLICE_OP_NEW ? XR_LIR_ARRAY_CELL : 0, &id);
     if (status != XR_LIR_OK) return status;
-    status = xr_lir_intrinsic_view(m, id, &signature);
-    if (status != XR_LIR_OK) return status;
-    XrLirInstruction call = {.op=XR_LIR_CALL_INTRINSIC,.type=signature.result,.intrinsic=id,.operands=args,.operand_count=count};
-    return signature.result == XR_LIR_UNIT ? xr_lir_emit_effect(m, block, &call) : xr_lir_emit_value(m, block, &call, result);
+    const XrLirIntrinsic *signature = xr_lir_internal_slice_intrinsic(m, id);
+    if (!signature) return XR_LIR_INVALID_STATE;
+    XrLirType type = signature->result;
+    XrLirInstruction call = {.op=XR_LIR_CALL_INTRINSIC,.type=type,.intrinsic=id,.operands=args,.operand_count=count};
+    return type == XR_LIR_UNIT ? xr_lir_emit_effect(m, block, &call) : xr_lir_emit_value(m, block, &call, result);
 }
 static XrLirStatus view_fixture_create(XrLirModule **output) {
     XrLirModule *m = NULL; XrLirStatus status;
