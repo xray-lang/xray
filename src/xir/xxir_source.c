@@ -1984,7 +1984,7 @@ static bool source_block_functions(SourceContext *ctx,AstNode *block);
 #include "xxir_source_view.inc.c"
 #include "xxir_source_copy.inc.c"
 #include "xxir_source_unsafe.inc.c"
-static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
+static bool expression_structural_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     switch (node->type) {
     case AST_UNSAFE_EXPR: return source_unsafe_expression(ctx,node,context,value);
     case AST_LITERAL_NULL:
@@ -2045,14 +2045,6 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         --ctx->flow_alternatives;
         return matched && source_facts_kill(ctx, node);
     }
-    case AST_GROUPING: {
-        SourceExpressionPlan *child=ctx->active_expression->left;
-        if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"group has no collected expression");
-        if (!child->type_ready) child->expected=context;
-        if (!source_plan_complete(ctx,child,value)) return false;
-        source_read_forward(ctx->active_expression,child);
-        return true;
-    }
     case AST_COMPTIME_EXPR: return source_comptime_expression(ctx,node,context,value);
     case AST_COPY_EXPR: return source_copy(ctx,node,context,value);
     case AST_MOVE_EXPR: return source_move(ctx,node,value);
@@ -2112,12 +2104,6 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         }
         return source_binding_read(ctx, symbol, value);
     }
-    case AST_UNARY_BNOT: case AST_BINARY_BAND: case AST_BINARY_BOR: case AST_BINARY_BXOR:
-    case AST_BINARY_LSHIFT: case AST_BINARY_RSHIFT:
-    case AST_UNARY_NEG: case AST_BINARY_ADD: case AST_BINARY_SUB: case AST_BINARY_MUL:
-    case AST_BINARY_DIV: case AST_BINARY_MOD: case AST_BINARY_EQ: case AST_BINARY_NE:
-    case AST_BINARY_LT: case AST_BINARY_LE: case AST_BINARY_GT: case AST_BINARY_GE:
-        return source_arithmetic(ctx, node, context, value);
     case AST_COMPOUND_ASSIGNMENT: return source_compound(ctx, node, value);
     case AST_ASSIGNMENT: {
         SourceName *symbol = visible_name(ctx, node->as.assignment.name);
@@ -2142,6 +2128,21 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     }
     default: return source_fail_syntax(ctx, node, "expression");
     }
+}
+/* Arithmetic chains retain only this dispatch frame, not every structural case. */
+static bool expression_body(SourceContext *ctx,AstNode *node,SourceExpectedType context,SourceValue *value) {
+    if ((node->type>=AST_BINARY_ADD && node->type<=AST_BINARY_GE) ||
+        node->type==AST_UNARY_NEG || node->type==AST_UNARY_BNOT)
+        return source_arithmetic(ctx,node,context,value);
+    if (node->type==AST_GROUPING) {
+        SourceExpressionPlan *child=ctx->active_expression->left;
+        if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"group has no collected expression");
+        if (!child->type_ready) child->expected=context;
+        if (!source_plan_complete(ctx,child,value)) return false;
+        source_read_forward(ctx->active_expression,child);
+        return true;
+    }
+    return expression_structural_body(ctx,node,context,value);
 }
 static bool expression(SourceContext *ctx, AstNode *node, SourceValue *value) {
     return source_plan_expression(ctx, node, (SourceExpectedType){false,XR_XIR_UNIT, false, false}, value);
