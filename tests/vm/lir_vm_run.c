@@ -36,10 +36,11 @@ static XrRbcProgram *compile_file(const char *path, bool optimize, const char *s
         fprintf(stderr, "lir_vm_run: specialization failed (%u)\n",
             (unsigned)failure.specialization_status);
     } else if (status == XR_LIR_SOURCE_LOWER_FAILED) {
-        fprintf(stderr, "lir_vm_run: lower %s:%u:%u: %s\n",
+        fprintf(stderr, "lir_vm_run: lower %s:%u:%u: %s [function=%u block=%u instruction=%u]\n",
             failure.lower.owned_path ? failure.lower.owned_path : path,
             failure.lower.diagnostic.source.line, failure.lower.diagnostic.source.column,
-            failure.lower.diagnostic.message);
+            failure.lower.diagnostic.message, failure.lower.diagnostic.function,
+            failure.lower.diagnostic.block, failure.lower.diagnostic.instruction);
     } else if (status != XR_LIR_SOURCE_OK) {
         fprintf(stderr, "lir_vm_run: cannot prepare source input: %s\n", path);
     } else {
