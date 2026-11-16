@@ -272,6 +272,16 @@ static void cross_root_cell_guard(void) {
     OK(xrt_place_edge_transfer(copies,2,NULL));
     CHECK(xr_signed_rc_read(&cell->managed.references)==2);
     XrtManagedHeader *copied = NULL; OK(xrt_managed_slot_borrow(other_frame,3,&copied)); CHECK(copied==cell->value);
+    XrtBillingStats single_before=xrt_billing_owner_stats(f.billing);
+    OK(xrt_place_edge_transfer(copies,1,NULL));
+    CHECK(xr_signed_rc_read(&cell->managed.references)==2 && atomic_load(&cell->managed.flags)==UINT32_C(0x1000));
+    same_bill(&f,single_before);
+    atomic_fetch_or(&cell->managed.flags,UINT32_C(1));
+    STATUS(xrt_place_edge_transfer(copies,1,NULL),XRT_MANAGED_ARGUMENT);
+    atomic_fetch_and(&cell->managed.flags,~UINT32_C(1));
+    CHECK(xr_signed_rc_read(&cell->managed.references)==2);
+    OK(xrt_managed_slot_borrow(other_frame,3,&copied)); CHECK(copied==cell->value);
+    same_bill(&f,single_before);
     STATUS(xrt_place_move_replace(copies[0].destination,binding,NULL),XRT_MANAGED_ARGUMENT);
     bool wrong = false; XrtExternalOwner invalid = external; invalid.busy=&wrong;
     const XrtManagedHeader *absent = NULL;

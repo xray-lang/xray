@@ -547,6 +547,107 @@ static void nullable_edge_copies(void) {
     CHECK(!*owner_field(&fixture, 8) && !*owner_field(&fixture, 9) && bytes.calls == 1 && !tag);
     fixture_done(&fixture);
 }
+static void single_edge_boundaries(void) {
+    /* The second row is an empty nullable MOVE, so both transaction sizes
+     * exercise the same first-row rejection and publication obligations. */
+    for (size_t count = 1; count <= 2; ++count) {
+        Fixture fixture;
+        fixture_init(&fixture);
+        XrtManagedHeader *one = make(&fixture, 0, 1), *two = make(&fixture, 1, 2);
+        XrtManagedHeader *outside = NULL;
+        bool busy = false, other_busy = false;
+        Guard guard = {.readable=true, .writable=true};
+        XrtExternalOwner external = {&outside, &busy, preflight, &guard, NULL};
+        XrtPlace field = {.external=&external, .nulls=XRT_PLACE_NONNULL};
+        OK(xrt_place_move_replace(field, slot(&fixture, 1), NULL));
+        XrtPlace empty = slot(&fixture, 12), target = slot(&fixture, 13), temporary = slot(&fixture, 14);
+        empty.nulls = target.nulls = temporary.nulls = XRT_PLACE_NULLABLE;
+        XrtPlaceEdge edges[] = {{field, slot(&fixture, 0), slot(&fixture, 8), XRT_PLACE_TRANSFER_COPY},
+            {target, empty, temporary, XRT_PLACE_TRANSFER_MOVE}};
+        uint8_t tag = 3, expected = 17;
+        PublicationBytes bytes = {&tag, NULL, 1, 0, {17, 0}};
+        XrtPlacePublication publication = {publish_bytes, &bytes};
+        for (size_t role = 0; role < 3; ++role) {
+            XrtPlaceEdge invalid[] = {edges[0], edges[1]};
+            if (role == 0) invalid[0].source = slot(&fixture, 30);
+            else if (role == 1) invalid[0].destination = slot(&fixture, 30);
+            else invalid[0].temporary = slot(&fixture, 30);
+            BAD(xrt_place_edge_transfer(invalid, count, &publication));
+            CHECK(!busy && outside == two && *owner_field(&fixture, 0) == one && !bytes.calls);
+        }
+        edges[0].transfer = (XrtPlaceTransfer)0;
+        BAD(xrt_place_edge_transfer(edges, count, &publication));
+        edges[0].transfer = XRT_PLACE_TRANSFER_COPY;
+        XrtExternalOwner alias = external;
+        alias.busy = &other_busy;
+        edges[0].source = (XrtPlace){.external=&alias, .nulls=XRT_PLACE_NONNULL};
+        BAD(xrt_place_edge_transfer(edges, count, &publication));
+        CHECK(!busy && !other_busy);
+        edges[0].source = slot(&fixture, 0);
+        busy = true;
+        size_t calls = guard.calls;
+        BAD(xrt_place_edge_transfer(edges, count, &publication));
+        CHECK(busy && guard.calls == calls);
+        busy = false; guard.writable = false;
+        CHECK(xrt_place_edge_transfer(edges, count, &publication) == XRT_MANAGED_CLOSED);
+        guard.writable = true;
+        const size_t pending_slots[] = {0, 1, 8};
+        for (size_t i = 0; i < sizeof(pending_slots) / sizeof(*pending_slots); ++i) {
+            XrtManagedHeader *pending = NULL;
+            if (pending_slots[i] == 1) edges[0].destination = slot(&fixture, 1);
+            OK(xrt_managed_slot_prepare(fixture.frame, pending_slots[i], fixture.ops, sizeof(Payload), &pending));
+            ((Payload *)pending)->value = 3;
+            BAD(xrt_place_edge_transfer(edges, count, &publication));
+            CHECK(outside == two && *owner_field(&fixture, 0) == one && !busy);
+            OK(xrt_managed_slot_abort(fixture.frame, pending_slots[i]));
+            edges[0].destination = field;
+        }
+        make(&fixture, 8, 4);
+        BAD(xrt_place_edge_transfer(edges, count, &publication));
+        OK(xrt_managed_slot_drop(fixture.frame, 8));
+        edges[0].temporary = slot(&fixture, 0);
+        BAD(xrt_place_edge_transfer(edges, count, &publication));
+        edges[0].temporary = slot(&fixture, 8);
+        const int32_t limits[] = {INT32_MAX, -INT32_MAX};
+        for (size_t i = 0; i < sizeof(limits) / sizeof(*limits); ++i) {
+            atomic_store(&one->references, limits[i]);
+            CHECK(xrt_place_edge_transfer(edges, count, &publication) == XRT_MANAGED_REFCOUNT);
+            edges[0].destination = slot(&fixture, 0);
+            CHECK(xrt_place_edge_transfer(edges, count, &publication) == XRT_MANAGED_REFCOUNT);
+            edges[0].transfer = XRT_PLACE_TRANSFER_MOVE;
+            OK(xrt_place_edge_transfer(edges, count, NULL));
+            CHECK(xr_signed_rc_read(&one->references) == limits[i] && !*owner_field(&fixture, 8));
+            edges[0].transfer = XRT_PLACE_TRANSFER_COPY; edges[0].destination = field;
+        }
+        atomic_store(&one->references, 1);
+        CHECK(outside == two && tag == 3 && !bytes.calls && !busy);
+        guard.from = slot(&fixture, 0); guard.to = field; guard.reentry = true;
+        fixture.audit.observed_destination = &outside; fixture.audit.expected = one;
+        fixture.audit.observed_source = owner_field(&fixture, 0); fixture.audit.expected_source = one;
+        fixture.audit.observed_bytes = &tag; fixture.audit.expected_bytes = &expected;
+        fixture.audit.byte_count = 1; fixture.audit.observed_publications = &bytes.calls;
+        fixture.audit.reenter = field; fixture.audit.watch = true;
+        size_t allocations = atomic_load(&fixture.audit.allocations);
+        xrt_billing_owner_fail_after(fixture.billing, 0);
+        OK(xrt_place_edge_transfer(edges, count, &publication));
+        fixture.audit.watch = false;
+        CHECK(outside == one && xr_signed_rc_read(&one->references) == 2 && tag == 17 && bytes.calls == 1 && !busy);
+        CHECK(!*owner_field(&fixture, 8) && atomic_load(&fixture.audit.allocations) == allocations);
+        edges[0].source = field; edges[0].destination = slot(&fixture, 2);
+        guard.readable = false; guard.writable = false;
+        CHECK(xrt_place_edge_transfer(edges, count, NULL) == XRT_MANAGED_CLOSED);
+        guard.readable = true;
+        OK(xrt_place_edge_transfer(edges, count, NULL));
+        CHECK(outside == one && xr_signed_rc_read(&one->references) == 3 && !busy);
+        edges[0].transfer = XRT_PLACE_TRANSFER_MOVE; edges[0].destination = slot(&fixture, 3);
+        CHECK(xrt_place_edge_transfer(edges, count, NULL) == XRT_MANAGED_CLOSED);
+        guard.writable = true;
+        OK(xrt_place_edge_transfer(edges, count, NULL));
+        CHECK(!outside && !busy && xr_signed_rc_read(&one->references) == 3);
+        fixture_done(&fixture);
+    }
+    puts("single and multi-row edges retain identical rejection, alias, guard and publication boundaries");
+}
 static void inline_home_transfers(void) {
     typedef struct Homes { XrtManagedHeader *left, *right; } Homes;
     Fixture fixture;
@@ -594,7 +695,7 @@ int main(void) {
     publication_boundaries();
     edge_publication();
     duplicate_copy_publication(); copy_overflow_rollback(); mixed_edge_overlap();
-    external_edge_copies(); nullable_edge_copies();
+    external_edge_copies(); nullable_edge_copies(); single_edge_boundaries();
     inline_home_transfers();
     root_transfers(); external_transfers(); edges_and_domains(); edge_guards_and_retirement(); escaped_lifetime();
     puts("stable places: guarded replacement, whole-edge transfers and complete owner/code retirement passed");
