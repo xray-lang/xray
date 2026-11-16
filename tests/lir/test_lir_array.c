@@ -513,7 +513,7 @@ static void cs_binding_setup_scope(const char *text) {
         const char *end=strstr(cursor,"    }\n"); CHECK(end);
         const char *prepare=strstr(cursor,setup);
         if (prepare && prepare<end) {
-            const char *enter=strstr(cursor,"_enter(xrl_root, &xrl_frame, &xrl_payload)");
+            const char *enter=strstr(cursor,"xrt_managed_frame_enter_payload(xrl_root, &xrl_frame_");
             const char *failure=strstr(cursor,"if (status != XRT_MANAGED_OK) xrt_native_managed_failure(");
             CHECK(enter && failure && enter<failure && failure<prepare);
             ++guarded;
