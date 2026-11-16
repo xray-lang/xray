@@ -605,9 +605,11 @@ static void array_c_output(const char *name, const char *path) {
         m = fixture.module; OK(xr_lir_module_finish(m, NULL));
     }
     else if (!strncmp(name,"slice-state-",12)) {
-        SliceStateReadFixture fixture = slice_state_read_fixture(
-            strstr(name,"-u8") ? XR_LIR_U8 : XR_LIR_I64, strstr(name,"-mutable-") != NULL,
-            strstr(name,"-unready-") == NULL);
+        XrLirType element = strstr(name,"-u8") ? XR_LIR_U8 : XR_LIR_I64;
+        bool mutable = strstr(name,"-mutable-") != NULL;
+        SliceStateReadFixture fixture = strstr(name,"-initializing-") ?
+            slice_state_read_fixture_phase(element,mutable,SLICE_STATE_INITIALIZING) :
+            slice_state_read_fixture(element,mutable,strstr(name,"-unready-") == NULL);
         m = fixture.module; root = fixture.root; OK(xr_lir_module_finish(m, NULL));
     }
     else array_c_fixture(name, &m, &root);
@@ -720,7 +722,9 @@ int main(int argc, char **argv) {
     array_c_output("slice-boundary-i64",NULL); array_c_output("slice-boundary-u8",NULL);
     static const char *const state_slices[]={"slice-state-const-i64","slice-state-const-u8",
         "slice-state-mutable-i64","slice-state-mutable-u8","slice-state-unready-const-i64",
-        "slice-state-unready-const-u8","slice-state-unready-mutable-i64","slice-state-unready-mutable-u8"};
+        "slice-state-unready-const-u8","slice-state-unready-mutable-i64","slice-state-unready-mutable-u8",
+        "slice-state-initializing-const-i64","slice-state-initializing-const-u8",
+        "slice-state-initializing-mutable-i64","slice-state-initializing-mutable-u8"};
     for (size_t n=0;n<sizeof(state_slices)/sizeof(*state_slices);++n) array_c_output(state_slices[n],NULL);
     static const char *const map_formals[]={"map-formal-new","map-formal-closure","map-formal-write","map-formal-ref",
         "map-formal-state","map-formal-construct","map-formal-initialize"};

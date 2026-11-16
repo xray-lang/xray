@@ -127,6 +127,8 @@ def main():
                 'slice-boundary-i64': 68, 'slice-boundary-u8': 68,
                 'slice-state-const-i64': 25, 'slice-state-const-u8': 25,
                 'slice-state-mutable-i64': 25, 'slice-state-mutable-u8': 25,
+                'slice-state-initializing-const-i64': 25, 'slice-state-initializing-const-u8': 25,
+                'slice-state-initializing-mutable-i64': 25, 'slice-state-initializing-mutable-u8': 25,
                 'slice-state-unready-const-i64': None, 'slice-state-unready-const-u8': None,
                 'slice-state-unready-mutable-i64': None, 'slice-state-unready-mutable-u8': None,
                 'map-formal-new': 1, 'map-formal-closure': 1, 'map-formal-write': 1, 'map-formal-ref': 1,
