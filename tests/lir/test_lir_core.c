@@ -13,6 +13,27 @@
 #include "lir/xlir_inline.h"
 #include "lir/xlir_sccp.h"
 #include "base/xmalloc.h"
+#include "lir_slice_callable_fixture.h"
+
+static void slice_callable_captures(void) {
+    for (unsigned shape=0;shape<SLICE_CALLABLE_CASE_COUNT;++shape) {
+        XrLirModule *m=slice_callable_fixture((SliceCallableCase)shape);
+        bool safe=shape==SLICE_CALLABLE_DIRECT || shape==SLICE_CALLABLE_INDIRECT || shape==SLICE_CALLABLE_ALIAS;
+        XrLirStatus expected=safe?XR_LIR_OK:shape==SLICE_CALLABLE_ARRAY?XR_LIR_VERIFY_ERROR:XR_LIR_UNSUPPORTED;
+        XrLirDiagnostic diagnostic={0};
+        XrLirStatus status=xr_lir_module_finish(m,&diagnostic);
+        if (status!=expected) fprintf(stderr,"Slice callable case %u: status %u, f%u b%u i%u: %s\n",
+            shape,(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.message);
+        CHECK(status==expected);
+        if (safe) {
+            OK(xr_lir_verify(m,NULL));XrLirModule *copy=NULL;OK(xr_lir_rebuild(m,&copy));
+            xr_lir_module_destroy(m);OK(xr_lir_verify(copy,NULL));xr_lir_module_destroy(copy);
+        } else {
+            CHECK(strstr(diagnostic.message,shape==SLICE_CALLABLE_ARRAY?"Array binding write":"captured binding effect facts"));
+            xr_lir_module_destroy(m);
+        }
+    }
+}
 
 static void queries(void) {
     XrLirModule *fib = test_fib(), *sum = test_sum();
@@ -973,6 +994,7 @@ int main(void) {
     intrinsic_and_float();
     intrinsic_query_and_transfer();
     first_failure_diagnostic();
+    slice_callable_captures();
     puts("scalar LIR construction, queries, ownership and rejection tests passed");
     return 0;
 }

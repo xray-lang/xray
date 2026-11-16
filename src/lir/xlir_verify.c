@@ -1053,7 +1053,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
 #include "xlir_callable_scope_verify.inc.c"
 #include "xlir_slice_verify.inc.c"
 
-static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCallableFacts **facts,
+static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d, XrLirCallableFacts **facts,
     uint8_t **multiplicity) {
     if (d)
         memset(d, 0, sizeof(*d));
@@ -1143,8 +1143,6 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
             if (!xr_lir_internal_type_valid(m, f->values[value].type, true))
                 return xr_lir_internal_error(d, "SSA value type is invalid", index + 1, 0, 0, NULL);
         if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
-            XrLirStatus slice = lir_slice_function(m, f, index + 1, d);
-            if (slice != XR_LIR_OK) return slice;
             XrLirStatus status = lir_callable_facts_capture(m, f, index + 1, (LirCallableGeometry){0}, facts);
             if (status != XR_LIR_OK) return lir_status_error(d, status, "callable description allocation failed");
             continue;
@@ -1184,7 +1182,6 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
             status = lir_uses(f, index + 1, &graph, d);
         }
         if (status == XR_LIR_OK) status = lir_state_function(m, index, d);
-        if (status == XR_LIR_OK) status = lir_slice_function(m, f, index + 1, d);
         if (status==XR_LIR_OK && multiplicity) {
             multiplicity[index]=graph.multiplicity;graph.owns_multiplicity=false;
         }
@@ -1199,6 +1196,22 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
         }
     }
     return XR_LIR_OK;
+}
+static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d,XrLirCallableFacts **facts,
+    uint8_t **multiplicity) {
+    XrLirCallableFacts *temporary=NULL;
+    XrLirCallableFacts **receiving=facts ? facts : m && m->slice_facts ? &temporary : NULL;
+    XrLirStatus status=lir_verify_structure(m,d,receiving,multiplicity);
+    /* Every target's canonical captures are complete before the one loan pass.
+     * Independent verification owns its receiving copy until that pass ends. */
+    for (uint32_t f=0;status == XR_LIR_OK && f<m->function_count;++f) {
+        status=lir_slice_function(m,&m->functions[f],f+1,receiving ? *receiving : NULL,d);
+        if (status != XR_LIR_OK && d && d->status == XR_LIR_OK) {
+            lir_status_error(d,status,"Slice loan receiving failed");d->function=f+1;
+        }
+    }
+    xr_lir_callable_facts_destroy(temporary);
+    return status;
 }
 
 XR_FUNC XrLirStatus xr_lir_verify(const XrLirModule *m, XrLirDiagnostic *d) {
