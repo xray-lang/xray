@@ -39,6 +39,8 @@ typedef struct LirCConstructedType {
     char name[32];
 } LirCConstructedType;
 
+enum { LIR_C_FUNCTION_VISITED = 1u, LIR_C_FUNCTION_STRING_BINDING = 2u };
+
 typedef struct LirC {
     const XrLirCRequest *request;
     XrLirCDiagnostic *diagnostic;
@@ -317,10 +319,10 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
 #include "xlir_c_string_library.inc.c"
 static void c_visit(LirC *c, uint32_t id) {
     XR_DCHECK(id && id <= xr_lir_function_count(c->request->module), "valid callee");
-    if (!c->seen[id - 1]) {
+    if (!(c->seen[id - 1] & LIR_C_FUNCTION_VISITED)) {
         XR_DCHECK(c->closure_count < xr_lir_function_count(c->request->module),
                   "each closure function enters the queue once");
-        c->seen[id - 1] = 1;
+        c->seen[id - 1] |= LIR_C_FUNCTION_VISITED;
         c->closure[c->closure_count++] = id;
     }
 }

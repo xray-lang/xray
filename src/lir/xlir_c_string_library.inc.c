@@ -215,7 +215,6 @@ static void c_string_binding_instruction(LirC *c, const XrLirInstructionView *v,
         c_error(c,XR_LIR_C_INVALID_LIR,"String append lost its nonconsuming binding and suffix"); return;
     }
     c_values_ensure(c,source);
-    c_format(c,"    xrt_native_string_binding_prepare(UINT32_C(%" PRIu32 "));\n",source);
     c_string_binding_cache(c,binding_value,source);
     c_text(c,"    xrt_native_string_append_place("); c_string_binding_place(c,binding_value);
     c_format(c,", xrl_frame, %zu, (const XrtStringBacking *)",workspace->first_owner); c_value(c,target);

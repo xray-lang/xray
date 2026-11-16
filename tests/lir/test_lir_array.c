@@ -448,11 +448,18 @@ static void cs_binding_fixture(XrLirModule **output, XrLirFunction *entry) {
         .payload_size=sizeof(void *),.payload_alignment=_Alignof(void *)};
     OK(xr_lir_set_state_layout(c.module,&layout));
     XrLirType state_type=XR_LIR_STATE,parameters[]={XR_LIR_STRING,XR_LIR_STATE};
-    XrLirFunction root={0},helper={0};
+    XrLirFunction root={0},helper={0},borrowed_only={0};
     XrLirFunctionSpec spec={.name="root",.name_length=4,.parameters=&state_type,.parameter_count=1,.result=XR_LIR_I64};
     OK(xr_lir_declare_function(c.module,&spec,&root)); OK(xr_lir_set_state_entry(c.module,root));
     spec=(XrLirFunctionSpec){.name="bindings",.name_length=8,.parameters=parameters,.parameter_count=2,.result=XR_LIR_I64};
-    OK(xr_lir_declare_function(c.module,&spec,&helper)); OK(xr_lir_define_function(c.module,helper));
+    OK(xr_lir_declare_function(c.module,&spec,&helper));
+    XrLirType ref_type=XR_LIR_STRING_REF;
+    spec=(XrLirFunctionSpec){.name="borrowed_only",.name_length=13,.parameters=&ref_type,.parameter_count=1,.result=XR_LIR_UNIT};
+    OK(xr_lir_declare_function(c.module,&spec,&borrowed_only)); OK(xr_lir_define_function(c.module,borrowed_only));
+    XrLirBlock empty={0}; OK(xr_lir_add_block(c.module,borrowed_only,NULL,0,&empty));
+    OK(xr_lir_set_entry(c.module,borrowed_only,empty));
+    OK(xr_lir_set_terminator(c.module,empty,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT}));
+    OK(xr_lir_define_function(c.module,helper));
     XrLirBlock body={0}; OK(xr_lir_add_block(c.module,helper,NULL,0,&body)); OK(xr_lir_set_entry(c.module,helper,body));
     XrLirValue incoming={0},state={0};
     OK(xr_lir_function_parameter(c.module,helper,0,&incoming)); OK(xr_lir_function_parameter(c.module,helper,1,&state));
@@ -461,6 +468,8 @@ static void cs_binding_fixture(XrLirModule **output, XrLirFunction *entry) {
     XrLirInstruction write={.op=XR_LIR_CELL_WRITE,.type=XR_LIR_UNIT,.operands=pair,.operand_count=2,.source=ca_source()};
     OK(xr_lir_emit_effect(c.module,body,&write));
     XrLirValue local_ref=cs_binding_role(&c,body,XR_LIR_STRING_OP_BORROW_CELL,XR_LIR_STRING_REF,&cell,1);
+    XrLirInstruction forward={.op=XR_LIR_CALL,.type=XR_LIR_UNIT,.callee=borrowed_only,.operands=&local_ref,.operand_count=1};
+    OK(xr_lir_emit_effect(c.module,body,&forward));
     pair[0]=local_ref; (void)cs_binding_role(&c,body,XR_LIR_STRING_OP_WRITE_REF,XR_LIR_UNIT,pair,2);
     pair[0]=cell; (void)cs_binding_role(&c,body,XR_LIR_STRING_OP_APPEND_CELL,XR_LIR_UNIT,pair,2);
     pair[0]=local_ref; (void)cs_binding_role(&c,body,XR_LIR_STRING_OP_APPEND_REF,XR_LIR_UNIT,pair,2);
@@ -491,6 +500,24 @@ static void cs_binding_fixture(XrLirModule **output, XrLirFunction *entry) {
     OK(xr_lir_module_finish(c.module,NULL)); *output=c.module; *entry=root;
 }
 
+static void cs_binding_setup_scope(const char *text) {
+    static const char setup[]="xrt_native_string_binding_prepare(";
+    static const char frame[]="    if (!xrl_frame) {\n";
+    size_t calls=0,guarded=0;
+    for (const char *cursor=text; (cursor=strstr(cursor,setup))!=NULL; cursor+=sizeof(setup)-1) ++calls;
+    for (const char *cursor=text; (cursor=strstr(cursor,frame))!=NULL;) {
+        const char *end=strstr(cursor,"    }\n"); CHECK(end);
+        const char *prepare=strstr(cursor,setup);
+        if (prepare && prepare<end) {
+            const char *enter=strstr(cursor,"_enter(xrl_root, &xrl_frame, &xrl_payload)");
+            const char *failure=strstr(cursor,"if (status != XRT_MANAGED_OK) xrt_native_managed_failure(");
+            CHECK(enter && failure && enter<failure && failure<prepare);
+            ++guarded;
+        }
+        cursor=end+6;
+    }
+    CHECK(calls && calls==guarded);
+}
 static void array_c_output(const char *name, const char *path) {
     XrLirModule *m = NULL;
     XrLirFunction root = {0};
@@ -533,9 +560,20 @@ static void array_c_output(const char *name, const char *path) {
         CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_OK && program);
         xr_rbc_program_destroy(program);
     }
-    if (!strcmp(name,"string-bindings"))
+    if (!strcmp(name,"string-bindings") || !strcmp(name,"string-ref-bindings")) {
         CHECK(strstr(output.bytes,"xrt_native_string_binding_prepare(") && strstr(output.bytes,"xrt_native_string_append_place(") &&
-            strstr(output.bytes,"xrt_place_move_replace(") && strstr(output.bytes,"XrtPlace"));
+            strstr(output.bytes,"XrtPlace"));
+        cs_binding_setup_scope(output.bytes);
+    }
+    if (!strcmp(name,"string-bindings")) {
+        CHECK(strstr(output.bytes,"xrt_place_move_replace("));
+        const char *borrowed=strstr(output.bytes,"static void xrl_f3(XrtPlace p0) {\n"); CHECK(borrowed);
+        const char *end=strstr(borrowed,"\n}\n"),*frame=strstr(borrowed,"xrl_frame"); CHECK(end);
+        CHECK(!frame || frame>end);
+        const char *prepare=strstr(borrowed,"xrt_native_string_binding_prepare("); CHECK(!prepare || prepare>end);
+    }
+    if (!strcmp(name,"i64") || !strcmp(name,"string"))
+        CHECK(!strstr(output.bytes,"xrt_native_string_binding_prepare("));
     if (path) {
         FILE *file = fopen(path, "wb");
         CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && !fclose(file));
