@@ -187,7 +187,7 @@ static void callable_reference_shapes(void) {
     XrLirType owned_cell = 0;
     OK(xr_lir_cell_type(module, (XrLirCellType){XR_LIR_I64, 0}, &owned_cell));
     XrLirType cells[] = {XR_LIR_I64_CELL, XR_LIR_STRING_CELL, XR_LIR_ARRAY_CELL,
-        XR_LIR_ARRAY_REF, XR_LIR_STRING_REF, XR_LIR_VIEW_CELL, owned_cell};
+        XR_LIR_ARRAY_REF, XR_LIR_STRING_REF, owned_cell};
     for (unsigned c = 0; c < sizeof(cells) / sizeof(cells[0]); ++c) {
         XrLirCallableParameter parameter = {.type=cells[c], .mode=XR_PARAM_REF,
             .array_element=cells[c] == XR_LIR_ARRAY_CELL || cells[c] == XR_LIR_ARRAY_REF ? XR_LIR_I64 : 0};
@@ -209,7 +209,25 @@ static void callable_reference_shapes(void) {
             xr_lir_module_destroy(invalid);
         }
     }
+    const XrLirType elements[] = {XR_LIR_I64, XR_LIR_U8};
+    for (unsigned n = 0; n < sizeof(elements) / sizeof(elements[0]); ++n) {
+        XrLirType slice = 0, type = 0;
+        OK(xr_lir_slice_type(module, elements[n], &slice));
+        XrLirCallableParameter parameter = {.type=slice, .mode=XR_PARAM_READ};
+        XrLirCallableType signature = {.parameters=&parameter, .parameter_count=1, .result=XR_LIR_UNIT};
+        OK(xr_lir_callable_type(module, &signature, &type));
+        XrLirCallableType view;
+        OK(xr_lir_callable_type_view(module, type, &view));
+        CHECK(view.parameters[0].type == slice && view.parameters[0].mode == XR_PARAM_READ);
+    }
     OK(xr_lir_module_finish(module, NULL));
     OK(xr_lir_verify(module, NULL));
     xr_lir_module_destroy(module);
+    XrLirModule *retired = NULL;
+    OK(xr_lir_module_create(NULL, &retired));
+    XrLirCallableParameter parameter = {.type=XR_LIR_VIEW_CELL, .mode=XR_PARAM_REF};
+    XrLirCallableType signature = {.parameters=&parameter, .parameter_count=1, .result=XR_LIR_UNIT};
+    XrLirType rejected = 0;
+    CHECK(xr_lir_callable_type(retired, &signature, &rejected) == XR_LIR_INVALID_ARGUMENT && !rejected);
+    xr_lir_module_destroy(retired);
 }

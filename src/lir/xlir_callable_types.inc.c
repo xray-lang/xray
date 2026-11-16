@@ -34,7 +34,7 @@ static bool lir_callable_signature_valid(const XrLirModule *m, const XrLirCallab
             m->types[parameter.type - XR_LIR_TYPE_COUNT].shape.kind != XR_LIR_TYPE_CALLABLE)) return false;
         bool reference = parameter.type == XR_LIR_I64_CELL || parameter.type == XR_LIR_STRING_CELL ||
             parameter.type == XR_LIR_ARRAY_CELL || parameter.type == XR_LIR_ARRAY_REF ||
-            parameter.type == XR_LIR_STRING_REF || parameter.type == XR_LIR_VIEW_CELL ||
+            parameter.type == XR_LIR_STRING_REF ||
             (parameter.type >= XR_LIR_TYPE_COUNT &&
                 m->types[parameter.type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_CELL);
         if ((parameter.mode == XR_PARAM_REF) != reference) return false;
