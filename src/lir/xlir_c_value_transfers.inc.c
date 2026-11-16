@@ -52,7 +52,7 @@ static bool c_edge_event(const LirCEdgeEvents *events, const XrLirHomeEdge *edge
         const XrLirHomeEvent *event = &events->homes->events[events->index[at] - 1];
         if (event->block == edge->block && event->edge == edge->edge && event->target == transfer.target)
             return event->source == transfer.source && event->target_block == edge->target_block &&
-                event->transfer_mode == transfer.transfer_mode;
+                event->transfer_mode == transfer.transfer_mode && event->hold_transfer_mode == transfer.hold_transfer_mode;
         at = (at + 1) & (events->capacity - 1);
     }
     return false;
@@ -85,12 +85,28 @@ static size_t c_value_edge_owners(LirC *c, const XrLirValueHomes *homes,
     for (size_t i = 0; i < edge->count && c_request_poll(c); ++i) {
         XrLirHomeTransfer transfer = homes->transfers[edge->first + i];
         const XrLirValueHome *target = &homes->values[transfer.target];
+        const XrLirValueHome *source = &homes->values[transfer.source];
+        if (target->view_workspace || source->view_workspace || transfer.source_workspace || transfer.target_workspace) {
+            if (source->type != target->type || transfer.source_workspace != source->view_workspace ||
+                transfer.target_workspace != target->view_workspace ||
+                transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
+                (transfer.hold_transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY &&
+                 transfer.hold_transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE) ||
+                !c_edge_event(events, edge, transfer) ||
+                !c_view_value_workspace(c, homes, transfer.source) || !c_view_value_workspace(c, homes, transfer.target)) {
+                c_error(c, XR_LIR_C_INVALID_LIR, "Slice edge lost its separate keeper transfer event"); return 0;
+            }
+            if (count == SIZE_MAX) {
+                c_error(c, XR_LIR_C_OVERFLOW, "C edge keeper inventory exceeds machine capacity"); return 0;
+            }
+            ++count;
+            continue;
+        }
         if (!target->owner_count) continue;
         if (!c_edge_event(events, edge, transfer)) {
             c_error(c, XR_LIR_C_INVALID_LIR, "owned C edge has no matching final ownership event");
             return 0;
         }
-        const XrLirValueHome *source = &homes->values[transfer.source];
         if (source->owner_count != target->owner_count ||
             (transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY &&
              transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)) {
@@ -139,7 +155,8 @@ static void c_value_edge_hook(LirC *c, const XrLirValueHomes *homes, const XrLir
             for (size_t j = 0; j < target->byte_count && c_request_poll(c); ++j) {
                 XrLirHomeBytes bytes = homes->bytes[target->first_bytes + j];
                 if (pass == 1) {
-                    if (source->owner_count && transfer.transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE)
+                    if ((source->owner_count && transfer.transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE) ||
+                        (source->view_workspace && transfer.hold_transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE))
                         c_format(c, "    memset(edge->payload + %zu, 0, %zu);\n", source->offset + bytes.offset, bytes.size);
                     continue;
                 }
@@ -183,6 +200,14 @@ static void c_value_edge(LirC *c, const XrLirValueHomes *homes,
     for (size_t i = 0; i < edge->count && c_request_poll(c); ++i) {
         XrLirHomeTransfer transfer = homes->transfers[edge->first + i];
         const XrLirValueHome *source = &homes->values[transfer.source], *target = &homes->values[transfer.target];
+        if (transfer.target_workspace) {
+            const XrLirHomeWorkspace *from = c_view_workspace(c, homes, transfer.source_workspace);
+            const XrLirHomeWorkspace *to = c_view_workspace(c, homes, transfer.target_workspace);
+            if (!from || !to) return;
+            c_format(c, "        {{frame, %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NONNULL}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, %s},\n",
+                to->first_owner, from->first_owner, to->temporary_first_owner,
+                transfer.hold_transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY ? "XRT_PLACE_TRANSFER_COPY" : "XRT_PLACE_TRANSFER_MOVE");
+        }
         for (size_t leaf = 0; leaf < target->owner_count && c_request_poll(c); ++leaf)
             c_format(c, "        {{frame, %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, {frame, %zu, NULL, XRT_PLACE_NULLABLE}, %s},\n",
                 target->first_owner + leaf, source->first_owner + leaf, target->temporary_first_owner + leaf,
@@ -306,6 +331,11 @@ XR_FUNC XrLirCStatus xr_lir_emit_c_value_transfers(const XrLirCValueTransfersReq
     for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)
         if (types.rows[i].spec.kind == XRT_VALUE_FUNCTION) {
             c_text(&c, "#include \"xray_native_function.h\"\n");
+            break;
+        }
+    for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)
+        if (types.rows[i].spec.kind == XRT_VALUE_SLICE_I64 || types.rows[i].spec.kind == XRT_VALUE_SLICE_U8) {
+            c_text(&c, "#include \"xray_native_array_slice.h\"\n");
             break;
         }
     if (homes->owned_frame_needed) c_text(&c, "#include <string.h>\n#include \"xray_native_place.h\"\n");

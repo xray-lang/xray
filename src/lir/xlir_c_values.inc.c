@@ -230,7 +230,7 @@ static void c_values_declarations(LirC *c) {
 static bool c_values_declare(LirC *c, uint32_t value) {
     if (c->homes && c->homes->bindings && c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_STATE_BORROW)
         c_format(c, "    XrtExternalOwner xrl_array_binding%" PRIu32 ";\n", value);
-    return c->homes && (c->homes->values[value].owner_count ||
+    return c->homes && (c->homes->values[value].owner_count || c->homes->values[value].view_workspace ||
         (c->homes->bindings && c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_LOCAL));
 }
 static void c_values_ensure(LirC *c, uint32_t source) {
@@ -350,8 +350,10 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
     }
     if (!home) return false;
     bool owned = false;
-    for (size_t a = 0; a < home->count; ++a)
-        owned |= c->homes->values[c->homes->transfers[home->first + a].target].owner_count != 0;
+    for (size_t a = 0; a < home->count; ++a) {
+        const XrLirHomeTransfer *transfer = &c->homes->transfers[home->first + a];
+        owned |= c->homes->values[transfer->target].owner_count != 0 || transfer->target_workspace != 0;
+    }
     if (!owned) return false;
     XrLirBlockView target;
     xr_lir_block_view(c->request->module, (XrLirBlock){c->request->module, c->function.id, edge->target}, &target);

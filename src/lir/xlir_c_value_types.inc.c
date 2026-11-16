@@ -84,6 +84,7 @@ static const char *c_value_scalar_type(XrtValueKind kind) {
     case XRT_VALUE_F32: return "float";
     case XRT_VALUE_F64: return "double";
     case XRT_VALUE_FUNCTION: return "XrtFunction";
+    case XRT_VALUE_SLICE_I64: case XRT_VALUE_SLICE_U8: return "XrtReadonlyArraySlice";
     case XRT_VALUE_STRING: case XRT_VALUE_ARRAY_I64: case XRT_VALUE_ARRAY_STRING:
     case XRT_VALUE_ARRAY_U8: case XRT_VALUE_ARRAY_U64: case XRT_VALUE_MAP_STRING_I64:
         return "XrtManagedHeader *";
@@ -176,6 +177,11 @@ XR_FUNC XrLirCStatus xr_lir_emit_c_value_types(const XrLirCValueTypesRequest *re
     for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)
         if (types.rows[i].spec.kind == XRT_VALUE_FUNCTION) {
             c_text(&c, "#include \"xray_native_function.h\"\n");
+            break;
+        }
+    for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)
+        if (types.rows[i].spec.kind == XRT_VALUE_SLICE_I64 || types.rows[i].spec.kind == XRT_VALUE_SLICE_U8) {
+            c_text(&c, "#include \"xray_native_array_slice.h\"\n");
             break;
         }
     for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)
