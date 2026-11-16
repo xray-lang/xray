@@ -581,7 +581,34 @@ int main(int argc, char **argv) {
     XrRbcProgram *program = NULL; XrRbcCompileDiagnostic bd = {0};
     start = clock_ticks();
     XrRbcCompileStatus bs = xr_rbc_compile(lowered.module, lowered.entry, &program, &bd);
-    if (bs != XR_RBC_COMPILE_OK) fprintf(stderr, "bytecode: %s\n", bd.message);
+    if (bs != XR_RBC_COMPILE_OK) {
+        fprintf(stderr,"bytecode f%u b%u i%u: %s\n",bd.function,bd.block,bd.instruction,bd.message);
+        XrLirFunction function={lowered.module,bd.function}; XrLirFunctionView view={0};
+        if (xr_lir_function_view(lowered.module,function,&view)==XR_LIR_OK) {
+            fprintf(stderr,"rejected function: entry=b%u blocks=%u\n",view.entry,view.block_count);
+            for (uint32_t b=0;b<view.block_count;++b) {
+                XrLirBlock block={0}; XrLirBlockView body={0};
+                OK(xr_lir_block_at(lowered.module,function,b,&block));
+                OK(xr_lir_block_view(lowered.module,block,&body));
+                fprintf(stderr,"b%u params",block.id);
+                for (uint32_t p=0;p<body.parameter_count;++p) fprintf(stderr," v%u",body.parameters[p]);
+                fputc('\n',stderr);
+                for (uint32_t n=0;n<body.instruction_count;++n) {
+                    XrLirInstructionView op={0}; OK(xr_lir_instruction_view(lowered.module,block,n,&op));
+                    fprintf(stderr," b%u i%u op=%u result=v%u type=%u callee=f%u bits=%" PRIu64 " source=%u:%u args",
+                        block.id,n+1,(unsigned)op.op,op.result,op.type,op.callee,op.bits,op.source.line,op.source.column);
+                    for (uint32_t p=0;p<op.operand_count;++p) fprintf(stderr," v%u",op.operands[p]);
+                    for (uint32_t e=0;e<op.edge_count;++e) {
+                        fprintf(stderr," edge%u=b%u(",e+1,op.edges[e].target);
+                        for (uint32_t p=0;p<op.edges[e].argument_count;++p)
+                            fprintf(stderr,"v%u%s",op.edges[e].arguments[p],p+1<op.edges[e].argument_count ? "," : "");
+                        fputc(')',stderr);
+                    }
+                    fputc('\n',stderr);
+                }
+            }
+        }
+    }
     CHECK(bs == XR_RBC_COMPILE_OK && program);
     const XrRbcModule *rbc=xr_rbc_program_view(program);
     for(size_t f=0;f<rbc->function_count;++f) {
