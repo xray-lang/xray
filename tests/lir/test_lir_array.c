@@ -41,6 +41,7 @@
 #include "lir_c_cell_fixture.h"
 #include "lir_c_map_literal_fixture.h"
 #include "lir_map_borrow_fixture.h"
+#include "lir_slice_boundary_root_fixture.h"
 #include "lir_string_fixture.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
@@ -519,6 +520,30 @@ static void cs_binding_setup_scope(const char *text) {
     }
     CHECK(calls && calls==guarded);
 }
+static void slice_c_raw_entry_rejection(XrLirType element) {
+    SliceBoundaryFixture fixture = slice_boundary_fixture(element, false);
+    OK(xr_lir_module_finish(fixture.module, NULL));
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {.module=fixture.module, .entry=fixture.fanout, .resources=resources,
+        .translation_unit="raw-slice-entry.c"};
+    XrLirCOutput output = {0};
+    CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_BAD_ARGUMENT && !output.bytes && !output.length);
+    xr_compile_resources_release(resources); xr_lir_module_destroy(fixture.module);
+}
+static void slice_c_reader_has_no_owners(const char *text) {
+    const char *needle = "static int64_t xrl_f4(", *reader = strstr(text, needle);
+    while (reader) {
+        const char *line = strchr(reader, '\n'), *body = strstr(reader, ") {\n");
+        if (line && body && body < line) { reader = body; break; }
+        reader = strstr(reader + 1, needle);
+    }
+    CHECK(reader);
+    const char *end = strstr(reader, "\n}\n"); CHECK(end);
+    const char *frame = strstr(reader, "xrl_frame"), *retain = strstr(reader, "xrt_managed_retain(");
+    CHECK((!frame || frame > end) && (!retain || retain > end));
+}
 static void array_c_output(const char *name, const char *path) {
     XrLirModule *m = NULL;
     XrLirFunction root = {0};
@@ -551,6 +576,11 @@ static void array_c_output(const char *name, const char *path) {
     else if (!strcmp(name,"string-bindings")) cs_binding_fixture(&m,&root);
     else if (!strcmp(name,"string-ref-bindings")) {
         OK(string_ref_fixture(&m)); OK(xr_lir_function_at(m,0,&root));
+    }
+    else if (!strcmp(name,"slice-boundary-i64") || !strcmp(name,"slice-boundary-u8")) {
+        SliceBoundaryFixture fixture = slice_boundary_root_fixture(
+            !strcmp(name,"slice-boundary-u8") ? XR_LIR_U8 : XR_LIR_I64, &root);
+        m = fixture.module; OK(xr_lir_module_finish(m, NULL));
     }
     else array_c_fixture(name, &m, &root);
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
@@ -586,6 +616,7 @@ static void array_c_output(const char *name, const char *path) {
         if (strcmp(name,"map-formal-construct") && strcmp(name,"map-formal-initialize"))
             CHECK(strstr(output.bytes,"xrt_managed_slot_adopt(") && strstr(output.bytes,"xrt_place_move_replace("));
     }
+    if (!strncmp(name,"slice-boundary-",15)) slice_c_reader_has_no_owners(output.bytes);
     if (path) {
         FILE *file = fopen(path, "wb");
         CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && !fclose(file));
@@ -655,6 +686,8 @@ int main(int argc, char **argv) {
     CHECK(argc == 1);
     array_c_output("string-bindings",NULL);
     array_c_output("string-ref-bindings",NULL);
+    slice_c_raw_entry_rejection(XR_LIR_I64); slice_c_raw_entry_rejection(XR_LIR_U8);
+    array_c_output("slice-boundary-i64",NULL); array_c_output("slice-boundary-u8",NULL);
     static const char *const map_formals[]={"map-formal-new","map-formal-closure","map-formal-write","map-formal-ref",
         "map-formal-state","map-formal-construct","map-formal-initialize"};
     for (size_t n=0;n<sizeof(map_formals)/sizeof(*map_formals);++n) array_c_output(map_formals[n],NULL);
