@@ -10,6 +10,8 @@
 #include "base/xmalloc.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_code.h"
+#include "xray_native_values.h"
+#include "xray_native_array_slice.h"
 
 
 // The sole guest result is owned; this test helper consumes it after inspection.
@@ -118,7 +120,18 @@ static size_t observed_location_count(const XrtLocationOwner *owner) {
     return xrt_locations_count(owner);
 }
 #define xrt_locations_count observed_location_count
+/* Observe authentic cold Slice boundaries inside this existing fault harness. */
+static XrRbcExecution *slice_running_execution;
+static XrtManagedStatus slice_observe_inline(const XrtInlineValueHome *,const XrtInlineValueSpec *,const void *);
+static bool slice_observe_retain(XrtManagedHeader *);
+static _Noreturn void slice_observe_failure(XrtManagedStatus,uint32_t);
+#define xrt_inline_value_replace slice_observe_inline
+#define xrt_managed_retain slice_observe_retain
+#define xrt_native_managed_failure slice_observe_failure
 #include "vm/register/xrbc.c"
+#undef xrt_native_managed_failure
+#undef xrt_managed_retain
+#undef xrt_inline_value_replace
 #undef xrt_locations_count
 // Scope fault injection to the actual common admission called before publish.
 static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocationOwner *locations) {
@@ -990,6 +1003,7 @@ static void record_compiler_failures(void) {
     printf("Record/Nullable compiler/runtime allocation failures %zu/%zu drained\n", total, runtime);
     attempts = 0;
 }
+#include "lir_slice_alloc_cases.h"
 int main(void) {
     // Keep the last completed allocation fixture visible even after a fatal abort.
     CHECK(!setvbuf(stdout,NULL,_IONBF,0));
@@ -1000,6 +1014,7 @@ int main(void) {
     tuple_compiler_failures();
     typed_edge_spill_cycles();
     string_reference_allocation_failures();
+    slice_boundary_allocation_failures();
     aggregate_call_compiler_failures(false);
     aggregate_call_compiler_failures(true);
     aggregate_state_compiler_failures();
