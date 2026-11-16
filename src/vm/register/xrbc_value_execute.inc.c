@@ -607,7 +607,6 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
     }
     for (uint32_t p=0;p<access.count;++p) {
         uint32_t from=caller->code->arguments[access.first+p];
-        const XrLirValueHome *home=rbc_value_home(caller->code,from);
         if (receiving) {
             uint32_t parameter=captures+p;
             uint32_t to=receiving->parameters[parameter];
@@ -619,7 +618,8 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
                 child->parameters[parameter]=rbc_value_origin(caller,from); continue;
             }
             if (formal && formal->type) {
-                if (!home || home->type!=formal->type || formal->parameter!=parameter+1) return XR_RBC_INVALID;
+                if (!rbc_value_formal_accepts(module,receiving,to,caller->code,from) ||
+                    formal->parameter!=parameter+1) return XR_RBC_INVALID;
                 if (formal->owner_count || rbc_value_inline(module,receiving,to,false)) {
                     child->parameters[parameter]=rbc_value_origin(caller,from); continue;
                 }

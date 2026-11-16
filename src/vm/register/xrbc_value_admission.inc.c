@@ -269,7 +269,8 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 if (!actual || binding->kind!=XR_LIR_HOME_BINDING_PARAMETER || binding->parameter!=p+1 ||
                     binding->type!=actual->type || !rbc_value_binding_valid(module,code,function,source)) return false;
             } else if (formal && formal->type) {
-                if (!from || from->type!=formal->type || formal->parameter!=p+1) return false;
+                if (!rbc_value_formal_accepts(module,callee,callee->parameters[p],code,source) ||
+                    formal->parameter!=p+1) return false;
                 if (formal->owner_count && (!rbc_value_owner(module,code,source,false) ||
                     !rbc_value_owner(module,callee,callee->parameters[p],false))) return false;
             } else {

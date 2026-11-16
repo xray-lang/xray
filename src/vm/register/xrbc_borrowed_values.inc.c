@@ -95,8 +95,11 @@ static XrRbcStatus rbc_borrowed_home_admit(const XrRbcModule *module,const XrRbc
             event->callable_transport==XR_LIR_CALLABLE_TRANSPORT_MIXED ||
             event->kind==XR_LIR_OWNERSHIP_CALLABLE_MATERIALIZE || event->kind==XR_LIR_OWNERSHIP_RESULT_OWNER ||
             event->kind==XR_LIR_OWNERSHIP_BLOCK_OWNER || event->kind==XR_LIR_OWNERSHIP_RELEASE) valid=false;
-        if (event->kind==XR_LIR_OWNERSHIP_CALLABLE_VALUE && event->operation!=XR_LIR_FUNCTION_REF &&
-            event->transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_BORROW) valid=false;
+        if (event->kind==XR_LIR_OWNERSHIP_CALLABLE_VALUE) {
+            bool alias=event->operation==XR_LIR_FUNCTION_BIND || event->operation==XR_LIR_FUNCTION_WEAKEN ||
+                event->operation==XR_LIR_FUNCTION_SCOPE_LEAVE;
+            if (event->transfer_mode!=(alias ? XR_LIR_OWNERSHIP_TRANSFER_BORROW : XR_LIR_OWNERSHIP_TRANSFER_NONE)) valid=false;
+        }
         if (event->kind==XR_LIR_OWNERSHIP_CALLABLE_SCOPE_EXIT && event->source &&
             event->transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_BORROW) valid=false;
     }

@@ -81,7 +81,10 @@ static void callable_raw_positive(CallableRawFixture *raw,const XrRbcProgram *pr
     callable_raw_reset(raw);
     CHECK(!raw->homes.owned_frame_needed && !raw->homes.frame.slot_count);
     XrRbcExecution *execution=NULL;
-    CHECK(xr_rbc_module_prepare(&raw->module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_OK);
+    XrRbcStatus status=xr_rbc_module_prepare(&raw->module,0,NULL,0,xr_rbc_program_locations(program),&execution);
+    if (status!=XR_RBC_OK) fprintf(stderr,"raw Frame prepare status=%u functions=%zu environments=%u\n",
+        (unsigned)status,raw->module.function_count,raw->functions[0].environment_count);
+    CHECK(status==XR_RBC_OK);
     XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
     uint64_t bits=0;
     CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits==42);
@@ -91,7 +94,7 @@ static void callable_raw_receiving(const XrRbcProgram *program) {
     CallableRawFixture raw=callable_raw_fixture(program);
     CHECK(raw.original->function_count==3 && raw.original->callable_type_count==1);
     callable_raw_positive(&raw,program);
-    for (unsigned scenario=0;scenario<12;++scenario) {
+    for (unsigned scenario=0;scenario<13;++scenario) {
         callable_raw_reset(&raw);
         uint32_t reference=callable_raw_constructor(&raw);
         XrRbcValueAccess *constructor=&raw.accesses[reference];
@@ -115,6 +118,7 @@ static void callable_raw_receiving(const XrRbcProgram *program) {
         if (scenario==9) raw.values[constructor->result].temporary_first_owner=0;
         if (scenario==10) raw.values[constructor->result].borrow_source=constructor->result;
         if (scenario==11) raw.events[constructor->other-1].callable_materialize=true;
+        if (scenario==12) raw.events[constructor->other-1].transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_BORROW;
         XrRbcExecution *execution=NULL;
         CHECK(xr_rbc_module_prepare(&raw.module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID);
         CHECK(!execution);

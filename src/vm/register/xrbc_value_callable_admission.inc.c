@@ -11,6 +11,15 @@ static uint32_t rbc_value_signature(const XrRbcModule *module,const XrRbcValueCo
     const uint32_t *types=xr_rbc_module_type_callables(module);
     return home && home->type && types && rbc_value_function(module,code,value,false) ? types[home->type-1] : 0;
 }
+static bool rbc_value_formal_accepts(const XrRbcModule *module,const XrRbcValueCode *receiving,
+    uint32_t formal,const XrRbcValueCode *sending,uint32_t source) {
+    const XrLirValueHome *to=rbc_value_home(receiving,formal),*from=rbc_value_home(sending,source);
+    if (!to || !from || !to->type || !from->type) return false;
+    if (rbc_value_function(module,receiving,formal,false))
+        return rbc_value_function(module,sending,source,false) && rbc_callable_accepts(module,
+            rbc_value_signature(module,receiving,formal),rbc_value_signature(module,sending,source));
+    return to->type==from->type;
+}
 static const XrLirHomeEvent *rbc_value_event(const XrRbcValueCode *code,uint32_t index,uint32_t kind) {
     return code && code->homes && code->homes->events && index && index<=code->homes->event_count &&
         code->homes->events[index-1].kind==kind ? &code->homes->events[index-1] : NULL;
