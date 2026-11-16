@@ -210,6 +210,45 @@ static bool view_access_cell_storage(const ViewAccess *a,const XrXirViewRootEven
         if (xr_xir_type_is_class(a->resolver->check.module->types,root->steps[p].container)) return false;
     return true;
 }
+/* Capturing a scalar Cell preserves its identity, including its separation
+ * from actual Array cells. It does not make unknown or borrowed roots apart. */
+static XrXirStatus view_access_scalar_cell_apart(ViewAccess *a,uint32_t left,uint32_t right,
+    const ViewRootSaved *roots,bool *apart) {
+    *apart=false;const XrXirTypes *types=a->resolver->check.module->types;
+    XrXirType type=xr_xir_operand_type(a->body,left);
+    const XrXirTypeNode *view=xr_xir_type_node(types,xr_xir_operand_type(a->body,right));
+    if (!roots || !view || (view->kind!=XR_XIR_TYPE_SLICE && view->kind!=XR_XIR_TYPE_MUT_SLICE) ||
+        (view->element!=XR_XIR_I64 && view->element!=XR_XIR_U8) || !xr_xir_type_is_cell(types,type) ||
+        !view_access_scalar_storage(xr_xir_cell_element(types,type)) || !a->cells || !a->cells->owner ||
+        xr_xir_cell_provenance_origin(a->cells->owner,a->function,left)!=XR_XIR_CELL_ORIGIN_OWNED)
+        return XR_XIR_OK;
+    uint32_t root=left,progress=0;
+    while (root>=a->body->parameter_count) {
+        XrXirStatus status=xir_receive_step(a->cells->control,&progress);if (status!=XR_XIR_OK) return status;
+        uint32_t index=root-a->body->parameter_count;
+        if (index>=a->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirInstruction *op=a->body->instructions+index;
+        if (op->op==XR_XIR_CELL_NEW) break;
+        if ((op->op!=XR_XIR_COPY && op->op!=XR_XIR_OWNED_RETAIN) || op->args[0]>=root ||
+            xr_xir_operand_type(a->body,op->args[0])!=type) return XR_XIR_OK;
+        root=op->args[0];
+    }
+    if (root<a->body->parameter_count) return XR_XIR_OK;
+    for (const ViewRootSaved *p=roots;p;p=p->next) {
+        XrXirStatus status=xir_receive_step(a->cells->control,&progress);if (status!=XR_XIR_OK) return status;
+        const XrXirViewRootEvent *event=&p->event;
+        if (event->kind!=XR_XIR_VIEW_ROOT_CELL || event->root_function!=a->function ||
+            event->opaque_suffix || event->dynamic_identity || event->step_count || event->selection_count ||
+            event->root_value<a->body->parameter_count || event->root_value==root) return XR_XIR_OK;
+        uint32_t index=event->root_value-a->body->parameter_count;
+        if (index>=a->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirInstruction *op=a->body->instructions+index;
+        const XrXirTypeNode *array=xr_xir_type_node(types,xr_xir_cell_element(types,op->type));
+        if (op->op!=XR_XIR_CELL_NEW || !array || array->kind!=XR_XIR_TYPE_ARRAY ||
+            array->element!=view->element) return XR_XIR_OK;
+    }
+    *apart=true;return XR_XIR_OK;
+}
 static XrXirStatus view_access_storage(ViewAccess *a,uint32_t left,uint32_t right,
     uint32_t left_query,uint32_t right_query,ViewAccessDecision *output) {
     *output=VIEW_ACCESS_UNKNOWN;ViewRootComparison l={a->resolver,NULL,false},r=l;
@@ -222,6 +261,9 @@ static XrXirStatus view_access_storage(ViewAccess *a,uint32_t left,uint32_t righ
     bool storage=r.left!=NULL;
     for (ViewRootSaved *p=r.left;p;p=p->next) storage&=view_access_cell_storage(a,&p->event);
     if (status==XR_XIR_OK && left_body && storage) { *output=VIEW_ACCESS_SAFE;goto done; }
+    bool scalar_apart=false;
+    if (status==XR_XIR_OK) status=view_access_scalar_cell_apart(a,left,right,r.left,&scalar_apart);
+    if (status==XR_XIR_OK && scalar_apart) { *output=VIEW_ACCESS_SAFE;goto done; }
     request.value=left;
     if (status==XR_XIR_OK) status=view_root_resolver_query_controlled(a->resolver,&request,view_root_save,&l,NULL,a->cells?a->cells->control:NULL);
     storage=l.left!=NULL;
