@@ -106,6 +106,7 @@ typedef struct {
     XrRbcValueCode *value_code;
     uint32_t *value_edges;
     size_t value_access_capacity, value_argument_capacity, value_display_capacity, value_call_cursor;
+    size_t binding_event_cursor, binding_workspace_cursor;
     bool typed_values;
     uint32_t *slots, *spill_home, *edge_spill;
     uint32_t *aggregate_home, *aggregate_scratch;
@@ -597,6 +598,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
             if (!rbc_lir_scalar(callee.parameter_types[p]) &&
                 !rbc_lir_captured_cell(input,callee.parameter_types[p]) &&
                 !rbc_lir_callable_type(input,callee.parameter_types[p]) &&
+                !(i->bits == XR_LIR_CLOSURE_OWNED && callee.parameter_types[p] == XR_LIR_MAP_STRING_I64) &&
                 (i->bits != XR_LIR_CLOSURE_FRAME || callee.parameter_types[p] != XR_LIR_I64_CELL)) return false;
         return true;
     }

@@ -222,6 +222,7 @@ static void c_values_function(LirC *c) {
     c->homes = c->value_homes ? c->value_homes[c->function.id - 1] : NULL;
     c->home_edge_cursor = 0;
     c->string_event_cursor = c->string_workspace_cursor = 0;
+    c->map_stage_event_cursor = c->map_stage_workspace_cursor = 0;
 }
 static bool c_values_owned_type(LirC *c, XrLirType type) {
     return c_managed_leaf(type) || (type >= XR_LIR_TYPE_COUNT &&

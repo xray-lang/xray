@@ -40,6 +40,7 @@
 #include "lir_map_cases.h"
 #include "lir_c_cell_fixture.h"
 #include "lir_c_map_literal_fixture.h"
+#include "lir_map_borrow_fixture.h"
 #include "lir_string_fixture.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
@@ -541,6 +542,12 @@ static void array_c_output(const char *name, const char *path) {
             !strcmp(name,"map-literal-spread-wins") ? 5u : 0u;
         c_map_literal_fixture(mode,&m,&root);
     }
+    else if (!strncmp(name,"map-formal-",11)) {
+        unsigned operation=!strcmp(name,"map-formal-write") ? 1u : !strcmp(name,"map-formal-ref") ? 2u :
+            !strcmp(name,"map-formal-state") ? 3u : !strcmp(name,"map-formal-construct") ? 4u :
+            !strcmp(name,"map-formal-initialize") ? 5u : 0u;
+        XrLirFunction helper={0}; m=map_binding_formal_fixture(operation,false,!strcmp(name,"map-formal-closure"),&root,&helper);
+    }
     else if (!strcmp(name,"string-bindings")) cs_binding_fixture(&m,&root);
     else if (!strcmp(name,"string-ref-bindings")) {
         OK(string_ref_fixture(&m)); OK(xr_lir_function_at(m,0,&root));
@@ -574,6 +581,11 @@ static void array_c_output(const char *name, const char *path) {
     }
     if (!strcmp(name,"i64") || !strcmp(name,"string"))
         CHECK(!strstr(output.bytes,"xrt_native_string_binding_prepare("));
+    if (!strncmp(name,"map-formal-",11)) {
+        CHECK(!strstr(output.bytes,"xrt_native_string_binding_prepare("));
+        if (strcmp(name,"map-formal-construct") && strcmp(name,"map-formal-initialize"))
+            CHECK(strstr(output.bytes,"xrt_managed_slot_adopt(") && strstr(output.bytes,"xrt_place_move_replace("));
+    }
     if (path) {
         FILE *file = fopen(path, "wb");
         CHECK(file && fwrite(output.bytes, 1, output.length, file) == output.length && !fclose(file));
@@ -643,6 +655,9 @@ int main(int argc, char **argv) {
     CHECK(argc == 1);
     array_c_output("string-bindings",NULL);
     array_c_output("string-ref-bindings",NULL);
+    static const char *const map_formals[]={"map-formal-new","map-formal-closure","map-formal-write","map-formal-ref",
+        "map-formal-state","map-formal-construct","map-formal-initialize"};
+    for (size_t n=0;n<sizeof(map_formals)/sizeof(*map_formals);++n) array_c_output(map_formals[n],NULL);
     map_receiving_owners();
     map_state_receiver();
     tuple_receiving_owners();

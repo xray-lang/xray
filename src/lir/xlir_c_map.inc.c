@@ -153,6 +153,59 @@ static void c_map_call(LirC *c, const XrLirInstructionView *v, uint32_t role, ui
     if (v->type != XR_LIR_UNIT) c_format(c, "    v%" PRIu32 " = removed;\n", v->result);
     c_text(c, "    }\n");
 }
+static void c_map_binding_stage_copy(LirC *c,uint32_t receiver,uint32_t input,uint32_t source) {
+    const XrLirHomeBinding *binding=&c->homes->bindings[receiver];
+    const XrLirValueHome *home=&c->homes->values[input];
+    const XrtValueImage *image=xr_lir_value_image_view(c->value_image);
+    const XrLirHomeEvent *event=NULL; const XrLirHomeWorkspace *stage=NULL;
+    if (!image || !binding->type || binding->type>image->type_count ||
+        image->types[binding->type-1].kind!=XRT_VALUE_MAP_STRING_I64 || home->type!=binding->type ||
+        !home->parameter || home->offset!=SIZE_MAX || home->first_owner!=SIZE_MAX) {
+        c_error(c,XR_LIR_C_INVALID_LIR,"Map binding copy lost its genuine borrowed formal"); return;
+    }
+    while (c->map_stage_event_cursor<c->homes->event_count && c_request_poll(c)) {
+        const XrLirHomeEvent *candidate=&c->homes->events[c->map_stage_event_cursor++];
+        if ((candidate->kind!=XR_LIR_OWNERSHIP_BINDING_NEW && candidate->kind!=XR_LIR_OWNERSHIP_BINDING_WRITE) ||
+            !candidate->target || !c->homes->values[candidate->target].parameter ||
+            c_value_type(c,candidate->target)!=XR_LIR_MAP_STRING_I64) continue;
+        if (candidate->block==c->block && candidate->instruction==c->instruction &&
+            candidate->source==receiver && candidate->target==input && !candidate->operation &&
+            candidate->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_NONE) event=candidate;
+        break;
+    }
+    while (event && c->map_stage_workspace_cursor<c->homes->workspace_count && c_request_poll(c)) {
+        const XrLirHomeWorkspace *candidate=&c->homes->workspaces[c->map_stage_workspace_cursor++];
+        if (candidate->kind!=XR_LIR_HOME_WORKSPACE_VALUE || !candidate->value || !candidate->type ||
+            candidate->type>image->type_count || image->types[candidate->type-1].kind!=XRT_VALUE_MAP_STRING_I64) continue;
+        if (candidate->block==c->block && candidate->instruction==c->instruction &&
+            candidate->value==receiver && candidate->type==binding->type) stage=candidate;
+        break;
+    }
+    const XrtManagedFrameSpec *frame=&c->homes->frame;
+    if (!stage || !c->homes->owned_frame_needed || !frame->owned_offsets ||
+        stage->temporary_offset!=SIZE_MAX || stage->temporary_first_owner!=SIZE_MAX ||
+        stage->first_owner>=frame->slot_count || stage->offset%_Alignof(XrtManagedHeader *) ||
+        stage->offset>frame->payload_size || sizeof(XrtManagedHeader *)>frame->payload_size-stage->offset ||
+        frame->owned_offsets[stage->first_owner]!=stage->offset || stage->first_owner==binding->first_owner) {
+        c_error(c,XR_LIR_C_INVALID_LIR,"Map binding copy lost its exact common pending workspace"); return;
+    }
+    c_values_ensure(c,source);
+    if (c_value_type(c,receiver)==XR_LIR_STATE_REF) {
+        c_text(c,"    { XrtManagedStatus status = xrt_module_external_owner("); c_value(c,receiver);
+        c_format(c,", 0, &xrl_array_binding%" PRIu32 ");\n",receiver); c_array_require(c,source); c_text(c,"    }\n");
+    }
+    c_text(c,"    { XrtManagedHeader *owner = "); c_value(c,input); c_text(c,";\n");
+    c_format(c,"      if (!xrt_managed_retain(owner)) xrt_native_managed_failure(XRT_MANAGED_REFCOUNT, UINT32_C(%" PRIu32 "));\n",source);
+    c_format(c,"      XrtManagedStatus status = xrt_managed_slot_adopt(xrl_frame, %zu, &owner);\n",stage->first_owner);
+    c_text(c,"      if (status != XRT_MANAGED_OK) { xrt_managed_drop(owner);\n"); c_array_require(c,source); c_text(c,"      }\n");
+    c_text(c,"      status = xrt_place_move_replace(");
+    if (c_value_type(c,receiver)==XR_LIR_STATE_REF)
+        c_format(c,"(XrtPlace){.external=&xrl_array_binding%" PRIu32 ",.nulls=XRT_PLACE_NONNULL}",receiver);
+    else c_value(c,receiver);
+    c_format(c,", (XrtPlace){.frame=xrl_frame,.slot=%zu,.nulls=XRT_PLACE_NONNULL}, NULL);\n",stage->first_owner);
+    c_format(c,"      XrtManagedStatus cleanup = xrt_managed_slot_drop(xrl_frame, %zu);\n",stage->first_owner);
+    c_text(c,"      if (status == XRT_MANAGED_OK) status = cleanup;\n"); c_array_require(c,source); c_text(c,"    }\n");
+}
 static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (c->status != XR_LIR_C_OK) return;
     if (v->op == XR_LIR_MAP_LITERAL_NEW) {
@@ -195,6 +248,13 @@ static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t s
     }
     uint32_t role = c_map_role(c, v);
     if (role) { c_map_call(c, v, role, source); return; }
+    bool binding_copy=v->op==XR_LIR_MAP_REF_WRITE ||
+        (v->op==XR_LIR_CELL_NEW && v->type==XR_LIR_MAP_STRING_I64_CELL) ||
+        (v->op==XR_LIR_CELL_WRITE && c_value_type(c,v->operands[0])==XR_LIR_MAP_STRING_I64_CELL);
+    if (binding_copy && c->homes->values[v->operands[v->operand_count-1]].parameter) {
+        c_map_binding_stage_copy(c,v->op==XR_LIR_CELL_NEW ? v->result : v->operands[0],
+            v->operands[v->operand_count-1],source); return;
+    }
     if (v->op == XR_LIR_MAP_REF_WRITE && c->homes->bindings[v->operands[0]].kind == XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW) {
         const XrLirHomeBinding *binding = &c->homes->bindings[v->operands[0]];
         c_text(c,"    xrt_native_cell_map_write("); c_value(c,binding->source); c_text(c,", ");

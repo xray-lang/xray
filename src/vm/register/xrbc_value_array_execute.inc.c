@@ -86,11 +86,18 @@ static XrtManagedStatus rbc_value_binding_step(const XrRbcModule *module,XrRbcSt
     if (access.operation==XR_RBC_VALUE_BINDING_DROP) return xrt_managed_slot_drop(place.frame,place.slot);
     bool read=access.operation==XR_RBC_VALUE_BINDING_READ;
     uint32_t value=read ? access.result : access.operation==XR_RBC_VALUE_BINDING_NEW ? access.source : access.other;
-    if (!read && rbc_value_kind(module,activation->code,binding)==XRT_VALUE_STRING && access.window!=UINT32_MAX) {
+    XrtValueKind kind=rbc_value_kind(module,activation->code,binding);
+    if (!read && (kind==XRT_VALUE_STRING || kind==XRT_VALUE_MAP_STRING_I64) && access.window!=UINT32_MAX) {
         const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
-        const XrtStringBacking *borrowed=NULL;
-        status=rbc_value_string_borrow(activation,value,&borrowed);
-        if (status==XRT_MANAGED_OK) status=xrt_backing_slot_copy(activation->frame,workspace->first_owner,&borrowed->managed);
+        const XrtManagedHeader *borrowed=NULL;
+        if (kind==XRT_VALUE_STRING) {
+            const XrtStringBacking *string=NULL;
+            status=rbc_value_string_borrow(activation,value,&string); borrowed=(const XrtManagedHeader *)string;
+        } else {
+            const XrtMapBacking *map=NULL;
+            status=rbc_value_map_borrow(module,activation,value,&map); borrowed=(const XrtManagedHeader *)map;
+        }
+        if (status==XRT_MANAGED_OK) status=xrt_backing_slot_copy(activation->frame,workspace->first_owner,borrowed);
         if (status!=XRT_MANAGED_OK) return status;
         XrtPlace stage={.frame=activation->frame,.slot=workspace->first_owner,.nulls=XRT_PLACE_NONNULL};
         status=xrt_place_move_replace(place,stage,NULL);

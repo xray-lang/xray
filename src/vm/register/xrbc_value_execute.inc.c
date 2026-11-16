@@ -304,6 +304,26 @@ static XrtManagedStatus rbc_value_string_borrow(RbcValueActivation *activation, 
     if (status == XRT_MANAGED_OK) *out=(const XrtStringBacking *)header;
     return status;
 }
+static XrtManagedStatus rbc_value_map_borrow(const XrRbcModule *module,RbcValueActivation *activation,
+    uint32_t value,const XrtMapBacking **output) {
+    RbcValueOrigin origin=rbc_value_origin(activation,value);
+    const XrLirValueHome *home=origin.activation ? rbc_value_home(origin.activation->code,origin.value) : NULL;
+    if (home && home->parameter &&
+        home->parameter<=origin.activation->code->parameter_count &&
+        origin.activation->borrowed_parameters[home->parameter-1] &&
+        xr_rbc_module_code_owner(module) &&
+        rbc_value_map(module,origin.activation->code,origin.value,false)) {
+        const XrtMapBacking *map=NULL;
+        memcpy(&map,origin.activation->borrowed_parameters[home->parameter-1],sizeof(map));
+        if (!map) return XRT_MANAGED_ARGUMENT;
+        *output=map; return XRT_MANAGED_OK;
+    }
+    XrtPlace place; const XrtManagedHeader *header=NULL;
+    XrtManagedStatus status=rbc_value_place(origin,false,0,&place);
+    if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&header);
+    if (status==XRT_MANAGED_OK) *output=(const XrtMapBacking *)header;
+    return status;
+}
 static XrtManagedStatus rbc_value_payload(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueOrigin origin, RbcValuePayload *output) {
     if (!origin.activation) return XRT_MANAGED_ARGUMENT;
@@ -517,6 +537,13 @@ static XrtManagedStatus rbc_value_replace(const XrRbcModule *module, XrRbcStack 
     const XrtPlacePublication publication={rbc_value_publication,scratch};
     if (copy && rbc_value_inline(module,destination.activation->code,destination.value,true))
         return rbc_value_inline_replace(module,stack,destination,input.address);
+    if (copy && from->parameter &&
+        from->parameter<=source.activation->code->parameter_count &&
+        source.activation->borrowed_parameters[from->parameter-1] &&
+        xr_rbc_module_code_owner(module) &&
+        rbc_value_map(module,source.activation->code,source.value,false) &&
+        rbc_value_map(module,destination.activation->code,destination.value,true))
+        return rbc_value_inline_replace(module,stack,destination,input.address);
     if (copy) {
         if (home->owner_count!=1) return XRT_MANAGED_ARGUMENT;
         XrtPlace to,from_place;
@@ -620,8 +647,12 @@ static XrtManagedStatus rbc_value_state(const XrRbcModule *module,XrRbcStack *st
     XrtManagedStatus status=XRT_MANAGED_OK;
     XrtPlace place; const XrtManagedHeader *header=NULL;
     if (inline_value) status=rbc_value_payload(module,stack,rbc_value_origin(activation,access.other),&inline_input);
-    else status=rbc_value_place(rbc_value_origin(activation,access.other),false,0,&place);
-    if (status==XRT_MANAGED_OK && !inline_value) status=xrt_place_borrow(place,&header);
+    else if (rbc_value_map(module,activation->code,access.other,false)) {
+        const XrtMapBacking *map=NULL;
+        status=rbc_value_map_borrow(module,activation,access.other,&map);
+        header=(const XrtManagedHeader *)map;
+    } else status=rbc_value_place(rbc_value_origin(activation,access.other),false,0,&place);
+    if (status==XRT_MANAGED_OK && !inline_value && !header) status=xrt_place_borrow(place,&header);
     if (status!=XRT_MANAGED_OK) return status;
     XrtManagedHeader *borrow=(XrtManagedHeader *)header;
     const void *value=inline_value ? (const void *)inline_input.address : (const void *)&borrow;

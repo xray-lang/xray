@@ -87,6 +87,8 @@ def main():
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='array-native-', dir=args.work))
     expected = {'string-bindings': 14, 'string-ref-bindings': 2,
+                'map-formal-new': 1, 'map-formal-closure': 1, 'map-formal-write': 1, 'map-formal-ref': 1,
+                'map-formal-state': 1, 'map-formal-construct': 1, 'map-formal-initialize': 1,
                 'map-literal-explicit': 42, 'map-literal-spread': 42, 'map-literal-spread-wins': 42,
                 'map-literal-empty': 0,
                 'map-literal-duplicate': None, 'map-literal-unknown-duplicate': None,
