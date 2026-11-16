@@ -19,6 +19,7 @@
 #include "lir/xlir_inline.h"
 #include "lir/xlir_lower.h"
 #include "lir/xlir_sccp.h"
+#include "lir/xlir_types.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_generic.h"
@@ -39,6 +40,7 @@
 typedef struct Shape {
     uint64_t functions, external, blocks, instructions, values, calls, leaves, self_calls;
     uint64_t types[XR_LIR_TYPE_COUNT];
+    uint64_t fixed_arrays, nullables, callables, cells, tuples, records, slices;
 } Shape;
 typedef struct Snapshot {
     const char *name;
@@ -200,6 +202,29 @@ typedef struct Walk {
     uint32_t *queue, count;
     Shape shape;
 } Walk;
+static void count_type(Walk *w, XrLirType type) {
+    if (type < XR_LIR_TYPE_COUNT) {
+        CHECK(type != XR_LIR_TYPE_INVALID);
+        managed_home_add(&w->shape.types[type], 1);
+        return;
+    }
+    XrLirTypeView view = {0};
+    OK(xr_lir_type_view(w->m, type, &view));
+    uint64_t *counter = NULL;
+    switch (view.kind) {
+    case XR_LIR_TYPE_FIXED_ARRAY: counter = &w->shape.fixed_arrays; break;
+    case XR_LIR_TYPE_NULLABLE: counter = &w->shape.nullables; break;
+    case XR_LIR_TYPE_CALLABLE: counter = &w->shape.callables; break;
+    case XR_LIR_TYPE_CELL: counter = &w->shape.cells; break;
+    case XR_LIR_TYPE_TUPLE: counter = &w->shape.tuples; break;
+    case XR_LIR_TYPE_RECORD: counter = &w->shape.records; break;
+    case XR_LIR_TYPE_SLICE: counter = &w->shape.slices; break;
+    default:
+        fprintf(stderr, "unmodeled constructed type kind %u for type %" PRIu32 "\n", (unsigned)view.kind, type);
+        exit(1);
+    }
+    managed_home_add(counter, 1);
+}
 static void visit(Walk *w, uint32_t ordinal) {
     CHECK(ordinal < xr_lir_function_count(w->m));
     if (!w->seen[ordinal]) {
@@ -215,12 +240,12 @@ static void count_block(Walk *w, XrLirFunction f, XrLirBlock block) {
     for (uint32_t p = 0; p < view.parameter_count; ++p) {
         XrLirType type;
         OK(xr_lir_value_type(w->m, (XrLirValue){w->m, f.id, view.parameters[p]}, &type));
-        ++w->shape.values; ++w->shape.types[type];
+        ++w->shape.values; count_type(w, type);
     }
     for (uint32_t i = 0; i < view.instruction_count; ++i) {
         XrLirInstructionView v;
         OK(xr_lir_instruction_view(w->m, block, i, &v));
-        if (v.result) { ++w->shape.values; ++w->shape.types[v.type]; }
+        if (v.result) { ++w->shape.values; count_type(w, v.type); }
         if (v.op != XR_LIR_CALL) continue;
         XrLirFunction callee = {w->m, v.callee};
         XrLirFunctionView cv;
@@ -243,7 +268,7 @@ static Shape shape(const XrLirModule *m, XrLirFunction root, unsigned kind) {
         if (v.kind == XR_LIR_FUNCTION_EXTERNAL) { ++w.shape.external; continue; }
         ++w.shape.functions;
         w.shape.values += v.parameter_count;
-        for (uint32_t p = 0; p < v.parameter_count; ++p) ++w.shape.types[v.parameter_types[p]];
+        for (uint32_t p = 0; p < v.parameter_count; ++p) count_type(&w, v.parameter_types[p]);
         if (kind != 1) {
             for (uint32_t b = 0; b < v.block_count; ++b) {
                 XrLirBlock block; OK(xr_lir_block_at(m, f, b, &block)); count_block(&w, f, block);
@@ -396,6 +421,13 @@ static void write_bytes(const char *path, const void *bytes, size_t count) {
     CHECK(fclose(file) == 0);
 }
 static void shape_json(FILE *f, const Shape *s) {
+    uint64_t definitions = 0;
+    for (unsigned i = 0; i < XR_LIR_TYPE_COUNT; ++i) managed_home_add(&definitions, s->types[i]);
+    const uint64_t constructed[] = {s->fixed_arrays, s->nullables, s->callables, s->cells,
+        s->tuples, s->records, s->slices};
+    for (size_t i = 0; i < sizeof(constructed) / sizeof(constructed[0]); ++i)
+        managed_home_add(&definitions, constructed[i]);
+    CHECK(definitions == s->values);
     fprintf(f, "{\"functions\":%" PRIu64 ",\"external\":%" PRIu64
         ",\"blocks\":%" PRIu64 ",\"instructions\":%" PRIu64 ",\"values\":%" PRIu64
         ",\"ordinary_calls\":%" PRIu64 ",\"leaf_calls\":%" PRIu64 ",\"self_calls\":%" PRIu64
@@ -403,7 +435,10 @@ static void shape_json(FILE *f, const Shape *s) {
         s->values, s->calls, s->leaves, s->self_calls);
     for (unsigned i = 0; i < XR_LIR_TYPE_COUNT; ++i)
         fprintf(f, "%s%" PRIu64, i ? "," : "", s->types[i]);
-    fputs("]}", f);
+    fprintf(f, "],\"constructed_type_definitions\":{\"fixed_array\":%" PRIu64 ",\"nullable\":%" PRIu64
+        ",\"callable\":%" PRIu64 ",\"cell\":%" PRIu64 ",\"tuple\":%" PRIu64 ",\"record\":%" PRIu64
+        ",\"slice\":%" PRIu64 "}}", s->fixed_arrays, s->nullables, s->callables, s->cells,
+        s->tuples, s->records, s->slices);
 }
 static void receipt(const char *path, const Eval *e, const Sample *samples, uint32_t warmups,
                     uint32_t runs, size_t c_bytes) {
