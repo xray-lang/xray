@@ -46,7 +46,7 @@ static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStac
         /* Entry has already allocated every Frame and setup. The checked source
          * borrow now reaches allocation-free temporary retention without a gap. */
         XrtExternalOwner external; XrtPlace binding; const XrtManagedHeader *header=NULL;
-        status=rbc_value_binding_place(stack,rbc_value_origin(activation,args[0]),&external,&binding);
+        status=rbc_value_binding_place(module,stack,rbc_value_origin(activation,args[0]),&external,&binding);
         if (status==XRT_MANAGED_OK) status=xrt_place_borrow(binding,&header);
         return status==XRT_MANAGED_OK ? xrt_array_slice_range_bind(&destination,kind,(const XrtArrayBacking *)header,start,limit) : status;
     }

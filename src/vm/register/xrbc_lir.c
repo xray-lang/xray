@@ -553,7 +553,12 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     if (i->op == XR_LIR_RECORD_NEW || i->op == XR_LIR_RECORD_FIELD ||
         i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
-    if (rbc_lir_captured_cell_point(input, function, i)) return false;
+    if (rbc_lir_captured_cell_point(input, function, i)) return true;
+    if (i->op==XR_LIR_MAP_BORROW && i->operand_count) {
+        XrLirType type=XR_LIR_TYPE_INVALID;
+        xr_lir_value_type(input,(XrLirValue){input,function.id,i->operands[0]},&type);
+        if (rbc_lir_captured_cell(input,type)) return true;
+    }
     if (rbc_lir_string_call(input, i)) return true;
     if (!rbc_lir_unsigned_operation(input, function, i)) return false;
     XrLirSliceIntrinsic slice = {0};
@@ -592,6 +597,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         if (i->bits==XR_LIR_CLOSURE_OWNED && target.state_capture) return false;
         for (uint32_t p = 0; p < target.capture_count; ++p)
             if (!rbc_lir_scalar(callee.parameter_types[p]) &&
+                !rbc_lir_captured_cell(input,callee.parameter_types[p]) &&
                 !rbc_lir_callable_type(input,callee.parameter_types[p]) &&
                 (i->bits != XR_LIR_CLOSURE_FRAME || callee.parameter_types[p] != XR_LIR_I64_CELL)) return false;
         return true;
@@ -1461,8 +1467,14 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         c->captures = xr_malloc((size_t)target.capture_count * sizeof(*c->captures));
         if (!c->captures) return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own capture descriptors");
         for (uint32_t p = 0; p < target.capture_count; ++p)
+            if (rbc_lir_captured_cell(c->input,c->view.parameter_types[p]) && !c->homes)
+                return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Cell capture has no common receiving home");
+        for (uint32_t p = 0; p < target.capture_count; ++p)
             c->captures[p] = c->view.parameter_types[p] == XR_LIR_I64_CELL ?
                 (XrRbcCallableValue){XR_RBC_CALLABLE_BINDING, XR_POD_I64} :
+                rbc_lir_captured_cell(c->input,c->view.parameter_types[p]) ?
+                (XrRbcCallableValue){XR_RBC_CALLABLE_CELL,
+                    c->homes->values[c->view.parameters[p]].type} :
                 rbc_lir_callable_type(c->input, c->view.parameter_types[p]) ?
                 (XrRbcCallableValue){XR_RBC_CALLABLE_FUNCTION,
                     c->literals->program->physical_callables[c->view.parameter_types[p] - XR_LIR_TYPE_COUNT]} :
@@ -1914,21 +1926,18 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     for (uint32_t f = 0; f < count; ++f) {
         XrLirFunction function = {input,ids[f]}; XrLirFunctionView view;
         xr_lir_function_view(input,function,&view);
-        boxed |= rbc_lir_captured_cell(input,view.result) ||
-            view.result == XR_LIR_VIEW_FRAME || view.result == XR_LIR_VIEW_CELL || view.result == XR_LIR_SLICE_I64;
+        boxed |= view.result == XR_LIR_VIEW_FRAME || view.result == XR_LIR_VIEW_CELL || view.result == XR_LIR_SLICE_I64;
         for (uint32_t parameter = 0; parameter < view.parameter_count; ++parameter)
-            boxed |= rbc_lir_captured_cell(input,view.parameter_types[parameter]) ||
-                view.parameter_types[parameter] == XR_LIR_VIEW_FRAME || view.parameter_types[parameter] == XR_LIR_VIEW_CELL ||
+            boxed |= view.parameter_types[parameter] == XR_LIR_VIEW_FRAME || view.parameter_types[parameter] == XR_LIR_VIEW_CELL ||
                 view.parameter_types[parameter] == XR_LIR_SLICE_I64;
         for (size_t index = 1; index <= view.value_count; ++index) {
             XrLirType type; xr_lir_value_type(input,(XrLirValue){input,function.id,(uint32_t)index},&type);
-            boxed |= rbc_lir_captured_cell(input,type) ||
-                type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL || type == XR_LIR_SLICE_I64;
+            boxed |= type == XR_LIR_VIEW_FRAME || type == XR_LIR_VIEW_CELL || type == XR_LIR_SLICE_I64;
         }
     }
     if (boxed) {
         status = rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
-            "Cell and View execution plans are not available", (XrLirSource){0});
+            "retired View execution plans are not available", (XrLirSource){0});
         goto done;
     }
     status = rbc_lir_prepare_values(input, entry, ids, count, p, &preparation, d);

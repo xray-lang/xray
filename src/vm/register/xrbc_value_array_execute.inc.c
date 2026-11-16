@@ -6,7 +6,7 @@
  *
  * xrbc_value_array_execute.inc.c - Fixed Array owners and actual binding transactions
  */
-static XrtManagedStatus rbc_value_binding_place(XrRbcStack *stack,RbcValueOrigin origin,
+static XrtManagedStatus rbc_value_binding_place(const XrRbcModule *module,XrRbcStack *stack,RbcValueOrigin origin,
     XrtExternalOwner *external,XrtPlace *place) {
     if (!origin.activation) return XRT_MANAGED_ARGUMENT;
     const XrLirHomeBinding *binding=rbc_value_binding(origin.activation->code,origin.value);
@@ -14,6 +14,14 @@ static XrtManagedStatus rbc_value_binding_place(XrRbcStack *stack,RbcValueOrigin
     if (binding->kind==XR_LIR_HOME_BINDING_LOCAL) {
         *place=(XrtPlace){.frame=origin.activation->frame,.slot=binding->first_owner,.nulls=XRT_PLACE_NONNULL};
         return XRT_MANAGED_OK;
+    }
+    if (binding->kind==XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW) {
+        XrtManagedHeader *cell=NULL;
+        XrtManagedStatus status=rbc_value_cell_borrow(module,stack,origin.activation,binding->source,&cell);
+        *external=(XrtExternalOwner){0};
+        if (status==XRT_MANAGED_OK) status=xrt_map_cell_external((XrtMapCell *)cell,external);
+        if (status==XRT_MANAGED_OK) *place=(XrtPlace){.external=external,.nulls=XRT_PLACE_NONNULL};
+        return status;
     }
     if (binding->kind!=XR_LIR_HOME_BINDING_STATE_BORROW) return XRT_MANAGED_ARGUMENT;
     XrRbcRegister *reference=rbc_value_register(stack,origin.activation,binding->source);
@@ -69,11 +77,11 @@ static XrtManagedStatus rbc_value_array_new(XrRbcStack *stack,RbcValueActivation
     return xrt_array_backing_string_create(activation->frame,slot,types,
         (XrtStringBacking *const *)activation->snapshots,access.count,access.count);
 }
-static XrtManagedStatus rbc_value_binding_step(XrRbcStack *stack,RbcValueActivation *activation,XrRbcValueAccess access) {
+static XrtManagedStatus rbc_value_binding_step(const XrRbcModule *module,XrRbcStack *stack,RbcValueActivation *activation,XrRbcValueAccess access) {
     uint32_t binding=access.operation==XR_RBC_VALUE_BINDING_NEW ? access.result : access.source;
     RbcValueOrigin origin=rbc_value_origin(activation,binding);
     XrtExternalOwner external; XrtPlace place,other;
-    XrtManagedStatus status=rbc_value_binding_place(stack,origin,&external,&place);
+    XrtManagedStatus status=rbc_value_binding_place(module,stack,origin,&external,&place);
     if (status!=XRT_MANAGED_OK) return status;
     if (access.operation==XR_RBC_VALUE_BINDING_DROP) return xrt_managed_slot_drop(place.frame,place.slot);
     bool read=access.operation==XR_RBC_VALUE_BINDING_READ;
@@ -84,7 +92,7 @@ static XrtManagedStatus rbc_value_binding_step(XrRbcStack *stack,RbcValueActivat
 }
 static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
-    if (access.operation!=XR_RBC_VALUE_ARRAY) return rbc_value_binding_step(stack,activation,access);
+    if (access.operation!=XR_RBC_VALUE_ARRAY) return rbc_value_binding_step(module,stack,activation,access);
     const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
     bool create=access.index==XR_LIR_ARRAY_OP_NEW || access.index==XR_LIR_ARRAY_OP_REPEAT;
     XrtValueKind value_kind=rbc_value_kind(module,activation->code,create ? access.result : args[0]);
@@ -97,7 +105,7 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     }
     if (access.index==XR_LIR_ARRAY_OP_SET || access.index==XR_LIR_ARRAY_OP_PUSH) {
         XrtExternalOwner external; XrtPlace binding;
-        XrtManagedStatus status=rbc_value_binding_place(stack,rbc_value_origin(activation,args[0]),&external,&binding);
+        XrtManagedStatus status=rbc_value_binding_place(module,stack,rbc_value_origin(activation,args[0]),&external,&binding);
         XrtArrayUpdate update={.operation=access.index==XR_LIR_ARRAY_OP_SET ? XRT_ARRAY_UPDATE_SET : XRT_ARRAY_UPDATE_PUSH};
         if (status==XRT_MANAGED_OK) status=rbc_value_array_item(stack,activation,args[access.count-1],kind,&update.item);
         if (access.index==XR_LIR_ARRAY_OP_SET) {

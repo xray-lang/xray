@@ -41,7 +41,7 @@ static XrtManagedStatus rbc_value_function_new(const XrRbcModule *module,XrRbcSt
                 uint64_t bits=0;
                 if (input.size!=sizeof(bits)) return XRT_MANAGED_ARGUMENT;
                 memcpy(&bits,input.address,sizeof(bits));
-                if (callee->captures[p].kind==XR_RBC_CALLABLE_BINDING ?
+                if (callee->captures[p].kind==XR_RBC_CALLABLE_CELL ? !bits : callee->captures[p].kind==XR_RBC_CALLABLE_BINDING ?
                     !xr_rbc_cell(stack,module,bits,XR_RBC_BITS) :
                     !xr_rbc_callable_scalar_valid(callee->captures[p],bits)) return XRT_MANAGED_ARGUMENT;
             }

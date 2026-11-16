@@ -135,7 +135,26 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
             f->register_callable_count != 0) return false;
         for (uint32_t p = 0; p < f->capture_count; ++p) {
             XrRbcCallableValue value = f->captures[p];
-            if (value.kind == XR_RBC_CALLABLE_CELL) return false;
+            if (value.kind == XR_RBC_CALLABLE_CELL) {
+                const XrRbcValueCode *code=xr_rbc_module_value_code(m,(uint32_t)n);
+                const XrtValueImage *image=xr_rbc_module_value_image(m);
+                if (!xr_rbc_module_code_owner(m) || !code || !code->homes || !code->parameters || !code->locations ||
+                    p>=code->parameter_count || !image || !image->types || !value.type || value.type>image->type_count)
+                    return false;
+                uint32_t formal=code->parameters[p];
+                if (!formal || formal>code->value_count || formal>code->homes->value_count || !code->homes->values)
+                    return false;
+                const XrLirValueHome *home=&code->homes->values[formal];
+                const XrtValueImageType *type=&image->types[value.type-1];
+                if (type->kind!=XRT_VALUE_CELL || !type->element || type->element>image->type_count ||
+                    (image->types[type->element-1].kind!=XRT_VALUE_I64 && image->types[type->element-1].kind!=XRT_VALUE_MAP_STRING_I64) ||
+                    home->type!=value.type || home->cell_payload_type!=type->element || home->parameter!=p+1 ||
+                    home->cell_transport!=XR_LIR_CELL_TRANSPORT_BORROW || home->owner_count ||
+                    home->offset!=SIZE_MAX || home->temporary_offset!=SIZE_MAX || home->first_owner!=SIZE_MAX ||
+                    home->temporary_first_owner!=SIZE_MAX || code->locations[formal].kind!=XR_RBC_VALUE_NOWHERE ||
+                    rbc_register_kind(f,p)!=XR_RBC_BITS) return false;
+                continue;
+            }
             if (value.kind == XR_RBC_CALLABLE_BINDING) {
                 if (value.type != XR_POD_I64 || rbc_register_kind(f, p) != XR_RBC_I64_BINDING) return false;
                 continue;

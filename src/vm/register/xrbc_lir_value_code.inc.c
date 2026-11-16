@@ -55,11 +55,11 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
     XrLirClosureTarget target={0};
     if (xr_lir_closure_target_view(c->input,c->function,&target)==XR_LIR_OK && target.callable) return true;
     for (uint32_t v = 1; v <= c->view.value_count; ++v)
-        if (rbc_lir_slice_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_callable_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_inline_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_value_type(c,v) == XR_LIR_STRING || rbc_lir_value_type(c,v) == XR_LIR_ARRAY ||
+        if (rbc_lir_captured_cell(c->input,rbc_lir_value_type(c,v)) || rbc_lir_slice_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_callable_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_inline_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_value_type(c,v) == XR_LIR_STRING || rbc_lir_value_type(c,v) == XR_LIR_ARRAY ||
             rbc_lir_value_type(c,v) == XR_LIR_ARRAY_CELL || rbc_lir_value_type(c,v) == XR_LIR_ARRAY_REF ||
             rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64 || rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_CELL ||
             rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_REF) return true;
-    if (rbc_lir_callable_type(c->input,c->view.result) || rbc_lir_inline_type(c->input,c->view.result) || c->view.result == XR_LIR_STRING || c->view.result == XR_LIR_ARRAY || c->view.result == XR_LIR_MAP_STRING_I64) return true;
+    if (rbc_lir_captured_cell(c->input,c->view.result) || rbc_lir_callable_type(c->input,c->view.result) || rbc_lir_inline_type(c->input,c->view.result) || c->view.result == XR_LIR_STRING || c->view.result == XR_LIR_ARRAY || c->view.result == XR_LIR_MAP_STRING_I64) return true;
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         XrLirBlock block; XrLirBlockView view;
         xr_lir_block_at(c->input,c->function,b,&block); xr_lir_block_view(c->input,block,&view);
@@ -188,6 +188,7 @@ static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *
     return true;
 }
 #include "xrbc_lir_value_callable.inc.c"
+#include "xrbc_lir_value_cell.inc.c"
 static bool rbc_lir_slice_access(RbcLirCompiler *c, const XrLirInstructionView *instruction,
     XrLirSliceIntrinsic shape, XrRbcValueAccess *access) {
     *access=(XrRbcValueAccess){.operation=XR_RBC_VALUE_SLICE,.result=instruction->result,
@@ -205,6 +206,8 @@ static bool rbc_lir_slice_access(RbcLirCompiler *c, const XrLirInstructionView *
 static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionView *i, bool *handled) {
     *handled = false;
     if (!c->typed_values) return true;
+    if (!rbc_lir_cell_access(c,i,handled)) return false;
+    if (*handled) return true;
     XrRbcValueAccess access = {.result=i->result,.source=i->operand_count ? i->operands[0] : 0,
         .other=i->operand_count > 1 ? i->operands[1] : 0};
     switch (i->op) {
@@ -321,7 +324,8 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         break;
     case XR_LIR_RET:
         access.operation = XR_RBC_VALUE_RETURN;
-        if (i->operand_count && rbc_lir_callable_type(c->input,rbc_lir_value_type(c,i->operands[0])))
+        if (i->operand_count && (rbc_lir_callable_type(c->input,rbc_lir_value_type(c,i->operands[0])) ||
+                rbc_lir_captured_cell(c->input,rbc_lir_value_type(c,i->operands[0]))))
             access.index=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_RETURN_TRANSFER,i->operands[0]);
         break;
     default: return true;

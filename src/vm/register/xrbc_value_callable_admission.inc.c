@@ -31,6 +31,8 @@ static bool rbc_value_scope(const XrRbcModule *module,const XrRbcValueCode *code
 }
 static bool rbc_value_callable_argument(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,uint32_t value,XrRbcCallableValue expected) {
+    if (expected.kind==XR_RBC_CALLABLE_CELL)
+        return rbc_value_cell(module,code,value,false) && rbc_value_home(code,value)->type==expected.type;
     if (expected.kind==XR_RBC_CALLABLE_FUNCTION)
         return rbc_callable_accepts(module,expected.type+1,rbc_value_signature(module,code,value));
     if (expected.kind==XR_RBC_CALLABLE_REFERENCE) {

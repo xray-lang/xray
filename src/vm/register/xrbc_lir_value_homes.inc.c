@@ -20,7 +20,7 @@ static bool rbc_home_key(const XrLirModule *module, XrLirFunction function,
     if (type >= XR_LIR_TYPE_COUNT) {
         XrLirTypeView shape;
         if (xr_lir_type_view(module,type,&shape) != XR_LIR_OK) return false;
-        plain = shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_SLICE || shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
+        plain = shape.kind == XR_LIR_TYPE_CALLABLE || rbc_lir_captured_cell(module,type) || shape.kind == XR_LIR_TYPE_SLICE || shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
             shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE;
     }
     if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64) return false;

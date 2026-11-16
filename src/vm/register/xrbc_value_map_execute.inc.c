@@ -37,7 +37,7 @@ static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack 
     if (access.index==XR_LIR_MAP_OP_NEW) return rbc_value_map_new(stack,activation,access,types);
     if (mutate) {
         XrtExternalOwner external; XrtPlace binding;
-        XrtManagedStatus status=rbc_value_binding_place(stack,rbc_value_origin(activation,args[0]),&external,&binding);
+        XrtManagedStatus status=rbc_value_binding_place(module,stack,rbc_value_origin(activation,args[0]),&external,&binding);
         XrtMapUpdate update={.operation=access.index==XR_LIR_MAP_OP_SET ? XRT_MAP_UPDATE_SET :
             access.index==XR_LIR_MAP_OP_REMOVE ? XRT_MAP_UPDATE_REMOVE : XRT_MAP_UPDATE_CLEAR};
         if (status==XRT_MANAGED_OK && access.count>1) status=rbc_value_string_borrow(activation,args[1],&update.key);

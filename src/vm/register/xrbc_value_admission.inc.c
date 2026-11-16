@@ -106,6 +106,38 @@ static bool rbc_value_function(const XrRbcModule *module,const XrRbcValueCode *c
     return !destination || (!home->parameter && home->offset!=SIZE_MAX &&
         (!owned || (home->temporary_offset!=SIZE_MAX && home->temporary_first_owner<code->homes->frame.slot_count)));
 }
+static bool rbc_value_cell(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
+    if (!xr_rbc_module_code_owner(module)) return false;
+    const XrLirValueHome *home=rbc_value_home(code,value);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (!home || !home->type || !image || !image->types || home->type>image->type_count ||
+        code->locations[value].kind!=XR_RBC_VALUE_NOWHERE || home->size!=sizeof(XrtManagedHeader *) ||
+        home->transport!=XR_LIR_CALLABLE_TRANSPORT_NONE || home->borrow_source || home->environment_type || home->view_workspace)
+        return false;
+    const XrtValueImageType *type=&image->types[home->type-1];
+    if (type->kind!=XRT_VALUE_CELL || type->size!=sizeof(XrtManagedHeader *) || type->alignment!=_Alignof(XrtManagedHeader *) ||
+        type->owned_count!=1 || !image->owned_offsets || type->first_owned>=image->owned_count ||
+        image->owned_offsets[type->first_owned] || !type->element || type->element!=home->cell_payload_type ||
+        type->element>image->type_count) return false;
+    XrtValueKind payload=image->types[type->element-1].kind;
+    if (payload!=XRT_VALUE_I64 && payload!=XRT_VALUE_MAP_STRING_I64) return false;
+    if (home->parameter)
+        return !destination && home->cell_transport==XR_LIR_CELL_TRANSPORT_BORROW && !home->owner_count &&
+            home->offset==SIZE_MAX && home->temporary_offset==SIZE_MAX && home->first_owner==SIZE_MAX &&
+            home->temporary_first_owner==SIZE_MAX && home->parameter<=code->parameter_count &&
+            code->parameters && code->parameters[home->parameter-1]==value && home->byte_count==1 &&
+            code->homes->bytes && home->first_bytes<code->homes->byte_count &&
+            !code->homes->bytes[home->first_bytes].offset && code->homes->bytes[home->first_bytes].size==home->size;
+    const XrtManagedFrameSpec *frame=&code->homes->frame;
+    if (home->cell_transport!=XR_LIR_CELL_TRANSPORT_OWNED || home->owner_count!=1 || home->byte_count ||
+        !code->homes->owned_frame_needed || !frame->owned_offsets || frame->payload_alignment<type->alignment ||
+        home->first_owner==home->temporary_first_owner || home->offset==home->temporary_offset) return false;
+    size_t slots[]={home->first_owner,home->temporary_first_owner},offsets[]={home->offset,home->temporary_offset};
+    for (size_t n=0;n<2;++n)
+        if (slots[n]>=frame->slot_count || offsets[n]%type->alignment || offsets[n]>frame->payload_size ||
+            home->size>frame->payload_size-offsets[n] || frame->owned_offsets[slots[n]]!=offsets[n]) return false;
+    return true;
+}
 static bool rbc_value_inline(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
     const XrLirValueHome *home=rbc_value_home(code,value);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
@@ -113,6 +145,7 @@ static bool rbc_value_inline(const XrRbcModule *module,const XrRbcValueCode *cod
         code->locations[value].kind!=XR_RBC_VALUE_NOWHERE) return false;
     const XrtValueImageType *type=&image->types[home->type-1];
     if (type->kind==XRT_VALUE_FUNCTION) return rbc_value_function(module,code,value,destination);
+    if (type->kind==XRT_VALUE_CELL) return rbc_value_cell(module,code,value,destination);
     return (type->kind==XRT_VALUE_RECORD || type->kind==XRT_VALUE_NULLABLE) && home->size==type->size &&
         home->owner_count==type->owned_count && (!destination || (!home->parameter && home->offset!=SIZE_MAX &&
             (!home->owner_count || (home->temporary_offset!=SIZE_MAX && home->temporary_first_owner<code->homes->frame.slot_count))));
@@ -137,6 +170,21 @@ static bool rbc_value_pod(const XrRbcModule *module,const XrRbcValueCode *code,
 #include "xrbc_value_array_admission.inc.c"
 #include "xrbc_value_map_admission.inc.c"
 #include "xrbc_value_slice_admission.inc.c"
+static const XrLirHomeWorkspace *rbc_value_cell_stage(const XrRbcValueCode *code,XrLirHomeTransfer transfer) {
+    const XrLirValueHomes *homes=code->homes;
+    if (!homes || !homes->workspaces || transfer.borrowed_owner_workspace>=homes->workspace_count) return NULL;
+    const XrLirHomeWorkspace *workspace=&homes->workspaces[transfer.borrowed_owner_workspace];
+    const XrLirValueHome *source=rbc_value_home(code,transfer.source),*target=rbc_value_home(code,transfer.target);
+    if (!source || !target || !source->parameter || workspace->kind!=XR_LIR_HOME_WORKSPACE_CELL_BORROW_STAGE ||
+        workspace->type!=source->type || workspace->value!=transfer.source || !workspace->block || !workspace->instruction ||
+        workspace->temporary_offset!=SIZE_MAX || workspace->temporary_first_owner!=SIZE_MAX ||
+        !homes->frame.owned_offsets || workspace->first_owner>=homes->frame.slot_count ||
+        workspace->first_owner==target->first_owner || workspace->first_owner==target->temporary_first_owner ||
+        workspace->offset%_Alignof(XrtManagedHeader *) || workspace->offset>homes->frame.payload_size ||
+        sizeof(XrtManagedHeader *)>homes->frame.payload_size-workspace->offset ||
+        homes->frame.owned_offsets[workspace->first_owner]!=workspace->offset) return NULL;
+    return workspace;
+}
 static bool rbc_value_edge_valid(const XrRbcModule *module,const XrRbcValueCode *code, XrRbcValueAccess access) {
     if (access.first > code->argument_count || access.count > (code->argument_count - access.first) / 2 ||
         (access.count && !code->arguments)) return false;
@@ -158,6 +206,17 @@ static bool rbc_value_edge_valid(const XrRbcModule *module,const XrRbcValueCode 
             XrLirHomeTransfer transfer = code->homes->transfers[edge->first + typed++];
             if (transfer.source != source || transfer.target != target || to->parameter ||
                 to->temporary_offset == SIZE_MAX) return false;
+            if (rbc_value_cell(module,code,target,true)) {
+                if (!rbc_value_cell(module,code,source,false) || transfer.transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_COPY ||
+                    transfer.hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE || transfer.source_workspace || transfer.target_workspace)
+                    return false;
+                if (from->parameter) {
+                    const XrLirHomeWorkspace *stage=rbc_value_cell_stage(code,transfer);
+                    if (!stage || stage->block!=edge->block) return false;
+                } else if (transfer.borrowed_owner_workspace!=SIZE_MAX) return false;
+                continue;
+            }
+            if (transfer.borrowed_owner_workspace!=SIZE_MAX) return false;
             if (rbc_value_slice(module,code,target)) {
                 if (!rbc_value_slice(module,code,source) || transfer.transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
                     transfer.hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_COPY ||
@@ -215,6 +274,7 @@ static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCo
 }
 #include "xrbc_value_inline_admission.inc.c"
 #include "xrbc_value_callable_admission.inc.c"
+#include "xrbc_value_cell_admission.inc.c"
 static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     XrRbcValueAccess access) {
     const XrLirHomeEvent *transfer=rbc_value_event(code,access.index,XR_LIR_OWNERSHIP_APPEND_TRANSFER);
@@ -264,6 +324,7 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         a.operation!=XR_RBC_VALUE_DISPLAY && a.operation!=XR_RBC_VALUE_RECORD_FIELD && a.operation!=XR_RBC_VALUE_RETURN &&
         a.operation<XR_RBC_VALUE_FUNCTION_NEW && a.index) return false;
     switch (a.operation) {
+    case XR_RBC_VALUE_CELL: return rbc_value_cell_access_valid(module,code,function,a);
     case XR_RBC_VALUE_STRING_APPEND_OWNED: return rbc_value_string_append_valid(module,code,a);
     case XR_RBC_VALUE_SLICE: return rbc_value_slice_access_valid(module,code,function,a);
     case XR_RBC_VALUE_FUNCTION_NEW: case XR_RBC_VALUE_FUNCTION_CALL:
@@ -277,11 +338,11 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return rbc_value_string(module,code,a.result,true) && rbc_value_string(module,code,a.source,false) &&
             rbc_value_string(module,code,a.other,false);
     case XR_RBC_VALUE_COPY: case XR_RBC_VALUE_MOVE:
-        return !a.other && !rbc_value_function(module,code,a.result,false) &&
+        return !a.other && !rbc_value_function(module,code,a.result,false) && !rbc_value_cell(module,code,a.result,false) &&
             rbc_value_owner(module,code,a.result,true) && rbc_value_owner(module,code,a.source,false) &&
             rbc_value_home(code,a.result)->type==rbc_value_home(code,a.source)->type && (a.operation == XR_RBC_VALUE_COPY || !rbc_value_home(code,a.source)->parameter);
     case XR_RBC_VALUE_DROP:
-        return !a.result && !a.other && rbc_value_owner(module,code,a.source,false) &&
+        return !a.result && !a.other && !rbc_value_cell(module,code,a.source,false) && rbc_value_owner(module,code,a.source,false) &&
             !rbc_value_home(code,a.source)->parameter &&
             (!rbc_value_function(module,code,a.source,false) || rbc_value_home(code,a.source)->owner_count==1);
     case XR_RBC_VALUE_STRING_PRINT:
@@ -353,9 +414,10 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return rbc_value_inline_access_valid(module,code,function,a);
     case XR_RBC_VALUE_RETURN:
         if (a.result || a.other) return false;
-        if (rbc_value_function(module,code,a.source,false)) {
+        if (rbc_value_function(module,code,a.source,false) || rbc_value_cell(module,code,a.source,false)) {
             const XrLirHomeEvent *event=rbc_value_event(code,a.index,XR_LIR_OWNERSHIP_RETURN_TRANSFER);
             return event && event->source==a.source && code->homes->result_type==rbc_value_home(code,a.source)->type &&
+                (!rbc_value_cell(module,code,a.source,false) || rbc_value_cell_event(module,code,event,a.source)) &&
                 (event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY || event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE);
         }
         if (a.index) return false;

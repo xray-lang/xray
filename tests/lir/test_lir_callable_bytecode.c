@@ -178,13 +178,13 @@ static void supported_and_rejected_captures(void) {
     callable_fixture_capture(&module,&root,3);
     XrRbcProgram *program=compile(module,root);
     xr_lir_module_destroy(module); execute(program,42);
-    /* An owning captured Cell still needs its separate real Cell receiver. */
     callable_fixture_capture(&module,&root,4);
-    program=NULL;
-    XrRbcCompileDiagnostic diagnostic={0};
-    CHECK(xr_rbc_compile(module,root,&program,&diagnostic)==XR_RBC_COMPILE_UNSUPPORTED);
-    CHECK(!program && diagnostic.message[0]);
-    xr_lir_module_destroy(module);
+    program=compile(module,root);
+    XrRbcModule raw=*xr_rbc_program_view(program);
+    raw.code_lease=(XrRbcCodeLease){0};
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
+    xr_lir_module_destroy(module); execute(program,42);
 }
 static void owned_duplicate_edge(void) {
     CArrayFixture c={0};

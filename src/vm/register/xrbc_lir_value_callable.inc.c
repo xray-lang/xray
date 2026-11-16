@@ -82,8 +82,12 @@ static bool rbc_lir_function_releases(RbcLirCompiler *c) {
     for (size_t n=0;n<c->homes->event_count;++n) {
         const XrLirHomeEvent *event=&c->homes->events[n];
         if (event->kind!=XR_LIR_OWNERSHIP_RELEASE || event->block!=c->diagnostic->block ||
-            event->instruction!=c->diagnostic->instruction || !rbc_lir_callable_type(c->input,rbc_lir_value_type(c,event->source))) continue;
-        if (!rbc_lir_value_append(c,(XrRbcValueAccess){.operation=XR_RBC_VALUE_DROP,.source=event->source})) return false;
+            event->instruction!=c->diagnostic->instruction) continue;
+        if (event->cell_transport!=XR_LIR_CELL_TRANSPORT_NONE) {
+            if (n>=UINT32_MAX || !rbc_lir_value_append(c,(XrRbcValueAccess){.operation=XR_RBC_VALUE_CELL,
+                    .source=event->source,.index=(uint32_t)n+1})) return false;
+        } else if (rbc_lir_callable_type(c->input,rbc_lir_value_type(c,event->source)) &&
+            !rbc_lir_value_append(c,(XrRbcValueAccess){.operation=XR_RBC_VALUE_DROP,.source=event->source})) return false;
     }
     return true;
 }
