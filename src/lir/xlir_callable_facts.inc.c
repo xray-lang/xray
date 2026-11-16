@@ -18,6 +18,7 @@ struct XrLirCallableFacts {
 
 typedef struct LirCallableGeometry {
     const uint32_t *parents, *owners, *floors;
+    const uint8_t *multiplicity;
 } LirCallableGeometry;
 
 _Static_assert(sizeof(LirCallableFunctionFacts) % _Alignof(XrLirCallableValueFact) == 0 &&
@@ -278,7 +279,7 @@ static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirF
     bool resolved = lir_callable_facts_resolve(rows, f->value_count, links, path, colors);
     xr_free(scratch);
     if (!resolved) { xr_free(received); return XR_LIR_VERIFY_ERROR; }
-    XrLirStatus construction_status = lir_callable_construction_reentry(f, rows);
+    XrLirStatus construction_status = lir_callable_construction_reentry(f, rows, geometry.multiplicity);
     if (construction_status != XR_LIR_OK) { xr_free(received); return construction_status; }
     lir_callable_materializations(m,f,rows);
     XrLirStatus transport_status = lir_callable_transports(f,rows);

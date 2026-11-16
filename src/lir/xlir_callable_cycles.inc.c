@@ -15,15 +15,8 @@ _Static_assert(sizeof(LirCallableCycleNode) % _Alignof(uint32_t) == 0,
 
 /* Iterative Tarjan visits each block and edge once. The parent cursor is the
  * DFS stack; the separate member stack contains only unfinished components. */
-static XrLirStatus lir_callable_construction_reentry(const XrLirFunctionData *f,
-    XrLirCallableValueFact *rows) {
-    bool needed = false;
-    for (uint32_t v = 0; v < f->value_count; ++v) {
-        const XrLirCallableValueFact *row = &rows[v + 1];
-        needed |= row->operation == XR_LIR_FUNCTION_REF &&
-            row->constructor_storage == XR_LIR_CLOSURE_FRAME && row->capture_count;
-    }
-    if (!needed) return XR_LIR_OK;
+static XrLirStatus lir_block_multiplicity_create(const XrLirFunctionData *f,uint8_t **empty) {
+    if (!empty || *empty) return XR_LIR_INVALID_ARGUMENT;
     size_t bytes = 0;
     if (!f->block_count || !lir_callable_extent(&bytes, f->block_count, sizeof(LirCallableCycleNode)) ||
         !lir_callable_extent(&bytes, f->block_count, sizeof(uint32_t))) return XR_LIR_OUT_OF_MEMORY;
@@ -67,13 +60,20 @@ static XrLirStatus lir_callable_construction_reentry(const XrLirFunctionData *f,
             current = parent;
         }
     }
+    uint8_t *multiplicity=xr_malloc(f->block_count);
+    if (!multiplicity) {xr_free(nodes);return XR_LIR_OUT_OF_MEMORY;}
+    for (uint32_t b=0;b<f->block_count;++b) multiplicity[b]=(uint8_t)nodes[b].cyclic;
+    xr_free(nodes);*empty=multiplicity;return XR_LIR_OK;
+}
+static XrLirStatus lir_callable_construction_reentry(const XrLirFunctionData *f,
+    XrLirCallableValueFact *rows,const uint8_t *multiplicity) {
     for (uint32_t v = 0; v < f->value_count; ++v) {
         XrLirCallableValueFact *row = &rows[v + 1];
         if (row->operation == XR_LIR_FUNCTION_REF && row->constructor_storage == XR_LIR_CLOSURE_FRAME && row->capture_count) {
             XR_CHECK(row->block && row->block <= f->block_count, "a final constructor names its verified block");
-            row->constructor_may_repeat = nodes[row->block - 1].cyclic;
+            if (!multiplicity) return XR_LIR_VERIFY_ERROR;
+            row->constructor_may_repeat = multiplicity[row->block - 1]!=0;
         }
     }
-    xr_free(nodes);
     return XR_LIR_OK;
 }

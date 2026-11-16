@@ -167,6 +167,7 @@ static void lir_function_free(XrLirFunctionData *f) {
     xr_free(f->parameters);
     xr_free(f->parameter_types);
     xr_free(f->callable_parameters);
+    xr_free(f->block_multiplicity);
 }
 
 XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
@@ -914,6 +915,15 @@ XR_FUNC XrLirStatus xr_lir_block_view(const XrLirModule *m, XrLirBlock handle,
     const XrLirBlockData *b = &f->blocks[handle.id - 1];
     *out = (XrLirBlockView) {b->parameters, b->parameter_count, b->instruction_count};
     return XR_LIR_OK;
+}
+XR_FUNC XrLirStatus xr_lir_block_may_repeat(const XrLirModule *m,XrLirBlock block,bool *output) {
+    if (!output || !m || block.module!=m || !block.function || block.function>m->function_count)
+        return XR_LIR_INVALID_ARGUMENT;
+    if (!lir_readable(m)) return XR_LIR_INVALID_STATE;
+    const XrLirFunctionData *f=&m->functions[block.function-1];
+    if (!block.id || block.id>f->block_count) return XR_LIR_INVALID_ARGUMENT;
+    if (!f->block_multiplicity || f->block_multiplicity_count!=f->block_count) return XR_LIR_INVALID_STATE;
+    *output=f->block_multiplicity[block.id-1]!=0;return XR_LIR_OK;
 }
 XR_FUNC XrLirStatus xr_lir_instruction_view(const XrLirModule *m, XrLirBlock block,
                                             uint32_t ordinal, XrLirInstructionView *out) {

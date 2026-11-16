@@ -199,6 +199,9 @@ XR_FUNC XrLirStatus xr_lir_function_view(const XrLirModule *, XrLirFunction, XrL
 XR_FUNC XrLirStatus xr_lir_block_at(const XrLirModule *, XrLirFunction, uint32_t ordinal,
                                     XrLirBlock *);
 XR_FUNC XrLirStatus xr_lir_block_view(const XrLirModule *, XrLirBlock, XrLirBlockView *);
+/* Reads the exact finished CFG's common construction fact. Failure preserves
+ * output; an unfinished or missing analysis never means a nonrepeating block. */
+XR_FUNC XrLirStatus xr_lir_block_may_repeat(const XrLirModule *, XrLirBlock, bool *output);
 XR_FUNC XrLirStatus xr_lir_instruction_view(const XrLirModule *, XrLirBlock, uint32_t ordinal,
                                             XrLirInstructionView *);
 XR_FUNC XrLirStatus xr_lir_value_type(const XrLirModule *, XrLirValue, XrLirType *);
