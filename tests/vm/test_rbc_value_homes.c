@@ -119,11 +119,19 @@ static void real_compiler_and_root(void) {
     XrRbcCodeLease lease = snapshot.code_lease; CHECK(lease.retain(lease.owner));
     CHECK(!xr_rbc_module_value_homes(NULL, 0) && !xr_rbc_module_value_homes(&snapshot, UINT32_MAX));
     XrRbcModule raw = snapshot; raw.code_lease = (XrRbcCodeLease){0};
+    /* Borrowing explicit metadata does not confer its Frame owner inventory. */
+    CHECK(xr_rbc_module_value_homes(&raw, 0) == homes && homes->owned_frame_needed && homes->frame.slot_count);
+    XrRbcExecution *invalid=NULL;
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&invalid) == XR_RBC_INVALID && !invalid);
+    raw.borrowed_value_codes=NULL; raw.borrowed_value_code_count=0;
     CHECK(!xr_rbc_module_value_homes(&raw, 0));
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&invalid) == XR_RBC_INVALID && !invalid);
     raw = snapshot; --raw.function_count;
     CHECK(!xr_rbc_module_value_homes(&raw, 0));
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&invalid) == XR_RBC_INVALID && !invalid);
     raw = snapshot; raw.functions = NULL;
     CHECK(!xr_rbc_module_value_homes(&raw, 0));
+    CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&invalid) == XR_RBC_INVALID && !invalid);
     xr_rbc_program_destroy(program);
     CHECK(xr_rbc_module_value_homes(&snapshot, 0) == homes && xr_rbc_module_value_homes(&snapshot, 1) == callee);
     XrtBillingOwner *billing = NULL; XrtManagedRoot *root = NULL; XrtManagedFrame *frame = NULL;
