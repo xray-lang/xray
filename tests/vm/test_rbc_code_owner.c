@@ -247,6 +247,37 @@ static void owned_outcome_take(void) {
     xr_rbc_outcome_free(&outcome);
     CHECK(!tracked_live);
 }
+static void owned_run_failures(void) {
+    XrRbcProgram *program=compile_fixture(4);
+    size_t baseline=tracked_live;
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    attempts=0;
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    size_t calls=attempts;
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+    xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+    CHECK(tracked_live==baseline);
+    for (size_t point=1;point<=calls;++point) {
+        CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+        attempts=0; fail_at=point;
+        outcome=xr_rbc_execution_run(execution);
+        CHECK(outcome);
+        XrRbcStatus status=xr_rbc_outcome_status(outcome);
+        if (status==XR_RBC_VALUE_FAILURE) {
+            XrXirValueStatus failure; uint32_t source; const XrtLocationOwner *locations;
+            CHECK(xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations) && failure==XR_XIR_VALUE_OOM);
+        } else CHECK(status==XR_RBC_OUT_OF_MEMORY);
+        fail_at=SIZE_MAX;
+        xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+        CHECK(tracked_live==baseline);
+    }
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    check_result(&execution,4);
+    xr_rbc_program_destroy(program);
+    CHECK(!tracked_live);
+    printf("Owned Fn run: %zu allocation failures retire staging and restore the code baseline\n",calls);
+}
 static void prepared_after_program(unsigned kind) {
     CHECK(!tracked_live);
     XrRbcProgram *program = compile_fixture(kind);
@@ -358,6 +389,7 @@ int main(void) {
     for (unsigned kind = 0; kind < 4; ++kind) { prepared_after_program(kind); failure_sweep(kind); }
     code_lease_is_leaf(); raw_borrow_and_refusal();
     prepared_after_program(4); prepared_after_program(5); owned_receiving_failures(); owned_outcome_take();
+    owned_run_failures();
     puts("CodeImage leases, independent Layout snapshots and post-Program executions passed");
     return 0;
 }
