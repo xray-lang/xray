@@ -72,6 +72,21 @@ typedef struct LowerLexical {
     uint32_t *incoming, *outgoing, *term_scope, *term_target, *value_scopes;
     uint32_t count, temporary_count, current;
 } LowerLexical;
+
+typedef struct LowerViewCleanup {
+    XrLirSliceCleanupInsertion insertion;
+    uint32_t owner;
+} LowerViewCleanup;
+typedef struct LowerViewStore {
+    XrLirValue value;
+    size_t next;
+} LowerViewStore;
+typedef struct LowerViews {
+    LowerViewCleanup *cleanups;
+    LowerViewStore *stores;
+    size_t *heads;
+    size_t cleanup_count, cleanup_capacity, store_count, store_capacity;
+} LowerViews;
 typedef struct LowerFunction {
     Lower *owner;
     const XrXirFunction *source;
@@ -88,10 +103,12 @@ typedef struct LowerFunction {
     uint32_t value_count, cell_count, ordered, frame_cell_count, retired_value_count;
     LowerArrayCells array_cells;
     LowerLexical lexical;
+    LowerViews views;
 } LowerFunction;
 
 static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
 static bool lower_map_borrow(LowerFunction *, uint32_t, XrLirValue *);
+static bool lower_view_store(LowerFunction *, uint32_t, XrLirValue);
 
 static XrLirType lower_array_element(const Lower *c, XrXirType type) {
     if (!xr_xir_type_is_array(c->source->types, type)) return XR_LIR_TYPE_INVALID;
@@ -1210,6 +1227,9 @@ static bool lower_declare(Lower *c, uint32_t index) {
 }
 
 static void lower_function_free(LowerFunction *f) {
+    xr_free(f->views.cleanups);
+    xr_free(f->views.stores);
+    xr_free(f->views.heads);
     xr_free(f->lexical.caps);
     xr_free(f->lexical.temporaries);
     xr_free(f->lexical.parents);
@@ -1504,6 +1524,11 @@ static bool lower_blocks(LowerFunction *f) {
                         XrLirArrayShape shape = {f->cell_elements[cell]};
                         if (!lower_build(c, xr_lir_block_parameter(c->module, f->blocks[b], position, &parameter)) ||
                             !lower_build(c, xr_lir_set_array_shape(c->module, parameter, &shape))) return false;
+                    }
+                    if (xr_lir_internal_slice_type(c->module, f->cell_types[cell])) {
+                        XrLirValue parameter = {0};
+                        if (!lower_build(c, xr_lir_block_parameter(c->module, f->blocks[b], position, &parameter)) ||
+                            !lower_view_store(f, cell, parameter)) return false;
                     }
                     ++position;
                 }
@@ -2381,6 +2406,7 @@ static bool lower_function(Lower *c, uint32_t index) {
         }
     for (uint32_t n = 0; n < f.ordered && good; ++n)
         good = lower_body(&f, f.order[n]);
+    if (good) good = lower_view_cleanups_finish(&f);
     if (good) good = lower_frame_cells(&f);
     for (uint32_t b = 0; b < f.source->block_count && good; ++b)
         if (f.reachable[b])

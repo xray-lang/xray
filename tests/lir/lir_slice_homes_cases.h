@@ -8,6 +8,7 @@
  */
 #include "lir/xlir_internal.h"
 #include "lir/xlir_view.h"
+#include "lir/xlir_verify.h"
 static XrLirValue slice_role(CArrayFixture *c, XrLirBlock block, XrLirSliceOperation role,
     XrLirType result, const XrLirValue *args, uint32_t count) {
     uint32_t id = 0;
