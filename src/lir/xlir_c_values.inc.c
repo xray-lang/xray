@@ -127,6 +127,9 @@ static void c_values_prepare(LirC *c) {
         }
         for (uint32_t v = 1; v <= view.value_count && c_request_poll(c); ++v) {
             XrLirType type = 0; xr_lir_value_type(module, (XrLirValue){module, function.id, v}, &type);
+            if (xr_lir_string_binding(module, (XrLirValue){module, function.id, v})) {
+                needed[XR_LIR_STRING] = 1; projected = true;
+            }
             if (type==XR_LIR_ARRAY || type==XR_LIR_ARRAY_CELL || type==XR_LIR_ARRAY_REF) {
                 XrLirArrayShape shape={0};
                 if (xr_lir_array_shape_view(module,(XrLirValue){module,function.id,v},&shape)!=XR_LIR_OK) {
@@ -217,6 +220,7 @@ static void c_values_emit_types(LirC *c) {
 static void c_values_function(LirC *c) {
     c->homes = c->value_homes ? c->value_homes[c->function.id - 1] : NULL;
     c->home_edge_cursor = 0;
+    c->string_event_cursor = c->string_workspace_cursor = 0;
 }
 static bool c_values_owned_type(LirC *c, XrLirType type) {
     return c_managed_leaf(type) || (type >= XR_LIR_TYPE_COUNT &&
@@ -230,7 +234,7 @@ static void c_values_declarations(LirC *c) {
 static bool c_values_declare(LirC *c, uint32_t value) {
     if (c->homes && c->homes->bindings && (c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_STATE_BORROW ||
         c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW))
-        c_format(c, "    XrtExternalOwner xrl_array_binding%" PRIu32 ";\n", value);
+        c_format(c, "    XrtExternalOwner xrl_array_binding%" PRIu32 ";\n    (void)&xrl_array_binding%" PRIu32 ";\n", value, value);
     return c->homes && (c->homes->values[value].owner_count || c->homes->values[value].view_workspace ||
         (c->homes->bindings && c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_LOCAL));
 }

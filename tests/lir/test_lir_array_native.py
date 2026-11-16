@@ -86,7 +86,8 @@ def main():
     args = parser.parse_args()
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='array-native-', dir=args.work))
-    expected = {'map-literal-explicit': 42, 'map-literal-spread': 42, 'map-literal-spread-wins': 42,
+    expected = {'string-bindings': 14, 'string-ref-bindings': 2,
+                'map-literal-explicit': 42, 'map-literal-spread': 42, 'map-literal-spread-wins': 42,
                 'map-literal-empty': 0,
                 'map-literal-duplicate': None, 'map-literal-unknown-duplicate': None,
                 'callable-nonentry-frame': 42, 'callable-loop-before-frame': 42,
