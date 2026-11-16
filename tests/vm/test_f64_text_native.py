@@ -10,9 +10,10 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lir'))
 from test_lir_carriers_native import _f64_profile, _f64_reject, _f64_options
+from test_lir_owned_string import frame_observer_source
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from xraytest.toolchain import archive_link_arguments
+from xraytest.toolchain import archive_link_arguments, native_c11_options
 
 
 def vectors(source):
@@ -26,13 +27,16 @@ def vectors(source):
 
 
 def adapter(public=False, cpp=False):
-    text = '#include "xray_native_runtime.h"\n#include <string.h>\n#include <stdlib.h>\n#include <fenv.h>\n'
+    text = '#include "xray_native_runtime.h"\n#include "xray_native_values.h"\n#include <string.h>\n#include <stdlib.h>\n#include <fenv.h>\n'
+    text += ('#ifdef __cplusplus\nextern "C" int f64_text_matches(const XrtManagedHeader *,const char *,int);\n'
+             '#else\nint f64_text_matches(const XrtManagedHeader *,const char *,int);\n#endif\n')
     if public:
-        text += ('#include <type_traits>\nstatic_assert(std::is_same<decltype(&xrt_string_f64),'
-                 'XrtString *(*)(uint64_t,uint32_t)>::value,"public text ABI");\n' if cpp else
-                 '_Static_assert(_Generic(&xrt_string_f64,XrtString *(*)(uint64_t,uint32_t):1,default:0),"public text ABI");\n')
+        text += ('#include <type_traits>\nstatic_assert(std::is_same<decltype(&xrt_native_string_f64_create),'
+                 'void (*)(XrtManagedFrame *,size_t,uint64_t,uint32_t)>::value,"public text ABI");\n' if cpp else
+                 '_Static_assert(_Generic(&xrt_native_string_f64_create,void (*)(XrtManagedFrame *,size_t,uint64_t,uint32_t):1,default:0),"public text ABI");\n')
+        text += 'const XrtSourceMap xrt_standalone_source_map={NULL,0};\n'
     else:
-        text += ('typedef XrtString *(*Text)(double);\nextern Text f64_text_get(void);\n'
+        text += ('typedef void (*Text)(XrtManagedFrame *,uint64_t);\nextern Text f64_text_get(void);\n'
                  'extern const XrtSourceMap *f64_text_source_map(void);\n')
     text += r'''
 #if defined(_M_X64) || defined(__x86_64__)
@@ -59,20 +63,21 @@ static int environment_matches(int round,unsigned control){
 #endif
  return 1;
 }
-static void equal_text(const XrtString *value,const char *expected){
- size_t length=0;const char *bytes=xrt_string_bytes(value,&length);
+static void invoke(void *data){
+ const Witness *row=(const Witness *)data;
+ XrtManagedRoot *root=xrt_native_managed_root(0);XrtManagedFrame *frame=NULL;
+ if(xrt_managed_frame_enter(root,2,&frame)!=XRT_MANAGED_OK)abort();
 '''
-    text += (' if(length!=strlen(expected) || memcmp(bytes,expected,length))abort();\n}\n' if public else
-             ' if(length!=strlen(expected)+2 || memcmp(bytes,"v=",2) || memcmp(bytes+2,expected,length-2))abort();\n}\n')
     if public:
-        text += ('static void invoke(void *data){const Witness *row=(const Witness *)data;\n'
-                 ' XrtString *value=xrt_string_f64(row->bits,0);equal_text(value,row->text);\n'
-                 ' xrt_string_drop(&value);if(value)abort();}\n')
+        text += ' xrt_native_string_f64_create(frame,0,row->bits,0);\n'
     else:
-        text += ('static void invoke(void *data){const Witness *row=(const Witness *)data;\n'
-                 ' double input;memcpy(&input,&row->bits,sizeof(input));\n'
-                 ' XrtString *value=f64_text_get()(input);equal_text(value,row->text);\n'
-                 ' xrt_string_drop(&value);if(value)abort();}\n')
+        text += ' f64_text_get()(frame,row->bits);\n'
+    text += (' XrtManagedHeader *value=NULL,*empty=NULL;\n'
+             ' if(xrt_managed_slot_borrow(frame,0,&value)!=XRT_MANAGED_OK || !value ||\n'
+             f'    !f64_text_matches(value,row->text,{0 if public else 1}))abort();\n'
+             ' if(xrt_managed_slot_drop(frame,0)!=XRT_MANAGED_OK ||\n'
+             '    xrt_managed_slot_borrow(frame,0,&empty)!=XRT_MANAGED_OK || empty ||\n'
+             '    xrt_managed_frame_leave(root,frame)!=XRT_MANAGED_OK)abort();\n}\n')
     text += r'''
 int main(void){
  const int rounds[]={FE_TONEAREST};
@@ -90,8 +95,8 @@ int main(void){
   for(unsigned i=0;i<sizeof(rows)/sizeof(rows[0]);++i)for(unsigned run=0;run<2;++run){
 '''
     if public:
-        text += ('   static const XrtSourceMap locations={NULL,0};Witness row=rows[i];\n'
-                 '   xrt_run_standalone(&locations,invoke,&row);\n')
+        text += ('   Witness row=rows[i];\n'
+                 '   xrt_run_standalone(&xrt_standalone_source_map,invoke,&row);\n')
     else:
         text += ('   Witness row=rows[i];\n'
                  '   xrt_run_standalone(f64_text_source_map(),invoke,&row);\n')
@@ -123,7 +128,7 @@ def main():
     records = []
 
     def run(name, command, folder=work):
-        result = subprocess.run(list(map(str, command)), cwd=folder, capture_output=True, timeout=60)
+        result = subprocess.run(list(map(str, command)), cwd=folder, capture_output=True, timeout=30)
         (folder / (name + '.stdout')).write_bytes(result.stdout)
         (folder / (name + '.stderr')).write_bytes(result.stderr)
         records.append(dict(name=name, command=list(map(str, command)), cwd=str(folder), exit=result.returncode))
@@ -140,18 +145,33 @@ def main():
     assert hashlib.sha256(before.replace(b'\r\n', b'\n')).hexdigest() == '89807d8c49e885d01b35402c03697496dafef7d1f5ef41ba86f4dac8d486e43f'
     expected = b'v=3.5\n-0.0\ninf -inf nan\n'
     (work / 'vectors.h').write_text(vectors(args.source_root), encoding='ascii')
-    (work / 'gateway.c').write_text('#include "whole.c"\n'
-        'typedef XrtString *(*Text)(double);\n'
-        f'_Static_assert(_Generic(&xrl_f{observation["callee"]},Text:1,default:0),"Source text ABI");\n'
-        f'Text f64_text_get(void){{return &xrl_f{observation["callee"]};}}\n'
+    (work / 'gateway.c').write_text('#include <stdlib.h>\n#include <string.h>\n#include "whole.c"\n'
+        'typedef void (*Text)(XrtManagedFrame *,uint64_t);\n'
+        f'typedef void (*Worker)(XrlLanding_{observation["callee"]},double);\n'
+        f'_Static_assert(_Generic(&xrl_f{observation["callee"]},Worker:1,default:0),"Source text ABI");\n'
+        'static void into_frame(XrtManagedFrame *frame,uint64_t bits){\n'
+        ' XrtManagedSlotLocation value={0},temporary={0};double input;memcpy(&input,&bits,sizeof(input));\n'
+        ' if(xrt_managed_slot_location(frame,0,&value)!=XRT_MANAGED_OK ||\n'
+        '    xrt_managed_slot_location(frame,1,&temporary)!=XRT_MANAGED_OK)abort();\n'
+        f' xrl_f{observation["callee"]}((XrlLanding_{observation["callee"]})'
+        '{frame,0,1,value.owner,temporary.owner},input);}\n'
+        'Text f64_text_get(void){return into_frame;}\n'
         'const XrtSourceMap *f64_text_source_map(void){return &xrt_standalone_source_map;}\n', encoding='ascii')
     (work / 'adapter.c').write_text(adapter(), encoding='ascii')
+    witness = work / 'text-witness.c'
+    witness.write_text('#include "xray_native_string_value.h"\n#include <string.h>\n'
+        'int f64_text_matches(const XrtManagedHeader *header,const char *expected,int prefix){\n'
+        ' const XrtStringBacking *value=(const XrtStringBacking *)header;size_t length=strlen(expected);\n'
+        ' if(!value || value->length!=length+(prefix?2u:0u))return 0;\n'
+        ' return (!prefix || !memcmp(value->bytes,"v=",2)) &&\n'
+        '        !memcmp(value->bytes+(prefix?2:0),expected,length);}\n', encoding='ascii')
 
     def options(cpp=False):
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
-            flags = ['/nologo', '/std:c++17' if cpp else '/std:c11', '/W4', '/WX', '/utf-8', crt, '/O2',
+            mode = ['/std:c++17'] if cpp else native_c11_options(args.compiler, driver=args.kind)
+            flags = ['/nologo', *mode, '/W4', '/WX', '/utf-8', crt, '/O2',
                      '/I' + str(args.include), '/I' + str(work)]
             flags += _f64_options(args.compiler, args.kind)
             if 'clang' not in args.compiler.name.lower():
@@ -190,7 +210,14 @@ def main():
         objects = []
         for i, path in enumerate(sources):
             obj = work / (name + str(i) + ('.obj' if args.kind == 'msvc' else '.o'))
-            run('compile-' + name + str(i), compile_command(compiler, flags, path, obj))
+            source_cpp = cpp and path.suffix == '.cpp'
+            source_compiler = args.cxx_compiler if source_cpp else args.compiler
+            source_flags = options(source_cpp)
+            if private:
+                source_flags += [('/I' if args.kind == 'msvc' else '-I') + str(args.source_root / 'src')]
+                if args.kind == 'msvc':
+                    source_flags += ['/D_CRT_SECURE_NO_WARNINGS', '/D_CRT_NONSTDC_NO_WARNINGS']
+            run('compile-' + name + str(i), compile_command(source_compiler, source_flags, path, obj))
             objects.append(obj)
         executable = work / (name + ('.exe' if args.kind == 'msvc' else ''))
         link_flags = [flag for flag in flags if flag != '/EHsc']
@@ -203,35 +230,14 @@ def main():
 
     def normal_frame_observer(generated, name):
         observer = work / ('normal-frame-' + name + '.c')
-        observer.write_text('#include "runtime/native/xnative_execution.h"\n#include <stdlib.h>\n'
-            'static XrtString *watched;static unsigned created,dropped;\n'
-            'static XrtString *observed_f64(uint64_t bits,uint32_t source){\n'
-            ' XrtString *value=xrt_string_f64(bits,source);\n'
-            ' if(bits==UINT64_C(0x8000000000000000)){if(watched)abort();watched=value;++created;}\n'
-            ' return value;}\n'
-            'static void observed_drop(XrtString **value){\n'
-            ' if(*value && *value==watched){watched=NULL;++dropped;}xrt_string_drop(value);}\n'
-            '#define xrt_string_f64(bits,source) observed_f64((bits),(source))\n'
-            '#define xrt_string_drop(value) observed_drop(value)\n'
-            f'#include "{generated.name}"\n'
-            '#undef xrt_string_f64\n#undef xrt_string_drop\n'
-            'typedef struct Observation{XrtValueRoot strings;unsigned visits;} Observation;\n'
-            'static void observe(void *data){Observation *o=data;int64_t result=99;xrl_invoke(&result);\n'
-            ' if(result || watched || o->strings.held || created!=o->visits+1 || dropped!=created)abort();\n'
-            ' ++o->visits;}\n'
-            'int main(void){Observation o={0};XrtLocationOwner *locations=NULL;XrtExecutionFailure failure={0};\n'
-            ' if(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations)!=XRT_LOCATION_OK)return 1;\n'
-            ' for(unsigned run=0;run<2;++run){\n'
-            '  if(xrt_run_embedded_owned(locations,&failure,observe,&o,&o.strings)!=XRT_EXECUTION_COMPLETED)return 2;\n'
-            '  if(o.visits!=run+1 || o.strings.held || o.strings.domain)return 3;\n'
-            ' }\n xrt_locations_release(locations);return 0;}\n', encoding='ascii')
+        observer.write_text(frame_observer_source(generated, watch_f64=True), encoding='ascii')
         native('normal-frame-' + name, [observer], expected_stdout=expected * 2, private=True)
 
-    native('local', [work / 'gateway.c', work / 'adapter.c'])
+    native('local', [work / 'gateway.c', work / 'adapter.c', witness])
     for cpp in (False, True):
         path = work / ('public.cpp' if cpp else 'public.c')
         path.write_text(adapter(True, cpp), encoding='ascii')
-        native('public-cpp17' if cpp else 'public-c11', [path], cpp)
+        native('public-cpp17' if cpp else 'public-c11', [path, witness], cpp)
     main_c = work / 'main.c'
     main_c.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
                       'int main(void){if(xray_lir_entry()!=0)return 1;return xray_lir_entry()!=0;}\n', encoding='ascii')
@@ -251,10 +257,17 @@ def main():
         assert run('source-' + name, [args.pipeline_driver, spill_source, mode, output,
             receipt, '0', '2', 'normal']) == b'1080\n1080\n'
         facts = json.loads(receipt.read_text())
-        assert facts['rbc_registers_max'] <= 255 and facts['rbc_reference_spills'] > 0 and facts['rbc_spills'] > 0
+        assert facts['rbc_registers_max'] <= 255 and facts['rbc_reference_spills'] == 0 and facts['rbc_spills'] > 0
+        assert facts['rbc_string_owned_homes'] > 255
+        assert facts['rbc_string_owner_slots'] == facts['rbc_string_owned_homes']
+        assert facts['rbc_string_temporary_slots'] == facts['rbc_string_owned_homes']
+        assert facts['rbc_frame_owner_slots'] >= facts['rbc_string_owner_slots'] + facts['rbc_string_temporary_slots']
+        assert facts['rbc_frame_payload_bytes'] > 0
         native(name, [output, main_c], expected_stdout=b'1080\n1080\n')
         spill_modes.append(dict(mode=mode, registers=facts['rbc_registers_max'],
-                               spills=facts['rbc_spills'], referenceSpills=facts['rbc_reference_spills']))
+                               spills=facts['rbc_spills'], referenceSpills=facts['rbc_reference_spills'],
+                               stringOwnedHomes=facts['rbc_string_owned_homes'], stringOwnerSlots=facts['rbc_string_owner_slots'],
+                               stringTemporarySlots=facts['rbc_string_temporary_slots'], framePayloadBytes=facts['rbc_frame_payload_bytes']))
     assert spill_source.read_bytes() == spill_before
     fast = [x for x in flags if x not in _f64_options(args.compiler, args.kind)] + (['/fp:fast'] if args.kind == 'msvc' else ['-ffast-math'])
     rejected = work / 'fast.obj'
@@ -263,7 +276,7 @@ def main():
     assert source.read_bytes() == before
     result.update(state='PASS', independentVectors=290, roundingModes=1, controlCases=1,
                   entriesPerImage=2, fullSourceModes=4, publicClients=2, installedClients=0,
-                  normalFrameModes=4, directPrintExplicitDropPerEntry=1, preDrainOwnerEmpty=True,
+                  normalFrameModes=4, negativeZeroFactoryPerEntry=1, preDrainOwnerEmpty=True, preDrainBillingBaseline=True,
                   typedSpillModes=spill_modes, typedSpillSourceSHA256=hashlib.sha256(spill_before).hexdigest(),
                   boundary='Public clients use this build closure; official installed/moved component is separate.')
     (work / 'result.json').write_text(json.dumps(result, indent=2) + '\n')

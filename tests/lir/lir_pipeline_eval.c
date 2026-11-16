@@ -24,6 +24,7 @@
 #include "xir/xxir_generic.h"
 #include "xir/xxir_source_dependencies.h"
 #include "vm/register/xrbc_lir.h"
+#include "vm/register/xrbc_value_homes.h"
 #include <errno.h>
 #include <inttypes.h>
 #if defined(XR_OS_WINDOWS)
@@ -54,12 +55,52 @@ typedef struct Eval {
     size_t snapshot_count;
     uint32_t comparisons;
     uint32_t rbc_registers, rbc_spills, rbc_reference_spills;
+    uint64_t rbc_frame_owner_slots, rbc_frame_payload_bytes;
+    uint64_t rbc_string_owned_homes, rbc_string_owner_slots, rbc_string_temporary_slots;
     uint64_t source_retire, lir_retire, execution_retire, program_retire, observations, comparisons_ticks;
     XrtSourceLocation failure_location;
     XrtOutputFailure failure;
     XrtArithmeticPanic panic;
     bool output_failure, arithmetic_failure;
 } Eval;
+
+static void managed_home_add(uint64_t *total, uint64_t count) {
+    CHECK(count <= UINT64_MAX - *total);
+    *total += count;
+}
+static void managed_home_shape(Eval *e, const XrRbcModule *module, uint32_t function) {
+    const XrLirValueHomes *homes = xr_rbc_module_value_homes(module, function);
+    if (!homes) return;
+    const XrtValueImage *image = xr_rbc_module_value_image(module);
+    CHECK(image && (!image->type_count || image->types) && (!image->owned_count || image->owned_offsets));
+    CHECK((!homes->value_count || homes->values) &&
+        (!homes->frame.slot_count || homes->frame.owned_offsets));
+    managed_home_add(&e->rbc_frame_owner_slots, homes->frame.slot_count);
+    managed_home_add(&e->rbc_frame_payload_bytes, homes->frame.payload_size);
+    for (uint32_t n = 0; n < homes->value_count; ++n) {
+        const XrLirValueHome *home = &homes->values[n + 1];
+        if (!home->type) { CHECK(!home->owner_count); continue; }
+        CHECK(home->type <= image->type_count);
+        if (!home->owner_count) continue;
+        const XrtValueImageType *type = &image->types[home->type - 1];
+        if (type->kind != XRT_VALUE_STRING) continue;
+        CHECK(!home->parameter && home->owner_count == 1 && type->owned_count == 1 &&
+            type->first_owned < image->owned_count && !image->owned_offsets[type->first_owned]);
+        CHECK(home->size == sizeof(XrtManagedHeader *) && home->offset <= homes->frame.payload_size &&
+            home->size <= homes->frame.payload_size - home->offset &&
+            home->first_owner < homes->frame.slot_count &&
+            homes->frame.owned_offsets[home->first_owner] == home->offset);
+        CHECK(home->temporary_first_owner < homes->frame.slot_count &&
+            home->temporary_first_owner != home->first_owner && home->temporary_offset <= homes->frame.payload_size &&
+            home->size <= homes->frame.payload_size - home->temporary_offset &&
+            (home->offset <= home->temporary_offset ? home->temporary_offset - home->offset :
+                home->offset - home->temporary_offset) >= home->size &&
+            homes->frame.owned_offsets[home->temporary_first_owner] == home->temporary_offset);
+        managed_home_add(&e->rbc_string_owned_homes, 1);
+        managed_home_add(&e->rbc_string_owner_slots, home->owner_count);
+        managed_home_add(&e->rbc_string_temporary_slots, home->owner_count);
+    }
+}
 
 static uint64_t clock_frequency(void) {
 #if defined(XR_OS_WINDOWS)
@@ -379,8 +420,12 @@ static void receipt(const char *path, const Eval *e, const Sample *samples, uint
         shape_json(f, &s->module); fputs(",\"ROOT_CFG_CLOSURE\":", f); shape_json(f, &s->cfg);
         fputs(",\"C_SELECTED_FUNCTION_ALL_BLOCKS\":", f); shape_json(f, &s->selected); fputc('}', f);
     }
-    fprintf(f,"],\"rbc_registers_max\":%u,\"rbc_spills\":%u,\"rbc_reference_spills\":%u,\"samples\":[",
-        e->rbc_registers,e->rbc_spills,e->rbc_reference_spills);
+    fprintf(f,"],\"rbc_registers_max\":%u,\"rbc_spills\":%u,\"rbc_reference_spills\":%u,"
+        "\"rbc_frame_owner_slots\":%" PRIu64 ",\"rbc_frame_payload_bytes\":%" PRIu64 ","
+        "\"rbc_string_owned_homes\":%" PRIu64 ",\"rbc_string_owner_slots\":%" PRIu64 ","
+        "\"rbc_string_temporary_slots\":%" PRIu64 ",\"samples\":[",
+        e->rbc_registers,e->rbc_spills,e->rbc_reference_spills,e->rbc_frame_owner_slots,e->rbc_frame_payload_bytes,
+        e->rbc_string_owned_homes,e->rbc_string_owner_slots,e->rbc_string_temporary_slots);
     for (uint64_t i = 0; i < (uint64_t)warmups + runs; ++i) {
         fprintf(f, "%s{\"warmup\":%s,\"prepare_ticks\":%" PRIu64 ",\"run_ticks\":%" PRIu64
             ",\"completed_entry\":%s,\"bits\":", i ? "," : "", i < warmups ? "true" : "false",
@@ -506,6 +551,7 @@ int main(int argc, char **argv) {
         const XrRbcFunction *body=&rbc->functions[f];
         if(e.rbc_registers<body->register_count)e.rbc_registers=body->register_count;
         e.rbc_spills+=body->spill_count;e.rbc_reference_spills+=body->reference_spill_count;
+        CHECK(f <= UINT32_MAX); managed_home_shape(&e, rbc, (uint32_t)f);
     }
     stage(&e, "rbc_compile", start);
     start = clock_ticks(); xr_lir_lowered_free(&lowered); e.lir_retire += elapsed(start);

@@ -3,7 +3,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 from pathlib import Path
 import stat
 import subprocess
@@ -11,7 +10,111 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from xraytest.toolchain import archive_link_arguments
+from xraytest.toolchain import archive_link_arguments, native_c11_options
+
+
+def frame_observer_source(generated, minimum_frames=0, expected_result=0, string_result=False, watch_f64=False):
+    """Measure real physical retirement before the enclosing execution drains."""
+    stateful = 'xrt_run_standalone_state(' in generated.read_text(encoding='ascii')
+    text = r'''#include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_values.h"
+#include "xray_native_values.h"
+#include "xray_native_state.h"
+#include <stdlib.h>
+#include <string.h>
+static unsigned entered, left, active_frames;
+static XrtManagedStatus observed_enter(XrtManagedRoot *root, size_t slots, XrtManagedFrame **output) {
+    XrtManagedStatus status = xrt_managed_frame_enter(root, slots, output);
+    if (status == XRT_MANAGED_OK) { ++entered; ++active_frames; }
+    return status;
+}
+static XrtManagedStatus observed_layout(XrtManagedRoot *root, const XrtManagedFrameSpec *spec, XrtManagedFrame **output) {
+    XrtManagedStatus status = xrt_managed_frame_enter_layout(root, spec, output);
+    if (status == XRT_MANAGED_OK) { ++entered; ++active_frames; }
+    return status;
+}
+static XrtManagedStatus observed_leave(XrtManagedRoot *root, XrtManagedFrame *frame) {
+    XrtManagedStatus status = xrt_managed_frame_leave(root, frame);
+    if (status == XRT_MANAGED_OK) { if (!active_frames) abort(); --active_frames; ++left; }
+    return status;
+}
+'''
+    if watch_f64:
+        text += r'''static unsigned negative_zero_created;
+static void observed_f64(XrtManagedFrame *frame, size_t slot, uint64_t bits, uint32_t source) {
+    XrtBillingOwner *billing = NULL;
+    if (xrt_native_values_prepare(xrt_value_root_active(), &billing) != XRT_MANAGED_OK) abort();
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    xrt_native_string_f64_create(frame, slot, bits, source);
+    if (bits == UINT64_C(0x8000000000000000)) {
+        XrtManagedHeader *header = NULL;
+        if (xrt_managed_slot_borrow(frame, slot, &header) != XRT_MANAGED_OK || !header) abort();
+        const XrtStringBacking *value = (const XrtStringBacking *)header;
+        XrtBillingStats after = xrt_billing_owner_stats(billing);
+        if (value->length != 4 || memcmp(value->bytes, "-0.0", 4) ||
+            after.bytes <= before.bytes || after.blocks <= before.blocks) abort();
+        ++negative_zero_created;
+    }
+}
+#define xrt_native_string_f64_create(frame,slot,bits,source) observed_f64((frame),(slot),(bits),(source))
+'''
+    text += ('#define xrt_managed_frame_enter(root,slots,out) observed_enter((root),(slots),(out))\n'
+             '#define xrt_managed_frame_enter_layout(root,spec,out) observed_layout((root),(spec),(out))\n'
+             '#define xrt_managed_frame_leave(root,frame) observed_leave((root),(frame))\n'
+             f'#include "{generated.name}"\n'
+             '#undef xrt_managed_frame_enter\n#undef xrt_managed_frame_enter_layout\n'
+             '#undef xrt_managed_frame_leave\n')
+    if watch_f64:
+        text += '#undef xrt_native_string_f64_create\n'
+    text += r'''typedef struct Observation { XrtValueRoot values; XrtModuleState *state; unsigned visits; } Observation;
+static void observe(void *data) {
+    Observation *o = data;
+    const XrtBackingTypes *types = NULL;
+    XrtBillingOwner *billing = NULL;
+    if (xrt_value_root_active() != &o->values || active_frames || entered != left ||
+        xrt_native_values_backings(&o->values, &types) != XRT_MANAGED_OK || !types ||
+        xrt_native_values_prepare(&o->values, &billing) != XRT_MANAGED_OK) abort();
+    (void)xrt_native_managed_root(0);
+    XrtBillingStats baseline = xrt_billing_owner_stats(billing);
+    unsigned before = left; (void)before;
+'''
+    invoke = 'xrl_invoke(&result,o->state)' if stateful else 'xrl_invoke(&result)'
+    if string_result:
+        text += ('    XrtManagedHeader *result = NULL; ' + invoke + ';\n'
+                 '    const XrtStringBacking *value = (const XrtStringBacking *)result;\n'
+                 '    if (!value || value->length != 7 || memcmp(value->bytes,"cell\\0\\303\\251",7)) abort();\n'
+                 '    XrtManagedHeader *owned = result; result = NULL; xrt_managed_drop(owned);\n')
+    else:
+        text += f'    int64_t result = 99; {invoke};\n    if (result != {expected_result}) abort();\n'
+    if stateful:
+        text += '    xrt_module_state_drop(&o->state);\n'
+    text += ('    XrtBillingStats after = xrt_billing_owner_stats(billing);\n'
+             '    if (active_frames || entered != left || after.bytes != baseline.bytes || after.blocks != baseline.blocks) abort();\n')
+    if minimum_frames:
+        text += f'    if (left - before < {minimum_frames}u) abort();\n'
+    if watch_f64:
+        text += '    if (negative_zero_created != o->visits + 1) abort();\n'
+    text += r'''    ++o->visits;
+}
+int main(void) {
+    Observation o = {0}; XrtLocationOwner *locations = NULL; XrtExecutionFailure failure = {0};
+    (void)&observed_enter; (void)&observed_layout; (void)&observed_leave;
+    if (xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations) != XRT_LOCATION_OK) return 1;
+    for (unsigned run = 0; run < 2; ++run) {
+'''
+    if stateful:
+        text += ('        XrtBillingOwner *billing = NULL; XrtModuleLayout *layout = NULL;\n'
+                 '        if (xrt_billing_owner_new(NULL,SIZE_MAX,&billing) != XRT_MANAGED_OK) return 4;\n'
+                 '        if (xrt_module_layout_new(billing,&xrl_state_spec,(XrtManagedLease){0},&layout) != XRT_MANAGED_OK) return 5;\n'
+                 '        if (xrt_module_state_new(layout,billing,&o.state) != XRT_MANAGED_OK) return 6;\n'
+                 '        xrt_module_layout_drop(&layout);\n')
+    text += ('        if (xrt_run_embedded_owned(locations,&failure,observe,&o,&o.values) != XRT_EXECUTION_COMPLETED) return 2;\n'
+             '        if (o.visits != run + 1 || !xrt_value_root_empty(&o.values) || o.state) return 3;\n')
+    if stateful:
+        text += ('        XrtBillingStats retired = xrt_billing_owner_stats(billing);\n'
+                 '        if (retired.bytes || retired.blocks) return 7;\n'
+                 '        xrt_billing_owner_drop(billing);\n')
+    return text + '    }\n    xrt_locations_release(locations); return 0;\n}\n'
 
 
 def _retire_native_products(work, current):
@@ -121,7 +224,7 @@ def main():
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
-            flags = ['/nologo', '/std:c11', '/W4', '/WX', '/utf-8', crt,
+            flags = ['/nologo', *native_c11_options(args.compiler, driver=args.kind), '/W4', '/WX', '/utf-8', crt,
                      '/' + optimization, '/I' + str(args.include)]
             if args.asan:
                 flags += ['/fsanitize=address', '/clang:-fsanitize=undefined']
@@ -154,44 +257,14 @@ def main():
             products.add(executable.with_suffix('.pdb'))
 
     def frame_observer(folder, generated, expected, drops, string_result=False, expected_result=0):
-        lines = generated.read_text(encoding='ascii').splitlines()
-        sites = [i+1 for i, line in enumerate(lines) if re.fullmatch(r'\s*xrt_string_drop\(v[0-9]+\);', line)]
-        assert sites or drops == 0, folder
-        stateful = 'xrt_run_standalone_state(' in generated.read_text(encoding='ascii')
-        predicate = ' || '.join('line == ' + str(i) + 'u' for i in sites) or 'line == UINT_MAX'
-        invoke = ('XrtString *result=NULL;xrl_invoke(&result);size_t length=0;\n'
-            ' const char *bytes=xrt_string_bytes(result,&length);\n'
-            ' if(length!=7 || memcmp(bytes,"cell\\0\\303\\251",7) || o->strings.held)abort();\n'
-            ' xrt_string_owned_drop(&result);\n' if string_result else
-            f'int64_t result=99;xrl_invoke(&result);\n if(result!={expected_result} || o->strings.held)abort();\n')
-        if stateful:
-            invoke = invoke.replace('xrl_invoke(&result)', 'xrl_invoke(&result,o->state)')
-        setup = ('XrtModuleLayout *layout=NULL;\n'
-            '  if(xrt_module_layout_new(&xrl_state_spec,&layout)!=0)return 4;\n'
-            '  if(xrt_module_state_new(layout,UINT64_MAX,&o.state)!=0)return 5;\n'
-            '  xrt_module_layout_drop(&layout);\n' if stateful else '')
-        cleanup = '  xrt_module_state_drop(&o.state);\n' if stateful else ''
         observer = folder / 'normal-frame-observer.c'
-        observer.write_text('#include "runtime/native/xnative_execution.h"\n#include "xray_native_state.h"\n#include <stdlib.h>\n#include <string.h>\n#include <limits.h>\n'
-            'static unsigned cell_drops;\n'
-            'static void observed_drop(XrtString **value, unsigned line){\n'
-            f' if({predicate})++cell_drops;\n xrt_string_drop(value);\n}}\n'
-            '#define xrt_string_drop(value) observed_drop((value),__LINE__)\n'
-            f'#include "{generated.name}"\n#undef xrt_string_drop\n'
-            'typedef struct Observation{XrtValueRoot strings;XrtModuleState *state;unsigned visits;} Observation;\n'
-            'static void observe(void *data){Observation *o=data;\n' + invoke + ' ++o->visits;}\n'
-            'int main(void){Observation o={0};XrtLocationOwner *locations=NULL;XrtExecutionFailure failure={0};\n (void)&observed_drop;\n'
-            ' if(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations)!=XRT_LOCATION_OK)return 1;\n'
-            ' for(unsigned run=0;run<2;++run){\n' + setup +
-            '  if(xrt_run_embedded_owned(locations,&failure,observe,&o,&o.strings)!=XRT_EXECUTION_COMPLETED)return 2;\n'
-            f'  if(cell_drops!=(run+1)*{drops}u || o.visits!=run+1 || o.strings.held || o.strings.domain)return 3;\n'
-            + cleanup + ' }\n xrt_locations_release(locations);return 0;}\n', encoding='ascii')
+        observer.write_text(frame_observer_source(generated, drops, expected_result, string_result), encoding='ascii')
         obj = folder / ('normal-frame-observer.obj' if args.kind == 'msvc' else 'normal-frame-observer.o')
         exe = folder / ('normal-frame-observer.exe' if args.kind == 'msvc' else 'normal-frame-observer')
         if args.kind == 'msvc':
             crt = {'MultiThreaded':'/MT','MultiThreadedDebug':'/MTd',
                    'MultiThreadedDLL':'/MD','MultiThreadedDebugDLL':'/MDd'}[args.msvc_runtime]
-            flags = ['/nologo','/std:c11','/W4','/WX','/utf-8','/O2',crt,
+            flags = ['/nologo',*native_c11_options(args.compiler, driver=args.kind),'/W4','/WX','/utf-8','/O2',crt,
                      '/D_CRT_SECURE_NO_WARNINGS','/D_CRT_NONSTDC_NO_WARNINGS',
                      '/I'+str(args.include),'/I'+str(args.source_root/'src')]
             if args.asan: flags += ['/fsanitize=address','/clang:-fsanitize=undefined']
@@ -213,8 +286,8 @@ def main():
         products.update([obj, exe])
         if args.kind == 'msvc' and exe.with_suffix('.pdb').is_file():
             products.add(exe.with_suffix('.pdb'))
-        records.append({'case':'normal-frame-observer','folder':str(folder),'explicitCellDropsPerEntry':drops,
-                        'sites':sites,'preDrainOwnerEmpty':True,'stringResultTransferred':string_result,'result':'PASS'})
+        records.append({'case':'normal-frame-observer','folder':str(folder),'minimumFrameRetirementsPerEntry':drops,
+                        'preDrainBillingBaseline':True,'preDrainOwnerEmpty':True,'stringResultTransferred':string_result,'result':'PASS'})
 
     hello = args.source_root / 'demos/01-basics/hello.xr'
     oracle = (args.source_root / 'tests/smoke/expected/hello.txt').read_bytes().replace(b'\r\n', b'\n')
@@ -287,12 +360,17 @@ def main():
             if name in ('length-over-64','length-spill-branches'):
                 actual=json.loads((folder/'rbc.json').read_text())
                 assert actual['rbc_registers_max']<=255 and actual['rbc_spills']>0
-                assert actual['rbc_reference_spills']>0
+                assert actual['rbc_reference_spills']==0
+                assert actual['rbc_string_owned_homes']>255
+                assert actual['rbc_string_owner_slots']==actual['rbc_string_owned_homes']
+                assert actual['rbc_string_temporary_slots']==actual['rbc_string_owned_homes']
+                assert actual['rbc_frame_owner_slots']>=actual['rbc_string_owner_slots']+actual['rbc_string_temporary_slots']
+                assert actual['rbc_frame_payload_bytes']>0
             text = generated.read_text(encoding='utf-8')
-            assert '({' not in text and 'XrtString *' in text and 'xrt_string_' in text
-            if name in ('literal-cache', 'append-owner-snapshot'):
-                assert 'xrt_string_append_cursor_flush(&xrl_append)' not in text
-                assert 'xrt_string_append_cursor_close(&xrl_append)' in text
+            assert '({' not in text and 'XrtString *' not in text and 'xrt_string_drop(' not in text
+            assert 'xrt_string_append_cursor' not in text
+            if 'xrt_native_string_' in text:
+                assert 'xrt_managed_frame_enter_layout(' in text and 'XrtManagedHeader *' in text
             main = folder / 'main.c'
             if name in frame_drops:
                 main.write_text('#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n'
@@ -312,29 +390,24 @@ def main():
                 observation = folder / 'literal-cache-observation'
                 observation.mkdir()
                 observer = folder / 'literal-cache-observer.c'
-                observer.write_text('#include "xray_native_runtime.h"\n'
-                    'struct XrtStringAppendCursor;\n'
-                    'extern XrtString *xrt_string_append_cursor_refill(struct XrtStringAppendCursor *,\n'
-                    ' XrtString *,const XrtString *,uint32_t);\n'
-                    'unsigned observed_literals,observed_refills;\n'
-                    'static XrtString *observe_literal(const char *bytes,size_t length,uint32_t source){\n'
-                    ' ++observed_literals;return xrt_string_literal(bytes,length,source);}\n'
-                    '#define xrt_string_literal(bytes,length,source) observe_literal((bytes),(length),(source))\n'
-                    '#define xrt_string_append_cursor_refill observe_refill\n'
+                observer.write_text('#include "xray_native_values.h"\n#include <string.h>\n#include <stdlib.h>\n'
+                    'unsigned observed_literals,observed_empty,observed_suffix;\n'
+                    'static void observe_literal(XrtManagedFrame *frame,size_t slot,const char *bytes,size_t length,uint32_t source){\n'
+                    ' ++observed_literals;\n if(!length)++observed_empty;\n'
+                    ' else if(length==3 && !memcmp(bytes,"\\303\\251\\0",3))++observed_suffix;else abort();\n'
+                    ' xrt_native_string_create(frame,slot,bytes,length,source);}\n'
+                    '#define xrt_native_string_create(frame,slot,bytes,length,source) observe_literal((frame),(slot),(bytes),(length),(source))\n'
                     f'#include "{generated.name}"\n'
-                    '#undef xrt_string_append_cursor_refill\n'
-                    'XrtString *observe_refill(XrtStringAppendCursor *cursor,XrtString *current,\n'
-                    ' const XrtString *suffix,uint32_t source){\n ++observed_refills;\n'
-                    ' return xrt_string_append_cursor_refill(cursor,current,suffix,source);}\n', encoding='ascii')
+                    '#undef xrt_native_string_create\n', encoding='ascii')
                 observed_main = folder / 'literal-cache-main.c'
                 observed_main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
-                    'extern unsigned observed_literals,observed_refills;\nint main(void){\n'
-                    ' if(xray_lir_entry()!=0 || observed_literals!=5u || observed_refills!=2u)return 1;\n'
-                    ' if(xray_lir_entry()!=0 || observed_literals!=10u || observed_refills!=4u)return 2;\nreturn 0;}\n', encoding='ascii')
+                    'extern unsigned observed_literals,observed_empty,observed_suffix;\nint main(void){\n'
+                    ' if(xray_lir_entry()!=0 || observed_literals!=5u || observed_empty!=3u || observed_suffix!=2u)return 1;\n'
+                    ' if(xray_lir_entry()!=0 || observed_literals!=10u || observed_empty!=6u || observed_suffix!=4u)return 2;\nreturn 0;}\n', encoding='ascii')
                 for optimization in ('Od', 'O2'):
                     compile_run(observation, observer, observed_main, optimization, expected * 2)
                 records.append({'case': name, 'result': 'FIRST_USE_PER_ACTIVATION',
-                                'entryRuns': 2, 'literalCalls': 10, 'cursorRefills': 4,
+                                'entryRuns': 2, 'literalFactoryCalls': 10, 'emptyFactories': 6, 'suffixFactories': 4,
                                 'zeroIterationBodyCalls': 0})
             if name in frame_drops:
                 frame_observer(folder,generated,expected,frame_drops[name])
@@ -346,7 +419,7 @@ def main():
                 assert b'xray: output write failed at ' in failed.stderr,folder
                 assert b'AFTER_ENTRY' not in failed.stderr and b'EXIT_CALLBACK' not in failed.stderr,folder
                 records.append({'case':name,'mode':mode,'result':'STANDALONE_OUTPUT_74',
-                                'cellsLiveAtFirstOutput':name!='original-parameter'})
+                                'ownedValuesLiveAtFirstOutput':name!='original-parameter'})
             records.append({'case': name, 'mode': mode, 'sourceSHA256': hashlib.sha256(before).hexdigest(),
                             'oracleHex': expected.hex(), 'result': 'PASS'})
             if name.startswith('length-') or name in frame_drops:
@@ -372,14 +445,15 @@ def main():
     result = run('source-rbc-result',[args.result_driver,generated],folder)
     assert (result.returncode,result.stdout,result.stderr)==(0,b'',b''),folder
     main = folder / 'main.c'
-    main.write_text('#include "xray_native_runtime.h"\n#include <stdlib.h>\n#include <string.h>\n'
-        'extern XrtString *xray_lir_entry(void);\n'
+    main.write_text('#include "xray_native_values.h"\n#include "xray_native_runtime.h"\n#include <stdlib.h>\n#include <string.h>\n'
+        'extern XrtManagedHeader *xray_lir_entry(void);\n'
         'static void consume(void *context){\n'
-        ' XrtString *s=xray_lir_entry(); XrtString *retained=xrt_string_retain(s,0);\n'
-        ' size_t length=0;const char *bytes; (void)context;\n'
-        ' xrt_string_owned_drop(&s);bytes=xrt_string_bytes(retained,&length);\n'
-        ' if(length!=5 || memcmp(bytes,"\\303\\251\\000" "73",5))abort();\n'
-        ' xrt_string_drop(&retained);}\n'
+        ' XrtManagedHeader *s=xray_lir_entry(),*retained=s;(void)context;\n'
+        ' if(!retained || !xrt_managed_retain(retained))abort();\n'
+        ' XrtManagedHeader *old=s;s=NULL;xrt_managed_drop(old);\n'
+        ' const XrtStringBacking *value=(const XrtStringBacking *)retained;\n'
+        ' if(value->length!=5 || memcmp(value->bytes,"\\303\\251\\000" "73",5))abort();\n'
+        ' old=retained;retained=NULL;xrt_managed_drop(old);}\n'
         'int main(void){const XrtSourceMap map={NULL,0};\n'
         ' xrt_run_standalone(&map,consume,NULL);xrt_run_standalone(&map,consume,NULL);return 0;}\n',encoding='ascii')
     for optimization in ('Od','O1','O2','Ox'):
@@ -389,12 +463,12 @@ def main():
     result = run('frame-cell-result-rbc',[args.result_driver,'--frame-cell-result',generated],folder)
     assert (result.returncode,result.stdout,result.stderr)==(0,b'',b''),folder
     main = folder / 'main.c'
-    main.write_text('#include "xray_native_runtime.h"\n#include <stdlib.h>\n#include <string.h>\n'
-        'extern XrtString *xray_lir_entry(void);\n'
-        'int main(void){for(unsigned run=0;run<2;++run){XrtString *value=xray_lir_entry();\n'
-        ' size_t length=0;const char *bytes=xrt_string_bytes(value,&length);\n'
-        ' if(length!=7 || memcmp(bytes,"cell\\0\\303\\251",7))abort();\n'
-        ' xrt_string_owned_drop(&value);}\nreturn 0;}\n',encoding='ascii')
+    main.write_text('#include "xray_native_values.h"\n#include <stdlib.h>\n#include <string.h>\n'
+        'extern XrtManagedHeader *xray_lir_entry(void);\n'
+        'int main(void){for(unsigned run=0;run<2;++run){XrtManagedHeader *owner=xray_lir_entry();\n'
+        ' const XrtStringBacking *value=(const XrtStringBacking *)owner;\n'
+        ' if(!value || value->length!=7 || memcmp(value->bytes,"cell\\0\\303\\251",7))abort();\n'
+        ' XrtManagedHeader *old=owner;owner=NULL;xrt_managed_drop(old);}\nreturn 0;}\n',encoding='ascii')
     for optimization in ('Od','O1','O2','Ox'):
         compile_run(folder,generated,main,optimization,b'')
     frame_observer(folder,generated,b'',1,string_result=True)
@@ -414,11 +488,12 @@ def main():
     result = run('constant-branch-rbc', [args.result_driver, '--constant-branch', folder], folder)
     assert (result.returncode, result.stdout, result.stderr) == (0, b'', b''), folder
     main = folder / 'main.c'
-    main.write_text('#include "xray_native_runtime.h"\n#include <stdlib.h>\n#include <string.h>\n'
-        'extern XrtString *xray_lir_entry(void);\n'
-        'static void consume(void *context){XrtString *s=xray_lir_entry();size_t length=0;\n'
-        ' const char *bytes=xrt_string_bytes(s,&length);(void)context;\n'
-        ' if(length!=4||memcmp(bytes,"kept",4))abort();xrt_string_owned_drop(&s);}\n'
+    main.write_text('#include "xray_native_values.h"\n#include "xray_native_runtime.h"\n#include <stdlib.h>\n#include <string.h>\n'
+        'extern XrtManagedHeader *xray_lir_entry(void);\n'
+        'static void consume(void *context){XrtManagedHeader *s=xray_lir_entry();\n'
+        ' const XrtStringBacking *value=(const XrtStringBacking *)s;(void)context;\n'
+        ' if(!value || value->length!=4||memcmp(value->bytes,"kept",4))abort();\n'
+        ' XrtManagedHeader *old=s;s=NULL;xrt_managed_drop(old);}\n'
         'int main(void){const XrtSourceMap map={NULL,0};xrt_run_standalone(&map,consume,NULL);\n'
         ' xrt_run_standalone(&map,consume,NULL);return 0;}\n', encoding='ascii')
     for variant in ('raw', 'sccp'):
