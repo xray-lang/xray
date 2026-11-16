@@ -143,10 +143,82 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "../lir/lir_record_fixture.h"
 #include "lir_bytecode_owned_prepare_cases.h"
 
-static void callable_factory_rejection(bool scopes) {
+static void callable_allocation_failures(XrLirModule *module, XrLirFunction root,
+    uint64_t expected, const char *name) {
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic = {0};
+    attempts = 0; fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    size_t compile_calls = attempts;
+    xr_rbc_program_destroy(program); program = NULL;
+    CHECK(compile_calls && !live_allocations);
+    for (size_t point = 1; point <= compile_calls; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OUT_OF_MEMORY);
+        CHECK(!program && diagnostic.status == XR_RBC_COMPILE_OUT_OF_MEMORY &&
+            attempts >= point && !live_allocations);
+    }
+    fail_at = SIZE_MAX;
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(module);
+    size_t baseline = live_allocations;
+    XrRbcExecution *execution = NULL;
+    attempts = 0;
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    size_t prepare_calls = attempts;
+    attempts = 0;
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    size_t run_calls = attempts;
+    uint64_t bits = 0;
+    CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK &&
+        xr_rbc_outcome_bits(outcome, &bits) && bits == expected);
+    xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+    CHECK(prepare_calls && live_allocations == baseline);
+    for (size_t point = 1; point <= prepare_calls; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OUT_OF_MEMORY && !execution);
+        CHECK(attempts >= point && live_allocations == baseline);
+    }
+    fail_at = SIZE_MAX;
+    for (size_t point = 1; point <= run_calls; ++point) {
+        CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+        attempts = 0; fail_at = point;
+        outcome = xr_rbc_execution_run(execution);
+        CHECK(outcome);
+        XrRbcStatus status = xr_rbc_outcome_status(outcome);
+        if (status == XR_RBC_VALUE_FAILURE) {
+            XrXirValueStatus failure; uint32_t source; const XrtLocationOwner *locations;
+            CHECK(xr_rbc_outcome_value_failure(outcome, &failure, &source, &locations) && failure == XR_XIR_VALUE_OOM);
+        } else CHECK(status == XR_RBC_OUT_OF_MEMORY);
+        fail_at = SIZE_MAX;
+        xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
+        CHECK(attempts >= point && live_allocations == baseline);
+    }
+    // The prepared execution must own its code even after both creators retire.
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    xr_rbc_program_destroy(program);
+    outcome = xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK &&
+        xr_rbc_outcome_bits(outcome, &bits) && bits == expected);
+    xr_rbc_outcome_free(&outcome);
+    CHECK(!live_allocations);
+    printf("Callable %s compile/prepare/run OOM sites %zu/%zu/%zu and retired creators PASS\n",
+        name, compile_calls, prepare_calls, run_calls);
+    attempts = 0;
+}
+
+static void callable_factory_failures(bool scopes) {
     XrLirModule *module=NULL; XrLirFunction root={0};
     callable_factory_fixture_mode(&module,&root,false,scopes);
+    callable_allocation_failures(module, root, 137, scopes ? "scoped factory" : "factory");
+}
+
+static void callable_frame_factory_rejection(void) {
+    XrLirModule *module=NULL; XrLirFunction root={0};
+    callable_factory_fixture(&module,&root,true);
     XrRbcProgram *program=NULL;
+    // A captured Frame closure cannot outlive the factory activation.
     CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED);
     CHECK(!program && !live_allocations);
     xr_lir_module_destroy(module);
@@ -158,40 +230,13 @@ static void callable_compiler_failures(void) {
         XrLirFunction root = {0};
         callable_fixture_capture(&module, &root, capture);
         XrRbcProgram *program = NULL;
-        attempts = 0; fail_at = SIZE_MAX;
-        if(capture>=3) {
+        if(capture==4) {
+            // Canonical Cell captures still lack an Owned environment receiver.
             CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED);
             CHECK(!program && !live_allocations);xr_lir_module_destroy(module);continue;
         }
-        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
-        size_t total = attempts;
-        xr_rbc_program_destroy(program); program = NULL;
-        CHECK(!live_allocations);
-        for (size_t point = 1; point <= total; ++point) {
-            attempts = 0; fail_at = point;
-            CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OUT_OF_MEMORY);
-            CHECK(!program && !live_allocations && attempts >= point);
-        }
-        fail_at = SIZE_MAX;
-        CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK);
-        xr_lir_module_destroy(module);
-        uint64_t result = 0;
-        if(capture) {
-            size_t retained=live_allocations; attempts=0;
-            CHECK(execute(program,NULL,0,&result)==XR_RBC_OK && result==42);
-            size_t runtime=attempts; CHECK(runtime && live_allocations==retained);
-            for(size_t point=1;point<=runtime;++point) {
-                attempts=0;fail_at=point;
-                CHECK(execute(program,NULL,0,&result)==XR_RBC_OUT_OF_MEMORY);
-                CHECK(live_allocations==retained);
-            }
-            fail_at=SIZE_MAX;
-            printf("Borrowed callable runtime failure points: %zu\n",runtime);
-        }
-        CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 42);
-        xr_rbc_program_destroy(program);
-        CHECK(!live_allocations);
-        printf("Callable bytecode compiler failure points: %zu\n", total);
+        const char *names[] = {"zero capture", "Frame scalar capture", "Frame mutable capture", "Owned scalar capture"};
+        callable_allocation_failures(module, root, 42, names[capture]);
     }
 }
 
@@ -806,11 +851,9 @@ static void aggregate_value_compiler_failures(uint32_t count, bool dynamic, bool
     attempts = 0;
 }
 
-static void composition_compiler_rejection(void) {
+static void composition_compiler_failures(void) {
     XrLirModule *module=NULL;XrLirFunction root={0};callable_composition_fixture(&module,&root);
-    XrRbcProgram *program=NULL;
-    CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED);
-    CHECK(!program && !live_allocations);xr_lir_module_destroy(module);
+    callable_allocation_failures(module, root, 42, "Owned composition");
 }
 
 static void tuple_compiler_failures(void) {
@@ -945,7 +988,7 @@ int main(void) {
     owned_program_admission();
     record_compiler_failures();
     map_compiler_failures();
-    composition_compiler_rejection();
+    composition_compiler_failures();
     tuple_compiler_failures();
     typed_edge_spill_cycles();
     string_reference_rejection();
@@ -1005,8 +1048,9 @@ int main(void) {
     view_compiler_rejection();
     callable_compiler_failures();
     callable_mutable_frame_storage();
-    callable_factory_rejection(false);
-    callable_factory_rejection(true);
+    callable_factory_failures(false);
+    callable_factory_failures(true);
+    callable_frame_factory_rejection();
     display_compiler_failures();
     compiled_source_maps();
     frame_cfg_compiler_failures();
