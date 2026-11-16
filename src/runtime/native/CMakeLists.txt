@@ -8,7 +8,7 @@ add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c xnat
     xnative_execution.c xnative_float.c xnative_module_state.c
     xnative_managed.c xnative_managed_root.c xnative_place.c
     xnative_backing_types.c xnative_string_backing.c xnative_string_backing_ops.c xnative_values.c
-    xnative_array_backing.c xnative_array_ops.c xnative_map_backing.c xnative_value_plan.c xnative_value_image.c xnative_capture_backing.c
+    xnative_array_backing.c xnative_array_ops.c xnative_array_slice.c xnative_map_backing.c xnative_value_plan.c xnative_value_image.c xnative_capture_backing.c
     "${native_output_platform}" "${native_clock_platform}")
 target_include_directories(xray_native_runtime PUBLIC "${PROJECT_SOURCE_DIR}/include"
     PRIVATE "${PROJECT_SOURCE_DIR}/src")
