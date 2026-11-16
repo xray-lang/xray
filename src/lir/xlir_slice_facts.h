@@ -38,6 +38,15 @@ typedef struct XrLirSliceEffect {
 
 typedef struct XrLirSliceEffectSpan { size_t first, count; } XrLirSliceEffectSpan;
 
+/* The actual caller must discharge CALLBACK(callback_parameter) against the
+ * live readonly entry loan PARAMETER/CAPTURE(loan_parameter). This relation
+ * carries no runtime address, capture environment or permission by itself. */
+typedef struct XrLirSliceCallbackLoan {
+    uint32_t callback_parameter;
+    XrLirSliceEffectKind loan_kind;
+    uint32_t loan_parameter;
+} XrLirSliceCallbackLoan;
+
 typedef struct XrLirSliceFunctionFact {
     uint32_t function, parameter_count;
     /* UINT32_MAX for an ordinary result or an unresolved borrowed origin.
@@ -45,7 +54,7 @@ typedef struct XrLirSliceFunctionFact {
      * verifier also checks every actual returned source against that origin. */
     uint32_t result_parameter;
     bool available;
-    XrLirSliceEffectSpan access, write, result_origin;
+    XrLirSliceEffectSpan access, write, result_origin, callback_loans;
 } XrLirSliceFunctionFact;
 
 typedef struct XrLirSliceFactsView {
@@ -53,8 +62,9 @@ typedef struct XrLirSliceFactsView {
      * absent row has function zero; unavailable WRITE is never empty proof. */
     const XrLirSliceFunctionFact *functions;
     const XrLirSliceEffect *terms;
+    const XrLirSliceCallbackLoan *callback_loans;
     uint32_t function_count;
-    size_t term_count;
+    size_t term_count, callback_loan_count;
 } XrLirSliceFactsView;
 
 typedef struct XrLirSliceFacts XrLirSliceFacts;

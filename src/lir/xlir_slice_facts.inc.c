@@ -10,14 +10,15 @@ struct XrLirSliceFacts { XrLirSliceFactsView view; };
 
 XR_FUNC void xr_lir_slice_facts_destroy(XrLirSliceFacts *facts) {
     if (!facts) return;
-    xr_free((void *)facts->view.functions); xr_free((void *)facts->view.terms); xr_free(facts);
+    xr_free((void *)facts->view.functions); xr_free((void *)facts->view.terms);
+    xr_free((void *)facts->view.callback_loans); xr_free(facts);
 }
 static bool lir_slice_span_valid(XrLirSliceEffectSpan span, size_t count) {
     return span.first <= count && span.count <= count - span.first;
 }
 static bool lir_slice_effects_valid(const XrLirModule *m, XrLirSliceFactsView view) {
     if (view.function_count != m->function_count || !view.functions ||
-        (view.term_count && !view.terms)) return false;
+        (view.term_count && !view.terms) || (view.callback_loan_count && !view.callback_loans)) return false;
     for (size_t n = 0; n < view.term_count; ++n) {
         XrLirSliceEffect term = view.terms[n];
         if ((uint32_t)term.kind > XR_LIR_SLICE_EFFECT_PARAMETER ||
@@ -30,7 +31,22 @@ static bool lir_slice_effects_valid(const XrLirModule *m, XrLirSliceFactsView vi
         if (row->function != n + 1 || row->parameter_count != f->parameter_count ||
             !lir_slice_span_valid(row->access, view.term_count) ||
             !lir_slice_span_valid(row->write, view.term_count) ||
-            !lir_slice_span_valid(row->result_origin, view.term_count)) return false;
+            !lir_slice_span_valid(row->result_origin, view.term_count) ||
+            !lir_slice_span_valid(row->callback_loans, view.callback_loan_count)) return false;
+        for (size_t p=0;p<row->callback_loans.count;++p) {
+            XrLirSliceCallbackLoan relation=view.callback_loans[row->callback_loans.first+p];
+            if (relation.callback_parameter>=f->parameter_count || relation.loan_parameter>=f->parameter_count ||
+                relation.callback_parameter<f->closure.capture_count ||
+                (relation.loan_kind!=XR_LIR_SLICE_EFFECT_PARAMETER && relation.loan_kind!=XR_LIR_SLICE_EFFECT_CAPTURE) ||
+                (relation.loan_kind==XR_LIR_SLICE_EFFECT_CAPTURE)!=(relation.loan_parameter<f->closure.capture_count) ||
+                !xr_lir_internal_slice_type(m,f->parameter_types[relation.loan_parameter])) return false;
+            XrLirCallableType signature;
+            if (xr_lir_callable_type_view(m,f->parameter_types[relation.callback_parameter],&signature)!=XR_LIR_OK)
+                return false;
+            for (uint32_t c=0;c<f->callable_parameter_count;++c)
+                if (f->callable_parameters[c].parameter==relation.callback_parameter &&
+                    f->callable_parameters[c].contract.escaping) return false;
+        }
         if (row->result_parameter != UINT32_MAX && (row->result_parameter >= f->parameter_count ||
             !xr_lir_internal_slice_type(m, f->result) || f->parameter_types[row->result_parameter] != f->result)) return false;
         if (row->result_parameter != UINT32_MAX) {
@@ -53,17 +69,23 @@ static bool lir_slice_effects_valid(const XrLirModule *m, XrLirSliceFactsView vi
 static XrLirStatus lir_slice_facts_copy(XrLirSliceFactsView view, XrLirSliceFacts **empty) {
     size_t count = (size_t)view.function_count + 1;
     if (count <= view.function_count || count > SIZE_MAX / sizeof(*view.functions) ||
-        view.term_count > SIZE_MAX / sizeof(*view.terms)) return XR_LIR_OUT_OF_MEMORY;
+        view.term_count > SIZE_MAX / sizeof(*view.terms) ||
+        view.callback_loan_count > SIZE_MAX / sizeof(*view.callback_loans)) return XR_LIR_OUT_OF_MEMORY;
     XrLirSliceFacts *copy = xr_calloc(1, sizeof(*copy));
     if (!copy) return XR_LIR_OUT_OF_MEMORY;
     copy->view = view;
     copy->view.functions = xr_malloc(count * sizeof(*view.functions));
     copy->view.terms = view.term_count ? xr_malloc(view.term_count * sizeof(*view.terms)) : NULL;
-    if (!copy->view.functions || (view.term_count && !copy->view.terms)) {
+    copy->view.callback_loans=view.callback_loan_count ?
+        xr_malloc(view.callback_loan_count*sizeof(*view.callback_loans)) : NULL;
+    if (!copy->view.functions || (view.term_count && !copy->view.terms) ||
+        (view.callback_loan_count && !copy->view.callback_loans)) {
         xr_lir_slice_facts_destroy(copy); return XR_LIR_OUT_OF_MEMORY;
     }
     memcpy((void *)copy->view.functions, view.functions, count * sizeof(*view.functions));
     if (view.term_count) memcpy((void *)copy->view.terms, view.terms, view.term_count * sizeof(*view.terms));
+    if (view.callback_loan_count) memcpy((void *)copy->view.callback_loans,view.callback_loans,
+        view.callback_loan_count*sizeof(*view.callback_loans));
     *empty = copy; return XR_LIR_OK;
 }
 XR_FUNC XrLirStatus xr_lir_internal_slice_effects_set(XrLirModule *m, XrLirSliceFactsView view) {

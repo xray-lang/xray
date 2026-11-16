@@ -16,6 +16,19 @@ typedef enum XirModuleEffectTermKind {
     XIR_MODULE_EFFECT_UNKNOWN, XIR_MODULE_EFFECT_FIELD, XIR_MODULE_EFFECT_PARAMETER
 } XirModuleEffectTermKind;
 typedef struct XirModuleEffectSpan { size_t first, count; } XirModuleEffectSpan;
+
+/* Calling CALLBACK(callback_parameter) while an entry loan from PARAMETER or
+ * CAPTURE(loan_parameter) is live requires its actual environment's writes to
+ * be apart from that loan. Both ordinals include the physical capture prefix.
+ * This symbolic relation is a caller obligation, never an empty WRITE fact or
+ * a grant to invoke an unknown callable. Only readonly Slice loans and
+ * nonescaping callable parameters participate in the initial protocol. */
+typedef struct XirModuleCallbackLoan {
+    uint32_t callback_parameter;
+    XirModuleEffectTermKind loan_kind;
+    uint32_t loan_parameter;
+    uint32_t witness_function, witness_instruction;
+} XirModuleCallbackLoan;
 typedef struct XirModuleEffectTerm {
     XirModuleEffectTermKind kind;
     uint32_t identity, witness_function, witness_instruction;
@@ -23,7 +36,7 @@ typedef struct XirModuleEffectTerm {
 typedef struct XirModuleEffectFunction {
     uint32_t module, parameter_count, capture_count;
     size_t first_value, value_count;
-    XirModuleEffectSpan access, write, result_origin;
+    XirModuleEffectSpan access, write, result_origin, callback_loans;
 } XirModuleEffectFunction;
 typedef struct XirModuleEffectValue { XirModuleEffectSpan origin; } XirModuleEffectValue;
 typedef struct XirModuleEffectDependency { size_t first, count; } XirModuleEffectDependency;
@@ -35,8 +48,9 @@ typedef struct XirModuleEffectExportView {
     const XirModuleEffectDependency *modules;
     const uint32_t *dependencies;
     const XirModuleEffectSlot *slots;
+    const XirModuleCallbackLoan *callback_loans;
     uint32_t function_count, module_count, slot_count;
-    size_t value_count, term_count, dependency_count;
+    size_t value_count, term_count, dependency_count, callback_loan_count;
     /* False means this input did not request module equations. Empty spans in
      * that case are unavailable facts, never proof of an empty WRITE set. */
     bool module_access_complete;
