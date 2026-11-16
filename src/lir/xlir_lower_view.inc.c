@@ -164,6 +164,13 @@ static bool lower_view_instruction(LowerFunction *f, uint32_t block, uint32_t in
             XrLirInstruction open = {.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=(uint64_t)op->immediate,.source=lower_source(c)};
             if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &open, &args[count++]))) return false;
         } else if (op->immediate) return lower_unsupported(c, "readonly Array Slice requires normalized bounds");
+        else {
+            XrLirValueData binding=c->module->functions[f->function.id-1].values[args[0].id-1];
+            /* Reuse the actual mutable State capability's existing Array Ref
+             * projection. A readonly State reference cannot acquire it. */
+            if (binding.type==XR_LIR_STATE_REF && binding.state_reference.mutable &&
+                !lower_array_borrow(f,block,&args[0])) return false;
+        }
     } else if (op->op == XR_XIR_VIEW_LEN || op->op == XR_XIR_VIEW_GET || op->op == XR_XIR_VIEW_COPY || op->op == XR_XIR_VIEW_END) {
         element = lower_slice_element(c, xr_xir_operand_type(f->source, op->args[0]));
         if (!lower_slice_source(f, op->args[0], &args[0])) return false;
