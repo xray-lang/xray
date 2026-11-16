@@ -1,0 +1,133 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xlir_slice_verify.inc.c - Logical loans independent of private keeper slots
+ */
+typedef struct LirSliceFlow {
+    uint32_t *values, *queue;
+    uint8_t *inputs, *scratch, *edge, *queued;
+    size_t count, head, tail, pending;
+} LirSliceFlow;
+static bool lir_slice_extent(uint64_t count, size_t stride) { return stride && count <= SIZE_MAX / stride; }
+static void lir_slice_flow_drop(LirSliceFlow *flow) {
+    xr_free(flow->values); xr_free(flow->queue); xr_free(flow->inputs);
+    xr_free(flow->scratch); xr_free(flow->edge); xr_free(flow->queued);
+}
+static XrLirStatus lir_slice_frontier(const XrLirModule *m, const XrLirFunctionData *f,
+    uint32_t function, XrLirDiagnostic *d) {
+    bool signature = xr_lir_internal_slice_type(m, f->result);
+    for (uint32_t p = 0; p < f->parameter_count; ++p)
+        signature |= xr_lir_internal_slice_type(m, f->parameter_types[p]);
+    if (signature) {
+        xr_lir_internal_error(d, "Slice parameters and returns require a checked caller loan", function, 0, 0, NULL);
+        if (d) d->status = XR_LIR_UNSUPPORTED;
+        return XR_LIR_UNSUPPORTED;
+    }
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirBlockData *block = &f->blocks[b];
+        for (uint32_t i = 0; i < block->instruction_count; ++i) {
+            const XrLirInstructionView *v = &block->instructions[i].view;
+            bool slice = xr_lir_internal_slice_type(m, v->type);
+            for (uint32_t a = 0; a < v->operand_count; ++a)
+                slice |= xr_lir_internal_slice_type(m, f->values[v->operands[a] - 1].type);
+            XrLirSliceIntrinsic role;
+            if (slice && (v->op != XR_LIR_CALL_INTRINSIC ||
+                xr_lir_slice_intrinsic_view(m, v->intrinsic, &role) != XR_LIR_OK)) {
+                xr_lir_internal_error(d, "Slice use requires a closed readonly loan operation", function, b + 1, i + 1, &v->source);
+                if (d) d->status = XR_LIR_UNSUPPORTED;
+                return XR_LIR_UNSUPPORTED;
+            }
+        }
+    }
+    return XR_LIR_OK;
+}
+static bool lir_slice_flow_create(const XrLirModule *m, const XrLirFunctionData *f, LirSliceFlow *flow) {
+    if (!lir_slice_extent((uint64_t)f->value_count + 1, sizeof(*flow->values))) return false;
+    size_t values = (size_t)f->value_count + 1;
+    flow->values = xr_calloc(values, sizeof(*flow->values));
+    if (!flow->values) return false;
+    for (uint32_t n = 0; n < f->value_count; ++n)
+        if (xr_lir_internal_slice_type(m, f->values[n].type)) flow->values[n + 1] = (uint32_t)++flow->count;
+    if (!flow->count) return true;
+    if (!lir_slice_extent(f->block_count, flow->count) ||
+        !lir_slice_extent(f->block_count, sizeof(*flow->queue))) return false;
+    flow->inputs = xr_calloc(f->block_count, flow->count);
+    flow->scratch = xr_malloc(flow->count); flow->edge = xr_malloc(flow->count);
+    flow->queued = xr_calloc(f->block_count, 1);
+    flow->queue = xr_malloc((size_t)f->block_count * sizeof(*flow->queue));
+    return flow->inputs && flow->scratch && flow->edge && flow->queued && flow->queue;
+}
+static void lir_slice_enqueue(LirSliceFlow *flow, uint32_t block, uint32_t blocks) {
+    if (flow->queued[block]) return;
+    flow->queue[flow->tail] = block; flow->tail = (flow->tail + 1) % blocks;
+    ++flow->pending; flow->queued[block] = 1;
+}
+static XrLirStatus lir_slice_block(const XrLirModule *m, const XrLirFunctionData *f,
+    uint32_t function, uint32_t b, LirSliceFlow *flow, bool check, XrLirDiagnostic *d) {
+    memcpy(flow->scratch, flow->inputs + (size_t)b * flow->count, flow->count);
+    const XrLirBlockData *block = &f->blocks[b];
+    for (uint32_t i = 0; i < block->instruction_count; ++i) {
+        const XrLirInstructionView *v = &block->instructions[i].view;
+        for (uint32_t a = 0; check && a < v->operand_count; ++a) {
+            uint32_t row = flow->values[v->operands[a]];
+            if (row && flow->scratch[row - 1] != 2)
+                return xr_lir_internal_error(d, "Slice use is outside its live loan", function, b + 1, i + 1, &v->source);
+        }
+        XrLirSliceIntrinsic role;
+        if (v->op != XR_LIR_CALL_INTRINSIC || xr_lir_slice_intrinsic_view(m, v->intrinsic, &role) != XR_LIR_OK) continue;
+        if (role.operation == XR_LIR_SLICE_OP_END) flow->scratch[flow->values[v->operands[0]] - 1] = 1;
+        else if (v->result && flow->values[v->result]) flow->scratch[flow->values[v->result] - 1] = 2;
+    }
+    const XrLirInstructionView *term = lir_terminator(f, b);
+    for (uint32_t e = 0; check && e < term->edge_count; ++e)
+        for (uint32_t a = 0; a < term->edges[e].argument_count; ++a) {
+            uint32_t row = flow->values[term->edges[e].arguments[a]];
+            if (row && flow->scratch[row - 1] != 2)
+                return xr_lir_internal_error(d, "selected edge requires a live Slice source", function, b + 1, block->instruction_count, &term->source);
+        }
+    return XR_LIR_OK;
+}
+static void lir_slice_successors(const XrLirFunctionData *f, uint32_t b, LirSliceFlow *flow) {
+    const XrLirInstructionView *term = lir_terminator(f, b);
+    for (uint32_t e = 0; e < term->edge_count; ++e) {
+        const XrLirEdgeView *edge = &term->edges[e];
+        const XrLirBlockData *target = &f->blocks[edge->target - 1];
+        memcpy(flow->edge, flow->scratch, flow->count);
+        for (uint32_t a = 0; a < edge->argument_count; ++a) {
+            uint32_t row = flow->values[target->parameters[a]];
+            if (row) flow->edge[row - 1] = flow->scratch[flow->values[edge->arguments[a]] - 1];
+        }
+        uint8_t *input = flow->inputs + (size_t)(edge->target - 1) * flow->count;
+        bool changed = false;
+        for (size_t n = 0; n < flow->count; ++n) {
+            uint8_t joined = input[n] | flow->edge[n];
+            changed |= joined != input[n]; input[n] = joined;
+        }
+        if (changed) lir_slice_enqueue(flow, edge->target - 1, f->block_count);
+    }
+}
+static XrLirStatus lir_slice_function(const XrLirModule *m, const XrLirFunctionData *f,
+    uint32_t function, XrLirDiagnostic *d) {
+    XrLirStatus status = lir_slice_frontier(m, f, function, d);
+    if (status != XR_LIR_OK || f->kind == XR_LIR_FUNCTION_EXTERNAL) return status;
+    bool needed = false;
+    for (uint32_t n = 0; n < f->value_count; ++n) needed |= xr_lir_internal_slice_type(m, f->values[n].type);
+    if (!needed) return XR_LIR_OK;
+    LirSliceFlow flow = {0};
+    if (!lir_slice_flow_create(m, f, &flow)) { lir_slice_flow_drop(&flow); return XR_LIR_OUT_OF_MEMORY; }
+    memset(flow.inputs + (size_t)(f->entry - 1) * flow.count, 1, flow.count);
+    lir_slice_enqueue(&flow, f->entry - 1, f->block_count);
+    while (flow.pending) {
+        uint32_t b = flow.queue[flow.head]; flow.head = (flow.head + 1) % f->block_count;
+        --flow.pending; flow.queued[b] = 0;
+        (void)lir_slice_block(m, f, function, b, &flow, false, NULL);
+        lir_slice_successors(f, b, &flow);
+    }
+    for (uint32_t b = 0; b < f->block_count && status == XR_LIR_OK; ++b)
+        status = lir_slice_block(m, f, function, b, &flow, true, d);
+    lir_slice_flow_drop(&flow);
+    return status;
+}

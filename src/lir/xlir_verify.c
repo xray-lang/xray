@@ -993,6 +993,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
 
 #include "xlir_callable_facts.inc.c"
 #include "xlir_callable_scope_verify.inc.c"
+#include "xlir_slice_verify.inc.c"
 
 static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCallableFacts **facts) {
     if (d)
@@ -1081,6 +1082,8 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
             if (!xr_lir_internal_type_valid(m, f->values[value].type, true))
                 return xr_lir_internal_error(d, "SSA value type is invalid", index + 1, 0, 0, NULL);
         if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
+            XrLirStatus slice = lir_slice_function(m, f, index + 1, d);
+            if (slice != XR_LIR_OK) return slice;
             XrLirStatus status = lir_callable_facts_capture(m, f, index + 1, (LirCallableGeometry){0}, facts);
             if (status != XR_LIR_OK) return lir_status_error(d, status, "callable description allocation failed");
             continue;
@@ -1116,6 +1119,7 @@ static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d, XrLirCal
             status = lir_uses(f, index + 1, &graph, d);
         }
         if (status == XR_LIR_OK) status = lir_state_function(m, index, d);
+        if (status == XR_LIR_OK) status = lir_slice_function(m, f, index + 1, d);
         xr_free(graph.memory);
         if (status != XR_LIR_OK) {
             if (d && d->status == XR_LIR_OK) {
