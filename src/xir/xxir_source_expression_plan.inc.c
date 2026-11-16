@@ -26,6 +26,24 @@ static bool source_plan_numeric_prepare(SourceContext *ctx,SourceExpressionPlan 
     if (plan->numeric.kind) {plan->type_ready=true;plan->ground_type=plan->numeric.type;}
     return true;
 }
+/* Recipe temporaries are needed only after both children have been prepared. */
+static bool source_plan_conditional_recipe(SourceContext *ctx,SourceExpressionPlan *plan,SourceExpectedType hint) {
+    SourceConditionalRecipe recipe;
+    if (!source_conditional_plan(ctx,plan->syntax,plan->left->ground_type,plan->right->ground_type,hint,&recipe)) return false;
+    SourceConditionalRecipe *recorded_recipe=source_recipe_storage(ctx,1,sizeof(*recorded_recipe));
+    if (!recorded_recipe) return false;
+    *recorded_recipe=recipe;plan->conditional=recorded_recipe;plan->type_ready=true;plan->ground_type=recipe.result;
+    return true;
+}
+static bool source_plan_binary_recipe(SourceContext *ctx,SourceExpressionPlan *plan,
+    SourceExpressionPlan *left,SourceExpressionPlan *right) {
+    XrHirBinary recipe;
+    if (!source_binary_check(ctx,plan->syntax,plan->syntax->type,left->ground_type,right->ground_type,&recipe)) return false;
+    XrHirBinary *recorded_recipe=source_recipe_storage(ctx,1,sizeof(*recorded_recipe));
+    if (!recorded_recipe) return false;
+    *recorded_recipe=recipe;plan->binary=recorded_recipe;plan->type_ready=true;plan->ground_type=recipe.result;
+    return true;
+}
 static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *plan,SourceExpectedType hint,bool defaults) {
     if (plan->syntax->type==AST_TERNARY && plan->left && plan->right) {
         if (plan->conditional) return true;
@@ -35,12 +53,7 @@ static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *
             !source_plan_binary_prepare(ctx,plan->right,hint,defaults) ||
             !source_plan_numeric_prepare(ctx,plan->right,hint,defaults)) return false;
         if (!plan->left->type_ready || !plan->right->type_ready) return true;
-        SourceConditionalRecipe recipe;
-        if (!source_conditional_plan(ctx,plan->syntax,plan->left->ground_type,plan->right->ground_type,hint,&recipe)) return false;
-        SourceConditionalRecipe *recorded_recipe=source_recipe_storage(ctx,1,sizeof(*recorded_recipe));
-        if (!recorded_recipe) return false;
-        *recorded_recipe=recipe;plan->conditional=recorded_recipe;plan->type_ready=true;plan->ground_type=recipe.result;
-        return true;
+        return source_plan_conditional_recipe(ctx,plan,hint);
     }
     if (plan->syntax->type==AST_GROUPING && plan->left) {
         if (!source_plan_binary_prepare(ctx,plan->left,hint,defaults) ||
@@ -70,29 +83,12 @@ static bool source_plan_binary_prepare(SourceContext *ctx,SourceExpressionPlan *
     if (!source_plan_binary_prepare(ctx,right,right_hint,defaults) ||
         !source_plan_numeric_prepare(ctx,right,right_hint,defaults)) return false;
     if (!left->type_ready || !right->type_ready) return true;
-    XrHirBinary recipe;
-    if (!source_binary_check(ctx,plan->syntax,plan->syntax->type,left->ground_type,right->ground_type,&recipe)) return false;
-    XrHirBinary *recorded_recipe=source_recipe_storage(ctx,1,sizeof(*recorded_recipe));
-    if (!recorded_recipe) return false;
-    *recorded_recipe=recipe;plan->binary=recorded_recipe;plan->type_ready=true;plan->ground_type=recipe.result;
-    return true;
+    return source_plan_binary_recipe(ctx,plan,left,right);
 }
 #include "xxir_source_ground_type.inc.c"
-static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *node, SourceExpectedType context) {
-    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
-    SourceFunction *body=&ctx->bodies[ctx->function];
-    if (body->region_sealed || body->expression_count==UINT32_MAX) {
-        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"expression region is not open"); return NULL;
-    }
-    if (!body->expressions || body->expressions->count==32) {
-        SourceExpressionStorage *storage=source_recipe_storage(ctx,1,sizeof(*storage));
-        if (!storage) return NULL;
-        storage->next=body->expressions;body->expressions=storage;
-    }
-    SourceExpressionPlan *parent=ctx->active_expression;
-    SourceExpressionPlan *plan=&body->expressions->expressions[body->expressions->count++];
-    plan->parent=parent && parent->owner==ctx->function ? parent : NULL;
-    plan->syntax=node;plan->owner=ctx->function;plan->identity=body->expression_count++;
+/* Node setup does not keep its temporaries alive during child collection. */
+static bool source_plan_collect_header(SourceContext *ctx,AstNode *node,SourceExpectedType context,
+    SourceFunction *body,SourceExpressionPlan *plan) {
     if (node->type==AST_THIS_EXPR || node->type==AST_VARIABLE) {
         plan->binding=visible_name(ctx,node->type==AST_THIS_EXPR ? "this" : node->as.variable.name);
         if (source_name_ready(plan->binding)) {
@@ -120,20 +116,25 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
         }
     }
     if(node->type==AST_RANGE) {
-        if(!source_range_type(ctx,node,&plan->ground_type)) return NULL;
+        if(!source_range_type(ctx,node,&plan->ground_type)) return false;
         plan->type_ready=true;
     }
     if (!plan->type_ready) {
         SourceExpectedType ground;
-        if (!source_ground_type(ctx,node,0,&ground)) return NULL;
+        if (!source_ground_type(ctx,node,0,&ground)) return false;
         if (ground.present) {plan->type_ready=true;plan->ground_type=ground.type;}
     }
     plan->expected=context;
     plan->entry=body->block_count ? body->current_block : (SourceBlockReference){ctx->function,0};
     plan->state=SOURCE_TERM_UNRESOLVED;
     if (!source_direct_integer(ctx,node,&plan->integer) || !source_direct_decimal(ctx,node,&plan->decimal)) {
-        plan->state=SOURCE_TERM_FAILED;return NULL;
+        plan->state=SOURCE_TERM_FAILED;return false;
     }
+    return true;
+}
+static SourceExpressionPlan *source_plan_collect_structural(SourceContext *ctx,SourceExpressionPlan *plan,
+    SourceExpectedType context,SourceExpressionPlan *parent) {
+    AstNode *node=plan->syntax;
     switch(node->type) {
     case AST_RANGE: {
         if(ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"range expression depth exhausted");return NULL;}
@@ -244,64 +245,49 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
             plan->type_ready=true;
         }
         break;
-    case AST_GROUPING:
-        if (plan->integer.present || plan->decimal.node) break;
-        /* Nonliteral grouping owns its child; no re-collection during completion. */
-        /* fall through */
-    case AST_BINARY_ADD:case AST_BINARY_SUB:case AST_BINARY_MUL:case AST_BINARY_DIV:case AST_BINARY_MOD:
-    case AST_BINARY_BAND:case AST_BINARY_BOR:case AST_BINARY_BXOR:case AST_BINARY_LSHIFT:case AST_BINARY_RSHIFT:
-    case AST_BINARY_EQ:case AST_BINARY_NE:case AST_BINARY_LT:case AST_BINARY_LE:case AST_BINARY_GT:case AST_BINARY_GE:
-        if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
-        ctx->active_expression=plan;++ctx->depth;
-        plan->left=source_plan_collect(ctx,node->type==AST_GROUPING ? node->as.grouping : node->as.binary.left,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
-        if (plan->left && node->type!=AST_GROUPING) {
-            SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;
-            if (source_planned_effects(ctx,plan->left,0))
-                plan->right=source_plan_collect(ctx,node->as.binary.right,(SourceExpectedType){false,XR_XIR_UNIT,false, false});
-            ctx->facts=facts;ctx->epochs=epochs;
-        }
-        --ctx->depth;ctx->active_expression=parent;
-        if (!plan->left || (node->type!=AST_GROUPING && !plan->right) || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false, false},false)) return NULL;
-        if (node->type==AST_GROUPING) source_read_forward(plan,plan->left);
-        if (node->type>=AST_BINARY_EQ && node->type<=AST_BINARY_GE) {plan->type_ready=true;plan->ground_type=XR_XIR_BOOL;}
-        break;
     default:break;
     }
     return plan;
 }
-static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan, SourceValue *value) {
-    if (!plan || plan->owner!=ctx->function || ctx->bodies[ctx->function].region_sealed)
-        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"expression plan has no active owner");
-    if (plan->state==SOURCE_TERM_GROUND) { *value=plan->value; return true; }
-    if (plan->state!=SOURCE_TERM_UNRESOLVED)
-        return source_fail(ctx,plan->syntax,XR_XIR_BAD_STRUCTURE,"expression plan cannot be retried");
-    AstNode *node=plan->syntax;
-    if (ctx->depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"source expression depth exhausted");
-    SourceExpectedType context=plan->expected;
-    XrHirConversion checked_conversion={0};
-    if (plan->read_binding && (node->type==AST_VARIABLE || node->type==AST_THIS_EXPR)) {
-        uint64_t epoch=source_epoch(ctx,ctx->epochs,plan->read_binding);
-        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
-        if (plan->read_epoch!=epoch && plan->read_prefix) {
-            uint32_t actual=source_fact_depth(ctx,plan->read_binding);
-            if (ctx->diagnostic.status!=XR_XIR_OK) return false;
-            if (actual<plan->read_prefix)
-                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"nullable read facts invalidated by an earlier write");
-        }
-        plan->read_epoch=epoch;
+static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *node, SourceExpectedType context) {
+    if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return NULL;
+    SourceFunction *body=&ctx->bodies[ctx->function];
+    if (body->region_sealed || body->expression_count==UINT32_MAX) {
+        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"expression region is not open"); return NULL;
+    }
+    if (!body->expressions || body->expressions->count==32) {
+        SourceExpressionStorage *storage=source_recipe_storage(ctx,1,sizeof(*storage));
+        if (!storage) return NULL;
+        storage->next=body->expressions;body->expressions=storage;
     }
     SourceExpressionPlan *parent=ctx->active_expression;
-    SourceFunction *body=&ctx->bodies[plan->owner];
-    SourceTryRegion *region=node->type==AST_TRY_EXPR ? source_try_region_begin(ctx,node) : NULL;
-    if (node->type==AST_TRY_EXPR && !region) return false;
-    plan->entry=body->block_count ? body->current_block : (SourceBlockReference){ctx->function,0};
-    plan->state=SOURCE_TERM_CHECKING;ctx->active_expression=plan;++ctx->depth;
-    bool result=node->type==AST_SPREAD_EXPR && plan->call_projection ? source_call_projection_complete(ctx,plan,&plan->value) :
-        plan->numeric.kind ? source_hir_literal_emit(ctx,&plan->numeric,&plan->value) :
-        (plan->integer.present ? source_integer(ctx,node,&plan->integer,context,&plan->value) : plan->decimal.node ?
-        source_decimal(ctx,&plan->decimal,context,&plan->value) : expression_body(ctx,node,context,&plan->value));
+    SourceExpressionPlan *plan=&body->expressions->expressions[body->expressions->count++];
+    plan->parent=parent && parent->owner==ctx->function ? parent : NULL;
+    plan->syntax=node;plan->owner=ctx->function;plan->identity=body->expression_count++;
+    if (!source_plan_collect_header(ctx,node,context,body,plan)) return NULL;
+    if (node->type!=AST_GROUPING && (node->type<AST_BINARY_ADD || node->type>AST_BINARY_GE))
+        return source_plan_collect_structural(ctx,plan,context,parent);
+    if (node->type==AST_GROUPING && (plan->integer.present || plan->decimal.node)) return plan;
+    if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
+    ctx->active_expression=plan;++ctx->depth;
+    plan->left=source_plan_collect(ctx,node->type==AST_GROUPING ? node->as.grouping : node->as.binary.left,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
+    if (plan->left && node->type!=AST_GROUPING) {
+        SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;
+        if (source_planned_effects(ctx,plan->left,0))
+            plan->right=source_plan_collect(ctx,node->as.binary.right,(SourceExpectedType){false,XR_XIR_UNIT,false, false});
+        ctx->facts=facts;ctx->epochs=epochs;
+    }
     --ctx->depth;ctx->active_expression=parent;
-    if (region) body->active_try=region->parent;
+    if (!plan->left || (node->type!=AST_GROUPING && !plan->right) || !source_plan_binary_prepare(ctx,plan,(SourceExpectedType){false,XR_XIR_UNIT, false, false},false)) return NULL;
+    if (node->type==AST_GROUPING) source_read_forward(plan,plan->left);
+    if (node->type>=AST_BINARY_EQ && node->type<=AST_BINARY_GE) {plan->type_ready=true;plan->ground_type=XR_XIR_BOOL;}
+    return plan;
+}
+/* Conversion and observation locals do not span recursive value completion. */
+static bool source_plan_complete_finish(SourceContext *ctx,SourceExpressionPlan *plan,
+    SourceExpectedType context,bool result,SourceValue *value) {
+    AstNode *node=plan->syntax;
+    XrHirConversion checked_conversion={0};
     if (result && plan->conversion_ready) {
         checked_conversion=plan->conversion;
         if (context.present && context.type!=checked_conversion.target)
@@ -333,6 +319,40 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
         plan->state=SOURCE_TERM_GROUND;plan->type_ready=true;plan->ground_type=plan->value.type;*value=plan->value;
     } else plan->state=SOURCE_TERM_FAILED;
     return result;
+}
+static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan, SourceValue *value) {
+    if (!plan || plan->owner!=ctx->function || ctx->bodies[ctx->function].region_sealed)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"expression plan has no active owner");
+    if (plan->state==SOURCE_TERM_GROUND) { *value=plan->value; return true; }
+    if (plan->state!=SOURCE_TERM_UNRESOLVED)
+        return source_fail(ctx,plan->syntax,XR_XIR_BAD_STRUCTURE,"expression plan cannot be retried");
+    AstNode *node=plan->syntax;
+    if (ctx->depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"source expression depth exhausted");
+    SourceExpectedType context=plan->expected;
+    if (plan->read_binding && (node->type==AST_VARIABLE || node->type==AST_THIS_EXPR)) {
+        uint64_t epoch=source_epoch(ctx,ctx->epochs,plan->read_binding);
+        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+        if (plan->read_epoch!=epoch && plan->read_prefix) {
+            uint32_t actual=source_fact_depth(ctx,plan->read_binding);
+            if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+            if (actual<plan->read_prefix)
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"nullable read facts invalidated by an earlier write");
+        }
+        plan->read_epoch=epoch;
+    }
+    SourceExpressionPlan *parent=ctx->active_expression;
+    SourceFunction *body=&ctx->bodies[plan->owner];
+    SourceTryRegion *region=node->type==AST_TRY_EXPR ? source_try_region_begin(ctx,node) : NULL;
+    if (node->type==AST_TRY_EXPR && !region) return false;
+    plan->entry=body->block_count ? body->current_block : (SourceBlockReference){ctx->function,0};
+    plan->state=SOURCE_TERM_CHECKING;ctx->active_expression=plan;++ctx->depth;
+    bool result=node->type==AST_SPREAD_EXPR && plan->call_projection ? source_call_projection_complete(ctx,plan,&plan->value) :
+        plan->numeric.kind ? source_hir_literal_emit(ctx,&plan->numeric,&plan->value) :
+        (plan->integer.present ? source_integer(ctx,node,&plan->integer,context,&plan->value) : plan->decimal.node ?
+        source_decimal(ctx,&plan->decimal,context,&plan->value) : expression_body(ctx,node,context,&plan->value));
+    --ctx->depth;ctx->active_expression=parent;
+    if (region) body->active_try=region->parent;
+    return source_plan_complete_finish(ctx,plan,context,result,value);
 }
 static bool source_plan_expression(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     if (!source_request_poll(ctx, node)) return false;
