@@ -1700,8 +1700,12 @@ int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--control-summary") ||
         !strcmp(argv[1], "--source-storage") || !strcmp(argv[1], "--lexical") ||
         !strcmp(argv[1], "--lexical-source") || !strcmp(argv[1], "--conversion") ||
-        !strcmp(argv[1], "--module-borrows") || !strcmp(argv[1], "--module-export"))));
+        !strcmp(argv[1], "--module-borrows") || !strcmp(argv[1], "--module-export") ||
+        !strcmp(argv[1], "--preparation-locations"))));
     effect_case_begin();
+    if (argc==2 && !strcmp(argv[1],"--preparation-locations")) {
+        preparation_failure_locations(); effect_case_end(); return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--module-export")) {
         module_effect_export_cases(); effect_case_end(); return 0;
     }
@@ -1762,8 +1766,22 @@ int main(int argc, char **argv) {
         {control_summary_kernel,true},
     };
     bool control_only = argc==2 && !strcmp(argv[1],"--control-summary");
+    const char *progress_setting=getenv("XR_TEST_PROGRESS");
+    bool progress=progress_setting && !strcmp(progress_setting,"1");
     for (size_t p=0;p<sizeof(probes)/sizeof(probes[0]);++p)
-        if (argc==1 || probes[p].control==control_only) probes[p].run();
+        if (argc==1 || probes[p].control==control_only) {
+            if (progress) {
+                fprintf(stderr,"[xir-test] probe[%zu/%zu] BEGIN control=%u\n",p,
+                    sizeof(probes)/sizeof(probes[0]),(unsigned)probes[p].control);
+                fflush(stderr);
+            }
+            probes[p].run();
+            if (progress) {
+                fprintf(stderr,"[xir-test] probe[%zu/%zu] END control=%u\n",p,
+                    sizeof(probes)/sizeof(probes[0]),(unsigned)probes[p].control);
+                fflush(stderr);
+            }
+        }
     effect_case_end();
     return 0;
 }
