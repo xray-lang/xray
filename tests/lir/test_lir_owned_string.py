@@ -105,6 +105,7 @@ int main(void) {
     if stateful:
         text += ('        XrtBillingOwner *billing = NULL; XrtModuleLayout *layout = NULL;\n'
                  '        if (xrt_billing_owner_new(NULL,SIZE_MAX,&billing) != XRT_MANAGED_OK) return 4;\n'
+                 '        XrtBillingStats control = xrt_billing_owner_stats(billing);\n'
                  '        if (xrt_module_layout_new(billing,&xrl_state_spec,(XrtManagedLease){0},&layout) != XRT_MANAGED_OK) return 5;\n'
                  '        if (xrt_module_state_new(layout,billing,&o.state) != XRT_MANAGED_OK) return 6;\n'
                  '        xrt_module_layout_drop(&layout);\n')
@@ -112,7 +113,7 @@ int main(void) {
              '        if (o.visits != run + 1 || !xrt_value_root_empty(&o.values) || o.state) return 3;\n')
     if stateful:
         text += ('        XrtBillingStats retired = xrt_billing_owner_stats(billing);\n'
-                 '        if (retired.bytes || retired.blocks) return 7;\n'
+                 '        if (retired.bytes != control.bytes || retired.blocks != control.blocks) return 7;\n'
                  '        xrt_billing_owner_drop(billing);\n')
     return text + '    }\n    xrt_locations_release(locations); return 0;\n}\n'
 
