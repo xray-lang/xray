@@ -19,14 +19,23 @@
 #ifndef XXIR_EFFECT_CHECK_IMPLEMENTATION
 #define XXIR_EFFECT_CHECK_IMPLEMENTATION
 
+#include "xxir_effect_module_export_internal.h"
+
 typedef struct EffectCheckFunction {
     uint32_t first, values, contents, parameters, words, root, result, result_contents, last, module, generic_parameters;
     uint32_t declaration, type_first, type_count, pending_first, pending_count;
     uint32_t native_callable, capture_count, cleanup_first, cleanup_count;
+    /* One-based links in the same ROOT owner; zero means no relation. */
+    uint32_t callback_loans;
     uint64_t *bits, *suspend_bits;
     uint8_t throws;
     bool default_callback, cleanup;
 } EffectCheckFunction;
+
+typedef struct EffectCheckCallbackLoan {
+    XirModuleCallbackLoan relation;
+    uint32_t function, next;
+} EffectCheckCallbackLoan;
 
 typedef enum EffectCheckConversionKind {
     EFFECT_CHECK_CONVERSION_NONE, EFFECT_CHECK_CONVERSION_COPY, EFFECT_CHECK_CONVERSION_WEAKEN
@@ -199,6 +208,8 @@ typedef struct EffectCheckedRoots {
     uint32_t module_seeds, module_seed_capacity, module_members, module_member_capacity, module_index_capacity;
     uint32_t *lent_fields;
     uint32_t lent_field_count, lent_field_capacity;
+    EffectCheckCallbackLoan *callback_loan;
+    uint32_t callback_loans, callback_loan_capacity;
     bool module_access;
     bool liveness_checked, refinement_dirty;
 } EffectCheckedRoots;
@@ -278,6 +289,7 @@ static void effect_checked_roots_free(EffectCheckedRoots *roots) {
     xr_compile_resources_free(roots->module_member);
     xr_compile_resources_free(roots->module_index);
     xr_compile_resources_free(roots->lent_fields);
+    xr_compile_resources_free(roots->callback_loan);
     if (roots->terms) effect_terms_free(roots->terms);
     xr_compile_resources_free(roots->terms);
     xr_compile_resources_free(roots);

@@ -27,6 +27,7 @@ XR_FUNC void xir_effects_module_export_free(XirModuleEffectExport *owned) {
     xr_compile_resources_free((void *)owned->view.modules);
     xr_compile_resources_free((void *)owned->view.dependencies);
     xr_compile_resources_free((void *)owned->view.slots);
+    xr_compile_resources_free((void *)owned->view.callback_loans);
     xr_compile_resources_free(owned);
 }
 XR_FUNC XrXirStatus xir_effects_module_export_view(const XirModuleEffectExport *owned, XirModuleEffectExportView *output) {
@@ -49,7 +50,7 @@ typedef struct EffectModuleProjection {
     const XrXirProvenance *instance;
     const EffectCheckedRoots *roots;
     uint32_t *witnesses;
-    size_t term_limit;
+    size_t term_limit, callback_loan_limit;
 } EffectModuleProjection;
 
 /* The specializing producer retains its exact Source derivation rather than
@@ -117,7 +118,7 @@ static XrXirStatus effect_module_export_set(const EffectModuleProjection *projec
 }
 static XrXirStatus effect_module_export_terms(const EffectCheckedRoots *roots, const EffectModuleProjection *projection,
     XirModuleEffectExportView *view, bool copy) {
-    size_t used = 0, value = 0; XrXirStatus status = XR_XIR_OK;
+    size_t used = 0, value = 0, loans = 0; XrXirStatus status = XR_XIR_OK;
     for (uint32_t f = 0; f < view->function_count && status == XR_XIR_OK; ++f) {
         uint32_t declaration=0; status=effect_module_export_function(projection,f,&declaration);
         if (status!=XR_XIR_OK || declaration>=roots->templates || declaration>=roots->functions) return XR_XIR_BAD_STRUCTURE;
@@ -129,6 +130,32 @@ static XrXirStatus effect_module_export_terms(const EffectCheckedRoots *roots, c
         status = effect_module_export_set(projection, source.root, EFFECT_MODULE_ACCESS, &row.access, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
         if (status == XR_XIR_OK) status = effect_module_export_set(projection, source.root, EFFECT_MODULE_WRITE, &row.write, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
         if (status == XR_XIR_OK) status = effect_module_export_set(projection, source.result, EFFECT_MODULE_ORIGIN, &row.result_origin, &used, copy ? (XirModuleEffectTerm *)view->terms : NULL);
+        size_t first_loan=loans;uint32_t visited=0;
+        for (uint32_t link=source.callback_loans;status==XR_XIR_OK && link;) {
+            if (link>roots->callback_loans || visited++>=roots->callback_loans || loans==SIZE_MAX) {
+                status=XR_XIR_BAD_STRUCTURE;break;
+            }
+            EffectCheckCallbackLoan from=roots->callback_loan[link-1];
+            XirModuleCallbackLoan relation=from.relation;
+            if (from.function!=declaration || relation.callback_parameter>=source.parameters ||
+                relation.loan_parameter>=source.parameters ||
+                (relation.loan_kind!=XIR_MODULE_EFFECT_PARAMETER && relation.loan_kind!=XIR_MODULE_EFFECT_CAPTURE)) {
+                status=XR_XIR_BAD_STRUCTURE;break;
+            }
+            if (copy) {
+                if (loans>=projection->callback_loan_limit) {status=XR_XIR_BAD_STRUCTURE;break;}
+                if (projection->witnesses && relation.witness_function!=UINT32_MAX) {
+                    if (relation.witness_function>=projection->producer->module.function_count) {
+                        status=XR_XIR_BAD_STRUCTURE;break;
+                    }
+                    relation.witness_function=projection->witnesses[relation.witness_function];
+                    if (relation.witness_function==UINT32_MAX) relation.witness_instruction=UINT32_MAX;
+                }
+                ((XirModuleCallbackLoan *)view->callback_loans)[loans]=relation;
+            }
+            ++loans;link=from.next;
+        }
+        row.callback_loans=(XirModuleEffectSpan){loans==first_loan?0:first_loan,loans-first_loan};
         if (copy) ((XirModuleEffectFunction *)view->functions)[f] = row;
         if (source.values > SIZE_MAX - value) return XR_XIR_OVERFLOW;
         for (uint32_t v = 0; v < source.values && status == XR_XIR_OK; ++v) {
@@ -138,8 +165,9 @@ static XrXirStatus effect_module_export_terms(const EffectCheckedRoots *roots, c
         }
         value += source.values;
     }
-    if (copy && (used != view->term_count || value != view->value_count)) return XR_XIR_BAD_STRUCTURE;
-    if (!copy) { view->term_count = used; view->value_count = value; }
+    if (copy && (used != view->term_count || value != view->value_count || loans!=view->callback_loan_count))
+        return XR_XIR_BAD_STRUCTURE;
+    if (!copy) { view->term_count = used; view->value_count = value; view->callback_loan_count=loans; }
     return status;
 }
 static XrXirStatus effect_module_export_allocate(const XrXirCompileContext *context,
@@ -157,6 +185,8 @@ static XrXirStatus effect_module_export_allocate(const XrXirCompileContext *cont
     view->modules = xir_compile_calloc(context, view->module_count, sizeof(*view->modules), &status);
     view->dependencies = xir_compile_calloc(context, view->dependency_count, sizeof(*view->dependencies), &status);
     view->slots = xir_compile_calloc(context, view->slot_count, sizeof(*view->slots), &status);
+    view->callback_loans=view->callback_loan_count ?
+        xir_compile_calloc(context,view->callback_loan_count,sizeof(*view->callback_loans),&status) : NULL;
     return status;
 }
 XR_FUNC XrXirStatus xir_effects_module_export_copy(const XrXirArtifact *artifact, XirModuleEffectExport **output) {
@@ -194,6 +224,7 @@ XR_FUNC XrXirStatus xir_effects_module_export_copy(const XrXirArtifact *artifact
     }
     if (status==XR_XIR_OK) status = effect_module_export_terms(effects->checked_roots, &projection, view, false);
     projection.term_limit=view->term_count;
+    projection.callback_loan_limit=view->callback_loan_count;
     if (status == XR_XIR_OK) status = effect_module_export_allocate(context, artifact->module.declarations, view);
     if (status == XR_XIR_OK) status = xir_effects_source_body_match_input(context, input, effects);
     if (status == XR_XIR_OK) status = effect_module_export_terms(effects->checked_roots, &projection, view, true);
