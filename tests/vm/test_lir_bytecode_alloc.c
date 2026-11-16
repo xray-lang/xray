@@ -294,10 +294,9 @@ static void callable_mutable_frame_storage(void) {
     puts("mutable Frame capture uses one indexed 8-byte place and no construction allocation");
 }
 
-static void view_compiler_rejection(void) {
-    XrLirModule *module=NULL;OK(view_fixture_create(&module));XrRbcProgram *program=NULL;
-    CHECK(xr_rbc_compile(module,(XrLirFunction){module,1},&program,NULL)==XR_RBC_COMPILE_UNSUPPORTED);
-    CHECK(!program && !live_allocations);xr_lir_module_destroy(module);
+static void slice_compiler_failures(void) {
+    XrLirModule *module=NULL;OK(view_fixture_create(&module));
+    callable_allocation_failures(module,(XrLirFunction){module,1},42,"readonly Slice");
 }
 
 static void array_compiler_failures(const char *name,uint64_t expected) {
@@ -1059,7 +1058,7 @@ int main(void) {
     CHECK(xr_rbc_program_locations(program));
     xr_rbc_program_destroy(program);
     xr_lir_module_destroy(m);
-    view_compiler_rejection();
+    slice_compiler_failures();
     callable_compiler_failures();
     callable_mutable_frame_storage();
     callable_factory_failures(false);

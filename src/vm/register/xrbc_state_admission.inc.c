@@ -45,7 +45,7 @@ static bool rbc_state_image_shape(const XrtValueImage *image) {
         !rbc_state_vector(image->names,image->name_bytes,1)) return false;
     for (uint32_t i = 0; i < image->type_count; ++i) {
         const XrtValueImageType *type = &image->types[i];
-        if ((uint32_t)type->kind > XRT_VALUE_ENVIRONMENT || !rbc_state_alignment(type->alignment) ||
+        if ((uint32_t)type->kind > XRT_VALUE_SLICE_U8 || !rbc_state_alignment(type->alignment) ||
             type->size % type->alignment ||
             !rbc_state_span(type->first_owned,type->owned_count,image->owned_count) ||
             !rbc_state_span(type->first_field,type->field_count,image->slot_count) ||

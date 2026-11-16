@@ -21,6 +21,8 @@
 #include "base/xmalloc.h"
 #include "runtime/native/xnative_values.h"
 #include "runtime/native/xnative_capture_backing.h"
+#include "runtime/native/xnative_array_slice.h"
+#include "lir/xlir_view.h"
 #include "runtime/native/xnative_module_state.h"
 #include "runtime/native/xnative_value_image.h"
 #include <float.h>

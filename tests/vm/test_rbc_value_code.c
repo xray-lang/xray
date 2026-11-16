@@ -12,6 +12,7 @@
 #include "xray_native_string_value.h"
 #include "runtime/native/xnative_array_backing.h"
 #include "runtime/native/xnative_map_backing.h"
+#include "xray_native_array_slice.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -462,6 +463,7 @@ static void inline_code_retirement(void) {
     CHECK(field && record); xr_lir_module_destroy(module); run_after_input_retirement(program,100);
     printf("inline Record/Nullable code: %zu allocation failures preserved empty output and retired metadata\n",sites);
 }
+#include "lir_slice_bytecode_cases.h"
 int main(void) {
     XrLirFunction root = {0}; XrLirModule *module = string_call(&root);
     XrRbcProgram *program = compile(module,root); check_receiving(program);
@@ -469,7 +471,8 @@ int main(void) {
     CHECK(callee->parameter_count == 1 && callee->homes->values[callee->parameters[0]].parameter == 1);
     xr_lir_module_destroy(module); run_after_input_retirement(program,4);
     allocation_failures(); scalar_state(); scalar_body_calls(); string_outcome_lifetime();
-    array_binding_calls(); array_outcome_lifetime(); map_outcome_lifetime(); pod_outcome_lifetime(); inline_code_retirement(); CHECK(!compiler_live_allocations);
+    array_binding_calls(); array_outcome_lifetime(); map_outcome_lifetime(); pod_outcome_lifetime(); inline_code_retirement();
+    slice_bytecode_retirement(); CHECK(!compiler_live_allocations);
     puts("typed code: real String call/return, mixed State edges, source retirement and code lease passed");
     return 0;
 }
