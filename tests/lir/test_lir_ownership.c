@@ -23,6 +23,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
 #include "lir_record_fixture.h"
+#include "lir_string_fixture.h"
 
 static uint32_t count_kind(const XrLirOwnershipPlan *plan, XrLirOwnershipFactKind kind) {
     uint32_t count = 0;
@@ -53,7 +54,8 @@ static void compare_internal(const XrLirOwnershipRequest *request, const XrLirOw
             a.array_operation == b.array_operation && a.map_operation == b.map_operation &&
             a.callable_transport==b.callable_transport && a.callable_operation==b.callable_operation &&
             a.callable_function==b.callable_function && a.callable_scope==b.callable_scope &&
-            a.callable_materialize==b.callable_materialize && a.transfer_mode==b.transfer_mode);
+            a.callable_materialize==b.callable_materialize && a.transfer_mode==b.transfer_mode &&
+            a.string_operation==b.string_operation);
         if (a.kind==XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER || a.kind==XR_LIR_OWNERSHIP_RETURN_TRANSFER ||
             a.kind==XR_LIR_OWNERSHIP_APPEND_TRANSFER) CHECK(a.transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE);
         if (a.kind==XR_LIR_OWNERSHIP_PARAMETER_BORROW || a.kind==XR_LIR_OWNERSHIP_OPERAND_BORROW)
@@ -71,7 +73,7 @@ static uint64_t digest(const XrLirOwnershipPlan *plan) {
             f.value, f.argument, f.edge, f.target_block, f.target_value, f.type,
             f.array_element, (uint32_t)f.array_operation, (uint32_t)f.map_operation,
             (uint32_t)f.callable_transport,(uint32_t)f.callable_operation,f.callable_function,f.callable_scope,f.callable_materialize,
-            (uint32_t)f.transfer_mode};
+            (uint32_t)f.transfer_mode,(uint32_t)f.string_operation};
         for (size_t p = 0; p < sizeof(fields) / sizeof(fields[0]); ++p)
             hash = hash * UINT64_C(16777619) + fields[p];
     }
@@ -576,12 +578,40 @@ static void unmodeled_constructed(void) {
     CHECK(view.unmodeled==(XR_LIR_OWNERSHIP_UNMODELED_CELL|XR_LIR_OWNERSHIP_UNMODELED_CALLABLE|XR_LIR_OWNERSHIP_UNMODELED_CONSTRUCTED));
     xr_lir_module_destroy(m); xr_lir_ownership_plan_destroy(plan);
 }
+static void string_bindings(void) {
+    XrLirModule *module=NULL; OK(string_ref_fixture(&module));
+    XrLirOwnershipRequest request={.module=module}; XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&request,&plan,NULL)); compare_internal(&request,plan);
+    CHECK(count_kind(plan,XR_LIR_OWNERSHIP_STRING_OPERATION)==1 &&
+        count_kind(plan,XR_LIR_OWNERSHIP_BINDING_NEW)==1 &&
+        count_kind(plan,XR_LIR_OWNERSHIP_BINDING_BORROW)==2 &&
+        count_kind(plan,XR_LIR_OWNERSHIP_BINDING_READ)==1 &&
+        count_kind(plan,XR_LIR_OWNERSHIP_BINDING_RELEASE)==1);
+    XrLirOwnershipFunction helper; OK(xr_lir_ownership_function_at(plan,2,&helper)); CHECK(!helper.unmodeled);
+    bool parameter=false,append=false;
+    for (uint32_t n=0;n<xr_lir_ownership_fact_count(plan);++n) {
+        XrLirOwnershipFact fact; OK(xr_lir_ownership_fact_at(plan,n,&fact));
+        if (fact.function!=2) continue;
+        if (fact.kind==XR_LIR_OWNERSHIP_PARAMETER_BORROW) {
+            CHECK(fact.type==XR_LIR_STRING_REF && !fact.block && !fact.instruction && !fact.argument &&
+                fact.transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW); parameter=true;
+        }
+        if (fact.kind==XR_LIR_OWNERSHIP_STRING_OPERATION) {
+            CHECK(fact.type==XR_LIR_STRING_REF && fact.string_operation==XR_LIR_STRING_OP_APPEND_REF &&
+                fact.value && fact.target_value && fact.block==1 && fact.instruction==2 &&
+                fact.transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW); append=true;
+        }
+    }
+    CHECK(parameter && append);
+    uint64_t before=digest(plan); xr_lir_module_destroy(module); CHECK(digest(plan)==before);
+    xr_lir_ownership_plan_destroy(plan);
+}
 
 int main(void) {
     XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t i = 0; i < 4; ++i) arrays(elements[i]);
     copies(); other_shapes(); rebuilt_fact_identity(); malformed(); boxed_lifetimes(); boxed_selected_edges();
-    constructed_snapshots(); constructed_requests(); pod_facts(); unmodeled_constructed();
+    constructed_snapshots(); constructed_requests(); pod_facts(); unmodeled_constructed(); string_bindings();
     puts("LIR ownership snapshots passed");
     return 0;
 }

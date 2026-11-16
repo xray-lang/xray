@@ -41,9 +41,9 @@ static bool lir_plan_constructed_value(const XrLirModule *m, XrLirType type) {
 }
 static uint32_t lir_plan_unmodeled(const XrLirModule *m, const XrLirOwnershipPlan *plan, XrLirType type) {
     switch (type) {
-        case XR_LIR_I64_CELL: case XR_LIR_STRING_CELL: case XR_LIR_ARRAY_CELL:
+        case XR_LIR_I64_CELL: case XR_LIR_ARRAY_CELL:
         case XR_LIR_MAP_STRING_I64_CELL: return XR_LIR_OWNERSHIP_UNMODELED_CELL;
-        case XR_LIR_STATE_REF: case XR_LIR_ARRAY_REF: case XR_LIR_STRING_REF:
+        case XR_LIR_STATE_REF: case XR_LIR_ARRAY_REF:
         case XR_LIR_MAP_STRING_I64_REF: return XR_LIR_OWNERSHIP_UNMODELED_REFERENCE;
         case XR_LIR_STATE: return XR_LIR_OWNERSHIP_UNMODELED_STATE;
         case XR_LIR_VIEW_FRAME: case XR_LIR_VIEW_CELL: case XR_LIR_SLICE_I64:
@@ -134,19 +134,21 @@ static bool lir_plan_binding(XrLirOwnershipPlan *plan, const XrLirFunctionData *
     XrLirOwnershipFact fact = {.function=function,.block=block,.instruction=instruction};
     switch (v->op) {
     case XR_LIR_CELL_NEW:
-        if (!lir_cfg_cell(v->type)) return true;
+        if (!lir_cfg_cell(v->type) && v->type != XR_LIR_STRING_CELL) return true;
         fact.kind=XR_LIR_OWNERSHIP_BINDING_NEW; fact.value=v->result; fact.target_value=v->operands[0]; break;
-    case XR_LIR_ARRAY_CELL_DROP: case XR_LIR_MAP_CELL_DROP:
+    case XR_LIR_ARRAY_CELL_DROP: case XR_LIR_MAP_CELL_DROP: case XR_LIR_STRING_CELL_DROP:
         fact.kind=XR_LIR_OWNERSHIP_BINDING_RELEASE; fact.value=v->operands[0]; break;
     case XR_LIR_ARRAY_BORROW: case XR_LIR_MAP_BORROW:
         fact.kind=XR_LIR_OWNERSHIP_BINDING_BORROW; fact.value=v->result; fact.target_value=v->operands[0]; break;
     case XR_LIR_CELL_READ:
-        if (!lir_cfg_cell(f->values[v->operands[0] - 1].type)) return true;
+        if (!lir_cfg_cell(f->values[v->operands[0] - 1].type) &&
+            f->values[v->operands[0] - 1].type != XR_LIR_STRING_CELL) return true;
         fact.kind=XR_LIR_OWNERSHIP_BINDING_READ; fact.value=v->operands[0]; fact.target_value=v->result; break;
     case XR_LIR_ARRAY_REF_READ: case XR_LIR_MAP_REF_READ:
         fact.kind=XR_LIR_OWNERSHIP_BINDING_READ; fact.value=v->operands[0]; fact.target_value=v->result; break;
     case XR_LIR_CELL_WRITE:
-        if (!lir_cfg_cell(f->values[v->operands[0] - 1].type)) return true;
+        if (!lir_cfg_cell(f->values[v->operands[0] - 1].type) &&
+            f->values[v->operands[0] - 1].type != XR_LIR_STRING_CELL) return true;
         fact.kind=XR_LIR_OWNERSHIP_BINDING_WRITE; fact.value=v->operands[0]; fact.target_value=v->operands[1]; break;
     case XR_LIR_ARRAY_REF_WRITE: case XR_LIR_MAP_REF_WRITE:
         fact.kind=XR_LIR_OWNERSHIP_BINDING_WRITE; fact.value=v->operands[0]; fact.target_value=v->operands[1]; break;
@@ -154,6 +156,28 @@ static bool lir_plan_binding(XrLirOwnershipPlan *plan, const XrLirFunctionData *
     }
     fact.type=f->values[fact.value - 1].type;
     fact.array_element=f->values[fact.value - 1].array_element;
+    return lir_plan_add(plan,fact);
+}
+static bool lir_plan_string_binding(XrLirOwnershipPlan *plan, const XrLirModule *m,
+    const XrLirFunctionData *f, const XrLirInstructionView *v, XrLirOwnershipFact fact) {
+    XrLirStringOperation role = (XrLirStringOperation)xr_lir_string_role(m,v);
+    fact.string_operation = role;
+    if (role == XR_LIR_STRING_OP_BORROW_CELL || role == XR_LIR_STRING_OP_BORROW_STATE) {
+        fact.kind = XR_LIR_OWNERSHIP_BINDING_BORROW; fact.value = v->result; fact.target_value = v->operands[0];
+    } else if (role == XR_LIR_STRING_OP_READ_REF) {
+        fact.kind = XR_LIR_OWNERSHIP_BINDING_READ; fact.value = v->operands[0]; fact.target_value = v->result;
+    } else if (role == XR_LIR_STRING_OP_WRITE_REF) {
+        fact.kind = XR_LIR_OWNERSHIP_BINDING_WRITE; fact.value = v->operands[0]; fact.target_value = v->operands[1];
+    } else if (role == XR_LIR_STRING_OP_APPEND_CELL || role == XR_LIR_STRING_OP_APPEND_STATE ||
+        role == XR_LIR_STRING_OP_APPEND_REF) {
+        fact.kind = XR_LIR_OWNERSHIP_STRING_OPERATION; fact.value = v->operands[0]; fact.target_value = v->operands[1];
+        fact.transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_BORROW;
+    } else if ((v->op == XR_LIR_STATE_READ || v->op == XR_LIR_STATE_WRITE) &&
+        f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_STRING) {
+        fact.kind = v->op == XR_LIR_STATE_READ ? XR_LIR_OWNERSHIP_BINDING_READ : XR_LIR_OWNERSHIP_BINDING_WRITE;
+        fact.value = v->operands[0]; fact.target_value = v->op == XR_LIR_STATE_READ ? v->result : v->operands[1];
+    } else return true;
+    fact.type = f->values[fact.value - 1].type;
     return lir_plan_add(plan,fact);
 }
 static bool lir_plan_callable_row(const XrLirCallableFunctionFacts *facts, uint32_t value) {
@@ -283,7 +307,8 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
         XrLirStatus cell_status = lir_plan_cells(plan,f,function,callables);
         if (cell_status != XR_LIR_OK) return cell_status;
         for (uint32_t p = 0; p < f->parameter_count; ++p)
-            if (lir_managed_value(m,f->parameter_types[p]) && !lir_plan_value(plan,f,
+            if ((lir_managed_value(m,f->parameter_types[p]) || f->parameter_types[p] == XR_LIR_STRING_CELL ||
+                f->parameter_types[p] == XR_LIR_STRING_REF) && !lir_plan_value(plan,f,
                 XR_LIR_OWNERSHIP_PARAMETER_BORROW,function,0,0,f->parameters[p],p)) return XR_LIR_OUT_OF_MEMORY;
         for (uint32_t b = 0; b < f->block_count; ++b) {
             const XrLirBlockData *block = &f->blocks[b];
@@ -308,6 +333,8 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                         return XR_LIR_OUT_OF_MEMORY;
                 }
                 if (!lir_plan_binding(plan,f,v,function,b + 1,i + 1)) return XR_LIR_OUT_OF_MEMORY;
+                if (!lir_plan_string_binding(plan,m,f,v,(XrLirOwnershipFact){.function=function,
+                    .block=b + 1,.instruction=i + 1})) return XR_LIR_OUT_OF_MEMORY;
                 XrLirOwnershipFactKind transfer = lir_plan_transfer(m,f,v);
                 for (uint32_t a = 0; a < v->operand_count; ++a) {
                     uint32_t id = v->operands[a];

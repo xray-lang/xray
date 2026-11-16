@@ -10,6 +10,10 @@
 #include "lir/xlir_state.h"
 #include "lir/xlir_cell.h"
 #include "lir/xlir_value_image.h"
+#include "lir/xlir_rebuild.h"
+#include "lir/xlir_inline.h"
+#include "lir/xlir_sccp.h"
+#include "lir/xlir_string_elide.h"
 #include "xray_native_function.h"
 #include "runtime/native/xnative_array_backing.h"
 #include "runtime/native/xnative_map_backing.h"
@@ -58,6 +62,70 @@ static XrLirValue ca_text(CArrayFixture *c,XrLirBlock block,const char *bytes,si
 #include "lir_map_fixture.h"
 #include "lir_callable_fixture.h"
 #include "lir_callable_factory_fixture.h"
+#include "lir_string_fixture.h"
+static XrLirValue string_role(CArrayFixture *c,XrLirBlock block,XrLirStringOperation operation,
+    XrLirType result,const XrLirValue *arguments,uint32_t count) {
+    uint32_t id=0; OK(xr_lir_string_operation(c->module,operation,&id));
+    XrLirValue value={0}; XrLirInstruction instruction={.op=XR_LIR_CALL_INTRINSIC,.type=result,
+        .intrinsic=id,.operands=arguments,.operand_count=count};
+    if (result==XR_LIR_UNIT) OK(xr_lir_emit_effect(c->module,block,&instruction));
+    else OK(xr_lir_emit_value(c->module,block,&instruction,&value));
+    return value;
+}
+static XrLirModule *string_roles_fixture(void) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    OK(xr_lir_string_catalog_install(c.module,false,false,false));
+    XrLirType parameters[]={XR_LIR_STRING_CELL,XR_LIR_STRING_REF};
+    XrLirFunction function={0}; XrLirFunctionSpec spec={.name="string_roles",.name_length=12,
+        .parameters=parameters,.parameter_count=2,.result=XR_LIR_UNIT};
+    OK(xr_lir_declare_function(c.module,&spec,&function)); OK(xr_lir_define_function(c.module,function));
+    XrLirBlock block={0}; OK(xr_lir_add_block(c.module,function,NULL,0,&block));
+    OK(xr_lir_set_entry(c.module,function,block)); XrLirValue inputs[2]={{0}};
+    for (uint32_t p=0;p<2;++p) OK(xr_lir_function_parameter(c.module,function,p,&inputs[p]));
+    XrLirValue text=ca_text(&c,block,"a\0z",3),cell=ca_value(&c,block,XR_LIR_CELL_NEW,XR_LIR_STRING_CELL,&text,1);
+    XrLirValue snapshot=ca_value(&c,block,XR_LIR_CELL_READ,XR_LIR_STRING,&cell,1),write[]={inputs[0],snapshot};
+    XrLirInstruction instruction={.op=XR_LIR_CELL_WRITE,.type=XR_LIR_UNIT,.operands=write,.operand_count=2};
+    OK(xr_lir_emit_effect(c.module,block,&instruction)); ca_effect(&c,block,XR_LIR_STRING_DROP,snapshot);
+    XrLirValue borrowed=string_role(&c,block,XR_LIR_STRING_OP_BORROW_CELL,XR_LIR_STRING_REF,&cell,1);
+    snapshot=string_role(&c,block,XR_LIR_STRING_OP_READ_REF,XR_LIR_STRING,&inputs[1],1);
+    write[0]=borrowed; write[1]=snapshot;
+    (void)string_role(&c,block,XR_LIR_STRING_OP_WRITE_REF,XR_LIR_UNIT,write,2);
+    ca_effect(&c,block,XR_LIR_STRING_DROP,snapshot);
+    XrLirValue append[]={inputs[0],text};
+    (void)string_role(&c,block,XR_LIR_STRING_OP_APPEND_CELL,XR_LIR_UNIT,append,2);
+    append[0]=inputs[1]; (void)string_role(&c,block,XR_LIR_STRING_OP_APPEND_REF,XR_LIR_UNIT,append,2);
+    append[0]=cell; (void)string_role(&c,block,XR_LIR_STRING_OP_APPEND_CELL,XR_LIR_UNIT,append,2);
+    ca_effect(&c,block,XR_LIR_STRING_DROP,text); ca_effect(&c,block,XR_LIR_STRING_CELL_DROP,cell);
+    ca_return(&c,block,(XrLirValue){0}); OK(xr_lir_module_finish(c.module,NULL)); return c.module;
+}
+static XrLirModule *string_state_fixture(void) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    OK(xr_lir_string_catalog_install(c.module,false,false,false));
+    XrLirStateModule module={0};
+    XrLirStateSlot slot={.payload=XR_LIR_STRING,.mutable=true,.size=sizeof(void *),.alignment=_Alignof(void *)};
+    XrLirStateLayout layout={.modules=&module,.module_count=1,.slots=&slot,.slot_count=1,
+        .payload_size=sizeof(void *),.payload_alignment=_Alignof(void *)};
+    OK(xr_lir_set_state_layout(c.module,&layout));
+    XrLirType parameter=XR_LIR_STATE; XrLirFunction function={0};
+    XrLirFunctionSpec spec={.name="string_state",.name_length=12,.parameters=&parameter,.parameter_count=1,.result=XR_LIR_UNIT};
+    OK(xr_lir_declare_function(c.module,&spec,&function)); OK(xr_lir_set_state_entry(c.module,function));
+    OK(xr_lir_define_function(c.module,function)); XrLirBlock block={0};
+    OK(xr_lir_add_block(c.module,function,NULL,0,&block)); OK(xr_lir_set_entry(c.module,function,block));
+    XrLirValue state={0}; OK(xr_lir_function_parameter(c.module,function,0,&state));
+    ca_effect(&c,block,XR_LIR_MODULE_BEGIN,state);
+    XrLirValue text=ca_text(&c,block,"state",5),arguments[]={state,text};
+    XrLirValue reference=ca_value(&c,block,XR_LIR_STATE_CONSTRUCT,XR_LIR_STATE_REF,arguments,2);
+    ca_effect(&c,block,XR_LIR_STATE_PUBLISH,reference);
+    XrLirValue snapshot=ca_value(&c,block,XR_LIR_STATE_READ,XR_LIR_STRING,&reference,1);
+    arguments[0]=reference; arguments[1]=snapshot;
+    XrLirInstruction instruction={.op=XR_LIR_STATE_WRITE,.type=XR_LIR_UNIT,.operands=arguments,.operand_count=2};
+    OK(xr_lir_emit_effect(c.module,block,&instruction)); ca_effect(&c,block,XR_LIR_STRING_DROP,snapshot);
+    arguments[1]=text; (void)string_role(&c,block,XR_LIR_STRING_OP_APPEND_STATE,XR_LIR_UNIT,arguments,2);
+    XrLirValue borrowed=string_role(&c,block,XR_LIR_STRING_OP_BORROW_STATE,XR_LIR_STRING_REF,&reference,1);
+    arguments[0]=borrowed; (void)string_role(&c,block,XR_LIR_STRING_OP_APPEND_REF,XR_LIR_UNIT,arguments,2);
+    ca_effect(&c,block,XR_LIR_STRING_DROP,text); ca_effect(&c,block,XR_LIR_MODULE_READY,state);
+    ca_return(&c,block,(XrLirValue){0}); OK(xr_lir_module_finish(c.module,NULL)); return c.module;
+}
 static XrLirValue role(CArrayFixture *c,XrLirBlock block,uint32_t operation,
     XrLirType result,const XrLirValue *args,uint32_t count) {
     uint32_t id=0;
@@ -197,7 +265,7 @@ static XrLirValueLayouts *layouts(XrLirModule *module,XrtBillingOwner *billing) 
     }
     XrLirValueLayouts *set=NULL; HOME(xr_lir_value_layouts_create(module,roots,count,billing,&set)); return set;
 }
-static unsigned kinds,array_roles,map_roles,literal_caches;
+static unsigned kinds,array_roles,map_roles,literal_caches,string_roles;
 static void check_projection(const XrLirValueHomes *homes,XrtBillingOwner *billing,
     const XrtBackingTypes *types,const XrtValueKind *workspace_kinds) {
     for (uint32_t v=0;v<=homes->value_count;++v) {
@@ -237,6 +305,27 @@ static void check_projection(const XrLirValueHomes *homes,XrtBillingOwner *billi
             map_roles|=1u<<(event->operation-XR_LIR_MAP_OP_NEW);
             expected+=event->operation==XR_LIR_MAP_OP_SET || event->operation==XR_LIR_MAP_OP_REMOVE || event->operation==XR_LIR_MAP_OP_CLEAR;
         }
+        if (event->operation>=XR_LIR_STRING_OP_APPEND_OWNED && event->operation<XR_LIR_STRING_OP_END)
+            string_roles|=1u<<(event->operation-XR_LIR_STRING_OP_APPEND_OWNED);
+        if (event->kind==XR_LIR_OWNERSHIP_STRING_OPERATION) {
+            CHECK(event->operation==XR_LIR_STRING_OP_APPEND_CELL || event->operation==XR_LIR_STRING_OP_APPEND_STATE ||
+                event->operation==XR_LIR_STRING_OP_APPEND_REF);
+            CHECK(event->source && event->target && event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_BORROW);
+            const XrLirHomeBinding *binding=&homes->bindings[event->source];
+            CHECK(binding->kind && binding->type==homes->values[event->target].type);
+            size_t matched=0;
+            for (size_t w=0;w<homes->workspace_count;++w) {
+                const XrLirHomeWorkspace *workspace=&homes->workspaces[w];
+                if (workspace->block!=event->block || workspace->instruction!=event->instruction) continue;
+                CHECK(workspace->kind==XR_LIR_HOME_WORKSPACE_VALUE && workspace->type==binding->type &&
+                    workspace->value==event->source && workspace->first_owner!=binding->first_owner &&
+                    workspace->temporary_offset==SIZE_MAX && workspace->temporary_first_owner==SIZE_MAX &&
+                    workspace->first_owner!=homes->values[event->target].first_owner &&
+                    workspace->first_owner!=homes->values[event->target].temporary_first_owner);
+                ++matched;
+            }
+            CHECK(matched==1); ++expected;
+        }
     }
     CHECK(homes->workspace_count==expected);
     for (size_t i=0;i<homes->workspace_count;++i) {
@@ -255,6 +344,7 @@ static void check_projection(const XrLirValueHomes *homes,XrtBillingOwner *billi
         XrLirHomeWorkspace row=homes->workspaces[i]; XrtValueKind kind=workspace_kinds[i];
         XrtManagedOps *ops=NULL; size_t extent=sizeof(XrtArrayBacking);
         switch (kind) {
+        case XRT_VALUE_STRING: ops=types->string; extent=sizeof(XrtStringBacking)+1; break;
         case XRT_VALUE_ARRAY_I64: ops=types->arrays[XRT_BACKING_ARRAY_I64]; break;
         case XRT_VALUE_ARRAY_STRING: ops=types->arrays[XRT_BACKING_ARRAY_STRING]; break;
         case XRT_VALUE_ARRAY_U8: ops=types->arrays[XRT_BACKING_ARRAY_U8]; break;
@@ -309,6 +399,42 @@ static void project(XrLirModule *module,bool faults) {
     xr_lir_module_destroy(module); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(set);
     for (size_t f=0;f<functions;++f) { CHECK(homes[f]); check_projection(homes[f],billing,&types,workspace_kinds[f]); xr_lir_value_homes_destroy(homes[f]); }
     xrt_backing_types_drop(&types); CHECK(!live); XrtBillingStats stats=xrt_billing_owner_stats(billing); CHECK(stats.blocks==1); xrt_billing_owner_drop(billing);
+}
+static void string_borrow_only(XrLirType type) {
+    XrLirModule *module=NULL; OK(xr_lir_module_create(NULL,&module));
+    XrLirFunction function={0};
+    XrLirFunctionSpec spec={.name="borrow_only",.name_length=11,.parameters=&type,.parameter_count=1,.result=XR_LIR_UNIT};
+    OK(xr_lir_declare_function(module,&spec,&function)); OK(xr_lir_define_function(module,function));
+    XrLirBlock block={0}; OK(xr_lir_add_block(module,function,NULL,0,&block)); OK(xr_lir_set_entry(module,function,block));
+    CArrayFixture fixture={.module=module}; ca_return(&fixture,block,(XrLirValue){0}); OK(xr_lir_module_finish(module,NULL));
+    XrLirValue parameter={0}; OK(xr_lir_function_parameter(module,function,0,&parameter));
+    CHECK(xr_lir_string_binding(module,parameter) && !xr_lir_string_binding(NULL,parameter));
+    XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=module},&plan,NULL));
+    XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+    XrLirValueLayoutKey root={XR_LIR_UNIT,0,0}; XrLirValueLayouts *missing=NULL;
+    HOME(xr_lir_value_layouts_create(module,&root,1,billing,&missing));
+    XrLirValueHomes *homes=NULL;
+    CHECK(xr_lir_value_homes_create(&(XrLirValueHomesRequest){module,function,missing,plan},&homes)==XR_LIR_VALUE_LAYOUT_ARGUMENT && !homes && !live);
+    xr_lir_value_layouts_destroy(missing); XrLirValueLayouts *set=layouts(module,billing);
+    HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){module,function,set,plan},&homes));
+    const XrLirHomeBinding *binding=&homes->bindings[parameter.id];
+    CHECK(binding->kind==XR_LIR_HOME_BINDING_PARAMETER && binding->parameter==1 && binding->type &&
+        binding->offset==SIZE_MAX && binding->first_owner==SIZE_MAX && !homes->values[parameter.id].type &&
+        !homes->values[parameter.id].owner_count && !homes->frame.slot_count && !homes->workspace_count && !homes->owned_frame_needed);
+    xr_lir_module_destroy(module); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(set);
+    CHECK(binding->parameter==1 && binding->offset==SIZE_MAX);
+    xr_lir_value_homes_destroy(homes); CHECK(!live && xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
+}
+static void string_projections(void) {
+    string_borrow_only(XR_LIR_STRING_CELL); string_borrow_only(XR_LIR_STRING_REF);
+    XrLirStatus (*transforms[])(const XrLirModule *,XrLirModule **)={xr_lir_rebuild,xr_lir_inline,xr_lir_sccp,xr_lir_string_elide};
+    XrLirModule *module=string_roles_fixture(),*copies[4]={0};
+    for (size_t i=0;i<4;++i) OK(transforms[i](module,&copies[i]));
+    project(module,true);
+    for (size_t i=0;i<4;++i) project(copies[i],true);
+    project(string_state_fixture(),true);
+    module=NULL; OK(string_ref_fixture(&module)); project(module,true);
+    CHECK(string_roles==((1u<<1)|(1u<<2)|(1u<<3)|(1u<<4)|(1u<<5)|(1u<<6)|(1u<<7)));
 }
 static void callable_projection(bool owned,bool scopes) {
     XrLirModule *module=NULL; XrLirFunction root={0};
@@ -578,6 +704,7 @@ static void callable_targets_and_join(unsigned shape) {
 #include "lir_slice_call_cases.h"
 #include "lir_scoped_cell_homes_cases.h"
 int main(void) {
+    string_projections();
     scoped_cells();
     slice_homes();
     slice_callback_frontier();
