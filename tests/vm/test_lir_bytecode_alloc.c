@@ -999,7 +999,7 @@ int main(void) {
     composition_compiler_failures();
     tuple_compiler_failures();
     typed_edge_spill_cycles();
-    string_reference_rejection();
+    string_reference_allocation_failures();
     aggregate_call_compiler_failures(false);
     aggregate_call_compiler_failures(true);
     aggregate_state_compiler_failures();
