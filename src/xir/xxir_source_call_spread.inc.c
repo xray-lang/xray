@@ -261,7 +261,7 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
             }
             if (!source_planned_effects(ctx,spread->source,0)) goto done;
         }
-append_entry:
+append_entry:;
         uint32_t bound_parameter = count + formal->parameter_offset;
         if (!source_call_binding_item(ctx,node,formal,call,(uint32_t)a,arity,
                 input->type==AST_SPREAD_EXPR,&bound_parameter)) goto done;
