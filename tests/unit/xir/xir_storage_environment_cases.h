@@ -134,7 +134,7 @@ static void storage_environment_guard_case(const char *name, XrXirType captured,
     XrXirModule module = {.types=&types, .functions=functions, .function_count=4,
         .declarations=&declarations, .generics=generics};
     EffectCheckedRoots *roots = NULL;
-    XrXirStatus status = effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false);
+    XrXirStatus status = effect_checked_roots_build(&effect_context, &module, NULL, NULL, NULL, &roots, false,NULL);
     if (status != XR_XIR_OK) fprintf(stderr,"environment %s type%u construction status%u\n",name,(uint32_t)captured,status);
     CHECK(status == XR_XIR_OK && roots && roots->storage);
     if (roots->terms) roots->terms->remaining = &effect_context;

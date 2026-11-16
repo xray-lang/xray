@@ -64,7 +64,7 @@ static XrXirStatus result_environment_case(void) {
     XrXirDeclarations declarations = {.modules=&source,.module_count=1,.functions=identities};
     XrXirModule module = {.types=&types,.functions=functions,.function_count=4,.declarations=&declarations};
     EffectCheckedRoots *roots = NULL;
-    XrXirStatus status = effect_checked_roots_build(&effect_context,&module,NULL,NULL,NULL,&roots,false);
+    XrXirStatus status = effect_checked_roots_build(&effect_context,&module,NULL,NULL,NULL,&roots,false,NULL);
     if (status == XR_XIR_OK) {
         if (roots->terms) roots->terms->remaining = &effect_context;
         for (uint32_t n = 0; n < 2 && status == XR_XIR_OK; ++n) {

@@ -103,7 +103,7 @@ static XrXirStatus conversion_owner_case(void) {
     XrXirStatus status = xir_fixture_module_construction(&effect_context,&module,&construction);
     if (status == XR_XIR_OK) status = xr_hir_escape_builder_new(&effect_context,&module,NULL,NULL,&preparation.lifetime.builder);
     if (status == XR_XIR_OK) status = xir_effects_prepare_verified_input(&effect_context,
-        (XirEffectInput){&module,construction,NULL},&refiner,&pending);
+        (XirEffectInput){&module,construction,NULL},&refiner,&pending,&diagnostic);
     if (status != XR_XIR_OK && !injected) fprintf(stderr,"conversion prepare status%u\n",status);
     if (status == XR_XIR_OK) status = xir_effects_finish_prepared_input(&effect_context,
         (XirEffectInput){&module,construction,NULL},&refiner,&pending,&effects,&diagnostic);
