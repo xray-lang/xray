@@ -198,6 +198,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
+<!-- xr-source:example types-explicit-conditions -->
 ```xray @id=types-explicit-conditions
 var ok = true
 if (ok) { }
@@ -216,6 +217,7 @@ var s = ""
 if (len(s) != 0) { }     // OK
 // if (s) { }            // 编译错误
 ```
+<!-- /xr-source -->
 
 #### 2.3.4 `string`
 
@@ -227,6 +229,7 @@ if (len(s) != 0) { }     // OK
 
 `rune` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `u32` 的别名。
 
+<!-- xr-source:example 003-2-type-system-example-002 -->
 ```xray
 var a: rune = 'a'
 var zh = '中'
@@ -234,6 +237,7 @@ var smile = '\u{1F600}'
 print(typeName(a))        // "rune"
 print(smile.toUInt32())   // 128512
 ```
+<!-- /xr-source -->
 
 - rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
 - `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: u32 = 'a'` 都会在分析期拒绝。
@@ -246,11 +250,13 @@ print(smile.toUInt32())   // 128512
 
 xray 用 **0-元组 `()`** 表示"无返回值"（Unit 类型）：
 
+<!-- xr-source:example 003-2-type-system-example-003 -->
 ```xray
 fn log(msg: string) -> () { print(msg) }   // 显式 Unit 返回
 fn ping() { print("pong") }                  // 省略返回类型 = ()
 var r: () = log("hi")                        // 允许；r 是 Unit 值
 ```
+<!-- /xr-source -->
 
 - 一个函数省略返回类型等同于 `-> ()`。
 - `void` 不是类型名：写 `fn f() -> void` 会被拒绝（`E0804`）；无返回值使用 `-> ()` 或省略返回类型。
@@ -269,6 +275,7 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
 
+<!-- xr-source:example 003-2-type-system-example-004 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -282,6 +289,7 @@ unsafe {
     free(p)
 }
 ```
+<!-- /xr-source -->
 
 `Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
 
@@ -295,12 +303,14 @@ unsafe {
 
 `Array<T>` 是有序、可增长的值类型。赋值、保存参数和返回值保留独立的逻辑副本；实现可以共享元素存储，但经一个可写绑定修改或追加元素不得改变其他逻辑副本。复制沿值语义部分递归，在 class 或同步身份处只复制引用，不复制或冻结所引用的对象。方法见 §14.7，所有权规则见 §2.14。
 
+<!-- xr-source:example types-array -->
 ```xray @id=types-array
 var a: Array<i64> = [1, 2, 3]
 var b = a                        // b 是逻辑副本
 b[0] = 9                         // a[0] 仍为 1
 var c: Array<string> = []         // 显式空数组
 ```
+<!-- /xr-source -->
 
 `T` 必须在编译期确定，且可复制、可保存；借用视图和不可复制资源不能作为普通 Array 元素。空 `[]` 需要类型上下文，无上下文时是编译错误：`Empty array '[]' requires a type annotation`。非 nullable Array 必须显式初始化，不从未初始化存储推定为空数组。
 
@@ -346,6 +356,7 @@ owner 必须是可证明存活的具名局部 place、参数或 receiver 字段�
 
 `MutSlice<T>` 赋值转移借用，普通调用暂时重借用。`MutSlice<T>` 到 `Slice<T>` 是共享重借用；派生的只读视图存活期间，原可写视图不能写入。子切片也必须遵守同一借用权限。
 
+<!-- xr-source:example types-slice -->
 ```xray @id=types-slice
 fn main() {
     var arr: Array<i64> = [10, 20, 30, 40]
@@ -361,6 +372,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ##### 借用规则
 
@@ -393,6 +405,7 @@ tuple / Optional 中的每个返回视图都依附该唯一候选，并单独验
 
 保持插入顺序的哈希字典。字面量写 `{key: value}`，键是任意表达式；裸标识符取其绑定的值。字符串键必须加引号。空 `{}` 需要 `Map<K, V>` 或 `JSON.Object` 上下文；语句开头及 `=>` 后的 `{` 是块（§3.10）。
 
+<!-- xr-source:example types-map -->
 ```xray @id=types-map @check
 var m: Map<string, i64> = {"a": 1, "b": 2}
 var m2 = {"a": 1, "b": 2}
@@ -401,6 +414,7 @@ m["c"] = 3
 var v = m["a"]
 var maybe = m.get("missing")
 ```
+<!-- /xr-source -->
 
 没有类型上下文时，全部键须取得同一类型 K，全部值须取得同一类型 V；不自动推为联合类型。两个显式项的键不得在键等价关系下相同；静态可确定的重复报 E0325，其余重复在构造时 panic E0434。Map 展开按书写顺序覆盖，只有两个显式项之间做重复检查（§3.10）。
 
@@ -418,27 +432,33 @@ var maybe = m.get("missing")
 
 去重集合，使用 `Set([...])` 构造；空集合写 `Set<T>()`，或在类型上下文中写 `Set()`。元素沿用既有键等价关系。`#[]` 不属于语言语法。
 
+<!-- xr-source:example types-set -->
 ```xray @id=types-set @check
 var s: Set<i64> = Set([1, 2, 3])
 var empty = Set<i64>()
 ```
+<!-- /xr-source -->
 
 #### 2.4.5 `Channel<T>`
 
 协程间通信通道。命名通道句柄使用稳定 `const` 绑定；其同步内部可变能力来自受审计 registry（见 §10.5）。
 
+<!-- xr-source:example types-channel -->
 ```xray @id=types-channel
 const ch: Channel<i64> = Channel<i64>(10)
 ```
+<!-- /xr-source -->
 
 #### 2.4.6 `Array<u8>`
 
 类型化字节缓冲。语义等价 `Array<u8>`，但底层是连续内存。
 
+<!-- xr-source:example 003-2-type-system-example-010 -->
 ```xray
 var buf = Array<u8>(1024)
 var init = Array<u8>([72, 101, 108, 108, 111])
 ```
+<!-- /xr-source -->
 
 #### 2.4.7 固定字段数据与 JSON 值域
 
@@ -446,6 +466,7 @@ var init = Array<u8>([72, 101, 108, 108, 111])
 
 `JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名，使用相同的 `{key: value}` 字面量；`JSON` 是 prelude 命名空间。固定字段的类型化 JSON 解码目标使用 struct。`JSON.value` / `JSON.stringify` 仍要求 `JSON.Encodable`，不是任意值的隐式编码。
 
+<!-- xr-source:example types-json-object -->
 ```xray @id=types-json-object @check
 struct User {
     name: string
@@ -455,6 +476,7 @@ var user = User{name: "Alice", age: 30}
 var data: JSON.Object = {"name": "Alice", "age": 30}
 data["traceId"] = "req-1"
 ```
+<!-- /xr-source -->
 
 | 类型 | 身份与字段 | 用途 |
 |---|---|---|
@@ -476,6 +498,7 @@ Map 的裸标识符键是变量值，不能把 `{name: value}` 当作命名字�
 - `a..b` 是半开区间 `[a, b)`，不包含终点 `b`。
 - `a..=b` 是闭区间 `[a, b]`，包含终点 `b`。
 
+<!-- xr-source:example types-range -->
 ```xray @id=types-range
 var halfOpen = 1..4       // 1, 2, 3
 var inclusive = 1..=4     // 1, 2, 3, 4
@@ -488,6 +511,7 @@ for (i in 3..=5) {
     print(i)
 }
 ```
+<!-- /xr-source -->
 
 范围可用于 `for-in`、`match` 范围模式以及集合查询。完整表达式语义见 §3.9，成员见 §14.12。
 
@@ -528,11 +552,13 @@ null 测试始终观察本次 R 的最外层；同一 binding 的第一次测试
 
 这是语言合同；各 Source／VM／native 声明族的实际执行资格与未完成表面见 §17，具体测试与剩余门由同批实现记录说明。
 
+<!-- xr-source:example types-nullable -->
 ```xray @id=types-nullable
 var x: i64? = null      // OK
 var y: i64? = 42        // OK
 var z: i64 = null       // 编译错误：null 不是 i64
 ```
+<!-- /xr-source -->
 
 `JSON.Value` 的值域本身包含 JSON null，但 `JSON.Value?` 是另一个独立的外层 Optional，因此是合法类型。它区分外层缺席和有值且载荷为 JSON null；`JSON.Value | null` 只在语法层改写为同一个外层 Optional，不因 JSON 值域已有 null 而拒绝。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 struct。不要引入全局 `Result<T,E>`。
 
@@ -542,6 +568,7 @@ var z: i64 = null       // 编译错误：null 不是 i64
 
 #### 解包
 
+<!-- xr-source:example 003-2-type-system-example-014 -->
 ```xray
 // 1. 空合并
 var v = x ?? 0
@@ -560,13 +587,16 @@ if (x is i64) {
     print(x + 1)
 }
 ```
+<!-- /xr-source -->
 
 ### 2.6 Union 类型
 
+<!-- xr-source:example types-union-basic -->
 ```xray @id=types-union-basic
 var v: i64 | string = 42
 v = "hello"             // OK
 ```
+<!-- /xr-source -->
 
 约束：
 - 最多 **6 个成员**（编译期检查；超限 → 错误）。
@@ -574,6 +604,7 @@ v = "hello"             // OK
 - **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | f64` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
+<!-- xr-source:example 003-2-type-system-example-016 -->
 ```xray @fragment
 var v: i64 | string = 1
 match (v) {
@@ -581,6 +612,7 @@ match (v) {
     is string => print("str: ${v}"),
 }
 ```
+<!-- /xr-source -->
 
 **成员选择**：union 值携带它被赋值时选定的成员。选择规则是确定的，与成员书写顺序无关：
 
@@ -588,12 +620,14 @@ match (v) {
 - 否则选唯一一个可经 §2.10.1 隐式转换到达的成员。可判别性规则保证每个数值族至多一个成员，所以这个成员至多有一个。
 - 数值字面量按自己的族选：整数字面量优先选整数族成员，union 没有整数族成员时选浮点族成员（与"整数字面量定型进唯一浮点上下文"一致）；浮点字面量选浮点族成员。字面量必须能被目标精确表示。
 
+<!-- xr-source:example 003-2-type-system-example-017 -->
 ```xray
 var a: i64 | f64 = 1        // 精确匹配 i64
 var b: i64 | f64 = 1.0      // 精确匹配 f64
 var c: i32 | string = 7       // 唯一整数族成员：i32
 var d: f32 | string = 1.5     // 唯一浮点族成员：f32
 ```
+<!-- /xr-source -->
 
 `is T` 检查的是运行期值：对定宽数值类型，它问的是"该值能否被 `T` 精确表示"——擦除后的值不保存位宽，这是唯一可回答的形式。在一个合法 union 内，选定成员总能通过它自己的 `is`，其余成员一定失败，因此各分支互斥。
 
@@ -605,6 +639,7 @@ var d: f32 | string = 1.5     // 唯一浮点族成员：f32
 
 xray 的元组**是头等公民**——可以作为任意值出现、作为字段保存、嵌套。
 
+<!-- xr-source:example types-tuple -->
 ```xray @id=types-tuple
 // 字面量
 var t = (1, 2, 3)                 // 类型推断为 (i64, i64, i64)
@@ -629,6 +664,7 @@ var (q, r) = divmod(17, 5)        // tuple destructure
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
 var p2 = pair(1, "x")             // (i64, string)
 ```
+<!-- /xr-source -->
 
 **注意事项**：
 
@@ -644,6 +680,7 @@ Sendable 按全部字段合取；本族不自动增加 Tuple 的 Equal 资格。
 
 #### 完整可运行示例
 
+<!-- xr-source:example 003-2-type-system-example-019 -->
 ```xray
 fn main() {
     var pair = (1, "hello")
@@ -656,9 +693,11 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 2.8 类型别名
 
+<!-- xr-source:example types-alias -->
 ```xray @id=types-alias @check
 type Result = i64 | string
 type Mapper = fn(i64) -> i64
@@ -667,13 +706,16 @@ type Position = Point
 type Pair<T> = (T, T)
 type Mapper2<T, U> = fn(T) -> U
 ```
+<!-- /xr-source -->
 
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
 
+<!-- xr-source:example 003-2-type-system-example-021 -->
 ```xray @fragment
 var p: Pair<i64> = (1, 2)                 // 等价于 (i64, i64)
 var f: Mapper2<i64, string> = (n) => string(n)
 ```
+<!-- /xr-source -->
 
 泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归 tuple 别名）是编译错误。
 
@@ -694,6 +736,7 @@ var f: Mapper2<i64, string> = (n) => string(n)
 - 覆写方法、接口实现和函数类型比较要求每个函数参数的 `escaping` 标志精确相等。
 - 不逃逸参数越过期限时在违规使用处报告 `E0398`，指出参数名和去向，并提示相应参数改为 `escaping fn(...)`。`throws` 继续由签名陈述，错误类型不按 callback 实参推导。
 
+<!-- xr-source:example types-nonescaping-parameters -->
 ```xray @id=types-nonescaping-parameters
 fn apply(callback: fn() -> i64) -> i64 {
     const thunk = fn() -> i64 { return callback() + 1 }
@@ -703,6 +746,7 @@ fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) ->
     return fn(x: i64) -> i64 { return f(g(x)) }
 }
 ```
+<!-- /xr-source -->
 
 末尾 READ rest 在函数类型中写作 `fn(...T) -> R`，带固定前缀时为 `fn(P, ...T) -> R`。rest 是真实 callable 类型事实；体内物理 Array 不使它与 `fn(Array<T>) -> R` 或固定元数类型相等，也不隐式适配。取值、泛型替换、嵌套类型、格式化及冷库接收均保留该事实。`throws`、root 与 `nosuspend` 仍按各自既有规则匹配；这不增加 C 可变参数 ABI。
 
@@ -714,6 +758,7 @@ fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) ->
 
 fn lambda 显式写 `throws(E)` 时，先按该子句检查自身函数体，再按错误子集规则匹配期望类型；期望类型不能放宽显式声明。无显式子句的闭包有期望函数类型时按该类型检查，没有期望类型时才从自身函数体局部推导错误类型。箭头 lambda 不书写该子句。外层 `try` 区域不会延伸到嵌套闭包体。泛型错误参数 `E: Error` 由调用实参推导：传入不抛错函数时可推出 `E = Never`；仅当实例化后的完整错误类型为 `Never` 时才不要求调用点加 `try`，例如签名为 `throws(E | IoErr)` 时仍需标记。
 
+<!-- xr-source:example 003-2-type-system-example-023 -->
 ```xray @fragment
 fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array<U> {
     var out: Array<U> = []
@@ -721,11 +766,13 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
     return out
 }
 ```
+<!-- /xr-source -->
 
 ### 2.9 类型推断
 
 详见 §7.4。简述：
 
+<!-- xr-source:example types-inference -->
 ```xray @id=types-inference @check
 var x = 1               // x: i64
 var y = 1.5             // y: f64
@@ -736,6 +783,7 @@ struct Named { name: string }
 var p = Named{name: "A"} // p: Named
 var f = (x: i64) => x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
 ```
+<!-- /xr-source -->
 
 ### 2.10 类型兼容性与转换
 
@@ -762,10 +810,12 @@ var f = (x: i64) => x   // f: fn(i64) -> i64 —— 箭头参数显式、返回�
 
 #### 2.10.2 显式 `as`
 
+<!-- xr-source:example types-cast -->
 ```xray @id=types-cast
 var n = x as i64        // 失败抛 TypeError
 var n = x as i64?       // 失败返回 null（安全转换）
 ```
+<!-- /xr-source -->
 
 适用于：
 - 数值之间（含 `JSON.Value → i64`，运行时检查）。
@@ -780,20 +830,24 @@ var n = x as i64?       // 失败返回 null（安全转换）
 
 #### 2.10.3 `is` 检查
 
+<!-- xr-source:example 003-2-type-system-example-026 -->
 ```xray
 if (v is User) {
     // 编译器在此分支窄化 v 的类型为 User
 }
 ```
+<!-- /xr-source -->
 
 仅作类型守卫；不改变值。
 
 ### 2.11 typeOf / typeName / Type 枚举
 
+<!-- xr-source:example 003-2-type-system-example-027 -->
 ```xray
 typeOf(value)     // 返回 Type 枚举值（i64 表示）
 typeName(value)   // 返回类型名字符串
 ```
+<!-- /xr-source -->
 
 `Type` 枚举成员：
 
@@ -817,7 +871,7 @@ Xray 默认只保留最小类型身份层：
 
 ### 2.13 流敏感类型收窄
 
-> 真值源：`src/frontend/analyzer/xanalyzer_flow.c`（事实算子与控制流传播）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（引用点查询与 `E0379`）。
+> 实现参考：`src/frontend/analyzer/xanalyzer_flow.c`（事实算子与控制流传播）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（引用点查询与 `E0379`）。
 
 **收窄（narrowing）**指在特定控制流位置上把一个绑定的**静态类型**收紧为其声明类型的子类型。收窄结果参与成员查找、重载解析、`match` 穷尽性判定与**代码生成**，因此收窄是**语义**而非诊断优化：对同一程序，VM 与 AOT 两条后端必须得到相同的收窄结果。
 
@@ -833,6 +887,7 @@ Xray 默认只保留最小类型身份层：
 
 **N-3** 需要对不可收窄位置做流敏感处理时，先提取一个局部绑定：
 
+<!-- xr-source:example narrowing-extract-binding -->
 ```xray @id=narrowing-extract-binding
 class Address { city: string
     init(city: string) { this.city = city } }
@@ -846,6 +901,7 @@ fn show(u: User) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.2 事实与算子
 
@@ -866,6 +922,7 @@ fn show(u: User) {
 
 **N-5（短路继承）** `e1 && e2` 的 `e2` 在 `e1` 的 true 事实下分析；`e1 \|\| e2` 的 `e2` 在 `e1` 的 false 事实下分析。由于 `T?` 不能直接作条件（§2.5），这条规则使下面两种写法成为处理可空值的标准形式：
 
+<!-- xr-source:example narrowing-short-circuit -->
 ```xray @id=narrowing-short-circuit
 fn check(a: string?) -> bool {
     if (a != null && len(a) > 0) { return true }     // e2 在 a: string 下分析
@@ -873,6 +930,7 @@ fn check(a: string?) -> bool {
     return true
 }
 ```
+<!-- /xr-source -->
 
 **N-6（相交语义）** `x is T` 的 true 方向：声明类型为 union 时保留与 `T` 相交的成员（无成员相交 → `Never`）；非 union 时若可交则为 `T`，否则为 `Never`。false 方向对称地移除相交部分。`x is T` 对基元类型、命名类型、泛型实例一视同仁。
 
@@ -882,17 +940,20 @@ fn check(a: string?) -> bool {
 
 **N-8（早返回）** 当分支必然终止（`return` / `throw` / `break` / `continue`），其后的代码继承该条件的相反方向事实：
 
+<!-- xr-source:example narrowing-early-return -->
 ```xray @id=narrowing-early-return
 fn nameLen(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)                 // 此处 s 已收窄为 string
 }
 ```
+<!-- /xr-source -->
 
 **N-9（合流）** 合流点的类型是各前驱路径类型的并集；不可达前驱贡献 `Never` 并被并集吸收。
 
 **N-10（循环）** 循环头的类型是入口边与所有回边的并集。回边上若存在对该绑定的赋值，则该回边贡献被赋值表达式的类型；若一条回边回到循环头时**没有**经过任何赋值，则绑定的值未变，该回边不向并集贡献任何类型。因此循环体内对该绑定的赋值会使下一轮迭代的条件收窄按合流后的类型重新计算，而循环前建立的收窄在循环体不写该绑定时保持有效：
 
+<!-- xr-source:example narrowing-loop -->
 ```xray @id=narrowing-loop
 fn drain(first: string?) {
     var cur = first
@@ -902,6 +963,7 @@ fn drain(first: string?) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.4 失效
 
@@ -915,6 +977,7 @@ fn drain(first: string?) {
 
 **N-11.1（函数体边界）** 每个函数体（具名函数、方法、闭包）拥有独立的流图：外层的收窄事实**不**进入闭包体，闭包体内的事实也不流出。闭包内需要收窄时在闭包内重新检查。
 
+<!-- xr-source:example narrowing-invalidation -->
 ```xray @id=narrowing-invalidation
 fn f(a: string?) {
     if (a != null) {
@@ -924,6 +987,7 @@ fn f(a: string?) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.5 收窄与 null 诊断
 
@@ -963,6 +1027,7 @@ class 实例和同步对象具有身份。复制其引用仍指向同一个对�
 
 `var b = a`、保存只读参数、返回 Array，以及把可复制 Array 存入另一个合法容器或聚合，均保留逻辑副本，不建立对源数组可变存储的语言级别名。它们不会把源绑定标为永久 `ESCAPED`，也不要求其他副本先结束存活期才能修改源值。底层存储的唯一性只可用于省略分离或复制的优化。
 
+<!-- xr-source:example 003-2-type-system-example-033 -->
 ```xray
 var a = [1, 2, 3]
 var b = a
@@ -974,6 +1039,7 @@ print(len(snapshot))        // 3
 print(b[0])                 // 9
 print(len(a))               // 4
 ```
+<!-- /xr-source -->
 
 复制必须取得可独立释放的结果责任；失败不得发布部分初始化的结果。自赋值、读取自身元素后写回或追加均须维持这一责任，不能因物理共享造成重复释放或使用已释放存储。求值顺序遵循 §3.0 E2/E5；复制或自动移动优化不能改变既定错误、析构或外部副作用顺序。
 
@@ -1009,6 +1075,7 @@ print(len(a))               // 4
 
 数组：
 
+<!-- xr-source:example 003-2-type-system-example-034 -->
 ```xray
 fn main() {
     var nums = [1, 2, 3]
@@ -1023,9 +1090,11 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 Map 与 Set：
 
+<!-- xr-source:example types-map-set-usage -->
 ```xray @id=types-map-set-usage @run
 fn main() {
     var scores = {"alice": 95, "bob": 88}
@@ -1043,16 +1112,19 @@ fn main() {
 
 main()
 ```
-
 ```output
 95
 3
 2
 true
 ```
+<!-- /xr-source -->
+
+
 
 可空类型与 `??`：
 
+<!-- xr-source:example 003-2-type-system-example-036 -->
 ```xray
 fn main() {
     var name: string? = null
@@ -1063,7 +1135,7 @@ fn main() {
 
 main()
 ```
-
+<!-- /xr-source -->
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1274,6 +1346,7 @@ Runtime `f64` values admit every binary64 payload, including signed, payload-bea
 
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
+<!-- xr-source:example types-explicit-conditions -->
 ```xray @id=types-explicit-conditions
 var ok = true
 if (ok) { }
@@ -1292,6 +1365,7 @@ var s = ""
 if (len(s) != 0) { }     // OK
 // if (s) { }            // compile error
 ```
+<!-- /xr-source -->
 
 #### 2.3.4 `string`
 
@@ -1303,6 +1377,7 @@ Strings preserve logical value copies across tasks under the Sendable and public
 
 `rune` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `u32`.
 
+<!-- xr-source:example 003-2-type-system-example-002 -->
 ```xray
 var a: rune = 'a'
 var zh = '中'
@@ -1310,6 +1385,7 @@ var smile = '\u{1F600}'
 print(typeName(a))        // "rune"
 print(smile.toUInt32())   // 128512
 ```
+<!-- /xr-source -->
 
 - A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
 - `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: u32 = 'a'` are rejected by the analyzer.
@@ -1322,11 +1398,13 @@ print(smile.toUInt32())   // 128512
 
 Xray uses the **0-tuple `()`** to represent "no return value" (the Unit type):
 
+<!-- xr-source:example 003-2-type-system-example-003 -->
 ```xray
 fn log(msg: string) -> () { print(msg) }   // explicit Unit return
 fn ping() { print("pong") }                  // omitted return type = ()
 var r: () = log("hi")                        // allowed; r is a Unit value
 ```
+<!-- /xr-source -->
 
 - A function omitting its return type is equivalent to `-> ()`.
 - `void` is not a type name: `fn f() -> void` is rejected (`E0804`); use `-> ()` or omit the return type to indicate no return value.
@@ -1345,6 +1423,7 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 
 Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
 
+<!-- xr-source:example 003-2-type-system-example-004 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -1358,6 +1437,7 @@ unsafe {
     free(p)
 }
 ```
+<!-- /xr-source -->
 
 `Ptr<T>` is read-only; writes require `MutPtr<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
 
@@ -1371,12 +1451,14 @@ unsafe {
 
 `Array<T>` is an ordered, growable value type. Assignment, saving a parameter, and returning a value preserve distinct logical copies. Implementations may share element storage, but mutation or append through one writable binding must not change other logical copies. Copying follows value-semantic components and copies only references at class or synchronized identity boundaries; it neither copies nor freezes the referenced objects. See §14.7 for methods and §2.14 for ownership.
 
+<!-- xr-source:example types-array -->
 ```xray @id=types-array
 var a: Array<i64> = [1, 2, 3]
 var b = a                        // b is a logical copy
 b[0] = 9                         // a[0] is still 1
 var c: Array<string> = []         // explicit empty array
 ```
+<!-- /xr-source -->
 
 `T` must be determined at compile time and must be copyable and storable. Borrowed views and noncopyable resources cannot be ordinary Array elements. An empty `[]` requires a type context; without one it is a compile error: `Empty array '[]' requires a type annotation`. A non-nullable Array requires explicit initialization; uninitialized storage is not an empty array.
 
@@ -1422,6 +1504,7 @@ An owner must be a named local place, parameter, or receiver field path with a p
 
 Assignment of a `MutSlice<T>` transfers its borrow; ordinary calls temporarily reborrow it. Conversion from `MutSlice<T>` to `Slice<T>` is a shared reborrow. The original writable view cannot write while the derived read-only view is live. Subslices obey the same borrow permissions.
 
+<!-- xr-source:example types-slice -->
 ```xray @id=types-slice
 fn main() {
     var arr: Array<i64> = [10, 20, 30, 40]
@@ -1437,6 +1520,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ##### Borrow rules
 
@@ -1469,6 +1553,7 @@ Current implementation qualification of complete type and operation families is 
 
 An insertion-ordered hash dictionary. A literal is `{key: value}`; every key is an expression, and a bare identifier reads its binding. Quote string keys. Empty `{}` requires a `Map<K, V>` or `JSON.Object` context. A statement-leading brace and a brace directly after `=>` begin blocks (§3.10).
 
+<!-- xr-source:example types-map -->
 ```xray @id=types-map @check
 var m: Map<string, i64> = {"a": 1, "b": 2}
 var m2 = {"a": 1, "b": 2}
@@ -1477,6 +1562,7 @@ m["c"] = 3
 var v = m["a"]
 var maybe = m.get("missing")
 ```
+<!-- /xr-source -->
 
 Without an expected type, all keys must have one type K and all values one type V; inference does not silently create a union. Two explicit entries must not have equivalent keys. A statically determined duplicate is E0325; other duplicates panic with E0434 during construction. Map spreads overwrite in written order; duplicate checking applies only between explicit entries (§3.10).
 
@@ -1494,27 +1580,33 @@ Keys obey the existing `Hashable` capability and key equivalence (§9.2). These 
 
 A deduplicating collection, constructed with `Set([...])`. Write `Set<T>()` for an empty set, or `Set()` with an expected type. Elements use the existing key equivalence. `#[]` is not language syntax.
 
+<!-- xr-source:example types-set -->
 ```xray @id=types-set @check
 var s: Set<i64> = Set([1, 2, 3])
 var empty = Set<i64>()
 ```
+<!-- /xr-source -->
 
 #### 2.4.5 `Channel<T>`
 
 Inter-coroutine communication channel. A named channel uses a stable `const` binding; its synchronized interior-mutation capability comes from the audited registry (see §10.5).
 
+<!-- xr-source:example types-channel -->
 ```xray @id=types-channel
 const ch: Channel<i64> = Channel<i64>(10)
 ```
+<!-- /xr-source -->
 
 #### 2.4.6 `Array<u8>`
 
 Typed byte buffer. Semantically equivalent to `Array<u8>`, but stored as contiguous memory.
 
+<!-- xr-source:example 003-2-type-system-example-010 -->
 ```xray
 var buf = Array<u8>(1024)
 var init = Array<u8>([72, 101, 108, 108, 111])
 ```
+<!-- /xr-source -->
 
 #### 2.4.7 Fixed-Field Data and the JSON Value Domain
 
@@ -1522,6 +1614,7 @@ Declare fixed fields in a nominal `struct` or `class`; an unlabeled tuple also s
 
 `JSON.Object` is a transparent alias of `Map<string, JSON.Value>` and uses the same `{key: value}` literal. `JSON` is a prelude namespace. Use structs as fixed-field typed JSON decoding targets. `JSON.value` / `JSON.stringify` still require `JSON.Encodable`; arbitrary values are not implicitly encoded.
 
+<!-- xr-source:example types-json-object -->
 ```xray @id=types-json-object @check
 struct User {
     name: string
@@ -1531,6 +1624,7 @@ var user = User{name: "Alice", age: 30}
 var data: JSON.Object = {"name": "Alice", "age": 30}
 data["traceId"] = "req-1"
 ```
+<!-- /xr-source -->
 
 | Type | Identity and fields | Purpose |
 |---|---|---|
@@ -1552,7 +1646,8 @@ Arbitrary-precision integer. See §14.8.
 - `a..b` is the half-open interval `[a, b)` and excludes `b`.
 - `a..=b` is the inclusive interval `[a, b]` and includes `b`.
 
-```xray @id=types-range-en
+<!-- xr-source:example types-range -->
+```xray @id=types-range
 var halfOpen = 1..4       // 1, 2, 3
 var inclusive = 1..=4     // 1, 2, 3, 4
 
@@ -1564,6 +1659,7 @@ for (i in 3..=5) {
     print(i)
 }
 ```
+<!-- /xr-source -->
 
 Ranges work with `for-in`, range patterns in `match`, and collection queries. See §3.9 for expression semantics and §14.12 for members.
 
@@ -1604,11 +1700,13 @@ Laziness controls runtime evaluation only. Even an unreachable default must unde
 
 This is the language contract. See §17 for execution qualification and unfinished Source/VM/native declaration families; implementation records identify the actual tests and remaining gates.
 
+<!-- xr-source:example types-nullable -->
 ```xray @id=types-nullable
 var x: i64? = null      // OK
 var y: i64? = 42        // OK
 var z: i64 = null       // compile error: null is not i64
 ```
+<!-- /xr-source -->
 
 `JSON.Value` includes JSON null in its own domain, but `JSON.Value?` is a distinct outer Optional and is legal. It distinguishes outer absence from a present JSON-null payload. `JSON.Value | null` rewrites to that outer Optional at the syntax boundary and is not rejected because the JSON domain already contains null. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a struct with an explicit status field. Do not introduce a global `Result<T,E>`.
 
@@ -1618,6 +1716,7 @@ var z: i64 = null       // compile error: null is not i64
 
 #### Unwrapping
 
+<!-- xr-source:example 003-2-type-system-example-014 -->
 ```xray
 // 1. Null coalescing
 var v = x ?? 0
@@ -1636,13 +1735,16 @@ if (x is i64) {
     print(x + 1)
 }
 ```
+<!-- /xr-source -->
 
 ### 2.6 Union Types
 
+<!-- xr-source:example types-union-basic -->
 ```xray @id=types-union-basic
 var v: i64 | string = 42
 v = "hello"             // OK
 ```
+<!-- /xr-source -->
 
 Constraints:
 - Up to **6 members** (checked at compile time; over the limit → error).
@@ -1650,6 +1752,7 @@ Constraints:
 - **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
+<!-- xr-source:example 003-2-type-system-example-016 -->
 ```xray @fragment
 var v: i64 | string = 1
 match (v) {
@@ -1657,6 +1760,7 @@ match (v) {
     is string => print("str: ${v}"),
 }
 ```
+<!-- /xr-source -->
 
 **Member selection**: a union value carries the member selected where it was assigned. The rule is deterministic and independent of the order the members were written:
 
@@ -1664,12 +1768,14 @@ match (v) {
 - Otherwise the single member reachable by an implicit conversion from §2.10.1 is selected. Discriminability guarantees at most one member per numeric family, so at most one member qualifies.
 - A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the f64-family member when the union has none (matching "an integer literal types into a unique floating context"); a f64 literal selects the f64-family member. The literal must be exactly representable in the selected member.
 
+<!-- xr-source:example 003-2-type-system-example-017 -->
 ```xray
 var a: i64 | f64 = 1        // exact match: i64
 var b: i64 | f64 = 1.0      // exact match: f64
 var c: i32 | string = 7       // sole integer-family member: i32
 var d: f32 | string = 1.5     // sole f64-family member: f32
 ```
+<!-- /xr-source -->
 
 `is T` asks about the runtime value: for a fixed-width numeric type it asks whether the value is exactly representable in `T`, because an erased value does not carry its width and that is the only answerable form. Inside a well-formed union the selected member always passes its own `is` and every other member always fails, so the arms are mutually exclusive.
 
@@ -1681,6 +1787,7 @@ var d: f32 | string = 1.5     // sole f64-family member: f32
 
 Xray's tuples are **first-class** — they may appear as any value, be stored as fields, and nest.
 
+<!-- xr-source:example types-tuple -->
 ```xray @id=types-tuple
 // Literals
 var t = (1, 2, 3)                 // type inferred as (i64, i64, i64)
@@ -1705,6 +1812,7 @@ var (q, r) = divmod(17, 5)        // tuple destructure
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
 var p2 = pair(1, "x")             // (i64, string)
 ```
+<!-- /xr-source -->
 
 **Notes**:
 
@@ -1720,6 +1828,7 @@ Sendable is the conjunction of all fields; this family does not automatically ex
 
 #### Worked Examples
 
+<!-- xr-source:example 003-2-type-system-example-019 -->
 ```xray
 fn main() {
     var pair = (1, "hello")
@@ -1732,9 +1841,11 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 2.8 Type Aliases
 
+<!-- xr-source:example types-alias -->
 ```xray @id=types-alias @check
 type Result = i64 | string
 type Mapper = fn(i64) -> i64
@@ -1743,15 +1854,18 @@ type Position = Point
 type Pair<T> = (T, T)
 type Mapper2<T, U> = fn(T) -> U
 ```
+<!-- /xr-source -->
 
 Aliases are **purely syntactic** equivalences; they do not introduce new types,
 runtime metadata, or AOT branches. A generic alias is substituted at its use
 site:
 
+<!-- xr-source:example 003-2-type-system-example-021 -->
 ```xray @fragment
 var p: Pair<i64> = (1, 2)                 // equivalent to (i64, i64)
 var f: Mapper2<i64, string> = (n) => string(n)
 ```
+<!-- /xr-source -->
 
 Generic alias parameters are a name list only (`<T, U>`); constraints are not
 part of type-alias syntax. Put constraints on the generic function, class /
@@ -1786,7 +1900,8 @@ Function-typed parameters are non-escaping by default, including parameters insi
 - Overrides, interface implementations and function-type matching require exact equality of each function parameter's `escaping` flag.
 - A non-escaping parameter crossing its invocation reports `E0398` at the offending use with the parameter name, destination and a suggested `escaping fn(...)` declaration. `throws` remains declared in the signature and is not inferred from callback arguments.
 
-```xray
+<!-- xr-source:example types-nonescaping-parameters -->
+```xray @id=types-nonescaping-parameters
 fn apply(callback: fn() -> i64) -> i64 {
     const thunk = fn() -> i64 { return callback() + 1 }
     return thunk()
@@ -1795,6 +1910,7 @@ fn compose(f: escaping fn(i64) -> i64, g: escaping fn(i64) -> i64) -> fn(i64) ->
     return fn(x: i64) -> i64 { return f(g(x)) }
 }
 ```
+<!-- /xr-source -->
 
 A final READ rest is written `fn(...T) -> R`, or `fn(P, ...T) -> R` with a fixed prefix. Rest is an authentic callable type fact: the physical Array in the body does not make it equal or implicitly adaptable to `fn(Array<T>) -> R` or a fixed-arity type. Function values, generic substitution, nested types, formatting and cold-library reception retain the fact. Existing error, root and `nosuspend` matching remains independent; this does not introduce a C varargs ABI.
 
@@ -1806,6 +1922,7 @@ When parameters, parameter modes, and results meet their existing matching rules
 
 A fn lambda with explicit `throws(E)` first checks its body against that clause, then matches an expected type by error subset; the expected type cannot widen its explicit declaration. A closure without an explicit clause uses its expected function type, or infers its errors locally from its own body when there is no expected type. An arrow lambda cannot write the clause. An outer `try` region does not extend into a nested closure body. An `E: Error` generic parameter is inferred from call arguments: a non-throwing argument can infer `E = Never`. Only a complete instantiated error type of `Never` removes the need for `try`; a signature such as `throws(E | IoErr)` still requires marking.
 
+<!-- xr-source:example 003-2-type-system-example-023 -->
 ```xray @fragment
 fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array<U> {
     var out: Array<U> = []
@@ -1813,11 +1930,13 @@ fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array
     return out
 }
 ```
+<!-- /xr-source -->
 
 ### 2.9 Type Inference
 
 See §7.4 for details. In summary:
 
+<!-- xr-source:example types-inference -->
 ```xray @id=types-inference @check
 var x = 1               // x: i64
 var y = 1.5             // y: f64
@@ -1828,6 +1947,7 @@ struct Named { name: string }
 var p = Named{name: "A"} // p: Named
 var f = (x: i64) => x   // f: fn(i64) -> i64 — explicit parameter, inferred return
 ```
+<!-- /xr-source -->
 
 ### 2.10 Type Compatibility and Conversion
 
@@ -1854,10 +1974,12 @@ Fixed-field types convert by nominal identity. Matching field sets grant neither
 
 #### 2.10.2 Explicit `as`
 
+<!-- xr-source:example types-cast -->
 ```xray @id=types-cast
 var n = x as i64        // throws TypeError on failure
 var n = x as i64?       // returns null on failure (safe cast)
 ```
+<!-- /xr-source -->
 
 Applies to:
 - Between numeric types (including `JSON.Value → i64`, checked at runtime).
@@ -1872,20 +1994,24 @@ An integer as operand is typed independently of the target. A direct positive li
 
 #### 2.10.3 `is` Check
 
+<!-- xr-source:example 003-2-type-system-example-026 -->
 ```xray
 if (v is User) {
     // In this branch the compiler narrows v's type to User
 }
 ```
+<!-- /xr-source -->
 
 Acts only as a type guard; does not change the value.
 
 ### 2.11 typeOf / typeName / Type Enum
 
+<!-- xr-source:example 003-2-type-system-example-027 -->
 ```xray
 typeOf(value)     // returns a Type enum value (an i64 representation)
 typeName(value)   // returns the type name as a string
 ```
+<!-- /xr-source -->
 
 `Type` enum members:
 
@@ -1909,7 +2035,7 @@ Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Refle
 
 ### 2.13 Flow-Sensitive Type Narrowing
 
-> Source of truth: `src/frontend/analyzer/xanalyzer_flow.c` (fact operators and control-flow propagation), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (reference-site query and `E0379`).
+> Implementation reference: `src/frontend/analyzer/xanalyzer_flow.c` (fact operators and control-flow propagation), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (reference-site query and `E0379`).
 
 **Narrowing** tightens the **static type** of a binding at a specific control-flow position to a subtype of its declared type. Narrowed types feed member lookup, overload resolution, `match` exhaustiveness, and **code generation**, so narrowing is **semantics**, not a diagnostic optimization: for the same program the VM and AOT backends must compute identical narrowing results.
 
@@ -1925,6 +2051,7 @@ Rules `N-1` … `N-13` in this section are normative. Each has a conformance cas
 
 **N-3** To get flow sensitivity for a non-narrowable position, extract a local binding first:
 
+<!-- xr-source:example narrowing-extract-binding -->
 ```xray @id=narrowing-extract-binding
 class Address { city: string
     init(city: string) { this.city = city } }
@@ -1938,6 +2065,7 @@ fn show(u: User) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.2 Facts and Operators
 
@@ -1958,6 +2086,7 @@ fn show(u: User) {
 
 **N-5 (short-circuit inheritance)** In `e1 && e2`, `e2` is analyzed under the true fact of `e1`; in `e1 || e2`, `e2` is analyzed under the false fact of `e1`. Because `T?` cannot be used directly as a condition (§2.5), this rule makes the two forms below the standard way to work with nullable values:
 
+<!-- xr-source:example narrowing-short-circuit -->
 ```xray @id=narrowing-short-circuit
 fn check(a: string?) -> bool {
     if (a != null && len(a) > 0) { return true }     // e2 analyzed with a: string
@@ -1965,6 +2094,7 @@ fn check(a: string?) -> bool {
     return true
 }
 ```
+<!-- /xr-source -->
 
 **N-6 (intersection semantics)** True direction of `x is T`: when the declared type is a union, keep the members that intersect `T` (none → `Never`); otherwise the result is `T` when the two intersect and `Never` when they do not. The false direction symmetrically removes the intersecting part. `x is T` treats primitive types, named types, and generic instances alike.
 
@@ -1974,17 +2104,20 @@ fn check(a: string?) -> bool {
 
 **N-8 (early exit)** When a branch necessarily terminates (`return` / `throw` / `break` / `continue`), the code after it inherits the opposite-direction fact:
 
+<!-- xr-source:example narrowing-early-return -->
 ```xray @id=narrowing-early-return
 fn nameLen(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)                 // s is narrowed to string here
 }
 ```
+<!-- /xr-source -->
 
 **N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `Never` and are absorbed by the union.
 
 **N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge. A back edge that assigns the binding contributes the assigned expression's type; a back edge that reaches the header **without** an assignment leaves the value unchanged and contributes nothing to the union. An assignment inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type, while a narrowing established before the loop survives a body that never writes the binding:
 
+<!-- xr-source:example narrowing-loop -->
 ```xray @id=narrowing-loop
 fn drain(first: string?) {
     var cur = first
@@ -1994,6 +2127,7 @@ fn drain(first: string?) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.4 Invalidation
 
@@ -2007,6 +2141,7 @@ fn drain(first: string?) {
 
 **N-11.1 (function-body boundary)** Every function body — named function, method, or closure — owns its flow graph: facts from the enclosing body do **not** enter a closure body, and facts inside a closure do not escape it. Re-check inside the closure when narrowing is needed there.
 
+<!-- xr-source:example narrowing-invalidation -->
 ```xray @id=narrowing-invalidation
 fn f(a: string?) {
     if (a != null) {
@@ -2016,6 +2151,7 @@ fn f(a: string?) {
     }
 }
 ```
+<!-- /xr-source -->
 
 #### 2.13.5 Narrowing and Null Diagnostics
 
@@ -2055,6 +2191,7 @@ Initialization and consumption are control-flow facts, permissions come from bin
 
 `var b = a`, saving a READ parameter, returning an Array, and storing a copyable Array in another permitted container or aggregate preserve logical copies. They do not create a language-level alias to the source array's mutable storage, do not permanently mark its binding `ESCAPED`, and do not require other copies to die before the source can be mutated. Backing-store uniqueness may only optimize away detachment or copying.
 
+<!-- xr-source:example 003-2-type-system-example-033 -->
 ```xray
 var a = [1, 2, 3]
 var b = a
@@ -2066,6 +2203,7 @@ print(len(snapshot))        // 3
 print(b[0])                 // 9
 print(len(a))               // 4
 ```
+<!-- /xr-source -->
 
 A copy must acquire independently releasable result ownership; failure must not publish a partially initialized result. Self-assignment and reading an element before replacing or appending it must preserve this responsibility, without double release or access to freed storage caused by physical sharing. Evaluation follows §3.0 E2/E5. Copy or automatic-move optimizations must not change the established order of errors, destruction, or external side effects.
 
@@ -2101,6 +2239,7 @@ Self-contained programs that run as-is and pass `xray check` (comments show the 
 
 Arrays:
 
+<!-- xr-source:example 003-2-type-system-example-034 -->
 ```xray
 fn main() {
     var nums = [1, 2, 3]
@@ -2115,9 +2254,11 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 Maps and Sets:
 
+<!-- xr-source:example types-map-set-usage -->
 ```xray @id=types-map-set-usage @run
 fn main() {
     var scores = {"alice": 95, "bob": 88}
@@ -2135,16 +2276,19 @@ fn main() {
 
 main()
 ```
-
 ```output
 95
 3
 2
 true
 ```
+<!-- /xr-source -->
+
+
 
 Nullable types with `??`:
 
+<!-- xr-source:example 003-2-type-system-example-036 -->
 ```xray
 fn main() {
     var name: string? = null
@@ -2155,5 +2299,5 @@ fn main() {
 
 main()
 ```
-
+<!-- /xr-source -->
 <!-- /xr-spec:en -->

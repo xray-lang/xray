@@ -110,8 +110,8 @@ the primary tree). Read the file that matches the work:
   commit with pathspecs).
 - `xray-docs/rules/design-principles.md` and
   `xray-docs/rules/concurrency-ownership-surface.md` — the language's type and
-  sharing model. These win over any older doc that still shows `shared`
-  declarations (removed) or `any` (removed).
+  sharing model rationale. Accepted language definitions live in `spec/source`;
+  older docs that still show `shared` declarations or `any` do not restore them.
 
 (`.devin/rules/` in this repo is the legacy Windsurf-era digest of the same
 rules — its process content is mostly still right, but its `xray-lang.md`
@@ -141,10 +141,12 @@ The rules agents break most often:
 
 ## Design decisions and verification
 
-Frozen language and implementation decisions are recorded in the sibling
-`xray-docs` repository (numbered task documents and design records) and are
-enforced by ordinary tests; there is no separate contract registry, digest
-anchor or contract gate. A change that alters a frozen decision updates the
-owning document and the tests that carry it in the same batch. Never refresh a
+Accepted language rules are owned by the specification source organized under
+`spec/source/README.md`, including the accepted target definitions migrated
+from roadmap tasks. The sibling `xray-docs` repository owns proposals, rationale,
+implementation plans and evidence. Update the normative definition, translations,
+affected tests and task references together; implementation behavior never
+automatically overrides an accepted rule. Ordinary tests enforce these rules;
+there is no separate contract registry, digest anchor or contract gate. Never refresh a
 runtime, schema, provider, ABI, or artifact fingerprint merely to silence a
 failure.

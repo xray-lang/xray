@@ -5,6 +5,7 @@ import collections
 import hashlib
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -56,6 +57,9 @@ def parse_document(text, source="<memory>"):
         block = dict(source=source, line=opening + 2, fence_line=opening + 1,
                      code="\n".join(body), markers=markers, language=language,
                      tagged=tagged, expected_stdout=None)
+        shared = re.fullmatch(r"<!-- xr-source:example ([A-Za-z0-9_.-]+) -->",
+                              lines[opening - 1].strip()) if opening else None
+        block["source_key"] = shared[1] if shared else None
         ids = [marker[4:] for marker in markers if marker.startswith("@id=")]
         block["id"] = ids[0] if len(ids) == 1 else None
         block["id_errors"] = len(ids) > 1 or bool(ids and not ids[0])
@@ -86,13 +90,13 @@ def snippet_key(start_line, code):
     return "sha:" + hashlib.sha256(code.encode("utf-8")).hexdigest()[:12]
 
 
-def lexical_facts(code):
+def lexical_facts(code, *, with_spans=False):
     """Remove real comments while preserving complete literal spellings and token boundaries.
 
     Interpolation remains verbatim inside its literal token, conservatively
     refusing translated inner comments rather than erasing string contents.
     """
-    tokens, comments = [], []
+    tokens, comments, spans = [], [], []
 
     def quoted(start, raw=False):
         quote = code[start]
@@ -165,8 +169,9 @@ def lexical_facts(code):
                 operator = next((op for op in OPERATORS if code.startswith(op, at)), None)
                 end = at + len(operator) if operator else at + 1
         tokens.append(code[at:end])
+        spans.append((at, end))
         at = end
-    return tokens, comments
+    return (tokens, comments, spans) if with_spans else (tokens, comments)
 
 
 def metadata(block):
@@ -309,6 +314,28 @@ def parity(primary, peer):
     return rows
 
 
+def support_table(report):
+    """Project measured example results without promoting unrun backends."""
+    lines = ["# Specification example support", "",
+             "This is measured example coverage, not a declaration of complete feature support.", "",
+             f"Platform: `{report.get('platform', 'unknown')}`",
+             f"Source revision: `{report.get('source_revision') or 'unknown'}`; dirty: `{report.get('source_dirty')}`",
+             f"Compiler SHA-256: `{report.get('compiler_sha256') or 'unknown'}`", "",
+             f"All examples conform: **{report['conforms']}**; ratchet passes: **{report['gate_pass']}**.", "",
+             "| Example | Mode | Result | VM | Native build | Native execution | Baselined failure |",
+             "|---|---|---|---|---|---|---|"]
+    def stage(row, key):
+        return "NOT_RUN" if key not in row else "PASS" if row[key] else "FAIL"
+    for row in report["results"]:
+        label = row.get("source_key") or row.get("id") or row["key"]
+        values = [label, row.get("mode") or "UNSPECIFIED", row["status"],
+                  stage(row, "vm_pass"), stage(row, "native_build_pass"),
+                  "NOT_RUN" if row.get("native_execution") == "NOT_RUN" else stage(row, "native_pass"),
+                  "yes" if row.get("baselined") and row["status"].endswith("FAIL") else "no"]
+        lines.append("| " + " | ".join(str(value).replace("|", "\\|") for value in values) + " |")
+    return "\n".join(lines) + "\n"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--xray", required=True, type=Path)
@@ -319,6 +346,7 @@ def main(argv=None):
     parser.add_argument("--parity-only", action="store_true")
     parser.add_argument("--ids", action="append", default=[], help="comma-separated IDs or basename:body-line selectors; scope never changes modes")
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--support-table", type=Path)
     args = parser.parse_args(argv)
     baseline = set()
     if args.baseline.is_file():
@@ -334,7 +362,8 @@ def main(argv=None):
     requested = {value for group in args.ids for value in group.split(",") if value}
     if requested:
         def selectors(block):
-            return {value for value in (block["id"], f"{Path(block['source']).name}:{block['line']}") if value}
+            shared = "example:" + block["source_key"] if block.get("source_key") else None
+            return {value for value in (block["id"], shared, f"{Path(block['source']).name}:{block['line']}") if value}
         found = set().union(*(selectors(block) for block in blocks))
         errors.extend(dict(status="SCOPE_FAIL", id=value, detail="requested fence selector is absent") for value in sorted(requested - found))
         chosen = [(index, block) for index, block in enumerate(blocks) if selectors(block) & requested]
@@ -365,9 +394,21 @@ def main(argv=None):
                   ids=sorted(requested), language=args.language, results=rows, parity=comparisons, metadata_errors=errors + peer_errors,
                   counts=counts, deviations=len(failures), new_deviations=len(new), stale_baseline=[row["key"] for row in stale],
                   conforms=not failures and not defects, gate_pass=not new and not defects)
+    report["platform"] = platform.platform()
+    report["compiler_sha256"] = hashlib.sha256(args.xray.read_bytes()).hexdigest() if args.xray.is_file() else None
+    try:
+        revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cwd, capture_output=True, text=True, timeout=10)
+        dirty = subprocess.run(["git", "status", "--porcelain"], cwd=cwd, capture_output=True, text=True, timeout=10)
+        report["source_revision"] = revision.stdout.strip() if revision.returncode == 0 else None
+        report["source_dirty"] = bool(dirty.stdout) if dirty.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired):
+        report["source_revision"], report["source_dirty"] = None, None
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if args.support_table:
+        args.support_table.parent.mkdir(parents=True, exist_ok=True)
+        args.support_table.write_text(support_table(report), encoding="utf-8")
     print("spec snippets: " + json.dumps(counts, sort_keys=True) + f"; {len(failures)} actual failures ({len(new)} new); {len(defects)} metadata/parity defects")
     for row in new + defects:
         print(f"  {row['status']} {row.get('source', args.spec)}:{row.get('line', 0)} {row.get('id') or ''}: {row.get('detail', '')}")

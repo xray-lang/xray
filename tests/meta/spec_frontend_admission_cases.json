@@ -5679,7 +5679,7 @@
       "required_for_task342": false,
       "source": {
         "path": "spec/source/sections/015-14-built-in-type-methods.md",
-        "fence_id": "json-boundary-and-path-en"
+        "fence_id": "json-boundary-and-path"
       },
       "body_sha256": "09b11a1f077258cfa49e2bb17a9598cba59b9e2acef8b5ea80a079716ad38750",
       "responsibility": "User-approved JSON API dependency: execute and report unaccepted; never a Task342/G13 PASS",
@@ -5693,7 +5693,8 @@
           "receipt_id": "en:020dd943b431f3fc2d5cd2d21f98524cb1f6f22343ba48245cf638237f9c9938"
         }
       ],
-      "dependency": "Task338"
+      "dependency": "Task338",
+      "source_migration": "Task344: bilingual fences share one source ID; body, role, dependency and original receipts unchanged."
     },
     {
       "id": "cn:original:003-2-type-system:480",

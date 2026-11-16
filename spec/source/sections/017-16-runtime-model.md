@@ -60,6 +60,7 @@ L0 在特化后判定类型是否可能成环，L1 允许通过 `weak` 显式断
 
 内置 `PanicInfo` 类是 prelude 类型（声明：`stdlib/types/panic_info.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `PanicInfo` 对象：
 
+<!-- xr-source:example 017-16-runtime-model-example-001 -->
 ```xray
 class PanicInfo {
     message: string             // 人类可读消息
@@ -72,6 +73,7 @@ class PanicInfo {
     fn toString() -> string
 }
 ```
+<!-- /xr-source -->
 
 用户级可恢复错误不使用 `PanicInfo`：`throw` 语句只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
@@ -234,6 +236,7 @@ See `stdlib/os/` for details.
 
 The built-in `PanicInfo` class is a prelude type (declared in `stdlib/types/panic_info.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `PanicInfo` objects constructed by the VM/AOT runtime:
 
+<!-- xr-source:example 017-16-runtime-model-example-001 -->
 ```xray
 class PanicInfo {
     message: string             // human-readable message
@@ -246,6 +249,7 @@ class PanicInfo {
     fn toString() -> string
 }
 ```
+<!-- /xr-source -->
 
 Recoverable user-level errors do not use `PanicInfo`: a `throw` statement accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 

@@ -7,8 +7,8 @@ order: 000
 # Xray 语言参考手册
 
 > 版本：基于 `xray` v0.9.0 源码（校对日期 2026-07-18）
-> 性质：语言规范与参考手册。本文档是描述 xray 语言**实际行为**的真值源。
-> 实现：所有语义以 `xray` 当前主仓代码为准；本文档与代码不一致以代码为准并视为本文档需更新。
+> 性质：语言规范与参考手册。已接受的目标规则与当前实现支持程度分别表述。
+> 规则权威：`spec/source` 组织已接受的语言定义；中文条文为裁决文本，英文为翻译。当前代码不能自动覆盖规范。
 > 受众：xray 编写者、IDE / AI 工具实现者、编译器内部贡献者。
 
 ## 目录
@@ -44,7 +44,7 @@ order: 000
 # Xray Language Reference
 
 > Version: based on the `xray` source tree version v0.9.0 (audited on 2026-07-18).
-> Status: this is a reference manual for the implemented language. When this document and the implementation disagree, the implementation is authoritative and this document must be updated.
+> Status: accepted language definitions are owned by `spec/source`; Chinese clauses are normative and English is their translation. Implementation support requires separate evidence; code does not override the specification.
 > Chinese version: [`LANGUAGE_SPEC_CN.md`](LANGUAGE_SPEC_CN.md).
 
 ## Table of Contents

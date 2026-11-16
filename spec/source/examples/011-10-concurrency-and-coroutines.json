@@ -1,0 +1,102 @@
+{
+  "coro-go-forms": {
+    "fence": "xray @id=coro-go-forms @fragment",
+    "code": "// 形式 1：调用一个已声明的函数\nvar t1 = go worker(0, channel)\n\n// 内联逻辑：lambda 也必须形成完整调用，并显式传参\nvar t2 = go fn(d: JSON.Object) -> i64 {\n    return d.value * 2\n}(payload)\n\n// 无参数内联逻辑仍写成零参 lambda 调用；不存在 go { ... } 语法\nvar t3 = go fn() -> i64 {\n    return compute()\n}()\n\n// 可选调试名称\nvar named = go(name: \"worker-1\") worker(1, channel)",
+    "trivia": {
+      "en": {
+        "0": "// Form 1: call an existing function\n",
+        "10": "\n\n// Inline logic: a lambda must still form a complete call with explicit arguments\n",
+        "35": "\n\n// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n",
+        "52": "\n\n// Optional debugging name\n"
+      }
+    }
+  },
+  "coro-move-argument": {
+    "fence": "xray @id=coro-move-argument @check",
+    "code": "var data = [10]\nvar task = go fn(d: Array<i64>) -> i64 {\n    return d[0] + 1\n}(data)            // 保存逻辑副本，调用方 data 仍可使用",
+    "trivia": {
+      "en": {
+        "33": "            // retain a logical copy; the caller can still use data"
+      }
+    }
+  },
+  "011-10-concurrency-and-coroutines-example-003": {
+    "fence": "xray",
+    "code": "var n = 10\nvar task = go fn(x: i64) -> i64 {\n    return x + 1\n}(n)"
+  },
+  "coro-await-forms": {
+    "fence": "xray @id=coro-await-forms @fragment",
+    "code": "var job = go compute(1)            // Task<i64, Never>\nvar n = await job                  // 不抛业务错误，不写 try\n\nvar task = go fetch(url)           // fetch 声明了 throws(FetchErr)\nvar result = try await task\n\nvar tasks = [go fetch(a), go fetch(b), go fetch(c)]\nvar results = try Task.all(tasks)\nvar first = try Task.first(tasks)\nvar firstOk = try Task.firstSuccess(tasks)\nvar bounded = try Task.timeout(task, 1000)",
+    "trivia": {
+      "en": {
+        "13": "                  // no business error, no try\n\n",
+        "21": "           // fetch declares throws(FetchErr)\n"
+      }
+    }
+  },
+  "coro-task-handle": {
+    "fence": "xray @id=coro-task-handle @fragment",
+    "code": "var t = go fetch(url)\nif (t.poll() == null) { print(\"running\") }\nvar outcome = t.awaitResult()"
+  },
+  "channel-decl-variants": {
+    "fence": "xray @id=channel-decl-variants",
+    "code": "const ch  = Channel<i64>(10)    // 有缓冲，capacity = 10\nconst ch0 = Channel<i64>(0)     // 无缓冲（同步握手）\nconst cha: Channel<i64> = Channel(3)   // 元素类型由类型上下文给出",
+    "trivia": {
+      "en": {
+        "10": "    // buffered, capacity = 10\n",
+        "20": "     // unbuffered (synchronous handshake)\n",
+        "32": "   // element type from the type context"
+      }
+    }
+  },
+  "channel-param-type": {
+    "fence": "xray @id=channel-param-type",
+    "code": "fn producer(ch: Channel<i64>) {\n    ch.send(42)\n}"
+  },
+  "coro-select": {
+    "fence": "xray @id=coro-select @fragment",
+    "code": "const ch1 = Channel<i64>(2)\nconst ch2 = Channel<i64>(2)\n\nselect {\n    msg from ch1 => { print(\"got from ch1:\", msg) }      // 接收分支\n    msg from ch2 => { print(\"got from ch2:\", msg) }      // 接收分支\n    100  to   ch1 => { print(\"sent 100 to ch1\") }        // 发送分支\n    _ => { print(\"no channel ready\") }                   // 默认分支（非阻塞）\n}",
+    "trivia": {
+      "en": {
+        "34": "      // receive arm\n    ",
+        "46": "      // receive arm\n    ",
+        "56": "        // send arm\n    ",
+        "64": "                   // default arm (non-blocking)\n"
+      }
+    }
+  },
+  "coro-scope": {
+    "fence": "xray @id=coro-scope @check",
+    "code": "fn worker(n: i64) -> i64 { return n + 1 }\nfn main() {\n    var x = 1\n    { var x = 10; print(x) }\n    print(x)\n    scope {\n        go worker(1)\n        go worker(2)\n    }\n}\nmain()"
+  },
+  "011-10-concurrency-and-coroutines-example-010": {
+    "fence": "xray",
+    "code": "const counter = Atomic(0)         // Atomic<i64>\nconst flag = Atomic(false)        // Atomic<bool>\nconst rate = Atomic(3.14)         // Atomic<f64>"
+  },
+  "011-10-concurrency-and-coroutines-example-011": {
+    "fence": "xray",
+    "code": "enum Ordering {\n    Relaxed,          // 无跨线程排序保证\n    Acquire,          // 读屏障\n    Release,          // 写屏障\n    AcquireRelease,   // 读写屏障\n    SeqCst,           // 顺序一致（默认）\n}",
+    "trivia": {
+      "en": {
+        "5": "          // No cross-thread ordering guarantee\n    ",
+        "7": "          // Read barrier\n    ",
+        "9": "          // Write barrier\n    ",
+        "11": "   // Read-write barrier\n    ",
+        "13": "           // Sequential consistency (default)\n"
+      }
+    }
+  },
+  "011-10-concurrency-and-coroutines-example-012": {
+    "fence": "xray",
+    "code": "const counter = Atomic(0)\ncounter.store(42, Ordering.Release)\nvar val = counter.load(Ordering.Acquire)"
+  },
+  "coro-yield-loop": {
+    "fence": "xray @id=coro-yield-loop @fragment",
+    "code": "for (i in 0..1000) {\n    do_chunk(i)\n    Task.yieldNow()                // 主动 safepoint，让其他协程有机会跑\n}",
+    "trivia": {
+      "en": {
+        "19": "                // explicit safepoint, lets other coroutines run\n"
+      }
+    }
+  }
+}

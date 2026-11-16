@@ -14,7 +14,7 @@ order: 001
 
 1. 让人类阅读后能写出合法且行为可预测的 xray 代码；
 2. 作为编译器、分析器、IDE、AI 助手、文档生成器等工具的**结构化真值源**；
-3. 与 `xray` 主仓的实际实现保持一致——任何不一致都视为本文档或代码的 bug。
+3. 明确区分已接受目标与实测支持：不一致须记录为规范错误、实现缺陷或已登记的实现缺口。
 
 **本手册不是教程**。完整的入门材料见 xray 官网与 `demos/` 目录。
 
@@ -60,7 +60,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 #### 0.4.2 源码引用
 
-本文档大量引用 xray 主仓源码作为真值源。引用格式：
+本文档引用主仓源码以定位实现和声明输入；引用不授予实现覆盖规范的权力。引用格式：
 
 ```
 路径:行号
@@ -93,7 +93,7 @@ This document is the **reference manual** for the Xray programming language. It 
 
 1. Allow a human reader to write valid Xray code with predictable behavior.
 2. Serve as a **structured source of truth** for compilers, analyzers, IDEs, AI assistants, documentation generators, and other tooling.
-3. Stay aligned with the actual implementation in the main `xray` repository — any divergence is a bug in either the document or the code.
+3. Distinguish accepted targets from measured support: disagreements must be classified as specification defects, implementation defects, or recorded implementation gaps.
 
 **This manual is not a tutorial.** For introductory material, see the Xray website and the `demos/` directory.
 

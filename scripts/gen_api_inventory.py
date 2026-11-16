@@ -1143,19 +1143,18 @@ def collect_interfaces(root: Path) -> list[dict[str, Any]]:
 
 
 def collect_keywords(root: Path) -> list[dict[str, Any]]:
-    path = root / "src/frontend/lexer/xkeywords.def"
-    text = path.read_text(encoding="utf-8")
+    from spec_sources import reserved_keywords
     out: list[dict[str, Any]] = []
-    for match in re.finditer(r'XR_KW\(\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*([A-Z_]+)\s*\)', text):
+    for keyword in reserved_keywords(root):
         out.append(
             item(
                 category="language-keyword",
                 namespace="keyword",
-                name=match.group(1),
+                name=keyword["name"],
                 kind="keyword",
-                signature=match.group(3),
-                source=rel(root, path),
-                line=line_for_offset(text, match.start()),
+                signature=keyword["token"],
+                source=keyword["source"],
+                line=keyword["line"],
             )
         )
     return out

@@ -12,17 +12,20 @@ order: 006
 
 ### 5.1 `var` / `const`
 
+<!-- xr-source:grammar 006-5-declarations-grammar-01 -->
 ```ebnf
 VarDecl ::= 'var' Binding
-ConstDecl ::= 'const' Binding
-Binding ::= Pattern (':' Type)? ('=' Expression)?
-Pattern ::= Identifier
-         | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
-         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+Binding ::= DeclarationPattern (':' Type)? ('=' Expression)?
+DeclarationPattern ::= Identifier
+                |  '[' DeclarationPattern (',' DeclarationPattern)* ','? ']'
+                |  '(' DeclarationPattern (',' DeclarationPattern)+ ','? ')'
 ```
+<!-- /xr-source -->
 
 #### 5.1.1 `var` — 可变绑定
 
+<!-- xr-source:example decl-var -->
 ```xray @id=decl-var
 var x = 1                         // 类型推断为 i64
 var name: string = "Alice"        // 显式类型
@@ -30,6 +33,7 @@ var count: i64                    // 仅声明无初值：使用零值
 var maybeName: string?            // OK：默认 null
 var empty: string = ""            // string 必须显式初始化
 ```
+<!-- /xr-source -->
 
 - 可重新赋值。
 - 必须有初值**或**类型标注；否则编译错误 `E0303`。
@@ -38,10 +42,12 @@ var empty: string = ""            // string 必须显式初始化
 
 #### 5.1.2 `const` — 不可变绑定
 
+<!-- xr-source:example decl-const -->
 ```xray @id=decl-const
 const PI = 3.14159
 const MAX_LEN: i64 = 1024
 ```
+<!-- /xr-source -->
 
 - **必须**有初值，不能重新赋值（编译错误 `E0303`）；类型可推断或显式标注。
 - 与 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
@@ -50,6 +56,7 @@ const MAX_LEN: i64 = 1024
 - `Channel`、`Atomic`、`Mutex` 等受审计同步句柄可用 `const` 固定绑定；其受审计 API 仍可改变同步保护的内部状态。`const` 本身不是 Sendable 或并发安全的证明。
 - 从只读可复制值保存到 `var` 时得到可写的逻辑副本；不能借此取得原 place 的可写借用，或解除 class 对象自身的权限限制。
 
+<!-- xr-source:example decl-capability -->
 ```xray @id=decl-capability
 const channel = Channel<i64>(16)
 const counter = Atomic(0)
@@ -62,6 +69,7 @@ current.push(4)
 print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
+<!-- /xr-source -->
 
 `const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止。普通值复制不要求显式 `copy value` 或 `move value`；这两种前缀表达式的规则见 §2.14.5。
 
@@ -69,6 +77,7 @@ print(len(snapshot))        // 3
 
 #### 5.1.3 解构绑定
 
+<!-- xr-source:example decl-destructuring -->
 ```xray @id=decl-destructuring @fragment
 // 数组解构
 var [a, b, c] = [1, 2, 3]
@@ -78,6 +87,7 @@ var [first, , third] = [10, 20, 30]         // 跳过元素
 var (q, r) = divmod(17, 5)
 
 ```
+<!-- /xr-source -->
 
 约束：
 - 解构变量数必须匹配（除 rest 模式外）。
@@ -86,22 +96,25 @@ var (q, r) = divmod(17, 5)
 
 ### 5.2 `fn` 函数声明
 
+<!-- xr-source:grammar 006-5-declarations-grammar-02 -->
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ThrowsClause ::= 'throws' ('(' Type ')')?
-ParamList ::= Param (',' Param)*
-Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
-            | '...' Identifier ':' Type
-ParamType ::= ParamMode? Type
+ParamList ::= Param (',' Param)* ','?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
+           |  '...' Identifier ':' Type
+ParamType ::= 'escaping'? ParamMode? Type
+// escaping is valid only for function-typed parameters; see the parameter rules.
 ParamMode ::= 'ref' | 'move'
-ReturnType ::= '->' Type
-            |  '->' '(' Type (',' Type)+ ')'   // 元组返回
-TypeParams ::= '<' Identifier (',' Identifier)* '>'
-AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
+AttrList ::= PublicAttribute*
 ```
+<!-- /xr-source -->
 
 #### 5.2.1 基本形式
 
+<!-- xr-source:example decl-fn-basic -->
 ```xray @id=decl-fn-basic
 fn add(a: i64, b: i64) -> i64 {
     return a + b
@@ -115,6 +128,7 @@ fn echo(x: i64) {                       // 省略返回类型 = ()
     print(x)
 }
 ```
+<!-- /xr-source -->
 
 **关键**：
 - 参数**必须**带类型标注（与箭头函数一致）。
@@ -125,12 +139,14 @@ fn echo(x: i64) {                       // 省略返回类型 = ()
 
 具名函数不写 `throws` 就保证不抛业务错误。`throws(E)` 放在参数列表之后、返回类型之前；返回 Unit 时也可写 `fn run() throws(E)`。`E` 的合法范围见 §2.2.2，裸 `throws` 等价于 `throws(Error)`，`throws(Never)` 等价于不写。错误枚举的 union 表示允许抛出的多个类型。
 
+<!-- xr-source:example 006-5-declarations-example-006 -->
 ```xray @fragment
 fn add(a: i64, b: i64) -> i64 { /* body omitted */ }
 fn parse(s: string) throws(ParseErr) -> i64 { /* body omitted */ }
 fn load(path: string) throws(IoErr | ParseErr) -> Config { /* body omitted */ }
 fn runAll() throws { /* body omitted */ }
 ```
+<!-- /xr-source -->
 
 上例只展示签名，函数体以注释省略；普通函数定义必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
 
@@ -140,6 +156,7 @@ fn runAll() throws { /* body omitted */ }
 
 #### 5.2.2 默认参数值与命名实参
 
+<!-- xr-source:example decl-fn-default -->
 ```xray @id=decl-fn-default
 fn connect(host: string, port: i64 = 8080, tls: bool = false) {
     print(host, port, tls)
@@ -149,6 +166,7 @@ connect("localhost")              // port=8080, tls=false
 connect("localhost", 443)         // tls=false
 connect("localhost", 443, true)
 ```
+<!-- /xr-source -->
 
 - 默认值在**调用点**求值：省略已声明默认值的参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
 - 显式传 `null` 就是传入 `null`，**不会**触发默认值（默认值只在参数被省略时使用）。
@@ -167,6 +185,7 @@ connect("localhost", 443, true)
 
 位置实参必须在命名实参之前；每个形参至多绑定一次，未知名字、重复名字、按位置给出后再命名、命名之后的位置实参均报 E0327。rest 只能按位置传递。直接调用具名函数、方法和构造器使用被调声明的参数名；函数值调用不能使用标签，包括具名函数的 const 别名。
 
+<!-- xr-source:example decl-named-arguments -->
 ```xray @id=decl-named-arguments @check
 fn request(url: string, method: string = "GET", followRedirects: bool = true) -> string {
     return "${method} ${url} ${followRedirects}"
@@ -174,11 +193,13 @@ fn request(url: string, method: string = "GET", followRedirects: bool = true) ->
 request("https://a")
 request(url: "https://a", followRedirects: false)
 ```
+<!-- /xr-source -->
 
 接收者/被调表达式先求值，显式实参按书写顺序求值，省略的默认值按声明顺序求值。按形参顺序排列的是已经求出的值，不得重排表达式。期望类型与泛型证据按绑定后的形参位置取得；默认值不补充新的调用方推导证据。`ref`、`move` 位于标签后的值之前；参数名属于导出 API，跨模块保持同一名字。参见 §3.11。
 
 #### 5.2.3 多返回值
 
+<!-- xr-source:example decl-fn-multi-return -->
 ```xray @id=decl-fn-multi-return
 fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
@@ -187,6 +208,7 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 var (q, r) = divmod(17, 5)
 var result = divmod(10, 3)        // result 类型 (i64, i64)
 ```
+<!-- /xr-source -->
 
 **约束**：
 - 返回类型用括号包裹元组：`(i64, bool)`。
@@ -197,6 +219,7 @@ var result = divmod(10, 3)        // result 类型 (i64, i64)
 
 普通参数默认为 READ；写借用使用 `name: ref T`，取得值的持有权使用 `name: move T`，包括可复制值与不可复制资源。参数模式属于声明合同，不由具体 ABI 是传值、指针还是句柄决定。
 
+<!-- xr-source:example decl-fn-param-modes -->
 ```xray @id=decl-fn-param-modes
 fn length_sq(v: Vec2) -> f64 {
     return v.x * v.x + v.y * v.y
@@ -215,6 +238,7 @@ fn appended(xs: Array<string>, value: string) -> Array<string> {
 
 translate(ref point, 1.0, 2.0)
 ```
+<!-- /xr-source -->
 
 | 参数模式 | 语义 |
 |--|--|
@@ -234,6 +258,7 @@ READ Array 参数不能直接索引写入、调用 `push` 或重绑参数；保�
 
 #### 5.2.5 rest 参数
 
+<!-- xr-source:example decl-fn-rest -->
 ```xray @id=decl-fn-rest
 fn sum(...nums: i64) -> i64 {
     var total = 0
@@ -243,6 +268,7 @@ fn sum(...nums: i64) -> i64 {
 
 sum(1, 2, 3)        // total = 6
 ```
+<!-- /xr-source -->
 
 - 普通具名函数允许一个末尾 READ rest：`...name: T`；不能带默认值、`ref` 或 `move`，也不扩展匿名函数、方法或构造器。嵌套具名函数沿真实捕获和拥有者规则。
 - 体内参数是只读绑定的 `Array<T>`；元素须满足既有 Array 保存和复制条件。不附加 Sendable 或 NoSuspend 承诺。普通值复制、COW、身份及失败清理规则保持。
@@ -252,11 +278,13 @@ sum(1, 2, 3)        // total = 6
 
 #### 5.2.6 函数提升
 
+<!-- xr-source:example 006-5-declarations-example-012 -->
 ```xray
 main()                       // OK：函数声明被提升
 
 fn main() { ... }
 ```
+<!-- /xr-source -->
 
 - 顶层 `fn` 声明被提升到当前作用域顶部。
 - `var f = (x: i64) -> x`（赋值给变量的箭头函数）**不**提升。
@@ -265,29 +293,34 @@ fn main() { ... }
 
 Xi 优化器会把可证明的自尾调用改写为循环；VM 也有常量栈空间的 tail-call opcode。不要把这一点理解为所有后端、所有间接/互递归调用的通用常量栈保证：构造调用和无法证明安全的调用仍按普通调用执行。详见 [§17](#17-编译流水线-compilation-pipeline)。
 
+<!-- xr-source:example 006-5-declarations-example-013 -->
 ```xray
 fn factorial(n: i64, acc: i64 = 1) -> i64 {
     if (n <= 1) { return acc }
     return factorial(n - 1, acc * n)     // 尾调用：自动优化为循环
 }
 ```
+<!-- /xr-source -->
 
 #### 5.2.8 程序入口
 
 xray **没有固定的 `main` 入口函数**。程序从**入口文件**的顶层开始顺序执行：遇到 `fn` 声明被提升注册，遇到表达式或语句立即执行。
 
+<!-- xr-source:example 006-5-declarations-example-014 -->
 ```xray
 // hello.xr（入口文件）
 print("loading")          // 顶层语句，立即执行
 fn greet() { print("hi") }
 greet()                   // 必须显式调用
 ```
+<!-- /xr-source -->
 
 - 入口文件是 `xray run`、`xray build` 等命令直接给出的文件。多文件项目的入口文件由 `xray.toml` 的 `[project]`（或 package manifest 的 `[package]`）中的 `main` 字段指定，例如 `main = "src/main.xr"`。
 - **只有入口文件可以包含可执行的顶层语句。** 被导入的模块，顶层只能包含声明（`import`、`export`、函数、类型与接口声明、`extern "C"` 块）以及模块状态的声明与初始化（`const`、`var` 及其初始化表达式）。被导入的模块中出现独立的表达式语句或控制流语句时，编译报错。模块状态按 §11.6 的拓扑序初始化。
 - 入口文件的顶层语句和各模块状态的初始化表达式隐式允许抛任意错误，传播点仍须标记；未捕获时输出 `[Uncaught Error] <值>` 并以退出码 1 结束（§8）。
 - `fn main()` 没有任何特殊含义，和其他具名函数遵守同一规则：省略 `throws` 即不抛错。需要时在入口文件顶层显式调用它，会抛错的写 `try main()`：
 
+<!-- xr-source:example 006-5-declarations-example-015 -->
 ```xray
 enum ConfigErr { Missing }
 
@@ -303,6 +336,7 @@ fn main() throws(ConfigErr) {
 
 try main()
 ```
+<!-- /xr-source -->
 
 - 顶层不允许 `return`（编译错误 `E0306`）。
 
@@ -312,6 +346,7 @@ try main()
 
 `extern "C"` 块只声明共享 C ABI 的外部**函数符号**。外部函数没有 Xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
+<!-- xr-source:example 006-5-declarations-example-016 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -326,11 +361,13 @@ unsafe {
     free(p)
 }
 ```
+<!-- /xr-source -->
 
 库、目标、symbol rename、原生源码/对象、typed flags、hash 与许可证都属于 `xray.toml` 的 NativePackagePlan，不写在普通源码中。`extern "C"` 不允许 `dylib/link` 子句、函数体、data/global，也不允许在块内声明 struct/union/packed/flex。
 
 C ABI 聚合使用普通 Xray struct，并由 manifest 的 `[[native.layout]]` 绑定 C header/type。构建器生成 `sizeof`、`_Alignof` 与 `offsetof` 静态断言；任何不一致都在链接前失败：
 
+<!-- xr-source:example 006-5-declarations-example-017 -->
 ```xray
 import mem
 
@@ -343,6 +380,7 @@ print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("count"))
 ```
+<!-- /xr-source -->
 
 规则：
 - ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
@@ -355,6 +393,7 @@ print(mem.offsetOf<CHeader>("count"))
 - C 回调参数必须写成 `CFn<fn(A, B) -> R>`，不能使用普通 xray 函数类型 `fn(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
 
+<!-- xr-source:example 006-5-declarations-example-018 -->
 ```xray
 extern "C" {
     fn bsearch(
@@ -372,11 +411,13 @@ fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
 
 // zeroCmp 是模块级非捕获函数，可作为 CFn 回调。
 ```
+<!-- /xr-source -->
 
 #### 5.2.10 Manifest C ABI 导出
 
 模块级 Xray 函数在源码中保持普通 `fn`；是否导出 C ABI、导出符号与可见性都由 `xray.toml` 的 typed export plan 指定：
 
+<!-- xr-source:example 006-5-declarations-example-019 -->
 ```xray
 fn add(a: i32, b: i32) -> i32 {
     return a + b
@@ -384,6 +425,7 @@ fn add(a: i32, b: i32) -> i32 {
 
 print(add(19, 23))        // Xray 内部仍是普通函数调用
 ```
+<!-- /xr-source -->
 
 ```toml
 [[export.c]]
@@ -460,6 +502,7 @@ no_suspend = true
 
 闭包捕获与高阶函数：
 
+<!-- xr-source:example 006-5-declarations-example-020 -->
 ```xray
 fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
@@ -474,9 +517,11 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 多返回值（元组）：
 
+<!-- xr-source:example 006-5-declarations-example-021 -->
 ```xray
 fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
@@ -490,22 +535,27 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 5.3 `class` 声明
 
 class 具有身份，赋值与保存参数只复制引用。class 方法不写 `ref` / `move` receiver；经只读参数或 `const` 绑定调用普通方法仍可修改对象，但不能重绑该参数或绑定。class 字段的 `ref` / 视图访问须保活对象并检查动态独占；局部无冲突证明只可消除检查，不能改变权限合同。
 
+<!-- xr-source:grammar 006-5-declarations-grammar-03 -->
 ```ebnf
-ClassDecl ::= 'final'? 'class' Identifier TypeParams?
-              ('extends' Identifier TypeArgs?)?
-              ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
+              ('extends' NamedType)?
+              ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+StaticBlock ::= 'static' Block
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // 参数类型可省
-Modifier ::= 'private' | 'protected' | 'static' | 'const'
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
+              // public visibility is the default; final is only a class prefix
 ```
+<!-- /xr-source -->
 
 > **关于默认公开可见性和显式覆写**：
 >
@@ -518,6 +568,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 
 #### 5.3.1 基本类
 
+<!-- xr-source:example decl-class-basic -->
 ```xray @id=decl-class-basic
 class Animal {
     name: string                       // 字段
@@ -540,9 +591,11 @@ var a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
+<!-- /xr-source -->
 
 #### 5.3.2 继承
 
+<!-- xr-source:example decl-class-inheritance -->
 ```xray @id=decl-class-inheritance
 class Dog extends Animal {
     init(name: string) {
@@ -554,6 +607,7 @@ class Dog extends Animal {
     }
 }
 ```
+<!-- /xr-source -->
 
 **约束**：
 - 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
@@ -587,6 +641,7 @@ class Dog extends Animal {
 
 构造器可以声明 `init(...) throws(E)`；省略子句表示不抛错。构造调用 `Type(...)` 按该签名要求 `try` 或处理区域；构造失败不发布部分初始化的值。方法（包括 static、enum 与运算符方法）采用同样的 `throws(E)` 位置和局部检查规则。
 
+<!-- xr-source:example 006-5-declarations-example-024 -->
 ```xray
 class Point {
     x: f64
@@ -607,6 +662,7 @@ class Vector2 {
     }
 }
 ```
+<!-- /xr-source -->
 
 - `init` 是类型成员位置的上下文关键字；旧 `constructor` 声明拼写拒绝，不保留别名。其它位置的 `init` 仍是普通标识符。
 - 一个类**只有一个构造器**（不支持构造器重载）；要多种创建方式用 `static` 工厂方法。
@@ -626,6 +682,7 @@ class Vector2 {
 
 `Iterator<T>` 是 prelude 内建接口，是 `for-in` 的拉取协议，也是生成器函数（§3.16）的返回类型：
 
+<!-- xr-source:example decl-iterator-protocol -->
 ```xray @id=decl-iterator-protocol
 interface Iterator<T> {
     hasNext() -> bool       // 是否还有下一个元素；不消费元素
@@ -637,6 +694,7 @@ interface Iterable<T> {
     iterator() -> Iterator<T>
 }
 ```
+<!-- /xr-source -->
 
 规则：
 
@@ -653,6 +711,7 @@ interface Iterable<T> {
 
 字段名后跟一个访问器块，即声明一个**计算属性**：它没有存储槽，读写都转成访问器调用。
 
+<!-- xr-source:example 006-5-declarations-example-026 -->
 ```xray
 class Rect {
     _w: i64
@@ -676,6 +735,7 @@ fn main() {
     print(r.area)       // 输出：40
 }
 ```
+<!-- /xr-source -->
 
 规则：
 
@@ -692,6 +752,7 @@ fn main() {
 
 继承与显式覆写：
 
+<!-- xr-source:example 006-5-declarations-example-027 -->
 ```xray
 class Animal {
     name: string
@@ -712,6 +773,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 具名变量调用遵循上述合同，完整实现资格见 §17。
 
@@ -721,12 +783,15 @@ main()
 
 struct / enum 修改自身值语义部分的方法显式使用 `ref` receiver；只读 receiver 可以保存可复制副本，不能直接修改自身。取得自身持有权的方法可声明 `move` receiver，包括可复制类型。完整聚合、receiver 和借用声明族的实现资格见 §17。
 
+<!-- xr-source:grammar 006-5-declarations-grammar-04 -->
 ```ebnf
-StructDecl ::= 'struct' Identifier TypeParams?
-               ('implements' Identifier (',' Identifier)*)?
-               '{' StructMember* '}'
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('implements' NamedType (',' NamedType)*)?
+               '{' ClassMember* '}'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-struct-point -->
 ```xray @id=decl-struct-point
 struct Point {
     x: f64
@@ -750,6 +815,7 @@ var b = q                            // b 是 q 的独立拷贝
 b.x = 99.0
 // q.x 仍为 3.0
 ```
+<!-- /xr-source -->
 
 **聚合字面量的字段规则**（名义 struct 的声明字段）：
 
@@ -759,6 +825,7 @@ b.x = 99.0
 - 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
 - **`union` 例外**：union 的成员共享同一块存储，同时只有一个成员是活的，因此 union 字面量必须**恰好**设置一个成员。设置 0 个（活成员未定义）或多个（写入互相覆盖）都是 `E0381`。
 
+<!-- xr-source:example 006-5-declarations-example-029 -->
 ```xray
 struct Config {
     host: string
@@ -770,6 +837,7 @@ var c = Config{host: "localhost"}    // OK
 // Config{host: "h", ports: 1}       // 编译错误 E0380：没有字段 'ports'
 // Config{port: 1}                   // 编译错误 E0381：缺少字段 'host'
 ```
+<!-- /xr-source -->
 
 **与 `class` 的差异**：
 
@@ -793,6 +861,7 @@ var c = Config{host: "localhost"}    // OK
 
 可复制 `struct` 是值类型，赋值与保存参数按字段保留逻辑副本；普通 READ 参数只读访问该值，允许保存副本，不强制某一种物理 ABI：
 
+<!-- xr-source:example 006-5-declarations-example-030 -->
 ```xray
 struct Point {
     x: i64
@@ -809,19 +878,22 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 5.5 `interface` 与 `implements`
 
 xray 接口实现是**显式声明的**（与 Go 的隐式实现不同）：类 / struct 必须用 `implements` 列出实现的接口。
 
+<!-- xr-source:grammar 006-5-declarations-grammar-05 -->
 ```ebnf
-InterfaceDecl ::= 'interface' Identifier TypeParams?
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?       // 方法签名
-                 |  ('const')? Identifier ':' Type                   // 属性签名（可加 const 表示只读）
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-interface-shape -->
 ```xray @id=decl-interface-shape
 interface Shape {
     area() -> f64
@@ -855,6 +927,7 @@ fn describe(s: Shape) -> string {
     return "area=${s.area()}, perimeter=${s.perimeter()}"
 }
 ```
+<!-- /xr-source -->
 
 **约束**：
 
@@ -885,6 +958,7 @@ Checked 拥有约束、接口应用、要求身份和显式实现映射。单态
 
 当前新 XIR 已接通普通 read receiver 方法、显式 struct/enum 实现与定义处泛型成员调用：Checked 保存原要求身份及实现映射，在 Checked 上选择见证、特化并复验后进入 Lowered。泛型 struct/enum 的实现受其名义声明前提约束，方法额外条件不得补足缺失的类型前提。enum 普通 READ/static 方法复用名义方法机制，载荷先经 match 解构；方法及内建成员碰撞按 §5.6.7 在声明处拒绝。该子集已有 Windows VM/native 独立预期验证，不代表完整声明族或全部安全资格完成。接口方法自身泛型的完整显式列表、内联/where条件及调用值形状推断已取得上述Windows范围验证；晚结果上下文补足和显式方法取值为下一验证族，完整双向和函数值上下文推断仍OPEN。属性、其他 receiver、未接通的 enum name/toString/variants 消费、class/override 和接口值仍须分别实现和验证，未接通的表面明确拒绝；上述语言目标不因此缩减。
 
+<!-- xr-source:example 006-5-declarations-example-032 -->
 ```xray
 // 属性签名 + 接口继承
 interface HasLength {
@@ -904,6 +978,7 @@ class Buffer implements SizedCollection<i64> {
     first() -> i64 { return this.data[0] }
 }
 ```
+<!-- /xr-source -->
 
 #### 实现资格
 
@@ -913,8 +988,9 @@ class Buffer implements SizedCollection<i64> {
 
 xray 的 `enum` 是**安全 tagged aggregate**：每个值包含编译器分配的声明顺序 tag，并且只有当前 tag 对应的 payload 可读。无 payload 的简单 enum 只是 payload size 为 0 的 tagged aggregate；带 payload 的 enum 是同一模型下的安全 sum type。
 
+<!-- xr-source:grammar 006-5-declarations-grammar-06 -->
 ```ebnf
-EnumDecl       ::= 'enum' Identifier TypeParams?
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier
@@ -923,6 +999,7 @@ EnumFieldDecl  ::= Identifier ':' Type
 EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
                  | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ```
+<!-- /xr-source -->
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
 
@@ -930,6 +1007,7 @@ EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' T
 
 #### 5.6.1 简单枚举（0-payload enum）
 
+<!-- xr-source:example decl-enum-simple -->
 ```xray @id=decl-enum-simple @fragment
 enum Color { Red, Green, Blue }
 
@@ -952,6 +1030,7 @@ enum HttpStatus {
     }
 }
 ```
+<!-- /xr-source -->
 
 enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backing value。协议数值、字符串符号等外部表示通过 `const`、方法或显式转换函数表达。
 
@@ -959,6 +1038,7 @@ enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backi
 
 payload 变体使用具名记录字段；每个字段必须有非空且唯一的名称：
 
+<!-- xr-source:example decl-enum-payload -->
 ```xray @id=decl-enum-payload
 enum Option<T> {
     Some { value: T },
@@ -985,6 +1065,7 @@ enum Expr {
     Call { name: string, args: Array<Expr> },
 }
 ```
+<!-- /xr-source -->
 
 直接按值递归的 enum payload 会导致无限大小，必须编译拒绝（`E0352`）。递归数据结构必须显式间接化，有两种手段：
 
@@ -997,6 +1078,7 @@ enum Expr {
 
 构造：
 
+<!-- xr-source:example 006-5-declarations-example-035 -->
 ```xray
 var c = Color.Red
 var r1 = Option.Some { value: 42 }
@@ -1004,9 +1086,11 @@ var e1 = NetEvent.DataReceived { bytes: b }
 var e2 = NetEvent.Error { code: 404, message: "not found" }
 var e3 = NetEvent.Connected                         // unit 变体不写 braces
 ```
+<!-- /xr-source -->
 
 解构（match）：
 
+<!-- xr-source:example decl-enum-match -->
 ```xray @id=decl-enum-match @fragment
 match (event) {
     NetEvent.Connected                         => print("connected"),
@@ -1015,6 +1099,7 @@ match (event) {
     NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 ```
+<!-- /xr-source -->
 
 详见 §6.3。
 
@@ -1022,11 +1107,13 @@ match (event) {
 
 实例属性（作用在枚举值上）：
 
+<!-- xr-source:example decl-enum-properties -->
 ```xray @id=decl-enum-properties
 Color.Red.name        // "Red"          变体名 (string)
 Color.Red.ordinal     // 0              声明顺序 tag (i64，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
+<!-- /xr-source -->
 
 enum 值提供 `name`、`ordinal` 与 `toString()`。name只返回活动变体的声明名，toString只返回原enum声明名和活动变体名，不附加泛型实参、不读取或格式化payload、不调用载荷回调。两者按原类型与成员权限检查，不能授予构造权限或隐式Stringable见证；描述查询也不能补足原泛型约束。它们不提供 `value`、`rawValue`、`fromName` 或 `fromOrdinal` 等隐式 backing-value/reflection API。
 
@@ -1034,6 +1121,7 @@ enum 值提供 `name`、`ordinal` 与 `toString()`。name只返回活动变体�
 
 仅由无 payload 变体组成的具体 enum 可以直接迭代实际 enum 值；任意具体 enum 都可通过 `.variants` 迭代声明级描述符：
 
+<!-- xr-source:example decl-enum-iteration -->
 ```xray @id=decl-enum-iteration
 for (color in Color) {
     print(color.name)                     // color: Color；Red、Green、Blue
@@ -1048,6 +1136,7 @@ for (variant in NetEvent.variants) {
     }
 }
 ```
+<!-- /xr-source -->
 
 两种循环语法相似，但产出类型有意不同：
 
@@ -1082,6 +1171,7 @@ unit-only enum 的实际值与带载荷 enum 具有相同的名义身份规则�
 
 默认不支持 `Enum(value)` 或从 backing value 反查 enum。协议解析应写成显式函数：
 
+<!-- xr-source:example 006-5-declarations-example-039 -->
 ```xray
 fn statusFromCode(code: i64) -> HttpStatus? {
     if (code == 200) { return HttpStatus.OK }
@@ -1090,6 +1180,7 @@ fn statusFromCode(code: i64) -> HttpStatus? {
     return null
 }
 ```
+<!-- /xr-source -->
 
 #### 5.6.7 enum 方法
 
@@ -1097,6 +1188,7 @@ fn statusFromCode(code: i64) -> HttpStatus? {
 
 `enum` 体内可定义实例方法和静态方法，语法与 `class` 内的方法一致（不引入 `impl` 关键字）。实例方法在所有变体上可调用；方法体内通过 `match (this)` 区分变体行为：
 
+<!-- xr-source:example 006-5-declarations-example-040 -->
 ```xray @fragment
 enum Shape {
     Circle { radius: f64 },
@@ -1126,9 +1218,11 @@ var s = Shape.Circle { radius: 1.0 }
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
+<!-- /xr-source -->
 
 静态方法使用 `static name(...)`；实例方法默认 READ receiver，修改值语义部分使用 `ref` receiver，取得持有权使用 `move` receiver，可复制与不可复制 enum 均适用；完整声明族的准入见 §17。enum 方法不写 `fn`：
 
+<!-- xr-source:example 006-5-declarations-example-041 -->
 ```xray
 enum Color {
     Red, Green, Blue
@@ -1146,6 +1240,7 @@ enum Color {
 
 print(Color.fromInt(2).label())     // "Green"
 ```
+<!-- /xr-source -->
 
 > 注意 `Triangle { ... }` 后没有逗号——最后一个变体与方法块之间用空白分隔（trailing comma 允许但不强制）。
 
@@ -1170,11 +1265,14 @@ print(Color.fromInt(2).label())     // "Green"
 
 ### 5.7 `type` 别名
 
+<!-- xr-source:grammar 006-5-declarations-grammar-07 -->
 ```ebnf
-TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-nominal-type-aliases -->
 ```xray @id=decl-nominal-type-aliases @check
 type Outcome = i64 | string                          // union 别名
 type Mapper = fn(i64) -> i64                              // 函数类型别名
@@ -1182,6 +1280,7 @@ struct Point { x: f64; y: f64 }
 type Position = Point                              // 同一名义类型的别名
 type Pair<T> = (T, T)                               // 无标签 tuple 的泛型别名
 ```
+<!-- /xr-source -->
 
 **语义**：
 - 别名是**纯语法**替换，不产生新名义类型。
@@ -1197,6 +1296,7 @@ type Pair<T> = (T, T)                               // 无标签 tuple 的泛型
 
 详见 [§11](#11-模块系统-modules)。语法要点：
 
+<!-- xr-source:example 006-5-declarations-example-043 -->
 ```xray
 // stdlib / 第三方包：裸标识符，可自动生成别名
 import time
@@ -1218,6 +1318,7 @@ export const VERSION = "1.0"
 export { name1, name2 as alias } from "./other"
 export * from "./other"
 ```
+<!-- /xr-source -->
 
 **xray 不支持** JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
 
@@ -1233,17 +1334,20 @@ export * from "./other"
 
 ### 5.1 `var` / `const`
 
+<!-- xr-source:grammar 006-5-declarations-grammar-01 -->
 ```ebnf
 VarDecl ::= 'var' Binding
-ConstDecl ::= 'const' Binding
-Binding ::= Pattern (':' Type)? ('=' Expression)?
-Pattern ::= Identifier
-         | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
-         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+Binding ::= DeclarationPattern (':' Type)? ('=' Expression)?
+DeclarationPattern ::= Identifier
+                |  '[' DeclarationPattern (',' DeclarationPattern)* ','? ']'
+                |  '(' DeclarationPattern (',' DeclarationPattern)+ ','? ')'
 ```
+<!-- /xr-source -->
 
 #### 5.1.1 `var` — mutable binding
 
+<!-- xr-source:example decl-var -->
 ```xray @id=decl-var
 var x = 1                         // type inferred as i64
 var name: string = "Alice"        // explicit type
@@ -1251,6 +1355,7 @@ var count: i64                    // no initializer: zero value used
 var maybeName: string?            // OK: defaults to null
 var empty: string = ""            // string requires an explicit initializer
 ```
+<!-- /xr-source -->
 
 - Reassignable.
 - Must have an initializer **or** a type annotation; otherwise compile error `E0303`.
@@ -1259,10 +1364,12 @@ var empty: string = ""            // string requires an explicit initializer
 
 #### 5.1.2 `const` — immutable binding
 
+<!-- xr-source:example decl-const -->
 ```xray @id=decl-const
 const PI = 3.14159
 const MAX_LEN: i64 = 1024
 ```
+<!-- /xr-source -->
 
 - An initializer is **required** and reassignment is forbidden (compile error `E0303`). The type may be inferred or annotated.
 - Like `var`, each declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
@@ -1271,6 +1378,7 @@ const MAX_LEN: i64 = 1024
 - Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` may use `const` to fix the binding. Their audited APIs can still change protected internal state. `const` alone proves neither Sendable nor concurrency safety.
 - Saving a copyable read-only value into `var` produces a writable logical copy. It does not acquire a writable borrow of the original place or remove the referenced class object's own permission restrictions.
 
+<!-- xr-source:example decl-capability -->
 ```xray @id=decl-capability
 const channel = Channel<i64>(16)
 const counter = Atomic(0)
@@ -1283,6 +1391,7 @@ current.push(4)
 print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
+<!-- /xr-source -->
 
 `const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries. Ordinary value copying requires neither explicit `copy value` nor `move value`; see §2.14.5 for these prefix expressions.
 
@@ -1290,6 +1399,7 @@ These are language contracts. See §17 for current new XIR implementation qualif
 
 #### 5.1.3 Destructuring bindings
 
+<!-- xr-source:example decl-destructuring -->
 ```xray @id=decl-destructuring @fragment
 // array destructuring
 var [a, b, c] = [1, 2, 3]
@@ -1299,6 +1409,7 @@ var [first, , third] = [10, 20, 30]         // skip elements
 var (q, r) = divmod(17, 5)
 
 ```
+<!-- /xr-source -->
 
 Constraints:
 - The number of destructured bindings must match (except with rest patterns).
@@ -1307,22 +1418,25 @@ The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `
 
 ### 5.2 `fn` function declaration
 
+<!-- xr-source:grammar 006-5-declarations-grammar-02 -->
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ThrowsClause ::= 'throws' ('(' Type ')')?
-ParamList ::= Param (',' Param)*
-Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
-            | '...' Identifier ':' Type
-ParamType ::= ParamMode? Type
+ParamList ::= Param (',' Param)* ','?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
+           |  '...' Identifier ':' Type
+ParamType ::= 'escaping'? ParamMode? Type
+// escaping is valid only for function-typed parameters; see the parameter rules.
 ParamMode ::= 'ref' | 'move'
-ReturnType ::= '->' Type
-            |  '->' '(' Type (',' Type)+ ')'   // tuple return
-TypeParams ::= '<' Identifier (',' Identifier)* '>'
-AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
+AttrList ::= PublicAttribute*
 ```
+<!-- /xr-source -->
 
 #### 5.2.1 Basic form
 
+<!-- xr-source:example decl-fn-basic -->
 ```xray @id=decl-fn-basic
 fn add(a: i64, b: i64) -> i64 {
     return a + b
@@ -1336,6 +1450,7 @@ fn echo(x: i64) {                       // omitted return type = ()
     print(x)
 }
 ```
+<!-- /xr-source -->
 
 **Key points**:
 - Parameters **must** carry type annotations (consistent with arrow functions).
@@ -1346,12 +1461,14 @@ fn echo(x: i64) {                       // omitted return type = ()
 
 A named function without `throws` guarantees no business error. Write `throws(E)` after the parameters and before the result; a Unit-returning function can use `fn run() throws(E)`. Legal error types are defined in §2.2.2. Bare `throws` means `throws(Error)`; `throws(Never)` is equivalent to omission. A union of error enums permits multiple error types.
 
+<!-- xr-source:example 006-5-declarations-example-006 -->
 ```xray @fragment
 fn add(a: i64, b: i64) -> i64 { /* body omitted */ }
 fn parse(s: string) throws(ParseErr) -> i64 { /* body omitted */ }
 fn load(path: string) throws(IoErr | ParseErr) -> Config { /* body omitted */ }
 fn runAll() throws { /* body omitted */ }
 ```
+<!-- /xr-source -->
 
 These examples show signatures with bodies omitted as comments; ordinary definitions require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
 
@@ -1361,6 +1478,7 @@ Throwing public standard-library APIs must declare typed `throws(E)`, which may 
 
 #### 5.2.2 Default Values and Named Arguments
 
+<!-- xr-source:example decl-fn-default -->
 ```xray @id=decl-fn-default
 fn connect(host: string, port: i64 = 8080, tls: bool = false) {
     print(host, port, tls)
@@ -1370,6 +1488,7 @@ connect("localhost")              // port=8080, tls=false
 connect("localhost", 443)         // tls=false
 connect("localhost", 443, true)
 ```
+<!-- /xr-source -->
 
 - Default values are evaluated at the **call site**: when a trailing argument is omitted, the compiler completes the call with the default expression, evaluating it once per omitting call in argument order.
 - Passing an explicit `null` passes `null`; it does **not** trigger the default (defaults are used only when the argument is omitted).
@@ -1388,6 +1507,7 @@ connect("localhost", 443, true)
 
 Positional arguments must precede named arguments. Each formal is bound at most once. Unknown names, duplicates, naming a parameter already supplied positionally, and positional arguments after named arguments report E0327. Rest arguments remain positional. Direct named-function, method and constructor calls use the called declaration's parameter names. Function values, including const aliases of named functions, accept no labels.
 
+<!-- xr-source:example decl-named-arguments -->
 ```xray @id=decl-named-arguments @check
 fn request(url: string, method: string = "GET", followRedirects: bool = true) -> string {
     return "${method} ${url} ${followRedirects}"
@@ -1395,11 +1515,13 @@ fn request(url: string, method: string = "GET", followRedirects: bool = true) ->
 request("https://a")
 request(url: "https://a", followRedirects: false)
 ```
+<!-- /xr-source -->
 
 Evaluate the receiver/callee first, explicit arguments in written order, then omitted defaults in declaration order. Reorder already evaluated values into formal slots, never expressions. Expected types and generic evidence use the bound formal positions; defaults provide no extra caller inference evidence. Place `ref` or `move` after the label and before the value. Parameter names are exported API and retain their names across modules. See §3.11.
 
 #### 5.2.3 Multiple return values
 
+<!-- xr-source:example decl-fn-multi-return -->
 ```xray @id=decl-fn-multi-return
 fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
@@ -1408,6 +1530,7 @@ fn divmod(a: i64, b: i64) -> (i64, i64) {
 var (q, r) = divmod(17, 5)
 var result = divmod(10, 3)        // result has type (i64, i64)
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 - The return type wraps the tuple in parentheses: `(i64, bool)`.
@@ -1418,6 +1541,7 @@ var result = divmod(10, 3)        // result has type (i64, i64)
 
 Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; acquiring ownership of a value uses `name: move T`, for copyable values as well as noncopyable resources. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
 
+<!-- xr-source:example decl-fn-param-modes -->
 ```xray @id=decl-fn-param-modes
 fn length_sq(v: Vec2) -> f64 {
     return v.x * v.x + v.y * v.y
@@ -1436,6 +1560,7 @@ fn appended(xs: Array<string>, value: string) -> Array<string> {
 
 translate(ref point, 1.0, 2.0)
 ```
+<!-- /xr-source -->
 
 | Parameter mode | Semantics |
 |--|--|
@@ -1455,6 +1580,7 @@ Ordinary outputs use return values, tuples, or structs. Business errors follow �
 
 #### 5.2.5 Rest parameters
 
+<!-- xr-source:example decl-fn-rest -->
 ```xray @id=decl-fn-rest
 fn sum(...nums: i64) -> i64 {
     var total = 0
@@ -1464,6 +1590,7 @@ fn sum(...nums: i64) -> i64 {
 
 sum(1, 2, 3)        // total = 6
 ```
+<!-- /xr-source -->
 
 - An ordinary named function may declare one final READ rest parameter, `...name: T`, without a default, `ref` or `move`. This does not extend anonymous functions, methods or constructors. Nested named functions retain authentic capture and owner rules.
 - The body receives a read-only `Array<T>` binding. Elements meet existing Array storage and copying requirements; rest adds no Sendable or NoSuspend promise. Ordinary value copying, COW, identity and failed cleanup apply.
@@ -1473,11 +1600,13 @@ sum(1, 2, 3)        // total = 6
 
 #### 5.2.6 Function hoisting
 
+<!-- xr-source:example 006-5-declarations-example-012 -->
 ```xray
 main()                       // OK: the function declaration is hoisted
 
 fn main() { ... }
 ```
+<!-- /xr-source -->
 
 - Top-level `fn` declarations are hoisted to the top of the current scope.
 - `var f = (x: i64) -> x` (an arrow function bound to a variable) is **not** hoisted.
@@ -1486,29 +1615,34 @@ fn main() { ... }
 
 The Xi optimizer rewrites proven self-tail calls into loops, and the VM also has constant-stack tail-call opcodes. This is not a blanket constant-stack guarantee for every back end or every indirect/mutually-recursive call: constructors and calls that cannot be proven safe remain ordinary calls. See [§17](#17-compilation-pipeline).
 
+<!-- xr-source:example 006-5-declarations-example-013 -->
 ```xray
 fn factorial(n: i64, acc: i64 = 1) -> i64 {
     if (n <= 1) { return acc }
     return factorial(n - 1, acc * n)     // tail call: optimized to a loop
 }
 ```
+<!-- /xr-source -->
 
 #### 5.2.8 Program entry point
 
 xray has **no fixed `main` entry function**. A program runs the top level of its **entry file** in order: `fn` declarations are hoisted and registered; expressions and statements run immediately.
 
+<!-- xr-source:example 006-5-declarations-example-014 -->
 ```xray
 // hello.xr (entry file)
 print("loading")          // top-level statement, runs immediately
 fn greet() { print("hi") }
 greet()                   // must be called explicitly
 ```
+<!-- /xr-source -->
 
 - The entry file is the file given directly to `xray run`, `xray build`, and similar commands. Multi-file projects specify the entry file with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`.
 - **Only the entry file may contain executable top-level statements.** The top level of an imported module may contain only declarations (`import`, `export`, functions, type and interface declarations, `extern "C"` blocks) and module-state declarations with their initializers (`const`, `var`, and their initializer expressions). A standalone expression statement or control-flow statement in an imported module is a compile error. Module state is initialized in the topological order of §11.6.
 - Top-level statements of the entry file and module-state initializers implicitly allow arbitrary errors; propagation sites still require marking. An uncaught error prints `[Uncaught Error] <value>` and exits with code 1 (§8).
 - `fn main()` has no special meaning and follows the same rules as any named function: omitting `throws` means it does not throw. Call it explicitly from the entry file's top level when needed, writing `try main()` if it can throw:
 
+<!-- xr-source:example 006-5-declarations-example-015 -->
 ```xray
 enum ConfigErr { Missing }
 
@@ -1524,6 +1658,7 @@ fn main() throws(ConfigErr) {
 
 try main()
 ```
+<!-- /xr-source -->
 
 - Top-level `return` is forbidden (compile error `E0306`).
 
@@ -1533,6 +1668,7 @@ try main()
 
 An `extern "C"` block declares external **function symbols** that share the C ABI. External functions have no Xray body, and calls must appear explicitly inside `unsafe { }`:
 
+<!-- xr-source:example 006-5-declarations-example-016 -->
 ```xray
 extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
@@ -1547,11 +1683,13 @@ unsafe {
     free(p)
 }
 ```
+<!-- /xr-source -->
 
 Libraries, targets, symbol renames, native sources/objects, typed flags, hashes, and licenses belong to the NativePackagePlan in `xray.toml`, not ordinary source. An `extern "C"` block does not accept `dylib`/`link` clauses, bodies, data/globals, structs, unions, packed layouts, or flexible members.
 
 C ABI aggregates use ordinary Xray structs bound to a C header/type by `[[native.layout]]`. Before linking, the builder compiles static assertions for `sizeof`, `_Alignof`, and every `offsetof`; any mismatch fails closed:
 
+<!-- xr-source:example 006-5-declarations-example-017 -->
 ```xray
 import mem
 
@@ -1564,6 +1702,7 @@ print(mem.sizeOf<CHeader>())
 print(mem.alignOf<CHeader>())
 print(mem.offsetOf<CHeader>("count"))
 ```
+<!-- /xr-source -->
 
 Rules:
 - The ABI string is mandatory; `"C"` is currently the only supported value.
@@ -1575,6 +1714,7 @@ Rules:
 - The aligned VM/AOT boundary types are `bool`, sized integers, `f32` / `f64`, `usize` / `isize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
 - C callbacks use `CFn<fn(A, B) -> R>`, not ordinary Xray function types. A `CFn` value must be a module-level, noncapturing Xray function with an exact signature match.
 
+<!-- xr-source:example 006-5-declarations-example-018 -->
 ```xray
 extern "C" {
     fn bsearch(
@@ -1592,16 +1732,21 @@ fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
 
 // zeroCmp is a module-level noncapturing function and can be used as a CFn callback.
 ```
+<!-- /xr-source -->
 
 #### 5.2.10 Manifest C ABI Exports
 
 A module-level Xray function remains an ordinary `fn` in source. Its C ABI export name and visibility are selected by the typed export plan in `xray.toml`:
 
+<!-- xr-source:example 006-5-declarations-example-019 -->
 ```xray
 fn add(a: i32, b: i32) -> i32 {
     return a + b
 }
+
+print(add(19, 23))        // An ordinary function call inside Xray
 ```
+<!-- /xr-source -->
 
 ```toml
 [[export.c]]
@@ -1672,6 +1817,7 @@ A default argument expression uses the parameter's declared expected type and is
 
 Closure capture and higher-order functions:
 
+<!-- xr-source:example 006-5-declarations-example-020 -->
 ```xray
 fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
@@ -1686,9 +1832,11 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 Multiple return values (a tuple):
 
+<!-- xr-source:example 006-5-declarations-example-021 -->
 ```xray
 fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
@@ -1702,22 +1850,27 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 5.3 `class` declaration
 
 Classes have identity; assignment and saving a parameter copy references only. Class methods do not declare `ref` / `move` receivers. Ordinary methods invoked through a READ parameter or `const` binding may still mutate the object, but cannot rebind that parameter or binding. A `ref` / view access to a class field must retain the object and check dynamic exclusivity. A local proof of no conflict may eliminate that check, not change the permission contract.
 
+<!-- xr-source:grammar 006-5-declarations-grammar-03 -->
 ```ebnf
-ClassDecl ::= 'final'? 'class' Identifier TypeParams?
-              ('extends' Identifier TypeArgs?)?
-              ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
+              ('extends' NamedType)?
+              ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+StaticBlock ::= 'static' Block
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // parameter types may be omitted
-Modifier ::= 'private' | 'protected' | 'static' | 'const'
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
+              // public visibility is the default; final is only a class prefix
 ```
+<!-- /xr-source -->
 
 > **About default public visibility and explicit overrides**:
 >
@@ -1730,6 +1883,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 
 #### 5.3.1 Basic class
 
+<!-- xr-source:example decl-class-basic -->
 ```xray @id=decl-class-basic
 class Animal {
     name: string                       // field
@@ -1752,9 +1906,11 @@ var a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
+<!-- /xr-source -->
 
 #### 5.3.2 Inheritance
 
+<!-- xr-source:example decl-class-inheritance -->
 ```xray @id=decl-class-inheritance
 class Dog extends Animal {
     init(name: string) {
@@ -1766,6 +1922,7 @@ class Dog extends Animal {
     }
 }
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 - A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
@@ -1799,6 +1956,7 @@ Direct static calls obey the trailing default-argument, left-to-right evaluation
 
 An initializer can declare `init(...) throws(E)`; omission means non-throwing. Its `Type(...)` call requires `try` or a handling region according to that signature, and failure does not publish a partially initialized value. Methods, including static, enum, and operator methods, use the same clause position and local checking rules.
 
+<!-- xr-source:example 006-5-declarations-example-024 -->
 ```xray
 class Point {
     x: f64
@@ -1819,6 +1977,7 @@ class Vector2 {
     }
 }
 ```
+<!-- /xr-source -->
 
 - `init` is contextual at a type member declaration. The retired `constructor` declaration spelling is rejected without an alias. Elsewhere `init` remains an ordinary identifier.
 - A class has **at most one constructor** (no overloading); multiple creation paths use `static` factory methods.
@@ -1838,6 +1997,7 @@ class Vector2 {
 
 `Iterator<T>` is a built-in prelude interface. It is the pull protocol behind `for-in` and the return type of a generator function (§3.16):
 
+<!-- xr-source:example decl-iterator-protocol -->
 ```xray @id=decl-iterator-protocol
 interface Iterator<T> {
     hasNext() -> bool       // is another element available; does not consume one
@@ -1849,6 +2009,7 @@ interface Iterable<T> {
     iterator() -> Iterator<T>
 }
 ```
+<!-- /xr-source -->
 
 Rules:
 
@@ -1865,6 +2026,7 @@ A generator function (one whose body uses `yield expr`) implements this interfac
 
 A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
 
+<!-- xr-source:example 006-5-declarations-example-026 -->
 ```xray
 class Rect {
     _w: i64
@@ -1888,6 +2050,7 @@ fn main() {
     print(r.area)       // prints 40
 }
 ```
+<!-- /xr-source -->
 
 Rules:
 
@@ -1904,6 +2067,7 @@ Self-contained programs that run as-is and pass `xray check` (comments show the 
 
 Inheritance with explicit override:
 
+<!-- xr-source:example 006-5-declarations-example-027 -->
 ```xray
 class Animal {
     name: string
@@ -1924,6 +2088,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 Named-value calls obey the contracts above, with complete implementation qualification in §17.
 
@@ -1933,12 +2098,15 @@ A copyable struct preserves logical copies according to the declared type of eac
 
 A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. A method acquiring ownership of its receiver may declare `move`, including for copyable types. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
 
+<!-- xr-source:grammar 006-5-declarations-grammar-04 -->
 ```ebnf
-StructDecl ::= 'struct' Identifier TypeParams?
-               ('implements' Identifier (',' Identifier)*)?
-               '{' StructMember* '}'
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('implements' NamedType (',' NamedType)*)?
+               '{' ClassMember* '}'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-struct-point -->
 ```xray @id=decl-struct-point
 struct Point {
     x: f64
@@ -1962,6 +2130,7 @@ var b = q                            // b is an independent copy of q
 b.x = 99.0
 // q.x is still 3.0
 ```
+<!-- /xr-source -->
 
 **Field rules for aggregate literals** (identical to sealed Records):
 
@@ -1971,6 +2140,7 @@ b.x = 99.0
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
 - **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 
+<!-- xr-source:example 006-5-declarations-example-029 -->
 ```xray
 struct Config {
     host: string
@@ -1982,6 +2152,7 @@ var c = Config{host: "localhost"}    // OK
 // Config{host: "h", ports: 1}       // compile error E0380: no field 'ports'
 // Config{port: 1}                   // compile error E0381: missing field 'host'
 ```
+<!-- /xr-source -->
 
 **Differences from `class`**:
 
@@ -2005,6 +2176,7 @@ var c = Config{host: "localhost"}    // OK
 
 A copyable `struct` is a value type: assignment and saving a parameter preserve logical copies field by field. An ordinary READ parameter accesses the value read-only and may save a copy, without requiring a particular physical ABI.
 
+<!-- xr-source:example 006-5-declarations-example-030 -->
 ```xray
 struct Point {
     x: i64
@@ -2021,19 +2193,22 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 ### 5.5 `interface` and `implements`
 
 xray's interface implementation is **explicit** (unlike Go's structural implementation): a class/struct must list interfaces with `implements`.
 
+<!-- xr-source:grammar 006-5-declarations-grammar-05 -->
 ```ebnf
-InterfaceDecl ::= 'interface' Identifier TypeParams?
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?       // method signature
-                 |  ('const')? Identifier ':' Type                   // property signature (`const` for read-only)
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-interface-shape -->
 ```xray @id=decl-interface-shape
 interface Shape {
     area() -> f64
@@ -2067,6 +2242,7 @@ fn describe(s: Shape) -> string {
     return "area=${s.area()}, perimeter=${s.perimeter()}"
 }
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 
@@ -2097,6 +2273,7 @@ Checked owns constraints, interface applications, requirement identities and exp
 
 New XIR now admits ordinary read-receiver methods, explicit struct/enum implementations, and generic member calls checked at definition time. Checked retains original requirement identities and implementation mappings; witness selection and specialization occur on Checked and are reverified before Lowered. Generic struct/enum implementations depend on their nominal declaration premises; additional method conditions cannot supply missing type premises. Ordinary enum READ/static methods reuse nominal method production and require match before payload extraction; method and builtin member collisions reject at declaration time under §5.6.7. This subset has Windows VM/native validation against independent expectations, without claiming complete declaration-family or safety qualification. Complete explicit own arguments and inline conditions of generic interface methods have the Windows scope qualification above. Own where and value-shape inference have Windows scope qualification; late result completion and explicit method values form the next qualification family. Full bidirectional and contextual function-value inference remain OPEN. Properties, other receivers, unimplemented enum name/toString/variants consumers, class/override, and interface values still require separate implementation and verification. Unimplemented surfaces reject explicitly; these language objectives remain unchanged.
 
+<!-- xr-source:example 006-5-declarations-example-032 -->
 ```xray
 // property signatures + interface inheritance
 interface HasLength {
@@ -2116,6 +2293,7 @@ class Buffer implements SizedCollection<i64> {
     first() -> i64 { return this.data[0] }
 }
 ```
+<!-- /xr-source -->
 
 #### Implementation Qualification
 
@@ -2125,8 +2303,9 @@ Interfaces, `implements` and polymorphism obey the contracts above, with complet
 
 xray's `enum` is a **safe tagged aggregate**: each value contains a compiler-assigned declaration-order tag, and only the payload for the active tag may be read. A payload-free enum is just a tagged aggregate whose variants have payload size 0; payload enums are the same model used as a safe sum type.
 
+<!-- xr-source:grammar 006-5-declarations-grammar-06 -->
 ```ebnf
-EnumDecl       ::= 'enum' Identifier TypeParams?
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier
@@ -2135,6 +2314,7 @@ EnumFieldDecl  ::= Identifier ':' Type
 EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
                  | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ```
+<!-- /xr-source -->
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
 
@@ -2142,6 +2322,7 @@ An enum type is identified by its declaring module, declaration and ordered type
 
 #### 5.6.1 Simple enums (0-payload enum)
 
+<!-- xr-source:example decl-enum-simple -->
 ```xray @id=decl-enum-simple @fragment
 enum Color { Red, Green, Blue }
 
@@ -2164,6 +2345,7 @@ enum HttpStatus {
     }
 }
 ```
+<!-- /xr-source -->
 
 Enum variants use declaration order for their stable `ordinal` and do not declare a separate backing value. Express protocol numbers, string symbols, and similar external representations with `const`, methods, or explicit conversion functions.
 
@@ -2171,6 +2353,7 @@ Enum variants use declaration order for their stable `ordinal` and do not declar
 
 Payload variants use named record fields. Every field has a non-empty name unique within the variant:
 
+<!-- xr-source:example decl-enum-payload -->
 ```xray @id=decl-enum-payload
 enum Option<T> {
     Some { value: T },
@@ -2197,6 +2380,7 @@ enum Expr {
     Call { name: string, args: Array<Expr> },
 }
 ```
+<!-- /xr-source -->
 
 A directly recursive enum payload would have infinite size and is rejected at compile time (`E0352`). Recursive data structures must use explicit indirection, in one of two forms:
 
@@ -2209,6 +2393,7 @@ A directly recursive enum payload would have infinite size and is rejected at co
 
 Construction:
 
+<!-- xr-source:example 006-5-declarations-example-035 -->
 ```xray
 var c = Color.Red
 var r1 = Option.Some { value: 42 }
@@ -2216,9 +2401,11 @@ var e1 = NetEvent.DataReceived { bytes: b }
 var e2 = NetEvent.Error { code: 404, message: "not found" }
 var e3 = NetEvent.Connected                         // unit variant: no braces
 ```
+<!-- /xr-source -->
 
 Destructuring (match):
 
+<!-- xr-source:example decl-enum-match -->
 ```xray @id=decl-enum-match @fragment
 match (event) {
     NetEvent.Connected                         => print("connected"),
@@ -2227,6 +2414,7 @@ match (event) {
     NetEvent.Error { code, message: msg }      => log.error(code, msg),
 }
 ```
+<!-- /xr-source -->
 
 See §6.3.
 
@@ -2234,11 +2422,13 @@ See §6.3.
 
 Instance properties (act on the enum value):
 
+<!-- xr-source:example decl-enum-properties -->
 ```xray @id=decl-enum-properties
 Color.Red.name        // "Red"          variant name (string)
 Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
+<!-- /xr-source -->
 
 Enum values provide `name`, `ordinal`, and `toString()`. name returns the active variant declaration name; toString returns only the original enum declaration name and active variant name. Neither appends generic arguments, reads or formats payloads, or invokes payload callbacks. Original type and member permissions still apply; these operations grant no construction authority or implicit Stringable witness, and descriptive queries cannot supply missing generic premises. They do not expose implicit backing-value/reflection APIs such as `value`, `rawValue`, `fromName`, or `fromOrdinal`.
 
@@ -2246,6 +2436,7 @@ Enum values provide `name`, `ordinal`, and `toString()`. name returns the active
 
 A concrete enum containing only payload-free variants can be iterated directly as actual enum values. Every concrete enum can expose declaration metadata through `.variants`:
 
+<!-- xr-source:example decl-enum-iteration -->
 ```xray @id=decl-enum-iteration
 for (color in Color) {
     print(color.name)                     // color: Color; Red, Green, Blue
@@ -2260,6 +2451,7 @@ for (variant in NetEvent.variants) {
     }
 }
 ```
+<!-- /xr-source -->
 
 The two loop forms deliberately yield different types:
 
@@ -2294,6 +2486,7 @@ Generic code must identify a concrete enum layout. `Option<i64>.variants` is val
 
 `Enum(value)` and reverse lookup from backing values are not supported by default. Protocol parsing should be written as an explicit function:
 
+<!-- xr-source:example 006-5-declarations-example-039 -->
 ```xray
 fn statusFromCode(code: i64) -> HttpStatus? {
     if (code == 200) { return HttpStatus.OK }
@@ -2302,6 +2495,7 @@ fn statusFromCode(code: i64) -> HttpStatus? {
     return null
 }
 ```
+<!-- /xr-source -->
 
 #### 5.6.7 Enum methods
 
@@ -2309,6 +2503,7 @@ An enum resolves members separately in its type-access and value-access domains.
 
 Instance and static methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Instance methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
 
+<!-- xr-source:example 006-5-declarations-example-040 -->
 ```xray @fragment
 enum Shape {
     Circle { radius: f64 },
@@ -2338,9 +2533,11 @@ var s = Shape.Circle { radius: 1.0 }
 print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
+<!-- /xr-source -->
 
 Static methods use `static name(...)`. Instance methods have a READ receiver by default, use `ref` to mutate value-semantic components and `move` to acquire ownership. Both copyable and noncopyable enums may declare a `move` receiver; see §17 for qualification of complete declaration families. Enum methods do not write `fn`:
 
+<!-- xr-source:example 006-5-declarations-example-041 -->
 ```xray
 enum Color {
     Red, Green, Blue
@@ -2358,6 +2555,7 @@ enum Color {
 
 print(Color.fromInt(2).label())     // "Green"
 ```
+<!-- /xr-source -->
 
 > Note that `Triangle { ... }` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
 
@@ -2382,11 +2580,14 @@ print(Color.fromInt(2).label())     // "Green"
 
 ### 5.7 `type` aliases
 
+<!-- xr-source:grammar 006-5-declarations-grammar-07 -->
 ```ebnf
-TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
 AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example decl-nominal-type-aliases -->
 ```xray @id=decl-nominal-type-aliases @check
 type Outcome = i64 | string                          // union alias
 type Mapper = fn(i64) -> i64                           // function-type alias
@@ -2394,6 +2595,7 @@ struct Point { x: f64; y: f64 }
 type Position = Point                              // alias of the same nominal type
 type Pair<T> = (T, T)                               // generic alias of an unlabeled tuple
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - An alias is **purely a syntactic** substitution; it does not introduce a new nominal type.
@@ -2409,6 +2611,7 @@ See §2.4.7 and [§2.8](#28-type-aliases).
 
 See [§11](#11-modules). Syntax highlights:
 
+<!-- xr-source:example 006-5-declarations-example-043 -->
 ```xray
 // stdlib / third-party packages: bare identifiers; alias auto-derived
 import time
@@ -2430,6 +2633,7 @@ export const VERSION = "1.0"
 export { name1, name2 as alias } from "./other"
 export * from "./other"
 ```
+<!-- /xr-source -->
 
 **xray does not support** the JavaScript default-import form `import name from "module"`. Use `import "module" as name`, `import module`, or `import { name } from module`.
 

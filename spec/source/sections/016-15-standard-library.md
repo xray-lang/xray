@@ -8,7 +8,7 @@ order: 016
 
 ## 15. 标准库概览 (Standard Library)
 
-> 真值源：`stdlib/defs/*.def`、纯 Xray `stdlib/<module>/<module>.xr` export、`stdlib/types/*.xr` native type 声明，以及合并这些来源的 `scripts/gen_api_inventory.py`。
+> 实现参考：`stdlib/defs/*.def`、纯 Xray `stdlib/<module>/<module>.xr` export、`stdlib/types/*.xr` native type 声明，以及合并这些来源的 `scripts/gen_api_inventory.py`。
 > MCP knowledge 和 API inventory 使用 source-derived inventory；`xray builtin-dump` 只作为运行时 builtin 视图输入之一。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
@@ -152,7 +152,7 @@ quoted导入`"std/path/posix"`／`"std/path/windows"`提供独立`PosixPath`／`
 
 ## 15. Standard Library Overview
 
-> Source of truth: `stdlib/defs/*.def`, pure-Xray `stdlib/<module>/<module>.xr` exports, `stdlib/types/*.xr` native type declarations, and `scripts/gen_api_inventory.py`, which merges those sources.
+> Implementation reference: `stdlib/defs/*.def`, pure-Xray `stdlib/<module>/<module>.xr` exports, `stdlib/types/*.xr` native type declarations, and `scripts/gen_api_inventory.py`, which merges those sources.
 > MCP knowledge and the API inventory use the source-derived inventory; `xray builtin-dump` is only one runtime builtin-view input.
 > See [Appendix D — stdlib module index](#d-stdlib-module-index).
 

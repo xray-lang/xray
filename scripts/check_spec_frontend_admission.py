@@ -45,7 +45,7 @@ def validate_case(case):
     expected = case.get("expected", {})
     if case["role"] == "DEFERRED":
         selected = case.get("source", {})
-        expected_id = "json-boundary-and-path" + ("-en" if case["language"] == "en" else "")
+        expected_id = "json-boundary-and-path"
         if case.get("dependency") != "Task338" or case.get("required_for_task342") is not False or selected.get("path") != "spec/source/sections/015-14-built-in-type-methods.md" or selected.get("fence_id") != expected_id:
             raise ValueError("only the explicitly approved Task338 dependency can be deferred")
     else:

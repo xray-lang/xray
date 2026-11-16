@@ -8,7 +8,7 @@ order: 012
 
 ## 11. 模块系统 (Modules)
 
-> 真值源：`src/module/xmodule.c`、`src/module/xmodule_resolver.c`、`src/module/xmodule_graph.c`、`src/frontend/parser/xparse_import.c`。
+> 实现参考：`src/module/xmodule.c`、`src/module/xmodule_resolver.c`、`src/module/xmodule_graph.c`、`src/frontend/parser/xparse_import.c`。
 
 ### 11.1 模块定义
 
@@ -47,15 +47,18 @@ local_utils = { path = "../local_utils" }
 
 `import` 声明**只能出现在模块顶层**。在函数、类或任何嵌套作用域内使用 `import` 会产生编译错误。
 
+<!-- xr-source:grammar 012-11-modules-grammar-01 -->
 ```ebnf
 ImportStmt ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
-ImportModule  ::= StringLiteral | ModuleName
+ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 ModuleName    ::= Identifier
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example modules-import -->
 ```xray @id=modules-import
 // 1. stdlib：裸标识符；没有 `as` 时别名等于模块名
 import time
@@ -74,6 +77,7 @@ import "../utils/string_utils" as utils
 import { readFile, writeFile as write } from io
 import { publicFn } from "./modules/mod_a"
 ```
+<!-- /xr-source -->
 
 **不支持**：
 - JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
@@ -98,14 +102,17 @@ import { publicFn } from "./modules/mod_a"
 
 `export` 可见性**只能出现在模块顶层声明上**。跨模块重导出仍是独立声明：
 
+<!-- xr-source:grammar 012-11-modules-grammar-02 -->
 ```ebnf
 Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
-Visibility  ::= 'export'
+Visibility ::= 'export'
 ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
               | 'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example modules-export -->
 ```xray @id=modules-export
 // 1. 声明自身携带 export 可见性
 export fn helper() { return }
@@ -121,6 +128,7 @@ export { getUser, getUserAge as getAge } from "./user"
 // 3. 通配重导出（把另一个模块的全部 export 转出）
 export * from "./product"
 ```
+<!-- /xr-source -->
 
 **限制**：
 - 未标 `export` 的声明仅模块内可见（**私有**）。
@@ -162,15 +170,20 @@ XRAY_API void register_time_module(xray_vm_t* vm) {
 
 xray 端用法相同：
 
+<!-- xr-source:example modules-use -->
 ```xray @id=modules-use
 import time
 var t = time.now()
 time.sleep(100)
 ```
+<!-- /xr-source -->
+
+
 ### 11.8 完整可运行示例
 
 从标准库按需导入与命名空间导入：
 
+<!-- xr-source:example 012-11-modules-example-004 -->
 ```xray
 import { sha256 } from crypto
 import math
@@ -182,7 +195,7 @@ fn main() {
 
 main()
 ```
-
+<!-- /xr-source -->
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -190,7 +203,7 @@ main()
 
 ## 11. Modules
 
-> Source of truth: `src/module/xmodule.c`, `src/module/xmodule_resolver.c`, `src/module/xmodule_graph.c`, `src/frontend/parser/xparse_import.c`.
+> Implementation reference: `src/module/xmodule.c`, `src/module/xmodule_resolver.c`, `src/module/xmodule_graph.c`, `src/frontend/parser/xparse_import.c`.
 
 ### 11.1 Module Definition
 
@@ -229,15 +242,18 @@ local_utils = { path = "../local_utils" }
 
 `import` declarations **must appear at the module top level**. Using `import` inside a function, class, or any nested scope is a compile error.
 
+<!-- xr-source:grammar 012-11-modules-grammar-01 -->
 ```ebnf
 ImportStmt ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
-ImportModule  ::= StringLiteral | ModuleName
+ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 ModuleName    ::= Identifier
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example modules-import -->
 ```xray @id=modules-import
 // 1. stdlib: bare identifier; without `as`, the alias equals the module name
 import time
@@ -256,6 +272,7 @@ import "../utils/string_utils" as utils
 import { readFile, writeFile as write } from io
 import { publicFn } from "./modules/mod_a"
 ```
+<!-- /xr-source -->
 
 **Not supported**:
 - JavaScript-style default import (`import name from "module"`). Use `import "module" as name`, `import module`, or `import { name } from module`.
@@ -279,14 +296,17 @@ Quoting is only how text that is not an identifier gets written, which is why a 
 
 `export` visibility **must appear on a module-level declaration**. Cross-module re-exports remain declarations of their own:
 
+<!-- xr-source:grammar 012-11-modules-grammar-02 -->
 ```ebnf
 Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
-Visibility  ::= 'export'
+Visibility ::= 'export'
 ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
               | 'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example modules-export -->
 ```xray @id=modules-export
 // 1. visibility belongs to the declaration
 export fn helper() { return }
@@ -302,6 +322,7 @@ export { getUser, getUserAge as getAge } from "./user"
 // 3. wildcard re-export (forward all exports of another module)
 export * from "./product"
 ```
+<!-- /xr-source -->
 
 **Restrictions**:
 - Declarations not marked `export` are **private** to the module.
@@ -345,15 +366,20 @@ XRAY_API void register_time_module(xray_vm_t* vm) {
 
 Usage from Xray code is identical:
 
+<!-- xr-source:example modules-use -->
 ```xray @id=modules-use
 import time
 var t = time.now()
 time.sleep(100)
 ```
+<!-- /xr-source -->
+
+
 ### 11.8 Worked Examples
 
 Selective import and namespace import from the standard library:
 
+<!-- xr-source:example 012-11-modules-example-004 -->
 ```xray
 import { sha256 } from crypto
 import math
@@ -365,5 +391,5 @@ fn main() {
 
 main()
 ```
-
+<!-- /xr-source -->
 <!-- /xr-spec:en -->

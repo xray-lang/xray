@@ -14,10 +14,13 @@ order: 013
 
 xray 用 **`@test` 注解**标注测试函数，**不**通过 `test("...")` 函数调用形式。
 
+<!-- xr-source:grammar 013-12-testing-grammar-01 -->
 ```ebnf
 TestDecl ::= '@test' FnDecl
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example testing-basic -->
 ```xray @id=testing-basic
 @test
 fn test_addition() {
@@ -31,6 +34,7 @@ fn test_with_assertions() {
     assert(result > 0)
 }
 ```
+<!-- /xr-source -->
 
 **语义**：
 - `@test` 标注的函数会被 `xray test` 自动发现并运行；普通函数不会。
@@ -71,6 +75,7 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 
 `@test` 函数体内可使用 `go`、`await` 及 `Task.all` / `Task.first` 等聚合等待（§10.3）：
 
+<!-- xr-source:example testing-async -->
 ```xray @id=testing-async
 @test
 fn test_async_fetch() {
@@ -79,6 +84,7 @@ fn test_async_fetch() {
     assertEqual(result.status, 200)
 }
 ```
+<!-- /xr-source -->
 
 ### 12.5 注解（Attributes）总览
 
@@ -100,6 +106,7 @@ xray 的公开注解来自唯一 attribute registry；可用 `xray language attr
 
 effect、native identity、C export、link symbol 和 freestanding entry 都由推导结果或 typed manifest plan 表示，不是源码注解。外部 C 函数声明使用 `extern "C" ... {}` 块。
 
+<!-- xr-source:example testing-attributes -->
 ```xray @id=testing-attributes
 import codegen
 
@@ -127,6 +134,7 @@ fn measuredKernel(value: u64) -> u64 {
     return measuredDispatchBoundary(hidden)
 }
 ```
+<!-- /xr-source -->
 
 > `@async`、`@override`、`@beforeEach` 等不在当前表中，会触发 `unknown attribute name`。异步能力直接在测试体内使用 `go` / `await`。
 
@@ -152,10 +160,13 @@ fn measuredKernel(value: u64) -> u64 {
 
 Xray marks test functions with the **`@test` attribute**, **not** with a `test("...")` function call.
 
+<!-- xr-source:grammar 013-12-testing-grammar-01 -->
 ```ebnf
 TestDecl ::= '@test' FnDecl
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example testing-basic -->
 ```xray @id=testing-basic
 @test
 fn test_addition() {
@@ -169,6 +180,7 @@ fn test_with_assertions() {
     assert(result > 0)
 }
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - Functions annotated with `@test` are auto-discovered and run by `xray test`; ordinary functions are not.
@@ -209,6 +221,7 @@ errors and panics are distinct failure channels and their assertions are not int
 
 A `@test` function body may use `go`, `await`, and aggregate waits such as `Task.all` / `Task.first` (§10.3):
 
+<!-- xr-source:example testing-async -->
 ```xray @id=testing-async
 @test
 fn test_async_fetch() {
@@ -217,6 +230,7 @@ fn test_async_fetch() {
     assertEqual(result.status, 200)
 }
 ```
+<!-- /xr-source -->
 
 ### 12.5 Attribute Overview
 
@@ -238,6 +252,7 @@ Other public attributes include `@deprecated("...")`, `@derive(Inspect, JSON, Eq
 
 Effects, native identity, C exports, link symbols, and freestanding entries are inferred facts or typed manifest plans, not source attributes. External C functions use an `extern "C" ... {}` declaration block.
 
+<!-- xr-source:example testing-attributes -->
 ```xray @id=testing-attributes
 import codegen
 
@@ -265,6 +280,7 @@ fn measuredKernel(value: u64) -> u64 {
     return measuredDispatchBoundary(hidden)
 }
 ```
+<!-- /xr-source -->
 
 > `@async`, `@override`, and camel-case spellings such as `@beforeEach` are not in the current table and trigger `unknown attribute name`. Use `go` / `await` directly in an async test body.
 

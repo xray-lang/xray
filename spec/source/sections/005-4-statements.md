@@ -8,18 +8,21 @@ order: 005
 
 ## 4. 语句 (Statements)
 
-> 真值源：`src/frontend/parser/xparse_stmt.c`、`src/frontend/parser/xast_nodes_stmt.h`。
+> 实现参考：`src/frontend/parser/xparse_stmt.c`、`src/frontend/parser/xast_nodes_stmt.h`。
 
 Xray 语句以 `\n` 或 `;` 分隔；语句末尾的 `;` 在大多数位置可省略，仅 `for` 循环的初始化/条件/步进三段必须用 `;` 分隔。
 
 ### 4.1 表达式语句与块
 
+<!-- xr-source:grammar 005-4-statements-grammar-01 -->
 ```ebnf
-ExprStmt   ::= Expression (';' | LineBreak)
+ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
-Block      ::= '{' Statement* '}'
+Block    ::= '{' Statement* '}'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 005-4-statements-example-001 -->
 ```xray
 foo()                  // 表达式语句
 x = 1                  // 赋值表达式作为语句
@@ -29,6 +32,7 @@ x++                    // 自增语句；不产生表达式值
     y + 1              // 表达式但结果被丢弃
 }
 ```
+<!-- /xr-source -->
 
 `++` / `--` 是纯语句或 `for` 步进项，只能写作 `name++` / `name--`。它们等价于 `name = name + 1` / `name = name - 1`，没有返回值；`var y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译失败。
 
@@ -36,12 +40,15 @@ x++                    // 自增语句；不产生表达式值
 
 ### 4.2 `if` / `else`
 
+<!-- xr-source:grammar 005-4-statements-grammar-02 -->
 ```ebnf
-IfStmt ::= 'if' '(' Expression ')' Block ElseIfChain? ElseClause?
+IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 ElseIfChain ::= ('else' 'if' '(' Expression ')' Block)+
 ElseClause  ::= 'else' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-if -->
 ```xray @id=stmt-if
 if (x > 0) {
     print("positive")
@@ -51,6 +58,7 @@ if (x > 0) {
     print("negative")
 }
 ```
+<!-- /xr-source -->
 
 **约束**：
 - 条件**必须**用括号包裹（与 Go/Rust 不同）。
@@ -60,11 +68,14 @@ if (x > 0) {
 
 ### 4.3 `while`
 
+<!-- xr-source:grammar 005-4-statements-grammar-03 -->
 ```ebnf
 LoopLabel ::= Identifier ':'
 WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-while -->
 ```xray @id=stmt-while
 var i = 0
 while (i < 10) {
@@ -72,6 +83,7 @@ while (i < 10) {
     i++
 }
 ```
+<!-- /xr-source -->
 
 无 `do-while` 形式。
 
@@ -79,12 +91,15 @@ while (i < 10) {
 
 #### C 风格 `for`
 
+<!-- xr-source:grammar 005-4-statements-grammar-04 -->
 ```ebnf
 ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
-ForInit ::= VarDecl | ExprStmt
+ForInit ::= VarDecl | Expression
 ForStep ::= Expression | Identifier ('++' | '--')
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-for-c -->
 ```xray @id=stmt-for-c
 for (var i = 0; i < 10; i++) {
     print(i)
@@ -93,6 +108,7 @@ for (var j = 100; j > 90; j--) {
     print(j)
 }
 ```
+<!-- /xr-source -->
 
 - `ForInit` 中声明的变量作用域限于循环体。
 - 步进项里的 `i++` / `i--` 必须是整个 step；若要多个更新，写在循环体末尾。
@@ -100,14 +116,17 @@ for (var j = 100; j > 90; j--) {
 
 #### `for-in` 单变量
 
+<!-- xr-source:grammar 005-4-statements-grammar-05 -->
 ```ebnf
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
 `for-in` 迭代变量是每次迭代新建的不可变绑定；闭包捕获的是创建闭包时该轮绑定的值。
 
 内建 `Array<T>` 的集合表达式求值一次，遍历拥有该次逻辑值的快照；循环内修改或重绑原数组不改变当前序列。双变量索引是从零开始的 `i64`，`_` 不建立可引用绑定。元素为 class 时保留对象身份，不作对象深复制（§14.7）。绑定不接受类型注解。
 
+<!-- xr-source:example stmt-for-in -->
 ```xray @id=stmt-for-in
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
@@ -120,16 +139,20 @@ for (variant in Event.variants) {             // 任意具体 enum；产出 Enum
 }
 for (_ in 0..n) { count++ }                   // 占位符忽略
 ```
+<!-- /xr-source -->
 
 #### `for-in` 双变量解构
 
 直接双变量接收来源的 pair 产出；内层 Tuple 模式解构每次迭代的元素本身。两者不是对任意集合都等价的索引写法：
 
+<!-- xr-source:grammar 005-4-statements-grammar-06 -->
 ```ebnf
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
 ForInTupleStmt ::= LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-for-pairs -->
 ```xray @id=stmt-for-pairs
 // 形式 A：直接两标识符（更常见）
 for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
@@ -140,6 +163,7 @@ for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
 for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 ```
+<!-- /xr-source -->
 
 形式 A 的迭代来源与产出对应关系如下。形式 B 对下表的单变量产出应用已有 Tuple 声明解构规则：例如 `Array<(string,i64)>` 的 `for ((k,v) in pairs)` 绑定每个元素的两个字段；不将 `k` 改成数组下标。每轮绑定的作用域、快照和拥有责任与普通迭代及声明解构一致。当前接收平坦的标识符或 `_`，不由此开放 rest 或嵌套循环模式。
 
@@ -166,10 +190,12 @@ enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum �
 
 #### 引用迭代
 
+<!-- xr-source:grammar 005-4-statements-grammar-07 -->
 ```ebnf
 ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
              | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
 `for (ref x in xs)` 与 `for (i, ref x in xs)` 用于 Array、定长数组和 MutSlice，迭代变量独占引用实际元素。`for (k, ref v in m)` 用于 Map，键保持只读，值引用实际 entry。循环开始时独占借用整个容器并完成必要的 COW 分离，每轮引用直接写入实际元素。
 
@@ -177,16 +203,19 @@ ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
 
 ### 4.5 `match` 语句
 
+<!-- xr-source:grammar 005-4-statements-grammar-08 -->
 ```ebnf
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
+<!-- /xr-source -->
 
 **关键语法**：
 - 被匹配的表达式**必须**用括号包裹：`match (x) {...}`。
 - 分支之间必须写逗号；末尾逗号可写可不写，格式化器统一补齐。分支用 `=>`，其后的 `{` 一律是块。
 - 守卫条件 `if` 后的表达式必须用括号：`n if (n > 0)`。
 
+<!-- xr-source:example stmt-match -->
 ```xray @id=stmt-match @fragment
 match (x) { 1 => print("one"), _ => print("other"), }
 
@@ -199,6 +228,7 @@ match (action) {
     _ => log.warn("unknown"),
 }
 ```
+<!-- /xr-source -->
 
 `match` 既可作语句也可作表达式（详见 §3.13）；当作表达式时分支体必须是单一表达式或块的最后一个表达式。
 
@@ -206,6 +236,7 @@ match (action) {
 
 ### 4.6 `break` / `continue`
 
+<!-- xr-source:example stmt-break-continue -->
 ```xray @id=stmt-break-continue
 break                  // 跳出最内层循环
 continue               // 进入最内层循环的下一次迭代
@@ -219,6 +250,7 @@ outer: for (i in 0..10) {
     }
 }
 ```
+<!-- /xr-source -->
 
 **约束**：
 - 必须在 `while` / `for` 内部；否则编译错误 `E0304` / `E0305`。
@@ -229,11 +261,14 @@ outer: for (i in 0..10) {
 
 ### 4.7 `return`
 
+<!-- xr-source:grammar 005-4-statements-grammar-09 -->
 ```ebnf
-ReturnStmt ::= 'return' ReturnValue? (';' | LineBreak)
+ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
 ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-return -->
 ```xray @id=stmt-return
 fn done() {
     return                 // 隐式返回 ()（Unit）
@@ -247,6 +282,7 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
     return (a, b)          // 多返回值，必须用括号包裹元组
 }
 ```
+<!-- /xr-source -->
 
 > **注意**：多返回值必须用元组形式 `return (a, b)`；裸逗号 `return a, b` 是编译错误（`E0801`）。
 
@@ -256,16 +292,18 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
 
 ### 4.8 `throw` / `try` / `catch`
 
+<!-- xr-source:grammar 005-4-statements-grammar-10 -->
 ```ebnf
-ThrowStmt     ::= 'throw' Expression
-
-TryStmt       ::= 'try' Block CatchClause+
-CatchClause   ::= 'catch' '(' CatchHeader ')' Block
-                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
-CatchHeader   ::= Identifier (':' Type)?
-                | EnumPattern (',' EnumPattern)*
+ThrowStmt ::= 'throw' Expression
+TryStmt   ::= 'try' Block CatchClause+
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-try -->
 ```xray @id=stmt-try @fragment
 enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
@@ -285,6 +323,7 @@ try { risky() } catch panic (p) {
 throw AppError.NotFound                      // 值返回错误通道
 // 没有 finally；用 defer 做确定性清理（见 §4.9）
 ```
+<!-- /xr-source -->
 
 **语义**：
 - `try` 必须至少跟一个 `catch` 或 `catch panic` 子句。
@@ -297,10 +336,17 @@ throw AppError.NotFound                      // 值返回错误通道
 
 ### 4.9 `defer`
 
+<!-- xr-source:grammar 005-4-statements-grammar-11 -->
 ```ebnf
 DeferStmt ::= 'defer' Block
-```
 
+// print is a normal global function call, syntactically an ExprStmt.
+
+// go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
+```
+<!-- /xr-source -->
+
+<!-- xr-source:example stmt-defer -->
 ```xray @id=stmt-defer
 fn read_file(path: string) -> string {
     var f = open(path)
@@ -324,6 +370,7 @@ fn late_binding_and_copy() {
     n = 2
 }                                      // 输出 saved 1，再输出 late 2
 ```
+<!-- /xr-source -->
 
 **语义**：
 - `defer` 仅接受块；调用表达式、赋值、裸值及其他非块正文都是语法错误。
@@ -342,12 +389,14 @@ fn late_binding_and_copy() {
 
 `print` / `dump` 是**内置全局函数**（非关键字，详见 §13.1），列于此处便于查阅：
 
+<!-- xr-source:example stmt-print-dump -->
 ```xray @id=stmt-print-dump
 print("hello")                 // 追加恰好一个换行
 print("a:", a, "b:", b)        // 多参以恰好一个空格分隔
 print()                        // 只输出一个换行
 dump(some_obj)                 // 调试输出，含类型信息与结构布局
 ```
+<!-- /xr-source -->
 
 **行为说明**：
 - 接受任意类型与任意数量参数（变长）；每个参数自动调用其 `toString()` 或内置格式化。
@@ -360,6 +409,7 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 
 综合 `if` / `match` / `for-in` 的控制流：
 
+<!-- xr-source:example 005-4-statements-example-013 -->
 ```xray @check
 fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
@@ -378,6 +428,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 输出：
 
@@ -387,7 +438,6 @@ zero
 small
 large
 ```
-
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -395,18 +445,21 @@ large
 
 ## 4. Statements
 
-> Source of truth: `src/frontend/parser/xparse_stmt.c`, `src/frontend/parser/xast_nodes_stmt.h`.
+> Implementation reference: `src/frontend/parser/xparse_stmt.c`, `src/frontend/parser/xast_nodes_stmt.h`.
 
 Xray statements are separated by `\n` or `;`; the trailing `;` is optional in most positions, only the three sections of a `for` loop (init / cond / step) require `;` separators.
 
 ### 4.1 Expression Statements and Blocks
 
+<!-- xr-source:grammar 005-4-statements-grammar-01 -->
 ```ebnf
-ExprStmt   ::= Expression (';' | LineBreak)
+ExprStmt ::= Expression (';' | LineBreak)
 IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
-Block      ::= '{' Statement* '}'
+Block    ::= '{' Statement* '}'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example 005-4-statements-example-001 -->
 ```xray
 foo()                  // expression statement
 x = 1                  // assignment expression as a statement
@@ -416,6 +469,7 @@ x++                    // increment statement; produces no expression value
     y + 1              // expression with discarded result
 }
 ```
+<!-- /xr-source -->
 
 `++` / `--` are pure statements or `for` step items, and can only be written as `name++` / `name--`. They are equivalent to `name = name + 1` / `name = name - 1` and produce no value; expression-position uses such as `var y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors.
 
@@ -423,12 +477,15 @@ x++                    // increment statement; produces no expression value
 
 ### 4.2 `if` / `else`
 
+<!-- xr-source:grammar 005-4-statements-grammar-02 -->
 ```ebnf
-IfStmt ::= 'if' '(' Expression ')' Block ElseIfChain? ElseClause?
+IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 ElseIfChain ::= ('else' 'if' '(' Expression ')' Block)+
 ElseClause  ::= 'else' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-if -->
 ```xray @id=stmt-if
 if (x > 0) {
     print("positive")
@@ -438,6 +495,7 @@ if (x > 0) {
     print("negative")
 }
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 - The condition **must** be parenthesized (unlike Go/Rust).
@@ -447,11 +505,14 @@ if (x > 0) {
 
 ### 4.3 `while`
 
+<!-- xr-source:grammar 005-4-statements-grammar-03 -->
 ```ebnf
 LoopLabel ::= Identifier ':'
 WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-while -->
 ```xray @id=stmt-while
 var i = 0
 while (i < 10) {
@@ -459,6 +520,7 @@ while (i < 10) {
     i++
 }
 ```
+<!-- /xr-source -->
 
 There is no `do-while` form.
 
@@ -466,12 +528,15 @@ There is no `do-while` form.
 
 #### C-style `for`
 
+<!-- xr-source:grammar 005-4-statements-grammar-04 -->
 ```ebnf
 ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
-ForInit ::= VarDecl | ExprStmt
+ForInit ::= VarDecl | Expression
 ForStep ::= Expression | Identifier ('++' | '--')
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-for-c -->
 ```xray @id=stmt-for-c
 for (var i = 0; i < 10; i++) {
     print(i)
@@ -480,6 +545,7 @@ for (var j = 100; j > 90; j--) {
     print(j)
 }
 ```
+<!-- /xr-source -->
 
 - Variables declared in `ForInit` are scoped to the loop body.
 - `i++` / `i--` in the step position must be the entire step; put multiple updates at the end of the loop body.
@@ -487,14 +553,17 @@ for (var j = 100; j > 90; j--) {
 
 #### Single-variable `for-in`
 
+<!-- xr-source:grammar 005-4-statements-grammar-05 -->
 ```ebnf
 ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
 The `for-in` iteration variable is a fresh immutable binding for each iteration; a closure captures the value of that iteration's binding when the closure is created.
 
 The collection expression of a built-in `Array<T>` is evaluated once and iteration owns a snapshot of that logical value. Mutating or rebinding the original array in the loop does not change the sequence being traversed. A pair binding uses a zero-based `i64` index; `_` creates no referenceable binding. Class elements preserve object identity rather than deeply copying objects (§14.7). Binding type annotations are not accepted.
 
+<!-- xr-source:example stmt-for-in -->
 ```xray @id=stmt-for-in
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // range iteration (half-open)
@@ -507,16 +576,20 @@ for (variant in Event.variants) {             // any concrete enum; yields EnumV
 }
 for (_ in 0..n) { count++ }                   // discard with placeholder
 ```
+<!-- /xr-source -->
 
 #### Two-variable `for-in` destructuring
 
 A direct pair binding receives the collection pair yield; an inner Tuple pattern destructures each yielded element itself. They are not interchangeable index syntax for arbitrary collections:
 
+<!-- xr-source:grammar 005-4-statements-grammar-06 -->
 ```ebnf
 ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
 ForInTupleStmt ::= LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-for-pairs -->
 ```xray @id=stmt-for-pairs
 // Form A: two bare identifiers (more common)
 for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
@@ -527,6 +600,7 @@ for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
 for ((i, e) in someArray.entries()) { print("${i}=${e}") }
 for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 ```
+<!-- /xr-source -->
 
 The following mapping describes form A. Form B applies existing Tuple declaration destructuring to the single-variable yield: for example, `for ((k,v) in pairs)` over `Array<(string,i64)>` binds both fields of each element; it does not replace `k` with the Array index. Per-iteration scope, snapshot and ownership follow ordinary iteration and declaration destructuring. The admitted head has flat identifiers or `_`; this does not admit rest or nested loop patterns.
 
@@ -553,10 +627,12 @@ Implement an `iterator()` method that returns an `Iterator<T>` protocol object (
 
 #### Reference Iteration
 
+<!-- xr-source:grammar 005-4-statements-grammar-07 -->
 ```ebnf
 ForRefStmt ::= LoopLabel? 'for' '(' 'ref' Identifier 'in' Expression ')' Block
              | LoopLabel? 'for' '(' Identifier ',' 'ref' Identifier 'in' Expression ')' Block
 ```
+<!-- /xr-source -->
 
 `for (ref x in xs)` and `for (i, ref x in xs)` iterate Array, fixed arrays and MutSlice with exclusive references to actual elements. `for (k, ref v in m)` iterates a Map with read-only keys and references to actual entry values. The loop exclusively borrows the entire container once and performs necessary COW detachment before iteration. Each iteration writes directly to its actual element.
 
@@ -564,16 +640,19 @@ The body cannot access the container through another path or change its length. 
 
 ### 4.5 `match` Statement
 
+<!-- xr-source:grammar 005-4-statements-grammar-08 -->
 ```ebnf
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (',' MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '=>' (Expression | Block)
 ```
+<!-- /xr-source -->
 
 **Key syntax**:
 - The matched expression **must** be parenthesized: `match (x) {...}`.
 - Commas between arms are required; a trailing comma is optional and the formatter supplies it. Arms use `=>`; an immediately following `{` always opens a block.
 - Guard expressions following `if` must be parenthesized: `n if (n > 0)`.
 
+<!-- xr-source:example stmt-match -->
 ```xray @id=stmt-match @fragment
 match (x) { 1 => print("one"), _ => print("other"), }
 
@@ -586,6 +665,7 @@ match (action) {
     _ => log.warn("unknown"),
 }
 ```
+<!-- /xr-source -->
 
 `match` may serve as either a statement or an expression (see §3.13); when used as an expression, the arm body must be a single expression or end with one as the last expression of a block.
 
@@ -593,6 +673,7 @@ For pattern details see [§6](#6-patterns).
 
 ### 4.6 `break` / `continue`
 
+<!-- xr-source:example stmt-break-continue -->
 ```xray @id=stmt-break-continue
 break                  // exit the innermost loop
 continue               // proceed to the innermost loop's next iteration
@@ -606,6 +687,7 @@ outer: for (i in 0..10) {
     }
 }
 ```
+<!-- /xr-source -->
 
 **Constraints**:
 - Must appear inside a `while` / `for`; otherwise the compile errors `E0304` / `E0305`.
@@ -616,11 +698,14 @@ outer: for (i in 0..10) {
 
 ### 4.7 `return`
 
+<!-- xr-source:grammar 005-4-statements-grammar-09 -->
 ```ebnf
-ReturnStmt ::= 'return' ReturnValue? (';' | LineBreak)
+ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
 ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-return -->
 ```xray @id=stmt-return
 fn done() {
     return                 // implicitly returns () (Unit)
@@ -634,6 +719,7 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
     return (a, b)          // multi-value return must wrap a tuple in parens
 }
 ```
+<!-- /xr-source -->
 
 > **Note**: multi-value returns must use the tuple form `return (a, b)`; the bare-comma form `return a, b` is the compile error `E0801`.
 
@@ -643,16 +729,18 @@ fn pair(a: i64, b: i64) -> (i64, i64) {
 
 ### 4.8 `throw` / `try` / `catch`
 
+<!-- xr-source:grammar 005-4-statements-grammar-10 -->
 ```ebnf
-ThrowStmt     ::= 'throw' Expression
-
-TryStmt       ::= 'try' Block CatchClause+
-CatchClause   ::= 'catch' '(' CatchHeader ')' Block
-                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
-CatchHeader   ::= Identifier (':' Type)?
-                | EnumPattern (',' EnumPattern)*
+ThrowStmt ::= 'throw' Expression
+TryStmt   ::= 'try' Block CatchClause+
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example stmt-try -->
 ```xray @id=stmt-try @fragment
 enum AppError { NotFound, Timeout { milliseconds: i64 } }
 
@@ -674,6 +762,7 @@ try { risky() } catch panic (p) {
 throw AppError.NotFound                      // value-return error channel
 // There is no finally; use defer for deterministic cleanup (see §4.9)
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - A `try` must be followed by at least one `catch` or `catch panic` clause.
@@ -686,10 +775,17 @@ throw AppError.NotFound                      // value-return error channel
 
 ### 4.9 `defer`
 
+<!-- xr-source:grammar 005-4-statements-grammar-11 -->
 ```ebnf
 DeferStmt ::= 'defer' Block
-```
 
+// print is a normal global function call, syntactically an ExprStmt.
+
+// go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
+```
+<!-- /xr-source -->
+
+<!-- xr-source:example stmt-defer -->
 ```xray @id=stmt-defer
 fn read_file(path: string) -> string {
     var f = open(path)
@@ -713,6 +809,7 @@ fn late_binding_and_copy() {
     n = 2
 }                                      // prints saved 1, then late 2
 ```
+<!-- /xr-source -->
 
 **Semantics**:
 - `defer` accepts only a block. A call expression, assignment, bare value, or any other non-block body is a syntax error.
@@ -731,12 +828,14 @@ fn late_binding_and_copy() {
 
 `print` / `dump` are **built-in global functions** (not keywords; see §13.1), listed here for convenience:
 
+<!-- xr-source:example stmt-print-dump -->
 ```xray @id=stmt-print-dump
 print("hello")                 // appends exactly one newline
 print("a:", a, "b:", b)        // arguments separated by exactly one space
 print()                        // writes just that newline
 dump(some_obj)                 // debug output, with type info and structure
 ```
+<!-- /xr-source -->
 
 **Behavior**:
 - Accepts any type and any number of arguments (variadic); each argument is automatically converted via its `toString()` or built-in formatter.
@@ -749,6 +848,7 @@ dump(some_obj)                 // debug output, with type info and structure
 
 Combining `if` / `match` / `for-in` control flow:
 
+<!-- xr-source:example 005-4-statements-example-013 -->
 ```xray @check
 fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
@@ -767,6 +867,7 @@ fn main() {
 
 main()
 ```
+<!-- /xr-source -->
 
 Output:
 
@@ -776,5 +877,4 @@ zero
 small
 large
 ```
-
 <!-- /xr-spec:en -->

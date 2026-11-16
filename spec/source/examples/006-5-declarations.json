@@ -1,0 +1,356 @@
+{
+  "decl-var": {
+    "fence": "xray @id=decl-var",
+    "code": "var x = 1                         // 类型推断为 i64\nvar name: string = \"Alice\"        // 显式类型\nvar count: i64                    // 仅声明无初值：使用零值\nvar maybeName: string?            // OK：默认 null\nvar empty: string = \"\"            // string 必须显式初始化",
+    "trivia": {
+      "en": {
+        "4": "                         // type inferred as i64\n",
+        "10": "        // explicit type\n",
+        "14": "                    // no initializer: zero value used\n",
+        "19": "            // OK: defaults to null\n",
+        "25": "            // string requires an explicit initializer"
+      }
+    }
+  },
+  "decl-const": {
+    "fence": "xray @id=decl-const",
+    "code": "const PI = 3.14159\nconst MAX_LEN: i64 = 1024"
+  },
+  "decl-capability": {
+    "fence": "xray @id=decl-capability",
+    "code": "const channel = Channel<i64>(16)\nconst counter = Atomic(0)\n\nvar source = [1, 2, 3]\nconst snapshot = source\nsource[0] = 9\nvar current = snapshot\ncurrent.push(4)\nprint(snapshot[0])          // 1\nprint(len(snapshot))        // 3"
+  },
+  "decl-destructuring": {
+    "fence": "xray @id=decl-destructuring @fragment",
+    "code": "// 数组解构\nvar [a, b, c] = [1, 2, 3]\nvar [first, , third] = [10, 20, 30]         // 跳过元素\n\n// 元组解构（多返回值）\nvar (q, r) = divmod(17, 5)\n",
+    "trivia": {
+      "en": {
+        "0": "// array destructuring\n",
+        "31": "         // skip elements\n\n// tuple destructuring (multi-return)\n"
+      }
+    }
+  },
+  "decl-fn-basic": {
+    "fence": "xray @id=decl-fn-basic",
+    "code": "fn add(a: i64, b: i64) -> i64 {\n    return a + b\n}\n\nfn greet(name: string) -> () {         // 显式 Unit\n    print(\"Hi ${name}\")\n}\n\nfn echo(x: i64) {                       // 省略返回类型 = ()\n    print(x)\n}",
+    "trivia": {
+      "en": {
+        "30": "         // explicit Unit\n    ",
+        "43": "                       // omitted return type = ()\n    "
+      }
+    }
+  },
+  "006-5-declarations-example-006": {
+    "fence": "xray @fragment",
+    "code": "fn add(a: i64, b: i64) -> i64 { /* body omitted */ }\nfn parse(s: string) throws(ParseErr) -> i64 { /* body omitted */ }\nfn load(path: string) throws(IoErr | ParseErr) -> Config { /* body omitted */ }\nfn runAll() throws { /* body omitted */ }"
+  },
+  "decl-fn-default": {
+    "fence": "xray @id=decl-fn-default",
+    "code": "fn connect(host: string, port: i64 = 8080, tls: bool = false) {\n    print(host, port, tls)\n}\n\nconnect(\"localhost\")              // port=8080, tls=false\nconnect(\"localhost\", 443)         // tls=false\nconnect(\"localhost\", 443, true)"
+  },
+  "decl-named-arguments": {
+    "fence": "xray @id=decl-named-arguments @check",
+    "code": "fn request(url: string, method: string = \"GET\", followRedirects: bool = true) -> string {\n    return \"${method} ${url} ${followRedirects}\"\n}\nrequest(\"https://a\")\nrequest(url: \"https://a\", followRedirects: false)"
+  },
+  "decl-fn-multi-return": {
+    "fence": "xray @id=decl-fn-multi-return",
+    "code": "fn divmod(a: i64, b: i64) -> (i64, i64) {\n    return (a / b, a % b)\n}\n\nvar (q, r) = divmod(17, 5)\nvar result = divmod(10, 3)        // result 类型 (i64, i64)",
+    "trivia": {
+      "en": {
+        "51": "        // result has type (i64, i64)"
+      }
+    }
+  },
+  "decl-fn-param-modes": {
+    "fence": "xray @id=decl-fn-param-modes",
+    "code": "fn length_sq(v: Vec2) -> f64 {\n    return v.x * v.x + v.y * v.y\n}\n\nfn translate(v: ref Vec2, dx: f64, dy: f64) -> () {\n    v.x += dx\n    v.y += dy\n}\n\nfn appended(xs: Array<string>, value: string) -> Array<string> {\n    var result = xs\n    result.push(value)\n    return result\n}\n\ntranslate(ref point, 1.0, 2.0)"
+  },
+  "decl-fn-rest": {
+    "fence": "xray @id=decl-fn-rest",
+    "code": "fn sum(...nums: i64) -> i64 {\n    var total = 0\n    for (n in nums) { total += n }\n    return total\n}\n\nsum(1, 2, 3)        // total = 6"
+  },
+  "006-5-declarations-example-012": {
+    "fence": "xray",
+    "code": "main()                       // OK：函数声明被提升\n\nfn main() { ... }",
+    "trivia": {
+      "en": {
+        "3": "                       // OK: the function declaration is hoisted\n\n"
+      }
+    }
+  },
+  "006-5-declarations-example-013": {
+    "fence": "xray",
+    "code": "fn factorial(n: i64, acc: i64 = 1) -> i64 {\n    if (n <= 1) { return acc }\n    return factorial(n - 1, acc * n)     // 尾调用：自动优化为循环\n}",
+    "trivia": {
+      "en": {
+        "37": "     // tail call: optimized to a loop\n"
+      }
+    }
+  },
+  "006-5-declarations-example-014": {
+    "fence": "xray",
+    "code": "// hello.xr（入口文件）\nprint(\"loading\")          // 顶层语句，立即执行\nfn greet() { print(\"hi\") }\ngreet()                   // 必须显式调用",
+    "trivia": {
+      "en": {
+        "0": "// hello.xr (entry file)\n",
+        "4": "          // top-level statement, runs immediately\n",
+        "17": "                   // must be called explicitly"
+      }
+    }
+  },
+  "006-5-declarations-example-015": {
+    "fence": "xray",
+    "code": "enum ConfigErr { Missing }\n\nfn loadPort(path: string) throws(ConfigErr) -> i64 {\n    if (path == \"\") { throw ConfigErr.Missing }\n    return 8080\n}\n\nfn main() throws(ConfigErr) {\n    var port = try loadPort(\"app.toml\")\n    print(port)\n}\n\ntry main()"
+  },
+  "006-5-declarations-example-016": {
+    "fence": "xray",
+    "code": "extern \"C\" {\n    fn malloc(n: usize) -> MutPtr<u8>\n    fn free(p: MutPtr<u8>)\n    fn cos(x: f64) -> f64\n}\n\nvar p = unsafe { malloc(4) }\nunsafe {\n    p[0] = 42\n    print(cos(0.0))\n    free(p)\n}"
+  },
+  "006-5-declarations-example-017": {
+    "fence": "xray",
+    "code": "import mem\n\nstruct CHeader {\n    tag: u8\n    count: u32\n}\n\nprint(mem.sizeOf<CHeader>())\nprint(mem.alignOf<CHeader>())\nprint(mem.offsetOf<CHeader>(\"count\"))"
+  },
+  "006-5-declarations-example-018": {
+    "fence": "xray",
+    "code": "extern \"C\" {\n    fn bsearch(\n        key: Ptr<u8>,\n        base: Ptr<u8>,\n        count: usize,\n        size: usize,\n        cmp: CFn<fn(Ptr<u8>, Ptr<u8>) -> i32>\n    ) -> Ptr<u8>\n}\n\nfn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {\n    return 0\n}\n\n// zeroCmp 是模块级非捕获函数，可作为 CFn 回调。",
+    "trivia": {
+      "en": {
+        "77": "\n\n// zeroCmp is a module-level noncapturing function and can be used as a CFn callback."
+      }
+    }
+  },
+  "006-5-declarations-example-019": {
+    "fence": "xray",
+    "code": "fn add(a: i32, b: i32) -> i32 {\n    return a + b\n}\n\nprint(add(19, 23))        // Xray 内部仍是普通函数调用",
+    "trivia": {
+      "en": {
+        "28": "        // An ordinary function call inside Xray"
+      }
+    }
+  },
+  "006-5-declarations-example-020": {
+    "fence": "xray",
+    "code": "fn apply(f: fn(i64) -> i64, x: i64) -> i64 {\n    return f(x)\n}\n\nfn main() {\n    var base = 10\n    var addBase = fn(x: i64) -> i64 { return x + base }   // 闭包捕获 base\n    print(addBase(5))            // 输出：15\n    print(apply(addBase, 7))     // 输出：17（函数作为参数传入）\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "51": "   // closure captures base\n    ",
+        "58": "            // prints 15\n    ",
+        "67": "     // prints 17 (function passed as an argument)\n"
+      }
+    }
+  },
+  "006-5-declarations-example-021": {
+    "fence": "xray",
+    "code": "fn divmod(a: i64, b: i64) -> (i64, i64) {\n    return (a / b, a % b)\n}\n\nfn main() {\n    var (q, r) = divmod(17, 5)\n    print(q)   // 输出：3\n    print(r)   // 输出：2\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "51": "   // prints 3\n    ",
+        "55": "   // prints 2\n"
+      }
+    }
+  },
+  "decl-class-basic": {
+    "fence": "xray @id=decl-class-basic",
+    "code": "class Animal {\n    name: string                       // 字段\n    private _age: i64 = 0              // 私有字段，可有默认值\n\n    init(name: string) {\n        this.name = name\n    }\n\n    speak() -> string {\n        return \"...\"\n    }\n\n    static create(name: string) -> Animal {\n        return Animal(name)\n    }\n}\n\nvar a = Animal(\"Rex\")\nprint(a.speak())\nprint(Animal.create(\"Bob\").name)",
+    "trivia": {
+      "en": {
+        "6": "                       // field\n    ",
+        "12": "              // private field with default value\n\n    "
+      }
+    }
+  },
+  "decl-class-inheritance": {
+    "fence": "xray @id=decl-class-inheritance",
+    "code": "class Dog extends Animal {\n    init(name: string) {\n        super(name)                    // **必须**首语句（仅限派生类）\n    }\n\n    override speak() -> string {         // 显式覆写父方法\n        return \"woof\"\n    }\n}",
+    "trivia": {
+      "en": {
+        "16": "                    // **must** be the first statement (derived classes only)\n    ",
+        "24": "         // Explicit parent method override\n        "
+      }
+    }
+  },
+  "006-5-declarations-example-024": {
+    "fence": "xray",
+    "code": "class Point {\n    x: f64\n    y: f64\n    init(x: f64, y: f64) {\n        this.x = x\n        this.y = y\n    }\n}\n\n// 参数类型可省（从同名字段推断）\nclass Vector2 {\n    x: f64\n    y: f64\n    init(x, y) {         // 等价于显式写 (x: f64, y: f64)\n        this.x = x\n        this.y = y\n    }\n}",
+    "trivia": {
+      "en": {
+        "32": "\n\n// Parameter types may be omitted (inferred from same-named fields)\n",
+        "48": "         // equivalent to (x: f64, y: f64)\n        "
+      }
+    }
+  },
+  "decl-iterator-protocol": {
+    "fence": "xray @id=decl-iterator-protocol",
+    "code": "interface Iterator<T> {\n    hasNext() -> bool       // 是否还有下一个元素；不消费元素\n    next() -> T             // 取下一个元素并前进\n    nth(index: i64) -> T    // 从当前位置起前进 index 个元素并返回\n}\n\ninterface Iterable<T> {\n    iterator() -> Iterator<T>\n}",
+    "trivia": {
+      "en": {
+        "11": "       // is another element available; does not consume one\n    ",
+        "16": "             // take the next element and advance\n    ",
+        "24": "    // advance index elements from the current position and return it\n"
+      }
+    }
+  },
+  "006-5-declarations-example-026": {
+    "fence": "xray",
+    "code": "class Rect {\n    _w: i64\n    _h: i64\n    init(w: i64, h: i64) { this._w = w; this._h = h }\n\n    // 只读：只有 getter\n    area: i64 { fn() { return this._w * this._h } }\n\n    // 可读可写：getter + setter\n    width: i64 {\n        fn() { return this._w }\n        fn(v: i64) { this._w = v }\n    }\n}\n\nfn main() {\n    var r = Rect(3, 4)\n    print(r.area)       // 输出：12\n    r.width = 10\n    print(r.area)       // 输出：40\n}",
+    "trivia": {
+      "en": {
+        "32": "\n\n    // Read-only: getter alone\n    ",
+        "50": "\n\n    // Readable and writable: getter + setter\n    ",
+        "98": "       // prints 12\n    ",
+        "109": "       // prints 40\n"
+      }
+    }
+  },
+  "006-5-declarations-example-027": {
+    "fence": "xray",
+    "code": "class Animal {\n    name: string\n    init(name: string) { this.name = name }\n    speak() -> string { return \"...\" }\n}\n\nclass Dog extends Animal {\n    init(name: string) { super(name) }\n    override speak() -> string { return \"woof\" }\n}\n\nfn main() {\n    var d = Dog(\"Rex\")\n    print(d.name)      // 输出：Rex\n    print(d.speak())   // 输出：woof\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "75": "      // prints Rex\n    ",
+        "83": "   // prints woof\n"
+      }
+    }
+  },
+  "decl-struct-point": {
+    "fence": "xray @id=decl-struct-point",
+    "code": "struct Point {\n    x: f64\n    y: f64\n\n    magnitude_sq() -> f64 {\n        return this.x * this.x + this.y * this.y\n    }\n}\n\n// 两种创建方式\nvar p = Point()                  // 默认构造（字段为零值）后逐个赋值\np.x = 3.0\np.y = 4.0\n\nvar q = Point{x: 3.0, y: 4.0}        // struct 字面量：类型名 + { field: value }\nvar pt = Point{x: 1.0, y: 2.0}\n\n// 值语义：赋值与传参都是拷贝\nvar b = q                            // b 是 q 的独立拷贝\nb.x = 99.0\n// q.x 仍为 3.0",
+    "trivia": {
+      "en": {
+        "33": "\n\n// Two creation styles\n",
+        "39": "                  // default-construct (zero-valued fields), then assign\n",
+        "62": "        // struct literal: TypeName + { field: value }\n",
+        "75": "\n\n// Value semantics: assignment and parameter passing copy\n",
+        "79": "                            // b is an independent copy of q\n",
+        "84": "\n// q.x is still 3.0"
+      }
+    }
+  },
+  "006-5-declarations-example-029": {
+    "fence": "xray",
+    "code": "struct Config {\n    host: string\n    port: i64 = 8080        // 声明默认值：字面量中可省\n    label: string?          // 可空：字面量中可省\n}\n\nvar c = Config{host: \"localhost\"}    // OK\n// Config{host: \"h\", ports: 1}       // 编译错误 E0380：没有字段 'ports'\n// Config{port: 1}                   // 编译错误 E0381：缺少字段 'host'",
+    "trivia": {
+      "en": {
+        "11": "        // declaration default: omittable in a literal\n    ",
+        "15": "          // nullable: omittable in a literal\n",
+        "25": "    // OK\n// Config{host: \"h\", ports: 1}       // compile error E0380: no field 'ports'\n// Config{port: 1}                   // compile error E0381: missing field 'host'"
+      }
+    }
+  },
+  "006-5-declarations-example-030": {
+    "fence": "xray",
+    "code": "struct Point {\n    x: i64\n    y: i64\n}\n\nfn main() {\n    var p = Point{x: 3, y: 4}\n    var q = p            // struct 赋值是拷贝\n    q.x = 99\n    print(p.x)           // 输出：3（不受影响）\n    print(q.x)           // 输出：99\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "32": "            // struct assignment copies\n    ",
+        "43": "           // prints 3 (unchanged)\n    ",
+        "49": "           // prints 99\n"
+      }
+    }
+  },
+  "decl-interface-shape": {
+    "fence": "xray @id=decl-interface-shape",
+    "code": "interface Shape {\n    area() -> f64\n    perimeter() -> f64\n}\n\n// 接口方法返回类型可省略（默认 ()）\ninterface Greeter {\n    greet(name: string)             // 等价于 greet(name: string) -> ()\n    log()                           // 无参无返回\n}\n\nclass Circle implements Shape {\n    radius: f64\n    init(r: f64) { this.radius = r }\n    area() -> f64 { return 3.14 * this.radius * this.radius }\n    perimeter() -> f64 { return 6.28 * this.radius }\n}\n\n// 实现多个接口\nclass Logger implements Shape, Greeter {\n    radius: f64\n    init(r: f64) { this.radius = r }\n    area() -> f64 { return 3.14 * this.radius * this.radius }\n    perimeter() -> f64 { return 6.28 * this.radius }\n    greet(name: string) { print(\"hello,\", name) }\n    log() { print(\"logging\") }\n}\n\nfn describe(s: Shape) -> string {\n    return \"area=${s.area()}, perimeter=${s.perimeter()}\"\n}",
+    "trivia": {
+      "en": {
+        "14": "\n\n// Interface method return types may be omitted (default ())\n",
+        "23": "             // same as greet(name: string) -> ()\n    ",
+        "26": "                           // no parameters, no return value\n",
+        "79": "\n\n// Implement multiple interfaces\n"
+      }
+    }
+  },
+  "006-5-declarations-example-032": {
+    "fence": "xray",
+    "code": "// 属性签名 + 接口继承\ninterface HasLength {\n    length: i64\n}\ninterface SizedCollection<T> extends HasLength {\n    first() -> T\n}\n\nclass Buffer implements SizedCollection<i64> {\n    length: i64                       // 实现属性签名\n    private data: Array<i64>\n    init(n: i64) {\n        this.length = n\n        this.data = []\n    }\n    first() -> i64 { return this.data[0] }\n}",
+    "trivia": {
+      "en": {
+        "0": "// property signatures + interface inheritance\n",
+        "32": "                       // implements the property signature\n    "
+      }
+    }
+  },
+  "decl-enum-simple": {
+    "fence": "xray @id=decl-enum-simple @fragment",
+    "code": "enum Color { Red, Green, Blue }\n\nColor.Red.ordinal     // 0\nColor.Blue.ordinal    // 2\nColor.Red.name        // \"Red\"\nColor.Red.toString()  // \"Color.Red\"\n\nenum HttpStatus {\n    OK,\n    NotFound,\n    InternalError\n\n    code() -> i64 {\n        return match (this) {\n            HttpStatus.OK => 200,\n            HttpStatus.NotFound => 404,\n            HttpStatus.InternalError => 500,\n        }\n    }\n}"
+  },
+  "decl-enum-payload": {
+    "fence": "xray @id=decl-enum-payload",
+    "code": "enum Option<T> {\n    Some { value: T },\n    None,\n}\n\nenum NetEvent {\n    Connected,\n    Disconnected { reason: string },\n    DataReceived { bytes: Array<u8> },\n    Error { code: i64, message: string },\n}\n\n// 递归 enum 的 payload 必须经 class 节点间接化\nclass ExprNode {\n    expr: Expr\n    init(expr: Expr) { this.expr = expr }\n    get() -> Expr { return this.expr }\n}\n\nenum Expr {\n    Number { value: i64 },\n    Binary { op: string, left: ExprNode, right: ExprNode },\n    Call { name: string, args: Array<Expr> },\n}",
+    "trivia": {
+      "en": {
+        "50": "\n\n// A recursive enum payload must be indirected through a class node\n"
+      }
+    }
+  },
+  "006-5-declarations-example-035": {
+    "fence": "xray",
+    "code": "var c = Color.Red\nvar r1 = Option.Some { value: 42 }\nvar e1 = NetEvent.DataReceived { bytes: b }\nvar e2 = NetEvent.Error { code: 404, message: \"not found\" }\nvar e3 = NetEvent.Connected                         // unit 变体不写 braces",
+    "trivia": {
+      "en": {
+        "49": "                         // unit variant: no braces"
+      }
+    }
+  },
+  "decl-enum-match": {
+    "fence": "xray @id=decl-enum-match @fragment",
+    "code": "match (event) {\n    NetEvent.Connected                         => print(\"connected\"),\n    NetEvent.Disconnected { reason }           => print(\"by:\", reason),\n    NetEvent.DataReceived { bytes }            => process(bytes),\n    NetEvent.Error { code, message: msg }      => log.error(code, msg),\n}"
+  },
+  "decl-enum-properties": {
+    "fence": "xray @id=decl-enum-properties",
+    "code": "Color.Red.name        // \"Red\"          变体名 (string)\nColor.Red.ordinal     // 0              声明顺序 tag (i64，从 0)\nColor.Red.toString()  // \"Color.Red\"    \"<EnumName>.<VariantName>\" 格式",
+    "trivia": {
+      "en": {
+        "5": "        // \"Red\"          variant name (string)\n",
+        "10": "     // 0              declaration-order tag (i64, zero-based)\n",
+        "17": "  // \"Color.Red\"    \"<EnumName>.<VariantName>\" format"
+      }
+    }
+  },
+  "decl-enum-iteration": {
+    "fence": "xray @id=decl-enum-iteration",
+    "code": "for (color in Color) {\n    print(color.name)                     // color: Color；Red、Green、Blue\n}\n\nfor (variant in NetEvent.variants) {\n    print(variant.ordinal)                // variant: EnumVariant<NetEvent>\n    print(variant.name)\n    for (field in variant.payloads) {\n        print(field.name)                 // field: EnumPayloadField<NetEvent>\n        print(field.type)                 // i64：具体字段类型的 canonical TypeId\n    }\n}",
+    "trivia": {
+      "en": {
+        "13": "                     // color: Color; Red, Green, Blue\n",
+        "56": "                 // i64: canonical TypeId for the concrete field type\n    "
+      }
+    }
+  },
+  "006-5-declarations-example-039": {
+    "fence": "xray",
+    "code": "fn statusFromCode(code: i64) -> HttpStatus? {\n    if (code == 200) { return HttpStatus.OK }\n    if (code == 404) { return HttpStatus.NotFound }\n    if (code == 500) { return HttpStatus.InternalError }\n    return null\n}"
+  },
+  "006-5-declarations-example-040": {
+    "fence": "xray @fragment",
+    "code": "enum Shape {\n    Circle { radius: f64 },\n    Rect { width: f64, height: f64 },\n    Triangle { a: f64, b: f64, c: f64 }\n\n    area() -> f64 {\n        return match (this) {\n            Shape.Circle { radius } => 3.14159 * radius * radius,\n            Shape.Rect { width, height } => width * height,\n            Shape.Triangle { a, b, c } => {\n                var s = (a + b + c) / 2.0\n                return (s * (s-a) * (s-b) * (s-c)).sqrt()\n            },\n        }\n    }\n\n    isRound() -> bool {\n        return match (this) {\n            Shape.Circle {} => true,\n            _               => false,\n        }\n    }\n}\n\nvar s = Shape.Circle { radius: 1.0 }\nprint(s.area())          // 3.14159\nprint(s.isRound())       // true"
+  },
+  "006-5-declarations-example-041": {
+    "fence": "xray",
+    "code": "enum Color {\n    Red, Green, Blue\n\n    static fromInt(v: i64) -> Color {\n        if (v == 1) { return Color.Red }\n        if (v == 2) { return Color.Green }\n        return Color.Blue\n    }\n\n    label() -> string {\n        return this.name\n    }\n}\n\nprint(Color.fromInt(2).label())     // \"Green\""
+  },
+  "decl-nominal-type-aliases": {
+    "fence": "xray @id=decl-nominal-type-aliases @check",
+    "code": "type Outcome = i64 | string                          // union 别名\ntype Mapper = fn(i64) -> i64                              // 函数类型别名\nstruct Point { x: f64; y: f64 }\ntype Position = Point                              // 同一名义类型的别名\ntype Pair<T> = (T, T)                               // 无标签 tuple 的泛型别名",
+    "trivia": {
+      "en": {
+        "6": "                          // union alias\n",
+        "15": "                           // function-type alias\n",
+        "30": "                              // alias of the same nominal type\n",
+        "41": "                               // generic alias of an unlabeled tuple"
+      }
+    }
+  },
+  "006-5-declarations-example-043": {
+    "fence": "xray",
+    "code": "// stdlib / 第三方包：裸标识符，可自动生成别名\nimport time\nimport http\nimport alice/utils as utils\n\n// 文件路径或目录路径：字符串，可显式 `as`，否则从路径尾段推导别名\nimport \"./modules/mod_a.xr\" as a\nimport \"../utils/string_utils.xr\" as utils\nimport \"models/user\" as user\n\n// 命名 import：支持 quoted path 或裸模块名，成员可用 `as` 重命名\nimport { readFile, writeFile as write } from io\nimport { publicFn } from \"./modules/mod_a.xr\"\n\n// 导出\nexport fn publicFn() -> string { return \"hi\" }\nexport const VERSION = \"1.0\"\nexport { name1, name2 as alias } from \"./other\"\nexport * from \"./other\"",
+    "trivia": {
+      "en": {
+        "0": "// stdlib / third-party packages: bare identifiers; alias auto-derived\n",
+        "10": "\n\n// File path or directory path: string, with explicit `as` or alias derived from the trailing segment\n",
+        "22": "\n\n// Named import: supports quoted paths or bare module names; members may be renamed with `as`\n",
+        "38": "\n\n// Exports\n"
+      }
+    }
+  }
+}

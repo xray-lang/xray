@@ -1140,11 +1140,19 @@ if(IS_DIRECTORY "${_spec_source}/cards")
     file(GLOB_RECURSE _spec_render_inputs CONFIGURE_DEPENDS
         "${_spec_source}/sections/*.md"
         "${_spec_source}/cards/*.json"
+        "${_spec_source}/examples/*.json"
+        "${_spec_source}/grammar/*.ebnf"
+        "${_spec_source}/grammar/*.json"
+        "${_spec_source}/lexical/*.json"
         "${_spec_source}/knowledge/*.md")
     # Refresh projections when inputs change in an existing Ninja tree.
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
         ${_spec_render_inputs}
-        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py")
+        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/spec_sources.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_spec_xray_snippets.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/lexer/xkeywords.def"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_exact_scalar_registry.def")
     execute_process(
         COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
@@ -1164,12 +1172,12 @@ if(IS_DIRECTORY "${_spec_source}/cards")
             RESULT_VARIABLE _docs_regen_result
         )
         if(NOT _docs_regen_result EQUAL 0)
-            message(WARNING "Language docs regeneration failed (exit ${_docs_regen_result})")
+            message(FATAL_ERROR "Language docs regeneration failed (exit ${_docs_regen_result})")
         endif()
     elseif(_docs_check_result EQUAL 0)
         message(STATUS "Language docs: up-to-date")
     else()
-        message(WARNING "Language docs check failed (exit ${_docs_check_result})")
+        message(FATAL_ERROR "Language docs check failed (exit ${_docs_check_result})")
     endif()
 else()
     message(STATUS "Spec source not found — using committed generated files")
@@ -4142,6 +4150,16 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    add_test(NAME spec_source_authority COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/test_spec_sources.py)
+    set_tests_properties(spec_source_authority PROPERTIES
+        LABELS "spec;docs;unit" PROCESSORS 1 TIMEOUT 30)
+    add_test(NAME spec_source_generation COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
+        --root ${CMAKE_CURRENT_SOURCE_DIR} --check --parity strict)
+    set_tests_properties(spec_source_generation PROPERTIES
+        LABELS "spec;docs;discipline" PROCESSORS 1 TIMEOUT 30)
+
     # Explicit frontend receipts preserve the former admission regression scope.
     # Runtime and complete G13 certification have separate strict reports.
     add_test(
@@ -4189,6 +4207,7 @@ if(BUILD_TESTS)
             --peer-spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC.md
             --baseline ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_snippet_baseline_cn.txt
             --report ${CMAKE_CURRENT_BINARY_DIR}/spec_g13_execution.json
+            --support-table ${CMAKE_CURRENT_BINARY_DIR}/spec_support.md
         DEPENDS xray VERBATIM)
     add_test(NAME spec_snippet_runner COMMAND ${XRAY_PYTHON} -X utf8
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/test_spec_snippet_runner.py --xray $<TARGET_FILE:xray>)
@@ -4199,7 +4218,7 @@ if(BUILD_TESTS)
         --xray $<TARGET_FILE:xray>
         --spec ${CMAKE_CURRENT_SOURCE_DIR}/spec/source/sections
         --baseline ${CMAKE_CURRENT_SOURCE_DIR}/tests/meta/spec_snippet_baseline_cn.txt
-        --ids "002-1-lexical-structure.md:480,types-map,types-set,types-json-object,types-alias,003-2-type-system.md:674,types-inference,types-map-set-usage,expr-spread-collections,expr-array-lit,expr-map-lit,expr-set-lit,expr-struct-lit,expr-literal-constructor-relation,decl-destructuring,decl-named-arguments,decl-nominal-type-aliases,007-6-patterns.md:181,generics-basic,generics-hashable-contract,generics-nominal-interface"
+        --ids "example:002-1-lexical-structure-example-016,types-map,types-set,types-json-object,types-alias,example:003-2-type-system-example-021,types-inference,types-map-set-usage,expr-spread-collections,expr-array-lit,expr-map-lit,expr-set-lit,expr-struct-lit,expr-literal-constructor-relation,decl-destructuring,decl-named-arguments,decl-nominal-type-aliases,example:007-6-patterns-example-010,generics-basic,generics-hashable-contract,generics-nominal-interface"
         --report ${CMAKE_CURRENT_BINARY_DIR}/spec_map_named_arguments.json)
     set_tests_properties(spec_map_named_arguments PROPERTIES
         LABELS "spec;docs;frontend;syntax" PROCESSORS 1 TIMEOUT 120)

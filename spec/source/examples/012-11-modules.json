@@ -1,0 +1,39 @@
+{
+  "modules-import": {
+    "fence": "xray @id=modules-import",
+    "code": "// 1. stdlib：裸标识符；没有 `as` 时别名等于模块名\nimport time\nimport datetime\nimport http as httpClient\n\n// 2. 第三方包：引号 + owner/name 形式\nimport \"alice/utils\"\nimport \"bob/http_client\" as httpClient\n\n// 3. 文件路径或目录路径：字符串字面量，可显式 alias，也可从路径尾段推导（不含 .xr 扩展名）\nimport \"./modules/mod_a\" as a\nimport \"../utils/string_utils\" as utils\n\n// 4. 命名 import：成员可重命名；`from` 后可接字符串路径或裸模块名\nimport { readFile, writeFile as write } from io\nimport { publicFn } from \"./modules/mod_a\"",
+    "trivia": {
+      "en": {
+        "0": "// 1. stdlib: bare identifier; without `as`, the alias equals the module name\n",
+        "8": "\n\n// 2. third-party packages: quoted owner/name form\n",
+        "14": "\n\n// 3. path: string literal, optional explicit alias, otherwise inferred from the trailing path segment (no .xr extension)\n",
+        "22": "\n\n// 4. named imports: members may be renamed; the `from` operand may be a quoted path or a bare module name\n"
+      }
+    }
+  },
+  "modules-export": {
+    "fence": "xray @id=modules-export",
+    "code": "// 1. 声明自身携带 export 可见性\nexport fn helper() { return }\nexport final class MyClass {\n    value: i64\n    init() { this.value = 1 }\n}\nexport const VERSION = \"1.0\"\n\n// 2. 重导出（带可选重命名）\nexport { getUser, getUserAge as getAge } from \"./user\"\n\n// 3. 通配重导出（把另一个模块的全部 export 转出）\nexport * from \"./product\"",
+    "trivia": {
+      "en": {
+        "0": "// 1. visibility belongs to the declaration\n",
+        "32": "\n\n// 2. re-export (with optional renaming)\n",
+        "42": "\n\n// 3. wildcard re-export (forward all exports of another module)\n"
+      }
+    }
+  },
+  "modules-use": {
+    "fence": "xray @id=modules-use",
+    "code": "import time\nvar t = time.now()\ntime.sleep(100)"
+  },
+  "012-11-modules-example-004": {
+    "fence": "xray",
+    "code": "import { sha256 } from crypto\nimport math\n\nfn main() {\n    print(math.sqrt(144.0))   // 输出：12.0\n    print(sha256(\"xray\"))     // 输出：1a46e6a6...（SHA-256 摘要）\n}\n\nmain()",
+    "trivia": {
+      "en": {
+        "22": "   // prints 12.0\n    ",
+        "29": "     // prints 1a46e6a6... (SHA-256 digest)\n"
+      }
+    }
+  }
+}

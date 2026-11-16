@@ -1,0 +1,436 @@
+{
+  "reserved": {
+    "as": {
+      "section": "§3.8",
+      "group": 2,
+      "cn": "运行时类型检查 / 转换",
+      "en": "runtime type check / cast"
+    },
+    "await": {
+      "section": "§10.3",
+      "group": 5,
+      "cn": "并发与底层能力",
+      "en": "Concurrency and low-level operations"
+    },
+    "bool": {
+      "section": "§2.3.3",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "break": {
+      "section": "§4.6",
+      "group": 1,
+      "cn": "循环控制",
+      "en": "loop control"
+    },
+    "catch": {
+      "section": "§8",
+      "group": 3,
+      "cn": "错误处理",
+      "en": "Error handling"
+    },
+    "class": {
+      "section": "§5.3",
+      "group": 2,
+      "cn": "类/结构体声明",
+      "en": "class / struct declaration"
+    },
+    "comptime": {
+      "section": "§3.2",
+      "group": 1,
+      "cn": "强制编译期求值的表达式前缀",
+      "en": "expression prefix that forces compile-time evaluation"
+    },
+    "const": {
+      "section": "§5.1",
+      "group": 1,
+      "cn": "固定绑定及其值语义部分",
+      "en": "immutable field/binding modifier"
+    },
+    "continue": {
+      "section": "§4.6",
+      "group": 1,
+      "cn": "循环控制",
+      "en": "loop control"
+    },
+    "defer": {
+      "section": "§4.9",
+      "group": 3,
+      "cn": "错误处理",
+      "en": "Error handling"
+    },
+    "else": {
+      "section": "§4.2",
+      "group": 1,
+      "cn": "条件分支",
+      "en": "conditional branches"
+    },
+    "enum": {
+      "section": "§5.6",
+      "group": 2,
+      "cn": "枚举声明",
+      "en": "enum declaration"
+    },
+    "export": {
+      "section": "§11",
+      "group": 4,
+      "cn": "模块导入与导出",
+      "en": "Module imports and exports"
+    },
+    "extends": {
+      "section": "§5.3",
+      "group": 2,
+      "cn": "类继承",
+      "en": "class inheritance"
+    },
+    "f32": {
+      "section": "§2.3.2",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "f64": {
+      "section": "§2.3.2",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "false": {
+      "section": "§1.6.4",
+      "group": 7,
+      "cn": "字面量",
+      "en": "Literal"
+    },
+    "final": {
+      "section": "§5.3",
+      "group": 2,
+      "cn": "`final class` 禁止继承",
+      "en": "`final class` cannot be inherited"
+    },
+    "fn": {
+      "section": "§5.2",
+      "group": 1,
+      "cn": "函数声明",
+      "en": "function declaration"
+    },
+    "for": {
+      "section": "§4.4",
+      "group": 1,
+      "cn": "循环（C 风格 + for-in）",
+      "en": "loops (C-style + for-in)"
+    },
+    "go": {
+      "section": "§10.2",
+      "group": 5,
+      "cn": "并发与底层能力",
+      "en": "Concurrency and low-level operations"
+    },
+    "i16": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "i32": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "i64": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "i8": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "if": {
+      "section": "§4.2",
+      "group": 1,
+      "cn": "条件分支",
+      "en": "conditional branches"
+    },
+    "implements": {
+      "section": "§5.5",
+      "group": 2,
+      "cn": "接口声明/实现",
+      "en": "interface declaration / implementation"
+    },
+    "import": {
+      "section": "§11",
+      "group": 4,
+      "cn": "模块导入与导出",
+      "en": "Module imports and exports"
+    },
+    "in": {
+      "section": "§4.4",
+      "group": 1,
+      "cn": "循环（C 风格 + for-in）",
+      "en": "loops (C-style + for-in)"
+    },
+    "interface": {
+      "section": "§5.5",
+      "group": 2,
+      "cn": "接口声明/实现",
+      "en": "interface declaration / implementation"
+    },
+    "is": {
+      "section": "§3.8",
+      "group": 2,
+      "cn": "运行时类型检查 / 转换",
+      "en": "runtime type check / cast"
+    },
+    "isize": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "match": {
+      "section": "§3.13 / §4.5",
+      "group": 1,
+      "cn": "模式匹配",
+      "en": "pattern matching"
+    },
+    "new": {
+      "section": "§3.14",
+      "group": 2,
+      "cn": "保留字；对象构造统一写 `T(...)`（见 §3.14）",
+      "en": "reserved; construct objects with `T(...)` (see §3.14)"
+    },
+    "null": {
+      "section": "§1.6.4",
+      "group": 7,
+      "cn": "字面量",
+      "en": "Literal"
+    },
+    "operator": {
+      "section": "§1.5.2",
+      "group": 2,
+      "cn": "保留字；语言不提供运算符重载",
+      "en": "reserved; the language has no operator overloading"
+    },
+    "packed": {
+      "section": "§5.2.9",
+      "group": 2,
+      "cn": "FFI 布局声明",
+      "en": "FFI layout declarations"
+    },
+    "private": {
+      "section": "§5.3",
+      "group": 2,
+      "cn": "类/成员修饰符；公开是默认语义，没有 `public` 关键字",
+      "en": "class/member modifiers; public visibility is the default and has no `public` keyword"
+    },
+    "protected": {
+      "section": "§5.3",
+      "group": 2,
+      "cn": "类/成员修饰符；公开是默认语义，没有 `public` 关键字",
+      "en": "class/member modifiers; public visibility is the default and has no `public` keyword"
+    },
+    "return": {
+      "section": "§4.7",
+      "group": 1,
+      "cn": "函数返回",
+      "en": "function return"
+    },
+    "rune": {
+      "section": "§2.3.5",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "scope": {
+      "section": "§10.7",
+      "group": 5,
+      "cn": "并发与底层能力",
+      "en": "Concurrency and low-level operations"
+    },
+    "select": {
+      "section": "§10.6",
+      "group": 5,
+      "cn": "并发与底层能力",
+      "en": "Concurrency and low-level operations"
+    },
+    "static": {
+      "section": "§5.3",
+      "group": 2,
+      "cn": "类/成员修饰符；公开是默认语义，没有 `public` 关键字",
+      "en": "class/member modifiers; public visibility is the default and has no `public` keyword"
+    },
+    "string": {
+      "section": "§2.3.4",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "struct": {
+      "section": "§5.4",
+      "group": 2,
+      "cn": "类/结构体声明",
+      "en": "class / struct declaration"
+    },
+    "super": {
+      "section": "§5.3",
+      "group": 2,
+      "cn": "自我/父类引用",
+      "en": "self / parent reference"
+    },
+    "this": {
+      "section": "§5.3",
+      "group": 2,
+      "cn": "自我/父类引用",
+      "en": "self / parent reference"
+    },
+    "throw": {
+      "section": "§8",
+      "group": 3,
+      "cn": "错误处理",
+      "en": "Error handling"
+    },
+    "true": {
+      "section": "§1.6.4",
+      "group": 7,
+      "cn": "字面量",
+      "en": "Literal"
+    },
+    "try": {
+      "section": "§8",
+      "group": 3,
+      "cn": "错误处理",
+      "en": "Error handling"
+    },
+    "type": {
+      "section": "§5.7",
+      "group": 2,
+      "cn": "类型别名",
+      "en": "type alias"
+    },
+    "u16": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "u32": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "u64": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "u8": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "union": {
+      "section": "§5.2.9",
+      "group": 2,
+      "cn": "FFI 布局声明",
+      "en": "FFI layout declarations"
+    },
+    "unsafe": {
+      "section": "§3.2 / §5.2",
+      "group": 5,
+      "cn": "并发与底层能力",
+      "en": "Concurrency and low-level operations"
+    },
+    "usize": {
+      "section": "§2.3.1",
+      "group": 6,
+      "cn": "内建标量类型",
+      "en": "Built-in scalar type"
+    },
+    "var": {
+      "section": "§5.1",
+      "group": 1,
+      "cn": "可变变量声明",
+      "en": "mutable variable declaration"
+    },
+    "where": {
+      "section": "§9.1",
+      "group": 2,
+      "cn": "类型与泛型规则",
+      "en": "Type and generic rules"
+    },
+    "while": {
+      "section": "§4.3",
+      "group": 1,
+      "cn": "循环",
+      "en": "loop"
+    },
+    "yield": {
+      "section": "§3.16",
+      "group": 1,
+      "cn": "生成器产值语句",
+      "en": "generator value-yield statement"
+    }
+  },
+  "contextual": {
+    "init": {
+      "cn": "class/struct 的初始化成员声明；在其它位置仍为普通标识符",
+      "en": "class/struct initializer member declaration; ordinary identifier elsewhere"
+    },
+    "from": {
+      "cn": "`select` 的接收分支 (`x from ch`)；也用于命名 import / re-export (`import { x } from \"module\"`)",
+      "en": "`select` receive arm (`x from ch`); also in named import / re-export (`import { x } from \"module\"`)"
+    },
+    "to": {
+      "cn": "`select` 的发送分支 (`value to ch`)",
+      "en": "`select` send arm (`value to ch`)"
+    },
+    "ref": {
+      "cn": "参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`)",
+      "en": "parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`)"
+    },
+    "move": {
+      "cn": "所有权转移 (`move x`)",
+      "en": "ownership transfer (`move x`)"
+    },
+    "isolated": {
+      "cn": "`scope(isolated)` 选项（§10.7）",
+      "en": "`scope(isolated)` option (§10.7)"
+    },
+    "after": {
+      "cn": "`select` 的超时分支 (`after 1000 => ...`)",
+      "en": "`select` timeout arm (`after 1000 => ...`)"
+    },
+    "panic": {
+      "cn": "`catch panic (p)` 的 panic 通道边界",
+      "en": "panic-channel boundary in `catch panic (p)`"
+    },
+    "throws": {
+      "cn": "函数、方法、构造器、fn lambda 与函数类型的参数列表之后，声明错误类型",
+      "en": "after the parameter list of a function, method, initializer, fn lambda, or function type; declares its error type"
+    },
+    "escaping": {
+      "cn": "参数类型中 `fn` 或 `nosuspend fn` 前，声明函数值可跨调用保存",
+      "en": "Before `fn` or `nosuspend fn` in a parameter type, allowing the function value to outlive the invocation"
+    },
+    "copy": {
+      "cn": "位置的显式复制表达式（§2.14）",
+      "en": "Explicit copy expression on a place (§2.14)"
+    },
+    "nosuspend": {
+      "cn": "函数类型的无挂起承诺前缀",
+      "en": "Non-suspending function type prefix"
+    },
+    "override": {
+      "cn": "类实例方法的显式覆写标记",
+      "en": "Explicit override marker on an instance method"
+    }
+  }
+}

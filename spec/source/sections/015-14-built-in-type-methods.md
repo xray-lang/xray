@@ -8,7 +8,7 @@ order: 015
 
 ## 14. 内置类型方法 (Built-in Type Methods)
 
-> 真值源：prelude / analyzer / runtime 中的内置类型注册与方法定义。
+> 实现参考：prelude / analyzer / runtime 中的内置类型注册与方法定义。
 > MCP knowledge 只消费生成后的 analyzer metadata，不独立维护内置类型方法签名。
 
 本节按主题汇总每种内置类型的方法、签名和行为。
@@ -124,6 +124,7 @@ string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`
 
 普通 read 参数不能成为这些 ref 方法的可写 receiver；可复制 Array 不声明 move receiver，pop 删除元素也不消费整个 Array。下表的 ref 是声明模式，dot-call 仍写 `a.push(x)`。纯索引 GET-place 的快照消除及瞬时 retain/copy/drop 必须遵守 §3.0 的错误保持要求，不能以共享 backing 的唯一性猜测绕过访问权限。
 
+<!-- xr-source:example array-ref-current-binding -->
 ```xray @id=array-ref-current-binding
 var a: Array<string> = ["old"]
 fn replaceForPush() -> string {
@@ -134,12 +135,15 @@ fn replaceForPush() -> string {
 a.push(replaceForPush())
 print(a[0], a[1])           // 依次输出 arg、new tail
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-push-own-element -->
 ```xray @id=array-push-own-element
 var a: Array<string> = ["head"]
 a.push(a[0])
 print(a[0], a[1])           // head head
 ```
+<!-- /xr-source -->
 
 同源 Array 清单保留完整32成员：30个实例方法、1个静态方法和1个属性。当前结构化声明准入27个成员（25个实例方法、withCapacity和capacity）；sort当前仅接Array<i64>的零实参升序调用，比较器与其它元素类型仍拒绝。未准入的五个实例方法为iterator、entriesIterator、ptr、mutPtr和toString。操作身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于查找。准入是编译/执行边界，完整安全、资源与性能资格仍须各批实际证据。
 
@@ -293,6 +297,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 `JSON.Path` 是 `Array<string | i64>`：string segment 是完整 object key，i64 segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
 
+<!-- xr-source:example json-boundary-and-path -->
 ```xray @id=json-boundary-and-path @check
 struct Request { action: string; userId: i64 }
 var body = "{\"action\":\"create\",\"userId\":7}"
@@ -305,6 +310,7 @@ var path: JSON.Path = ["user", "profile", "name"]
 var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
+<!-- /xr-source -->
 
 JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；struct、数组和其他复合值仍通过 `JSON.value(...)` 显式编码。`{"name": "alice"}` 是 Map 字面量；在 `JSON.Object` 上下文中，键为 string，值按现有标量规则进入 JSON.Value。固定字段的类型化解码目标使用 struct。
 
@@ -325,6 +331,7 @@ JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Val
 
 计数结果为 `i64`；若数学上的元素数量超过 `i64` 上限，返回 `MAX_I64`（`9223372036854775807`），不发生整数回绕。
 
+<!-- xr-source:example range-members -->
 ```xray @id=range-members
 var pages = 1..=3
 print(pages.start)          // 1
@@ -336,6 +343,7 @@ print(pages.toArray())      // [1, 2, 3]
 var empty = 5..5
 print(len(empty))           // 0
 ```
+<!-- /xr-source -->
 
 ### 14.13 `DateTime`
 
@@ -415,7 +423,7 @@ print(len(empty))           // 0
 
 ## 14. Built-in Type Methods
 
-> Source of truth: prelude / analyzer / runtime built-in type registration and method definitions.
+> Implementation reference: prelude / analyzer / runtime built-in type registration and method definitions.
 > MCP knowledge only consumes the generated analyzer metadata; it does not maintain its own copy of built-in method signatures.
 
 This section summarizes the methods, signatures, and behavior of each built-in type by topic.
@@ -535,6 +543,7 @@ Read-only get and indexing follow the value-receiver snapshot rule in §3.0: tak
 
 An ordinary read parameter cannot be a writable receiver for these ref methods. Copyable Array has no move receiver; pop removes an element without consuming the whole Array. Ref in the table is a declaration mode: the dot call remains `a.push(x)`. Pure-index GET-place snapshot elimination and transient retain/copy/drop must preserve failures as required by §3.0; backing uniqueness never bypasses access permissions.
 
+<!-- xr-source:example array-ref-current-binding -->
 ```xray @id=array-ref-current-binding
 var a: Array<string> = ["old"]
 fn replaceForPush() -> string {
@@ -545,12 +554,15 @@ fn replaceForPush() -> string {
 a.push(replaceForPush())
 print(a[0], a[1])           // Prints arg, then new tail
 ```
+<!-- /xr-source -->
 
+<!-- xr-source:example array-push-own-element -->
 ```xray @id=array-push-own-element
 var a: Array<string> = ["head"]
 a.push(a[0])
 print(a[0], a[1])           // head head
 ```
+<!-- /xr-source -->
 
 The source-derived Array inventory retains all32 members:30 instance methods, one static method and one field. Structured declarations currently admit27 members:25 instance methods, withCapacity and capacity. The executable sort subset accepts only zero-argument ascending Array<i64> calls; comparators and other element types remain rejected. The five unadmitted instance methods are iterator, entriesIterator, ptr, mutPtr and toString. Operation identities come from the same structured declarations in `stdlib/types/array.xr`; names serve lookup only. Admission defines a compiler/execution boundary, while full safety, resource and performance qualification still requires actual batch evidence.
 
@@ -697,7 +709,8 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 
 `JSON.Path` is `Array<string | i64>`: a string segment is one complete object key, and an i64 segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
 
-```xray @id=json-boundary-and-path-en @check
+<!-- xr-source:example json-boundary-and-path -->
+```xray @id=json-boundary-and-path @check
 struct Request { action: string; userId: i64 }
 var body = "{\"action\":\"create\",\"userId\":7}"
 
@@ -709,6 +722,7 @@ var path: JSON.Path = ["user", "profile", "name"]
 var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
+<!-- /xr-source -->
 
 JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly with an explicit `JSON.Value` target. Structs, arrays and other composites still require explicit `JSON.value(...)` encoding. `{"name": "alice"}` is a Map literal; under `JSON.Object`, keys are strings and values use existing scalar widening into JSON.Value. Fixed-field typed decoding targets are structs.
 
@@ -729,7 +743,8 @@ JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly with 
 
 The count is an `i64`. If the mathematical number of elements exceeds the `i64` maximum, it saturates at `MAX_I64` (`9223372036854775807`) without integer wraparound.
 
-```xray @id=range-members-en
+<!-- xr-source:example range-members -->
+```xray @id=range-members
 var pages = 1..=3
 print(pages.start)          // 1
 print(pages.end)            // 3
@@ -740,6 +755,7 @@ print(pages.toArray())      // [1, 2, 3]
 var empty = 5..5
 print(len(empty))           // 0
 ```
+<!-- /xr-source -->
 
 ### 14.13 `DateTime`
 

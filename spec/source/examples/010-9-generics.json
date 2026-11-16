@@ -1,0 +1,73 @@
+{
+  "generics-basic": {
+    "fence": "xray @id=generics-basic @check",
+    "code": "// 泛型函数\nfn identity<T>(x: T) -> T {\n    return x\n}\n\nvar a = identity<i64>(42)\nvar b = identity(\"hello\")               // 推断 T=string\n\n// 泛型类\nclass Box<T> {\n    value: T\n    init(v: T) { this.value = v }\n    get() -> T { return this.value }\n}\n\nvar b1 = Box<i64>(42)\nvar b2 = Box<string>(\"hi\")\n\n// 多参数泛型\nclass Pair<K, V> {\n    key: K\n    value: V\n    init(k: K, v: V) {\n        this.key = k; this.value = v\n    }\n}\n\n// 泛型接口\ninterface Comparable<T> {\n    compareTo(other: T) -> i64\n}\n\n// 泛型 type alias：透明语法替换，不产生新类型\ntype PairAlias<T> = (T, T)",
+    "trivia": {
+      "en": {
+        "0": "// Generic function\n",
+        "33": "               // T inferred as string\n\n// Generic class\n",
+        "87": "\n\n// Multi-parameter generic\n",
+        "125": "\n\n// Generic interface\n",
+        "140": "\n\n// Generic type alias: transparent syntax substitution, not a new type\n"
+      }
+    }
+  },
+  "generics-constraints": {
+    "fence": "xray @id=generics-constraints",
+    "code": "// 单一约束\nfn first<T: Comparable>(a: T, b: T) -> T {\n    return a\n}\n\n// 多个约束（交叉）——T 必须同时满足 Comparable、Hashable、Stringable\nfn passThrough<T: Comparable & Hashable & Stringable>(x: T) -> T {\n    return x\n}\n\n// 多个类型参数，每个独立约束\nfn pickValue<K: Hashable, V>(k: K, v: V) -> V {\n    return v\n}",
+    "trivia": {
+      "en": {
+        "0": "// Single constraint\n",
+        "22": "\n\n// Multiple constraints (intersection) — T must satisfy Comparable, Hashable, and Stringable\n",
+        "44": "\n\n// Multiple type parameters, each independently constrained\n"
+      }
+    }
+  },
+  "generics-hashable-contract": {
+    "fence": "xray @id=generics-hashable-contract @check",
+    "code": "class Token implements Hashable {\n    value: i64\n\n    init(value: i64) { this.value = value }\n\n    // 参数写 Token，不写 Self\n    equals(other: Token) -> bool { return this.value == other.value }\n\n    hash() -> i64 { return this.value }\n}\n\nvar counts: Map<Token, i64> = {}\ncounts.set(Token(7), 99)",
+    "trivia": {
+      "en": {
+        "21": "\n\n    // the parameter is spelled Token, not Self\n    "
+      }
+    }
+  },
+  "generics-where-clause": {
+    "fence": "xray @id=generics-where-clause",
+    "code": "// 约束列表长时，写在后面不会把参数挤出一行\nfn maxOf<T>(a: T, b: T) -> T where T: Comparable {\n    if (a > b) { return a }\n    return b\n}\n\n// 内联与 where 在同一参数上取交集：T 必须同时满足 Comparable 与 Stringable\nfn describe<T: Comparable>(a: T, b: T) -> T where T: Stringable { ... }\n\nclass Registry<K, V> where K: Hashable { ... }\nstruct Holder<T> where T: Comparable { ... }\ninterface Seq<T> where T: Comparable { ... }\nenum Wrap<T> where T: Comparable { ... }",
+    "trivia": {
+      "en": {
+        "0": "// A long constraint list after the signature keeps the parameters on one line\n",
+        "34": "\n\n// Inline and where intersect on T: it must satisfy Comparable and Stringable\n"
+      }
+    }
+  },
+  "generics-inference": {
+    "fence": "xray @id=generics-inference",
+    "code": "identity(42)                    // T 推断为 i64\nBox(\"hello\")                // T 推断为 string\nPair(\"key\", 100)            // K=string, V=i64",
+    "trivia": {
+      "en": {
+        "4": "                    // T inferred as i64\n",
+        "8": "                // T inferred as string\n"
+      }
+    }
+  },
+  "generics-explicit-instantiation": {
+    "fence": "xray @id=generics-explicit-instantiation",
+    "code": "var empty = Array<i64>()              // 无元素可推\nvar m = Map<string, i64>()\nvar result = identity<f64>(0)            // 泛型实参提供唯一上下文，0 直接定型为 f64",
+    "trivia": {
+      "en": {
+        "9": "              // no element to infer from\n",
+        "30": "            // the type argument supplies a unique context; 0 is directly typed as f64"
+      }
+    }
+  },
+  "generics-nominal-interface": {
+    "fence": "xray @id=generics-nominal-interface @check",
+    "code": "interface Named { name() -> string }\nstruct User implements Named {\n    value: string\n    name() -> string { return this.value }\n}\nfn show<T: Named>(value: T) -> string { return value.name() }\nvar user = User{value: \"A\"}\nvar text = show(user)"
+  },
+  "generics-type-identity": {
+    "fence": "xray @id=generics-type-identity",
+    "code": "class Container<T> {\n    items: Array<T>\n}\nvar c = Container<i64>()\nprint(c is Container<i64>)     // true\nprint(typeName(c))             // \"Container<i64>\" when type names are enabled"
+  }
+}

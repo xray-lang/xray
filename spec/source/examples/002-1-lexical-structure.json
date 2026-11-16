@@ -1,0 +1,111 @@
+{
+  "002-1-lexical-structure-example-001": {
+    "fence": "xray",
+    "code": "var x = a\n!b            // 两条语句；不是 var x = a!",
+    "trivia": {
+      "en": {
+        "6": "            // two statements; NOT var x = a!"
+      }
+    }
+  },
+  "002-1-lexical-structure-example-002": {
+    "fence": "xray",
+    "code": "var ok = check(a)\n    && check(b)      // 续行\n\nvar total = base +\n            extra    // 运算符置于行尾，续行\n\nvar quotient = total\n    / 2              // 除法只有中缀角色，续行",
+    "trivia": {
+      "en": {
+        "12": "      // continuation\n\n",
+        "18": "    // operator parked at end of line; continuation\n\n",
+        "24": "              // division has only an infix role; continuation"
+      }
+    }
+  },
+  "002-1-lexical-structure-example-003": {
+    "fence": "xray",
+    "code": "var d = (total\n    - used)          // 括号组内行结尾透明",
+    "trivia": {
+      "en": {
+        "8": "          // line endings are transparent inside a bracket group"
+      }
+    }
+  },
+  "002-1-lexical-structure-example-004": {
+    "fence": "xray",
+    "code": "// 行注释，从 // 到行尾\n/* 块注释，\n   可跨行；\n   支持 /* 嵌套 */ 到任意合理深度 */",
+    "trivia": {
+      "en": {
+        "0": "// line comment, from // to end-of-line\n/* block comment,\n   may span lines;\n   supports /* nested */ layers to any reasonable depth */"
+      }
+    }
+  },
+  "002-1-lexical-structure-example-005": {
+    "fence": "xray",
+    "code": "42\n0xFF\n0b1010\n0o77\n1_000_000      // 一百万",
+    "trivia": {
+      "en": {
+        "6": "      // one million"
+      }
+    }
+  },
+  "002-1-lexical-structure-example-006": {
+    "fence": "xray",
+    "code": "3.14\n1.0e10\n2.5E-3\n.5             // 等价 0.5",
+    "trivia": {
+      "en": {
+        "5": "             // equivalent to 0.5"
+      }
+    }
+  },
+  "002-1-lexical-structure-example-007": {
+    "fence": "xray",
+    "code": "123n\n0xFFn\n0b1010n"
+  },
+  "002-1-lexical-structure-example-008": {
+    "fence": "xray",
+    "code": "true\nfalse\nnull"
+  },
+  "002-1-lexical-structure-example-009": {
+    "fence": "xray",
+    "code": "\"hello\"\n\"Hello, ${name}! ${1 + 2}\"\n\"tab\\there\\nnewline\"\n\"\\u4F60\\u597D\"        // \"你好\"\n\"\\u{1F600}\"            // emoji"
+  },
+  "002-1-lexical-structure-example-010": {
+    "fence": "xray",
+    "code": "r\"C:\\path\\to\\file\"          // 字面量包含两个反斜杠\nr\"C:\\Users\\${USER}\"         // 反斜杠不转义，但 ${USER} 仍插值",
+    "trivia": {
+      "en": {
+        "1": "          // literal contains two backslashes\n",
+        "2": "         // backslash is not escaped, but ${USER} still interpolates"
+      }
+    }
+  },
+  "002-1-lexical-structure-example-011": {
+    "fence": "xray",
+    "code": "\"Hello, ${name}!\"\nr\"C:\\\\path\\\\${name}\"   // 反斜杠原样，仍插值\nb\"\\\\x89PNG\"              // escaped [u8; 4]\nbr\"${HOME}\\\\bin\"         // raw bytes；`${HOME}` 不插值\nc\"puts\"                   // [u8; 5]，最后一项是 appended NUL\ncr\"C:\\\\assets\"           // raw C bytes + appended NUL",
+    "trivia": {
+      "en": {
+        "2": "   // backslashes are raw; interpolation remains active\n",
+        "4": "         // raw bytes; `${HOME}` does not interpolate\n",
+        "5": "                   // [u8; 5], ending in the appended NUL\n"
+      }
+    }
+  },
+  "002-1-lexical-structure-example-012": {
+    "fence": "xray",
+    "code": "\"\" r\"\" b\"\" br\"\" c\"\" cr\"\""
+  },
+  "002-1-lexical-structure-example-013": {
+    "fence": "xray",
+    "code": "const HTML = r\"\"\"\n<div class=\"card\">\n  ${title}\n</div>\n\"\"\"\n\nconst SCRIPT = br\"\"\"\"\necho ${HOME}\n\"\"\"\n\"\"\"\""
+  },
+  "002-1-lexical-structure-example-014": {
+    "fence": "xray",
+    "code": "var a: rune = 'a'\nvar zh: rune = '中'\nvar smile: rune = '\\u{1F600}'"
+  },
+  "002-1-lexical-structure-example-015": {
+    "fence": "xray @fragment",
+    "code": "var letters = re\"(?i)[a-z]+\"\nvar decimal = re\"\\d+\\.\\d+\""
+  },
+  "002-1-lexical-structure-example-016": {
+    "fence": "xray @check",
+    "code": "var empty_map: Map<string, i64> = {}\nvar primes = Set([2, 3, 5, 7])"
+  }
+}
