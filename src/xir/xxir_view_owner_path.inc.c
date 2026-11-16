@@ -77,7 +77,7 @@ static XrXirStatus owner_path_result(ViewOwnerPath *p,bool *possible) {
     if (!a->reachable[block]) return XR_XIR_OK;
     status=affine_copy(a,a->current,a->inputs+(size_t)block*a->words);
     for (uint32_t i=a->function->blocks[block].first;i<p->request->instruction && status==XR_XIR_OK;++i) {
-        status=affine_instruction(a,i,false);
+        status=affine_instruction(a,i,false,NULL);
     }
     if (status == XR_XIR_OK)
         *possible = affine_has(a->current, affine_index(a, p->request->owner));

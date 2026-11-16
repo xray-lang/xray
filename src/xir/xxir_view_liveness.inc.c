@@ -115,12 +115,14 @@ static XrXirStatus view_live_callable_loans(ViewLive *a,uint32_t instruction,uin
         return XR_XIR_OK;
     XirViewLoanUse use={.function=a->location.function,.instruction=instruction,.value=value,
         .frame_bytes=a->frame_bytes,.physical=view_live_loan_physical,.context=a};
-    XrXirStatus status=xir_view_loan_transport_use(a->loan_transport,&use);
+    XrXirDiagnosticReason reason=XR_XIR_DIAGNOSTIC_NONE;
+    XrXirStatus status=xir_view_loan_transport_use(a->loan_transport,&use,&reason);
     if (status==XR_XIR_UNRESOLVED) {
         if (!a->pending_loans) {
             a->pending_location=a->location;
             a->pending_location.instruction=instruction;
             a->pending_location.status=status;
+            a->pending_location.reason=reason;
         }
         a->pending_loans=true;return XR_XIR_OK;
     }

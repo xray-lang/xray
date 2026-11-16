@@ -12,7 +12,21 @@
 #ifndef XXIR_VIEW_TYPES_INTERNAL_H
 #define XXIR_VIEW_TYPES_INTERNAL_H
 #include "xxir.h"
+#include "xxir_types.h"
 #include "xxir_effect_input_internal.h"
+
+/* Diagnostic classification only: an exact constructor is required. A formal,
+ * an arbitrary Array type or another Cell payload is not this capability. */
+static inline bool xir_view_actual_array_cell(const XrXirModule *module,uint32_t function,uint32_t value) {
+    if (!module || !module->functions || function>=module->function_count) return false;
+    const XrXirFunction *body=module->functions+function;
+    if (value<body->parameter_count || value-body->parameter_count>=body->instruction_count || !body->instructions)
+        return false;
+    const XrXirInstruction *op=body->instructions+value-body->parameter_count;
+    if (op->op!=XR_XIR_CELL_NEW || !xr_xir_type_is_cell(module->types,op->type)) return false;
+    const XrXirTypeNode *array=xr_xir_type_node(module->types,xr_xir_cell_element(module->types,op->type));
+    return array && array->kind==XR_XIR_TYPE_ARRAY && (array->element==XR_XIR_I64 || array->element==XR_XIR_U8);
+}
 
 #define XR_XIR_VIEW_SHARED 1u
 #define XR_XIR_VIEW_MUTABLE 2u

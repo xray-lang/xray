@@ -80,7 +80,11 @@ static XrXirStatus view_loan_transport_case(ViewLoanTransportFixture *fixture,ui
     XrXirStatus status=xir_view_loan_transport_new(&effect_context,&fixture->module,&fixture->facts,
         fixture->flags,NULL,&transport);
     XirViewLoanDemand demand={.function=0,.carrier=carrier,.physical=view_loan_transport_physical,.context=mask};
-    if (status==XR_XIR_OK) status=xir_view_loan_transport_demand(transport,&demand);
+    if (status==XR_XIR_OK) {
+        XrXirDiagnosticReason reason=XR_XIR_DIAGNOSTIC_CAPTURED_ARRAY_TRANSPORT;
+        status=xir_view_loan_transport_demand(transport,&demand,&reason);
+        CHECK(reason==XR_XIR_DIAGNOSTIC_NONE);
+    }
     xir_view_loan_transport_free(transport);return status;
 }
 
@@ -94,7 +98,7 @@ static void view_loan_transport_definition(ViewLoanTransportFixture *fixture) {
         fixture->flags, NULL, &transport) == XR_XIR_OK);
     XirViewLoanDemand demand = {.function=1, .carrier=3,
         .physical=view_loan_transport_physical, .context=&mask};
-    CHECK(xir_view_loan_transport_demand(transport, &demand) == XR_XIR_OK && mask == 1);
+    CHECK(xir_view_loan_transport_demand(transport, &demand,NULL) == XR_XIR_OK && mask == 1);
     xir_view_loan_transport_free(transport);
     uint32_t ordinal = 0;
     fixture->functions[1].escaping_parameters = &ordinal;
@@ -102,7 +106,7 @@ static void view_loan_transport_definition(ViewLoanTransportFixture *fixture) {
     transport = NULL;
     CHECK(xir_view_loan_transport_new(&effect_context, &fixture->module, &fixture->facts,
         fixture->flags, NULL, &transport) == XR_XIR_OK);
-    CHECK(xir_view_loan_transport_demand(transport, &demand) == XR_XIR_OK && mask == 1);
+    CHECK(xir_view_loan_transport_demand(transport, &demand,NULL) == XR_XIR_OK && mask == 1);
     xir_view_loan_transport_free(transport);
     fixture->restrictions[1].flows = &fixture->formal_flow;
     fixture->restrictions[1].flow_count = 1;
@@ -233,11 +237,11 @@ static void view_loan_transport_cases(void) {
         fixture.flags,NULL,&transport)==XR_XIR_OK);
     CHECK(attempts==1);
     XirViewLoanDemand demand={.function=0,.carrier=5,.physical=view_loan_transport_physical,.context=&mask};
-    mask=0;CHECK(xir_view_loan_transport_demand(transport,&demand)==XR_XIR_OK && mask==1);
+    mask=0;CHECK(xir_view_loan_transport_demand(transport,&demand,NULL)==XR_XIR_OK && mask==1);
     demand.carrier=6;mask=0;
-    CHECK(xir_view_loan_transport_demand(transport,&demand)==XR_XIR_OK && mask==2);
+    CHECK(xir_view_loan_transport_demand(transport,&demand,NULL)==XR_XIR_OK && mask==2);
     demand.frame_bytes=effect_context.limits.frame_bytes;
-    CHECK(xir_view_loan_transport_demand(transport,&demand)==XR_XIR_BUDGET);
+    CHECK(xir_view_loan_transport_demand(transport,&demand,NULL)==XR_XIR_BUDGET);
     xir_view_loan_transport_free(transport);
     effect_mark_check(baseline);
     for (size_t n=0;n<sites;++n) {

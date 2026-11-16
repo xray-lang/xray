@@ -38,8 +38,9 @@ XR_FUNC XrXirStatus xir_view_loan_transport_new(const XrXirCompileContext *,
  * contract. Applied inputs require their actual binding. Unknown storage
  * inputs, foreign borrowed terminals and ungrounded cycles fail closed.
  * A later failure invalidates every callback from this demand operation. */
-XR_FUNC XrXirStatus xir_view_loan_transport_demand(XirViewLoanTransport *, const XirViewLoanDemand *);
-XR_FUNC XrXirStatus xir_view_loan_transport_use(XirViewLoanTransport *, const XirViewLoanUse *);
+/* Optional reason is synchronous diagnostic output only, never proof. */
+XR_FUNC XrXirStatus xir_view_loan_transport_demand(XirViewLoanTransport *, const XirViewLoanDemand *,XrXirDiagnosticReason *);
+XR_FUNC XrXirStatus xir_view_loan_transport_use(XirViewLoanTransport *, const XirViewLoanUse *,XrXirDiagnosticReason *);
 XR_FUNC uint64_t xir_view_loan_transport_frame_bytes(const XirViewLoanTransport *);
 XR_FUNC void xir_view_loan_transport_free(XirViewLoanTransport *);
 #endif // XXIR_VIEW_LOAN_TRANSPORT_INTERNAL_H

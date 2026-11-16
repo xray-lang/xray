@@ -16,7 +16,11 @@ static XrXirStatus view_root_emit(ViewRootQuery *q,ViewOriginPair site,ViewOrigi
         return view_root_intern(c,&c->captured,site,&ignored);
     }
     bool captured=false;XrXirStatus status=view_root_find(c,site,&captured);
-    if (status!=XR_XIR_OK || captured) return captured ? XR_XIR_BAD_VALUE : status;
+    if (status!=XR_XIR_OK || captured) {
+        if (captured && kind==XR_XIR_VIEW_ROOT_CELL && xir_view_actual_array_cell(c->module,site.first,site.second))
+            c->location.reason=XR_XIR_DIAGNOSTIC_CAPTURED_ARRAY_VIEW;
+        return captured ? XR_XIR_BAD_VALUE : status;
+    }
     if (!c->visitor) return XR_XIR_OK;
     uint32_t paths=0,selections=0;
     for (uint32_t p=context.first>>1;p;p=q->paths.pairs[p-1u].second) {

@@ -11,13 +11,14 @@
  *   local to that demand and never publishes caller facts into a callee row.
  */
 #include "xxir_view_loan_transport_internal.h"
+#include "xxir_view_types_internal.h"
 #include "../base/xhash.h"
 
 typedef struct ViewLoanEdge { uint32_t function, value, application, next; } ViewLoanEdge;
 typedef struct ViewLoanState {
     XirStorageReference reference;
     uint32_t head;
-    bool grounded;
+    bool grounded, captured;
 } ViewLoanState;
 typedef struct ViewLoanDependency { uint32_t dependent, next; } ViewLoanDependency;
 typedef struct ViewLoanSlot { uint32_t value, generation; } ViewLoanSlot;
@@ -281,7 +282,7 @@ static bool view_loan_state_index(XirViewLoanTransport *a) {
     a->index = index; a->index_capacity = (uint32_t)next; return true;
 }
 
-static bool view_loan_push(XirViewLoanTransport *a, XirStorageReference reference, uint32_t dependent) {
+static bool view_loan_push(XirViewLoanTransport *a, XirStorageReference reference, uint32_t dependent,bool captured) {
     if (view_loan_value(a, reference.function, reference.value) == UINT32_MAX) return false;
     if (reference.environment == XIR_EXECUTION_UNKNOWN_ENVIRONMENT) { a->status = XR_XIR_UNRESOLVED; return false; }
     if (reference.environment != XIR_EXECUTION_CURRENT_ENVIRONMENT &&
@@ -299,9 +300,10 @@ static bool view_loan_push(XirViewLoanTransport *a, XirStorageReference referenc
     if (a->status != XR_XIR_OK) return false;
     if (id == UINT32_MAX) {
         if (!view_loan_grow(a, (void **)&a->states, a->state_count, &a->state_capacity, sizeof(*a->states))) return false;
-        id=a->state_count++; a->states[id]=(ViewLoanState){reference, UINT32_MAX, false};
+        id=a->state_count++; a->states[id]=(ViewLoanState){.reference=reference,.head=UINT32_MAX};
         a->index[slot]=(ViewLoanSlot){id, a->generation};
     }
+    a->states[id].captured|=captured;
     if (dependent == UINT32_MAX) return true;
     if (!view_loan_grow(a, (void **)&a->dependencies, a->dependency_count,
         &a->dependency_capacity, sizeof(*a->dependencies))) return false;
@@ -326,7 +328,7 @@ static bool view_loan_substitute(XirViewLoanTransport *a, uint32_t id, bool *bou
             binding.formal_value == reference.value) {
             *bound=true;
             return view_loan_push(a, (XirStorageReference){binding.actual_function,binding.actual_value,
-                binding.actual_environment == XIR_EXECUTION_CURRENT_ENVIRONMENT ? app.environment : binding.actual_environment}, id);
+                binding.actual_environment == XIR_EXECUTION_CURRENT_ENVIRONMENT ? app.environment : binding.actual_environment}, id,a->states[id].captured);
         }
         slot=(slot+1)&(a->binding_capacity-1);
     }
@@ -348,7 +350,7 @@ static XrXirStatus view_loan_transport_capture(void *context, const XirExecution
         a->status=xir_execution_argument(a->facts->execution,site,p,&actual);
         if (a->status != XR_XIR_OK) return a->status;
         if (!view_loan_push(a,(XirStorageReference){actual.function,actual.value,actual.environment},
-            walk->dependent)) return a->status;
+            walk->dependent,true)) return a->status;
     }
     return a->status;
 }
@@ -382,7 +384,8 @@ static bool view_loan_scalar_cell(XirViewLoanTransport *a,XirStorageReference re
     }
     return false;
 }
-static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirViewLoanDemand *demand) {
+static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirViewLoanDemand *demand,
+    XrXirDiagnosticReason *reason) {
     if (a->states[id].grounded) return true;
     XirStorageReference reference=a->states[id].reference;
     const XrXirFunction *function=&a->module->functions[reference.function];
@@ -400,7 +403,11 @@ static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirVi
      * obligations still consume receiver effects and actual alias facts. */
     bool receiver=xr_xir_type_is_class(a->module->types,type) &&
         reference.function == demand->function && reference.environment == XIR_EXECUTION_CURRENT_ENVIRONMENT;
-    if (!borrowed && !callable && !scalar && !cell && !receiver) {a->status=XR_XIR_UNRESOLVED;return false;}
+    if (!borrowed && !callable && !scalar && !cell && !receiver) {
+        if (reason && a->states[id].captured && xir_view_actual_array_cell(a->module,reference.function,reference.value))
+            *reason=XR_XIR_DIAGNOSTIC_CAPTURED_ARRAY_TRANSPORT;
+        a->status=XR_XIR_UNRESOLVED;return false;
+    }
     if (callable && !xr_xir_type_is_c_callable(a->module->types,type)) {
         bool complete=false;uint32_t remainder=0;
         ViewLoanCaptures walk={a,id};
@@ -412,7 +419,8 @@ static bool view_loan_terminal(XirViewLoanTransport *a, uint32_t id, const XirVi
     a->states[id].grounded=true;return true;
 }
 
-static bool view_loan_expand(XirViewLoanTransport *a, uint32_t id, const XirViewLoanDemand *demand) {
+static bool view_loan_expand(XirViewLoanTransport *a, uint32_t id, const XirViewLoanDemand *demand,
+    XrXirDiagnosticReason *reason) {
     XirStorageReference reference=a->states[id].reference;
     bool bound=false;
     if (!view_loan_substitute(a,id,&bound) || bound) return a->status == XR_XIR_OK;
@@ -448,9 +456,9 @@ static bool view_loan_expand(XirViewLoanTransport *a, uint32_t id, const XirView
             }
         } else if (edge.function != reference.function) {a->status=XR_XIR_UNRESOLVED;return false;}
         predecessor=true;
-        if (!view_loan_push(a,(XirStorageReference){edge.function,edge.value,environment},id)) return false;
+        if (!view_loan_push(a,(XirStorageReference){edge.function,edge.value,environment},id,a->states[id].captured)) return false;
     }
-    return a->status == XR_XIR_OK && (predecessor || view_loan_terminal(a,id,demand));
+    return a->status == XR_XIR_OK && (predecessor || view_loan_terminal(a,id,demand,reason));
 }
 
 static bool view_loan_grounded(XirViewLoanTransport *a) {
@@ -472,7 +480,9 @@ static bool view_loan_grounded(XirViewLoanTransport *a) {
     return a->status == XR_XIR_OK;
 }
 
-XR_FUNC XrXirStatus xir_view_loan_transport_demand(XirViewLoanTransport *a, const XirViewLoanDemand *demand) {
+XR_FUNC XrXirStatus xir_view_loan_transport_demand(XirViewLoanTransport *a, const XirViewLoanDemand *demand,
+    XrXirDiagnosticReason *reason) {
+    if (reason) *reason=XR_XIR_DIAGNOSTIC_NONE;
     if (!a || !demand || !demand->physical) return XR_XIR_BAD_STRUCTURE;
     if (a->status != XR_XIR_OK) return a->status;
     if (demand->frame_bytes > a->memory.limits.frame_bytes) return a->status=XR_XIR_BUDGET;
@@ -485,9 +495,9 @@ XR_FUNC XrXirStatus xir_view_loan_transport_demand(XirViewLoanTransport *a, cons
     a->state_count=0;a->dependency_count=0;
     if (++a->generation == 0) {memset(a->index,0,(size_t)a->index_capacity*sizeof(*a->index));++a->generation;}
     if (!view_loan_push(a,(XirStorageReference){demand->function,demand->carrier,
-        XIR_EXECUTION_CURRENT_ENVIRONMENT},UINT32_MAX)) return a->status;
+        XIR_EXECUTION_CURRENT_ENVIRONMENT},UINT32_MAX,false)) return a->status;
     for (uint32_t n=0;n<a->state_count && view_loan_transport_step(a);++n)
-        if (!view_loan_expand(a,n,demand)) return a->status;
+        if (!view_loan_expand(a,n,demand,reason)) return a->status;
     view_loan_grounded(a);return a->status;
 }
 
@@ -495,7 +505,9 @@ XR_FUNC uint64_t xir_view_loan_transport_frame_bytes(const XirViewLoanTransport 
     return a ? a->bytes : 0;
 }
 
-XR_FUNC XrXirStatus xir_view_loan_transport_use(XirViewLoanTransport *a, const XirViewLoanUse *use) {
+XR_FUNC XrXirStatus xir_view_loan_transport_use(XirViewLoanTransport *a, const XirViewLoanUse *use,
+    XrXirDiagnosticReason *reason) {
+    if (reason) *reason=XR_XIR_DIAGNOSTIC_NONE;
     if (!a || !use || !use->physical || use->function >= a->module->function_count ||
         use->instruction >= a->module->functions[use->function].instruction_count)
         return XR_XIR_BAD_STRUCTURE;
@@ -516,7 +528,7 @@ XR_FUNC XrXirStatus xir_view_loan_transport_use(XirViewLoanTransport *a, const X
         point.carrier >= view->functions[use->function].value_count) return XR_XIR_UNRESOLVED;
     XirViewLoanDemand demand = {.function=use->function, .carrier=point.carrier,
         .frame_bytes=use->frame_bytes, .physical=use->physical, .context=use->context};
-    XrXirStatus status = xir_view_loan_transport_demand(a, &demand);
+    XrXirStatus status = xir_view_loan_transport_demand(a, &demand,reason);
     /* A failed demand carries no proof. Retrying another demand still checks
      * every known physical loan before the module's unresolved obligation. */
     if (status == XR_XIR_UNRESOLVED) a->status = XR_XIR_OK;

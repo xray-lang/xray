@@ -72,7 +72,7 @@ static XrXirStatus view_may_transfer(ViewMayOwner *m,uint32_t b,bool emit) {
     for (uint32_t i=block->first;i<block->first+block->count;++i) {
 
         if (emit) {status=affine_copy(a,m->before,a->current);if (status!=XR_XIR_OK) return status;}
-        status=affine_instruction(a,i,false);if (status!=XR_XIR_OK) return status;
+        status=affine_instruction(a,i,false,NULL);if (status!=XR_XIR_OK) return status;
         for (uint32_t w=0;w<a->words;++w) {
 
             m->panic[w]|=a->current[w];
