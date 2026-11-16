@@ -50,6 +50,10 @@ typedef struct XrLirCallableValueFact {
     XrLirScopedValueKind kind;
     XrLirType cell_payload;
     XrLirCellTransport cell_transport;
+    /* Only a captured FRAME FUNCTION_REF uses this fact. False proves its
+     * block cannot repeat within one activation; true requires independent
+     * capture snapshots. Other rows leave it false without an execution proof. */
+    bool constructor_may_repeat;
 } XrLirCallableValueFact;
 
 typedef struct XrLirCallableFunctionFacts {
