@@ -91,6 +91,8 @@ def slice_observer(args, generated, client, binary, command, work):
     internal = args.include.parent / 'src'
     assert internal.is_dir(), internal
     compile_command.insert(1, ('/I' if args.kind == 'msvc' else '-I') + str(internal))
+    if args.kind == 'msvc':
+        compile_command[1:1] = ['/D_CRT_SECURE_NO_WARNINGS', '/D_CRT_NONSTDC_NO_WARNINGS']
     (work / (generated.stem + '-observer-command.json')).write_text(
         json.dumps(list(map(str, compile_command)), indent=2), encoding='utf-8')
     run(compile_command, work)
