@@ -12,6 +12,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments
 
 
+def fixed_value_type(text, count, aggregate):
+    """Check the natural byte shape and its real public entry contract."""
+    assert '({' not in text and 'XrtArray' not in text
+    definitions = re.findall(
+        r'typedef\s+struct\s+([A-Za-z_]\w*)\s*\{\s*uint8_t\s+bytes\[(\d+)\];\s*\}\s+\1\s*;', text)
+    assert len(definitions) == 1 and int(definitions[0][1]) == count, definitions
+    value_type = definitions[0][0]
+    entry = re.search(r'^([A-Za-z_]\w*)\s+xray_lir_entry\(void\)\s*\{', text, re.M)
+    assert entry and entry.group(1) == (value_type if aggregate else 'int64_t'), entry
+    return value_type
+
+
 def fixed_c_cases(args, root):
     root = Path(root) / 'fixed-values'
     root.mkdir()
@@ -36,12 +48,15 @@ def fixed_c_cases(args, root):
         binary = root / (name + ('.exe' if os.name == 'nt' else ''))
         execute(name + '-emit', [args.fixture_driver, name, generated])
         text = generated.read_text(encoding='ascii')
-        assert '({' not in text and 'typedef struct XrlFixed_' in text
-        assert 'uint8_t bytes[' in text and 'XrtArray' not in text
+        count = (int(name.removeprefix('fixed-')) if name.removeprefix('fixed-').isdigit() else
+                 11 if name in ('fixed-negative', 'fixed-bounds') else 17)
+        value_type = fixed_value_type(text, count, answer == 'aggregate')
+        layout = (f'_Static_assert(sizeof({value_type}) == {count}, "fixed value size");\n'
+                  f'_Static_assert(_Alignof({value_type}) == _Alignof(uint8_t), "byte alignment");\n'
+                  f'_Static_assert(offsetof({value_type}, bytes) == 0, "byte storage offset");\n'
+                  f'_Static_assert(sizeof((({value_type} *)0)->bytes) == {count}, "byte storage extent");\n')
         if answer == 'aggregate':
-            result_type = re.search(r'\b(XrlFixed_[0-9]+) xray_lir_entry\(void\)', text)
-            assert result_type
-            body = (f'    {result_type.group(1)} value = xray_lir_entry();\n'
+            body = (f'    {value_type} value = xray_lir_entry();\n'
                     '    _Static_assert(sizeof(value) == 17, "aggregate return size");\n'
                     '    for (uint32_t i = 0; i < 17; ++i)\n'
                     '        if (value.bytes[i] != (uint8_t)(i + 3)) return 1;\n')
@@ -49,7 +64,7 @@ def fixed_c_cases(args, root):
             body = '    int64_t value = xray_lir_entry();\n'
             body += ('    (void)value;\n' if isinstance(answer, str) else
                      f'    if (value != INT64_C({answer})) return 1;\n')
-        client.write_text(f'#include "{generated.name}"\nint main(void) {{\n' + body +
+        client.write_text(f'#include "{generated.name}"\n' + layout + 'int main(void) {\n' + body +
                           '    return 0;\n}\n', encoding='ascii')
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
