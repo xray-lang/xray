@@ -116,7 +116,7 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
         memcpy(parameters,c->view.parameters,(size_t)code->parameter_count * sizeof(*parameters));
     }
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
-        code->string_binding_setup |= c->homes->owned_frame_needed &&
+        code->string_binding_setup |= c->homes && c->homes->owned_frame_needed &&
             xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,v});
         if (rbc_lir_common_value(c, v)) continue;
         if (c->aggregate_home && c->aggregate_home[v] != UINT32_MAX)
