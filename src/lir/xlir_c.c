@@ -68,6 +68,8 @@ typedef struct LirC {
     struct LirCValueTypes *value_types;
     void *callable_cfg;
     uint8_t *callable_cycles;
+    const XrLirHomeEvent **callable_events;
+    size_t callable_scope_event;
     _Atomic(XrCompileResourceStatus) value_allocation_failure;
     size_t home_edge_cursor;
 } LirC;
@@ -84,6 +86,7 @@ static bool c_values_edge(LirC *, const XrLirEdgeView *, uint32_t);
 static void c_values_ensure(LirC *, uint32_t);
 static void c_values_replace_begin(LirC *, uint32_t, uint32_t);
 static void c_values_replace_end(LirC *, uint32_t);
+static bool c_values_owned_type(LirC *, XrLirType);
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
     if (c->status != XR_LIR_C_OK)
@@ -351,8 +354,21 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
     c_scalar(c, v->type);
-    if (c_callable_point(c,v)) { (void)c_callable_admit(c,v); return; }
-    if (c_callable_type(c,v->type,NULL)) {
+    if (v->op == XR_LIR_RET && v->operand_count && c_callable_type(c,c->view.result,NULL)) {
+        XrLirCallableValueFact returned;
+        if (!c_callable_fact(c,v->operands[0],&returned)) return;
+        if (returned.transport != XR_LIR_CALLABLE_TRANSPORT_OWNED && returned.transport != XR_LIR_CALLABLE_TRANSPORT_BORROW) {
+            c_error(c,XR_LIR_C_UNSUPPORTED,"Frame environment cannot escape its native activation"); return;
+        }
+    }
+    if (c_callable_point(c,v)) {
+        if (c_located(&v->source)) {
+            if (c->location_count == UINT32_MAX) c_error(c,XR_LIR_C_OVERFLOW,"C source inventory overflows");
+            else ++c->location_count;
+        }
+        (void)c_callable_admit(c,v); return;
+    }
+    if (c_callable_type(c,v->type,NULL) && v->op != XR_LIR_CALL && v->op != XR_LIR_STATE_READ) {
         c_error(c,XR_LIR_C_UNSUPPORTED,"callable result requires owned environment transport"); return;
     }
     if (xr_lir_string_role(c->request->module, v)) {
@@ -495,7 +511,7 @@ static void c_admit(LirC *c) {
         xr_lir_function_view(c->request->module, c->function, &c->view);
         for (uint32_t p = 0; p < c->view.callable_parameter_count; ++p) {
             XrLirCallableParameter contract = c->view.callable_parameters[p].contract;
-            if (contract.mode != XR_PARAM_READ || contract.escaping)
+            if (contract.mode != XR_PARAM_READ)
                 c_error(c, XR_LIR_C_UNSUPPORTED, "owned callable invocation parameters require lifetime transport");
         }
         if (!c_request_poll(c))
@@ -505,7 +521,7 @@ static void c_admit(LirC *c) {
             c->runtime = true;
             continue;
         }
-        if (c->view.result == XR_LIR_I64_CELL || c_callable_type(c,c->view.result,NULL)) {
+        if (c->view.result == XR_LIR_I64_CELL) {
             c_error(c,XR_LIR_C_UNSUPPORTED,"borrowed callable or Cell cannot leave its activation without owned transport");
             return;
         }
@@ -573,7 +589,7 @@ static void c_locations(LirC *c) {
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
-                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_record_point(&v) && !c_view_point(c, &v) &&
+                if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_callable_point(c,&v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_record_point(&v) && !c_view_point(c, &v) &&
                      !c_nullable_managed_point(c, &v) &&
                      !c_arithmetic_point(c, &v) &&
                      v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
@@ -831,7 +847,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (c->string_cursor && !scalar && v->op != XR_LIR_BR && v->op != XR_LIR_CONDBR &&
         v->op != XR_LIR_STRING_LITERAL && !literal_drop && !c_string_cursor_append(c, v))
         c_text(c, "    xrt_string_append_cursor_close(&xrl_append);\n");
-    if (c_callable_point(c,v)) { c_callable_instruction(c,v); return; }
+    if (c_callable_point(c,v)) {
+        uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
+        c_callable_instruction(c,v,source); return;
+    }
     if (v->op >= XR_LIR_NULLABLE_NONE && v->op <= XR_LIR_NULLABLE_UNWRAP) {
         c_nullable_instruction(c, v);
         return;
@@ -1062,9 +1081,11 @@ static void c_emit(LirC *c, XrLirType root_result) {
     c_values_landing_types(c);
     c_callable_types(c);
     c_values_helpers(c);
+    c_callable_publication(c);
     c_locations(c);
     c_literals(c);
     if (c->state) c_state_layout(c);
+    else if (c->value_image) c_value_image(c,xr_lir_value_image_view(c->value_image));
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
@@ -1085,6 +1106,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
             continue;
         c_prepare_divisors(c);
         c_values_function(c);
+        c_callable_events_prepare(c);
         c_prepare_string_cursor(c);
         c_signature(c, true);
         c_declarations(c);
@@ -1234,6 +1256,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     xr_compile_resources_free(c.callable_used);
     xr_compile_resources_free(c.constructed_types);
     xr_compile_resources_free(c.callable_cfg);
+    xr_compile_resources_free(c.callable_events);
     c_values_destroy(&c);
     return c.status;
 }

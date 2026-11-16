@@ -17,6 +17,40 @@ static bool c_callable_type(LirC *c, XrLirType type, XrLirCallableType *output) 
     if (output) *output = view;
     return true;
 }
+static bool c_callable_fact(LirC *c, uint32_t value, XrLirCallableValueFact *output) {
+    XrLirCallableFunctionFacts facts = {0};
+    if (xr_lir_callable_facts_function(c->request->module->callable_facts,c->function.id,&facts) != XR_LIR_OK ||
+        !value || value > facts.value_count || !facts.values || !facts.values[value].type) {
+        c_error(c,XR_LIR_C_INVALID_LIR,"callable value lost its final constructor fact"); return false;
+    }
+    *output = facts.values[value];
+    return true;
+}
+static void c_callable_events_prepare(LirC *c) {
+    xr_compile_resources_free(c->callable_events); c->callable_events = NULL; c->callable_scope_event = 0;
+    if (!c->homes || !c->callables) return;
+    bool found = false;
+    for (size_t i = 0; i < c->homes->event_count && c_request_poll(c); ++i)
+        found |= c->homes->events[i].kind == XR_LIR_OWNERSHIP_CALLABLE_VALUE;
+    if (!found || !c_request_poll(c)) return;
+    void *memory = NULL;
+    if (!c_resource(c,xr_compile_resources_calloc(c->request->resources,(size_t)c->view.value_count + 1,
+        sizeof(*c->callable_events),&memory))) return;
+    c->callable_events = memory;
+    for (size_t i = 0; i < c->homes->event_count && c_request_poll(c); ++i) {
+        const XrLirHomeEvent *event = &c->homes->events[i];
+        if (event->kind != XR_LIR_OWNERSHIP_CALLABLE_VALUE) continue;
+        if (!event->source || event->source > c->view.value_count || c->callable_events[event->source]) {
+            c_error(c,XR_LIR_C_INVALID_LIR,"callable value has no unique final event"); return;
+        }
+        ((const XrLirHomeEvent **)c->callable_events)[event->source] = event;
+    }
+}
+static const XrLirHomeEvent *c_callable_event(LirC *c, uint32_t value) {
+    const XrLirHomeEvent *event = c->callable_events && value <= c->view.value_count ? c->callable_events[value] : NULL;
+    if (!event) c_error(c,XR_LIR_C_INVALID_LIR,"callable production has no final transport event");
+    return event;
+}
 static bool c_callable_point(LirC *c, const XrLirInstructionView *v) {
     return v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT ||
         v->op == XR_LIR_FUNCTION_WEAKEN || v->op == XR_LIR_FUNCTION_SCOPE_ENTER ||
@@ -32,16 +66,14 @@ static const char *c_callable_parameter_type(LirC *c, XrLirCallableParameter par
     return NULL;
 }
 static bool c_callable_signature_admit(LirC *c, XrLirCallableType signature) {
-    if (!c_type(c,signature.result) || c_managed_leaf(signature.result) ||
-        xr_lir_boxed_type(c->request->module,signature.result) ||
-        c_callable_type(c,signature.result,NULL) || signature.result == XR_LIR_I64_CELL) {
+    if (!c_type(c,signature.result) || signature.result == XR_LIR_I64_CELL) {
         c_error(c,XR_LIR_C_UNSUPPORTED,"callable result has no established native landing ABI"); return false;
     }
     for (uint32_t p = 0; p < signature.parameter_count; ++p) {
         XrLirCallableParameter parameter = signature.parameters[p];
-        if (parameter.escaping || (parameter.mode == XR_PARAM_MOVE &&
+        if (parameter.mode == XR_PARAM_MOVE &&
             (c_managed_leaf(parameter.type) || xr_lir_boxed_type(c->request->module,parameter.type) ||
-             c_callable_type(c,parameter.type,NULL)))) {
+             c_callable_type(c,parameter.type,NULL))) {
             c_error(c,XR_LIR_C_UNSUPPORTED,"owned callable parameters require lifetime transport"); return false;
         }
         if (!c_callable_parameter_type(c,parameter)) {
@@ -49,6 +81,13 @@ static bool c_callable_signature_admit(LirC *c, XrLirCallableType signature) {
         }
     }
     return true;
+}
+static uint32_t c_callable_result_type(LirC *c, XrLirCallableType signature) {
+    const XrtValuePlan *plan = NULL; uint32_t type = 0;
+    XrLirValueLayoutKey key = {signature.result,signature.result == XR_LIR_ARRAY ? signature.result_element : 0,0};
+    if (xr_lir_value_layouts_lookup(c->value_layouts,key,&plan,&type) != XR_LIR_VALUE_LAYOUT_OK)
+        c_error(c,XR_LIR_C_INVALID_LIR,"callable result lost its common landing plan");
+    return type;
 }
 typedef struct LirCFnDfs { uint32_t block, parent, edge; } LirCFnDfs;
 /* Reentering a constructor needs distinct capture snapshots. Identify only
@@ -103,7 +142,13 @@ static bool c_callable_admit(LirC *c, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_FUNCTION_REF) {
         XrLirFunctionView target;
         xr_lir_function_view(c->request->module,(XrLirFunction){c->request->module,v->callee},&target);
-        if (v->bits != XR_LIR_CLOSURE_FRAME || target.kind != XR_LIR_FUNCTION_DEFINITION) {
+        XrLirCallableValueFact fact;
+        if (!c_callable_fact(c,v->result,&fact)) return false;
+        if (fact.operation != v->op || fact.constructor_storage != v->bits || fact.known_target != v->callee) {
+            c_error(c,XR_LIR_C_INVALID_LIR,"callable constructor changed after its final facts were sealed"); return false;
+        }
+        bool owned = fact.transport == XR_LIR_CALLABLE_TRANSPORT_OWNED;
+        if ((fact.transport != XR_LIR_CALLABLE_TRANSPORT_FRAME && !owned) || target.kind != XR_LIR_FUNCTION_DEFINITION) {
             c_error(c, XR_LIR_C_UNSUPPORTED, "escaping callable environments require owned lifetime transport");
             return false;
         }
@@ -114,13 +159,32 @@ static bool c_callable_admit(LirC *c, const XrLirInstructionView *v) {
             c_error(c,XR_LIR_C_INVALID_LIR,"callable reference has no verified target signature"); return false;
         }
         if (!c_callable_signature_admit(c,signature)) return false;
+        if (owned && closure.state_capture) {
+            c_error(c,XR_LIR_C_UNSUPPORTED,"escaping State captures require an admitted acyclic lifetime"); return false;
+        }
+        c->runtime |= owned;
         if (v->operand_count) {
-            if (!c->callable_cycles && !c_callable_cycle_index(c)) return false;
-            if (c->callable_cycles[c->block]) {
+            if (!owned && !c->callable_cycles && !c_callable_cycle_index(c)) return false;
+            if (!owned && c->callable_cycles[c->block]) {
                 c_error(c,XR_LIR_C_UNSUPPORTED,"reentered Frame environments require independent capture snapshots"); return false;
             }
             for (uint32_t p = 0; p < v->operand_count; ++p) {
                 XrLirType type = c_value_type(c,v->operands[p]); XrLirTypeLayout layout;
+                if (owned) {
+                    bool scalar = type == XR_LIR_I1 || type == XR_LIR_I64 || type == XR_LIR_U8 || type == XR_LIR_U64 || type == XR_LIR_F64;
+                    bool callable = c_callable_type(c,type,NULL);
+                    if (callable) {
+                        XrLirCallableValueFact capture;
+                        if (!c_callable_fact(c,v->operands[p],&capture)) return false;
+                        if (capture.transport != XR_LIR_CALLABLE_TRANSPORT_OWNED && capture.transport != XR_LIR_CALLABLE_TRANSPORT_BORROW) {
+                            c_error(c,XR_LIR_C_UNSUPPORTED,"escaping callable capture has no owning lifetime"); return false;
+                        }
+                    }
+                    if (!scalar && type != XR_LIR_MAP_STRING_I64 && !callable) {
+                        c_error(c,XR_LIR_C_UNSUPPORTED,"escaping capture has no admitted environment value plan"); return false;
+                    }
+                    continue;
+                }
                 if (type == XR_LIR_I64_CELL || type == XR_LIR_STATE || type == XR_LIR_STATE_REF || c_callable_type(c,type,NULL)) continue;
                 if (xr_lir_type_layout(c->request->module,type,&layout) != XR_LIR_OK || layout.managed) {
                     c_error(c,XR_LIR_C_UNSUPPORTED,"Frame capture requires an established borrowed payload lifetime"); return false;
@@ -152,6 +216,7 @@ static void c_callable_parameters(LirC *c, XrLirCallableType signature, bool nam
         if (names) c_format(c, " a%" PRIu32, p);
     }
 }
+#include "xlir_c_callable_values.inc.c"
 static void c_callable_types(LirC *c) {
     if (!c->callables) return;
     bool opened = false;
@@ -161,7 +226,9 @@ static void c_callable_types(LirC *c) {
         XR_CHECK(c_callable_type(c, XR_LIR_TYPE_COUNT + t, &signature), "receiving callable has its exact signature");
         if (!c_callable_signature_admit(c,signature)) return;
         if (!opened) { c_text(c, "typedef union XrlFnEntry {\n"); opened = true; }
-        c_format(c, "    %s (*s%" PRIu32 ")(uintptr_t", c_type(c, signature.result), XR_LIR_TYPE_COUNT + t);
+        bool owned = c_values_owned_type(c,signature.result);
+        c_format(c, "    %s (*s%" PRIu32 ")(uintptr_t", owned ? "void" : c_type(c, signature.result), XR_LIR_TYPE_COUNT + t);
+        if (owned) c_format(c,", XrlLandingValue_%" PRIu32,c_callable_result_type(c,signature));
         c_callable_parameters(c, signature, false); c_text(c, ");\n");
     }
     if (opened) c_text(c, "} XrlFnEntry;\n");
@@ -173,6 +240,11 @@ static void c_callable_types(LirC *c) {
         XrLirClosureTarget closure = {0};
         if (xr_lir_closure_target_view(c->request->module, (XrLirFunction){c->request->module,id}, &closure) != XR_LIR_OK ||
             !closure.callable || (!closure.capture_count && !closure.state_capture)) continue;
+        uint32_t environment = c_callable_environment(c,id);
+        if (environment) {
+            c_format(c,"typedef XrlValue_%" PRIu32 " XrlFnEnv_%" PRIu32 ";\n",environment,id);
+            continue;
+        }
         c_format(c, "typedef struct XrlFnEnv_%" PRIu32 " {\n", id);
         uint32_t count = closure.capture_count + closure.state_capture;
         for (uint32_t p = 0; p < count; ++p) {
@@ -192,19 +264,22 @@ static void c_callable_entries(LirC *c) {
         if (xr_lir_closure_target_view(c->request->module, function, &closure) != XR_LIR_OK || !closure.callable) continue;
         XrLirCallableType signature;
         XR_CHECK(c_callable_type(c,closure.callable,&signature), "closure target carries an admitted signature");
-        c_format(c, "static %s xrl_thunk_%" PRIu32 "(uintptr_t context", c_type(c,signature.result), function.id);
+        bool owned = c_values_owned_type(c,signature.result);
+        c_format(c, "static %s xrl_thunk_%" PRIu32 "(uintptr_t context", owned ? "void" : c_type(c,signature.result), function.id);
+        if (owned) c_format(c,", XrlLandingValue_%" PRIu32 " landing",c_callable_result_type(c,signature));
         c_callable_parameters(c,signature,true); c_text(c, ") {\n    (void)context;\n");
         if (closure.capture_count || closure.state_capture)
             c_format(c, "    const XrlFnEnv_%" PRIu32 " *env = (const void *)context;\n", function.id);
-        c_text(c, signature.result == XR_LIR_UNIT ? "    " : "    return ");
+        c_text(c, signature.result == XR_LIR_UNIT || owned ? "    " : "    return ");
         c_function_name(c,function.id); c_text(c,"(");
+        if (owned) c_text(c,"landing");
         for (uint32_t p = 0; p < target.parameter_count; ++p) {
-            if (p) c_text(c,", ");
+            if (p || owned) c_text(c,", ");
             if (p < closure.capture_count) c_format(c,"env->c%" PRIu32,p);
             else if (closure.state_capture && p + 1 == target.parameter_count) c_format(c,"env->c%" PRIu32,closure.capture_count);
             else c_format(c,"a%" PRIu32,p-closure.capture_count);
         }
-        c_text(c, signature.result == XR_LIR_UNIT ? ");\n    return;\n}\n" : ");\n}\n");
+        c_text(c, signature.result == XR_LIR_UNIT || owned ? ");\n    return;\n}\n" : ");\n}\n");
         c_format(c,"static const XrlFnEntry xrl_entry_%" PRIu32 " = {.s%" PRIu32 "=xrl_thunk_%" PRIu32 "};\n",
             function.id,closure.callable,function.id);
     }
@@ -222,28 +297,49 @@ static void c_callable_declarations(LirC *c) {
         }
     }
 }
-static void c_callable_instruction(LirC *c, const XrLirInstructionView *v) {
+static void c_callable_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (v->op == XR_LIR_FUNCTION_REF) {
+        const XrLirHomeEvent *event = c_callable_event(c,v->result);
+        if (!event) return;
         for (uint32_t p = 0; p < v->operand_count; ++p) {
             c_format(c,"    xrl_env_%" PRIu32 ".c%" PRIu32 " = ",v->result,p);
             c_value(c,v->operands[p]); c_text(c,";\n");
+        }
+        if (event->callable_transport == XR_LIR_CALLABLE_TRANSPORT_OWNED) {
+            c_callable_owned_constructor(c,v,source); return;
         }
         c_format(c,"    v%" PRIu32 " = (XrtFunction){&xrl_entry_%" PRIu32 ", ",v->result,v->callee);
         if (v->operand_count) c_format(c,"(uintptr_t)&xrl_env_%" PRIu32,v->result); else c_text(c,"0");
         c_text(c,", NULL};\n");
     } else if (v->op == XR_LIR_CALL_INDIRECT) {
-        c_text(c,"    "); if (v->result) c_format(c,"v%" PRIu32 " = ",v->result);
+        bool owned = v->result && c_values_owned_type(c,v->type);
+        if (owned) c_values_ensure(c,source);
+        c_text(c,"    "); if (v->result && !owned) { c_value(c,v->result); c_text(c," = "); }
         c_text(c,"((const XrlFnEntry *)"); c_value(c,v->operands[0]);
         c_format(c,".entry)->s%" PRIu32 "(",c_value_type(c,v->operands[0]));
         c_value(c,v->operands[0]); c_text(c,".environment");
+        if (owned) {
+            const XrLirValueHome *home = &c->homes->values[v->result];
+            c_format(c,", (XrlLandingValue_%" PRIu32 "){xrl_frame, %zu, %zu,\n",home->type,home->first_owner,home->temporary_first_owner);
+            c_format(c,"        (void *)((unsigned char *)xrl_payload + %zu), (void *)((unsigned char *)xrl_payload + %zu)}",
+                home->offset,home->temporary_offset);
+        }
         for (uint32_t p=1;p<v->operand_count;++p) { c_text(c,", "); c_value(c,v->operands[p]); }
         c_text(c,");\n");
     } else if (v->op == XR_LIR_FUNCTION_SCOPE_ENTER)
         c_format(c,"    v%" PRIu32 " = UINT32_C(%" PRIu32 ");\n",v->result,v->result);
     else if (v->op == XR_LIR_FUNCTION_WEAKEN || v->op == XR_LIR_FUNCTION_BIND ||
         (v->op == XR_LIR_FUNCTION_SCOPE_LEAVE && v->result)) {
-        c_format(c,"    v%" PRIu32 " = ",v->result);
-        c_value(c,v->operands[v->operand_count-1]); c_text(c,";\n");
+        const XrLirHomeEvent *event = c_callable_event(c,v->result);
+        if (!event) return;
+        uint32_t value = v->operands[v->operand_count-1];
+        if (event->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_COPY) {
+            c_values_replace_begin(c,v->result,source); c_text(c,"&"); c_value(c,value); c_values_replace_end(c,source);
+        } else if (event->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE) {
+            c_values_ensure(c,source); c_text(c,"    {\n"); c_callable_move(c,v->result,value,source,false); c_text(c,"    }\n");
+        } else if (event->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_BORROW) {
+            c_text(c,"    "); c_value(c,v->result); c_text(c," = "); c_value(c,value); c_text(c,";\n");
+        } else c_error(c,XR_LIR_C_INVALID_LIR,"callable alias has no final transfer mode");
     } else if (v->op == XR_LIR_CELL_NEW) {
         c_format(c,"    xrl_cell_%" PRIu32 " = ",v->result); c_value(c,v->operands[0]);
         c_format(c,";\n    v%" PRIu32 " = &xrl_cell_%" PRIu32 ";\n",v->result,v->result);
@@ -252,4 +348,5 @@ static void c_callable_instruction(LirC *c, const XrLirInstructionView *v) {
     } else if (v->op == XR_LIR_CELL_WRITE) {
         c_text(c,"    *"); c_value(c,v->operands[0]); c_text(c," = "); c_value(c,v->operands[1]); c_text(c,";\n");
     }
+    if (v->op == XR_LIR_FUNCTION_SCOPE_LEAVE) c_callable_scope_release(c);
 }

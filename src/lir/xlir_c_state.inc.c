@@ -79,7 +79,8 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
     c_state_check_access(c, reference, source);
     if (v->op == XR_LIR_STATE_READ) {
         if (shape.payload == XR_LIR_UNIT) return;
-        if (shape.payload >= XR_LIR_TYPE_COUNT && xr_lir_boxed_type(c->request->module, shape.payload)) {
+        if (shape.payload >= XR_LIR_TYPE_COUNT &&
+            (xr_lir_boxed_type(c->request->module, shape.payload) || c_callable_type(c,shape.payload,NULL))) {
             bool owned = c->homes && c->homes->values[v->result].owner_count;
             /* Frame acquisition can call a provider that changes State. Take
              * the checked borrow only after that allocation has completed. */

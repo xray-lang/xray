@@ -12,7 +12,7 @@ static void callable_scope_verification(void) {
     xr_lir_module_destroy(inlined);
     OK(xr_lir_verify(folded, NULL));
     xr_lir_module_destroy(folded);
-    callable_execution_unavailable(module, root);
+    callable_rbc_unavailable(module, root); callable_c_supported(module,root,true);
     for (unsigned mutation = 0; mutation < 7; ++mutation) {
         XrLirModule *copy = NULL;
         OK(xr_lir_rebuild(module, &copy));
@@ -79,8 +79,13 @@ static void callable_owned_factory_cases(void) {
         XrLirModule *module = NULL;
         XrLirFunction root;
         callable_factory_fixture(&module, &root, frame != 0);
-        callable_execution_unavailable(module, root);
+        callable_rbc_unavailable(module, root);
+        if (frame) callable_c_rejected(module,root,XR_LIR_C_UNSUPPORTED);
+        else callable_c_supported(module,root,true);
         xr_lir_module_destroy(module);
     }
-    puts("Owned and Frame factories remain valid LIR without a receiving execution carrier");
+    XrLirModule *borrowed = NULL; XrLirFunction borrowed_root = {0};
+    callable_c_borrowed_result_fixture(&borrowed,&borrowed_root);
+    callable_c_supported(borrowed,borrowed_root,true); xr_lir_module_destroy(borrowed);
+    puts("Owned factories have native lifetime transport; escaping Frame captures remain rejected");
 }

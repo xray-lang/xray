@@ -15,11 +15,21 @@ static void callable_c_rejected(const XrLirModule *module, XrLirFunction root, X
     CHECK(status == expected && !output.bytes && !output.length);
     xr_compile_resources_release(resources);
 }
-static void callable_execution_unavailable(const XrLirModule *module, XrLirFunction root) {
+static void callable_rbc_unavailable(const XrLirModule *module, XrLirFunction root) {
     OK(xr_lir_verify(module, NULL));
     XrRbcProgram *program = NULL;
     CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
-    callable_c_rejected(module, root, XR_LIR_C_UNSUPPORTED);
+}
+static void callable_c_supported(const XrLirModule *module, XrLirFunction root, bool owned) {
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,false}; XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits,&resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {.module=module,.entry=root,.resources=resources,.translation_unit="callable-values.c"};
+    XrLirCOutput output = {0}; XrLirCDiagnostic diagnostic = {0};
+    XrLirCStatus status = xr_lir_emit_c(&request,&output,&diagnostic);
+    if (status != XR_LIR_C_OK) fprintf(stderr,"callable C: %s\n",diagnostic.message);
+    CHECK(status == XR_LIR_C_OK && output.bytes && output.length);
+    CHECK((strstr(output.bytes,"xrt_native_environment_create") != NULL) == owned);
+    xr_lir_c_output_free(&output); xr_compile_resources_release(resources);
 }
 static void callable_c_frame(const XrLirModule *module, XrLirFunction root) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
@@ -32,8 +42,46 @@ static void callable_c_frame(const XrLirModule *module, XrLirFunction root) {
     if (status != XR_LIR_C_OK) fprintf(stderr,"Frame C: %s\n",diagnostic.message);
     CHECK(status == XR_LIR_C_OK && output.bytes && output.length);
     CHECK(strstr(output.bytes,"XrtFunction") && strstr(output.bytes,"XrlFnEntry"));
-    CHECK(!strstr(output.bytes,"xrt_environment_create"));
+    CHECK(!strstr(output.bytes,"xrt_native_environment_create"));
     xr_lir_c_output_free(&output); xr_compile_resources_release(resources);
+}
+static void callable_c_borrowed_result_fixture(XrLirModule **output, XrLirFunction *root) {
+    CArrayFixture c = {0}; OK(xr_lir_module_create(NULL,&c.module));
+    XrLirType leaf_type = 0, factory_type = 0;
+    OK(xr_lir_callable_type(c.module,&(XrLirCallableType){.result=XR_LIR_I64},&leaf_type));
+    XrLirCallableParameter argument = {.type=leaf_type,.escaping=true};
+    OK(xr_lir_callable_type(c.module,&(XrLirCallableType){.parameters=&argument,.parameter_count=1,.result=leaf_type},&factory_type));
+    XrLirFunction leaf = {0}, identity = {0};
+    XrLirFunctionSpec spec = {.name="leaf",.name_length=4,.result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module,&spec,&leaf));
+    OK(xr_lir_set_closure_target(c.module,leaf,(XrLirClosureTarget){.callable=leaf_type}));
+    OK(xr_lir_define_function(c.module,leaf)); XrLirBlock block = {0};
+    OK(xr_lir_add_block(c.module,leaf,NULL,0,&block)); OK(xr_lir_set_entry(c.module,leaf,block));
+    ca_return(&c,block,ca_constant(&c,block,42));
+    XrLirFunctionCallableParameter contract = {.contract=argument};
+    spec = (XrLirFunctionSpec){.name="identity",.name_length=8,.parameters=&leaf_type,.parameter_count=1,.result=leaf_type,
+        .callable_parameters=&contract,.callable_parameter_count=1};
+    OK(xr_lir_declare_function(c.module,&spec,&identity));
+    OK(xr_lir_set_closure_target(c.module,identity,(XrLirClosureTarget){.callable=factory_type}));
+    OK(xr_lir_define_function(c.module,identity));
+    OK(xr_lir_add_block(c.module,identity,NULL,0,&block)); OK(xr_lir_set_entry(c.module,identity,block));
+    XrLirValue borrowed = {0}; OK(xr_lir_function_parameter(c.module,identity,0,&borrowed));
+    XrLirValue scope = callable_fixture_scope(&c,block,(XrLirValue){0}), operands[] = {scope,borrowed};
+    XrLirValue bound = ca_value(&c,block,XR_LIR_FUNCTION_BIND,leaf_type,operands,2);
+    XrLirValue kept = callable_fixture_leave(&c,block,scope,bound,leaf_type); ca_return(&c,block,kept);
+    spec = (XrLirFunctionSpec){.name="root",.name_length=4,.result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module,&spec,root)); OK(xr_lir_define_function(c.module,*root));
+    OK(xr_lir_add_block(c.module,*root,NULL,0,&block)); OK(xr_lir_set_entry(c.module,*root,block));
+    XrLirValue first = {0}, factory = {0};
+    XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF,.type=leaf_type,.callee=leaf};
+    OK(xr_lir_emit_value(c.module,block,&reference,&first));
+    reference.type=factory_type; reference.callee=identity; OK(xr_lir_emit_value(c.module,block,&reference,&factory));
+    XrLirValue arguments[] = {factory,first};
+    XrLirValue returned = ca_value(&c,block,XR_LIR_CALL_INDIRECT,leaf_type,arguments,2);
+    XrLirValue copied_answer = ca_value(&c,block,XR_LIR_CALL_INDIRECT,XR_LIR_I64,&returned,1);
+    XrLirValue original_answer = ca_value(&c,block,XR_LIR_CALL_INDIRECT,XR_LIR_I64,&first,1);
+    ca_return(&c,block,ca_binary(&c,block,XR_LIR_ADD,copied_answer,original_answer));
+    OK(xr_lir_module_finish(c.module,NULL)); *output=c.module;
 }
 /* Reusing one constructor's stack cell would change the previous iteration's
  * immutable capture before it is invoked. Keep this valid LIR rejected until
@@ -116,7 +164,8 @@ static void callable_entry_signature_frontiers(void) {
         XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF,.type=callable,.callee=target};
         XrLirValue unused = {0}; OK(xr_lir_emit_value(c.module,block,&reference,&unused));
         ca_return(&c,block,ca_constant(&c,block,42)); OK(xr_lir_module_finish(c.module,NULL));
-        callable_c_rejected(c.module,root,XR_LIR_C_UNSUPPORTED);
+        if (!shape) callable_c_supported(c.module,root,false);
+        else callable_c_rejected(c.module,root,XR_LIR_C_UNSUPPORTED);
         xr_lir_module_destroy(c.module);
     }
 }
@@ -219,7 +268,11 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
         for (uint32_t n = 0; n < entry->instruction_count; ++n)
             if (entry->instructions[n].view.op == XR_LIR_FUNCTION_REF) reference = &entry->instructions[n].view;
         CHECK(reference);
-        if (!scenario) reference->bits = XR_LIR_CLOSURE_OWNED;
+        if (!scenario) {
+            reference->bits = XR_LIR_CLOSURE_OWNED;
+            XrLirModule *received = NULL; OK(xr_lir_rebuild(copy,&received));
+            xr_lir_module_destroy(copy); copy = received;
+        }
         else if (scenario == 1) {
             function->result = reference->type;
             XrLirInstructionView *ret = &entry->instructions[entry->instruction_count - 1].view;
@@ -238,7 +291,9 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
             copy = received;
             CHECK(copy->functions[1].callable_parameters[0].contract.escaping);
         }
-        callable_execution_unavailable(copy, (XrLirFunction){copy, root.id});
+        callable_rbc_unavailable(copy, (XrLirFunction){copy, root.id});
+        if (scenario == 1) callable_c_rejected(copy,(XrLirFunction){copy,root.id},XR_LIR_C_UNSUPPORTED);
+        else callable_c_supported(copy,(XrLirFunction){copy,root.id},true);
         xr_lir_module_destroy(copy);
     }
 }
