@@ -58,9 +58,11 @@ static void slice_boundary_contracts_for_root(SliceBoundaryFixture *c, XrLirFunc
         {XR_LIR_SLICE_EFFECT_UNKNOWN,0},{XR_LIR_SLICE_EFFECT_FIELD,17}};
     rows[c->leaf.id].result_parameter = 0; rows[c->leaf.id].result_origin = (XrLirSliceEffectSpan){0,1};
     rows[c->relay.id].result_parameter = 1; rows[c->relay.id].result_origin = (XrLirSliceEffectSpan){1,1};
-    /* An unused helper retains a conservative unknown write and field access.
-     * Receiving copies must not erase either symbolic term into empty facts. */
-    rows[c->read.id].write = (XrLirSliceEffectSpan){2,1}; rows[c->read.id].access = (XrLirSliceEffectSpan){3,1};
+    /* The original metadata fixture keeps conservative symbolic facts on an
+     * unused helper. The executable root instead calls its actual pure body. */
+    if (!root.id) {
+        rows[c->read.id].write = (XrLirSliceEffectSpan){2,1}; rows[c->read.id].access = (XrLirSliceEffectSpan){3,1};
+    }
     if (root.id) rows[root.id]=(XrLirSliceFunctionFact){.function=root.id,.result_parameter=UINT32_MAX,.available=true};
     OK(xr_lir_internal_slice_effects_set(c->module,(XrLirSliceFactsView){.functions=rows,
         .function_count=root.id ? 5u : 4u,.terms=terms,.term_count=4}));
