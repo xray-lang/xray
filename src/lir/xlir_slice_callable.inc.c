@@ -117,23 +117,24 @@ static LirSliceCallableCheck lir_slice_callable_check(const XrLirModule *m,const
     LirSliceCallable c={.module=m,.function=f,.flow=flow};
     if (xr_lir_slice_facts_view(m->slice_facts,&c.effects) != XR_LIR_OK) return LIR_SLICE_CALLABLE_UNKNOWN;
     LirSliceCallableCheck status;
-    if (v->op == XR_LIR_CALL) {
-        /* Module-only WRITE is not proof that a local capture is empty. This
-         * bounded carrier checks the conservative union of actual callbacks. */
-        for (uint32_t p=0;p<v->operand_count;++p) {
-            XrLirCallableType signature;
-            if (xr_lir_callable_type_view(m,f->values[v->operands[p]-1].type,&signature) == XR_LIR_OK &&
-                !lir_slice_enqueue_callable(&c,v->operands[p],0)) {
-                status=LIR_SLICE_CALLABLE_UNKNOWN;goto done;
-            }
+    /* Module-only WRITE is not proof that a local capture is empty. Both call
+     * forms check actual callbacks; an indirect receiver is applied once below. */
+    uint32_t first=v->op == XR_LIR_CALL_INDIRECT ? 1u : 0u;
+    for (uint32_t p=first;p<v->operand_count;++p) {
+        XrLirCallableType signature;
+        if (xr_lir_callable_type_view(m,f->values[v->operands[p]-1].type,&signature) == XR_LIR_OK &&
+            !lir_slice_enqueue_callable(&c,v->operands[p],0)) {
+            status=LIR_SLICE_CALLABLE_UNKNOWN;goto done;
         }
+    }
+    if (v->op == XR_LIR_CALL) {
         LirSliceActuals actuals={.arguments=v->operands,.argument_count=v->operand_count,
             .parameter_count=m->functions[v->callee-1].parameter_count};
         status=lir_slice_apply_callable(&c,v->callee,actuals,0);
     } else {
         LirSliceActuals actuals;
         const XrLirCallableValueFact *row=lir_slice_constructor(&c,v->operands[0],0,&actuals);
-        if (!row) return LIR_SLICE_CALLABLE_UNKNOWN;
+        if (!row) {status=LIR_SLICE_CALLABLE_UNKNOWN;goto done;}
         actuals.arguments=v->operands+1; actuals.argument_count=v->operand_count-1;
         status=lir_slice_apply_callable(&c,row->known_target,actuals,flow->callables.values[v->operands[0]].origin);
     }
