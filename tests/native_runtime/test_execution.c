@@ -197,6 +197,7 @@ static void managed_scopes(void) {
 #endif
     xrt_locations_release(map);
 }
+#include "execution_environments.inc.c"
 static void state_string_root(void *context, XrtModuleState *state) {
     unsigned *completed = context;
     XrtManagedRoot *root = xrt_native_managed_root(1); XrtManagedFrame *frame = NULL;
@@ -233,6 +234,7 @@ static void standalone_state_string(void) {
 }
 int main(void) {
     managed_scopes();
+    managed_environments();
     standalone_state_string();
     Context *outer = xr_calloc(1, sizeof(*outer));
     Context *inner = xr_calloc(1, sizeof(*inner));

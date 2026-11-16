@@ -144,8 +144,14 @@ static void unsupported_and_absent(void) {
     const XrtModuleLayoutSpec *spec=xr_lir_state_projection_view(projection);
     CHECK(spec->slots[0].size==sizeof(XrtFunction) && spec->slots[0].alignment==alignof(XrtFunction) &&
         spec->values->types[spec->slots[0].type-1].kind==XRT_VALUE_FUNCTION);
-    XrtModuleLayout *unsupported=NULL; before=xrt_billing_owner_stats(billing);
-    CHECK(xrt_module_layout_new(billing,spec,(XrtManagedLease){0},&unsupported)==XRT_MANAGED_ARGUMENT && !unsupported);
+    XrtModuleLayout *callable_layout=NULL; before=xrt_billing_owner_stats(billing);
+    MANAGED(xrt_module_layout_new(billing,spec,(XrtManagedLease){0},&callable_layout));
+    const XrtValuePlan *callable_plan=NULL;
+    MANAGED(xrt_module_layout_plan(callable_layout,spec->slots[0].type,&callable_plan));
+    XrtValuePlanSpec callable_view;
+    MANAGED(xrt_value_plan_view(callable_plan,&callable_view));
+    CHECK(callable_view.kind==XRT_VALUE_FUNCTION && callable_view.size==sizeof(XrtFunction));
+    xrt_module_layout_drop(&callable_layout); CHECK(!callable_layout);
     after=xrt_billing_owner_stats(billing); CHECK(before.bytes==after.bytes && before.blocks==after.blocks);
     xr_lir_state_projection_destroy(projection); projection=NULL;
     xr_lir_value_image_destroy(image); xr_lir_value_layouts_destroy(set); xr_lir_module_destroy(f.module);
