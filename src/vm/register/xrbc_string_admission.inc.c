@@ -183,7 +183,7 @@ static bool rbc_strings_cell(RbcStringAdmission *s, XrRbcOperands v) {
 
 static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
-    if (rbc_register_kind(f, v.a) != XR_RBC_CALL_WINDOW ||
+    if ((f->register_kinds && rbc_register_kind(f, v.a) != XR_RBC_CALL_WINDOW) ||
         s->state[v.a] == RBC_STRING_OWNED || s->state[v.a] == RBC_CELL_OWNED) return false;
     if (v.op == XR_RBC_CALLN) {
         XrRbcNativeKind kind = s->module->natives[v.immediate];
@@ -191,7 +191,7 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
         uint32_t count = kind == XR_RBC_NATIVE_PRINT_I64 || kind == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u;
         for (uint32_t p = 1; p <= count; ++p) {
             if (s->state[v.a + p] != RBC_BITS) return false;
-            s->state[v.a + p] = RBC_EMPTY;
+            if (f->register_kinds) s->state[v.a + p] = RBC_EMPTY;
         }
         s->state[v.a] = RBC_BITS;
         return true;
@@ -213,7 +213,8 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
         if (rbc_register_kind(f, v.a + 1 + p) != XR_RBC_CALL_WINDOW ||
             !rbc_call_parameter_matches(s, v.a + 1 + p, kind)) return false;
     }
-    for (uint32_t p = 0; p < callee->parameter_count; ++p) s->state[v.a + 1 + p] = RBC_EMPTY;
+    for (uint32_t p = 0; p < callee->parameter_count; ++p)
+        s->state[v.a + 1 + p] = f->register_kinds ? RBC_EMPTY : RBC_BITS;
     s->state[v.a] = callee->result_kind == XR_RBC_FUNCTION ? RBC_FUNCTION_OWNED :
         callee->result_kind == XR_RBC_SLICE_I64 ? RBC_VIEW_SLICE :
         rbc_managed_kind(callee->result_kind) ? RBC_STRING_OWNED : RBC_BITS;

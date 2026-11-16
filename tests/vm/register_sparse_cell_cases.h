@@ -28,7 +28,7 @@ static void test_sparse_cell_ordinals(void) {
     uint32_t caller[6],callee[5];
     immediate(caller,0,XR_RBC_LOADI,0,40); immediate(caller,1,XR_RBC_CELL_NEW,0,0);
     emit(caller,2,XR_RBC_MOV,2,0,0); immediate(caller,3,XR_RBC_CALL,1,1);
-    emit(caller,4,XR_RBC_CELL_READ,0,0,0); emit(caller,5,XR_RBC_RET,0,0,0);
+    emit(caller,4,XR_RBC_CELL_READ,0,2,0); emit(caller,5,XR_RBC_RET,0,0,0);
     emit(callee,0,XR_RBC_CELL_READ,1,0,0); immediate(callee,1,XR_RBC_LOADI,2,1);
     emit(callee,2,XR_RBC_ADD,1,1,2); emit(callee,3,XR_RBC_CELL_WRITE,0,1,0);
     emit(callee,4,XR_RBC_RET,1,0,0);
