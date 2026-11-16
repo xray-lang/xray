@@ -1063,16 +1063,12 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         return lower_unsupported(c, "function result type");
     bool slice_result = xr_lir_internal_slice_type(c->module, lower_type(c, f->result));
     c->views |= slice_result;
-    if (slice_result)
-        return lower_unsupported(c, "Slice parameters and returns require a checked caller loan");
     c->arrays |= lower_array_element(c, f->result) != XR_LIR_TYPE_INVALID;
     c->maps |= lower_map_type(c, f->result);
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         if (!lower_receive_type(c, f->parameters[p])) return false;
         bool slice_parameter = xr_lir_internal_slice_type(c->module, lower_type(c, f->parameters[p]));
         c->views |= slice_parameter;
-        if (slice_parameter)
-            return lower_unsupported(c, "Slice parameters and returns require a checked caller loan");
         c->string_appends |= lower_type(c, f->parameters[p]) == XR_LIR_STRING_CELL;
         c->arrays |= lower_type(c, f->parameters[p]) == XR_LIR_ARRAY ||
             lower_type(c, f->parameters[p]) == XR_LIR_ARRAY_CELL;

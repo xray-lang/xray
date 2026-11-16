@@ -16,11 +16,14 @@ static bool c_view_point(LirC *c, const XrLirInstructionView *v) {
         c_view_intrinsic(c, v, &shape);
 }
 static void c_view_admit_signature(LirC *c) {
-    if (c_slice_type(c, c->view.result))
-        c_error(c, XR_LIR_C_UNSUPPORTED, "Slice return requires a receiving loan boundary");
-    for (uint32_t p = 0; p < c->view.parameter_count && c_request_poll(c); ++p)
-        if (c_slice_type(c, c->view.parameter_types[p]))
-            c_error(c, XR_LIR_C_UNSUPPORTED, "Slice parameter requires a receiving loan boundary");
+    bool boundary = c_slice_type(c, c->view.result);
+    for (uint32_t p = 0; p < c->view.parameter_count; ++p)
+        boundary |= c_slice_type(c, c->view.parameter_types[p]);
+    if (!boundary) return;
+    XrLirSliceFunctionFact fact = {0};
+    if (xr_lir_slice_function_fact(c->request->module, c->function.id, &fact) != XR_LIR_OK ||
+        !fact.available || fact.parameter_count != c->view.parameter_count)
+        c_error(c, XR_LIR_C_UNSUPPORTED, "Slice boundary has no checked caller loan");
 }
 /* These are positions in the same common Frame, never ownership inferred from
  * the natural Slice plan. The runtime checks each actual slot again when the
