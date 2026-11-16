@@ -20,6 +20,19 @@ static void callable_rbc_unavailable(const XrLirModule *module, XrLirFunction ro
     XrRbcProgram *program = NULL;
     CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
 }
+static void callable_rbc_i64(const XrLirModule *module, XrLirFunction root, uint64_t expected) {
+    OK(xr_lir_verify(module,NULL));
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(module,root,&program,NULL) == XR_RBC_COMPILE_OK && program);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution) == XR_RBC_OK && execution);
+    xr_rbc_program_destroy(program);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    uint64_t bits = 0;
+    CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits == expected);
+    xr_rbc_outcome_free(&outcome);
+}
 static void callable_c_supported(const XrLirModule *module, XrLirFunction root, bool owned) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,false}; XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits,&resources) == XR_COMPILE_RESOURCE_OK);
@@ -291,9 +304,13 @@ static void callable_frame_frontiers(const XrLirModule *module, XrLirFunction ro
             copy = received;
             CHECK(copy->functions[1].callable_parameters[0].contract.escaping);
         }
-        callable_rbc_unavailable(copy, (XrLirFunction){copy, root.id});
-        if (scenario == 1) callable_c_rejected(copy,(XrLirFunction){copy,root.id},XR_LIR_C_UNSUPPORTED);
-        else callable_c_supported(copy,(XrLirFunction){copy,root.id},true);
+        if (scenario == 1) {
+            callable_rbc_unavailable(copy,(XrLirFunction){copy,root.id});
+            callable_c_rejected(copy,(XrLirFunction){copy,root.id},XR_LIR_C_UNSUPPORTED);
+        } else {
+            callable_rbc_i64(copy,(XrLirFunction){copy,root.id},42);
+            callable_c_supported(copy,(XrLirFunction){copy,root.id},true);
+        }
         xr_lir_module_destroy(copy);
     }
 }

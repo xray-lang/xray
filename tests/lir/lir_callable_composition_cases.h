@@ -8,7 +8,7 @@ static void callable_composition_receiving(void) {
     OK(xr_lir_inline(rebuilt, &inlined));
     OK(xr_lir_sccp(inlined, &folded));
     xr_lir_module_destroy(module); xr_lir_module_destroy(rebuilt); xr_lir_module_destroy(inlined);
-    callable_rbc_unavailable(folded, (XrLirFunction){folded, root.id});
+    callable_rbc_i64(folded,(XrLirFunction){folded,root.id},42);
     callable_c_supported(folded,(XrLirFunction){folded,root.id},true);
     xr_lir_module_destroy(folded);
     puts("Owned function captures preserve native transport after final LIR rebuilding");

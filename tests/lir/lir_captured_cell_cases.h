@@ -64,7 +64,8 @@ static void callable_owned_edge_binding(void) {
     ca_return(&c, block, returned);
     OK(xr_lir_module_finish(c.module, NULL));
     callable_c_rejected(c.module, root, XR_LIR_C_BAD_ARGUMENT);
-    callable_execution_unavailable(c.module, entry);
+    callable_rbc_unavailable(c.module, entry);
+    callable_c_rejected(c.module, entry, XR_LIR_C_UNSUPPORTED);
     xr_lir_module_destroy(c.module);
 }
 
@@ -123,7 +124,10 @@ static void captured_cell_frame_extent(void) {
             xr_rbc_program_destroy(program);
         }
         CHECK(status == (mutation == 2 ? XR_LIR_OK : XR_LIR_VERIFY_ERROR));
-        if (mutation == 2) callable_execution_unavailable(c.module, root);
+        if (mutation == 2) {
+            callable_rbc_unavailable(c.module, root);
+            callable_c_rejected(c.module, root, XR_LIR_C_UNSUPPORTED);
+        }
         xr_lir_module_destroy(c.module);
     }
     puts("Frame BIND and result LEAVE cannot outlive their captured Cell owner");
