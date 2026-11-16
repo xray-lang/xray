@@ -165,10 +165,13 @@ static void facts_boundaries(const FactsFixture *f, const XrLirCallableFacts *co
     OK(xr_lir_callable_facts_function(copy, f->hidden.id, &hidden));
     CHECK(root.values[f->frame.id].type == root.values[f->owned.id].type &&
         !root.values[f->frame.id].persistent && root.values[f->owned.id].persistent &&
-        root.values[f->owned.id].constructor_storage == XR_LIR_CLOSURE_OWNED);
+        root.values[f->owned.id].constructor_storage == XR_LIR_CLOSURE_OWNED &&
+        !root.values[f->frame.id].constructor_may_repeat && !root.values[f->owned.id].constructor_may_repeat &&
+        !root.values[f->last_alias.id].constructor_may_repeat);
     CHECK(formals.values[1].parameter == 1 && !formals.values[1].persistent &&
         formals.values[2].parameter == 2 && formals.values[2].persistent && !formals.values[2].known_target &&
-        hidden.values[1].parameter == 1 && hidden.values[1].persistent && !hidden.values[1].known_target);
+        hidden.values[1].parameter == 1 && hidden.values[1].persistent && !hidden.values[1].known_target &&
+        !formals.values[1].constructor_may_repeat);
     CHECK(root.values[f->returned.id].operation == XR_LIR_CALL && root.values[f->returned.id].persistent &&
         !root.values[f->returned.id].known_target && root.values[f->returned.id].origin == f->returned.id);
     CHECK(root.capture_count == 3 && root.values[f->owned.id].capture_count == 1 &&
@@ -400,8 +403,30 @@ static void facts_scalar_empty(void) {
     fail_at = SIZE_MAX; xr_lir_module_destroy(module);
 }
 
+#include "lir_callable_construction_fixture.h"
+static void facts_construction_reentry(void) {
+    for (unsigned shape = 0; shape < 4; ++shape) {
+        XrLirModule *module = NULL; XrLirFunction root = {0}; XrLirValue reference = {0};
+        callable_construction_fixture(shape, &module, &root, &reference);
+        XrLirCallableFacts *copy = NULL;
+        OK(xr_lir_callable_facts_create(module, &copy));
+        XrLirCallableFunctionFacts cached = {0}, received = {0};
+        OK(xr_lir_callable_facts_function(module->callable_facts, root.id, &cached));
+        OK(xr_lir_callable_facts_function(copy, root.id, &received));
+        CHECK(received.values != cached.values &&
+            !memcmp(received.values, cached.values, ((size_t)received.value_count + 1) * sizeof(*received.values)));
+        xr_lir_module_destroy(module);
+        const XrLirCallableValueFact *row = &received.values[reference.id];
+        CHECK(row->kind == XR_LIR_SCOPED_VALUE_FUNCTION && row->operation == XR_LIR_FUNCTION_REF &&
+            row->constructor_storage == XR_LIR_CLOSURE_FRAME && row->capture_count == 1 && row->block != 1 &&
+            row->constructor_may_repeat == (shape >= 2));
+        xr_lir_callable_facts_destroy(copy); CHECK(!live && !live_bytes);
+    }
+}
+
 int main(void) {
-    facts_scalar_empty(); facts_seed_origins(); facts_copy_failures(); facts_finish_failures(); facts_rejected_pending();
+    facts_scalar_empty(); facts_construction_reentry(); facts_seed_origins();
+    facts_copy_failures(); facts_finish_failures(); facts_rejected_pending();
     puts("constructor callable facts, owned copies and failure cleanup passed");
     return 0;
 }

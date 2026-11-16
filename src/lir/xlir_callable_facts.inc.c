@@ -36,6 +36,7 @@ static bool lir_callable_extent(size_t *bytes, size_t count, size_t stride) {
     *bytes += count * stride;
     return true;
 }
+#include "xlir_callable_cycles.inc.c"
 
 static XrLirCallableFacts *lir_callable_facts_allocate(uint32_t functions) {
     size_t bytes = sizeof(XrLirCallableFacts);
@@ -277,6 +278,8 @@ static XrLirStatus lir_callable_facts_capture(const XrLirModule *m, const XrLirF
     bool resolved = lir_callable_facts_resolve(rows, f->value_count, links, path, colors);
     xr_free(scratch);
     if (!resolved) { xr_free(received); return XR_LIR_VERIFY_ERROR; }
+    XrLirStatus construction_status = lir_callable_construction_reentry(f, rows);
+    if (construction_status != XR_LIR_OK) { xr_free(received); return construction_status; }
     lir_callable_materializations(m,f,rows);
     XrLirStatus transport_status = lir_callable_transports(f,rows);
     if (transport_status != XR_LIR_OK) { xr_free(received); return transport_status; }
