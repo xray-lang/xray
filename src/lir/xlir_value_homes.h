@@ -36,6 +36,11 @@ typedef struct XrLirValueHome {
      * stays SIZE_MAX. offset/temporary_offset project the corresponding bundle
      * value field, never a second allocation of the natural bytes. */
     uint32_t view_workspace;
+    /* A literal's private activation cache owns one immutable String separately
+     * from this SSA value. Normal SSA COPY/MOVE/DROP never consumes the cache;
+     * the Frame retires it. SIZE_MAX means no cache, including all formals.
+     * Its actual owner offset is part of the same sealed Frame inventory. */
+    size_t literal_cache_offset, literal_cache_owner;
 } XrLirValueHome;
 typedef struct XrLirHomeBytes { size_t offset, size; } XrLirHomeBytes;
 typedef struct XrLirHomeTransfer {

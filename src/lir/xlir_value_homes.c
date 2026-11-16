@@ -274,7 +274,8 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
     if (!values) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot own activation home directory");
     b->homes->values = values;
     for (size_t v = 0; v < count; ++v) values[v] = (XrLirValueHome){.type=0,
-        .offset=SIZE_MAX, .first_owner=SIZE_MAX, .temporary_offset=SIZE_MAX, .temporary_first_owner=SIZE_MAX};
+        .offset=SIZE_MAX, .first_owner=SIZE_MAX, .temporary_offset=SIZE_MAX, .temporary_first_owner=SIZE_MAX,
+        .literal_cache_offset=SIZE_MAX, .literal_cache_owner=SIZE_MAX};
     if (!lir_home_callable_rows(b,ownership,values)) return false;
     for (size_t index = 1; index <= c->view.value_count; ++index) {
         uint32_t v = (uint32_t)index;
@@ -310,6 +311,21 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
             XrLirValueHome *home = &values[view.parameters[p]];
             if (home->type == 0 || home->owner_count) continue;
             if (!lir_home_temporary(b, home)) return false;
+        }
+        /* One linear instruction scan selects actual literal producers. An
+         * unused String descriptor does not allocate activation cache storage. */
+        for (uint32_t n = 0; n < view.instruction_count; ++n) {
+            XrLirInstructionView instruction;
+            if (xr_lir_instruction_view(c->input, id, n, &instruction) != XR_LIR_OK)
+                return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "literal home producer disappeared");
+            if (instruction.op != XR_LIR_STRING_LITERAL) continue;
+            XrLirValueHome *home = &values[instruction.result];
+            XrtValuePlanSpec spec; uint32_t ordinal;
+            if (!lir_home_spec(b, (XrLirValueLayoutKey){XR_LIR_STRING,0,0}, &spec, &ordinal)) return false;
+            if (home->parameter || home->type != ordinal + 1 || home->owner_count != 1 ||
+                spec.kind != XRT_VALUE_STRING || home->literal_cache_owner != SIZE_MAX)
+                return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "literal cache lost its exact String home");
+            if (!lir_home_reserve(b, &spec, &home->literal_cache_offset, &home->literal_cache_owner)) return false;
         }
     }
     XrLirValueLayoutKey key; XrtValuePlanSpec result;

@@ -193,9 +193,22 @@ static XrLirValueLayouts *layouts(XrLirModule *module,XrtBillingOwner *billing) 
     }
     XrLirValueLayouts *set=NULL; HOME(xr_lir_value_layouts_create(module,roots,count,billing,&set)); return set;
 }
-static unsigned kinds,array_roles,map_roles;
+static unsigned kinds,array_roles,map_roles,literal_caches;
 static void check_projection(const XrLirValueHomes *homes,XrtBillingOwner *billing,
     const XrtBackingTypes *types,const XrtValueKind *workspace_kinds) {
+    for (uint32_t v=0;v<=homes->value_count;++v) {
+        const XrLirValueHome *home=&homes->values[v];
+        if (home->literal_cache_owner==SIZE_MAX) { CHECK(home->literal_cache_offset==SIZE_MAX); continue; }
+        CHECK(v && home->type && !home->parameter && home->size==sizeof(XrtManagedHeader *) && home->owner_count==1);
+        CHECK(home->literal_cache_owner<homes->frame.slot_count &&
+            homes->frame.owned_offsets[home->literal_cache_owner]==home->literal_cache_offset);
+        CHECK(home->literal_cache_offset<=homes->frame.payload_size &&
+            home->size<=homes->frame.payload_size-home->literal_cache_offset &&
+            !(home->literal_cache_offset%_Alignof(XrtManagedHeader *)));
+        CHECK(home->literal_cache_owner!=home->first_owner && home->literal_cache_owner!=home->temporary_first_owner &&
+            home->literal_cache_offset!=home->offset && home->literal_cache_offset!=home->temporary_offset);
+        ++literal_caches;
+    }
     for (uint32_t v=0;homes->bindings && v<=homes->value_count;++v) {
         const XrLirHomeBinding *row=&homes->bindings[v];
         if (!row->kind) { CHECK(!row->type); continue; }
@@ -573,7 +586,7 @@ int main(void) {
     project(map_fixture(1),true); project(map_state_fixture(),false); project(roles_fixture(XR_LIR_I64,true),true);
     CHECK(kinds==((1u<<XR_LIR_HOME_BINDING_LOCAL)|(1u<<XR_LIR_HOME_BINDING_PARAMETER)|
         (1u<<XR_LIR_HOME_BINDING_CELL_BORROW)|(1u<<XR_LIR_HOME_BINDING_STATE_BORROW)));
-    CHECK(array_roles==254 && map_roles==255); array_cell_cfg(); array_block_cells();
+    CHECK(array_roles==254 && map_roles==255 && literal_caches); array_cell_cfg(); array_block_cells();
     callable_projection(false,false); callable_projection(true,false); callable_projection(true,true);
     callable_targets_and_join(0); callable_targets_and_join(1); callable_targets_and_join(2); callable_targets_and_join(3);
     puts("binding homes: four Array families, Map roles, real pending slots, loop lifetime, input retirement and allocation rollback passed");
