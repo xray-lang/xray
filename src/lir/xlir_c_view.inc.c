@@ -12,7 +12,7 @@ static bool c_view_intrinsic(LirC *c, const XrLirInstructionView *v, XrLirSliceI
 }
 static bool c_view_point(LirC *c, const XrLirInstructionView *v) {
     XrLirSliceIntrinsic shape = {0};
-    return c_view_intrinsic(c, v, &shape);
+    return v->op == XR_LIR_SLICE_CLEANUP || c_view_intrinsic(c, v, &shape);
 }
 static void c_view_admit_signature(LirC *c) {
     if (c_slice_type(c, c->view.result))
@@ -69,7 +69,7 @@ static void c_view_home(LirC *c, const XrLirHomeWorkspace *workspace) {
 }
 static bool c_view_event(LirC *c, const XrLirInstructionView *v, XrLirSliceOperation operation,
     uint32_t value, uint32_t workspace) {
-    bool ending = operation == XR_LIR_SLICE_OP_END;
+    bool ending = operation == XR_LIR_SLICE_OP_END || operation == XR_LIR_SLICE_OP_CLEANUP;
     for (size_t i = 0; i < c->homes->event_count && c_request_poll(c); ++i) {
         const XrLirHomeEvent *event = &c->homes->events[i];
         if (event->block != c->block || event->instruction != c->instruction ||
@@ -78,9 +78,29 @@ static bool c_view_event(LirC *c, const XrLirInstructionView *v, XrLirSliceOpera
             event->view_workspace == workspace &&
             event->transfer_mode == (ending ? XR_LIR_OWNERSHIP_TRANSFER_NONE : XR_LIR_OWNERSHIP_TRANSFER_BORROW) &&
             event->hold_transfer_mode == (ending ? XR_LIR_OWNERSHIP_TRANSFER_NONE : XR_LIR_OWNERSHIP_TRANSFER_COPY) &&
-            (ending || event->target == v->operands[0])) return true;
+            (ending ? !event->target : event->target == v->operands[0])) return true;
     }
     c_error(c, XR_LIR_C_INVALID_LIR, "Slice operation has no matching final loan event"); return false;
+}
+static void c_view_cleanup(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (!c->homes || v->type != XR_LIR_UNIT || v->result || v->operand_count ||
+        !v->bits || v->bits > c->homes->value_count) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "Slice cleanup has no exact local resource target"); return;
+    }
+    uint32_t target = (uint32_t)v->bits;
+    const XrLirValueHome *home = &c->homes->values[target];
+    const XrLirHomeWorkspace *workspace = c_view_workspace(c, c->homes, home->view_workspace);
+    if (!workspace) return;
+    if (home->parameter || home->owner_count || home->first_owner != SIZE_MAX ||
+        workspace->type != home->type || !c_slice_type(c, c_value_type(c, target))) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "Slice cleanup target disagrees with its keeper workspace"); return;
+    }
+    if (!c_view_event(c, v, XR_LIR_SLICE_OP_CLEANUP, target, home->view_workspace)) return;
+    /* A resource target can be unconstructed on this path. Inspect only the
+     * common storage metadata; do not evaluate its natural Slice bytes or
+     * allocate a Frame solely to retire a keeper that was never published. */
+    c_text(c, "    if (xrl_frame) {\n    XrtManagedStatus status = xrt_array_slice_clear(");
+    c_view_home(c, workspace); c_text(c, ");\n"); c_array_require(c, source); c_text(c, "    }\n");
 }
 static void c_view_bind(LirC *c, const XrLirInstructionView *v,
     const XrLirSliceIntrinsic *shape, const XrLirHomeWorkspace *workspace, uint32_t source) {
@@ -109,6 +129,7 @@ static void c_view_bind(LirC *c, const XrLirInstructionView *v,
     c_text(c, ");\n"); c_array_require(c, source); c_text(c, "    }\n");
 }
 static void c_view_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_SLICE_CLEANUP) { c_view_cleanup(c, v, source); return; }
     XrLirSliceIntrinsic shape = {0};
     if (!c_view_intrinsic(c, v, &shape) || (shape.element != XR_LIR_I64 && shape.element != XR_LIR_U8) || !c->homes) {
         c_error(c, XR_LIR_C_UNSUPPORTED, "Slice role has no common native loan receiver"); return;
