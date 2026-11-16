@@ -26,7 +26,7 @@ static uint32_t root_find(const XrXirModule *module,const char *name) {
         if(module->functions[f].name_length==length&&!memcmp(module->functions[f].name,name,length))return f;
     fprintf(stderr,"root oracle missing function %s\n",name);return UINT32_MAX;
 }
-static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
+static XrXirArtifact *root_source_expect(const char *file,XrXirStatus expected,const char *message) {
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_ROOT_EFFECT_FIXTURES,file)>0);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(effect_context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ROOT_EFFECT_FIXTURES};
@@ -36,6 +36,8 @@ static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
     if(status!=expected)fprintf(stderr,"root source %s status%u %d:%d %s\n",
         file,status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==expected);
+    if (message && strcmp(diagnostic.message,message)) fprintf(stderr,"root source %s diagnostic: %s\n",file,diagnostic.message);
+    CHECK(!message || !strcmp(diagnostic.message,message));
     CHECK(expected==XR_XIR_OK?(source.checked!=NULL):(!source.checked&&!source.snapshot));
     if (expected==XR_XIR_OK) {
         CHECK(xr_xir_compile_source_snapshot_calls(source.snapshot)==NULL);
@@ -50,6 +52,9 @@ static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
     XrXirArtifact *checked=source.checked;source.checked=NULL;
     xr_xir_compile_source_failure_free(&failure_path);xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);
     return checked;
+}
+static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
+    return root_source_expect(file,expected,NULL);
 }
 #include "xir_signal_escaping_cases.h"
 #include "xir_closure_placement_cases.h"
