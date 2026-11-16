@@ -10,6 +10,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from xraytest.artifacts import complete_native_artifacts
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -166,6 +169,7 @@ def main() -> None:
             if actual_out != out or actual_err != err:
                 failures.append((name, "Source refusal byte comparison", stage, (out, err), (actual_out, actual_err)))
     assert not failures, failures
+    complete_native_artifacts(work)
     print(f"{len(records)} Array Source/VM/native commands passed")
 
 

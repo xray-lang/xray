@@ -11,6 +11,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments
+from xraytest.artifacts import complete_native_artifacts
 
 
 def run(command, cwd, expected_exit=0):
@@ -112,6 +113,7 @@ def main():
                                  'stderr': result.stderr.decode(),
                                  'sourceSHA256': hashlib.sha256(generated.read_bytes()).hexdigest()}
     (work / 'result.json').write_text(json.dumps(record, indent=2), encoding='utf-8')
+    complete_native_artifacts(work)
     print(json.dumps(record), flush=True)
 
 
