@@ -45,6 +45,32 @@ static bool lower_view_empty_entry(LowerFunction *f, uint32_t block) {
      * so every local keeper is truly empty before its first instruction. */
     return true;
 }
+static void *lower_view_reserve(Lower *c, void *storage, size_t count, size_t *capacity, size_t size) {
+    if (count < *capacity) return storage;
+    size_t next = *capacity ? *capacity : 4;
+    if (next > SIZE_MAX / 2 || next * 2 > SIZE_MAX / size) {
+        lower_error(c, XR_LIR_OUT_OF_MEMORY, "Slice cleanup storage capacity"); return NULL;
+    }
+    next *= 2;
+    void *grown = xr_realloc(storage, next * size);
+    if (!grown) { lower_error(c, XR_LIR_OUT_OF_MEMORY, "Slice cleanup storage allocation"); return NULL; }
+    *capacity = next; return grown;
+}
+static bool lower_view_store(LowerFunction *f, uint32_t cell, XrLirValue value) {
+    LowerViews *views = &f->views;
+    if (!views->heads) {
+        views->heads = lower_alloc(f->owner, f->cell_count, sizeof(*views->heads));
+        if (!views->heads) return false;
+        for (uint32_t n = 0; n < f->cell_count; ++n) views->heads[n] = SIZE_MAX;
+    }
+    void *grown = lower_view_reserve(f->owner, views->stores, views->store_count,
+        &views->store_capacity, sizeof(*views->stores));
+    if (!grown) return false;
+    views->stores = grown;
+    views->stores[views->store_count] = (LowerViewStore){value,views->heads[cell]};
+    views->heads[cell] = views->store_count++;
+    return true;
+}
 static bool lower_view_cleanup(LowerFunction *f, uint32_t block, const XrXirInstruction *op) {
     if (lower_view_empty_entry(f, block)) return true;
     for (uint32_t n = 0; n < op->args[1]; ++n) {
@@ -52,10 +78,15 @@ static bool lower_view_cleanup(LowerFunction *f, uint32_t block, const XrXirInst
         if (ordinal >= f->value_count) return lower_unsupported(f->owner, "Slice cleanup source ordinal");
         if (ordinal >= f->source->parameter_count && f->value_blocks && f->value_blocks[ordinal] == UINT32_MAX) continue;
         XrLirType element = lower_slice_element(f->owner, xr_xir_operand_type(f->source, ordinal));
-        XrLirValue value = {0};
         if (!element) return lower_unsupported(f->owner, "Slice cleanup requires a natural readonly Array loan");
-        if (!lower_slice_source(f, ordinal, &value) ||
-            !lower_slice_call(f, block, XR_LIR_SLICE_OP_END, element, &value, 1, NULL)) return false;
+        LowerViews *views = &f->views;
+        void *grown = lower_view_reserve(f->owner, views->cleanups, views->cleanup_count,
+            &views->cleanup_capacity, sizeof(*views->cleanups));
+        if (!grown) return false;
+        views->cleanups = grown;
+        uint32_t position = f->owner->module->functions[f->function.id - 1].blocks[f->blocks[block].id - 1].instruction_count;
+        views->cleanups[views->cleanup_count++] = (LowerViewCleanup){
+            .insertion={.block=f->blocks[block],.ordinal=position,.source=lower_source(f->owner)},.owner=ordinal};
     }
     return true;
 }
@@ -71,8 +102,44 @@ static bool lower_view_local(LowerFunction *f, uint32_t block, uint32_t index, b
     if (!lower_cell_index(f, create ? result : op->args[0], &cell)) return false;
     XrLirValue input = f->current[cell];
     if (!read && !lower_slice_source(f, op->args[create ? 0 : 1], &input)) return false;
-    return lower_slice_call(f, block, XR_LIR_SLICE_OP_BIND, element, &input, 1,
-        read ? &f->values[result] : &f->current[cell]);
+    if (!lower_slice_call(f, block, XR_LIR_SLICE_OP_BIND, element, &input, 1,
+        read ? &f->values[result] : &f->current[cell])) return false;
+    return read || lower_view_store(f, cell, f->current[cell]);
+}
+static bool lower_view_cleanups_finish(LowerFunction *f) {
+    LowerViews *views = &f->views;
+    if (!views->cleanup_count) return true;
+    size_t count = 0;
+    for (size_t n = 0; n < views->cleanup_count; ++n) {
+        uint32_t cell = f->cell_for[views->cleanups[n].owner];
+        if (cell == UINT32_MAX) {
+            if (count == SIZE_MAX) return lower_unsupported(f->owner, "Slice cleanup capacity");
+            ++count;
+        } else {
+            if (!views->heads || views->heads[cell] == SIZE_MAX) return lower_unsupported(f->owner, "Slice local has no receiving keeper");
+            for (size_t store = views->heads[cell]; store != SIZE_MAX; store = views->stores[store].next) {
+                if (count == SIZE_MAX) return lower_unsupported(f->owner, "Slice cleanup capacity");
+                ++count;
+            }
+        }
+    }
+    XrLirSliceCleanupInsertion *items = lower_alloc(f->owner, count, sizeof(*items));
+    if (!items) return false;
+    size_t used = 0;
+    for (size_t n = 0; n < views->cleanup_count; ++n) {
+        LowerViewCleanup cleanup = views->cleanups[n]; uint32_t cell = f->cell_for[cleanup.owner];
+        if (cell == UINT32_MAX) {
+            cleanup.insertion.target = f->values[cleanup.owner]; items[used++] = cleanup.insertion;
+        } else {
+            /* A local place owns its writer incarnations and live-in phis.
+             * Independent LOCAL_READ copies retain their own keeper identity. */
+            for (size_t store = views->heads[cell]; store != SIZE_MAX; store = views->stores[store].next) {
+                cleanup.insertion.target = views->stores[store].value; items[used++] = cleanup.insertion;
+            }
+        }
+    }
+    bool good = lower_build(f->owner, xr_lir_internal_slice_cleanup_batch(f->owner->module, f->function, items, count));
+    xr_free(items); return good;
 }
 static bool lower_view_instruction(LowerFunction *f, uint32_t block, uint32_t index, bool *handled) {
     Lower *c = f->owner; const XrXirInstruction *op = &f->source->instructions[index];
