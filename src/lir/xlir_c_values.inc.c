@@ -129,6 +129,7 @@ static void c_values_prepare(LirC *c) {
             XrLirType type = 0; xr_lir_value_type(module, (XrLirValue){module, function.id, v}, &type);
             if (xr_lir_string_binding(module, (XrLirValue){module, function.id, v})) {
                 needed[XR_LIR_STRING] = 1; projected = true;
+                c->seen[function.id - 1] |= LIR_C_FUNCTION_STRING_BINDING;
             }
             if (type==XR_LIR_ARRAY || type==XR_LIR_ARRAY_CELL || type==XR_LIR_ARRAY_REF) {
                 XrLirArrayShape shape={0};
@@ -244,6 +245,8 @@ static void c_values_ensure(LirC *c, uint32_t source) {
     c_format(c, "        xrl_root = xrt_native_managed_root(UINT32_C(%" PRIu32 "));\n", source);
     c_format(c, "        XrtManagedStatus status = xrl_frame_%" PRIu32 "_enter(xrl_root, &xrl_frame, &xrl_payload);\n", c->function.id);
     c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
+    if (c->seen[c->function.id - 1] & LIR_C_FUNCTION_STRING_BINDING)
+        c_format(c, "        xrt_native_string_binding_prepare(UINT32_C(%" PRIu32 "));\n", source);
     c_text(c, "    }\n");
 }
 static void c_values_replace_begin(LirC *c, uint32_t value, uint32_t source) {
