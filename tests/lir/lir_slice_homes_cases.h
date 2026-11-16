@@ -6,6 +6,8 @@
  *
  * lir_slice_homes_cases.h - Live borrowed windows and separate keeper publication
  */
+#include "lir/xlir_internal.h"
+#include "lir/xlir_view.h"
 static XrLirValue slice_role(CArrayFixture *c, XrLirBlock block, XrLirSliceOperation role,
     XrLirType result, const XrLirValue *args, uint32_t count) {
     uint32_t id = 0;
@@ -36,8 +38,8 @@ static XrLirModule *slice_fixture(XrLirType element, uint32_t invalid) {
     XrLirValue binding = {0}; OK(xr_lir_function_parameter(c.module, fn, 0, &binding));
     OK(xr_lir_set_array_shape(c.module, binding, &(XrLirArrayShape){element}));
     XrLirBlock entry = {0}, join = {0}; XrLirType parameters[] = {slice, slice};
-    OK(xr_lir_create_block(c.module, fn, NULL, 0, &entry)); OK(xr_lir_set_entry(c.module, fn, entry));
-    OK(xr_lir_create_block(c.module, fn, parameters, 2, &join));
+    OK(xr_lir_add_block(c.module, fn, NULL, 0, &entry)); OK(xr_lir_set_entry(c.module, fn, entry));
+    OK(xr_lir_add_block(c.module, fn, parameters, 2, &join));
     XrLirValue args[] = {binding, ca_constant(&c, entry, 0), ca_constant(&c, entry, 3)};
     XrLirValue original = slice_role(&c, entry, XR_LIR_SLICE_OP_NEW, slice, args, 3), copies[] = {original, original};
     XrLirInstruction branch = {.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edge_count=1,.edges={{join,copies,2}}};
@@ -68,7 +70,7 @@ static XrLirModule *slice_state_fixture(XrLirType element, uint32_t mode) {
     XrLirFunctionSpec signature = {.name="state_slice",.name_length=11,.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
     OK(xr_lir_declare_function(c.module, &signature, &fn)); OK(xr_lir_set_state_entry(c.module, fn));
     OK(xr_lir_define_function(c.module, fn)); XrLirValue state = {0}; OK(xr_lir_function_parameter(c.module, fn, 0, &state));
-    XrLirBlock block = {0}; OK(xr_lir_create_block(c.module, fn, NULL, 0, &block)); OK(xr_lir_set_entry(c.module, fn, block));
+    XrLirBlock block = {0}; OK(xr_lir_add_block(c.module, fn, NULL, 0, &block)); OK(xr_lir_set_entry(c.module, fn, block));
     XrLirInstruction ref = {.op=XR_LIR_STATE_REFERENCE,.type=XR_LIR_STATE_REF,.operands=&state,.operand_count=1};
     XrLirValue reference = {0}; OK(xr_lir_emit_value(c.module, block, &ref, &reference));
     XrLirValue binding = ca_value(&c, block, XR_LIR_ARRAY_BORROW, XR_LIR_ARRAY_REF, &reference, 1);

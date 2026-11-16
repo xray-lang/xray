@@ -6,6 +6,9 @@
  *
  * lir_slice_call_cases.h - A preexisting callback cannot hide a loan's mutable root
  */
+#include "lir/xlir_internal.h"
+#include "lir/xlir_callable.h"
+#include "lir/xlir_view.h"
 static XrLirFunction slice_state_callback(CArrayFixture *c, XrLirType callable) {
     XrLirType parameter = XR_LIR_STATE; XrLirFunction target = {0};
     XrLirFunctionSpec signature = {.name="mutate",.name_length=6,.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64};
