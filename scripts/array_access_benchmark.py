@@ -252,6 +252,41 @@ def compiler_flags(compiler: Path, header: str, version: bytes) -> tuple[list, s
     return ["-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic", "-O2", "-ffp-contract=off"], family
 
 
+def runtime_compile_commands(rows: list, root: Path, build: Path, compiler: Path) -> list:
+    """Select real target objects, excluding test copies of the same sources."""
+    directory = (build / "src/runtime/native/CMakeFiles/xray_native_runtime.dir").resolve()
+    names = ("xnative_array_backing.c", "xnative_array_ops.c", "xnative_array_slice.c")
+    expected = {(root / "src/runtime/native" / name).resolve(): name for name in names}
+    selected = {}
+    for row in rows:
+        base = Path(row["directory"])
+        source = Path(row["file"])
+        source = (source if source.is_absolute() else base / source).resolve()
+        if source not in expected:
+            continue
+        if not row.get("output"):
+            raise ValueError("Array compiler command is missing its real object target")
+        output = Path(row["output"])
+        output = (output if output.is_absolute() else base / output).resolve()
+        if not output.is_relative_to(directory):
+            continue
+        name = expected[source]
+        if name in selected:
+            raise ValueError("Duplicate effective Array runtime compiler command: " + name)
+        command = row.get("arguments")
+        if command is None:
+            match = re.match(r'^"([^"]+)"|^(\S+)', row["command"])
+            if not match:
+                raise ValueError("Missing effective Array compiler executable")
+            command = [match[1] or match[2]]
+        if not command or not os.path.samefile(command[0], compiler):
+            raise ValueError("Runtime and C reference must use the same actual compiler")
+        selected[name] = row
+    if set(selected) != set(names):
+        raise ValueError("Missing complete target Array runtime compiler commands")
+    return [selected[name] for name in names]
+
+
 def prepare(args) -> None:
     args.work.mkdir(parents=True)
     root, build, work = args.root.resolve(), args.build.resolve(), args.work.resolve()
@@ -290,8 +325,8 @@ def prepare(args) -> None:
         if "#define XRT_NATIVE_ASAN 0" not in header or "#define XRT_NATIVE_UBSAN 0" not in header:
             raise ValueError("Performance products must use uninstrumented runtime libraries")
         runtime = re.findall(r'"([^"]+)"', header.split("xrt_native_development_libraries[] = {", 1)[1].split("};", 1)[0])
-        if len(runtime) != 5:
-            raise ValueError("Expected all five effective runtime libraries")
+        if len(runtime) != 1 or Path(runtime[0]).name not in ("xray_native_runtime.lib", "libxray_native_runtime.a"):
+            raise ValueError("Expected the single target native runtime library")
         library_dir = work / "libraries"
         library_dir.mkdir()
         for path in runtime:
@@ -307,17 +342,9 @@ def prepare(args) -> None:
         version = run("compiler-version", [compiler, "/?"] if compiler.name.lower() == "cl.exe" else [compiler, "--version"])
         flags, family = compiler_flags(compiler, header, version)
         rows = json.loads((work / "compile_commands.json").read_text(encoding="utf-8"))
-        runtime_rows = [row for row in rows if row["file"].replace("\\", "/").endswith("/xnative_array.c")]
-        if len(runtime_rows) != 1:
-            raise ValueError("Missing unique effective Array runtime compiler command")
-        command = runtime_rows[0].get("arguments")
-        if command is None:
-            match = re.match(r'^"([^"]+)"|^(\S+)', runtime_rows[0]["command"])
-            command = [match[1] or match[2]]
-        if not os.path.samefile(command[0], compiler):
-            raise ValueError("Runtime and C reference must use the same actual compiler")
+        runtime_rows = runtime_compile_commands(rows, root, build, compiler)
         result["provider"] = {"compiler": fingerprint(compiler), "family": family, "flags": flags,
-                              "runtimeCompileCommand": runtime_rows[0], "includeSearch": env.get("INCLUDE"), "librarySearch": env.get("LIB")}
+                              "runtimeCompileCommands": runtime_rows, "includeSearch": env.get("INCLUDE"), "librarySearch": env.get("LIB")}
         for kind in ("lua", "python"):
             executable, receipt = getattr(args, kind), getattr(args, kind + "_receipt")
             if (executable is None) != (receipt is None):
@@ -482,6 +509,39 @@ def assert_result(args) -> int:
     return 0 if report["state"] == "PASS_NATIVE_ARRAY_ONLY" else 1
 
 
+def self_test_runtime_commands(work: Path) -> list:
+    root = Path(__file__).resolve().parents[1]
+    build = work / "compiler-controls"
+    target = build / "src/runtime/native/CMakeFiles/xray_native_runtime.dir"
+    compiler = Path(sys.executable).resolve()
+    owned = []
+    for name in ("xnative_array_backing.c", "xnative_array_ops.c", "xnative_array_slice.c"):
+        source = root / "src/runtime/native" / name
+        if not source.is_file():
+            raise RuntimeError("Missing current Array runtime source: " + name)
+        owned.append({"directory": str(build), "file": str(source),
+                      "output": str(target / (name + ".obj")), "arguments": [str(compiler), "-c", str(source)]})
+    whitebox = dict(owned[0], output=str(build / "tests/CMakeFiles/whitebox.dir/array.obj"))
+    complete = [*owned, whitebox]
+    if runtime_compile_commands(complete, root, build, compiler) != owned:
+        raise RuntimeError("A whitebox object replaced an effective runtime producer")
+    wrong_compiler = work / "different-compiler"
+    wrong_compiler.write_bytes(b"different provider")
+    controls = {
+        "missing-effective-producer": complete[1:],
+        "duplicate-effective-producer": [*complete, dict(owned[0], output=str(target / "duplicate.obj"))],
+        "different-actual-provider": [owned[0], dict(owned[1], arguments=[str(wrong_compiler)]), owned[2], whitebox],
+        "missing-object-identity": [dict(owned[0], output=""), *complete[1:]],
+    }
+    for name, rows in controls.items():
+        try:
+            runtime_compile_commands(rows, root, build, compiler)
+        except ValueError:
+            continue
+        raise RuntimeError("Malformed runtime compiler identity was accepted: " + name)
+    return ["owned-target-with-whitebox-copy", *controls]
+
+
 def self_test(args) -> None:
     args.work.mkdir(parents=True)
     cases = {"good": ("import sys;sys.stdout.buffer.write(b'ok\\n')", PRODUCT_TIMEOUT, True),
@@ -533,8 +593,10 @@ def self_test(args) -> None:
             rejected.append(state)
         else:
             raise RuntimeError("An incomplete reference receipt was accepted")
+    compiler_controls = self_test_runtime_commands(args.work)
     save(args.work / "self-test.json", {"state": "PASS", "rows": rows,
-                                        "rejectedReceiptStates": rejected, "benchmarkMeasurement": False})
+                                        "rejectedReceiptStates": rejected, "runtimeCompilerControls": compiler_controls,
+                                        "benchmarkMeasurement": False})
 
 
 def main() -> int:
