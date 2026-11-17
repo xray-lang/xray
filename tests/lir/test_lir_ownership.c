@@ -43,7 +43,8 @@ static void compare_internal(const XrLirOwnershipRequest *request, const XrLirOw
         XrLirOwnershipFunction a, b;
         OK(xr_lir_ownership_function_at(internal,i,&a)); OK(xr_lir_ownership_function_at(public_plan,i,&b));
         CHECK(a.fact_offset == b.fact_offset && a.fact_count == b.fact_count &&
-            a.unmodeled == b.unmodeled && a.external == b.external);
+            a.unmodeled == b.unmodeled && a.external == b.external &&
+            a.region_offset == b.region_offset && a.region_count == b.region_count);
     }
     for (uint32_t i = 0; i < xr_lir_ownership_fact_count(internal); ++i) {
         XrLirOwnershipFact a, b;
@@ -609,8 +610,10 @@ static void string_bindings(void) {
 }
 
 #include "lir_array_forwarding_cases.h"
+#include "lir_array_set_region_cases.h"
 int main(void) {
     array_forwarding_preparation();
+    array_set_region_preparations();
     XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t i = 0; i < 4; ++i) arrays(elements[i]);
     copies(); other_shapes(); rebuilt_fact_identity(); malformed(); boxed_lifetimes(); boxed_selected_edges();
