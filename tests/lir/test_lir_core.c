@@ -50,6 +50,9 @@ static void slice_callback_loan_conditions(void) {
         XrLirModule *captured=slice_callback_loan_capture_fixture(elements[family]);XrLirDiagnostic diagnostic={0};
         CHECK(xr_lir_module_finish(captured,&diagnostic)==XR_LIR_UNSUPPORTED &&
             strstr(diagnostic.message,"captured binding effect facts"));xr_lir_module_destroy(captured);
+        XrLirModule *selected=slice_callback_loan_multiroot_fixture(elements[family]);diagnostic=(XrLirDiagnostic){0};
+        CHECK(xr_lir_module_finish(selected,&diagnostic)==XR_LIR_UNSUPPORTED &&
+            strstr(diagnostic.message,"captured binding effect facts"));xr_lir_module_destroy(selected);
     }
 }
 
