@@ -91,6 +91,7 @@ static XrRbcStatus rbc_borrowed_home_admit(const XrRbcModule *module,const XrRbc
     }
     for (size_t n=0;valid && n<homes->event_count;++n) {
         const XrLirHomeEvent *event=&homes->events[n];
+        if (event->forwarding_mode || event->forwarding_drop) valid=false;
         if (event->callable_materialize || event->callable_transport==XR_LIR_CALLABLE_TRANSPORT_OWNED ||
             event->callable_transport==XR_LIR_CALLABLE_TRANSPORT_MIXED ||
             event->kind==XR_LIR_OWNERSHIP_CALLABLE_MATERIALIZE || event->kind==XR_LIR_OWNERSHIP_RESULT_OWNER ||

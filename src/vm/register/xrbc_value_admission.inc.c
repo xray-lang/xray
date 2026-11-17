@@ -317,7 +317,9 @@ static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcV
     return borrowed && owned;
 }
 static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
-    const XrRbcFunction *function, uint32_t word) {
+    const XrRbcFunction *function, size_t pc) {
+    if (pc>=function->code_count) return false;
+    uint32_t word=function->code[pc];
     if ((word & 255) != XR_RBC_VALUE_ACCESS || ((word >> 8) & 255)) return false;
     const XrRbcValueCode *code = rbc_value_code(module,function);
     size_t index = word >> 16;
@@ -449,7 +451,9 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_DISPLAY: return rbc_value_display_valid(module,code,function,a);
     case XR_RBC_VALUE_BINDING_NEW: case XR_RBC_VALUE_BINDING_READ:
     case XR_RBC_VALUE_BINDING_WRITE: case XR_RBC_VALUE_BINDING_DROP:
-        return rbc_value_binding_access_valid(module,code,function,a);
+        return rbc_value_binding_access_valid(module,code,function,a) &&
+            (!a.index || rbc_value_kind(module,code,a.operation==XR_RBC_VALUE_BINDING_NEW ? a.result : a.source)!=XRT_VALUE_ARRAY_I64 ||
+             rbc_value_array_forwarding_words(function,code,(uint32_t)index,pc));
     case XR_RBC_VALUE_EDGE:
         return !a.result && !a.source && !a.other && rbc_value_edge_valid(module,code,a);
     default: return false;

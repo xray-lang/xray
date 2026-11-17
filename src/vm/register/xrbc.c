@@ -270,7 +270,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     bool comparison = immediate_comparison || op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
     switch (op) {
     case XR_RBC_VALUE_ACCESS:
-        return xr_rbc_value_instruction_valid(module, function, word) &&
+        return xr_rbc_value_instruction_valid(module, function, pc) &&
             (xr_rbc_value_return_word(module, function, word) || remaining > 1);
     case XR_RBC_AGGREGATE_ACCESS:
         if (a || index >= function->aggregate_access_count) return false;

@@ -40,6 +40,7 @@ struct RbcValueActivation {
     size_t depth, bytes;
     XrtManagedFrame *frame;
     uint8_t *payload;
+    XrtManagedFrameLocations frame_locations;
     RbcValueOrigin *parameters;
     const uint8_t **borrowed_parameters;
     RbcValueCapture *capture_parameters;
@@ -47,6 +48,7 @@ struct RbcValueActivation {
     RbcValuePublication *publications;
     uint8_t *snapshots;
     size_t edge_capacity, publication_capacity, snapshot_capacity, publication_count;
+    bool array_forwarding; /* Only a genuine immutable code owner supplies this capability. */
     bool receiving_call;
     const XrLirHomeCall *receiving_slice_call;
 };
@@ -204,7 +206,8 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     RbcValueActivation *activation = memory;
     *activation = (RbcValueActivation){.previous=runtime->top,.code=code,.image=xr_rbc_module_value_image(module),
         .function=function,.depth=stack->depth,
-        .bytes=bytes,.edge_capacity=leaves,.publication_capacity=rows,.snapshot_capacity=snapshots};
+        .bytes=bytes,.edge_capacity=leaves,.publication_capacity=rows,.snapshot_capacity=snapshots,
+        .array_forwarding=xr_rbc_module_code_owner(module)!=NULL};
     size_t offset = sizeof(*activation);
 #define RBC_VALUE_PART(field,n,t) do { offset=(offset+7u)&~(size_t)7u; \
     activation->field=(t *)((uint8_t *)memory+offset); offset+=(n)*sizeof(t); } while(0)
@@ -229,12 +232,10 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
         return XR_RBC_OUT_OF_MEMORY;
     if (code->homes && code->homes->owned_frame_needed) {
         runtime->root = xrt_native_managed_root(source);
-        status = xr_rbc_value_homes_enter(code->homes,runtime->root,&activation->frame);
-        void *payload = NULL; size_t size = 0;
-        if (status == XRT_MANAGED_OK) status = xrt_managed_frame_payload(activation->frame,&payload,&size);
-        if (status == XRT_MANAGED_OK && size != code->homes->frame.payload_size) status = XRT_MANAGED_ARGUMENT;
+        status = xrt_managed_frame_enter_locations(runtime->root,&code->homes->frame,&activation->frame_locations);
         if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
-        activation->payload = payload;
+        activation->frame = activation->frame_locations.frame;
+        activation->payload = activation->frame_locations.payload;
         if (code->string_binding_setup) xrt_native_string_binding_prepare(source);
     }
     return XR_RBC_OK;
@@ -909,6 +910,10 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     }
     if (!activation || activation->depth!=stack->depth || index>=activation->code->access_count) return XR_RBC_INVALID;
     XrRbcValueAccess access=activation->code->accesses[index];
+    if (rbc_value_array_forward(module,activation,index,pc)) {
+        stack->frames[stack->depth-1].pc=pc+1;
+        return XR_RBC_OK;
+    }
     if (access.operation==XR_RBC_VALUE_CALL || access.operation==XR_RBC_VALUE_FUNCTION_CALL)
         return rbc_value_call(module,stack,activation,access,pc,source);
     if (access.operation==XR_RBC_VALUE_RETURN) return rbc_value_return(module,stack,activation,access,source);
