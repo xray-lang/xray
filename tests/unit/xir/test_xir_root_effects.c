@@ -1101,7 +1101,8 @@ static XrXirStatus stored_lifetime_case(bool opaque_result,bool relocate) {
     XrXirStatus status=xir_fixture_module_construction(&effect_context,&module,&construction);
     XirEffectInput input={&module,construction,NULL};
     if (status==XR_XIR_OK) status=xir_compile_structure_verify_input(&effect_context,input,&diagnostic);
-    EffectLifetimePreparation lifetime={.diagnostic=&diagnostic};
+    EffectLifetimePreparation lifetime={.failure=
+        {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
     if (status==XR_XIR_OK) status=xr_hir_escape_builder_new(&effect_context,&module,NULL,NULL,&lifetime.builder);
     XrXirRootRefiner refiner={.context=&lifetime,.observe=effect_lifetime_observe,
         .points=effect_lifetime_points,.prepare=effect_lifetime_finish};
