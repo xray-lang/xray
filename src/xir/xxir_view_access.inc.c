@@ -563,11 +563,11 @@ static XrXirStatus view_access_callback_actual(void *context,const XirCallbackLo
     if (actual->function!=a->function || actual->instruction!=walk->event->instruction ||
         actual->callback>=(uint64_t)a->body->parameter_count+a->body->instruction_count ||
         actual->loan>=(uint64_t)a->body->parameter_count+a->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    bool live=false;
+    bool loan_live=false;
     for (uint32_t p=0;p<walk->event->before.count;++p)
         if (walk->event->before.values[p]==actual->loan &&
-            (walk->event->before.bits[p/64u]&(UINT64_C(1)<<(p%64u)))) {live=true;break;}
-    if (!live || !xr_xir_callable_signature(a->resolver->check.module->types,
+            (walk->event->before.bits[p/64u]&(UINT64_C(1)<<(p%64u)))) {loan_live=true;break;}
+    if (!loan_live || !xr_xir_callable_signature(a->resolver->check.module->types,
         xr_xir_operand_type(a->body,actual->callback))) return XR_XIR_UNRESOLVED;
     const XrXirTypeNode *loan=xr_xir_type_node(a->resolver->check.module->types,xr_xir_operand_type(a->body,actual->loan));
     if (!loan || loan->kind!=XR_XIR_TYPE_SLICE ||
