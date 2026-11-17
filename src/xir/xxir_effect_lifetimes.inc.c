@@ -8,7 +8,7 @@
  */
 typedef struct EffectLifetimePreparation {
     XrHirEscapeBuilder *builder;
-    XrXirDiagnostic *diagnostic;
+    XrXirDiagnostic failure;
 } EffectLifetimePreparation;
 
 static XrXirStatus effect_lifetime_observe(void *context, const XrXirModule *module,
@@ -38,10 +38,10 @@ static XrXirStatus effect_lifetime_finish(void *context, const XirExecutionOwner
     }
     xr_hir_escape_facts_free(facts);
     xr_hir_escape_builder_free(prepare->builder); prepare->builder = NULL;
-    if (status != XR_XIR_OK && prepare->diagnostic) {
-        prepare->diagnostic->status = status;
-        prepare->diagnostic->function = failure.function;
-        prepare->diagnostic->instruction = failure.instruction;
+    if (status != XR_XIR_OK && failure.code) {
+        prepare->failure.status = status;
+        prepare->failure.function = failure.function;
+        prepare->failure.instruction = failure.instruction;
     }
     return status;
 }
@@ -49,7 +49,8 @@ static XrXirStatus effect_lifetime_finish(void *context, const XirExecutionOwner
 XR_FUNC XrXirStatus xir_effects_infer_lifetimes_input(const XrXirCompileContext *context,
     XirEffectInput input, XrXirEffects **output, XrXirDiagnostic *diagnostic) {
     if (!output || *output) return XR_XIR_BAD_STRUCTURE;
-    EffectLifetimePreparation prepare = {.diagnostic = diagnostic};
+    EffectLifetimePreparation prepare = {.failure =
+        {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}};
     XrXirStatus status = xr_hir_escape_builder_new(context, input.module, NULL, input.control, &prepare.builder);
     if (status == XR_XIR_OK) {
         XrXirRootRefiner refiner = {.context = &prepare, .observe = effect_lifetime_observe,
@@ -57,5 +58,9 @@ XR_FUNC XrXirStatus xir_effects_infer_lifetimes_input(const XrXirCompileContext 
         status = effect_infer(context, input, &refiner, output, diagnostic);
     }
     xr_hir_escape_builder_free(prepare.builder);
+    /* The general constructor reports its own location after the callback.
+     * Preserve the sole lifetime producer's concrete rejection separately. */
+    if (status != XR_XIR_OK && diagnostic && prepare.failure.status == status &&
+        prepare.failure.function != UINT32_MAX) *diagnostic = prepare.failure;
     return status;
 }
