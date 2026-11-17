@@ -370,7 +370,21 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     /* Escaping parameters receive their fixed bound before shared checking. */
     bool escaping = plan->family==SOURCE_CALL_FUNCTION &&
         xr_xir_function_parameter_escaping(&ctx->functions[plan->declaration.function],parameter);
-    bool callback = !escaping && !plan->fixed_arguments && plan->family!=SOURCE_CALL_INDIRECT && expected.present &&
+    bool callback_context=plan->family!=SOURCE_CALL_INDIRECT;
+    if(plan->family==SOURCE_CALL_INDIRECT) {
+        const XrXirTypeNode *signature=xr_xir_callable_signature(&ctx->types,plan->declaration.callable);
+        if(!signature || parameter>=signature->parameter_count || !signature->parameters)
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"indirect argument lost its declared parameter contract");
+        /* The mapped signature ordinal, rather than the syntax argument,
+         * supplies the same nonescaping call-bound conversion as a direct
+         * declaration. Read only scalars here; completing the expression may
+         * grow the type pool and cannot retain this descriptor. */
+        escaping=signature->parameters[parameter].escaping!=0;
+        callback_context=!(signature->flags&XR_XIR_CALLABLE_C_ABI) &&
+            signature->parameters[parameter].mode==XR_PARAM_READ &&
+            !xr_xir_type_is_c_callable(&ctx->types,signature->parameters[parameter].type);
+    }
+    bool callback = callback_context && !escaping && !plan->fixed_arguments && expected.present &&
         xr_xir_callable_signature(&ctx->types,expected.type);
     if (callback) {
         arguments[a].value->conversion_ready = false;
