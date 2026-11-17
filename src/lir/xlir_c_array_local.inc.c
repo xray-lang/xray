@@ -69,11 +69,15 @@ static bool c_array_local_begin(LirC *c, const XrLirInstructionView *op,
     for (size_t n=0;n<2;++n)
         if (offsets[n]>c->homes->frame.payload_size || sizeof(XrtManagedHeader *)>c->homes->frame.payload_size-offsets[n] ||
             offsets[n]%_Alignof(XrtManagedHeader *) || c->homes->frame.owned_offsets[slots[n]]!=offsets[n]) return false;
+    c_text(c,"    {\n    const int64_t xrl_array_index = ");
+    if (shape->operation==XR_LIR_ARRAY_OP_SET) c_value(c,op->operands[1]); else c_text(c,"0");
+    c_text(c,";\n    const int64_t xrl_array_item = "); c_value(c,op->operands[op->operand_count-1]);
+    c_format(c,";\n    const XrtArrayUpdate xrl_array_update = {%s, xrl_array_index, {XRT_BACKING_ARRAY_I64, {.i64=xrl_array_item}}};\n",
+        shape->operation==XR_LIR_ARRAY_OP_SET?"XRT_ARRAY_UPDATE_SET":"XRT_ARRAY_UPDATE_PUSH");
     c_format(c,"    if (!(xrl_array_ready && xrt_array_i64_try_update_local(xrl_frame, xrl_payload, &xrl_frame_locations, &xrl_frame_%" PRIu32 ",\n",
         c->function.id);
     c_format(c,"        (XrtArrayI64LocalUpdate){%zu, %zu, %zu, %zu, %s, ",slots[0],offsets[0],slots[1],offsets[1],
         shape->operation==XR_LIR_ARRAY_OP_SET?"XRT_ARRAY_UPDATE_SET":"XRT_ARRAY_UPDATE_PUSH");
-    if (shape->operation==XR_LIR_ARRAY_OP_SET) c_value(c,op->operands[1]); else c_text(c,"0");
-    c_text(c,", "); c_value(c,op->operands[op->operand_count-1]); c_text(c,"}))) {\n");
+    c_text(c,"xrl_array_update.index, xrl_array_update.item.value.i64}))) {\n");
     return true;
 }

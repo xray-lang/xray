@@ -157,13 +157,16 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         }
         bool local=c_array_local_begin(c,v,shape,workspace);
         c_text(c,"    xrt_native_array_update_place("); c_value(c,v->operands[0]);
-        c_format(c,", %s, xrl_frame, %zu, &(XrtArrayUpdate){%s, ",kind,workspace->first_owner,
-            shape->operation==XR_LIR_ARRAY_OP_SET ? "XRT_ARRAY_UPDATE_SET" : "XRT_ARRAY_UPDATE_PUSH");
-        if (shape->operation==XR_LIR_ARRAY_OP_SET) c_value(c,v->operands[1]); else c_text(c,"0");
-        c_text(c,", "); c_array_item(c,element,v->operands[v->operand_count-1]);
-        c_format(c,"}, UINT32_C(%" PRIu32 "));\n",source);
+        if (local) c_format(c,", %s, xrl_frame, %zu, &xrl_array_update, UINT32_C(%" PRIu32 "));\n",kind,workspace->first_owner,source);
+        else {
+            c_format(c,", %s, xrl_frame, %zu, &(XrtArrayUpdate){%s, ",kind,workspace->first_owner,
+                shape->operation==XR_LIR_ARRAY_OP_SET ? "XRT_ARRAY_UPDATE_SET" : "XRT_ARRAY_UPDATE_PUSH");
+            if (shape->operation==XR_LIR_ARRAY_OP_SET) c_value(c,v->operands[1]); else c_text(c,"0");
+            c_text(c,", "); c_array_item(c,element,v->operands[v->operand_count-1]);
+            c_format(c,"}, UINT32_C(%" PRIu32 "));\n",source);
+        }
         c_array_local_ready(c);
-        if (local) c_text(c,"    }\n");
+        if (local) c_text(c,"    }\n    }\n");
         return;
     }
     case XR_LIR_ARRAY_OP_REPEAT:
