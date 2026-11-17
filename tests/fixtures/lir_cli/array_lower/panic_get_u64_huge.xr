@@ -1,0 +1,3 @@
+fn index()->i64{return 9223372036854775807}
+const values:Array<u64>=[0,18446744073709551615]
+print(values[index()] as i64)

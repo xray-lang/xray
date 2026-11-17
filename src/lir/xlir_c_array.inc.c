@@ -95,6 +95,20 @@ static void c_array_item(LirC *c, XrLirType element, uint32_t operand) {
     if (element==XR_LIR_STRING) c_text(c,"(XrtStringBacking *)");
     c_value(c,operand); c_text(c,"}}");
 }
+/* Exact scalar tails have no child owner to retain. The original receiver
+ * owns rejection and its diagnostic order; only admitted reads load bytes. */
+static void c_array_scalar_get(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    c_text(c,"    { const XrtArrayBacking *array = (const XrtArrayBacking *)");
+    c_value(c,v->operands[0]); c_text(c,";\n    const int64_t index = ");
+    c_value(c,v->operands[1]); c_text(c,";\n");
+    c_text(c,"    if (array && array->length <= array->capacity && index >= 0 && (uint64_t)index < array->length) {\n");
+    c_format(c,"        memcpy(&v%" PRIu32 ", array->elements + (size_t)index * sizeof(v%" PRIu32 "), sizeof(v%" PRIu32 "));\n",
+        v->result,v->result,v->result);
+    c_text(c,"    } else { XrtArrayItem item = {0};\n");
+    c_format(c,"        xrt_native_array_get((const XrtManagedHeader *)array, %s, index, &item, UINT32_C(%" PRIu32 "));\n",
+        c_array_kind(v->type),source);
+    c_format(c,"        v%" PRIu32 " = item.value.%s;\n    }\n    }\n",v->result,c_array_member(v->type));
+}
 static void c_array_call(LirC *c, const XrLirInstructionView *v,
     const XrLirArrayIntrinsic *shape, uint32_t source) {
     XrLirType element=v->type==XR_LIR_ARRAY ? shape->result_element : shape->parameter_elements[0];
@@ -127,6 +141,7 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         c_format(c,"    v%" PRIu32 " = (int64_t)((const XrtArrayBacking *)",v->result);
         c_value(c,v->operands[0]); c_text(c,")->length;\n"); return;
     case XR_LIR_ARRAY_OP_GET:
+        if (element != XR_LIR_STRING) { c_array_scalar_get(c,v,source); return; }
         c_text(c,"    { XrtArrayItem item = {0};\n    xrt_native_array_get("); c_value(c,v->operands[0]);
         c_format(c,", %s, ",kind); c_value(c,v->operands[1]);
         c_format(c,", &item, UINT32_C(%" PRIu32 "));\n",source);

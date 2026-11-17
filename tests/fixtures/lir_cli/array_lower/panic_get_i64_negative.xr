@@ -1,0 +1,3 @@
+fn index()->i64{return -1}
+const values:Array<i64>=[-9223372036854775808,9223372036854775807]
+print(values[index()])
