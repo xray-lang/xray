@@ -81,20 +81,19 @@ static bool lir_slice_conditional_formal(const LirSliceCallable *c,uint32_t valu
         LirSliceRoot root=c->flow->roots[n];uint32_t loan=0;
         if (root.kind!=LIR_SLICE_ROOT_INPUT || !root.identity || root.identity>c->function->value_count) return false;
         while (loan<c->function->parameter_count && c->function->parameters[loan]!=root.identity) ++loan;
-        if (loan==c->function->parameter_count ||
+        if (loan==c->function->parameter_count || loan<c->function->closure.capture_count ||
             !xr_lir_internal_slice_type(c->module,c->function->parameter_types[loan])) return false;
-        XrLirSliceEffectKind kind=loan<c->function->closure.capture_count ?
-            XR_LIR_SLICE_EFFECT_CAPTURE:XR_LIR_SLICE_EFFECT_PARAMETER;
         bool found=false;
         for (size_t p=0;p<own.callback_loans.count;++p) {
             XrLirSliceCallbackLoan pair=c->effects.callback_loans[own.callback_loans.first+p];
-            found|=pair.callback_parameter==parameter-1 && pair.loan_kind==kind && pair.loan_parameter==loan;
+            found|=pair.callback_parameter==parameter-1 && pair.loan_kind==XR_LIR_SLICE_EFFECT_PARAMETER && pair.loan_parameter==loan;
         }
         if (!found) return false;
         live=true;
     }
     /* This is a condition on actual callers, not an empty callable body. Each
-     * live loan must independently name an entry whose obligation is exported. */
+     * live loan must name an ordinary entry whose obligation is exported;
+     * captured Slice conditions remain metadata without a physical carrier. */
     return live;
 }
 static bool lir_slice_enqueue_callable(LirSliceCallable *c,uint32_t value,uint32_t earlier_than) {
@@ -129,7 +128,7 @@ static LirSliceCallableCheck lir_slice_unknown_arguments(const LirSliceCallable 
         uint32_t value=v->operands[p];XrLirType type=c->function->values[value-1].type;XrLirCellType cell;
         if (type!=XR_LIR_I64_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF &&
             type!=XR_LIR_STATE && type!=XR_LIR_STATE_REF &&
-            xr_lir_cell_value_type(c->module,type,&cell)!=XR_LIR_OK) continue;
+            !xr_lir_cell_value_type(c->module,type,&cell)) continue;
         LirSliceRoot root=type==XR_LIR_STATE ? (LirSliceRoot){LIR_SLICE_ROOT_STATE_ANY,0} : lir_slice_actual_root(c,value);
         if (!root.kind) return LIR_SLICE_CALLABLE_UNKNOWN;
         for (size_t n=0;n<c->flow->count;++n)

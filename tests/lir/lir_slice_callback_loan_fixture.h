@@ -8,7 +8,7 @@ typedef enum SliceCallbackLoanCase {
     SLICE_CALLBACK_LOAN_ALIAS,SLICE_CALLBACK_LOAN_INDIRECT_ALIAS,
     SLICE_CALLBACK_LOAN_INCOMPLETE,SLICE_CALLBACK_LOAN_MISSING_INVOKE,
     SLICE_CALLBACK_LOAN_MISSING_RELAY,SLICE_CALLBACK_LOAN_LOCAL,
-    SLICE_CALLBACK_LOAN_PHI,SLICE_CALLBACK_LOAN_CASE_COUNT
+    SLICE_CALLBACK_LOAN_PHI,SLICE_CALLBACK_LOAN_DERIVED,SLICE_CALLBACK_LOAN_CASE_COUNT
 } SliceCallbackLoanCase;
 typedef struct SliceCallbackLoanFixture { XrLirModule *module;XrLirFunction root,invoke,relay; } SliceCallbackLoanFixture;
 
@@ -76,6 +76,17 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
     slice_callable_effect(writer,(XrLirInstruction){.op=XR_LIR_ARRAY_DROP,.type=XR_LIR_UNIT,.operands=&array,.operand_count=1});
     result=slice_callable_value(writer,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64});slice_callable_return(writer,result);
     XrLirValue part={0},cb={0};OK(xr_lir_function_parameter(m,c.invoke,0,&part));OK(xr_lir_function_parameter(m,c.invoke,1,&cb));
+    XrLirValue live_part=part,derived={0};
+    if (shape==SLICE_CALLBACK_LOAN_DERIVED) {
+        XrLirValue start=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64}),
+            limit=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=1}),
+            closed=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1});
+        XrLirValue bounds[]={part,start,limit,closed};uint32_t role=0;
+        OK(xr_lir_slice_operation(m,XR_LIR_SLICE_OP_REBORROW,element,0,&role));
+        live_part=derived=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,
+            .type=slice,.intrinsic=role,.operands=bounds,.operand_count=4});
+        slice_callable_effect(invoke,(XrLirInstruction){.op=XR_LIR_SLICE_FORMAL_CLEANUP,.type=XR_LIR_UNIT,.bits=part.id});
+    }
     if (shape==SLICE_CALLBACK_LOAN_PHI) {
         XrLirBlock joined={0};OK(xr_lir_add_block(m,c.invoke,&callback,1,&joined));
         OK(xr_lir_set_terminator(m,invoke,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
@@ -96,7 +107,7 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
     result=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_CALL_INDIRECT,.type=XR_LIR_I64,.operands=&cb,.operand_count=1});
     uint32_t get=0;OK(xr_lir_slice_operation(m,XR_LIR_SLICE_OP_GET,element,0,&get));
     XrLirValue first=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64});
-    XrLirValue read[]={part,first};XrLirValue selected=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,
+    XrLirValue read[]={live_part,first};XrLirValue selected=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,
         .type=element,.intrinsic=get,.operands=read,.operand_count=2});
     if (element==XR_LIR_U8) selected=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_INTCAST,.type=XR_LIR_I64,.operands=&selected,.operand_count=1});
     XrLirValue sum[]={result,selected};result=slice_callable_value(invoke,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=sum,.operand_count=2});
@@ -104,6 +115,7 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
         slice_callable_effect(invoke,(XrLirInstruction){.op=XR_LIR_SLICE_CLEANUP,.type=XR_LIR_UNIT,.bits=local.id});
         slice_callable_effect(invoke,(XrLirInstruction){.op=XR_LIR_ARRAY_CELL_DROP,.type=XR_LIR_UNIT,.operands=&local_cell,.operand_count=1});
     }
+    if (derived.id) slice_callable_effect(invoke,(XrLirInstruction){.op=XR_LIR_SLICE_CLEANUP,.type=XR_LIR_UNIT,.bits=derived.id});
     slice_callable_effect(invoke,(XrLirInstruction){.op=XR_LIR_SLICE_FORMAL_CLEANUP,.type=XR_LIR_UNIT,.bits=part.id});slice_callable_return(invoke,result);
     OK(xr_lir_function_parameter(m,c.relay,0,&cb));OK(xr_lir_function_parameter(m,c.relay,1,&part));
     XrLirValue forwarded[]={part,cb};result=slice_callable_value(relay,(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_I64,
@@ -133,13 +145,16 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
     OK(xr_lir_internal_slice_effects_set(m,facts));
     return c;
 }
-static XrLirModule *slice_callback_loan_ref_fixture(XrLirType element,bool array) {
+static XrLirModule *slice_callback_loan_ref_fixture(XrLirType element,unsigned kind) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));OK(xr_lir_slice_catalog_install(m));
     XrLirType slice=0,callback=0;OK(xr_lir_slice_type(m,element,&slice));
+    bool array=kind==1;XrLirType owned_cell=0;
+    if (kind==2) OK(xr_lir_cell_type(m,(XrLirCellType){XR_LIR_I64,0},&owned_cell));
     XrLirCallableParameter parameter={.type=array?XR_LIR_ARRAY:XR_LIR_I64,
         .array_element=array?element:0,.mode=XR_PARAM_REF};
+    if (owned_cell) parameter=(XrLirCallableParameter){.type=owned_cell,.mode=XR_PARAM_READ};
     OK(xr_lir_callable_type(m,&(XrLirCallableType){.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64},&callback));
-    XrLirType types[]={slice,callback,array?XR_LIR_ARRAY_REF:XR_LIR_I64_CELL};XrLirFunction function={0};
+    XrLirType types[]={slice,callback,owned_cell?owned_cell:array?XR_LIR_ARRAY_REF:XR_LIR_I64_CELL};XrLirFunction function={0};
     XrLirBlock block=slice_callable_function(m,"loan_reference",types,3,&function);
     XrLirValue part={0},cb={0},reference={0};OK(xr_lir_function_parameter(m,function,0,&part));
     OK(xr_lir_function_parameter(m,function,1,&cb));OK(xr_lir_function_parameter(m,function,2,&reference));
@@ -157,6 +172,31 @@ static XrLirModule *slice_callback_loan_ref_fixture(XrLirType element,bool array
     XrLirSliceFunctionFact rows[2]={{0},{.function=function.id,.parameter_count=3,.result_parameter=UINT32_MAX,
         .available=true,.access={0,1},.write={1,1},.callback_loans={0,1}}};
     XrLirSliceCallbackLoan pair={1,XR_LIR_SLICE_EFFECT_PARAMETER,0};
+    OK(xr_lir_internal_slice_effects_set(m,(XrLirSliceFactsView){.functions=rows,.terms=terms,.term_count=2,.function_count=1,
+        .callback_loans=&pair,.callback_loan_count=1,.callback_loans_complete=true}));
+    return m;
+}
+static XrLirModule *slice_callback_loan_capture_fixture(XrLirType element) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));OK(xr_lir_slice_catalog_install(m));
+    XrLirType slice=0,callback=0,closure=0;OK(xr_lir_slice_type(m,element,&slice));
+    OK(xr_lir_callable_type(m,&(XrLirCallableType){.result=XR_LIR_I64},&callback));
+    XrLirCallableParameter parameter={.type=callback,.mode=XR_PARAM_READ};
+    OK(xr_lir_callable_type(m,&(XrLirCallableType){.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64},&closure));
+    XrLirType types[]={slice,callback};XrLirFunction function={0};
+    XrLirBlock block=slice_callable_function(m,"loan_capture",types,2,&function);
+    OK(xr_lir_set_closure_target(m,function,(XrLirClosureTarget){closure,1,false}));
+    XrLirValue part={0},cb={0};OK(xr_lir_function_parameter(m,function,0,&part));OK(xr_lir_function_parameter(m,function,1,&cb));
+    XrLirValue called=slice_callable_value(block,(XrLirInstruction){.op=XR_LIR_CALL_INDIRECT,.type=XR_LIR_I64,.operands=&cb,.operand_count=1});
+    uint32_t role=0;OK(xr_lir_slice_operation(m,XR_LIR_SLICE_OP_LEN,element,0,&role));
+    XrLirValue length=slice_callable_value(block,(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_I64,
+        .intrinsic=role,.operands=&part,.operand_count=1});
+    XrLirValue sum[]={called,length};XrLirValue result=slice_callable_value(block,(XrLirInstruction){.op=XR_LIR_ADD,
+        .type=XR_LIR_I64,.operands=sum,.operand_count=2});
+    slice_callable_effect(block,(XrLirInstruction){.op=XR_LIR_SLICE_FORMAL_CLEANUP,.type=XR_LIR_UNIT,.bits=part.id});slice_callable_return(block,result);
+    XrLirSliceEffect terms[]={{XR_LIR_SLICE_EFFECT_CAPTURE,0},{XR_LIR_SLICE_EFFECT_CALLBACK,1}};
+    XrLirSliceFunctionFact rows[2]={{0},{.function=function.id,.parameter_count=2,.result_parameter=UINT32_MAX,
+        .available=true,.access={0,1},.write={1,1},.callback_loans={0,1}}};
+    XrLirSliceCallbackLoan pair={1,XR_LIR_SLICE_EFFECT_CAPTURE,0};
     OK(xr_lir_internal_slice_effects_set(m,(XrLirSliceFactsView){.functions=rows,.terms=terms,.term_count=2,.function_count=1,
         .callback_loans=&pair,.callback_loan_count=1,.callback_loans_complete=true}));
     return m;
