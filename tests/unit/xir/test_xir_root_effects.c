@@ -1768,11 +1768,13 @@ int main(int argc, char **argv) {
     };
     bool control_only = argc==2 && !strcmp(argv[1],"--control-summary");
     bool entry_only = argc==2 && !strcmp(argv[1],"--entry-footprint");
+    bool storage_only = argc==2 && !strcmp(argv[1],"--source-storage");
     const char *progress_setting=getenv("XR_TEST_PROGRESS");
     bool progress=progress_setting && !strcmp(progress_setting,"1");
     for (size_t p=0;p<sizeof(probes)/sizeof(probes[0]);++p)
         if (entry_only ? probes[p].run==entry_footprint_ownership :
-            argc==1 || probes[p].control==control_only) {
+            (argc==1 || probes[p].control==control_only) &&
+            (!storage_only || probes[p].run!=entry_footprint_ownership)) {
             clock_t started=0;
             if (progress) {
                 started=clock();
