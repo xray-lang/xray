@@ -201,4 +201,35 @@ static XrLirModule *slice_callback_loan_capture_fixture(XrLirType element) {
         .callback_loans=&pair,.callback_loan_count=1,.callback_loans_complete=true}));
     return m;
 }
+static XrLirModule *slice_callback_loan_multiroot_fixture(XrLirType element) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));OK(xr_lir_slice_catalog_install(m));
+    XrLirType slice=0,callback=0;OK(xr_lir_slice_type(m,element,&slice));
+    OK(xr_lir_callable_type(m,&(XrLirCallableType){.result=XR_LIR_I64},&callback));
+    XrLirType types[]={slice,callback,slice,XR_LIR_I1};XrLirFunction function={0};
+    XrLirBlock entry=slice_callable_function(m,"loan_selection",types,4,&function),joined={0};
+    OK(xr_lir_add_block(m,function,&slice,1,&joined));XrLirValue first={0},second={0},cb={0},flag={0},selected={0};
+    OK(xr_lir_function_parameter(m,function,0,&first));OK(xr_lir_function_parameter(m,function,1,&cb));
+    OK(xr_lir_function_parameter(m,function,2,&second));OK(xr_lir_function_parameter(m,function,3,&flag));
+    OK(xr_lir_block_parameter(m,joined,0,&selected));
+    OK(xr_lir_set_terminator(m,entry,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+        .operands=&flag,.operand_count=1,.edge_count=2,.edges={{joined,&first,1},{joined,&second,1}}}));
+    slice_callable_effect(joined,(XrLirInstruction){.op=XR_LIR_SLICE_FORMAL_CLEANUP,.type=XR_LIR_UNIT,.bits=first.id});
+    slice_callable_effect(joined,(XrLirInstruction){.op=XR_LIR_SLICE_FORMAL_CLEANUP,.type=XR_LIR_UNIT,.bits=second.id});
+    XrLirValue called=slice_callable_value(joined,(XrLirInstruction){.op=XR_LIR_CALL_INDIRECT,
+        .type=XR_LIR_I64,.operands=&cb,.operand_count=1});uint32_t role=0;
+    OK(xr_lir_slice_operation(m,XR_LIR_SLICE_OP_LEN,element,0,&role));
+    XrLirValue length=slice_callable_value(joined,(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_I64,
+        .intrinsic=role,.operands=&selected,.operand_count=1});
+    XrLirValue sum[]={called,length};XrLirValue result=slice_callable_value(joined,(XrLirInstruction){.op=XR_LIR_ADD,
+        .type=XR_LIR_I64,.operands=sum,.operand_count=2});
+    slice_callable_effect(joined,(XrLirInstruction){.op=XR_LIR_SLICE_CLEANUP,.type=XR_LIR_UNIT,.bits=selected.id});
+    slice_callable_return(joined,result);
+    XrLirSliceEffect terms[]={{XR_LIR_SLICE_EFFECT_PARAMETER,0},{XR_LIR_SLICE_EFFECT_PARAMETER,2},{XR_LIR_SLICE_EFFECT_CALLBACK,1}};
+    XrLirSliceFunctionFact rows[2]={{0},{.function=function.id,.parameter_count=4,.result_parameter=UINT32_MAX,
+        .available=true,.access={0,2},.write={2,1},.callback_loans={0,2}}};
+    XrLirSliceCallbackLoan pairs[]={{1,XR_LIR_SLICE_EFFECT_PARAMETER,0},{1,XR_LIR_SLICE_EFFECT_PARAMETER,2}};
+    OK(xr_lir_internal_slice_effects_set(m,(XrLirSliceFactsView){.functions=rows,.terms=terms,.term_count=3,.function_count=1,
+        .callback_loans=pairs,.callback_loan_count=2,.callback_loans_complete=true}));
+    return m;
+}
 #endif
