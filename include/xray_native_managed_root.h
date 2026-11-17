@@ -71,8 +71,9 @@ XRAY_API XrtManagedStatus xrt_managed_frame_enter_payload(XrtManagedRoot *,
  * Failure preserves every output field and success performs no extra allocation.
  * These addresses expire when the Frame leaves or its Root drains; active child
  * Frames do not move them. The view owns nothing and grants no access authority.
- * Only trusted generated code on the single executor may first read the actual
- * busy flag and, when idle, probe pending/owner fields in a contiguous window
+ * Only trusted execution code consuming a verified physical ownership plan on
+ * the single executor may first read the actual busy flag and, when idle,
+ * probe pending/owner fields in a contiguous window
  * with no call, retain, drop, allocation or other observation. Do not cache live
  * busy or pending values. All other Place use retains its original locking
  * protocol. A zero-slot Frame has slots == NULL; zero payload has payload == NULL. */
@@ -134,6 +135,43 @@ typedef struct XrtManagedSlotLocation {
 } XrtManagedSlotLocation;
 XRAY_API XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *, size_t,
     XrtManagedSlotLocation *);
+#ifndef __cplusplus
+/* Trusted execution code consuming a verified physical ownership plan may
+ * forward one owned Header through this activation's real factory view in a
+ * single-executor window without calls, external observations or retirement.
+ * This does not authenticate descriptors,
+ * establish unique ownership or grant access to a binding. The caller proves
+ * the adjacent logical COPY/DROP and preserves their ordinary fallback.
+ * With an empty destination and 0 < RC < INT32_MAX, the original COPY retain
+ * must succeed and its following source DROP cannot be last. Forwarding has
+ * that net effect even with a real snapshot (RC == 2), whose reference stays
+ * intact. No count, pending state or other bytes change. False leaves every
+ * owner untouched; callers run the original COPY/DROP with fresh reads rather
+ * than reusing a preflight pointer. C++ keeps Headers opaque. */
+static inline bool xrt_managed_frame_try_forward(XrtManagedFrame *frame, void *payload,
+    const XrtManagedFrameLocations *locations, size_t source, size_t source_offset,
+    size_t destination, size_t destination_offset) {
+    if (!frame || !payload || !locations || locations->frame!=frame || locations->payload!=payload ||
+        !locations->slots || !locations->busy || source>=locations->slot_count ||
+        destination>=locations->slot_count || source==destination || source_offset==SIZE_MAX ||
+        destination_offset==SIZE_MAX || source_offset==destination_offset ||
+        locations->slots[source].owner_offset!=source_offset ||
+        locations->slots[destination].owner_offset!=destination_offset) return false;
+    if (*locations->busy) return false;
+    if (locations->slots[source].pending.value || locations->slots[source].pending.allocation_bytes ||
+        locations->slots[destination].pending.value || locations->slots[destination].pending.allocation_bytes)
+        return false;
+    XrtManagedHeader **from=(XrtManagedHeader **)((unsigned char *)payload+source_offset);
+    XrtManagedHeader **to=(XrtManagedHeader **)((unsigned char *)payload+destination_offset);
+    XrtManagedHeader *incoming=*from;
+    if (*to || !incoming) return false;
+    int32_t references=atomic_load_explicit(&incoming->references,memory_order_relaxed);
+    if (references<=0 || references==INT32_MAX) return false;
+    *to=incoming;
+    *from=NULL;
+    return true;
+}
+#endif
 #ifdef __cplusplus
 }
 #endif
