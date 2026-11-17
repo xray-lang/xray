@@ -259,7 +259,7 @@ static XrXirStatus effect_contract_bindings(
     for (uint32_t b = 0; b < contract->binding_count; ++b) {
 
         const XrXirEffectCallBinding *binding = &contract->bindings[b];
-        if (binding->family < XR_XIR_EFFECT_BINDING_DIRECT || binding->family > XR_XIR_EFFECT_BINDING_REQUIREMENT ||
+        if (binding->family < XR_XIR_EFFECT_BINDING_DIRECT || binding->family > XR_XIR_EFFECT_BINDING_INDIRECT ||
             binding->instruction >= function->instruction_count || binding->value >= values ||
             (b && effect_contract_binding_order(&contract->bindings[b - 1], binding) >= 0))
             return XR_XIR_BAD_STRUCTURE;
@@ -551,16 +551,22 @@ static XrXirStatus effect_contract_instance_candidate(const XrXirCompileContext 
     return status==XR_XIR_OK ? xir_effect_callable_bound_matches(context,&candidate) : status;
 }
 
+#include "xxir_effect_indirect_binding.inc.c"
+
 /* Only this candidate edge may differ from its declared outer Fn bound. The
  * caller has already passed ordinary instruction/type shape; this helper still
  * admits all metadata views before accessing their records. */
 XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext *context,
     const XrXirModule *module, uint32_t caller, uint32_t instruction, uint32_t parameter) {
     if (!xir_compile_context_valid(context) || !module || !module->types || !module->functions ||
-        caller >= module->function_count || instruction >= module->functions[caller].instruction_count)
+        caller >= module->function_count || instruction >= module->functions[caller].instruction_count ||
+        !module->functions[caller].instructions)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *p = module->provenance;
     if (!p) return XR_XIR_BAD_TYPE;
+    XrXirOp operation=module->functions[caller].instructions[instruction].op;
+    if(operation==XR_XIR_CALL_INDIRECT || operation==XR_XIR_INVOKE_INDIRECT)
+        return effect_contract_indirect_candidate(context,module,caller,instruction,parameter);
     if (xir_effect_kind_is_closed(p->kind))
         return effect_contract_instance_candidate(context,module,caller,instruction,parameter);
     if (p->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_TYPE;

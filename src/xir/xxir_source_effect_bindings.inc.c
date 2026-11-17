@@ -110,7 +110,7 @@ static bool source_effect_records(SourceContext *ctx, uint32_t f, bool prepare) 
     /* Grouping by the actual opcode family makes the serialized record order
      * canonical without a second mutable sorting buffer. */
     for (uint32_t family = XR_XIR_EFFECT_BINDING_DIRECT;
-        family <= XR_XIR_EFFECT_BINDING_REQUIREMENT; ++family) {
+        family <= XR_XIR_EFFECT_BINDING_INDIRECT; ++family) {
       for (uint32_t i = 0; i < function->instruction_count; ++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         const XrXirInstruction *op = &function->instructions[i];
@@ -118,7 +118,8 @@ static bool source_effect_records(SourceContext *ctx, uint32_t f, bool prepare) 
             op->op == XR_XIR_GENERATOR_NEW ?
             XR_XIR_EFFECT_BINDING_DIRECT : op->op == XR_XIR_FUNCTION_REF ?
             XR_XIR_EFFECT_BINDING_CAPTURE : op->op == XR_XIR_CALL_REQUIREMENT ?
-            XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;
+            XR_XIR_EFFECT_BINDING_REQUIREMENT : op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT ?
+            XR_XIR_EFFECT_BINDING_INDIRECT : 0;
         if (actual_family != family || !body->root_values) continue;
         for (uint32_t p = 0; p < op->args[1]; ++p) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;

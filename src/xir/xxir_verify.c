@@ -1341,6 +1341,15 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                     match = xir_effect_call_binding_candidate(&context->remaining,context->module,
                         context->location.function,i,a);
                 if (match != XR_XIR_OK) return match;
+            } else if(indirect) {
+                uint32_t operand=function->operands[op->args[0]+a];
+                XrXirType actual=xr_xir_operand_type(function,operand);
+                if(actual!=operand_type) {
+                    XrXirStatus match=xir_effect_call_binding_candidate(&context->remaining,context->module,
+                        context->location.function,i,a);
+                    if(match!=XR_XIR_OK) return match;
+                    operand_type=actual;
+                }
             }
             if ((op->op == XR_XIR_SHL_INT || op->op == XR_XIR_SHR_INT) && a == 1) {
                 operand_type = xr_xir_operand_type(function, op->args[1]);
