@@ -264,6 +264,9 @@ static void array_local_live_cases(void) {
     }
 }
 static void array_local_native_failures(XrRbcProgram *program) {
+    XrtBillingOwner *control=NULL; CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&control)==XRT_MANAGED_OK);
+    /* The retained billing owner stays charged after every payload refunds. */
+    XrtBillingStats base=xrt_billing_owner_stats(control);
     size_t retained=live_allocations,failures=0;
     for (size_t allowance=0;;++allowance) {
         XrRbcExecution *execution=NULL; CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
@@ -278,12 +281,12 @@ static void array_local_native_failures(XrRbcProgram *program) {
             CHECK(status==XR_RBC_VALUE_FAILURE && xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations) &&
                 failure==XR_XIR_VALUE_OOM); ++failures; }
         xrt_billing_owner_fail_after(billing,SIZE_MAX); xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome);
-        XrtBillingStats after=xrt_billing_owner_stats(billing); CHECK(!after.blocks && !after.bytes);
+        XrtBillingStats after=xrt_billing_owner_stats(billing); CHECK(after.blocks==base.blocks && after.bytes==base.bytes);
         xrt_billing_owner_drop(billing); CHECK(live_allocations==retained);
         if (status==XR_RBC_OK) break;
         CHECK(allowance<SIZE_MAX);
     }
-    CHECK(failures);
+    CHECK(failures); xrt_billing_owner_drop(control);
 }
 static void array_local_allocation_cases(void) {
     array_local_bytecode_cases(); CHECK(!live_allocations);
