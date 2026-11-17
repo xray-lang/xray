@@ -18,7 +18,8 @@ static bool lir_slice_span_valid(XrLirSliceEffectSpan span, size_t count) {
 }
 static bool lir_slice_effects_valid(const XrLirModule *m, XrLirSliceFactsView view) {
     if (view.function_count != m->function_count || !view.functions ||
-        (view.term_count && !view.terms) || (view.callback_loan_count && !view.callback_loans)) return false;
+        (view.term_count && !view.terms) || (view.callback_loan_count &&
+            (!view.callback_loans || !view.callback_loans_complete))) return false;
     for (size_t n = 0; n < view.term_count; ++n) {
         XrLirSliceEffect term = view.terms[n];
         if ((uint32_t)term.kind > XR_LIR_SLICE_EFFECT_PARAMETER ||

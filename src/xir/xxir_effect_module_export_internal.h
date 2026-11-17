@@ -54,6 +54,7 @@ typedef struct XirModuleEffectExportView {
     /* False means this input did not request module equations. Empty spans in
      * that case are unavailable facts, never proof of an empty WRITE set. */
     bool module_access_complete;
+    bool callback_loans_complete;
 } XirModuleEffectExportView;
 typedef struct XirModuleEffectExport XirModuleEffectExport;
 

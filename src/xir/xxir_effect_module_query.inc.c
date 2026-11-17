@@ -137,8 +137,16 @@ static XrXirStatus effect_module_export_terms(const EffectCheckedRoots *roots, c
             }
             EffectCheckCallbackLoan from=roots->callback_loan[link-1];
             XirModuleCallbackLoan relation=from.relation;
-            if (from.function!=declaration || relation.callback_parameter>=source.parameters ||
-                relation.loan_parameter>=source.parameters ||
+            if (from.function!=declaration || relation.callback_parameter>=source.parameters) {
+                status=XR_XIR_BAD_STRUCTURE;break;
+            }
+            if (from.source) {
+                if (relation.loan_kind!=XIR_MODULE_EFFECT_UNKNOWN || relation.loan_parameter>=source.values) {
+                    status=XR_XIR_BAD_STRUCTURE;break;
+                }
+                link=from.next;continue;
+            }
+            if (relation.loan_parameter>=source.parameters ||
                 (relation.loan_kind!=XIR_MODULE_EFFECT_PARAMETER && relation.loan_kind!=XIR_MODULE_EFFECT_CAPTURE)) {
                 status=XR_XIR_BAD_STRUCTURE;break;
             }
@@ -210,6 +218,7 @@ XR_FUNC XrXirStatus xir_effects_module_export_copy(const XrXirArtifact *artifact
     XirModuleEffectExportView *view = &owned->view;
     view->function_count = artifact->module.function_count;
     view->module_access_complete = effects->checked_roots->module_access;
+    view->callback_loans_complete=effects->checked_roots->callback_loans_closed;
     if (projection.instance) {
         uint64_t bytes=(uint64_t)producer->module.function_count*sizeof(*projection.witnesses);
         if (bytes>SIZE_MAX) status=XR_XIR_OVERFLOW;

@@ -287,11 +287,23 @@ static XrXirStatus effect_relocation_edges(EffectRelocation *relocation) {
     }
     for (uint32_t n=0;n<roots->callback_loans;++n) {
         XirModuleCallbackLoan *relation=&roots->callback_loan[n].relation;
+        if (roots->callback_loan[n].source) {
+            uint32_t function=roots->callback_loan[n].function;
+            if (function>=roots->templates || relation->loan_parameter>=roots->function[function].values)
+                return XR_XIR_BAD_STRUCTURE;
+            uint32_t target=effect_relocation_node(relocation,
+                roots->function[function].first+relation->loan_parameter);
+            EffectCheckFunction next=relocation->functions[function];
+            if (relocation->status!=XR_XIR_OK || target<next.first || target-next.first>=next.values)
+                return XR_XIR_BAD_STRUCTURE;
+            relation->loan_parameter=target-next.first;
+        }
         if (relation->witness_function==UINT32_MAX) continue;
         if (relation->witness_function>=roots->templates) return XR_XIR_BAD_STRUCTURE;
         relation->witness_instruction=effect_relocation_instruction(relocation,
             relation->witness_function,relation->witness_instruction);
     }
+    effect_callback_loans_reindex(roots);
     roots->callback_loans_closed=false;
     for (uint32_t d = 0; d < roots->dependencies; ++d) {
         roots->dependency[d].source = effect_relocation_node(relocation, roots->dependency[d].source);

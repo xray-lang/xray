@@ -65,6 +65,7 @@ typedef struct XrLirSliceFactsView {
     const XrLirSliceCallbackLoan *callback_loans;
     uint32_t function_count;
     size_t term_count, callback_loan_count;
+    bool callback_loans_complete;
 } XrLirSliceFactsView;
 
 typedef struct XrLirSliceFacts XrLirSliceFacts;

@@ -57,6 +57,8 @@ static bool lower_slice_effects_receive(Lower *c, XirModuleEffectExportView sour
     }
     if (loans && !source.callback_loans)
         return lower_unsupported(c,"Slice callback loan directory is unavailable");
+    if (loans && !source.callback_loans_complete)
+        return lower_unsupported(c,"Slice callback loan protocol is not closed");
     XrLirSliceFunctionFact *rows = lower_alloc(c,extent,sizeof(*rows));
     XrLirSliceEffect *terms = count ? lower_alloc(c,count,sizeof(*terms)) : NULL;
     XrLirSliceCallbackLoan *relations=loans ? lower_alloc(c,loans,sizeof(*relations)) : NULL;
@@ -108,7 +110,8 @@ static bool lower_slice_effects_receive(Lower *c, XirModuleEffectExportView sour
     }
     if (good) good = used == count && borrowed==loans && lower_build(c,xr_lir_internal_slice_effects_set(c->module,
         (XrLirSliceFactsView){.functions=rows,.terms=terms,.callback_loans=relations,
-            .function_count=c->module->function_count,.term_count=used,.callback_loan_count=borrowed}));
+            .function_count=c->module->function_count,.term_count=used,.callback_loan_count=borrowed,
+            .callback_loans_complete=source.callback_loans_complete}));
     xr_free(rows); xr_free(terms); xr_free(relations); return good;
 }
 static bool lower_slice_effects(Lower *c) {
