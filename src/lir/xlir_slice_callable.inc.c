@@ -18,6 +18,7 @@ typedef struct LirSliceCallable {
     const XrLirFunctionData *function;
     LirSliceFlow *flow;
     XrLirSliceFactsView effects;
+    uint32_t function_id;
     size_t first, count;
 } LirSliceCallable;
 
@@ -53,10 +54,53 @@ static const XrLirCallableValueFact *lir_slice_constructor(LirSliceCallable *c,u
         .state=target->closure.state_capture ? facts->captures[row->first_capture+target->closure.capture_count] : 0};
     return row;
 }
+static bool lir_slice_conditional_formal(const LirSliceCallable *c,uint32_t value,uint32_t earlier_than) {
+    const XrLirCallableFunctionFacts *facts=&c->flow->callables;
+    if (!c->effects.callback_loans_complete || !facts->values || !value || value>facts->value_count) return false;
+    const XrLirCallableValueFact *alias=&facts->values[value];
+    uint32_t origin=alias->origin;
+    if (alias->kind!=XR_LIR_SCOPED_VALUE_FUNCTION || alias->known_target ||
+        alias->transport!=XR_LIR_CALLABLE_TRANSPORT_BORROW || !origin || origin>facts->value_count ||
+        (earlier_than && origin>=earlier_than)) return false;
+    const XrLirCallableValueFact *formal=&facts->values[origin];
+    uint32_t parameter=formal->parameter;
+    if (formal->kind!=XR_LIR_SCOPED_VALUE_FUNCTION || formal->block || !parameter ||
+        parameter>c->function->parameter_count || formal->persistent || formal->known_target ||
+        formal->transport!=XR_LIR_CALLABLE_TRANSPORT_BORROW ||
+        c->function->parameters[parameter-1]!=origin || parameter-1<c->function->closure.capture_count) return false;
+    XrLirCallableType signature;
+    if (xr_lir_callable_type_view(c->module,formal->type,&signature)!=XR_LIR_OK ||
+        (signature.flags&XR_LIR_CALLABLE_C_ABI)) return false;
+    XrLirSliceFunctionFact own;
+    if (xr_lir_internal_slice_function_fact(c->module,c->function_id,&own)!=XR_LIR_OK || !own.available ||
+        own.parameter_count!=c->function->parameter_count || own.callback_loans.first>c->effects.callback_loan_count ||
+        own.callback_loans.count>c->effects.callback_loan_count-own.callback_loans.first ||
+        (own.callback_loans.count && !c->effects.callback_loans)) return false;
+    bool live=false;
+    for (size_t n=0;n<c->flow->count;++n) if (c->flow->scratch[n]&2u) {
+        LirSliceRoot root=c->flow->roots[n];uint32_t loan=0;
+        if (root.kind!=LIR_SLICE_ROOT_INPUT || !root.identity || root.identity>c->function->value_count) return false;
+        while (loan<c->function->parameter_count && c->function->parameters[loan]!=root.identity) ++loan;
+        if (loan==c->function->parameter_count ||
+            !xr_lir_internal_slice_type(c->module,c->function->parameter_types[loan])) return false;
+        XrLirSliceEffectKind kind=loan<c->function->closure.capture_count ?
+            XR_LIR_SLICE_EFFECT_CAPTURE:XR_LIR_SLICE_EFFECT_PARAMETER;
+        bool found=false;
+        for (size_t p=0;p<own.callback_loans.count;++p) {
+            XrLirSliceCallbackLoan pair=c->effects.callback_loans[own.callback_loans.first+p];
+            found|=pair.callback_parameter==parameter-1 && pair.loan_kind==kind && pair.loan_parameter==loan;
+        }
+        if (!found) return false;
+        live=true;
+    }
+    /* This is a condition on actual callers, not an empty callable body. Each
+     * live loan must independently name an entry whose obligation is exported. */
+    return live;
+}
 static bool lir_slice_enqueue_callable(LirSliceCallable *c,uint32_t value,uint32_t earlier_than) {
     LirSliceActuals actuals;
     const XrLirCallableValueFact *row=lir_slice_constructor(c,value,earlier_than,&actuals);
-    if (!row) return false;
+    if (!row) return lir_slice_conditional_formal(c,value,earlier_than);
     uint32_t origin=c->flow->callables.values[value].origin;
     if (!c->flow->callable_seen[origin]) {
         XR_CHECK(c->count < c->flow->callables.value_count,
@@ -79,6 +123,20 @@ static LirSliceRoot lir_slice_actual_root(const LirSliceCallable *c,uint32_t val
         op->op == XR_LIR_CELL_NEW && op->type == XR_LIR_I64_CELL)
         return (LirSliceRoot){LIR_SLICE_ROOT_LOCAL,value};
     return (LirSliceRoot){0};
+}
+static LirSliceCallableCheck lir_slice_unknown_arguments(const LirSliceCallable *c,const XrLirInstructionView *v) {
+    for (uint32_t p=1;p<v->operand_count;++p) {
+        uint32_t value=v->operands[p];XrLirType type=c->function->values[value-1].type;XrLirCellType cell;
+        if (type!=XR_LIR_I64_CELL && type!=XR_LIR_ARRAY_CELL && type!=XR_LIR_ARRAY_REF &&
+            type!=XR_LIR_STATE && type!=XR_LIR_STATE_REF &&
+            xr_lir_cell_value_type(c->module,type,&cell)!=XR_LIR_OK) continue;
+        LirSliceRoot root=type==XR_LIR_STATE ? (LirSliceRoot){LIR_SLICE_ROOT_STATE_ANY,0} : lir_slice_actual_root(c,value);
+        if (!root.kind) return LIR_SLICE_CALLABLE_UNKNOWN;
+        for (size_t n=0;n<c->flow->count;++n)
+            if ((c->flow->scratch[n]&2u) && lir_slice_root_alias(c->flow->roots[n],root,false))
+                return LIR_SLICE_CALLABLE_CONFLICT;
+    }
+    return LIR_SLICE_CALLABLE_SAFE;
 }
 static LirSliceCallableCheck lir_slice_apply_callable(LirSliceCallable *c,uint32_t function,
     LirSliceActuals actuals,uint32_t constructor) {
@@ -111,10 +169,10 @@ static LirSliceCallableCheck lir_slice_apply_callable(LirSliceCallable *c,uint32
     }
     return LIR_SLICE_CALLABLE_SAFE;
 }
-static LirSliceCallableCheck lir_slice_callable_check(const XrLirModule *m,const XrLirFunctionData *f,
+static LirSliceCallableCheck lir_slice_callable_check(const XrLirModule *m,const XrLirFunctionData *f,uint32_t function,
     const XrLirInstructionView *v,LirSliceFlow *flow) {
     if (!flow->callable_queue || !flow->callable_seen) return LIR_SLICE_CALLABLE_UNKNOWN;
-    LirSliceCallable c={.module=m,.function=f,.flow=flow};
+    LirSliceCallable c={.module=m,.function=f,.flow=flow,.function_id=function};
     if (xr_lir_slice_facts_view(m->slice_facts,&c.effects) != XR_LIR_OK) return LIR_SLICE_CALLABLE_UNKNOWN;
     LirSliceCallableCheck status;
     /* Module-only WRITE is not proof that a local capture is empty. Both call
@@ -134,9 +192,14 @@ static LirSliceCallableCheck lir_slice_callable_check(const XrLirModule *m,const
     } else {
         LirSliceActuals actuals;
         const XrLirCallableValueFact *row=lir_slice_constructor(&c,v->operands[0],0,&actuals);
-        if (!row) {status=LIR_SLICE_CALLABLE_UNKNOWN;goto done;}
-        actuals.arguments=v->operands+1; actuals.argument_count=v->operand_count-1;
-        status=lir_slice_apply_callable(&c,row->known_target,actuals,flow->callables.values[v->operands[0]].origin);
+        if (!row) {
+            status=lir_slice_unknown_arguments(&c,v);
+            if (status==LIR_SLICE_CALLABLE_SAFE && !lir_slice_conditional_formal(&c,v->operands[0],0))
+                status=LIR_SLICE_CALLABLE_UNKNOWN;
+        } else {
+            actuals.arguments=v->operands+1; actuals.argument_count=v->operand_count-1;
+            status=lir_slice_apply_callable(&c,row->known_target,actuals,flow->callables.values[v->operands[0]].origin);
+        }
     }
     while (status == LIR_SLICE_CALLABLE_SAFE && c.first < c.count) {
         uint32_t value=flow->callable_queue[c.first++]; LirSliceActuals actuals;

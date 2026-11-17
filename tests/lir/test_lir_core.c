@@ -14,6 +14,41 @@
 #include "lir/xlir_sccp.h"
 #include "base/xmalloc.h"
 #include "lir_slice_callable_fixture.h"
+#include "lir_slice_callback_loan_fixture.h"
+
+static void slice_callback_loan_conditions(void) {
+    const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
+    for (size_t family=0;family<2;++family) {
+        for (unsigned shape=0;shape<SLICE_CALLBACK_LOAN_CASE_COUNT;++shape) {
+            SliceCallbackLoanFixture c=slice_callback_loan_fixture(elements[family],(SliceCallbackLoanCase)shape);
+            bool safe=shape==SLICE_CALLBACK_LOAN_DIRECT || shape==SLICE_CALLBACK_LOAN_INDIRECT;
+            bool alias=shape==SLICE_CALLBACK_LOAN_ALIAS || shape==SLICE_CALLBACK_LOAN_INDIRECT_ALIAS;
+            XrLirStatus expected=safe?XR_LIR_OK:alias?XR_LIR_VERIFY_ERROR:XR_LIR_UNSUPPORTED;
+            XrLirDiagnostic diagnostic={0};XrLirStatus status=xr_lir_module_finish(c.module,&diagnostic);
+            if (status!=expected) fprintf(stderr,"Slice callback loan family%zu case%u: status%u expected%u f%u b%u i%u %s\n",
+                family,shape,(unsigned)status,(unsigned)expected,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.message);
+            CHECK(status==expected);
+            if (safe) {
+                OK(xr_lir_verify(c.module,NULL));XrLirModule *copy=NULL;OK(xr_lir_rebuild(c.module,&copy));
+                XrLirSliceFacts *facts=NULL;OK(xr_lir_slice_facts_create(c.module,&facts));xr_lir_module_destroy(c.module);
+                XrLirSliceFactsView view={0};OK(xr_lir_slice_facts_view(facts,&view));
+                CHECK(view.callback_loans_complete && view.callback_loan_count==2 &&
+                    view.callback_loans[0].callback_parameter==1 && view.callback_loans[0].loan_parameter==0 &&
+                    view.callback_loans[1].callback_parameter==0 && view.callback_loans[1].loan_parameter==1);
+                xr_lir_slice_facts_destroy(facts);OK(xr_lir_verify(copy,NULL));xr_lir_module_destroy(copy);
+            } else {
+                CHECK(strstr(diagnostic.message,alias?"Array binding write":"captured binding effect facts"));
+                xr_lir_module_destroy(c.module);
+            }
+        }
+        for (unsigned array=0;array<2;++array) {
+            XrLirModule *m=slice_callback_loan_ref_fixture(elements[family],array!=0);XrLirDiagnostic diagnostic={0};
+            XrLirStatus expected=array?XR_LIR_VERIFY_ERROR:XR_LIR_UNSUPPORTED;
+            CHECK(xr_lir_module_finish(m,&diagnostic)==expected);
+            CHECK(strstr(diagnostic.message,array?"Array binding write":"captured binding effect facts"));xr_lir_module_destroy(m);
+        }
+    }
+}
 
 static void slice_callable_captures(void) {
     for (unsigned shape=0;shape<SLICE_CALLABLE_CASE_COUNT;++shape) {
@@ -1001,6 +1036,7 @@ int main(void) {
     intrinsic_query_and_transfer();
     first_failure_diagnostic();
     slice_callable_captures();
+    slice_callback_loan_conditions();
     puts("scalar LIR construction, queries, ownership and rejection tests passed");
     return 0;
 }
