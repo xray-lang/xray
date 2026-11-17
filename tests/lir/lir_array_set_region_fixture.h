@@ -14,13 +14,16 @@ enum ArraySetRegionMode {
     ARRAY_SET_REGION_LOCAL, ARRAY_SET_REGION_CALL, ARRAY_SET_REGION_SNAPSHOT,
     ARRAY_SET_REGION_ALIAS, ARRAY_SET_REGION_RESIZE, ARRAY_SET_REGION_GAP,
     ARRAY_SET_REGION_HEADER_WRITE, ARRAY_SET_REGION_EXTRA_ENTRY,
-    ARRAY_SET_REGION_EXTRA_BACKEDGE, ARRAY_SET_REGION_EARLY_EXIT, ARRAY_SET_REGION_TRAP, ARRAY_SET_REGION_PADDED
+    ARRAY_SET_REGION_EXTRA_BACKEDGE, ARRAY_SET_REGION_EARLY_EXIT, ARRAY_SET_REGION_TRAP, ARRAY_SET_REGION_PADDED,
+    ARRAY_SET_REGION_OUTSIDE_NEW_SNAPSHOT, ARRAY_SET_REGION_OUTSIDE_READ_SNAPSHOT, ARRAY_SET_REGION_NO_SET,
+    ARRAY_SET_REGION_REF_ORIGIN, ARRAY_SET_REGION_ARRAY_FORMAL, ARRAY_SET_REGION_DIAMONDS
 };
+enum { ARRAY_SET_REGION_BODY_CAPACITY = 257 };
 typedef struct ArraySetRegionFixture {
     XrLirModule *module;
     XrLirFunction function, helper;
-    XrLirBlock entry, header, exit, body[8];
-    XrLirValue header_array, result;
+    XrLirBlock entry, header, exit, body[ARRAY_SET_REGION_BODY_CAPACITY];
+    XrLirValue header_array, result, outside_cell, outside_ref;
     enum ArraySetRegionMode mode;
     uint32_t count, arity;
 } ArraySetRegionFixture;
@@ -72,8 +75,9 @@ static XrLirValue ars_mutate(ArraySetRegionFixture *c, XrLirBlock block, XrLirVa
     }
     uint32_t set = 0; OK(xr_lir_array_operation(c->module, XR_LIR_I64, XR_LIR_ARRAY_OP_SET, &set));
     XrLirValue operands[] = {cell,zero,item};
-    OK(xr_lir_emit_effect(c->module, block, &(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_UNIT,
-        .intrinsic=set,.operands=operands,.operand_count=3}));
+    if (c->mode != ARRAY_SET_REGION_NO_SET)
+        OK(xr_lir_emit_effect(c->module, block, &(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_UNIT,
+            .intrinsic=set,.operands=operands,.operand_count=3}));
     XrLirValue result = ars_value(c, block, (XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_ARRAY,
         .operands=&cell,.operand_count=1});
     ars_effect(c, block, XR_LIR_ARRAY_CELL_DROP, cell);
@@ -89,8 +93,16 @@ static void ars_declare(ArraySetRegionFixture *c) {
     }
     char name[40]; int length = snprintf(name, sizeof(name), "local_set_loop_%u", (unsigned)c->count);
     CHECK(length > 0 && (size_t)length < sizeof(name));
+    bool formal_origin = c->mode == ARRAY_SET_REGION_REF_ORIGIN || c->mode == ARRAY_SET_REGION_ARRAY_FORMAL;
+    XrLirType formal = c->mode == ARRAY_SET_REGION_ARRAY_FORMAL ? XR_LIR_ARRAY : XR_LIR_ARRAY_REF;
     OK(xr_lir_declare_function(c->module, &(XrLirFunctionSpec){.name=name,.name_length=(size_t)length,
-        .result=XR_LIR_I64}, &c->function)); OK(xr_lir_define_function(c->module, c->function));
+        .parameters=formal_origin ? &formal : NULL,.parameter_count=formal_origin ? 1u : 0u,
+        .result=XR_LIR_I64}, &c->function));
+    if (formal_origin) {
+        OK(xr_lir_function_parameter(c->module, c->function, 0, &c->outside_ref));
+        OK(xr_lir_set_array_shape(c->module, c->outside_ref, &(XrLirArrayShape){XR_LIR_I64}));
+    }
+    OK(xr_lir_define_function(c->module, c->function));
     OK(xr_lir_add_block(c->module, c->function, NULL, 0, &c->entry)); OK(xr_lir_set_entry(c->module, c->function, c->entry));
     XrLirType parameters[] = {XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_ARRAY};
     OK(xr_lir_add_block(c->module, c->function, parameters, c->arity, &c->header));
@@ -106,7 +118,18 @@ static void ars_declare(ArraySetRegionFixture *c) {
 }
 static void ars_entry_header(ArraySetRegionFixture *c) {
     XrLirValue seed = ars_number(c, c->entry, 7), values[3] = {{0}};
-    values[0] = ars_array_op(c, c->entry, XR_LIR_ARRAY_OP_NEW, &seed, 1);
+    values[0] = c->mode == ARRAY_SET_REGION_REF_ORIGIN ?
+        ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_ARRAY_REF_READ,.type=XR_LIR_ARRAY,
+            .operands=&c->outside_ref,.operand_count=1}) : ars_array_op(c, c->entry, XR_LIR_ARRAY_OP_NEW, &seed, 1);
+    if (c->mode == ARRAY_SET_REGION_OUTSIDE_NEW_SNAPSHOT || c->mode == ARRAY_SET_REGION_OUTSIDE_READ_SNAPSHOT) {
+        c->outside_cell = ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,
+            .operands=values,.operand_count=1});
+        if (c->mode == ARRAY_SET_REGION_OUTSIDE_READ_SNAPSHOT) {
+            ars_effect(c, c->entry, XR_LIR_ARRAY_DROP, values[0]);
+            values[0] = ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_ARRAY,
+                .operands=&c->outside_cell,.operand_count=1});
+        }
+    }
     values[1] = ars_number(c, c->entry, 0);
     if (c->arity == 3) values[2] = ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_ARRAY_RETAIN,
         .type=XR_LIR_ARRAY,.operands=&values[0],.operand_count=1});
@@ -123,6 +146,25 @@ static void ars_entry_header(ArraySetRegionFixture *c) {
         .predicate=XR_LIR_LT,.operands=compared,.operand_count=2});
     OK(xr_lir_set_terminator(c->module, c->header, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
         .operands=&condition,.operand_count=1,.edge_count=2,.edges={{c->body[0],values,c->arity},{c->exit,values,c->arity}}}));
+}
+static void ars_diamonds(ArraySetRegionFixture *c) {
+    XrLirBlock current = c->exit;
+    for (uint32_t n = 0; n < ARRAY_SET_REGION_BODY_CAPACITY; ++n) {
+        XrLirBlock left = {0}, right = {0}, join = {0};
+        OK(xr_lir_add_block(c->module, c->function, NULL, 0, &join));
+        OK(xr_lir_add_block(c->module, c->function, NULL, 0, &right));
+        OK(xr_lir_add_block(c->module, c->function, NULL, 0, &left));
+        XrLirValue condition = ars_value(c, current, (XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1});
+        OK(xr_lir_set_terminator(c->module, current, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+            .operands=&condition,.operand_count=1,.edge_count=2,.edges={{left,NULL,0},{right,NULL,0}}}));
+        OK(xr_lir_set_terminator(c->module, left, &(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+            .edge_count=1,.edges={{join,NULL,0}}}));
+        OK(xr_lir_set_terminator(c->module, right, &(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+            .edge_count=1,.edges={{join,NULL,0}}}));
+        current = join;
+    }
+    OK(xr_lir_set_terminator(c->module, current, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+        .operands=&c->result,.operand_count=1}));
 }
 static void ars_body_exit(ArraySetRegionFixture *c) {
     for (uint32_t n = 0; n < c->count; ++n) {
@@ -145,11 +187,13 @@ static void ars_body_exit(ArraySetRegionFixture *c) {
     c->result = ars_array_op(c, c->exit, XR_LIR_ARRAY_OP_LEN, values, 1);
     ars_effect(c, c->exit, XR_LIR_ARRAY_DROP, values[0]);
     if (c->arity == 3) ars_effect(c, c->exit, XR_LIR_ARRAY_DROP, values[2]);
-    OK(xr_lir_set_terminator(c->module, c->exit, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+    if (c->outside_cell.id) ars_effect(c, c->exit, XR_LIR_ARRAY_CELL_DROP, c->outside_cell);
+    if (c->mode == ARRAY_SET_REGION_DIAMONDS) ars_diamonds(c);
+    else OK(xr_lir_set_terminator(c->module, c->exit, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
         .operands=&c->result,.operand_count=1}));
 }
 static ArraySetRegionFixture array_set_region_build(XrLirModule *module, uint32_t count, enum ArraySetRegionMode mode) {
-    CHECK(count && count <= 8);
+    CHECK(count && count <= ARRAY_SET_REGION_BODY_CAPACITY);
     ArraySetRegionFixture c = {.module=module,.count=count,.mode=mode,.arity=mode == ARRAY_SET_REGION_SNAPSHOT ? 3u : 2u};
     if (!c.module) OK(xr_lir_array_module_create(NULL, &c.module));
     ars_declare(&c); ars_entry_header(&c); ars_body_exit(&c);

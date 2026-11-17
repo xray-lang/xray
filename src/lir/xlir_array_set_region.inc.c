@@ -65,28 +65,27 @@ static bool lir_array_region_array_role(const XrLirModule *m, const XrLirInstruc
         xr_lir_internal_array_intrinsic(m, op->intrinsic) : NULL;
     return shape && (shape->operation == XR_LIR_ARRAY_OP_LEN || shape->operation == XR_LIR_ARRAY_OP_GET);
 }
+static bool lir_array_region_recorded_pair(const LirArrayRegionProof *p, uint32_t block, uint32_t instruction) {
+    const XrLirBlockData *body = &p->function->blocks[block];
+    const XrLirInstructionView *op = &body->instructions[instruction - 1].view;
+    if (!op->result || !p->pairs[op->result] || op->operand_count != 1 || instruction >= body->instruction_count)
+        return false;
+    bool read = op->op == XR_LIR_CELL_READ;
+    uint32_t cell = read ? op->operands[0] : op->result, array = read ? op->result : op->operands[0];
+    const XrLirOwnershipFact *fact = &p->plan->facts[p->pairs[op->result] - 1];
+    const XrLirInstructionView *drop = &body->instructions[instruction].view;
+    return fact->kind == (XrLirOwnershipFactKind)(read ? XR_LIR_OWNERSHIP_BINDING_READ : XR_LIR_OWNERSHIP_BINDING_NEW) &&
+        fact->block == block + 1 && fact->instruction == instruction && fact->value == cell && fact->target_value == array &&
+        fact->type == XR_LIR_ARRAY_CELL && fact->array_element == XR_LIR_I64 &&
+        fact->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_NONE && fact->forwarding_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE &&
+        fact->forwarding_drop == instruction + 1 && lir_array_forward_cell(p->function, cell) &&
+        lir_array_region_array(p->function, array) && drop->operand_count == 1 && drop->operands[0] == op->operands[0] &&
+        drop->op == (XrLirOp)(read ? XR_LIR_ARRAY_CELL_DROP : XR_LIR_ARRAY_DROP);
+}
 /* One whole-function use inventory bounds every candidate. It does not prove
  * uniqueness or extend the lifetime of an operand borrow. */
 static bool lir_array_region_inventory(LirArrayRegionProof *p) {
     const XrLirFunctionData *f = p->function;
-    for (uint32_t b = 0; b < f->block_count; ++b)
-        for (uint32_t i = 0; i < f->blocks[b].instruction_count; ++i) {
-            const XrLirInstructionView *op = &f->blocks[b].instructions[i].view;
-            /* Retained snapshots are deliberately outside this preparation,
-             * including snapshots created before a candidate loop. */
-            if (op->op == XR_LIR_ARRAY_RETAIN) return false;
-            for (uint32_t a = 0; a < op->operand_count; ++a) {
-                uint32_t value = op->operands[a];
-                LirArrayForwardUse *use = &p->uses[value];
-                lir_array_forward_use(use, b + 1, i + 1);
-                XrLirType type = f->values[value - 1].type;
-                if (type == XR_LIR_ARRAY && !lir_array_region_array_role(p->module, op, a)) use->blocked = true;
-                if (type == XR_LIR_ARRAY_CELL && !lir_array_forward_role(p->module, op, a)) use->blocked = true;
-            }
-            for (uint32_t e = 0; e < op->edge_count; ++e)
-                for (uint32_t a = 0; a < op->edges[e].argument_count; ++a)
-                    lir_array_forward_use(&p->uses[op->edges[e].arguments[a]], b + 1, i + 1);
-        }
     XrLirOwnershipFunction row = p->plan->functions[p->function_id - 1];
     for (uint32_t n = 0; n < row.fact_count; ++n) {
         uint32_t ordinal = row.fact_offset + n;
@@ -104,11 +103,72 @@ static bool lir_array_region_inventory(LirArrayRegionProof *p) {
         if (!value || value > f->value_count || p->pairs[value]) return false;
         p->pairs[value] = ordinal + 1;
     }
+    for (uint32_t b = 0; b < f->block_count; ++b)
+        for (uint32_t i = 0; i < f->blocks[b].instruction_count; ++i) {
+            const XrLirInstructionView *op = &f->blocks[b].instructions[i].view;
+            /* Retained snapshots are deliberately outside this preparation,
+             * including snapshots created before a candidate loop. */
+            if (op->op == XR_LIR_ARRAY_RETAIN) return false;
+            /* An unpaired constructor or read can preserve a second owner
+             * outside the loop even when its entry Array has no alias use. */
+            if (((op->op == XR_LIR_CELL_NEW && op->type == XR_LIR_ARRAY_CELL) ||
+                (op->op == XR_LIR_CELL_READ && op->type == XR_LIR_ARRAY)) &&
+                !lir_array_region_recorded_pair(p, b, i + 1)) return false;
+            if (op->type == XR_LIR_ARRAY && op->op != XR_LIR_CELL_READ) {
+                const XrLirArrayIntrinsic *origin = op->op == XR_LIR_CALL_INTRINSIC ?
+                    xr_lir_internal_array_intrinsic(p->module, op->intrinsic) : NULL;
+                /* Ref, State and unknown producers may leave another owner
+                 * alive outside this function's selected local lineage. */
+                if (!origin || origin->result_element != XR_LIR_I64 ||
+                    (origin->operation != XR_LIR_ARRAY_OP_NEW && origin->operation != XR_LIR_ARRAY_OP_REPEAT)) return false;
+            }
+            for (uint32_t a = 0; a < op->operand_count; ++a) {
+                uint32_t value = op->operands[a];
+                LirArrayForwardUse *use = &p->uses[value];
+                lir_array_forward_use(use, b + 1, i + 1);
+                XrLirType type = f->values[value - 1].type;
+                if (type == XR_LIR_ARRAY && !lir_array_region_array_role(p->module, op, a)) use->blocked = true;
+                if (type == XR_LIR_ARRAY_CELL && !lir_array_forward_role(p->module, op, a)) use->blocked = true;
+            }
+            for (uint32_t e = 0; e < op->edge_count; ++e)
+                for (uint32_t a = 0; a < op->edges[e].argument_count; ++a)
+                    lir_array_forward_use(&p->uses[op->edges[e].arguments[a]], b + 1, i + 1);
+        }
+    for (uint32_t v = 1; v <= f->value_count; ++v) {
+        if (f->values[v - 1].type == XR_LIR_ARRAY && f->values[v - 1].parameter && !f->values[v - 1].block)
+            return false;
+        if (f->values[v - 1].type == XR_LIR_ARRAY_CELL &&
+            (!lir_array_forward_cell(f, v) || p->uses[v].blocked || p->uses[v].block != f->values[v - 1].block))
+            return false;
+    }
     return true;
 }
+/* This private graph has finished RPO and dominator construction. Subsequent
+ * region readers use only entry, predecessors, offsets and dominance queries.
+ * Reuse order/rank for tree intervals, next/cursor for child lists and stack
+ * for iterative traversal. One cold linear pass makes every query constant. */
+static void lir_array_region_dominance_index(LirGraph *g) {
+    memset(g->next, 0, (size_t)g->count * sizeof(*g->next));
+    for (uint32_t b = 0; b < g->count; ++b) if (b != g->entry) {
+        uint32_t parent = g->idom[b];
+        XR_DCHECK(parent < g->count, "reachable block has a dominator");
+        g->cursor[b] = g->next[parent]; g->next[parent] = b + 1;
+    }
+    uint32_t depth = 1, ordinal = 0;
+    g->stack[0] = g->entry; g->order[g->entry] = ordinal++;
+    while (depth) {
+        uint32_t block = g->stack[depth - 1], child = g->next[block];
+        if (child) {
+            --child; g->next[block] = g->cursor[child];
+            g->order[child] = ordinal++; g->stack[depth++] = child;
+        } else {
+            g->rank[block] = ordinal; --depth;
+        }
+    }
+    XR_DCHECK(ordinal == g->count, "dominator intervals cover every reachable block");
+}
 static bool lir_array_region_dominates(const LirGraph *g, uint32_t header, uint32_t block) {
-    while (block != header && block != g->entry) block = g->idom[block];
-    return block == header;
+    return g->order[header] <= g->order[block] && g->rank[block] <= g->rank[header];
 }
 /* The body may have any number of blocks, but only one straight-line route.
  * Predecessor cardinality rules out side entries and other hidden backedges. */
@@ -135,8 +195,10 @@ static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint
     uint32_t block = term->edges[body_edge].target - 1;
     uint64_t stamp = (uint64_t)header * 2 + body_edge + 1;
     while (block != header) {
-        if (p->marks[block] == stamp || g->offsets[block + 1] - g->offsets[block] != 1 ||
-            !lir_array_region_dominates(g, header, block)) return false;
+        /* This route starts at the header and every visited block has its
+         * sole actual incoming edge on that route. Its dominance follows
+         * without walking each block's increasingly long dominator chain. */
+        if (p->marks[block] == stamp || g->offsets[block + 1] - g->offsets[block] != 1) return false;
         p->marks[block] = stamp; p->blocks[p->block_count++] = block;
         const XrLirInstructionView *next = lir_terminator(f, block);
         if (next->op != XR_LIR_BR || next->edge_count != 1) return false;
@@ -214,19 +276,10 @@ static bool lir_array_region_pair(LirArrayRegionProof *p, uint32_t block, uint32
     const XrLirFunctionData *f = p->function;
     const XrLirBlockData *body = &f->blocks[block];
     const XrLirInstructionView *op = &body->instructions[instruction - 1].view;
-    if (!op->result || !p->pairs[op->result] || instruction >= body->instruction_count ||
-        op->operand_count != 1 || op->operands[0] != *current) return false;
-    const XrLirOwnershipFact *fact = &p->plan->facts[p->pairs[op->result] - 1];
-    const XrLirInstructionView *drop = &body->instructions[instruction].view;
+    if (!lir_array_region_recorded_pair(p, block, instruction) || op->operands[0] != *current) return false;
     uint32_t cell = read ? *current : op->result, array = read ? op->result : *current;
-    if (fact->kind != (XrLirOwnershipFactKind)(read ? XR_LIR_OWNERSHIP_BINDING_READ : XR_LIR_OWNERSHIP_BINDING_NEW) ||
-        fact->block != block + 1 || fact->instruction != instruction || fact->value != cell || fact->target_value != array ||
-        fact->type != XR_LIR_ARRAY_CELL || fact->array_element != XR_LIR_I64 || fact->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_NONE ||
-        fact->forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE || fact->forwarding_drop != instruction + 1 ||
-        !lir_array_forward_cell(f, cell) || !lir_array_region_array(f, array) ||
-        p->uses[cell].blocked || p->uses[cell].block != block + 1 || p->uses[array].blocked ||
-        f->values[array - 1].block != block + 1 || drop->operand_count != 1 || drop->operands[0] != *current ||
-        drop->op != (XrLirOp)(read ? XR_LIR_ARRAY_CELL_DROP : XR_LIR_ARRAY_DROP)) return false;
+    if (p->uses[cell].blocked || p->uses[cell].block != block + 1 || p->uses[array].blocked ||
+        f->values[array - 1].block != block + 1) return false;
     const LirArrayForwardUse *dying = &p->uses[*current];
     if (dying->block != block + 1 || dying->last != instruction + 1) return false;
     uint32_t source = *current; *current = op->result;
@@ -298,6 +351,7 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
     if (status != XR_LIR_OK) return status;
     if (!lir_graph_order(f, &p->graph)) return XR_LIR_VERIFY_ERROR;
     lir_graph_dominators(&p->graph);
+    lir_array_region_dominance_index(&p->graph);
     uint64_t values = (uint64_t)f->value_count + 1, steps = values + f->block_count + 2;
     if (steps > UINT32_MAX) return XR_LIR_OUT_OF_MEMORY;
     p->uses = lir_plan_allocate((size_t)values, sizeof(*p->uses));
@@ -334,36 +388,67 @@ static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b)
         a.entry_edge == b.entry_edge && a.latch == b.latch && a.exit_edge == b.exit_edge && a.exit_block == b.exit_block &&
         a.entry_value == b.entry_value && a.canonical_value == b.canonical_value && a.exit_value == b.exit_value &&
         a.body_block_count == b.body_block_count && a.set_block == b.set_block && a.set_instruction == b.set_instruction &&
-        a.step_count == b.step_count;
+        a.first_step == b.first_step && a.step_count == b.step_count;
 }
 static bool lir_array_region_step_equal(XrLirArraySetRegionStep a, XrLirArraySetRegionStep b) {
     return a.kind == b.kind && a.block == b.block && a.instruction == b.instruction && a.edge == b.edge &&
         a.source == b.source && a.target == b.target && a.drop == b.drop;
 }
-XR_FUNC XrLirStatus xr_lir_ownership_array_regions_verify(const XrLirModule *module,
-    const XrLirOwnershipPlan *plan, uint32_t function) {
-    if (!plan || !xr_lir_module_is_readable(module) || !function || function > plan->function_count ||
-        module->function_count != plan->function_count) return XR_LIR_INVALID_ARGUMENT;
-    XrLirStatus status = xr_lir_verify(module, NULL);
-    if (status != XR_LIR_OK) return status;
-    LirArrayRegionTables tables = {0};
-    LirArrayRegionProof proof = {.module=module,.function=&module->functions[function - 1],
-        .plan=plan,.function_id=function};
-    status = lir_array_regions_function(&proof, &tables);
-    XrLirOwnershipFunction row = plan->functions[function - 1];
-    bool same = row.region_offset <= plan->array_regions.regions.count &&
-        row.region_count <= plan->array_regions.regions.count - row.region_offset && row.region_count == tables.regions.count;
-    const XrLirArraySetRegion *old = plan->array_regions.regions.data, *fresh = tables.regions.data;
-    const XrLirArraySetRegionStep *old_steps = plan->array_regions.steps.data, *fresh_steps = tables.steps.data;
-    for (uint32_t n = 0; status == XR_LIR_OK && same && n < row.region_count; ++n) {
-        XrLirArraySetRegion a = old[row.region_offset + n], b = fresh[n];
-        same = lir_array_region_equal(a, b) && a.first_step <= plan->array_regions.steps.count &&
-            a.step_count <= plan->array_regions.steps.count - a.first_step;
-        for (uint32_t s = 0; same && s < a.step_count; ++s)
-            same = lir_array_region_step_equal(old_steps[a.first_step + s], fresh_steps[b.first_step + s]);
+static bool lir_array_region_proof_fact(const XrLirOwnershipFact *fact) {
+    return fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION || fact->forwarding_mode != 0 ||
+        (fact->kind == XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER && fact->type == XR_LIR_ARRAY) ||
+        ((fact->kind == XR_LIR_OWNERSHIP_BINDING_NEW || fact->kind == XR_LIR_OWNERSHIP_BINDING_READ) &&
+            fact->type == XR_LIR_ARRAY_CELL);
+}
+static bool lir_array_region_fact_equal(XrLirOwnershipFact a, XrLirOwnershipFact b) {
+    return a.kind == b.kind && a.function == b.function && a.block == b.block && a.instruction == b.instruction &&
+        a.value == b.value && a.argument == b.argument && a.edge == b.edge && a.target_block == b.target_block &&
+        a.target_value == b.target_value && a.type == b.type && a.array_element == b.array_element &&
+        a.array_operation == b.array_operation && a.transfer_mode == b.transfer_mode &&
+        a.hold_transfer_mode == b.hold_transfer_mode && a.forwarding_mode == b.forwarding_mode &&
+        a.forwarding_drop == b.forwarding_drop;
+}
+static bool lir_array_region_inputs_equal(const XrLirOwnershipPlan *a, const XrLirOwnershipPlan *b, uint32_t function) {
+    XrLirOwnershipFunction x = a->functions[function], y = b->functions[function];
+    if (x.fact_offset > a->fact_count || x.fact_count > a->fact_count - x.fact_offset ||
+        y.fact_offset > b->fact_count || y.fact_count > b->fact_count - y.fact_offset ||
+        x.region_offset != y.region_offset || x.region_count != y.region_count) return false;
+    uint32_t i = 0, j = 0;
+    while (true) {
+        while (i < x.fact_count && !lir_array_region_proof_fact(&a->facts[x.fact_offset + i])) ++i;
+        while (j < y.fact_count && !lir_array_region_proof_fact(&b->facts[y.fact_offset + j])) ++j;
+        if (i == x.fact_count || j == y.fact_count) return i == x.fact_count && j == y.fact_count;
+        if (!lir_array_region_fact_equal(a->facts[x.fact_offset + i], b->facts[y.fact_offset + j])) return false;
+        ++i; ++j;
     }
-    lir_array_region_proof_free(&proof); lir_array_regions_free(&tables);
-    return status == XR_LIR_OK && !same ? XR_LIR_VERIFY_ERROR : status;
+}
+static bool lir_array_region_plans_equal(const XrLirOwnershipPlan *a, const XrLirOwnershipPlan *b) {
+    if (a->function_count != b->function_count || a->array_regions.regions.count != b->array_regions.regions.count ||
+        a->array_regions.steps.count != b->array_regions.steps.count) return false;
+    for (uint32_t f = 0; f < a->function_count; ++f)
+        if (!lir_array_region_inputs_equal(a, b, f)) return false;
+    const XrLirArraySetRegion *x = a->array_regions.regions.data, *y = b->array_regions.regions.data;
+    for (uint32_t n = 0; n < a->array_regions.regions.count; ++n)
+        if (!lir_array_region_equal(x[n], y[n])) return false;
+    const XrLirArraySetRegionStep *u = a->array_regions.steps.data, *v = b->array_regions.steps.data;
+    for (uint32_t n = 0; n < a->array_regions.steps.count; ++n)
+        if (!lir_array_region_step_equal(u[n], v[n])) return false;
+    return true;
+}
+XR_FUNC XrLirStatus xr_lir_ownership_array_regions_verify(const XrLirModule *module,
+    const XrLirOwnershipPlan *plan) {
+    if (!plan || !xr_lir_module_is_readable(module) || module->function_count != plan->function_count)
+        return XR_LIR_INVALID_ARGUMENT;
+    /* Only the explicit inspection boundary pays for an independent complete
+     * producer. In particular, an old empty directory cannot suppress proof
+     * through its old eligibility, forwarding or selected-edge inputs. */
+    XrLirOwnershipPlan *fresh = NULL;
+    XrLirStatus status = xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){module,plan->types,plan->type_count},
+        &fresh, NULL);
+    if (status != XR_LIR_OK) return status;
+    bool same = lir_array_region_plans_equal(plan, fresh);
+    xr_lir_ownership_plan_destroy(fresh);
+    return same ? XR_LIR_OK : XR_LIR_VERIFY_ERROR;
 }
 XR_FUNC uint32_t xr_lir_ownership_array_region_count(const XrLirOwnershipPlan *plan) {
     return plan ? plan->array_regions.regions.count : 0;

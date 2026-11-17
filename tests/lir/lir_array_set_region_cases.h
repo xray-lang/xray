@@ -57,17 +57,17 @@ static void ars_current_body(ArraySetRegionFixture c, const XrLirOwnershipPlan *
     XrLirInstructionView *increment = &latch->instructions[latch->instruction_count - 2].view;
     CHECK(increment->op == XR_LIR_ADD); increment->op = XR_LIR_DIV;
     OK(xr_lir_verify(c.module, NULL));
-    CHECK(xr_lir_ownership_array_regions_verify(c.module, plan, c.function.id) == XR_LIR_VERIFY_ERROR);
+    CHECK(xr_lir_ownership_array_regions_verify(c.module, plan) == XR_LIR_VERIFY_ERROR);
     increment->op = XR_LIR_ADD;
-    OK(xr_lir_ownership_array_regions_verify(c.module, plan, c.function.id));
+    OK(xr_lir_ownership_array_regions_verify(c.module, plan));
 }
 static void ars_preparation(uint32_t blocks, enum ArraySetRegionMode mode) {
     ArraySetRegionFixture c = array_set_region_fixture(blocks, mode);
     XrLirOwnershipPlan *plan = NULL; XrLirOwnershipRequest request = {.module=c.module};
     OK(xr_lir_ownership_plan_create(&request, &plan, NULL)); compare_internal(&request, plan);
-    bool expected = mode == ARRAY_SET_REGION_LOCAL || mode == ARRAY_SET_REGION_PADDED;
+    bool expected = mode == ARRAY_SET_REGION_LOCAL || mode == ARRAY_SET_REGION_PADDED || mode == ARRAY_SET_REGION_DIAMONDS;
     CHECK(xr_lir_ownership_array_region_count(plan) == (expected ? 1u : 0u));
-    OK(xr_lir_ownership_array_regions_verify(c.module, plan, c.function.id));
+    OK(xr_lir_ownership_array_regions_verify(c.module, plan));
     XrLirOwnershipFunction row; OK(xr_lir_ownership_function_at(plan, c.function.id, &row));
     CHECK(row.region_count == (expected ? 1u : 0u));
     if (!expected) { xr_lir_module_destroy(c.module); xr_lir_ownership_plan_destroy(plan); return; }
@@ -90,20 +90,42 @@ static void ars_preparation(uint32_t blocks, enum ArraySetRegionMode mode) {
         sentinel.function == 733);
     ars_current_body(c, plan); ars_retirement(c, plan);
 }
+static void ars_current_inventory(void) {
+    ArraySetRegionFixture absent = array_set_region_fixture(3, ARRAY_SET_REGION_NO_SET);
+    ArraySetRegionFixture present = array_set_region_fixture(3, ARRAY_SET_REGION_LOCAL);
+    XrLirOwnershipPlan *old_absent = NULL, *old_present = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=absent.module}, &old_absent, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=present.module}, &old_present, NULL));
+    CHECK(!xr_lir_ownership_array_region_count(old_absent) && xr_lir_ownership_array_region_count(old_present) == 1);
+    CHECK(xr_lir_ownership_array_regions_verify(present.module, old_absent) == XR_LIR_VERIFY_ERROR);
+    CHECK(xr_lir_ownership_array_regions_verify(absent.module, old_present) == XR_LIR_VERIFY_ERROR);
+    OK(xr_lir_ownership_array_regions_verify(absent.module, old_absent));
+    OK(xr_lir_ownership_array_regions_verify(present.module, old_present));
+    xr_lir_ownership_plan_destroy(old_absent); xr_lir_ownership_plan_destroy(old_present);
+    xr_lir_module_destroy(absent.module); xr_lir_module_destroy(present.module);
+}
 static void array_set_region_preparations(void) {
-    const uint32_t blocks[] = {1,3,6};
+    const uint32_t blocks[] = {1,3,6,ARRAY_SET_REGION_BODY_CAPACITY};
     for (size_t n = 0; n < sizeof(blocks) / sizeof(*blocks); ++n) ars_preparation(blocks[n], ARRAY_SET_REGION_LOCAL);
     ars_preparation(4, ARRAY_SET_REGION_PADDED);
     for (unsigned mode = ARRAY_SET_REGION_CALL; mode <= ARRAY_SET_REGION_TRAP; ++mode)
         ars_preparation(3, (enum ArraySetRegionMode)mode);
+    ars_preparation(ARRAY_SET_REGION_BODY_CAPACITY, ARRAY_SET_REGION_EXTRA_ENTRY);
+    ars_preparation(3, ARRAY_SET_REGION_OUTSIDE_NEW_SNAPSHOT);
+    ars_preparation(3, ARRAY_SET_REGION_OUTSIDE_READ_SNAPSHOT);
+    ars_preparation(3, ARRAY_SET_REGION_NO_SET);
+    ars_preparation(3, ARRAY_SET_REGION_REF_ORIGIN);
+    ars_preparation(3, ARRAY_SET_REGION_ARRAY_FORMAL);
+    ars_preparation(3, ARRAY_SET_REGION_DIAMONDS);
+    ars_current_inventory();
     ArraySetRegionFixture first = array_set_region_build(NULL, 3, ARRAY_SET_REGION_LOCAL);
     ArraySetRegionFixture second = array_set_region_build(first.module, 6, ARRAY_SET_REGION_LOCAL);
     OK(xr_lir_module_finish(first.module, NULL));
     XrLirOwnershipPlan *plan = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=first.module}, &plan, NULL));
     CHECK(xr_lir_ownership_array_region_count(plan) == 2);
-    OK(xr_lir_ownership_array_regions_verify(first.module, plan, first.function.id));
-    OK(xr_lir_ownership_array_regions_verify(second.module, plan, second.function.id));
+    OK(xr_lir_ownership_array_regions_verify(first.module, plan));
+    ars_current_body(second, plan);
     XrLirOwnershipFunction row; OK(xr_lir_ownership_function_at(plan, second.function.id, &row));
     XrLirArraySetRegion region; OK(xr_lir_ownership_array_region_at(plan, row.region_offset, &region));
     CHECK(row.region_offset == 1 && row.region_count == 1 && region.first_step > 0);
