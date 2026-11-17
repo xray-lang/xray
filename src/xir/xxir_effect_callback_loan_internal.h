@@ -12,9 +12,11 @@
 struct XrXirViewLiveEvent;
 
 /* The existing whole-module liveness visit observes an admitted immutable
- * body. Only its live entry Slice parameters and actual nonescaping callable
- * formal receivers produce pairs in the same unpublished ROOT owner. This
- * records a condition; neither it nor completion grants an entry or call. */
+ * body. Actual nonescaping formal receivers and live readonly Slice values
+ * produce body seeds in the same unpublished ROOT owner. Its existing ORIGIN
+ * equations project them to entry pairs during the ordinary close, including
+ * derived views whose original formal is no longer live. This records a
+ * condition; neither it nor completion grants an entry or call. */
 XR_FUNC XrXirStatus xir_effects_callback_loan_observe(const XrXirCompileContext *,
     const XrXirModule *,const XrXirEffects *,const struct XrXirViewLiveEvent *);
 XR_FUNC XrXirStatus xir_effects_callback_loan_observed(const XrXirCompileContext *,
@@ -26,4 +28,18 @@ XR_FUNC XrXirStatus xir_effects_callback_loan_observed(const XrXirCompileContext
 XR_FUNC XrXirStatus xir_effects_callback_loan_contract(const XrXirCompileContext *,
     const XrXirModule *,const XrXirEffects *,uint32_t function,uint32_t callback,
     XirModuleEffectTermKind loan_kind,uint32_t loan,bool *);
+
+typedef struct XirCallbackLoanApplication {
+    uint32_t function,instruction,callback,loan;
+} XirCallbackLoanApplication;
+typedef XrXirStatus (*XirCallbackLoanApplicationVisitor)(void *,const XirCallbackLoanApplication *);
+/* Visits this actual call's completed ROOT argument/capture applications.
+ * Both values are real caller-local physical SSA ordinals; a missing or
+ * foreign representative is unresolved, never an invented caller binding.
+ * Each callback expires synchronously and conveys no borrowed permission. */
+XR_FUNC XrXirStatus xir_effects_callback_loan_applications(const XrXirCompileContext *,
+    const XrXirModule *,const XrXirEffects *,uint32_t function,uint32_t instruction,
+    XirCallbackLoanApplicationVisitor,void *);
+XR_FUNC XrXirStatus xir_effects_callback_loan_receiver(const XrXirCompileContext *,
+    const XrXirModule *,const XrXirEffects *,uint32_t function,uint32_t value,uint32_t *formal,bool *);
 #endif

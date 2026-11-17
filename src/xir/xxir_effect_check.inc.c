@@ -27,6 +27,7 @@ typedef struct EffectCheckFunction {
     uint32_t native_callable, capture_count, cleanup_first, cleanup_count;
     /* One-based links in the same ROOT owner; zero means no relation. */
     uint32_t callback_loans;
+    uint32_t callback_loan_revision, callback_loan_seen;
     uint64_t *bits, *suspend_bits;
     uint8_t throws;
     bool default_callback, cleanup;
@@ -35,6 +36,10 @@ typedef struct EffectCheckFunction {
 typedef struct EffectCheckCallbackLoan {
     XirModuleCallbackLoan relation;
     uint32_t function, next;
+    /* A body seed names a live physical Slice SSA in loan_parameter and is
+     * never exported or granted. The existing ROOT ORIGIN equations turn it
+     * into zero or more symbolic entry pairs during the common close. */
+    bool source;
 } EffectCheckCallbackLoan;
 
 typedef enum EffectCheckConversionKind {
@@ -211,7 +216,7 @@ typedef struct EffectCheckedRoots {
     EffectCheckCallbackLoan *callback_loan;
     uint32_t callback_loans, callback_loan_capacity;
     uint32_t *callback_loan_index, callback_loan_index_capacity;
-    bool callback_loans_observed, callback_loans_closed;
+    bool callback_loans_observed, callback_loans_closed, callback_loans_scheduled;
     bool module_access;
     bool liveness_checked, refinement_dirty;
 } EffectCheckedRoots;
@@ -233,6 +238,10 @@ typedef struct EffectCheckBuild {
     uint32_t progress;
     XrXirStatus status;
 } EffectCheckBuild;
+
+static bool effect_callback_loans_evaluate(EffectCheckBuild *,uint32_t);
+static bool effect_callback_loans_schedule(EffectCheckBuild *);
+static void effect_callback_loans_reindex(EffectCheckedRoots *);
 
 /* A successful scan position is never a failure witness. Record only the
  * actual operation that returned a non-success status. Linking reads headers,
@@ -2425,6 +2434,7 @@ static XrXirStatus effect_check_component(EffectCheckBuild *build, const uint32_
         roots->node[node].queued = false;
         bool changed = effect_check_evaluate(roots, node);
         changed |= effect_module_evaluate(build, node);
+        changed |= effect_callback_loans_evaluate(build,node);
         if (build->status != XR_XIR_OK) return build->status;
         if (!changed) continue;
         for (uint32_t e = roots->node[node].consumers; e != UINT32_MAX; e = roots->dependency[e].next_source) {
@@ -2442,6 +2452,7 @@ static XrXirStatus effect_check_component(EffectCheckBuild *build, const uint32_
 
 static XrXirStatus effect_check_close(EffectCheckBuild *build) {
     EffectCheckedRoots *roots = build->roots;
+    if (!effect_callback_loans_schedule(build)) return build->status;
     uint32_t count = roots->nodes;
     uint64_t frames_bytes = (uint64_t)count * sizeof(EffectCheckFrame);
     if (frames_bytes > SIZE_MAX) return XR_XIR_OVERFLOW;
