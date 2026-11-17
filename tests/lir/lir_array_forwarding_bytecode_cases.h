@@ -43,7 +43,8 @@ static uint32_t array_forwarding_encoded_sites(const XrRbcModule *module) {
             if ((a.operation!=XR_RBC_VALUE_BINDING_NEW && a.operation!=XR_RBC_VALUE_BINDING_READ) || !a.index) continue;
             const XrLirHomeEvent *event=&code->homes->events[a.index-1];
             if (!event->forwarding_mode) continue;
-            CHECK(event->forwarding_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE && pc+1<function->code_count && !a.window);
+            CHECK(event->forwarding_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE &&
+                event->view_parameter==UINT32_MAX && pc+1<function->code_count && !a.window);
             word=function->code[pc+1]; CHECK((word&65535u)==XR_RBC_VALUE_ACCESS);
             XrRbcValueAccess drop=code->accesses[word>>16];
             CHECK(drop.operation==(a.operation==XR_RBC_VALUE_BINDING_NEW ? XR_RBC_VALUE_DROP : XR_RBC_VALUE_BINDING_DROP) &&
@@ -94,6 +95,14 @@ static void array_forwarding_bytecode_corruptions(void) {
         event->target=event->source; array_forwarding_reject(program); *event=original;
         event->kind=XR_LIR_OWNERSHIP_BINDING_WRITE; array_forwarding_reject(program); *event=original;
         event->view_cleanup=XR_LIR_SLICE_CLEANUP_UNCONSTRUCTED; array_forwarding_reject(program); *event=original;
+        event->view_parameter=0; array_forwarding_reject(program); *event=original;
+        XrLirHomeEvent *release=NULL;
+        for (size_t n=access->index;n<code->homes->event_count;++n)
+            if (events[n].block==event->block && events[n].instruction==event->forwarding_drop &&
+                events[n].source==access->source && events[n].kind==(uint32_t)(access->operation==XR_RBC_VALUE_BINDING_NEW ?
+                    XR_LIR_OWNERSHIP_RELEASE : XR_LIR_OWNERSHIP_BINDING_RELEASE)) { release=&events[n]; break; }
+        CHECK(release && release->view_parameter==UINT32_MAX);
+        release->view_parameter=0; array_forwarding_reject(program); release->view_parameter=UINT32_MAX;
         XrRbcValueAccess saved=*access;
         access->index=(uint32_t)code->homes->event_count+1; array_forwarding_reject(program); *access=saved;
         access->window=1; array_forwarding_reject(program); *access=saved;

@@ -106,7 +106,7 @@ static bool rbc_value_array_forwarding_event_plain(const XrLirHomeEvent *event) 
         !event->callable_function && !event->callable_scope && !event->callable_transport && !event->callable_materialize &&
         !event->transfer_mode && !event->view_operation && !event->view_workspace && !event->view_cleanup &&
         !event->hold_transfer_mode && !event->cell_operation && !event->cell_type && !event->cell_payload_type &&
-        !event->cell_transport && !event->cell_scope && !event->view_storage && !event->view_parameter;
+        !event->cell_transport && !event->cell_scope && !event->view_storage && event->view_parameter==UINT32_MAX;
 }
 /* An event index is only a projection. The receiving code owner, exact homes,
  * original operand/result event and adjacent logical release grant this use. */
