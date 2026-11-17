@@ -81,6 +81,7 @@ typedef struct VerifyContext {
     /* The caller retains complete facts for this verification only. */
     const XrXirConstruction *construction;
     XrCompileRequestControl *control; /* Borrowed by this synchronous verification. */
+    XirEffectIndirectBindings indirect_bindings;
 } VerifyContext;
 
 typedef struct Graph {
@@ -1345,8 +1346,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 uint32_t operand=function->operands[op->args[0]+a];
                 XrXirType actual=xr_xir_operand_type(function,operand);
                 if(actual!=operand_type) {
-                    XrXirStatus match=xir_effect_call_binding_candidate(&context->remaining,context->module,
-                        context->location.function,i,a);
+                    XrXirStatus match=XR_XIR_OK;
+                    if(!context->indirect_bindings.module)
+                        match=xir_effect_indirect_bindings_open(&context->remaining,context->module,&context->indirect_bindings);
+                    if(match==XR_XIR_OK)match=xir_effect_indirect_binding_candidate(&context->remaining,
+                        &context->indirect_bindings,context->location.function,i,a);
                     if(match!=XR_XIR_OK) return match;
                     operand_type=actual;
                 }
@@ -1602,7 +1606,7 @@ XR_FUNC XrXirStatus xir_compile_view_prepare_ordinary(const XrXirCompileContext 
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     VerifyContext context={*compile_context,
         {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE},input.module,
-        {compile_context->resources,NULL},{compile_context->resources,NULL,0},NULL,0,false,input.construction,input.control};
+        {compile_context->resources,NULL},{compile_context->resources,NULL,0},NULL,0,false,input.construction,input.control,{0}};
     XrXirStatus status=xir_receive_poll(input.control);
     if(status==XR_XIR_OK)status=structure_verify_ordinary(&context,input.construction);
     xr_compile_resources_free(context.graph_storage);
@@ -1658,7 +1662,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
         return XR_XIR_BAD_STRUCTURE;
     }
     VerifyContext context = {*remaining,
-                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0, false,construction,control};
+                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0, false,construction,control,{0}};
     XrXirStatus status=structure_verify_ordinary(&context,construction);
     xr_compile_resources_free(context.graph_storage);
     context.graph_storage = NULL; context.graph_capacity = 0;

@@ -29,28 +29,74 @@ static XrXirStatus effect_contract_indirect_parameter(const XrXirModule *module,
         xr_xir_type_is_c_callable(module->types,signature->parameters[parameter].type)) return XR_XIR_BAD_TYPE;
     *output=signature->parameters[parameter].type;return XR_XIR_OK;
 }
-static XrXirStatus effect_contract_indirect_candidate(const XrXirCompileContext *context,
-    const XrXirModule *module,uint32_t caller,uint32_t instruction,uint32_t parameter) {
+/* The immutable request checks each metadata directory once, independently of
+ * how many arguments consult it. This view owns nothing and never outlives the
+ * current verification; the public candidate opens a fresh view each time. */
+XR_FUNC XrXirStatus xir_effect_indirect_bindings_open(const XrXirCompileContext *context,
+    const XrXirModule *module,XirEffectIndirectBindings *empty) {
+    if(!xir_compile_context_valid(context) || !module || !module->types || !module->functions ||
+        !module->function_count || !empty || empty->module) return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *p=module->provenance;
+    if(!p) return XR_XIR_BAD_TYPE;
+    const XrXirModule *source=module;XrXirStatus status=XR_XIR_OK;
+    if(xir_effect_kind_is_closed(p->kind)) {
+        status=effect_contract_instance(context,module,p);
+        if(status!=XR_XIR_OK) return status;
+        source=&p->source->module;
+    } else if(p->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
+        (module->stage!=XR_XIR_BUILT && module->stage!=XR_XIR_CHECKED)) return XR_XIR_BAD_TYPE;
+    if(!source->types || !source->functions || !source->function_count || !source->provenance ||
+        source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t f=0;f<source->function_count;++f) {
+        const XrXirFunction *function=source->functions+f;
+        if((function->instruction_count && !function->instructions) ||
+            (function->parameter_count && !function->parameters)) return XR_XIR_BAD_STRUCTURE;
+    }
+    status=effect_contract_template(source,source->provenance);
+    if(status!=XR_XIR_OK) return status;
+    *empty=(XirEffectIndirectBindings){module,source,p};return XR_XIR_OK;
+}
+static const XrXirEffectCallBinding *effect_contract_indirect_row(const XrXirFunctionEffectContract *consumer,
+    uint32_t instruction,uint32_t parameter) {
+    uint32_t first=0,last=consumer->binding_count;
+    while(first<last) {
+        uint32_t middle=first+(last-first)/2;const XrXirEffectCallBinding *row=consumer->bindings+middle;
+        if(row->family<XR_XIR_EFFECT_BINDING_INDIRECT || (row->family==XR_XIR_EFFECT_BINDING_INDIRECT &&
+            (row->instruction<instruction || (row->instruction==instruction && row->parameter<parameter)))) first=middle+1;
+        else last=middle;
+    }
+    if(first==consumer->binding_count) return NULL;
+    const XrXirEffectCallBinding *row=consumer->bindings+first;
+    return row->family==XR_XIR_EFFECT_BINDING_INDIRECT && row->instruction==instruction && row->parameter==parameter?row:NULL;
+}
+static const XrXirRootValueIdentity *effect_contract_indirect_identity(const XrXirFunctionEffectContract *consumer,
+    uint32_t producer) {
+    uint32_t first=0,last=consumer->value_count;
+    while(first<last) {
+        uint32_t middle=first+(last-first)/2;
+        if(consumer->values[middle].instruction<producer) first=middle+1;
+        else last=middle;
+    }
+    return first<consumer->value_count && consumer->values[first].instruction==producer?consumer->values+first:NULL;
+}
+XR_FUNC XrXirStatus xir_effect_indirect_binding_candidate(const XrXirCompileContext *context,
+    const XirEffectIndirectBindings *view,uint32_t caller,uint32_t instruction,uint32_t parameter) {
+    if(!xir_compile_context_valid(context) || !view || !view->module || !view->source || !view->provenance ||
+        !view->source->provenance || view->source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
+        view->module->provenance!=view->provenance) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module=view->module;const XrXirProvenance *p=view->provenance;
     XrXirType formal=XR_XIR_UNIT;
     XrXirStatus status=effect_contract_indirect_parameter(module,caller,instruction,parameter,&formal);
     if(status!=XR_XIR_OK) return status;
     const XrXirFunction *function=module->functions+caller;
     const XrXirInstruction *op=function->instructions+instruction;
-    const XrXirModule *source=module;uint32_t source_function=caller;
+    const XrXirModule *source=view->source;uint32_t source_function=caller;
     const XrXirOrigin *origin=NULL;
     if(xir_effect_kind_is_closed(p->kind)) {
-        status=effect_contract_instance(context,module,p);
-        if(status!=XR_XIR_OK) return status;
-        origin=p->origins+caller;source=&p->source->module;source_function=origin->function;
-    } else if(p->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
-        (module->stage!=XR_XIR_BUILT && module->stage!=XR_XIR_CHECKED)) return XR_XIR_BAD_TYPE;
+        origin=p->origins+caller;source_function=origin->function;
+    }
     const XrXirProvenance *record=source->provenance;
-    if(!record || record->kind!=XR_XIR_EVIDENCE_TEMPLATE || record->source || record->origins || record->count ||
-        record->bindings || record->binding_count || record->contract_count!=source->function_count)
-        return XR_XIR_BAD_STRUCTURE;
-    status=effect_contract_vector(record->contracts,record->contract_count,sizeof(*record->contracts));
-    if(status!=XR_XIR_OK || source_function>=source->function_count) return status!=XR_XIR_OK?status:XR_XIR_BAD_STRUCTURE;
+    if(source_function>=source->function_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *original=source->functions+source_function;
     XrXirType original_formal=XR_XIR_UNIT;
     status=effect_contract_indirect_parameter(source,source_function,instruction,parameter,&original_formal);
@@ -59,16 +105,7 @@ static XrXirStatus effect_contract_indirect_candidate(const XrXirCompileContext 
     if(function->parameter_count!=original->parameter_count || op->op!=before->op ||
         op->immediate!=before->immediate) return XR_XIR_BAD_TYPE;
     const XrXirFunctionEffectContract *consumer=record->contracts+source_function;
-    status=effect_contract_parameters(source,source_function,consumer);
-    if(status==XR_XIR_OK) status=effect_contract_values(source,source_function,consumer);
-    if(status==XR_XIR_OK) status=effect_contract_bindings(original,consumer);
-    if(status!=XR_XIR_OK) return status;
-    const XrXirEffectCallBinding *binding=NULL;
-    for(uint32_t b=0;b<consumer->binding_count;++b) {
-        const XrXirEffectCallBinding *row=consumer->bindings+b;
-        if(row->family==XR_XIR_EFFECT_BINDING_INDIRECT && row->instruction==instruction && row->parameter==parameter)
-            binding=row;
-    }
+    const XrXirEffectCallBinding *binding=effect_contract_indirect_row(consumer,instruction,parameter);
     if(!binding) return XR_XIR_BAD_TYPE;
     uint32_t value=function->operands[op->args[0]+parameter];
     uint32_t original_value=original->operands[before->args[0]+parameter];
@@ -81,9 +118,7 @@ static XrXirStatus effect_contract_indirect_candidate(const XrXirCompileContext 
     if((copy->op!=XR_XIR_COPY && !retained) || original_copy->op!=XR_XIR_COPY ||
         copy->args[0]>=value || original_copy->args[0]!=copy->args[0] ||
         copy->type!=xr_xir_operand_type(function,copy->args[0])) return XR_XIR_BAD_TYPE;
-    const XrXirRootValueIdentity *identity=NULL;
-    for(uint32_t v=0;v<consumer->value_count;++v)
-        if(consumer->values[v].instruction==producer) identity=consumer->values+v;
+    const XrXirRootValueIdentity *identity=effect_contract_indirect_identity(consumer,producer);
     if(!identity || identity->mode!=XR_XIR_EFFECT_VALUE_CALL_BIND) return XR_XIR_BAD_TYPE;
     status=xr_xir_compile_callable_weakening(context,source->types,identity->declared_type,original_formal);
     if(status!=XR_XIR_OK) return status;
@@ -94,4 +129,10 @@ static XrXirStatus effect_contract_indirect_candidate(const XrXirCompileContext 
     if(status==XR_XIR_OK) status=xir_effect_callable_bound_matches(context,&declared);
     XirEffectCallableBound actual={module->types,module->types,NULL,0,formal,copy->type};
     return status==XR_XIR_OK?xir_effect_callable_bound_matches(context,&actual):status;
+}
+static XrXirStatus effect_contract_indirect_candidate(const XrXirCompileContext *context,
+    const XrXirModule *module,uint32_t caller,uint32_t instruction,uint32_t parameter) {
+    XirEffectIndirectBindings view={0};
+    XrXirStatus status=xir_effect_indirect_bindings_open(context,module,&view);
+    return status==XR_XIR_OK?xir_effect_indirect_binding_candidate(context,&view,caller,instruction,parameter):status;
 }
