@@ -26,7 +26,7 @@ static FrameForwardCall forwarding_call(const XrtManagedFrameLocations *view) {
 }
 static bool forwarding_try(FrameForwardCall call) {
     return xrt_managed_frame_try_forward(call.frame,call.payload,call.locations,
-        call.source,call.source_offset,call.destination,call.destination_offset);
+        (XrtManagedFrameForward){call.source,call.source_offset,call.destination,call.destination_offset});
 }
 static void forwarding_rejected(Fixture *fixture, const XrtManagedFrameLocations *real, FrameForwardCall call) {
     InlineHomes *homes=real->payload, before=*homes;
