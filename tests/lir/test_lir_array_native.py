@@ -183,6 +183,12 @@ def main():
         run([args.driver, name, generated], work)
         text = generated.read_text(encoding='ascii')
         assert '({' not in text
+        if name in ('i64', 'u8', 'u64', 'phi-i64', 'phi-u8', 'phi-u64'):
+            reads = re.findall(r'if \(array && array->length <= array->capacity && index >= 0 && '
+                               r'\(uint64_t\)index < array->length\) \{(.*?)\n    \} else \{', text, re.DOTALL)
+            assert reads and all('xrt_' not in body for body in reads), name
+        if name in ('string', 'phi-string'):
+            assert 'xrt_native_array_get(' in text, name
         if name.startswith('map-literal-'):
             assert 'xrt_native_map_literal_create(' in text
             assert 'static const XrtMapLiteral xrl_map_literal_2' in text
