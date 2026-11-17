@@ -48,7 +48,9 @@ typedef enum XrXirEffectBindingFamily {
     XR_XIR_EFFECT_BINDING_DIRECT = 1,
     XR_XIR_EFFECT_BINDING_CAPTURE = 2,
     XR_XIR_EFFECT_BINDING_DEFAULT = 3,
-    XR_XIR_EFFECT_BINDING_REQUIREMENT = 4
+    XR_XIR_EFFECT_BINDING_REQUIREMENT = 4,
+    /* The receiver signature owns this parameter; it names no direct callee. */
+    XR_XIR_EFFECT_BINDING_INDIRECT = 5
 } XrXirEffectBindingFamily;
 
 /* Generic value arguments retain their actual callable identity. The fixed

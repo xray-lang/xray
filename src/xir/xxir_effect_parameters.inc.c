@@ -48,11 +48,16 @@ static XrXirStatus effect_parameters_current(const XrXirCompileContext *work,
             const XrXirEffectCallBinding *binding = &stored->bindings[b];
             if (binding->family != XR_XIR_EFFECT_BINDING_DIRECT &&
                 binding->family != XR_XIR_EFFECT_BINDING_CAPTURE &&
-                binding->family != XR_XIR_EFFECT_BINDING_REQUIREMENT) return XR_XIR_BAD_TYPE;
+                binding->family != XR_XIR_EFFECT_BINDING_REQUIREMENT &&
+                binding->family != XR_XIR_EFFECT_BINDING_INDIRECT) return XR_XIR_BAD_TYPE;
             XrXirStatus status = xir_effect_call_binding_candidate(work,module,f,
                 binding->instruction,binding->parameter);
             if (status != XR_XIR_OK) return status;
             const XrXirInstruction *call = &module->functions[f].instructions[binding->instruction];
+            if(binding->family==XR_XIR_EFFECT_BINDING_INDIRECT) {
+                if(call->op!=XR_XIR_CALL_INDIRECT && call->op!=XR_XIR_INVOKE_INDIRECT) return XR_XIR_BAD_STRUCTURE;
+                continue;
+            }
             if (binding->family==XR_XIR_EFFECT_BINDING_REQUIREMENT) {
                 if (call->op!=XR_XIR_CALL_REQUIREMENT) return XR_XIR_BAD_STRUCTURE;
                 continue;
