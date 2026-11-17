@@ -157,13 +157,18 @@ static void array_forwarding_raw_fields(void) {
 }
 static ArrayForwardFixture array_forwarding_branch_fixture(void) {
     ArrayForwardFixture c={0}; OK(xr_lir_array_module_create(NULL,&c.module));
-    XrLirType flag_type=XR_LIR_I1;
+    XrLirType flag_type=XR_LIR_I1, array_type=XR_LIR_ARRAY;
     OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="branch_drop",.name_length=11,
         .parameters=&flag_type,.parameter_count=1,.result=XR_LIR_I64},&c.function));
     OK(xr_lir_define_function(c.module,c.function));
     XrLirBlock other={0},cleanup={0};
     OK(xr_lir_add_block(c.module,c.function,NULL,0,&c.block)); OK(xr_lir_set_entry(c.module,c.function,c.block));
-    OK(xr_lir_add_block(c.module,c.function,NULL,0,&other)); OK(xr_lir_add_block(c.module,c.function,NULL,0,&cleanup));
+    OK(xr_lir_add_block(c.module,c.function,&array_type,1,&other));
+    OK(xr_lir_add_block(c.module,c.function,&array_type,1,&cleanup));
+    XrLirValue incoming[2]={{0}};
+    OK(xr_lir_block_parameter(c.module,other,0,&incoming[0]));
+    OK(xr_lir_block_parameter(c.module,cleanup,0,&incoming[1]));
+    for (unsigned n=0;n<2;++n) OK(xr_lir_set_array_shape(c.module,incoming[n],&(XrLirArrayShape){XR_LIR_I64}));
     uint32_t make=0; OK(xr_lir_array_operation(c.module,XR_LIR_I64,XR_LIR_ARRAY_OP_NEW,&make));
     c.initial=array_forward_value(c.module,c.block,(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_ARRAY,.intrinsic=make});
     c.cell=array_forward_value(c.module,c.block,(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,
@@ -175,15 +180,18 @@ static ArrayForwardFixture array_forwarding_branch_fixture(void) {
         .operands=&next,.operand_count=1}), flag={0};
     OK(xr_lir_function_parameter(c.module,c.function,0,&flag));
     OK(xr_lir_set_terminator(c.module,c.block,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
-        .operands=&flag,.operand_count=1,.edge_count=2,.edges={{cleanup,NULL,0},{other,NULL,0}}}));
+        .operands=&flag,.operand_count=1,.edge_count=2,.edges={{cleanup,&next,1},{other,&next,1}}}));
     XrLirBlock exits[]={other,cleanup};
     for (unsigned n=0;n<2;++n) {
-        array_forward_effect(c.module,exits[n],(XrLirInstruction){.op=XR_LIR_ARRAY_DROP,.type=XR_LIR_UNIT,.operands=&next,.operand_count=1});
+        array_forward_effect(c.module,exits[n],(XrLirInstruction){.op=XR_LIR_ARRAY_DROP,.type=XR_LIR_UNIT,.operands=&incoming[n],.operand_count=1});
         array_forward_effect(c.module,exits[n],(XrLirInstruction){.op=XR_LIR_ARRAY_CELL_DROP,.type=XR_LIR_UNIT,.operands=&cell,.operand_count=1});
         XrLirValue answer=array_forward_value(c.module,exits[n],(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=n ? 42u : 17u});
         array_forward_return(c.module,exits[n],answer);
     }
-    OK(xr_lir_module_finish(c.module,NULL)); return c;
+    XrLirDiagnostic diagnostic={0}; XrLirStatus status=xr_lir_module_finish(c.module,&diagnostic);
+    if (status!=XR_LIR_OK) fprintf(stderr,"Array branch finish status=%u f%u b%u i%u: %s\n",
+        (unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.message);
+    CHECK(status==XR_LIR_OK); return c;
 }
 static void array_forwarding_branch_drop(void) {
     for (uint64_t flag=0;flag<2;++flag) {
