@@ -48,6 +48,7 @@
 #include "lir_slice_cleanup_fixture.h"
 #include "lir_slice_callback_loan_fixture.h"
 #include "lir_string_fixture.h"
+#include "lir_array_forwarding_bytecode_cases.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -933,6 +934,7 @@ int main(int argc, char **argv) {
     fixed_bytecode_state();
     fixed_bytecode_calls();
     array_catalog();
+    array_forwarding_bytecode_cases();
     array_reference_owners();
     array_unsigned_frontier();
     array_unsigned_spans();

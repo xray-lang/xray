@@ -968,6 +968,9 @@ static void aggregate_call_compiler_failures(bool aggregate) {
 #include "lir_display_alloc_cases.h"
 #include "lir_string_alloc_cases.h"
 #include "lir_map_alloc_cases.h"
+#define XR_ARRAY_FORWARDING_ALLOC_CASES
+#include "../lir/lir_array_forwarding_bytecode_cases.h"
+#undef XR_ARRAY_FORWARDING_ALLOC_CASES
 
 static void record_compiler_failures(void) {
     XrLirFunction root = {0};
@@ -1053,6 +1056,7 @@ int main(void) {
     aggregate_type_projection_failures();
     array_reference_compiler_failures();
     compiled_array_edge_owners();
+    array_forwarding_allocation_cases();
     array_compiler_failures("string",511);
     array_compiler_failures("large",1500);
     array_compiler_failures("array-spills-string",1500);
