@@ -867,6 +867,7 @@ static void map_retirement_and_lifetimes(void) {
 }
 #include "backing_place_cases.h"
 #include "backing_map_literal_cases.h"
+#include "backing_array_local_cases.h"
 int main(void) {
     setup_failures();
     string_values();
@@ -877,6 +878,7 @@ int main(void) {
     nonlocal_retirement();
     independent_lifetimes();
     scalar_updates();
+    array_local_updates();
     string_updates();
     sole_child_updates();
     repeat_and_get();
