@@ -45,13 +45,16 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
     XrLirValue fn=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_FUNCTION_REF,.type=callback,.callee=change,
         .operands=&state,.operand_count=1,.bits=XR_LIR_CLOSURE_FRAME});
     bool indirect=shape==SLICE_CALLBACK_LOAN_INDIRECT || shape==SLICE_CALLBACK_LOAN_INDIRECT_ALIAS;
-    XrLirValue dispatch={0};
+    XrLirValue dispatch={0};XrLirFunction forwarding={0};XrLirBlock forwarding_body={0};
     if (indirect) {
-        XrLirCallableParameter parameters[]={{.type=callback,.mode=XR_PARAM_READ},{.type=slice,.mode=XR_PARAM_READ}};
-        XrLirType type=0;OK(xr_lir_callable_type(m,&(XrLirCallableType){.parameters=parameters,.parameter_count=2,.result=XR_LIR_I64},&type));
-        OK(xr_lir_set_closure_target(m,c.relay,(XrLirClosureTarget){type,0,false}));
+        /* The indirect carrier transports a real callback, never a Slice.
+         * Slice arguments still use the established direct-call boundary. */
+        forwarding_body=slice_callable_function(m,"loan_forward",&callback,1,&forwarding);
+        XrLirCallableParameter parameter={.type=callback,.mode=XR_PARAM_READ};
+        XrLirType type=0;OK(xr_lir_callable_type(m,&(XrLirCallableType){.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64},&type));
+        OK(xr_lir_set_closure_target(m,forwarding,(XrLirClosureTarget){type,0,false}));
         dispatch=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_FUNCTION_REF,.type=type,
-            .callee=c.relay,.bits=XR_LIR_CLOSURE_FRAME});
+            .callee=forwarding,.bits=XR_LIR_CLOSURE_FRAME});
     }
     XrLirValue zero=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64});
     XrLirValue one=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=1});
@@ -60,9 +63,18 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
     OK(xr_lir_slice_operation(m,XR_LIR_SLICE_OP_NEW,element,XR_LIR_STATE_REF,&read_role));
     XrLirValue view=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=slice,
         .intrinsic=read_role,.operands=range,.operand_count=3});
-    XrLirValue arguments[]={indirect?dispatch:fn,indirect?fn:view,view};
-    XrLirValue result=slice_callable_value(root,(XrLirInstruction){.op=indirect?XR_LIR_CALL_INDIRECT:XR_LIR_CALL,
-        .type=XR_LIR_I64,.callee=indirect?(XrLirFunction){0}:c.relay,.operands=arguments,.operand_count=indirect?3u:2u});
+    XrLirValue indirect_result={0};
+    if (indirect) {
+        XrLirValue args[]={dispatch,fn};indirect_result=slice_callable_value(root,(XrLirInstruction){
+            .op=XR_LIR_CALL_INDIRECT,.type=XR_LIR_I64,.operands=args,.operand_count=2});
+    }
+    XrLirValue arguments[]={fn,view};
+    XrLirValue result=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_CALL,
+        .type=XR_LIR_I64,.callee=c.relay,.operands=arguments,.operand_count=2});
+    if (indirect) {
+        XrLirValue sum[]={indirect_result,result};result=slice_callable_value(root,(XrLirInstruction){
+            .op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=sum,.operand_count=2});
+    }
     slice_callable_effect(root,(XrLirInstruction){.op=XR_LIR_SLICE_CLEANUP,.type=XR_LIR_UNIT,.bits=view.id});
     slice_callable_return(root,result);
     XrLirValue writer_state={0};OK(xr_lir_function_parameter(m,change,0,&writer_state));
@@ -121,8 +133,13 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
     XrLirValue forwarded[]={part,cb};result=slice_callable_value(relay,(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_I64,
         .callee=c.invoke,.operands=forwarded,.operand_count=2});
     slice_callable_effect(relay,(XrLirInstruction){.op=XR_LIR_SLICE_FORMAL_CLEANUP,.type=XR_LIR_UNIT,.bits=part.id});slice_callable_return(relay,result);
-    XrLirSliceFunctionFact rows[5]={{0}};
-    for (uint32_t f=1;f<=4;++f) rows[f]=(XrLirSliceFunctionFact){.function=f,.parameter_count=m->functions[f-1].parameter_count,
+    if (indirect) {
+        XrLirValue actual={0};OK(xr_lir_function_parameter(m,forwarding,0,&actual));
+        XrLirValue called=slice_callable_value(forwarding_body,(XrLirInstruction){.op=XR_LIR_CALL_INDIRECT,
+            .type=XR_LIR_I64,.operands=&actual,.operand_count=1});slice_callable_return(forwarding_body,called);
+    }
+    XrLirSliceFunctionFact rows[6]={{0}};
+    for (uint32_t f=1;f<=m->function_count;++f) rows[f]=(XrLirSliceFunctionFact){.function=f,.parameter_count=m->functions[f-1].parameter_count,
         .available=true,.result_parameter=UINT32_MAX};
     XrLirSliceEffect terms[]={{XR_LIR_SLICE_EFFECT_SLOT,0},{XR_LIR_SLICE_EFFECT_SLOT,1},
         {XR_LIR_SLICE_EFFECT_PARAMETER,0},{XR_LIR_SLICE_EFFECT_CALLBACK,1},
@@ -131,10 +148,11 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
     rows[change.id].access=rows[change.id].write=(XrLirSliceEffectSpan){0,1};
     rows[c.invoke.id].access=(XrLirSliceEffectSpan){2,1};rows[c.invoke.id].write=(XrLirSliceEffectSpan){3,1};
     rows[c.relay.id].access=(XrLirSliceEffectSpan){4,1};rows[c.relay.id].write=(XrLirSliceEffectSpan){5,1};
+    if (indirect) rows[forwarding.id].access=rows[forwarding.id].write=(XrLirSliceEffectSpan){5,1};
     XrLirSliceCallbackLoan pairs[]={{1,XR_LIR_SLICE_EFFECT_PARAMETER,0},{0,XR_LIR_SLICE_EFFECT_PARAMETER,1}};
     rows[c.invoke.id].callback_loans=(XrLirSliceEffectSpan){0,shape==SLICE_CALLBACK_LOAN_MISSING_INVOKE?0u:1u};
     rows[c.relay.id].callback_loans=(XrLirSliceEffectSpan){1,shape==SLICE_CALLBACK_LOAN_MISSING_RELAY?0u:1u};
-    XrLirSliceFactsView facts={.functions=rows,.terms=terms,.term_count=6,.function_count=4,
+    XrLirSliceFactsView facts={.functions=rows,.terms=terms,.term_count=6,.function_count=m->function_count,
         .callback_loans=pairs,.callback_loan_count=2,.callback_loans_complete=true};
     if (shape==SLICE_CALLBACK_LOAN_INCOMPLETE) {
         facts.callback_loans_complete=false;
