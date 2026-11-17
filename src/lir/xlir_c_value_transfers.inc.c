@@ -94,6 +94,57 @@ static const XrLirHomeWorkspace *c_value_borrow_stage(LirC *c, const XrLirValueH
     }
     return stage;
 }
+/* This is a physical specialization of the final owned MOVE event. Neither
+ * slot geometry nor the location view grants a new ownership permission. */
+static bool c_value_header_edge(LirC *c, const XrLirValueHomes *homes, const XrLirHomeEdge *edge) {
+    if (!c->value_types || !homes || !homes->values || !homes->transfers ||
+        !homes->owned_frame_needed || !homes->frame.owned_offsets || edge->count != 1 ||
+        edge->first >= homes->transfer_count) return false;
+    XrLirHomeTransfer transfer = homes->transfers[edge->first];
+    if (!transfer.source || !transfer.target || transfer.source > homes->value_count || transfer.target > homes->value_count ||
+        transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE || transfer.hold_transfer_mode ||
+        transfer.source_workspace || transfer.target_workspace || transfer.source_storage ||
+        transfer.borrowed_owner_workspace != SIZE_MAX) return false;
+    const XrLirValueHome *from = &homes->values[transfer.source], *to = &homes->values[transfer.target];
+    if (!from->type || from->type != to->type || from->type > c->value_types->count ||
+        from->parameter || to->parameter || from->transport || to->transport || from->cell_transport || to->cell_transport ||
+        from->view_workspace || to->view_workspace || from->view_storage || to->view_storage ||
+        from->owner_count != 1 || to->owner_count != 1 || from->byte_count || to->byte_count ||
+        from->size != sizeof(XrtManagedHeader *) || to->size != sizeof(XrtManagedHeader *)) return false;
+    const XrtValuePlanSpec *spec = &c->value_types->rows[from->type - 1].spec;
+    if (spec->kind < XRT_VALUE_STRING || spec->kind > XRT_VALUE_MAP_STRING_I64 ||
+        spec->owned_count != 1 || !spec->owned_offsets || spec->owned_offsets[0]) return false;
+    size_t slots[] = {from->first_owner, to->first_owner, to->temporary_first_owner};
+    size_t offsets[] = {from->offset, to->offset, to->temporary_offset};
+    for (size_t n = 0; n < 3; ++n) {
+        if (slots[n] >= homes->frame.slot_count || offsets[n] > homes->frame.payload_size ||
+            sizeof(XrtManagedHeader *) > homes->frame.payload_size - offsets[n] ||
+            offsets[n] % _Alignof(XrtManagedHeader *) || homes->frame.owned_offsets[slots[n]] != offsets[n]) return false;
+        for (size_t p = 0; p < n; ++p) if (slots[n] == slots[p] || offsets[n] == offsets[p]) return false;
+    }
+    return true;
+}
+static void c_value_header_move(LirC *c, const XrLirValueHomes *homes, const XrLirHomeEdge *edge) {
+    /* locations is the private activation's actual constructor result, never
+     * an external input or a self-authenticating descriptor. */
+    XrLirHomeTransfer transfer = homes->transfers[edge->first];
+    const XrLirValueHome *from = &homes->values[transfer.source], *to = &homes->values[transfer.target];
+    size_t slots[] = {from->first_owner, to->first_owner, to->temporary_first_owner};
+    size_t offsets[] = {from->offset, to->offset, to->temporary_offset};
+    c_text(c, "    if (!scalars && locations && locations->frame == frame && locations->payload == payload &&\n");
+    c_format(c, "        locations->slots && locations->busy && locations->slot_count == %zu && !*locations->busy", homes->frame.slot_count);
+    for (size_t n = 0; n < 3; ++n)
+        c_format(c, " &&\n        locations->slots[%zu].owner_offset == %zu && !locations->slots[%zu].pending.value &&\n"
+            "        !locations->slots[%zu].pending.allocation_bytes", slots[n], offsets[n], slots[n], slots[n]);
+    c_format(c, " &&\n        !*(XrtManagedHeader **)((unsigned char *)payload + %zu) &&\n"
+        "        !*(XrtManagedHeader **)((unsigned char *)payload + %zu)) {\n", offsets[1], offsets[2]);
+    /* Actual pending/busy state is read on every entry. The following window
+     * performs no call, retain, drop, allocation, callback or failure exit. */
+    c_format(c, "        XrtManagedHeader *incoming = *(XrtManagedHeader **)((unsigned char *)payload + %zu);\n", offsets[0]);
+    c_format(c, "        *(XrtManagedHeader **)((unsigned char *)payload + %zu) = NULL;\n", offsets[0]);
+    c_format(c, "        *(XrtManagedHeader **)((unsigned char *)payload + %zu) = incoming;\n", offsets[1]);
+    c_text(c, "        return XRT_MANAGED_OK;\n    }\n");
+}
 static size_t c_value_edge_owners(LirC *c, const XrLirValueHomes *homes,
     const LirCEdgeEvents *events, const XrLirHomeEdge *edge) {
     size_t count = 0;
@@ -145,6 +196,7 @@ static void c_value_edge_parameters(LirC *c, const XrLirValueHomes *homes,
     const XrLirHomeEdge *edge, bool managed) {
     bool first = !managed;
     if (managed) c_text(c, "XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars");
+    if (managed && c_value_header_edge(c, homes, edge)) c_text(c, ", const XrtManagedFrameLocations *locations");
     for (size_t i = 0; i < edge->count && c_request_poll(c); ++i) {
         XrLirHomeTransfer transfer = homes->transfers[edge->first + i];
         const XrLirValueHome *target = &homes->values[transfer.target];
@@ -220,6 +272,7 @@ static void c_value_edge(LirC *c, const XrLirValueHomes *homes,
         return;
     }
     c_text(c, "    if (!frame || !payload || (scalars && !scalars->publish)) return XRT_MANAGED_ARGUMENT;\n");
+    if (c_value_header_edge(c, homes, edge)) c_value_header_move(c, homes, edge);
     size_t borrowed = 0;
     for (size_t i = 0; i < edge->count; ++i) borrowed += homes->transfers[edge->first + i].borrowed_owner_workspace != SIZE_MAX;
     if (borrowed) {

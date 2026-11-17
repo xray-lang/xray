@@ -58,7 +58,7 @@ typedef struct LirC {
     XrLirSource source;
     uint32_t location_count, location_cursor;
     bool runtime, runtime_header, f64, state, arrays, views, displays, maps;
-    bool string_values, inline_values, callables, cells;
+    bool string_values, inline_values, callables, cells, header_edges;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;

@@ -33,7 +33,13 @@ typedef struct Audit {
     XrtManagedHeader **input_owner;
     size_t watch_id;
     bool published;
+    const XrtManagedFrameLocations *locations_watch;
+    XrtManagedRoot *locations_root;
+    size_t locations_callbacks;
+    bool locations_allocate, locations_drop;
 } Audit;
+
+static void locations_busy_callback(Audit *);
 typedef struct Provider { _Atomic(int32_t) references; Audit *audit; } Provider;
 typedef struct Payload {
     XrtManagedHeader header;
@@ -63,6 +69,7 @@ static void provider_drop(void *context) {
 }
 static void *provider_allocate(void *context, size_t bytes) {
     Audit *audit = ((Provider *)context)->audit;
+    if (audit->locations_watch && audit->locations_allocate) locations_busy_callback(audit);
     void *memory = xr_malloc(bytes);
     if (memory) { audit->bytes += bytes; ++audit->blocks; }
     return memory;
@@ -77,6 +84,7 @@ static void provider_free(void *context, void *memory, size_t bytes) {
 static void payload_drop(XrtManagedHeader *value, void *context) {
     Payload *payload = (Payload *)value;
     Audit *audit = ((Provider *)context)->audit;
+    if (audit->locations_watch && audit->locations_drop) locations_busy_callback(audit);
     CHECK(!payload->child && audit->count < 64);
     audit->events[audit->count++] = payload->id;
     if (audit->watch && payload->id == audit->watch_id) {
@@ -802,6 +810,7 @@ static void fixed_execution_boundary(void) {
     xrt_locations_release(locations); fixture_finish(&fixture);
     puts("fixed execution: normal, nested and failing roots drain actual stable owners PASS");
 }
+#include "managed_frame_locations_cases.h"
 int main(void) {
     aliases_and_return();
     independent_taken_owner();
@@ -813,6 +822,7 @@ int main(void) {
     scalar_and_closed();
     inline_payload_homes();
     combined_frame_boundary();
+    canonical_frame_locations();
     inline_payload_rejection();
     inline_payload_jump();
     fixed_execution_boundary();

@@ -20,6 +20,23 @@ extern "C" {
 typedef struct XrtManagedRoot XrtManagedRoot;
 typedef struct XrtManagedFrame XrtManagedFrame;
 
+/* This is the Frame's actual slot metadata, not a shadow owner directory.
+ * owner_offset == SIZE_MAX uses committed; other offsets select the actual
+ * Header field inside the same Frame payload. pending remains live state. */
+typedef struct XrtManagedSlot {
+    XrtManagedHeader *committed;
+    XrtManagedPending pending;
+    size_t owner_offset;
+} XrtManagedSlot;
+
+typedef struct XrtManagedFrameLocations {
+    XrtManagedFrame *frame;
+    void *payload;
+    const XrtManagedSlot *slots;
+    const bool *busy;
+    size_t slot_count;
+} XrtManagedFrameLocations;
+
 /* These handles come only from their constructors. A Root is exclusively
  * owned outside the function containing setjmp. Frames and borrowed values are
  * valid only within their real active lifetimes; a retired handle is not an
@@ -50,6 +67,17 @@ XRAY_API XrtManagedStatus xrt_managed_frame_enter_layout(XrtManagedRoot *,
  * this cold boundary grants no additional access or borrowing authority. */
 XRAY_API XrtManagedStatus xrt_managed_frame_enter_payload(XrtManagedRoot *,
     const XrtManagedFrameSpec *, XrtManagedFrame **empty_frame, void **empty_payload);
+/* Establish one empty borrowed address view with the same real Frame factory.
+ * Failure preserves every output field and success performs no extra allocation.
+ * These addresses expire when the Frame leaves or its Root drains; active child
+ * Frames do not move them. The view owns nothing and grants no access authority.
+ * Only trusted generated code on the single executor may first read the actual
+ * busy flag and, when idle, probe pending/owner fields in a contiguous window
+ * with no call, retain, drop, allocation or other observation. Do not cache live
+ * busy or pending values. All other Place use retains its original locking
+ * protocol. A zero-slot Frame has slots == NULL; zero payload has payload == NULL. */
+XRAY_API XrtManagedStatus xrt_managed_frame_enter_locations(XrtManagedRoot *,
+    const XrtManagedFrameSpec *, XrtManagedFrameLocations *empty);
 /* The borrowed slab lives exactly as long as the active frame. Scalar bytes may
  * be accessed by the admitted typed code. Its owner fields are the actual slot
  * storage, not a second set of references: copies, transfers and publication
