@@ -37,11 +37,24 @@ static void facts_free(void *memory) {
     CHECK(live && live_bytes >= allocation->bytes);
     --live; live_bytes -= allocation->bytes; xr_free(allocation);
 }
+static void *facts_reallocate(void *memory,size_t bytes) {
+    if(!bytes) {facts_free(memory);return NULL;}
+    if(!memory)return facts_allocate(bytes);
+    if(attempt++==fail_at || bytes>SIZE_MAX-sizeof(FactsAllocation))return NULL;
+    FactsAllocation *old=(FactsAllocation *)memory-1;size_t previous=old->bytes;
+    CHECK(live && live_bytes>=previous && bytes<=SIZE_MAX-(live_bytes-previous));
+    FactsAllocation *allocation=xr_realloc(old,sizeof(*allocation)+bytes);
+    if(!allocation)return NULL;
+    allocation->bytes=bytes;live_bytes=live_bytes-previous+bytes;
+    return allocation+1;
+}
 #undef xr_malloc
 #undef xr_calloc
+#undef xr_realloc
 #undef xr_free
 #define xr_malloc(bytes) facts_allocate(bytes)
 #define xr_calloc(count, size) facts_callocate(count, size)
+#define xr_realloc(memory,bytes) facts_reallocate(memory,bytes)
 #define xr_free(memory) facts_free(memory)
 /* The constructor, copy and retirement resolve to this same instrumented TU. */
 #include "lir/xlir_verify.c"
