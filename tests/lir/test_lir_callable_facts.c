@@ -45,6 +45,7 @@ static void facts_free(void *memory) {
 #define xr_free(memory) facts_free(memory)
 /* The constructor, copy and retirement resolve to this same instrumented TU. */
 #include "lir/xlir_verify.c"
+#include "lir/xlir_rebuild.c"
 
 typedef struct FactsFixture {
     XrLirModule *module;
@@ -429,6 +430,50 @@ static void facts_construction_reentry(void) {
 }
 
 #include "lir_slice_boundary_fixture.h"
+#include "lir_slice_callback_loan_fixture.h"
+static void facts_callback_pairs(XrLirSliceFactsView view) {
+    CHECK(view.callback_loans_complete && view.callback_loan_count==2 && view.callback_loans &&
+        view.callback_loans[0].callback_parameter==1 && view.callback_loans[0].loan_kind==XR_LIR_SLICE_EFFECT_PARAMETER &&
+        view.callback_loans[0].loan_parameter==0 && view.callback_loans[1].callback_parameter==0 &&
+        view.callback_loans[1].loan_kind==XR_LIR_SLICE_EFFECT_PARAMETER && view.callback_loans[1].loan_parameter==1);
+}
+static void facts_callback_receiving_failures(void) {
+    const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
+    for(size_t family=0;family<2;++family) {
+        SliceCallbackLoanFixture fixture=slice_callback_loan_fixture(elements[family],SLICE_CALLBACK_LOAN_DIRECT);
+        OK(xr_lir_module_finish(fixture.module,NULL));
+        XrLirSliceFactsView source;OK(xr_lir_slice_facts_view(fixture.module->slice_facts,&source));facts_callback_pairs(source);
+        size_t baseline=live,bytes=live_bytes;XrLirSliceFacts *copy=NULL;
+        attempt=0;OK(xr_lir_slice_facts_create(fixture.module,&copy));size_t copy_sites=attempt;
+        XrLirSliceFactsView received;OK(xr_lir_slice_facts_view(copy,&received));facts_callback_pairs(received);
+        CHECK(copy_sites>=4 && received.callback_loans!=source.callback_loans);
+        xr_lir_slice_facts_destroy(copy);copy=NULL;CHECK(live==baseline && live_bytes==bytes);
+        for(size_t point=0;point<copy_sites;++point) {
+            attempt=0;fail_at=point;
+            CHECK(xr_lir_slice_facts_create(fixture.module,&copy)==XR_LIR_OUT_OF_MEMORY && !copy);
+            fail_at=SIZE_MAX;CHECK(live==baseline && live_bytes==bytes);
+        }
+        XrLirModule *rebuilt=NULL;attempt=0;OK(xr_lir_rebuild(fixture.module,&rebuilt));size_t rebuild_sites=attempt;
+        OK(xr_lir_slice_facts_view(rebuilt->slice_facts,&received));facts_callback_pairs(received);
+        CHECK(rebuild_sites>copy_sites && received.callback_loans!=source.callback_loans);
+        xr_lir_module_destroy(rebuilt);rebuilt=NULL;CHECK(live==baseline && live_bytes==bytes);
+        for(size_t point=0;point<rebuild_sites;++point) {
+            attempt=0;fail_at=point;XrLirStatus status=xr_lir_rebuild(fixture.module,&rebuilt);
+            fail_at=SIZE_MAX;
+            if(status!=XR_LIR_OUT_OF_MEMORY || rebuilt || live!=baseline || live_bytes!=bytes)
+                fprintf(stderr,"callback relation rebuild family%zu allocation%zu/%zu status%u live%zu/%zu bytes%zu/%zu\n",
+                    family,point,rebuild_sites,(unsigned)status,live,baseline,live_bytes,bytes);
+            CHECK(status==XR_LIR_OUT_OF_MEMORY && !rebuilt && live==baseline && live_bytes==bytes);
+        }
+        OK(xr_lir_rebuild(fixture.module,&rebuilt));OK(xr_lir_slice_facts_create(fixture.module,&copy));
+        xr_lir_module_destroy(fixture.module);fixture.module=NULL;
+        OK(xr_lir_slice_facts_view(copy,&received));facts_callback_pairs(received);
+        OK(xr_lir_verify(rebuilt,NULL));OK(xr_lir_slice_facts_view(rebuilt->slice_facts,&received));facts_callback_pairs(received);
+        xr_lir_slice_facts_destroy(copy);xr_lir_module_destroy(rebuilt);CHECK(!live && !live_bytes);
+        printf("callback relation family%zu: copy %zu and rebuild %zu allocation failures preserve owners\n",
+            family,copy_sites,rebuild_sites);
+    }
+}
 static void facts_slice_receiving(void) {
     for (unsigned family = 0; family < 2; ++family) {
         SliceBoundaryFixture fixture = slice_boundary_fixture(family ? XR_LIR_U8 : XR_LIR_I64,false);
@@ -475,6 +520,7 @@ static void facts_slice_finish_failures(void) {
     }
 }
 int main(void) {
+    facts_callback_receiving_failures();
     facts_slice_receiving(); facts_slice_finish_failures();
     facts_scalar_empty(); facts_construction_reentry(); facts_seed_origins();
     facts_copy_failures(); facts_finish_failures(); facts_rejected_pending();

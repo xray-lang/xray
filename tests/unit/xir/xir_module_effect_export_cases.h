@@ -238,6 +238,37 @@ static void module_callback_producer_failures(const XrXirArtifact *source) {
         if(point!=SIZE_MAX && point+1==sites)break;
     }
     printf("callback loan producer: %zu real allocation failures refund unpublished relations\n",sites);
+    /* Close the same real seeds through the production ROOT equations. This
+     * separately covers scheduling and derived/forwarded pairs, rather than
+     * claiming that the liveness observation sweep ran the closure stage. */
+    for(size_t point=SIZE_MAX;;point=point==SIZE_MAX?0:point+1) {
+        XrXirEffects *pending=NULL;
+        CHECK(xir_effects_prepare_verified_input(&source->context,input,NULL,&pending,NULL)==XR_XIR_OK && pending);
+        CallbackLoanObserver observer={&source->module,pending};
+        XirViewLiveRequest request={.visitor=module_callback_loan_observe,.user=&observer};
+        CHECK(xir_compile_view_liveness_loans_verified(&source->context,&source->module,
+            source->checked_effects,&request)==XR_XIR_OK);
+        CHECK(xir_effects_callback_loan_observed(&source->context,&source->module,pending)==XR_XIR_OK);
+        EffectCheckBuild build={.memory=&source->context,.module=&source->module,.roots=pending->checked_roots};
+        attempts=0;injected=false;fail_at=point;XrXirStatus status=effect_check_close(&build);fail_at=SIZE_MAX;
+        if(point==SIZE_MAX) {
+            CHECK(status==XR_XIR_OK && pending->checked_roots->callback_loans_scheduled);
+            size_t completed=0;
+            for(uint32_t p=0;p<pending->checked_roots->callback_loans;++p)
+                completed+=!pending->checked_roots->callback_loan[p].source;
+            CHECK(completed>=2);sites=attempts;CHECK(sites);
+        } else {
+            if(status!=XR_XIR_OUT_OF_MEMORY || !injected)
+                fprintf(stderr,"callback loan closure allocation%zu/%zu status%u injected%d\n",
+                    point,sites,(unsigned)status,injected);
+            CHECK(status==XR_XIR_OUT_OF_MEMORY && injected);
+        }
+        CHECK(!pending->checked_roots->callback_loans_closed);
+        xr_xir_compile_effects_free(pending);effect_mark_check(baseline);
+        CHECK(effect_stats(&source->context).held_bytes==memory.held_bytes);
+        if(point!=SIZE_MAX && point+1==sites)break;
+    }
+    printf("callback loan closure: %zu real allocation failures refund unpublished derived pairs\n",sites);
 }
 static void module_export_callback_loans(void) {
     EffectMark baseline=effect_mark();
