@@ -16,13 +16,13 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
 
-static size_t attempt, fail_at = SIZE_MAX, live, live_bytes;
+static size_t attempt, fail_at = SIZE_MAX, facts_live, live_bytes;
 typedef union FactsAllocation { long double alignment; void *pointer; size_t bytes; } FactsAllocation;
 static void *facts_allocate(size_t bytes) {
     if (attempt++ == fail_at || bytes > SIZE_MAX - sizeof(FactsAllocation)) return NULL;
     FactsAllocation *allocation = xr_malloc(sizeof(*allocation) + bytes);
     if (!allocation) return NULL;
-    allocation->bytes = bytes; ++live; live_bytes += bytes;
+    allocation->bytes = bytes; ++facts_live; live_bytes += bytes;
     return allocation + 1;
 }
 static void *facts_callocate(size_t count, size_t size) {
@@ -34,15 +34,15 @@ static void *facts_callocate(size_t count, size_t size) {
 static void facts_free(void *memory) {
     if (!memory) return;
     FactsAllocation *allocation = (FactsAllocation *)memory - 1;
-    CHECK(live && live_bytes >= allocation->bytes);
-    --live; live_bytes -= allocation->bytes; xr_free(allocation);
+    CHECK(facts_live && live_bytes >= allocation->bytes);
+    --facts_live; live_bytes -= allocation->bytes; xr_free(allocation);
 }
 static void *facts_reallocate(void *memory,size_t bytes) {
     if(!bytes) {facts_free(memory);return NULL;}
     if(!memory)return facts_allocate(bytes);
     if(attempt++==fail_at || bytes>SIZE_MAX-sizeof(FactsAllocation))return NULL;
     FactsAllocation *old=(FactsAllocation *)memory-1;size_t previous=old->bytes;
-    CHECK(live && live_bytes>=previous && bytes<=SIZE_MAX-(live_bytes-previous));
+    CHECK(facts_live && live_bytes>=previous && bytes<=SIZE_MAX-(live_bytes-previous));
     FactsAllocation *allocation=xr_realloc(old,sizeof(*allocation)+bytes);
     if(!allocation)return NULL;
     allocation->bytes=bytes;live_bytes=live_bytes-previous+bytes;
@@ -223,24 +223,24 @@ static void facts_boundaries(const FactsFixture *f, const XrLirCallableFacts *co
 
 static void facts_copy_failures(void) {
     FactsFixture f = facts_fixture(512); OK(xr_lir_module_finish(f.module, NULL));
-    size_t baseline = live, baseline_bytes = live_bytes;
+    size_t baseline = facts_live, baseline_bytes = live_bytes;
     CHECK(baseline && baseline_bytes && f.module->callable_facts);
     XrLirCallableFacts *cache = f.module->callable_facts, *copy = NULL;
     attempt = 0; OK(xr_lir_callable_facts_create(f.module, &copy)); size_t allocations = attempt;
     CHECK(allocations > 1 && xr_lir_callable_facts_function_count(copy) == f.module->function_count);
     facts_boundaries(&f, copy); xr_lir_callable_facts_destroy(copy); copy = NULL;
-    CHECK(live == baseline && live_bytes == baseline_bytes);
+    CHECK(facts_live == baseline && live_bytes == baseline_bytes);
     for (size_t point = 0; point < allocations; ++point) {
         attempt = 0; fail_at = point;
         CHECK(xr_lir_callable_facts_create(f.module, &copy) == XR_LIR_OUT_OF_MEMORY && !copy && attempt > point);
-        CHECK(f.module->callable_facts == cache && live == baseline && live_bytes == baseline_bytes);
+        CHECK(f.module->callable_facts == cache && facts_live == baseline && live_bytes == baseline_bytes);
     }
     fail_at = SIZE_MAX; OK(xr_lir_callable_facts_create(f.module, &copy));
-    size_t occupied = live, occupied_bytes = live_bytes; XrLirCallableFacts *saved = copy;
+    size_t occupied = facts_live, occupied_bytes = live_bytes; XrLirCallableFacts *saved = copy;
     attempt = 0; fail_at = 0;
     CHECK(xr_lir_callable_facts_create(f.module, &copy) == XR_LIR_INVALID_ARGUMENT && copy == saved && !attempt);
     CHECK(xr_lir_module_finish(f.module, NULL) == XR_LIR_INVALID_STATE && !attempt &&
-        f.module->callable_facts == cache && live == occupied && live_bytes == occupied_bytes);
+        f.module->callable_facts == cache && facts_live == occupied && live_bytes == occupied_bytes);
     fail_at = SIZE_MAX;
     XrLirOwnershipPlan *ownership = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=f.module}, &ownership, NULL));
@@ -249,23 +249,23 @@ static void facts_copy_failures(void) {
     XrLirTypeLayout layout = {.size=123};
     CHECK(xr_lir_type_layout(f.module, f.strong, &layout) == XR_LIR_UNSUPPORTED && layout.size == 123);
     xr_lir_module_destroy(f.module); facts_boundaries(&f, copy);
-    CHECK(live == occupied - baseline && live_bytes == occupied_bytes - baseline_bytes);
-    xr_lir_callable_facts_destroy(copy); CHECK(!live && !live_bytes);
+    CHECK(facts_live == occupied - baseline && live_bytes == occupied_bytes - baseline_bytes);
+    xr_lir_callable_facts_destroy(copy); CHECK(!facts_live && !live_bytes);
     printf("callable copy failure points: %zu\n", allocations);
 }
 
 static void facts_finish_failures(void) {
     FactsFixture initial = facts_fixture(2); attempt = 0;
     OK(xr_lir_module_finish(initial.module, NULL)); size_t allocations = attempt;
-    xr_lir_module_destroy(initial.module); CHECK(!live && !live_bytes);
+    xr_lir_module_destroy(initial.module); CHECK(!facts_live && !live_bytes);
     for (size_t point = 0; point < allocations; ++point) {
         FactsFixture f = facts_fixture(2); attempt = 0; fail_at = point;
         XrLirDiagnostic diagnostic;
         CHECK(xr_lir_module_finish(f.module, &diagnostic) == XR_LIR_OUT_OF_MEMORY &&
-            !f.module->finished && !f.module->callable_facts && !live && !live_bytes);
+            !f.module->finished && !f.module->callable_facts && !facts_live && !live_bytes);
         size_t used = attempt; fail_at = SIZE_MAX;
         CHECK(xr_lir_module_finish(f.module, NULL) == XR_LIR_OUT_OF_MEMORY && attempt == used);
-        xr_lir_module_destroy(f.module); CHECK(!live && !live_bytes);
+        xr_lir_module_destroy(f.module); CHECK(!facts_live && !live_bytes);
     }
     printf("callable constructor failure points: %zu\n", allocations);
 }
@@ -306,14 +306,14 @@ static void facts_rejected_pending(void) {
         } else facts_bad_state(&f);
         XrLirDiagnostic diagnostic; attempt = 0;
         CHECK(xr_lir_module_finish(f.module, &diagnostic) == XR_LIR_VERIFY_ERROR && attempt &&
-            !f.module->finished && !f.module->callable_facts && !live && !live_bytes);
+            !f.module->finished && !f.module->callable_facts && !facts_live && !live_bytes);
         if (scenario == 1) CHECK(strstr(diagnostic.message, "dominat") || strstr(diagnostic.message, "before"));
         if (scenario == 2) CHECK(strstr(diagnostic.message, "state reference edge shape mismatch"));
         size_t used = attempt;
         CHECK(xr_lir_module_finish(f.module, NULL) == XR_LIR_VERIFY_ERROR && attempt == used);
         XrLirCallableFacts *copy = NULL;
         CHECK(xr_lir_callable_facts_create(f.module, &copy) == XR_LIR_INVALID_ARGUMENT && !copy);
-        xr_lir_module_destroy(f.module); CHECK(!live && !live_bytes);
+        xr_lir_module_destroy(f.module); CHECK(!facts_live && !live_bytes);
     }
 }
 
@@ -403,7 +403,7 @@ static void facts_seed_origins(void) {
     CHECK(read->type==callable && read->operation==XR_LIR_STATE_READ && read->block==entry.id &&
         read->instruction && !read->parameter && read->persistent && !read->known_target && read->origin==state_read.id);
     CHECK(read->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED && returned->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED);
-    CHECK(live && live_bytes); xr_lir_callable_facts_destroy(copy); CHECK(!live && !live_bytes);
+    CHECK(facts_live && live_bytes); xr_lir_callable_facts_destroy(copy); CHECK(!facts_live && !live_bytes);
     puts("callable block arguments, code-only seeds, indirect results and State reads retain exact facts");
 }
 
@@ -412,13 +412,13 @@ static void facts_scalar_empty(void) {
     XrLirFunction function = facts_function(module, &(XrLirFunctionSpec){.name="scalar", .name_length=6, .result=XR_LIR_UNIT});
     facts_return(module, facts_block(module, function), (XrLirValue){0});
     OK(xr_lir_module_finish(module, NULL));
-    size_t baseline = live, baseline_bytes = live_bytes;
+    size_t baseline = facts_live, baseline_bytes = live_bytes;
     CHECK(baseline && baseline_bytes);
     XrLirCallableFacts *copy = NULL; attempt = 0; fail_at = 0;
     OK(xr_lir_callable_facts_create(module, &copy));
-    CHECK(!copy && !attempt && live == baseline && live_bytes == baseline_bytes);
+    CHECK(!copy && !attempt && facts_live == baseline && live_bytes == baseline_bytes);
     fail_at = SIZE_MAX; xr_lir_module_destroy(module);
-    CHECK(!live && !live_bytes);
+    CHECK(!facts_live && !live_bytes);
 }
 
 #include "lir_callable_construction_fixture.h"
@@ -438,7 +438,7 @@ static void facts_construction_reentry(void) {
         CHECK(row->kind == XR_LIR_SCOPED_VALUE_FUNCTION && row->operation == XR_LIR_FUNCTION_REF &&
             row->constructor_storage == XR_LIR_CLOSURE_FRAME && row->capture_count == 1 && row->block != 1 &&
             row->constructor_may_repeat == (shape >= 2));
-        xr_lir_callable_facts_destroy(copy); CHECK(!live && !live_bytes);
+        xr_lir_callable_facts_destroy(copy); CHECK(!facts_live && !live_bytes);
     }
 }
 
@@ -456,33 +456,33 @@ static void facts_callback_receiving_failures(void) {
         SliceCallbackLoanFixture fixture=slice_callback_loan_fixture(elements[family],SLICE_CALLBACK_LOAN_DIRECT);
         OK(xr_lir_module_finish(fixture.module,NULL));
         XrLirSliceFactsView source;OK(xr_lir_slice_facts_view(fixture.module->slice_facts,&source));facts_callback_pairs(source);
-        size_t baseline=live,bytes=live_bytes;XrLirSliceFacts *copy=NULL;
+        size_t baseline=facts_live,bytes=live_bytes;XrLirSliceFacts *copy=NULL;
         attempt=0;OK(xr_lir_slice_facts_create(fixture.module,&copy));size_t copy_sites=attempt;
         XrLirSliceFactsView received;OK(xr_lir_slice_facts_view(copy,&received));facts_callback_pairs(received);
         CHECK(copy_sites>=4 && received.callback_loans!=source.callback_loans);
-        xr_lir_slice_facts_destroy(copy);copy=NULL;CHECK(live==baseline && live_bytes==bytes);
+        xr_lir_slice_facts_destroy(copy);copy=NULL;CHECK(facts_live==baseline && live_bytes==bytes);
         for(size_t point=0;point<copy_sites;++point) {
             attempt=0;fail_at=point;
             CHECK(xr_lir_slice_facts_create(fixture.module,&copy)==XR_LIR_OUT_OF_MEMORY && !copy);
-            fail_at=SIZE_MAX;CHECK(live==baseline && live_bytes==bytes);
+            fail_at=SIZE_MAX;CHECK(facts_live==baseline && live_bytes==bytes);
         }
         XrLirModule *rebuilt=NULL;attempt=0;OK(xr_lir_rebuild(fixture.module,&rebuilt));size_t rebuild_sites=attempt;
         OK(xr_lir_slice_facts_view(rebuilt->slice_facts,&received));facts_callback_pairs(received);
         CHECK(rebuild_sites>copy_sites && received.callback_loans!=source.callback_loans);
-        xr_lir_module_destroy(rebuilt);rebuilt=NULL;CHECK(live==baseline && live_bytes==bytes);
+        xr_lir_module_destroy(rebuilt);rebuilt=NULL;CHECK(facts_live==baseline && live_bytes==bytes);
         for(size_t point=0;point<rebuild_sites;++point) {
             attempt=0;fail_at=point;XrLirStatus status=xr_lir_rebuild(fixture.module,&rebuilt);
             fail_at=SIZE_MAX;
-            if(status!=XR_LIR_OUT_OF_MEMORY || rebuilt || live!=baseline || live_bytes!=bytes)
+            if(status!=XR_LIR_OUT_OF_MEMORY || rebuilt || facts_live!=baseline || live_bytes!=bytes)
                 fprintf(stderr,"callback relation rebuild family%zu allocation%zu/%zu status%u live%zu/%zu bytes%zu/%zu\n",
-                    family,point,rebuild_sites,(unsigned)status,live,baseline,live_bytes,bytes);
-            CHECK(status==XR_LIR_OUT_OF_MEMORY && !rebuilt && live==baseline && live_bytes==bytes);
+                    family,point,rebuild_sites,(unsigned)status,facts_live,baseline,live_bytes,bytes);
+            CHECK(status==XR_LIR_OUT_OF_MEMORY && !rebuilt && facts_live==baseline && live_bytes==bytes);
         }
         OK(xr_lir_rebuild(fixture.module,&rebuilt));OK(xr_lir_slice_facts_create(fixture.module,&copy));
         xr_lir_module_destroy(fixture.module);fixture.module=NULL;
         OK(xr_lir_slice_facts_view(copy,&received));facts_callback_pairs(received);
         OK(xr_lir_verify(rebuilt,NULL));OK(xr_lir_slice_facts_view(rebuilt->slice_facts,&received));facts_callback_pairs(received);
-        xr_lir_slice_facts_destroy(copy);xr_lir_module_destroy(rebuilt);CHECK(!live && !live_bytes);
+        xr_lir_slice_facts_destroy(copy);xr_lir_module_destroy(rebuilt);CHECK(!facts_live && !live_bytes);
         printf("callback relation family%zu: copy %zu and rebuild %zu allocation failures preserve owners\n",
             family,copy_sites,rebuild_sites);
     }
@@ -491,7 +491,7 @@ static void facts_slice_receiving(void) {
     for (unsigned family = 0; family < 2; ++family) {
         SliceBoundaryFixture fixture = slice_boundary_fixture(family ? XR_LIR_U8 : XR_LIR_I64,false);
         OK(xr_lir_module_finish(fixture.module,NULL));
-        size_t baseline = live, bytes = live_bytes;
+        size_t baseline = facts_live, bytes = live_bytes;
         XrLirSliceFacts *copy = NULL; attempt = 0;
         OK(xr_lir_slice_facts_create(fixture.module,&copy)); size_t sites = attempt;
         XrLirSliceFactsView cached, received;
@@ -504,11 +504,11 @@ static void facts_slice_receiving(void) {
         XrLirSliceFacts *preserved = copy;
         CHECK(xr_lir_slice_facts_create(fixture.module,&copy) == XR_LIR_INVALID_ARGUMENT && copy == preserved);
         xr_lir_slice_facts_destroy(copy); copy = NULL;
-        CHECK(live == baseline && live_bytes == bytes);
+        CHECK(facts_live == baseline && live_bytes == bytes);
         for (size_t n = 0; n < sites; ++n) {
             attempt = 0; fail_at = n;
             CHECK(xr_lir_slice_facts_create(fixture.module,&copy) == XR_LIR_OUT_OF_MEMORY && !copy &&
-                live == baseline && live_bytes == bytes);
+                facts_live == baseline && live_bytes == bytes);
         }
         fail_at = SIZE_MAX; OK(xr_lir_slice_facts_create(fixture.module,&copy));
         xr_lir_module_destroy(fixture.module);
@@ -517,19 +517,19 @@ static void facts_slice_receiving(void) {
             received.terms[received.functions[fixture.relay.id].result_origin.first].kind == XR_LIR_SLICE_EFFECT_PARAMETER &&
             received.terms[received.functions[fixture.read.id].write.first].kind == XR_LIR_SLICE_EFFECT_UNKNOWN &&
             received.terms[received.functions[fixture.read.id].access.first].kind == XR_LIR_SLICE_EFFECT_FIELD);
-        xr_lir_slice_facts_destroy(copy); CHECK(!live && !live_bytes);
+        xr_lir_slice_facts_destroy(copy); CHECK(!facts_live && !live_bytes);
     }
 }
 static void facts_slice_finish_failures(void) {
     SliceBoundaryFixture fixture = slice_boundary_fixture(XR_LIR_I64,false); attempt = 0;
     OK(xr_lir_module_finish(fixture.module,NULL)); size_t sites = attempt;
-    xr_lir_module_destroy(fixture.module); CHECK(!live && !live_bytes);
+    xr_lir_module_destroy(fixture.module); CHECK(!facts_live && !live_bytes);
     for (size_t n = 0; n < sites; ++n) {
         fixture = slice_boundary_fixture(XR_LIR_I64,false); attempt = 0; fail_at = n;
         XrLirDiagnostic diagnostic = {0};
         CHECK(xr_lir_module_finish(fixture.module,&diagnostic) == XR_LIR_OUT_OF_MEMORY &&
             diagnostic.status == XR_LIR_OUT_OF_MEMORY && !fixture.module->finished && !fixture.module->callable_facts);
-        fail_at = SIZE_MAX; xr_lir_module_destroy(fixture.module); CHECK(!live && !live_bytes);
+        fail_at = SIZE_MAX; xr_lir_module_destroy(fixture.module); CHECK(!facts_live && !live_bytes);
     }
 }
 int main(void) {
