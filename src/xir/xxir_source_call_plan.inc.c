@@ -382,6 +382,7 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
         escaping=signature->parameters[parameter].escaping!=0;
         callback_context=!(signature->flags&XR_XIR_CALLABLE_C_ABI) &&
             signature->parameters[parameter].mode==XR_PARAM_READ &&
+            xr_xir_callable_signature(&ctx->types,signature->parameters[parameter].type) &&
             !xr_xir_type_is_c_callable(&ctx->types,signature->parameters[parameter].type);
     }
     bool callback = callback_context && !escaping && !plan->fixed_arguments && expected.present &&
