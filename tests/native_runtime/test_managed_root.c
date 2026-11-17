@@ -811,6 +811,7 @@ static void fixed_execution_boundary(void) {
     puts("fixed execution: normal, nested and failing roots drain actual stable owners PASS");
 }
 #include "managed_frame_locations_cases.h"
+#include "managed_frame_forwarding_cases.h"
 int main(void) {
     aliases_and_return();
     independent_taken_owner();
@@ -823,6 +824,7 @@ int main(void) {
     inline_payload_homes();
     combined_frame_boundary();
     canonical_frame_locations();
+    managed_frame_forwarding();
     inline_payload_rejection();
     inline_payload_jump();
     fixed_execution_boundary();
