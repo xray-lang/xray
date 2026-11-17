@@ -13,6 +13,7 @@
 
 static size_t attempts, fail_at = SIZE_MAX;
 static uint32_t observed_callable_scopes;
+static size_t observed_callback_loans;
 typedef struct LowerBlock { void *pointer; size_t bytes; } LowerBlock;
 static LowerBlock observed_lower_blocks[1024];
 static size_t lower_live, lower_bytes;
@@ -54,6 +55,12 @@ static XrLirStatus run(const SourceFixture *fixture) {
         CHECK(output.module && output.entry.id);
         OK(xr_lir_verify(output.module, NULL));
         observed_callable_scopes = 0;
+        observed_callback_loans = 0;
+        if(output.module->slice_facts) {
+            XrLirSliceFactsView facts;OK(xr_lir_slice_facts_view(output.module->slice_facts,&facts));
+            CHECK(!facts.callback_loan_count || (facts.callback_loans_complete && facts.callback_loans));
+            observed_callback_loans=facts.callback_loan_count;
+        }
         for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
             XrLirFunctionView view;
             OK(xr_lir_function_view(output.module, (XrLirFunction){output.module, f + 1}, &view));
@@ -82,6 +89,24 @@ static void supported_length(void) {
         fail_at=SIZE_MAX;OK(run(&fixture));
     }
     source_fixture_free(&fixture);
+}
+static void callback_loan_lowering_failures(void) {
+    SourceFixture fixture=source_fixture(
+        "var values=[1,2,3]\nvar other=[4,5,6]\n"
+        "fn invoke(part:Slice<i64>,callback:fn()->i64)->i64{return callback()+part[0]}\n"
+        "fn relay(callback:fn()->i64,part:Slice<i64>)->i64{return invoke(part,callback)}\n"
+        "fn change()->i64{values[0]=9\nreturn 0}\nprint(relay(change,other[0:2]))\n");
+    attempts=0;fail_at=SIZE_MAX;OK(run(&fixture));size_t sites=attempts;
+    CHECK(sites && observed_callback_loans>=2);
+    for(size_t point=0;point<sites;++point) {
+        attempts=0;fail_at=point;XrLirStatus status=run(&fixture);fail_at=SIZE_MAX;
+        if(status!=XR_LIR_OUT_OF_MEMORY)
+            fprintf(stderr,"callback relation Lower allocation%zu/%zu status%u\n",point,sites,(unsigned)status);
+        CHECK(status==XR_LIR_OUT_OF_MEMORY);
+    }
+    OK(run(&fixture));CHECK(observed_callback_loans>=2);source_fixture_free(&fixture);
+    CHECK(!lower_live && !lower_bytes);
+    printf("callback relation Lower: %zu real allocation failures refund receiving storage\n",sites);
 }
 static void constant_initializer_failures(void) {
     SourceFixture fixture = source_fixture(
@@ -460,6 +485,7 @@ int main(void) {
     }
     source_fixture_free(&fixture);
     supported_length();
+    callback_loan_lowering_failures();
     constant_initializer_failures();
     diagnostic_copy_failure();
     CHECK(!lower_live && !lower_bytes);
