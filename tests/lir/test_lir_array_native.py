@@ -15,6 +15,7 @@ from xraytest.toolchain import archive_link_arguments
 from xraytest.artifacts import complete_native_artifacts
 from lir_slice_native_observer import slice_boundary_observer_source
 from lir_header_edge_native_observer import header_edge_observer_source
+from lir_array_forward_native_observer import array_forward_observer_source
 
 
 def run(command, cwd, expected_exit=0):
@@ -126,6 +127,16 @@ def header_observer(args, generated, client, binary, command, work):
     assert all(row['fallback'] == (row['mode'] != 0) and row['allocationDelta'] == 0 and
                row['bytes'] == row['controlBytes'] and row['blocks'] == row['controlBlocks']
                for row in cases), cases
+    return record
+
+
+def forward_observer(args, generated, client, binary, command, work):
+    record = native_observer(args, generated, client, binary, command, work,
+                             array_forward_observer_source(generated), '-array-forward-observer')
+    cases = record['cases']
+    assert [(row['pair'], row['mode']) for row in cases] == [(pair, mode) for pair in range(2) for mode in range(12)]
+    assert all(row['attempts'] == 1 and row['fast'] == (row['mode'] in (0, 1)) and
+               row['bytes'] == row['controlBytes'] and row['blocks'] == row['controlBlocks'] for row in cases), cases
     return record
 
 
@@ -242,6 +253,9 @@ def main():
                 args, generated, client, binary, command, work)
         if name == 'phi-i64':
             record['cases'][name]['headerEdgeObserver'] = header_observer(
+                args, generated, client, binary, command, work)
+        if name == 'i64':
+            record['cases'][name]['arrayForwardObserver'] = forward_observer(
                 args, generated, client, binary, command, work)
     (work / 'result.json').write_text(json.dumps(record, indent=2), encoding='utf-8')
     complete_native_artifacts(work)
