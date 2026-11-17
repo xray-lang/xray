@@ -574,6 +574,12 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
              fact.view_operation!=XR_LIR_SLICE_OP_CLEANUP)))
             return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"invalid physical Slice cleanup fact");
         if (!lir_home_binding_fact(b,fact) || !lir_home_workspace(b,fact)) return false;
+        if ((fact.forwarding_mode || fact.forwarding_drop) &&
+            (fact.forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE ||
+             (fact.kind!=XR_LIR_OWNERSHIP_BINDING_NEW && fact.kind!=XR_LIR_OWNERSHIP_BINDING_READ) ||
+             fact.type!=XR_LIR_ARRAY_CELL || fact.array_element!=XR_LIR_I64 ||
+             !fact.instruction || fact.instruction==UINT32_MAX || fact.forwarding_drop!=fact.instruction+1))
+            return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"invalid Array forwarding preparation");
         uint32_t view_workspace = 0;
         if (fact.kind == XR_LIR_OWNERSHIP_VIEW_VALUE || fact.kind == XR_LIR_OWNERSHIP_VIEW_END ||
             (fact.kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER && fact.view_storage)) {
@@ -615,7 +621,8 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
             .view_operation=fact.view_operation,.view_workspace=view_workspace,.view_cleanup=fact.view_cleanup,
             .hold_transfer_mode=fact.hold_transfer_mode,
             .view_storage=fact.view_storage,.view_parameter=fact.view_parameter,
-            .cell_operation=fact.cell_operation,.cell_transport=fact.cell_transport,.cell_scope=fact.cell_scope};
+            .cell_operation=fact.cell_operation,.cell_transport=fact.cell_transport,.cell_scope=fact.cell_scope,
+            .forwarding_mode=fact.forwarding_mode,.forwarding_drop=fact.forwarding_drop};
         if (fact.cell_transport) {
             if (!fact.value || fact.value > b->homes->value_count || !b->homes->values[fact.value].cell_payload_type)
                 return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Cell event lost its actual identity home");

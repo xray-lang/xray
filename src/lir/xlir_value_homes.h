@@ -141,6 +141,10 @@ typedef struct XrLirHomeEvent {
     uint32_t cell_scope;
     XrLirSliceStorage view_storage;
     uint32_t view_parameter;
+    /* Unconsumed common preparation; all ordinary events and homes stay live.
+     * The paired logical DROP remains present even when this field is set. */
+    XrLirOwnershipTransferMode forwarding_mode;
+    uint32_t forwarding_drop;
 } XrLirHomeEvent;
 
 typedef struct XrLirValueHomes {

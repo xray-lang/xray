@@ -56,6 +56,7 @@ static void ownership_free(void *memory) {
 #include "lir_slice_ownership_fixture.h"
 #include "lir_slice_callable_fixture.h"
 #include "lir_slice_cleanup_fixture.h"
+#include "lir_array_forwarding_fixture.h"
 
 static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint32_t type_count) {
     XrLirOwnershipPlan *output = NULL;
@@ -138,6 +139,8 @@ int main(void) {
         XrLirModule *input = NULL; OK(slice_ownership_fixture(i ? XR_LIR_U8 : XR_LIR_I64, &input));
         sweep(input,NULL,0);
     }
+    ArrayForwardFixture forwarding=array_forward_fixture(XR_LIR_I64,ARRAY_FORWARD_LOCAL);
+    sweep(forwarding.module,NULL,0);
     XrLirModule *grown = NULL;
     OK(ownership_fixture(XR_LIR_STRING, false, 24, &grown));
     sweep(grown,NULL,0);

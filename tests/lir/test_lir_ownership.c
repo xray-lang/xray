@@ -55,7 +55,8 @@ static void compare_internal(const XrLirOwnershipRequest *request, const XrLirOw
             a.callable_transport==b.callable_transport && a.callable_operation==b.callable_operation &&
             a.callable_function==b.callable_function && a.callable_scope==b.callable_scope &&
             a.callable_materialize==b.callable_materialize && a.transfer_mode==b.transfer_mode &&
-            a.string_operation==b.string_operation);
+            a.string_operation==b.string_operation && a.forwarding_mode==b.forwarding_mode &&
+            a.forwarding_drop==b.forwarding_drop);
         if (a.kind==XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER || a.kind==XR_LIR_OWNERSHIP_RETURN_TRANSFER ||
             a.kind==XR_LIR_OWNERSHIP_APPEND_TRANSFER) CHECK(a.transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE);
         if (a.kind==XR_LIR_OWNERSHIP_PARAMETER_BORROW || a.kind==XR_LIR_OWNERSHIP_OPERAND_BORROW)
@@ -73,7 +74,7 @@ static uint64_t digest(const XrLirOwnershipPlan *plan) {
             f.value, f.argument, f.edge, f.target_block, f.target_value, f.type,
             f.array_element, (uint32_t)f.array_operation, (uint32_t)f.map_operation,
             (uint32_t)f.callable_transport,(uint32_t)f.callable_operation,f.callable_function,f.callable_scope,f.callable_materialize,
-            (uint32_t)f.transfer_mode,(uint32_t)f.string_operation};
+            (uint32_t)f.transfer_mode,(uint32_t)f.string_operation,(uint32_t)f.forwarding_mode,f.forwarding_drop};
         for (size_t p = 0; p < sizeof(fields) / sizeof(fields[0]); ++p)
             hash = hash * UINT64_C(16777619) + fields[p];
     }
@@ -607,7 +608,9 @@ static void string_bindings(void) {
     xr_lir_ownership_plan_destroy(plan);
 }
 
+#include "lir_array_forwarding_cases.h"
 int main(void) {
+    array_forwarding_preparation();
     XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t i = 0; i < 4; ++i) arrays(elements[i]);
     copies(); other_shapes(); rebuilt_fact_identity(); malformed(); boxed_lifetimes(); boxed_selected_edges();
