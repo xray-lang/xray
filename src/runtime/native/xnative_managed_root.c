@@ -14,11 +14,10 @@
 #include "base/xmax_align.h"
 #include <stdalign.h>
 
-typedef struct XrtManagedSlot {
-    XrtManagedHeader *committed;
-    XrtManagedPending pending;
-    size_t owner_offset;
-} XrtManagedSlot;
+_Static_assert(offsetof(XrtManagedSlot,pending) == sizeof(XrtManagedHeader *) &&
+    offsetof(XrtManagedSlot,owner_offset) == sizeof(XrtManagedHeader *) + sizeof(XrtManagedPending) &&
+    sizeof(XrtManagedSlot) == sizeof(XrtManagedHeader *) + sizeof(XrtManagedPending) + sizeof(size_t),
+    "canonical slot metadata preserves its original three-field layout");
 struct XrtManagedFrame {
     XrtManagedHeader header;
     XrtManagedRoot *root;
@@ -273,6 +272,19 @@ XRAY_API XrtManagedStatus xrt_managed_frame_enter_payload(XrtManagedRoot *root,
     }
     *output = frame;
     *payload = bytes;
+    return XRT_MANAGED_OK;
+}
+XRAY_API XrtManagedStatus xrt_managed_frame_enter_locations(XrtManagedRoot *root,
+    const XrtManagedFrameSpec *spec, XrtManagedFrameLocations *output) {
+    if (!output || output->frame || output->payload || output->slots || output->busy || output->slot_count)
+        return XRT_MANAGED_ARGUMENT;
+    XrtManagedFrame *frame = NULL;
+    XrtManagedStatus status = xrt_managed_frame_enter_layout(root,spec,&frame);
+    if (status != XRT_MANAGED_OK) return status;
+    *output = (XrtManagedFrameLocations){.frame=frame,
+        .payload=frame->payload_size ? (unsigned char *)frame + frame->payload_offset : NULL,
+        .slots=frame->slot_count ? frame_slots(frame) : NULL,
+        .busy=&root->busy,.slot_count=frame->slot_count};
     return XRT_MANAGED_OK;
 }
 XRAY_API XrtManagedStatus xrt_managed_frame_leave(XrtManagedRoot *root, XrtManagedFrame *frame) {

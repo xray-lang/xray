@@ -225,6 +225,9 @@ static void c_values_function(LirC *c) {
     c->map_stage_event_cursor = c->map_stage_workspace_cursor = 0;
     c->view_call_cursor = c->view_event_cursor = 0;
     c->array_frame_block = 0;
+    c->header_edges = false;
+    for (size_t n = 0; c->homes && n < c->homes->edge_count && c_request_poll(c); ++n)
+        c->header_edges |= c_value_header_edge(c, c->homes, &c->homes->edges[n]);
 }
 static bool c_values_owned_type(LirC *c, XrLirType type) {
     return c_managed_leaf(type) || (type >= XR_LIR_TYPE_COUNT &&
@@ -234,6 +237,7 @@ static void c_values_declarations(LirC *c) {
     if (c_values_owned_type(c, c->view.result) || c_slice_type(c, c->view.result)) c_text(c, "    (void)xrl_result;\n");
     if (!c->homes || !c->homes->owned_frame_needed) return;
     c_text(c, "    XrtManagedRoot *xrl_root = NULL;\n    XrtManagedFrame *xrl_frame = NULL;\n    void *xrl_payload = NULL;\n");
+    if (c->header_edges) c_text(c, "    XrtManagedFrameLocations xrl_frame_locations = {0};\n");
 }
 static bool c_values_declare(LirC *c, uint32_t value) {
     if (c->homes && c->homes->bindings && (c->homes->bindings[value].kind == XR_LIR_HOME_BINDING_STATE_BORROW ||
@@ -247,8 +251,11 @@ static void c_values_ensure(LirC *c, uint32_t source) {
     if (c->array_frame_block && c->array_frame_block == c->block) return;
     c_text(c, "    if (!xrl_frame) {\n");
     c_format(c, "        xrl_root = xrt_native_managed_root(UINT32_C(%" PRIu32 "));\n", source);
-    c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_payload(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame, &xrl_payload);\n", c->function.id);
+    if (c->header_edges)
+        c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_locations(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame_locations);\n", c->function.id);
+    else c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_payload(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame, &xrl_payload);\n", c->function.id);
     c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
+    if (c->header_edges) c_text(c, "        xrl_frame = xrl_frame_locations.frame; xrl_payload = xrl_frame_locations.payload;\n");
     if (c->seen[c->function.id - 1] & LIR_C_FUNCTION_STRING_BINDING)
         c_format(c, "        xrt_native_string_binding_prepare(UINT32_C(%" PRIu32 "));\n", source);
     c_text(c, "    }\n");
@@ -420,6 +427,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
     }
     c_format(c, "    XrtManagedStatus status = xrl_edge_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(xrl_frame, xrl_payload, %s",
         c->function.id, c->block, selected, scalars && !private_scalars ? "&scalar_publication" : "NULL");
+    if (c_value_header_edge(c, c->homes, home)) c_text(c, ", &xrl_frame_locations");
     for (size_t a = 0; a < home->count && c_request_poll(c); ++a) {
         XrLirHomeTransfer transfer = c->homes->transfers[home->first + a];
         if (transfer.borrowed_owner_workspace != SIZE_MAX && !transfer.target_workspace) {

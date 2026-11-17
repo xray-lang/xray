@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments
 from xraytest.artifacts import complete_native_artifacts
 from lir_slice_native_observer import slice_boundary_observer_source
+from lir_header_edge_native_observer import header_edge_observer_source
 
 
 def run(command, cwd, expected_exit=0):
@@ -74,10 +75,10 @@ int main(void) {{
 '''
 
 
-def slice_observer(args, generated, client, binary, command, work):
-    source = work / (generated.stem + '-ownership-observer.c')
-    executable = work / (generated.stem + '-ownership-observer' + ('.exe' if os.name == 'nt' else ''))
-    source.write_text(slice_boundary_observer_source(generated), encoding='ascii')
+def native_observer(args, generated, client, binary, command, work, source_text, suffix):
+    source = work / (generated.stem + suffix + '.c')
+    executable = work / (generated.stem + suffix + ('.exe' if os.name == 'nt' else ''))
+    source.write_text(source_text, encoding='ascii')
     compile_command = []
     for value in command:
         if str(value) == str(client):
@@ -93,21 +94,39 @@ def slice_observer(args, generated, client, binary, command, work):
     compile_command.insert(1, ('/I' if args.kind == 'msvc' else '-I') + str(internal))
     if args.kind == 'msvc':
         compile_command[1:1] = ['/D_CRT_SECURE_NO_WARNINGS', '/D_CRT_NONSTDC_NO_WARNINGS']
-    (work / (generated.stem + '-observer-command.json')).write_text(
+    (work / (generated.stem + suffix + '-command.json')).write_text(
         json.dumps(list(map(str, compile_command)), indent=2), encoding='utf-8')
     run(compile_command, work)
     print('$ ' + json.dumps([str(executable)]), flush=True)
     result = subprocess.run([str(executable)], cwd=work, capture_output=True, timeout=30)
-    (work / (generated.stem + '-observer.stdout')).write_bytes(result.stdout)
-    (work / (generated.stem + '-observer.stderr')).write_bytes(result.stderr)
+    (work / (generated.stem + suffix + '.stdout')).write_bytes(result.stdout)
+    (work / (generated.stem + suffix + '.stderr')).write_bytes(result.stderr)
     assert result.returncode == 0 and not result.stderr, (source, result.returncode, result.stdout, result.stderr)
     cases = [json.loads(line) for line in result.stdout.splitlines()]
-    assert [row['mode'] for row in cases] == list(range(10)), cases
-    assert all(row['bytes'] == row['controlBytes'] and row['blocks'] == row['controlBlocks']
-               for row in cases), cases
     return {'source': str(source), 'sourceSHA256': hashlib.sha256(source.read_bytes()).hexdigest(),
             'cases': cases, 'guestRefund': 'exact live-owner control baseline',
             'finalOwnerFree': 'existing billing API and sanitizer coverage; no post-free statistics', 'result': 'PASS'}
+
+
+def slice_observer(args, generated, client, binary, command, work):
+    record = native_observer(args, generated, client, binary, command, work,
+                             slice_boundary_observer_source(generated), '-ownership-observer')
+    cases = record['cases']
+    assert [row['mode'] for row in cases] == list(range(10)), cases
+    assert all(row['bytes'] == row['controlBytes'] and row['blocks'] == row['controlBlocks']
+               for row in cases), cases
+    return record
+
+
+def header_observer(args, generated, client, binary, command, work):
+    record = native_observer(args, generated, client, binary, command, work,
+                             header_edge_observer_source(generated), '-header-edge-observer')
+    cases = record['cases']
+    assert [row['mode'] for row in cases] == list(range(9)), cases
+    assert all(row['fallback'] == (row['mode'] != 0) and row['allocationDelta'] == 0 and
+               row['bytes'] == row['controlBytes'] and row['blocks'] == row['controlBlocks']
+               for row in cases), cases
+    return record
 
 
 def main():
@@ -214,6 +233,9 @@ def main():
                                  'sourceSHA256': hashlib.sha256(generated.read_bytes()).hexdigest()}
         if name.startswith('slice-boundary-'):
             record['cases'][name]['ownershipObserver'] = slice_observer(
+                args, generated, client, binary, command, work)
+        if name == 'phi-i64':
+            record['cases'][name]['headerEdgeObserver'] = header_observer(
                 args, generated, client, binary, command, work)
     (work / 'result.json').write_text(json.dumps(record, indent=2), encoding='utf-8')
     complete_native_artifacts(work)

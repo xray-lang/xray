@@ -517,6 +517,7 @@ static void cs_binding_setup_scope(const char *text) {
         const char *prepare=strstr(cursor,setup);
         if (prepare && prepare<end) {
             const char *enter=strstr(cursor,"xrt_managed_frame_enter_payload(xrl_root, &xrl_frame_");
+            if (!enter || enter>=end) enter=strstr(cursor,"xrt_managed_frame_enter_locations(xrl_root, &xrl_frame_");
             const char *failure=strstr(cursor,"if (status != XRT_MANAGED_OK) xrt_native_managed_failure(");
             CHECK(enter && failure && enter<failure && failure<prepare);
             ++guarded;
@@ -597,8 +598,14 @@ static void scalar_edge_structure(const char *text,XrLirModule *module,XrLirFunc
                 const char *publish=strstr(failure_end,marker); CHECK(publish && publish<jump);
                 const char *early=strstr(cursor,marker); CHECK(early==publish);
             }
-            const char *null_argument=strstr(call,"xrl_payload, NULL"),*close=strstr(call,");\n");
-            CHECK(null_argument && close && null_argument+strlen("xrl_payload, NULL")==close && close<failure);
+            snprintf(marker,sizeof(marker),"static XrtManagedStatus xrl_edge_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(",
+                function.id,blocks[e],edges[e]);
+            const char *declaration=strstr(text,marker); CHECK(declaration);
+            const char *end=strchr(declaration,'\n'),*locations=strstr(declaration,"const XrtManagedFrameLocations *locations");
+            CHECK(end);
+            const char *arguments=locations && locations<end ? "xrl_payload, NULL, &xrl_frame_locations" : "xrl_payload, NULL";
+            const char *null_argument=strstr(call,arguments),*close=strstr(call,");\n");
+            CHECK(null_argument && close && null_argument+strlen(arguments)==close && close<failure);
         }
         cursor=strchr(jump,'\n')+1;
     }

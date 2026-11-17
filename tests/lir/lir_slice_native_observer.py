@@ -69,6 +69,28 @@ static XrtManagedStatus observed_leave(XrtManagedRoot *root, XrtManagedFrame *fr
     if (status==XRT_MANAGED_OK) { --probe.depth; ++probe.leaves; }
     return status;
 }
+static XrtManagedStatus observed_locations(XrtManagedRoot *root, const XrtManagedFrameSpec *spec,
+    XrtManagedFrameLocations *output) {
+    ++probe.layout_calls;
+    bool fail=(probe.fault==FIRST_FRAME_ALLOCATE && probe.layout_calls==1) ||
+        (probe.fault==LATE_FRAME_ALLOCATE && probe.layout_calls==3);
+    XrtBillingStats before=xrt_billing_owner_stats(probe.billing);
+    if (fail) { ++probe.injected; xrt_billing_owner_fail_after(probe.billing,0); }
+    XrtManagedStatus status=xrt_managed_frame_enter_locations(root,spec,output);
+    if (fail) {
+        xrt_billing_owner_fail_after(probe.billing,SIZE_MAX);
+        REQUIRE(status==XRT_MANAGED_OOM && !output->frame && !output->payload &&
+            !output->slots && !output->busy && !output->slot_count);
+        same_storage(before); ++probe.checked;
+    }
+    if (status==XRT_MANAGED_OK) {
+        void *actual=NULL; size_t bytes=0;
+        REQUIRE(output->frame && xrt_managed_frame_payload(output->frame,&actual,&bytes)==XRT_MANAGED_OK && actual==output->payload);
+        REQUIRE(probe.depth<sizeof(probe.frames)/sizeof(*probe.frames));
+        probe.frames[probe.depth++]=output->frame; ++probe.enters;
+    }
+    return status;
+}
 static void observed_array(XrtManagedFrame *frame, size_t slot, const XrtArrayInput *input, uint32_t source) {
     if (probe.fault==ARRAY_ALLOCATE && !probe.injected) {
         /* Warm only real immutable type setup; the next actual Array backing
@@ -199,6 +221,7 @@ static XrtManagedStatus observed_edge(const XrtPlaceEdge *edges, size_t count,
 }
 #define xrt_native_managed_root observed_root
 #define xrt_managed_frame_enter_payload(root,spec,out,payload) observed_payload((root),(spec),(out),(payload))
+#define xrt_managed_frame_enter_locations(root,spec,out) observed_locations((root),(spec),(out))
 #define xrt_managed_frame_leave observed_leave
 #define xrt_native_array_create observed_array
 #define xrt_inline_value_replace observed_replace
@@ -210,6 +233,7 @@ static XrtManagedStatus observed_edge(const XrtPlaceEdge *edges, size_t count,
     text += f'#include "{generated.name}"\n'
     text += r'''#undef xrt_native_managed_root
 #undef xrt_managed_frame_enter_payload
+#undef xrt_managed_frame_enter_locations
 #undef xrt_managed_frame_leave
 #undef xrt_native_array_create
 #undef xrt_inline_value_replace
@@ -225,6 +249,7 @@ static void observe(void *data) {
     probe.completed=true;
 }
 int main(void) {
+    (void)&observed_payload; (void)&observed_locations;
     XrtLocationOwner *locations=NULL;
     REQUIRE(xrt_locations_create(xrt_standalone_source_map.locations,xrt_standalone_source_map.count,&locations)==XRT_LOCATION_OK);
     XrtBillingOwner *control=NULL;
