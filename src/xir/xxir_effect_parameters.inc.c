@@ -26,6 +26,7 @@ static XrXirStatus effect_parameters_current(const XrXirCompileContext *work,
         return XR_XIR_OK;
     if (!effect_contracts_read(effects) || !module->provenance->contracts ||
         module->provenance->contract_count != effects->count) return XR_XIR_BAD_STRUCTURE;
+    XirEffectIndirectBindings indirect={0};
     for (uint32_t f = 0; f < effects->count; ++f) {
 
         const XrXirFunctionEffectContract *derived = &effect_contracts_read(effects)[f];
@@ -50,8 +51,12 @@ static XrXirStatus effect_parameters_current(const XrXirCompileContext *work,
                 binding->family != XR_XIR_EFFECT_BINDING_CAPTURE &&
                 binding->family != XR_XIR_EFFECT_BINDING_REQUIREMENT &&
                 binding->family != XR_XIR_EFFECT_BINDING_INDIRECT) return XR_XIR_BAD_TYPE;
-            XrXirStatus status = xir_effect_call_binding_candidate(work,module,f,
-                binding->instruction,binding->parameter);
+            XrXirStatus status=XR_XIR_OK;
+            if(binding->family==XR_XIR_EFFECT_BINDING_INDIRECT) {
+                if(!indirect.module) status=xir_effect_indirect_bindings_open(work,module,&indirect);
+                if(status==XR_XIR_OK)status=xir_effect_indirect_binding_candidate(work,&indirect,f,
+                    binding->instruction,binding->parameter);
+            } else status=xir_effect_call_binding_candidate(work,module,f,binding->instruction,binding->parameter);
             if (status != XR_XIR_OK) return status;
             const XrXirInstruction *call = &module->functions[f].instructions[binding->instruction];
             if(binding->family==XR_XIR_EFFECT_BINDING_INDIRECT) {

@@ -81,6 +81,17 @@ XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *
  * This bounded candidate is not proof; the same-owner final gate derives it. */
 XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext *context,
     const XrXirModule *module, uint32_t caller, uint32_t instruction, uint32_t parameter);
+/* Synchronous readonly view of one fully checked current metadata generation.
+ * The caller keeps both modules immutable for this traversal, discards this
+ * borrow on mutation, and never publishes it as a permission or Source cache. */
+typedef struct XirEffectIndirectBindings {
+    const XrXirModule *module,*source;
+    const XrXirProvenance *provenance;
+} XirEffectIndirectBindings;
+XR_FUNC XrXirStatus xir_effect_indirect_bindings_open(const XrXirCompileContext *,
+    const XrXirModule *,XirEffectIndirectBindings *empty);
+XR_FUNC XrXirStatus xir_effect_indirect_binding_candidate(const XrXirCompileContext *,
+    const XirEffectIndirectBindings *,uint32_t caller,uint32_t instruction,uint32_t parameter);
 typedef struct XirEffectCallableBound {
     const XrXirTypes *source, *destination;
     const XrXirType *arguments;
