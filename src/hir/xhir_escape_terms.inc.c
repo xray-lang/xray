@@ -22,6 +22,11 @@ typedef struct HirRestrictionEdge {
 typedef struct HirRestrictionCarrier { uint32_t function, source, observation; } HirRestrictionCarrier;
 typedef struct HirRestrictionCheck { uint32_t use, carrier, exposure; } HirRestrictionCheck;
 typedef struct HirClosureOccurrence { XirClosurePlacement placement; uint32_t observation; } HirClosureOccurrence;
+
+typedef struct HirRestrictionPending {
+    HirEscapeObservation observation;
+    XrXirDiagnosticReason reason;
+} HirRestrictionPending;
 typedef struct HirRestrictionSolver {
     XrHirEscapeBuilder *builder;
     XirStorageFlow *storage;
@@ -36,7 +41,7 @@ typedef struct HirRestrictionSolver {
     uint32_t check_count, check_capacity, queue_first, queue_count;
     uint32_t observation;
     HirEscapeObservation *base_observations;
-    HirEscapeObservation *pending;
+    HirRestrictionPending *pending;
     uint32_t base_observation_count, base_use_count;
     uint32_t pending_count, pending_capacity;
     uint32_t remainder;
@@ -56,19 +61,24 @@ static XrXirStatus restriction_storage_status(HirRestrictionSolver *solver, XrXi
 
 /* Unknown environments remain obligations, never empty capture proofs. The
  * known restriction equations still diagnose proven escapes immediately. */
-static XrXirStatus restriction_request(HirRestrictionSolver *solver, XrXirStatus status,
-    HirEscapeObservation point) {
+static XrXirStatus restriction_request_reason(HirRestrictionSolver *solver, XrXirStatus status,
+    HirEscapeObservation point, XrXirDiagnosticReason reason) {
     if (status != XR_XIR_UNRESOLVED) return status;
     HirEscape *owner = &solver->builder->graph;
     owner->status = XR_XIR_OK;
     if (solver->pending_count == solver->pending_capacity) {
-        HirEscapeObservation *grown = xir_compile_array_grow(owner->memory, solver->pending,
+        HirRestrictionPending *grown = xir_compile_array_grow(owner->memory, solver->pending,
             solver->pending_count, sizeof(*grown), &solver->pending_capacity, &owner->status);
         if (!grown) return owner->status;
         solver->pending = grown;
     }
-    solver->pending[solver->pending_count++] = point;
+    solver->pending[solver->pending_count++] = (HirRestrictionPending){point,reason};
     return owner->status;
+}
+
+static XrXirStatus restriction_request(HirRestrictionSolver *solver, XrXirStatus status,
+    HirEscapeObservation point) {
+    return restriction_request_reason(solver,status,point,XR_XIR_DIAGNOSTIC_NONE);
 }
 
 static void restriction_free(HirRestrictionSolver *solver) {
@@ -259,6 +269,15 @@ static int restriction_observation_compare(const void *left, const void *right) 
     return 0;
 }
 
+static int restriction_pending_compare(const void *left, const void *right) {
+    const HirRestrictionPending *a=left,*b=right;
+    int order=restriction_observation_compare(&a->observation,&b->observation);
+    if (order) return order;
+    /* An unclassified obligation at the same point must not inherit a more
+     * specific cause from another visit. NONE sorts before any refinement. */
+    return a->reason<b->reason ? -1 : a->reason>b->reason ? 1 : 0;
+}
+
 static XrXirStatus restriction_call_actuals(void *context, const XirExecutionSite *site) {
     HirRestrictionSolver *solver = context;
     HirEscape *owner = &solver->builder->graph;
@@ -327,6 +346,23 @@ static bool restriction_function_use(const HirEscape *owner, HirEscapeUse use) {
         !xr_xir_type_is_c_callable(owner->module->types, type);
 }
 
+/* Refine only this already rejected callback entry. Every physical capture
+ * must name an actual local Array Cell constructor; an opaque formal, another
+ * payload or a foreign environment retains the original unknown reason. */
+static XrXirDiagnosticReason restriction_callback_reason(const HirRestrictionSolver *solver,
+    const XirExecutionSite *site) {
+    if (site->unresolved || site->remainder!=XIR_EXECUTION_REMAINDER_OPAQUE ||
+        !site->capture_count || site->reference==UINT32_MAX) return XR_XIR_DIAGNOSTIC_NONE;
+    for (uint32_t p=0;p<site->capture_count;++p) {
+        XirExecutionArgument actual;
+        if (xir_execution_argument(solver->execution,site,p,&actual)!=XR_XIR_OK ||
+            actual.environment!=XIR_EXECUTION_CURRENT_ENVIRONMENT ||
+            !xir_view_actual_array_cell(solver->builder->graph.module,actual.function,actual.value))
+            return XR_XIR_DIAGNOSTIC_NONE;
+    }
+    return XR_XIR_DIAGNOSTIC_CAPTURED_ARRAY_TRANSPORT;
+}
+
 static XrXirStatus restriction_callback_entry(void *context, const XirExecutionSite *site) {
     HirRestrictionSolver *solver = context;
     if (site->invocation_contract && site->parent_kind != XIR_EXECUTION_CLEANUP_USE) {
@@ -341,8 +377,9 @@ static XrXirStatus restriction_callback_entry(void *context, const XirExecutionS
         return XR_XIR_OK;
     }
     if (!site->unresolved && !site->remainder) return XR_XIR_OK;
-    return restriction_request(solver, XR_XIR_UNRESOLVED,
-        (HirEscapeObservation){site->function, site->instruction, site->receiver_value, XIR_STORAGE_BEFORE});
+    return restriction_request_reason(solver, XR_XIR_UNRESOLVED,
+        (HirEscapeObservation){site->function, site->instruction, site->receiver_value, XIR_STORAGE_BEFORE},
+        restriction_callback_reason(solver,site));
 }
 
 static bool restriction_cell_publications(HirRestrictionSolver *solver) {
@@ -599,10 +636,10 @@ static bool restriction_seed(HirRestrictionSolver *solver) {
         uint32_t first = 0, end = solver->pending_count;
         while (first < end) {
             uint32_t middle = first + (end - first) / 2;
-            if (restriction_observation_compare(solver->pending + middle, &point) < 0) first = middle + 1;
+            if (restriction_observation_compare(&solver->pending[middle].observation, &point) < 0) first = middle + 1;
             else end = middle;
         }
-        if (first < solver->pending_count && !restriction_observation_compare(&point, solver->pending + first))
+        if (first < solver->pending_count && !restriction_observation_compare(&point, &solver->pending[first].observation))
             solver->nodes[restriction_node(solver, point.function, solver->point_values[p], false)].incomplete = true;
     }
     for (uint32_t c = 0; c < solver->carrier_count && escape_poll(owner); ++c) {
@@ -754,9 +791,9 @@ static bool restriction_publish(HirRestrictionSolver *solver, XrHirEscapeFacts *
         .formula_count=total, .inputs=inputs, .input_count=(uint32_t)terms, .points=points,
         .point_count=solver->builder->observation_count};
     if (solver->pending_count) {
-        HirEscapeObservation pending = solver->pending[0];
+        HirEscapeObservation pending = solver->pending[0].observation;
         facts->view.pending = (XrXirDiagnostic){XR_XIR_UNRESOLVED, pending.function,
-            UINT32_MAX, pending.instruction, XR_XIR_DIAGNOSTIC_NONE};
+            UINT32_MAX, pending.instruction, solver->pending[0].reason};
     }
     uint32_t cursor = 0;
     for (uint32_t n = 0; n < total && escape_poll(owner); ++n) {
@@ -834,7 +871,7 @@ XR_FUNC XrXirStatus xr_hir_escape_builder_prepare_points(XrHirEscapeBuilder *bui
     solver->placement_count = 0;
     bool complete = restriction_observe_storage(solver, final);
     if (owner->status == XR_XIR_OK && solver->pending_count)
-        qsort(solver->pending, solver->pending_count, sizeof(*solver->pending), restriction_observation_compare);
+        qsort(solver->pending, solver->pending_count, sizeof(*solver->pending), restriction_pending_compare);
     solver->view = (XirStorageFlowView){0};
     if (!complete && owner->status == XR_XIR_UNRESOLVED && solver->remainder == XIR_EXECUTION_REMAINDER_STORAGE) {
         owner->status = XR_XIR_OK; solver->ready = false; *ready = false;

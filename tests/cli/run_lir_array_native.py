@@ -166,6 +166,8 @@ def main() -> None:
         "reject_view_indirect_callback_write": b"borrowing captured Array storage is not implemented yet",
         "reject_view_local_byte_capture": b"borrowing captured Array storage is not implemented yet",
         "reject_callable_local_array_transport": b"callable transport of captured Array storage is not implemented yet",
+        "reject_callable_local_byte_transport": b"callable transport of captured Array storage is not implemented yet",
+        "reject_callable_unknown_before_array_transport": b"constructed XIR failed checking",
         "reject_view_state_indirect_callback_write": b"E0382: Slice of module binding `values` conflicts with write",
         "reject_view_local_return": b"constructed XIR failed checking",
     }
