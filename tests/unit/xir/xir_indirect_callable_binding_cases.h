@@ -9,6 +9,7 @@
 #define XIR_INDIRECT_CALLABLE_BINDING_CASES_H
 #include "base/xsha256.h"
 #include "xir/xxir_internal.h"
+#include "xir_construction_fixture.h"
 typedef struct IndirectBindingSite {
     uint32_t function,binding,identity,instruction,parameter,value;
 } IndirectBindingSite;
@@ -237,10 +238,94 @@ static void indirect_binding_roundtrip(const char *file,XrXirOp operation,bool h
     CHECK(indirect_binding_instance_sites(decoded,operation,false)==sites);
     CHECK(xr_xir_compile_artifact_verify(decoded,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
 }
+/* This is an independent raw Built graph with the real Source signature and
+ * call-bound type contract, not a modified Source artifact with stale facts.
+ * The two graph shapes differ only in the entry terminator: 0->2->1 proves
+ * dominance despite physical order; 0->{1,2} exposes a genuine bypass. */
+static void indirect_binding_cfg_order(const XrXirArtifact *source,IndirectBindingSite site) {
+    const XrXirModule *source_module=&source->module;
+    const XrXirFunction *source_function=source_module->functions+site.function;
+    const XrXirFunctionEffectContract *source_contract=source_module->provenance->contracts+site.function;
+    const XrXirInstruction *copy=source_function->instructions+site.value-source_function->parameter_count;
+    const XrXirInstruction *call=source_function->instructions+site.instruction;
+    CHECK(source_function->parameter_count==1 && site.parameter==0 && call->immediate==0 &&
+        source_function->result==XR_XIR_UNIT && source_function->error_type==XR_XIR_NEVER);
+    const XrXirType precise=copy->type,bound=source_contract->values[site.identity].declared_type;
+    const XrXirTypeNode *precise_signature=xr_xir_callable_signature(source_module->types,precise);
+    CHECK(precise_signature && !precise_signature->parameter_count && precise_signature->result==XR_XIR_UNIT &&
+        precise_signature->element==XR_XIR_NEVER);
+    XrXirInstruction instructions[]={
+        {.op=XR_XIR_CONST_BOOL,.type=XR_XIR_BOOL,.immediate=1},
+        {.op=XR_XIR_JUMP,.targets={2}},
+        {.op=XR_XIR_COPY,.type=precise,.args={6}},
+        {.op=XR_XIR_CALL_INDIRECT,.args={0,1},.immediate=0},
+        {.op=XR_XIR_RETURN},
+        {.op=XR_XIR_FUNCTION_REF,.type=precise,.immediate=1},
+        {.op=XR_XIR_JUMP,.targets={1}}
+    };
+    const XrXirBlock blocks[]={{.first=0,.count=2},{.first=2,.count=3},{.first=5,.count=2}};
+    const XrXirInstruction unit={.op=XR_XIR_RETURN};const XrXirBlock unit_block={.count=1};
+    const XrXirInstruction entry_instructions[]={
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},{.op=XR_XIR_RETURN,.args={0}}
+    };
+    const XrXirBlock entry_block={.count=2};
+    const uint32_t operands[]={3};
+    const XrXirFunction functions[]={
+        {.name="indirect",.name_length=8,.parameters=source_function->parameters,.parameter_count=1,
+            .result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,.instructions=instructions,.instruction_count=7,
+            .blocks=blocks,.block_count=3,.operands=operands,.operand_count=1},
+        {.name="action",.name_length=6,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
+            .instructions=&unit,.instruction_count=1,.blocks=&unit_block,.block_count=1},
+        {.name="entry",.name_length=5,.result=XR_XIR_I64,.error_type=XR_XIR_NEVER,
+            .instructions=entry_instructions,.instruction_count=2,.blocks=&entry_block,.block_count=1},
+        {.name="initialize",.name_length=10,.result=XR_XIR_UNIT,.error_type=XR_XIR_NEVER,
+            .instructions=&unit,.instruction_count=1,.blocks=&unit_block,.block_count=1}
+    };
+    const XrXirRootValueIdentity identities[]={
+        {.instruction=2,.mode=XR_XIR_EFFECT_VALUE_CALL_BIND,.declared_type=bound},
+        {.instruction=5,.mode=XR_XIR_EFFECT_VALUE_AUTHENTIC_REF,.declared_type=precise}
+    };
+    const XrXirEffectCallBinding binding={XR_XIR_EFFECT_BINDING_INDIRECT,3,0,3};
+    XrXirRootTerm *terms=NULL;
+    if(source_contract->formula.term_count) {
+        terms=indirect_binding_copy(source_contract->formula.terms,source_contract->formula.term_count,sizeof(*terms));
+        for(uint32_t t=0;t<source_contract->formula.term_count;++t)
+            if(terms[t].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL){CHECK(terms[t].index==site.instruction);terms[t].index=3;}
+    }
+    XrXirFunctionEffectContract contracts[4]={{0}};
+    contracts[0]=(XrXirFunctionEffectContract){.parameter_count=1,.parameters=source_contract->parameters,
+        .formula={source_contract->formula.constant_mask,source_contract->formula.term_count,terms},
+        .value_count=2,.values=identities,.binding_count=1,.bindings=&binding};
+    /* Actual module initialization is ROOT-required even for a Unit body. */
+    contracts[3].formula.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
+    XrXirProvenance provenance={.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=contracts,.contract_count=4};
+    XrXirFunctionIdentity names[4]={{0}};
+    if(precise_signature->flags&XR_XIR_CALLABLE_NO_SUSPEND)names[1].promises=XR_XIR_FUNCTION_NO_SUSPEND;
+    const XrXirSourceModule module_name={.name="indirect-ssa",.name_length=12,.initializer=3,.storage=XR_XIR_MODULE_FRESH_STORAGE};
+    const XrXirDeclarations declarations={.modules=&module_name,.module_count=1,.functions=names,.entry_function=2};
+    XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=4,.types=source_module->types,
+        .declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM,.provenance=&provenance};
+    CHECK(instructions[2].args[0]>1+2);
+    CHECK(xir_effect_call_binding_candidate(&effect_context,&built,0,3,0)==XR_XIR_OK);
+    XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
+    XrXirStatus status=xir_fixture_check(&effect_context,&built,&checked,&diagnostic);
+    if(status!=XR_XIR_OK)fprintf(stderr,"indirect reverse physical CFG status%u f%u b%u i%u\n",
+        (unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction);
+    CHECK(status==XR_XIR_OK && checked && xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
+    CHECK(xir_effect_call_binding_candidate(&effect_context,&checked->module,0,3,0)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);checked=NULL;
+    instructions[1]=(XrXirInstruction){.op=XR_XIR_BRANCH,.args={1},.targets={1,2}};
+    CHECK(xir_effect_call_binding_candidate(&effect_context,&built,0,3,0)==XR_XIR_OK);
+    CHECK(xir_fixture_verify(&effect_context,&built,&diagnostic)==XR_XIR_BAD_DOMINANCE);
+    CHECK(diagnostic.function==0 && diagnostic.block==1 && diagnostic.instruction==2);
+    CHECK(xir_fixture_check(&effect_context,&built,&checked,&diagnostic)==XR_XIR_BAD_DOMINANCE && !checked);
+    xr_free(terms);
+}
 static void indirect_callable_binding_cases(void) {
     EffectMark baseline=effect_mark();
     XrXirArtifact *opaque=root_source("indirect_binding_opaque.xr",XR_XIR_OK);
-    (void)indirect_binding_site(opaque,XR_XIR_CALL_INDIRECT);xr_xir_compile_artifact_free(opaque);
+    IndirectBindingSite opaque_site=indirect_binding_site(opaque,XR_XIR_CALL_INDIRECT);
+    indirect_binding_cfg_order(opaque,opaque_site);xr_xir_compile_artifact_free(opaque);
     indirect_binding_roundtrip("indirect_binding_reachable.xr",XR_XIR_CALL_INDIRECT,true);
     indirect_binding_roundtrip("indirect_binding_invoke.xr",XR_XIR_INVOKE_INDIRECT,false);
     XrXirArtifact *rejected=root_source("reject_indirect_binding_generic.xr",XR_XIR_BAD_TYPE);CHECK(!rejected);
