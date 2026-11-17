@@ -58,7 +58,7 @@ typedef struct LirC {
     XrLirSource source;
     uint32_t location_count, location_cursor;
     bool runtime, runtime_header, f64, state, arrays, views, displays, maps;
-    bool string_values, inline_values, callables, cells, header_edges;
+    bool string_values, inline_values, callables, cells, header_edges, array_forwarding;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;
@@ -79,6 +79,8 @@ typedef struct LirC {
     size_t view_call_cursor, view_event_cursor;
     /* Only a complete, unconditional Array NEW establishes this block fact. */
     uint32_t array_frame_block;
+    size_t array_forward_cursor;
+    const XrLirHomeEvent *array_forward_pending;
 } LirC;
 static void c_values_emit_types(LirC *);
 static void c_values_function(LirC *);
@@ -98,6 +100,8 @@ static void c_cell_scope_release(LirC *, uint32_t);
 static void c_cell_events_prepare(LirC *);
 static void c_cell_instruction(LirC *, const XrLirInstructionView *, uint32_t);
 static void c_map_binding_stage_copy(LirC *, uint32_t, uint32_t, uint32_t);
+static bool c_array_forward_begin(LirC *, const XrLirInstructionView *);
+static bool c_array_forward_drop(LirC *, const XrLirInstructionView *);
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
     if (c->status != XR_LIR_C_OK)
@@ -1197,6 +1201,7 @@ static void c_verify_text(LirC *c) {
 #include "xlir_c_value_types.inc.c"
 #include "xlir_c_cell.inc.c"
 #include "xlir_c_value_transfers.inc.c"
+#include "xlir_c_array_forwarding.inc.c"
 #include "xlir_c_values.inc.c"
 static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {
     XrLirTypeView shape = {0};
