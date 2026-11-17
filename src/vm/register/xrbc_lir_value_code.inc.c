@@ -225,6 +225,28 @@ static bool rbc_lir_fixed_binding(RbcLirCompiler *c,uint32_t value) {
         (image->types[binding->type-1].kind==XRT_VALUE_STRING ||
          image->types[binding->type-1].kind==XRT_VALUE_MAP_STRING_I64);
 }
+static bool rbc_lir_array_local_metadata(RbcLirCompiler *c,XrRbcValueAccess *access,uint32_t receiver) {
+    const XrLirHomeBinding *binding=c->homes->bindings ? &c->homes->bindings[receiver] : NULL;
+    const XrtValueImage *image=xr_lir_value_image_view(c->literals->program->value_image);
+    if (!binding || binding->kind!=XR_LIR_HOME_BINDING_LOCAL || !binding->type || !image ||
+        binding->type>image->type_count || image->types[binding->type-1].kind!=XRT_VALUE_ARRAY_I64) return true;
+    while (c->array_local_cursor<c->homes->event_count) {
+        size_t n=c->array_local_cursor++;
+        const XrLirHomeEvent *event=&c->homes->events[n];
+        if (event->kind!=XR_LIR_OWNERSHIP_ARRAY_OPERATION) continue;
+        if (event->block<c->diagnostic->block ||
+            (event->block==c->diagnostic->block && event->instruction<c->diagnostic->instruction)) continue;
+        if (event->block!=c->diagnostic->block || event->instruction!=c->diagnostic->instruction ||
+            event->source!=receiver || event->operation!=access->index)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"local Array update lost its actual common operation");
+        if (n>=UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"local Array event exceeds typed code");
+        /* ARRAY otherwise leaves other zero. This is a common event ordinal,
+         * not mutation authority inferred from the live reference count. */
+        access->other=(uint32_t)n+1;
+        return true;
+    }
+    return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"local Array update lost its common operation");
+}
 static uint32_t rbc_lir_binding_event(RbcLirCompiler *c,uint32_t kind,uint32_t receiver) {
     while (c->binding_event_cursor<c->homes->event_count) {
         size_t n=c->binding_event_cursor++;
@@ -422,6 +444,7 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
                 }
             }
             if (access.window==UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"container mutator lost its common pending workspace");
+            if (!map && !rbc_lir_array_local_metadata(c,&access,i->operands[0])) return false;
         }
         break;
     }
