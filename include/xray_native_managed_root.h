@@ -136,6 +136,10 @@ typedef struct XrtManagedSlotLocation {
 XRAY_API XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *, size_t,
     XrtManagedSlotLocation *);
 #ifndef __cplusplus
+typedef struct XrtManagedFrameForward {
+    size_t source_slot, source_offset, destination_slot, destination_offset;
+} XrtManagedFrameForward;
+
 /* Trusted execution code consuming a verified physical ownership plan may
  * forward one owned Header through this activation's real factory view in a
  * single-executor window without calls, external observations or retirement.
@@ -149,8 +153,9 @@ XRAY_API XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *, size_t,
  * owner untouched; callers run the original COPY/DROP with fresh reads rather
  * than reusing a preflight pointer. C++ keeps Headers opaque. */
 static inline bool xrt_managed_frame_try_forward(XrtManagedFrame *frame, void *payload,
-    const XrtManagedFrameLocations *locations, size_t source, size_t source_offset,
-    size_t destination, size_t destination_offset) {
+    const XrtManagedFrameLocations *locations, XrtManagedFrameForward transfer) {
+    size_t source=transfer.source_slot, source_offset=transfer.source_offset;
+    size_t destination=transfer.destination_slot, destination_offset=transfer.destination_offset;
     if (!frame || !payload || !locations || locations->frame!=frame || locations->payload!=payload ||
         !locations->slots || !locations->busy || source>=locations->slot_count ||
         destination>=locations->slot_count || source==destination || source_offset==SIZE_MAX ||

@@ -21,8 +21,9 @@ static bool rbc_value_array_forward(const XrRbcModule *module,RbcValueActivation
     const XrLirHomeBinding *binding=rbc_value_binding(code,create ? access.result : access.source);
     const XrLirValueHome *home=rbc_value_home(code,create ? access.source : access.result);
     return xrt_managed_frame_try_forward(activation->frame,activation->payload,&activation->frame_locations,
-        create ? home->first_owner : binding->first_owner,create ? home->offset : binding->offset,
-        create ? binding->first_owner : home->first_owner,create ? binding->offset : home->offset);
+        (XrtManagedFrameForward){create ? home->first_owner : binding->first_owner,
+            create ? home->offset : binding->offset,create ? binding->first_owner : home->first_owner,
+            create ? binding->offset : home->offset});
 }
 static XrtManagedStatus rbc_value_binding_place(const XrRbcModule *module,XrRbcStack *stack,RbcValueOrigin origin,
     XrtExternalOwner *external,XrtPlace *place) {

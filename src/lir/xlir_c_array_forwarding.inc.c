@@ -66,7 +66,7 @@ static bool c_array_forward_begin(LirC *c, const XrLirInstructionView *op) {
         if (event->block!=c->block || event->instruction!=c->instruction) continue;
         LirCArrayForward transfer={0};
         if (!c_array_forward_geometry(c,event,op,&transfer)) return false;
-        c_format(c,"    xrl_array_forwarded = xrt_managed_frame_try_forward(xrl_frame, xrl_payload, &xrl_frame_locations, %zu, %zu, %zu, %zu);\n",
+        c_format(c,"    xrl_array_forwarded = xrt_managed_frame_try_forward(xrl_frame, xrl_payload, &xrl_frame_locations, (XrtManagedFrameForward){%zu, %zu, %zu, %zu});\n",
             transfer.source,transfer.source_offset,transfer.destination,transfer.destination_offset);
         c_text(c,"    if (!xrl_array_forwarded) {\n");
         c->array_forward_pending=event;

@@ -128,10 +128,10 @@ typedef struct XrLirOwnershipFact {
      * suffix. It neither consumes the binding nor produces an SSA owner.
      * BINDING facts also retain exact String Ref roles when present. */
     XrLirStringOperation string_operation;
-    /* Preparation only: a same-block LOCAL Array<i64> NEW/READ is followed
+    /* A same-block LOCAL Array<i64> NEW/READ is followed
      * immediately by the named source/Cell DROP. MOVE describes the proposed
      * reference forwarding, not the original logical transfer_mode. Consumers
-     * still execute both original events. This proves neither runtime busy /
+     * retain both original events as the dynamic fallback. This proves neither runtime busy /
      * pending / old-target state nor equivalence of retain-failure behavior,
      * and never authorizes ignoring callbacks or coalescing physical homes. */
     XrLirOwnershipTransferMode forwarding_mode;
