@@ -478,6 +478,32 @@ static void late_frame_scalar_cells(void) {
 }
 #include "lir_slice_state_read_fixture.h"
 #include "lir_slice_cleanup_bytecode_cases.h"
+#include "lir_slice_callback_loan_fixture.h"
+static void slice_callback_loan_execution(void) {
+    const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
+    const SliceCallbackLoanCase shapes[]={SLICE_CALLBACK_LOAN_DIRECT,SLICE_CALLBACK_LOAN_INDIRECT,SLICE_CALLBACK_LOAN_DERIVED};
+    for (size_t family=0;family<2;++family) for (size_t shape=0;shape<3;++shape) {
+        SliceCallbackLoanFixture c=slice_callback_loan_fixture(elements[family],shapes[shape]);
+        OK(xr_lir_module_finish(c.module,NULL));XrRbcProgram *program=compile(c.module,c.root);
+        const XrRbcModule *module=xr_rbc_program_view(program);
+        bool root=false,invoke=false,relay=false,forwarding=false;
+        for (uint32_t f=0;f<module->function_count;++f) {
+            const XrRbcValueCode *code=xr_rbc_module_value_code(module,f);CHECK(code && code->homes);
+            size_t direct=0,indirect=0;
+            for (size_t n=0;n<code->access_count;++n) {
+                direct+=code->accesses[n].operation==XR_RBC_VALUE_CALL;
+                indirect+=code->accesses[n].operation==XR_RBC_VALUE_FUNCTION_CALL;
+            }
+            if (code->homes->source_function==c.root.id) {
+                CHECK(direct==1 && indirect==(shapes[shape]==SLICE_CALLBACK_LOAN_INDIRECT?1u:0u));root=true;
+            } else if (code->homes->source_function==c.invoke.id) {CHECK(indirect==1);invoke=true;}
+            else if (code->homes->source_function==c.relay.id) {CHECK(direct==1);relay=true;}
+            else if (indirect) {CHECK(indirect==1 && !direct);forwarding=true;}
+        }
+        CHECK(root && invoke && relay && forwarding==(shapes[shape]==SLICE_CALLBACK_LOAN_INDIRECT));
+        xr_lir_module_destroy(c.module);execute(program,4);
+    }
+}
 static void slice_state_reads(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
     for (size_t family=0;family<2;++family) for (unsigned mutable=0;mutable<2;++mutable)
@@ -786,6 +812,7 @@ int main(void) {
     late_frame_scalar_cells();
     slice_state_reads();
     slice_cleanup_bytecode();
+    slice_callback_loan_execution();
     owned_duplicate_edge();
     scope_receiving();
     scope_keep_formal(false); scope_keep_formal(true);

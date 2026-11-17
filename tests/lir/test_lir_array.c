@@ -46,6 +46,7 @@
 #include "lir_slice_boundary_root_fixture.h"
 #include "lir_slice_state_read_fixture.h"
 #include "lir_slice_cleanup_fixture.h"
+#include "lir_slice_callback_loan_fixture.h"
 #include "lir_string_fixture.h"
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
@@ -656,7 +657,12 @@ static void slice_cleanup_proofs(void) {
 static void array_c_output(const char *name, const char *path) {
     XrLirModule *m = NULL;
     XrLirFunction root = {0};
-    if (!strncmp(name,"slice-proof-",12)) {
+    if (!strncmp(name,"slice-callback-",15)) {
+        SliceCallbackLoanFixture c=slice_callback_loan_fixture(strstr(name,"-u8")?XR_LIR_U8:XR_LIR_I64,
+            strstr(name,"-indirect-")?SLICE_CALLBACK_LOAN_INDIRECT:SLICE_CALLBACK_LOAN_DIRECT);
+        m=c.module;root=c.root;OK(xr_lir_module_finish(m,NULL));
+    }
+    else if (!strncmp(name,"slice-proof-",12)) {
         SliceCleanupCase shape=strstr(name,"-bind-")?SLICE_CLEANUP_BIND:
             strstr(name,"-call-before-")?SLICE_CLEANUP_CALL_BEFORE:
             strstr(name,"-call-after-")?SLICE_CLEANUP_CALL_AFTER:
@@ -890,6 +896,9 @@ int main(int argc, char **argv) {
     array_c_output("scalar-edge-mixed",NULL);
     array_c_output("scalar-edge-pod",NULL);
     slice_cleanup_proofs();
+    static const char *const callback_products[]={"slice-callback-direct-i64","slice-callback-direct-u8",
+        "slice-callback-indirect-i64","slice-callback-indirect-u8"};
+    for (size_t n=0;n<sizeof(callback_products)/sizeof(*callback_products);++n) array_c_output(callback_products[n],NULL);
     static const char *const cleanup_products[]={"slice-proof-branch-i64","slice-proof-branch-u8",
         "slice-proof-live-i64","slice-proof-live-u8","slice-proof-bind-i64","slice-proof-bind-u8",
         "slice-proof-loop-i64","slice-proof-loop-u8","slice-proof-call-before-i64","slice-proof-call-before-u8",
