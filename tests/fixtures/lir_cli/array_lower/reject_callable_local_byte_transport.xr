@@ -1,0 +1,15 @@
+fn apply(callback: fn() -> i64) -> i64 {
+    return callback()
+}
+
+fn sample() -> i64 {
+    var values: Array<u8> = [11, 22, 33]
+    const callback = fn() -> i64 {
+        values.push(44)
+        return len(values)
+    }
+    const dispatch = apply
+    return dispatch(callback)
+}
+
+print(sample())
