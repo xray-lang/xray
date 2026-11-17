@@ -241,7 +241,7 @@ def compiler_flags(compiler: Path, header: str, version: bytes) -> tuple[list, s
         flags = ["/nologo", "/std:c11", "/utf-8", "/W4", "/WX", "/O2", ("/MT", "/MTd", "/MD", "/MDd")[crt]]
         flags.append("/clang:-ffp-contract=off" if name == "clang-cl.exe" else "/fp:precise")
         if name == "cl.exe":
-            flags.append("/wd4723")
+            flags += ["/experimental:c11atomics", "/wd4723"]
         return flags, "clang-cl" if name == "clang-cl.exe" else "MSVC"
     if sys.platform not in ("linux", "darwin"):
         raise ValueError("NOT_RUN: unsupported host platform " + sys.platform)
