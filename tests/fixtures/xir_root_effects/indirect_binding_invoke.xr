@@ -1,0 +1,14 @@
+enum Fault { Failed }
+var failing: bool = false
+fn invoke(exec: fn(fn()) throws(Fault) -> i64) -> i64 {
+    const action = fn() {}
+    try { return exec(action) } catch (error) { return 9 }
+}
+fn run(action: fn()) throws(Fault) -> i64 {
+    action()
+    if (failing) { throw Fault.Failed }
+    return 4
+}
+print(invoke(run))
+failing = true
+print(invoke(run))
