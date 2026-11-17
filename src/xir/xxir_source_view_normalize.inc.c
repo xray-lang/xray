@@ -221,6 +221,18 @@ static SourceRootQuery *source_view_queries(SourceContext *ctx,const XirViewNorm
 }
 static XrXirStatus source_view_access_failure(SourceContext *ctx,const XrXirModule *module,
     const XrXirDiagnostic *diagnostic,XrXirStatus status) {
+    if (diagnostic->reason==XR_XIR_DIAGNOSTIC_CALLBACK_LOAN_UNRESOLVED && status==XR_XIR_UNRESOLVED) {
+        AstNode *site=NULL;XrXirSourceRange range={0};
+        if (diagnostic->function<module->function_count) {
+            uint32_t function=diagnostic->function;site=ctx->bodies[function].node;
+            ctx->module=ctx->bodies[function].module;
+            if (diagnostic->instruction<module->functions[function].instruction_count && ctx->bodies[function].debug_points)
+                range=ctx->bodies[function].debug_points[diagnostic->instruction].range;
+        }
+        source_fail(ctx,site,status,"callback arguments require a completed readonly Slice borrowing contract");
+        if (range.line>0) {ctx->diagnostic.module=range.module;ctx->diagnostic.line=range.line;ctx->diagnostic.column=range.column;}
+        return ctx->diagnostic.status;
+    }
     AstNode *site=NULL;XrXirOp op=XR_XIR_INVALID;uint32_t block=diagnostic->block;
     if (diagnostic->function<module->function_count) {
         const XrXirFunction *function=module->functions+diagnostic->function;

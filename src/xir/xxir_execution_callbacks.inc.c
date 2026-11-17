@@ -34,7 +34,13 @@ static XrXirStatus execution_callback_capture(void *context, const XirExecutionS
         entry.receiver_function = capture->receiver_function;
         entry.receiver_value = capture->receiver_value;
         entry.capture_environment = capture->environment;
-        entry.invocation_contract = (formal.escaping || formal.generic_storage) &&
+        /* A readonly nonescaping Fn also borrows its actual environment for
+         * this invocation. The storage footprint and all known actual capture
+         * edges remain present; this grants neither access nor persistence. */
+        bool borrowed=!formal.hidden && !formal.cell && !formal.escaping && formal.mode==XR_PARAM_READ &&
+            xr_xir_callable_signature(xir_execution_types(run->owner),formal.type) &&
+            !xr_xir_type_is_c_callable(xir_execution_types(run->owner),formal.type);
+        entry.invocation_contract = (formal.escaping || formal.generic_storage || borrowed) &&
             capture->receiver_function == entry.function && capture->environment == XIR_EXECUTION_CURRENT_ENVIRONMENT;
         entry.remainder = entry.invocation_contract ? 0 : XIR_EXECUTION_REMAINDER_PARAMETER;
         return run->visit(run->context, &entry);

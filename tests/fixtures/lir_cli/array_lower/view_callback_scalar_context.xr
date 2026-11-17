@@ -1,0 +1,13 @@
+fn invoke(part: Slice<i64>, callback: fn() -> i64) -> i64 {
+    return callback() + part[0] + len(part)
+}
+fn sample() -> i64 {
+    var left = 1
+    var right = 10
+    var values = [11, 22, 33]
+    const first = fn() -> i64 { left += 1; return left }
+    const second = fn() -> i64 { right += 2; return right }
+    const part: Slice<i64> = values[1:3]
+    return invoke(part, first) + invoke(part, second)
+}
+print(sample())

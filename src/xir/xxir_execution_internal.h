@@ -113,8 +113,9 @@ typedef struct XirExecutionSite {
     XrXirType signature;
     uint8_t protocol;
     bool unresolved;
-    /* An ordinary storable formal has an invocation-loan contract. Consumers
-     * retain its current footprint independently of its escape permission. */
+    /* Ordinary storable and readonly nonescaping Fn formals have an
+     * invocation-loan contract. Consumers retain the current footprint and
+     * known actual captures; no access or persistence follows from this bit. */
     bool invocation_contract;
     /* A footprint branch has crossed a validated stored-value boundary.
      * Its restriction is fixed, while captures and environment loans remain. */

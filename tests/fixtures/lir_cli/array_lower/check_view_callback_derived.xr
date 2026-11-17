@@ -1,0 +1,5 @@
+fn work(src: Slice<u8>, callback: fn()) -> i64 {
+    var loan: Slice<u8> = src[0:len(src)]
+    callback()
+    return len(loan)
+}

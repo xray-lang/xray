@@ -7,6 +7,7 @@
  * xxir_view_access.inc.c - Independent view, Cell and retained-place decisions
  */
 #include "xxir_view_access_graph.inc.c"
+#include "xxir_effect_callback_loan_internal.h"
 #include "xxir_view_access_entry.inc.c"
 #include "xxir_view_access_epoch.inc.c"
 static XrXirStatus view_access_class_fresh_input(ViewAccess *,const XrXirViewRootEvent *,
@@ -453,14 +454,72 @@ static bool view_access_scalar_storage(XrXirType type) {
 }
 #include "xxir_view_access_class_candidate.inc.c"
 #include "xxir_view_access_uncaptured.inc.c"
-static XrXirStatus view_access_indirect_captures(ViewAccess *a,const XrXirViewOwnerEvent *event) {
-    const XrXirInstruction *call=&a->body->instructions[event->instruction];uint32_t producer=UINT32_MAX;
+static XrXirStatus view_access_callback_origin(ViewAccess *a,uint32_t value,uint32_t *parameter,bool *complete) {
+    *complete=false;ViewRootCheck *c=&a->resolver->check;
+    uint64_t total=(uint64_t)a->body->parameter_count+a->body->instruction_count;
+    for (uint64_t depth=0;depth<total;++depth) {
+        ViewAccessOrigin *origins=NULL;XrXirStatus status=view_access_origins(a,value,&origins);
+        if (status!=XR_XIR_OK || !origins || origins->next) return status;
+        XrXirViewLoanOrigin origin=origins->event;
+        if (origin.function!=a->function || origin.repeated_phi || origin.selection_count) return XR_XIR_OK;
+        for (uint32_t p=0;p<origin.choice_count;++p) {
+            if (origin.choices[p].block>=a->body->block_count) return XR_XIR_BAD_STRUCTURE;
+            if (a->repeated[origin.choices[p].block]) return XR_XIR_OK;
+        }
+        if (origin.kind==XR_XIR_VIEW_LOAN_INPUT) {
+            bool entry=false;status=view_access_entry_origin(a,&origin,&entry);
+            if (status!=XR_XIR_OK || !entry) return status;
+            uint32_t capture=c->module->declarations->functions[a->function].capture_count;
+            if (origin.value<capture || origin.value>=a->body->parameter_count) return XR_XIR_OK;
+            *parameter=origin.value;*complete=true;return XR_XIR_OK;
+        }
+        if ((origin.kind!=XR_XIR_VIEW_LOAN_REBORROW && origin.kind!=XR_XIR_VIEW_LOAN_CALL) ||
+            origin.source>=value) return XR_XIR_OK;
+        const XrXirTypeNode *source=xr_xir_type_node(c->module->types,xr_xir_operand_type(a->body,origin.source));
+        if (!source || source->kind!=XR_XIR_TYPE_SLICE ||
+            (source->element!=XR_XIR_I64 && source->element!=XR_XIR_U8)) return XR_XIR_OK;
+        value=origin.source;
+    }
+    return XR_XIR_OK;
+}
+/* Conditional entry grants cover every actual live origin, not merely one
+ * pair found in a module summary. Unknown, captured and mixed roots retain
+ * their independent unresolved obligation. */
+static XrXirStatus view_access_callback_entry(ViewAccess *a,const XrXirViewOwnerEvent *event,
+    uint32_t receiver,bool *granted) {
+    *granted=false;
+    if (!a->cells || !a->cells->effects) return XR_XIR_OK;
+    ViewRootCheck *c=&a->resolver->check;uint32_t callback=0;bool formal=false;
+    XrXirStatus status=xir_effects_callback_loan_receiver(c->context,c->module,a->cells->effects,
+        a->function,receiver,&callback,&formal);
+    if (status!=XR_XIR_OK || !formal) return status;
+    for (uint32_t p=0;p<event->before.count;++p) {
+        if (!(event->before.bits[p/64u]&(UINT64_C(1)<<(p%64u)))) continue;
+        uint32_t value=event->before.values[p];
+        const XrXirTypeNode *type=xr_xir_type_node(c->module->types,xr_xir_operand_type(a->body,value));
+        if (!type || type->kind!=XR_XIR_TYPE_SLICE ||
+            (type->element!=XR_XIR_I64 && type->element!=XR_XIR_U8)) return XR_XIR_OK;
+        uint32_t loan=0;bool complete=false;status=view_access_callback_origin(a,value,&loan,&complete);
+        if (status!=XR_XIR_OK || !complete) return status;
+        const XrXirTypeNode *parameter=xr_xir_type_node(c->module->types,a->body->parameters[loan]);
+        if (!parameter || parameter->kind!=XR_XIR_TYPE_SLICE || parameter->element!=type->element) return XR_XIR_OK;
+        bool paired=false;
+        status=xir_effects_callback_loan_contract(c->context,c->module,a->cells->effects,a->function,
+            callback,XIR_MODULE_EFFECT_PARAMETER,loan,&paired);
+        if (status!=XR_XIR_OK || !paired) return status;
+    }
+    *granted=true;return XR_XIR_OK;
+}
+static XrXirStatus view_access_callable_captures(ViewAccess *a,const XrXirViewOwnerEvent *event,uint32_t receiver) {
+    uint32_t producer=UINT32_MAX;
     XrXirStatus status=view_root_reference_producer(&a->resolver->check,a->function,
-        (uint32_t)call->immediate,&producer,a->cells?a->cells->control:NULL);
+        receiver,&producer,a->cells?a->cells->control:NULL);
     if(status!=XR_XIR_OK)return status;
     if(producer==UINT32_MAX) {
-        bool empty=false;status=view_access_uncaptured_result(a,(uint32_t)call->immediate,&empty);
+        bool empty=false;status=view_access_uncaptured_result(a,receiver,&empty);
         if(status!=XR_XIR_OK || empty)return status;
+        bool conditional=false;status=view_access_callback_entry(a,event,receiver,&conditional);
+        if (status!=XR_XIR_OK || conditional) return status;
         /* Arity and NoSuspend do not describe an unknown callable's captures. */
         for(uint32_t p=0;p<event->before.count;++p)
             if(event->before.bits[p/64u]&(UINT64_C(1)<<(p%64u)))return XR_XIR_UNRESOLVED;
@@ -490,6 +549,30 @@ static XrXirStatus view_access_indirect_captures(ViewAccess *a,const XrXirViewOw
         if(status!=XR_XIR_OK)return status;
     }
     return XR_XIR_OK;
+}
+static XrXirStatus view_access_indirect_captures(ViewAccess *a,const XrXirViewOwnerEvent *event) {
+    const XrXirInstruction *call=&a->body->instructions[event->instruction];
+    return view_access_callable_captures(a,event,(uint32_t)call->immediate);
+}
+typedef struct ViewCallbackApplication {
+    ViewAccess *access;
+    const XrXirViewOwnerEvent *event;
+} ViewCallbackApplication;
+static XrXirStatus view_access_callback_actual(void *context,const XirCallbackLoanApplication *actual) {
+    ViewCallbackApplication *walk=context;ViewAccess *a=walk->access;
+    if (actual->function!=a->function || actual->instruction!=walk->event->instruction ||
+        actual->callback>=(uint64_t)a->body->parameter_count+a->body->instruction_count ||
+        actual->loan>=(uint64_t)a->body->parameter_count+a->body->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    bool live=false;
+    for (uint32_t p=0;p<walk->event->before.count;++p)
+        if (walk->event->before.values[p]==actual->loan &&
+            (walk->event->before.bits[p/64u]&(UINT64_C(1)<<(p%64u)))) {live=true;break;}
+    if (!live || !xr_xir_callable_signature(a->resolver->check.module->types,
+        xr_xir_operand_type(a->body,actual->callback))) return XR_XIR_UNRESOLVED;
+    const XrXirTypeNode *loan=xr_xir_type_node(a->resolver->check.module->types,xr_xir_operand_type(a->body,actual->loan));
+    if (!loan || loan->kind!=XR_XIR_TYPE_SLICE ||
+        (loan->element!=XR_XIR_I64 && loan->element!=XR_XIR_U8)) return XR_XIR_UNRESOLVED;
+    return view_access_callable_captures(a,walk->event,actual->callback);
 }
 static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEvent *event) {
     const XrXirInstruction *op=a->body->instructions+event->instruction;
@@ -537,6 +620,19 @@ static XrXirStatus view_access_instruction(ViewAccess *a,const XrXirViewOwnerEve
         return view_access_use(a,&event->before,source,op->op==XR_XIR_VIEW_SET,true,NULL);
     }
     bool call=op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT;
+    bool contract_call=call || op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT || op->op==XR_XIR_CALL_REQUIREMENT;
+    bool live_call=false;
+    if (contract_call) for (uint32_t p=0;p<event->before.count;++p)
+        live_call|=(event->before.bits[p/64u]&(UINT64_C(1)<<(p%64u)))!=0;
+    if (live_call && a->cells && a->cells->effects) {
+        ViewCallbackApplication application={a,event};
+        XrXirStatus status=xir_effects_callback_loan_applications(a->resolver->check.context,
+            a->resolver->check.module,a->cells->effects,a->function,event->instruction,
+            view_access_callback_actual,&application);
+        if (status==XR_XIR_UNRESOLVED && a->resolver->check.location.reason==XR_XIR_DIAGNOSTIC_NONE)
+            a->resolver->check.location.reason=XR_XIR_DIAGNOSTIC_CALLBACK_LOAN_UNRESOLVED;
+        if (status!=XR_XIR_OK) return status;
+    }
     if(op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
         XrXirStatus status=view_access_indirect_captures(a,event);
         if(status!=XR_XIR_OK)return status;

@@ -114,7 +114,7 @@ static bool effect_callback_loan_node_formal(const EffectCheckBuild *build,uint3
             return false;
         if (node>=row.first && node-row.first<row.parameters) {
             uint32_t ordinal=node-row.first;
-            if (ordinal<row.capture_count || value.erased || !value.callable_input ||
+            if (ordinal<row.capture_count || value.erased || value.mode!=XR_PARAM_READ || !value.callable_input ||
                 xr_xir_type_is_c_callable(effect_check_types_read(build),value.type)) return false;
             *parameter=ordinal;return true;
         }
@@ -254,6 +254,7 @@ XR_FUNC XrXirStatus xir_effects_callback_loan_contract(const XrXirCompileContext
     const XrXirModule *module,const XrXirEffects *effects,uint32_t function,uint32_t callback,
     XirModuleEffectTermKind kind,uint32_t loan,bool *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
+    if (kind!=XIR_MODULE_EFFECT_PARAMETER && kind!=XIR_MODULE_EFFECT_CAPTURE) return XR_XIR_BAD_STRUCTURE;
     *output=false;EffectCheckedRoots *roots=NULL;
     XrXirStatus status=effect_callback_loan_context(memory,module,effects,&roots);
     if (status!=XR_XIR_OK) return status;
@@ -264,7 +265,7 @@ XR_FUNC XrXirStatus xir_effects_callback_loan_contract(const XrXirCompileContext
         if (link>roots->callback_loans || visited++>=roots->callback_loans) return XR_XIR_BAD_STRUCTURE;
         EffectCheckCallbackLoan row=roots->callback_loan[link-1];
         if (row.function!=function) return XR_XIR_BAD_STRUCTURE;
-        if (row.relation.callback_parameter==callback && row.relation.loan_kind==kind &&
+        if (!row.source && row.relation.callback_parameter==callback && row.relation.loan_kind==kind &&
             row.relation.loan_parameter==loan) {*output=true;return XR_XIR_OK;}
         link=row.next;
     }
@@ -299,6 +300,11 @@ XR_FUNC XrXirStatus xir_effects_callback_loan_applications(const XrXirCompileCon
     if (status!=XR_XIR_OK) return status;
     if (!visitor || function>=roots->templates || instruction>=module->functions[function].instruction_count)
         return XR_XIR_BAD_STRUCTURE;
+    if (!roots->callback_loans) return XR_XIR_OK;
+    const XrXirInstruction *op=module->functions[function].instructions+instruction;
+    if ((op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE) && op->immediate>=0 &&
+        (uint64_t)op->immediate<roots->templates && !roots->function[op->immediate].callback_loans)
+        return XR_XIR_OK;
     if (!roots->callback_loans_observed || !roots->callback_loans_closed) return XR_XIR_UNRESOLVED;
     EffectCheckFunction caller=roots->function[function];uint32_t visited_calls=0;
     for (uint32_t c=roots->node[caller.root].calls;c!=UINT32_MAX;) {
@@ -319,10 +325,19 @@ XR_FUNC XrXirStatus xir_effects_callback_loan_applications(const XrXirCompileCon
             if (pair.relation.callback_parameter>=call.count || pair.relation.loan_parameter>=call.count)
                 return XR_XIR_UNRESOLVED;
             XirCallbackLoanApplication actual={.function=function,.instruction=instruction};
-            if (!effect_callback_loan_physical(roots,function,
-                    roots->argument[call.first+pair.relation.callback_parameter],&actual.callback) ||
+            uint32_t callback_node=roots->argument[call.first+pair.relation.callback_parameter];
+            if (!effect_callback_loan_physical(roots,function,callback_node,&actual.callback) ||
                 !effect_callback_loan_physical(roots,function,
                     roots->argument[call.first+pair.relation.loan_parameter],&actual.loan)) return XR_XIR_UNRESOLVED;
+            /* A known constructor's local environment is still checked by
+             * the access consumer. Unknown execution writes are not an empty
+             * module summary, even when the actual view has a local root. */
+            uint32_t members=0;
+            for (uint32_t m=roots->node[callback_node].module_sets[EFFECT_MODULE_WRITE];m!=UINT32_MAX;) {
+                if (m>=roots->module_members || members++>=roots->module_members) return XR_XIR_BAD_STRUCTURE;
+                EffectModuleMember member=roots->module_member[m];m=member.next;
+                if (member.kind==EFFECT_MODULE_UNKNOWN) return XR_XIR_UNRESOLVED;
+            }
             status=visitor(context,&actual);if (status!=XR_XIR_OK) return status;
         }
     }
