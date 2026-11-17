@@ -16,6 +16,7 @@ from xraytest.artifacts import complete_native_artifacts
 from lir_slice_native_observer import slice_boundary_observer_source
 from lir_header_edge_native_observer import header_edge_observer_source
 from lir_array_forward_native_observer import array_forward_observer_source
+from lir_array_local_native_observer import array_local_observer_source
 
 
 def run(command, cwd, expected_exit=0):
@@ -140,6 +141,16 @@ def forward_observer(args, generated, client, binary, command, work):
     return record
 
 
+def local_observer(args, generated, client, binary, command, work):
+    record = native_observer(args, generated, client, binary, command, work,
+                             array_local_observer_source(generated), '-array-local-observer')
+    cases = record['cases']
+    assert [(row['operation'], row['mode']) for row in cases] == [(op, mode) for op in range(2) for mode in range(12)]
+    assert all(row['fast'] == (row['mode'] == 0) and row['bytes'] == row['controlBytes'] and
+               row['blocks'] == row['controlBlocks'] for row in cases), cases
+    return record
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--driver', type=Path, required=True)
@@ -200,6 +211,8 @@ def main():
             assert reads and all('xrt_' not in body for body in reads), name
         if name in ('string', 'phi-string'):
             assert 'xrt_native_array_get(' in text, name
+        if name in ('string', 'scalar-edge-swap'):
+            assert 'xray_native_array_local.h' not in text and 'xrl_array_ready' not in text, name
         if name.startswith('map-literal-'):
             assert 'xrt_native_map_literal_create(' in text
             assert 'static const XrtMapLiteral xrl_map_literal_2' in text
@@ -256,6 +269,9 @@ def main():
                 args, generated, client, binary, command, work)
         if name == 'repeat-i64':
             record['cases'][name]['arrayForwardObserver'] = forward_observer(
+                args, generated, client, binary, command, work)
+        if name == 'i64':
+            record['cases'][name]['arrayLocalObserver'] = local_observer(
                 args, generated, client, binary, command, work)
     (work / 'result.json').write_text(json.dumps(record, indent=2), encoding='utf-8')
     complete_native_artifacts(work)
