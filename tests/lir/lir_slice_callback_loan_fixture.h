@@ -8,7 +8,8 @@ typedef enum SliceCallbackLoanCase {
     SLICE_CALLBACK_LOAN_ALIAS,SLICE_CALLBACK_LOAN_INDIRECT_ALIAS,
     SLICE_CALLBACK_LOAN_INCOMPLETE,SLICE_CALLBACK_LOAN_MISSING_INVOKE,
     SLICE_CALLBACK_LOAN_MISSING_RELAY,SLICE_CALLBACK_LOAN_LOCAL,
-    SLICE_CALLBACK_LOAN_PHI,SLICE_CALLBACK_LOAN_DERIVED,SLICE_CALLBACK_LOAN_CASE_COUNT
+    SLICE_CALLBACK_LOAN_PHI,SLICE_CALLBACK_LOAN_DERIVED,SLICE_CALLBACK_LOAN_INDIRECT_SLICE,
+    SLICE_CALLBACK_LOAN_CASE_COUNT
 } SliceCallbackLoanCase;
 typedef struct SliceCallbackLoanFixture { XrLirModule *module;XrLirFunction root,invoke,relay; } SliceCallbackLoanFixture;
 
@@ -45,6 +46,7 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
     XrLirValue fn=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_FUNCTION_REF,.type=callback,.callee=change,
         .operands=&state,.operand_count=1,.bits=XR_LIR_CLOSURE_FRAME});
     bool indirect=shape==SLICE_CALLBACK_LOAN_INDIRECT || shape==SLICE_CALLBACK_LOAN_INDIRECT_ALIAS;
+    bool indirect_slice=shape==SLICE_CALLBACK_LOAN_INDIRECT_SLICE;
     XrLirValue dispatch={0};XrLirFunction forwarding={0};XrLirBlock forwarding_body={0};
     if (indirect) {
         /* The indirect carrier transports a real callback, never a Slice.
@@ -55,6 +57,13 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
         OK(xr_lir_set_closure_target(m,forwarding,(XrLirClosureTarget){type,0,false}));
         dispatch=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_FUNCTION_REF,.type=type,
             .callee=forwarding,.bits=XR_LIR_CLOSURE_FRAME});
+    }
+    if (indirect_slice) {
+        XrLirCallableParameter parameters[]={{.type=callback,.mode=XR_PARAM_READ},{.type=slice,.mode=XR_PARAM_READ}};
+        XrLirType type=0;OK(xr_lir_callable_type(m,&(XrLirCallableType){.parameters=parameters,.parameter_count=2,.result=XR_LIR_I64},&type));
+        OK(xr_lir_set_closure_target(m,c.relay,(XrLirClosureTarget){type,0,false}));
+        dispatch=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_FUNCTION_REF,.type=type,
+            .callee=c.relay,.bits=XR_LIR_CLOSURE_FRAME});
     }
     XrLirValue zero=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64});
     XrLirValue one=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=1});
@@ -71,6 +80,10 @@ static SliceCallbackLoanFixture slice_callback_loan_fixture(XrLirType element,Sl
     XrLirValue arguments[]={fn,view};
     XrLirValue result=slice_callable_value(root,(XrLirInstruction){.op=XR_LIR_CALL,
         .type=XR_LIR_I64,.callee=c.relay,.operands=arguments,.operand_count=2});
+    if (indirect_slice) {
+        XrLirValue args[]={dispatch,fn,view};result=slice_callable_value(root,(XrLirInstruction){
+            .op=XR_LIR_CALL_INDIRECT,.type=XR_LIR_I64,.operands=args,.operand_count=3});
+    }
     if (indirect) {
         XrLirValue sum[]={indirect_result,result};result=slice_callable_value(root,(XrLirInstruction){
             .op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=sum,.operand_count=2});
@@ -168,9 +181,9 @@ static XrLirModule *slice_callback_loan_ref_fixture(XrLirType element,unsigned k
     XrLirType slice=0,callback=0;OK(xr_lir_slice_type(m,element,&slice));
     bool array=kind==1;XrLirType owned_cell=0;
     if (kind==2) OK(xr_lir_cell_type(m,(XrLirCellType){XR_LIR_I64,0},&owned_cell));
-    XrLirCallableParameter parameter={.type=array?XR_LIR_ARRAY:XR_LIR_I64,
+    XrLirCallableParameter parameter={.type=array?XR_LIR_ARRAY_REF:XR_LIR_I64_CELL,
         .array_element=array?element:0,.mode=XR_PARAM_REF};
-    if (owned_cell) parameter=(XrLirCallableParameter){.type=owned_cell,.mode=XR_PARAM_READ};
+    if (owned_cell) parameter=(XrLirCallableParameter){.type=owned_cell,.mode=XR_PARAM_REF};
     OK(xr_lir_callable_type(m,&(XrLirCallableType){.parameters=&parameter,.parameter_count=1,.result=XR_LIR_I64},&callback));
     XrLirType types[]={slice,callback,owned_cell?owned_cell:array?XR_LIR_ARRAY_REF:XR_LIR_I64_CELL};XrLirFunction function={0};
     XrLirBlock block=slice_callable_function(m,"loan_reference",types,3,&function);

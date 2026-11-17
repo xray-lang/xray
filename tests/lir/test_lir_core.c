@@ -37,7 +37,8 @@ static void slice_callback_loan_conditions(void) {
                     view.callback_loans[1].callback_parameter==0 && view.callback_loans[1].loan_parameter==1);
                 xr_lir_slice_facts_destroy(facts);OK(xr_lir_verify(copy,NULL));xr_lir_module_destroy(copy);
             } else {
-                CHECK(strstr(diagnostic.message,alias?"Array binding write":"captured binding effect facts"));
+                CHECK(strstr(diagnostic.message,alias?"Array binding write":shape==SLICE_CALLBACK_LOAN_INDIRECT_SLICE?
+                    "Slice use requires a closed readonly loan operation":"captured binding effect facts"));
                 xr_lir_module_destroy(c.module);
             }
         }
