@@ -138,6 +138,26 @@ static XrtManagedStatus rbc_value_string_binding_append(const XrRbcModule *modul
     xrt_native_string_append_place(place,activation->frame,workspace->first_owner,suffix,source);
     return XRT_MANAGED_OK;
 }
+static bool rbc_value_array_local_update(XrRbcStack *stack,RbcValueActivation *activation,
+    XrRbcValueAccess access) {
+    if (!activation->array_forwarding || !activation->array_backings_ready || !access.other) return false;
+    const uint32_t *args=activation->code->arguments+access.first;
+    const XrLirHomeBinding *binding=rbc_value_binding(activation->code,args[0]);
+    const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
+    XrRbcRegister *item=rbc_value_register(stack,activation,args[access.count-1]);
+    if (!item) return false;
+    XrtArrayI64LocalUpdate update={.binding_slot=binding->first_owner,.binding_offset=binding->offset,
+        .workspace_slot=workspace->first_owner,.workspace_offset=workspace->offset,
+        .operation=access.index==XR_LIR_ARRAY_OP_SET ? XRT_ARRAY_UPDATE_SET : XRT_ARRAY_UPDATE_PUSH};
+    memcpy(&update.value,&item->bits,sizeof(update.value));
+    if (access.index==XR_LIR_ARRAY_OP_SET) {
+        XrRbcRegister *index=rbc_value_register(stack,activation,args[1]);
+        if (!index) return false;
+        memcpy(&update.index,&index->bits,sizeof(update.index));
+    }
+    return xrt_array_i64_try_update_local(activation->frame,activation->payload,&activation->frame_locations,
+        &activation->code->homes->frame,update);
+}
 static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     if (access.operation!=XR_RBC_VALUE_ARRAY) return rbc_value_binding_step(module,stack,activation,access);
@@ -146,10 +166,12 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     XrtValueKind value_kind=rbc_value_kind(module,activation->code,create ? access.result : args[0]);
     XrtBackingArrayKind kind=(XrtBackingArrayKind)(value_kind-XRT_VALUE_ARRAY_I64);
     if ((unsigned)kind>=XRT_BACKING_ARRAY_COUNT) return XRT_MANAGED_ARGUMENT;
+    if (access.other && rbc_value_array_local_update(stack,activation,access)) return XRT_MANAGED_OK;
     const XrtBackingTypes *types=NULL;
     if (create || access.index==XR_LIR_ARRAY_OP_SET || access.index==XR_LIR_ARRAY_OP_PUSH || access.index==XR_LIR_ARRAY_OP_DISPLAY) {
         XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
         if (status!=XRT_MANAGED_OK) return status;
+        activation->array_backings_ready=true;
     }
     if (access.index==XR_LIR_ARRAY_OP_SET || access.index==XR_LIR_ARRAY_OP_PUSH) {
         XrtExternalOwner external; XrtPlace binding;

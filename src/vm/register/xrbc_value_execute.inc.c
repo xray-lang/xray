@@ -14,6 +14,7 @@
 #include "runtime/native/xnative_array_ops.h"
 #include "runtime/native/xnative_map_backing.h"
 #include "runtime/native/xnative_values.h"
+#include "xray_native_array_local.h"
 
 typedef struct RbcValueActivation RbcValueActivation;
 typedef struct RbcValueOrigin { RbcValueActivation *activation; uint32_t value; } RbcValueOrigin;
@@ -49,6 +50,7 @@ struct RbcValueActivation {
     uint8_t *snapshots;
     size_t edge_capacity, publication_capacity, snapshot_capacity, publication_count;
     bool array_forwarding; /* Only a genuine immutable code owner supplies this capability. */
+    bool array_backings_ready; /* Set only after this execution's complete backing setup succeeds. */
     bool receiving_call;
     const XrLirHomeCall *receiving_slice_call;
 };
@@ -682,6 +684,9 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
     size_t parent=stack->depth-1;
     XrRbcFrame *frame=&stack->frames[parent];
     bool indirect=access.operation==XR_RBC_VALUE_FUNCTION_CALL;
+    /* Keep setup evidence across known guest calls, but do not carry it
+     * through a callable boundary whose external lifetime is not assumed. */
+    if (indirect) for (RbcValueActivation *a=caller;a;a=a->previous) a->array_backings_ready=false;
     RbcFunctionCall invoked={0};
     if (indirect) {
         XrtFunction binding;
