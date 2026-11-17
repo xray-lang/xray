@@ -76,7 +76,7 @@ static bool lir_slice_conditional_formal(const LirSliceCallable *c,uint32_t valu
         own.parameter_count!=c->function->parameter_count || own.callback_loans.first>c->effects.callback_loan_count ||
         own.callback_loans.count>c->effects.callback_loan_count-own.callback_loans.first ||
         (own.callback_loans.count && !c->effects.callback_loans)) return false;
-    bool live=false;
+    bool slice_inputs_live=false;
     for (size_t n=0;n<c->flow->count;++n) if (c->flow->scratch[n]&2u) {
         LirSliceRoot root=c->flow->roots[n];uint32_t loan=0;
         if (root.kind!=LIR_SLICE_ROOT_INPUT || !root.identity || root.identity>c->function->value_count) return false;
@@ -89,12 +89,12 @@ static bool lir_slice_conditional_formal(const LirSliceCallable *c,uint32_t valu
             found|=pair.callback_parameter==parameter-1 && pair.loan_kind==XR_LIR_SLICE_EFFECT_PARAMETER && pair.loan_parameter==loan;
         }
         if (!found) return false;
-        live=true;
+        slice_inputs_live=true;
     }
     /* This is a condition on actual callers, not an empty callable body. Each
      * live loan must name an ordinary entry whose obligation is exported;
      * captured Slice conditions remain metadata without a physical carrier. */
-    return live;
+    return slice_inputs_live;
 }
 static bool lir_slice_enqueue_callable(LirSliceCallable *c,uint32_t value,uint32_t earlier_than) {
     LirSliceActuals actuals;
