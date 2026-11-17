@@ -1,0 +1,2 @@
+import "./rejected-library" as Library
+print(Library.read())

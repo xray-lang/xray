@@ -1686,7 +1686,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/task_unit.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_resources.cmake")
 
-include("${PROJECT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_preparation.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/task_outcome_copy_controls.cmake")
