@@ -6,12 +6,20 @@
  *
  * xlir_ownership.inc.c - Cold collection within the existing verifier
  */
+typedef struct LirArrayRegionVector {
+    void *data;
+    uint32_t count, capacity;
+} LirArrayRegionVector;
+typedef struct LirArrayRegionTables {
+    LirArrayRegionVector regions, steps;
+} LirArrayRegionTables;
 struct XrLirOwnershipPlan {
     XrLirOwnershipFunction *functions;
     XrLirOwnershipFact *facts;
     uint32_t function_count, fact_count, fact_capacity;
     XrLirOwnershipTypeFact *types;
     uint32_t type_count;
+    LirArrayRegionTables array_regions;
 };
 
 static XrLirStatus lir_verify(const XrLirModule *, XrLirDiagnostic *, XrLirCallableFacts **,
@@ -336,6 +344,7 @@ static bool lir_plan_slice_boundary(XrLirOwnershipPlan *plan, const XrLirModule 
     return lir_plan_add(plan, fact);
 }
 #include "xlir_array_forwarding.inc.c"
+#include "xlir_array_set_region.inc.c"
 static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan,
     const XrLirCallableFacts *callables, const XrLirBlockConstructionFacts *fresh, XrLirDiagnostic *d) {
     for (uint32_t function = 1; function <= m->function_count; ++function) {
@@ -462,6 +471,8 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
         }
         XrLirStatus forwarding_status=lir_plan_array_forwarding(plan,m,f,function);
         if (forwarding_status!=XR_LIR_OK) return forwarding_status;
+        XrLirStatus region_status=lir_plan_array_set_regions(plan,m,f,function);
+        if (region_status!=XR_LIR_OK) return region_status;
     }
     return XR_LIR_OK;
 }
@@ -469,6 +480,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
 XR_FUNC void xr_lir_ownership_plan_destroy(XrLirOwnershipPlan *plan) {
     if (!plan) return;
     xr_free(plan->facts);
+    lir_array_regions_free(&plan->array_regions);
     xr_free(plan->types);
     xr_free(plan->functions);
     xr_free(plan);

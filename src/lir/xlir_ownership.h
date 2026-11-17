@@ -147,8 +147,38 @@ enum XrLirOwnershipUnmodeled {
     XR_LIR_OWNERSHIP_UNMODELED_CONSTRUCTED = 1u << 5
 };
 
+typedef enum XrLirArraySetRegionStepKind {
+    XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE = 1,
+    XR_LIR_ARRAY_SET_REGION_EDGE_MOVE,
+    XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE,
+    XR_LIR_ARRAY_SET_REGION_READ_CANDIDATE,
+    XR_LIR_ARRAY_SET_REGION_EXIT_MOVE
+} XrLirArraySetRegionStepKind;
+
+/* Numeric descriptions of structurally closed local Array<i64> loops. They
+ * grant no physical aliasing, borrow, bounds, uniqueness or mutation right.
+ * Every future execution must preserve the complete original first iteration,
+ * including its RHS, COPY failures, COW and error ordering. No runtime or
+ * induction theorem is encoded here, and ordinary events/homes remain intact.
+ * canonical_value describes each internal transition/death, not a new shared
+ * physical slot; entry_value and exit_value retain the actual outside owners.
+ * NEW/READ_CANDIDATE preserve a COPY plus its adjacent logical death; they are
+ * not original MOVE events. source dies at drop, or at the selected MOVE edge.
+ * Positions/edges are one-based, and first_step is a zero-based table offset. */
+typedef struct XrLirArraySetRegionStep {
+    XrLirArraySetRegionStepKind kind;
+    uint32_t block, instruction, edge, source, target, drop;
+} XrLirArraySetRegionStep;
+
+typedef struct XrLirArraySetRegion {
+    uint32_t function, header, entry_block, entry_edge, latch;
+    uint32_t exit_edge, exit_block, entry_value, canonical_value, exit_value;
+    uint32_t body_block_count, set_block, set_instruction, first_step, step_count;
+} XrLirArraySetRegion;
+
 typedef struct XrLirOwnershipFunction {
     uint32_t fact_offset, fact_count, unmodeled;
+    uint32_t region_offset, region_count;
     bool external;
 } XrLirOwnershipFunction;
 
@@ -193,5 +223,17 @@ XR_FUNC XrLirStatus xr_lir_ownership_function_at(const XrLirOwnershipPlan *,
     uint32_t function, XrLirOwnershipFunction *);
 XR_FUNC XrLirStatus xr_lir_ownership_fact_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirOwnershipFact *);
+XR_FUNC uint32_t xr_lir_ownership_array_region_count(const XrLirOwnershipPlan *);
+XR_FUNC uint32_t xr_lir_ownership_array_region_step_count(const XrLirOwnershipPlan *);
+/* Invalid row queries preserve the output; successful rows are owned copies. */
+XR_FUNC XrLirStatus xr_lir_ownership_array_region_at(const XrLirOwnershipPlan *,
+    uint32_t ordinal, XrLirArraySetRegion *);
+XR_FUNC XrLirStatus xr_lir_ownership_array_region_step_at(const XrLirOwnershipPlan *,
+    uint32_t ordinal, XrLirArraySetRegionStep *);
+/* Explicit independent current-IR verification for mutable/external inspection
+ * and PARANOID tests. Normal same-process Plan to Homes reception only copies
+ * the owned producer tables; it does not invoke this full structural proof. */
+XR_FUNC XrLirStatus xr_lir_ownership_array_regions_verify(const XrLirModule *,
+    const XrLirOwnershipPlan *, uint32_t function);
 
 #endif // XLIR_OWNERSHIP_H
