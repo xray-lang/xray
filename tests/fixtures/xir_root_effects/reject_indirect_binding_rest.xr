@@ -1,0 +1,5 @@
+fn collect(...actions: fn()) {}
+fn relay(callback: fn()) {
+    const dispatch = collect
+    dispatch(callback)
+}

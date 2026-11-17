@@ -144,6 +144,7 @@ static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
 #include "xir_closure_placement_cases.h"
 #include "xir_lexical_owner_cases.h"
 #include "xir_lexical_source_cases.h"
+#include "xir_indirect_callable_binding_cases.h"
 
 static void captured_cell_bound_types(void) {
     EffectMark baseline = effect_mark();
@@ -1702,8 +1703,12 @@ int main(int argc, char **argv) {
         !strcmp(argv[1], "--source-storage") || !strcmp(argv[1], "--lexical") ||
         !strcmp(argv[1], "--lexical-source") || !strcmp(argv[1], "--conversion") ||
         !strcmp(argv[1], "--module-borrows") || !strcmp(argv[1], "--module-export") ||
-        !strcmp(argv[1], "--preparation-locations") || !strcmp(argv[1], "--entry-footprint"))));
+        !strcmp(argv[1], "--preparation-locations") || !strcmp(argv[1], "--entry-footprint") ||
+        !strcmp(argv[1], "--indirect-bindings"))));
     effect_case_begin();
+    if (argc==2 && !strcmp(argv[1],"--indirect-bindings")) {
+        indirect_callable_binding_cases(); effect_case_end(); return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--preparation-locations")) {
         preparation_failure_locations(); effect_case_end(); return 0;
     }
@@ -1765,6 +1770,7 @@ int main(int argc, char **argv) {
         {signal_escaping_contracts,false},
         {storage_environment_guard_cases,false},
         {control_summary_kernel,true},
+        {indirect_callable_binding_cases,false},
     };
     bool control_only = argc==2 && !strcmp(argv[1],"--control-summary");
     bool entry_only = argc==2 && !strcmp(argv[1],"--entry-footprint");
@@ -1774,7 +1780,8 @@ int main(int argc, char **argv) {
     for (size_t p=0;p<sizeof(probes)/sizeof(probes[0]);++p)
         if (entry_only ? probes[p].run==entry_footprint_ownership :
             (argc==1 || probes[p].control==control_only) &&
-            (!storage_only || probes[p].run!=entry_footprint_ownership)) {
+            (!storage_only || (probes[p].run!=entry_footprint_ownership &&
+                probes[p].run!=indirect_callable_binding_cases))) {
             clock_t started=0;
             if (progress) {
                 started=clock();

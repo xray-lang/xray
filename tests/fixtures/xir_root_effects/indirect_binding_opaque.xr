@@ -1,0 +1,4 @@
+fn invoke(exec: fn(fn())) {
+    const action = fn() {}
+    exec(action)
+}
