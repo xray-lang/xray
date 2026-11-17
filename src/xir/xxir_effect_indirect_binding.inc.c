@@ -116,7 +116,9 @@ XR_FUNC XrXirStatus xir_effect_indirect_binding_candidate(const XrXirCompileCont
     const XrXirInstruction *copy=function->instructions+producer,*original_copy=original->instructions+producer;
     bool retained=module->stage==XR_XIR_LOWERED && copy->op==XR_XIR_OWNED_RETAIN;
     if((copy->op!=XR_XIR_COPY && !retained) || original_copy->op!=XR_XIR_COPY ||
-        copy->args[0]>=value || original_copy->args[0]!=copy->args[0] ||
+        copy->args[0]>=(uint64_t)function->parameter_count+function->instruction_count || copy->args[0]==value ||
+        original_copy->args[0]>=(uint64_t)original->parameter_count+original->instruction_count ||
+        original_copy->args[0]!=copy->args[0] ||
         copy->type!=xr_xir_operand_type(function,copy->args[0])) return XR_XIR_BAD_TYPE;
     const XrXirRootValueIdentity *identity=effect_contract_indirect_identity(consumer,producer);
     if(!identity || identity->mode!=XR_XIR_EFFECT_VALUE_CALL_BIND) return XR_XIR_BAD_TYPE;
