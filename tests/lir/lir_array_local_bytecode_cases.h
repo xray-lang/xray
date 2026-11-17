@@ -78,11 +78,11 @@ static ArrayForwardFixture array_local_fixture(bool snapshot,bool call) {
     answer=array_forward_value(c.module,c.block,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
     if (snapshot) {
         XrLirValue check[]={array_local_get(c,get,c.saved,zero),initial[0]};
-        XrLirValue difference=array_forward_value(c.module,c.block,(XrLirInstruction){.op=XR_LIR_SUB,
+        XrLirValue snapshot_difference=array_forward_value(c.module,c.block,(XrLirInstruction){.op=XR_LIR_SUB,
             .type=XR_LIR_I64,.operands=check,.operand_count=2});
-        XrLirValue add[]={answer,difference};
+        XrLirValue snapshot_add[]={answer,snapshot_difference};
         answer=array_forward_value(c.module,c.block,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,
-            .operands=add,.operand_count=2});
+            .operands=snapshot_add,.operand_count=2});
         array_forward_effect(c.module,c.block,(XrLirInstruction){.op=XR_LIR_ARRAY_DROP,.type=XR_LIR_UNIT,
             .operands=&c.saved,.operand_count=1});
     }
