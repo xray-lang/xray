@@ -137,8 +137,8 @@ static XrXirStatus entry_cleanup_case(const XrXirArtifact *artifact, bool qualif
     XrXirEffects *effects = NULL;
     XrXirDiagnostic diagnostic = {0};
     XirEffectInput input = {module,artifact->construction,NULL};
-    EntryCleanupPreparation prepare = {.module=module,.parent=UINT32_MAX};
-    prepare.lifetime.diagnostic = &diagnostic;
+    EntryCleanupPreparation prepare = {.module=module,.parent=UINT32_MAX,.lifetime={.failure=
+        {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}}};
     XrXirStatus status = qualified ? xr_hir_escape_builder_new(&effect_context,module,NULL,NULL,
         &prepare.lifetime.builder) : XR_XIR_OK;
     if (status == XR_XIR_OK && qualified) {

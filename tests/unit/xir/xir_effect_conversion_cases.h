@@ -95,7 +95,8 @@ static XrXirStatus conversion_owner_case(void) {
         {.result=XR_XIR_I64,.error_type=XR_XIR_NEVER,.instructions=caller,.instruction_count=4,.blocks=blocks+1,.block_count=1}};
     XrXirModule module = {.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=2};
     XrXirDiagnostic diagnostic = {0};
-    ConversionPreparation preparation = {.lifetime={.diagnostic=&diagnostic},.copy=&caller[1]};
+    ConversionPreparation preparation = {.lifetime={.failure=
+        {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE}},.copy=&caller[1]};
     XrXirRootRefiner refiner = {.context=&preparation,.update=conversion_refine,.observe=conversion_observe,
         .points=conversion_points,.prepare=conversion_prepare};
     XrXirConstruction *construction = NULL;
