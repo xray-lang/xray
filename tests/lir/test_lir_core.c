@@ -21,7 +21,7 @@ static void slice_callback_loan_conditions(void) {
     for (size_t family=0;family<2;++family) {
         for (unsigned shape=0;shape<SLICE_CALLBACK_LOAN_CASE_COUNT;++shape) {
             SliceCallbackLoanFixture c=slice_callback_loan_fixture(elements[family],(SliceCallbackLoanCase)shape);
-            bool safe=shape==SLICE_CALLBACK_LOAN_DIRECT || shape==SLICE_CALLBACK_LOAN_INDIRECT;
+            bool safe=shape==SLICE_CALLBACK_LOAN_DIRECT || shape==SLICE_CALLBACK_LOAN_INDIRECT || shape==SLICE_CALLBACK_LOAN_DERIVED;
             bool alias=shape==SLICE_CALLBACK_LOAN_ALIAS || shape==SLICE_CALLBACK_LOAN_INDIRECT_ALIAS;
             XrLirStatus expected=safe?XR_LIR_OK:alias?XR_LIR_VERIFY_ERROR:XR_LIR_UNSUPPORTED;
             XrLirDiagnostic diagnostic={0};XrLirStatus status=xr_lir_module_finish(c.module,&diagnostic);
@@ -41,12 +41,15 @@ static void slice_callback_loan_conditions(void) {
                 xr_lir_module_destroy(c.module);
             }
         }
-        for (unsigned array=0;array<2;++array) {
-            XrLirModule *m=slice_callback_loan_ref_fixture(elements[family],array!=0);XrLirDiagnostic diagnostic={0};
-            XrLirStatus expected=array?XR_LIR_VERIFY_ERROR:XR_LIR_UNSUPPORTED;
+        for (unsigned kind=0;kind<3;++kind) {
+            XrLirModule *m=slice_callback_loan_ref_fixture(elements[family],kind);XrLirDiagnostic diagnostic={0};
+            XrLirStatus expected=kind==1?XR_LIR_VERIFY_ERROR:XR_LIR_UNSUPPORTED;
             CHECK(xr_lir_module_finish(m,&diagnostic)==expected);
-            CHECK(strstr(diagnostic.message,array?"Array binding write":"captured binding effect facts"));xr_lir_module_destroy(m);
+            CHECK(strstr(diagnostic.message,kind==1?"Array binding write":"captured binding effect facts"));xr_lir_module_destroy(m);
         }
+        XrLirModule *captured=slice_callback_loan_capture_fixture(elements[family]);XrLirDiagnostic diagnostic={0};
+        CHECK(xr_lir_module_finish(captured,&diagnostic)==XR_LIR_UNSUPPORTED &&
+            strstr(diagnostic.message,"captured binding effect facts"));xr_lir_module_destroy(captured);
     }
 }
 
