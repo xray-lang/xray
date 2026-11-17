@@ -19,7 +19,7 @@ def array_forward_observer_source(generated):
     selected = {}
     pattern = re.compile(
         r"    xrl_array_forwarded = xrt_managed_frame_try_forward\(xrl_frame, xrl_payload, "
-        r"&xrl_frame_locations, (\d+), (\d+), (\d+), (\d+)\);\n")
+        r"&xrl_frame_locations, \(XrtManagedFrameForward\)\{(\d+), (\d+), (\d+), (\d+)\}\);\n")
     for match in pattern.finditer(emitted):
         position = match.end()
         for _ in range(2):
@@ -104,14 +104,16 @@ static XrtManagedHeader **owner_field(size_t offset) {
     text += "static const uint32_t copy_sources[2] = {" + ",".join(source_ids) + "};\n"
     text += r'''
 static bool observed_try(XrtManagedFrame *frame, void *payload, const XrtManagedFrameLocations *locations,
-    size_t source, size_t source_offset, size_t target, size_t target_offset) {
+    XrtManagedFrameForward transfer) {
+    size_t source=transfer.source_slot, source_offset=transfer.source_offset;
+    size_t target=transfer.destination_slot, target_offset=transfer.destination_offset;
     REQUIRE(frame==observation.view.frame && payload==observation.view.payload && locations->frame==frame &&
         locations->payload==payload && source==geometry[observation.pair][0] && source_offset==geometry[observation.pair][1] &&
         target==geometry[observation.pair][2] && target_offset==geometry[observation.pair][3]);
     XrtManagedHeader *from=*owner_field(source_offset), *to=*owner_field(target_offset);
     int32_t count=from?atomic_load_explicit(&from->references,memory_order_relaxed):0;
     XrtBillingStats before=xrt_billing_owner_stats(observation.billing);
-    bool success=xrt_managed_frame_try_forward(frame,payload,locations,source,source_offset,target,target_offset);
+    bool success=xrt_managed_frame_try_forward(frame,payload,locations,transfer);
     ++observation.attempts; observation.fast=success;
     REQUIRE(*owner_field(source_offset)==(success?NULL:from) && *owner_field(target_offset)==(success?from:to));
     REQUIRE(!from || atomic_load_explicit(&from->references,memory_order_relaxed)==count);
