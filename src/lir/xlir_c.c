@@ -59,6 +59,7 @@ typedef struct LirC {
     uint32_t location_count, location_cursor;
     bool runtime, runtime_header, f64, state, arrays, views, displays, maps;
     bool string_values, inline_values, callables, cells, header_edges, array_forwarding;
+    bool array_local, array_local_runtime;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;
@@ -81,6 +82,7 @@ typedef struct LirC {
     uint32_t array_frame_block;
     size_t array_forward_cursor;
     const XrLirHomeEvent *array_forward_pending;
+    size_t array_local_event_cursor;
 } LirC;
 static void c_values_emit_types(LirC *);
 static void c_values_function(LirC *);
@@ -102,6 +104,9 @@ static void c_cell_instruction(LirC *, const XrLirInstructionView *, uint32_t);
 static void c_map_binding_stage_copy(LirC *, uint32_t, uint32_t, uint32_t);
 static bool c_array_forward_begin(LirC *, const XrLirInstructionView *);
 static bool c_array_forward_drop(LirC *, const XrLirInstructionView *);
+static bool c_array_local_begin(LirC *, const XrLirInstructionView *, const XrLirArrayIntrinsic *, const XrLirHomeWorkspace *);
+static void c_array_local_ready(LirC *);
+static void c_array_local_invalidate(LirC *, const XrLirInstructionView *);
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
     if (c->status != XR_LIR_C_OK)
@@ -877,6 +882,7 @@ static void c_division(LirC *c, const XrLirInstructionView *v) {
 static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
+    c_array_local_invalidate(c,v);
     static const char *const predicates[] = {NULL, "==", "!=", "<", "<=", ">", ">="};
     if (c_cell_point(c,v)) {
         uint32_t source = c_located(&v->source) ? ++c->location_cursor : 0;
@@ -1112,6 +1118,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
     if (c->views) c_text(c, "#include \"xray_native_array_slice.h\"\n\n");
     if (c->arrays) c_text(c, "#include \"xray_native_array.h\"\n\n");
+    if (c->array_local_runtime) c_text(c,"#include \"xray_native_array_local.h\"\n\n");
     if (c->maps) c_text(c, "#include \"xray_native_map.h\"\n\n");
     if (c->displays) c_text(c, "#include \"xray_native_pod.h\"\n\n");
     c_constructed_types(c);
@@ -1202,6 +1209,7 @@ static void c_verify_text(LirC *c) {
 #include "xlir_c_cell.inc.c"
 #include "xlir_c_value_transfers.inc.c"
 #include "xlir_c_array_forwarding.inc.c"
+#include "xlir_c_array_local.inc.c"
 #include "xlir_c_values.inc.c"
 static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {
     XrLirTypeView shape = {0};
