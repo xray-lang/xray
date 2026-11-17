@@ -211,7 +211,7 @@ static XrLirStatus lir_slice_block(const XrLirModule *m, const XrLirFunctionData
             continue;
         }
         bool callable_checked = check && lir_slice_callable_frontier(m, f, v, flow);
-        LirSliceCallableCheck callable = callable_checked ? lir_slice_callable_check(m, f, v, flow) : LIR_SLICE_CALLABLE_SAFE;
+        LirSliceCallableCheck callable = callable_checked ? lir_slice_callable_check(m, f, function, v, flow) : LIR_SLICE_CALLABLE_SAFE;
         if (callable_checked && callable == LIR_SLICE_CALLABLE_UNKNOWN) {
             const char *message = v->op == XR_LIR_CALL_INDIRECT ?
                 "indirect call with a live Slice requires captured binding effect facts" :
