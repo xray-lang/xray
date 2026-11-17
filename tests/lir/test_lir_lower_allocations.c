@@ -39,8 +39,27 @@ static void *injected_allocate(size_t bytes) {
     return pointer;
 }
 
+static void *injected_resize(void *pointer, size_t bytes) {
+    CHECK(bytes);
+    if (!pointer) return injected_allocate(bytes);
+    size_t i=0;
+    while (i<lower_live && observed_lower_blocks[i].pointer!=pointer) ++i;
+    CHECK(i<lower_live);
+    if (attempts++ == fail_at) return NULL;
+    size_t previous=observed_lower_blocks[i].bytes;
+    CHECK(bytes<=SIZE_MAX-(lower_bytes-previous));
+    void *grown=xr_realloc(pointer,bytes);
+    if (grown) {
+        observed_lower_blocks[i]=(LowerBlock){grown,bytes};
+        lower_bytes=lower_bytes-previous+bytes;
+    }
+    return grown;
+}
+
 #undef xr_malloc
 #define xr_malloc(bytes) injected_allocate(bytes)
+#undef xr_realloc
+#define xr_realloc(pointer, bytes) injected_resize(pointer, bytes)
 #undef xr_free
 #define xr_free(pointer) injected_release(pointer)
 #include "lir/xlir_lower.c"
