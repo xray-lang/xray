@@ -37,7 +37,7 @@ def main() -> None:
              "nullable_scalar", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
              "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit",
              "display_nullable", "display_nullable_values", "display_nullable_array", "display_values", "display_strings", "display_imports", "display_loop", "panic_display_unpublished",
-             "view_local", "view_late_callable", "view_scalar_callable_write", "view_scalar_branch_cells", "view_state_callback_read", "view_call", "view_return", "view_loop", "view_copy", "view_module_alias",
+             "view_local", "view_late_callable", "view_scalar_callable_write", "view_scalar_branch_cells", "view_state_callback_read", "view_callback_relay", "view_callback_scalar_context", "view_call", "view_return", "view_loop", "view_copy", "view_module_alias",
              "view_module_const", "view_conditional_cleanup", "view_phi", "view_phi_mixed", "view_copy_argument",
              "view_return_module_unrelated", "view_recursive_module_unrelated", "view_multiple_module_unrelated",
              "view_copy_unused_parameter", "view_call_module_write", "panic_nullable_view", "string_append_values", "string_append_ref",
@@ -140,10 +140,10 @@ def main() -> None:
             failures.append((name, "VM/native refusal byte comparison", (out, err), (vm_out, vm_err)))
     # This paired State control tests semantic admission. The indirect higher-
     # order callable ABI still has its separate Lower implementation frontier.
-    status, out, err = run("check_view_state_indirect_callback_read-check",
-                          [binary, "check", fixtures / "check_view_state_indirect_callback_read.xr"], 0)
-    if status or out or err:
-        failures.append(("check_view_state_indirect_callback_read", "Source read control", out, err))
+    for name in ("check_view_state_indirect_callback_read", "check_view_callback_declaration", "check_view_callback_derived"):
+        status, out, err = run(name + "-check", [binary, "check", fixtures / (name + ".xr")], 0)
+        if status or out or err:
+            failures.append((name, "Source callback borrowing control", out, err))
     rejected_sources = {
         "ref_global_alias": b"E0382: ref of module binding `shared` conflicts with access by `update` via `inspect`",
         "string_append_ref": b"E0382: ref of module binding `published` conflicts with access by `actual` via `actual`",
@@ -169,6 +169,8 @@ def main() -> None:
         "reject_callable_local_byte_transport": b"callable transport of captured Array storage is not implemented yet",
         "reject_callable_unknown_before_array_transport": b"constructed XIR failed checking",
         "reject_view_state_indirect_callback_write": b"E0382: Slice of module binding `values` conflicts with write",
+        "reject_view_callback_relay_write": b"E0382: Slice of module binding `values` conflicts with write",
+        "reject_view_callback_opaque": b"callback arguments require a completed readonly Slice borrowing contract",
         "reject_view_local_return": b"constructed XIR failed checking",
     }
     for name, diagnostic in rejected_sources.items():

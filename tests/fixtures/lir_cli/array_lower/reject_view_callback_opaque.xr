@@ -1,0 +1,6 @@
+fn invoke(part: Slice<i64>, callback: fn() -> i64) -> i64 {
+    return callback() + part[0]
+}
+fn opaque(callback: escaping fn() -> i64, part: Slice<i64>) -> i64 {
+    return invoke(part, callback)
+}

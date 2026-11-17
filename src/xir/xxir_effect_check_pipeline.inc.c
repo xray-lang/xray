@@ -719,6 +719,8 @@ XR_FUNC XrXirStatus xir_effects_finish_prepared_input(const XrXirCompileContext 
     if (status == XR_XIR_OK) status = effect_check_cell_roles(&build);
     if (status == XR_XIR_OK) status = effect_cleanup_suspend_project(&build);
     if (status == XR_XIR_OK) status = effect_check_close(&build);
+    if (status==XR_XIR_OK) effects->checked_roots->callback_loans_closed=
+        effects->checked_roots->callback_loans_observed && effects->checked_roots->module_access;
     if (status==XR_XIR_OK && (!refiner || !refiner->admit) &&
         effects->checked_roots->restrictions.view.pending.status!=XR_XIR_OK)
         status=xir_compile_view_cell_access_verified_input(memory,input,effects,diagnostic);
