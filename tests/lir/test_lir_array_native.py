@@ -254,7 +254,7 @@ def main():
         if name == 'phi-i64':
             record['cases'][name]['headerEdgeObserver'] = header_observer(
                 args, generated, client, binary, command, work)
-        if name == 'i64':
+        if name == 'repeat-i64':
             record['cases'][name]['arrayForwardObserver'] = forward_observer(
                 args, generated, client, binary, command, work)
     (work / 'result.json').write_text(json.dumps(record, indent=2), encoding='utf-8')
