@@ -140,6 +140,11 @@ static void array_forwarding_raw_fields(void) {
     XrRbcModule module={.functions=&function,.function_count=1,.borrowed_value_codes=codes,.borrowed_value_code_count=1};
     XrtLocationOwner *source=NULL; CHECK(xrt_locations_create(NULL,0,&source)==XRT_LOCATION_OK);
     XrRbcExecution *execution=NULL;
+    /* An explicit typed directory selects complete bank/CFG admission even
+     * when every logical home is scalar and has no image or owning slot. */
+    CHECK(xr_rbc_module_prepare(&module,0,NULL,0,source,&execution)==XR_RBC_INVALID && !execution);
+    const XrRbcRegisterKind kinds[]={XR_RBC_BITS};
+    function.register_kinds=kinds; function.register_kind_count=1;
     CHECK(xr_rbc_module_prepare(&module,0,NULL,0,source,&execution)==XR_RBC_OK);
     XrRbcOutcome *outcome=xr_rbc_execution_run(execution); uint64_t bits=0;
     CHECK(outcome && xr_rbc_outcome_bits(outcome,&bits) && bits==42);
