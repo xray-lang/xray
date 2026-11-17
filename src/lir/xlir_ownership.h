@@ -231,9 +231,10 @@ XR_FUNC XrLirStatus xr_lir_ownership_array_region_at(const XrLirOwnershipPlan *,
 XR_FUNC XrLirStatus xr_lir_ownership_array_region_step_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirArraySetRegionStep *);
 /* Explicit independent current-IR verification for mutable/external inspection
- * and PARANOID tests. Normal same-process Plan to Homes reception only copies
+ * and PARANOID tests. It validates the module once and rederives every function
+ * once. Normal same-process Plan to Homes reception only copies
  * the owned producer tables; it does not invoke this full structural proof. */
 XR_FUNC XrLirStatus xr_lir_ownership_array_regions_verify(const XrLirModule *,
-    const XrLirOwnershipPlan *, uint32_t function);
+    const XrLirOwnershipPlan *);
 
 #endif // XLIR_OWNERSHIP_H

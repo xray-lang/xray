@@ -142,16 +142,71 @@ static void array_region_tampering(void) {
         }
     CHECK(move && move->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE);
     move->transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_COPY;
-    CHECK(xr_lir_ownership_array_regions_verify(c.module, plan, c.function.id) == XR_LIR_VERIFY_ERROR &&
+    CHECK(xr_lir_ownership_array_regions_verify(c.module, plan) == XR_LIR_VERIFY_ERROR &&
         live == baseline && live_bytes == bytes);
     move->transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_MOVE;
     XrLirArraySetRegionStep *steps = plan->array_regions.steps.data;
     XrLirArraySetRegionStepKind saved = steps[0].kind; steps[0].kind = XR_LIR_ARRAY_SET_REGION_EXIT_MOVE;
-    CHECK(xr_lir_ownership_array_regions_verify(c.module, plan, c.function.id) == XR_LIR_VERIFY_ERROR &&
+    CHECK(xr_lir_ownership_array_regions_verify(c.module, plan) == XR_LIR_VERIFY_ERROR &&
         live == baseline && live_bytes == bytes);
-    steps[0].kind = saved; OK(xr_lir_ownership_array_regions_verify(c.module, plan, c.function.id));
+    steps[0].kind = saved; OK(xr_lir_ownership_array_regions_verify(c.module, plan));
     CHECK(live == baseline && live_bytes == bytes);
     xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module); CHECK(!live && !live_bytes);
+}
+static void array_region_input_equal(const XrLirModule *input, const XrLirModule *reference) {
+    CHECK(input->function_count == reference->function_count);
+    for (uint32_t f = 0; f < input->function_count; ++f) {
+        const XrLirFunctionData *a = &input->functions[f], *b = &reference->functions[f];
+        CHECK(a->entry == b->entry && a->value_count == b->value_count && a->block_count == b->block_count);
+        for (uint32_t v = 0; v < a->value_count; ++v)
+            CHECK(a->values[v].type == b->values[v].type && a->values[v].block == b->values[v].block &&
+                a->values[v].instruction == b->values[v].instruction && a->values[v].parameter == b->values[v].parameter &&
+                a->values[v].array_element == b->values[v].array_element);
+        for (uint32_t n = 0; n < a->block_count; ++n) {
+            const XrLirBlockData *x = &a->blocks[n], *y = &b->blocks[n];
+            CHECK(x->parameter_count == y->parameter_count && x->instruction_count == y->instruction_count);
+            for (uint32_t p = 0; p < x->parameter_count; ++p) CHECK(x->parameters[p] == y->parameters[p]);
+            for (uint32_t i = 0; i < x->instruction_count; ++i) {
+                const XrLirInstructionView *u = &x->instructions[i].view, *v = &y->instructions[i].view;
+                CHECK(u->op == v->op && u->type == v->type && u->predicate == v->predicate && u->result == v->result &&
+                    u->callee == v->callee && u->intrinsic == v->intrinsic && u->bits == v->bits &&
+                    u->operand_count == v->operand_count && u->edge_count == v->edge_count);
+                for (uint32_t o = 0; o < u->operand_count; ++o) CHECK(u->operands[o] == v->operands[o]);
+                for (uint32_t e = 0; e < u->edge_count; ++e) {
+                    CHECK(u->edges[e].target == v->edges[e].target &&
+                        u->edges[e].argument_count == v->edges[e].argument_count);
+                    for (uint32_t o = 0; o < u->edges[e].argument_count; ++o)
+                        CHECK(u->edges[e].arguments[o] == v->edges[e].arguments[o]);
+                }
+            }
+        }
+    }
+}
+static void array_region_verification_faults(void) {
+    ArraySetRegionFixture input = array_set_region_build(NULL, 3, ARRAY_SET_REGION_LOCAL);
+    input = array_set_region_build(input.module, 6, ARRAY_SET_REGION_LOCAL);
+    ArraySetRegionFixture reference = array_set_region_build(NULL, 3, ARRAY_SET_REGION_LOCAL);
+    reference = array_set_region_build(reference.module, 6, ARRAY_SET_REGION_LOCAL);
+    OK(xr_lir_module_finish(input.module, NULL)); OK(xr_lir_module_finish(reference.module, NULL));
+    XrLirOwnershipPlan *plan = NULL, *saved = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module}, &plan, NULL));
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=reference.module}, &saved, NULL));
+    CHECK(plan->array_regions.regions.count == 2 && lir_array_region_plans_equal(plan, saved));
+    size_t baseline = live, bytes = live_bytes;
+    attempt = 0; OK(xr_lir_ownership_array_regions_verify(input.module, plan));
+    size_t count = attempt; CHECK(count && live == baseline && live_bytes == bytes);
+    for (size_t point = 0; point < count; ++point) {
+        attempt = 0; fail_at = point;
+        CHECK(xr_lir_ownership_array_regions_verify(input.module, plan) == XR_LIR_OUT_OF_MEMORY && attempt > point &&
+            live == baseline && live_bytes == bytes);
+        fail_at = SIZE_MAX;
+        CHECK(lir_array_region_plans_equal(plan, saved)); array_region_input_equal(input.module, reference.module);
+        OK(xr_lir_ownership_array_regions_verify(input.module, plan));
+        CHECK(live == baseline && live_bytes == bytes);
+    }
+    xr_lir_ownership_plan_destroy(plan); xr_lir_ownership_plan_destroy(saved);
+    xr_lir_module_destroy(input.module); xr_lir_module_destroy(reference.module);
+    CHECK(!live && !live_bytes); printf("array region verification failure points: %zu\n", count);
 }
 
 int main(void) {
@@ -179,6 +234,7 @@ int main(void) {
     OK(xr_lir_module_finish(region.module,NULL));
     sweep(region.module,NULL,0);
     array_region_tampering();
+    array_region_verification_faults();
     XrLirModule *grown = NULL;
     OK(ownership_fixture(XR_LIR_STRING, false, 24, &grown));
     sweep(grown,NULL,0);
