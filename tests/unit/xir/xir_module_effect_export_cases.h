@@ -181,7 +181,98 @@ static void module_export_instances(void) {
         returned|=module_export_contains(view,view.functions[f].result_origin,XIR_MODULE_EFFECT_PARAMETER,0);
     CHECK(returned); xir_effects_module_export_free(owned); effect_mark_check(baseline);
 }
+static void module_export_callback_pair(XirModuleEffectExportView view,uint32_t function,
+    uint32_t callback,uint32_t loan) {
+    CHECK(view.callback_loans_complete && view.callback_loan_count && view.callback_loans &&
+        function<view.function_count);
+    XirModuleEffectSpan span=view.functions[function].callback_loans;
+    CHECK(span.first<=view.callback_loan_count && span.count<=view.callback_loan_count-span.first);
+    bool found=false;
+    for (size_t p=0;p<span.count;++p) {
+        XirModuleCallbackLoan row=view.callback_loans[span.first+p];
+        found|=row.callback_parameter==callback && row.loan_kind==XIR_MODULE_EFFECT_PARAMETER &&
+            row.loan_parameter==loan;
+    }
+    CHECK(found);
+}
+typedef struct CallbackLoanObserver {
+    const XrXirModule *module;
+    XrXirEffects *pending;
+} CallbackLoanObserver;
+static XrXirStatus module_callback_loan_observe(void *user,const XrXirCompileContext *context,
+    const XrXirViewLiveEvent *event) {
+    CallbackLoanObserver *observer=user;
+    return xir_effects_callback_loan_observe(context,observer->module,observer->pending,event);
+}
+/* The immutable admitted body supplies real liveness events. A separate pending
+ * ROOT owner receives those same events, so every replay reaches the new hash
+ * and seed storage without faulting a parser or fabricating a live-bit set. */
+static void module_callback_producer_failures(const XrXirArtifact *source) {
+    EffectMark baseline=effect_mark();
+    XrCompileResourceStats memory=effect_stats(&source->context);
+    XirEffectInput input={.module=&source->module,.construction=source->construction};
+    size_t sites=0;
+    for (size_t point=SIZE_MAX;;point=point==SIZE_MAX?0:point+1) {
+        XrXirEffects *pending=NULL;
+        CHECK(xir_effects_prepare_verified_input(&source->context,input,NULL,&pending,NULL)==XR_XIR_OK && pending);
+        CHECK(!pending->checked_roots->callback_loans && !pending->checked_roots->callback_loans_closed);
+        CallbackLoanObserver observer={&source->module,pending};
+        XirViewLiveRequest request={.visitor=module_callback_loan_observe,.user=&observer};
+        attempts=0;injected=false;fail_at=point;
+        XrXirStatus status=xir_compile_view_liveness_loans_verified(&source->context,
+            &source->module,source->checked_effects,&request);
+        fail_at=SIZE_MAX;
+        if (point==SIZE_MAX) {
+            CHECK(status==XR_XIR_OK && pending->checked_roots->callback_loans &&
+                pending->checked_roots->callback_loan_capacity && pending->checked_roots->callback_loan_index_capacity);
+            sites=attempts;CHECK(sites);
+        } else {
+            if(status!=XR_XIR_OUT_OF_MEMORY || !injected)
+                fprintf(stderr,"callback loan producer allocation%zu/%zu status%u injected%d\n",
+                    point,sites,(unsigned)status,injected);
+            CHECK(status==XR_XIR_OUT_OF_MEMORY && injected);
+        }
+        CHECK(!pending->checked_roots->callback_loans_closed);
+        xr_xir_compile_effects_free(pending);effect_mark_check(baseline);
+        CHECK(effect_stats(&source->context).held_bytes==memory.held_bytes);
+        if(point!=SIZE_MAX && point+1==sites)break;
+    }
+    printf("callback loan producer: %zu real allocation failures refund unpublished relations\n",sites);
+}
+static void module_export_callback_loans(void) {
+    EffectMark baseline=effect_mark();
+    XrXirArtifact *source=root_source("slice_callback_loans.xr",XR_XIR_OK),*closed=NULL;
+    uint32_t invoke=root_find(&source->module,"invoke"),relay=root_find(&source->module,"relay");
+    XirModuleEffectExport *owned=NULL;XirModuleEffectExportView view;
+    CHECK(xir_effects_module_export_copy(source,&owned)==XR_XIR_OK && owned);
+    CHECK(xir_effects_module_export_view(owned,&view)==XR_XIR_OK);
+    module_export_callback_pair(view,invoke,1,0);module_export_callback_pair(view,relay,0,1);
+    xir_effects_module_export_free(owned);owned=NULL;
+    module_callback_producer_failures(source);
+    CHECK(xr_xir_compile_specialize(source,&closed,NULL,NULL)==XR_XIR_OK && closed);
+    module_export_instance_failures(closed);
+    CHECK(xir_effects_module_export_copy(closed,&owned)==XR_XIR_OK && owned);
+    CHECK(xir_effects_module_export_view(owned,&view)==XR_XIR_OK);
+    CHECK(closed->module.provenance && closed->module.provenance->kind==XR_XIR_EVIDENCE_INSTANCE);
+    unsigned families=0,instances=0;
+    for(uint32_t f=0;f<closed->module.function_count;++f) {
+        if(closed->module.provenance->origins[f].function!=relay)continue;
+        const XrXirFunction *actual=closed->module.functions+f;
+        CHECK(actual->parameter_count==3);
+        unsigned family=actual->parameters[2]==XR_XIR_I64?1u:actual->parameters[2]==XR_XIR_U8?2u:0u;
+        CHECK(family && !(families&family));families|=family;++instances;
+        module_export_callback_pair(view,f,0,1);
+    }
+    CHECK(families==3 && instances==2);
+    size_t count=view.callback_loan_count;
+    XirModuleCallbackLoan first;memcpy(&first,view.callback_loans,sizeof(first));
+    xr_xir_compile_artifact_free(source);xr_xir_compile_artifact_free(closed);
+    CHECK(xir_effects_module_export_view(owned,&view)==XR_XIR_OK && view.callback_loans_complete &&
+        view.callback_loan_count==count && !memcmp(&first,view.callback_loans,sizeof(first)));
+    xir_effects_module_export_free(owned);effect_mark_check(baseline);
+}
 static void module_effect_export_cases(void) {
     module_export_retirement(); module_export_slice_sources(); module_export_unused_slice(); module_export_instances();
+    module_export_callback_loans();
 }
 #endif
