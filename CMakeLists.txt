@@ -1389,7 +1389,6 @@ if(BUILD_TESTS)
     include("${CMAKE_CURRENT_SOURCE_DIR}/bench/native/native_bench.cmake")
 
     # Exercise public commands and the installed native runtime.
-    include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/cli_usability.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/lir_commands.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke/smoke.cmake")

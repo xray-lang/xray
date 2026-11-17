@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "purpose": "Preserve complete language inputs and literal byte oracles when retiring the old XIR-VM and state-machine-C public CLI harness. This inventory is not an execution result.",
+  "retiredHarness": "tests/cli/run_xir_public_cli_product.py",
+  "retiredRegistrations": 2,
+  "obsoleteAssertions": [
+    "Generated C contains XrXirProgramSpec and XrXirCallEntry",
+    "All library mutable state is rejected"
+  ],
+  "cases": [
+    {
+      "id": "plain_go",
+      "source": "../xir_go_product/main.xr",
+      "stdoutHex": "4100420a32310a",
+      "stderrHex": "",
+      "execution": "Target scheduler acceptance; not executed by this inventory.",
+      "sourceSHA256": "3609d7c2f114b1bb00e2536fe25b740dddc224a79395480d7012cfae6eb40746"
+    },
+    {
+      "id": "cached_state_go",
+      "source": "main.xr",
+      "stdoutHex": "41004234312034322034322074727565207472756520312e350a",
+      "stderrHex": "450052",
+      "execution": "Target scheduler and module-state acceptance; not executed by this inventory.",
+      "sourceSHA256": "ff84e31648b0a24b226da0e21e0051ae4bd8886129f5b3f2cceb944b91191cd0"
+    },
+    {
+      "id": "builtin_constants",
+      "source": "builtin_constants.xr",
+      "stdoutHex": "410042",
+      "stderrHex": "450052",
+      "execution": "Target binary-output acceptance; not executed by this inventory.",
+      "sourceSHA256": "420242de2a91b58d672646bcae5335f83a09f63f03dee65de5245d657d34ea0f"
+    },
+    {
+      "id": "library_mutable_state",
+      "source": "preserved_library_state/rejected-entry.xr",
+      "stdoutHex": "34300a",
+      "stderrHex": "",
+      "originalCarrierRejection": "library mutable or exported state is not admitted",
+      "execution": "Module state is legal on the target architecture; old rejection is not retained as authority.",
+      "sourceSHA256": "688042fbbea2c24637d2c424fc9aad4560cc1bddb2f9bc1584f77e7551d344a6"
+    }
+  ],
+  "publicationFailureCoverage": "tests/cli/run_lir_commands.py retains actual invalid-source run/build and existing-output preservation checks; no positive GO coverage is claimed here."
+}
