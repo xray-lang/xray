@@ -132,6 +132,7 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         }
         c_format(c,", %" PRIu32 "}, UINT32_C(%" PRIu32 "));\n",v->operand_count,source);
         c_values_publish_leaf(c,v->result,source);
+        c_array_local_ready(c);
         /* Both setup and publication must succeed before later instructions
          * run. This function's Frame cannot leave until a terminating return.
          * Merely emitting an ensure inside conditional C proves nothing. */
@@ -154,17 +155,21 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         if (!binding->type || workspace->type!=binding->type) {
             c_error(c,XR_LIR_C_INVALID_LIR,"Array mutation workspace lost its exact binding type"); return;
         }
+        bool local=c_array_local_begin(c,v,shape,workspace);
         c_text(c,"    xrt_native_array_update_place("); c_value(c,v->operands[0]);
         c_format(c,", %s, xrl_frame, %zu, &(XrtArrayUpdate){%s, ",kind,workspace->first_owner,
             shape->operation==XR_LIR_ARRAY_OP_SET ? "XRT_ARRAY_UPDATE_SET" : "XRT_ARRAY_UPDATE_PUSH");
         if (shape->operation==XR_LIR_ARRAY_OP_SET) c_value(c,v->operands[1]); else c_text(c,"0");
         c_text(c,", "); c_array_item(c,element,v->operands[v->operand_count-1]);
-        c_format(c,"}, UINT32_C(%" PRIu32 "));\n",source); return;
+        c_format(c,"}, UINT32_C(%" PRIu32 "));\n",source);
+        c_array_local_ready(c);
+        if (local) c_text(c,"    }\n");
+        return;
     }
     case XR_LIR_ARRAY_OP_REPEAT:
         c_format(c,"    xrt_native_array_repeat(xrl_frame, %zu, &(XrtArrayItem)",home->temporary_first_owner);
         c_array_item(c,element,v->operands[1]); c_text(c,", "); c_value(c,v->operands[0]);
-        c_format(c,", UINT32_C(%" PRIu32 "));\n",source); c_values_publish_leaf(c,v->result,source); return;
+        c_format(c,", UINT32_C(%" PRIu32 "));\n",source); c_values_publish_leaf(c,v->result,source); c_array_local_ready(c); return;
     case XR_LIR_ARRAY_OP_DISPLAY:
         c_format(c,"    xrt_native_array_display(xrl_frame, %zu, ",home->temporary_first_owner); c_value(c,v->operands[0]);
         c_format(c,", %s, UINT32_C(%" PRIu32 "));\n",kind,source); c_values_publish_leaf(c,v->result,source); return;
