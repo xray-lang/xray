@@ -14,14 +14,16 @@ static bool c_array_forward_geometry(LirC *c, const XrLirHomeEvent *event,
     const XrLirInstructionView *op, LirCArrayForward *output) {
     const XrLirValueHomes *homes=c->homes;
     bool create=event->kind==XR_LIR_OWNERSHIP_BINDING_NEW;
+    XrLirOp copy_op=create?XR_LIR_CELL_NEW:XR_LIR_CELL_READ;
+    XrLirOp release_op=create?XR_LIR_ARRAY_DROP:XR_LIR_ARRAY_CELL_DROP;
+    XrLirType copy_type=create?XR_LIR_ARRAY_CELL:XR_LIR_ARRAY;
     if (homes->source_function!=c->function.id || (!create && event->kind!=XR_LIR_OWNERSHIP_BINDING_READ) ||
         event->forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE || event->transfer_mode ||
         !event->source || !event->target || event->source>homes->value_count || event->target>homes->value_count ||
         event->instruction==UINT32_MAX || event->forwarding_drop!=event->instruction+1 ||
         !homes->owned_frame_needed || !homes->bindings || !homes->frame.owned_offsets || !c->value_types ||
         c_value_type(c,event->source)!=XR_LIR_ARRAY_CELL || c_value_type(c,event->target)!=XR_LIR_ARRAY ||
-        op->operand_count!=1 || op->op!=(create?XR_LIR_CELL_NEW:XR_LIR_CELL_READ) ||
-        op->type!=(create?XR_LIR_ARRAY_CELL:XR_LIR_ARRAY) ||
+        op->operand_count!=1 || op->op!=copy_op || op->type!=copy_type ||
         op->result!=(create?event->source:event->target) || op->operands[0]!=(create?event->target:event->source)) return false;
     XrLirArrayShape shape={0};
     if (xr_lir_array_shape_view(c->request->module,(XrLirValue){c->request->module,c->function.id,event->source},&shape)!=XR_LIR_OK ||
@@ -30,7 +32,7 @@ static bool c_array_forward_geometry(LirC *c, const XrLirHomeEvent *event,
         shape.element!=XR_LIR_I64) return false;
     XrLirInstructionView drop={0};
     if (xr_lir_instruction_view(c->request->module,(XrLirBlock){c->request->module,c->function.id,event->block},
-        event->forwarding_drop-1,&drop)!=XR_LIR_OK || drop.op!=(create?XR_LIR_ARRAY_DROP:XR_LIR_ARRAY_CELL_DROP) ||
+        event->forwarding_drop-1,&drop)!=XR_LIR_OK || drop.op!=release_op ||
         drop.operand_count!=1 || drop.operands[0]!=(create?event->target:event->source)) return false;
     const XrLirHomeBinding *binding=&homes->bindings[event->source];
     const XrLirValueHome *value=&homes->values[event->target];
@@ -77,8 +79,9 @@ static bool c_array_forward_drop(LirC *c, const XrLirInstructionView *op) {
     if (!event) return false;
     c->array_forward_pending=NULL;
     bool create=event->kind==XR_LIR_OWNERSHIP_BINDING_NEW;
+    XrLirOp release_op=create?XR_LIR_ARRAY_DROP:XR_LIR_ARRAY_CELL_DROP;
     if (event->block!=c->block || event->forwarding_drop!=c->instruction || op->operand_count!=1 ||
-        op->op!=(create?XR_LIR_ARRAY_DROP:XR_LIR_ARRAY_CELL_DROP) ||
+        op->op!=release_op ||
         op->operands[0]!=(create?event->target:event->source)) {
         c_error(c,XR_LIR_C_INVALID_LIR,"Array forwarding lost its adjacent logical release"); return false;
     }
