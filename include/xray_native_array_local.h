@@ -19,6 +19,14 @@ typedef struct XrtArrayI64LocalUpdate {
     int64_t index, value;
 } XrtArrayI64LocalUpdate;
 
+#if defined(_MSC_VER) && !defined(__clang__)
+#define XRT_ARRAY_LOCAL_INLINE static __forceinline
+#elif defined(__clang__) || defined(__GNUC__)
+#define XRT_ARRAY_LOCAL_INLINE static inline __attribute__((always_inline))
+#else
+#define XRT_ARRAY_LOCAL_INLINE static inline
+#endif
+
 /* The caller has completed this execution's backing initialization and proves
  * an admitted mutable LOCAL I64 Array operation with a separate workspace.
  * Frame, view and immutable spec are the actual private factory/plan objects,
@@ -27,7 +35,7 @@ typedef struct XrtArrayI64LocalUpdate {
  * RC1 only selects a physical strategy; it grants no mutation authority.
  * False changes nothing and requires the original kernel with fresh reads.
  * Capacity is the real typed allocation's prefix, not arbitrary external data. */
-static inline bool xrt_array_i64_try_update_local(XrtManagedFrame *frame, void *payload,
+XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_try_update_local(XrtManagedFrame *frame, void *payload,
     const XrtManagedFrameLocations *locations, const XrtManagedFrameSpec *spec,
     XrtArrayI64LocalUpdate update) {
     if (!frame || !payload || !locations || !spec || locations->frame!=frame || locations->payload!=payload ||
@@ -65,5 +73,6 @@ static inline bool xrt_array_i64_try_update_local(XrtManagedFrame *frame, void *
     if (update.operation==XRT_ARRAY_UPDATE_PUSH) array->length=index+1;
     return true;
 }
+#undef XRT_ARRAY_LOCAL_INLINE
 #endif
 #endif // XRAY_NATIVE_ARRAY_LOCAL_H
