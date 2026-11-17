@@ -759,6 +759,9 @@ static XrXirStatus view_access_check(const XrXirCompileContext *context,
         }
         view_access_function_free(&access);if (status!=XR_XIR_OK) break;
     }
+    if (status==XR_XIR_UNRESOLVED && diagnostic &&
+        c->location.reason==XR_XIR_DIAGNOSTIC_CALLBACK_LOAN_UNRESOLVED)
+        diagnostic->reason=c->location.reason;
     XR_CHECK(c->reserved>=fixed,"access checking retires its receiver after every borrowed callback");
     c->reserved-=fixed;xir_compile_view_root_resolver_free(resolver);return status;
 }
