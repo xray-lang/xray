@@ -421,9 +421,12 @@ static void allocation_dispose(XrtManagedHeader *root, size_t root_bytes) {
         }
     }
 }
-XRAY_API XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes, XrtManagedPending *pending) {
+static XrtManagedStatus managed_prepare(XrtManagedOps *ops, size_t bytes, bool clear_tail,
+    XrtManagedPending *pending) {
     if (!ops || !pending || pending->value || pending->allocation_bytes) return XRT_MANAGED_ARGUMENT;
     const XrtRuntimeTypeSpec *spec = &ops->plan->spec;
+    if (!clear_tail && (!spec->stride || spec->child_count || spec->tail_child_count || spec->drop_payload))
+        return XRT_MANAGED_ARGUMENT;
     size_t children;
     if (!allocation_children(spec, bytes, &children)) return XRT_MANAGED_ARGUMENT;
     if (!xrt_managed_ops_retain(ops)) return XRT_MANAGED_REFCOUNT;
@@ -433,7 +436,7 @@ XRAY_API XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes, 
     if (status != XRT_MANAGED_OK) {
         xrt_billing_owner_drop(ops->billing); xrt_managed_ops_drop(ops); return status;
     }
-    memset(memory, 0, bytes);
+    memset(memory, 0, clear_tail ? bytes : spec->fixed_size);
     XrtManagedHeader *value = memory;
     xr_signed_rc_initialize(&value->references);
     atomic_init(&value->flags, 0);
@@ -445,6 +448,13 @@ XRAY_API XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes, 
     }
     *pending = (XrtManagedPending){value, bytes};
     return XRT_MANAGED_OK;
+}
+XRAY_API XrtManagedStatus xrt_managed_prepare(XrtManagedOps *ops, size_t bytes, XrtManagedPending *pending) {
+    return managed_prepare(ops, bytes, true, pending);
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_prepare_scalar_tail(XrtManagedOps *ops, size_t bytes,
+    XrtManagedPending *pending) {
+    return managed_prepare(ops, bytes, false, pending);
 }
 XRAY_API XrtManagedStatus xrt_managed_commit(XrtManagedPending *pending, XrtManagedHeader **output) {
     if (!pending || !pending->value || !output || output == &pending->value || *output)

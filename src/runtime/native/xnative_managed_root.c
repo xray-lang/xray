@@ -371,8 +371,9 @@ XRAY_API XrtManagedStatus xrt_managed_slot_drop(XrtManagedFrame *frame, size_t i
     return status;
 }
 static XrtManagedStatus slot_prepare_active(XrtManagedSlot *slot, XrtManagedOps *ops,
-    size_t bytes, XrtManagedHeader **output) {
-    XrtManagedStatus status = xrt_managed_prepare(ops, bytes, &slot->pending);
+    size_t bytes, bool clear_tail, XrtManagedHeader **output) {
+    XrtManagedStatus status = clear_tail ? xrt_managed_prepare(ops, bytes, &slot->pending) :
+        xrt_managed_prepare_scalar_tail(ops, bytes, &slot->pending);
     if (status == XRT_MANAGED_OK) *output = slot->pending.value;
     return status;
 }
@@ -391,7 +392,7 @@ XRAY_API XrtManagedStatus xrt_managed_slot_prepare(XrtManagedFrame *frame, size_
     if (!ops || !output || *output) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *slot = slot_begin(frame, index);
     if (!slot) return XRT_MANAGED_ARGUMENT;
-    XrtManagedStatus status = slot_prepare_active(slot,ops,bytes,output);
+    XrtManagedStatus status = slot_prepare_active(slot,ops,bytes,true,output);
     frame->root->busy = false;
     return status;
 }
@@ -415,7 +416,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_construct(XrtManagedFrame *frame, s
     XrtManagedSlot *slot = slot_begin(frame, index);
     if (!slot) return XRT_MANAGED_ARGUMENT;
     XrtManagedHeader *value = NULL;
-    XrtManagedStatus status = slot_prepare_active(slot, ops, bytes, &value);
+    XrtManagedStatus status = slot_prepare_active(slot, ops, bytes, true, &value);
     if (status == XRT_MANAGED_OK) {
         status = construction->initialize(value, construction->context);
         if (status == XRT_MANAGED_OK) status = slot_commit_active(frame, slot);
@@ -469,16 +470,24 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_apply(XrtManagedSlotReserv
     root->reserved_phase=RESERVED_EMPTY;
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_prepare(const XrtManagedSlotReservation *handle,
-    XrtManagedOps *ops, size_t bytes, XrtManagedHeader **output) {
+static XrtManagedStatus reserved_prepare(const XrtManagedSlotReservation *handle,
+    XrtManagedOps *ops, size_t bytes, bool clear_tail, XrtManagedHeader **output) {
     XrtManagedSlot *slot=reserved_slot(handle);
     if (!slot || !ops || !output || *output || handle->root->reserved_phase!=RESERVED_EMPTY)
         return XRT_MANAGED_ARGUMENT;
     XrtManagedRoot *root=handle->root;
     root->reserved_phase=RESERVED_CALLBACK;
-    XrtManagedStatus status=slot_prepare_active(slot,ops,bytes,output);
+    XrtManagedStatus status=slot_prepare_active(slot,ops,bytes,clear_tail,output);
     root->reserved_phase=status==XRT_MANAGED_OK ? RESERVED_PENDING : RESERVED_EMPTY;
     return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_prepare(const XrtManagedSlotReservation *handle,
+    XrtManagedOps *ops, size_t bytes, XrtManagedHeader **output) {
+    return reserved_prepare(handle, ops, bytes, true, output);
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_prepare_scalar_tail(const XrtManagedSlotReservation *handle,
+    XrtManagedOps *ops, size_t bytes, XrtManagedHeader **output) {
+    return reserved_prepare(handle, ops, bytes, false, output);
 }
 XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_commit(const XrtManagedSlotReservation *handle) {
     XrtManagedSlot *slot=reserved_slot(handle);
