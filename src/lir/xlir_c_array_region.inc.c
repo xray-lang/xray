@@ -120,7 +120,7 @@ static void c_array_push_edge_end(LirC *c, size_t edge) {
             role.kind == XR_LIR_ARRAY_REGION_EDGE_LATCH ? "true" : "false");
 }
 static size_t c_array_push_window_at(const LirC *c) {
-    if (!c_array_push_present(c) || c->array_helper_active) return 0;
+    if (!c_array_push_present(c) || c->array_helper_kind) return 0;
     const XrLirArrayRegionBindings *binding = c->array_region->push_windows;
     if (c->block >= binding->block_index_count) return 0;
     size_t window = binding->block_index[c->block].region;
@@ -133,7 +133,7 @@ static size_t c_array_push_window_at(const LirC *c) {
  * home. A successful segment has exactly one observable checkpoint: the
  * next ordinary header, with its scalar induction and Array length updated. */
 static void c_array_push_before_branch(LirC *c) {
-    if (!c_array_push_present(c) || c->array_helper_active) return;
+    if (!c_array_push_present(c) || c->array_helper_kind) return;
     const XrLirArrayRegionBindings *binding = c->array_region->push_windows;
     if (c->block >= binding->block_index_count || !binding->block_index[c->block].region) return;
     size_t r = binding->block_index[c->block].region - 1;
@@ -178,7 +178,7 @@ static void c_array_region_slow(LirC *c) {
         c_format(c,"xrl_ar_slow_%" PRIu32 "_%" PRIu32 ": ;\n",c->block,c->instruction);
 }
 static bool c_array_region_coalesced_move(LirC *c, size_t region, size_t ordinal) {
-    if (!c->array_helper_active) return false;
+    if (!c->array_helper_kind) return false;
     const XrLirArrayRegionBindings *binding = c->array_region->bindings;
     const XrLirArrayRegionBinding row = binding->regions[region];
     uint32_t expected = row.region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET ?
@@ -217,7 +217,7 @@ static void c_array_region_move(LirC *c, size_t region, size_t ordinal) {
     /* The once-acquired window and the common schedule prove these actual
      * fields. The pair cannot allocate, call, fail or observe an intermediate
      * representation. The cache is only a borrow; the Frame owns the result. */
-    const char *payload = c->array_helper_active ? "xrl_ar_payload" : "xrl_payload";
+    const char *payload = c->array_helper_kind ? "xrl_ar_payload" : "xrl_payload";
     c_format(c,"    *(XrtManagedHeader **)((unsigned char *)%s + %zu) = xrl_ar_%zu_cache.owner;\n"
         "    *(XrtManagedHeader **)((unsigned char *)%s + %zu) = NULL;\n",payload,target.offset,region,payload,source.offset);
 }
@@ -239,7 +239,7 @@ static void c_array_region_fast_edge(LirC *c, size_t region, size_t ordinal, con
     }
     if (move->step.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE) {
         c_array_region_clear(c,region,0);
-        if (c->array_helper_active) c_array_helper_return(c,region);
+        if (c->array_helper_kind) c_array_helper_return(c,region);
         else c_format(c,"    goto bb%" PRIu32 ";\n",edge->target);
     } else c_format(c,"    goto xrl_ar_%zu_bb%" PRIu32 ";\n",region,edge->target);
     c_text(c,"    }\n");
@@ -281,26 +281,25 @@ static void c_array_region_access(LirC *c, size_t region, size_t ordinal) {
     if (access->operation == XR_LIR_ARRAY_OP_LEN) {
         c_format(c,"    v%" PRIu32 " = (int64_t)xrl_ar_%zu_cache.length;\n",access->result,region); return;
     }
-    if (!c->array_helper_active) {
+    if (!c->array_helper_kind) {
         c_text(c,"    if ("); c_value(c,access->index);
         c_text(c," < INT64_C(0) || (uint64_t)"); c_value(c,access->index);
         c_format(c," >= xrl_ar_%zu_cache.length) {\n",region);
         c_array_region_clear(c,region,3);
         c_format(c,"    goto xrl_ar_slow_%" PRIu32 "_%" PRIu32 ";\n    }\n",access->block,access->instruction);
     }
-    bool fixed_copy = c->array_helper_active &&
-        binding->regions[region].region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET;
+    bool fixed_copy = c->array_helper_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET;
     const char *copy = fixed_copy ? "XRT_ARRAY_I64_REGION_COPY" : "memcpy";
     const char *copy_end = fixed_copy ? ");\n" : ", sizeof(int64_t));\n";
     if (access->operation == XR_LIR_ARRAY_OP_GET) {
         c_format(c,"    %s(&v%" PRIu32 ", ",copy,access->result);
-        if (c->array_helper_active) c_text(c,"xrl_ar_elements");
+        if (c->array_helper_kind) c_text(c,"xrl_ar_elements");
         else c_format(c,"xrl_ar_%zu_cache.elements",region);
         c_text(c," + (size_t)");
         c_value(c,access->index); c_text(c," * sizeof(int64_t)"); c_text(c,copy_end);
     } else {
         c_format(c,"    %s(",copy);
-        if (c->array_helper_active) c_text(c,"xrl_ar_elements");
+        if (c->array_helper_kind) c_text(c,"xrl_ar_elements");
         else c_format(c,"xrl_ar_%zu_cache.elements",region);
         c_text(c," + (size_t)"); c_value(c,access->index);
         c_text(c," * sizeof(int64_t), &"); c_value(c,access->item); c_text(c,copy_end);
