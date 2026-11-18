@@ -1,0 +1,8 @@
+fn ordinary(condition: bool, message: string) { print(message) }
+fn invoke(check: fn(bool, string)) { check(false, "ordinary") }
+fn relay(check: nosuspend fn(bool, string)) {
+    const plain: fn(bool, string) = check
+    plain(true, "weakened")
+}
+invoke(ordinary)
+relay(fn(condition: bool, message: string) { print(message) })

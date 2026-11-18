@@ -1,0 +1,7 @@
+fn assert(condition: bool, message: string) { print(message) }
+fn make() -> Array<i64> { print("make"); return [10, 20, 30] }
+var [first, _, last] = make()
+const [] = Array<i64>()
+const [_] = [99]
+assert(false, "user")
+print(first + last)

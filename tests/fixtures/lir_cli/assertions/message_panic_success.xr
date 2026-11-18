@@ -1,0 +1,8 @@
+fn message() -> string {
+    print("message")
+    var zero = 0
+    var ignored = 1 / zero
+    return "unreachable"
+}
+assert(true, message())
+print("unreachable")

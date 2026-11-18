@@ -1,0 +1,4 @@
+fn assert(condition: bool) { print("user must not run") }
+fn make() -> Array<i64> { print("make"); return [1] }
+var [first, second] = make() // fault
+print("unreachable")

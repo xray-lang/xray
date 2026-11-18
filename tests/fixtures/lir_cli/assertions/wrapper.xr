@@ -1,0 +1,5 @@
+fn ordinary(condition: bool, message: string) {
+    assert(condition, message) // fault
+}
+const check: fn(bool, string) = ordinary
+check(false, "wrapper")

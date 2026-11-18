@@ -1,0 +1,4 @@
+fn condition() -> bool { print("condition"); return false }
+fn message() -> string { print("message"); return "a\0中" }
+assert(condition(), message()) // fault
+print("unreachable")

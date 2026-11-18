@@ -1,0 +1,4 @@
+fn condition() -> bool { print("condition"); return true }
+fn message() -> string { print("message"); return "named" }
+assert(msg: message(), cond: condition())
+print("after")

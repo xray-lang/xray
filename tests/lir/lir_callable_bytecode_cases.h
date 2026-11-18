@@ -94,7 +94,7 @@ static void callable_raw_receiving(const XrRbcProgram *program) {
     CallableRawFixture raw=callable_raw_fixture(program);
     CHECK(raw.original->function_count==3 && raw.original->callable_type_count==1);
     callable_raw_positive(&raw,program);
-    for (unsigned scenario=0;scenario<15;++scenario) {
+    for (unsigned scenario=0;scenario<16;++scenario) {
         callable_raw_reset(&raw);
         uint32_t reference=callable_raw_constructor(&raw);
         XrRbcValueAccess *constructor=&raw.accesses[reference];
@@ -121,6 +121,7 @@ static void callable_raw_receiving(const XrRbcProgram *program) {
         if (scenario==12) raw.events[constructor->other-1].transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_BORROW;
         if (scenario==13) raw.entries[constructor->index].kind=XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION;
         if (scenario==14) raw.entries[constructor->index].physical_function=UINT32_MAX;
+        if (scenario==15) constructor->operation=XR_RBC_VALUE_ASSERT_CONDITION;
         XrRbcExecution *execution=NULL;
         CHECK(xr_rbc_module_prepare(&raw.module,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID);
         CHECK(!execution);

@@ -1,0 +1,7 @@
+fn select() -> fn(bool, string) { return assert }
+fn invoke(check: fn(bool, string), condition: bool, message: string) {
+    check(condition, message) // fault
+}
+const check = select()
+invoke(check, false, "forward\0消息")
+print("unreachable")
