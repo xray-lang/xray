@@ -101,13 +101,9 @@
       "id": "demos/01-basics/variables.xr",
       "path": "demos/01-basics/variables.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/variables.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/variables.xr:51:1: ASSERT_CONDITION is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/variables.txt"
     },
     {
       "id": "demos/02-collections/arrays.xr",
@@ -867,13 +863,9 @@
       "id": "native:demos/01-basics/variables.xr",
       "path": "demos/01-basics/variables.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/variables.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/variables.xr:51:1: ASSERT_CONDITION is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/variables.txt"
     },
     {
       "id": "native:stdlib/encoding/encoding.xr",
