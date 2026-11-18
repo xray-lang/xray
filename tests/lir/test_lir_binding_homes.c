@@ -899,7 +899,7 @@ static void array_set_region_receiving(void) {
 }
 #include "lir_array_region_binding_cases.h"
 int main(void) {
-    array_region_binding_projection(false); array_region_binding_projection(true);
+    array_region_binding_projection(0); array_region_binding_projection(1); array_region_binding_projection(2);
     array_set_region_receiving();
     borrowed_map_stages();
     string_projections();

@@ -307,6 +307,23 @@ static XrLirArrayRegionOperation *region_binding_operation(RegionBindingBuilder 
     if (row->region!=b->stamp || !instruction || instruction>row->instruction_count) return NULL;
     return &((XrLirArrayRegionOperation *)b->operations.data)[row->first_operation+instruction-1];
 }
+static XrLirValueLayoutStatus region_binding_edges_available(const RegionBindingBuilder *b,
+    const XrLirArrayRegionBinding *region) {
+    const XrLirArrayRegionMove *moves=b->moves.data;
+    for (size_t n=0;n<region->move_count;++n) {
+        XrLirArraySetRegionStep step=moves[region->first_move+n].step;
+        if (step.kind==XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE || step.kind==XR_LIR_ARRAY_SET_REGION_READ_CANDIDATE)
+            continue;
+        if (!step.block || step.block>=b->output->block_index_count || !step.edge || step.edge>2)
+            return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        size_t edge=b->edge_index[(size_t)step.block*2+step.edge-1];
+        if (!edge) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        /* A previous loop's exit can be this loop's entry. The single-role
+         * index keeps that loop and leaves this legal successor ordinary. */
+        if (b->output->edges[edge-1].region) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+    }
+    return XR_LIR_VALUE_LAYOUT_OK;
+}
 static XrLirValueLayoutStatus region_binding_edge(RegionBindingBuilder *b, const XrLirArrayRegionMove *move,
     size_t index, const XrLirArraySetRegion *region) {
     XrLirArraySetRegionStep step=move->step;
@@ -396,6 +413,7 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_array_region_bindings_create(const XrLi
                 .first_move=b.moves.count,.first_access=b.accesses.count,.first_block=b.blocks.count,.canonical_slot=SIZE_MAX};
             status=XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
         }
+        if (status==XR_LIR_VALUE_LAYOUT_OK) status=region_binding_edges_available(&b,&row);
         if (status==XR_LIR_VALUE_LAYOUT_UNSUPPORTED) {
             region_binding_unsupported(&b,n,&row);
             row=(XrLirArrayRegionBinding){.region=homes->array_regions[n],.canonical_slot=SIZE_MAX};
