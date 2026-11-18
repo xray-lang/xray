@@ -104,7 +104,7 @@ typedef struct LirC {
     size_t array_local_event_cursor;
     LirCArrayRegions *array_regions;
     const LirCArrayRegions *array_region;
-    bool array_helper_active;
+    uint32_t array_helper_kind;
 } LirC;
 static void c_values_emit_types(LirC *);
 static void c_values_function(LirC *);
@@ -259,7 +259,7 @@ static void c_function_name(LirC *c, uint32_t id) {
 }
 static void c_value(LirC *c, uint32_t id) {
     XR_DCHECK(id && id <= c->view.value_count, "operand belongs to this function");
-    if (c->array_helper_active) {
+    if (c->array_helper_kind) {
         c_format(c, "v%" PRIu32, id);
         return;
     }
@@ -775,6 +775,13 @@ static void c_declarations(LirC *c) {
         c_format(c, "    (void)p%" PRIu32 ";\n", p);
 }
 static void c_reconstruct(LirC *c, XrLirType type, uint32_t result) {
+    if (type == XR_LIR_I64 && c->array_helper_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET) {
+        /* Exact-width int64_t has a two's-complement representation. Copying
+         * the modulo result to its scalar home exposes that operation to loop
+         * optimization before the provider simplifies signed expressions. */
+        c_format(c, "    XRT_ARRAY_I64_REGION_COPY(&v%" PRIu32 ", &v%" PRIu32 ");\n", result, c->scratch);
+        return;
+    }
     c_format(c, "    v%" PRIu32 " = ", result);
     if (type >= XR_LIR_I8 && type <= XR_LIR_I64) {
         uint64_t maximum = c_mask(type) >> 1;

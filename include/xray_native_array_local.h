@@ -67,9 +67,9 @@ typedef struct XrtArrayI64RegionCache {
 #define XRT_ARRAY_REGION_OUTLINE
 #endif
 
-/* An admitted mutation loop has already checked the complete spans. Expose
- * the fixed-width byte access to the optimizer even when libc wraps memcpy
- * in a checked call. The backing remains byte storage on every provider. */
+/* The admitted mutation loop copies within checked spans or between exact
+ * scalar objects. Expose fixed-width byte access to the optimizer even when
+ * libc wraps memcpy in a checked call. Backing remains byte storage. */
 #if defined(__clang__) || defined(__GNUC__)
 #define XRT_ARRAY_I64_REGION_COPY(destination, source) \
     __builtin_memcpy((destination), (source), sizeof(int64_t))

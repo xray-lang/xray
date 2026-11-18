@@ -177,10 +177,10 @@ static void c_array_helper_emit(LirC *c, size_t region) {
     const XrLirInstructionView *term = &header->instructions[header->instruction_count - 1].view;
     size_t edge = bindings->block_index[row.header].edges[0];
     XR_DCHECK(edge && bindings->edges[edge - 1].move,"common range starts on the selected true body edge");
-    c->array_helper_active = true;
+    c->array_helper_kind = row.primary_kind;
     c_array_region_fast_edge(c,region,bindings->edges[edge - 1].move - 1,&term->edges[0]);
     c_array_region_clone(c,region);
-    c->array_helper_active = false;
+    c->array_helper_kind = XR_LIR_ARRAY_REGION_PRIMARY_NONE;
     c_text(c,"}\n\n");
 }
 static void c_array_helpers(LirC *c) {
