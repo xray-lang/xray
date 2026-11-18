@@ -601,9 +601,9 @@ static void array_helper_cancellation(void) {
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
     xr_lir_module_destroy(input.module); CHECK(!runtime_live && !runtime_bytes);
 }
-static void array_helper_owner_exit(const char *text) {
+static void array_helper_owner_exit(const char *text, size_t expected) {
     const char *helper = text; size_t helpers = 0;
-    while ((helper = strstr(helper,"static XrlArResult_")) != NULL) {
+    while ((helper = strstr(helper,"(\n    unsigned char *restrict xrl_ar_payload,\n")) != NULL) {
         const char *end = strstr(helper,"\n}\n\n"); CHECK(end);
         const char *read = strstr(helper,"XrtManagedHeader *xrl_ar_owner = *(XrtManagedHeader **)(xrl_ar_payload + ");
         CHECK(read && read < end);
@@ -618,7 +618,7 @@ static void array_helper_owner_exit(const char *text) {
         const char *borrow = strstr(helper,"_cache.owner"); CHECK(!borrow || borrow > end);
         ++helpers; helper = end + 1;
     }
-    CHECK(helpers);
+    CHECK(helpers == expected);
 }
 static void array_helper_boundaries(void) {
     const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT,ARRAY_REGION_RANGE_C_HEADER_LIVEOUT,
@@ -626,9 +626,11 @@ static void array_helper_boundaries(void) {
     (void)ars_range_same; (void)ars_range_digest; (void)ars_owner_home_same; (void)ars_owner_home_digest;
     (void)array_set_region_fixture;
     size_t mode_count = sizeof(modes) / sizeof(*modes);
-    for (size_t n = 0; n <= mode_count; ++n) {
-        bool dual = n == mode_count, readonly = !dual && modes[n] == ARRAY_REGION_RANGE_READ_ONLY;
-        ArraySetRegionFixture input = dual ? array_region_binding_two_loops(false,false,true) :
+    for (size_t n = 0; n <= mode_count + 1; ++n) {
+        bool dual = n >= mode_count, mixed = n == mode_count + 1;
+        bool readonly = !dual && modes[n] == ARRAY_REGION_RANGE_READ_ONLY;
+        ArraySetRegionFixture input = mixed ? array_region_binding_loops(false,false,true,2) :
+            dual ? array_region_binding_two_loops(false,false,true) :
             ars_range_build(NULL,n == 0 ? 8 : 3,modes[n]);
         XrLirFunction root = dual ? input.function : array_helper_root(&input);
         if (!dual) OK(xr_lir_module_finish(input.module,NULL));
@@ -651,7 +653,10 @@ static void array_helper_boundaries(void) {
         CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_elements") != NULL) == helper);
         CHECK(strstr(output.bytes,"xrt_array_i64_region_try_begin") && strstr(output.bytes,"xrl_ar_0_phase == 1"));
         if (helper) {
-            array_helper_owner_exit(output.bytes);
+            const char *outlined = strstr(output.bytes,"static XRT_ARRAY_REGION_OUTLINE XrlArResult_");
+            CHECK((outlined != NULL) == mixed);
+            if (outlined) CHECK(!strstr(outlined + 1,"static XRT_ARRAY_REGION_OUTLINE XrlArResult_"));
+            array_helper_owner_exit(output.bytes, dual ? 2 : 1);
             CHECK(strstr(output.bytes,"UINTPTR_MAX - xrl_ar_payload_begin") &&
                 strstr(output.bytes,"UINTPTR_MAX - xrl_ar_elements_begin") &&
                 strstr(output.bytes,"(uintmax_t)INT64_MAX") && strstr(output.bytes,"XrlArResult_"));
