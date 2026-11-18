@@ -199,7 +199,7 @@ static ArraySetRegionFixture array_set_region_build(XrLirModule *module, uint32_
     ars_declare(&c); ars_entry_header(&c); ars_body_exit(&c);
     return c;
 }
-static ArraySetRegionFixture array_set_region_fixture(uint32_t count, enum ArraySetRegionMode mode) {
+static inline ArraySetRegionFixture array_set_region_fixture(uint32_t count, enum ArraySetRegionMode mode) {
     ArraySetRegionFixture c = array_set_region_build(NULL, count, mode);
     OK(xr_lir_module_finish(c.module, NULL));
     return c;
