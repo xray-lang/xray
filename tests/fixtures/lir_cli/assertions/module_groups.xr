@@ -1,0 +1,18 @@
+fn make() -> Array<i64> { print("make"); return [10, 20, 30] }
+fn mark(value: i64) -> i64 { print(value); return value }
+fn pair() -> (i64, i64) { return (5, 6) }
+var [left, _, right] = make()
+const [first, second] = [mark(7), mark(8)]
+const (before, after) = pair()
+left = left + 1
+print(left + right)
+print(first * 10 + second)
+print(before * 10 + after)
+fn local() -> i64 {
+    print("local")
+    var [a, b] = [1, 2]
+    const [c, _, d] = [3, 4, 5]
+    a = a + 10
+    return a + b + c + d
+}
+print(local())

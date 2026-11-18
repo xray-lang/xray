@@ -201,6 +201,47 @@ static void rejected(const char *text, bool overflow, const char *message) {
     xr_lir_lower_failure_free(&failure);
     CHECK(!failure.owned_path && !failure.diagnostic.source.path);
 }
+static void module_i64_groups(void) {
+    XrLirLowered output = lower_text("var[a,_,b]=[1,2,3]\nconst[c]=[4]\nprint(a+b+c)\n");
+    unsigned groups = 0, assertions = 0;
+    for (uint32_t n = 0; n < xr_lir_function_count(output.module); ++n) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        OK(xr_lir_function_at(output.module, n, &function));
+        OK(xr_lir_function_view(output.module, function, &view));
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView body;
+            unsigned checked = 0;
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &body));
+            for (uint32_t i = 0; i < body.instruction_count; ++i) {
+                XrLirInstructionView instruction;
+                OK(xr_lir_instruction_view(output.module, block, i, &instruction));
+                if (instruction.op == XR_LIR_ASSERT_CONDITION) { ++assertions; ++checked; }
+                if (instruction.op != XR_LIR_STATE_GROUP_INITIALIZE) continue;
+                CHECK(checked && i);
+                --checked;
+                XrLirInstructionView tuple;
+                OK(xr_lir_instruction_view(output.module, block, i - 1, &tuple));
+                CHECK(tuple.op == XR_LIR_TUPLE_NEW && tuple.result == instruction.operands[1]);
+                CHECK(tuple.operand_count == (instruction.bits ? 1u : 2u));
+                CHECK(tuple.source.line == instruction.source.line && tuple.source.column == instruction.source.column);
+                ++groups;
+            }
+        }
+    }
+    CHECK(groups == 2 && assertions == 2);
+    xr_lir_lowered_free(&output);
+    output = lower_text("var[a,b]=[1,2]\nconst[c]=[3]\nprint(17)\n");
+    XrLirFunctionView entry;
+    OK(xr_lir_function_view(output.module, output.entry, &entry));
+    CHECK(entry.parameter_count == 1 && entry.parameter_types[0] == XR_LIR_STATE);
+    xr_lir_lowered_free(&output);
+    rejected("const[a,b]=[true,false]\nprint(a)\n", false, "module group requires I64 slot payloads");
+    rejected("var value:i64?=1\nconst(a,b)=(value,value)\nprint(a)\n", false,
+        "module group requires I64 slot payloads");
+}
 static void floating_conversion_source(void) {
     SourceFixture fixture = source_fixture(
         "fn convert(x:f64)->i64{return x as i64}\nprint(convert(1.0))\n");
@@ -1050,6 +1091,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 3);
     callable_source();
     assertion_declaration_and_scope_sources(argv[1]);
+    module_i64_groups();
     view_cold_checked_sources(argv[1]);
     fixed_sources();
     array_sources();
