@@ -65,11 +65,19 @@ static void array_push_exit_retained_source(void) {
         window.push_capacity.kind==XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT &&
         window.push_capacity.end==view.parameters[0] && window.push_capacity.entry_iv==view.parameters[1] &&
         !window.push_capacity.end_block && !window.push_capacity.end_instruction);
-    XrLirBlock exit_block={0}; XrLirBlockView body={0}; bool retained=false,displayed=false;
-    OK(xr_lir_block_at(output.module,function,window.exit_block-1,&exit_block));
-    OK(xr_lir_block_view(output.module,exit_block,&body));
+    XrLirBlock current={0}; XrLirBlockView body={0}; bool retained=false,displayed=false;
+    OK(xr_lir_block_at(output.module,function,window.exit_block-1,&current));
+    OK(xr_lir_block_view(output.module,current,&body));
+    uint32_t bridges=0;
+    while (body.instruction_count==1) {
+        XrLirInstructionView branch={0}; OK(xr_lir_instruction_view(output.module,current,0,&branch));
+        CHECK(branch.op==XR_LIR_BR && branch.edge_count==1 && ++bridges<view.block_count);
+        OK(xr_lir_block_at(output.module,function,branch.edges[0].target-1,&current));
+        OK(xr_lir_block_view(output.module,current,&body));
+    }
+    CHECK(bridges && current.id!=window.exit_block);
     for (uint32_t n=0;n<body.instruction_count;++n) {
-        XrLirInstructionView op={0}; OK(xr_lir_instruction_view(output.module,exit_block,n,&op));
+        XrLirInstructionView op={0}; OK(xr_lir_instruction_view(output.module,current,n,&op));
         retained|=op.op==XR_LIR_ARRAY_RETAIN;
         if (op.op==XR_LIR_CALL_INTRINSIC) {
             XrLirArrayIntrinsic shape={0}; OK(xr_lir_array_intrinsic_view(output.module,op.intrinsic,&shape));

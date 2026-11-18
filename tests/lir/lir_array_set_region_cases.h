@@ -197,7 +197,7 @@ static void ars_readonly_preparations(void) {
     }
 }
 static void ars_push_preparations(void) {
-    for (unsigned mode=PUSH_WINDOW_CURRENT;mode<=PUSH_WINDOW_EXIT_BYPASS;++mode) {
+    for (unsigned mode=PUSH_WINDOW_CURRENT;mode<=PUSH_WINDOW_EXIT_BRIDGE_BRANCH;++mode) {
         ArraySetRegionFixture c=array_push_window_build((enum ArrayPushWindowMode)mode);
         XrLirOwnershipPlan *plan=NULL; XrLirOwnershipRequest request={.module=c.module};
         OK(xr_lir_ownership_plan_create(&request,&plan,NULL)); compare_internal(&request,plan);
@@ -216,6 +216,12 @@ static void ars_push_preparations(void) {
             CHECK(entry.kind==XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE && entry.block==window.entry_block &&
                 entry.edge==window.entry_edge && entry.target==window.canonical_value &&
                 latch.kind==XR_LIR_ARRAY_SET_REGION_EDGE_MOVE && latch.block==window.latch && latch.target==window.canonical_value);
+            if (mode==PUSH_WINDOW_EXIT_BRIDGE) {
+                XrLirArraySetRegionStep leave={0};
+                OK(xr_lir_ownership_array_push_step_at(plan,window.first_step+window.step_count-1,&leave));
+                CHECK(window.exit_block==c.exit.id && window.exit_block!=c.bridge.id &&
+                    leave.kind==XR_LIR_ARRAY_SET_REGION_EXIT_MOVE && leave.target==window.exit_value);
+            }
             XrLirFunctionData *function=&c.module->functions[c.function.id-1];
             XrLirInstructionView *push=&function->blocks[window.primary_block-1].instructions[window.primary_instruction-1].view;
             uint32_t *item=(uint32_t *)&push->operands[1],saved=*item; *item=p.one;
