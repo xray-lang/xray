@@ -212,8 +212,26 @@ typedef struct XrLirArraySetRegionOwnerHome {
 enum {
     XR_LIR_ARRAY_REGION_PRIMARY_NONE,
     XR_LIR_ARRAY_REGION_PRIMARY_SET,
-    XR_LIR_ARRAY_REGION_PRIMARY_GET
+    XR_LIR_ARRAY_REGION_PRIMARY_GET,
+    XR_LIR_ARRAY_REGION_PRIMARY_PUSH
 };
+enum { XR_LIR_ARRAY_PUSH_CAPACITY_NONE, XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT };
+/* Conditional capacity-window identity, distinct from unchanged Array LEN.
+ * The restart is before the original header: its only parameters are the
+ * owned Array and IV. The sole LOCAL PUSH item is CURRENT, increment is +1,
+ * and the invariant end is an I64 constant or function parameter. All other
+ * operations are nonobserving scalar computations or exact token transfers.
+ * This does not authorize access or prove any runtime value/capacity/RC.
+ * In particular end-IV is not safe until dynamic signed/range checks pass.
+ * A future consumer retains the ordinary first trip and must restore original
+ * homes before growth, COW, failure or observation. Step anchors are one-based
+ * in this window's slice; checkpoint is the original latch back to canonical.
+ * NONE has all fields zero. */
+typedef struct XrLirArrayPushCapacity {
+    uint32_t kind, iv, iv_argument, entry_iv, end, end_block, end_instruction;
+    uint32_t condition, condition_instruction, increment, increment_block, increment_instruction;
+    uint32_t one, latch_iv, item, first_active_step, checkpoint_step;
+} XrLirArrayPushCapacity;
 /* The primary access is an original element operation, not CELL_READ/death.
  * SET retains its existing body contract. GET names the sole element read in
  * a closed unit/same-length read-only loop; no mutation permission follows. */
@@ -223,11 +241,13 @@ typedef struct XrLirArraySetRegion {
     uint32_t body_block_count, primary_kind, primary_block, primary_instruction, first_step, step_count;
     XrLirArraySetRegionRange range;
     XrLirArraySetRegionOwnerHome owner_home;
+    XrLirArrayPushCapacity push_capacity;
 } XrLirArraySetRegion;
 
 typedef struct XrLirOwnershipFunction {
     uint32_t fact_offset, fact_count, unmodeled;
     uint32_t region_offset, region_count;
+    uint32_t push_window_offset, push_window_count;
     bool external;
 } XrLirOwnershipFunction;
 
@@ -278,6 +298,14 @@ XR_FUNC uint32_t xr_lir_ownership_array_region_step_count(const XrLirOwnershipPl
 XR_FUNC XrLirStatus xr_lir_ownership_array_region_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirArraySetRegion *);
 XR_FUNC XrLirStatus xr_lir_ownership_array_region_step_at(const XrLirOwnershipPlan *,
+    uint32_t ordinal, XrLirArraySetRegionStep *);
+/* Separate, owned numeric tables; existing SET/GET consumers do not receive
+ * PUSH windows through their executable region directory. */
+XR_FUNC uint32_t xr_lir_ownership_array_push_window_count(const XrLirOwnershipPlan *);
+XR_FUNC uint32_t xr_lir_ownership_array_push_step_count(const XrLirOwnershipPlan *);
+XR_FUNC XrLirStatus xr_lir_ownership_array_push_window_at(const XrLirOwnershipPlan *,
+    uint32_t ordinal, XrLirArraySetRegion *);
+XR_FUNC XrLirStatus xr_lir_ownership_array_push_step_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirArraySetRegionStep *);
 /* Explicit independent current-IR verification for mutable/external inspection
  * and PARANOID tests. It validates the module once and rederives every function

@@ -9,6 +9,7 @@
 #ifndef LIR_ARRAY_REGION_BINDING_CASES_H
 #define LIR_ARRAY_REGION_BINDING_CASES_H
 #include "lir_array_region_loop_fixture.h"
+#include "lir_array_push_window_fixture.h"
 static void array_region_binding_check(const XrLirArrayRegionBindings *b,const XrLirValueHomes *homes,
     const XrLirModule *module,XrLirFunction function) {
     CHECK(b->region_count==homes->array_region_count);
@@ -220,7 +221,72 @@ static void array_region_binding_mixed(bool reverse,unsigned read_mask) {
     xr_lir_array_region_bindings_destroy(bindings); CHECK(!live && !home_live_bytes());
     CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
 }
+static void array_push_binding_slot(const XrLirArrayRegionBindings *bindings,const XrLirArrayRegionBinding *row,size_t slot) {
+    bool found=false;
+    for (size_t n=0;n<row->slot_count;++n) found|=bindings->slots[row->first_slot+n].slot==slot;
+    CHECK(found);
+}
+static void array_push_binding_projection(void) {
+    for (unsigned mode=PUSH_WINDOW_CURRENT;mode<=PUSH_WINDOW_PARAMETER_END;++mode) {
+        ArraySetRegionFixture c=array_push_window_build((enum ArrayPushWindowMode)mode);
+        XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+        XrLirValueLayoutKey roots[]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
+        XrLirValueLayouts *set=NULL; HOME(xr_lir_value_layouts_create(c.module,roots,4,billing,&set));
+        XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
+        XrLirValueHomes *homes=NULL;
+        HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,c.function,set,plan},&homes));
+        CHECK(!homes->array_region_count && homes->array_push_window_count==1);
+        XrLirArraySetRegion published={0}; OK(xr_lir_ownership_array_push_window_at(plan,0,&published));
+        CHECK(ars_push_same(published.push_capacity,homes->array_push_windows[0].push_capacity));
+        XrLirArrayRegionBindings *bindings=NULL; attempts=0;
+        size_t baseline=live,bytes=home_live_bytes();
+        HOME(xr_lir_array_push_window_bindings_create(homes,set,&bindings)); size_t sites=attempts;
+        CHECK(bindings->region_count==1 && bindings->regions[0].slot_count && bindings->regions[0].access_count==1);
+        const XrLirArrayRegionBinding *row=&bindings->regions[0];
+        XrLirArrayPushCapacity retained=row->region.push_capacity;
+        CHECK(ars_push_same(retained,published.push_capacity));
+        for (size_t n=0;n<row->move_count;++n) {
+            XrLirArraySetRegionStep step=bindings->moves[row->first_move+n].step; uint32_t values[]={step.source,step.target};
+            for (size_t a=0;a<2;++a) {
+                uint32_t v=values[a]; const XrLirHomeBinding *binding=homes->bindings ? &homes->bindings[v] : NULL;
+                if (binding && binding->type) array_push_binding_slot(bindings,row,binding->first_owner);
+                else {
+                    array_push_binding_slot(bindings,row,homes->values[v].first_owner);
+                    if (homes->values[v].temporary_first_owner!=SIZE_MAX)
+                        array_push_binding_slot(bindings,row,homes->values[v].temporary_first_owner);
+                }
+            }
+        }
+        const XrLirArrayRegionAccess *push=&bindings->accesses[row->first_access]; bool workspace=false;
+        for (size_t n=0;n<homes->workspace_count;++n) if (homes->workspaces[n].block==push->block &&
+            homes->workspaces[n].instruction==push->instruction) {
+            CHECK(bindings->slots[push->workspace_slot].slot==homes->workspaces[n].first_owner); workspace=true;
+        }
+        CHECK(workspace && push->operation==XR_LIR_ARRAY_OP_PUSH && push->item==retained.item);
+        bool entry=false,latch=false;
+        for (size_t n=0;n<homes->edge_count;++n) if (bindings->edges[n].region) {
+            const XrLirArrayRegionMove *move=&bindings->moves[bindings->edges[n].move-1];
+            CHECK(move->step.block==homes->edges[n].block && move->step.edge==homes->edges[n].edge);
+            entry|=bindings->edges[n].kind==XR_LIR_ARRAY_REGION_EDGE_ENTRY;
+            latch|=bindings->edges[n].kind==XR_LIR_ARRAY_REGION_EDGE_LATCH;
+        }
+        CHECK(entry && latch);
+        xr_lir_array_region_bindings_destroy(bindings); bindings=NULL; CHECK(live==baseline && home_live_bytes()==bytes);
+        if (!mode) for (size_t point=1;point<=sites;++point) {
+            attempts=0; fail_at=point;
+            CHECK(xr_lir_array_push_window_bindings_create(homes,set,&bindings)==XR_LIR_VALUE_LAYOUT_OOM && !bindings &&
+                attempts>=point && live==baseline && home_live_bytes()==bytes);
+        }
+        fail_at=SIZE_MAX; HOME(xr_lir_array_push_window_bindings_create(homes,set,&bindings));
+        xr_lir_value_homes_destroy(homes); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(set);
+        xr_lir_module_destroy(c.module);
+        CHECK(bindings->regions[0].slot_count && ars_push_same(bindings->regions[0].region.push_capacity,retained));
+        xr_lir_array_region_bindings_destroy(bindings); CHECK(!live && !home_live_bytes());
+        CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
+    }
+}
 static void array_region_binding_projection(unsigned shape) {
+    if (!shape) array_push_binding_projection();
     if (!shape) for (unsigned mask=1;mask<=2;++mask) {
         array_region_binding_mixed(false,mask); array_region_binding_mixed(true,mask);
     }

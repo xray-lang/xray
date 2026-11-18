@@ -184,6 +184,11 @@ typedef struct XrLirValueHomes {
     const XrLirArraySetRegion *array_regions;
     const XrLirArraySetRegionStep *array_region_steps;
     uint32_t array_region_count, array_region_step_count;
+    /* Separate owned facts for a future capacity consumer. They do not enter
+     * the executable SET/GET directory or change ordinary value homes. */
+    const XrLirArraySetRegion *array_push_windows;
+    const XrLirArraySetRegionStep *array_push_steps;
+    uint32_t array_push_window_count, array_push_step_count;
 } XrLirValueHomes;
 
 typedef struct XrLirValueHomesRequest {

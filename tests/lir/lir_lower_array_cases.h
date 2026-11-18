@@ -31,6 +31,16 @@ static void array_readonly_original_source(void) {
     OK(xr_lir_instruction_view(output.module,block,region.primary_instruction-1,&get));
     XrLirArrayIntrinsic shape={0}; OK(xr_lir_array_intrinsic_view(output.module,get.intrinsic,&shape));
     CHECK(get.op==XR_LIR_CALL_INTRINSIC && shape.operation==XR_LIR_ARRAY_OP_GET && get.result && get.operand_count==2);
+    CHECK(xr_lir_ownership_array_push_window_count(plan)==1);
+    XrLirArraySetRegion push={0}; OK(xr_lir_ownership_array_push_window_at(plan,0,&push));
+    CHECK(push.function==region.function && push.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH &&
+        push.push_capacity.kind==XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT && !push.range.kind && !push.owner_home.kind);
+    function=(XrLirFunction){output.module,push.function};
+    OK(xr_lir_block_at(output.module,function,push.primary_block-1,&block));
+    XrLirInstructionView append={0}; OK(xr_lir_instruction_view(output.module,block,push.primary_instruction-1,&append));
+    OK(xr_lir_array_intrinsic_view(output.module,append.intrinsic,&shape));
+    CHECK(append.op==XR_LIR_CALL_INTRINSIC && shape.operation==XR_LIR_ARRAY_OP_PUSH && append.operand_count==2 &&
+        append.operands[1]==push.push_capacity.item);
     OK(xr_lir_ownership_array_regions_verify(output.module,plan));
     xr_lir_ownership_plan_destroy(plan); xr_lir_lowered_free(&output);
 }

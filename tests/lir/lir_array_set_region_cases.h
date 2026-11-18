@@ -8,6 +8,7 @@
  */
 #include "lir_array_set_region_fixture.h"
 #include "lir_array_region_range_fixture.h"
+#include "lir_array_push_window_fixture.h"
 #include "lir/xlir_value_homes.h"
 
 static uint64_t ars_steps_digest(const XrLirArraySetRegionStep *steps, uint32_t count) {
@@ -195,6 +196,45 @@ static void ars_readonly_preparations(void) {
         OK(xr_lir_ownership_array_regions_verify(c.module,plan)); ars_retirement(c,plan);
     }
 }
+static void ars_push_preparations(void) {
+    for (unsigned mode=PUSH_WINDOW_CURRENT;mode<=PUSH_WINDOW_LATCH_CURRENT;++mode) {
+        ArraySetRegionFixture c=array_push_window_build((enum ArrayPushWindowMode)mode);
+        XrLirOwnershipPlan *plan=NULL; XrLirOwnershipRequest request={.module=c.module};
+        OK(xr_lir_ownership_plan_create(&request,&plan,NULL)); compare_internal(&request,plan);
+        bool expected=ars_push_expected((enum ArrayPushWindowMode)mode);
+        CHECK(!xr_lir_ownership_array_region_count(plan) && xr_lir_ownership_array_push_window_count(plan)==(expected ? 1u : 0u));
+        OK(xr_lir_ownership_array_regions_verify(c.module,plan));
+        if (expected) {
+            XrLirArraySetRegion window={0}; OK(xr_lir_ownership_array_push_window_at(plan,0,&window));
+            XrLirArrayPushCapacity p=window.push_capacity;
+            CHECK(window.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH && !window.range.kind && !window.owner_home.kind &&
+                p.kind==XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT && p.iv && p.end && p.item && p.first_active_step==2 &&
+                p.checkpoint_step==window.step_count-1 && (mode==PUSH_WINDOW_PARAMETER_END ? !p.end_block && !p.end_instruction : p.end_block && p.end_instruction));
+            XrLirArraySetRegionStep entry={0},latch={0};
+            OK(xr_lir_ownership_array_push_step_at(plan,window.first_step,&entry));
+            OK(xr_lir_ownership_array_push_step_at(plan,window.first_step+p.checkpoint_step-1,&latch));
+            CHECK(entry.kind==XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE && entry.block==window.entry_block &&
+                entry.edge==window.entry_edge && entry.target==window.canonical_value &&
+                latch.kind==XR_LIR_ARRAY_SET_REGION_EDGE_MOVE && latch.block==window.latch && latch.target==window.canonical_value);
+            XrLirFunctionData *function=&c.module->functions[c.function.id-1];
+            XrLirInstructionView *push=&function->blocks[window.primary_block-1].instructions[window.primary_instruction-1].view;
+            uint32_t *item=(uint32_t *)&push->operands[1],saved=*item; *item=p.one;
+            OK(xr_lir_verify(c.module,NULL)); CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR);
+            *item=saved; OK(xr_lir_ownership_array_regions_verify(c.module,plan));
+        } else if (mode==PUSH_WINDOW_STEP_TWO) {
+            XrLirFunctionData *function=&c.module->functions[c.function.id-1];
+            XrLirBlockData *body=&function->blocks[c.body[1].id-1];
+            XrLirInstructionView add=body->instructions[body->instruction_count-2].view;
+            CHECK(add.op==XR_LIR_ADD);
+            XrLirValueData one=function->values[add.operands[1]-1];
+            XrLirInstructionView *constant=&function->blocks[one.block-1].instructions[one.instruction].view;
+            CHECK(constant->op==XR_LIR_CONST && constant->bits==2); constant->bits=1;
+            OK(xr_lir_verify(c.module,NULL)); CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR);
+            constant->bits=2; OK(xr_lir_ownership_array_regions_verify(c.module,plan));
+        }
+        xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module);
+    }
+}
 static void ars_preparation(uint32_t blocks, enum ArraySetRegionMode mode) {
     ArraySetRegionFixture c = array_set_region_fixture(blocks, mode);
     XrLirOwnershipPlan *plan = NULL; XrLirOwnershipRequest request = {.module=c.module};
@@ -266,6 +306,7 @@ static void ars_current_retained(void) {
 static void array_set_region_preparations(void) {
     ars_range_preparations();
     ars_readonly_preparations();
+    ars_push_preparations();
     const uint32_t blocks[] = {1,3,6,ARRAY_SET_REGION_BODY_CAPACITY};
     for (size_t n = 0; n < sizeof(blocks) / sizeof(*blocks); ++n) ars_preparation(blocks[n], ARRAY_SET_REGION_LOCAL);
     ars_preparation(4, ARRAY_SET_REGION_PADDED);

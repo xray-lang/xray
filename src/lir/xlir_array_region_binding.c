@@ -24,6 +24,7 @@ typedef struct RegionBindingBuilder {
     size_t *slot_indices, *event_heads, *event_tails, *event_next;
     size_t *edge_index, *workspace_first, *workspace_index, *binding_index;
     uint32_t stamp;
+    bool push;
 } RegionBindingBuilder;
 
 static XrLirValueLayoutStatus region_binding_storage(void **output, size_t count, size_t stride) {
@@ -141,7 +142,10 @@ static XrLirValueLayoutStatus region_binding_prepare(RegionBindingBuilder *b) {
         XrLirArraySetRegion r=h->array_regions[n];
         if (r.first_step>h->array_region_step_count || r.step_count>h->array_region_step_count-r.first_step ||
             r.function!=h->source_function || !r.primary_block || !r.primary_instruction ||
-            (r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_SET && r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_GET))
+            (b->push ? r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_PUSH :
+                (r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_SET && r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_GET)))
+            return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        if (b->push && (r.push_capacity.kind!=XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT || r.range.kind || r.owner_home.kind))
             return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         uint32_t blocks[]={r.header,r.entry_block,r.latch,r.exit_block};
         for (size_t p=0;p<4;++p) if (blocks[p]>maximum) maximum=blocks[p];
@@ -242,24 +246,30 @@ static XrLirValueLayoutStatus region_binding_positions(RegionBindingBuilder *b) 
     return XR_LIR_VALUE_LAYOUT_OK;
 }
 static XrLirValueLayoutStatus region_binding_access(RegionBindingBuilder *b, const XrLirHomeEvent *event) {
-    if (event->operation!=XR_LIR_ARRAY_OP_LEN && event->operation!=XR_LIR_ARRAY_OP_GET &&
-        event->operation!=XR_LIR_ARRAY_OP_SET) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+    if (b->push ? event->operation!=XR_LIR_ARRAY_OP_PUSH :
+        (event->operation!=XR_LIR_ARRAY_OP_LEN && event->operation!=XR_LIR_ARRAY_OP_GET &&
+         event->operation!=XR_LIR_ARRAY_OP_SET)) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     XrLirArrayRegionAccess row={.block=event->block,.instruction=event->instruction,.receiver=event->source,
         .result=event->array_result,.index=event->array_index,.item=event->array_item,
         .operation=(XrLirArrayOperation)event->operation,.workspace_slot=SIZE_MAX};
     if (row.result>b->homes->value_count || row.index>b->homes->value_count || row.item>b->homes->value_count ||
-        (row.operation==XR_LIR_ARRAY_OP_SET ? row.result || !row.index || !row.item :
+        (row.operation==XR_LIR_ARRAY_OP_PUSH ? row.result || row.index || !row.item :
+         row.operation==XR_LIR_ARRAY_OP_SET ? row.result || !row.index || !row.item :
             !row.result || row.item || (row.operation==XR_LIR_ARRAY_OP_GET ? !row.index : row.index!=0)))
         return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     XrLirValueLayoutStatus status=region_binding_value(b,row.receiver,&row.receiver_slot);
     if (status!=XR_LIR_VALUE_LAYOUT_OK) return status;
-    if (row.operation==XR_LIR_ARRAY_OP_SET) {
+    if (row.operation==XR_LIR_ARRAY_OP_SET || row.operation==XR_LIR_ARRAY_OP_PUSH) {
         size_t workspace=b->workspace_index[b->workspace_first[row.block]+row.instruction-1];
         if (!workspace) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
         const XrLirHomeWorkspace *w=&b->homes->workspaces[workspace-1];
+        if (b->push && (!b->homes->bindings || !row.receiver || w->kind!=XR_LIR_HOME_WORKSPACE_VALUE || w->value ||
+            w->type!=b->homes->bindings[row.receiver].type || w->block!=row.block || w->instruction!=row.instruction))
+            return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         status=region_binding_type(b,w->type);
         if (status==XR_LIR_VALUE_LAYOUT_OK) status=region_binding_slot(b,w->first_owner,w->offset,&row.workspace_slot);
         if (status!=XR_LIR_VALUE_LAYOUT_OK) return status;
+        if (b->push && row.receiver_slot==row.workspace_slot) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     }
     return region_binding_append(&b->accesses,&row,1,sizeof(row));
 }
@@ -296,9 +306,40 @@ static XrLirValueLayoutStatus region_binding_owner_home(const RegionBindingBuild
     row->owner_home = (XrLirArrayRegionOwnerHomeBinding){home.kind,row->canonical_slot,exit.target_slot};
     return XR_LIR_VALUE_LAYOUT_OK;
 }
+static XrLirValueLayoutStatus region_binding_capacity(const RegionBindingBuilder *b,
+    const XrLirArrayRegionBinding *row) {
+    const XrLirArraySetRegion *region=&row->region; XrLirArrayPushCapacity p=region->push_capacity;
+    if (!b->push) return (p.kind|p.iv|p.iv_argument|p.entry_iv|p.end|p.end_block|p.end_instruction|
+        p.condition|p.condition_instruction|p.increment|p.increment_block|p.increment_instruction|p.one|p.latch_iv|
+        p.item|p.first_active_step|p.checkpoint_step) ? XR_LIR_VALUE_LAYOUT_ARGUMENT : XR_LIR_VALUE_LAYOUT_OK;
+    uint32_t values[]={p.iv,p.entry_iv,p.end,p.condition,p.increment,p.one,p.latch_iv,p.item};
+    for (size_t n=0;n<sizeof(values)/sizeof(*values);++n)
+        if (!values[n] || values[n]>b->homes->value_count) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    if (p.kind!=XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT || p.iv_argument>=2 || !p.condition_instruction ||
+        !p.increment_block || !p.increment_instruction || p.iv==p.end || (!p.end_block)!=(!p.end_instruction) ||
+        region->range.kind || region->owner_home.kind || p.first_active_step!=2 || row->move_count<6 ||
+        p.checkpoint_step!=row->move_count-1 || row->move_count!=region->step_count)
+        return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    const XrLirArrayRegionMove *moves=b->moves.data;
+    XrLirArraySetRegionStep begin=moves[row->first_move+p.first_active_step-1].step;
+    XrLirArraySetRegionStep checkpoint=moves[row->first_move+p.checkpoint_step-1].step;
+    if (begin.kind!=XR_LIR_ARRAY_SET_REGION_EDGE_MOVE || begin.source!=region->canonical_value ||
+        begin.block!=region->header || begin.edge!=1 || checkpoint.kind!=XR_LIR_ARRAY_SET_REGION_EDGE_MOVE ||
+        checkpoint.target!=region->canonical_value || checkpoint.block!=region->latch)
+        return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    return XR_LIR_VALUE_LAYOUT_OK;
+}
 static XrLirValueLayoutStatus region_binding_primary(const RegionBindingBuilder *b,
     const XrLirArrayRegionBinding *row) {
     XrLirArraySetRegion region=row->region;
+    if (b->push) {
+        if (row->access_count!=1) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        XrLirArrayRegionAccess access=((const XrLirArrayRegionAccess *)b->accesses.data)[row->first_access];
+        if (access.operation!=XR_LIR_ARRAY_OP_PUSH || access.block!=region.primary_block ||
+            access.instruction!=region.primary_instruction || access.item!=region.push_capacity.item)
+            return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        return region_binding_capacity(b,row);
+    }
     size_t gets=0,sets=0,matches=0;
     const XrLirArrayRegionAccess *accesses=b->accesses.data;
     for (size_t n=0;n<row->access_count;++n) {
@@ -311,6 +352,8 @@ static XrLirValueLayoutStatus region_binding_primary(const RegionBindingBuilder 
         }
     }
     if (matches!=1) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    XrLirValueLayoutStatus capacity=region_binding_capacity(b,row);
+    if (capacity!=XR_LIR_VALUE_LAYOUT_OK) return capacity;
     if (region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET) return sets==1 ? XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_ARGUMENT;
     return gets==1 && !sets && region.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN ?
         XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_ARGUMENT;
@@ -391,6 +434,8 @@ static XrLirValueLayoutStatus region_binding_edge(RegionBindingBuilder *b, const
     const XrLirHomeEdge *home=&b->homes->edges[edge-1]; bool matched=false;
     for (size_t n=0;n<home->count;++n) {
         const XrLirHomeTransfer *transfer=&b->homes->transfers[home->first+n];
+        if (b->push && (transfer->hold_transfer_mode || transfer->source_workspace || transfer->target_workspace ||
+            transfer->borrowed_owner_workspace!=SIZE_MAX)) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         if (transfer->source==step.source && transfer->target==step.target &&
             transfer->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE) matched=true;
     }
@@ -449,8 +494,8 @@ static void region_binding_unsupported(RegionBindingBuilder *b, uint32_t ordinal
         blocks[block].region=0; blocks[block].first_operation=0; blocks[block].instruction_count=0;
     }
 }
-XR_FUNCDEF XrLirValueLayoutStatus xr_lir_array_region_bindings_create(const XrLirValueHomes *homes,
-    const XrLirValueLayouts *layouts, XrLirArrayRegionBindings **output) {
+static XrLirValueLayoutStatus region_bindings_create(const XrLirValueHomes *homes,
+    const XrLirValueLayouts *layouts, XrLirArrayRegionBindings **output,bool push) {
     if (!homes || !layouts || !output || *output || (homes->value_count && !homes->values) ||
         (homes->event_count && !homes->events) || (homes->edge_count && !homes->edges) ||
         (homes->transfer_count && !homes->transfers) || (homes->workspace_count && !homes->workspaces) ||
@@ -458,7 +503,7 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_array_region_bindings_create(const XrLi
         (homes->array_region_step_count && !homes->array_region_steps)) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     XrLirArrayRegionBindings *result=xr_calloc(1,sizeof(*result));
     if (!result) return XR_LIR_VALUE_LAYOUT_OOM;
-    RegionBindingBuilder b={.homes=homes,.layouts=layouts,.output=result};
+    RegionBindingBuilder b={.homes=homes,.layouts=layouts,.output=result,.push=push};
     result->region_count=homes->array_region_count;
     void *regions=NULL;
     XrLirValueLayoutStatus status=region_binding_storage(&regions,result->region_count,sizeof(XrLirArrayRegionBinding));
@@ -497,4 +542,16 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_array_region_bindings_create(const XrLi
     result->blocks=b.blocks.data; result->block_count=b.blocks.count;
     result->operations=b.operations.data; result->operation_count=b.operations.count;
     *output=result; return XR_LIR_VALUE_LAYOUT_OK;
+}
+XR_FUNCDEF XrLirValueLayoutStatus xr_lir_array_region_bindings_create(const XrLirValueHomes *homes,
+    const XrLirValueLayouts *layouts, XrLirArrayRegionBindings **output) {
+    return region_bindings_create(homes,layouts,output,false);
+}
+XR_FUNCDEF XrLirValueLayoutStatus xr_lir_array_push_window_bindings_create(const XrLirValueHomes *homes,
+    const XrLirValueLayouts *layouts, XrLirArrayRegionBindings **output) {
+    if (!homes) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    XrLirValueHomes view=*homes;
+    view.array_regions=homes->array_push_windows; view.array_region_count=homes->array_push_window_count;
+    view.array_region_steps=homes->array_push_steps; view.array_region_step_count=homes->array_push_step_count;
+    return region_bindings_create(&view,layouts,output,true);
 }
