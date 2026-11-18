@@ -105,9 +105,14 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
             OK(xr_lir_emit_effect(c.module,done,&(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_UNIT,.callee=c.helper}));
         if (mode==PUSH_WINDOW_EXIT_BRIDGE_BRANCH) {
             XrLirValue branch=ars_value(&c,done,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1});
+            XrLirBlock alternate={0}; XrLirValue forwarded[4]={{0}};
+            OK(xr_lir_add_block(c.module,c.function,types,c.arity,&alternate));
+            ars_parameters(&c,alternate,forwarded);
+            OK(xr_lir_set_array_shape(c.module,forwarded[0],&(XrLirArrayShape){XR_LIR_I64}));
+            ars_branch(&c,alternate,c.bridge,forwarded);
             OK(xr_lir_set_terminator(c.module,done,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
                 .operands=&branch,.operand_count=1,.edge_count=2,
-                .edges={{c.bridge,values,c.arity},{c.bridge,values,c.arity}}}));
+                .edges={{c.bridge,values,c.arity},{alternate,values,c.arity}}}));
         } else ars_branch(&c,done,c.bridge,values);
         done=c.bridge; ars_parameters(&c,done,values);
     }
@@ -118,6 +123,9 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     ars_effect(&c,done,XR_LIR_ARRAY_DROP,values[0]);
     if (mode==PUSH_WINDOW_LIVE_SNAPSHOT) ars_effect(&c,done,XR_LIR_ARRAY_DROP,c.outside_array);
     OK(xr_lir_set_terminator(c.module,done,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&c.result,.operand_count=1}));
-    OK(xr_lir_module_finish(c.module,NULL)); return c;
+    XrLirDiagnostic diagnostic={0};
+    XrLirStatus status=xr_lir_module_finish(c.module,&diagnostic);
+    if (status!=XR_LIR_OK) fprintf(stderr,"PUSH window fixture %u: %s\n",(unsigned)mode,diagnostic.message);
+    OK(status); return c;
 }
 #endif // LIR_ARRAY_PUSH_WINDOW_FIXTURE_H
