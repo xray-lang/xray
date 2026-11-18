@@ -71,6 +71,8 @@ static XiCgenVerifyStatus publication_verify(XrCompileResources *r, const char *
 #undef xr_compile_resources_alloc
 #undef xr_compile_resources_resize
 #undef xr_compile_cgen_verify_output_or_ice
+#define OK(c) CHECK((c) == XR_LIR_OK)
+#include "lir_array_region_loop_fixture.h"
 
 static bool cancel_now(const void *context) { return *(const bool *) context; }
 
@@ -451,6 +453,63 @@ static void map_literal_memory_boundaries(void) {
         !strstr(output.bytes, "zap-fault.xr") && output.entry_result == XR_LIR_I64);
     xr_lir_c_output_free(&output); CHECK(!runtime_live && !runtime_bytes);
 }
+static void array_helper_boundaries(void) {
+    const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT,ARRAY_REGION_RANGE_C_HEADER_LIVEOUT,
+        ARRAY_REGION_RANGE_NEXT_COPIES,ARRAY_REGION_RANGE_STEP_TWO,ARRAY_REGION_RANGE_PARALLEL_BAD};
+    (void)ars_range_same; (void)ars_range_digest; (void)array_set_region_fixture;
+    size_t mode_count = sizeof(modes) / sizeof(*modes);
+    for (size_t n = 0; n <= mode_count; ++n) {
+        bool dual = n == mode_count;
+        ArraySetRegionFixture input = dual ? array_region_binding_two_loops(false,false,true) :
+            ars_range_build(NULL,n == 0 ? 1 : 3,modes[n]);
+        if (!dual) OK(xr_lir_module_finish(input.module,NULL));
+        XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
+        XrCompileResources *resources = sdk_ledger(&limits);
+        XrLirCRequest request = {input.module,input.function,resources,"array-helper-publication",NULL};
+        XrLirCOutput output = {0};
+        if (!n) output = memory_boundaries(&request);
+        else {
+            XrLirCDiagnostic diagnostic = {0};
+            XrLirCStatus status = xr_lir_emit_c(&request,&output,&diagnostic);
+            if (status != XR_LIR_C_OK) fprintf(stderr,"array helper status%u: %s\n",(unsigned)status,diagnostic.message);
+            CHECK(status == XR_LIR_C_OK);
+        }
+        bool helper = n < 3 || dual;
+        CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_payload") != NULL) == helper);
+        CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_elements") != NULL) == helper);
+        CHECK(strstr(output.bytes,"xrt_array_i64_region_try_begin") && strstr(output.bytes,"xrl_ar_0_phase == 1"));
+        if (helper) {
+            CHECK(strstr(output.bytes,"UINTPTR_MAX - xrl_ar_payload_begin") &&
+                strstr(output.bytes,"UINTPTR_MAX - xrl_ar_elements_begin") &&
+                strstr(output.bytes,"(uintmax_t)INT64_MAX") && strstr(output.bytes,"XrlArResult_"));
+            CHECK(!strstr(output.bytes,"goto xrl_ar_slow_") && strstr(output.bytes,"xrt_native_array_get("));
+            const char *call = strstr(output.bytes," xrl_ar_result = xrl_ar_loop_");
+            CHECK(call);
+            const char *end = strstr(call,"});"); CHECK(end);
+            char late[64]; int length = snprintf(late,sizeof(late),"= v%" PRIu32 ",",input.result.id);
+            CHECK(length > 0 && (size_t)length < sizeof(late));
+            const char *capture = strstr(call,late);
+            CHECK(!capture || capture > end);
+            if (n == 1) {
+                const char *external = strstr(call,"= p0,"); CHECK(external && external < end);
+                XrLirInstructionView length_op = {0};
+                OK(xr_lir_instruction_view(input.module,input.header,0,&length_op));
+                char restored[64]; length = snprintf(restored,sizeof(restored),"v%" PRIu32 " = xrl_ar_result.s",length_op.result);
+                CHECK(length > 0 && (size_t)length < sizeof(restored) && strstr(call,restored));
+                XrLirValue exited = {0}; OK(xr_lir_block_parameter(input.module,input.exit,1,&exited));
+                length = snprintf(restored,sizeof(restored),"v%" PRIu32 " = xrl_ar_result.s",exited.id);
+                CHECK(length > 0 && (size_t)length < sizeof(restored) && strstr(call,restored));
+            }
+            if (dual) {
+                char second[64]; length = snprintf(second,sizeof(second),"XrlArInput_%" PRIu32 "_1",input.function.id);
+                CHECK(length > 0 && (size_t)length < sizeof(second) && strstr(output.bytes,second));
+            }
+        } else CHECK(strstr(output.bytes,"goto xrl_ar_slow_") && !strstr(output.bytes,"xrl_ar_loop_"));
+        xr_lir_module_destroy(input.module); xr_compile_resources_release(resources);
+        CHECK(output.bytes && output.length); xr_lir_c_output_free(&output);
+        CHECK(!runtime_live && !runtime_bytes);
+    }
+}
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--edge-control")) {
         edge_control_boundaries(); return 0;
@@ -464,6 +523,7 @@ int main(int argc, char **argv) {
     }
     if (argc == 1) edge_control_boundaries();
     if (argc == 1) record_memory_boundaries();
+    if (argc == 1) array_helper_boundaries();
     (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--ice")));
     XrLirModule *module = NULL;

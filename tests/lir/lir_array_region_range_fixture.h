@@ -17,7 +17,7 @@ enum ArrayRegionRangeMode {
     ARRAY_REGION_RANGE_COMPUTED_GET, ARRAY_REGION_RANGE_CONSTANT_SET,
     ARRAY_REGION_RANGE_STEP_TWO, ARRAY_REGION_RANGE_STEP_DYNAMIC,
     ARRAY_REGION_RANGE_COMMUTED, ARRAY_REGION_RANGE_DOUBLE_STEP, ARRAY_REGION_RANGE_LATCH_CURRENT,
-    ARRAY_REGION_RANGE_NEXT_COPIES
+    ARRAY_REGION_RANGE_NEXT_COPIES, ARRAY_REGION_RANGE_C_HEADER_LIVEOUT
 };
 #define ARS_RANGE_FIELDS(r) (r).kind,(r).iv,(r).iv_argument,(r).entry_iv,(r).length,(r).length_instruction, \
     (r).condition,(r).condition_instruction,(r).increment,(r).increment_block,(r).increment_instruction,(r).one,(r).latch_iv
@@ -47,6 +47,11 @@ static XrLirValue ars_range_mutate(ArraySetRegionFixture *c, XrLirValue values[4
     }
     XrLirValue item = ars_array_op(c, block, XR_LIR_ARRAY_OP_GET, args, 2);
     (void)ars_array_op(c, block, XR_LIR_ARRAY_OP_GET, args, 2);
+    if (mode == ARRAY_REGION_RANGE_C_HEADER_LIVEOUT) {
+        XrLirValue external = {0}; OK(xr_lir_function_parameter(c->module,c->function,0,&external));
+        XrLirValue sum[] = {item,external};
+        item = ars_value(c,block,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=sum,.operand_count=2});
+    }
     XrLirValue cell = ars_value(c, block, (XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,
         .operands=values,.operand_count=1});
     ars_effect(c, block, XR_LIR_ARRAY_DROP, values[0]);
@@ -123,6 +128,10 @@ static ArraySetRegionFixture ars_range_build(XrLirModule *module, uint32_t count
     }
     XrLirValue exited[4]; ars_range_parameters(&c,c.exit,exited);
     c.result = ars_array_op(&c,c.exit,XR_LIR_ARRAY_OP_LEN,exited,1);
+    if (mode == ARRAY_REGION_RANGE_C_HEADER_LIVEOUT) {
+        XrLirValue sum[] = {bound,exited[1]};
+        c.result = ars_value(&c,c.exit,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=sum,.operand_count=2});
+    }
     ars_effect(&c,c.exit,XR_LIR_ARRAY_DROP,exited[0]);
     OK(xr_lir_set_terminator(c.module,c.exit,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
         .operands=&c.result,.operand_count=1}));

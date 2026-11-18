@@ -53,8 +53,9 @@ typedef struct XrtArrayI64RegionCache {
  * and a numeric projection of exact I64 homes. Typed setup supplies the real
  * allocation extent; this is not validation of arbitrary or expired pointers.
  * Success borrows bytes without retaining or changing busy/pending state.
- * The caller preserves real owner moves and original per-access bounds checks
- * in the uninterrupted scalar window. False changes no input or output byte. */
+ * The caller preserves real owner moves and either original per-access bounds
+ * checks or its exact conditional arithmetic proof in the uninterrupted scalar
+ * window. No numeric fact grants access. False changes no input or output byte. */
 XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_region_try_begin(const XrtArrayI64RegionContext *context,
     const XrtArrayI64RegionSpec *region, bool ready, XrtArrayI64RegionCache *empty) {
     if (!context || !region || !empty || empty->owner || empty->elements || empty->length || !ready ||
