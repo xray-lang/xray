@@ -620,17 +620,6 @@ static void array_helper_owner_exit(const char *text, size_t expected) {
     }
     CHECK(helpers == expected);
 }
-static bool array_helper_reconstructs_i64_bits(const char *source) {
-    const char *copy = source;
-    while ((copy = strstr(copy, "XRT_ARRAY_I64_REGION_COPY(&v")) != NULL) {
-        const char *comma = strchr(copy, ',');
-        const char *end = strchr(copy, ')');
-        if (comma && end && comma < end && strncmp(comma, ", &v", 4) == 0)
-            return true;
-        ++copy;
-    }
-    return false;
-}
 static void array_helper_boundaries(void) {
     const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT,ARRAY_REGION_RANGE_C_HEADER_LIVEOUT,
         ARRAY_REGION_RANGE_NEXT_COPIES,ARRAY_REGION_RANGE_STEP_TWO,ARRAY_REGION_RANGE_PARALLEL_BAD,ARRAY_REGION_RANGE_READ_ONLY};
@@ -664,7 +653,7 @@ static void array_helper_boundaries(void) {
         CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_elements") != NULL) == helper);
         CHECK((strstr(output.bytes,"XRT_ARRAY_I64_REGION_COPY(&v") != NULL) == (helper && !readonly));
         CHECK((strstr(output.bytes,"XRT_ARRAY_I64_REGION_COPY(xrl_ar_elements") != NULL) == (helper && !readonly));
-        CHECK(array_helper_reconstructs_i64_bits(output.bytes) == (helper && !readonly));
+        CHECK((strstr(output.bytes,"XRT_ARRAY_I64_REGION_RECONSTRUCT(v") != NULL) == (helper && !readonly));
         CHECK(strstr(output.bytes,"xrt_array_i64_region_try_begin") && strstr(output.bytes,"xrl_ar_0_phase == 1"));
         if (helper) {
             const char *outlined = strstr(output.bytes,"static XRT_ARRAY_REGION_OUTLINE XrlArResult_");

@@ -78,6 +78,18 @@ typedef struct XrtArrayI64RegionCache {
     memcpy((destination), (source), sizeof(int64_t))
 #endif
 
+/* Operands are distinct generated scalar locals. GCC optimizes the modulo
+ * loop better when it sees the bit copy. Other providers keep the arithmetic
+ * reconstruction to avoid materializing the scratch object in the loop. */
+#if defined(__GNUC__) && !defined(__clang__)
+#define XRT_ARRAY_I64_REGION_RECONSTRUCT(destination, bits) \
+    XRT_ARRAY_I64_REGION_COPY(&(destination), &(bits))
+#else
+#define XRT_ARRAY_I64_REGION_RECONSTRUCT(destination, bits) \
+    ((destination) = (bits) <= (uint64_t)INT64_MAX ? (int64_t)(bits) : \
+        -INT64_C(1) - (int64_t)((~(bits)) & UINT64_MAX))
+#endif
+
 /* This is the only full dynamic check for a producer-described call-free
  * region. Ready means its original complete SET/READ/drop/latch has returned,
  * not a metadata permission. Inputs are actual live private factory objects

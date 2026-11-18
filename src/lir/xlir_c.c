@@ -779,7 +779,7 @@ static void c_reconstruct(LirC *c, XrLirType type, uint32_t result) {
         /* Exact-width int64_t has a two's-complement representation. Copying
          * the modulo result to its scalar home exposes that operation to loop
          * optimization before the provider simplifies signed expressions. */
-        c_format(c, "    XRT_ARRAY_I64_REGION_COPY(&v%" PRIu32 ", &v%" PRIu32 ");\n", result, c->scratch);
+        c_format(c, "    XRT_ARRAY_I64_REGION_RECONSTRUCT(v%" PRIu32 ", v%" PRIu32 ");\n", result, c->scratch);
         return;
     }
     c_format(c, "    v%" PRIu32 " = ", result);
