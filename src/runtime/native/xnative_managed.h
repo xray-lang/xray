@@ -29,4 +29,10 @@ XR_FUNC bool xrt_managed_layout_matches(const XrtManagedHeader *, const XrtRunti
  * logical length is published. Only the fixed prefix is initialized here.
  * An owned field or a payload callback makes this preparation invalid. */
 XR_FUNC XrtManagedStatus xrt_managed_prepare_scalar_tail(XrtManagedOps *, size_t bytes, XrtManagedPending *);
+/* The caller holds the true local owner field and has ended every borrow of
+ * the old allocation. Only a unique built-in scalar allocation with the
+ * identical Ops can move. OK with an empty output leaves the binding intact.
+ * Success lends the new allocation until the caller releases the binding. */
+XR_FUNC XrtManagedStatus xrt_managed_grow_unique_scalar_tail(XrtManagedHeader **binding,
+    XrtManagedOps *expected, size_t bytes, XrtManagedHeader **grown);
 #endif // XNATIVE_MANAGED_H

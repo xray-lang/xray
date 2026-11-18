@@ -470,6 +470,16 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_apply(XrtManagedSlotReserv
     root->reserved_phase=RESERVED_EMPTY;
     return status;
 }
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_grow_scalar_tail(const XrtManagedSlotReservation *handle,
+    XrtManagedOps *expected, size_t bytes, XrtManagedHeader **grown) {
+    if (!reserved_slot(handle) || handle->root->reserved_phase != RESERVED_EMPTY ||
+        handle->root->reserved_binding.busy != &handle->root->busy) return XRT_MANAGED_ARGUMENT;
+    XrtManagedRoot *root = handle->root;
+    root->reserved_phase = RESERVED_CALLBACK;
+    XrtManagedStatus status = xrt_managed_grow_unique_scalar_tail(root->reserved_binding.owner, expected, bytes, grown);
+    root->reserved_phase = RESERVED_EMPTY;
+    return status;
+}
 static XrtManagedStatus reserved_prepare(const XrtManagedSlotReservation *handle,
     XrtManagedOps *ops, size_t bytes, bool clear_tail, XrtManagedHeader **output) {
     XrtManagedSlot *slot=reserved_slot(handle);

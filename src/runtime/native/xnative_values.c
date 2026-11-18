@@ -344,6 +344,12 @@ XRAY_API void xrt_native_array_update_place(XrtPlace binding, XrtBackingArrayKin
     if (status==XRT_MANAGED_OK) status=xrt_array_update_place(binding,kind,frame,workspace,types,update);
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
 }
+XRAY_API void xrt_native_array_push_local_i64(XrtPlace binding, size_t workspace, int64_t item, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    if (status == XRT_MANAGED_OK) status = xrt_array_push_local_i64(binding, workspace, types, item);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
 
 #include "xnative_map_literal_value.inc.c"
 XRAY_API void xrt_native_map_create(XrtManagedFrame *frame, size_t slot,

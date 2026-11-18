@@ -41,6 +41,10 @@ XR_FUNC XrtManagedStatus xrt_array_backing_update_create(XrtManagedFrame *, size
  * domains through callbacks. The caller may fail nonlocally only after return. */
 XR_FUNC XrtManagedStatus xrt_array_update_place(XrtPlace, XrtBackingArrayKind binding_kind,
     XrtManagedFrame *, size_t temporary, const XrtBackingTypes *, const XrtArrayUpdate *);
+/* A proved local capacity window may relocate its unique built-in allocation.
+ * All old backing borrows have ended. Both slots belong to the same Frame. */
+XR_FUNC XrtManagedStatus xrt_array_push_local_i64(XrtPlace, size_t temporary,
+    const XrtBackingTypes *, int64_t item);
 
 /* Scalar results are copied. A String result is only a synchronous borrow of
  * its source tail owner; an independent binding must retain it explicitly.

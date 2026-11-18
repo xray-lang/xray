@@ -111,6 +111,9 @@ def main() -> None:
             assert generated_text.count("static const XrtArrayI64RegionSpec xrl_ap_spec_") == 1
             assert "xrl_ap_0_ready = true;" in generated_text
             assert "xrt_native_array_update_place(" in generated_text
+            assert generated_text.count("xrt_native_array_push_local_i64(") == 1
+        elif "xrt_native_array_push_local_i64(" in generated_text:
+            assert re.search(r"if \(xrl_ap_\d+_ready\) \{\s+xrt_native_array_push_local_i64\(", generated_text)
         if name.startswith("region_") or name.startswith("panic_region_"):
             specs = re.findall(r"static const XrtArrayI64RegionSpec xrl_ar_spec_", generated_text)
             clones = re.findall(r"^xrl_ar_\d+_bb\d+: ;\n(.*?)(?=^xrl_ar_\d+_bb\d+: ;|^}\n)",

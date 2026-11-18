@@ -139,6 +139,7 @@ static void c_array_region_edge_end(LirC *, size_t);
 static void c_array_region_clones(LirC *);
 static bool c_array_region_present(const LirC *);
 static bool c_array_push_present(const LirC *);
+static size_t c_array_push_window_at(const LirC *);
 static void c_array_push_edge_end(LirC *, size_t);
 static void c_array_push_before_branch(LirC *);
 static void c_array_helpers_prepare(LirC *, uint32_t, LirCArrayRegions *);

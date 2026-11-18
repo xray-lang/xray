@@ -425,6 +425,64 @@ static void scalar_updates(void) {
         fixture_done(&fixture);
     }
 }
+static void local_i64_growth(void) {
+    size_t full_bytes = 0;
+    const size_t old_extent = sizeof(XrtArrayBacking) + 4 * sizeof(int64_t);
+    const size_t new_extent = sizeof(XrtArrayBacking) + 8 * sizeof(int64_t);
+    const int64_t initial[] = {11, 13, 17, 19};
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        Fixture fixture = {0};
+        OK(xrt_billing_owner_new(NULL, mode == 2 ? full_bytes + new_extent - old_extent : SIZE_MAX,
+            &fixture.billing));
+        XrtBillingStats empty = xrt_billing_owner_stats(fixture.billing);
+        OK(xrt_backing_types_init(fixture.billing, &fixture.types));
+        OK(xrt_managed_root_new(fixture.billing, &fixture.root));
+        OK(xrt_managed_frame_enter(fixture.root, 2, &fixture.frame));
+        OK(xrt_array_backing_i64_create(fixture.frame, 0, &fixture.types, initial, 4, 4));
+        XrtPlace place = {.frame=fixture.frame, .slot=0, .nulls=XRT_PLACE_NONNULL};
+        XrtManagedHeader *snapshot = mode == 1 ? borrow(&fixture, 0) : NULL;
+        if (snapshot) CHECK(xrt_managed_retain(snapshot));
+        XrtBillingStats before = xrt_billing_owner_stats(fixture.billing);
+        if (!mode) {
+            full_bytes = before.bytes;
+            XrtManagedHeader *old = borrow(&fixture, 0);
+            xrt_billing_owner_fail_after(fixture.billing, 0);
+            CHECK(xrt_array_push_local_i64(place, 1, &fixture.types, 23) == XRT_MANAGED_OOM);
+            CHECK(borrow(&fixture, 0) == old && ((XrtArrayBacking *)old)->length == 4);
+            CHECK(!memcmp(((XrtArrayBacking *)old)->elements, initial, sizeof(initial)));
+            same_bill(fixture.billing, before);
+            CHECK(xrt_billing_owner_stats(fixture.billing).allocations == before.allocations);
+            xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+        }
+        XrtManagedStatus status = xrt_array_push_local_i64(place, 1, &fixture.types, INT64_MIN);
+        CHECK(status == (mode == 2 ? XRT_MANAGED_LIMIT : XRT_MANAGED_OK));
+        XrtArrayBacking *array = (XrtArrayBacking *)borrow(&fixture, 0);
+        CHECK(!memcmp(array->elements, initial, sizeof(initial)));
+        if (mode == 2) {
+            CHECK(array->length == 4 && array->capacity == 4);
+            same_bill(fixture.billing, before);
+        } else {
+            CHECK(array->length == 5 && array->capacity == 8 &&
+                scalar_at(array, XRT_BACKING_ARRAY_I64, 4) == (uint64_t)INT64_MIN);
+            if (snapshot) {
+                XrtArrayBacking *old = (XrtArrayBacking *)snapshot;
+                CHECK(old != array && old->length == 4 && old->capacity == 4);
+                CHECK(!memcmp(old->elements, initial, sizeof(initial)));
+                xrt_managed_drop(snapshot);
+            }
+            XrtBillingStats final = xrt_billing_owner_stats(fixture.billing);
+            CHECK(final.blocks == before.blocks && final.bytes == before.bytes + new_extent - old_extent &&
+                final.allocations == before.allocations + 1);
+        }
+        XrtManagedSlotLocation workspace = {0};
+        OK(xrt_managed_slot_location(fixture.frame, 1, &workspace));
+        CHECK(!*workspace.owner && !workspace.pending->value && !workspace.pending->allocation_bytes && !*workspace.busy);
+        OK(xrt_managed_root_destroy(&fixture.root));
+        xrt_backing_types_drop(&fixture.types);
+        same_bill(fixture.billing, empty);
+        xrt_billing_owner_drop(fixture.billing);
+    }
+}
 static void string_updates(void) {
     Fixture fixture;
     fixture_init(&fixture, 16384);
@@ -886,6 +944,7 @@ int main(void) {
     nonlocal_retirement();
     independent_lifetimes();
     scalar_updates();
+    local_i64_growth();
     array_local_updates();
     array_region_borrows();
     string_updates();
