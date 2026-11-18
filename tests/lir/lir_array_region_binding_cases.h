@@ -159,7 +159,71 @@ static void array_region_binding_shared_check(const XrLirArrayRegionBindings *bi
         (reverse ? XR_LIR_ARRAY_REGION_EDGE_ENTRY : XR_LIR_ARRAY_REGION_EDGE_EXIT));
     xr_lir_array_region_bindings_destroy(alone);
 }
+static void array_region_binding_mixed(bool reverse,unsigned read_mask) {
+    ArraySetRegionFixture c=array_region_binding_loops(true,reverse,true,read_mask);
+    XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+    XrLirValueLayoutKey roots[]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
+    XrLirValueLayouts *set=NULL; HOME(xr_lir_value_layouts_create(c.module,roots,4,billing,&set));
+    XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
+    XrLirValueHomes *homes=NULL;
+    HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,c.function,set,plan},&homes));
+    size_t winner=read_mask==1 ? (reverse ? 0u : 1u) : (reverse ? 1u : 0u), skipped=1-winner;
+    CHECK(homes->array_region_count==2 && homes->array_regions[winner].primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET &&
+        homes->array_regions[skipped].primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET);
+    size_t baseline=live,bytes=home_live_bytes(); attempts=0;
+    XrLirArrayRegionBindings *bindings=NULL; HOME(xr_lir_array_region_bindings_create(homes,set,&bindings));
+    size_t sites=attempts;
+    const XrLirArrayRegionBinding *selected=&bindings->regions[winner],*ordinary=&bindings->regions[skipped];
+    CHECK(bindings->region_count==2 && selected->slot_count && selected->move_count && selected->access_count &&
+        !ordinary->slot_count && !ordinary->move_count && !ordinary->access_count && !ordinary->block_count &&
+        ordinary->canonical_slot==SIZE_MAX);
+    for (size_t n=0;n<2;++n) CHECK(bindings->regions[n].region.first_step==homes->array_regions[n].first_step &&
+        bindings->regions[n].region.primary_kind==homes->array_regions[n].primary_kind &&
+        bindings->regions[n].region.primary_block==homes->array_regions[n].primary_block &&
+        bindings->regions[n].region.primary_instruction==homes->array_regions[n].primary_instruction);
+    const XrLirArraySetRegion *first=&homes->array_regions[reverse ? 1 : 0],*second=&homes->array_regions[reverse ? 0 : 1];
+    CHECK(first->header==second->entry_block && first->exit_edge==second->entry_edge && first->exit_block==second->header);
+    size_t edge=bindings->block_index[first->header].edges[first->exit_edge-1]; CHECK(edge);
+    CHECK(bindings->edges[edge-1].region==winner+1 && bindings->edges[edge-1].kind==
+        ((reverse ? 1u : 0u)==winner ? XR_LIR_ARRAY_REGION_EDGE_EXIT : XR_LIR_ARRAY_REGION_EDGE_ENTRY));
+    XrLirValueHomes single=*homes; single.array_regions=&homes->array_regions[winner]; single.array_region_count=1;
+    XrLirArrayRegionBindings *alone=NULL; HOME(xr_lir_array_region_bindings_create(&single,set,&alone));
+    array_region_binding_check(alone,&single,c.module,c.function);
+    CHECK(bindings->slot_count==alone->slot_count && bindings->move_count==alone->move_count &&
+        bindings->access_count==alone->access_count && bindings->block_count==alone->block_count &&
+        bindings->operation_count==alone->operation_count && bindings->edge_count==alone->edge_count &&
+        bindings->block_index_count==alone->block_index_count);
+    for (size_t n=0;n<bindings->slot_count;++n) CHECK(bindings->slots[n].slot==alone->slots[n].slot &&
+        bindings->slots[n].offset==alone->slots[n].offset);
+    for (size_t n=0;n<bindings->edge_count;++n) CHECK(bindings->edges[n].kind==alone->edges[n].kind &&
+        bindings->edges[n].move==alone->edges[n].move && bindings->edges[n].region==(alone->edges[n].region ? winner+1 : 0));
+    for (size_t n=0;n<bindings->operation_count;++n) CHECK(bindings->operations[n].access==alone->operations[n].access &&
+        bindings->operations[n].move==alone->operations[n].move && bindings->operations[n].drop==alone->operations[n].drop);
+    for (size_t n=0;n<bindings->block_index_count;++n) CHECK(bindings->block_index[n].region==
+        (alone->block_index[n].region ? winner+1 : 0) &&
+        bindings->block_index[n].first_operation==alone->block_index[n].first_operation &&
+        bindings->block_index[n].instruction_count==alone->block_index[n].instruction_count &&
+        bindings->block_index[n].edges[0]==alone->block_index[n].edges[0] &&
+        bindings->block_index[n].edges[1]==alone->block_index[n].edges[1]);
+    xr_lir_array_region_bindings_destroy(alone); xr_lir_array_region_bindings_destroy(bindings); bindings=NULL;
+    CHECK(live==baseline && home_live_bytes()==bytes);
+    if (!reverse && read_mask==1) for (size_t point=1;point<=sites;++point) {
+        attempts=0; fail_at=point;
+        CHECK(xr_lir_array_region_bindings_create(homes,set,&bindings)==XR_LIR_VALUE_LAYOUT_OOM && !bindings &&
+            attempts>=point && live==baseline && home_live_bytes()==bytes);
+    }
+    fail_at=SIZE_MAX; HOME(xr_lir_array_region_bindings_create(homes,set,&bindings));
+    xr_lir_value_homes_destroy(homes); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(set);
+    xr_lir_module_destroy(c.module);
+    CHECK(bindings->regions[winner].slot_count && bindings->regions[winner].region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET &&
+        !bindings->regions[skipped].slot_count && bindings->edges[edge-1].region==winner+1);
+    xr_lir_array_region_bindings_destroy(bindings); CHECK(!live && !home_live_bytes());
+    CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
+}
 static void array_region_binding_projection(unsigned shape) {
+    if (!shape) for (unsigned mask=1;mask<=2;++mask) {
+        array_region_binding_mixed(false,mask); array_region_binding_mixed(true,mask);
+    }
     bool large=shape==1,shared=shape==2 || shape==3,reverse=shape==3,single_range=shape==4 || shape==6,range=shape>=4;
     ArraySetRegionFixture c=single_range ? ars_range_build(NULL,3,shape==6 ? ARRAY_REGION_RANGE_READ_ONLY : ARRAY_REGION_RANGE_UNIT) :
         large ? array_set_region_fixture(257,ARRAY_SET_REGION_LOCAL) : array_region_binding_two_loops(shared,reverse,range);

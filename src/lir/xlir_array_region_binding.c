@@ -374,8 +374,9 @@ static XrLirValueLayoutStatus region_binding_edges_available(const RegionBinding
             return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         size_t edge=b->edge_index[(size_t)step.block*2+step.edge-1];
         if (!edge) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
-        /* A previous loop's exit can be this loop's entry. The single-role
-         * index keeps that loop and leaves this legal successor ordinary. */
+        /* One loop's exit can be another loop's entry. Stable SET-first
+         * projection preserves existing SET coverage; a conflicting optional
+         * read-only window keeps its original ordinary schedule. */
         if (b->output->edges[edge-1].region) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     }
     return XR_LIR_VALUE_LAYOUT_OK;
@@ -465,7 +466,11 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_array_region_bindings_create(const XrLi
     if (status==XR_LIR_VALUE_LAYOUT_OK && homes->array_region_count) status=region_binding_prepare(&b);
     if (status==XR_LIR_VALUE_LAYOUT_OK && homes->array_region_count) status=region_binding_positions(&b);
     bool frame=status==XR_LIR_VALUE_LAYOUT_OK && homes->array_region_count && region_binding_frame(&homes->frame);
+    /* Only physical publication order changes. Each class keeps original
+     * order, and stamps/region rows retain their original numeric identity. */
+    for (unsigned pass=0;status==XR_LIR_VALUE_LAYOUT_OK && pass<2;++pass)
     for (uint32_t n=0;status==XR_LIR_VALUE_LAYOUT_OK && n<homes->array_region_count;++n) {
+        if ((pass==0)!=(homes->array_regions[n].primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET)) continue;
         b.stamp=n+1; XrLirArrayRegionBinding row={0};
         if (frame) status=region_binding_project(&b,n,&row);
         else {
