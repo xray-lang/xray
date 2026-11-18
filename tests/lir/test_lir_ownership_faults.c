@@ -58,6 +58,7 @@ static void ownership_free(void *memory) {
 #include "lir_slice_cleanup_fixture.h"
 #include "lir_array_forwarding_fixture.h"
 #include "lir_array_set_region_fixture.h"
+#include "lir_array_region_range_fixture.h"
 
 static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint32_t type_count) {
     XrLirOwnershipPlan *output = NULL;
@@ -166,6 +167,32 @@ static void array_region_tampering(void) {
     CHECK(live == baseline && live_bytes == bytes);
     xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module); CHECK(!live && !live_bytes);
 }
+static void array_region_range_tampering(void) {
+    for (unsigned kind = 0; kind < 2; ++kind) {
+        ArraySetRegionFixture c = ars_range_build(NULL, 3, kind ? ARRAY_REGION_RANGE_UNIT : ARRAY_REGION_RANGE_BOUND);
+        OK(xr_lir_module_finish(c.module, NULL));
+        XrLirOwnershipPlan *plan = NULL;
+        OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
+        CHECK(plan->array_regions.regions.count == 1);
+        XrLirArraySetRegionRange *range = &((XrLirArraySetRegion *)plan->array_regions.regions.data)[0].range;
+        CHECK(range->kind == kind);
+        uint32_t *fields[] = {&range->kind,&range->iv,&range->iv_argument,&range->entry_iv,&range->length,
+            &range->length_instruction,&range->condition,&range->condition_instruction,&range->increment,
+            &range->increment_block,&range->increment_instruction,&range->one,&range->latch_iv};
+        XrLirArraySetRegionRange original = *range;
+        size_t baseline = live, bytes = live_bytes;
+        for (size_t n = 0; n < sizeof(fields) / sizeof(*fields); ++n) {
+            uint32_t saved = *fields[n]; *fields[n] ^= 1;
+            CHECK(xr_lir_ownership_array_regions_verify(c.module, plan) == XR_LIR_VERIFY_ERROR &&
+                live == baseline && live_bytes == bytes);
+            *fields[n] = saved;
+            CHECK(ars_range_same(*range, original));
+        }
+        OK(xr_lir_ownership_array_regions_verify(c.module, plan));
+        xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module);
+        CHECK(!live && !live_bytes);
+    }
+}
 static void array_region_input_equal(const XrLirModule *input, const XrLirModule *reference) {
     CHECK(input->function_count == reference->function_count);
     for (uint32_t f = 0; f < input->function_count; ++f) {
@@ -195,13 +222,14 @@ static void array_region_input_equal(const XrLirModule *input, const XrLirModule
         }
     }
 }
-static void array_region_verification_faults(bool retired) {
+static void array_region_verification_faults(unsigned shape) {
+    bool retired = shape == 1, range = shape == 2;
     enum ArraySetRegionMode first = retired ? ARRAY_SET_REGION_RETAIN_SOURCE : ARRAY_SET_REGION_LOCAL;
     enum ArraySetRegionMode second = retired ? ARRAY_SET_REGION_RETAIN_TARGET : ARRAY_SET_REGION_LOCAL;
-    ArraySetRegionFixture input = array_set_region_build(NULL, 3, first);
-    input = array_set_region_build(input.module, 6, second);
-    ArraySetRegionFixture reference = array_set_region_build(NULL, 3, first);
-    reference = array_set_region_build(reference.module, 6, second);
+    ArraySetRegionFixture input = range ? ars_range_build(NULL, 3, ARRAY_REGION_RANGE_UNIT) : array_set_region_build(NULL, 3, first);
+    input = range ? ars_range_build(input.module, 6, ARRAY_REGION_RANGE_UNIT) : array_set_region_build(input.module, 6, second);
+    ArraySetRegionFixture reference = range ? ars_range_build(NULL, 3, ARRAY_REGION_RANGE_UNIT) : array_set_region_build(NULL, 3, first);
+    reference = range ? ars_range_build(reference.module, 6, ARRAY_REGION_RANGE_UNIT) : array_set_region_build(reference.module, 6, second);
     OK(xr_lir_module_finish(input.module, NULL)); OK(xr_lir_module_finish(reference.module, NULL));
     XrLirOwnershipPlan *plan = NULL, *saved = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module}, &plan, NULL));
@@ -222,7 +250,8 @@ static void array_region_verification_faults(bool retired) {
     xr_lir_ownership_plan_destroy(plan); xr_lir_ownership_plan_destroy(saved);
     xr_lir_module_destroy(input.module); xr_lir_module_destroy(reference.module);
     CHECK(!live && !live_bytes);
-    if (retired) printf("retired copy region verification failure points: %zu\n", count);
+    if (range) printf("unit-forward range verification failure points: %zu\n", count);
+    else if (retired) printf("retired copy region verification failure points: %zu\n", count);
     else printf("array region verification failure points: %zu\n", count);
 }
 
@@ -255,8 +284,12 @@ int main(void) {
     OK(xr_lir_module_finish(retired.module,NULL));
     sweep(retired.module,NULL,0);
     array_region_tampering();
+    array_region_range_tampering();
     array_region_verification_faults(false);
     array_region_verification_faults(true);
+    array_region_verification_faults(2);
+    ArraySetRegionFixture ranged = ars_range_build(NULL,3,ARRAY_REGION_RANGE_UNIT);
+    OK(xr_lir_module_finish(ranged.module,NULL)); sweep(ranged.module,NULL,0);
     XrLirModule *grown = NULL;
     OK(ownership_fixture(XR_LIR_STRING, false, 24, &grown));
     sweep(grown,NULL,0);
