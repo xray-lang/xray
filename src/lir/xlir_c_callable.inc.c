@@ -102,7 +102,9 @@ static bool c_callable_admit(LirC *c, const XrLirInstructionView *v) {
             c_error(c,XR_LIR_C_INVALID_LIR,"callable constructor changed after its final facts were sealed"); return false;
         }
         bool owned = fact.transport == XR_LIR_CALLABLE_TRANSPORT_OWNED;
-        if ((fact.transport != XR_LIR_CALLABLE_TRANSPORT_FRAME && !owned) || target.kind != XR_LIR_FUNCTION_DEFINITION) {
+        bool assertion = target.kind == XR_LIR_FUNCTION_EXTERNAL && target.extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION;
+        if ((fact.transport != XR_LIR_CALLABLE_TRANSPORT_FRAME && !owned) ||
+            (target.kind != XR_LIR_FUNCTION_DEFINITION && !assertion)) {
             c_error(c, XR_LIR_C_UNSUPPORTED, "escaping callable environments require owned lifetime transport");
             return false;
         }
@@ -169,6 +171,8 @@ static void c_callable_parameters(LirC *c, XrLirCallableType signature, bool nam
         c_format(c, ", %s", type);
         if (names) c_format(c, " a%" PRIu32, p);
     }
+    if (xr_lir_callable_invocation_source(&signature))
+        c_text(c, names ? ", uint32_t invocation_source" : ", uint32_t");
 }
 #include "xlir_c_callable_values.inc.c"
 static void c_callable_types(LirC *c) {
@@ -222,6 +226,13 @@ static void c_callable_entries(LirC *c) {
         c_format(c, "static %s xrl_thunk_%" PRIu32 "(uintptr_t context", owned ? "void" : c_type(c,signature.result), function.id);
         if (owned) c_format(c,", XrlLandingValue_%" PRIu32 " landing",c_callable_result_type(c,signature));
         c_callable_parameters(c,signature,true); c_text(c, ") {\n    (void)context;\n");
+        if (target.kind == XR_LIR_FUNCTION_EXTERNAL && target.extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION) {
+            c_text(c, "    xrt_assert_condition(a0, (const XrtStringBacking *)a1, invocation_source);\n}\n");
+            c_format(c,"static const XrlFnEntry xrl_entry_%" PRIu32 " = {.s%" PRIu32 "=xrl_thunk_%" PRIu32 "};\n",
+                function.id,closure.callable,function.id);
+            continue;
+        }
+        if (xr_lir_callable_invocation_source(&signature)) c_text(c, "    (void)invocation_source;\n");
         if (closure.capture_count || closure.state_capture)
             c_format(c, "    const XrlFnEnv_%" PRIu32 " *env = (const void *)context;\n", function.id);
         c_text(c, signature.result == XR_LIR_UNIT || owned ? "    " : "    return ");
@@ -279,6 +290,10 @@ static void c_callable_instruction(LirC *c, const XrLirInstructionView *v, uint3
                 home->offset,home->temporary_offset);
         }
         for (uint32_t p=1;p<v->operand_count;++p) { c_text(c,", "); c_value(c,v->operands[p]); }
+        XrLirCallableType signature;
+        if (c_callable_type(c, c_value_type(c, v->operands[0]), &signature) &&
+            xr_lir_callable_invocation_source(&signature))
+            c_format(c, ", UINT32_C(%" PRIu32 ")", source);
         c_text(c,");\n");
     } else if (v->op == XR_LIR_FUNCTION_SCOPE_ENTER)
         c_format(c,"    v%" PRIu32 " = UINT32_C(%" PRIu32 ");\n",v->result,v->result);

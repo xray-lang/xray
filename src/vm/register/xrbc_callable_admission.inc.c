@@ -89,10 +89,22 @@ static bool rbc_callable_image_valid(const XrRbcModule *module) {
         }
     }
     const XrRbcCallableEntry *entries=xr_rbc_module_callable_entries(module);
-    if (entries) for (size_t n=0;n<module->function_count;++n) {
+    size_t count=xr_rbc_module_callable_entry_count(module);
+    const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
+    if (entries && count<module->function_count) return false;
+    if (entries) for (size_t n=0;n<count;++n) {
         uint32_t signature=entries[n].signature_type;
-        if (module->functions[n].callable ? !signature || signature>image->type_count ||
-                !entries[n].source_function || types[signature-1]!=module->functions[n].callable : signature!=0) return false;
+        if (entries[n].kind==XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION) {
+            if (!owner || entries[n].producer!=owner || n<module->function_count ||
+                entries[n].physical_function!=UINT32_MAX || !entries[n].source_function ||
+                !signature || signature>image->type_count || !entries[n].callable ||
+                types[signature-1]!=entries[n].callable) return false;
+        } else {
+            if (entries[n].kind!=XR_RBC_CALLABLE_ENTRY_CODE || n>=module->function_count ||
+                entries[n].physical_function!=n) return false;
+            if (module->functions[n].callable ? !signature || signature>image->type_count ||
+                    !entries[n].source_function || types[signature-1]!=module->functions[n].callable : signature!=0) return false;
+        }
     }
     return true;
 }

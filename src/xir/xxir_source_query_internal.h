@@ -15,6 +15,11 @@
 #include "xxir_source_dependencies.h"
 #include "xxir_source_calls.h"
 #include "xxir_source_type_facts.h"
+#include "xxir_source_builtin.h"
+/* Only the Core Source loader publishes this executable binding. The supplied
+ * Checked owner and debug function must retain the same numerical identity. */
+XR_FUNC XrXirStatus xr_xir_compile_source_builtin_bind(XrXirSourceSnapshot *,
+    XrXirSourceBuiltinBinding, const XrXirModule *);
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy_v2(const XrXirCompileContext *context,
     const XrXirSourceView *view, const XrXirConstruction *construction, XrXirSourceSnapshot **output);
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapshot *, const XrXirSourceSyntaxView *);

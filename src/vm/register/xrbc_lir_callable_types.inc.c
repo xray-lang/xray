@@ -128,21 +128,36 @@ static XrRbcCompileStatus rbc_lir_callable_parameters(const XrLirModule *input,
     return XR_RBC_COMPILE_OK;
 }
 static XrRbcCompileStatus rbc_lir_callable_entries(const XrLirModule *input,
-    const uint32_t *ids, const uint32_t *mapping, XrRbcProgram *program,
+    const uint32_t *ids, uint32_t *mapping, XrRbcProgram *program,
     const XrLirValueLayouts *layouts, XrRbcCompileDiagnostic *diagnostic) {
     if (!program->module.callable_type_count) return XR_RBC_COMPILE_OK;
     size_t count=program->module.function_count;
+    uint32_t functions=xr_lir_function_count(input);
+    for (uint32_t f=0;f<functions;++f) if (mapping[f]==RBC_LIR_ASSERT_ENTRY) ++count;
+    if (count>UINT32_MAX)
+        return rbc_lir_error(diagnostic,XR_RBC_COMPILE_LIMIT,"callable entry count exceeds indexed storage",(XrLirSource){0});
     if (count>SIZE_MAX/sizeof(*program->callable_entries))
         return rbc_lir_error(diagnostic,XR_RBC_COMPILE_LIMIT,"callable entry map exceeds address space",(XrLirSource){0});
     program->callable_entries=xr_calloc(count,sizeof(*program->callable_entries));
     if (!program->callable_entries)
         return rbc_lir_error(diagnostic,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own callable entry map",(XrLirSource){0});
+    program->callable_entry_count=count;
+    size_t next=program->module.function_count;
+    for (uint32_t f=0;f<functions;++f) if (mapping[f]==RBC_LIR_ASSERT_ENTRY) {
+        mapping[f]=(uint32_t)next+1;
+        program->callable_entries[next++]=(XrRbcCallableEntry){.physical_function=UINT32_MAX,
+            .source_function=f+1,.kind=XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION};
+    }
     for (size_t n=0;n<count;++n) {
         XrRbcCallableEntry *entry=&program->callable_entries[n];
-        entry->physical_function=(uint32_t)n; entry->source_function=ids[n];
+        if (n<program->module.function_count) {
+            entry->physical_function=(uint32_t)n; entry->source_function=ids[n];
+        }
         XrLirClosureTarget target={0}; const XrtValuePlan *plan=NULL;
-        if (layouts && xr_lir_closure_target_view(input,(XrLirFunction){input,ids[n]},&target)==XR_LIR_OK && target.callable)
+        if (layouts && xr_lir_closure_target_view(input,(XrLirFunction){input,entry->source_function},&target)==XR_LIR_OK && target.callable) {
             (void)xr_lir_value_layouts_lookup(layouts,(XrLirValueLayoutKey){target.callable,0,0},&plan,&entry->signature_type);
+            entry->callable=program->physical_callables[target.callable-XR_LIR_TYPE_COUNT]+1;
+        }
     }
     const XrtValueImage *image=program->value_image ? xr_lir_value_image_view(program->value_image) : NULL;
     if (image && image->type_count) {

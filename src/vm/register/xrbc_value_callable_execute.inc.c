@@ -24,17 +24,23 @@ static XrtManagedStatus rbc_value_function_read(const XrRbcModule *module,XrRbcS
 static XrtManagedStatus rbc_value_function_target(const XrRbcModule *module,XrRbcStack *stack,
     const XrtFunction *binding,uint32_t signature,RbcFunctionCall *output) {
     const XrRbcCallableEntry *entries=xr_rbc_module_callable_entries(module);
-    if (!entries || !binding->entry || module->function_count>SIZE_MAX/sizeof(*entries)) return XRT_MANAGED_ARGUMENT;
+    size_t count=xr_rbc_module_callable_entry_count(module);
+    if (!entries || !binding->entry || count>SIZE_MAX/sizeof(*entries)) return XRT_MANAGED_ARGUMENT;
     uintptr_t first=(uintptr_t)entries,address=(uintptr_t)binding->entry;
-    if (address<first || address-first>=(size_t)module->function_count*sizeof(*entries) ||
+    if (address<first || address-first>=count*sizeof(*entries) ||
         (address-first)%sizeof(*entries)) return XRT_MANAGED_ARGUMENT;
     size_t index=(address-first)/sizeof(*entries);
     const XrRbcCallableEntry *entry=&entries[index];
-    if (entry->physical_function!=index || !rbc_callable_accepts(module,signature,module->functions[index].callable))
+    bool assertion=entry->kind==XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION;
+    const XrRbcCodeOwner *producer=xr_rbc_module_code_owner(module);
+    if (assertion) {
+        if (!producer || entry->producer!=producer || entry->physical_function!=UINT32_MAX ||
+            !rbc_callable_accepts(module,signature,entry->callable)) return XRT_MANAGED_ARGUMENT;
+    } else if (entry->kind!=XR_RBC_CALLABLE_ENTRY_CODE || entry->physical_function!=index ||
+        index>=module->function_count || !rbc_callable_accepts(module,signature,module->functions[index].callable))
         return XRT_MANAGED_ARGUMENT;
     *output=(RbcFunctionCall){.binding=*binding,.entry=entry,.frame_captures=SIZE_MAX};
     if (binding->owner) {
-        const XrRbcCodeOwner *producer=xr_rbc_module_code_owner(module);
         if (!producer || entry->producer!=producer || !entry->environment_type)
             return XRT_MANAGED_ARGUMENT;
         /* Introductions receive and validate the genuine Env once. Invocation
@@ -42,6 +48,7 @@ static XrtManagedStatus rbc_value_function_target(const XrRbcModule *module,XrRb
         output->captures=(const uint8_t *)binding->environment;
         return output->captures ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
     }
+    if (assertion) return binding->environment==SIZE_MAX ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
     const XrRbcFunction *target=&module->functions[index];
     if (!target->capture_count && !target->state_capture)
         return binding->environment==SIZE_MAX ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;

@@ -66,10 +66,12 @@ struct XrRbcProgram {
     XrLirValueImage *value_image;
     XrLirStateProjection *state_projection;
     XrRbcCallableEntry *callable_entries;
+    size_t callable_entry_count;
     uint32_t *type_callables;
 };
 
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
+#define RBC_LIR_ASSERT_ENTRY (UINT32_MAX - 2)
 #define RBC_LIR_NATIVE_BASE (UINT32_MAX - 8)
 
 static bool rbc_lir_native(uint32_t mapping) {
@@ -638,7 +640,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
     case XR_LIR_STRING_LITERAL: case XR_LIR_STRING_I64: case XR_LIR_STRING_F64: case XR_LIR_STRING_CONCAT:
     case XR_LIR_STRING_RETAIN: case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP:
-    case XR_LIR_STRING_PRINT: case XR_LIR_STRING_LEN:
+    case XR_LIR_STRING_PRINT: case XR_LIR_STRING_LEN: case XR_LIR_ASSERT_CONDITION:
         return true;
     case XR_LIR_INTCAST: {
         XrLirType source = XR_LIR_TYPE_INVALID;
@@ -738,6 +740,10 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                     XrLirFunctionView callee;
                     xr_lir_function_view(input, (XrLirFunction) {input, i.callee}, &callee);
                     if (callee.kind != XR_LIR_FUNCTION_DEFINITION) {
+                        if (callee.kind == XR_LIR_FUNCTION_EXTERNAL && callee.extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION) {
+                            mapping[i.callee - 1] = RBC_LIR_ASSERT_ENTRY;
+                            continue;
+                        }
                         if (callee.kind != XR_LIR_FUNCTION_EXTERNAL ||
                             (callee.extern_kind < XR_LIR_EXTERN_PRINT_I64 ||
                              callee.extern_kind > XR_LIR_EXTERN_UTC_OFFSET_AT)) {
@@ -1684,8 +1690,9 @@ static bool rbc_lir_seal(XrRbcProgram *program) {
     image->code.module=&image->module;
     image->code.locations=image->locations;
     image->code.entries=image->callable_entries;
+    image->code.entry_count=program->callable_entry_count;
     image->code.type_callables=image->type_callables;
-    for (size_t n=0;image->callable_entries && n<image->module.function_count;++n)
+    for (size_t n=0;image->callable_entries && n<image->code.entry_count;++n)
         image->callable_entries[n].producer=&image->code;
     image->code.retire = rbc_code_retire;
     image->module.borrowed_value_codes=(const XrRbcValueCode *const *)image->value_codes;

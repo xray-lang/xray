@@ -17,6 +17,8 @@
 #include "xlir_array.h"
 #include "xlir_cell.h"
 #include "../xir/xxir_source_query.h"
+#include "../xir/xxir_source_builtin.h"
+#include "../shared/xr_core_intrinsic.h"
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_types.h"
 #include "../xir/xxir_type_description.h"
@@ -242,6 +244,15 @@ static XrLirSource lower_source(const Lower *c) {
             }
     return lower_range_source(c, range);
 }
+static uint32_t lower_core_builtin(const Lower *c, uint32_t function) {
+    uint32_t origin = UINT32_MAX;
+    XrXirSourceBuiltinBinding binding;
+    return xr_xir_compile_specialization_origin(c->request->closed, function, &origin) == XR_XIR_OK &&
+        xr_xir_compile_source_builtin_binding(c->request->snapshot, origin, &binding) ? binding.builtin : 0;
+}
+static bool lower_core_assertion(const Lower *c, uint32_t function) {
+    return lower_core_builtin(c,function)==XR_CORE_BUILTIN_ASSERT;
+}
 
 static XrLirSource lower_slot_source(const Lower *c, uint32_t slot) {
     const XrXirSourceDebugView *debug = xr_xir_compile_source_snapshot_debug(c->request->snapshot);
@@ -373,6 +384,7 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET:
         case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN: case XR_XIR_CALL_INDIRECT:
         case XR_XIR_RANGE_CHECK:
+        case XR_XIR_ASSERT_CONDITION:
         case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_SLOT_GROUP_INIT:
         case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
         case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
@@ -756,7 +768,7 @@ static bool lower_local_pure(Lower *c, uint32_t selected) {
                  ++i) {
                 c->instruction = i;
                 const XrXirInstruction *op = &f->instructions[i];
-                if (op->op == XR_XIR_PRINT || op->op == XR_XIR_CLOCK_NANOS ||
+                if (op->op == XR_XIR_PRINT || op->op == XR_XIR_ASSERT_CONDITION || op->op == XR_XIR_CLOCK_NANOS ||
                     op->op == XR_XIR_UTC_OFFSET_AT || !lower_known(op->op))
                     return lower_unsupported(c, "effect in local function closure");
                 if (op->op != XR_XIR_CALL)
@@ -1006,9 +1018,12 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             c->closure_types = lower_alloc(c, c->source->function_count, sizeof(*c->closure_types));
             if (!c->closure_types) return false;
         }
-        if (c->closure_types[callee] && c->closure_types[callee] != type)
-            return lower_unsupported(c, "function reference signature conversion");
-        c->closure_types[callee] = type;
+        if (c->closure_types[callee] && c->closure_types[callee] != type) {
+            if (xr_lir_callable_accepts(c->module, c->closure_types[callee], type))
+                c->closure_types[callee] = type;
+            else if (!xr_lir_callable_accepts(c->module, type, c->closure_types[callee]))
+                return lower_unsupported(c, "function reference signature conversion");
+        } else c->closure_types[callee] = type;
         return lower_mark(c, callee);
     }
     if (op->op == XR_XIR_FUNCTION_WEAKEN) {
@@ -1204,6 +1219,10 @@ static bool lower_declare(Lower *c, uint32_t index) {
                               .parameter_count = count,
                               .result = lower_type(c, f->result), .callable_parameters=contracts,
                               .callable_parameter_count=contract_count};
+    if (lower_core_assertion(c, index)) {
+        spec.kind = XR_LIR_FUNCTION_EXTERNAL;
+        spec.extern_kind = XR_LIR_EXTERN_ASSERT_CONDITION;
+    }
     bool good = lower_build(c, xr_lir_declare_function(c->module, &spec, &c->functions[index]));
     if (good && spec.result == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {lower_array_element(c, f->result)};
@@ -1714,6 +1733,14 @@ static bool lower_display(LowerFunction *f, uint32_t block, XrLirValue argument,
 static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
+    if (op->op == XR_XIR_ASSERT_CONDITION) {
+        XrLirValue arguments[2];
+        if (!lower_value(f, op->args[0], &arguments[0]) || !lower_value(f, op->args[1], &arguments[1]))
+            return false;
+        XrLirInstruction assertion = {.op=XR_LIR_ASSERT_CONDITION, .type=XR_LIR_UNIT,
+            .operands=arguments, .operand_count=2, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &assertion));
+    }
     if (op->op == XR_XIR_COPY && c->owned_bindings && c->owned_bindings[c->function] &&
         c->owned_bindings[c->function][f->source->parameter_count + i])
         return lower_value(f, op->args[0], &f->values[f->source->parameter_count + i]);
@@ -1975,6 +2002,25 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         .operand_count = count,
         .source = lower_source(c),
         .callee = indirect ? (XrLirFunction){0} : op->op == XR_XIR_PRINT ? c->print : c->functions[(uint32_t) op->immediate]};
+    if (op->op == XR_XIR_CALL && lower_core_builtin(c,(uint32_t)op->immediate)==XR_CORE_BUILTIN_ASSERT_EQUAL) {
+        const XrXirFunction *target=&c->source->functions[op->immediate];
+        if (count!=3 || !target->instruction_count || target->instructions[0].op!=XR_XIR_EQUAL) {
+            xr_free(arguments);
+            return lower_error(c,XR_LIR_VERIFY_ERROR,"Core equality assertion lost its checked comparison recipe"),false;
+        }
+        LowerFunction comparison_owner={.owner=c,.source=target};
+        XrLirValue condition={0};
+        XrLirInstruction compare={.op=lower_operation(&comparison_owner,&target->instructions[0]),
+            .type=XR_LIR_I1,.predicate=lower_predicate(&target->instructions[0]),
+            .operands=arguments,.operand_count=2,.source=call.source};
+        if (good) good=lower_build(c,xr_lir_emit_value(c->module,f->blocks[b],&compare,&condition));
+        arguments[0]=condition; arguments[1]=arguments[2];
+        call.op=XR_LIR_ASSERT_CONDITION; call.callee=(XrLirFunction){0}; call.operand_count=2;
+    }
+    if (op->op == XR_XIR_CALL && lower_core_assertion(c, (uint32_t)op->immediate)) {
+        call.op = XR_LIR_ASSERT_CONDITION;
+        call.callee = (XrLirFunction){0};
+    }
     if (good)
         good = lower_build(c, call.type == XR_LIR_UNIT
                                   ? xr_lir_emit_effect(c->module, f->blocks[b], &call)
@@ -2601,7 +2647,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     if (good && c.views && !local) good = lower_wrapper(&c, &entry);
     if (good) good = lower_slice_effects(&c);
     for (uint32_t f = 0; f < source->function_count && good; ++f)
-        if (c.active[f])
+        if (c.active[f] && !lower_core_assertion(&c, f))
             good = lower_function(&c, f);
     if (good && local)
         entry = c.functions[selected];

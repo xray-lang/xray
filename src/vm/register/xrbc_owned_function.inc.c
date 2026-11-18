@@ -10,6 +10,7 @@ typedef struct RbcOwnedFunction {
     const XrRbcCodeOwner *code;
     XrtEnvironmentBorrow environment;
     uint32_t function;
+    const XrRbcCallableEntry *entry;
 } RbcOwnedFunction;
 
 /* A raw dependency always precedes its parent. One receiving plan per raw id
@@ -85,15 +86,19 @@ static XrtManagedStatus rbc_owned_function_borrow(const XrtFunction *binding, Rb
     if (status!=XRT_MANAGED_OK) return status;
     const XrRbcCodeOwner *code=xr_rbc_code_owner_borrow(shape.code);
     if (!code || !code->values) return XRT_MANAGED_ARGUMENT;
-    for (size_t n=0;n<code->function_count;++n) {
+    for (size_t n=0;n<code->entry_count;++n) {
         const XrRbcCallableEntry *entry=&code->entries[n];
         if (binding->entry!=entry) continue;
         if (entry->source_function!=shape.entry.ordinal || !entry->environment_type ||
-            entry->producer!=code || entry->physical_function!=n ||
-            code->functions[n].state_capture || !entry->signature_type) return XRT_MANAGED_ARGUMENT;
+            entry->producer!=code || !entry->signature_type) return XRT_MANAGED_ARGUMENT;
+        if (entry->kind==XR_RBC_CALLABLE_ENTRY_CODE) {
+            if (entry->physical_function!=n || n>=code->function_count || code->functions[n].state_capture)
+                return XRT_MANAGED_ARGUMENT;
+        } else if (entry->kind!=XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION ||
+            entry->physical_function!=UINT32_MAX || !entry->callable) return XRT_MANAGED_ARGUMENT;
         status=rbc_owned_plan_matches(code,environment.plan,entry->environment_type);
         if (status!=XRT_MANAGED_OK) return status;
-        *output=(RbcOwnedFunction){code,environment,(uint32_t)n};
+        *output=(RbcOwnedFunction){code,environment,entry->physical_function,entry};
         return XRT_MANAGED_OK;
     }
     return XRT_MANAGED_ARGUMENT;

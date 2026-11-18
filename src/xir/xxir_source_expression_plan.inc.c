@@ -91,6 +91,8 @@ static bool source_plan_collect_header(SourceContext *ctx,AstNode *node,SourceEx
     SourceFunction *body,SourceExpressionPlan *plan) {
     if (node->type==AST_THIS_EXPR || node->type==AST_VARIABLE) {
         plan->binding=visible_name(ctx,node->type==AST_THIS_EXPR ? "this" : node->as.variable.name);
+        if (!plan->binding && node->type == AST_VARIABLE)
+            plan->binding = source_builtin_value(ctx, node, node->as.variable.name);
         if (source_name_ready(plan->binding)) {
             plan->type_ready=true;plan->ground_type=source_symbol_type(ctx,plan->binding);
             if (plan->binding->kind==SOURCE_LOCAL) {

@@ -343,6 +343,8 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
     if (spec->kind == XR_LIR_FUNCTION_DEFINITION)
         return spec->extern_kind == XR_LIR_EXTERN_NONE;
     if (spec->kind != XR_LIR_FUNCTION_EXTERNAL) return false;
+    if (spec->extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION)
+        return xr_lir_assertion_entry_signature(spec->parameters, spec->parameter_count, spec->result);
     const char *clock = clock_external_name(spec->extern_kind);
     if (clock) return spec->result == XR_LIR_I64 &&
         spec->parameter_count == (spec->extern_kind == XR_LIR_EXTERN_UTC_OFFSET_AT ? 1u : 0u) &&

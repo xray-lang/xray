@@ -732,6 +732,17 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
         XrtManagedStatus status=rbc_value_function_read(module,stack,caller,access.source,&binding);
         if (status==XRT_MANAGED_OK) status=rbc_value_function_target(module,stack,&binding,access.index,&invoked);
         if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+        if (invoked.entry->kind==XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION) {
+            const uint32_t *arguments=caller->code->arguments+access.first;
+            XrRbcRegister *condition=rbc_value_register(stack,caller,arguments[0]);
+            const XrtStringBacking *message=NULL;
+            status=rbc_value_string_borrow(caller,arguments[1],&message);
+            if (status==XRT_MANAGED_OK && (!condition || condition->bits>1)) status=XRT_MANAGED_ARGUMENT;
+            if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+            xrt_assert_condition((uint8_t)condition->bits,message,source);
+            stack->frames[parent].pc=pc;
+            return XR_RBC_OK;
+        }
         access.index=invoked.entry->physical_function;
     }
     const XrRbcFunction *callee=&module->functions[access.index];
@@ -986,6 +997,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         status=rbc_value_inline(module,activation->code,access.source,false) ?
             rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.source},NULL) :
             xrt_managed_slot_drop(activation->frame,home->first_owner);
+    } else if (access.operation==XR_RBC_VALUE_ASSERT_CONDITION) {
+        const XrtStringBacking *message=NULL;
+        status=rbc_value_string_borrow(activation,access.other,&message);
+        XrRbcRegister *condition=rbc_value_register(stack,activation,access.source);
+        if (status==XRT_MANAGED_OK && (!condition || condition->bits>1)) status=XRT_MANAGED_ARGUMENT;
+        if (status==XRT_MANAGED_OK) xrt_assert_condition((uint8_t)condition->bits,message,source);
     } else if (access.operation==XR_RBC_VALUE_STRING_PRINT || access.operation==XR_RBC_VALUE_STRING_LENGTH) {
         const XrtStringBacking *string=NULL;
         status=rbc_value_string_borrow(activation,access.source,&string);

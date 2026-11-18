@@ -335,7 +335,7 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
         xr_lir_range_point(c->request->module, v)) return true;
     if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 || v->op == XR_LIR_STRING_F64 ||
         v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_RETAIN ||
-        v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN) return true;
+        v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN || v->op == XR_LIR_ASSERT_CONDITION) return true;
     return (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_STRING_CELL) ||
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_STRING) ||
         (v->op == XR_LIR_CELL_WRITE && c_value_type(c, v->operands[0]) == XR_LIR_STRING_CELL);
@@ -486,7 +486,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
         case XR_LIR_STRING_I64: case XR_LIR_STRING_F64: case XR_LIR_STRING_CONCAT: case XR_LIR_STRING_RETAIN:
         case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_STRING_PRINT:
-        case XR_LIR_STRING_LEN:
+        case XR_LIR_STRING_LEN: case XR_LIR_ASSERT_CONDITION:
         case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
         case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE:
         case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
@@ -1016,6 +1016,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                     (XrLirFunction){c->request->module, v->callee}, &external);
                 string_output = external.extern_kind == XR_LIR_EXTERN_PRINT_STRING;
                 const char *name = string_output ? "xrt_print_string" :
+                    external.extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION ? "xrt_assert_condition" :
                     external.extern_kind == XR_LIR_EXTERN_PRINT_I64 ? "xrt_print_i64" :
                     external.extern_kind == XR_LIR_EXTERN_CLOCK_REALTIME ? "xrt_clock_realtime_nanos" :
                     external.extern_kind == XR_LIR_EXTERN_CLOCK_CPU ? "xrt_clock_process_cpu_nanos" :
@@ -1028,6 +1029,8 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                 if (a)
                     c_text(c, ", ");
                 if (string_output && a == 1) c_text(c, "(size_t)");
+                if (callee.extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION && a == 1)
+                    c_text(c, "(const XrtStringBacking *)");
                 c_value(c, v->operands[a]);
             }
             if (c_runtime_call(c, v)) {

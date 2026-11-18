@@ -33,6 +33,10 @@ typedef struct XrtSourceMap {
     const XrtSourceLocation *locations;
     size_t count;
 } XrtSourceMap;
+typedef struct XrtStringBacking XrtStringBacking;
+/* Arguments have already been evaluated, including the message on success.
+ * Failure retains its own exact String before execution-owned values drain. */
+XRAY_API void xrt_assert_condition(uint8_t condition, const XrtStringBacking *message, uint32_t source_id);
 
 typedef void (*XrtSynchronousRoot)(void *context);
 

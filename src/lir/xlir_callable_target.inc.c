@@ -32,13 +32,18 @@ XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *m,
     XrLirClosureTarget target = function->closure;
     if (!target.callable) return !target.capture_count && !target.state_capture;
     XrLirCallableType signature;
-    if (function->kind != XR_LIR_FUNCTION_DEFINITION ||
+    bool assertion = function->kind == XR_LIR_FUNCTION_EXTERNAL &&
+        function->extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION;
+    if ((function->kind != XR_LIR_FUNCTION_DEFINITION && !assertion) ||
         xr_lir_callable_type_view(m, target.callable, &signature) != XR_LIR_OK ||
         target.capture_count > function->parameter_count ||
         (uint32_t)target.state_capture > function->parameter_count - target.capture_count ||
         signature.parameter_count != function->parameter_count - target.capture_count - target.state_capture ||
         signature.result != function->result || signature.result_element != function->array_result)
         return false;
+    if (assertion && (target.capture_count || target.state_capture ||
+        !xr_lir_assertion_entry_signature(function->parameter_types, function->parameter_count, function->result) ||
+        !xr_lir_callable_invocation_source(&signature))) return false;
     if (target.state_capture && function->parameter_types[function->parameter_count - 1] != XR_LIR_STATE)
         return false;
     for (uint32_t p = 0; p < target.capture_count; ++p)
