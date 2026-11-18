@@ -14,6 +14,7 @@
 #define XRBC_VALUE_CODE_H
 #include "xrbc_value_homes.h"
 #include "xray_native_pod.h"
+#include "lir/xlir_array_region_binding.h"
 
 typedef enum XrRbcValueLocationKind {
     XR_RBC_VALUE_NOWHERE, XR_RBC_VALUE_REGISTER, XR_RBC_VALUE_SPILL, XR_RBC_VALUE_AGGREGATE
@@ -71,6 +72,10 @@ typedef struct XrRbcValueAccess {
      * for a physical scope capability; operation hooks keep their normal SSA
      * operands. Scope exit and RELEASE never read retired natural bytes. */
     uint32_t index, first, count, window;
+    /* Stable access identities survive bytecode compaction. Only the actual
+     * immutable CodeOwner may execute these common region coordinates. */
+    uint32_t array_region;
+    XrLirArrayRegionOperation region_operation;
 } XrRbcValueAccess;
 
 typedef struct XrRbcValueCode {
@@ -91,6 +96,7 @@ typedef struct XrRbcValueCode {
     size_t display_count;
     const uint32_t *scope_values; /* Physical scope ordinal -> original SSA capability. */
     uint32_t scope_count;
+    XrLirArrayRegionBindings *array_regions; /* Owned numeric projection, no live addresses. */
 } XrRbcValueCode;
 
 /* Descriptions borrow the actual code lease, as the existing common homes do.

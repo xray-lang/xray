@@ -14,6 +14,19 @@
 #include "base/xmalloc.h"
 #include "vm/register/xrbc_lir.h"
 #include "xray_native_string_value.h"
+#include "xray_native_array_local.h"
+
+static size_t region_begin_attempts,region_begin_successes;
+static bool region_force_bypass;
+static bool counted_region_begin(const XrtArrayI64RegionContext *context,const XrtArrayI64RegionSpec *spec,
+    bool ready,XrtArrayI64RegionCache *cache) {
+    ++region_begin_attempts;
+    CHECK(ready && !cache->owner && !cache->elements && !cache->length);
+    if (region_force_bypass) return false;
+    bool result=xrt_array_i64_region_try_begin(context,spec,ready,cache);
+    if (result) ++region_begin_successes;
+    return result;
+}
 
 static size_t attempts, fail_at = SIZE_MAX, tracked_live;
 static void *watched_program, *watched_layout;
@@ -67,7 +80,9 @@ static void *resize(void *memory, size_t bytes) {
 #include "runtime/native/xnative_managed.c"
 #include "runtime/native/xnative_locations.c"
 #include "runtime/native/xnative_module_state.c"
+#define xrt_array_i64_region_try_begin counted_region_begin
 #include "vm/register/xrbc.c"
+#undef xrt_array_i64_region_try_begin
 #include "vm/register/xrbc_lir.c"
 #include "../lir/lir_fixed_bytecode_fixture.h"
 #include "../lir/lir_array_c_fixture.h"
@@ -686,7 +701,9 @@ static void failure_sweep(unsigned kind) {
     printf("Code owner fixture %u: compile/prepare/run OOM sites %zu/%zu/%zu refunded\n", kind, compile_calls, prepare_calls, run_calls);
 }
 #include "rbc_header_edge_cases.h"
+#include "rbc_array_region_cases.h"
 int main(void) {
+    rbc_array_region_cases();
     for (unsigned kind = 0; kind < 4; ++kind) { prepared_after_program(kind); failure_sweep(kind); }
     code_lease_is_leaf(); raw_borrow_and_refusal();
     prepared_after_program(4); prepared_after_program(5); owned_receiving_failures(); owned_outcome_take();
