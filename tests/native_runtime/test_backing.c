@@ -391,11 +391,13 @@ static void scalar_updates(void) {
         OK(xrt_array_backing_update_create(fixture.frame, 0, &fixture.types, binding, &edit));
         XrtArrayBacking *next = (XrtArrayBacking *)borrow(&fixture, 0);
         CHECK(next != binding && next->length == 2 && scalar_at(next, kind, 0) == 29);
+        CHECK(scalar_at(next, kind, 1) == 23);
         CHECK(scalar_at(binding, kind, 0) == 17 && scalar_at(binding, kind, 1) == 23);
         edit.operation = XRT_ARRAY_UPDATE_PUSH; edit.item = scalar_item(kind, UINT64_MAX);
         OK(xrt_array_backing_update_create(fixture.frame, 0, &fixture.types, next, &edit));
         next = (XrtArrayBacking *)borrow(&fixture, 0);
         CHECK(next->length == 3 && next->capacity == 4);
+        CHECK(scalar_at(next, kind, 0) == 29 && scalar_at(next, kind, 1) == 23);
         CHECK(scalar_at(next, kind, 2) == (kind == XRT_BACKING_ARRAY_U8 ? 255 : UINT64_MAX));
         baseline = xrt_billing_owner_stats(fixture.billing);
         edit.operation = XRT_ARRAY_UPDATE_SET; edit.index = -1;

@@ -109,13 +109,17 @@ static XrtManagedStatus array_update_create(XrtManagedFrame *frame, size_t slot,
     if (status != XRT_MANAGED_OK) return status;
     XrtArrayBacking *array = (XrtArrayBacking *)payload;
     size_t changed = update->operation == XRT_ARRAY_UPDATE_PUSH ? source->length : (size_t)update->index;
-    for (size_t i = 0; i < length; ++i) {
-        if (update->item.kind == XRT_BACKING_ARRAY_STRING) {
+    if (update->item.kind == XRT_BACKING_ARRAY_STRING) {
+        for (size_t i = 0; i < length; ++i) {
             XrtManagedHeader *child = i == changed ? &update->item.value.string->managed : array_owned_child(source, i);
             if (!xrt_managed_retain(child)) { status = XRT_MANAGED_REFCOUNT; break; }
             memcpy(array->elements + i * stride, &child, sizeof(child));
-        } else if (i == changed) array_store_scalar(array->elements + i * stride, &update->item);
-        else memcpy(array->elements + i * stride, source->elements + i * stride, stride);
+        }
+    } else {
+        /* Both extents were bounded above. Only initialized scalar elements
+         * cross to the still-private replacement. */
+        memcpy(array->elements, source->elements, source->length * stride);
+        array_store_scalar(array->elements + changed * stride, &update->item);
     }
     if (status == XRT_MANAGED_OK) array->length = length;
     if (!reservation) return array_finish(frame,slot,status);
