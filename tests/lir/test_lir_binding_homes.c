@@ -906,7 +906,7 @@ static void array_set_region_receiving(bool range) {
 }
 #include "lir_array_region_binding_cases.h"
 int main(void) {
-    for (unsigned shape=0;shape<5;++shape) array_region_binding_projection(shape);
+    for (unsigned shape=0;shape<6;++shape) array_region_binding_projection(shape);
     array_set_region_receiving(false); array_set_region_receiving(true);
     borrowed_map_stages();
     string_projections();

@@ -15,7 +15,7 @@ static XrLirBlock array_region_binding_block(ArraySetRegionFixture *c) {
     OK(xr_lir_set_array_shape(c->module,array,&(XrLirArrayShape){XR_LIR_I64}));
     return block;
 }
-static ArraySetRegionFixture array_region_binding_two_loops(bool shared,bool reverse) {
+static ArraySetRegionFixture array_region_binding_two_loops(bool shared,bool reverse,bool range) {
     ArraySetRegionFixture c={.arity=2,.mode=ARRAY_SET_REGION_LOCAL};
     OK(xr_lir_array_module_create(NULL,&c.module));
     OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="two_regions",.name_length=11,
@@ -32,22 +32,22 @@ static ArraySetRegionFixture array_region_binding_two_loops(bool shared,bool rev
         if (shared && !loop && reverse) c.exit=next_header;
         else c.exit=array_region_binding_block(&c);
         if (shared && !loop) next_header=c.exit;
-        XrLirValue values[3]={{0}};
+        XrLirValue values[4]={{0}};
         if (!shared || !loop) {
             XrLirValue item=ars_number(&c,current,7);
             values[0]=ars_array_op(&c,current,XR_LIR_ARRAY_OP_NEW,&item,1); values[1]=ars_number(&c,current,0);
             ars_branch(&c,current,c.header,values);
         }
         ars_parameters(&c,c.header,values); c.header_array=values[0];
-        (void)ars_array_op(&c,c.header,XR_LIR_ARRAY_OP_LEN,values,1);
-        XrLirValue limit=ars_number(&c,c.header,shared && loop ? 8 : 4),operands[]={values[1],limit};
+        XrLirValue length=ars_array_op(&c,c.header,XR_LIR_ARRAY_OP_LEN,values,1);
+        XrLirValue limit=range ? length : ars_number(&c,c.header,shared && loop ? 8 : 4),operands[]={values[1],limit};
         XrLirValue condition=ars_value(&c,c.header,(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
             .predicate=XR_LIR_LT,.operands=operands,.operand_count=2});
         OK(xr_lir_set_terminator(c.module,c.header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
             .operands=&condition,.operand_count=1,.edge_count=2,.edges={{c.body[0],values,2},{c.exit,values,2}}}));
         for (uint32_t n=0;n<c.count;++n) {
             ars_parameters(&c,c.body[n],values);
-            if (!n) values[0]=ars_mutate(&c,c.body[n],values[0]);
+            if (!n) values[0]=range ? ars_range_mutate(&c,values,ARRAY_REGION_RANGE_UNIT) : ars_mutate(&c,c.body[n],values[0]);
             if (n+1==c.count) {
                 XrLirValue increment[]={values[1],ars_number(&c,c.body[n],1)};
                 values[1]=ars_value(&c,c.body[n],(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,
@@ -194,17 +194,17 @@ static void array_region_binding_shared_check(const XrLirArrayRegionBindings *bi
     xr_lir_array_region_bindings_destroy(alone);
 }
 static void array_region_binding_projection(unsigned shape) {
-    bool large=shape==1,shared=shape==2 || shape==3,reverse=shape==3,range=shape==4;
-    ArraySetRegionFixture c=range ? ars_range_build(NULL,3,ARRAY_REGION_RANGE_UNIT) :
-        large ? array_set_region_fixture(257,ARRAY_SET_REGION_LOCAL) : array_region_binding_two_loops(shared,reverse);
-    if (range) OK(xr_lir_module_finish(c.module,NULL));
+    bool large=shape==1,shared=shape==2 || shape==3,reverse=shape==3,single_range=shape==4,range=shape>=4;
+    ArraySetRegionFixture c=single_range ? ars_range_build(NULL,3,ARRAY_REGION_RANGE_UNIT) :
+        large ? array_set_region_fixture(257,ARRAY_SET_REGION_LOCAL) : array_region_binding_two_loops(shared,reverse,range);
+    if (single_range) OK(xr_lir_module_finish(c.module,NULL));
     XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
     XrLirValueLayoutKey roots[]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
     XrLirValueLayouts *set=NULL; HOME(xr_lir_value_layouts_create(c.module,roots,4,billing,&set));
     XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
     XrLirValueHomes *homes=NULL;
     HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,c.function,set,plan},&homes));
-    CHECK(homes->array_region_count==(large || range ? 1u : 2u));
+    CHECK(homes->array_region_count==(large || single_range ? 1u : 2u));
     XrLirOwnershipFunction owner; OK(xr_lir_ownership_function_at(plan,c.function.id,&owner));
     for (uint32_t n=0;n<homes->array_region_count;++n) {
         XrLirArraySetRegion published; OK(xr_lir_ownership_array_region_at(plan,owner.region_offset+n,&published));
@@ -216,8 +216,11 @@ static void array_region_binding_projection(unsigned shape) {
     size_t sites=attempts; CHECK(sites && live>baseline);
     if (shared) array_region_binding_shared_check(bindings,homes,set,c.module,c.function,reverse);
     else array_region_binding_check(bindings,homes,c.module,c.function);
-    if (!large && !shared && !range) CHECK(bindings->regions[1].first_slot && bindings->regions[1].first_move &&
+    if (!large && !shared && !single_range) CHECK(bindings->regions[1].first_slot && bindings->regions[1].first_move &&
         bindings->regions[1].first_access && bindings->regions[1].canonical_slot>=bindings->regions[1].first_slot);
+    if (shape==5) CHECK(bindings->regions[1].region.first_step &&
+        bindings->regions[0].region.range.iv!=bindings->regions[1].region.range.iv &&
+        bindings->regions[0].region.range.length!=bindings->regions[1].region.range.length);
     XrLirArrayRegionBindings *preserved=bindings;
     CHECK(xr_lir_array_region_bindings_create(homes,set,&bindings)==XR_LIR_VALUE_LAYOUT_ARGUMENT && bindings==preserved);
     xr_lir_array_region_bindings_destroy(bindings); bindings=NULL;
@@ -233,6 +236,8 @@ static void array_region_binding_projection(unsigned shape) {
     size_t regions=bindings->region_count,moves=bindings->move_count,accesses=bindings->access_count;
     XrLirArraySetRegion first=bindings->regions[0].region;
     uint64_t range_digest=ars_range_digest(first.range);
+    XrLirArraySetRegionRange retained_ranges[2]; CHECK(regions<=2);
+    for (size_t n=0;n<regions;++n) retained_ranges[n]=bindings->regions[n].region.range;
     xr_lir_value_homes_destroy(homes); xr_lir_ownership_plan_destroy(plan);
     xr_lir_value_layouts_destroy(set); xr_lir_module_destroy(c.module);
     CHECK(bindings->region_count==regions && bindings->move_count==moves && bindings->access_count==accesses &&
@@ -241,6 +246,8 @@ static void array_region_binding_projection(unsigned shape) {
         ars_range_digest(bindings->regions[0].region.range)==range_digest);
     for (size_t n=0;n<regions;++n) {
         const XrLirArrayRegionBinding *r=&bindings->regions[n];
+        CHECK(ars_range_same(r->region.range,retained_ranges[n]) &&
+            ars_range_digest(r->region.range)==ars_range_digest(retained_ranges[n]));
         if (shared && n==1) CHECK(!r->slot_count);
         else CHECK(r->slot_count && r->canonical_slot<bindings->slot_count && r->first_move+r->move_count<=moves &&
             r->first_access+r->access_count<=accesses);
