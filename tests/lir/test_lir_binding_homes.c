@@ -867,9 +867,10 @@ static void callable_targets_and_join(unsigned shape) {
 #include "lir_slice_boundary_cases.h"
 #include "lir_scoped_cell_homes_cases.h"
 #include "lir_array_set_region_fixture.h"
-static void array_set_region_receiving(void) {
+#include "lir_array_region_range_fixture.h"
+static void array_set_region_receiving(bool range) {
     ArraySetRegionFixture c = array_set_region_build(NULL, 3, ARRAY_SET_REGION_LOCAL);
-    c = array_set_region_build(c.module, 6, ARRAY_SET_REGION_LOCAL);
+    c = range ? ars_range_build(c.module, 6, ARRAY_REGION_RANGE_UNIT) : array_set_region_build(c.module, 6, ARRAY_SET_REGION_LOCAL);
     OK(xr_lir_module_finish(c.module, NULL));
     XrtBillingOwner *billing = NULL; MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
     XrLirValueLayoutKey roots[] = {{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
@@ -880,6 +881,9 @@ static void array_set_region_receiving(void) {
     size_t baseline = live, bytes = home_live_bytes(); attempts = 0;
     HOME(xr_lir_value_homes_create(&request, &homes)); size_t sites = attempts;
     CHECK(homes && homes->array_region_count == 1 && homes->array_region_step_count && sites && live > baseline);
+    XrLirArraySetRegion published; OK(xr_lir_ownership_array_region_at(plan, 1, &published));
+    CHECK(ars_range_same(homes->array_regions[0].range, published.range) && published.range.kind == (range ?
+        XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN : XR_LIR_ARRAY_SET_RANGE_NONE));
     xr_lir_value_homes_destroy(homes); homes = NULL;
     CHECK(live == baseline && home_live_bytes() == bytes);
     for (size_t point = 1; point <= sites; ++point) {
@@ -890,17 +894,20 @@ static void array_set_region_receiving(void) {
     fail_at = SIZE_MAX; HOME(xr_lir_value_homes_create(&request, &homes));
     uint32_t count = homes->array_region_step_count;
     XrLirArraySetRegionStep first = homes->array_region_steps[0], last = homes->array_region_steps[count - 1];
+    uint64_t range_digest = ars_range_digest(published.range);
     xr_lir_module_destroy(c.module); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
     CHECK(homes->array_regions[0].canonical_value == c.header_array.id && homes->array_regions[0].body_block_count == c.count &&
         homes->array_region_steps[0].source == first.source && homes->array_region_steps[count - 1].target == last.target &&
         first.kind == XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE && last.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE);
+    CHECK(ars_range_same(homes->array_regions[0].range, published.range) &&
+        ars_range_digest(homes->array_regions[0].range) == range_digest);
     xr_lir_value_homes_destroy(homes); CHECK(live == baseline && home_live_bytes() == bytes);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
 }
 #include "lir_array_region_binding_cases.h"
 int main(void) {
-    for (unsigned shape=0;shape<4;++shape) array_region_binding_projection(shape);
-    array_set_region_receiving();
+    for (unsigned shape=0;shape<5;++shape) array_region_binding_projection(shape);
+    array_set_region_receiving(false); array_set_region_receiving(true);
     borrowed_map_stages();
     string_projections();
     scoped_cells();

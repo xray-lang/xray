@@ -9,6 +9,8 @@
 typedef struct LirArrayRegionUse {
     LirArrayForwardUse direct;
     uint32_t saving_uses, next_retain;
+    uint64_t range_stamp;
+    uint32_t lane, edge_lane;
 } LirArrayRegionUse;
 typedef struct LirArrayRegionProof {
     const XrLirModule *module;
@@ -22,6 +24,8 @@ typedef struct LirArrayRegionProof {
     XrLirArraySetRegionStep *steps;
     uint32_t step_count, step_capacity, block_count;
     uint32_t retain_head, retain_block, retain_drop;
+    uint64_t range_stamp;
+    XrLirArraySetRegionRange range;
 } LirArrayRegionProof;
 
 static void lir_array_regions_free(LirArrayRegionTables *tables) {
@@ -285,6 +289,72 @@ static bool lir_array_region_move(const LirArrayRegionProof *p, uint32_t block, 
     }
     return false;
 }
+enum { LIR_ARRAY_RANGE_CURRENT = 1, LIR_ARRAY_RANGE_NEXT };
+static uint32_t lir_array_region_lane(const LirArrayRegionProof *p, uint32_t value) {
+    return p->uses[value].range_stamp == p->range_stamp ? p->uses[value].lane : 0;
+}
+static void lir_array_region_range_begin(LirArrayRegionProof *p, const XrLirArraySetRegion *region,
+    uint32_t body_edge) {
+    const XrLirFunctionData *f = p->function;
+    const XrLirInstructionView *term = lir_terminator(f, region->header - 1);
+    if (body_edge || term->operand_count != 1) return;
+    uint32_t condition = term->operands[0];
+    const XrLirInstructionView *compare = xr_lir_internal_value_definition(f, condition);
+    if (!compare || compare->op != XR_LIR_ICMP || compare->type != XR_LIR_I1 ||
+        compare->predicate != XR_LIR_LT || compare->operand_count != 2 ||
+        f->values[condition - 1].block != region->header) return;
+    uint32_t iv = compare->operands[0], length = compare->operands[1];
+    const XrLirValueData *definition = &f->values[iv - 1];
+    const XrLirInstructionView *bound = xr_lir_internal_value_definition(f, length);
+    const XrLirArrayIntrinsic *shape = bound && bound->op == XR_LIR_CALL_INTRINSIC ?
+        xr_lir_internal_array_intrinsic(p->module, bound->intrinsic) : NULL;
+    if (definition->type != XR_LIR_I64 || !definition->parameter || definition->block != region->header ||
+        !shape || shape->operation != XR_LIR_ARRAY_OP_LEN || bound->type != XR_LIR_I64 ||
+        bound->operand_count != 1 || bound->operands[0] != region->canonical_value ||
+        f->values[length - 1].block != region->header) return;
+    const XrLirBlockData *header = &f->blocks[region->header - 1];
+    uint32_t argument = 0;
+    while (argument < header->parameter_count && header->parameters[argument] != iv) ++argument;
+    if (argument == header->parameter_count) return;
+    const XrLirInstructionView *entry = lir_terminator(f, region->entry_block - 1);
+    p->range = (XrLirArraySetRegionRange){.kind=XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN,
+        .iv=iv,.iv_argument=argument,.entry_iv=entry->edges[region->entry_edge - 1].arguments[argument],
+        .length=length,.length_instruction=f->values[length - 1].instruction + 1,
+        .condition=condition,.condition_instruction=f->values[condition - 1].instruction + 1};
+    p->range_stamp = (uint64_t)(region->header - 1) * 2 + body_edge + 1;
+    p->uses[iv].range_stamp = p->range_stamp; p->uses[iv].lane = LIR_ARRAY_RANGE_CURRENT;
+}
+/* A selected edge assigns parameters simultaneously. Scratch belongs to the
+ * unique target parameters, so even a latch that reads header parameters must
+ * finish every source read before publishing any destination lane. */
+static void lir_array_region_range_edge(LirArrayRegionProof *p, const XrLirEdgeView *edge) {
+    if (!p->range.kind) return;
+    const XrLirBlockData *target = &p->function->blocks[edge->target - 1];
+    XR_DCHECK(edge->argument_count == target->parameter_count, "selected edge has exact parameter arity");
+    for (uint32_t a = 0; a < edge->argument_count; ++a)
+        p->uses[target->parameters[a]].edge_lane = lir_array_region_lane(p, edge->arguments[a]);
+    for (uint32_t a = 0; a < edge->argument_count; ++a) {
+        LirArrayRegionUse *use = &p->uses[target->parameters[a]];
+        XR_DCHECK(use->edge_lane <= LIR_ARRAY_RANGE_NEXT, "range lane came from the old edge environment");
+        use->range_stamp = p->range_stamp; use->lane = use->edge_lane;
+    }
+    if (p->function->values[p->range.iv - 1].block == edge->target) {
+        if (!p->range.increment || lir_array_region_lane(p, p->range.iv) != LIR_ARRAY_RANGE_NEXT)
+            p->range = (XrLirArraySetRegionRange){0};
+        else p->range.latch_iv = edge->arguments[p->range.iv_argument];
+    }
+}
+static void lir_array_region_range_instruction(LirArrayRegionProof *p, const XrLirInstructionView *op,
+    uint32_t block, uint32_t instruction) {
+    if (!p->range.kind || op->op != XR_LIR_ADD || op->type != XR_LIR_I64 || op->operand_count != 2 ||
+        lir_array_region_lane(p, op->operands[0]) != LIR_ARRAY_RANGE_CURRENT) return;
+    const XrLirInstructionView *one = xr_lir_internal_value_definition(p->function, op->operands[1]);
+    if (!one || one->op != XR_LIR_CONST || one->type != XR_LIR_I64 || one->bits != 1) return;
+    if (p->range.increment) { p->range = (XrLirArraySetRegionRange){0}; return; }
+    p->range.increment = op->result; p->range.increment_block = block + 1;
+    p->range.increment_instruction = instruction; p->range.one = op->operands[1];
+    p->uses[op->result].range_stamp = p->range_stamp; p->uses[op->result].lane = LIR_ARRAY_RANGE_NEXT;
+}
 static bool lir_array_region_edge(LirArrayRegionProof *p, uint32_t block, uint32_t edge,
     XrLirArraySetRegionStepKind kind, uint32_t *current) {
     const XrLirFunctionData *f = p->function;
@@ -303,6 +373,7 @@ static bool lir_array_region_edge(LirArrayRegionProof *p, uint32_t block, uint32
             !lir_array_region_scalar(f->values[value - 1].type)) return false;
     }
     if (!destination) return false;
+    lir_array_region_range_edge(p, selected);
     *current = destination;
     return lir_array_region_step(p, (XrLirArraySetRegionStep){.kind=kind,.block=block + 1,
         .instruction=f->blocks[block].instruction_count,.edge=edge + 1,.source=source,.target=destination});
@@ -354,13 +425,19 @@ static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32
     const XrLirBlockData *body = &p->function->blocks[block];
     for (uint32_t i = 0; i + 1 < body->instruction_count; ++i) {
         const XrLirInstructionView *op = &body->instructions[i].view;
-        if (lir_array_region_pure(p->function, op)) continue;
+        if (lir_array_region_pure(p->function, op)) {
+            if (!header) lir_array_region_range_instruction(p, op, block, i + 1);
+            continue;
+        }
         if (!header && (op->op == XR_LIR_CELL_NEW || op->op == XR_LIR_CELL_READ)) {
             if (!lir_array_region_pair(p, block, i + 1, current, op->op == XR_LIR_CELL_READ)) return false;
             ++i; continue;
         }
         if (!lir_array_region_operation(p, op, *current, header)) return false;
         const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(p->module, op->intrinsic);
+        if (p->range.kind && (shape->operation == XR_LIR_ARRAY_OP_GET || shape->operation == XR_LIR_ARRAY_OP_SET) &&
+            lir_array_region_lane(p, op->operands[1]) != LIR_ARRAY_RANGE_CURRENT)
+            p->range = (XrLirArraySetRegionRange){0};
         if (shape->operation == XR_LIR_ARRAY_OP_SET) {
             if (region->set_block) return false;
             region->set_block = block + 1; region->set_instruction = i + 1;
@@ -371,16 +448,19 @@ static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32
 static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
     XrLirArraySetRegion *region) {
     if (!lir_array_region_shape(p, header, body_edge, region)) return false;
-    p->step_count = 0; uint32_t current = 0;
+    p->step_count = 0; p->range = (XrLirArraySetRegionRange){0}; uint32_t current = 0;
     if (!lir_array_region_edge(p, region->entry_block - 1, region->entry_edge - 1,
         XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE, &current)) return false;
     region->entry_value = p->steps[0].source; region->canonical_value = current;
+    lir_array_region_range_begin(p, region, body_edge);
     if (!lir_array_region_body(p, header, &current, region, true) ||
         !lir_array_region_edge(p, header, body_edge, XR_LIR_ARRAY_SET_REGION_EDGE_MOVE, &current)) return false;
     for (uint32_t n = 0; n < p->block_count; ++n)
         if (!lir_array_region_body(p, p->blocks[n], &current, region, false) ||
             !lir_array_region_edge(p, p->blocks[n], 0, XR_LIR_ARRAY_SET_REGION_EDGE_MOVE, &current)) return false;
     if (current != region->canonical_value || !region->set_block) return false;
+    if (p->range.latch_iv) region->range = p->range;
+    p->range = (XrLirArraySetRegionRange){0};
     current = region->canonical_value;
     if (!lir_array_region_edge(p, header, region->exit_edge - 1, XR_LIR_ARRAY_SET_REGION_EXIT_MOVE, &current)) return false;
     region->exit_value = current; region->step_count = p->step_count;
@@ -435,7 +515,13 @@ static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b)
         a.entry_edge == b.entry_edge && a.latch == b.latch && a.exit_edge == b.exit_edge && a.exit_block == b.exit_block &&
         a.entry_value == b.entry_value && a.canonical_value == b.canonical_value && a.exit_value == b.exit_value &&
         a.body_block_count == b.body_block_count && a.set_block == b.set_block && a.set_instruction == b.set_instruction &&
-        a.first_step == b.first_step && a.step_count == b.step_count;
+        a.first_step == b.first_step && a.step_count == b.step_count &&
+        a.range.kind == b.range.kind && a.range.iv == b.range.iv && a.range.iv_argument == b.range.iv_argument &&
+        a.range.entry_iv == b.range.entry_iv && a.range.length == b.range.length &&
+        a.range.length_instruction == b.range.length_instruction && a.range.condition == b.range.condition &&
+        a.range.condition_instruction == b.range.condition_instruction && a.range.increment == b.range.increment &&
+        a.range.increment_block == b.range.increment_block && a.range.increment_instruction == b.range.increment_instruction &&
+        a.range.one == b.range.one && a.range.latch_iv == b.range.latch_iv;
 }
 static bool lir_array_region_step_equal(XrLirArraySetRegionStep a, XrLirArraySetRegionStep b) {
     return a.kind == b.kind && a.block == b.block && a.instruction == b.instruction && a.edge == b.edge &&

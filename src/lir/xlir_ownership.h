@@ -161,8 +161,8 @@ typedef enum XrLirArraySetRegionStepKind {
 /* Numeric descriptions of structurally closed local Array<i64> loops. They
  * grant no physical aliasing, borrow, bounds, uniqueness or mutation right.
  * Every future execution must preserve the complete original first iteration,
- * including its RHS, COPY failures, COW and error ordering. No runtime or
- * induction theorem is encoded here, and ordinary events/homes remain intact.
+ * including its RHS, COPY failures, COW and error ordering. A numeric range
+ * shape authorizes no runtime access; ordinary events/homes remain intact.
  * canonical_value describes each internal transition/death, not a new shared
  * physical slot; entry_value and exit_value retain the actual outside owners.
  * NEW/READ_CANDIDATE preserve a COPY plus its adjacent logical death; they are
@@ -173,10 +173,26 @@ typedef struct XrLirArraySetRegionStep {
     uint32_t block, instruction, edge, source, target, drop;
 } XrLirArraySetRegionStep;
 
+enum {
+    XR_LIR_ARRAY_SET_RANGE_NONE,
+    XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN
+};
+/* An exact conditional arithmetic shape, independent of creator lifetimes.
+ * NONE has every other field zero. The unit-forward shape still requires a
+ * runtime nonnegative IV below an unchanged length representable by I64,
+ * after the complete ordinary first iteration and existing runtime admission.
+ * Instruction positions are one-based; iv_argument is a zero-based ordinal. */
+typedef struct XrLirArraySetRegionRange {
+    uint32_t kind, iv, iv_argument, entry_iv, length, length_instruction;
+    uint32_t condition, condition_instruction, increment, increment_block;
+    uint32_t increment_instruction, one, latch_iv;
+} XrLirArraySetRegionRange;
+
 typedef struct XrLirArraySetRegion {
     uint32_t function, header, entry_block, entry_edge, latch;
     uint32_t exit_edge, exit_block, entry_value, canonical_value, exit_value;
     uint32_t body_block_count, set_block, set_instruction, first_step, step_count;
+    XrLirArraySetRegionRange range;
 } XrLirArraySetRegion;
 
 typedef struct XrLirOwnershipFunction {
