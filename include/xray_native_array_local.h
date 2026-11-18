@@ -57,6 +57,16 @@ typedef struct XrtArrayI64RegionCache {
 #define XRT_ARRAY_LOCAL_INLINE static inline
 #endif
 
+/* Keep a read-only window separate from a sibling mutation helper. This is
+ * a code layout hint; compilers without it use an ordinary C function. */
+#if defined(_MSC_VER) && !defined(__clang__)
+#define XRT_ARRAY_REGION_OUTLINE __declspec(noinline)
+#elif defined(__clang__) || defined(__GNUC__)
+#define XRT_ARRAY_REGION_OUTLINE __attribute__((noinline))
+#else
+#define XRT_ARRAY_REGION_OUTLINE
+#endif
+
 /* This is the only full dynamic check for a producer-described call-free
  * region. Ready means its original complete SET/READ/drop/latch has returned,
  * not a metadata permission. Inputs are actual live private factory objects

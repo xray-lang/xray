@@ -55,6 +55,7 @@ typedef struct LirCArrayRegions {
     LirCArrayRegionHelper *helpers;
     LirCArrayRegionScalar *scalars;
     size_t scalar_count, scalar_capacity;
+    bool has_set_helper;
 } LirCArrayRegions;
 
 typedef struct LirC {

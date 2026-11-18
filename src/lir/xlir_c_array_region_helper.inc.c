@@ -118,6 +118,8 @@ static void c_array_helpers_prepare(LirC *c, uint32_t function, LirCArrayRegions
                 if (!row.slot_count || row.region.range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) continue;
                 builder.region = r; builder.helper = &receiver->helpers[r];
                 if (!c_array_helper_project(&builder)) break;
+                if (row.region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET)
+                    receiver->has_set_helper = true;
             }
         }
     }
@@ -152,7 +154,12 @@ static void c_array_helper_emit(LirC *c, size_t region) {
     const XrLirArrayRegionBindings *bindings = c->array_region->bindings;
     const XrLirArraySetRegion row = bindings->regions[region].region;
     c_array_helper_types(c,region);
-    c_format(c,"static XrlArResult_%" PRIu32 "_%zu xrl_ar_loop_%" PRIu32 "_%zu(\n",c->function.id,region,c->function.id,region);
+    /* A sibling read-only window runs its own loop. Keep its code outside
+     * the function containing a mutation window to limit coupled layout. */
+    const char *outline = c->array_region->has_set_helper && row.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET ?
+        "XRT_ARRAY_REGION_OUTLINE " : "";
+    c_format(c,"static %sXrlArResult_%" PRIu32 "_%zu xrl_ar_loop_%" PRIu32 "_%zu(\n",
+        outline,c->function.id,region,c->function.id,region);
     c_text(c,"    unsigned char *restrict xrl_ar_payload,\n    unsigned char *restrict xrl_ar_elements,\n");
     c_format(c,"    XrtArrayI64RegionCache xrl_ar_%zu_cache, unsigned xrl_ar_%zu_phase,\n"
         "    XrlArInput_%" PRIu32 "_%zu input) {\n",region,region,c->function.id,region);
