@@ -27,6 +27,8 @@ REQUIRED = (
     # Fixed receiving layouts, independent images and constructor facts replace
     # retired owner-bank tests; these retain metadata and failure cleanup checks.
     "lir_value_layout", "lir_value_image", "lir_binding_homes", "lir_callable_facts",
+    # Loop consumers rely on fresh ownership facts and failure-atomic proofs.
+    "test_lir_ownership", "test_lir_ownership_faults",
     # Physical metadata, allocator and foreign-thread owner retirement.
     "native_managed_kernel", "native_managed_root", "native_backing", "native_string_backing_ops",
     "native_place", "native_value_plan", "native_managed_status", "native_capture_backing", "rbc_code_owner",
