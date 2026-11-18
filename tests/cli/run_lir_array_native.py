@@ -32,6 +32,7 @@ def main() -> None:
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity",
+             "element_update", "element_update_carried",
              "panic_region_get", "panic_region_set",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
              "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
@@ -123,6 +124,9 @@ def main() -> None:
             if name == "region_set":
                 assert "XRT_ARRAY_I64_REGION_COPY(" not in generated_text
                 assert "XRT_ARRAY_I64_REGION_RECONSTRUCT(" not in generated_text
+        if name in ("element_update", "element_update_carried"):
+            assert "XRT_ARRAY_I64_REGION_RECONSTRUCT(" in generated_text
+            assert ("xrt_array_i64_pair_store(" in generated_text) == (name == "element_update"), name
         # The original large-case oracles check both length and element 299.
         # Keep that executed span check independent of C literal spelling.
         for ordinal, compiler in enumerate(args.compiler or [None]):

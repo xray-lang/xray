@@ -90,6 +90,36 @@ typedef struct XrtArrayI64RegionCache {
         -INT64_C(1) - (int64_t)((~(bits)) & UINT64_MAX))
 #endif
 
+/* Paired values are a code generation convenience for an admitted byte
+ * span. Byte copies preserve the effective type and impose no alignment on
+ * the backing. Unsupported providers use the original scalar loop. */
+#if defined(__GNUC__) && !defined(__clang__) && \
+    ((defined(__x86_64__) && defined(__SSE2__)) || (defined(__aarch64__) && defined(__ARM_NEON)))
+#define XRT_ARRAY_I64_PAIR_AVAILABLE 1
+typedef uint64_t XrtArrayI64Pair __attribute__((vector_size(16)));
+
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_load(const unsigned char *source) {
+    XrtArrayI64Pair value;
+    __builtin_memcpy(&value, source, sizeof(value));
+    return value;
+}
+XRT_ARRAY_LOCAL_INLINE void xrt_array_i64_pair_store(unsigned char *target, XrtArrayI64Pair value) {
+    __builtin_memcpy(target, &value, sizeof(value));
+}
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_splat(uint64_t value) {
+    return (XrtArrayI64Pair){value, value};
+}
+/* GCC can lower a multiplication of two I64 lanes as separate scalar
+ * multiplications. Keep the two cheap power-of-two terms in vector form. */
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_scale(XrtArrayI64Pair value, uint64_t factor) {
+    if (!factor) return xrt_array_i64_pair_splat(0);
+    uint64_t rest = factor & (factor - 1);
+    if (rest & (rest - 1)) return value * xrt_array_i64_pair_splat(factor);
+    XrtArrayI64Pair first = value << __builtin_ctzll(factor);
+    return rest ? first + (value << __builtin_ctzll(rest)) : first;
+}
+#endif
+
 /* This is the only full dynamic check for a producer-described call-free
  * region. Ready means its original complete SET/READ/drop/latch has returned,
  * not a metadata permission. Inputs are actual live private factory objects

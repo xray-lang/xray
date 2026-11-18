@@ -1,0 +1,14 @@
+fn main() {
+    var values: Array<i64> = [2, 4, 8, 16, 32]
+    var i = 0
+    var carry = 10
+    while (i < len(values)) {
+        values[i] = values[i] * 3 + 1
+        carry = carry + i
+        i = i + 1
+    }
+    print(carry)
+    print(values[0])
+    print(values[4])
+}
+main()
