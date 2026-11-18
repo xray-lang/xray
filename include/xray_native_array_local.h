@@ -109,14 +109,44 @@ XRT_ARRAY_LOCAL_INLINE void xrt_array_i64_pair_store(unsigned char *target, XrtA
 XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_splat(uint64_t value) {
     return (XrtArrayI64Pair){value, value};
 }
-/* GCC can lower a multiplication of two I64 lanes as separate scalar
- * multiplications. Keep the two cheap power-of-two terms in vector form. */
-XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_scale(XrtArrayI64Pair value, uint64_t factor) {
-    if (!factor) return xrt_array_i64_pair_splat(0);
-    uint64_t rest = factor & (factor - 1);
-    if (rest & (rest - 1)) return value * xrt_array_i64_pair_splat(factor);
-    XrtArrayI64Pair first = value << __builtin_ctzll(factor);
-    return rest ? first + (value << __builtin_ctzll(rest)) : first;
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_add(XrtArrayI64Pair a, XrtArrayI64Pair b) {
+    return a + b;
+}
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_sub(XrtArrayI64Pair a, XrtArrayI64Pair b) {
+    return a - b;
+}
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_shl(XrtArrayI64Pair value, int amount) {
+    return value << amount;
+}
+
+#elif defined(_MSC_VER) && !defined(__clang__) && defined(_M_X64)
+/* SSE2 is part of the MSVC x64 baseline. Use copies so even a byte-aligned
+ * admitted backing does not acquire an intrinsic pointer alignment contract. */
+#include <emmintrin.h>
+#define XRT_ARRAY_I64_PAIR_AVAILABLE 1
+typedef __m128i XrtArrayI64Pair;
+
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_load(const unsigned char *source) {
+    XrtArrayI64Pair value;
+    memcpy(&value, source, sizeof(value));
+    return value;
+}
+XRT_ARRAY_LOCAL_INLINE void xrt_array_i64_pair_store(unsigned char *target, XrtArrayI64Pair value) {
+    memcpy(target, &value, sizeof(value));
+}
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_splat(uint64_t value) {
+    int64_t lane;
+    memcpy(&lane, &value, sizeof(lane));
+    return _mm_set1_epi64x(lane);
+}
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_add(XrtArrayI64Pair a, XrtArrayI64Pair b) {
+    return _mm_add_epi64(a, b);
+}
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_sub(XrtArrayI64Pair a, XrtArrayI64Pair b) {
+    return _mm_sub_epi64(a, b);
+}
+XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_shl(XrtArrayI64Pair value, int amount) {
+    return _mm_slli_epi64(value, amount);
 }
 #endif
 
