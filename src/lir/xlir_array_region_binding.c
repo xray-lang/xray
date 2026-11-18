@@ -386,7 +386,11 @@ static void region_binding_unsupported(RegionBindingBuilder *b, uint32_t ordinal
     b->slots.count=pending->first_slot; b->moves.count=pending->first_move;
     b->accesses.count=pending->first_access; b->blocks.count=pending->first_block;
     XrLirArrayRegionBlock *blocks=(XrLirArrayRegionBlock *)b->output->block_index;
-    for (uint32_t block=b->block_heads[ordinal];block;block=b->block_next[block]) blocks[block]=(XrLirArrayRegionBlock){0};
+    for (uint32_t block=b->block_heads[ordinal];block;block=b->block_next[block]) {
+        /* A supported successor may already index its entry at this block.
+         * This candidate has published no edges, so keep those earlier roles. */
+        blocks[block].region=0; blocks[block].first_operation=0; blocks[block].instruction_count=0;
+    }
 }
 XR_FUNCDEF XrLirValueLayoutStatus xr_lir_array_region_bindings_create(const XrLirValueHomes *homes,
     const XrLirValueLayouts *layouts, XrLirArrayRegionBindings **output) {
