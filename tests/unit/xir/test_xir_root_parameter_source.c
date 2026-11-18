@@ -130,11 +130,106 @@ static XrXirStatus rps_operation(const XrXirCompileContext *context, void *opaqu
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_failure_free(&failure);
     xr_xir_compile_source_result_free(&result);return status;
 }
+enum { RPS_COMPILER_WORKERS=2, RPS_COMPILER_FIXTURES=2 };
+static RootParameterSourceOperation rps_compiler_operation(unsigned fixture) {
+    CHECK(fixture<RPS_COMPILER_FIXTURES);
+    return (RootParameterSourceOperation){fixture?&rps_capture_oracles[0]:&rps_oracles[0],false};
+}
+static void rps_write_all(void) {
+    for(size_t i=0;i<sizeof(rps_oracles)/sizeof(rps_oracles[0]);++i)rps_write(&rps_oracles[i]);
+    for(size_t i=0;i<sizeof(rps_capture_oracles)/sizeof(rps_capture_oracles[0]);++i)rps_write(&rps_capture_oracles[i]);
+}
+static void rps_compiler_physical(FILE *report) {
+    CHECK(!source_program_compile_live && !source_program_compile_bytes);
+    CHECK(fprintf(report,"\"blocks\":%zu,\"bytes\":%zu}\n",source_program_compile_live,source_program_compile_bytes)>0);
+}
+static size_t rps_compiler_census(FILE *report,unsigned fixture,XrCompileResourceStats *required) {
+    RootParameterSourceOperation operation=rps_compiler_operation(fixture);
+    LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+    source_program_compile_attempts=0;CHECK(rps_operation(&owner.context,&operation)==XR_XIR_OK);
+    size_t sites=source_program_compile_attempts;CHECK(sites);
+    *required=library_compile_stats(&owner.context);uint64_t baseline=owner.baseline.held_bytes;
+    CHECK(required->held_bytes==baseline && required->peak_bytes>0 && required->peak_bytes<UINT64_MAX);
+    library_compile_owner_drop(&owner);
+    CHECK(fprintf(report,"{\"kind\":\"census\",\"fixture\":%u,\"file\":\"%s\",\"sites\":%zu,"
+        "\"allocated\":%llu,\"peak\":%llu,\"allocations\":%llu,\"baseline\":%llu,\"held\":%llu,",
+        fixture,operation.oracle->file,sites,(unsigned long long)required->allocated_bytes,
+        (unsigned long long)required->peak_bytes,(unsigned long long)required->allocation_count,
+        (unsigned long long)baseline,(unsigned long long)required->held_bytes)>0);
+    rps_compiler_physical(report);CHECK(fflush(report)==0);return sites;
+}
+static size_t rps_compiler_faults(FILE *report,unsigned fixture,size_t sites,unsigned index) {
+    RootParameterSourceOperation operation=rps_compiler_operation(fixture);size_t points=0;
+    for(size_t site=index;site<sites;) {
+        LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+        source_program_compile_attempts=0;source_program_compile_fail_at=site;source_program_compile_injected=false;
+        XrXirStatus status=rps_operation(&owner.context,&operation);source_program_compile_fail_at=SIZE_MAX;
+        size_t attempts=source_program_compile_attempts;bool injected=source_program_compile_injected;
+        if(status!=XR_XIR_OUT_OF_MEMORY)fprintf(stderr,"%s compiler fault %zu/%zu status%u\n",operation.oracle->file,site,sites,status);
+        CHECK(status==XR_XIR_OUT_OF_MEMORY && injected && attempts>site);
+        XrCompileResourceStats stats=library_compile_stats(&owner.context);uint64_t baseline=owner.baseline.held_bytes;
+        CHECK(stats.held_bytes==baseline);library_compile_owner_drop(&owner);
+        CHECK(fprintf(report,"{\"kind\":\"point\",\"fixture\":%u,\"ordinal\":%zu,\"attempts\":%zu,"
+            "\"status\":%u,\"injected\":true,\"baseline\":%llu,\"held\":%llu,",fixture,site,attempts,status,
+            (unsigned long long)baseline,(unsigned long long)stats.held_bytes)>0);
+        rps_compiler_physical(report);++points;
+        if(sites-site<=RPS_COMPILER_WORKERS)break;
+        site+=RPS_COMPILER_WORKERS;
+    }
+    return points;
+}
+static void rps_compiler_bounds(FILE *report,unsigned fixture,const XrCompileResourceStats *required) {
+    RootParameterSourceOperation operation=rps_compiler_operation(fixture);
+    for(unsigned boundary=0;boundary<3;++boundary) {
+        XrCompileResourceLimits limits=library_compile_limits;limits.memory_limit=required->peak_bytes-1+boundary;
+        LibraryCompileOwner owner={0};XrXirStatus status=library_compile_owner_new(&owner,&limits);
+        if(status==XR_XIR_OK)status=rps_operation(&owner.context,&operation);
+        CHECK(status==(boundary==0?XR_XIR_MEMORY_LIMIT:XR_XIR_OK));
+        library_compile_owner_drop(&owner);
+        CHECK(fprintf(report,"{\"kind\":\"boundary\",\"fixture\":%u,\"boundary\":%u,\"limit\":%llu,"
+            "\"status\":%u,",fixture,boundary,(unsigned long long)limits.memory_limit,status)>0);
+        rps_compiler_physical(report);
+    }
+}
+static bool rps_compiler_dispatch(int argc,char **argv) {
+    if(argc<2)return false;
+    bool census=!strcmp(argv[1],"--compiler-census"),shard=!strcmp(argv[1],"--compiler-shard");
+    bool bounds=!strcmp(argv[1],"--compiler-bounds");if(!census && !shard && !bounds)return false;
+    CHECK(argc==(shard?5:4));unsigned index=0;
+    if(shard){CHECK(strlen(argv[2])==1 && (argv[2][0]=='0' || argv[2][0]=='1'));index=(unsigned)(argv[2][0]-'0');}
+    const char *nonce=argv[argc-2];CHECK(strlen(nonce)==32);
+    for(size_t n=0;n<32;++n)CHECK((nonce[n]>='0' && nonce[n]<='9') || (nonce[n]>='a' && nonce[n]<='f'));
+    FILE *report=NULL;
+#ifdef _MSC_VER
+    CHECK(fopen_s(&report,argv[argc-1],"wb")==0 && report);
+#else
+    report=fopen(argv[argc-1],"wb");CHECK(report);
+#endif
+    const char *mode=census?"census":shard?"shard":"bounds";
+    CHECK(fprintf(report,"{\"kind\":\"identity\",\"mode\":\"%s\",\"index\":%u,\"workers\":%u,"
+        "\"nonce\":\"%s\",\"memory_limit\":%llu}\n",mode,index,(unsigned)RPS_COMPILER_WORKERS,nonce,
+        (unsigned long long)library_compile_limits.memory_limit)>0);
+    /* Only the parent's completed census prepares files. Parallel trials must
+     * never truncate the same Source input while another session reads it. */
+    if(census)rps_write_all();
+    size_t total=0;
+    for(unsigned fixture=0;fixture<RPS_COMPILER_FIXTURES;++fixture) {
+        XrCompileResourceStats required={0};size_t sites=rps_compiler_census(report,fixture,&required);
+        size_t points=shard?rps_compiler_faults(report,fixture,sites,index):0;
+        if(bounds)rps_compiler_bounds(report,fixture,&required);
+        CHECK(points<=SIZE_MAX-total);total+=points;
+        CHECK(fprintf(report,"{\"kind\":\"complete\",\"fixture\":%u,\"points\":%zu,\"boundaries\":%u,",
+            fixture,points,bounds?3u:0u)>0);rps_compiler_physical(report);CHECK(fflush(report)==0);
+    }
+    library_compile_observer_free();
+    CHECK(fprintf(report,"{\"kind\":\"finished\",\"points\":%zu,\"boundaries\":%u,",total,bounds?6u:0u)>0);
+    rps_compiler_physical(report);CHECK(!ferror(report) && fclose(report)==0);return true;
+}
 int main(int argc, char **argv) {
+    if(rps_compiler_dispatch(argc,argv))return 0;
     CHECK(argc<=2);
     bool resources=argc==2;CHECK(!resources || !strcmp(argv[1],"--compiler"));
-    for (size_t i=0;i<sizeof(rps_oracles)/sizeof(rps_oracles[0]);++i) rps_write(&rps_oracles[i]);
-    for (size_t i=0;i<sizeof(rps_capture_oracles)/sizeof(rps_capture_oracles[0]);++i) rps_write(&rps_capture_oracles[i]);
+    rps_write_all();
     RootParameterSourceOperation operation={&rps_oracles[0],!resources};
     if (resources) {
         library_compile_operation_cases("H1 Source apply full same-ledger pipeline",rps_operation,&operation);

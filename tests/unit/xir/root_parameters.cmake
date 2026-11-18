@@ -14,6 +14,16 @@ endif()
 add_test(NAME test_xir_root_parameter_source COMMAND test_xir_root_parameter_source)
 set_tests_properties(test_xir_root_parameter_source PROPERTIES
     LABELS "unit;xir;source;root-effects;higher-order;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
-add_test(NAME test_xir_root_parameter_source_compiler COMMAND test_xir_root_parameter_source --compiler)
+if(WIN32)
+    add_test(NAME test_xir_root_parameter_source_compiler COMMAND ${Python3_EXECUTABLE} -B
+        ${CMAKE_CURRENT_LIST_DIR}/run_root_parameter_compiler_faults.py
+        --executable $<TARGET_FILE:test_xir_root_parameter_source>
+        --fixtures-root ${CMAKE_CURRENT_BINARY_DIR}/root_parameter_source)
+    set(root_parameter_compiler_processors 2)
+else()
+    add_test(NAME test_xir_root_parameter_source_compiler COMMAND test_xir_root_parameter_source --compiler)
+    set(root_parameter_compiler_processors 1)
+endif()
 set_tests_properties(test_xir_root_parameter_source_compiler PROPERTIES
-    LABELS "unit;xir;source;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+    LABELS "unit;xir;source;root-effects;higher-order;compiler-fault;ownership"
+    TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS ${root_parameter_compiler_processors})
