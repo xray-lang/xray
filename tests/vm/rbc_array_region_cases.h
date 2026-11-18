@@ -216,9 +216,11 @@ static void rbc_region_role_fallbacks(void) {
     xr_free(values); xr_lir_value_layouts_destroy(layouts); xrt_billing_owner_drop(billing);
     xr_lir_module_destroy(input); xr_rbc_program_destroy(program); CHECK(!tracked_live);
 }
-static void rbc_region_failures(void) {
-    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,1,0,false); XrRbcProgram *program=NULL;
+static void rbc_region_failures(unsigned loops) {
+    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,loops,0,false); XrRbcProgram *program=NULL;
     attempts=0; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK); size_t sites=attempts;
+    const XrRbcValueCode *code=xr_rbc_module_value_code(xr_rbc_program_view(program),0);
+    CHECK(code && code->array_region_accesses && (loops==1 || code->access_count>16));
     xr_rbc_program_destroy(program); program=NULL; CHECK(!tracked_live);
     for (size_t point=1;point<=sites;++point) {
         attempts=0; fail_at=point;
@@ -239,7 +241,8 @@ static void rbc_array_region_cases(void) {
     rbc_region_case(4,1,0,false,false); rbc_region_case(5,1,0,false,false);
     rbc_region_case(5,2,0,false,false); rbc_region_case(5,1,0,true,false);
     rbc_region_case(4,1,1,false,false); rbc_region_case(4,1,2,false,false);
-    rbc_region_case(4,1,0,false,true); rbc_region_role_fallbacks(); rbc_region_failures();
+    rbc_region_case(4,1,0,false,true); rbc_region_role_fallbacks();
+    rbc_region_failures(1); rbc_region_failures(2);
     RbcArrayRegionState state={.cache={(void *)1,(void *)2,3},.phase=RBC_ARRAY_REGION_ACTIVE};
     RbcValueActivation activation={.array_regions=&state,.active_array_region=1,.frame=(void *)4,.payload=(void *)5};
     rbc_value_array_region_forget(&activation,1,RBC_ARRAY_REGION_BYPASS);
