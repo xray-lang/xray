@@ -45,6 +45,42 @@ static void array_readonly_original_source(void) {
     xr_lir_ownership_plan_destroy(plan); xr_lir_lowered_free(&output);
 }
 
+static void array_push_exit_retained_source(void) {
+    static const char text[] =
+        "fn show_window(end: i64, start: i64) {\n"
+        "    var values: Array<i64> = [9]\n    var i = start\n    while (i < end) {\n"
+        "        values.push(i)\n        i = i + 1\n    }\n    print(values)\n}\n\n"
+        "fn show_snapshot(end: i64) {\n    var values: Array<i64> = [40, 50]\n"
+        "    const snapshot = values\n    var i = 0\n    while (i < end) {\n"
+        "        values.push(i)\n        i = i + 1\n    }\n    print(snapshot)\n    print(values)\n}\n\n"
+        "show_window(0, 0)\nshow_window(3, 0)\nshow_window(9, -2)\nshow_window(7, 9)\n"
+        "show_window(9223372036854775807, 9223372036854775802)\nshow_snapshot(7)\n";
+    XrLirLowered output=lower_text(text); XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=output.module},&plan,NULL));
+    CHECK(xr_lir_ownership_array_push_window_count(plan)==1);
+    XrLirArraySetRegion window={0}; OK(xr_lir_ownership_array_push_window_at(plan,0,&window));
+    XrLirFunction function={output.module,window.function}; XrLirFunctionView view={0};
+    OK(xr_lir_function_view(output.module,function,&view));
+    CHECK(view.parameter_count==2 && window.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH &&
+        window.push_capacity.kind==XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT &&
+        window.push_capacity.end==view.parameters[0] && window.push_capacity.entry_iv==view.parameters[1] &&
+        !window.push_capacity.end_block && !window.push_capacity.end_instruction);
+    XrLirBlock exit={0}; XrLirBlockView body={0}; bool retained=false,displayed=false;
+    OK(xr_lir_block_at(output.module,function,window.exit_block-1,&exit));
+    OK(xr_lir_block_view(output.module,exit,&body));
+    for (uint32_t n=0;n<body.instruction_count;++n) {
+        XrLirInstructionView op={0}; OK(xr_lir_instruction_view(output.module,exit,n,&op));
+        retained|=op.op==XR_LIR_ARRAY_RETAIN;
+        if (op.op==XR_LIR_CALL_INTRINSIC) {
+            XrLirArrayIntrinsic shape={0}; OK(xr_lir_array_intrinsic_view(output.module,op.intrinsic,&shape));
+            displayed|=shape.operation==XR_LIR_ARRAY_OP_DISPLAY;
+        }
+    }
+    CHECK(retained && displayed);
+    OK(xr_lir_ownership_array_regions_verify(output.module,plan));
+    xr_lir_ownership_plan_destroy(plan); xr_lir_lowered_free(&output);
+}
+
 static void array_reference_mutator_transport(void) {
     XrLirLowered output = lower_text("fn update(values:ref Array<u64>,value:u64){values[0]=value\n"
         "values.push(value)}\nvar values:Array<u64>=[0]\nupdate(ref values,18446744073709551615)\n");
@@ -82,6 +118,7 @@ static void array_reference_mutator_transport(void) {
 static void array_sources(void) {
     array_reference_mutator_transport();
     array_readonly_original_source();
+    array_push_exit_retained_source();
     static const char *cases[] = {
         "fn count(xs:Array<i64>)->i64{return len(xs)}\nprint(count([]))\n",
         "fn choose(flag:bool,a:Array<i64>,b:Array<i64>)->Array<i64>{return flag?a:b}\n"

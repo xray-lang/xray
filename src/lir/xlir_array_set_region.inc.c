@@ -225,6 +225,13 @@ static bool lir_array_region_retains(LirArrayRegionProof *p) {
     }
     return true;
 }
+static bool lir_array_region_retains_before_entry(const LirArrayRegionProof *p, uint32_t header,
+    uint32_t entry) {
+    return !p->retain_block || (p->retain_block != header + 1 &&
+        lir_array_region_dominates(&p->graph, p->retain_block - 1, header) &&
+        lir_array_region_dominates(&p->graph, p->retain_block - 1, entry) &&
+        (p->retain_block != entry + 1 || p->retain_drop < p->function->blocks[entry].instruction_count));
+}
 /* The body may have any number of blocks, but only one straight-line route.
  * Predecessor cardinality rules out side entries and other hidden backedges. */
 static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
@@ -246,10 +253,15 @@ static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint
         }
     }
     if (entry == UINT32_MAX || latch == UINT32_MAX) return false;
-    if (p->retain_block && (p->retain_block == header + 1 ||
-        !lir_array_region_dominates(g, p->retain_block - 1, header) ||
-        !lir_array_region_dominates(g, p->retain_block - 1, entry) ||
-        (p->retain_block == entry + 1 && p->retain_drop >= f->blocks[entry].instruction_count))) return false;
+    uint32_t exit = term->edges[1 - body_edge].target - 1;
+    /* Every retain already has an exact same-block endpoint death, and all
+     * retain blocks lie on one dominator chain. If its last block is this
+     * direct exit and the header dominates it, every other chain block
+     * strictly dominates the header or is the header itself. The instruction
+     * walk still rejects header/body retains. Only a proven PUSH may use this
+     * exception; its real exit move precedes the ordinary exit instructions. */
+    if (!lir_array_region_retains_before_entry(p, header, entry) &&
+        (p->retain_block != exit + 1 || !lir_array_region_dominates(g, header, exit))) return false;
     p->block_count = 0;
     uint32_t block = term->edges[body_edge].target - 1;
     uint64_t stamp = (uint64_t)header * 2 + body_edge + 1;
@@ -263,7 +275,6 @@ static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint
         if (next->op != XR_LIR_BR || next->edge_count != 1) return false;
         block = next->edges[0].target - 1;
     }
-    uint32_t exit = term->edges[1 - body_edge].target - 1;
     if (!p->block_count || p->blocks[p->block_count - 1] != latch || exit == header || p->marks[exit] == stamp)
         return false;
     uint32_t entry_edge = UINT32_MAX;
@@ -570,6 +581,8 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint
         region->primary_kind = XR_LIR_ARRAY_REGION_PRIMARY_GET;
         region->primary_block = p->get_block; region->primary_instruction = p->get_instruction;
     }
+    if (region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_PUSH &&
+        !lir_array_region_retains_before_entry(p, header, region->entry_block - 1)) return false;
     XrLirArraySetRegionRange recurrence=p->range; p->range = (XrLirArraySetRegionRange){0};
     current = region->canonical_value;
     if (!lir_array_region_edge(p, header, region->exit_edge - 1, XR_LIR_ARRAY_SET_REGION_EXIT_MOVE, &current)) return false;

@@ -197,7 +197,7 @@ static void ars_readonly_preparations(void) {
     }
 }
 static void ars_push_preparations(void) {
-    for (unsigned mode=PUSH_WINDOW_CURRENT;mode<=PUSH_WINDOW_LATCH_CURRENT;++mode) {
+    for (unsigned mode=PUSH_WINDOW_CURRENT;mode<=PUSH_WINDOW_EXIT_BYPASS;++mode) {
         ArraySetRegionFixture c=array_push_window_build((enum ArrayPushWindowMode)mode);
         XrLirOwnershipPlan *plan=NULL; XrLirOwnershipRequest request={.module=c.module};
         OK(xr_lir_ownership_plan_create(&request,&plan,NULL)); compare_internal(&request,plan);
