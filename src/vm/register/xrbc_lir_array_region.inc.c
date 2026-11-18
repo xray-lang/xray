@@ -6,15 +6,20 @@
  *
  * xrbc_lir_array_region.inc.c - Stable typed access identities for common regions
  */
+static bool rbc_lir_array_region_uses_runtime(const XrLirArrayRegionBindings *bindings) {
+    for (size_t n=0;n<bindings->region_count;++n) {
+        const XrLirArrayRegionBinding *row=&bindings->regions[n];
+        if (row->slot_count && row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET) return true;
+    }
+    return false;
+}
+
 static bool rbc_lir_array_region_prepare(RbcLirCompiler *c) {
     if (!c->homes || !c->homes->array_region_count) return true;
     XrLirValueLayoutStatus status=xr_lir_array_region_bindings_create(c->homes,c->literals->layouts,
         &c->value_code->array_regions);
     if (status==XR_LIR_VALUE_LAYOUT_OK) {
-        for (size_t n=0;n<c->value_code->array_regions->region_count;++n) {
-            const XrLirArrayRegionBinding *row=&c->value_code->array_regions->regions[n];
-            c->value_code->array_region_runtime|=row->slot_count && row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET;
-        }
+        c->value_code->array_region_runtime=rbc_lir_array_region_uses_runtime(c->value_code->array_regions);
         return true;
     }
     XrRbcCompileStatus compile_failure=status==XR_LIR_VALUE_LAYOUT_OOM ? XR_RBC_COMPILE_OUT_OF_MEMORY :
