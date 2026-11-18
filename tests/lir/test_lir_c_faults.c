@@ -566,8 +566,10 @@ static void array_helper_boundaries(void) {
                 OK(xr_lir_instruction_view(input.module,input.header,0,&length_op));
                 char restored[64]; length = snprintf(restored,sizeof(restored),"v%" PRIu32 " = xrl_ar_result.s",length_op.result);
                 CHECK(length > 0 && (size_t)length < sizeof(restored) && strstr(call,restored));
-                XrLirValue exited = {0}; OK(xr_lir_block_parameter(input.module,input.exit,1,&exited));
-                length = snprintf(restored,sizeof(restored),"v%" PRIu32 " = xrl_ar_result.s",exited.id);
+                XrLirBlockView exit_view = {0};
+                OK(xr_lir_block_view(input.module,input.exit,&exit_view));
+                CHECK(exit_view.parameter_count > 1);
+                length = snprintf(restored,sizeof(restored),"v%" PRIu32 " = xrl_ar_result.s",exit_view.parameters[1]);
                 CHECK(length > 0 && (size_t)length < sizeof(restored) && strstr(call,restored));
             }
             if (dual) {
