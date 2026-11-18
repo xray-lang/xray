@@ -16,7 +16,8 @@ static XrLirBlock array_region_binding_block(ArraySetRegionFixture *c) {
     OK(xr_lir_set_array_shape(c->module,array,&(XrLirArrayShape){XR_LIR_I64}));
     return block;
 }
-static ArraySetRegionFixture array_region_binding_two_loops(bool shared,bool reverse,bool range) {
+static ArraySetRegionFixture array_region_binding_loops(bool shared,bool reverse,bool range,unsigned read_mask) {
+    CHECK(read_mask<=3 && (!read_mask || range));
     ArraySetRegionFixture c={.arity=2,.mode=ARRAY_SET_REGION_LOCAL};
     OK(xr_lir_array_module_create(NULL,&c.module));
     OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="two_regions",.name_length=11,
@@ -48,7 +49,8 @@ static ArraySetRegionFixture array_region_binding_two_loops(bool shared,bool rev
             .operands=&condition,.operand_count=1,.edge_count=2,.edges={{c.body[0],values,2},{c.exit,values,2}}}));
         for (uint32_t n=0;n<c.count;++n) {
             ars_parameters(&c,c.body[n],values);
-            if (!n) values[0]=range ? ars_range_mutate(&c,values,ARRAY_REGION_RANGE_UNIT) : ars_mutate(&c,c.body[n],values[0]);
+            if (!n) values[0]=range ? ars_range_mutate(&c,values,(read_mask&(1u<<loop)) ?
+                ARRAY_REGION_RANGE_READ_ONLY : ARRAY_REGION_RANGE_UNIT) : ars_mutate(&c,c.body[n],values[0]);
             if (n+1==c.count) {
                 XrLirValue increment[]={values[1],ars_number(&c,c.body[n],1)};
                 values[1]=ars_value(&c,c.body[n],(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,
@@ -68,5 +70,8 @@ static ArraySetRegionFixture array_region_binding_two_loops(bool shared,bool rev
     if (status!=XR_LIR_OK) fprintf(stderr,"two regions f%u b%u i%u: %s\n",diagnostic.function,
         diagnostic.block,diagnostic.instruction,diagnostic.message);
     OK(status); return c;
+}
+static ArraySetRegionFixture array_region_binding_two_loops(bool shared,bool reverse,bool range) {
+    return array_region_binding_loops(shared,reverse,range,0);
 }
 #endif // LIR_ARRAY_REGION_LOOP_FIXTURE_H
