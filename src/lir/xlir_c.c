@@ -41,9 +41,20 @@ typedef struct LirCConstructedType {
 } LirCConstructedType;
 
 enum { LIR_C_FUNCTION_VISITED = 1u, LIR_C_FUNCTION_STRING_BINDING = 2u };
+typedef struct LirCArrayRegionScalar {
+    uint32_t value;
+    XrLirType type;
+    size_t input, output;
+} LirCArrayRegionScalar;
+typedef struct LirCArrayRegionHelper {
+    size_t first, count, inputs, outputs;
+} LirCArrayRegionHelper;
 typedef struct LirCArrayRegions {
     XrLirArrayRegionBindings *bindings;
     size_t bound_count;
+    LirCArrayRegionHelper *helpers;
+    LirCArrayRegionScalar *scalars;
+    size_t scalar_count, scalar_capacity;
 } LirCArrayRegions;
 
 typedef struct LirC {
@@ -90,6 +101,7 @@ typedef struct LirC {
     size_t array_local_event_cursor;
     LirCArrayRegions *array_regions;
     const LirCArrayRegions *array_region;
+    bool array_helper_active;
 } LirC;
 static void c_values_emit_types(LirC *);
 static void c_values_function(LirC *);
@@ -123,6 +135,11 @@ static void c_array_region_edge_begin(LirC *, size_t, const XrLirEdgeView *);
 static void c_array_region_edge_end(LirC *, size_t);
 static void c_array_region_clones(LirC *);
 static bool c_array_region_present(const LirC *);
+static void c_array_helpers_prepare(LirC *, uint32_t, LirCArrayRegions *);
+static bool c_array_helper_enabled(const LirC *, size_t);
+static void c_array_helpers(LirC *);
+static void c_array_helper_guard(LirC *, size_t);
+static void c_array_helper_return(LirC *, size_t);
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
     if (c->status != XR_LIR_C_OK)
@@ -235,6 +252,10 @@ static void c_function_name(LirC *c, uint32_t id) {
 }
 static void c_value(LirC *c, uint32_t id) {
     XR_DCHECK(id && id <= c->view.value_count, "operand belongs to this function");
+    if (c->array_helper_active) {
+        c_format(c, "v%" PRIu32, id);
+        return;
+    }
     for (uint32_t p = 0; p < c->view.parameter_count; ++p) {
         if (c->view.parameters[p] == id) {
             c_format(c, "p%" PRIu32, p);
@@ -1162,6 +1183,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_signature(c, false);
     }
     c_callable_entries(c);
+    c_array_helpers(c);
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
@@ -1233,6 +1255,7 @@ static void c_verify_text(LirC *c) {
 #include "xlir_c_array_local.inc.c"
 #include "xlir_c_values.inc.c"
 #include "xlir_c_array_region.inc.c"
+#include "xlir_c_array_region_helper.inc.c"
 static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {
     XrLirTypeView shape = {0};
     return type == XR_LIR_SLICE_I64 || (type >= XR_LIR_TYPE_COUNT &&
