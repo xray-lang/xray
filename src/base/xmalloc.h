@@ -119,8 +119,9 @@ static inline void *xr_calloc_tracked(size_t count, size_t size) {
 }
 
 static inline void *xr_realloc_tracked(void *ptr, size_t size) {
+    bool creates_allocation = !ptr;
     void *p = xr_realloc_raw(ptr, size);
-    if (p && !ptr)
+    if (p && creates_allocation)
         xr_mem_track_alloc(size);
     return p;
 }

@@ -482,6 +482,18 @@ static void local_i64_growth(void) {
         same_bill(fixture.billing, empty);
         xrt_billing_owner_drop(fixture.billing);
     }
+    Fixture custom;
+    fixture_init(&custom, SIZE_MAX);
+    OK(xrt_array_backing_i64_create(custom.frame, 0, &custom.types, initial, 4, 4));
+    XrtBillingStats before = xrt_billing_owner_stats(custom.billing);
+    XrtPlace place = {.frame=custom.frame, .slot=0, .nulls=XRT_PLACE_NONNULL};
+    OK(xrt_array_push_local_i64(place, 1, &custom.types, 23));
+    XrtArrayBacking *array = (XrtArrayBacking *)borrow(&custom, 0);
+    CHECK(array->length == 5 && array->capacity == 8 && !memcmp(array->elements, initial, sizeof(initial)));
+    CHECK(scalar_at(array, XRT_BACKING_ARRAY_I64, 4) == 23);
+    CHECK(atomic_load(&custom.audit.bytes) == before.bytes + new_extent - old_extent &&
+        atomic_load(&custom.audit.blocks) == before.blocks);
+    fixture_done(&custom);
 }
 static void string_updates(void) {
     Fixture fixture;
