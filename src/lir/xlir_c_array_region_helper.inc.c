@@ -156,6 +156,37 @@ static void c_array_pair_operand(LirC *c, const XrLirFunctionData *f, uint32_t v
     else c_format(c,"xrl_pair_v%" PRIu32,value);
 }
 
+/* The common proof bounds a factor to two set bits. Emitting explicit lane
+ * shifts also avoids provider-specific scalarization of I64 vector multiply. */
+static void c_array_pair_term(LirC *c, const XrLirFunctionData *f, uint32_t value, uint64_t bit) {
+    XR_DCHECK(bit && !(bit & (bit - 1)), "a paired multiply term is one power of two");
+    int amount = __builtin_ctzll(bit);
+    if (amount) c_text(c,"xrt_array_i64_pair_shl(");
+    c_array_pair_operand(c,f,value);
+    if (amount) c_format(c,", %d)",amount);
+}
+
+static void c_array_pair_multiply(LirC *c, const XrLirFunctionData *f, const XrLirInstructionView *op) {
+    const XrLirInstructionView *left = xr_lir_internal_value_definition(f,op->operands[0]);
+    bool left_const = left && left->op == XR_LIR_CONST;
+    const XrLirInstructionView *factor = left_const ? left : xr_lir_internal_value_definition(f,op->operands[1]);
+    XR_DCHECK(factor && factor->op == XR_LIR_CONST, "paired multiplication has a proved constant factor");
+    uint64_t bits = factor->bits;
+    if (!bits) {
+        c_text(c,"xrt_array_i64_pair_splat(UINT64_C(0))");
+        return;
+    }
+    uint64_t rest = bits & (bits - 1);
+    uint32_t value = op->operands[left_const ? 1 : 0];
+    if (rest) c_text(c,"xrt_array_i64_pair_add(");
+    c_array_pair_term(c,f,value,bits ^ rest);
+    if (rest) {
+        c_text(c,", ");
+        c_array_pair_term(c,f,value,rest);
+        c_text(c,")");
+    }
+}
+
 static void c_array_pair_prefix(LirC *c, const XrLirFunctionData *f, const XrLirArraySetRegion *row, size_t region) {
     if (!row->element_read) return;
     const XrLirBlockData *body = &f->blocks[row->primary_block - 1];
@@ -178,23 +209,16 @@ static void c_array_pair_prefix(LirC *c, const XrLirFunctionData *f, const XrLir
         if (op->op == XR_LIR_CELL_NEW) { ++i; continue; }
         if (op->op == XR_LIR_CONST) continue;
         c_format(c,"        const XrtArrayI64Pair xrl_pair_v%" PRIu32 " = ",op->result);
-        if (op->op == XR_LIR_MUL) {
-            const XrLirInstructionView *left = xr_lir_internal_value_definition(f,op->operands[0]);
-            bool left_const = left && left->op == XR_LIR_CONST;
-            const XrLirInstructionView *factor = left_const ? left : xr_lir_internal_value_definition(f,op->operands[1]);
-            XR_DCHECK(factor && factor->op == XR_LIR_CONST, "paired multiplication has a proved constant factor");
-            c_text(c,"xrt_array_i64_pair_scale(");
-            c_array_pair_operand(c,f,op->operands[left_const]);
-            c_format(c,", UINT64_C(%" PRIu64 "))",factor->bits);
-        } else {
-            if (op->op == XR_LIR_NEG) c_text(c,"-");
-            c_array_pair_operand(c,f,op->operands[0]);
-            if (op->op != XR_LIR_NEG) {
-                XR_DCHECK(op->op == XR_LIR_ADD || op->op == XR_LIR_SUB,
-                    "paired expression contains only proved wrapping operations");
-                c_text(c,op->op == XR_LIR_ADD ? " + " : " - ");
-                c_array_pair_operand(c,f,op->operands[1]);
-            }
+        if (op->op == XR_LIR_MUL) c_array_pair_multiply(c,f,op);
+        else {
+            XR_DCHECK(op->op == XR_LIR_ADD || op->op == XR_LIR_SUB || op->op == XR_LIR_NEG,
+                "paired expression contains only proved wrapping operations");
+            c_text(c,op->op == XR_LIR_ADD ? "xrt_array_i64_pair_add(" : "xrt_array_i64_pair_sub(");
+            if (op->op == XR_LIR_NEG) c_text(c,"xrt_array_i64_pair_splat(UINT64_C(0))");
+            else c_array_pair_operand(c,f,op->operands[0]);
+            c_text(c,", ");
+            c_array_pair_operand(c,f,op->operands[op->op == XR_LIR_NEG ? 0 : 1]);
+            c_text(c,")");
         }
         c_format(c,";\n        (void)xrl_pair_v%" PRIu32 ";\n",op->result);
     }
