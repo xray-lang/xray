@@ -223,6 +223,24 @@ static bool lir_array_region_retains(LirArrayRegionProof *p) {
             if (death > p->retain_drop) p->retain_drop = death;
         } else if (!lir_array_region_dominates(&p->graph, block - 1, p->retain_block - 1)) return false;
     }
+    if (p->retain_block) {
+        /* Dominance indexing has finished with stack. Reuse its owned storage
+         * for one reverse corridor of empty, single-predecessor bridges. The
+         * actual region exit is never rebased to the retain block. */
+        LirGraph *g=&p->graph;
+        memset(g->stack,0,(size_t)g->count*sizeof(*g->stack));
+        uint32_t block=p->retain_block-1;
+        for (;;) {
+            if (g->stack[block]) return false;
+            g->stack[block]=1;
+            if (block==g->entry || g->offsets[block+1]-g->offsets[block]!=1) break;
+            uint32_t predecessor=g->predecessors[g->offsets[block]];
+            const XrLirInstructionView *term=lir_terminator(p->function,predecessor);
+            if (p->function->blocks[predecessor].instruction_count!=1 || term->op!=XR_LIR_BR ||
+                term->edge_count!=1 || term->edges[0].target!=block+1) break;
+            block=predecessor;
+        }
+    }
     return true;
 }
 static bool lir_array_region_retains_before_entry(const LirArrayRegionProof *p, uint32_t header,
@@ -254,14 +272,15 @@ static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint
     }
     if (entry == UINT32_MAX || latch == UINT32_MAX) return false;
     uint32_t exit = term->edges[1 - body_edge].target - 1;
-    /* Every retain already has an exact same-block endpoint death, and all
-     * retain blocks lie on one dominator chain. If its last block is this
-     * direct exit and the header dominates it, every other chain block
-     * strictly dominates the header or is the header itself. The instruction
-     * walk still rejects header/body retains. Only a proven PUSH may use this
-     * exception; its real exit move precedes the ordinary exit instructions. */
+    /* Every retain has an exact same-block endpoint death, and all retain
+     * blocks lie on one dominator chain. If the original exit reaches the
+     * latest retain through the precomputed empty-bridge corridor and the
+     * header dominates that retain, the other retain blocks dominate the
+     * header. The instruction walk still rejects header/body retains. Only a
+     * proven PUSH may use this exception; its real exit move and all ordinary
+     * bridge instructions remain before the ordinary retain instructions. */
     if (!lir_array_region_retains_before_entry(p, header, entry) &&
-        (p->retain_block != exit + 1 || !lir_array_region_dominates(g, header, exit))) return false;
+        (!p->retain_block || !g->stack[exit] || !lir_array_region_dominates(g,header,p->retain_block-1))) return false;
     p->block_count = 0;
     uint32_t block = term->edges[body_edge].target - 1;
     uint64_t stamp = (uint64_t)header * 2 + body_edge + 1;
