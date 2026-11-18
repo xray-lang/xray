@@ -32,6 +32,7 @@ XR_FUNCDEF void xr_lir_value_homes_destroy(XrLirValueHomes *homes) {
     xr_free((void *)homes->arguments); xr_free((void *)homes->frame.owned_offsets);
     xr_free((void *)homes->bindings); xr_free((void *)homes->workspaces);
     xr_free((void *)homes->array_regions); xr_free((void *)homes->array_region_steps);
+    xr_free((void *)homes->array_push_windows); xr_free((void *)homes->array_push_steps);
     xr_free(homes);
 }
 
@@ -642,39 +643,45 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
 }
 /* Opaque Plan and this same-process receiver share the exact final module.
  * Copy the producer tables once; independent current-body proof is explicit. */
-static bool lir_home_array_regions(LirHomeBuilder *b, const XrLirOwnershipPlan *plan) {
+static bool lir_home_array_regions(LirHomeBuilder *b, const XrLirOwnershipPlan *plan, bool push) {
     XrLirOwnershipFunction function;
     if (xr_lir_ownership_function_at(plan, b->compiler.function.id, &function) != XR_LIR_OK)
         return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Array region function is unavailable");
-    if (!function.region_count) return true;
+    uint32_t count=push ? function.push_window_count : function.region_count;
+    uint32_t offset=push ? function.push_window_offset : function.region_offset;
+    uint32_t *received=push ? &b->homes->array_push_window_count : &b->homes->array_region_count;
+    uint32_t *received_steps=push ? &b->homes->array_push_step_count : &b->homes->array_region_step_count;
+    if (!count) return true;
     size_t capacity = 0, step_capacity = 0;
     XrLirArraySetRegion *regions = NULL; XrLirArraySetRegionStep *steps = NULL;
-    if (!lir_home_grow(&b->compiler, (void **)&regions, &capacity, function.region_count, sizeof(*regions))) return false;
-    b->homes->array_regions = regions;
-    for (uint32_t n = 0; n < function.region_count; ++n) {
+    if (!lir_home_grow(&b->compiler, (void **)&regions, &capacity, count, sizeof(*regions))) return false;
+    if (push) b->homes->array_push_windows=regions; else b->homes->array_regions=regions;
+    for (uint32_t n = 0; n < count; ++n) {
         XrLirArraySetRegion region;
-        if (function.region_offset > UINT32_MAX - n ||
-            xr_lir_ownership_array_region_at(plan, function.region_offset + n, &region) != XR_LIR_OK ||
+        if (offset > UINT32_MAX - n ||
+            (push ? xr_lir_ownership_array_push_window_at(plan,offset+n,&region) :
+                xr_lir_ownership_array_region_at(plan,offset+n,&region)) != XR_LIR_OK ||
             region.function != b->compiler.function.id || !region.header || region.header > b->compiler.view.block_count ||
             !region.entry_value || !region.canonical_value || !region.exit_value ||
             region.entry_value > b->homes->value_count || region.canonical_value > b->homes->value_count ||
-            region.exit_value > b->homes->value_count || region.step_count > UINT32_MAX - b->homes->array_region_step_count)
+            region.exit_value > b->homes->value_count || region.step_count > UINT32_MAX - *received_steps)
             return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Array region lost its receiving representation");
-        uint32_t first = b->homes->array_region_step_count;
+        uint32_t first = *received_steps;
         bool grown = lir_home_grow(&b->compiler, (void **)&steps, &step_capacity,
             (size_t)first + region.step_count, sizeof(*steps));
-        b->homes->array_region_steps = steps;
+        if (push) b->homes->array_push_steps=steps; else b->homes->array_region_steps=steps;
         if (!grown) return false;
         for (uint32_t s = 0; s < region.step_count; ++s) {
             XrLirArraySetRegionStep step;
             if (region.first_step > UINT32_MAX - s ||
-                xr_lir_ownership_array_region_step_at(plan, region.first_step + s, &step) != XR_LIR_OK ||
+                (push ? xr_lir_ownership_array_push_step_at(plan,region.first_step+s,&step) :
+                    xr_lir_ownership_array_region_step_at(plan,region.first_step+s,&step)) != XR_LIR_OK ||
                 !step.source || step.source > b->homes->value_count || !step.target || step.target > b->homes->value_count)
                 return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Array region step lost its receiving representation");
             steps[first + s] = step;
         }
         region.first_step = first; regions[n] = region;
-        ++b->homes->array_region_count; b->homes->array_region_step_count += region.step_count;
+        ++*received; *received_steps += region.step_count;
     }
     return true;
 }
@@ -695,7 +702,8 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHome
     if (!b.homes) return XR_LIR_VALUE_LAYOUT_OOM;
     b.homes->frame.payload_alignment = 1;
     b.homes->view_result_parameter = UINT32_MAX;
-    bool success = lir_home_function(&b, request->ownership) && lir_home_array_regions(&b, request->ownership);
+    bool success = lir_home_function(&b, request->ownership) && lir_home_array_regions(&b, request->ownership,false) &&
+        lir_home_array_regions(&b, request->ownership,true);
     b.homes->frame.slot_count = b.owners.count; b.homes->frame.owned_offsets = b.owners.data;
     b.homes->owned_frame_needed = b.owners.count != 0;
     b.homes->bytes = b.bytes.data; b.homes->byte_count = b.bytes.count;

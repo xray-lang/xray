@@ -24,6 +24,7 @@ typedef struct LirArrayRegionProof {
     XrLirArraySetRegionStep *steps;
     uint32_t step_count, step_capacity, block_count;
     uint32_t get_count, get_block, get_instruction;
+    uint32_t push_item, array_accesses;
     uint32_t retain_head, retain_block, retain_drop;
     uint64_t range_stamp;
     XrLirArraySetRegionRange range;
@@ -58,11 +59,13 @@ static bool lir_array_region_array(const XrLirFunctionData *f, uint32_t value) {
 }
 static bool lir_array_region_needed(const XrLirOwnershipPlan *plan, uint32_t function) {
     XrLirOwnershipFunction row = plan->functions[function - 1];
-    bool set = false, create = false, read = false, get = false, edge = false;
+    bool set = false, push = false, create = false, read = false, get = false, edge = false;
     for (uint32_t n = 0; n < row.fact_count; ++n) {
         const XrLirOwnershipFact *fact = &plan->facts[row.fact_offset + n];
         set |= fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION && fact->array_element == XR_LIR_I64 &&
             fact->array_operation == XR_LIR_ARRAY_OP_SET;
+        push |= fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION && fact->array_element == XR_LIR_I64 &&
+            fact->array_operation == XR_LIR_ARRAY_OP_PUSH;
         create |= fact->kind == XR_LIR_OWNERSHIP_BINDING_NEW && fact->forwarding_mode != 0;
         read |= fact->kind == XR_LIR_OWNERSHIP_BINDING_READ && fact->forwarding_mode != 0;
         get |= fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION && fact->array_element == XR_LIR_I64 &&
@@ -70,7 +73,7 @@ static bool lir_array_region_needed(const XrLirOwnershipPlan *plan, uint32_t fun
         edge |= fact->kind == XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER && fact->type == XR_LIR_ARRAY &&
             fact->array_element == XR_LIR_I64 && fact->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE;
     }
-    return (set && create && read) || (get && edge);
+    return (set && create && read) || (get && edge) || (push && create && read && edge);
 }
 static bool lir_array_region_array_role(const XrLirModule *m, const XrLirInstructionView *op, uint32_t argument) {
     if (argument) return false;
@@ -295,6 +298,8 @@ static bool lir_array_region_move(const LirArrayRegionProof *p, uint32_t block, 
     return false;
 }
 enum { LIR_ARRAY_RANGE_CURRENT = 1, LIR_ARRAY_RANGE_NEXT };
+/* Private dimensionless recurrence tag; never published as SAME_LEN. */
+enum { LIR_ARRAY_RANGE_UNIT_LIMIT = 2 };
 static uint32_t lir_array_region_lane(const LirArrayRegionProof *p, uint32_t value) {
     return p->uses[value].range_stamp == p->range_stamp ? p->uses[value].lane : 0;
 }
@@ -313,18 +318,21 @@ static void lir_array_region_range_begin(LirArrayRegionProof *p, const XrLirArra
     const XrLirInstructionView *bound = xr_lir_internal_value_definition(f, length);
     const XrLirArrayIntrinsic *shape = bound && bound->op == XR_LIR_CALL_INTRINSIC ?
         xr_lir_internal_array_intrinsic(p->module, bound->intrinsic) : NULL;
-    if (definition->type != XR_LIR_I64 || !definition->parameter || definition->block != region->header ||
-        !shape || shape->operation != XR_LIR_ARRAY_OP_LEN || bound->type != XR_LIR_I64 ||
-        bound->operand_count != 1 || bound->operands[0] != region->canonical_value ||
-        f->values[length - 1].block != region->header) return;
+    if (definition->type != XR_LIR_I64 || !definition->parameter || definition->block != region->header) return;
+    const XrLirValueData *end = &f->values[length - 1];
+    bool same = shape && shape->operation == XR_LIR_ARRAY_OP_LEN && bound->type == XR_LIR_I64 &&
+        bound->operand_count == 1 && bound->operands[0] == region->canonical_value && end->block == region->header;
+    bool independent = end->type == XR_LIR_I64 && ((end->parameter && !end->block) ||
+        (bound && bound->op == XR_LIR_CONST && bound->type == XR_LIR_I64));
+    if (!same && !independent) return;
     const XrLirBlockData *header = &f->blocks[region->header - 1];
     uint32_t argument = 0;
     while (argument < header->parameter_count && header->parameters[argument] != iv) ++argument;
     if (argument == header->parameter_count) return;
     const XrLirInstructionView *entry = lir_terminator(f, region->entry_block - 1);
-    p->range = (XrLirArraySetRegionRange){.kind=XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN,
+    p->range = (XrLirArraySetRegionRange){.kind=same ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN : LIR_ARRAY_RANGE_UNIT_LIMIT,
         .iv=iv,.iv_argument=argument,.entry_iv=entry->edges[region->entry_edge - 1].arguments[argument],
-        .length=length,.length_instruction=f->values[length - 1].instruction + 1,
+        .length=length,.length_instruction=end->block ? end->instruction + 1 : 0,
         .condition=condition,.condition_instruction=f->values[condition - 1].instruction + 1};
     p->range_stamp = (uint64_t)(region->header - 1) * 2 + body_edge + 1;
     p->uses[iv].range_stamp = p->range_stamp; p->uses[iv].lane = LIR_ARRAY_RANGE_CURRENT;
@@ -420,10 +428,12 @@ static bool lir_array_region_operation(LirArrayRegionProof *p, const XrLirInstru
     if (shape->operation == XR_LIR_ARRAY_OP_LEN) return array && op->operand_count == 1;
     if (!header && shape->operation == XR_LIR_ARRAY_OP_GET)
         return array && op->operand_count == 2 && p->function->values[op->operands[1] - 1].type == XR_LIR_I64;
-    return !header && shape->operation == XR_LIR_ARRAY_OP_SET && !array &&
-        p->function->values[current - 1].type == XR_LIR_ARRAY_CELL && op->operand_count == 3 &&
-        p->function->values[op->operands[1] - 1].type == XR_LIR_I64 &&
-        p->function->values[op->operands[2] - 1].type == XR_LIR_I64;
+    return !header && !array && p->function->values[current - 1].type == XR_LIR_ARRAY_CELL &&
+        ((shape->operation == XR_LIR_ARRAY_OP_SET && op->operand_count == 3 &&
+          p->function->values[op->operands[1] - 1].type == XR_LIR_I64 &&
+          p->function->values[op->operands[2] - 1].type == XR_LIR_I64) ||
+         (shape->operation == XR_LIR_ARRAY_OP_PUSH && op->operand_count == 2 &&
+          p->function->values[op->operands[1] - 1].type == XR_LIR_I64));
 }
 static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32_t *current,
     XrLirArraySetRegion *region, bool header) {
@@ -440,13 +450,19 @@ static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32
         }
         if (!lir_array_region_operation(p, op, *current, header)) return false;
         const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(p->module, op->intrinsic);
+        if (p->array_accesses < 2) ++p->array_accesses;
         if (p->range.kind && (shape->operation == XR_LIR_ARRAY_OP_GET || shape->operation == XR_LIR_ARRAY_OP_SET) &&
             lir_array_region_lane(p, op->operands[1]) != LIR_ARRAY_RANGE_CURRENT)
             p->range = (XrLirArraySetRegionRange){0};
-        if (shape->operation == XR_LIR_ARRAY_OP_SET) {
+        if (shape->operation == XR_LIR_ARRAY_OP_SET || shape->operation == XR_LIR_ARRAY_OP_PUSH) {
             if (region->primary_kind) return false;
-            region->primary_kind = XR_LIR_ARRAY_REGION_PRIMARY_SET;
+            region->primary_kind = shape->operation == XR_LIR_ARRAY_OP_SET ?
+                XR_LIR_ARRAY_REGION_PRIMARY_SET : XR_LIR_ARRAY_REGION_PRIMARY_PUSH;
             region->primary_block = block + 1; region->primary_instruction = i + 1;
+            if (shape->operation == XR_LIR_ARRAY_OP_PUSH) {
+                if (lir_array_region_lane(p,op->operands[1]) != LIR_ARRAY_RANGE_CURRENT) return false;
+                p->push_item = op->operands[1];
+            }
         } else if (shape->operation == XR_LIR_ARRAY_OP_GET) {
             if (p->get_count < 2) ++p->get_count;
             p->get_block = block + 1; p->get_instruction = i + 1;
@@ -454,18 +470,19 @@ static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32
     }
     return true;
 }
-static XrLirArraySetRegionOwnerHome lir_array_region_owner_home(const LirArrayRegionProof *p,
-    const XrLirArraySetRegion *region) {
+/* This walk proves token transport only. Access/failure rules are discharged
+ * by the caller before any conditional window is published. */
+static XrLirArraySetRegionOwnerHome lir_array_region_token_home(const LirArrayRegionProof *p,
+    const XrLirArraySetRegion *region, uint32_t kind) {
     XrLirArraySetRegionOwnerHome none = {0};
-    if (region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN || p->step_count < 3) return none;
+    if (p->step_count < 3) return none;
     XrLirArraySetRegionStep entry = p->steps[0];
     if (entry.kind != XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE || entry.source != region->entry_value ||
         entry.target != region->canonical_value || entry.block != region->entry_block || entry.edge != region->entry_edge)
         return none;
     uint32_t current = region->canonical_value, first = 0, exit = 0;
-    /* The original body walk has admitted only nonfailing scalar operations,
-     * same-backing Array accesses and exact COPY/death pairs. Do not infer this
-     * equivalence from liveness, sampled RC or an unobserved dead destination:
+    /* The caller closes the access/effect protocol separately. Do not infer
+     * this transport equivalence from liveness, sampled RC or a dead destination:
      * every original owner transition, including its death, is covered here. */
     for (uint32_t n = 1; n < p->step_count; ++n) {
         XrLirArraySetRegionStep step = p->steps[n];
@@ -494,14 +511,49 @@ static XrLirArraySetRegionOwnerHome lir_array_region_owner_home(const LirArrayRe
         current = step.target;
     }
     if (!first || !exit) return none;
+    return (XrLirArraySetRegionOwnerHome){kind,first,exit};
+}
+static XrLirArraySetRegionOwnerHome lir_array_region_owner_home(const LirArrayRegionProof *p,
+    const XrLirArraySetRegion *region) {
+    if (region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN)
+        return (XrLirArraySetRegionOwnerHome){0};
     uint32_t kind = region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET ?
         XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW : XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW;
-    return (XrLirArraySetRegionOwnerHome){kind,first,exit};
+    return lir_array_region_token_home(p,region,kind);
+}
+static bool lir_array_region_push_capacity(const LirArrayRegionProof *p, XrLirArraySetRegion *region) {
+    const XrLirArraySetRegionRange *r=&p->range;
+    if (r->kind!=LIR_ARRAY_RANGE_UNIT_LIMIT || !r->increment || !r->latch_iv || !p->push_item ||
+        p->array_accesses!=1 || p->function->blocks[region->header-1].parameter_count!=2) return false;
+    XrLirArraySetRegionOwnerHome token=lir_array_region_token_home(p,region,1);
+    if (!token.kind || token.exit_step<3) return false;
+    uint32_t creates=0,reads=0;
+    for (uint32_t n=0;n<p->step_count;++n) {
+        XrLirArraySetRegionStep step=p->steps[n];
+        if (step.kind==XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE) {
+            if (step.block!=region->primary_block || step.drop>=region->primary_instruction) return false;
+            ++creates;
+        } else if (step.kind==XR_LIR_ARRAY_SET_REGION_READ_CANDIDATE) {
+            if (step.block!=region->primary_block || step.instruction<=region->primary_instruction) return false;
+            ++reads;
+        }
+    }
+    XrLirArraySetRegionStep latch=p->steps[token.exit_step-2];
+    if (creates!=1 || reads!=1 || latch.kind!=XR_LIR_ARRAY_SET_REGION_EDGE_MOVE ||
+        latch.block!=region->latch || latch.target!=region->canonical_value) return false;
+    region->push_capacity=(XrLirArrayPushCapacity){.kind=XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT,
+        .iv=r->iv,.iv_argument=r->iv_argument,.entry_iv=r->entry_iv,.end=r->length,
+        .end_block=p->function->values[r->length-1].block,.end_instruction=r->length_instruction,
+        .condition=r->condition,.condition_instruction=r->condition_instruction,.increment=r->increment,
+        .increment_block=r->increment_block,.increment_instruction=r->increment_instruction,.one=r->one,
+        .latch_iv=r->latch_iv,.item=p->push_item,.first_active_step=token.first_active_step,.checkpoint_step=token.exit_step-1};
+    return true;
 }
 static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
     XrLirArraySetRegion *region) {
     if (!lir_array_region_shape(p, header, body_edge, region)) return false;
-    p->step_count = p->get_count = 0; p->range = (XrLirArraySetRegionRange){0}; uint32_t current = 0;
+    p->step_count = p->get_count = p->push_item = p->array_accesses = 0;
+    p->range = (XrLirArraySetRegionRange){0}; uint32_t current = 0;
     if (!lir_array_region_edge(p, region->entry_block - 1, region->entry_edge - 1,
         XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE, &current)) return false;
     region->entry_value = p->steps[0].source; region->canonical_value = current;
@@ -512,16 +564,21 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint
         if (!lir_array_region_body(p, p->blocks[n], &current, region, false) ||
             !lir_array_region_edge(p, p->blocks[n], 0, XR_LIR_ARRAY_SET_REGION_EDGE_MOVE, &current)) return false;
     if (current != region->canonical_value) return false;
-    if (p->range.latch_iv) region->range = p->range;
+    if (p->range.latch_iv && p->range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) region->range = p->range;
     if (!region->primary_kind) {
         if (p->get_count != 1 || region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) return false;
         region->primary_kind = XR_LIR_ARRAY_REGION_PRIMARY_GET;
         region->primary_block = p->get_block; region->primary_instruction = p->get_instruction;
     }
-    p->range = (XrLirArraySetRegionRange){0};
+    XrLirArraySetRegionRange recurrence=p->range; p->range = (XrLirArraySetRegionRange){0};
     current = region->canonical_value;
     if (!lir_array_region_edge(p, header, region->exit_edge - 1, XR_LIR_ARRAY_SET_REGION_EXIT_MOVE, &current)) return false;
     region->exit_value = current; region->step_count = p->step_count;
+    if (region->primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH) {
+        p->range=recurrence;
+        bool capacity=lir_array_region_push_capacity(p,region); p->range=(XrLirArraySetRegionRange){0};
+        return capacity;
+    }
     region->owner_home = lir_array_region_owner_home(p,region);
     if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET &&
         region->owner_home.kind != XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW) return false;
@@ -531,7 +588,8 @@ static void lir_array_region_proof_free(LirArrayRegionProof *p) {
     xr_free(p->graph.memory); xr_free(p->uses); xr_free(p->pairs); xr_free(p->moves);
     xr_free(p->blocks); xr_free(p->marks); xr_free(p->steps);
 }
-static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRegionTables *tables) {
+static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRegionTables *tables,
+    LirArrayRegionTables *push_windows) {
     const XrLirFunctionData *f = p->function;
     if (f->kind == XR_LIR_FUNCTION_EXTERNAL) return XR_LIR_OK;
     if (!lir_array_region_needed(p->plan, p->function_id)) return XR_LIR_OK;
@@ -554,10 +612,11 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
         for (uint32_t e = 0; e < 2; ++e) {
             XrLirArraySetRegion region;
             if (!lir_array_region_prove(p, b, e, &region)) continue;
-            region.first_step = tables->steps.count;
+            LirArrayRegionTables *receiver=region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH ? push_windows : tables;
+            region.first_step = receiver->steps.count;
             for (uint32_t n = 0; n < p->step_count; ++n)
-                if (!lir_array_region_append(&tables->steps, &p->steps[n], sizeof(p->steps[n]))) return XR_LIR_OUT_OF_MEMORY;
-            if (!lir_array_region_append(&tables->regions, &region, sizeof(region))) return XR_LIR_OUT_OF_MEMORY;
+                if (!lir_array_region_append(&receiver->steps, &p->steps[n], sizeof(p->steps[n]))) return XR_LIR_OUT_OF_MEMORY;
+            if (!lir_array_region_append(&receiver->regions, &region, sizeof(region))) return XR_LIR_OUT_OF_MEMORY;
         }
     return XR_LIR_OK;
 }
@@ -565,11 +624,20 @@ static XrLirStatus lir_plan_array_set_regions(XrLirOwnershipPlan *plan,
     const XrLirModule *module, const XrLirFunctionData *f, uint32_t function) {
     XrLirOwnershipFunction *row = &plan->functions[function - 1];
     row->region_offset = plan->array_regions.regions.count;
+    row->push_window_offset = plan->array_push_windows.regions.count;
     LirArrayRegionProof proof = {.module=module,.function=f,.plan=plan,.function_id=function};
-    XrLirStatus status = lir_array_regions_function(&proof, &plan->array_regions);
+    XrLirStatus status = lir_array_regions_function(&proof, &plan->array_regions,&plan->array_push_windows);
     row->region_count = plan->array_regions.regions.count - row->region_offset;
+    row->push_window_count = plan->array_push_windows.regions.count - row->push_window_offset;
     lir_array_region_proof_free(&proof);
     return status;
+}
+static bool lir_array_push_capacity_equal(XrLirArrayPushCapacity a, XrLirArrayPushCapacity b) {
+    return a.kind==b.kind && a.iv==b.iv && a.iv_argument==b.iv_argument && a.entry_iv==b.entry_iv &&
+        a.end==b.end && a.end_block==b.end_block && a.end_instruction==b.end_instruction &&
+        a.condition==b.condition && a.condition_instruction==b.condition_instruction && a.increment==b.increment &&
+        a.increment_block==b.increment_block && a.increment_instruction==b.increment_instruction && a.one==b.one &&
+        a.latch_iv==b.latch_iv && a.item==b.item && a.first_active_step==b.first_active_step && a.checkpoint_step==b.checkpoint_step;
 }
 static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b) {
     return a.function == b.function && a.header == b.header && a.entry_block == b.entry_block &&
@@ -585,7 +653,7 @@ static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b)
         a.range.increment_block == b.range.increment_block && a.range.increment_instruction == b.range.increment_instruction &&
         a.range.one == b.range.one && a.range.latch_iv == b.range.latch_iv &&
         a.owner_home.kind == b.owner_home.kind && a.owner_home.first_active_step == b.owner_home.first_active_step &&
-        a.owner_home.exit_step == b.owner_home.exit_step;
+        a.owner_home.exit_step == b.owner_home.exit_step && lir_array_push_capacity_equal(a.push_capacity,b.push_capacity);
 }
 static bool lir_array_region_step_equal(XrLirArraySetRegionStep a, XrLirArraySetRegionStep b) {
     return a.kind == b.kind && a.block == b.block && a.instruction == b.instruction && a.edge == b.edge &&
@@ -610,7 +678,8 @@ static bool lir_array_region_inputs_equal(const XrLirOwnershipPlan *a, const XrL
     XrLirOwnershipFunction x = a->functions[function], y = b->functions[function];
     if (x.fact_offset > a->fact_count || x.fact_count > a->fact_count - x.fact_offset ||
         y.fact_offset > b->fact_count || y.fact_count > b->fact_count - y.fact_offset ||
-        x.region_offset != y.region_offset || x.region_count != y.region_count) return false;
+        x.region_offset != y.region_offset || x.region_count != y.region_count ||
+        x.push_window_offset!=y.push_window_offset || x.push_window_count!=y.push_window_count) return false;
     uint32_t i = 0, j = 0;
     while (true) {
         while (i < x.fact_count && !lir_array_region_proof_fact(&a->facts[x.fact_offset + i])) ++i;
@@ -620,18 +689,22 @@ static bool lir_array_region_inputs_equal(const XrLirOwnershipPlan *a, const XrL
         ++i; ++j;
     }
 }
-static bool lir_array_region_plans_equal(const XrLirOwnershipPlan *a, const XrLirOwnershipPlan *b) {
-    if (a->function_count != b->function_count || a->array_regions.regions.count != b->array_regions.regions.count ||
-        a->array_regions.steps.count != b->array_regions.steps.count) return false;
-    for (uint32_t f = 0; f < a->function_count; ++f)
-        if (!lir_array_region_inputs_equal(a, b, f)) return false;
-    const XrLirArraySetRegion *x = a->array_regions.regions.data, *y = b->array_regions.regions.data;
-    for (uint32_t n = 0; n < a->array_regions.regions.count; ++n)
+static bool lir_array_region_tables_equal(const LirArrayRegionTables *a, const LirArrayRegionTables *b) {
+    if (a->regions.count!=b->regions.count || a->steps.count!=b->steps.count) return false;
+    const XrLirArraySetRegion *x = a->regions.data, *y = b->regions.data;
+    for (uint32_t n = 0; n < a->regions.count; ++n)
         if (!lir_array_region_equal(x[n], y[n])) return false;
-    const XrLirArraySetRegionStep *u = a->array_regions.steps.data, *v = b->array_regions.steps.data;
-    for (uint32_t n = 0; n < a->array_regions.steps.count; ++n)
+    const XrLirArraySetRegionStep *u = a->steps.data, *v = b->steps.data;
+    for (uint32_t n = 0; n < a->steps.count; ++n)
         if (!lir_array_region_step_equal(u[n], v[n])) return false;
     return true;
+}
+static bool lir_array_region_plans_equal(const XrLirOwnershipPlan *a, const XrLirOwnershipPlan *b) {
+    if (a->function_count != b->function_count) return false;
+    for (uint32_t f = 0; f < a->function_count; ++f)
+        if (!lir_array_region_inputs_equal(a,b,f)) return false;
+    return lir_array_region_tables_equal(&a->array_regions,&b->array_regions) &&
+        lir_array_region_tables_equal(&a->array_push_windows,&b->array_push_windows);
 }
 XR_FUNC XrLirStatus xr_lir_ownership_array_regions_verify(const XrLirModule *module,
     const XrLirOwnershipPlan *plan) {
@@ -665,4 +738,20 @@ XR_FUNC XrLirStatus xr_lir_ownership_array_region_step_at(const XrLirOwnershipPl
     if (!plan || !out || ordinal >= plan->array_regions.steps.count) return XR_LIR_INVALID_ARGUMENT;
     *out = ((const XrLirArraySetRegionStep *)plan->array_regions.steps.data)[ordinal];
     return XR_LIR_OK;
+}
+XR_FUNC uint32_t xr_lir_ownership_array_push_window_count(const XrLirOwnershipPlan *plan) {
+    return plan ? plan->array_push_windows.regions.count : 0;
+}
+XR_FUNC uint32_t xr_lir_ownership_array_push_step_count(const XrLirOwnershipPlan *plan) {
+    return plan ? plan->array_push_windows.steps.count : 0;
+}
+XR_FUNC XrLirStatus xr_lir_ownership_array_push_window_at(const XrLirOwnershipPlan *plan,
+    uint32_t ordinal, XrLirArraySetRegion *out) {
+    if (!plan || !out || ordinal>=plan->array_push_windows.regions.count) return XR_LIR_INVALID_ARGUMENT;
+    *out=((const XrLirArraySetRegion *)plan->array_push_windows.regions.data)[ordinal]; return XR_LIR_OK;
+}
+XR_FUNC XrLirStatus xr_lir_ownership_array_push_step_at(const XrLirOwnershipPlan *plan,
+    uint32_t ordinal, XrLirArraySetRegionStep *out) {
+    if (!plan || !out || ordinal>=plan->array_push_windows.steps.count) return XR_LIR_INVALID_ARGUMENT;
+    *out=((const XrLirArraySetRegionStep *)plan->array_push_windows.steps.data)[ordinal]; return XR_LIR_OK;
 }

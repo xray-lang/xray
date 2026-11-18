@@ -74,5 +74,10 @@ typedef struct XrLirArrayRegionBindings {
  * the original one-based block ID, including unused zero. */
 XR_FUNC XrLirValueLayoutStatus xr_lir_array_region_bindings_create(const XrLirValueHomes *,
     const XrLirValueLayouts *, XrLirArrayRegionBindings **);
+/* Project only the separate PUSH capacity facts. The same numeric containers
+ * include all participating value temporaries, exact PUSH workspace and edge
+ * fields. Existing executable SET/GET directories remain untouched. */
+XR_FUNC XrLirValueLayoutStatus xr_lir_array_push_window_bindings_create(const XrLirValueHomes *,
+    const XrLirValueLayouts *, XrLirArrayRegionBindings **);
 XR_FUNC void xr_lir_array_region_bindings_destroy(XrLirArrayRegionBindings *);
 #endif
