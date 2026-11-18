@@ -12,7 +12,9 @@
 enum ArrayPushWindowMode {
     PUSH_WINDOW_CURRENT, PUSH_WINDOW_PARAMETER_END, PUSH_WINDOW_NEGATIVE_IV, PUSH_WINDOW_MAX_END,
     PUSH_WINDOW_STEP_TWO, PUSH_WINDOW_NEXT_ITEM, PUSH_WINDOW_TWO_PUSHES, PUSH_WINDOW_OBSERVER,
-    PUSH_WINDOW_LENGTH_END, PUSH_WINDOW_EXTRA_STATE, PUSH_WINDOW_LATCH_CURRENT
+    PUSH_WINDOW_LENGTH_END, PUSH_WINDOW_EXTRA_STATE, PUSH_WINDOW_LATCH_CURRENT,
+    PUSH_WINDOW_EXIT_RETAIN_SOURCE, PUSH_WINDOW_EXIT_RETAIN_TARGET, PUSH_WINDOW_ENTRY_EXIT_RETAINS,
+    PUSH_WINDOW_LIVE_SNAPSHOT, PUSH_WINDOW_BODY_RETAIN, PUSH_WINDOW_EXIT_BYPASS
 };
 #define ARS_PUSH_FIELDS(p) (p).kind,(p).iv,(p).iv_argument,(p).entry_iv,(p).end,(p).end_block,(p).end_instruction, \
     (p).condition,(p).condition_instruction,(p).increment,(p).increment_block,(p).increment_instruction, \
@@ -22,7 +24,9 @@ static inline bool ars_push_same(XrLirArrayPushCapacity a,XrLirArrayPushCapacity
     for (size_t n=0;n<sizeof(x)/sizeof(*x);++n) if (x[n]!=y[n]) return false;
     return true;
 }
-static inline bool ars_push_expected(enum ArrayPushWindowMode mode) { return mode<=PUSH_WINDOW_MAX_END; }
+static inline bool ars_push_expected(enum ArrayPushWindowMode mode) {
+    return mode<=PUSH_WINDOW_MAX_END || (mode>=PUSH_WINDOW_EXIT_RETAIN_SOURCE && mode<=PUSH_WINDOW_ENTRY_EXIT_RETAINS);
+}
 static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mode) {
     ArraySetRegionFixture c={.count=2,.arity=mode==PUSH_WINDOW_EXTRA_STATE ? 3 : 2};
     OK(xr_lir_array_module_create(NULL,&c.module));
@@ -48,7 +52,14 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     }
     XrLirValue seed=ars_number(&c,c.entry,7),incoming[]={ars_array_op(&c,c.entry,XR_LIR_ARRAY_OP_NEW,&seed,1),
         ars_number(&c,c.entry,mode==PUSH_WINDOW_NEGATIVE_IV ? -1 : 0),ars_number(&c,c.entry,42)};
-    ars_branch(&c,c.entry,c.header,incoming);
+    if (mode==PUSH_WINDOW_ENTRY_EXIT_RETAINS) incoming[0]=ars_retire_copy(&c,c.entry,incoming[0],true);
+    if (mode==PUSH_WINDOW_LIVE_SNAPSHOT) c.outside_array=ars_retained(&c,c.entry,incoming[0]);
+    if (mode==PUSH_WINDOW_EXIT_BYPASS) {
+        XrLirValue bypass=ars_value(&c,c.entry,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1});
+        OK(xr_lir_set_terminator(c.module,c.entry,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+            .operands=&bypass,.operand_count=1,.edge_count=2,
+            .edges={{c.header,incoming,c.arity},{c.exit,incoming,c.arity}}}));
+    } else ars_branch(&c,c.entry,c.header,incoming);
     XrLirValue values[4]={{0}}; ars_parameters(&c,c.header,values); c.header_array=values[0];
     XrLirValue end={0};
     if (mode==PUSH_WINDOW_PARAMETER_END) OK(xr_lir_function_parameter(c.module,c.function,0,&end));
@@ -62,6 +73,7 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
         .edges={{c.body[0],values,c.arity},{c.exit,values,c.arity}}}));
     ars_parameters(&c,c.body[0],values); ars_branch(&c,c.body[0],c.body[1],values);
     XrLirBlock block=c.body[1]; ars_parameters(&c,block,values);
+    if (mode==PUSH_WINDOW_BODY_RETAIN) values[0]=ars_retire_copy(&c,block,values[0],true);
     XrLirValue next={0},one=ars_number(&c,block,mode==PUSH_WINDOW_STEP_TWO ? 2 : 1),add[]={values[1],one};
     if (mode==PUSH_WINDOW_NEXT_ITEM) next=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
     XrLirValue cell=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,.operands=values,.operand_count=1});
@@ -78,8 +90,13 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     if (!next.id) next=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
     if (mode!=PUSH_WINDOW_LATCH_CURRENT) values[1]=next;
     ars_branch(&c,block,c.header,values);
-    ars_parameters(&c,c.exit,values); c.result=ars_array_op(&c,c.exit,XR_LIR_ARRAY_OP_LEN,values,1);
+    ars_parameters(&c,c.exit,values);
+    if (mode>=PUSH_WINDOW_EXIT_RETAIN_SOURCE && mode<=PUSH_WINDOW_ENTRY_EXIT_RETAINS)
+        values[0]=ars_retire_copy(&c,c.exit,values[0],mode!=PUSH_WINDOW_EXIT_RETAIN_TARGET);
+    if (mode==PUSH_WINDOW_EXIT_BYPASS) values[0]=ars_retire_copy(&c,c.exit,values[0],true);
+    c.result=ars_array_op(&c,c.exit,XR_LIR_ARRAY_OP_LEN,values,1);
     ars_effect(&c,c.exit,XR_LIR_ARRAY_DROP,values[0]);
+    if (mode==PUSH_WINDOW_LIVE_SNAPSHOT) ars_effect(&c,c.exit,XR_LIR_ARRAY_DROP,c.outside_array);
     OK(xr_lir_set_terminator(c.module,c.exit,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=&c.result,.operand_count=1}));
     OK(xr_lir_module_finish(c.module,NULL)); return c;
 }

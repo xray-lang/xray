@@ -227,7 +227,9 @@ static void array_push_binding_slot(const XrLirArrayRegionBindings *bindings,con
     CHECK(found);
 }
 static void array_push_binding_projection(void) {
-    for (unsigned mode=PUSH_WINDOW_CURRENT;mode<=PUSH_WINDOW_PARAMETER_END;++mode) {
+    const enum ArrayPushWindowMode modes[]={PUSH_WINDOW_CURRENT,PUSH_WINDOW_PARAMETER_END,PUSH_WINDOW_ENTRY_EXIT_RETAINS};
+    for (size_t test=0;test<sizeof(modes)/sizeof(*modes);++test) {
+        enum ArrayPushWindowMode mode=modes[test];
         ArraySetRegionFixture c=array_push_window_build((enum ArrayPushWindowMode)mode);
         XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
         XrLirValueLayoutKey roots[]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
