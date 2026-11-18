@@ -882,8 +882,8 @@ static void array_set_region_receiving(bool range) {
     HOME(xr_lir_value_homes_create(&request, &homes)); size_t sites = attempts;
     CHECK(homes && homes->array_region_count == 1 && homes->array_region_step_count && sites && live > baseline);
     XrLirArraySetRegion published; OK(xr_lir_ownership_array_region_at(plan, 1, &published));
-    CHECK(ars_range_same(homes->array_regions[0].range, published.range) && published.range.kind == (range ?
-        XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN : XR_LIR_ARRAY_SET_RANGE_NONE));
+    uint32_t expected_range = range ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN : XR_LIR_ARRAY_SET_RANGE_NONE;
+    CHECK(ars_range_same(homes->array_regions[0].range, published.range) && published.range.kind == expected_range);
     xr_lir_value_homes_destroy(homes); homes = NULL;
     CHECK(live == baseline && home_live_bytes() == bytes);
     for (size_t point = 1; point <= sites; ++point) {
