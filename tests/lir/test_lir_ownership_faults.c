@@ -182,11 +182,13 @@ static void array_region_input_equal(const XrLirModule *input, const XrLirModule
         }
     }
 }
-static void array_region_verification_faults(void) {
-    ArraySetRegionFixture input = array_set_region_build(NULL, 3, ARRAY_SET_REGION_LOCAL);
-    input = array_set_region_build(input.module, 6, ARRAY_SET_REGION_LOCAL);
-    ArraySetRegionFixture reference = array_set_region_build(NULL, 3, ARRAY_SET_REGION_LOCAL);
-    reference = array_set_region_build(reference.module, 6, ARRAY_SET_REGION_LOCAL);
+static void array_region_verification_faults(bool retired) {
+    enum ArraySetRegionMode first = retired ? ARRAY_SET_REGION_RETAIN_SOURCE : ARRAY_SET_REGION_LOCAL;
+    enum ArraySetRegionMode second = retired ? ARRAY_SET_REGION_RETAIN_TARGET : ARRAY_SET_REGION_LOCAL;
+    ArraySetRegionFixture input = array_set_region_build(NULL, 3, first);
+    input = array_set_region_build(input.module, 6, second);
+    ArraySetRegionFixture reference = array_set_region_build(NULL, 3, first);
+    reference = array_set_region_build(reference.module, 6, second);
     OK(xr_lir_module_finish(input.module, NULL)); OK(xr_lir_module_finish(reference.module, NULL));
     XrLirOwnershipPlan *plan = NULL, *saved = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module}, &plan, NULL));
@@ -206,7 +208,9 @@ static void array_region_verification_faults(void) {
     }
     xr_lir_ownership_plan_destroy(plan); xr_lir_ownership_plan_destroy(saved);
     xr_lir_module_destroy(input.module); xr_lir_module_destroy(reference.module);
-    CHECK(!live && !live_bytes); printf("array region verification failure points: %zu\n", count);
+    CHECK(!live && !live_bytes);
+    if (retired) printf("retired copy region verification failure points: %zu\n", count);
+    else printf("array region verification failure points: %zu\n", count);
 }
 
 int main(void) {
@@ -233,8 +237,13 @@ int main(void) {
     region=array_set_region_build(region.module,6,ARRAY_SET_REGION_LOCAL);
     OK(xr_lir_module_finish(region.module,NULL));
     sweep(region.module,NULL,0);
+    ArraySetRegionFixture retired = array_set_region_build(NULL,3,ARRAY_SET_REGION_RETAIN_SOURCE);
+    retired = array_set_region_build(retired.module,6,ARRAY_SET_REGION_RETAIN_TARGET);
+    OK(xr_lir_module_finish(retired.module,NULL));
+    sweep(retired.module,NULL,0);
     array_region_tampering();
-    array_region_verification_faults();
+    array_region_verification_faults(false);
+    array_region_verification_faults(true);
     XrLirModule *grown = NULL;
     OK(ownership_fixture(XR_LIR_STRING, false, 24, &grown));
     sweep(grown,NULL,0);
