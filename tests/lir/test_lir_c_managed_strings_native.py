@@ -220,7 +220,12 @@ def main():
         assert 'xrt_native_string_create(' in emitted and 'XrtString *' not in emitted
         assert 'xrt_string_retain(' not in emitted and 'xrt_string_root_take(' not in emitted
         if not panic:
-            assert 'xrl_scalars_' in emitted and 'xrl_edge_' in emitted and 'xrl_return_' in emitted
+            publications = re.findall(
+                r'XrtPlacePublication publication = \{(xrl_publish_\d+_\d+_\d+), &context\};', emitted)
+            assert publications and all('static void ' + callback + '(void *context)' in emitted
+                                        for callback in publications)
+            assert 'xrt_place_edge_transfer(owners, ' in emitted
+            assert 'xrl_edge_' in emitted and 'xrl_return_' in emitted
             normal = compile_run('normal', '#include ' + json.dumps(generated.as_posix()) +
                                  '\nint main(void) { return xray_lir_entry() != 0; }\n')
             assert (normal.stdout, normal.stderr) == (expected, b'')
@@ -241,7 +246,9 @@ def main():
         generated = root / (name + '-generated.c')
         run([args.driver.resolve(), programs / (name + '.xr'), generated], root)
         emitted = generated.read_text(encoding='ascii')
-        assert 'XrtValueImage xrl_value_image' in emitted and 'XrtModuleTypeSpec' not in emitted
+        assert re.search(r'static const XrtValueImage xrl_value_image\s*=', emitted)
+        assert re.search(r'static const XrtModuleLayoutSpec xrl_state_spec\s*=\s*\{\s*&xrl_value_image,', emitted)
+        assert 'XrtModuleTypeSpec' not in emitted
         if scalar:
             assert 'xrt_native_managed_root(' not in emitted and 'xrt_managed_frame_enter' not in emitted
         else:
@@ -267,6 +274,7 @@ def main():
     for name, text, expected in [
         ('format', 'print("n=${42}")\n', b'n=42\n'),
         ('array', 'var xs=Array<i64>(2,0)\nprint(len(xs))\n', b'2\n'),
+        ('cell', 'fn work(){var text="local"\nprint(len(text))}\nwork()\n', b'5\n'),
     ]:
         source, generated = root / (name + '.xr'), root / (name + '-generated.c')
         source.write_text(text, encoding='utf-8')
@@ -274,13 +282,6 @@ def main():
         normal = compile_run(name, '#include ' + json.dumps(generated.as_posix()) +
                              '\nint main(void) { (void)xray_lir_entry(); return 0; }\n')
         assert (normal.stdout, normal.stderr) == (expected, b'')
-    for name, text in [
-        ('cell', 'fn work(){var text="local"\nprint(len(text))}\nwork()\n'),
-    ]:
-        source, generated = root / (name + '.xr'), root / (name + '.c')
-        source.write_text(text, encoding='utf-8')
-        rejected = run([args.driver.resolve(), source, generated], root, success=False)
-        assert rejected.returncode == 1 and b'C emission:' in rejected.stderr and not generated.exists()
     print('ordinary C String workers: real sources, borrowed calls, reused landing, selected edges, quota/panic drain and retired producers PASS', flush=True)
 
 
