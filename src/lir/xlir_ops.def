@@ -36,8 +36,6 @@ XR_LIR_OP(STRING_DROP, "string_drop", 1)
 XR_LIR_OP(STRING_CELL_DROP, "string_cell_drop", 1)
 XR_LIR_OP(STRING_PRINT, "string_print", 1)
 XR_LIR_OP(STRING_LEN, "string_len", 1)
-/* Both operands are evaluated before this effect, including on success. */
-XR_LIR_OP(ASSERT_CONDITION, "assert_condition", 2)
 XR_LIR_OP(STRING_F64, "string_f64", 1)
 XR_LIR_OP(FTOI, "ftoi", 1)
 /* State capabilities belong to the execution, independently of call frames. */
@@ -109,3 +107,5 @@ XR_LIR_OP(SET_CELL_DROP, "set_cell_drop", 1)
 XR_LIR_OP(SET_BORROW, "set_borrow", 1)
 XR_LIR_OP(SET_REF_READ, "set_ref_read", 1)
 XR_LIR_OP(SET_REF_WRITE, "set_ref_write", 2)
+/* Both operands are evaluated before this effect, including on success. */
+XR_LIR_OP(ASSERT_CONDITION, "assert_condition", 2)
