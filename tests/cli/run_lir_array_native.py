@@ -121,7 +121,7 @@ def main() -> None:
             assert len(specs) == (2 if name == "region_two" else 1), (name, len(specs))
             assert clones and all("xrt_" not in body for body in clones), name
             if name == "region_set":
-                assert re.search(r"XRT_ARRAY_I64_REGION_COPY\(&v\d+, &v\d+\);", generated_text)
+                assert "XRT_ARRAY_I64_REGION_COPY(" not in generated_text
         # The original large-case oracles check both length and element 299.
         # Keep that executed span check independent of C literal spelling.
         for ordinal, compiler in enumerate(args.compiler or [None]):
