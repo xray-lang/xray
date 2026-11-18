@@ -8,6 +8,13 @@
  */
 #ifndef LIR_ARRAY_REGION_BINDING_CASES_H
 #define LIR_ARRAY_REGION_BINDING_CASES_H
+static XrLirBlock array_region_binding_block(ArraySetRegionFixture *c) {
+    const XrLirType types[]={XR_LIR_ARRAY,XR_LIR_I64}; XrLirBlock block={0}; XrLirValue array={0};
+    OK(xr_lir_add_block(c->module,c->function,types,2,&block));
+    OK(xr_lir_block_parameter(c->module,block,0,&array));
+    OK(xr_lir_set_array_shape(c->module,array,&(XrLirArrayShape){XR_LIR_I64}));
+    return block;
+}
 static ArraySetRegionFixture array_region_binding_two_loops(bool shared,bool reverse) {
     ArraySetRegionFixture c={.arity=2,.mode=ARRAY_SET_REGION_LOCAL};
     OK(xr_lir_array_module_create(NULL,&c.module));
@@ -16,15 +23,14 @@ static ArraySetRegionFixture array_region_binding_two_loops(bool shared,bool rev
     OK(xr_lir_define_function(c.module,c.function));
     OK(xr_lir_add_block(c.module,c.function,NULL,0,&c.entry)); OK(xr_lir_set_entry(c.module,c.function,c.entry));
     XrLirBlock current=c.entry,next_header={0};
-    XrLirType types[]={XR_LIR_ARRAY,XR_LIR_I64};
-    if (reverse) OK(xr_lir_add_block(c.module,c.function,types,2,&next_header));
+    if (reverse) next_header=array_region_binding_block(&c);
     for (uint32_t loop=0;loop<2;++loop) {
         c.count=loop+2;
         if (shared && loop) c.header=next_header;
-        else OK(xr_lir_add_block(c.module,c.function,types,2,&c.header));
-        for (uint32_t n=0;n<c.count;++n) OK(xr_lir_add_block(c.module,c.function,types,2,&c.body[n]));
+        else c.header=array_region_binding_block(&c);
+        for (uint32_t n=0;n<c.count;++n) c.body[n]=array_region_binding_block(&c);
         if (shared && !loop && reverse) c.exit=next_header;
-        else OK(xr_lir_add_block(c.module,c.function,types,2,&c.exit));
+        else c.exit=array_region_binding_block(&c);
         if (shared && !loop) next_header=c.exit;
         XrLirValue values[3]={{0}};
         if (!shared || !loop) {
