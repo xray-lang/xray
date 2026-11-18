@@ -536,6 +536,27 @@ static void array_local_index_cancellation(XrLirCRequest *request, const XrLirVa
     xr_compile_resources_free(types.index); xr_compile_resources_free(types.rows);
     CHECK(sdk_stats(request->resources).held_bytes == held && runtime_live == live && runtime_bytes == bytes);
 }
+static void array_local_index_fixture(XrCompileResources *resources) {
+    /* The scalar projection fixture has eight blocks but only one SET. Two
+     * existing loops supply two actual workspaces, so cancellation can stop
+     * index population after a real insertion and before it is complete. */
+    ArraySetRegionFixture input = array_region_binding_two_loops(false,false,true);
+    XrtBillingOwner *billing = NULL; CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing) == XRT_MANAGED_OK);
+    XrLirValueLayoutKey keys[] = {{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
+    XrLirValueLayouts *layouts = NULL;
+    CHECK(xr_lir_value_layouts_create(input.module,keys,4,billing,&layouts) == XR_LIR_VALUE_LAYOUT_OK);
+    XrLirOwnershipPlan *plan = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module},&plan,NULL));
+    XrLirValueHomes *homes = NULL;
+    CHECK(xr_lir_value_homes_create(&(XrLirValueHomesRequest){input.module,input.function,layouts,plan},&homes) == XR_LIR_VALUE_LAYOUT_OK);
+    XrLirFunctionView root = {0}; OK(xr_lir_function_view(input.module,input.function,&root));
+    CHECK(!root.parameter_count && homes->source_function == input.function.id);
+    XrLirCRequest request = {input.module,input.function,resources,"array-local-index-cancellation",NULL};
+    array_local_index_cancellation(&request,homes,layouts);
+    xr_lir_value_homes_destroy(homes); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
+    CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
+    xr_lir_module_destroy(input.module);
+}
 static void array_helper_cancellation(void) {
     ArraySetRegionFixture input = ars_range_build(NULL,8,ARRAY_REGION_RANGE_UNIT);
     XrLirFunction root = array_helper_root(&input); OK(xr_lir_module_finish(input.module,NULL));
@@ -573,8 +594,8 @@ static void array_helper_cancellation(void) {
         c_array_regions_destroy(&compiler);
         CHECK(sdk_stats(resources).held_bytes == held && runtime_live == live && runtime_bytes == bytes);
     }
-    XrLirCRequest request = {input.module,root,resources,"array-local-index-cancellation",NULL};
-    array_local_index_cancellation(&request,homes,layouts);
+    array_local_index_fixture(resources);
+    CHECK(sdk_stats(resources).held_bytes == held && runtime_live == live && runtime_bytes == bytes);
     xr_compile_resources_release(resources); xr_lir_value_homes_destroy(homes);
     xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
