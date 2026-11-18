@@ -326,6 +326,7 @@ static void *home_resize(void *old,size_t bytes) {
 #define xr_realloc(old,bytes) home_resize(old,bytes)
 #define xr_free(memory) home_free(memory)
 #include "lir/xlir_value_homes.c"
+#include "lir/xlir_array_region_binding.c"
 
 static void borrowed_map_stages(void) {
     for (unsigned writes=0;writes<2;++writes) {
@@ -896,7 +897,9 @@ static void array_set_region_receiving(void) {
     xr_lir_value_homes_destroy(homes); CHECK(live == baseline && home_live_bytes() == bytes);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
 }
+#include "lir_array_region_binding_cases.h"
 int main(void) {
+    array_region_binding_projection(false); array_region_binding_projection(true);
     array_set_region_receiving();
     borrowed_map_stages();
     string_projections();
