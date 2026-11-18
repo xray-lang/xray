@@ -14,6 +14,7 @@ static void rbc_lir_value_code_free(XrRbcValueCode *code) {
     xr_free((void *)code->arguments);
     xr_free((void *)code->displays);
     xr_free((void *)code->scope_values);
+    xr_free((void *)code->array_region_accesses);
     xr_lir_array_region_bindings_destroy(code->array_regions);
     xr_free(code);
 }
@@ -147,11 +148,11 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     if (!code) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"typed operation has no receiving code description");
     if (code->access_count > UINT16_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"typed operation table exceeds bytecode encoding");
-    if (!rbc_lir_array_region_access(c,&access)) return false;
+    if (!rbc_lir_array_region_append(c,&access)) return false;
     void *storage = (void *)code->accesses;
     if (!rbc_lir_grow(c,&storage,&c->value_access_capacity,code->access_count + 1,sizeof(*code->accesses))) return false;
     code->accesses = storage;
-    ((XrRbcValueAccess *)storage)[code->access_count] = access;
+    ((XrRbcValueAccess *)code->accesses)[code->access_count] = access;
     return rbc_lir_emit(c,XR_RBC_VALUE_ACCESS,0,0,0,(int64_t)code->access_count++);
 }
 static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
