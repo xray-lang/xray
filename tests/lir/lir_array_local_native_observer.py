@@ -15,14 +15,41 @@ def array_local_observer_source(generated):
                         r"    const XrtArrayUpdate xrl_array_update = \{(XRT_ARRAY_UPDATE_(?:SET|PUSH)),[^\n]+\n")
     for match in prefix.finditer(text):
         fragment = text[match.start():_block_end(text, match.start()+4)]
-        kernel = re.search(r"xrt_array_i64_try_update_local\(xrl_frame, xrl_payload, &xrl_frame_locations, &xrl_frame_(\d+),\s*"
-                           r"\(XrtArrayI64LocalUpdate\)\{(\d+), (\d+), (\d+), (\d+), (XRT_ARRAY_UPDATE_(?:SET|PUSH)), "
+        kernel = re.search(r"xrt_array_i64_try_update_local\(&xrl_array_locals.e(\d+),\s*"
+                           r"\(XrtArrayI64LocalUpdate\)\{(XRT_ARRAY_UPDATE_(?:SET|PUSH)), "
                            r"xrl_array_update.index, xrl_array_update.item.value.i64\}\)\)\) \{", fragment)
         full = re.search(r"xrt_native_array_update_place\(\(XrtPlace\)\{.frame=xrl_frame, .slot=(\d+), .nulls=XRT_PLACE_NONNULL\}, "
                          r"XRT_BACKING_ARRAY_I64, xrl_frame, (\d+), &xrl_array_update, UINT32_C\((\d+)\)\);", fragment)
-        if not kernel or not full or kernel[6] != match[3] or not re.search(r"if \(!\(xrl_array_ready && xrt_array_i64_try_update_local", fragment):
+        if not kernel or not full or kernel[2] != match[3] or not re.search(r"if \(!\(xrl_array_ready && xrt_array_i64_try_update_local", fragment):
             raise ValueError("local fragment lost its ready short-circuit or original full native call")
-        function, binding, offset, workspace, workspace_offset = map(int, kernel.groups()[:5])
+        functions = list(re.finditer(r"^static [^\n]*\bxrl_f(\d+)\([^\n]*\) \{\n", text[:match.start()], re.MULTILINE))
+        if not functions:
+            raise ValueError("local update has no actual owning function")
+        function, field = int(functions[-1][1]), int(kernel[1])
+        prepare_start = re.search(rf"^static void xrl_array_local_prepare_{function}\([^{{]+\{{", text, re.MULTILINE)
+        if not prepare_start:
+            raise ValueError("local update has no cold geometry helper")
+        prepare_body = text[prepare_start.start():_block_end(text, prepare_start.end()-1)]
+        preparations = re.findall(rf"xrt_array_i64_local_prepare\(frame, payload, locations, &xrl_frame_{function},\s*"
+                                  rf"\(XrtArrayI64LocalGeometry\)\{{(\d+), (\d+), (\d+), (\d+)\}}, &views->e{field}\);", prepare_body)
+        if len(preparations) != 1:
+            raise ValueError("local view must prepare its one actual Homes pair exactly once")
+        binding, offset, workspace, workspace_offset = map(int, preparations[0])
+        owner_start = functions[-1].start()
+        owner_body = text[owner_start:_block_end(text, text.index("{", owner_start))]
+        if f"XrlArrayLocals_{function} xrl_array_locals = {{0}};" not in owner_body:
+            raise ValueError("prepared view lacks its true automatic function lifetime")
+        constructors = list(re.finditer(r"if \(!xrl_frame\) \{", owner_body))
+        prepare_call = f"xrl_array_local_prepare_{function}(xrl_frame, xrl_payload, &xrl_frame_locations, &xrl_array_locals);"
+        if not constructors or owner_body.count(prepare_call) != len(constructors):
+            raise ValueError("each lazy constructor must prepare once, without extra prepare calls")
+        for constructor in constructors:
+            block = owner_body[constructor.start():_block_end(owner_body, constructor.end()-1)]
+            assignment = "xrl_frame = xrl_frame_locations.frame; xrl_payload = xrl_frame_locations.payload;"
+            if (block.count(prepare_call) != 1 or "xrt_managed_frame_enter_locations(" not in block or
+                    "if (status != XRT_MANAGED_OK) xrt_native_managed_failure(" not in block or
+                    block.index(assignment) > block.index(prepare_call)):
+                raise ValueError("geometry preparation must follow actual successful lazy Frame construction")
         if (binding, workspace) != tuple(map(int, full.groups()[:2])) or binding == workspace or offset == workspace_offset:
             raise ValueError("local fragment changed receiver/workspace identities")
         for expression in (match[1], match[2]):
@@ -97,16 +124,17 @@ static int64_t element_at(const XrtArrayBacking *array, size_t index) {
     int64_t value=0; REQUIRE(index<array->length);
     memcpy(&value,array->elements+index*sizeof(value),sizeof(value)); return value;
 }
-static bool observed_local(XrtManagedFrame *frame, void *payload, const XrtManagedFrameLocations *view,
-    const XrtManagedFrameSpec *plan, XrtArrayI64LocalUpdate update) {
+static bool observed_local(const XrtArrayI64LocalView *view, XrtArrayI64LocalUpdate update) {
     XrtArrayUpdateKind expected=observation.operation?XRT_ARRAY_UPDATE_PUSH:XRT_ARRAY_UPDATE_SET;
-    REQUIRE(frame==observation.view.frame && payload==observation.view.payload && view->frame==frame && view->payload==payload &&
-        plan==plans[observation.operation] && update.binding_slot==geometry[observation.operation][0] &&
-        update.binding_offset==geometry[observation.operation][1] && update.workspace_slot==geometry[observation.operation][2] &&
-        update.workspace_offset==geometry[observation.operation][3] && update.operation==expected &&
+    const size_t *g=geometry[observation.operation];
+    REQUIRE(view && view->busy==observation.view.busy &&
+        view->binding_pending==&observation.view.slots[g[0]].pending &&
+        view->workspace_pending==&observation.view.slots[g[2]].pending &&
+        view->binding_owner==(XrtManagedHeader **)((unsigned char *)observation.view.payload+g[1]) &&
+        view->workspace_owner==(XrtManagedHeader **)((unsigned char *)observation.view.payload+g[3]) && update.operation==expected &&
         update.index==(observation.operation?0:observation.index) && update.value==observation.item);
     XrtBillingStats before=xrt_billing_owner_stats(observation.billing);
-    observation.fast=xrt_array_i64_try_update_local(frame,payload,view,plan,update); ++observation.kernels;
+    observation.fast=xrt_array_i64_try_update_local(view,update); ++observation.kernels;
     XrtBillingStats after=xrt_billing_owner_stats(observation.billing);
     REQUIRE(before.bytes==after.bytes && before.blocks==after.blocks && before.allocations==after.allocations);
     return observation.fast;
@@ -123,11 +151,13 @@ static void observed_full(XrtPlace binding, XrtBackingArrayKind kind, XrtManaged
 }
 '''
     for number, row in enumerate(rows):
-        fragment, _, _, _, index, item = row
+        fragment, function, _, _, index, item = row
         code += f'''static void emitted_update_{number}(XrtManagedFrame *xrl_frame, void *xrl_payload,
     const XrtManagedFrameLocations *factory, bool ready) {{
     XrtManagedFrameLocations xrl_frame_locations=*factory;
     bool xrl_array_ready=ready;
+    XrlArrayLocals_{function} xrl_array_locals={{0}};
+    xrl_array_local_prepare_{function}(xrl_frame,xrl_payload,&xrl_frame_locations,&xrl_array_locals);
 '''
         if index != "0":
             code += f"    const int64_t {index}=observation.index;\n"

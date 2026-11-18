@@ -213,6 +213,7 @@ def main():
             assert 'xrt_native_array_get(' in text, name
         if name in ('string', 'scalar-edge-swap'):
             assert 'xray_native_array_local.h' not in text and 'xrl_array_ready' not in text, name
+            assert 'XrlArrayLocals_' not in text and 'xrl_array_local_prepare_' not in text, name
         if name.startswith('map-literal-'):
             assert 'xrt_native_map_literal_create(' in text
             assert 'static const XrtMapLiteral xrl_map_literal_2' in text

@@ -146,8 +146,7 @@ static bool rbc_value_array_local_update(XrRbcStack *stack,RbcValueActivation *a
     const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
     XrRbcRegister *item=rbc_value_register(stack,activation,args[access.count-1]);
     if (!item) return false;
-    XrtArrayI64LocalUpdate update={.binding_slot=binding->first_owner,.binding_offset=binding->offset,
-        .workspace_slot=workspace->first_owner,.workspace_offset=workspace->offset,
+    XrtArrayI64LocalUpdate update={
         .operation=access.index==XR_LIR_ARRAY_OP_SET ? XRT_ARRAY_UPDATE_SET : XRT_ARRAY_UPDATE_PUSH};
     memcpy(&update.value,&item->bits,sizeof(update.value));
     if (access.index==XR_LIR_ARRAY_OP_SET) {
@@ -155,8 +154,10 @@ static bool rbc_value_array_local_update(XrRbcStack *stack,RbcValueActivation *a
         if (!index) return false;
         memcpy(&update.index,&index->bits,sizeof(update.index));
     }
-    return xrt_array_i64_try_update_local(activation->frame,activation->payload,&activation->frame_locations,
-        &activation->code->homes->frame,update);
+    XrtArrayI64LocalView view={0};
+    return xrt_array_i64_local_prepare(activation->frame,activation->payload,&activation->frame_locations,
+        &activation->code->homes->frame,(XrtArrayI64LocalGeometry){binding->first_owner,binding->offset,
+            workspace->first_owner,workspace->offset},&view) && xrt_array_i64_try_update_local(&view,update);
 }
 static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {

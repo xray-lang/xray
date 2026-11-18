@@ -557,7 +557,10 @@ static void array_helper_boundaries(void) {
         XrCompileResources *resources = sdk_ledger(&limits);
         XrLirCRequest request = {input.module,root,resources,"array-helper-publication",NULL};
         XrLirCOutput output = {0};
-        if (!n) output = memory_boundaries(&request);
+        if (!n) {
+            output = memory_boundaries(&request);
+            CHECK(strstr(output.bytes,"xrt_array_i64_local_prepare(") && strstr(output.bytes,"XrlArrayLocals_"));
+        }
         else {
             XrLirCDiagnostic diagnostic = {0};
             XrLirCStatus status = xr_lir_emit_c(&request,&output,&diagnostic);
