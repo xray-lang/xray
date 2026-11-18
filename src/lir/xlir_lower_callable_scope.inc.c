@@ -260,7 +260,9 @@ static void lower_lexical_value(LowerFunction *f, uint32_t i) {
     bool cell = f->owner->owned_bindings && f->owner->owned_bindings[f->owner->function] &&
         f->owner->owned_bindings[f->owner->function][result];
     if (!cell && !lower_callable_type(f, op->type)) return;
-    f->lexical.value_scopes[result] = op->op == XR_XIR_COPY || op->op == XR_XIR_FUNCTION_WEAKEN ?
+    /* COPY reuses its original LIR carrier. Weakening emits a fresh SSA value
+     * in the current scope, so a wider binding must publish its own carrier. */
+    f->lexical.value_scopes[result] = op->op == XR_XIR_COPY ?
         f->lexical.value_scopes[op->args[0]] : f->lexical.current;
 }
 static bool lower_lexical_finish_body(LowerFunction *f, uint32_t b) {

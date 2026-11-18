@@ -1013,12 +1013,43 @@ static void callable_source(void) {
     CHECK(references == 1 && invocations == 1);
     xr_lir_lowered_free(&output);
 }
+static void assertion_declaration_and_scope_sources(const char *programs) {
+    const char *fixtures[] = {"named","ordinary"};
+    for (size_t n = 0; n < sizeof(fixtures) / sizeof(*fixtures); ++n) {
+        char path[128];
+        int length = snprintf(path,sizeof(path),"../../fixtures/lir_cli/assertions/%s",fixtures[n]);
+        CHECK(length > 0 && (size_t)length < sizeof(path));
+        char *text = read_file(programs,path,"xr");
+        XrLirLowered output = lower_text(text); xr_free(text);
+        unsigned assertions = 0, weakenings = 0, bindings = 0;
+        for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
+            XrLirFunction function; XrLirFunctionView view;
+            OK(xr_lir_function_at(output.module,f,&function));
+            OK(xr_lir_function_view(output.module,function,&view));
+            for (uint32_t b = 0; b < view.block_count; ++b) {
+                XrLirBlock block; XrLirBlockView body;
+                OK(xr_lir_block_at(output.module,function,b,&block));
+                OK(xr_lir_block_view(output.module,block,&body));
+                for (uint32_t i = 0; i < body.instruction_count; ++i) {
+                    XrLirInstructionView op;
+                    OK(xr_lir_instruction_view(output.module,block,i,&op));
+                    assertions += op.op == XR_LIR_ASSERT_CONDITION;
+                    weakenings += op.op == XR_LIR_FUNCTION_WEAKEN;
+                    bindings += op.op == XR_LIR_FUNCTION_BIND;
+                }
+            }
+        }
+        CHECK(n ? weakenings && bindings : assertions == 1);
+        xr_lir_lowered_free(&output);
+    }
+}
 #include "lir_lower_array_cases.h"
 #include "lir_fixed_lower_cases.h"
 #include "lir_view_lower_cases.h"
 int main(int argc, char **argv) {
     CHECK(argc == 3);
     callable_source();
+    assertion_declaration_and_scope_sources(argv[1]);
     view_cold_checked_sources(argv[1]);
     fixed_sources();
     array_sources();
