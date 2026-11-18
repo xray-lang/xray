@@ -57,7 +57,8 @@ static void compare_internal(const XrLirOwnershipRequest *request, const XrLirOw
             a.callable_function==b.callable_function && a.callable_scope==b.callable_scope &&
             a.callable_materialize==b.callable_materialize && a.transfer_mode==b.transfer_mode &&
             a.string_operation==b.string_operation && a.forwarding_mode==b.forwarding_mode &&
-            a.forwarding_drop==b.forwarding_drop);
+            a.forwarding_drop==b.forwarding_drop && a.array_result==b.array_result &&
+            a.array_index==b.array_index && a.array_item==b.array_item);
         if (a.kind==XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER || a.kind==XR_LIR_OWNERSHIP_RETURN_TRANSFER ||
             a.kind==XR_LIR_OWNERSHIP_APPEND_TRANSFER) CHECK(a.transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE);
         if (a.kind==XR_LIR_OWNERSHIP_PARAMETER_BORROW || a.kind==XR_LIR_OWNERSHIP_OPERAND_BORROW)
@@ -75,7 +76,8 @@ static uint64_t digest(const XrLirOwnershipPlan *plan) {
             f.value, f.argument, f.edge, f.target_block, f.target_value, f.type,
             f.array_element, (uint32_t)f.array_operation, (uint32_t)f.map_operation,
             (uint32_t)f.callable_transport,(uint32_t)f.callable_operation,f.callable_function,f.callable_scope,f.callable_materialize,
-            (uint32_t)f.transfer_mode,(uint32_t)f.string_operation,(uint32_t)f.forwarding_mode,f.forwarding_drop};
+            (uint32_t)f.transfer_mode,(uint32_t)f.string_operation,(uint32_t)f.forwarding_mode,f.forwarding_drop,
+            f.array_result,f.array_index,f.array_item};
         for (size_t p = 0; p < sizeof(fields) / sizeof(fields[0]); ++p)
             hash = hash * UINT64_C(16777619) + fields[p];
     }

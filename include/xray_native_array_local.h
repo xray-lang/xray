@@ -19,6 +19,26 @@ typedef struct XrtArrayI64LocalUpdate {
     int64_t index, value;
 } XrtArrayI64LocalUpdate;
 
+typedef struct XrtArrayI64RegionSlot { size_t slot, offset; } XrtArrayI64RegionSlot;
+typedef struct XrtArrayI64RegionSpec {
+    const XrtArrayI64RegionSlot *slots;
+    size_t slot_count, canonical;
+} XrtArrayI64RegionSpec;
+typedef struct XrtArrayI64RegionContext {
+    XrtManagedFrame *frame;
+    void *payload;
+    const XrtManagedFrameLocations *locations;
+    const XrtManagedFrameSpec *spec;
+} XrtArrayI64RegionContext;
+/* These fields borrow live bytes. They own no reference or dynamic right and
+ * must never be read after Frame/Root retirement. Clearing the local struct
+ * needs no Frame access, unlock, drop or other retirement operation. */
+typedef struct XrtArrayI64RegionCache {
+    XrtManagedHeader *owner;
+    unsigned char *elements;
+    size_t length;
+} XrtArrayI64RegionCache;
+
 #if defined(_MSC_VER) && !defined(__clang__)
 #define XRT_ARRAY_LOCAL_INLINE static __forceinline
 #elif defined(__clang__) || defined(__GNUC__)
@@ -26,6 +46,48 @@ typedef struct XrtArrayI64LocalUpdate {
 #else
 #define XRT_ARRAY_LOCAL_INLINE static inline
 #endif
+
+/* This is the only full dynamic check for a producer-described call-free
+ * region. Ready means its original complete SET/READ/drop/latch has returned,
+ * not a metadata permission. Inputs are actual live private factory objects
+ * and a numeric projection of exact I64 homes. Typed setup supplies the real
+ * allocation extent; this is not validation of arbitrary or expired pointers.
+ * Success borrows bytes without retaining or changing busy/pending state.
+ * The caller preserves real owner moves and original per-access bounds checks
+ * in the uninterrupted scalar window. False changes no input or output byte. */
+XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_region_try_begin(const XrtArrayI64RegionContext *context,
+    const XrtArrayI64RegionSpec *region, bool ready, XrtArrayI64RegionCache *empty) {
+    if (!context || !region || !empty || empty->owner || empty->elements || empty->length || !ready ||
+        !context->frame || !context->payload || !context->locations || !context->spec ||
+        !region->slots || !region->slot_count || region->canonical >= region->slot_count) return false;
+    const XrtManagedFrameLocations *locations = context->locations;
+    const XrtManagedFrameSpec *spec = context->spec;
+    void *payload = context->payload;
+    if (locations->frame != context->frame || locations->payload != payload || !locations->slots || !locations->busy ||
+        !spec->owned_offsets || spec->slot_count != locations->slot_count || region->slot_count > spec->slot_count ||
+        spec->payload_alignment < _Alignof(XrtManagedHeader *) ||
+        (spec->payload_alignment & (spec->payload_alignment - 1)) || (uintptr_t)payload % spec->payload_alignment)
+        return false;
+    if (*locations->busy) return false;
+    XrtManagedHeader *owner = NULL;
+    for (size_t n = 0; n < region->slot_count; ++n) {
+        size_t slot = region->slots[n].slot, offset = region->slots[n].offset;
+        if (slot >= locations->slot_count || offset > spec->payload_size ||
+            sizeof(XrtManagedHeader *) > spec->payload_size - offset || offset % _Alignof(XrtManagedHeader *) ||
+            spec->owned_offsets[slot] != offset || locations->slots[slot].owner_offset != offset ||
+            locations->slots[slot].pending.value || locations->slots[slot].pending.allocation_bytes) return false;
+        XrtManagedHeader *value = *(XrtManagedHeader **)((unsigned char *)payload + offset);
+        if (n == region->canonical) { if (!value) return false; owner = value; }
+        else if (value) return false;
+    }
+    if (!owner || atomic_load_explicit(&owner->references, memory_order_relaxed) != 1) return false;
+    XrtArrayBacking *array = (XrtArrayBacking *)owner;
+    size_t maximum = (SIZE_MAX - sizeof(*array)) / sizeof(int64_t);
+    if (array->length > array->capacity || array->capacity > maximum || (uint64_t)array->length > (uint64_t)INT64_MAX)
+        return false;
+    *empty = (XrtArrayI64RegionCache){owner,array->elements,array->length};
+    return true;
+}
 
 /* The caller has completed this execution's backing initialization and proves
  * an admitted mutable LOCAL I64 Array operation with a separate workspace.

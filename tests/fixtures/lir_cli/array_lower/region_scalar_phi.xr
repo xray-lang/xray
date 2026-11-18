@@ -1,0 +1,17 @@
+fn main() {
+    var values: Array<i64> = [2]
+    var x = 3
+    var y = 5
+    var i = 0
+    while (i < 4) {
+        values[0] = values[0] + x
+        const before = x
+        x = y
+        y = before
+        i = i + 1
+    }
+    print(values[0])
+    print(x)
+    print(y)
+}
+main()
