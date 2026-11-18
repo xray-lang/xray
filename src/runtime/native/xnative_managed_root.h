@@ -51,6 +51,9 @@ XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_apply(XrtManagedSlotReservati
     XrtManagedReservedApply, void *);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_prepare(const XrtManagedSlotReservation *,
     XrtManagedOps *, size_t, XrtManagedHeader **);
+/* As above, with a scalar tail the factory initializes before publication. */
+XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_prepare_scalar_tail(const XrtManagedSlotReservation *,
+    XrtManagedOps *, size_t, XrtManagedHeader **);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_commit(const XrtManagedSlotReservation *);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_abort(const XrtManagedSlotReservation *);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_publish(XrtManagedSlotReservation *);

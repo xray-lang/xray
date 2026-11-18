@@ -104,12 +104,15 @@ static XrtManagedStatus array_update_create(XrtManagedFrame *frame, size_t slot,
     if (status != XRT_MANAGED_OK) return status;
     XrtManagedHeader *payload = NULL;
     size_t bytes=sizeof(XrtArrayBacking)+capacity*stride;
-    status=reservation ? xrt_managed_slot_reserved_prepare(reservation,types->arrays[update->item.kind],bytes,&payload) :
-        xrt_managed_slot_prepare(frame,slot,types->arrays[update->item.kind],bytes,&payload);
+    XrtManagedOps *ops = types->arrays[update->item.kind];
+    bool scalar = update->item.kind != XRT_BACKING_ARRAY_STRING;
+    if (!reservation) status = xrt_managed_slot_prepare(frame, slot, ops, bytes, &payload);
+    else if (scalar) status = xrt_managed_slot_reserved_prepare_scalar_tail(reservation, ops, bytes, &payload);
+    else status = xrt_managed_slot_reserved_prepare(reservation, ops, bytes, &payload);
     if (status != XRT_MANAGED_OK) return status;
     XrtArrayBacking *array = (XrtArrayBacking *)payload;
     size_t changed = update->operation == XRT_ARRAY_UPDATE_PUSH ? source->length : (size_t)update->index;
-    if (update->item.kind == XRT_BACKING_ARRAY_STRING) {
+    if (!scalar) {
         for (size_t i = 0; i < length; ++i) {
             XrtManagedHeader *child = i == changed ? &update->item.value.string->managed : array_owned_child(source, i);
             if (!xrt_managed_retain(child)) { status = XRT_MANAGED_REFCOUNT; break; }

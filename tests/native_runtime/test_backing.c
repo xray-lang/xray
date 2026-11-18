@@ -29,6 +29,7 @@ typedef struct Audit {
     const XrtStringBacking *watched_key;
     bool watched_empty;
     size_t watched_frees;
+    unsigned char allocation_fill;
     void (*observe)(void *, void *, bool);
     void *observer;
 } Audit;
@@ -57,7 +58,11 @@ static void *provider_allocate(void *context, size_t bytes) {
     Audit *audit = context;
     if (audit->observe) audit->observe(audit->observer,NULL,true);
     void *memory = xr_malloc(bytes);
-    if (memory) { atomic_fetch_add(&audit->bytes, bytes); atomic_fetch_add(&audit->blocks, 1); }
+    if (memory) {
+        if (audit->allocation_fill) memset(memory, audit->allocation_fill, bytes);
+        atomic_fetch_add(&audit->bytes, bytes);
+        atomic_fetch_add(&audit->blocks, 1);
+    }
     return memory;
 }
 static void provider_free(void *context, void *memory, size_t bytes) {

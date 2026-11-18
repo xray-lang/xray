@@ -62,10 +62,18 @@ static void array_place_updates(void) {
         CHECK(borrow(&f,0)==original && ((XrtArrayBacking *)original)->length==2 && !borrow(&f,1)); same_bill(f.billing,baseline);
         xrt_billing_owner_fail_after(f.billing,SIZE_MAX);
         ArrayPlaceWatch watch={.fixture=&f,.place=binding,.update=edit,.old=original};
+        f.audit.allocation_fill=0xa5;
         f.audit.observe=array_place_observe; f.audit.observer=&watch;
         OK(xrt_array_update_place(binding,kind,f.frame,1,&f.types,&edit));
         f.audit.observe=NULL; CHECK(watch.allocations && watch.retirements==1 && borrow(&f,0)!=original);
-        XrtArrayBacking *changed=(XrtArrayBacking *)borrow(&f,0); CHECK(changed->length==3);
+        XrtArrayBacking *changed=(XrtArrayBacking *)borrow(&f,0);
+        CHECK(changed->length==3 && changed->capacity==4);
+        CHECK(scalar_at(changed,kind,0)==42 && scalar_at(changed,kind,1)==42 && scalar_at(changed,kind,2)==42);
+        size_t stride=xrt_backing_array_stride(kind);
+        for (size_t i=3*stride;i<4*stride;++i) CHECK(changed->elements[i]==0xa5);
+        XrtArrayItem unavailable={.kind=XRT_BACKING_ARRAY_U64,.value.u64=99};
+        CHECK(xrt_array_backing_get(changed,kind,3,&unavailable)==XRT_MANAGED_BOUNDS);
+        CHECK(unavailable.kind==XRT_BACKING_ARRAY_U64 && unavailable.value.u64==99);
         OK(xrt_backing_slot_copy(f.frame,2,&changed->managed));
         baseline=xrt_billing_owner_stats(f.billing); xrt_billing_owner_fail_after(f.billing,0);
         edit.operation=XRT_ARRAY_UPDATE_SET;
@@ -84,6 +92,10 @@ static void array_place_updates(void) {
     OK(xrt_string_backing_create(strings.frame,3,&strings.types,"old",3,0));
     OK(xrt_string_backing_create(strings.frame,4,&strings.types,"new",3,0));
     XrtStringBacking *old=(XrtStringBacking *)borrow(&strings,3),*next=(XrtStringBacking *)borrow(&strings,4);
+    XrtManagedPending rejected={0};
+    BAD(xrt_managed_prepare_scalar_tail(strings.types.arrays[XRT_BACKING_ARRAY_STRING],
+        sizeof(XrtArrayBacking),&rejected));
+    CHECK(!rejected.value && !rejected.allocation_bytes);
     OK(xrt_array_backing_string_create(strings.frame,0,&strings.types,&old,1,2));
     XrtArrayUpdate edit={XRT_ARRAY_UPDATE_SET,0,{.kind=XRT_BACKING_ARRAY_STRING,.value.string=next}};
     XrtPlace binding={.frame=strings.frame,.slot=0,.nulls=XRT_PLACE_NONNULL};

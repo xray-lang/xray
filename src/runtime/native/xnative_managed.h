@@ -24,4 +24,9 @@ XR_FUNC XrtManagedStatus xrt_managed_producer_borrow(const XrtManagedHeader *,
 /* Compare immutable physical schemas of a real live owner. This neither proves
  * a producer identity nor grants a borrow or mutation permission. */
 XR_FUNC bool xrt_managed_layout_matches(const XrtManagedHeader *, const XrtRuntimeTypeSpec *);
+
+/* Prepare a private replacement whose scalar tail is written before its
+ * logical length is published. Only the fixed prefix is initialized here.
+ * An owned field or a payload callback makes this preparation invalid. */
+XR_FUNC XrtManagedStatus xrt_managed_prepare_scalar_tail(XrtManagedOps *, size_t bytes, XrtManagedPending *);
 #endif // XNATIVE_MANAGED_H
