@@ -14,6 +14,7 @@ static void rbc_lir_value_code_free(XrRbcValueCode *code) {
     xr_free((void *)code->arguments);
     xr_free((void *)code->displays);
     xr_free((void *)code->scope_values);
+    xr_lir_array_region_bindings_destroy(code->array_regions);
     xr_free(code);
 }
 static void rbc_lir_value_codes_free(XrRbcValueCode **codes, size_t count) {
@@ -73,6 +74,7 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
     }
     return false;
 }
+#include "xrbc_lir_array_region.inc.c"
 static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
     if (!c->typed_values) return true;
     if (c->homes && c->homes->value_count != c->view.value_count)
@@ -84,6 +86,7 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
     if (!code) return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own typed bytecode description");
     c->value_code = code;
     code->homes = c->homes; code->value_count = c->view.value_count;
+    if (!rbc_lir_array_region_prepare(c)) return false;
     if (c->view.scope_count) {
         uint32_t *scopes=xr_calloc(c->view.scope_count,sizeof(*scopes));
         if (!scopes) return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own raw scope capabilities");
@@ -144,6 +147,7 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     if (!code) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"typed operation has no receiving code description");
     if (code->access_count > UINT16_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"typed operation table exceeds bytecode encoding");
+    if (!rbc_lir_array_region_access(c,&access)) return false;
     void *storage = (void *)code->accesses;
     if (!rbc_lir_grow(c,&storage,&c->value_access_capacity,code->access_count + 1,sizeof(*code->accesses))) return false;
     code->accesses = storage;

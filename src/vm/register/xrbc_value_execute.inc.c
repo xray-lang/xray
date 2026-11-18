@@ -33,6 +33,14 @@ typedef union RbcValueCapture {
     XrtFunction function;
     XrtManagedHeader *cell;
 } RbcValueCapture;
+typedef enum RbcArrayRegionPhase {
+    RBC_ARRAY_REGION_COLD, RBC_ARRAY_REGION_ELIGIBLE, RBC_ARRAY_REGION_ACTIVE, RBC_ARRAY_REGION_BYPASS
+} RbcArrayRegionPhase;
+typedef struct RbcArrayRegionState {
+    XrtArrayI64RegionCache cache;
+    RbcArrayRegionPhase phase;
+    bool completed_set;
+} RbcArrayRegionState;
 struct RbcValueActivation {
     RbcValueActivation *previous;
     const XrRbcValueCode *code;
@@ -53,6 +61,8 @@ struct RbcValueActivation {
     bool array_backings_ready; /* Set only after this execution's complete backing setup succeeds. */
     bool receiving_call;
     const XrLirHomeCall *receiving_slice_call;
+    RbcArrayRegionState *array_regions;
+    uint32_t active_array_region;
 };
 struct XrRbcValueRuntime {
     XrtBillingOwner *billing;
@@ -194,12 +204,16 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     XrRbcValueRuntime *runtime = stack->values;
     if (runtime->top && runtime->top->depth == stack->depth) return XR_RBC_INVALID;
     size_t leaves, rows, snapshots, bytes = sizeof(RbcValueActivation);
+    /* A borrowed raw description can still use the ordinary typed receiver.
+     * Only the exact immutable executable owner supplies the closed window. */
+    size_t regions=xr_rbc_module_code_owner(module) && code->array_regions ? code->array_regions->region_count : 0;
     if (!rbc_value_capacities(code,&leaves,&rows,&snapshots) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(const uint8_t *)) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueCapture)) ||
         !rbc_value_extent(&bytes,leaves,sizeof(XrtPlaceEdge)) ||
         !rbc_value_extent(&bytes,rows,sizeof(RbcValuePublication)) || !rbc_value_extent(&bytes,snapshots,1) ||
+        !rbc_value_extent(&bytes,regions,sizeof(RbcArrayRegionState)) ||
         !rbc_value_extent(&bytes,code->homes && !code->homes->owned_frame_needed ? code->homes->frame.payload_size : 0,1))
         xrt_native_managed_failure(XRT_MANAGED_OVERFLOW,source);
     void *memory = NULL;
@@ -219,6 +233,10 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     RBC_VALUE_PART(edges,leaves,XrtPlaceEdge);
     RBC_VALUE_PART(publications,rows,RbcValuePublication);
     RBC_VALUE_PART(snapshots,snapshots,uint8_t);
+    if (regions) {
+        RBC_VALUE_PART(array_regions,regions,RbcArrayRegionState);
+        memset(activation->array_regions,0,regions*sizeof(RbcArrayRegionState));
+    }
     if (code->homes && !code->homes->owned_frame_needed && code->homes->frame.payload_size) {
         RBC_VALUE_PART(payload,code->homes->frame.payload_size,uint8_t);
         memset(activation->payload,0,code->homes->frame.payload_size);
@@ -908,6 +926,7 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
     return XR_RBC_OK;
 }
 #include "xrbc_value_array_execute.inc.c"
+#include "xrbc_value_array_region.inc.c"
 #include "xrbc_value_cell_execute.inc.c"
 #include "xrbc_value_slice_execute.inc.c"
 #include "xrbc_value_map_execute.inc.c"
@@ -935,6 +954,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     }
     if (!activation || activation->depth!=stack->depth || index>=activation->code->access_count) return XR_RBC_INVALID;
     XrRbcValueAccess access=activation->code->accesses[index];
+    XrtManagedStatus region_status=XRT_MANAGED_OK;
+    if (rbc_value_array_region_before(module,stack,activation,access,&region_status)) {
+        if (region_status!=XRT_MANAGED_OK) xrt_native_managed_failure(region_status,source);
+        stack->frames[stack->depth-1].pc=pc;
+        return XR_RBC_OK;
+    }
     if (rbc_value_array_forward(module,activation,index,pc)) {
         stack->frames[stack->depth-1].pc=pc+1;
         return XR_RBC_OK;
@@ -983,6 +1008,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation==XR_RBC_VALUE_DISPLAY) status=rbc_value_display(module,stack,activation,access,source);
     else return XR_RBC_INVALID;
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+    rbc_value_array_region_after(activation,access);
     stack->frames[stack->depth-1].pc=pc;
     return XR_RBC_OK;
 }

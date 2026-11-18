@@ -1,0 +1,130 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xrbc_value_array_region.inc.c - Borrowed windows over actual activation owners
+ */
+static void rbc_value_array_region_forget(RbcValueActivation *activation,uint32_t region,RbcArrayRegionPhase phase) {
+    RbcArrayRegionState *state=&activation->array_regions[region-1];
+    *state=(RbcArrayRegionState){.phase=phase};
+    if (activation->active_array_region==region) activation->active_array_region=0;
+}
+static void rbc_value_array_region_move(RbcValueActivation *activation,const XrLirArrayRegionMove *move,
+    const XrtArrayI64RegionCache *cache) {
+    const XrtArrayI64RegionSlot *slots=activation->code->array_regions->slots;
+    XrtManagedHeader **from=(XrtManagedHeader **)(activation->payload+slots[move->source_slot].offset);
+    XrtManagedHeader **to=(XrtManagedHeader **)(activation->payload+slots[move->target_slot].offset);
+    *to=cache->owner; *from=NULL;
+}
+static XrtManagedStatus rbc_value_array_region_edge(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,XrRbcValueAccess access,const XrLirArrayRegionMove *move,
+    const XrtArrayI64RegionCache *cache) {
+    const XrRbcValueCode *code=activation->code;
+    const XrLirHomeEdge *edge=&code->homes->edges[access.index];
+    RbcValueEdgeBuilder builder={.module=module,.stack=stack,.activation=activation};
+    activation->publication_count=0;
+    XrtManagedStatus status=XRT_MANAGED_OK;
+    for (size_t n=0;status==XRT_MANAGED_OK && n<edge->count;++n) {
+        const XrLirHomeTransfer *transfer=&code->homes->transfers[edge->first+n];
+        if (transfer->source==move->step.source && transfer->target==move->step.target) {
+            size_t bytes=code->homes->values[transfer->target].size;
+            if (builder.rows>=activation->publication_capacity || builder.bytes>activation->snapshot_capacity ||
+                bytes>activation->snapshot_capacity-builder.bytes) return XRT_MANAGED_ARGUMENT;
+            ++builder.rows; builder.bytes+=bytes;
+        } else status=rbc_value_edge_pair(&builder,transfer->source,transfer->target,transfer->transfer_mode,transfer);
+    }
+    for (uint32_t n=0;status==XRT_MANAGED_OK && n<access.count;++n) {
+        uint32_t source=code->arguments[access.first+(size_t)n*2],target=code->arguments[access.first+(size_t)n*2+1];
+        const XrLirValueHome *home=rbc_value_home(code,target);
+        if (home && home->type) continue;
+        status=rbc_value_edge_pair(&builder,source,target,XR_LIR_OWNERSHIP_TRANSFER_BORROW,NULL);
+    }
+    if (status!=XRT_MANAGED_OK) return status;
+    /* The common edge has one Array and only scalar parallel arguments.
+     * Snapshot all scalars before either the real owner or scalar publication. */
+    if (builder.owners) return XRT_MANAGED_ARGUMENT;
+    rbc_value_array_region_move(activation,move,cache);
+    rbc_value_publication(activation);
+    return XRT_MANAGED_OK;
+}
+static bool rbc_value_array_region_access(XrRbcStack *stack,RbcValueActivation *activation,
+    const XrLirArrayRegionAccess *access,RbcArrayRegionState *state,XrtManagedStatus *status) {
+    XrRbcRegister *output=access->result ? rbc_value_register(stack,activation,access->result) : NULL;
+    if (access->operation==XR_LIR_ARRAY_OP_LEN) {
+        if (!output) *status=XRT_MANAGED_ARGUMENT;
+        else output->bits=(uint64_t)state->cache.length;
+        return true;
+    }
+    XrRbcRegister *index=rbc_value_register(stack,activation,access->index);
+    XrRbcRegister *item=access->item ? rbc_value_register(stack,activation,access->item) : NULL;
+    if (!index || (access->operation==XR_LIR_ARRAY_OP_GET ? !output : !item)) {
+        *status=XRT_MANAGED_ARGUMENT; return true;
+    }
+    int64_t at; memcpy(&at,&index->bits,sizeof(at));
+    if (at<0 || (uint64_t)at>=(uint64_t)state->cache.length) return false;
+    unsigned char *element=state->cache.elements+(size_t)at*sizeof(int64_t);
+    if (access->operation==XR_LIR_ARRAY_OP_GET) memcpy(&output->bits,element,sizeof(output->bits));
+    else memcpy(element,&item->bits,sizeof(item->bits));
+    return true;
+}
+static bool rbc_value_array_region_before(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,XrRbcValueAccess access,XrtManagedStatus *status) {
+    /* Raw modules may borrow the same numeric descriptions, but never receive
+     * these states: their mutable CFG cannot borrow the producer's window. */
+    if (!activation->array_regions) return false;
+    if (activation->active_array_region && activation->active_array_region!=access.array_region)
+        rbc_value_array_region_forget(activation,activation->active_array_region,RBC_ARRAY_REGION_BYPASS);
+    if (!access.array_region) return false;
+    const XrLirArrayRegionBindings *bindings=activation->code->array_regions;
+    const XrLirArrayRegionBinding *region=&bindings->regions[access.array_region-1];
+    RbcArrayRegionState *state=&activation->array_regions[access.array_region-1];
+    if (access.operation==XR_RBC_VALUE_EDGE) {
+        const XrLirArrayRegionEdge *edge=&bindings->edges[access.index];
+        const XrLirArrayRegionMove *move=&bindings->moves[edge->move-1];
+        if (edge->kind==XR_LIR_ARRAY_REGION_EDGE_ENTRY) {
+            rbc_value_array_region_forget(activation,access.array_region,RBC_ARRAY_REGION_COLD); return false;
+        }
+        if (state->phase==RBC_ARRAY_REGION_ELIGIBLE && move->step.block==region->region.header &&
+            edge->kind==XR_LIR_ARRAY_REGION_EDGE_BODY) {
+            const XrtArrayI64RegionContext context={activation->frame,activation->payload,
+                &activation->frame_locations,&activation->code->homes->frame};
+            const XrtArrayI64RegionSpec spec={bindings->slots+region->first_slot,region->slot_count,
+                region->canonical_slot-region->first_slot};
+            if (xrt_array_i64_region_try_begin(&context,&spec,state->completed_set,&state->cache)) {
+                state->phase=RBC_ARRAY_REGION_ACTIVE; activation->active_array_region=access.array_region;
+            } else rbc_value_array_region_forget(activation,access.array_region,RBC_ARRAY_REGION_BYPASS);
+        }
+        if (state->phase!=RBC_ARRAY_REGION_ACTIVE) return false;
+        *status=rbc_value_array_region_edge(module,stack,activation,access,move,&state->cache);
+        if (*status!=XRT_MANAGED_OK || edge->kind==XR_LIR_ARRAY_REGION_EDGE_EXIT)
+            rbc_value_array_region_forget(activation,access.array_region,RBC_ARRAY_REGION_BYPASS);
+        return true;
+    }
+    if (state->phase!=RBC_ARRAY_REGION_ACTIVE) return false;
+    XrLirArrayRegionOperation operation=access.region_operation;
+    if (operation.move) rbc_value_array_region_move(activation,&bindings->moves[operation.move-1],&state->cache);
+    else if (operation.access) {
+        if (!rbc_value_array_region_access(stack,activation,&bindings->accesses[operation.access-1],state,status)) {
+            /* Resume this exact ordinary operation with its RHS and real
+             * current owner intact. No prefix or consumed pair is replayed. */
+            rbc_value_array_region_forget(activation,access.array_region,RBC_ARRAY_REGION_BYPASS); return false;
+        }
+    }
+    if (*status!=XRT_MANAGED_OK) rbc_value_array_region_forget(activation,access.array_region,RBC_ARRAY_REGION_BYPASS);
+    return true;
+}
+static void rbc_value_array_region_after(RbcValueActivation *activation,XrRbcValueAccess access) {
+    if (!activation->array_regions || !access.array_region) return;
+    RbcArrayRegionState *state=&activation->array_regions[access.array_region-1];
+    const XrLirArrayRegionBindings *bindings=activation->code->array_regions;
+    if (access.operation==XR_RBC_VALUE_EDGE) {
+        XrLirArrayRegionEdgeKind kind=bindings->edges[access.index].kind;
+        if (kind==XR_LIR_ARRAY_REGION_EDGE_LATCH && state->phase==RBC_ARRAY_REGION_COLD && state->completed_set)
+            state->phase=RBC_ARRAY_REGION_ELIGIBLE;
+        if (kind==XR_LIR_ARRAY_REGION_EDGE_EXIT)
+            rbc_value_array_region_forget(activation,access.array_region,RBC_ARRAY_REGION_BYPASS);
+    } else if (access.region_operation.access && state->phase==RBC_ARRAY_REGION_COLD &&
+        bindings->accesses[access.region_operation.access-1].operation==XR_LIR_ARRAY_OP_SET) state->completed_set=true;
+}
