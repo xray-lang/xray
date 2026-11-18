@@ -29,7 +29,7 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
     XrLirBlock current=test_block(c.module,*root,NULL,0); OK(xr_lir_set_entry(c.module,*root,current));
     XrLirValue result={0};
     for (unsigned loop=0;loop<loops;++loop) {
-        XrLirBlock header=rbc_region_block(&c,*root),body=rbc_region_block(&c,*root),exit=rbc_region_block(&c,*root);
+        XrLirBlock header=rbc_region_block(&c,*root),body=rbc_region_block(&c,*root),exit_block=rbc_region_block(&c,*root);
         XrLirValue seed=ca_constant(&c,current,7),values[]={
             ca_intrinsic(&c,current,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,&seed,1),ca_constant(&c,current,0),
             ca_constant(&c,current,11),ca_constant(&c,current,22)};
@@ -41,7 +41,7 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
         XrLirValue condition={0}; OK(xr_lir_emit_value(c.module,header,&(XrLirInstruction){.op=XR_LIR_ICMP,
             .type=XR_LIR_I1,.predicate=XR_LIR_LT,.operands=compare,.operand_count=2},&condition));
         OK(xr_lir_set_terminator(c.module,header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
-            .operands=&condition,.operand_count=1,.edge_count=2,.edges={{body,values,4},{exit,values,4}}}));
+            .operands=&condition,.operand_count=1,.edge_count=2,.edges={{body,values,4},{exit_block,values,4}}}));
         rbc_region_parameters(&c,body,values);
         XrLirValue zero=ca_constant(&c,body,0),get[]={values[0],failure==1 ? values[1] : zero};
         XrLirValue item=ca_intrinsic(&c,body,XR_LIR_ARRAY_OP_GET,XR_LIR_I64,get,2);
@@ -57,10 +57,10 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
         XrLirValue swap[]={values[0],values[1],values[3],values[2]};
         OK(xr_lir_set_terminator(c.module,body,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
             .edge_count=1,.edges={{header,swap,4}}}));
-        rbc_region_parameters(&c,exit,values); XrLirValue at[]={values[0],ca_constant(&c,exit,0)};
-        result=ca_intrinsic(&c,exit,XR_LIR_ARRAY_OP_GET,XR_LIR_I64,at,2); ca_effect(&c,exit,XR_LIR_ARRAY_DROP,values[0]);
-        result=ca_binary(&c,exit,XR_LIR_ADD,result,ca_binary(&c,exit,XR_LIR_MUL,values[2],ca_constant(&c,exit,100)));
-        result=ca_binary(&c,exit,XR_LIR_ADD,result,values[3]); current=exit;
+        rbc_region_parameters(&c,exit_block,values); XrLirValue at[]={values[0],ca_constant(&c,exit_block,0)};
+        result=ca_intrinsic(&c,exit_block,XR_LIR_ARRAY_OP_GET,XR_LIR_I64,at,2); ca_effect(&c,exit_block,XR_LIR_ARRAY_DROP,values[0]);
+        result=ca_binary(&c,exit_block,XR_LIR_ADD,result,ca_binary(&c,exit_block,XR_LIR_MUL,values[2],ca_constant(&c,exit_block,100)));
+        result=ca_binary(&c,exit_block,XR_LIR_ADD,result,values[3]); current=exit_block;
     }
     ca_return(&c,current,result); OK(xr_lir_module_finish(c.module,NULL)); return c.module;
 }
