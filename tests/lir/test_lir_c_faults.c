@@ -453,6 +453,20 @@ static void map_literal_memory_boundaries(void) {
         !strstr(output.bytes, "zap-fault.xr") && output.entry_result == XR_LIR_I64);
     xr_lir_c_output_free(&output); CHECK(!runtime_live && !runtime_bytes);
 }
+static XrLirFunction array_helper_root(ArraySetRegionFixture *input) {
+    static const char name[] = "array_helper_root";
+    XrLirFunction root = {0}; XrLirBlock block = {0}; XrLirValue start = {0}, result = {0};
+    OK(xr_lir_declare_function(input->module,&(XrLirFunctionSpec){.name=name,.name_length=sizeof(name) - 1,
+        .result=XR_LIR_I64},&root));
+    OK(xr_lir_define_function(input->module,root));
+    OK(xr_lir_add_block(input->module,root,NULL,0,&block)); OK(xr_lir_set_entry(input->module,root,block));
+    OK(xr_lir_emit_value(input->module,block,&(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=0},&start));
+    OK(xr_lir_emit_value(input->module,block,&(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_I64,
+        .callee=input->function,.operands=&start,.operand_count=1},&result));
+    OK(xr_lir_set_terminator(input->module,block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+        .operands=&result,.operand_count=1}));
+    return root;
+}
 static void array_helper_boundaries(void) {
     const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT,ARRAY_REGION_RANGE_C_HEADER_LIVEOUT,
         ARRAY_REGION_RANGE_NEXT_COPIES,ARRAY_REGION_RANGE_STEP_TWO,ARRAY_REGION_RANGE_PARALLEL_BAD};
@@ -461,11 +475,12 @@ static void array_helper_boundaries(void) {
     for (size_t n = 0; n <= mode_count; ++n) {
         bool dual = n == mode_count;
         ArraySetRegionFixture input = dual ? array_region_binding_two_loops(false,false,true) :
-            ars_range_build(NULL,n == 0 ? 1 : 3,modes[n]);
+            ars_range_build(NULL,n == 0 ? 8 : 3,modes[n]);
+        XrLirFunction root = dual ? input.function : array_helper_root(&input);
         if (!dual) OK(xr_lir_module_finish(input.module,NULL));
         XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
         XrCompileResources *resources = sdk_ledger(&limits);
-        XrLirCRequest request = {input.module,input.function,resources,"array-helper-publication",NULL};
+        XrLirCRequest request = {input.module,root,resources,"array-helper-publication",NULL};
         XrLirCOutput output = {0};
         if (!n) output = memory_boundaries(&request);
         else {
