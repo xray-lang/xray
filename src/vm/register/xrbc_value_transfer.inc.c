@@ -309,6 +309,9 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         return true;
     case XR_RBC_VALUE_STRING_PRINT:
         return true;
+    case XR_RBC_VALUE_ASSERT_CONDITION:
+        return rbc_value_flow_bits(state,code,access.source) &&
+            rbc_value_flow_read(state,code,access.other,&incoming);
     default: return false;
     }
 }
