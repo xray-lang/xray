@@ -119,6 +119,16 @@ static void c_array_push_edge_end(LirC *c, size_t edge) {
         c_format(c,"    xrl_ap_%zu_ready = %s;\n",(size_t)role.region-1,
             role.kind == XR_LIR_ARRAY_REGION_EDGE_LATCH ? "true" : "false");
 }
+static size_t c_array_push_window_at(const LirC *c) {
+    if (!c_array_push_present(c) || c->array_helper_active) return 0;
+    const XrLirArrayRegionBindings *binding = c->array_region->push_windows;
+    if (c->block >= binding->block_index_count) return 0;
+    size_t window = binding->block_index[c->block].region;
+    if (!window) return 0;
+    const XrLirArrayRegionBinding *row = &binding->regions[window - 1];
+    return row->slot_count && row->region.primary_block == c->block &&
+        row->region.primary_instruction == c->instruction ? window : 0;
+}
 /* Enter only at the original condition, with the real owner in its header
  * home. A successful segment has exactly one observable checkpoint: the
  * next ordinary header, with its scalar induction and Array length updated. */

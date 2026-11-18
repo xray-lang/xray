@@ -108,7 +108,7 @@ XRAY_API XrtBillingStats xrt_billing_owner_stats(const XrtBillingOwner *owner) {
 
 /* Only the reservation holds the index lock. Provider calls can reenter binding
  * or release independently owned metadata; in-flight reservations stay charged. */
-static XrtManagedStatus billing_allocate(XrtBillingOwner *owner, size_t bytes, void **out) {
+static XrtManagedStatus billing_reserve(XrtBillingOwner *owner, size_t bytes) {
     billing_lock(owner);
     size_t held = atomic_load(&owner->bytes), budget = atomic_load(&owner->fail_after);
     XrtManagedStatus status = atomic_load(&owner->closed) ? XRT_MANAGED_CLOSED :
@@ -122,12 +122,24 @@ static XrtManagedStatus billing_allocate(XrtBillingOwner *owner, size_t bytes, v
         if (budget != SIZE_MAX) atomic_store(&owner->fail_after, budget - 1);
     }
     billing_unlock(owner);
+    return status;
+}
+static void billing_refund(XrtBillingOwner *owner, size_t bytes) {
+    size_t blocks = atomic_fetch_sub(&owner->blocks, 1);
+    size_t held = atomic_fetch_sub(&owner->bytes, bytes);
+    XR_CHECK(blocks > 1 && held >= bytes + sizeof(*owner), "every allocation refunds its original billing owner");
+}
+static void billing_failed_allocation(XrtBillingOwner *owner, size_t bytes) {
+    atomic_fetch_sub(&owner->bytes, bytes);
+    atomic_fetch_sub(&owner->blocks, 1);
+    atomic_fetch_sub(&owner->allocations, 1);
+}
+static XrtManagedStatus billing_allocate(XrtBillingOwner *owner, size_t bytes, void **out) {
+    XrtManagedStatus status = billing_reserve(owner, bytes);
     if (status != XRT_MANAGED_OK) return status;
     void *memory = owner->allocator.allocate(owner->allocator.context, bytes);
     if (!memory) {
-        atomic_fetch_sub(&owner->bytes, bytes);
-        atomic_fetch_sub(&owner->blocks, 1);
-        atomic_fetch_sub(&owner->allocations, 1);
+        billing_failed_allocation(owner, bytes);
         return XRT_MANAGED_OOM;
     }
     *out = memory;
@@ -135,9 +147,7 @@ static XrtManagedStatus billing_allocate(XrtBillingOwner *owner, size_t bytes, v
 }
 static void billing_free(XrtBillingOwner *owner, void *memory, size_t bytes) {
     owner->allocator.deallocate(owner->allocator.context, memory, bytes);
-    size_t blocks = atomic_fetch_sub(&owner->blocks, 1);
-    size_t held = atomic_fetch_sub(&owner->bytes, bytes);
-    XR_CHECK(blocks > 1 && held >= bytes + sizeof(*owner), "every allocation refunds its original billing owner");
+    billing_refund(owner, bytes);
 }
 
 XRAY_API XrtManagedStatus xrt_managed_metadata_allocate(XrtBillingOwner *owner, size_t bytes, void **empty) {
@@ -318,6 +328,48 @@ static bool allocation_children(const XrtRuntimeTypeSpec *spec, size_t bytes, si
         return false;
     *count = spec->child_count + capacity * spec->tail_child_count;
     return true;
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_grow_unique_scalar_tail(XrtManagedHeader **binding,
+    XrtManagedOps *expected, size_t bytes, XrtManagedHeader **grown) {
+    if (!binding || !*binding || !expected || !grown || *grown || binding == grown)
+        return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *value = *binding;
+    XrtBillingOwner *billing = expected->billing;
+    if (value->ops != expected || billing->allocator.allocate != default_allocate ||
+        xr_signed_rc_read(&value->references) != 1 ||
+        atomic_load_explicit(&value->flags, memory_order_relaxed)) return XRT_MANAGED_OK;
+    const XrtRuntimeTypeSpec *spec = &expected->plan->spec;
+    size_t previous, children;
+    if (!spec->stride || spec->child_count || spec->tail_child_count || spec->drop_payload ||
+        !allocation_extent(expected->plan, value, &previous) || previous >= bytes ||
+        !allocation_children(spec, bytes, &children)) return XRT_MANAGED_ARGUMENT;
+
+    /* Preserve the replacement factory's reference and full quota checks.
+     * The live binding still owns its original leases through the resize. */
+    if (!xrt_managed_ops_retain(expected)) return XRT_MANAGED_REFCOUNT;
+    if (!xrt_billing_owner_retain(billing)) {
+        xrt_managed_ops_drop(expected);
+        return XRT_MANAGED_REFCOUNT;
+    }
+    XrtManagedStatus status = billing_reserve(billing, bytes);
+    if (status == XRT_MANAGED_OK) {
+        XrtManagedHeader *replacement = xr_realloc(value, bytes);
+        if (!replacement) {
+            billing_failed_allocation(billing, bytes);
+            status = XRT_MANAGED_OOM;
+        } else {
+            size_t capacity = (bytes - spec->fixed_size) / spec->stride;
+            xr_signed_rc_initialize(&replacement->references);
+            atomic_init(&replacement->flags, 0);
+            memcpy((unsigned char *)replacement + spec->capacity_offset, &capacity, sizeof(capacity));
+            *binding = replacement;
+            *grown = replacement;
+            billing_refund(billing, previous);
+        }
+    }
+    xrt_billing_owner_drop(billing);
+    xrt_managed_ops_drop(expected);
+    return status;
 }
 static const uint32_t retirement_cursor = UINT32_C(0x80000000);
 _Static_assert(sizeof(size_t) <= sizeof(XrtManagedHeader *), "a dead child slot holds its cursor bytes");

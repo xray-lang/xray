@@ -146,8 +146,25 @@ static XrtManagedStatus array_binding_try(XrtManagedHeader *value, void *context
     binding->source=(XrtArrayBacking *)value;
     return xrt_array_backing_try_update(binding->source,binding->update,&binding->applied);
 }
-XR_FUNCDEF XrtManagedStatus xrt_array_update_place(XrtPlace binding, XrtBackingArrayKind kind,
-    XrtManagedFrame *frame, size_t temporary, const XrtBackingTypes *types, const XrtArrayUpdate *update) {
+static XrtManagedStatus array_grow_local_i64(const XrtManagedSlotReservation *reservation,
+    const XrtBackingTypes *types, ArrayBindingUpdate *edit) {
+    size_t length = edit->source->length, capacity = 0;
+    XrtManagedStatus status = array_capacity(edit->source->capacity, length + 1, sizeof(int64_t), &capacity);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtManagedHeader *grown = NULL;
+    status = xrt_managed_slot_reserved_grow_scalar_tail(reservation, types->arrays[XRT_BACKING_ARRAY_I64],
+        sizeof(XrtArrayBacking) + capacity * sizeof(int64_t), &grown);
+    if (status != XRT_MANAGED_OK || !grown) return status;
+    XrtArrayBacking *array = (XrtArrayBacking *)grown;
+    memcpy(array->elements + length * sizeof(int64_t), &edit->update->item.value.i64, sizeof(int64_t));
+    array->length = length + 1;
+    edit->source = NULL;
+    edit->applied = true;
+    return XRT_MANAGED_OK;
+}
+static XrtManagedStatus array_update_place(XrtPlace binding, XrtBackingArrayKind kind,
+    XrtManagedFrame *frame, size_t temporary, const XrtBackingTypes *types, const XrtArrayUpdate *update,
+    bool allow_growth) {
     if (!xrt_backing_array_stride(kind) || !update || kind!=update->item.kind ||
         !types || !types->arrays[kind]) return XRT_MANAGED_ARGUMENT;
     XrtPlaceReplacement replacement={0};
@@ -155,6 +172,9 @@ XR_FUNCDEF XrtManagedStatus xrt_array_update_place(XrtPlace binding, XrtBackingA
     if (status!=XRT_MANAGED_OK) return status;
     ArrayBindingUpdate edit={.update=update};
     status=xrt_managed_slot_reserved_apply(&replacement,array_binding_try,&edit);
+    if (status == XRT_MANAGED_OK && !edit.applied && allow_growth &&
+        edit.source->length == edit.source->capacity)
+        status = array_grow_local_i64(&replacement, types, &edit);
     if (status==XRT_MANAGED_OK && !edit.applied) {
         status=array_update_create(frame,temporary,types,edit.source,update,&replacement);
         if (status==XRT_MANAGED_OK) status=xrt_place_replacement_publish(&replacement);
@@ -162,6 +182,16 @@ XR_FUNCDEF XrtManagedStatus xrt_array_update_place(XrtPlace binding, XrtBackingA
     XR_CHECK(xrt_place_replacement_end(&replacement)==XRT_MANAGED_OK,
         "every registered update releases its actual domains after cleanup");
     return status;
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_update_place(XrtPlace binding, XrtBackingArrayKind kind,
+    XrtManagedFrame *frame, size_t temporary, const XrtBackingTypes *types, const XrtArrayUpdate *update) {
+    return array_update_place(binding, kind, frame, temporary, types, update, false);
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_push_local_i64(XrtPlace binding, size_t temporary,
+    const XrtBackingTypes *types, int64_t item) {
+    if (!binding.frame || binding.external) return XRT_MANAGED_ARGUMENT;
+    const XrtArrayUpdate update = {XRT_ARRAY_UPDATE_PUSH, 0, {XRT_BACKING_ARRAY_I64, {.i64=item}}};
+    return array_update_place(binding, XRT_BACKING_ARRAY_I64, binding.frame, temporary, types, &update, true);
 }
 XR_FUNCDEF XrtManagedStatus xrt_array_backing_get(const XrtArrayBacking *array,
     XrtBackingArrayKind kind, int64_t index, XrtArrayItem *output) {

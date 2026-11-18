@@ -49,6 +49,11 @@ XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_begin(XrtManagedFrame *, size
  * Reentrant use of the registered handle is rejected during every callback. */
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_apply(XrtManagedSlotReservation *,
     XrtManagedReservedApply, void *);
+/* Grow only the registered local binding during an empty reservation. The
+ * caller has ended old payload borrows and must initialize newly used elements
+ * before ending the reservation. An empty output leaves the old owner intact. */
+XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_grow_scalar_tail(const XrtManagedSlotReservation *,
+    XrtManagedOps *expected, size_t bytes, XrtManagedHeader **grown);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_prepare(const XrtManagedSlotReservation *,
     XrtManagedOps *, size_t, XrtManagedHeader **);
 /* As above, with a scalar tail the factory initializes before publication. */
