@@ -622,12 +622,12 @@ static void array_helper_owner_exit(const char *text) {
 }
 static void array_helper_boundaries(void) {
     const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT,ARRAY_REGION_RANGE_C_HEADER_LIVEOUT,
-        ARRAY_REGION_RANGE_NEXT_COPIES,ARRAY_REGION_RANGE_STEP_TWO,ARRAY_REGION_RANGE_PARALLEL_BAD};
+        ARRAY_REGION_RANGE_NEXT_COPIES,ARRAY_REGION_RANGE_STEP_TWO,ARRAY_REGION_RANGE_PARALLEL_BAD,ARRAY_REGION_RANGE_READ_ONLY};
     (void)ars_range_same; (void)ars_range_digest; (void)ars_owner_home_same; (void)ars_owner_home_digest;
     (void)array_set_region_fixture;
     size_t mode_count = sizeof(modes) / sizeof(*modes);
     for (size_t n = 0; n <= mode_count; ++n) {
-        bool dual = n == mode_count;
+        bool dual = n == mode_count, readonly = !dual && modes[n] == ARRAY_REGION_RANGE_READ_ONLY;
         ArraySetRegionFixture input = dual ? array_region_binding_two_loops(false,false,true) :
             ars_range_build(NULL,n == 0 ? 8 : 3,modes[n]);
         XrLirFunction root = dual ? input.function : array_helper_root(&input);
@@ -636,9 +636,9 @@ static void array_helper_boundaries(void) {
         XrCompileResources *resources = sdk_ledger(&limits);
         XrLirCRequest request = {input.module,root,resources,"array-helper-publication",NULL};
         XrLirCOutput output = {0};
-        if (!n) {
+        if (!n || readonly) {
             output = memory_boundaries(&request);
-            CHECK(strstr(output.bytes,"xrt_array_i64_local_prepare(") && strstr(output.bytes,"XrlArrayLocals_"));
+            if (!n) CHECK(strstr(output.bytes,"xrt_array_i64_local_prepare(") && strstr(output.bytes,"XrlArrayLocals_"));
         }
         else {
             XrLirCDiagnostic diagnostic = {0};
@@ -646,7 +646,7 @@ static void array_helper_boundaries(void) {
             if (status != XR_LIR_C_OK) fprintf(stderr,"array helper status%u: %s\n",(unsigned)status,diagnostic.message);
             CHECK(status == XR_LIR_C_OK);
         }
-        bool helper = n < 3 || dual;
+        bool helper = n < 3 || dual || readonly;
         CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_payload") != NULL) == helper);
         CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_elements") != NULL) == helper);
         CHECK(strstr(output.bytes,"xrt_array_i64_region_try_begin") && strstr(output.bytes,"xrl_ar_0_phase == 1"));
