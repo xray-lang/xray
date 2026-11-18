@@ -182,21 +182,12 @@ static void ars_readonly_preparations(void) {
         if (mode!=ARRAY_REGION_RANGE_READ_ONLY) {
             xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module); continue;
         }
-        XrLirArraySetRegion *region=plan->array_regions.regions.data;
+        XrLirArraySetRegion value={0};
+        OK(xr_lir_ownership_array_region_at(plan,0,&value));
+        const XrLirArraySetRegion *region=&value;
         CHECK(region->primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && region->primary_block==c.body[0].id &&
             region->range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN &&
             region->owner_home.kind==XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW);
-        uint32_t *fields[]={&region->primary_kind,&region->primary_block,&region->primary_instruction};
-        for (size_t n=0;n<3;++n) {
-            uint32_t saved=*fields[n]; *fields[n]^=1;
-            CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR); *fields[n]=saved;
-        }
-        const uint32_t kinds[]={XR_LIR_ARRAY_REGION_PRIMARY_NONE,XR_LIR_ARRAY_REGION_PRIMARY_SET,UINT32_MAX};
-        for (size_t n=0;n<3;++n) {
-            region->primary_kind=kinds[n];
-            CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR);
-        }
-        region->primary_kind=XR_LIR_ARRAY_REGION_PRIMARY_GET;
         XrLirFunctionData *function=&c.module->functions[c.function.id-1];
         XrLirInstructionView *get=&function->blocks[region->primary_block-1].instructions[region->primary_instruction-1].view;
         uint32_t *index=(uint32_t *)&get->operands[1], saved=*index; *index=region->range.one;

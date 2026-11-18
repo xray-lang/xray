@@ -204,6 +204,37 @@ static void array_region_range_tampering(void) {
         CHECK(!live && !live_bytes);
     }
 }
+static void array_region_readonly_tampering(void) {
+    ArraySetRegionFixture c=ars_range_build(NULL,3,ARRAY_REGION_RANGE_READ_ONLY);
+    OK(xr_lir_module_finish(c.module,NULL));
+    XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
+    CHECK(plan->array_regions.regions.count == 1);
+    size_t baseline = live, bytes = live_bytes;
+    XrLirArraySetRegion *region=plan->array_regions.regions.data;
+    CHECK(region->primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && region->primary_block==c.body[0].id &&
+        region->range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN &&
+        region->owner_home.kind==XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW);
+    uint32_t *fields[]={&region->primary_kind,&region->primary_block,&region->primary_instruction};
+    for (size_t n=0;n<3;++n) {
+        uint32_t saved=*fields[n]; *fields[n]^=1;
+        CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR &&
+            live == baseline && live_bytes == bytes);
+        *fields[n]=saved;
+    }
+    const uint32_t kinds[]={XR_LIR_ARRAY_REGION_PRIMARY_NONE,XR_LIR_ARRAY_REGION_PRIMARY_SET,UINT32_MAX};
+    for (size_t n=0;n<3;++n) {
+        region->primary_kind=kinds[n];
+        CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR &&
+            live == baseline && live_bytes == bytes);
+    }
+    region->primary_kind=XR_LIR_ARRAY_REGION_PRIMARY_GET;
+    OK(xr_lir_ownership_array_regions_verify(c.module,plan));
+    CHECK(live == baseline && live_bytes == bytes);
+    xr_lir_ownership_plan_destroy(plan);
+    xr_lir_module_destroy(c.module);
+    CHECK(!live && !live_bytes);
+}
 static void array_region_input_equal(const XrLirModule *input, const XrLirModule *reference) {
     CHECK(input->function_count == reference->function_count);
     for (uint32_t f = 0; f < input->function_count; ++f) {
@@ -297,6 +328,7 @@ int main(void) {
     sweep(retired.module,NULL,0);
     array_region_tampering();
     array_region_range_tampering();
+    array_region_readonly_tampering();
     array_region_verification_faults(false);
     array_region_verification_faults(true);
     array_region_verification_faults(2);
