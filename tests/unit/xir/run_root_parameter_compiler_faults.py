@@ -338,7 +338,7 @@ def main():
     executable = args.executable.resolve(strict=True)
     fixtures = args.fixtures_root.resolve(strict=True)
     run = Run(executable, deadline)
-    complete, baseline = False, []
+    complete, baseline, summary = False, [], ""
     try:
         identity = sha(executable, deadline)
         run.manifest.update(executable=str(executable), binary_sha256=identity, fixtures_root=str(fixtures))
@@ -366,8 +366,7 @@ def main():
                     summaries.append(f"H1 Source {name} full same-ledger pipeline compilerOOM={row['sites']} sites={row['sites']} "
                                      f"mode=all observed allocated={row['allocated']} peak={row['peak']} allocations={row['allocations']} "
                                      "held-minus/exact/plus/physicalbaseline PASS\n")
-                sys.stderr.write("".join(summaries))
-                remaining(deadline)
+                summary = "".join(summaries)
             print(f"Root compiler evidence: {run.root}", flush=True)
             run.manifest.update(qualified=complete, seconds=time.monotonic() - STARTED)
             run.publish()
@@ -376,6 +375,10 @@ def main():
             complete = False
             run.manifest.update(qualified=False, failure=f"{type(error).__name__}: {error}")
             run.publish()
+    # Successful summaries are the final output. Earlier evidence, deadline or
+    # drain failures must never leave the original all-ordinal PASS text behind.
+    if complete:
+        sys.stderr.write(summary)
     return 0 if complete else 1
 
 
