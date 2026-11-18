@@ -13,6 +13,21 @@
 static bool lir_callable_array_shape(XrLirType type, XrLirType element) {
     return xr_lir_internal_array_type(type) ? xr_lir_internal_array_element(element) : !element;
 }
+XR_FUNC bool xr_lir_assertion_entry_signature(const XrLirType *parameters, uint32_t count,
+    XrLirType result) {
+    return result == XR_LIR_UNIT && count == 2 && parameters &&
+        parameters[0] == XR_LIR_I1 && parameters[1] == XR_LIR_STRING;
+}
+XR_FUNC bool xr_lir_callable_invocation_source(const XrLirCallableType *signature) {
+    if (!signature || signature->parameter_count != 2 || !signature->parameters ||
+        signature->throws || signature->result_element || (signature->flags & XR_LIR_CALLABLE_C_ABI))
+        return false;
+    XrLirType parameters[] = {signature->parameters[0].type, signature->parameters[1].type};
+    for (uint32_t p = 0; p < 2; ++p)
+        if (signature->parameters[p].mode != XR_PARAM_READ || signature->parameters[p].escaping ||
+            signature->parameters[p].array_element) return false;
+    return xr_lir_assertion_entry_signature(parameters, 2, signature->result);
+}
 
 static bool lir_callable_signature_valid(const XrLirModule *m, const XrLirCallableType *type,
     uint32_t ordinal) {

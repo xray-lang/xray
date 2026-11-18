@@ -126,7 +126,7 @@ static XrRbcStatus rbc_borrowed_values_admit(const XrRbcModule *module) {
     }
     const XrRbcCallableEntry *entries=module->borrowed_callable_entries;
     for (size_t n=0;n<module->function_count;++n) {
-        if (entries && (entries[n].physical_function!=n || (entries[n].signature_type &&
+        if (entries && (entries[n].kind!=XR_RBC_CALLABLE_ENTRY_CODE || entries[n].physical_function!=n || (entries[n].signature_type &&
             (!image || entries[n].signature_type>image->type_count ||
              image->types[entries[n].signature_type-1].kind!=XRT_VALUE_FUNCTION)) || entries[n].environment_type)) return XR_RBC_INVALID;
         const XrRbcValueCode *code=module->borrowed_value_codes[n];

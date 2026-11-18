@@ -104,7 +104,8 @@ typedef enum XrLirExternKind {
     XR_LIR_EXTERN_CLOCK_REALTIME,
     XR_LIR_EXTERN_CLOCK_CPU,
     XR_LIR_EXTERN_CLOCK_MONOTONIC,
-    XR_LIR_EXTERN_UTC_OFFSET_AT
+    XR_LIR_EXTERN_UTC_OFFSET_AT,
+    XR_LIR_EXTERN_ASSERT_CONDITION
 } XrLirExternKind;
 
 /* Handles are valid only while their module is alive. Zero IDs are invalid. */

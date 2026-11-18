@@ -51,12 +51,29 @@ static bool rbc_value_function_access_valid(const XrRbcModule *module,const XrRb
     if (access.operation==XR_RBC_VALUE_FUNCTION_NEW) {
         const XrLirHomeEvent *event=rbc_value_event(code,access.other,XR_LIR_OWNERSHIP_CALLABLE_VALUE);
         const XrRbcCallableEntry *entries=xr_rbc_module_callable_entries(module);
-        if (!event || !entries || access.source || access.index>=module->function_count ||
+        if (!event || !entries || access.source || access.index>=xr_rbc_module_callable_entry_count(module) ||
             !rbc_value_function(module,code,access.result,true) || event->source!=access.result ||
             event->operation!=XR_LIR_FUNCTION_REF || event->callable_function!=entries[access.index].source_function ||
             access.first>code->argument_count || access.count>code->argument_count-access.first ||
             (access.count && !code->arguments)) return false;
         const XrLirValueHome *home=rbc_value_home(code,access.result);
+        const XrRbcCallableEntry *entry=&entries[access.index];
+        if (entry->kind==XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION) {
+            const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
+            if (!owner || entry->producer!=owner || entry->physical_function!=UINT32_MAX ||
+                access.count || access.window || home->borrow_source ||
+                event->callable_transport!=home->transport ||
+                !rbc_callable_accepts(module,rbc_value_signature(module,code,access.result),entry->callable)) return false;
+            if (home->transport==XR_LIR_CALLABLE_TRANSPORT_OWNED) {
+                const XrtValueImage *image=xr_rbc_module_value_image(module);
+                return image && home->environment_type && home->environment_type==entry->environment_type &&
+                    home->environment_type<=image->type_count &&
+                    image->types[home->environment_type-1].kind==XRT_VALUE_ENVIRONMENT;
+            }
+            return home->transport==XR_LIR_CALLABLE_TRANSPORT_FRAME && !home->environment_type && !event->callable_materialize;
+        }
+        if (entry->kind!=XR_RBC_CALLABLE_ENTRY_CODE || entry->physical_function!=access.index ||
+            access.index>=module->function_count) return false;
         const XrRbcFunction *callee=&module->functions[access.index];
         const XrRbcValueCode *receiver=xr_rbc_module_value_code(module,access.index);
         if (!receiver || receiver->parameter_count!=callee->parameter_count) return false;

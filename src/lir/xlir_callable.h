@@ -67,6 +67,11 @@ XR_FUNC XrLirStatus xr_lir_callable_type_view(const XrLirModule *, XrLirType, Xr
 /* Call operands can forget NoSuspend. All other signature components, including
  * parameter modes, escape contracts and the C ABI bit, remain exact. */
 XR_FUNC bool xr_lir_callable_accepts(const XrLirModule *, XrLirType expected, XrLirType actual);
+/* This closed entry role has no captures or language-level hidden parameters. */
+XR_FUNC bool xr_lir_assertion_entry_signature(const XrLirType *, uint32_t count, XrLirType result);
+/* Physical callable thunks in this compatible signature family receive an
+ * invocation source. Ordinary user thunks ignore it; their direct ABI is unchanged. */
+XR_FUNC bool xr_lir_callable_invocation_source(const XrLirCallableType *);
 /* Captures are the declaration's ordered prefix. A hidden State parameter,
  * when present, remains its final parameter and is bound by the environment.
  * Setting this metadata never turns an ordinary function ID into a value. */

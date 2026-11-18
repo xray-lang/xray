@@ -60,8 +60,8 @@ typedef struct XrtExecutionFailure {
  * is harmless. A receiver must drop or transfer it before reusing failure. */
 XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *);
 /* Consume an independently owned fixed String, publish it to preowned failure
- * storage, then leave the active execution. Only duplicate-key code 434 is
- * admitted here. No allocation or owner lookup occurs during the transfer. */
+ * storage, then leave the active execution. Duplicate-key code 434 and
+ * assertion code 445 are admitted. Transfer allocates and looks up no owner. */
 XR_FUNC XR_NORET void xrt_message_panic_take(XrtManagedHeader **owned, uint32_t code, uint32_t source_id);
 
 typedef enum XrtExecutionStatus {
@@ -93,4 +93,7 @@ XR_FUNC XR_NORET void xrt_output_exit(const XrtSourceMap *map, XrtIoResult failu
 XR_FUNC XR_NORET void xrt_clock_exit(const XrtSourceMap *map, XrtHostClockFailure failure);
 XR_FUNC void xrt_value_failure_report(XrXirValueStatus, const XrtSourceLocation *);
 XR_FUNC void xrt_null_unwrap_report(const XrtSourceLocation *);
+/* Both hosted backends render the same exact message bytes, with the source
+ * presented separately for assertions rather than embedded in the message. */
+XR_FUNC bool xrt_message_panic_report(uint32_t code, const char *, size_t, const XrtSourceLocation *);
 #endif // XNATIVE_EXECUTION_H

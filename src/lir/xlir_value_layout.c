@@ -107,7 +107,8 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
     for (size_t row = environments; row < set->rows; ++row) {
         if (!set->values[row].needed) continue;
         const XrLirFunctionData *target = &module->functions[row - environments];
-        if (!target->closure.callable || target->kind != XR_LIR_FUNCTION_DEFINITION || target->closure.state_capture)
+        bool assertion = target->kind == XR_LIR_FUNCTION_EXTERNAL && target->extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION;
+        if (!target->closure.callable || (target->kind != XR_LIR_FUNCTION_DEFINITION && !assertion) || target->closure.state_capture)
             return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
         XrLirType limit = (XrLirType)(XR_LIR_TYPE_COUNT + set->constructed);
         XrLirValueLayoutStatus status = need_type(set,target->closure.callable,limit);

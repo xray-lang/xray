@@ -1429,6 +1429,13 @@ static bool source_mem_length(SourceContext *ctx,AstNode *node,SourceValue recei
         source_recipe_group(ctx,(XrXirInstruction){.op=XR_XIR_CALL,.type=XR_XIR_I64,.immediate=method->index},&receiver,1,value);
 }
 static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint32_t intrinsic);
+static SourceName *source_builtin_value(SourceContext *ctx, AstNode *node, const char *name) {
+    size_t length = source_text_size(ctx, name);
+    if (ctx->diagnostic.status != XR_XIR_OK) return NULL;
+    const XrCoreIntrinsicDesc *intrinsic = xr_core_intrinsic_by_source_name(name, length);
+    return intrinsic && intrinsic->id == XR_CORE_BUILTIN_ASSERT ?
+        source_core_assertion(ctx, node, intrinsic->id) : NULL;
+}
 static bool source_scalar_text(SourceContext *ctx,AstNode *node,SourceValue input,XrHirCastRole role,SourceValue *value);
 #include "xxir_source_rune.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
@@ -1959,7 +1966,10 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
 static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     AstNode *callee = node->as.function_ref.callee;
     SourceName *symbol = NULL, *binding = NULL;
-    if (callee && callee->type == AST_VARIABLE) binding = symbol = visible_name(ctx,callee->as.variable.name);
+    if (callee && callee->type == AST_VARIABLE) {
+        binding = symbol = visible_name(ctx,callee->as.variable.name);
+        if (!symbol) binding = symbol = source_builtin_value(ctx, node, callee->as.variable.name);
+    }
     else if (callee && callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx,member->object->as.variable.name) : NULL;

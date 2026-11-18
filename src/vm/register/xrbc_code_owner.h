@@ -16,9 +16,14 @@
 #include <stdatomic.h>
 
 typedef struct XrRbcCodeOwner XrRbcCodeOwner;
+typedef enum XrRbcCallableEntryKind {
+    XR_RBC_CALLABLE_ENTRY_CODE, XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION
+} XrRbcCallableEntryKind;
 typedef struct XrRbcCallableEntry {
     const XrRbcCodeOwner *producer; /* Borrowed enclosing code allocation. */
     uint32_t physical_function, source_function, signature_type, environment_type;
+    XrRbcCallableEntryKind kind;
+    uint32_t callable;
 } XrRbcCallableEntry;
 struct XrRbcCodeOwner {
     _Atomic(uint32_t) references;
@@ -29,7 +34,9 @@ struct XrRbcCodeOwner {
     const XrtValueImage *values;
     const XrRbcModule *module;
     XrtLocationOwner *locations;
-    const XrRbcCallableEntry *entries; /* Physical function indexed, raw image ids. */
+    /* Ordinary entries form the physical prefix; intrinsic entries have no code body. */
+    const XrRbcCallableEntry *entries;
+    size_t entry_count;
     const uint32_t *type_callables; /* Image type -> one-based RBC signature, zero for non-Fn. */
     /* The enclosing allocation owns every borrowed asset above. Retire runs
      * exactly once at zero actual references and must return normally. The
@@ -47,5 +54,6 @@ XR_FUNC void xr_rbc_code_owner_release(void *);
 XR_FUNC const XrRbcCodeOwner *xr_rbc_code_owner_borrow(XrtManagedLease);
 XR_FUNC const XrRbcCodeOwner *xr_rbc_module_code_owner(const XrRbcModule *);
 XR_FUNC const XrRbcCallableEntry *xr_rbc_module_callable_entries(const XrRbcModule *);
+XR_FUNC size_t xr_rbc_module_callable_entry_count(const XrRbcModule *);
 XR_FUNC const uint32_t *xr_rbc_module_type_callables(const XrRbcModule *);
 #endif // XRBC_CODE_OWNER_H

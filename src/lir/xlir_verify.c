@@ -318,6 +318,8 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return v->type == XR_LIR_STRING && a == XR_LIR_F64;
         case XR_LIR_STRING_CONCAT:
             return v->type == XR_LIR_STRING && a == XR_LIR_STRING && b == XR_LIR_STRING;
+        case XR_LIR_ASSERT_CONDITION:
+            return v->type == XR_LIR_UNIT && a == XR_LIR_I1 && b == XR_LIR_STRING;
         case XR_LIR_STRING_RETAIN:
             return v->type == XR_LIR_STRING && a == XR_LIR_STRING;
         case XR_LIR_STRING_LEN:
@@ -839,6 +841,8 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
             return false;
     if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
         if (f->defined || f->block_count || f->entry) return false;
+        if (f->extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION)
+            return xr_lir_assertion_entry_signature(f->parameter_types, f->parameter_count, f->result);
         const char *clock = clock_external_name(f->extern_kind);
         if (clock) return f->result == XR_LIR_I64 &&
             f->parameter_count == (f->extern_kind == XR_LIR_EXTERN_UTC_OFFSET_AT ? 1u : 0u) &&

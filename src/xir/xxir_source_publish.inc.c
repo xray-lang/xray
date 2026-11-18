@@ -60,6 +60,18 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         failure = "source debug snapshot publication failed";
         status = source_debug_publish(ctx, output);
     }
+    if (status == XR_XIR_OK && ctx->assertion) {
+        failure = "source builtin binding publication failed";
+        status = xr_xir_compile_source_builtin_bind(output->snapshot,
+            (XrXirSourceBuiltinBinding){XR_CORE_BUILTIN_ASSERT, ctx->assertion->index,
+                ctx->assertion->declaration}, xr_xir_compile_artifact_module(output->checked));
+    }
+    if (status == XR_XIR_OK && ctx->assert_equal) {
+        failure = "source equality assertion binding publication failed";
+        status = xr_xir_compile_source_builtin_bind(output->snapshot,
+            (XrXirSourceBuiltinBinding){XR_CORE_BUILTIN_ASSERT_EQUAL, ctx->assert_equal->index,
+                ctx->assert_equal->declaration}, xr_xir_compile_artifact_module(output->checked));
+    }
     if (status == XR_XIR_OK) {
         failure = "source dependency snapshot publication failed";
         status = source_dependencies_publish(ctx, output->snapshot);

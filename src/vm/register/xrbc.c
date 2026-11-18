@@ -645,7 +645,7 @@ XR_FUNC XrRbcStatus xr_rbc_owned_function_prepare(const XrtFunction *borrowed,
     RbcOwnedFunction received={0};
     XrtManagedStatus native=rbc_owned_function_borrow(&owned,&received);
     XrRbcStatus status=native==XRT_MANAGED_OOM ? XR_RBC_OUT_OF_MEMORY : XR_RBC_INVALID;
-    if (native==XRT_MANAGED_OK) {
+    if (native==XRT_MANAGED_OK && received.entry->kind==XR_RBC_CALLABLE_ENTRY_CODE) {
         status=xr_rbc_module_admit(received.code->module,received.code->locations);
         if (status==XR_RBC_OK) {
             RbcPrepareRequest request={received.code->module,received.function,arguments,argument_count,

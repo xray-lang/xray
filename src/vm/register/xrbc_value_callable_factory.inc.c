@@ -24,7 +24,11 @@ static XrtManagedStatus rbc_value_function_new(const XrRbcModule *module,XrRbcSt
     RbcValueActivation *activation,XrRbcValueAccess access) {
     const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
     const XrRbcCallableEntry *entries=xr_rbc_module_callable_entries(module);
-    const XrRbcFunction *callee=&module->functions[access.index];
+    if (!entries || access.index>=xr_rbc_module_callable_entry_count(module)) return XRT_MANAGED_ARGUMENT;
+    const XrRbcCallableEntry *entry=&entries[access.index];
+    const XrRbcFunction *callee=entry->kind==XR_RBC_CALLABLE_ENTRY_CODE ?
+        &module->functions[entry->physical_function] : NULL;
+    if (!callee && access.count) return XRT_MANAGED_ARGUMENT;
     XrtFunction binding={&entries[access.index],SIZE_MAX,NULL};
     if (home->transport==XR_LIR_CALLABLE_TRANSPORT_FRAME) {
         size_t bytes=0;

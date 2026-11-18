@@ -18,6 +18,7 @@ static XrtManagedStatus rbc_value_function_receive(const XrRbcModule *module,
     XrtManagedStatus status=rbc_owned_function_borrow(binding,&received);
     if (status!=XRT_MANAGED_OK) return status;
     return received.code==code && rbc_callable_accepts(module,types[expected-1],
+        received.entry->kind==XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION ? received.entry->callable :
         code->functions[received.function].callable) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
 }
 static XrtManagedStatus rbc_value_function_state(const XrRbcModule *module,XrRbcStack *stack,

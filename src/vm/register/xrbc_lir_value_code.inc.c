@@ -338,6 +338,7 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     XrRbcValueAccess access = {.result=i->result,.source=i->operand_count ? i->operands[0] : 0,
         .other=i->operand_count > 1 ? i->operands[1] : 0};
     switch (i->op) {
+    case XR_LIR_ASSERT_CONDITION: access.operation = XR_RBC_VALUE_ASSERT_CONDITION; break;
     case XR_LIR_MAP_LITERAL_NEW:
         if (!i->bits || i->bits > c->literals->program->module.map_literal_count)
             return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Map literal lost its owned provenance");
@@ -484,6 +485,15 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         access.operation = i->op == XR_LIR_STATE_CONSTRUCT ? XR_RBC_VALUE_STATE_CONSTRUCT : XR_RBC_VALUE_STATE_INITIALIZE;
         access.index = (uint32_t)i->bits; break;
     case XR_LIR_CALL:
+        {
+            XrLirFunctionView target;
+            if (xr_lir_function_view(c->input,(XrLirFunction){c->input,i->callee},&target)==XR_LIR_OK &&
+                target.kind==XR_LIR_FUNCTION_EXTERNAL && target.extern_kind==XR_LIR_EXTERN_ASSERT_CONDITION) {
+                access=(XrRbcValueAccess){.operation=XR_RBC_VALUE_ASSERT_CONDITION,
+                    .source=i->operands[0],.other=i->operands[1]};
+                break;
+            }
+        }
         if (!rbc_lir_value_call(c,i)) return true;
         access.operation = XR_RBC_VALUE_CALL; access.source = access.other = 0;
         if (rbc_lir_slice_type(c->input,i->type)) {

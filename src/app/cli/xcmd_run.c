@@ -33,8 +33,7 @@ static int run_report(const XrRbcOutcome *outcome, XrRbcStatus status) {
     const XrtLocationOwner *locations;
     uint32_t message_code=0,message_source=0;const char *message=NULL;size_t message_length=0;
     if(xr_rbc_outcome_message_panic(outcome,&message_code,&message,&message_length,&message_source,&locations)) {
-        XrValueFormatSink sink={NULL,run_panic_write};
-        if(!xr_value_format_panic(sink,message_code,0,0,0,1,(const uint8_t *)message,message_length,0))
+        if(!xrt_message_panic_report(message_code,message,message_length,xrt_locations_get(locations,message_source)))
             fputs("cannot render uncaught message panic\n",stderr);
     } else if (xr_rbc_outcome_arithmetic_panic(outcome, &panic, &locations)) {
         XrValueFormatSink sink = {NULL, run_panic_write};

@@ -243,6 +243,7 @@ static void managed_message_owner(void) {
 }
 #include "execution_map_literals.inc.c"
 #include "execution_environments.inc.c"
+#include "execution_assertions.inc.c"
 typedef struct StringBindingCall {
     XrtValueRoot *owner;
     XrtBillingOwner *billing;
@@ -387,6 +388,7 @@ static void standalone_state_string(void) {
 int main(void) {
     managed_scopes();
     managed_message_owner();
+    managed_assertion_owner();
     managed_map_literals();
     managed_environments();
     managed_cells();

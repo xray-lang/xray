@@ -363,6 +363,9 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             (!rbc_value_function(module,code,a.source,false) || rbc_value_home(code,a.source)->owner_count==1);
     case XR_RBC_VALUE_STRING_PRINT:
         return !a.result && !a.other && rbc_value_string(module,code,a.source,false);
+    case XR_RBC_VALUE_ASSERT_CONDITION:
+        return !a.result && !a.index && rbc_value_scalar(code,function,a.source,XR_RBC_BITS) &&
+            rbc_value_string(module,code,a.other,false);
     case XR_RBC_VALUE_STRING_LENGTH:
         return !a.other && rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     case XR_RBC_VALUE_STATE_READ:

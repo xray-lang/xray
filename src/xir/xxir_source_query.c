@@ -17,6 +17,7 @@
 #include "xxir_internal.h"
 #include "xxir_types.h"
 #include "../shared/xnative_declaration.h"
+#include "../shared/xr_core_intrinsic.h"
 #include "xxir_constraint_proof.h"
 #include <string.h>
 typedef struct SourceQueryMemory { struct SourceQueryMemory *next; } SourceQueryMemory;
@@ -34,6 +35,7 @@ struct XrXirSourceSnapshot {
     bool dependencies_ready;
     XrXirSourceDebugView debug;
     bool debug_ready;
+    XrXirSourceBuiltinBinding builtin_bindings[2];
     SourceQueryMemory *memory;
 };
 typedef struct SourceQueryCopy {
@@ -342,6 +344,35 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy_v2(const XrXirCompileCon
 }
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_snapshot_view(const XrXirSourceSnapshot *snapshot) {
     return snapshot ? &snapshot->view : NULL;
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_builtin_bind(XrXirSourceSnapshot *snapshot,
+    XrXirSourceBuiltinBinding binding, const XrXirModule *checked) {
+    bool equality=binding.builtin==XR_CORE_BUILTIN_ASSERT_EQUAL;
+    uint32_t slot=equality?1u:0u;
+    if (!snapshot || snapshot->builtin_bindings[slot].builtin ||
+        (binding.builtin != XR_CORE_BUILTIN_ASSERT && !equality) ||
+        !checked || !snapshot->debug_ready || binding.function >= checked->function_count ||
+        binding.function >= snapshot->debug.function_count || !binding.declaration ||
+        binding.declaration > snapshot->view.declaration_count ||
+        snapshot->debug.functions[binding.function].declaration != binding.declaration)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *function = &checked->functions[binding.function];
+    if (function->parameter_count != (equality?3u:2u) || !function->parameters ||
+        (equality?function->parameters[0]!=function->parameters[1]:function->parameters[0]!=XR_XIR_BOOL) ||
+        function->parameters[equality?2u:1u] != XR_XIR_STRING ||
+        function->result != XR_XIR_UNIT || function->error_type != XR_XIR_NEVER)
+        return XR_XIR_BAD_TYPE;
+    snapshot->builtin_bindings[slot] = binding;
+    return XR_XIR_OK;
+}
+XR_FUNC bool xr_xir_compile_source_builtin_binding(const XrXirSourceSnapshot *snapshot,
+    uint32_t function, XrXirSourceBuiltinBinding *output) {
+    if (!snapshot || !output) return false;
+    for (uint32_t i=0;i<2;++i)
+        if (snapshot->builtin_bindings[i].builtin && snapshot->builtin_bindings[i].function==function) {
+            *output=snapshot->builtin_bindings[i]; return true;
+        }
+    return false;
 }
 XR_FUNC const XrXirConstruction *xr_xir_compile_source_snapshot_construction(const XrXirSourceSnapshot *snapshot) {
     return snapshot ? snapshot->construction : NULL;

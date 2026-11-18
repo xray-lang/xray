@@ -63,6 +63,10 @@ XR_FUNC const XrRbcCallableEntry *xr_rbc_module_callable_entries(const XrRbcModu
     const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
     return owner ? owner->entries : module ? module->borrowed_callable_entries : NULL;
 }
+XR_FUNC size_t xr_rbc_module_callable_entry_count(const XrRbcModule *module) {
+    const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
+    return owner ? owner->entry_count : module && module->borrowed_callable_entries ? module->function_count : 0;
+}
 XR_FUNC const uint32_t *xr_rbc_module_type_callables(const XrRbcModule *module) {
     const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
     return owner ? owner->type_callables : module ? module->borrowed_type_callables : NULL;

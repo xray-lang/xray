@@ -536,6 +536,12 @@ static void c_values_string_literal(LirC *c, const XrLirInstructionView *v, uint
     c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
 }
 static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_ASSERT_CONDITION) {
+        c_text(c, "    xrt_assert_condition("); c_value(c, v->operands[0]);
+        c_text(c, ", (const XrtStringBacking *)"); c_value(c, v->operands[1]);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        return true;
+    }
     if (v->op == XR_LIR_CALL && c_slice_type(c, v->type)) {
         c_view_call_instruction(c, v, source); return true;
     }
