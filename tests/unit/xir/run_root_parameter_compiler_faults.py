@@ -233,8 +233,9 @@ class Run:
         self.manifest.pop("native_drain", None)
         command = [str(self.executable), *arguments]
         with (self.root / (name + ".stdout")).open("xb") as stdout, (self.root / (name + ".stderr")).open("xb") as stderr:
+            # Avoid console-host descendants without breaking inherited Job ownership.
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
-                                       close_fds=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                                       close_fds=True, creationflags=subprocess.DETACHED_PROCESS)
         row = {"name": name, "argv": command, "pid": process.pid, "expected_exit": expected}
         self.active.append((process, row))
         self.manifest["commands"].append(row)
