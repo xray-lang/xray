@@ -198,6 +198,8 @@ static void rbc_region_role_fallbacks(void) {
         uint32_t supported=shape ? 3u&~(1u<<(shape-1)) : 0;
         CHECK(bindings->region_count==2 && (bindings->slot_count!=0)==(supported!=0));
         XrRbcValueCode projected=*code; projected.array_regions=bindings; projected.array_region_accesses=NULL;
+        projected.array_region_runtime=rbc_lir_array_region_uses_runtime(bindings);
+        CHECK(projected.array_region_runtime==(supported!=0));
         projected.access_count=0; RbcLirCompiler builder={.value_code=&projected,.diagnostic=&diagnostic};
         for (size_t n=0;n<code->access_count;++n) {
             const XrLirArrayRegionOperation *operation=&code->array_region_accesses[n].operation;
