@@ -1,0 +1,1 @@
+{"source":"demos/01-basics/variables.xr","exit":0,"stdout":"count = 1\nPI = 3.14159\nAlice, age 25, height 1.75, active: true\nmaybe = null\nmaybe = 42\nvalue = 42\n17 / 5 = 3 remainder 2\na=10, b=20, c=30\nBob, score 99\n"}

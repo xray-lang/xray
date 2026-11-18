@@ -15,7 +15,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #define OK(c) CHECK((c)==XR_LIR_OK)
-static XrLirModule *assertion_module(bool condition, bool indirect, XrLirFunction *root) {
+static XrLirModule *assertion_module(bool condition, unsigned transport, XrLirFunction *root) {
     XrLirModule *module=NULL; OK(xr_lir_module_create(NULL,&module));
     XrLirType parameters[]={XR_LIR_I1,XR_LIR_STRING};
     XrLirCallableParameter args[]={{.type=XR_LIR_I1},{.type=XR_LIR_STRING}};
@@ -38,15 +38,16 @@ static XrLirModule *assertion_module(bool condition, bool indirect, XrLirFunctio
     XrLirLiteral literal={0}; OK(xr_lir_add_literal(module,text,sizeof(text),&literal));
     XrLirInstruction message={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
     OK(xr_lir_emit_value(module,block,&message,&inputs[2]));
-    if (indirect) {
-        XrLirInstruction reference={.op=XR_LIR_FUNCTION_REF,.type=strong,.callee=target};
+    if (transport) {
+        XrLirInstruction reference={.op=XR_LIR_FUNCTION_REF,.type=strong,.callee=target,
+            .bits=transport==2 ? XR_LIR_CLOSURE_OWNED : XR_LIR_CLOSURE_FRAME};
         OK(xr_lir_emit_value(module,block,&reference,&inputs[0]));
         XrLirValue original=inputs[0];
         XrLirInstruction weaken={.op=XR_LIR_FUNCTION_WEAKEN,.type=weak,.operands=&original,.operand_count=1};
         OK(xr_lir_emit_value(module,block,&weaken,&inputs[0]));
     }
-    XrLirInstruction assertion={.op=indirect?XR_LIR_CALL_INDIRECT:XR_LIR_ASSERT_CONDITION,.type=XR_LIR_UNIT,
-        .operands=indirect?inputs:inputs+1,.operand_count=indirect?3u:2u,
+    XrLirInstruction assertion={.op=transport?XR_LIR_CALL_INDIRECT:XR_LIR_ASSERT_CONDITION,.type=XR_LIR_UNIT,
+        .operands=transport?inputs:inputs+1,.operand_count=transport?3u:2u,
         .source={"assert-kernel.xr",sizeof("assert-kernel.xr")-1,7,3,7,18}};
     OK(xr_lir_emit_effect(module,block,&assertion));
     XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=inputs+2,.operand_count=1};
@@ -55,18 +56,26 @@ static XrLirModule *assertion_module(bool condition, bool indirect, XrLirFunctio
     OK(xr_lir_set_terminator(module,block,&ret)); OK(xr_lir_module_finish(module,NULL));
     return module;
 }
-static void assertion_execute(bool condition, bool indirect) {
-    XrLirFunction root={0}; XrLirModule *module=assertion_module(condition,indirect,&root);
+static void assertion_execute(bool condition, unsigned transport) {
+    XrLirFunction root={0}; XrLirModule *module=assertion_module(condition,transport,&root);
     XrRbcProgram *program=NULL; XrRbcCompileDiagnostic diagnostic={0};
     XrRbcCompileStatus status=xr_rbc_compile(module,root,&program,&diagnostic);
     if (status!=XR_RBC_COMPILE_OK) fprintf(stderr,"assertion bytecode %u: %s\n",(unsigned)status,diagnostic.message);
     CHECK(status==XR_RBC_COMPILE_OK && program);
     const XrRbcModule *view=xr_rbc_program_view(program);
-    if (indirect) {
+    if (transport) {
         size_t count=xr_rbc_module_callable_entry_count(view);
         const XrRbcCallableEntry *table=xr_rbc_module_callable_entries(view);
         CHECK(count==view->function_count+1 && table[count-1].kind==XR_RBC_CALLABLE_ENTRY_ASSERT_CONDITION &&
             table[count-1].physical_function==UINT32_MAX && table[count-1].producer==xr_rbc_module_code_owner(view));
+        if (transport==2) {
+            uint32_t environment=table[count-1].environment_type;
+            const XrtValueImage *image=xr_rbc_module_value_image(view);
+            CHECK(image && environment && environment<=image->type_count);
+            const XrtValueImageType *shape=&image->types[environment-1];
+            CHECK(shape->kind==XRT_VALUE_ENVIRONMENT && !shape->capture_count && !shape->size &&
+                shape->entry_ordinal==table[count-1].source_function);
+        }
     }
     XrRbcExecution *execution=NULL; CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
     xr_lir_module_destroy(module); xr_rbc_program_destroy(program);
@@ -97,9 +106,27 @@ static void invalid_entries(void) {
     signature.flags=0; args[1].mode=XR_PARAM_MOVE; CHECK(!xr_lir_callable_invocation_source(&signature));
     args[1].mode=XR_PARAM_READ; args[0].type=XR_LIR_I64; CHECK(!xr_lir_callable_invocation_source(&signature));
 }
+static void invalid_effect(void) {
+    XrLirModule *module=NULL; XrLirFunction root={0}; XrLirBlock block={0};
+    XrLirType parameters[]={XR_LIR_I64,XR_LIR_STRING};
+    XrLirFunctionSpec spec={.name="wrong-effect",.name_length=12,.parameters=parameters,.parameter_count=2,
+        .result=XR_LIR_UNIT};
+    OK(xr_lir_module_create(NULL,&module)); OK(xr_lir_declare_function(module,&spec,&root));
+    OK(xr_lir_define_function(module,root)); OK(xr_lir_add_block(module,root,NULL,0,&block));
+    OK(xr_lir_set_entry(module,root,block));
+    XrLirValue operands[2]={{0}};
+    OK(xr_lir_function_parameter(module,root,0,&operands[0]));
+    OK(xr_lir_function_parameter(module,root,1,&operands[1]));
+    XrLirInstruction assertion={.op=XR_LIR_ASSERT_CONDITION,.type=XR_LIR_UNIT,.operands=operands,.operand_count=2};
+    CHECK(xr_lir_emit_effect(module,block,&assertion)!=XR_LIR_OK);
+    CHECK(xr_lir_module_finish(module,NULL)!=XR_LIR_OK);
+    xr_lir_module_destroy(module);
+}
 int main(void) {
-    invalid_entries(); assertion_execute(true,false); assertion_execute(false,false);
-    assertion_execute(true,true); assertion_execute(false,true);
+    invalid_entries(); invalid_effect();
+    for (unsigned transport=0;transport<3;++transport) {
+        assertion_execute(true,transport); assertion_execute(false,transport);
+    }
     puts("Typed assertion effects, entries, sources and retired messages passed");
     return 0;
 }

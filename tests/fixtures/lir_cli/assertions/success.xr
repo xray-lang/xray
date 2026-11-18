@@ -1,0 +1,8 @@
+fn condition() -> bool { print("condition"); return true }
+fn message() -> string { print("message"); return "消息\0ok" }
+assert(condition(), message())
+assert(true)
+const check: fn(bool, string) = assert
+fn forward(check: fn(bool, string)) { check(true, "forward") }
+forward(check)
+print("after")

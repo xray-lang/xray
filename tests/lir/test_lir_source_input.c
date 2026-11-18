@@ -14,6 +14,9 @@
 #include "xir/xxir_internal.h"
 #include "xir/xxir_comptime_pending_internal.h"
 #include "xir/xxir_source_comptime_instances_internal.h"
+#include "xir/xxir_source_builtin.h"
+#include "xir/xxir_source_query_internal.h"
+#include "shared/xr_core_intrinsic.h"
 #include "../unit/xir/xir_comptime_construction_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -272,9 +275,49 @@ static void literal_output_source_facts(void) {
     xr_xir_compile_artifact_free(closed);
 }
 
+static void builtin_loader_identity(void) {
+    XrXirSourceResult source=compile_text("assert(true)\nassertEqual(1,1)\n");
+    const XrXirModule *checked=xr_xir_compile_artifact_module(source.checked);
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(source.snapshot);
+    XrXirSourceBuiltinBinding bindings[2]={{0}};
+    uint32_t count=0;
+    for (uint32_t f=0;f<checked->function_count;++f) {
+        XrXirSourceBuiltinBinding binding={0};
+        if (!xr_xir_compile_source_builtin_binding(source.snapshot,f,&binding)) continue;
+        CHECK(count<2 && binding.function==f && binding.declaration && binding.declaration<=view->declaration_count);
+        CHECK(binding.builtin==XR_CORE_BUILTIN_ASSERT || binding.builtin==XR_CORE_BUILTIN_ASSERT_EQUAL);
+        CHECK(view->declarations[binding.declaration-1].native_identity==binding.builtin);
+        bindings[count++]=binding;
+    }
+    CHECK(count==2 && bindings[0].builtin!=bindings[1].builtin);
+    XrXirSourceSnapshot *observations=NULL;
+    XIR_OK(xr_xir_compile_source_snapshot_copy_v2(&source.checked->context,view,
+        xr_xir_compile_artifact_construction(source.checked),&observations));
+    XrXirSourceBuiltinBinding untouched={UINT32_MAX,UINT32_MAX,UINT32_MAX};
+    for (uint32_t f=0;f<checked->function_count;++f) {
+        CHECK(!xr_xir_compile_source_builtin_binding(observations,f,&untouched));
+        CHECK(untouched.builtin==UINT32_MAX && untouched.function==UINT32_MAX && untouched.declaration==UINT32_MAX);
+    }
+    xr_xir_compile_source_snapshot_free(observations);
+    XrXirSourceSnapshot *owned=source.snapshot; source.snapshot=NULL;
+    xr_xir_compile_source_result_free(&source);
+    for (uint32_t n=0;n<count;++n) {
+        XrXirSourceBuiltinBinding actual={0};
+        CHECK(xr_xir_compile_source_builtin_binding(owned,bindings[n].function,&actual));
+        CHECK(actual.builtin==bindings[n].builtin && actual.function==bindings[n].function &&
+            actual.declaration==bindings[n].declaration);
+    }
+    CHECK(!xr_xir_compile_source_builtin_binding(owned,UINT32_MAX,&untouched) &&
+        !xr_xir_compile_source_builtin_binding(NULL,0,&untouched) &&
+        !xr_xir_compile_source_builtin_binding(owned,bindings[0].function,NULL));
+    CHECK(untouched.builtin==UINT32_MAX && untouched.function==UINT32_MAX && untouched.declaration==UINT32_MAX);
+    xr_xir_compile_source_snapshot_free(owned);
+}
+
 int main(void) {
     scalar_input_facts();
     literal_output_source_facts();
+    builtin_loader_identity();
     specialization_origins();
     lowered_origin_rejected();
     evaluation_origin_rejected();

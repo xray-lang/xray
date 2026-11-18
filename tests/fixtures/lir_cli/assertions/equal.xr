@@ -1,0 +1,5 @@
+fn actual() -> i64 { print("actual"); return 1 }
+fn expected() -> i64 { print("expected"); return 2 }
+fn message() -> string { print("message"); return "equal\0中" }
+assertEqual(actual(), expected(), message()) // fault
+print("unreachable")

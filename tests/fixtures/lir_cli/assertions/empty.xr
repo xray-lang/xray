@@ -1,0 +1,2 @@
+assert(false) // fault
+print("unreachable")
