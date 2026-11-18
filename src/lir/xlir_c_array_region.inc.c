@@ -89,7 +89,36 @@ static void c_array_region_slow(LirC *c) {
     if (binding->accesses[access].operation != XR_LIR_ARRAY_OP_LEN)
         c_format(c,"xrl_ar_slow_%" PRIu32 "_%" PRIu32 ": ;\n",c->block,c->instruction);
 }
+static bool c_array_region_coalesced_move(LirC *c, size_t region, size_t ordinal) {
+    if (!c->array_helper_active) return false;
+    const XrLirArrayRegionBindings *binding = c->array_region->bindings;
+    const XrLirArrayRegionBinding row = binding->regions[region];
+    if (row.owner_home.kind != XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW) return false;
+    if (ordinal < row.first_move || ordinal - row.first_move >= row.move_count) {
+        c_error(c,XR_LIR_C_INVALID_LIR,"Array owner home move lost its common slice"); return true;
+    }
+    XrLirArraySetRegionOwnerHome fact = row.region.owner_home;
+    size_t step = ordinal - row.first_move + 1;
+    if (step >= fact.first_active_step && step < fact.exit_step) {
+        /* The common producer discharged this exact logical transition and
+         * death. Its real owner remains in the canonical Frame field. */
+        c_text(c,"    ;\n"); return true;
+    }
+    if (step != fact.exit_step) {
+        c_error(c,XR_LIR_C_INVALID_LIR,"Array owner home move is outside its common window"); return true;
+    }
+    XrtArrayI64RegionSlot stable = binding->slots[row.owner_home.stable_slot];
+    XrtArrayI64RegionSlot exit = binding->slots[row.owner_home.exit_slot];
+    XR_DCHECK(stable.slot != exit.slot && stable.offset != exit.offset,"owner exit transfers between real distinct homes");
+    /* Read the actual owning field, never manufacture an owner from the
+     * borrowed cache. Publish the original exit before any return/observer. */
+    c_format(c,"    XrtManagedHeader *xrl_ar_owner = *(XrtManagedHeader **)(xrl_ar_payload + %zu);\n"
+        "    *(XrtManagedHeader **)(xrl_ar_payload + %zu) = xrl_ar_owner;\n"
+        "    *(XrtManagedHeader **)(xrl_ar_payload + %zu) = NULL;\n",stable.offset,exit.offset,stable.offset);
+    return true;
+}
 static void c_array_region_move(LirC *c, size_t region, size_t ordinal) {
+    if (c_array_region_coalesced_move(c,region,ordinal)) return;
     const XrLirArrayRegionBindings *binding = c->array_region->bindings;
     const XrLirArrayRegionMove *move = &binding->moves[ordinal];
     XR_DCHECK(move->source_slot < binding->slot_count && move->target_slot < binding->slot_count,

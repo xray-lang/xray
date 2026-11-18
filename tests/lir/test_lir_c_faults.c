@@ -522,6 +522,25 @@ static void array_helper_cancellation(void) {
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
     xr_lir_module_destroy(input.module); CHECK(!runtime_live && !runtime_bytes);
 }
+static void array_helper_owner_exit(const char *text) {
+    const char *helper = text; size_t helpers = 0;
+    while ((helper = strstr(helper,"static XrlArResult_")) != NULL) {
+        const char *end = strstr(helper,"\n}\n\n"); CHECK(end);
+        const char *read = strstr(helper,"XrtManagedHeader *xrl_ar_owner = *(XrtManagedHeader **)(xrl_ar_payload + ");
+        CHECK(read && read < end);
+        const char *publish = strstr(read," = xrl_ar_owner;"), *clear = publish ? strstr(publish," = NULL;") : NULL;
+        CHECK(publish && clear && clear < end && read < publish && publish < clear);
+        const char *ret = strstr(clear,"return (XrlArResult_"); CHECK(ret && ret < end);
+        size_t stores = 0; const char *store = helper;
+        while ((store = strstr(store,"    *(XrtManagedHeader **)")) != NULL && store < end) {
+            ++stores; ++store;
+        }
+        CHECK(stores == 2);
+        const char *borrow = strstr(helper,"_cache.owner"); CHECK(!borrow || borrow > end);
+        ++helpers; helper = end + 1;
+    }
+    CHECK(helpers);
+}
 static void array_helper_boundaries(void) {
     const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT,ARRAY_REGION_RANGE_C_HEADER_LIVEOUT,
         ARRAY_REGION_RANGE_NEXT_COPIES,ARRAY_REGION_RANGE_STEP_TWO,ARRAY_REGION_RANGE_PARALLEL_BAD};
@@ -550,6 +569,7 @@ static void array_helper_boundaries(void) {
         CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_elements") != NULL) == helper);
         CHECK(strstr(output.bytes,"xrt_array_i64_region_try_begin") && strstr(output.bytes,"xrl_ar_0_phase == 1"));
         if (helper) {
+            array_helper_owner_exit(output.bytes);
             CHECK(strstr(output.bytes,"UINTPTR_MAX - xrl_ar_payload_begin") &&
                 strstr(output.bytes,"UINTPTR_MAX - xrl_ar_elements_begin") &&
                 strstr(output.bytes,"(uintmax_t)INT64_MAX") && strstr(output.bytes,"XrlArResult_"));
