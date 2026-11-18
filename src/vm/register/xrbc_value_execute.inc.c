@@ -206,7 +206,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     size_t leaves, rows, snapshots, bytes = sizeof(RbcValueActivation);
     /* A borrowed raw description can still use the ordinary typed receiver.
      * Only the exact immutable executable owner supplies the closed window. */
-    size_t regions=xr_rbc_module_code_owner(module) && code->array_regions && code->array_regions->slot_count ?
+    size_t regions=xr_rbc_module_code_owner(module) && code->array_region_runtime ?
         code->array_regions->region_count : 0;
     if (!rbc_value_capacities(code,&leaves,&rows,&snapshots) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||

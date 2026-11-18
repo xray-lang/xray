@@ -17,7 +17,9 @@ enum ArrayRegionRangeMode {
     ARRAY_REGION_RANGE_COMPUTED_GET, ARRAY_REGION_RANGE_CONSTANT_SET,
     ARRAY_REGION_RANGE_STEP_TWO, ARRAY_REGION_RANGE_STEP_DYNAMIC,
     ARRAY_REGION_RANGE_COMMUTED, ARRAY_REGION_RANGE_DOUBLE_STEP, ARRAY_REGION_RANGE_LATCH_CURRENT,
-    ARRAY_REGION_RANGE_NEXT_COPIES, ARRAY_REGION_RANGE_C_HEADER_LIVEOUT, ARRAY_REGION_RANGE_FAILING_RHS
+    ARRAY_REGION_RANGE_NEXT_COPIES, ARRAY_REGION_RANGE_C_HEADER_LIVEOUT, ARRAY_REGION_RANGE_FAILING_RHS,
+    ARRAY_REGION_RANGE_READ_ONLY, ARRAY_REGION_RANGE_READ_EXTRA, ARRAY_REGION_RANGE_READ_INDEX,
+    ARRAY_REGION_RANGE_READ_STEP
 };
 #define ARS_RANGE_FIELDS(r) (r).kind,(r).iv,(r).iv_argument,(r).entry_iv,(r).length,(r).length_instruction, \
     (r).condition,(r).condition_instruction,(r).increment,(r).increment_block,(r).increment_instruction,(r).one,(r).latch_iv
@@ -48,11 +50,15 @@ static XrLirValue ars_range_mutate(ArraySetRegionFixture *c, XrLirValue values[4
     enum ArrayRegionRangeMode mode) {
     XrLirBlock block = c->body[0];
     XrLirValue index = values[1], args[] = {values[0],index};
-    if (mode == ARRAY_REGION_RANGE_COMPUTED_GET) {
+    if (mode == ARRAY_REGION_RANGE_COMPUTED_GET || mode == ARRAY_REGION_RANGE_READ_INDEX) {
         XrLirValue zero = ars_number(c, block, 0), add[] = {index,zero};
         args[1] = ars_value(c, block, (XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
     }
     XrLirValue item = ars_array_op(c, block, XR_LIR_ARRAY_OP_GET, args, 2);
+    if (mode >= ARRAY_REGION_RANGE_READ_ONLY) {
+        if (mode == ARRAY_REGION_RANGE_READ_EXTRA) (void)ars_array_op(c,block,XR_LIR_ARRAY_OP_GET,args,2);
+        return values[0];
+    }
     (void)ars_array_op(c, block, XR_LIR_ARRAY_OP_GET, args, 2);
     if (mode == ARRAY_REGION_RANGE_C_HEADER_LIVEOUT || mode == ARRAY_REGION_RANGE_FAILING_RHS) {
         XrLirValue external = {0}; OK(xr_lir_function_parameter(c->module,c->function,0,&external));
@@ -116,7 +122,7 @@ static ArraySetRegionFixture ars_range_build(XrLirModule *module, uint32_t count
         XrLirValue next = values[iv_slot];
         if ((n + 1 == count && mode != ARRAY_REGION_RANGE_NEXT_COPIES) || (!n && mode == ARRAY_REGION_RANGE_NEXT_COPIES)) {
             XrLirValue one = mode == ARRAY_REGION_RANGE_STEP_DYNAMIC ? start :
-                ars_number(&c,c.body[n],mode == ARRAY_REGION_RANGE_STEP_TWO ? 2 : 1);
+                ars_number(&c,c.body[n],mode == ARRAY_REGION_RANGE_STEP_TWO || mode == ARRAY_REGION_RANGE_READ_STEP ? 2 : 1);
             XrLirValue add[] = {next,one};
             if (mode == ARRAY_REGION_RANGE_COMMUTED) { add[0] = one; add[1] = next; }
             next = ars_value(&c,c.body[n],(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
