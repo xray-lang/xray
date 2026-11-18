@@ -404,6 +404,9 @@ typedef struct RbcValueEdgeBuilder {
     XrRbcStack *stack;
     RbcValueActivation *activation;
     size_t owners,bytes;
+    /* Logical scratch bounds include owner-only pairs; actual publications
+     * contain only rows that still need their non-owner bytes transported. */
+    size_t rows;
 } RbcValueEdgeBuilder;
 static XrtManagedStatus rbc_value_edge_pair(RbcValueEdgeBuilder *builder, uint32_t source, uint32_t target,
     XrLirOwnershipTransferMode transfer,const XrLirHomeTransfer *loan) {
@@ -411,6 +414,7 @@ static XrtManagedStatus rbc_value_edge_pair(RbcValueEdgeBuilder *builder, uint32
     const XrRbcValueCode *code=activation->code;
     RbcValueOrigin from=rbc_value_origin(activation,source),to={activation,target};
     const XrLirValueHome *home=rbc_value_home(code,target);
+    const XrLirValueHome *source_home=rbc_value_home(code,source);
     if (transfer!=XR_LIR_OWNERSHIP_TRANSFER_NONE && transfer!=XR_LIR_OWNERSHIP_TRANSFER_BORROW && transfer!=XR_LIR_OWNERSHIP_TRANSFER_COPY &&
         transfer!=XR_LIR_OWNERSHIP_TRANSFER_MOVE) return XRT_MANAGED_ARGUMENT;
     if (loan && loan->target_workspace) {
@@ -427,7 +431,6 @@ static XrtManagedStatus rbc_value_edge_pair(RbcValueEdgeBuilder *builder, uint32
             .transfer=stage ? XRT_PLACE_TRANSFER_MOVE : XRT_PLACE_TRANSFER_COPY};
     }
     if (home && home->owner_count) {
-        const XrLirValueHome *source_home=rbc_value_home(code,source);
         const XrLirHomeWorkspace *stage=loan && loan->borrowed_owner_workspace!=SIZE_MAX ?
             rbc_value_cell_stage(code,*loan) : NULL;
         if (!source_home || (source_home->parameter && !stage) || builder->owners>activation->edge_capacity ||
@@ -446,11 +449,28 @@ static XrtManagedStatus rbc_value_edge_pair(RbcValueEdgeBuilder *builder, uint32
             if (status!=XRT_MANAGED_OK) return status;
         }
     }
+    if (home && source_home && from.activation==activation && from.value==source && activation->payload &&
+        home->owner_count==1 && source_home->owner_count==1 && home->type==source_home->type &&
+        home->size==sizeof(XrtManagedHeader *) && source_home->size==home->size &&
+        !home->byte_count && !source_home->byte_count && !home->parameter && !source_home->parameter &&
+        home->transport==XR_LIR_CALLABLE_TRANSPORT_NONE && source_home->transport==XR_LIR_CALLABLE_TRANSPORT_NONE &&
+        !home->borrow_source && !source_home->borrow_source && !home->view_workspace && !source_home->view_workspace &&
+        loan && loan->borrowed_owner_workspace==SIZE_MAX && !loan->source_workspace && !loan->target_workspace &&
+        loan->hold_transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_NONE && loan->source_storage==XR_LIR_SLICE_STORAGE_NONE) {
+        /* The owner transaction transports the complete representation. Keep
+         * logical scratch bounds without materializing an empty byte publication. */
+        if (builder->rows>=activation->publication_capacity || builder->bytes>activation->snapshot_capacity ||
+            home->size>activation->snapshot_capacity-builder->bytes) return XRT_MANAGED_ARGUMENT;
+        ++builder->rows; builder->bytes+=home->size;
+        return XRT_MANAGED_OK;
+    }
     RbcValuePayload destination,source_payload;
     XrtManagedStatus status=rbc_value_payload(builder->module,builder->stack,to,&destination);
     if (status==XRT_MANAGED_OK) status=rbc_value_payload(builder->module,builder->stack,from,&source_payload);
+    if (status==XRT_MANAGED_OK && builder->rows>=activation->publication_capacity) return XRT_MANAGED_ARGUMENT;
     if (status==XRT_MANAGED_OK) status=rbc_value_snapshot(activation,destination,source_payload,
         home && home->owner_count && transfer==XR_LIR_OWNERSHIP_TRANSFER_MOVE,&builder->bytes);
+    if (status==XRT_MANAGED_OK) ++builder->rows;
     return status;
 }
 static void rbc_value_edge_unstage(RbcValueActivation *activation,const XrLirHomeEdge *edge,size_t prepared) {
@@ -487,7 +507,7 @@ static XrtManagedStatus rbc_value_edge_stage(const XrRbcModule *module,XrRbcStac
 static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *activation, XrRbcValueAccess access) {
     const XrRbcValueCode *code=activation->code;
-    RbcValueEdgeBuilder builder={module,stack,activation,0,0};
+    RbcValueEdgeBuilder builder={.module=module,.stack=stack,.activation=activation};
     activation->publication_count=0;
     const XrLirHomeEdge *selected=NULL; size_t prepared=0;
     XrtManagedStatus status=XRT_MANAGED_OK;

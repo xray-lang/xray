@@ -685,6 +685,7 @@ static void failure_sweep(unsigned kind) {
     xr_rbc_program_destroy(program); CHECK(!tracked_live);
     printf("Code owner fixture %u: compile/prepare/run OOM sites %zu/%zu/%zu refunded\n", kind, compile_calls, prepare_calls, run_calls);
 }
+#include "rbc_header_edge_cases.h"
 int main(void) {
     for (unsigned kind = 0; kind < 4; ++kind) { prepared_after_program(kind); failure_sweep(kind); }
     code_lease_is_leaf(); raw_borrow_and_refusal();
@@ -694,6 +695,8 @@ int main(void) {
     borrowed_cell_edge_rollback();
     scalar_callable_directory();
     raw_callable_exact_boundaries();
+    header_only_edge_failures(); tagged_edge_keeps_publication();
+    mixed_edge_publication_order(false); mixed_edge_publication_order(true);
     puts("CodeImage leases, independent Layout snapshots and post-Program executions passed");
     return 0;
 }
