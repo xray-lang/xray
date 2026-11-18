@@ -14,6 +14,7 @@
 #include "xnative_module_state.h"
 #include "xnative_status.h"
 #include "xnative_values.h"
+#include "xray_native_values.h"
 #include "xray_native_string_value.h"
 #include "base/xchecks.h"
 #include "os/os_time.h"
