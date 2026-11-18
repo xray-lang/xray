@@ -266,7 +266,8 @@ static void c_array_region_edge_end(LirC *c, size_t edge) {
         c_format(c,"    if (xrl_ar_%zu_phase == 0) xrl_ar_%zu_phase = 1;\n",region,region);
 }
 static void c_array_region_access(LirC *c, size_t region, size_t ordinal) {
-    const XrLirArrayRegionAccess *access = &c->array_region->bindings->accesses[ordinal];
+    const XrLirArrayRegionBindings *binding = c->array_region->bindings;
+    const XrLirArrayRegionAccess *access = &binding->accesses[ordinal];
     if (access->operation == XR_LIR_ARRAY_OP_LEN) {
         c_format(c,"    v%" PRIu32 " = (int64_t)xrl_ar_%zu_cache.length;\n",access->result,region); return;
     }
@@ -277,18 +278,22 @@ static void c_array_region_access(LirC *c, size_t region, size_t ordinal) {
         c_array_region_clear(c,region,3);
         c_format(c,"    goto xrl_ar_slow_%" PRIu32 "_%" PRIu32 ";\n    }\n",access->block,access->instruction);
     }
+    bool fixed_copy = c->array_helper_active &&
+        binding->regions[region].region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET;
+    const char *copy = fixed_copy ? "XRT_ARRAY_I64_REGION_COPY" : "memcpy";
+    const char *copy_end = fixed_copy ? ");\n" : ", sizeof(int64_t));\n";
     if (access->operation == XR_LIR_ARRAY_OP_GET) {
-        c_format(c,"    memcpy(&v%" PRIu32 ", ",access->result);
+        c_format(c,"    %s(&v%" PRIu32 ", ",copy,access->result);
         if (c->array_helper_active) c_text(c,"xrl_ar_elements");
         else c_format(c,"xrl_ar_%zu_cache.elements",region);
         c_text(c," + (size_t)");
-        c_value(c,access->index); c_text(c," * sizeof(int64_t), sizeof(int64_t));\n");
+        c_value(c,access->index); c_text(c," * sizeof(int64_t)"); c_text(c,copy_end);
     } else {
-        c_text(c,"    memcpy(");
+        c_format(c,"    %s(",copy);
         if (c->array_helper_active) c_text(c,"xrl_ar_elements");
         else c_format(c,"xrl_ar_%zu_cache.elements",region);
         c_text(c," + (size_t)"); c_value(c,access->index);
-        c_text(c," * sizeof(int64_t), &"); c_value(c,access->item); c_text(c,", sizeof(int64_t));\n");
+        c_text(c," * sizeof(int64_t), &"); c_value(c,access->item); c_text(c,copy_end);
     }
 }
 static void c_array_region_clone(LirC *c, size_t region) {

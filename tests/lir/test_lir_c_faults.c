@@ -651,6 +651,8 @@ static void array_helper_boundaries(void) {
         bool helper = n < 3 || dual || readonly;
         CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_payload") != NULL) == helper);
         CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_elements") != NULL) == helper);
+        CHECK((strstr(output.bytes,"XRT_ARRAY_I64_REGION_COPY(&v") != NULL) == (helper && !readonly));
+        CHECK((strstr(output.bytes,"XRT_ARRAY_I64_REGION_COPY(xrl_ar_elements") != NULL) == (helper && !readonly));
         CHECK(strstr(output.bytes,"xrt_array_i64_region_try_begin") && strstr(output.bytes,"xrl_ar_0_phase == 1"));
         if (helper) {
             const char *outlined = strstr(output.bytes,"static XRT_ARRAY_REGION_OUTLINE XrlArResult_");

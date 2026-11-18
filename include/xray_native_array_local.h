@@ -67,6 +67,17 @@ typedef struct XrtArrayI64RegionCache {
 #define XRT_ARRAY_REGION_OUTLINE
 #endif
 
+/* An admitted mutation loop has already checked the complete spans. Expose
+ * the fixed-width byte access to the optimizer even when libc wraps memcpy
+ * in a checked call. The backing remains byte storage on every provider. */
+#if defined(__clang__) || defined(__GNUC__)
+#define XRT_ARRAY_I64_REGION_COPY(destination, source) \
+    __builtin_memcpy((destination), (source), sizeof(int64_t))
+#else
+#define XRT_ARRAY_I64_REGION_COPY(destination, source) \
+    memcpy((destination), (source), sizeof(int64_t))
+#endif
+
 /* This is the only full dynamic check for a producer-described call-free
  * region. Ready means its original complete SET/READ/drop/latch has returned,
  * not a metadata permission. Inputs are actual live private factory objects
