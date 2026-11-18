@@ -190,7 +190,8 @@ static void array_region_range_tampering(void) {
         }
         XrLirArraySetRegionOwnerHome *home = &((XrLirArraySetRegion *)plan->array_regions.regions.data)[0].owner_home;
         CHECK(home->kind == kind);
-        uint32_t *home_fields[] = {&home->kind,&home->first_active_step,&home->exit_step};
+        uint32_t *home_fields[] = {&home->kind,&home->first_active_step,&home->exit_step,
+            &((XrLirArraySetRegion *)plan->array_regions.regions.data)[0].element_read};
         XrLirArraySetRegionOwnerHome original_home = *home;
         for (size_t n = 0; n < sizeof(home_fields) / sizeof(*home_fields); ++n) {
             uint32_t saved = *home_fields[n]; *home_fields[n] ^= 1;

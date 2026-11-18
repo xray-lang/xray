@@ -241,6 +241,10 @@ typedef struct XrLirArraySetRegion {
     uint32_t body_block_count, primary_kind, primary_block, primary_instruction, first_step, step_count;
     XrLirArraySetRegionRange range;
     XrLirArraySetRegionOwnerHome owner_home;
+    /* One-based GET in primary_block for a current-element I64 expression
+     * ending at the primary SET. No changed scalar recurrence except the IV.
+     * Consumers must still run the original final iteration and owner exit. */
+    uint32_t element_read;
     XrLirArrayPushCapacity push_capacity;
 } XrLirArraySetRegion;
 

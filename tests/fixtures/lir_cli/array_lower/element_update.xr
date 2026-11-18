@@ -1,0 +1,20 @@
+fn show(start: i64) {
+    var values: Array<i64> = [9223372036854775807, -1, 0, 4, 9223372036854775807, 6, -7]
+    var i = start
+    while (i < len(values)) {
+        values[i] = values[i] * 3 + 1
+        i = i + 1
+    }
+    print(i)
+    print(values[0])
+    print(values[1])
+    print(values[4])
+    print(values[5])
+    print(values[6])
+}
+
+show(7)
+show(6)
+show(5)
+show(4)
+show(0)

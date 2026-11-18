@@ -579,6 +579,85 @@ static bool lir_array_region_push_capacity(const LirArrayRegionProof *p, XrLirAr
         .latch_iv=r->latch_iv,.item=p->push_item,.first_active_step=token.first_active_step,.checkpoint_step=token.exit_step-1};
     return true;
 }
+/* The range walk is finished. Use a disjoint stamp to trace unchanged
+ * header parameters through the straight-line body, including bridge blocks. */
+static bool lir_array_element_passthrough(LirArrayRegionProof *p, const XrLirArraySetRegion *region) {
+    const XrLirFunctionData *f = p->function;
+    const XrLirBlockData *header = &f->blocks[region->header - 1];
+    uint64_t stamp = p->range_stamp | (UINT64_C(1) << 63);
+    for (uint32_t a = 0; a < header->parameter_count; ++a) {
+        uint32_t value = header->parameters[a];
+        p->uses[value].range_stamp = stamp; p->uses[value].lane = value;
+    }
+    uint32_t block = region->header - 1;
+    for (uint32_t n = 0; n <= p->block_count; ++n) {
+        const XrLirEdgeView *edge = &lir_terminator(f,block)->edges[0];
+        const XrLirBlockData *target = &f->blocks[edge->target - 1];
+        bool latch = n == p->block_count;
+        XR_DCHECK(latch == (edge->target == region->header), "element proof follows the closed region route");
+        for (uint32_t a = 0; a < target->parameter_count; ++a) {
+            uint32_t source = edge->arguments[a], parameter = target->parameters[a];
+            if (!lir_array_region_scalar(f->values[parameter - 1].type)) continue;
+            uint32_t origin = p->uses[source].range_stamp == stamp ? p->uses[source].lane : 0;
+            if (latch) {
+                if (parameter != region->range.iv && origin != parameter) return false;
+            } else {
+                p->uses[parameter].range_stamp = stamp; p->uses[parameter].lane = origin;
+            }
+        }
+        block = edge->target - 1;
+    }
+    return true;
+}
+
+static bool lir_array_element_constant(const XrLirFunctionData *f, uint32_t value, uint64_t *bits) {
+    const XrLirInstructionView *def = xr_lir_internal_value_definition(f,value);
+    if (!def || def->op != XR_LIR_CONST || def->type != XR_LIR_I64) return false;
+    *bits = def->bits; return true;
+}
+
+static bool lir_array_element_operand(const XrLirFunctionData *f, uint32_t block,
+    uint32_t read, uint32_t before, uint32_t value) {
+    const XrLirValueData *v = &f->values[value - 1];
+    uint64_t bits;
+    return v->type == XR_LIR_I64 && (lir_array_element_constant(f,value,&bits) ||
+        (!v->parameter && v->block == block && v->instruction + 1 >= read && v->instruction + 1 < before));
+}
+
+/* The existing owner and range windows exclude other arrays, different
+ * indices, faults and observers. Close the remaining scalar dependency:
+ * the update reads just this element and leaves other loop state unchanged. */
+static bool lir_array_element_update(LirArrayRegionProof *p, const XrLirArraySetRegion *region) {
+    if (region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_SET ||
+        region->owner_home.kind != XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW ||
+        p->get_count != 1 || p->get_block != region->primary_block || p->get_instruction >= region->primary_instruction)
+        return false;
+    const XrLirFunctionData *f = p->function;
+    const XrLirBlockData *body = &f->blocks[region->primary_block - 1];
+    uint32_t read = p->get_instruction;
+    for (uint32_t i = read + 1; i < region->primary_instruction; ++i) {
+        const XrLirInstructionView *op = &body->instructions[i - 1].view;
+        if (op->op == XR_LIR_CELL_NEW) {
+            /* This adjacent retirement was already discharged by the owner proof. */
+            ++i; continue;
+        }
+        if (op->type != XR_LIR_I64) return false;
+        if (op->op == XR_LIR_CONST) continue;
+        if (op->op == XR_LIR_MUL) {
+            uint64_t bits;
+            if (!lir_array_element_constant(f,op->operands[0],&bits) &&
+                !lir_array_element_constant(f,op->operands[1],&bits)) return false;
+            bits &= bits - 1;
+            if (bits & (bits - 1)) return false;
+        } else if (op->op != XR_LIR_ADD && op->op != XR_LIR_SUB && op->op != XR_LIR_NEG) return false;
+        for (uint32_t a = 0; a < op->operand_count; ++a)
+            if (!lir_array_element_operand(f,region->primary_block,read,i,op->operands[a])) return false;
+    }
+    const XrLirInstructionView *set = &body->instructions[region->primary_instruction - 1].view;
+    return lir_array_element_operand(f,region->primary_block,read,region->primary_instruction,set->operands[2]) &&
+        lir_array_element_passthrough(p,region);
+}
+
 static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
     XrLirArraySetRegion *region) {
     if (!lir_array_region_shape(p, header, body_edge, region)) return false;
@@ -612,6 +691,7 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint
         return capacity;
     }
     region->owner_home = lir_array_region_owner_home(p,region);
+    if (lir_array_element_update(p,region)) region->element_read = p->get_instruction;
     if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET &&
         region->owner_home.kind != XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW) return false;
     return true;
@@ -677,7 +757,7 @@ static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b)
         a.entry_value == b.entry_value && a.canonical_value == b.canonical_value && a.exit_value == b.exit_value &&
         a.body_block_count == b.body_block_count && a.primary_kind == b.primary_kind &&
         a.primary_block == b.primary_block && a.primary_instruction == b.primary_instruction &&
-        a.first_step == b.first_step && a.step_count == b.step_count &&
+        a.first_step == b.first_step && a.step_count == b.step_count && a.element_read == b.element_read &&
         a.range.kind == b.range.kind && a.range.iv == b.range.iv && a.range.iv_argument == b.range.iv_argument &&
         a.range.entry_iv == b.range.entry_iv && a.range.length == b.range.length &&
         a.range.length_instruction == b.range.length_instruction && a.range.condition == b.range.condition &&
