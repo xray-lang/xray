@@ -1,0 +1,28 @@
+fn show_window(end: i64, start: i64) {
+    var values: Array<i64> = [9]
+    var i = start
+    while (i < end) {
+        values.push(i)
+        i = i + 1
+    }
+    print(values)
+}
+
+fn show_snapshot(end: i64) {
+    var values: Array<i64> = [40, 50]
+    const snapshot = values
+    var i = 0
+    while (i < end) {
+        values.push(i)
+        i = i + 1
+    }
+    print(snapshot)
+    print(values)
+}
+
+show_window(0, 0)
+show_window(3, 0)
+show_window(9, -2)
+show_window(7, 9)
+show_window(9223372036854775807, 9223372036854775802)
+show_snapshot(7)

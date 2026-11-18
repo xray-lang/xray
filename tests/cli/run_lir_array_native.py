@@ -31,7 +31,7 @@ def main() -> None:
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
-             "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi",
+             "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity",
              "panic_region_get", "panic_region_set",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
              "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
@@ -107,6 +107,10 @@ def main() -> None:
             continue
         generated_text = generated.read_text(encoding="utf-8")
         assert "({" not in generated_text
+        if name == "push_capacity":
+            assert generated_text.count("static const XrtArrayI64RegionSpec xrl_ap_spec_") == 1
+            assert "xrl_ap_0_ready = true;" in generated_text
+            assert "xrt_native_array_update_place(" in generated_text
         if name.startswith("region_") or name.startswith("panic_region_"):
             specs = re.findall(r"static const XrtArrayI64RegionSpec xrl_ar_spec_", generated_text)
             clones = re.findall(r"^xrl_ar_\d+_bb\d+: ;\n(.*?)(?=^xrl_ar_\d+_bb\d+: ;|^}\n)",
