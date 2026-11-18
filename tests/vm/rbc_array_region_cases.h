@@ -92,6 +92,12 @@ static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool 
     RbcRegionResult actual=rbc_region_run(&module,locations);
     size_t expected=observer || trips<2 ? 0 : failure ? 1 : loops;
     CHECK(region_begin_attempts==expected && region_begin_successes==(bypass ? 0 : expected));
+    region_begin_attempts=region_begin_successes=0; region_force_bypass=true;
+    RbcRegionResult ordinary=rbc_region_run(&module,locations);
+    CHECK(region_begin_attempts==expected && !region_begin_successes && actual.status==ordinary.status &&
+        actual.bits==ordinary.bits && actual.failure==ordinary.failure && actual.source==ordinary.source);
+    if (!failure) CHECK(actual.status==XR_RBC_OK && actual.bits==(trips%2 ? 2218u : 1129u)+trips);
+    else CHECK(actual.status==XR_RBC_VALUE_FAILURE && actual.failure==XR_XIR_VALUE_BOUNDS);
     XrRbcFunction *functions=xr_malloc(module.function_count*sizeof(*functions)); CHECK(functions);
     memcpy(functions,module.functions,module.function_count*sizeof(*functions));
     XrRbcValueAccess *accesses=xr_malloc(code->access_count*sizeof(*accesses)); CHECK(accesses);
@@ -107,11 +113,10 @@ static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool 
     XrRbcModule raw=module; raw.functions=functions; raw.borrowed_value_codes=codes;
     CHECK(!xr_rbc_module_code_owner(&raw));
     region_begin_attempts=region_begin_successes=0; region_force_bypass=false;
-    RbcRegionResult ordinary=rbc_region_run(&raw,locations);
-    CHECK(!region_begin_attempts && actual.status==ordinary.status && actual.bits==ordinary.bits &&
-        actual.failure==ordinary.failure && actual.source==ordinary.source);
-    if (!failure) CHECK(actual.status==XR_RBC_OK && actual.bits==(trips%2 ? 2218u : 1129u)+trips);
-    else CHECK(actual.status==XR_RBC_VALUE_FAILURE && actual.failure==XR_XIR_VALUE_BOUNDS);
+    /* Owned Frame homes are outside the existing raw admission boundary,
+     * even after old private hints are cleared or the new roles are copied. */
+    RbcRegionResult rejected=rbc_region_run(&raw,locations);
+    CHECK(rejected.status==XR_RBC_INVALID && !region_begin_attempts && !region_begin_successes);
     if (!failure && !observer && trips>1) {
         XrRbcFunction *physical=&functions[0]; uint32_t *words=xr_malloc(physical->code_count*sizeof(*words)); CHECK(words);
         memcpy(words,physical->code,physical->code_count*sizeof(*words)); size_t replaced=0;
@@ -122,8 +127,8 @@ static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool 
             }
         }
         CHECK(replaced==loops); physical->code=words;
-        ordinary=rbc_region_run(&raw,locations);
-        CHECK(!region_begin_attempts && ordinary.status==XR_RBC_OK && ordinary.bits==(trips%2 ? 2218u : 1129u));
+        rejected=rbc_region_run(&raw,locations);
+        CHECK(rejected.status==XR_RBC_INVALID && !region_begin_attempts && !region_begin_successes);
         xr_free(words);
     }
     xr_free(codes); xr_free(accesses); xr_free(functions);
