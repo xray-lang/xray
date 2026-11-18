@@ -38,10 +38,17 @@ typedef struct XrLirArrayRegionEdge {
     XrLirArrayRegionEdgeKind kind;
     size_t move;
 } XrLirArrayRegionEdge;
+typedef struct XrLirArrayRegionOwnerHomeBinding {
+    uint32_t kind;
+    /* Global indices in the original slots table; NONE has all fields zero.
+     * Ordinary homes and every original move remain separately available. */
+    size_t stable_slot, exit_slot;
+} XrLirArrayRegionOwnerHomeBinding;
 typedef struct XrLirArrayRegionBinding {
     XrLirArraySetRegion region;
     size_t first_slot, slot_count, canonical_slot;
     size_t first_move, move_count, first_access, access_count, first_block, block_count;
+    XrLirArrayRegionOwnerHomeBinding owner_home;
 } XrLirArrayRegionBinding;
 typedef struct XrLirArrayRegionBindings {
     const XrLirArrayRegionBinding *regions;

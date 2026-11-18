@@ -188,6 +188,17 @@ static void array_region_range_tampering(void) {
             *fields[n] = saved;
             CHECK(ars_range_same(*range, original));
         }
+        XrLirArraySetRegionOwnerHome *home = &((XrLirArraySetRegion *)plan->array_regions.regions.data)[0].owner_home;
+        CHECK(home->kind == kind);
+        uint32_t *home_fields[] = {&home->kind,&home->first_active_step,&home->exit_step};
+        XrLirArraySetRegionOwnerHome original_home = *home;
+        for (size_t n = 0; n < sizeof(home_fields) / sizeof(*home_fields); ++n) {
+            uint32_t saved = *home_fields[n]; *home_fields[n] ^= 1;
+            CHECK(xr_lir_ownership_array_regions_verify(c.module,plan) == XR_LIR_VERIFY_ERROR &&
+                live == baseline && live_bytes == bytes);
+            *home_fields[n] = saved;
+            CHECK(ars_owner_home_same(*home,original_home));
+        }
         OK(xr_lir_ownership_array_regions_verify(c.module, plan));
         xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module);
         CHECK(!live && !live_bytes);

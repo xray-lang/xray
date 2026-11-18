@@ -15,6 +15,14 @@ static void array_region_binding_check(const XrLirArrayRegionBindings *b,const X
     for (size_t n=0;n<b->region_count;++n) {
         const XrLirArrayRegionBinding *r=&b->regions[n]; CHECK(r->slot_count && r->move_count==r->region.step_count);
         CHECK(ars_range_same(r->region.range, homes->array_regions[n].range));
+        CHECK(ars_owner_home_same(r->region.owner_home,homes->array_regions[n].owner_home));
+        if (r->region.owner_home.kind) {
+            CHECK(r->region.owner_home.first_active_step==2 && r->region.owner_home.exit_step==r->move_count);
+            const XrLirArrayRegionMove *exit=&b->moves[r->first_move+r->region.owner_home.exit_step-1];
+            CHECK(r->owner_home.kind==XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW &&
+                r->owner_home.stable_slot==r->canonical_slot && r->owner_home.exit_slot==exit->target_slot &&
+                r->owner_home.stable_slot!=r->owner_home.exit_slot && exit->step.kind==XR_LIR_ARRAY_SET_REGION_EXIT_MOVE);
+        } else CHECK(!r->owner_home.kind && !r->owner_home.stable_slot && !r->owner_home.exit_slot);
         CHECK(r->canonical_slot>=r->first_slot && r->canonical_slot-r->first_slot<r->slot_count);
         XrtArrayI64RegionSpec runtime={b->slots+r->first_slot,r->slot_count,r->canonical_slot-r->first_slot};
         CHECK(runtime.slots[runtime.canonical].slot==homes->values[r->region.canonical_value].first_owner);
@@ -81,12 +89,29 @@ static void array_region_binding_unsupported(const XrLirValueHomes *homes,const 
         XrLirValueHomes view=*homes; view.values=values;
         XrLirArrayRegionBindings *bindings=NULL; HOME(xr_lir_array_region_bindings_create(&view,set,&bindings));
         CHECK(bindings->region_count==homes->array_region_count && !bindings->regions[disabled].slot_count);
+        CHECK(ars_owner_home_same(bindings->regions[disabled].region.owner_home,homes->array_regions[disabled].owner_home) &&
+            !bindings->regions[disabled].owner_home.kind && !bindings->regions[disabled].owner_home.stable_slot &&
+            !bindings->regions[disabled].owner_home.exit_slot);
         for (size_t n=0;n<bindings->region_count;++n) if (n!=disabled) CHECK(bindings->regions[n].slot_count);
         for (size_t n=0;n<bindings->block_index_count;++n) CHECK(bindings->block_index[n].region!=disabled+1);
         for (size_t n=0;n<bindings->edge_count;++n) CHECK(bindings->edges[n].region!=disabled+1);
         xr_lir_array_region_bindings_destroy(bindings);
     }
     xr_free(values);
+    {
+        size_t size=homes->array_region_count*sizeof(*homes->array_regions);
+        XrLirArraySetRegion *regions=xr_malloc(size); CHECK(regions); memcpy(regions,homes->array_regions,size);
+        for (uint32_t n=0;n<homes->array_region_count;++n) regions[n].owner_home=(XrLirArraySetRegionOwnerHome){0};
+        XrLirValueHomes ordinary=*homes; ordinary.array_regions=regions;
+        XrLirArrayRegionBindings *projection=NULL; HOME(xr_lir_array_region_bindings_create(&ordinary,set,&projection));
+        for (size_t n=0;n<projection->region_count;++n) CHECK(projection->regions[n].slot_count &&
+            !projection->regions[n].owner_home.kind && !projection->regions[n].owner_home.stable_slot &&
+            !projection->regions[n].owner_home.exit_slot);
+        xr_lir_array_region_bindings_destroy(projection); projection=NULL;
+        regions[0].owner_home.first_active_step=1;
+        CHECK(xr_lir_array_region_bindings_create(&ordinary,set,&projection)==XR_LIR_VALUE_LAYOUT_ARGUMENT && !projection);
+        xr_free(regions);
+    }
     XrLirValueHomes view=*homes; view.frame.payload_alignment=1;
     XrLirArrayRegionBindings *bindings=NULL; HOME(xr_lir_array_region_bindings_create(&view,set,&bindings));
     CHECK(!bindings->slot_count && !bindings->move_count && !bindings->access_count && !bindings->block_count && !bindings->operation_count);
@@ -178,7 +203,11 @@ static void array_region_binding_projection(unsigned shape) {
     XrLirArraySetRegion first=bindings->regions[0].region;
     uint64_t range_digest=ars_range_digest(first.range);
     XrLirArraySetRegionRange retained_ranges[2]; CHECK(regions<=2);
-    for (size_t n=0;n<regions;++n) retained_ranges[n]=bindings->regions[n].region.range;
+    XrLirArraySetRegionOwnerHome retained_homes[2]; XrLirArrayRegionOwnerHomeBinding retained_projections[2];
+    for (size_t n=0;n<regions;++n) {
+        retained_ranges[n]=bindings->regions[n].region.range; retained_homes[n]=bindings->regions[n].region.owner_home;
+        retained_projections[n]=bindings->regions[n].owner_home;
+    }
     xr_lir_value_homes_destroy(homes); xr_lir_ownership_plan_destroy(plan);
     xr_lir_value_layouts_destroy(set); xr_lir_module_destroy(c.module);
     CHECK(bindings->region_count==regions && bindings->move_count==moves && bindings->access_count==accesses &&
@@ -189,6 +218,10 @@ static void array_region_binding_projection(unsigned shape) {
         const XrLirArrayRegionBinding *r=&bindings->regions[n];
         CHECK(ars_range_same(r->region.range,retained_ranges[n]) &&
             ars_range_digest(r->region.range)==ars_range_digest(retained_ranges[n]));
+        CHECK(ars_owner_home_same(r->region.owner_home,retained_homes[n]) &&
+            ars_owner_home_digest(r->region.owner_home)==ars_owner_home_digest(retained_homes[n]) &&
+            r->owner_home.kind==retained_projections[n].kind && r->owner_home.stable_slot==retained_projections[n].stable_slot &&
+            r->owner_home.exit_slot==retained_projections[n].exit_slot);
         if (shared && n==1) CHECK(!r->slot_count);
         else CHECK(r->slot_count && r->canonical_slot<bindings->slot_count && r->first_move+r->move_count<=moves &&
             r->first_access+r->access_count<=accesses);

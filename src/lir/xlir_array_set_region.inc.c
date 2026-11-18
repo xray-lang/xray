@@ -445,6 +445,48 @@ static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32
     }
     return true;
 }
+static XrLirArraySetRegionOwnerHome lir_array_region_owner_home(const LirArrayRegionProof *p,
+    const XrLirArraySetRegion *region) {
+    XrLirArraySetRegionOwnerHome none = {0};
+    if (region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN || p->step_count < 3) return none;
+    XrLirArraySetRegionStep entry = p->steps[0];
+    if (entry.kind != XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE || entry.source != region->entry_value ||
+        entry.target != region->canonical_value || entry.block != region->entry_block || entry.edge != region->entry_edge)
+        return none;
+    uint32_t current = region->canonical_value, first = 0, exit = 0;
+    /* The original body walk has admitted only nonfailing scalar operations,
+     * same-backing Array accesses and exact COPY/death pairs. Do not infer this
+     * equivalence from liveness, sampled RC or an unobserved dead destination:
+     * every original owner transition, including its death, is covered here. */
+    for (uint32_t n = 1; n < p->step_count; ++n) {
+        XrLirArraySetRegionStep step = p->steps[n];
+        if (step.source != current || p->uses[current].direct.blocked) return none;
+        if (step.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE) {
+            if (n + 1 != p->step_count || current != region->canonical_value ||
+                step.block != region->header || step.edge != region->exit_edge || step.target != region->exit_value)
+                return none;
+            exit = n + 1; continue;
+        }
+        if (!first) {
+            if (step.kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE || step.block != region->header || step.edge != 1)
+                return none;
+            first = n + 1;
+        }
+        if (step.kind == XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) {
+            if (!lir_array_region_array(p->function,current) || !lir_array_region_array(p->function,step.target) ||
+                !step.edge || step.drop) return none;
+        } else if (step.kind == XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE || step.kind == XR_LIR_ARRAY_SET_REGION_READ_CANDIDATE) {
+            const LirArrayForwardUse *use = &p->uses[current].direct;
+            bool create = step.kind == XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE;
+            if (step.edge || step.drop != step.instruction + 1 || use->block != step.block || use->last != step.drop ||
+                (create ? !lir_array_region_array(p->function,current) || !lir_array_forward_cell(p->function,step.target) :
+                    !lir_array_forward_cell(p->function,current) || !lir_array_region_array(p->function,step.target))) return none;
+        } else return none;
+        current = step.target;
+    }
+    if (!first || !exit) return none;
+    return (XrLirArraySetRegionOwnerHome){XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW,first,exit};
+}
 static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
     XrLirArraySetRegion *region) {
     if (!lir_array_region_shape(p, header, body_edge, region)) return false;
@@ -464,6 +506,7 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint
     current = region->canonical_value;
     if (!lir_array_region_edge(p, header, region->exit_edge - 1, XR_LIR_ARRAY_SET_REGION_EXIT_MOVE, &current)) return false;
     region->exit_value = current; region->step_count = p->step_count;
+    region->owner_home = lir_array_region_owner_home(p,region);
     return true;
 }
 static void lir_array_region_proof_free(LirArrayRegionProof *p) {
@@ -521,7 +564,9 @@ static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b)
         a.range.length_instruction == b.range.length_instruction && a.range.condition == b.range.condition &&
         a.range.condition_instruction == b.range.condition_instruction && a.range.increment == b.range.increment &&
         a.range.increment_block == b.range.increment_block && a.range.increment_instruction == b.range.increment_instruction &&
-        a.range.one == b.range.one && a.range.latch_iv == b.range.latch_iv;
+        a.range.one == b.range.one && a.range.latch_iv == b.range.latch_iv &&
+        a.owner_home.kind == b.owner_home.kind && a.owner_home.first_active_step == b.owner_home.first_active_step &&
+        a.owner_home.exit_step == b.owner_home.exit_step;
 }
 static bool lir_array_region_step_equal(XrLirArraySetRegionStep a, XrLirArraySetRegionStep b) {
     return a.kind == b.kind && a.block == b.block && a.instruction == b.instruction && a.edge == b.edge &&

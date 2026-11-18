@@ -261,6 +261,37 @@ static XrLirValueLayoutStatus region_binding_access(RegionBindingBuilder *b, con
     }
     return region_binding_append(&b->accesses,&row,1,sizeof(row));
 }
+static XrLirValueLayoutStatus region_binding_owner_home(const RegionBindingBuilder *b,
+    XrLirArrayRegionBinding *row) {
+    XrLirArraySetRegionOwnerHome home = row->region.owner_home;
+    if (home.kind == XR_LIR_ARRAY_SET_OWNER_HOME_NONE)
+        return home.first_active_step || home.exit_step ? XR_LIR_VALUE_LAYOUT_ARGUMENT : XR_LIR_VALUE_LAYOUT_OK;
+    if (home.kind != XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW ||
+        row->region.range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN ||
+        home.first_active_step < 2 || home.first_active_step >= home.exit_step || home.exit_step != row->move_count ||
+        row->move_count != row->region.step_count) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    const XrLirArrayRegionMove *moves = b->moves.data;
+    size_t first = home.first_active_step - 1, last = home.exit_step - 1;
+    if (first != 1 || moves[row->first_move].step.kind != XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE)
+        return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    for (size_t n = first; n < last; ++n) {
+        XrLirArraySetRegionStep step = moves[row->first_move + n].step;
+        if (step.kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE && step.kind != XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE &&
+            step.kind != XR_LIR_ARRAY_SET_REGION_READ_CANDIDATE) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    }
+    XrLirArrayRegionMove begin = moves[row->first_move + first], exit = moves[row->first_move + last];
+    if (begin.step.kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE || begin.step.block != row->region.header || begin.step.edge != 1 ||
+        begin.step.source != row->region.canonical_value || begin.source_slot != row->canonical_slot ||
+        exit.step.kind != XR_LIR_ARRAY_SET_REGION_EXIT_MOVE || exit.step.source != row->region.canonical_value ||
+        exit.step.target != row->region.exit_value || exit.step.block != row->region.header ||
+        exit.step.edge != row->region.exit_edge || exit.source_slot != row->canonical_slot)
+        return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    if (row->canonical_slot == exit.target_slot) return XR_LIR_VALUE_LAYOUT_OK;
+    /* These are the original typed Frame fields. Only the optional window
+     * projects a stable home; the real admission still probes every old slot. */
+    row->owner_home = (XrLirArrayRegionOwnerHomeBinding){home.kind,row->canonical_slot,exit.target_slot};
+    return XR_LIR_VALUE_LAYOUT_OK;
+}
 static XrLirValueLayoutStatus region_binding_project(RegionBindingBuilder *b, uint32_t ordinal,
     XrLirArrayRegionBinding *row) {
     XrLirArraySetRegion r=b->homes->array_regions[ordinal];
@@ -298,7 +329,7 @@ static XrLirValueLayoutStatus region_binding_project(RegionBindingBuilder *b, ui
     }
     row->slot_count=b->slots.count-row->first_slot; row->move_count=b->moves.count-row->first_move;
     row->access_count=b->accesses.count-row->first_access;
-    return XR_LIR_VALUE_LAYOUT_OK;
+    return region_binding_owner_home(b,row);
 }
 static XrLirArrayRegionOperation *region_binding_operation(RegionBindingBuilder *b, uint32_t block,
     uint32_t instruction) {

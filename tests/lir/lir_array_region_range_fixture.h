@@ -17,7 +17,7 @@ enum ArrayRegionRangeMode {
     ARRAY_REGION_RANGE_COMPUTED_GET, ARRAY_REGION_RANGE_CONSTANT_SET,
     ARRAY_REGION_RANGE_STEP_TWO, ARRAY_REGION_RANGE_STEP_DYNAMIC,
     ARRAY_REGION_RANGE_COMMUTED, ARRAY_REGION_RANGE_DOUBLE_STEP, ARRAY_REGION_RANGE_LATCH_CURRENT,
-    ARRAY_REGION_RANGE_NEXT_COPIES, ARRAY_REGION_RANGE_C_HEADER_LIVEOUT
+    ARRAY_REGION_RANGE_NEXT_COPIES, ARRAY_REGION_RANGE_C_HEADER_LIVEOUT, ARRAY_REGION_RANGE_FAILING_RHS
 };
 #define ARS_RANGE_FIELDS(r) (r).kind,(r).iv,(r).iv_argument,(r).entry_iv,(r).length,(r).length_instruction, \
     (r).condition,(r).condition_instruction,(r).increment,(r).increment_block,(r).increment_instruction,(r).one,(r).latch_iv
@@ -29,6 +29,13 @@ static inline bool ars_range_same(XrLirArraySetRegionRange a, XrLirArraySetRegio
 static inline uint64_t ars_range_digest(XrLirArraySetRegionRange range) {
     uint32_t fields[] = {ARS_RANGE_FIELDS(range)};
     return xr_hash_bytes64(fields, sizeof(fields));
+}
+static inline bool ars_owner_home_same(XrLirArraySetRegionOwnerHome a, XrLirArraySetRegionOwnerHome b) {
+    return a.kind == b.kind && a.first_active_step == b.first_active_step && a.exit_step == b.exit_step;
+}
+static inline uint64_t ars_owner_home_digest(XrLirArraySetRegionOwnerHome home) {
+    uint32_t fields[] = {home.kind,home.first_active_step,home.exit_step};
+    return xr_hash_bytes64(fields,sizeof(fields));
 }
 static void ars_range_edge(ArraySetRegionFixture *c, XrLirBlock block, XrLirBlock target, XrLirValue values[4]) {
     OK(xr_lir_set_terminator(c->module, block, &(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
@@ -47,10 +54,11 @@ static XrLirValue ars_range_mutate(ArraySetRegionFixture *c, XrLirValue values[4
     }
     XrLirValue item = ars_array_op(c, block, XR_LIR_ARRAY_OP_GET, args, 2);
     (void)ars_array_op(c, block, XR_LIR_ARRAY_OP_GET, args, 2);
-    if (mode == ARRAY_REGION_RANGE_C_HEADER_LIVEOUT) {
+    if (mode == ARRAY_REGION_RANGE_C_HEADER_LIVEOUT || mode == ARRAY_REGION_RANGE_FAILING_RHS) {
         XrLirValue external = {0}; OK(xr_lir_function_parameter(c->module,c->function,0,&external));
         XrLirValue sum[] = {item,external};
-        item = ars_value(c,block,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=sum,.operand_count=2});
+        item = ars_value(c,block,(XrLirInstruction){.op=mode == ARRAY_REGION_RANGE_C_HEADER_LIVEOUT ? XR_LIR_ADD : XR_LIR_DIV,
+            .type=XR_LIR_I64,.operands=sum,.operand_count=2});
     }
     XrLirValue cell = ars_value(c, block, (XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,
         .operands=values,.operand_count=1});
