@@ -19,6 +19,9 @@ REQUIRED = (
     "register_vm", "register_vm_native_print", "register_vm_alloc",
     "lir_bytecode", "lir_bytecode_alloc", "lir_bytecode_source",
     "lir_vm_source", "lir_vm_output", "skeleton_diff", "smoke", "test_lir_cli_effects",
+    # Preserve written Bool/String evaluation order, retained messages and real
+    # callsite locations through valid LIR and Source on both execution backends.
+    "lir_assertion", "test_lir_cli_assertions",
     # Cross-module ownership and capability transport need real native execution.
     "test_lir_state", "native_module_state_owner", "test_lir_cli_module_state",
     # Exercise Array ownership, failure cleanup and complete Source/native parity.
