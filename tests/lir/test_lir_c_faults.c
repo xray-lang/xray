@@ -467,6 +467,61 @@ static XrLirFunction array_helper_root(ArraySetRegionFixture *input) {
         .operands=&result,.operand_count=1}));
     return root;
 }
+typedef struct ArrayHelperCancelPoint {
+    const LirC *compiler;
+    size_t stop, polls, attempts;
+    bool reached;
+} ArrayHelperCancelPoint;
+static bool array_helper_cancel(const void *context) {
+    ArrayHelperCancelPoint *point = (ArrayHelperCancelPoint *)context;
+    ++point->polls;
+    if (point->polls > 1 && point->compiler->array_region->scalar_count == point->stop) {
+        point->reached = true; point->attempts = runtime_attempts; return true;
+    }
+    return false;
+}
+static void array_helper_cancellation(void) {
+    ArraySetRegionFixture input = ars_range_build(NULL,8,ARRAY_REGION_RANGE_UNIT);
+    XrLirFunction root = array_helper_root(&input); OK(xr_lir_module_finish(input.module,NULL));
+    XrtBillingOwner *billing = NULL; CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing) == XRT_MANAGED_OK);
+    XrLirValueLayoutKey keys[] = {{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
+    XrLirValueLayouts *layouts = NULL;
+    CHECK(xr_lir_value_layouts_create(input.module,keys,4,billing,&layouts) == XR_LIR_VALUE_LAYOUT_OK);
+    XrLirOwnershipPlan *plan = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module},&plan,NULL));
+    XrLirValueHomes *homes = NULL;
+    CHECK(xr_lir_value_homes_create(&(XrLirValueHomesRequest){input.module,input.function,layouts,plan},&homes) == XR_LIR_VALUE_LAYOUT_OK);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
+    XrCompileResources *resources = sdk_ledger(&limits);
+    uint64_t held = sdk_stats(resources).held_bytes; size_t live = runtime_live, bytes = runtime_bytes;
+    const size_t stops[] = {0,32};
+    for (size_t n = 0; n < sizeof(stops) / sizeof(*stops); ++n) {
+        XrLirCRequest request = {input.module,root,resources,"array-helper-cancellation",NULL};
+        LirC compiler = {.request=&request}; void *memory = NULL;
+        CHECK(xr_compile_resources_calloc(resources,xr_lir_function_count(input.module),
+            sizeof(*compiler.array_regions),&memory) == XR_COMPILE_RESOURCE_OK);
+        compiler.array_regions = memory;
+        LirCArrayRegions *receiver = &compiler.array_regions[input.function.id - 1];
+        CHECK(xr_lir_array_region_bindings_create(homes,layouts,&receiver->bindings) == XR_LIR_VALUE_LAYOUT_OK);
+        CHECK(receiver->bindings->region_count == 1 && receiver->bindings->regions[0].slot_count);
+        receiver->bound_count = 1; compiler.array_region = receiver;
+        ArrayHelperCancelPoint point = {.compiler=&compiler,.stop=stops[n]};
+        XrCompileRequestControl control = {0};
+        XrCompileRequestOptions options = {array_helper_cancel,&point,XR_COMPILE_DEADLINE_NONE,0};
+        CHECK(xr_compile_request_control_init(&options,&control) == XR_COMPILE_RESOURCE_OK);
+        request.control = &control;
+        c_array_helpers_prepare(&compiler,input.function.id,receiver);
+        CHECK(point.reached && compiler.status == XR_LIR_C_CANCELLED && control.status == XR_COMPILE_RESOURCE_CANCELLED);
+        CHECK(receiver->scalar_count == stops[n] && runtime_attempts == point.attempts);
+        CHECK(stops[n] ? receiver->scalars != NULL : receiver->scalars == NULL);
+        c_array_regions_destroy(&compiler);
+        CHECK(sdk_stats(resources).held_bytes == held && runtime_live == live && runtime_bytes == bytes);
+    }
+    xr_compile_resources_release(resources); xr_lir_value_homes_destroy(homes);
+    xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
+    CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
+    xr_lir_module_destroy(input.module); CHECK(!runtime_live && !runtime_bytes);
+}
 static void array_helper_boundaries(void) {
     const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT,ARRAY_REGION_RANGE_C_HEADER_LIVEOUT,
         ARRAY_REGION_RANGE_NEXT_COPIES,ARRAY_REGION_RANGE_STEP_TWO,ARRAY_REGION_RANGE_PARALLEL_BAD};
@@ -539,6 +594,7 @@ int main(int argc, char **argv) {
     if (argc == 1) edge_control_boundaries();
     if (argc == 1) record_memory_boundaries();
     if (argc == 1) array_helper_boundaries();
+    if (argc == 1) array_helper_cancellation();
     (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--ice")));
     XrLirModule *module = NULL;

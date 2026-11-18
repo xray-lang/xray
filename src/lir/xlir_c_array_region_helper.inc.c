@@ -24,6 +24,7 @@ static bool c_array_helper_enabled(const LirC *c, size_t region) {
     return c->array_region && c->array_region->helpers && c->array_region->helpers[region].count != 0;
 }
 static bool c_array_helper_scalar(LirCArrayHelperBuilder *b, uint32_t value, bool read, bool output) {
+    if (b->c->status != XR_LIR_C_OK) return false;
     if (!value) return true;
     const XrLirValueData definition = b->function->values[value - 1];
     if (definition.type != XR_LIR_I1 && definition.type != XR_LIR_I64) return true;
@@ -75,6 +76,7 @@ static bool c_array_helper_project(LirCArrayHelperBuilder *b) {
                     if (!c_array_helper_scalar(b,op->edges[e].arguments[a],true,false)) return false;
         }
     }
+    if (!c_request_poll(b->c)) return false;
     const XrLirBlockData *exit = &b->function->blocks[row.region.exit_block - 1];
     for (uint32_t a = 0; a < exit->parameter_count; ++a)
         if (!c_array_helper_scalar(b,exit->parameters[a],false,true)) return false;
