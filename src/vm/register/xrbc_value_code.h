@@ -12,6 +12,7 @@
  */
 #ifndef XRBC_VALUE_CODE_H
 #define XRBC_VALUE_CODE_H
+#include "base/xchecks.h"
 #include "xrbc_value_homes.h"
 #include "xray_native_pod.h"
 #include "lir/xlir_array_region_binding.h"
