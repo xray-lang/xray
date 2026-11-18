@@ -65,6 +65,44 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
     ca_return(&c,current,result); OK(xr_lir_module_finish(c.module,NULL)); return c.module;
 }
 typedef struct RbcRegionResult { XrRbcStatus status; uint64_t bits; uint32_t source; XrXirValueStatus failure; } RbcRegionResult;
+static void rbc_region_roles(const XrRbcModule *module,const XrRbcValueCode *code,unsigned loops,uint32_t supported) {
+    if (!supported) { CHECK(!code->array_region_accesses); return; }
+    const XrLirArrayRegionBindings *bindings=code->array_regions;
+    CHECK(bindings && bindings->slot_count && code->array_region_accesses);
+    uint32_t seen=0;
+    for (size_t n=0;n<code->access_count;++n) {
+        const XrRbcArrayRegionAccess *role=&code->array_region_accesses[n];
+        XrRbcValueAccess access=code->accesses[n];
+        if (access.operation==XR_RBC_VALUE_EDGE && access.index!=UINT32_MAX)
+            CHECK(role->region==bindings->edges[access.index].region);
+        if (!role->region) {
+            CHECK(!role->operation.access && !role->operation.move && !role->operation.drop); continue;
+        }
+        CHECK(role->region<=loops && bindings->regions[role->region-1].slot_count);
+        seen|=1u<<(role->region-1);
+        if (role->operation.move) {
+            CHECK(role->operation.move<=bindings->move_count);
+            const XrLirArrayRegionMove *move=&bindings->moves[role->operation.move-1];
+            CHECK((access.operation==XR_RBC_VALUE_BINDING_NEW || access.operation==XR_RBC_VALUE_BINDING_READ) &&
+                access.source==move->step.source && access.result==move->step.target);
+        }
+        if (role->operation.drop) {
+            CHECK(role->operation.drop<=bindings->move_count);
+            CHECK((access.operation==XR_RBC_VALUE_DROP || access.operation==XR_RBC_VALUE_BINDING_DROP) &&
+                access.source==bindings->moves[role->operation.drop-1].step.source);
+        }
+        if (role->operation.access) {
+            CHECK(role->operation.access<=bindings->access_count);
+            const XrLirArrayRegionAccess *shared=&bindings->accesses[role->operation.access-1];
+            CHECK(access.operation==XR_RBC_VALUE_ARRAY && access.index==(uint32_t)shared->operation &&
+                access.result==shared->result && code->arguments[access.first]==shared->receiver);
+        }
+    }
+    CHECK(seen==supported);
+    const XrRbcFunction *function=&module->functions[0];
+    for (size_t pc=0;pc<function->code_count;++pc) if ((function->code[pc]&255)==XR_RBC_VALUE_ACCESS)
+        CHECK((function->code[pc]>>16)<code->access_count);
+}
 static RbcRegionResult rbc_region_run(const XrRbcModule *module,XrtLocationOwner *locations) {
     XrRbcExecution *execution=NULL; RbcRegionResult result={0};
     result.status=xr_rbc_module_prepare(module,0,NULL,0,locations,&execution);
@@ -88,6 +126,7 @@ static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool 
     CHECK(module.code_lease.retain(module.code_lease.owner));
     XrtLocationOwner *locations=program->locations; CHECK(xrt_locations_retain(locations));
     xr_lir_module_destroy(input); xr_rbc_program_destroy(program);
+    rbc_region_roles(&module,code,loops,observer ? 0 : (1u<<loops)-1);
     region_begin_attempts=region_begin_successes=0; region_force_bypass=bypass;
     RbcRegionResult actual=rbc_region_run(&module,locations);
     size_t expected=observer || trips<2 ? 0 : failure ? 1 : loops;
@@ -135,6 +174,48 @@ static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool 
     xrt_locations_release(locations); module.code_lease.release(module.code_lease.owner);
     CHECK(!tracked_live);
 }
+static void rbc_region_role_fallbacks(void) {
+    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,2,0,false); XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0); const XrLirValueHomes *homes=code->homes;
+    XrRbcCompileDiagnostic diagnostic={0}; RbcLirCompiler collector={.input=input,.diagnostic=&diagnostic};
+    RbcHomeVector roots={0}; CHECK(rbc_home_roots(&collector,NULL,&roots,&root.id,1));
+    XrtBillingOwner *billing=NULL; CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing)==XRT_MANAGED_OK);
+    XrLirValueLayouts *layouts=NULL;
+    CHECK(xr_lir_value_layouts_create(input,roots.data,roots.count,billing,&layouts)==XR_LIR_VALUE_LAYOUT_OK);
+    xr_free(roots.data);
+    size_t bytes=((size_t)homes->value_count+1)*sizeof(*homes->values);
+    XrLirValueHome *values=xr_malloc(bytes); CHECK(values);
+    for (unsigned shape=0;shape<3;++shape) {
+        memcpy(values,homes->values,bytes); XrLirValueHomes view=*homes; view.values=values;
+        if (!shape) view.frame.payload_alignment=1;
+        else values[homes->array_regions[shape-1].canonical_value].parameter=1;
+        XrLirArrayRegionBindings *bindings=NULL;
+        CHECK(xr_lir_array_region_bindings_create(&view,layouts,&bindings)==XR_LIR_VALUE_LAYOUT_OK);
+        uint32_t supported=shape ? 3u&~(1u<<(shape-1)) : 0;
+        CHECK(bindings->region_count==2 && (bindings->slot_count!=0)==(supported!=0));
+        XrRbcValueCode projected=*code; projected.array_regions=bindings; projected.array_region_accesses=NULL;
+        projected.access_count=0; RbcLirCompiler builder={.value_code=&projected,.diagnostic=&diagnostic};
+        for (size_t n=0;n<code->access_count;++n) {
+            const XrLirArrayRegionOperation *operation=&code->array_region_accesses[n].operation;
+            diagnostic.block=diagnostic.instruction=0;
+            if (operation->access) {
+                const XrLirArrayRegionAccess *access=&code->array_regions->accesses[operation->access-1];
+                diagnostic.block=access->block; diagnostic.instruction=access->instruction;
+            } else if (operation->move || operation->drop) {
+                const XrLirArraySetRegionStep *step=&code->array_regions->moves[
+                    (operation->move ? operation->move : operation->drop)-1].step;
+                diagnostic.block=step->block; diagnostic.instruction=operation->move ? step->instruction : step->drop;
+            }
+            CHECK(rbc_lir_array_region_append(&builder,&code->accesses[n])); ++projected.access_count;
+        }
+        rbc_region_roles(module,&projected,2,supported);
+        xr_free((void *)projected.array_region_accesses); xr_lir_array_region_bindings_destroy(bindings);
+    }
+    xr_free(values); xr_lir_value_layouts_destroy(layouts); xrt_billing_owner_drop(billing);
+    xr_lir_module_destroy(input); xr_rbc_program_destroy(program); CHECK(!tracked_live);
+}
 static void rbc_region_failures(void) {
     XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,1,0,false); XrRbcProgram *program=NULL;
     attempts=0; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK); size_t sites=attempts;
@@ -158,7 +239,7 @@ static void rbc_array_region_cases(void) {
     rbc_region_case(4,1,0,false,false); rbc_region_case(5,1,0,false,false);
     rbc_region_case(5,2,0,false,false); rbc_region_case(5,1,0,true,false);
     rbc_region_case(4,1,1,false,false); rbc_region_case(4,1,2,false,false);
-    rbc_region_case(4,1,0,false,true); rbc_region_failures();
+    rbc_region_case(4,1,0,false,true); rbc_region_role_fallbacks(); rbc_region_failures();
     RbcArrayRegionState state={.cache={(void *)1,(void *)2,3},.phase=RBC_ARRAY_REGION_ACTIVE};
     RbcValueActivation activation={.array_regions=&state,.active_array_region=1,.frame=(void *)4,.payload=(void *)5};
     rbc_value_array_region_forget(&activation,1,RBC_ARRAY_REGION_BYPASS);

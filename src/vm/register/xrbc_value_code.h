@@ -72,11 +72,15 @@ typedef struct XrRbcValueAccess {
      * for a physical scope capability; operation hooks keep their normal SSA
      * operands. Scope exit and RELEASE never read retired natural bytes. */
     uint32_t index, first, count, window;
-    /* Stable access identities survive bytecode compaction. Only the actual
-     * immutable CodeOwner may execute these common region coordinates. */
-    uint32_t array_region;
-    XrLirArrayRegionOperation region_operation;
 } XrRbcValueAccess;
+XR_STATIC_ASSERT(sizeof(XrRbcValueAccess)==32,"ordinary typed access rows occupy thirty-two bytes");
+
+/* Numeric roles belong only to code with projected Array slots. Stable access
+ * ordinals survive compaction; ordinary operation rows keep their own ABI. */
+typedef struct XrRbcArrayRegionAccess {
+    uint32_t region;
+    XrLirArrayRegionOperation operation;
+} XrRbcArrayRegionAccess;
 
 typedef struct XrRbcValueCode {
     const XrLirValueHomes *homes;
@@ -97,6 +101,7 @@ typedef struct XrRbcValueCode {
     const uint32_t *scope_values; /* Physical scope ordinal -> original SSA capability. */
     uint32_t scope_count;
     XrLirArrayRegionBindings *array_regions; /* Owned numeric projection, no live addresses. */
+    const XrRbcArrayRegionAccess *array_region_accesses; /* Same ordinal/count as accesses, or absent. */
 } XrRbcValueCode;
 
 /* Descriptions borrow the actual code lease, as the existing common homes do.
