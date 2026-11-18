@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lir'))
 from test_lir_carriers_native import _f64_profile, _f64_reject, _f64_options
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from xraytest.toolchain import archive_link_arguments
+from xraytest.toolchain import archive_link_arguments, native_c11_options
 
 MODES = ('raw', 'sccp', 'inline', 'sccp-inline-inline-sccp')
 PANIC = b'[Uncaught Panic] E0422: numeric conversion is out of range\n'
@@ -168,7 +168,8 @@ def main():
         if args.kind == 'msvc':
             crt = {'MultiThreaded':'/MT','MultiThreadedDebug':'/MTd',
                    'MultiThreadedDLL':'/MD','MultiThreadedDebugDLL':'/MDd'}[args.msvc_runtime]
-            values = ['/nologo','/std:c++17' if cpp else '/std:c11','/W4','/WX','/utf-8',crt,'/O2']
+            language = ['/std:c++17'] if cpp else native_c11_options(args.compiler, driver=args.kind)
+            values = ['/nologo',*language,'/W4','/WX','/utf-8',crt,'/O2']
             values += ['/clang:-fno-lto'] if 'clang' in args.compiler.name.lower() else ['/GL-']
             # Match the CLI's IEEE contract, including literal division by zero.
             values += ['/clang:-ffp-contract=off'] if 'clang' in args.compiler.name.lower() else ['/fp:precise','/wd4723']
