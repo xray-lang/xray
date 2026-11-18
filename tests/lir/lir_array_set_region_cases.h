@@ -61,18 +61,36 @@ static void ars_current_body(ArraySetRegionFixture c, const XrLirOwnershipPlan *
     increment->op = XR_LIR_ADD;
     OK(xr_lir_ownership_array_regions_verify(c.module, plan));
 }
+static void ars_current_retained_death(ArraySetRegionFixture c, const XrLirOwnershipPlan *plan) {
+    XrLirBlockData *entry = &c.module->functions[c.function.id - 1].blocks[c.entry.id - 1];
+    uint32_t *death = NULL;
+    for (uint32_t i = 0; i + 1 < entry->instruction_count; ++i)
+        if (entry->instructions[i].view.op == XR_LIR_ARRAY_DROP)
+            death = (uint32_t *)entry->instructions[i].view.operands;
+    CHECK(death);
+    uint32_t *survivor = (uint32_t *)entry->instructions[entry->instruction_count - 1].view.edges[0].arguments;
+    uint32_t old_death = *death, old_survivor = *survivor;
+    CHECK(old_death != old_survivor);
+    *death = old_survivor; *survivor = old_death;
+    OK(xr_lir_verify(c.module, NULL));
+    CHECK(xr_lir_ownership_array_regions_verify(c.module, plan) == XR_LIR_VERIFY_ERROR);
+    *death = old_death; *survivor = old_survivor;
+    OK(xr_lir_ownership_array_regions_verify(c.module, plan));
+}
 static void ars_preparation(uint32_t blocks, enum ArraySetRegionMode mode) {
     ArraySetRegionFixture c = array_set_region_fixture(blocks, mode);
     XrLirOwnershipPlan *plan = NULL; XrLirOwnershipRequest request = {.module=c.module};
     OK(xr_lir_ownership_plan_create(&request, &plan, NULL)); compare_internal(&request, plan);
-    bool expected = mode == ARRAY_SET_REGION_LOCAL || mode == ARRAY_SET_REGION_PADDED || mode == ARRAY_SET_REGION_DIAMONDS;
+    bool expected = mode == ARRAY_SET_REGION_LOCAL || mode == ARRAY_SET_REGION_PADDED || mode == ARRAY_SET_REGION_DIAMONDS ||
+        mode == ARRAY_SET_REGION_RETAIN_SOURCE || mode == ARRAY_SET_REGION_RETAIN_TARGET ||
+        mode == ARRAY_SET_REGION_RETAIN_MANY || mode == ARRAY_SET_REGION_RETAIN_DOMINATING;
     CHECK(xr_lir_ownership_array_region_count(plan) == (expected ? 1u : 0u));
     OK(xr_lir_ownership_array_regions_verify(c.module, plan));
     XrLirOwnershipFunction row; OK(xr_lir_ownership_function_at(plan, c.function.id, &row));
     CHECK(row.region_count == (expected ? 1u : 0u));
     if (!expected) { xr_lir_module_destroy(c.module); xr_lir_ownership_plan_destroy(plan); return; }
     XrLirArraySetRegion region; OK(xr_lir_ownership_array_region_at(plan, row.region_offset, &region));
-    CHECK(region.function == c.function.id && region.header == c.header.id && region.entry_block == c.entry.id &&
+    CHECK(region.function == c.function.id && region.header == c.header.id && region.entry_block == c.region_entry.id &&
         region.latch == c.body[blocks - 1].id && region.exit_block == c.exit.id && region.body_block_count == blocks &&
         region.canonical_value == c.header_array.id && region.set_block == c.body[0].id && region.set_instruction);
     uint32_t kinds[6] = {0};
@@ -88,7 +106,10 @@ static void ars_preparation(uint32_t blocks, enum ArraySetRegionMode mode) {
     XrLirArraySetRegion sentinel = {.function=733};
     CHECK(xr_lir_ownership_array_region_at(plan, xr_lir_ownership_array_region_count(plan), &sentinel) == XR_LIR_INVALID_ARGUMENT &&
         sentinel.function == 733);
-    ars_current_body(c, plan); ars_retirement(c, plan);
+    ars_current_body(c, plan);
+    if (mode == ARRAY_SET_REGION_RETAIN_SOURCE || mode == ARRAY_SET_REGION_RETAIN_TARGET)
+        ars_current_retained_death(c, plan);
+    ars_retirement(c, plan);
 }
 static void ars_current_inventory(void) {
     ArraySetRegionFixture absent = array_set_region_fixture(3, ARRAY_SET_REGION_NO_SET);
@@ -104,6 +125,25 @@ static void ars_current_inventory(void) {
     xr_lir_ownership_plan_destroy(old_absent); xr_lir_ownership_plan_destroy(old_present);
     xr_lir_module_destroy(absent.module); xr_lir_module_destroy(present.module);
 }
+static void ars_current_retained(void) {
+    ArraySetRegionFixture snapshot = array_set_region_fixture(3, ARRAY_SET_REGION_SNAPSHOT);
+    XrLirOwnershipPlan *old_snapshot = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=snapshot.module}, &old_snapshot, NULL));
+    CHECK(!xr_lir_ownership_array_region_count(old_snapshot));
+    const enum ArraySetRegionMode modes[] = {ARRAY_SET_REGION_RETAIN_SOURCE,ARRAY_SET_REGION_RETAIN_TARGET};
+    for (uint32_t n = 0; n < 2; ++n) {
+        ArraySetRegionFixture retired = array_set_region_fixture(3, modes[n]);
+        XrLirOwnershipPlan *old_retired = NULL;
+        OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=retired.module}, &old_retired, NULL));
+        CHECK(xr_lir_ownership_array_region_count(old_retired) == 1);
+        CHECK(xr_lir_ownership_array_regions_verify(retired.module, old_snapshot) == XR_LIR_VERIFY_ERROR);
+        CHECK(xr_lir_ownership_array_regions_verify(snapshot.module, old_retired) == XR_LIR_VERIFY_ERROR);
+        OK(xr_lir_ownership_array_regions_verify(retired.module, old_retired));
+        xr_lir_ownership_plan_destroy(old_retired); xr_lir_module_destroy(retired.module);
+    }
+    OK(xr_lir_ownership_array_regions_verify(snapshot.module, old_snapshot));
+    xr_lir_ownership_plan_destroy(old_snapshot); xr_lir_module_destroy(snapshot.module);
+}
 static void array_set_region_preparations(void) {
     const uint32_t blocks[] = {1,3,6,ARRAY_SET_REGION_BODY_CAPACITY};
     for (size_t n = 0; n < sizeof(blocks) / sizeof(*blocks); ++n) ars_preparation(blocks[n], ARRAY_SET_REGION_LOCAL);
@@ -117,7 +157,10 @@ static void array_set_region_preparations(void) {
     ars_preparation(3, ARRAY_SET_REGION_REF_ORIGIN);
     ars_preparation(3, ARRAY_SET_REGION_ARRAY_FORMAL);
     ars_preparation(3, ARRAY_SET_REGION_DIAMONDS);
+    for (unsigned mode = ARRAY_SET_REGION_RETAIN_SOURCE; mode <= ARRAY_SET_REGION_RETAIN_BODY_TARGET; ++mode)
+        ars_preparation(3, (enum ArraySetRegionMode)mode);
     ars_current_inventory();
+    ars_current_retained();
     ArraySetRegionFixture first = array_set_region_build(NULL, 3, ARRAY_SET_REGION_LOCAL);
     ArraySetRegionFixture second = array_set_region_build(first.module, 6, ARRAY_SET_REGION_LOCAL);
     OK(xr_lir_module_finish(first.module, NULL));

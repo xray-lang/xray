@@ -16,14 +16,18 @@ enum ArraySetRegionMode {
     ARRAY_SET_REGION_HEADER_WRITE, ARRAY_SET_REGION_EXTRA_ENTRY,
     ARRAY_SET_REGION_EXTRA_BACKEDGE, ARRAY_SET_REGION_EARLY_EXIT, ARRAY_SET_REGION_TRAP, ARRAY_SET_REGION_PADDED,
     ARRAY_SET_REGION_OUTSIDE_NEW_SNAPSHOT, ARRAY_SET_REGION_OUTSIDE_READ_SNAPSHOT, ARRAY_SET_REGION_NO_SET,
-    ARRAY_SET_REGION_REF_ORIGIN, ARRAY_SET_REGION_ARRAY_FORMAL, ARRAY_SET_REGION_DIAMONDS
+    ARRAY_SET_REGION_REF_ORIGIN, ARRAY_SET_REGION_ARRAY_FORMAL, ARRAY_SET_REGION_DIAMONDS,
+    ARRAY_SET_REGION_RETAIN_SOURCE, ARRAY_SET_REGION_RETAIN_TARGET, ARRAY_SET_REGION_RETAIN_MANY,
+    ARRAY_SET_REGION_RETAIN_DOMINATING, ARRAY_SET_REGION_RETAIN_SOURCE_SAVED, ARRAY_SET_REGION_RETAIN_TARGET_SAVED,
+    ARRAY_SET_REGION_RETAIN_CROSS_BLOCK, ARRAY_SET_REGION_RETAIN_INCOMPARABLE,
+    ARRAY_SET_REGION_RETAIN_BODY_SOURCE, ARRAY_SET_REGION_RETAIN_BODY_TARGET
 };
 enum { ARRAY_SET_REGION_BODY_CAPACITY = 257 };
 typedef struct ArraySetRegionFixture {
     XrLirModule *module;
     XrLirFunction function, helper;
-    XrLirBlock entry, header, exit, body[ARRAY_SET_REGION_BODY_CAPACITY];
-    XrLirValue header_array, result, outside_cell, outside_ref;
+    XrLirBlock entry, header, exit, bridge, sides[2], region_entry, body[ARRAY_SET_REGION_BODY_CAPACITY];
+    XrLirValue header_array, result, outside_cell, outside_ref, outside_array;
     enum ArraySetRegionMode mode;
     uint32_t count, arity;
 } ArraySetRegionFixture;
@@ -51,7 +55,29 @@ static void ars_branch(ArraySetRegionFixture *c, XrLirBlock block, XrLirBlock ta
     OK(xr_lir_set_terminator(c->module, block, &(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
         .edge_count=1,.edges={{target,values,c->arity}}}));
 }
+static XrLirValue ars_retained(ArraySetRegionFixture *c, XrLirBlock block, XrLirValue array) {
+    return ars_value(c, block, (XrLirInstruction){.op=XR_LIR_ARRAY_RETAIN,.type=XR_LIR_ARRAY,
+        .operands=&array,.operand_count=1});
+}
+static XrLirValue ars_retire_copy(ArraySetRegionFixture *c, XrLirBlock block, XrLirValue array, bool source) {
+    XrLirValue retained = ars_retained(c, block, array);
+    (void)ars_number(c, block, 91);
+    ars_effect(c, block, XR_LIR_ARRAY_DROP, source ? array : retained);
+    return source ? retained : array;
+}
+static XrLirValue ars_saved_copy(ArraySetRegionFixture *c, XrLirValue array, bool source) {
+    XrLirValue retained = ars_retained(c, c->entry, array), saved = source ? array : retained;
+    XrLirValue cell = ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,
+        .operands=&saved,.operand_count=1});
+    ars_effect(c, c->entry, XR_LIR_ARRAY_DROP, saved);
+    c->outside_array = ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_ARRAY,
+        .operands=&cell,.operand_count=1});
+    ars_effect(c, c->entry, XR_LIR_ARRAY_CELL_DROP, cell);
+    return source ? retained : array;
+}
 static XrLirValue ars_mutate(ArraySetRegionFixture *c, XrLirBlock block, XrLirValue array) {
+    if (c->mode == ARRAY_SET_REGION_RETAIN_BODY_SOURCE || c->mode == ARRAY_SET_REGION_RETAIN_BODY_TARGET)
+        array = ars_retire_copy(c, block, array, c->mode == ARRAY_SET_REGION_RETAIN_BODY_SOURCE);
     XrLirValue zero = ars_number(c, block, 0), arguments[] = {array,zero};
     XrLirValue item = ars_array_op(c, block, XR_LIR_ARRAY_OP_GET, arguments, 2);
     XrLirValue cell = ars_value(c, block, (XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,
@@ -109,6 +135,21 @@ static void ars_declare(ArraySetRegionFixture *c) {
     for (uint32_t n = 0; n < c->count; ++n)
         OK(xr_lir_add_block(c->module, c->function, parameters, c->arity, &c->body[c->count - 1 - n]));
     OK(xr_lir_add_block(c->module, c->function, parameters, c->arity, &c->exit));
+    c->region_entry = c->entry;
+    if (c->mode == ARRAY_SET_REGION_RETAIN_DOMINATING || c->mode == ARRAY_SET_REGION_RETAIN_INCOMPARABLE) {
+        OK(xr_lir_add_block(c->module, c->function, parameters, c->arity, &c->bridge));
+        c->region_entry = c->bridge;
+        if (c->mode == ARRAY_SET_REGION_RETAIN_INCOMPARABLE)
+            for (uint32_t n = 0; n < 2; ++n)
+                OK(xr_lir_add_block(c->module, c->function, parameters, c->arity, &c->sides[1 - n]));
+        XrLirValue array = {0}; OK(xr_lir_block_parameter(c->module, c->bridge, 0, &array));
+        OK(xr_lir_set_array_shape(c->module, array, &(XrLirArrayShape){XR_LIR_I64}));
+        if (c->mode == ARRAY_SET_REGION_RETAIN_INCOMPARABLE)
+            for (uint32_t n = 0; n < 2; ++n) {
+                OK(xr_lir_block_parameter(c->module, c->sides[n], 0, &array));
+                OK(xr_lir_set_array_shape(c->module, array, &(XrLirArrayShape){XR_LIR_I64}));
+            }
+    }
     for (uint32_t n = 0; n < c->count + 2; ++n) {
         XrLirBlock block = n == c->count ? c->header : n == c->count + 1 ? c->exit : c->body[n];
         XrLirValue values[3] = {{0}}; ars_parameters(c, block, values);
@@ -121,6 +162,17 @@ static void ars_entry_header(ArraySetRegionFixture *c) {
     values[0] = c->mode == ARRAY_SET_REGION_REF_ORIGIN ?
         ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_ARRAY_REF_READ,.type=XR_LIR_ARRAY,
             .operands=&c->outside_ref,.operand_count=1}) : ars_array_op(c, c->entry, XR_LIR_ARRAY_OP_NEW, &seed, 1);
+    if (c->mode == ARRAY_SET_REGION_RETAIN_SOURCE || c->mode == ARRAY_SET_REGION_RETAIN_DOMINATING)
+        values[0] = ars_retire_copy(c, c->entry, values[0], true);
+    if (c->mode == ARRAY_SET_REGION_RETAIN_TARGET) values[0] = ars_retire_copy(c, c->entry, values[0], false);
+    if (c->mode == ARRAY_SET_REGION_RETAIN_MANY)
+        for (uint32_t n = 0; n < ARRAY_SET_REGION_BODY_CAPACITY; ++n)
+            values[0] = ars_retire_copy(c, c->entry, values[0], true);
+    if (c->mode == ARRAY_SET_REGION_RETAIN_SOURCE_SAVED || c->mode == ARRAY_SET_REGION_RETAIN_TARGET_SAVED)
+        values[0] = ars_saved_copy(c, values[0], c->mode == ARRAY_SET_REGION_RETAIN_SOURCE_SAVED);
+    if (c->mode == ARRAY_SET_REGION_RETAIN_CROSS_BLOCK) {
+        c->outside_array = values[0]; values[0] = ars_retained(c, c->entry, values[0]);
+    }
     if (c->mode == ARRAY_SET_REGION_OUTSIDE_NEW_SNAPSHOT || c->mode == ARRAY_SET_REGION_OUTSIDE_READ_SNAPSHOT) {
         c->outside_cell = ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,
             .operands=values,.operand_count=1});
@@ -131,12 +183,26 @@ static void ars_entry_header(ArraySetRegionFixture *c) {
         }
     }
     values[1] = ars_number(c, c->entry, 0);
-    if (c->arity == 3) values[2] = ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_ARRAY_RETAIN,
-        .type=XR_LIR_ARRAY,.operands=&values[0],.operand_count=1});
+    if (c->mode == ARRAY_SET_REGION_SNAPSHOT) values[2] = ars_retained(c, c->entry, values[0]);
+    else if (c->arity == 3) values[2] = c->outside_array;
     if (c->mode == ARRAY_SET_REGION_EXTRA_ENTRY) {
         XrLirValue condition = ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1});
         OK(xr_lir_set_terminator(c->module, c->entry, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
             .operands=&condition,.operand_count=1,.edge_count=2,.edges={{c->header,values,c->arity},{c->body[0],values,c->arity}}}));
+    } else if (c->mode == ARRAY_SET_REGION_RETAIN_INCOMPARABLE) {
+        XrLirValue condition = ars_value(c, c->entry, (XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1});
+        OK(xr_lir_set_terminator(c->module, c->entry, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+            .operands=&condition,.operand_count=1,.edge_count=2,
+            .edges={{c->sides[0],values,c->arity},{c->sides[1],values,c->arity}}}));
+        for (uint32_t n = 0; n < 2; ++n) {
+            ars_parameters(c, c->sides[n], values);
+            values[0] = ars_retire_copy(c, c->sides[n], values[0], false);
+            ars_branch(c, c->sides[n], c->bridge, values);
+        }
+        ars_parameters(c, c->bridge, values); ars_branch(c, c->bridge, c->header, values);
+    } else if (c->mode == ARRAY_SET_REGION_RETAIN_DOMINATING) {
+        ars_branch(c, c->entry, c->bridge, values);
+        ars_parameters(c, c->bridge, values); ars_branch(c, c->bridge, c->header, values);
     } else ars_branch(c, c->entry, c->header, values);
     ars_parameters(c, c->header, values); c->header_array = values[0];
     if (c->mode == ARRAY_SET_REGION_HEADER_WRITE) values[0] = ars_mutate(c, c->header, values[0]);
@@ -194,7 +260,9 @@ static void ars_body_exit(ArraySetRegionFixture *c) {
 }
 static ArraySetRegionFixture array_set_region_build(XrLirModule *module, uint32_t count, enum ArraySetRegionMode mode) {
     CHECK(count && count <= ARRAY_SET_REGION_BODY_CAPACITY);
-    ArraySetRegionFixture c = {.module=module,.count=count,.mode=mode,.arity=mode == ARRAY_SET_REGION_SNAPSHOT ? 3u : 2u};
+    bool snapshot = mode == ARRAY_SET_REGION_SNAPSHOT || mode == ARRAY_SET_REGION_RETAIN_SOURCE_SAVED ||
+        mode == ARRAY_SET_REGION_RETAIN_TARGET_SAVED || mode == ARRAY_SET_REGION_RETAIN_CROSS_BLOCK;
+    ArraySetRegionFixture c = {.module=module,.count=count,.mode=mode,.arity=snapshot ? 3u : 2u};
     if (!c.module) OK(xr_lir_array_module_create(NULL, &c.module));
     ars_declare(&c); ars_entry_header(&c); ars_body_exit(&c);
     return c;
