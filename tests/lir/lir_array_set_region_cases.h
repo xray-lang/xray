@@ -173,7 +173,7 @@ static void ars_current_retained_death(ArraySetRegionFixture c, const XrLirOwner
     OK(xr_lir_ownership_array_regions_verify(c.module, plan));
 }
 static void ars_readonly_preparations(void) {
-    for (unsigned mode=ARRAY_REGION_RANGE_READ_ONLY;mode<=ARRAY_REGION_RANGE_READ_STEP;++mode) {
+    for (unsigned mode=ARRAY_REGION_RANGE_READ_ONLY;mode<=ARRAY_REGION_RANGE_READ_EFFECT;++mode) {
         ArraySetRegionFixture c=ars_range_build(NULL,3,(enum ArrayRegionRangeMode)mode);
         OK(xr_lir_module_finish(c.module,NULL));
         XrLirOwnershipPlan *plan=NULL; XrLirOwnershipRequest request={.module=c.module};
@@ -191,6 +191,12 @@ static void ars_readonly_preparations(void) {
             uint32_t saved=*fields[n]; *fields[n]^=1;
             CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR); *fields[n]=saved;
         }
+        const uint32_t kinds[]={XR_LIR_ARRAY_REGION_PRIMARY_NONE,XR_LIR_ARRAY_REGION_PRIMARY_SET,UINT32_MAX};
+        for (size_t n=0;n<3;++n) {
+            region->primary_kind=kinds[n];
+            CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR);
+        }
+        region->primary_kind=XR_LIR_ARRAY_REGION_PRIMARY_GET;
         XrLirFunctionData *function=&c.module->functions[c.function.id-1];
         XrLirInstructionView *get=&function->blocks[region->primary_block-1].instructions[region->primary_instruction-1].view;
         uint32_t *index=(uint32_t *)&get->operands[1], saved=*index; *index=region->range.one;

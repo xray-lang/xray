@@ -199,6 +199,12 @@ static void array_region_binding_projection(unsigned shape) {
             CHECK(xr_lir_array_region_bindings_create(&view,set,&bindings)==XR_LIR_VALUE_LAYOUT_ARGUMENT && !bindings);
             *fields[n]=saved; CHECK(live==baseline && home_live_bytes()==bytes);
         }
+        const uint32_t kinds[]={XR_LIR_ARRAY_REGION_PRIMARY_NONE,XR_LIR_ARRAY_REGION_PRIMARY_SET,UINT32_MAX};
+        for (size_t n=0;n<3;++n) {
+            region.primary_kind=kinds[n];
+            CHECK(xr_lir_array_region_bindings_create(&view,set,&bindings)==XR_LIR_VALUE_LAYOUT_ARGUMENT && !bindings);
+            CHECK(live==baseline && home_live_bytes()==bytes);
+        }
     }
     for (size_t point=1;point<=sites;++point) {
         attempts=0; fail_at=point;

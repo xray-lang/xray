@@ -9,6 +9,11 @@
 static bool c_array_region_present(const LirC *c) {
     return c->array_region && c->array_region->bound_count != 0;
 }
+static bool c_array_region_usable(const LirC *c, size_t region) {
+    const XrLirArrayRegionBinding *row=&c->array_region->bindings->regions[region];
+    return row->slot_count && (row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET ||
+        (row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && c_array_helper_enabled(c,region)));
+}
 static void c_array_regions_destroy(LirC *c) {
     if (!c->array_regions) return;
     for (uint32_t f = 0; f < xr_lir_function_count(c->request->module); ++f) {
@@ -60,7 +65,7 @@ static void c_array_region_specs(LirC *c) {
     const XrLirArrayRegionBindings *binding = c->array_region->bindings;
     for (size_t r = 0; r < binding->region_count && c_request_poll(c); ++r) {
         XrLirArrayRegionBinding row = binding->regions[r];
-        if (!row.slot_count) continue;
+        if (!c_array_region_usable(c,r)) continue;
         XR_DCHECK(row.canonical_slot >= row.first_slot && row.canonical_slot-row.first_slot < row.slot_count,
             "runtime canonical index is relative to this region slot span");
         c_format(c,"static const XrtArrayI64RegionSlot xrl_ar_slots_%" PRIu32 "_%zu[] = {\n",c->function.id,r);
@@ -75,7 +80,7 @@ static void c_array_region_specs(LirC *c) {
 static void c_array_region_declarations(LirC *c) {
     if (!c_array_region_present(c)) return;
     const XrLirArrayRegionBindings *binding = c->array_region->bindings;
-    for (size_t r = 0; r < binding->region_count; ++r) if (binding->regions[r].slot_count) {
+    for (size_t r = 0; r < binding->region_count; ++r) if (c_array_region_usable(c,r)) {
         c_format(c,"    XrtArrayI64RegionCache xrl_ar_%zu_cache = {0};\n    unsigned xrl_ar_%zu_phase = 0;\n",r,r);
     }
 }
@@ -85,6 +90,7 @@ static void c_array_region_slow(LirC *c) {
     const XrLirArrayRegionBindings *binding = c->array_region->bindings;
     size_t access = operation->access - 1;
     size_t region = binding->block_index[c->block].region - 1;
+    if (!c_array_region_usable(c,region)) return;
     if (c_array_helper_enabled(c,region)) return;
     if (binding->accesses[access].operation != XR_LIR_ARRAY_OP_LEN)
         c_format(c,"xrl_ar_slow_%" PRIu32 "_%" PRIu32 ": ;\n",c->block,c->instruction);
@@ -93,7 +99,9 @@ static bool c_array_region_coalesced_move(LirC *c, size_t region, size_t ordinal
     if (!c->array_helper_active) return false;
     const XrLirArrayRegionBindings *binding = c->array_region->bindings;
     const XrLirArrayRegionBinding row = binding->regions[region];
-    if (row.owner_home.kind != XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW) return false;
+    uint32_t expected = row.region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET ?
+        XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW : XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW;
+    if (row.owner_home.kind != expected) return false;
     if (ordinal < row.first_move || ordinal - row.first_move >= row.move_count) {
         c_error(c,XR_LIR_C_INVALID_LIR,"Array owner home move lost its common slice"); return true;
     }
@@ -160,7 +168,7 @@ static void c_array_region_edge_begin(LirC *c, size_t edge, const XrLirEdgeView 
     if (edge >= binding->edge_count || !binding->edges[edge].region) return;
     XrLirArrayRegionEdge role = binding->edges[edge]; size_t region = role.region - 1;
     const XrLirArrayRegionBinding *row = &binding->regions[region];
-    if (!row->slot_count) return;
+    if (!c_array_region_usable(c,region)) return;
     if (role.kind == XR_LIR_ARRAY_REGION_EDGE_ENTRY || role.kind == XR_LIR_ARRAY_REGION_EDGE_EXIT) {
         c_array_region_clear(c,region,0); return;
     }
@@ -182,7 +190,7 @@ static void c_array_region_edge_end(LirC *c, size_t edge) {
     if (edge >= binding->edge_count || binding->edges[edge].kind != XR_LIR_ARRAY_REGION_EDGE_LATCH ||
         !binding->edges[edge].region) return;
     size_t region = binding->edges[edge].region - 1;
-    if (binding->regions[region].slot_count)
+    if (c_array_region_usable(c,region))
         c_format(c,"    if (xrl_ar_%zu_phase == 0) xrl_ar_%zu_phase = 1;\n",region,region);
 }
 static void c_array_region_access(LirC *c, size_t region, size_t ordinal) {
@@ -263,5 +271,5 @@ static void c_array_region_clones(LirC *c) {
     if (!c_array_region_present(c)) return;
     const XrLirArrayRegionBindings *binding = c->array_region->bindings;
     for (size_t r = 0; r < binding->region_count && c_request_poll(c); ++r)
-        if (binding->regions[r].slot_count && !c_array_helper_enabled(c,r)) c_array_region_clone(c,r);
+        if (c_array_region_usable(c,r) && !c_array_helper_enabled(c,r)) c_array_region_clone(c,r);
 }
