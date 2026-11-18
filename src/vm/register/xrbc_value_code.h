@@ -103,6 +103,7 @@ typedef struct XrRbcValueCode {
     const uint32_t *scope_values; /* Physical scope ordinal -> original SSA capability. */
     uint32_t scope_count;
     XrLirArrayRegionBindings *array_regions; /* Owned numeric projection, no live addresses. */
+    bool array_region_runtime; /* Compile-time SET-window consumption; read-only facts stay ordinary. */
     const XrRbcArrayRegionAccess *array_region_accesses; /* Same ordinal/count as accesses, or absent. */
 } XrRbcValueCode;
 

@@ -8,6 +8,32 @@
  */
 #include "lir/xlir_array.h"
 #include "lir/xlir_rebuild.h"
+#include "lir/xlir_ownership.h"
+
+static void array_readonly_original_source(void) {
+    /* Original complete push-plus-sum workload; only compilation is observed.
+     * No loop bound or index is rewritten to manufacture a candidate. */
+    static const char text[] = "fn main() {\n"
+        "    var a: Array<i64> = []\n    var i = 0\n    while (i < 5000000) {\n"
+        "        a.push(i)\n        i = i + 1\n    }\n    var total = 0\n    i = 0\n"
+        "    while (i < len(a)) {\n        total = total + a[i]\n        i = i + 1\n    }\n"
+        "    print(total)\n}\nmain()\n";
+    XrLirLowered output=lower_text(text);
+    XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=output.module},&plan,NULL));
+    CHECK(xr_lir_ownership_array_region_count(plan)==1);
+    XrLirArraySetRegion region={0}; OK(xr_lir_ownership_array_region_at(plan,0,&region));
+    CHECK(region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET &&
+        region.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN &&
+        region.owner_home.kind==XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW);
+    XrLirFunction function={output.module,region.function}; XrLirBlock block={0}; XrLirInstructionView get={0};
+    OK(xr_lir_block_at(output.module,function,region.primary_block-1,&block));
+    OK(xr_lir_instruction_view(output.module,block,region.primary_instruction-1,&get));
+    XrLirArrayIntrinsic shape={0}; OK(xr_lir_array_intrinsic_view(output.module,get.intrinsic,&shape));
+    CHECK(get.op==XR_LIR_CALL_INTRINSIC && shape.operation==XR_LIR_ARRAY_OP_GET && get.result && get.operand_count==2);
+    OK(xr_lir_ownership_array_regions_verify(output.module,plan));
+    xr_lir_ownership_plan_destroy(plan); xr_lir_lowered_free(&output);
+}
 
 static void array_reference_mutator_transport(void) {
     XrLirLowered output = lower_text("fn update(values:ref Array<u64>,value:u64){values[0]=value\n"
@@ -45,6 +71,7 @@ static void array_reference_mutator_transport(void) {
 
 static void array_sources(void) {
     array_reference_mutator_transport();
+    array_readonly_original_source();
     static const char *cases[] = {
         "fn count(xs:Array<i64>)->i64{return len(xs)}\nprint(count([]))\n",
         "fn choose(flag:bool,a:Array<i64>,b:Array<i64>)->Array<i64>{return flag?a:b}\n"

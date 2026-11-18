@@ -172,6 +172,32 @@ static void ars_current_retained_death(ArraySetRegionFixture c, const XrLirOwner
     *death = old_death; *survivor = old_survivor;
     OK(xr_lir_ownership_array_regions_verify(c.module, plan));
 }
+static void ars_readonly_preparations(void) {
+    for (unsigned mode=ARRAY_REGION_RANGE_READ_ONLY;mode<=ARRAY_REGION_RANGE_READ_STEP;++mode) {
+        ArraySetRegionFixture c=ars_range_build(NULL,3,(enum ArrayRegionRangeMode)mode);
+        OK(xr_lir_module_finish(c.module,NULL));
+        XrLirOwnershipPlan *plan=NULL; XrLirOwnershipRequest request={.module=c.module};
+        OK(xr_lir_ownership_plan_create(&request,&plan,NULL)); compare_internal(&request,plan);
+        CHECK(xr_lir_ownership_array_region_count(plan)==(mode==ARRAY_REGION_RANGE_READ_ONLY ? 1u : 0u));
+        if (mode!=ARRAY_REGION_RANGE_READ_ONLY) {
+            xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module); continue;
+        }
+        XrLirArraySetRegion *region=plan->array_regions.regions.data;
+        CHECK(region->primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && region->primary_block==c.body[0].id &&
+            region->range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN &&
+            region->owner_home.kind==XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW);
+        uint32_t *fields[]={&region->primary_kind,&region->primary_block,&region->primary_instruction};
+        for (size_t n=0;n<3;++n) {
+            uint32_t saved=*fields[n]; *fields[n]^=1;
+            CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR); *fields[n]=saved;
+        }
+        XrLirFunctionData *function=&c.module->functions[c.function.id-1];
+        XrLirInstructionView *get=&function->blocks[region->primary_block-1].instructions[region->primary_instruction-1].view;
+        uint32_t *index=(uint32_t *)&get->operands[1], saved=*index; *index=region->range.one;
+        CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR); *index=saved;
+        OK(xr_lir_ownership_array_regions_verify(c.module,plan)); ars_retirement(c,plan);
+    }
+}
 static void ars_preparation(uint32_t blocks, enum ArraySetRegionMode mode) {
     ArraySetRegionFixture c = array_set_region_fixture(blocks, mode);
     XrLirOwnershipPlan *plan = NULL; XrLirOwnershipRequest request = {.module=c.module};
@@ -187,7 +213,8 @@ static void ars_preparation(uint32_t blocks, enum ArraySetRegionMode mode) {
     XrLirArraySetRegion region; OK(xr_lir_ownership_array_region_at(plan, row.region_offset, &region));
     CHECK(region.function == c.function.id && region.header == c.header.id && region.entry_block == c.region_entry.id &&
         region.latch == c.body[blocks - 1].id && region.exit_block == c.exit.id && region.body_block_count == blocks &&
-        region.canonical_value == c.header_array.id && region.set_block == c.body[0].id && region.set_instruction);
+        region.canonical_value == c.header_array.id && region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET &&
+        region.primary_block == c.body[0].id && region.primary_instruction);
     uint32_t kinds[6] = {0};
     for (uint32_t n = 0; n < region.step_count; ++n) {
         XrLirArraySetRegionStep step; OK(xr_lir_ownership_array_region_step_at(plan, region.first_step + n, &step));
@@ -241,6 +268,7 @@ static void ars_current_retained(void) {
 }
 static void array_set_region_preparations(void) {
     ars_range_preparations();
+    ars_readonly_preparations();
     const uint32_t blocks[] = {1,3,6,ARRAY_SET_REGION_BODY_CAPACITY};
     for (size_t n = 0; n < sizeof(blocks) / sizeof(*blocks); ++n) ars_preparation(blocks[n], ARRAY_SET_REGION_LOCAL);
     ars_preparation(4, ARRAY_SET_REGION_PADDED);

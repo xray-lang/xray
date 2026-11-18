@@ -234,13 +234,14 @@ static void array_region_input_equal(const XrLirModule *input, const XrLirModule
     }
 }
 static void array_region_verification_faults(unsigned shape) {
-    bool retired = shape == 1, range = shape == 2;
+    bool retired = shape == 1, range = shape >= 2;
+    enum ArrayRegionRangeMode range_mode = shape == 3 ? ARRAY_REGION_RANGE_READ_ONLY : ARRAY_REGION_RANGE_UNIT;
     enum ArraySetRegionMode first = retired ? ARRAY_SET_REGION_RETAIN_SOURCE : ARRAY_SET_REGION_LOCAL;
     enum ArraySetRegionMode second = retired ? ARRAY_SET_REGION_RETAIN_TARGET : ARRAY_SET_REGION_LOCAL;
-    ArraySetRegionFixture input = range ? ars_range_build(NULL, 3, ARRAY_REGION_RANGE_UNIT) : array_set_region_build(NULL, 3, first);
-    input = range ? ars_range_build(input.module, 6, ARRAY_REGION_RANGE_UNIT) : array_set_region_build(input.module, 6, second);
-    ArraySetRegionFixture reference = range ? ars_range_build(NULL, 3, ARRAY_REGION_RANGE_UNIT) : array_set_region_build(NULL, 3, first);
-    reference = range ? ars_range_build(reference.module, 6, ARRAY_REGION_RANGE_UNIT) : array_set_region_build(reference.module, 6, second);
+    ArraySetRegionFixture input = range ? ars_range_build(NULL, 3, range_mode) : array_set_region_build(NULL, 3, first);
+    input = range ? ars_range_build(input.module, 6, range_mode) : array_set_region_build(input.module, 6, second);
+    ArraySetRegionFixture reference = range ? ars_range_build(NULL, 3, range_mode) : array_set_region_build(NULL, 3, first);
+    reference = range ? ars_range_build(reference.module, 6, range_mode) : array_set_region_build(reference.module, 6, second);
     OK(xr_lir_module_finish(input.module, NULL)); OK(xr_lir_module_finish(reference.module, NULL));
     XrLirOwnershipPlan *plan = NULL, *saved = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module}, &plan, NULL));
@@ -299,6 +300,7 @@ int main(void) {
     array_region_verification_faults(false);
     array_region_verification_faults(true);
     array_region_verification_faults(2);
+    array_region_verification_faults(3);
     ArraySetRegionFixture ranged = ars_range_build(NULL,3,ARRAY_REGION_RANGE_UNIT);
     OK(xr_lir_module_finish(ranged.module,NULL)); sweep(ranged.module,NULL,0);
     XrLirModule *grown = NULL;

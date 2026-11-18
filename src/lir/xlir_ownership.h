@@ -191,7 +191,8 @@ typedef struct XrLirArraySetRegionRange {
 
 enum {
     XR_LIR_ARRAY_SET_OWNER_HOME_NONE,
-    XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW
+    XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW,
+    XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW
 };
 /* An optional physical equivalence for an uninterrupted admitted window, not
  * a change to ordinary homes, COPY/death events or access permissions. Ordinals
@@ -201,15 +202,25 @@ enum {
  * the exact original EXIT_MOVE. Full first-trip/runtime/range admission still
  * precedes activation. Before any exit or observation, transfer the real
  * canonical owner to its original empty exit home and clear canonical. A cache
- * only borrows that owner. Consumers unable to close this window ignore it. */
+ * only borrows that owner. The READ_ONLY kind has the same storage discipline
+ * with one proven element GET and no mutation; it does not reinterpret a
+ * CELL_READ/death pair as an element read. Consumers may ignore either kind. */
 typedef struct XrLirArraySetRegionOwnerHome {
     uint32_t kind, first_active_step, exit_step;
 } XrLirArraySetRegionOwnerHome;
 
+enum {
+    XR_LIR_ARRAY_REGION_PRIMARY_NONE,
+    XR_LIR_ARRAY_REGION_PRIMARY_SET,
+    XR_LIR_ARRAY_REGION_PRIMARY_GET
+};
+/* The primary access is an original element operation, not CELL_READ/death.
+ * SET retains its existing body contract. GET names the sole element read in
+ * a closed unit/same-length read-only loop; no mutation permission follows. */
 typedef struct XrLirArraySetRegion {
     uint32_t function, header, entry_block, entry_edge, latch;
     uint32_t exit_edge, exit_block, entry_value, canonical_value, exit_value;
-    uint32_t body_block_count, set_block, set_instruction, first_step, step_count;
+    uint32_t body_block_count, primary_kind, primary_block, primary_instruction, first_step, step_count;
     XrLirArraySetRegionRange range;
     XrLirArraySetRegionOwnerHome owner_home;
 } XrLirArraySetRegion;

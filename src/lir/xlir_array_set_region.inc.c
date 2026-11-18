@@ -23,6 +23,7 @@ typedef struct LirArrayRegionProof {
     uint64_t *marks;
     XrLirArraySetRegionStep *steps;
     uint32_t step_count, step_capacity, block_count;
+    uint32_t get_count, get_block, get_instruction;
     uint32_t retain_head, retain_block, retain_drop;
     uint64_t range_stamp;
     XrLirArraySetRegionRange range;
@@ -57,15 +58,19 @@ static bool lir_array_region_array(const XrLirFunctionData *f, uint32_t value) {
 }
 static bool lir_array_region_needed(const XrLirOwnershipPlan *plan, uint32_t function) {
     XrLirOwnershipFunction row = plan->functions[function - 1];
-    bool set = false, create = false, read = false;
+    bool set = false, create = false, read = false, get = false, edge = false;
     for (uint32_t n = 0; n < row.fact_count; ++n) {
         const XrLirOwnershipFact *fact = &plan->facts[row.fact_offset + n];
         set |= fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION && fact->array_element == XR_LIR_I64 &&
             fact->array_operation == XR_LIR_ARRAY_OP_SET;
         create |= fact->kind == XR_LIR_OWNERSHIP_BINDING_NEW && fact->forwarding_mode != 0;
         read |= fact->kind == XR_LIR_OWNERSHIP_BINDING_READ && fact->forwarding_mode != 0;
+        get |= fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION && fact->array_element == XR_LIR_I64 &&
+            fact->array_operation == XR_LIR_ARRAY_OP_GET;
+        edge |= fact->kind == XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER && fact->type == XR_LIR_ARRAY &&
+            fact->array_element == XR_LIR_I64 && fact->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE;
     }
-    return set && create && read;
+    return (set && create && read) || (get && edge);
 }
 static bool lir_array_region_array_role(const XrLirModule *m, const XrLirInstructionView *op, uint32_t argument) {
     if (argument) return false;
@@ -439,8 +444,12 @@ static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32
             lir_array_region_lane(p, op->operands[1]) != LIR_ARRAY_RANGE_CURRENT)
             p->range = (XrLirArraySetRegionRange){0};
         if (shape->operation == XR_LIR_ARRAY_OP_SET) {
-            if (region->set_block) return false;
-            region->set_block = block + 1; region->set_instruction = i + 1;
+            if (region->primary_kind) return false;
+            region->primary_kind = XR_LIR_ARRAY_REGION_PRIMARY_SET;
+            region->primary_block = block + 1; region->primary_instruction = i + 1;
+        } else if (shape->operation == XR_LIR_ARRAY_OP_GET) {
+            if (p->get_count < 2) ++p->get_count;
+            p->get_block = block + 1; p->get_instruction = i + 1;
         }
     }
     return true;
@@ -485,12 +494,14 @@ static XrLirArraySetRegionOwnerHome lir_array_region_owner_home(const LirArrayRe
         current = step.target;
     }
     if (!first || !exit) return none;
-    return (XrLirArraySetRegionOwnerHome){XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW,first,exit};
+    uint32_t kind = region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET ?
+        XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW : XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW;
+    return (XrLirArraySetRegionOwnerHome){kind,first,exit};
 }
 static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
     XrLirArraySetRegion *region) {
     if (!lir_array_region_shape(p, header, body_edge, region)) return false;
-    p->step_count = 0; p->range = (XrLirArraySetRegionRange){0}; uint32_t current = 0;
+    p->step_count = p->get_count = 0; p->range = (XrLirArraySetRegionRange){0}; uint32_t current = 0;
     if (!lir_array_region_edge(p, region->entry_block - 1, region->entry_edge - 1,
         XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE, &current)) return false;
     region->entry_value = p->steps[0].source; region->canonical_value = current;
@@ -500,13 +511,20 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint
     for (uint32_t n = 0; n < p->block_count; ++n)
         if (!lir_array_region_body(p, p->blocks[n], &current, region, false) ||
             !lir_array_region_edge(p, p->blocks[n], 0, XR_LIR_ARRAY_SET_REGION_EDGE_MOVE, &current)) return false;
-    if (current != region->canonical_value || !region->set_block) return false;
+    if (current != region->canonical_value) return false;
     if (p->range.latch_iv) region->range = p->range;
+    if (!region->primary_kind) {
+        if (p->get_count != 1 || region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) return false;
+        region->primary_kind = XR_LIR_ARRAY_REGION_PRIMARY_GET;
+        region->primary_block = p->get_block; region->primary_instruction = p->get_instruction;
+    }
     p->range = (XrLirArraySetRegionRange){0};
     current = region->canonical_value;
     if (!lir_array_region_edge(p, header, region->exit_edge - 1, XR_LIR_ARRAY_SET_REGION_EXIT_MOVE, &current)) return false;
     region->exit_value = current; region->step_count = p->step_count;
     region->owner_home = lir_array_region_owner_home(p,region);
+    if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET &&
+        region->owner_home.kind != XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW) return false;
     return true;
 }
 static void lir_array_region_proof_free(LirArrayRegionProof *p) {
@@ -557,7 +575,8 @@ static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b)
     return a.function == b.function && a.header == b.header && a.entry_block == b.entry_block &&
         a.entry_edge == b.entry_edge && a.latch == b.latch && a.exit_edge == b.exit_edge && a.exit_block == b.exit_block &&
         a.entry_value == b.entry_value && a.canonical_value == b.canonical_value && a.exit_value == b.exit_value &&
-        a.body_block_count == b.body_block_count && a.set_block == b.set_block && a.set_instruction == b.set_instruction &&
+        a.body_block_count == b.body_block_count && a.primary_kind == b.primary_kind &&
+        a.primary_block == b.primary_block && a.primary_instruction == b.primary_instruction &&
         a.first_step == b.first_step && a.step_count == b.step_count &&
         a.range.kind == b.range.kind && a.range.iv == b.range.iv && a.range.iv_argument == b.range.iv_argument &&
         a.range.entry_iv == b.range.entry_iv && a.range.length == b.range.length &&

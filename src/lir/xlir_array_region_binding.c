@@ -140,7 +140,9 @@ static XrLirValueLayoutStatus region_binding_prepare(RegionBindingBuilder *b) {
     for (uint32_t n=0;n<h->array_region_count;++n) {
         XrLirArraySetRegion r=h->array_regions[n];
         if (r.first_step>h->array_region_step_count || r.step_count>h->array_region_step_count-r.first_step ||
-            r.function!=h->source_function) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+            r.function!=h->source_function || !r.primary_block || !r.primary_instruction ||
+            (r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_SET && r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_GET))
+            return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         uint32_t blocks[]={r.header,r.entry_block,r.latch,r.exit_block};
         for (size_t p=0;p<4;++p) if (blocks[p]>maximum) maximum=blocks[p];
     }
@@ -266,7 +268,9 @@ static XrLirValueLayoutStatus region_binding_owner_home(const RegionBindingBuild
     XrLirArraySetRegionOwnerHome home = row->region.owner_home;
     if (home.kind == XR_LIR_ARRAY_SET_OWNER_HOME_NONE)
         return home.first_active_step || home.exit_step ? XR_LIR_VALUE_LAYOUT_ARGUMENT : XR_LIR_VALUE_LAYOUT_OK;
-    if (home.kind != XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW ||
+    uint32_t expected = row->region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET ?
+        XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW : XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW;
+    if (home.kind != expected ||
         row->region.range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN ||
         home.first_active_step < 2 || home.first_active_step >= home.exit_step || home.exit_step != row->move_count ||
         row->move_count != row->region.step_count) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
@@ -291,6 +295,25 @@ static XrLirValueLayoutStatus region_binding_owner_home(const RegionBindingBuild
      * projects a stable home; the real admission still probes every old slot. */
     row->owner_home = (XrLirArrayRegionOwnerHomeBinding){home.kind,row->canonical_slot,exit.target_slot};
     return XR_LIR_VALUE_LAYOUT_OK;
+}
+static XrLirValueLayoutStatus region_binding_primary(const RegionBindingBuilder *b,
+    const XrLirArrayRegionBinding *row) {
+    XrLirArraySetRegion region=row->region;
+    size_t gets=0,sets=0,matches=0;
+    const XrLirArrayRegionAccess *accesses=b->accesses.data;
+    for (size_t n=0;n<row->access_count;++n) {
+        XrLirArrayRegionAccess access=accesses[row->first_access+n];
+        gets+=access.operation==XR_LIR_ARRAY_OP_GET; sets+=access.operation==XR_LIR_ARRAY_OP_SET;
+        if (access.block==region.primary_block && access.instruction==region.primary_instruction) {
+            if (access.operation!=(region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET ? XR_LIR_ARRAY_OP_SET : XR_LIR_ARRAY_OP_GET))
+                return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+            ++matches;
+        }
+    }
+    if (matches!=1) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    if (region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET) return sets==1 ? XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    return gets==1 && !sets && region.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN ?
+        XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_ARGUMENT;
 }
 static XrLirValueLayoutStatus region_binding_project(RegionBindingBuilder *b, uint32_t ordinal,
     XrLirArrayRegionBinding *row) {
@@ -329,6 +352,8 @@ static XrLirValueLayoutStatus region_binding_project(RegionBindingBuilder *b, ui
     }
     row->slot_count=b->slots.count-row->first_slot; row->move_count=b->moves.count-row->first_move;
     row->access_count=b->accesses.count-row->first_access;
+    status=region_binding_primary(b,row);
+    if (status!=XR_LIR_VALUE_LAYOUT_OK) return status;
     return region_binding_owner_home(b,row);
 }
 static XrLirArrayRegionOperation *region_binding_operation(RegionBindingBuilder *b, uint32_t block,
