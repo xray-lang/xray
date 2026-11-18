@@ -151,6 +151,19 @@ static void array_region_tampering(void) {
         live == baseline && live_bytes == bytes);
     steps[0].kind = saved; OK(xr_lir_ownership_array_regions_verify(c.module, plan));
     CHECK(live == baseline && live_bytes == bytes);
+    for (uint32_t n = 0; n < plan->fact_count; ++n) {
+        XrLirOwnershipFact *access = &plan->facts[n];
+        if (access->kind != XR_LIR_OWNERSHIP_ARRAY_OPERATION) continue;
+        uint32_t *fields[] = {&access->array_result,&access->array_index,&access->array_item};
+        for (size_t f = 0; f < 3; ++f) if (*fields[f]) {
+            uint32_t original = *fields[f]; *fields[f] = 0;
+            CHECK(xr_lir_ownership_array_regions_verify(c.module, plan) == XR_LIR_VERIFY_ERROR &&
+                live == baseline && live_bytes == bytes);
+            *fields[f] = original;
+        }
+    }
+    OK(xr_lir_ownership_array_regions_verify(c.module, plan));
+    CHECK(live == baseline && live_bytes == bytes);
     xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module); CHECK(!live && !live_bytes);
 }
 static void array_region_input_equal(const XrLirModule *input, const XrLirModule *reference) {

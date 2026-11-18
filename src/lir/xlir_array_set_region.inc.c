@@ -453,7 +453,8 @@ static bool lir_array_region_fact_equal(XrLirOwnershipFact a, XrLirOwnershipFact
         a.target_value == b.target_value && a.type == b.type && a.array_element == b.array_element &&
         a.array_operation == b.array_operation && a.transfer_mode == b.transfer_mode &&
         a.hold_transfer_mode == b.hold_transfer_mode && a.forwarding_mode == b.forwarding_mode &&
-        a.forwarding_drop == b.forwarding_drop;
+        a.forwarding_drop == b.forwarding_drop && a.array_result == b.array_result &&
+        a.array_index == b.array_index && a.array_item == b.array_item;
 }
 static bool lir_array_region_inputs_equal(const XrLirOwnershipPlan *a, const XrLirOwnershipPlan *b, uint32_t function) {
     XrLirOwnershipFunction x = a->functions[function], y = b->functions[function];

@@ -431,7 +431,11 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                             .function=function,.block=b + 1,.instruction=i + 1,.value=receiver,
                             .type=receiver ? f->values[receiver - 1].type : XR_LIR_TYPE_INVALID,
                             .array_element=constructor ? shape->result_element : shape->parameter_elements[0],
-                            .array_operation=shape->operation})) return XR_LIR_OUT_OF_MEMORY;
+                            .array_operation=shape->operation,.array_result=v->result,
+                            .array_index=shape->operation == XR_LIR_ARRAY_OP_GET || shape->operation == XR_LIR_ARRAY_OP_SET ?
+                                v->operands[1] : 0,
+                            .array_item=shape->operation == XR_LIR_ARRAY_OP_SET ? v->operands[2] :
+                                shape->operation == XR_LIR_ARRAY_OP_PUSH ? v->operands[1] : 0})) return XR_LIR_OUT_OF_MEMORY;
                     }
                     XrLirIntrinsic entry;
                     if (xr_lir_intrinsic_view(m,v->intrinsic,&entry) == XR_LIR_OK && xr_lir_map_intrinsic_valid(m,&entry)) {

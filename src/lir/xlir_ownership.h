@@ -136,6 +136,9 @@ typedef struct XrLirOwnershipFact {
      * and never authorizes ignoring callbacks or coalescing physical homes. */
     XrLirOwnershipTransferMode forwarding_mode;
     uint32_t forwarding_drop;
+    /* Original Array operation SSA identities. Zero means inapplicable;
+     * these describe the checked operation and grant no access permission. */
+    uint32_t array_result, array_index, array_item;
 } XrLirOwnershipFact;
 
 enum XrLirOwnershipUnmodeled {

@@ -623,7 +623,8 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
             .hold_transfer_mode=fact.hold_transfer_mode,
             .view_storage=fact.view_storage,.view_parameter=fact.view_parameter,
             .cell_operation=fact.cell_operation,.cell_transport=fact.cell_transport,.cell_scope=fact.cell_scope,
-            .forwarding_mode=fact.forwarding_mode,.forwarding_drop=fact.forwarding_drop};
+            .forwarding_mode=fact.forwarding_mode,.forwarding_drop=fact.forwarding_drop,
+            .array_result=fact.array_result,.array_index=fact.array_index,.array_item=fact.array_item};
         if (fact.cell_transport) {
             if (!fact.value || fact.value > b->homes->value_count || !b->homes->values[fact.value].cell_payload_type)
                 return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Cell event lost its actual identity home");

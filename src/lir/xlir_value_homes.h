@@ -145,6 +145,7 @@ typedef struct XrLirHomeEvent {
      * The paired logical DROP remains present even when this field is set. */
     XrLirOwnershipTransferMode forwarding_mode;
     uint32_t forwarding_drop;
+    uint32_t array_result, array_index, array_item;
 } XrLirHomeEvent;
 
 typedef struct XrLirValueHomes {

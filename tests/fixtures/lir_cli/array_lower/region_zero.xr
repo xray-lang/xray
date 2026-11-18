@@ -1,0 +1,10 @@
+fn main() {
+    var values: Array<i64> = [2]
+    var i = 0
+    while (i < 0) {
+        values[0] = values[0] * 3 + 1
+        i = i + 1
+    }
+    print(values[0])
+}
+main()

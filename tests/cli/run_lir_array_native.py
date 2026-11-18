@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -30,6 +31,8 @@ def main() -> None:
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
+             "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi",
+             "panic_region_get", "panic_region_set",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
              "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
              "panic_bounds", "panic_get_i64_negative", "panic_get_u8_length", "panic_get_u64_huge",
@@ -102,7 +105,14 @@ def main() -> None:
         status, _, _ = run(name + "-c", [binary, "build", "-c", source, "-o", generated], 0)
         if status:
             continue
-        assert "({" not in generated.read_text(encoding="utf-8")
+        generated_text = generated.read_text(encoding="utf-8")
+        assert "({" not in generated_text
+        if name.startswith("region_") or name.startswith("panic_region_"):
+            specs = re.findall(r"static const XrtArrayI64RegionSpec xrl_ar_spec_", generated_text)
+            clones = re.findall(r"^xrl_ar_\d+_bb\d+: ;\n(.*?)(?=^xrl_ar_\d+_bb\d+: ;|^}\n)",
+                                generated_text, re.MULTILINE | re.DOTALL)
+            assert len(specs) == (2 if name == "region_two" else 1), (name, len(specs))
+            assert clones and all("xrt_" not in body for body in clones), name
         # The original large-case oracles check both length and element 299.
         # Keep that executed span check independent of C literal spelling.
         for ordinal, compiler in enumerate(args.compiler or [None]):
