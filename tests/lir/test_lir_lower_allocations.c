@@ -416,7 +416,8 @@ static void map_lower_failures(void) {
 
 static void tuple_lower_failures(void) {
     SourceFixture fixture = source_fixture("fn pair(a:i64,b:i64)->(i64,i64){return(a,b)}\n"
-        "var(a,b)=pair(40,2)\nprint(a+b)\nconst(c,d)=pair(17,25)\nprint(c+d)\n");
+        "var(a,b)=pair(40,2)\nprint(a+b)\nconst(c,d)=pair(17,25)\nprint(c+d)\n"
+        "var[e,_,f]=[10,20,30]\nconst[g]=[7]\nprint(e+f+g)\n");
     attempts = 0; fail_at = SIZE_MAX; OK(run(&fixture));
     size_t total = attempts;
     CHECK(total > 10);

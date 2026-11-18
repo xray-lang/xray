@@ -497,7 +497,7 @@ static bool lower_storage_closures(Lower *c) {
         const XrXirFunction *body = &c->source->functions[f];
         for (uint32_t i = 0; i < body->instruction_count; ++i) {
             const XrXirInstruction *op = &body->instructions[i];
-            if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_LOAD ||
+            if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_GROUP_INIT || op->op == XR_XIR_SLOT_LOAD ||
                 op->op == XR_XIR_SLOT_PLACE)
                 c->state_required[f] = 1;
             uint32_t target;
@@ -2033,34 +2033,45 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
 static bool lower_module_group(LowerFunction *f, uint32_t block, const XrXirInstruction *op) {
     Lower *c = f->owner;
     uint32_t first = (uint32_t)((uint64_t)op->immediate >> 32), count = (uint32_t)op->immediate;
-    uint32_t tuple = UINT32_MAX;
-    for (uint32_t n = 0; n < count; ++n) {
+    XrLirValue *elements = lower_alloc(c, count, sizeof(*elements));
+    if (!elements) return false;
+    bool good = true;
+    for (uint32_t n = 0; n < count && good; ++n) {
         uint32_t value = f->source->operands[op->args[0] + n];
         if (c->source->declarations->slots[first + n].mutable) {
-            if (value < f->source->parameter_count) return lower_unsupported(c, "module group Cell constructor");
+            if (value < f->source->parameter_count) {
+                good = lower_unsupported(c, "module group Cell constructor");
+                break;
+            }
             const XrXirInstruction *cell = &f->source->instructions[value - f->source->parameter_count];
-            if (cell->op != XR_XIR_CELL_NEW) return lower_unsupported(c, "module group Cell constructor");
+            if (cell->op != XR_XIR_CELL_NEW) {
+                good = lower_unsupported(c, "module group Cell constructor");
+                break;
+            }
             value = cell->args[0];
         }
-        if (value < f->source->parameter_count) return lower_unsupported(c, "module group Tuple projection");
-        const XrXirInstruction *field = &f->source->instructions[value - f->source->parameter_count];
-        if (field->op != XR_XIR_TUPLE_FIELD || field->type != XR_XIR_I64 ||
-            field->immediate != (int64_t)n || (n && field->args[0] != tuple))
-            return lower_unsupported(c, "module group requires ordered fields of one I64 Tuple");
-        tuple = field->args[0];
-        if (c->state_slots[first + n] != c->state_slots[first] + n)
-            return lower_unsupported(c, "module group lost contiguous receiving slots");
+        if (xr_xir_operand_type(f->source, value) != XR_XIR_I64) {
+            good = lower_unsupported(c, "module group requires I64 scalar values");
+            break;
+        }
+        if (c->state_slots[first + n] != c->state_slots[first] + n) {
+            good = lower_unsupported(c, "module group lost contiguous receiving slots");
+            break;
+        }
+        good = lower_value(f, value, &elements[n]);
     }
     XrLirValue args[2] = {f->state, {0}};
-    if (!lower_value(f, tuple, &args[1])) return false;
-    XrLirTypeView shape;
-    XrLirType type = lower_type(c, xr_xir_operand_type(f->source, tuple));
-    if (xr_lir_type_view(c->module, type, &shape) != XR_LIR_OK ||
-        shape.kind != XR_LIR_TYPE_TUPLE || shape.count != count)
-        return lower_unsupported(c, "module group requires a complete I64 Tuple");
+    XrLirType type = XR_LIR_TYPE_INVALID;
+    if (good) good = lower_build(c, xr_lir_tuple_i64_type(c->module, count, &type));
+    /* Pack already evaluated fields into the existing atomic publication carrier. */
+    XrLirInstruction tuple = {.op=XR_LIR_TUPLE_NEW, .type=type,
+        .operands=elements, .operand_count=count, .source=lower_source(c)};
+    if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &tuple, &args[1]));
     XrLirInstruction instruction = {.op=XR_LIR_STATE_GROUP_INITIALIZE, .type=XR_LIR_UNIT,
         .operands=args, .operand_count=2, .bits=c->state_slots[first], .source=lower_source(c)};
-    return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[block], &instruction));
+    if (good) good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[block], &instruction));
+    xr_free(elements);
+    return good;
 }
 
 static bool lower_module_operation(LowerFunction *f, uint32_t b, uint32_t i, bool *handled) {
