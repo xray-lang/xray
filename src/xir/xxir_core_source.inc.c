@@ -274,7 +274,7 @@ static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *mod
     ctx->bodies[target].module=ctx->module_count;
     ctx->bodies[target].checked_library=true;
     ctx->bodies[target].parameters=(XrXirType *)function->parameters;
-    return true;
+    return source_parameter_names_import_function(ctx,module,source,target);
 }
 
 /* Each installed copy belongs to its receiving Source birth. The immutable
