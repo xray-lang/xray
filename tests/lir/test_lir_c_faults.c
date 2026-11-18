@@ -525,7 +525,8 @@ static void array_helper_cancellation(void) {
 static void array_helper_boundaries(void) {
     const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT,ARRAY_REGION_RANGE_C_HEADER_LIVEOUT,
         ARRAY_REGION_RANGE_NEXT_COPIES,ARRAY_REGION_RANGE_STEP_TWO,ARRAY_REGION_RANGE_PARALLEL_BAD};
-    (void)ars_range_same; (void)ars_range_digest; (void)array_set_region_fixture;
+    (void)ars_range_same; (void)ars_range_digest; (void)ars_owner_home_same; (void)ars_owner_home_digest;
+    (void)array_set_region_fixture;
     size_t mode_count = sizeof(modes) / sizeof(*modes);
     for (size_t n = 0; n <= mode_count; ++n) {
         bool dual = n == mode_count;

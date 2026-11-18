@@ -163,8 +163,9 @@ typedef enum XrLirArraySetRegionStepKind {
  * Every future execution must preserve the complete original first iteration,
  * including its RHS, COPY failures, COW and error ordering. A numeric range
  * shape authorizes no runtime access; ordinary events/homes remain intact.
- * canonical_value describes each internal transition/death, not a new shared
- * physical slot; entry_value and exit_value retain the actual outside owners.
+ * canonical_value alone does not merge ordinary physical homes. The separate
+ * optional owner_home fact describes only its admitted unobserved window;
+ * entry_value and exit_value retain the actual outside owners.
  * NEW/READ_CANDIDATE preserve a COPY plus its adjacent logical death; they are
  * not original MOVE events. source dies at drop, or at the selected MOVE edge.
  * Positions/edges are one-based, and first_step is a zero-based table offset. */
@@ -188,11 +189,29 @@ typedef struct XrLirArraySetRegionRange {
     uint32_t increment_instruction, one, latch_iv;
 } XrLirArraySetRegionRange;
 
+enum {
+    XR_LIR_ARRAY_SET_OWNER_HOME_NONE,
+    XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW
+};
+/* An optional physical equivalence for an uninterrupted admitted window, not
+ * a change to ordinary homes, COPY/death events or access permissions. Ordinals
+ * are one-based within this region's step slice. NONE has both ordinals zero.
+ * The producer discharges every step in [first_active_step,exit_step) as one
+ * live token at the real canonical home. ENTRY remains ordinary; exit_step is
+ * the exact original EXIT_MOVE. Full first-trip/runtime/range admission still
+ * precedes activation. Before any exit or observation, transfer the real
+ * canonical owner to its original empty exit home and clear canonical. A cache
+ * only borrows that owner. Consumers unable to close this window ignore it. */
+typedef struct XrLirArraySetRegionOwnerHome {
+    uint32_t kind, first_active_step, exit_step;
+} XrLirArraySetRegionOwnerHome;
+
 typedef struct XrLirArraySetRegion {
     uint32_t function, header, entry_block, entry_edge, latch;
     uint32_t exit_edge, exit_block, entry_value, canonical_value, exit_value;
     uint32_t body_block_count, set_block, set_instruction, first_step, step_count;
     XrLirArraySetRegionRange range;
+    XrLirArraySetRegionOwnerHome owner_home;
 } XrLirArraySetRegion;
 
 typedef struct XrLirOwnershipFunction {

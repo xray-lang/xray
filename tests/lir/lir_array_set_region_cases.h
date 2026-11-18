@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * lir_array_set_region_cases.h - Structural proof does not coalesce storage
+ * lir_array_set_region_cases.h - Conditional facts preserve ordinary storage
  */
 #include "lir_array_set_region_fixture.h"
 #include "lir_array_region_range_fixture.h"
@@ -47,12 +47,16 @@ static void ars_retirement(ArraySetRegionFixture c, XrLirOwnershipPlan *plan) {
     uint64_t before = ars_steps_digest(homes->array_region_steps, homes->array_region_step_count);
     XrLirArraySetRegionRange range = homes->array_regions[0].range;
     uint64_t range_digest = ars_range_digest(range);
+    XrLirArraySetRegionOwnerHome owner_home = homes->array_regions[0].owner_home;
+    uint64_t owner_home_digest = ars_owner_home_digest(owner_home);
     uint32_t count = homes->array_region_step_count;
     xr_lir_module_destroy(c.module); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
     CHECK(homes->array_regions[0].body_block_count == c.count && homes->array_region_step_count == count &&
         ars_steps_digest(homes->array_region_steps, count) == before);
     CHECK(ars_range_same(homes->array_regions[0].range, range) &&
         ars_range_digest(homes->array_regions[0].range) == range_digest);
+    CHECK(ars_owner_home_same(homes->array_regions[0].owner_home,owner_home) &&
+        ars_owner_home_digest(homes->array_regions[0].owner_home) == owner_home_digest);
     ars_home_geometry(homes); xr_lir_value_homes_destroy(homes);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
 }
@@ -92,6 +96,7 @@ static void ars_range_current(ArraySetRegionFixture c, const XrLirOwnershipPlan 
         OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &none, NULL));
         XrLirArraySetRegion changed; OK(xr_lir_ownership_array_region_at(none, 0, &changed));
         CHECK(ars_range_same(changed.range, (XrLirArraySetRegionRange){0}));
+        CHECK(ars_owner_home_same(changed.owner_home,(XrLirArraySetRegionOwnerHome){0}));
         *fields[n] = original;
         CHECK(xr_lir_ownership_array_regions_verify(c.module, none) == XR_LIR_VERIFY_ERROR);
         xr_lir_ownership_plan_destroy(none);
@@ -115,10 +120,15 @@ static void ars_range_preparations(void) {
                 range.length && range.length_instruction && range.condition && range.condition_instruction &&
                 range.increment && range.increment_block == c.body[mode == ARRAY_REGION_RANGE_UNIT ? 2 : 0].id &&
                 range.increment_instruction && range.one && range.latch_iv);
+            CHECK(region.owner_home.kind == XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW &&
+                region.owner_home.first_active_step == 2 && region.owner_home.exit_step == region.step_count);
             if (mode == ARRAY_REGION_RANGE_UNIT) {
                 CHECK(range.latch_iv == range.increment); ars_range_current(c, plan, range);
             } else CHECK(range.latch_iv != range.increment);
-        } else CHECK(ars_range_same(region.range, (XrLirArraySetRegionRange){0}));
+        } else {
+            CHECK(ars_range_same(region.range, (XrLirArraySetRegionRange){0}));
+            CHECK(ars_owner_home_same(region.owner_home,(XrLirArraySetRegionOwnerHome){0}));
+        }
         ars_retirement(c, plan);
     }
     ArraySetRegionFixture c = ars_range_build(NULL, ARRAY_SET_REGION_BODY_CAPACITY, ARRAY_REGION_RANGE_NEXT_COPIES);
@@ -129,6 +139,12 @@ static void ars_range_preparations(void) {
     CHECK(region.body_block_count == ARRAY_SET_REGION_BODY_CAPACITY && region.range.kind ==
         XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN);
     OK(xr_lir_ownership_array_regions_verify(c.module, plan)); ars_retirement(c, plan);
+    c = ars_range_build(NULL,3,ARRAY_REGION_RANGE_FAILING_RHS);
+    OK(xr_lir_module_finish(c.module,NULL)); plan = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
+    CHECK(!xr_lir_ownership_array_region_count(plan));
+    OK(xr_lir_ownership_array_regions_verify(c.module,plan));
+    xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module);
 }
 static void ars_current_body(ArraySetRegionFixture c, const XrLirOwnershipPlan *plan) {
     XrLirFunctionData *f = &c.module->functions[c.function.id - 1];

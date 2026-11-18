@@ -884,6 +884,8 @@ static void array_set_region_receiving(bool range) {
     XrLirArraySetRegion published; OK(xr_lir_ownership_array_region_at(plan, 1, &published));
     uint32_t expected_range = range ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN : XR_LIR_ARRAY_SET_RANGE_NONE;
     CHECK(ars_range_same(homes->array_regions[0].range, published.range) && published.range.kind == expected_range);
+    CHECK(ars_owner_home_same(homes->array_regions[0].owner_home,published.owner_home) &&
+        published.owner_home.kind == (uint32_t)(range ? XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW : XR_LIR_ARRAY_SET_OWNER_HOME_NONE));
     xr_lir_value_homes_destroy(homes); homes = NULL;
     CHECK(live == baseline && home_live_bytes() == bytes);
     for (size_t point = 1; point <= sites; ++point) {
@@ -895,12 +897,15 @@ static void array_set_region_receiving(bool range) {
     uint32_t count = homes->array_region_step_count;
     XrLirArraySetRegionStep first = homes->array_region_steps[0], last = homes->array_region_steps[count - 1];
     uint64_t range_digest = ars_range_digest(published.range);
+    uint64_t owner_home_digest = ars_owner_home_digest(published.owner_home);
     xr_lir_module_destroy(c.module); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
     CHECK(homes->array_regions[0].canonical_value == c.header_array.id && homes->array_regions[0].body_block_count == c.count &&
         homes->array_region_steps[0].source == first.source && homes->array_region_steps[count - 1].target == last.target &&
         first.kind == XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE && last.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE);
     CHECK(ars_range_same(homes->array_regions[0].range, published.range) &&
         ars_range_digest(homes->array_regions[0].range) == range_digest);
+    CHECK(ars_owner_home_same(homes->array_regions[0].owner_home,published.owner_home) &&
+        ars_owner_home_digest(homes->array_regions[0].owner_home) == owner_home_digest);
     xr_lir_value_homes_destroy(homes); CHECK(live == baseline && home_live_bytes() == bytes);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
 }
