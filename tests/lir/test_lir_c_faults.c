@@ -27,6 +27,14 @@ static uint64_t request_clock(void) {
 static bool fail_workspace, fail_text, fail_divisors, corrupt_text, injected;
 static unsigned divisor_attempt, failed_divisor_attempt;
 static bool *cancel_at_publication;
+typedef struct ArrayLocalIndexCancelPoint {
+    XrCompileResources *resources;
+    size_t *index;
+    size_t count, populated, attempts, live, bytes;
+    uint64_t held;
+    bool reached;
+} ArrayLocalIndexCancelPoint;
+static ArrayLocalIndexCancelPoint *array_local_index_watch;
 static XrCompileResourceStatus workspace_allocate(XrCompileResources *r, size_t n, void **out) {
     if (fail_workspace && !injected) {
         injected = true;
@@ -41,7 +49,19 @@ static XrCompileResourceStatus facts_allocate(XrCompileResources *r, size_t n, s
         injected = true;
         return XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
     }
-    return xr_compile_resources_calloc(r, n, size, out);
+    ArrayLocalIndexCancelPoint *point = array_local_index_watch;
+    if (point) {
+        /* This watch is armed only around the private cold-spec emitter,
+         * whose sole calloc is its actual temporary coordinate index. */
+        CHECK(r == point->resources && !point->index && size == sizeof(size_t));
+        point->held = sdk_stats(r).held_bytes; point->live = runtime_live; point->bytes = runtime_bytes;
+    }
+    XrCompileResourceStatus status = xr_compile_resources_calloc(r, n, size, out);
+    if (point) {
+        CHECK(status == XR_COMPILE_RESOURCE_OK && *out);
+        point->index = *out; point->count = n;
+    }
+    return status;
 }
 static XrCompileResourceStatus text_resize(XrCompileResources *r, void **out, size_t n) {
     if (fail_text && !injected) {
@@ -480,6 +500,42 @@ static bool array_helper_cancel(const void *context) {
     }
     return false;
 }
+static bool array_local_index_cancel(const void *context) {
+    ArrayLocalIndexCancelPoint *point = (ArrayLocalIndexCancelPoint *)context;
+    if (!point->index) return false;
+    point->populated = 0;
+    for (size_t n = 0; n < point->count; ++n) point->populated += point->index[n] != 0;
+    if (!point->populated) return false;
+    CHECK(sdk_stats(point->resources).held_bytes > point->held && runtime_live == point->live + 1 &&
+        runtime_bytes > point->bytes);
+    point->reached = true; point->attempts = runtime_attempts; return true;
+}
+static void array_local_index_cancellation(XrLirCRequest *request, const XrLirValueHomes *homes,
+    const XrLirValueLayouts *layouts) {
+    uint64_t held = sdk_stats(request->resources).held_bytes; size_t live = runtime_live, bytes = runtime_bytes;
+    LirCValueTypes types = {0};
+    LirC compiler = {.request=request,.function={request->module,homes->source_function},.homes=homes,.value_types=&types};
+    c_value_types_prepare(&compiler,layouts,&types);
+    CHECK(compiler.status == XR_LIR_C_OK && homes->workspace_count > 1 && c_array_local_function(&compiler,homes));
+    compiler.array_local = true;
+    ArrayLocalIndexCancelPoint point = {.resources=request->resources};
+    XrCompileRequestControl control = {0};
+    XrCompileRequestOptions options = {array_local_index_cancel,&point,XR_COMPILE_DEADLINE_NONE,0};
+    CHECK(xr_compile_request_control_init(&options,&control) == XR_COMPILE_RESOURCE_OK);
+    request->control = &control; CHECK(!array_local_index_watch); array_local_index_watch = &point;
+    c_array_local_specs(&compiler);
+    array_local_index_watch = NULL; request->control = NULL;
+    CHECK(point.reached && point.count / 2 >= homes->workspace_count && point.populated &&
+        point.populated < homes->workspace_count && compiler.status == XR_LIR_C_CANCELLED &&
+        control.status == XR_COMPILE_RESOURCE_CANCELLED && runtime_attempts == point.attempts);
+    /* The caller returned the held index even though population stopped.
+     * Do not dereference its expired address; only the original text remains. */
+    CHECK(sdk_stats(request->resources).held_bytes == point.held && runtime_live == point.live && runtime_bytes == point.bytes);
+    CHECK(compiler.text && compiler.length);
+    xr_compile_resources_free(compiler.text);
+    xr_compile_resources_free(types.index); xr_compile_resources_free(types.rows);
+    CHECK(sdk_stats(request->resources).held_bytes == held && runtime_live == live && runtime_bytes == bytes);
+}
 static void array_helper_cancellation(void) {
     ArraySetRegionFixture input = ars_range_build(NULL,8,ARRAY_REGION_RANGE_UNIT);
     XrLirFunction root = array_helper_root(&input); OK(xr_lir_module_finish(input.module,NULL));
@@ -517,6 +573,8 @@ static void array_helper_cancellation(void) {
         c_array_regions_destroy(&compiler);
         CHECK(sdk_stats(resources).held_bytes == held && runtime_live == live && runtime_bytes == bytes);
     }
+    XrLirCRequest request = {input.module,root,resources,"array-local-index-cancellation",NULL};
+    array_local_index_cancellation(&request,homes,layouts);
     xr_compile_resources_release(resources); xr_lir_value_homes_destroy(homes);
     xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
