@@ -52,6 +52,24 @@ class StringBaselineTests(unittest.TestCase):
                                  "assignment_vm_to_compound": 1.5, "assignment_native_to_compound": 0.5},
         })
 
+    def test_string_gate_checks_each_form_against_its_reference(self):
+        values = {"CPython": 2.0, "C -O2": 10.0, "Xray VM": 2.0, "Xray native": 13.0}
+        for name, _, _ in BASELINE.STRING_APPEND_FORMS:
+            values["Xray VM " + name] = 2.0
+            values["Xray native " + name] = 13.0
+        medians = {f"String append {count}": values.copy() for count in BASELINE.STRING_SIZES}
+        medians["String append 1000000"] = {"Xray VM": 3.0, "CPython": 1.0}
+        passed = BASELINE.string_performance_gate(medians)
+        self.assertEqual(passed["status"], "PASS")
+        self.assertEqual(len(passed["rows"]), 30)
+
+        medians["String append 4000000"]["Xray VM local const"] = 3.0
+        del medians["String append 8000000"]["Xray native grouped"]
+        failed = BASELINE.string_performance_gate(medians)
+        self.assertEqual(failed["status"], "FAIL")
+        self.assertEqual([(r["engine"], r["ratio"]) for r in failed["rows"] if r["status"] == "FAIL"],
+                         [("Xray VM local const", 1.5), ("Xray native grouped", None)])
+
     def test_windows_reference_uses_optimized_static_crt(self):
         command = BASELINE.string_reference_command("clang-cl.exe", pathlib.Path("ref.c"), pathlib.Path("ref.exe"))
         for flag in ("/O2", "/Ob2", "/MT", "/std:c11", "/clang:-ffp-contract=off"):

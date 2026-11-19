@@ -109,6 +109,17 @@ jobs:
       - name: Independently rebuild Unix CLI
         if: runner.os != 'Windows'
         run: python scripts/ci_build_log.py --log current-evidence/cli-post-build.log -- cmake --build build --parallel 4 --target xray
+      - name: Resolve the effective native C compiler
+        id: native-cc
+        shell: python
+        run: |
+          import os, pathlib, re
+          cache = pathlib.Path('build/CMakeCache.txt').read_text(encoding='utf-8')
+          compiler = re.search(r'^CMAKE_C_COMPILER:FILEPATH=(.+)$', cache, re.M)
+          if not compiler:
+              raise RuntimeError('Missing explicit compiler identity in the fresh build')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('NATIVE_CC=' + compiler[1].strip() + '\n')
       - name: Verify Windows current gates
         if: runner.os == 'Windows'
         shell: cmd
@@ -123,27 +134,17 @@ jobs:
         run: >-
           python scripts/ci_build_log.py --log current-evidence/pipe-probe.log --
           ctest --test-dir build --output-on-failure --no-tests=error -R '^os_pipe_owned$'
-      - name: Resolve the effective Array C compiler
-        shell: python
-        run: |
-          import os, pathlib, re
-          cache = pathlib.Path('build/CMakeCache.txt').read_text(encoding='utf-8')
-          compiler = re.search(r'^CMAKE_C_COMPILER:FILEPATH=(.+)$', cache, re.M)
-          if not compiler:
-              raise RuntimeError('Missing explicit compiler identity in the fresh build')
-          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
-              output.write('ARRAY_CC=' + compiler[1].strip() + '\n')
       - name: Prepare Windows Array performance gates
         if: runner.os == 'Windows'
         shell: cmd
         run: |
           chcp 65001 >nul
-          python scripts/array_access_benchmark.py prepare --root . --build build --cc "%ARRAY_CC%" --work build/array-performance-prepare --case push --case inplace
+          python scripts/array_access_benchmark.py prepare --root . --build build --cc "%NATIVE_CC%" --work build/array-performance-prepare --case push --case inplace
       - name: Prepare Unix Array performance gates
         if: runner.os != 'Windows'
         run: >-
           python scripts/array_access_benchmark.py prepare --root . --build build
-          --cc "$ARRAY_CC" --work build/array-performance-prepare --case push --case inplace
+          --cc "$NATIVE_CC" --work build/array-performance-prepare --case push --case inplace
       - name: Measure native Array performance
         run: >-
           python scripts/array_access_benchmark.py measure
@@ -153,6 +154,20 @@ jobs:
           python scripts/array_access_benchmark.py assert --scope native
           --prepared build/array-performance-prepare/prepared.json
           --result build/array-performance-measured/result.json
+      - name: Set up the String reference interpreter
+        if: ${{ !cancelled() && steps.native-cc.outcome == 'success' }}
+        id: string-reference
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.15.2'
+      - name: Enforce String append limits for equivalent spellings
+        if: ${{ !cancelled() && steps.string-reference.outcome == 'success' }}
+        shell: python
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable, 'scripts/new_path_baseline.py', '--root', '.',
+                          '--build', 'build', '--work', 'build/string-performance',
+                          '--cc', os.environ['NATIVE_CC'], '--samples', '5', '--gate-string'], check=True)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -160,6 +175,9 @@ jobs:
           path: |
             build/array-performance-prepare/
             build/array-performance-measured/
+            build/string-performance/**/*.json
+            build/string-performance/**/*.stdout
+            build/string-performance/**/*.stderr
             current-evidence/
             build/Testing/Temporary/LastTest.log
             build/smoke/
@@ -167,6 +185,9 @@ jobs:
             build/lir-cli-commands/**/result.json
             build/lir-cli-commands/**/*.stdout
             build/lir-cli-commands/**/*.stderr
+            build/lir-cli-assertions/**/result.json
+            build/lir-cli-assertions/**/*.stdout
+            build/lir-cli-assertions/**/*.stderr
             build/lir-cli-array-native/**/result.json
             build/lir-cli-array-native/**/*.stdout
             build/lir-cli-array-native/**/*.stderr
