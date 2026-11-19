@@ -168,6 +168,31 @@ static inline const XrLirInstructionView *xr_lir_internal_value_definition(
     const XrLirInstructionView *definition = &block->instructions[value->instruction].view;
     return definition->result == id ? definition : NULL;
 }
+/* Constant branches have one executable edge. Return UINT32_MAX for
+ * terminators whose successor is not known from the verified instruction. */
+static inline uint32_t xr_lir_internal_known_edge(const XrLirFunctionData *f,
+    const XrLirInstructionView *term) {
+    if (term->op == XR_LIR_BR) return 0;
+    if (term->op != XR_LIR_CONDBR) return UINT32_MAX;
+    const XrLirInstructionView *test = xr_lir_internal_value_definition(f, term->operands[0]);
+    if (!test || test->op != XR_LIR_CONST || test->type != XR_LIR_I1 || test->bits > 1) return UINT32_MAX;
+    return test->bits ? 0 : 1;
+}
+
+/* A forwarding block may define scalar constants, but does no work whose
+ * result or observable behavior can change between iterations. The caller
+ * must separately prove the behavior of every argument on its selected edge. */
+static inline uint32_t xr_lir_internal_forward_edge(const XrLirFunctionData *f, const XrLirBlockData *block) {
+    const XrLirInstructionView *term = &block->instructions[block->instruction_count - 1].view;
+    uint32_t selected = xr_lir_internal_known_edge(f, term);
+    if (selected == UINT32_MAX) return selected;
+    for (uint32_t n = 0; n + 1 < block->instruction_count; ++n) {
+        const XrLirInstructionView *op = &block->instructions[n].view;
+        if (op->op != XR_LIR_CONST || (op->type != XR_LIR_I64 && op->type != XR_LIR_I1)) return UINT32_MAX;
+    }
+    return selected;
+}
+
 /* Return the signed strict order implied by a selected conditional edge.
  * This describes operand identities only. It does not prove a recurrence or
  * grant permission to skip any of the original control flow. */

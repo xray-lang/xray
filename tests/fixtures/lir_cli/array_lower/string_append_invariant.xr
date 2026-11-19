@@ -91,6 +91,40 @@ fn nested_boolean_limit(count: i64) -> i64 {
     return len(text)
 }
 
+fn exit_test(first: i64, count: i64) -> i64 {
+    var text = ""
+    var i = first
+    while (true) {
+        if (count <= i) { break }
+        text += "é"
+        i += 1
+    }
+    return len(text)
+}
+
+fn constant_branches(count: i64) -> i64 {
+    var text = ""
+    var i = 0
+    while (i < count) {
+        if (true) {}
+        if (false) { print(-42) }
+        text += "é"
+        i += 1
+    }
+    return len(text)
+}
+
+fn observable_branch(count: i64) -> i64 {
+    var text = ""
+    var i = 0
+    while (i < count) {
+        if (i == 7) { print(-42) }
+        text += "é"
+        i += 1
+    }
+    return len(text)
+}
+
 print(len(fixed(0)))
 print(fixed(3))
 print(len(fixed(4096)))
@@ -111,3 +145,8 @@ print(negated_limit(-3, 7))
 print(negated_limit(4, 4))
 print(negated_limit(9223372036854775707, 9223372036854775807))
 print(nested_boolean_limit(71))
+print(exit_test(-3, 7))
+print(exit_test(4, 4))
+print(exit_test(9223372036854775707, 9223372036854775807))
+print(constant_branches(4096))
+print(observable_branch(80))
