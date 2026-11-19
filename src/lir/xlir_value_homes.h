@@ -44,6 +44,9 @@ typedef struct XrLirValueHome {
     /* On this path all reads are owned appends' suffix operands, before release.
      * Its cache is the only physical owner; the logical SSA home stays empty. */
     bool literal_append_borrow;
+    /* Verified suffix-only forwarding chain. Every member uses the physical
+     * owner of this one-based producer. The selected edges do not move it. */
+    uint32_t stationary_string;
     /* Cell's actual payload plan is in this same receiving layout image.
      * Borrowed Cell formals have no owner slot, offset or temporary. */
     uint32_t cell_payload_type;
@@ -196,6 +199,15 @@ typedef struct XrLirValueHomes {
     const XrLirArraySetRegionStep *array_push_steps;
     uint32_t array_push_window_count, array_push_step_count;
 } XrLirValueHomes;
+
+/* Only for consumers of common homes and the exact LIR edge. Raw execution
+ * metadata never uses this fact to grant access to an owner. */
+static inline bool xr_lir_home_stationary_edge(const XrLirValueHomes *homes,
+    uint32_t source, uint32_t target) {
+    if (!homes) return false;
+    uint32_t producer = homes->values[source].stationary_string;
+    return producer && producer == homes->values[target].stationary_string;
+}
 
 typedef struct XrLirValueHomesRequest {
     const XrLirModule *module;

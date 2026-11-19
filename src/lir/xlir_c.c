@@ -871,12 +871,14 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
     xr_lir_block_view(c->request->module, target, &block);
     XR_DCHECK(block.parameter_count == edge->argument_count, "validated edge matches its target");
     for (uint32_t a = 0; a < edge->argument_count; ++a)
-        if (c_managed_leaf(c_value_type(c, edge->arguments[a]))) {
+        if (c_managed_leaf(c_value_type(c, edge->arguments[a])) &&
+            !xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) {
             c_error(c, XR_LIR_C_INVALID_LIR, "owned edge lost its common transfer");
             return;
         }
     c_text(c, "    {\n");
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
+        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
         uint64_t temp = (uint64_t) c->scratch + 1 + a;
         if (temp >= UINT32_C(8388608)) {
             c_error(c, XR_LIR_C_UNSUPPORTED, "C edge temporary index exceeds the W4 limit");
@@ -890,6 +892,7 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
                 " = xrl_access%" PRIu32 ";\n", a, edge->arguments[a]);
     }
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
+        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
         c_format(c, "        v%" PRIu32 " = v%" PRIu32 ";\n", block.parameters[a],
                  c->scratch + 1 + a);
         if (c_value_type(c, edge->arguments[a]) == XR_LIR_STATE_REF)
