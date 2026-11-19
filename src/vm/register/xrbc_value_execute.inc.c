@@ -311,6 +311,32 @@ static XrtManagedStatus rbc_value_place(RbcValueOrigin origin, bool temporary, s
     return xr_rbc_value_home_place((XrRbcHomeLocation){origin.activation->code->homes,
         origin.activation->frame,origin.value,temporary},leaf,nulls,out);
 }
+/* The real Frame view already binds the sealed home to its payload. Reading
+ * a committed local Header calls no provider and cannot run guest code. The
+ * root's busy flag and the actual slot's pending state still forbid reads. */
+static XrtManagedStatus rbc_value_borrow_header(RbcValueOrigin origin, const XrLirValueHome *home,
+    const XrtManagedHeader **output) {
+    RbcValueActivation *activation = origin.activation;
+    if (home && activation->owned_code && activation->frame && !home->parameter &&
+        home->owner_count == 1 && home->first_owner < activation->frame_locations.slot_count) {
+        const XrtManagedFrameLocations *locations = &activation->frame_locations;
+        const XrtManagedSlot *slot = &locations->slots[home->first_owner];
+        XR_DCHECK(locations->frame == activation->frame && locations->payload == activation->payload &&
+            slot->owner_offset == home->offset && slot->owner_offset != SIZE_MAX,
+            "the owned Header borrow uses its real Frame payload");
+        if (*locations->busy || slot->pending.value || slot->pending.allocation_bytes)
+            return XRT_MANAGED_ARGUMENT;
+        XrtManagedHeader *header = *(XrtManagedHeader **)(activation->payload + slot->owner_offset);
+        if (!header) return XRT_MANAGED_ARGUMENT;
+        *output = header;
+        return XRT_MANAGED_OK;
+    }
+    XrtPlace place;
+    XrtManagedStatus status = rbc_value_place(origin, false, 0, &place);
+    if (status != XRT_MANAGED_OK) return status;
+    place.nulls = XRT_PLACE_NONNULL;
+    return xrt_place_borrow(place, output);
+}
 static XrtManagedStatus rbc_value_string_borrow(RbcValueActivation *activation, uint32_t value,
     const XrtStringBacking **out) {
     RbcValueOrigin origin = rbc_value_origin(activation,value);
@@ -322,10 +348,8 @@ static XrtManagedStatus rbc_value_string_borrow(RbcValueActivation *activation, 
         if (!borrowed) return XRT_MANAGED_ARGUMENT;
         *out=borrowed; return XRT_MANAGED_OK;
     }
-    XrtPlace place;
-    XrtManagedStatus status = rbc_value_place(origin,false,0,&place);
     const XrtManagedHeader *header = NULL;
-    if (status == XRT_MANAGED_OK) { place.nulls=XRT_PLACE_NONNULL; status=xrt_place_borrow(place,&header); }
+    XrtManagedStatus status = rbc_value_borrow_header(origin, home, &header);
     if (status == XRT_MANAGED_OK) *out=(const XrtStringBacking *)header;
     return status;
 }
@@ -343,9 +367,8 @@ static XrtManagedStatus rbc_value_map_borrow(const XrRbcModule *module,RbcValueA
         if (!map) return XRT_MANAGED_ARGUMENT;
         *output=map; return XRT_MANAGED_OK;
     }
-    XrtPlace place; const XrtManagedHeader *header=NULL;
-    XrtManagedStatus status=rbc_value_place(origin,false,0,&place);
-    if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&header);
+    const XrtManagedHeader *header=NULL;
+    XrtManagedStatus status=rbc_value_borrow_header(origin,home,&header);
     if (status==XRT_MANAGED_OK) *output=(const XrtMapBacking *)header;
     return status;
 }
@@ -361,9 +384,8 @@ static XrtManagedStatus rbc_value_set_borrow(const XrRbcModule *module,RbcValueA
         if (!set) return XRT_MANAGED_ARGUMENT;
         *output=set; return XRT_MANAGED_OK;
     }
-    XrtPlace place; const XrtManagedHeader *header=NULL;
-    XrtManagedStatus status=rbc_value_place(origin,false,0,&place);
-    if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&header);
+    const XrtManagedHeader *header=NULL;
+    XrtManagedStatus status=rbc_value_borrow_header(origin,home,&header);
     if (status==XRT_MANAGED_OK) *output=(const XrtSetBacking *)header;
     return status;
 }

@@ -72,12 +72,13 @@ static void header_edge_case_begin(HeaderEdgeCase *c,unsigned kind) {
     CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&c->billing)==XRT_MANAGED_OK);
     CHECK(xrt_backing_types_init(c->billing,&c->types)==XRT_MANAGED_OK);
     CHECK(xrt_managed_root_new(c->billing,&c->root)==XRT_MANAGED_OK);
-    XrtManagedFrame *frame=NULL;
-    CHECK(xr_rbc_value_homes_enter(code->homes,c->root,&frame)==XRT_MANAGED_OK);
-    void *payload=NULL; size_t bytes=0;
-    CHECK(xrt_managed_frame_payload(frame,&payload,&bytes)==XRT_MANAGED_OK);
+    XrtManagedFrameLocations locations={0};
+    CHECK(xrt_managed_frame_enter_locations(c->root,&code->homes->frame,&locations)==XRT_MANAGED_OK);
+    XrtManagedFrame *frame=locations.frame;
     c->activation=(RbcValueActivation){.code=code,.image=xr_rbc_module_value_image(c->module),
-        .frame=frame,.payload=payload,.edges=c->edges,.edge_capacity=2,.publications=c->publications,
+        .frame=frame,.payload=locations.payload,.frame_locations=locations,
+        .owned_code=xr_rbc_module_code_owner(c->module)!=NULL,
+        .edges=c->edges,.edge_capacity=2,.publications=c->publications,
         .publication_capacity=2,.snapshots=c->snapshots,.snapshot_capacity=sizeof(c->snapshots)};
     const XrLirValueHome *source=&code->homes->values[c->transfer.source],*target=&code->homes->values[c->transfer.target];
     CHECK(source->owner_count==1 && target->owner_count==1 && source->size==target->size);
@@ -128,6 +129,9 @@ static void header_only_edge_failures(void) {
     CHECK(xrt_managed_slot_location(c.activation.frame,target->first_owner,&to)==XRT_MANAGED_OK);
     CHECK(xrt_managed_slot_location(c.activation.frame,target->temporary_first_owner,&temporary)==XRT_MANAGED_OK);
     XrtManagedHeader *old=*to.owner,*value=*from.owner;
+    RbcValueOrigin origin={&c.activation,c.transfer.source};
+    const XrtManagedHeader *borrowed=NULL;
+    CHECK(c.activation.owned_code && rbc_value_borrow_header(origin,source,&borrowed)==XRT_MANAGED_OK && borrowed==value);
     atomic_store(&value->references,INT32_MAX);
     CHECK(header_edge_apply(&c,XR_LIR_OWNERSHIP_TRANSFER_COPY)==XRT_MANAGED_REFCOUNT);
     CHECK(*from.owner==value && *to.owner==old && !*temporary.owner);
@@ -137,14 +141,21 @@ static void header_only_edge_failures(void) {
         XrtManagedHeader *pending=NULL;
         CHECK(xrt_managed_slot_prepare(c.activation.frame,pending_slots[n],c.types.string,
             sizeof(XrtStringBacking)+1,&pending)==XRT_MANAGED_OK);
+        if (n==0) {
+            borrowed=NULL;
+            CHECK(rbc_value_borrow_header(origin,source,&borrowed)==XRT_MANAGED_ARGUMENT && !borrowed);
+        }
         CHECK(header_edge_apply(&c,XR_LIR_OWNERSHIP_TRANSFER_MOVE)==XRT_MANAGED_ARGUMENT);
         CHECK(*from.owner==value && *to.owner==old && !*temporary.owner);
         CHECK(xrt_managed_slot_abort(c.activation.frame,pending_slots[n])==XRT_MANAGED_OK);
     }
     CHECK(from.busy && !*from.busy); *from.busy=true;
+    borrowed=NULL;
+    CHECK(rbc_value_borrow_header(origin,source,&borrowed)==XRT_MANAGED_ARGUMENT && !borrowed);
     CHECK(header_edge_apply(&c,XR_LIR_OWNERSHIP_TRANSFER_MOVE)==XRT_MANAGED_ARGUMENT);
     CHECK(*from.owner==value && *to.owner==old && !*temporary.owner && *from.busy); *from.busy=false;
     CHECK(xrt_managed_slot_drop(c.activation.frame,source->first_owner)==XRT_MANAGED_OK);
+    CHECK(rbc_value_borrow_header(origin,source,&borrowed)==XRT_MANAGED_ARGUMENT && !borrowed);
     CHECK(header_edge_apply(&c,XR_LIR_OWNERSHIP_TRANSFER_MOVE)==XRT_MANAGED_ARGUMENT);
     CHECK(!*from.owner && *to.owner==old && !*temporary.owner);
     CHECK(xrt_string_backing_create(c.activation.frame,source->first_owner,&c.types,"next",4,0)==XRT_MANAGED_OK);
