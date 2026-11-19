@@ -328,8 +328,6 @@ static bool lir_array_region_move(const LirArrayRegionProof *p, uint32_t block, 
     return false;
 }
 enum { LIR_ARRAY_RANGE_CURRENT = 1, LIR_ARRAY_RANGE_NEXT };
-/* Private dimensionless recurrence tag; never published as SAME_LEN. */
-enum { LIR_ARRAY_RANGE_UNIT_LIMIT = 2 };
 static uint32_t lir_array_region_lane(const LirArrayRegionProof *p, uint32_t value) {
     return p->uses[value].range_stamp == p->range_stamp ? p->uses[value].lane : 0;
 }
@@ -365,7 +363,8 @@ static void lir_array_region_range_begin(LirArrayRegionProof *p, const XrLirArra
     while (argument < header->parameter_count && header->parameters[argument] != iv) ++argument;
     if (argument == header->parameter_count) return;
     const XrLirInstructionView *entry = lir_terminator(f, region->entry_block - 1);
-    p->range = (XrLirArraySetRegionRange){.kind=same ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN : LIR_ARRAY_RANGE_UNIT_LIMIT,
+    p->range = (XrLirArraySetRegionRange){.kind=same ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN :
+            XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT,
         .iv=iv,.iv_argument=argument,.entry_iv=entry->edges[region->entry_edge - 1].arguments[argument],
         .length=length,.length_instruction=bound ? end->instruction + 1 : 0,
         .condition=condition,.condition_instruction=f->values[condition - 1].instruction + 1};
@@ -555,16 +554,18 @@ static XrLirArraySetRegionOwnerHome lir_array_region_token_home(const LirArrayRe
 }
 static XrLirArraySetRegionOwnerHome lir_array_region_owner_home(const LirArrayRegionProof *p,
     const XrLirArraySetRegion *region) {
-    if (region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN)
+    bool readonly = region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET;
+    if (region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN &&
+        !(readonly && region->range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT))
         return (XrLirArraySetRegionOwnerHome){0};
-    uint32_t kind = region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET ?
+    uint32_t kind = readonly ?
         XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW : XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW;
     return lir_array_region_token_home(p,region,kind);
 }
 /* The range walk is finished. Use a disjoint stamp to trace unchanged
  * header parameters through the straight-line body, including bridge blocks. */
 static bool lir_array_region_scalar_passthrough(LirArrayRegionProof *p, const XrLirArraySetRegion *region,
-    uint32_t advancing) {
+    uint32_t advancing, uint32_t only) {
     const XrLirFunctionData *f = p->function;
     const XrLirBlockData *header = &f->blocks[region->header - 1];
     uint64_t stamp = p->range_stamp | (UINT64_C(1) << 63);
@@ -583,7 +584,7 @@ static bool lir_array_region_scalar_passthrough(LirArrayRegionProof *p, const Xr
             if (!lir_array_region_scalar(f->values[parameter - 1].type)) continue;
             uint32_t origin = p->uses[source].range_stamp == stamp ? p->uses[source].lane : 0;
             if (latch) {
-                if (parameter != advancing && origin != parameter) return false;
+                if ((only ? parameter == only : parameter != advancing) && origin != parameter) return false;
             } else {
                 p->uses[parameter].range_stamp = stamp; p->uses[parameter].lane = origin;
             }
@@ -595,8 +596,8 @@ static bool lir_array_region_scalar_passthrough(LirArrayRegionProof *p, const Xr
 
 static bool lir_array_region_push_capacity(LirArrayRegionProof *p, XrLirArraySetRegion *region) {
     const XrLirArraySetRegionRange *r=&p->range;
-    if (r->kind!=LIR_ARRAY_RANGE_UNIT_LIMIT || !r->increment || !r->latch_iv || !p->push_item ||
-        p->array_accesses!=1 || !lir_array_region_scalar_passthrough(p,region,r->iv)) return false;
+    if (r->kind!=XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT || !r->increment || !r->latch_iv || !p->push_item ||
+        p->array_accesses!=1 || !lir_array_region_scalar_passthrough(p,region,r->iv,0)) return false;
     XrLirArraySetRegionOwnerHome token=lir_array_region_token_home(p,region,1);
     if (!token.kind || token.exit_step<3) return false;
     uint32_t creates=0,reads=0;
@@ -667,7 +668,7 @@ static bool lir_array_element_update(LirArrayRegionProof *p, const XrLirArraySet
     }
     const XrLirInstructionView *set = &body->instructions[region->primary_instruction - 1].view;
     return lir_array_element_operand(f,region->primary_block,read,region->primary_instruction,set->operands[2]) &&
-        lir_array_region_scalar_passthrough(p,region,region->range.iv);
+        lir_array_region_scalar_passthrough(p,region,region->range.iv,0);
 }
 
 static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
@@ -687,7 +688,12 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint
     if (current != region->canonical_value) return false;
     if (p->range.latch_iv && p->range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) region->range = p->range;
     if (!region->primary_kind) {
-        if (p->get_count != 1 || region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) return false;
+        if (p->get_count != 1 || !p->range.latch_iv) return false;
+        const XrLirValueData *limit = &p->function->values[p->range.length - 1];
+        if (p->range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
+            limit->parameter && limit->block == region->header &&
+            !lir_array_region_scalar_passthrough(p, region, 0, p->range.length)) return false;
+        region->range = p->range;
         region->primary_kind = XR_LIR_ARRAY_REGION_PRIMARY_GET;
         region->primary_block = p->get_block; region->primary_instruction = p->get_instruction;
     }
