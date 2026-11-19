@@ -76,7 +76,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, runtime_header, f64, state, arrays, views, displays, maps, sets;
+    bool runtime, runtime_header, f64, state, arrays, views, displays, tuple_displays, maps, sets;
     bool string_values, inline_values, callables, cells, header_edges, binding_forwarding;
     bool array_local, array_local_runtime;
     XrLirStateLayout state_layout;
@@ -499,7 +499,11 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             else ++c->location_count;
         }
     }
-    if (c_display_point(c, v)) { c->displays = true; return; }
+    if (c_display_point(c, v)) {
+        c->displays = true;
+        c->tuple_displays |= xr_lir_tuple_display_type(c->request->module, c_value_type(c, v->operands[0]));
+        return;
+    }
     if (xr_lir_range_point(c->request->module, v)) return;
     if (c_record_point(v)) return;
     if (c_map_point(c, v)) {

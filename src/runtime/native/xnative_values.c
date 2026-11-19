@@ -168,7 +168,7 @@ static XrtManagedStatus native_image_plans(struct XrtNativeValues *values,
     return XRT_MANAGED_OK;
 }
 static XrtManagedStatus native_capture_plan(struct XrtNativeValues *values,
-    const XrtValueImage *source, XrtModuleState *state, XrtManagedLease code,
+    const XrtValueImage *source, const XrtModuleState *state, XrtManagedLease code,
     uint32_t type_id, const XrtValuePlan **output) {
     if (state) return xrt_module_state_plan(state,type_id,output);
     const XrtValueImagePlans *plans = NULL;
@@ -521,8 +521,13 @@ XRAY_API void xrt_native_tuple_display_create(XrtManagedFrame *frame, size_t slo
     if (!image || !image->types || !type || type > image->type_count ||
         !(image->types[type - 1].flags & XRT_VALUE_INLINE_DISPLAY))
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source_id);
+    struct XrtNativeValues *values = native_values(source_id);
+    const XrtModuleState *state = image == values->state_image ? values->state : NULL;
+    const XrtValuePlan *plan = NULL;
+    XrtManagedStatus status = native_capture_plan(values, image, state,
+        (XrtManagedLease){0}, type, &plan);
     const XrtBackingTypes *types = NULL;
-    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    if (status == XRT_MANAGED_OK) status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
     if (status == XRT_MANAGED_OK)
         status = xrt_string_backing_tuple_display_create(frame, slot, types, image, type, bytes);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
