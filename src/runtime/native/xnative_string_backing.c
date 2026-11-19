@@ -36,10 +36,9 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_create(XrtManagedFrame *frame, si
     if (status != XRT_MANAGED_OK) return status;
     XrUtf8ScanResult scan = xr_utf8_core_scan_strict((const uint8_t *)bytes, length);
     if (scan.error != XR_UTF8_OK) return XRT_MANAGED_BAD_UTF8;
-    XrtManagedHeader *payload = NULL;
-    status = xrt_managed_slot_prepare(frame, slot, types->string, extent, &payload);
+    XrtStringBacking *string = NULL;
+    status = xrt_string_backing_prepare(frame, slot, types->string, extent, &string);
     if (status != XRT_MANAGED_OK) return status;
-    XrtStringBacking *string = (XrtStringBacking *)payload;
     XR_CHECK(string->capacity > length, "the kernel derives the complete String extent");
     if (length) memmove(string->bytes, bytes, length);
     string->bytes[length] = 0;
@@ -56,10 +55,9 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_concat_create(XrtManagedFrame *fr
     size_t extent = 0, length = left->length + right->length;
     XrtManagedStatus status = string_extent(length, reserve, &extent);
     if (status != XRT_MANAGED_OK) return status;
-    XrtManagedHeader *payload = NULL;
-    status = xrt_managed_slot_prepare(frame, slot, types->string, extent, &payload);
+    XrtStringBacking *string = NULL;
+    status = xrt_string_backing_prepare(frame, slot, types->string, extent, &string);
     if (status != XRT_MANAGED_OK) return status;
-    XrtStringBacking *string = (XrtStringBacking *)payload;
     XR_CHECK(string->capacity > length, "concat pending storage covers both borrowed inputs");
     if (left->length) memcpy(string->bytes, left->bytes, left->length);
     if (right->length) memcpy(string->bytes + left->length, right->bytes, right->length);
@@ -98,10 +96,9 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_format_create(XrtManagedFrame *fr
     size_t length = buffer.length, extent = 0;
     XrtManagedStatus status = string_extent(length, 0, &extent);
     if (status != XRT_MANAGED_OK) return status;
-    XrtManagedHeader *payload = NULL;
-    status = xrt_managed_slot_prepare(frame, slot, types->string, extent, &payload);
+    XrtStringBacking *string = NULL;
+    status = xrt_string_backing_prepare(frame, slot, types->string, extent, &string);
     if (status != XRT_MANAGED_OK) return status;
-    XrtStringBacking *string = (XrtStringBacking *)payload;
     XR_CHECK(string->capacity > length, "format pending storage covers the measured text");
     buffer = (StringFormatBuffer){.bytes = string->bytes, .capacity = length};
     if (!xr_value_format_value(reader, root, sink, 0) || buffer.length != length) {

@@ -749,7 +749,11 @@ static void map_construction_and_updates(void) {
     CHECK(xrt_billing_owner_stats(fixture.billing).bytes == before.bytes + 40 + 8 * 56);
     XrtStringBacking *ordered[] = {first, other};
     map_check(map, ordered, 2);
+    CHECK(!atomic_load(&missing->cached_hash));
     map_value(map, equal, true, 42); map_value(map, missing, false, 0);
+    CHECK(atomic_load(&first->cached_hash) == xr_hash_bytes64("same", 4));
+    CHECK(first != equal && atomic_load(&equal->cached_hash) == atomic_load(&first->cached_hash));
+    CHECK(atomic_load(&missing->cached_hash) == xr_hash_bytes64("missing", 7));
     CHECK(xr_signed_rc_read(&first->managed.references) == 2 && xr_signed_rc_read(&equal->managed.references) == 1);
     int64_t unchanged = 73; bool found = true;
     BAD(xrt_map_backing_get(map, NULL, &unchanged, &found));

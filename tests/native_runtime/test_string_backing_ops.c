@@ -134,6 +134,13 @@ static XrtStringBacking *make(Fixture *fixture, size_t slot, const char *bytes) 
     OK(xrt_string_backing_create(fixture->frame, slot, &fixture->types, bytes, strlen(bytes), 0));
     return string(fixture, slot);
 }
+static uint64_t cache_string_hash(const XrtStringBacking *text) {
+    CHECK(!atomic_load(&text->cached_hash));
+    uint64_t hash = xrt_string_backing_hash(text);
+    CHECK(hash && hash == xr_hash_bytes64(text->bytes, text->length));
+    CHECK(atomic_load(&text->cached_hash) == hash);
+    return hash;
+}
 static void text_is(const XrtStringBacking *text, const char *bytes, size_t length, size_t runes) {
     CHECK(text && text->length == length && text->runes == runes && text->capacity > length);
     CHECK(!memcmp(text->bytes, bytes, length) && !text->bytes[length]);
@@ -253,16 +260,22 @@ static void exclusive_append(void) {
     Fixture f; fixture_init(&f, SIZE_MAX);
     OK(xrt_string_backing_create(f.frame, 0, &f.types, "\xc3\xa9", 2, 17));
     XrtStringBacking *text = string(&f, 0), *suffix = make(&f, 1, "!");
+    XrtStringBacking *empty = make(&f, 4, "");
+    uint64_t original_hash = cache_string_hash(text);
     size_t capacity = text->capacity;
     XrtBillingStats baseline = xrt_billing_owner_stats(f.billing);
     size_t calls = atomic_load(&f.audit.calls);
     bool appended = false;
+    OK(xrt_string_backing_try_append_exclusive(text, empty, &appended)); CHECK(appended);
+    CHECK(atomic_load(&text->cached_hash) == original_hash);
     OK(xrt_string_backing_try_append_exclusive(text, text, &appended)); CHECK(appended);
     text_is(text, "\xc3\xa9\xc3\xa9", 4, 2);
+    CHECK(cache_string_hash(text) != original_hash);
     atomic_store(&text->managed.references, -1);
     OK(xrt_string_backing_try_append_exclusive(text, suffix, &appended)); CHECK(appended);
     CHECK(xr_signed_rc_read(&text->managed.references) == 1);
     text_is(text, "\xc3\xa9\xc3\xa9!", 5, 3);
+    uint64_t shared_hash = cache_string_hash(text);
     OK(xrt_string_backing_copy_into(f.frame, 2, text));
     OK(xrt_string_backing_try_append_exclusive(text, suffix, &appended)); CHECK(!appended);
     text_is(text, "\xc3\xa9\xc3\xa9!", 5, 3);
@@ -271,6 +284,7 @@ static void exclusive_append(void) {
     OK(xrt_string_backing_copy_into(f.frame, 2, text));
     OK(xrt_string_backing_try_append_exclusive(text, suffix, &appended)); CHECK(!appended);
     CHECK(xr_signed_rc_read(&text->managed.references) == -2);
+    CHECK(atomic_load(&text->cached_hash) == shared_hash);
     OK(xrt_managed_slot_drop(f.frame, 2));
     CHECK(atomic_load(&f.audit.calls) == calls && text->capacity == capacity);
     same_bill(&f, baseline);
@@ -544,6 +558,7 @@ static void append_capacity_window(void) {
     OK(xrt_string_backing_create(f.frame, 0, &f.types, "p", 1, 11));
     OK(xrt_string_backing_create(f.frame, 3, &f.types, "\xc3\xa9\0", 3, 0));
     XrtStringBacking *text = string(&f, 0);
+    uint64_t old_hash = cache_string_hash(text);
     OK(xrt_string_backing_copy_into(f.frame, 1, text));
     CHECK(!xrt_native_string_append_window(f.frame, 0, 3, 8, NULL, 0));
     CHECK(!xrt_native_string_append_window(f.frame, 0, 3, 8, empty, 2));
@@ -559,10 +574,14 @@ static void append_capacity_window(void) {
     CHECK(!xrt_native_string_append_window(f.frame, 0, 3, 8, empty, 2));
     xrt_managed_domain_leave(location);
     size_t calls = atomic_load(&f.audit.calls);
+    CHECK(atomic_load(&text->cached_hash) == old_hash);
     CHECK(xrt_native_string_append_window(f.frame, 0, 3, 8, empty, 2) == 3);
     CHECK(string(&f, 0) == text && atomic_load(&f.audit.calls) == calls);
     text_is(text, "p\xc3\xa9\0\xc3\xa9\0\xc3\xa9\0", 10, 7);
+    uint64_t new_hash = cache_string_hash(text);
+    CHECK(new_hash != old_hash);
     CHECK(!xrt_native_string_append_window(f.frame, 0, 3, 8, empty, 2));
+    CHECK(atomic_load(&text->cached_hash) == new_hash);
     fixture_done(&f);
 }
 
@@ -602,6 +621,7 @@ static void owned_append_default_growth(void) {
     OK(xrt_managed_root_new(f.billing, &f.root));
     OK(xrt_managed_frame_enter(f.root, 5, &f.frame));
     XrtStringBacking *left = make(&f, 0, "\xc3\xa9");
+    uint64_t left_hash = cache_string_hash(left);
     XrtStringBacking *old = make(&f, 1, "old"), *suffix = make(&f, 3, "z");
     XrtStringAppendOwned input = {0, 1, 2, suffix};
     XrtBillingStats before = xrt_billing_owner_stats(f.billing);
@@ -609,6 +629,7 @@ static void owned_append_default_growth(void) {
     STATUS(xrt_string_backing_append_owned(f.frame, &f.types, &input), XRT_MANAGED_OOM);
     CHECK(string(&f, 0) == left && string(&f, 1) == old && !borrow(&f, 2));
     text_is(left, "\xc3\xa9", 2, 1);
+    CHECK(atomic_load(&left->cached_hash) == left_hash);
     slot_is(&f, 1, "old");
     XrtBillingStats failed = xrt_billing_owner_stats(f.billing);
     CHECK(failed.bytes == before.bytes && failed.blocks == before.blocks && failed.allocations == before.allocations);
@@ -617,6 +638,7 @@ static void owned_append_default_growth(void) {
     OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
     CHECK(!borrow(&f, 0) && !borrow(&f, 2));
     text_is(string(&f, 1), "\xc3\xa9z", 3, 2);
+    CHECK(cache_string_hash(string(&f, 1)) != left_hash);
     slot_is(&f, 3, "z");
     CHECK(!xrt_billing_owner_stats(f.billing).fail_after);
 
@@ -627,12 +649,15 @@ static void owned_append_default_growth(void) {
     CHECK(!borrow(&f, 0) && !borrow(&f, 2));
     slot_is(&f, 1, "pp");
     left = make(&f, 0, "q");
+    left_hash = cache_string_hash(left);
     OK(xrt_string_backing_copy_into(f.frame, 4, left));
     input.suffix = suffix;
     OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
     CHECK(!borrow(&f, 0) && !borrow(&f, 2));
     slot_is(&f, 1, "qz");
     slot_is(&f, 4, "q");
+    CHECK(cache_string_hash(string(&f, 1)) != left_hash);
+    CHECK(atomic_load(&left->cached_hash) == left_hash);
 
     OK(xrt_managed_root_destroy(&f.root));
     xrt_backing_types_drop(&f.types);

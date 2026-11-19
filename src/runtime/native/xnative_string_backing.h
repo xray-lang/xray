@@ -14,7 +14,33 @@
 #include "xnative_backing_types.h"
 
 #include "xray_native_string_value.h"
+#include "base/xhash.h"
 #include "shared/xr_value_format_core.h"
+
+/* The typed factory initializes the cache before exposing its pending bytes. */
+static inline XrtManagedStatus xrt_string_backing_prepare(XrtManagedFrame *frame, size_t slot,
+    XrtManagedOps *ops, size_t extent, XrtStringBacking **output) {
+    XrtManagedHeader *pending = NULL;
+    XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, ops, extent, &pending);
+    if (status == XRT_MANAGED_OK) {
+        XrtStringBacking *text = (XrtStringBacking *)pending;
+        atomic_init(&text->cached_hash, 0);
+        *output = text;
+    }
+    return status;
+}
+
+/* A live borrow keeps the bytes stable. Readers may race to cache the same
+ * derived hash; the atomic cache neither publishes bytes nor grants mutation.
+ * Zero remains a valid hash and is simply recomputed on its next use. */
+static inline uint64_t xrt_string_backing_hash(const XrtStringBacking *text) {
+    uint64_t hash = atomic_load_explicit(&text->cached_hash, memory_order_relaxed);
+    if (!hash) {
+        hash = xr_hash_bytes64(text->bytes, text->length);
+        atomic_store_explicit(&((XrtStringBacking *)text)->cached_hash, hash, memory_order_relaxed);
+    }
+    return hash;
+}
 
 /* Reserve counts tail bytes, including the terminator; zero selects length+1.
  * Inputs are synchronous borrows. The stable pending slot exists before any

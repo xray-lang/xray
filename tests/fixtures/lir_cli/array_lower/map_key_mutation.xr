@@ -1,0 +1,12 @@
+fn changes()->i64 {
+    const table={"a": 1, "ab": 2, "abb": 3}
+    var key="a"
+    const snapshot={key: 9}
+    var total=table[key]*100
+    key+="b"
+    total+=table[key]*10
+    key+="b"
+    return total+table[key]+snapshot["a"]
+}
+
+print(changes())

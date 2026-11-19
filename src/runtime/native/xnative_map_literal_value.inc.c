@@ -45,11 +45,10 @@ static XrtManagedStatus map_literal_message_create(XrtManagedFrame *parent, cons
     XrtManagedFrame *frame = NULL;
     XrtManagedStatus status = xrt_managed_frame_enter(root, 1, &frame);
     if (status != XRT_MANAGED_OK) return status;
-    XrtManagedHeader *payload = NULL;
-    status = xrt_managed_slot_prepare(frame, 0, types->string,
-        sizeof(XrtStringBacking) + message.capacity + 1, &payload);
+    XrtStringBacking *text = NULL;
+    status = xrt_string_backing_prepare(frame, 0, types->string,
+        sizeof(XrtStringBacking) + message.capacity + 1, &text);
     if (status == XRT_MANAGED_OK) {
-        XrtStringBacking *text = (XrtStringBacking *)payload;
         message.bytes = text->bytes; message.count = 0;
         if (!map_literal_message_format(&message, literal, inputs, duplicate) || message.count != message.capacity)
             status = XRT_MANAGED_OVERFLOW;

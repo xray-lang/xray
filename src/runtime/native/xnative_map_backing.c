@@ -14,7 +14,6 @@
 #include "xnative_array_backing.h"
 #include "xnative_string_backing.h"
 #include "base/xchecks.h"
-#include "base/xhash.h"
 #include <string.h>
 
 typedef struct MapProbe {
@@ -96,7 +95,7 @@ static XrtManagedStatus map_capacity(size_t current, size_t required, size_t *ou
 }
 static XrtManagedStatus map_probe(const XrtMapBacking *map, const XrtStringBacking *key, MapProbe *output) {
     if (!key) return XRT_MANAGED_ARGUMENT;
-    MapProbe probe = {.hash=xr_hash_bytes64(key->bytes, key->length)};
+    MapProbe probe = {.hash=xrt_string_backing_hash(key)};
     if (!map->capacity) { *output = probe; return XRT_MANAGED_OK; }
     size_t mask = map->capacity - 1;
     probe.bucket = (size_t)probe.hash & mask;
@@ -107,8 +106,9 @@ static XrtManagedStatus map_probe(const XrtMapBacking *map, const XrtStringBacki
         probe.entry = index - 1;
         const XrtMapBackingRow *entry = &map->rows[probe.entry];
         if (!entry->key) return XRT_MANAGED_ARGUMENT;
-        if (entry->hash == probe.hash && entry->key->length == key->length &&
-            (!key->length || !memcmp(entry->key->bytes, key->bytes, key->length))) {
+        if (entry->hash == probe.hash && (entry->key == key ||
+            (entry->key->length == key->length && (!key->length ||
+                !memcmp(entry->key->bytes, key->bytes, key->length))))) {
             probe.found = true; *output = probe; return XRT_MANAGED_OK;
         }
     }
