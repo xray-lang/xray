@@ -399,7 +399,14 @@ static void map_outcome_lifetime(void) {
     XrLirValue from_lookup={0},actuals[]={map,text};
     OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL,.type=optional,.callee=lookup,
         .operands=actuals,.operand_count=2},&from_lookup));
-    args[1]=managed_state_value(module,block,XR_LIR_NULLABLE_UNWRAP,XR_LIR_I64,&from_lookup,1,0);
+    XrLirValue from_local={0};
+    OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=optional,.intrinsic=getter,
+        .operands=actuals,.operand_count=2},&from_local));
+    XrLirValue hits[]={
+        managed_state_value(module,block,XR_LIR_NULLABLE_UNWRAP,XR_LIR_I64,&from_lookup,1,0),
+        managed_state_value(module,block,XR_LIR_NULLABLE_UNWRAP,XR_LIR_I64,&from_local,1,0),
+    };
+    args[1]=managed_state_value(module,block,XR_LIR_ADD,XR_LIR_I64,hits,2,0);
     managed_state_effect(module,block,XR_LIR_MAP_DROP,&map,1,0);
     OK(xr_lir_emit_value(module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=map_type,
         .intrinsic=constructor,.operands=args,.operand_count=2},&map));
@@ -416,7 +423,27 @@ static void map_outcome_lifetime(void) {
         CHECK(xr_rbc_compile(module,root,&program,NULL)==XR_RBC_COMPILE_OUT_OF_MEMORY && !program && !compiler_live_allocations);
     }
     failure=SIZE_MAX; program=compile(module,root); check_receiving(program);
-    XrRbcModule raw=*xr_rbc_program_view(program); raw.code_lease=(XrRbcCodeLease){0}; XrRbcExecution *execution=NULL;
+    const XrRbcModule *view=xr_rbc_program_view(program);
+    size_t local_reads=0, formal_reads=0;
+    for (uint32_t f=0;f<view->function_count;++f) {
+        const XrRbcValueCode *code=xr_rbc_module_value_code(view,f);
+        for (size_t n=0;code && n<code->access_count;++n) {
+            XrRbcValueAccess row=code->accesses[n];
+            if (row.operation!=XR_RBC_VALUE_MAP || row.index!=XR_LIR_MAP_OP_GET) continue;
+            const XrLirValueHome *receiver=&code->homes->values[code->arguments[row.first]];
+            const XrLirValueHome *key_home=&code->homes->values[code->arguments[row.first+1]];
+            if (receiver->parameter) {
+                CHECK(key_home->parameter && !row.source && !row.other);
+                ++formal_reads;
+            } else {
+                CHECK(!key_home->parameter && !key_home->literal_cache_borrow &&
+                    row.source==receiver->first_owner+1 && row.other==key_home->first_owner+1);
+                ++local_reads;
+            }
+        }
+    }
+    CHECK(local_reads==1 && formal_reads==1);
+    XrRbcModule raw=*view; raw.code_lease=(XrRbcCodeLease){0}; XrRbcExecution *execution=NULL;
     CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
     uint32_t word=XR_RBC_RET; XrRbcRegisterKind kind=XR_RBC_MAP_STRING_I64;
     XrRbcFunction function={.code=&word,.code_count=1,.register_count=1,.register_kinds=&kind,.register_kind_count=1,.result_kind=kind};
@@ -431,7 +458,7 @@ static void map_outcome_lifetime(void) {
     const XrtStringBacking *key=answer->rows[0].key;
     CHECK(key->length==sizeof(bytes) && key->runes==4 && !memcmp(key->bytes,bytes,sizeof(bytes)));
     int64_t found_value=0; bool found=false;
-    CHECK(xrt_map_backing_get(answer,key,&found_value,&found)==XRT_MANAGED_OK && found && found_value==42);
+    CHECK(xrt_map_backing_get(answer,key,&found_value,&found)==XRT_MANAGED_OK && found && found_value==84);
     XrtManagedHeader *owned=NULL; CHECK(xr_rbc_outcome_take_map(outcome,&owned) && owned==header);
     xr_rbc_outcome_free(&outcome); CHECK(!compiler_live_allocations);
     CHECK(key->length==sizeof(bytes) && !memcmp(key->bytes,bytes,sizeof(bytes))); xrt_managed_drop(owned);

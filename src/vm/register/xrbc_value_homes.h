@@ -45,4 +45,19 @@ XR_FUNC XrtManagedStatus xr_rbc_value_homes_enter(const XrLirValueHomes *,
 XR_FUNC XrtManagedStatus xr_rbc_value_home_address(XrRbcHomeLocation, void **empty);
 XR_FUNC XrtManagedStatus xr_rbc_value_home_place(XrRbcHomeLocation, size_t leaf,
     XrtPlaceNull, XrtPlace *);
+/* Project a typed, admitted operand to its sole physical owner slot. Zero
+ * means the origin must be resolved dynamically. A one-based slot still
+ * reads the current Frame, never a cached backing pointer. */
+static inline uint32_t rbc_local_borrow_slot(const XrLirValueHomes *homes, uint32_t value) {
+    if (!homes || !homes->values || !value || value > homes->value_count ||
+        (homes->bindings && homes->bindings[value].type)) return 0;
+    const XrLirValueHome *home = &homes->values[value];
+    if (home->parameter || home->borrow_source || home->owner_count != 1 ||
+        home->size != sizeof(XrtManagedHeader *)) return 0;
+    size_t slot = home->literal_cache_borrow ? home->literal_cache_owner : home->first_owner;
+    size_t offset = home->literal_cache_borrow ? home->literal_cache_offset : home->offset;
+    if (offset == SIZE_MAX || slot >= UINT32_MAX || slot >= homes->frame.slot_count ||
+        !homes->frame.owned_offsets || homes->frame.owned_offsets[slot] != offset) return 0;
+    return (uint32_t)slot + 1;
+}
 #endif // XRBC_VALUE_HOMES_H
