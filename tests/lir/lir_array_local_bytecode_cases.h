@@ -181,7 +181,7 @@ static void array_local_probe_root(void *context) {
     rbc_value_register(stack,activation,code->arguments[make.first])->bits=17;
     rbc_value_register(stack,activation,code->arguments[make.first+1])->bits=25;
     CHECK(rbc_value_array_step(module,stack,activation,make,0)==XRT_MANAGED_OK && activation->backings_ready);
-    CHECK(rbc_value_binding_step(module,stack,activation,binding_new)==XRT_MANAGED_OK);
+    CHECK(rbc_value_binding_step(module,stack,activation,binding_new,0)==XRT_MANAGED_OK);
     CHECK(xrt_managed_slot_drop(activation->frame,code->homes->values[binding_new.source].first_owner)==XRT_MANAGED_OK);
     const uint32_t *args=code->arguments+set.first;
     const XrLirHomeBinding *binding=&code->homes->bindings[args[0]];

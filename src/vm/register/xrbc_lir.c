@@ -524,7 +524,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     for (uint32_t value = 1; value <= v->value_count; ++value) {
         XrLirType type;
         if (xr_lir_value_type(input, (XrLirValue) {input, f.id, value}, &type) != XR_LIR_OK ||
-            (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL && type != XR_LIR_STRING && type != XR_LIR_STRING_CELL &&
+            (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL && type != XR_LIR_I64_REF && type != XR_LIR_STRING && type != XR_LIR_STRING_CELL &&
              type != XR_LIR_STATE && type != XR_LIR_STATE_REF && type != XR_LIR_U32 &&
              type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64 && type != XR_LIR_FUNCTION_SCOPE &&
              type != XR_LIR_MAP_STRING_I64 && type != XR_LIR_MAP_STRING_I64_CELL && type != XR_LIR_MAP_STRING_I64_REF &&
@@ -1962,7 +1962,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
             "constructed physical types have no bytecode implementation", (XrLirSource) {0});
     for (uint32_t i = 0; i < root.parameter_count; ++i)
         if (root.parameter_types[i] >= XR_LIR_TYPE_COUNT ||
-            root.parameter_types[i] == XR_LIR_I64_CELL || root.parameter_types[i] == XR_LIR_STRING_CELL ||
+            root.parameter_types[i] == XR_LIR_I64_CELL || root.parameter_types[i] == XR_LIR_I64_REF || root.parameter_types[i] == XR_LIR_STRING_CELL ||
             root.parameter_types[i] == XR_LIR_SET_I64 || root.parameter_types[i] == XR_LIR_SET_I64_CELL || root.parameter_types[i] == XR_LIR_SET_I64_REF ||
             root.parameter_types[i] == XR_LIR_MAP_STRING_I64 || root.parameter_types[i] == XR_LIR_MAP_STRING_I64_CELL || root.parameter_types[i] == XR_LIR_MAP_STRING_I64_REF || root.parameter_types[i] == XR_LIR_STRING || root.parameter_types[i]==XR_LIR_ARRAY ||
             root.parameter_types[i]==XR_LIR_ARRAY_CELL || root.parameter_types[i]==XR_LIR_ARRAY_REF ||

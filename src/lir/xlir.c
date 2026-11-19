@@ -328,7 +328,7 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
     if (!spec || !spec->name || !spec->name_length || spec->name_length == SIZE_MAX ||
         memchr(spec->name, 0, spec->name_length) ||
         !lir_types_valid(m, spec->parameters, spec->parameter_count) ||
-        !xr_lir_internal_type_valid(m, spec->result, true) || spec->result == XR_LIR_I64_CELL ||
+        !xr_lir_internal_type_valid(m, spec->result, true) || spec->result == XR_LIR_I64_CELL || spec->result == XR_LIR_I64_REF ||
         spec->result == XR_LIR_STRING_REF || spec->result == XR_LIR_STRING_CELL || spec->result == XR_LIR_STATE ||
         spec->result == XR_LIR_STATE_REF || spec->result == XR_LIR_ARRAY_CELL ||
         spec->result == XR_LIR_ARRAY_REF || spec->result == XR_LIR_VIEW_FRAME ||
@@ -473,6 +473,8 @@ XR_FUNC XrLirStatus xr_lir_add_block(XrLirModule *m, XrLirFunction handle, const
     XrLirFunctionData *f = lir_function(m, handle);
     if (!output || !f || !f->defined || !lir_types_valid(m, types, count))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    for (uint32_t i = 0; i < count; ++i)
+        if (types[i] == XR_LIR_I64_REF) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     if (count > UINT32_MAX - f->value_count)
         return lir_fail(m, XR_LIR_UNSUPPORTED);
     uint32_t *parameters = lir_allocate(m, count, sizeof(*parameters));

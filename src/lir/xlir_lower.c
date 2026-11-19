@@ -1101,9 +1101,8 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             lower_type(c, f->parameters[p]) == XR_LIR_ARRAY_CELL;
         c->maps |= lower_type(c, f->parameters[p]) == XR_LIR_MAP_STRING_I64 ||
             lower_type(c, f->parameters[p]) == XR_LIR_MAP_STRING_I64_CELL;
-        if (lower_type(c, f->parameters[p]) <= XR_LIR_UNIT ||
-            (lower_type(c, f->parameters[p]) == XR_LIR_I64_CELL &&
-             p >= c->source->declarations->functions[function].capture_count))
+        c->scalar_bindings |= lower_type(c, f->parameters[p]) == XR_LIR_I64_CELL;
+        if (lower_type(c, f->parameters[p]) <= XR_LIR_UNIT)
             return lower_unsupported(c, "function parameter type");
     }
     const XrXirSourceDebugView *debug = xr_xir_compile_source_snapshot_debug(c->request->snapshot);
@@ -1203,6 +1202,14 @@ static bool lower_declare(Lower *c, uint32_t index) {
         parameters[p] = lower_type(c, f->parameters[p]);
         if (c->owned_bindings && c->owned_bindings[index] && c->owned_bindings[index][p])
             parameters[p] = lower_owned_cell_type(c, f->parameters[p]);
+        if (parameters[p] == XR_LIR_I64_CELL && p >= c->source->declarations->functions[index].capture_count) {
+            if (c->closure_types && c->closure_types[index]) {
+                xr_free(name);
+                xr_free(parameters);
+                return lower_unsupported(c, "function reference with a scalar ref parameter");
+            }
+            parameters[p] = XR_LIR_I64_REF;
+        }
         if (parameters[p] == XR_LIR_ARRAY_CELL) parameters[p] = XR_LIR_ARRAY_REF;
         if (parameters[p] == XR_LIR_SET_I64_CELL) parameters[p] = XR_LIR_SET_I64_REF;
         if (parameters[p] == XR_LIR_MAP_STRING_I64_CELL) parameters[p] = XR_LIR_MAP_STRING_I64_REF;
@@ -1363,9 +1370,15 @@ static bool lower_frame_bindings(LowerFunction *f) {
             (c->owned_bindings && c->owned_bindings[c->function] && c->owned_bindings[c->function][p]);
     for (uint32_t i = 0; i < source->instruction_count; ++i) {
         const XrXirInstruction *op = &source->instructions[i];
-        if (op->op != XR_XIR_FUNCTION_REF) continue;
+        bool call = op->op == XR_XIR_CALL;
+        if (!call && op->op != XR_XIR_FUNCTION_REF) continue;
+        uint32_t target = call ? c->functions[(uint32_t)op->immediate].id : 0;
+        if (call && !target) continue;
+        const XrLirFunctionData *callee = call ? &c->module->functions[target - 1] : NULL;
         for (uint32_t p = 0; p < op->args[1]; ++p) {
             uint32_t value = source->operands[op->args[0] + p];
+            if (call && (callee->parameter_types[p] != XR_LIR_I64_REF ||
+                lower_module_cell(c,c->function,value) != UINT32_MAX)) continue;
             if (lower_type(c, xr_xir_operand_type(source, value)) != XR_LIR_I64_CELL &&
                 !(c->owned_bindings && c->owned_bindings[c->function] &&
                     value < f->value_count && c->owned_bindings[c->function][value])) continue;
@@ -1381,7 +1394,7 @@ static bool lower_frame_bindings(LowerFunction *f) {
                 if (producer->op != XR_XIR_COPY) break;
                 value = producer->args[0];
             }
-            if (!found) return lower_unsupported(c, "captured scalar binding producer");
+            if (!found) return lower_unsupported(c, call ? "scalar ref argument binding producer" : "captured scalar binding producer");
         }
     }
     return true;

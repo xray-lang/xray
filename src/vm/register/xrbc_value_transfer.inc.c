@@ -262,17 +262,23 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
             return false;
         return access.operation==XR_RBC_VALUE_STATE_INITIALIZE || rbc_value_flow_write(state,code,access.result,
             (RbcValueEdgeState){.value={xr_rbc_state_shape(state->module,access.index),RBC_STATE_REFERENCE}});
-    case XR_RBC_VALUE_CALL:
-        for (uint32_t p=0;p<access.count;++p)
-            if (!rbc_value_flow_read(state,code,code->arguments[access.first+p],&incoming)) return false;
+    case XR_RBC_VALUE_CALL: {
+        const XrRbcValueCode *callee=xr_rbc_module_value_code(state->module,access.index);
+        for (uint32_t p=0;p<access.count;++p) {
+            uint32_t actual=code->arguments[access.first+p];
+            if (!rbc_value_flow_read(state,code,actual,&incoming)) return false;
+            if (callee && rbc_value_i64_ref(state->module,callee,callee->parameters[p]) &&
+                !rbc_value_i64_ref(state->module,code,actual) && incoming.value.state!=RBC_CELL_BORROWED &&
+                !rbc_value_flow_reference(state,code,actual,XRT_VALUE_I64,true)) return false;
+        }
         if (!access.result) return true;
         if (rbc_value_slice(state->module,code,access.result)) {
-            const XrRbcValueCode *callee=xr_rbc_module_value_code(state->module,access.index);
             return rbc_value_slice_call(state->module,code,callee,access) &&
                 rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_SLICE_BORROWED}});
         }
         return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS},
             .scope=rbc_value_function(state->module,code,access.result,false) ? 2u : 0u});
+    }
     case XR_RBC_VALUE_RETURN: {
         if (rbc_scope_current(state)) return false;
         const XrLirValueHome *home=rbc_value_home(code,access.source);

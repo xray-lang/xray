@@ -1,0 +1,20 @@
+fn initializeAnswer(slot: ref i64) {
+    slot = 42
+}
+
+fn relay(slot: ref i64) -> i64 {
+    initializeAnswer(ref slot)
+    slot = slot + 1
+    return slot
+}
+
+fn exerciseLocal() {
+    var answer = 0
+    assert(relay(ref answer) == 43)
+    print(answer)
+}
+
+var answer = -1
+exerciseLocal()
+assert(relay(ref answer) == 43)
+print(answer)

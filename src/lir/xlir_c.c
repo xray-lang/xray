@@ -76,7 +76,7 @@ typedef struct LirC {
     uint32_t block, instruction, scratch;
     XrLirSource source;
     uint32_t location_count, location_cursor;
-    bool runtime, runtime_header, f64, state, arrays, views, displays, tuple_displays, maps, sets;
+    bool runtime, runtime_header, f64, state, arrays, views, displays, tuple_displays, maps, sets, i64_refs;
     bool string_values, inline_values, callables, cells, header_edges, binding_forwarding;
     bool array_local, array_local_runtime;
     XrLirStateLayout state_layout;
@@ -230,6 +230,7 @@ static bool c_managed_leaf(XrLirType type) {
 }
 static const char *c_builtin_type(XrLirType type) {
     if (type == XR_LIR_I64_CELL) return "int64_t *";
+    if (type == XR_LIR_I64_REF) return "XrlI64Ref";
     if (type == XR_LIR_FUNCTION_SCOPE) return "uint32_t";
     if (type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_SET_I64) return "XrtManagedHeader *";
     if (type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF ||
@@ -288,6 +289,17 @@ static XrLirType c_value_type(LirC *c, uint32_t id) {
     XR_CHECK(status == XR_LIR_OK, "validated C operand has a type");
     return type;
 }
+static void c_call_argument(LirC *c, XrLirType formal, uint32_t actual) {
+    if (formal != XR_LIR_I64_REF || c_value_type(c,actual) == XR_LIR_I64_REF) {
+        c_value(c,actual); return;
+    }
+    if (c_value_type(c,actual) == XR_LIR_STATE_REF) {
+        c_format(c,"(XrlI64Ref){(int64_t *)xrl_access%" PRIu32 ".payload, xrl_access%" PRIu32
+            ".flags, xrl_access%" PRIu32 ".required_flags}",actual,actual,actual);
+    } else {
+        c_text(c,"(XrlI64Ref){.address="); c_value(c,actual); c_text(c,"}");
+    }
+}
 static bool c_slice_type(const LirC *c, XrLirType type) {
     return type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < c->constructed_count &&
         c->constructed_types[type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_SLICE;
@@ -340,7 +352,8 @@ static bool c_scalar(LirC *c, XrLirType type) {
     c->maps |= type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
     c->sets |= type == XR_LIR_SET_I64 || type == XR_LIR_SET_I64_CELL || type == XR_LIR_SET_I64_REF;
     c->views |= c_slice_type(c, type);
-    c->runtime |= c->string_values || c->state || c->arrays || c->views || c->maps || c->sets;
+    c->i64_refs |= type == XR_LIR_I64_REF;
+    c->runtime |= c->string_values || c->state || c->arrays || c->views || c->maps || c->sets || c->i64_refs;
     return c->status == XR_LIR_C_OK;
 }
 static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
@@ -1081,7 +1094,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                 if (string_output && a == 1) c_text(c, "(size_t)");
                 if (callee.extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION && a == 1)
                     c_text(c, "(const XrtStringBacking *)");
-                c_value(c, v->operands[a]);
+                c_call_argument(c, callee.parameter_types[a], v->operands[a]);
             }
             if (c_runtime_call(c, v)) {
                 uint32_t id = c_located(&v->source) ? ++c->location_cursor : 0;
@@ -1186,7 +1199,9 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->string_values || c->arrays || c->maps || c->sets || c->inline_values || c->views || c->cells) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
     else if (c->value_types) c_text(c, "typedef struct XrtManagedHeader XrtManagedHeader;\n");
     if (c->value_types) c_text(c, "#include \"xray_native_value_image.h\"\n\n");
-    if (c->state) c_text(c, "#include \"xray_native_state.h\"\n\n");
+    if (c->state || c->i64_refs) c_text(c, "#include \"xray_native_state.h\"\n\n");
+    if (c->i64_refs)
+        c_text(c,"typedef struct { int64_t *address; const uint8_t *flags; uint8_t required_flags; } XrlI64Ref;\n");
     if (c->views) c_text(c, "#include \"xray_native_array_slice.h\"\n\n");
     if (c->arrays) c_text(c, "#include \"xray_native_array.h\"\n\n");
     if (c->array_local_runtime) c_text(c,"#include \"xray_native_array_local.h\"\n\n");

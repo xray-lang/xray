@@ -24,7 +24,7 @@
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
                                              "u8", "u16", "u32", "u64", "f32", "f64", "ptr", "i64_cell",
                                              "string", "string_cell", "state", "state_ref", "array", "array_cell", "array_ref", "view_frame", "view_cell", "slice_i64", "string_ref", "function_scope",
-                                             "map_string_i64", "map_string_i64_cell", "map_string_i64_ref", "set_i64", "set_i64_cell", "set_i64_ref"};
+                                             "map_string_i64", "map_string_i64_cell", "map_string_i64_ref", "set_i64", "set_i64_cell", "set_i64_ref", "i64_ref"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -121,10 +121,14 @@ static bool lir_signature_matches(const XrLirModule *m, const XrLirFunctionData 
                                   const XrLirType *parameters, uint32_t count, XrLirType result) {
     if (v->operand_count != count || v->type != result)
         return false;
-    for (uint32_t i = 0; i < count; ++i)
-        if (f->values[v->operands[i] - 1].type != parameters[i] &&
-            !xr_lir_callable_accepts(m, parameters[i], f->values[v->operands[i] - 1].type))
+    for (uint32_t i = 0; i < count; ++i) {
+        const XrLirValueData *actual = &f->values[v->operands[i] - 1];
+        if (parameters[i] == XR_LIR_I64_REF && v->op == XR_LIR_CALL &&
+            (actual->type == XR_LIR_I64_CELL || (actual->type == XR_LIR_STATE_REF &&
+                actual->state_reference.payload == XR_LIR_I64 && actual->state_reference.mutable))) continue;
+        if (actual->type != parameters[i] && !xr_lir_callable_accepts(m, parameters[i], actual->type))
             return false;
+    }
     return true;
 }
 
@@ -252,7 +256,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             XrLirCellType cell;
             if (xr_lir_cell_type_view(m, a, &cell) == XR_LIR_OK)
                 return (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64) && v->type == cell.payload;
-            return (v->type == XR_LIR_I64 && a == XR_LIR_I64_CELL) ||
+            return (v->type == XR_LIR_I64 && (a == XR_LIR_I64_CELL || a == XR_LIR_I64_REF)) ||
                 (v->type == XR_LIR_STRING && a == XR_LIR_STRING_CELL) ||
                 (v->type == XR_LIR_MAP_STRING_I64 && a == XR_LIR_MAP_STRING_I64_CELL) ||
                 (v->type == XR_LIR_SET_I64 && a == XR_LIR_SET_I64_CELL) ||
@@ -263,7 +267,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             if (xr_lir_cell_type_view(m, a, &cell) == XR_LIR_OK)
                 return (cell.payload == XR_LIR_I64 || cell.payload == XR_LIR_MAP_STRING_I64) &&
                     b == cell.payload && v->type == XR_LIR_UNIT;
-            return v->type == XR_LIR_UNIT && ((a == XR_LIR_I64_CELL && b == XR_LIR_I64) ||
+            return v->type == XR_LIR_UNIT && (((a == XR_LIR_I64_CELL || a == XR_LIR_I64_REF) && b == XR_LIR_I64) ||
                 (a == XR_LIR_STRING_CELL && b == XR_LIR_STRING) ||
                 (a == XR_LIR_MAP_STRING_I64_CELL && b == XR_LIR_MAP_STRING_I64) ||
                 (a == XR_LIR_SET_I64_CELL && b == XR_LIR_SET_I64) ||
@@ -409,7 +413,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     const char *message = "instruction type or signature mismatch";
     if (v->op <= XR_LIR_OP_INVALID || v->op >= XR_LIR_OP_COUNT ||
         v->op == XR_LIR_VIEW_FRAME_ENTER || v->op == XR_LIR_VIEW_FRAME_LEAVE ||
-        !xr_lir_internal_type_valid(m, v->type, true))
+        !xr_lir_internal_type_valid(m, v->type, true) || v->type == XR_LIR_I64_REF)
         goto invalid;
     if ((v->operand_count && !v->operands) ||
         (lir_arities[v->op] >= 0 && v->operand_count != (uint32_t) lir_arities[v->op]))
@@ -824,7 +828,7 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
     if (f->result == XR_LIR_FUNCTION_SCOPE || f->result == XR_LIR_MAP_STRING_I64_CELL ||
         f->result == XR_LIR_MAP_STRING_I64_REF || f->result == XR_LIR_SET_I64_CELL || f->result == XR_LIR_SET_I64_REF) return false;
     if (!f->name || !f->name_length || !xr_lir_internal_type_valid(m, f->result, true) ||
-        f->result == XR_LIR_I64_CELL || f->result == XR_LIR_STRING_REF || f->result == XR_LIR_STRING_CELL ||
+        f->result == XR_LIR_I64_CELL || f->result == XR_LIR_I64_REF || f->result == XR_LIR_STRING_REF || f->result == XR_LIR_STRING_CELL ||
         f->result == XR_LIR_STATE || f->result == XR_LIR_STATE_REF ||
         f->value_count > f->value_capacity || (f->value_count && !f->values) ||
         (f->parameter_count && (!f->parameters || !f->parameter_types)) ||
@@ -834,7 +838,8 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
         return false;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (!xr_lir_internal_type_valid(m, f->parameter_types[p], false) ||
-            f->parameter_types[p] == XR_LIR_FUNCTION_SCOPE)
+            f->parameter_types[p] == XR_LIR_FUNCTION_SCOPE ||
+            (f->parameter_types[p] == XR_LIR_I64_REF && (f->kind != XR_LIR_FUNCTION_DEFINITION || f->closure.callable)))
             return false;
     if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
         if (f->defined || f->block_count || f->entry) return false;

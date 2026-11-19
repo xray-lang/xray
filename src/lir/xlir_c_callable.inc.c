@@ -51,13 +51,17 @@ static const XrLirHomeEvent *c_callable_event(LirC *c, uint32_t value) {
     if (!event) c_error(c,XR_LIR_C_INVALID_LIR,"callable production has no final transport event");
     return event;
 }
+static bool c_i64_ref_point(LirC *c, const XrLirInstructionView *v) {
+    return (v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) &&
+        c_value_type(c, v->operands[0]) == XR_LIR_I64_REF;
+}
 static bool c_callable_point(LirC *c, const XrLirInstructionView *v) {
     return v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT ||
         v->op == XR_LIR_FUNCTION_WEAKEN || v->op == XR_LIR_FUNCTION_SCOPE_ENTER ||
         v->op == XR_LIR_FUNCTION_SCOPE_LEAVE || v->op == XR_LIR_FUNCTION_BIND ||
         (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_I64_CELL) ||
         ((v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE) &&
-         c_value_type(c, v->operands[0]) == XR_LIR_I64_CELL);
+         c_value_type(c, v->operands[0]) == XR_LIR_I64_CELL) || c_i64_ref_point(c,v);
 }
 static const char *c_callable_parameter_type(LirC *c, XrLirCallableParameter parameter) {
     if (parameter.mode != XR_PARAM_REF) return c_type(c, parameter.type);
@@ -90,6 +94,7 @@ static uint32_t c_callable_result_type(LirC *c, XrLirCallableType signature) {
     return type;
 }
 static bool c_callable_admit(LirC *c, const XrLirInstructionView *v) {
+    if (c_i64_ref_point(c,v)) return true;
     c->callables = true;
     if (v->op == XR_LIR_FUNCTION_REF) {
         XrLirFunctionView target;
@@ -267,6 +272,18 @@ static void c_callable_declarations(LirC *c) {
     }
 }
 static void c_callable_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (c_i64_ref_point(c,v)) {
+        uint32_t reference = v->operands[0];
+        c_text(c,"    { XrlI64Ref ref = "); c_value(c,reference); c_text(c,";\n");
+        c_format(c,"    if (ref.flags && (*ref.flags & ref.required_flags) != ref.required_flags)\n"
+            "        xrt_module_uninitialized(UINT32_C(%" PRIu32 "));\n",source);
+        if (v->op == XR_LIR_CELL_READ) c_format(c,"    v%" PRIu32 " = *ref.address;\n",v->result);
+        else {
+            c_text(c,"    *ref.address = "); c_value(c,v->operands[1]); c_text(c,";\n");
+        }
+        c_text(c,"    }\n");
+        return;
+    }
     if (v->op == XR_LIR_FUNCTION_REF) {
         const XrLirHomeEvent *event = c_callable_event(c,v->result);
         if (!event) return;

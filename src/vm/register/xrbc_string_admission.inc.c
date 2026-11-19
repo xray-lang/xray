@@ -197,6 +197,9 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
         return true;
     }
     const XrRbcFunction *callee = &s->module->functions[v.immediate];
+    const XrRbcValueCode *receiving=xr_rbc_module_value_code(s->module,v.immediate);
+    for (uint32_t p=0;receiving && receiving->parameters && p<receiving->parameter_count;++p)
+        if (rbc_value_i64_ref(s->module,receiving,receiving->parameters[p])) return false;
     for (uint32_t p = 0; p < callee->parameter_count; ++p) {
         XrRbcRegisterKind kind = rbc_register_kind(callee, p);
         if (kind == XR_RBC_FUNCTION) {

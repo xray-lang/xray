@@ -93,9 +93,35 @@ static XrtManagedStatus rbc_value_array_new(XrRbcStack *stack,RbcValueActivation
     return xrt_array_backing_string_create(activation->frame,slot,types,
         (XrtStringBacking *const *)activation->snapshots,access.count,access.count);
 }
-static XrtManagedStatus rbc_value_binding_step(const XrRbcModule *module,XrRbcStack *stack,RbcValueActivation *activation,XrRbcValueAccess access) {
+static XrtManagedStatus rbc_value_i64_ref_step(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,RbcValueOrigin origin,XrRbcValueAccess access,uint32_t source) {
+    bool read=access.operation==XR_RBC_VALUE_BINDING_READ;
+    if (!origin.activation || (!read && access.operation!=XR_RBC_VALUE_BINDING_WRITE)) return XRT_MANAGED_ARGUMENT;
+    XrRbcRegister *reference=rbc_value_register(stack,origin.activation,origin.value);
+    XrRbcRegister *value=rbc_value_register(stack,activation,read ? access.result : access.other);
+    if (!reference || !value) return XRT_MANAGED_ARGUMENT;
+    const XrRbcFunction *function=&module->functions[origin.activation->function];
+    if (rbc_value_scalar(origin.activation->code,function,origin.value,XR_RBC_I64_BINDING)) {
+        XrRbcRegister *cell=xr_rbc_cell(stack,module,reference->bits,XR_RBC_BITS);
+        if (!cell) return XRT_MANAGED_ARGUMENT;
+        if (read) value->bits=cell->bits;
+        else cell->bits=value->bits;
+    } else {
+        if (!rbc_value_scalar(origin.activation->code,function,origin.value,XR_RBC_STATE_REF)) return XRT_MANAGED_ARGUMENT;
+        const XrtModuleAccess *state=reference->state_ref;
+        if (!state || state->kind!=XRT_VALUE_I64 || !state->is_mutable) return XRT_MANAGED_ARGUMENT;
+        if ((*state->flags & state->required_flags)!=state->required_flags) xrt_module_uninitialized(source);
+        if (read) memcpy(&value->bits,state->payload,sizeof(value->bits));
+        else memcpy(state->payload,&value->bits,sizeof(value->bits));
+    }
+    return XRT_MANAGED_OK;
+}
+static XrtManagedStatus rbc_value_binding_step(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     uint32_t binding=access.operation==XR_RBC_VALUE_BINDING_NEW ? access.result : access.source;
     RbcValueOrigin origin=rbc_value_origin(activation,binding);
+    if (rbc_value_i64_ref(module,activation->code,binding))
+        return rbc_value_i64_ref_step(module,stack,activation,origin,access,source);
     XrtExternalOwner external; XrtPlace place,other;
     XrtManagedStatus status=rbc_value_binding_place(module,stack,origin,&external,&place);
     if (status!=XRT_MANAGED_OK) return status;
@@ -205,7 +231,7 @@ static XrtManagedStatus rbc_value_array_inline(const XrRbcModule *module,XrRbcSt
 }
 static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
-    if (access.operation!=XR_RBC_VALUE_ARRAY) return rbc_value_binding_step(module,stack,activation,access);
+    if (access.operation!=XR_RBC_VALUE_ARRAY) return rbc_value_binding_step(module,stack,activation,access,source);
     const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
     bool create=access.index==XR_LIR_ARRAY_OP_NEW || access.index==XR_LIR_ARRAY_OP_REPEAT;
     XrtValueKind value_kind=rbc_value_kind(module,activation->code,create ? access.result : args[0]);
