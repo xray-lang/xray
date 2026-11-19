@@ -74,12 +74,13 @@ static bool rbc_lir_array_read_reduction(const RbcLirCompiler *c, const XrLirArr
     if (result!=add.result) return false;
     *fold=(XrRbcArrayReadFold){.accumulator=accumulator,.next_accumulator=next_accumulator};
     if (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT) {
-        /* The comparator may encode this constant and never initialize its
-         * nominal register. Use the same verified SSA immediate inventory. */
-        const RbcLirImmediate *bound=&c->immediates[range->length];
-        if (bound->known) {
+        const XrLirFunctionData *function=&c->input->functions[c->function.id-1];
+        const XrLirInstructionView *bound=xr_lir_internal_value_definition(function,range->length);
+        /* An immediate can lack storage, and a header constant need not
+         * remain live after its comparison. Use the exact SSA bits. */
+        if (bound && bound->op==XR_LIR_CONST && bound->type==XR_LIR_I64) {
             fold->constant=true;
-            fold->limit_bits=(uint64_t)(int64_t)bound->value;
+            fold->limit_bits=bound->bits;
         } else {
             fold->limit=range->length;
         }
