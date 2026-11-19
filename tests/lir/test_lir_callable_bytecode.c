@@ -14,6 +14,7 @@
 #include "vm/register/xrbc_code_owner.h"
 #include "xray_native_function.h"
 #include "runtime/native/xnative_capture_backing.h"
+#include "runtime/native/xnative_value_image.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -801,8 +802,88 @@ static void scope_receiving(void) {
     execute(scoped_code(true),42);
 }
 
+static void class_owners_outlive_programs(void) {
+    CArrayFixture c={0};
+    OK(xr_lir_module_create(NULL,&c.module));
+    XrLirType row=0, instance_type=0;
+    XrLirRecordField field={"value",5,XR_LIR_I64,0};
+    XrLirRecordIdentity identity={.module="tests.lir.class",.module_length=15,.name="Box",.name_length=3};
+    OK(xr_lir_record_type(c.module,&identity,&field,1,&row));
+    OK(xr_lir_internal_class_type(c.module,row,&instance_type));
+
+    XrLirFunction make={0}, read={0}, root={0};
+    OK(xr_lir_declare_function(c.module,
+        &(XrLirFunctionSpec){.name="make",.name_length=4,.result=instance_type},&make));
+    OK(xr_lir_define_function(c.module,make));
+    XrLirBlock block={0};
+    OK(xr_lir_add_block(c.module,make,NULL,0,&block)); OK(xr_lir_set_entry(c.module,make,block));
+    XrLirValue input=ca_constant(&c,block,42);
+    ca_return(&c,block,ca_value(&c,block,XR_LIR_CLASS_NEW,instance_type,&input,1));
+
+    OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="read",.name_length=4,
+        .parameters=&instance_type,.parameter_count=1,.result=XR_LIR_I64},&read));
+    OK(xr_lir_define_function(c.module,read));
+    OK(xr_lir_add_block(c.module,read,NULL,0,&block)); OK(xr_lir_set_entry(c.module,read,block));
+    OK(xr_lir_function_parameter(c.module,read,0,&input));
+    ca_return(&c,block,ca_value(&c,block,XR_LIR_CLASS_FIELD,XR_LIR_I64,&input,1));
+
+    OK(xr_lir_declare_function(c.module,
+        &(XrLirFunctionSpec){.name="root",.name_length=4,.result=XR_LIR_I64},&root));
+    OK(xr_lir_define_function(c.module,root));
+    OK(xr_lir_add_block(c.module,root,NULL,0,&block)); OK(xr_lir_set_entry(c.module,root,block));
+    XrLirValue instance={0}, result={0};
+    XrLirInstruction call={.op=XR_LIR_CALL,.type=instance_type,.callee=make};
+    OK(xr_lir_emit_value(c.module,block,&call,&instance));
+    call=(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_I64,.callee=read,.operands=&instance,.operand_count=1};
+    OK(xr_lir_emit_value(c.module,block,&call,&result));
+    OK(xr_lir_emit_effect(c.module,block,&(XrLirInstruction){
+        .op=XR_LIR_VALUE_DROP,.type=XR_LIR_UNIT,.operands=&instance,.operand_count=1}));
+    ca_return(&c,block,result); OK(xr_lir_module_finish(c.module,NULL));
+
+    XrRbcProgram *rejected=NULL; XrRbcCompileDiagnostic diagnostic={0};
+    CHECK(xr_rbc_compile(c.module,make,&rejected,&diagnostic)==XR_RBC_COMPILE_UNSUPPORTED && !rejected);
+    CHECK(xr_rbc_compile(c.module,read,&rejected,&diagnostic)==XR_RBC_COMPILE_UNSUPPORTED && !rejected);
+    XrRbcProgram *program=compile(c.module,root);
+    xr_lir_module_destroy(c.module);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrRbcCodeOwner *code=xr_rbc_module_code_owner(module);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    CHECK(code && image && atomic_load(&code->references)==1);
+    XrtBillingOwner *billing=NULL;
+    CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing)==XRT_MANAGED_OK);
+    XrtValueImagePlans *plans=NULL;
+    CHECK(xrt_value_image_bind(billing,image,
+        (XrtManagedLease){(void *)code,xr_rbc_code_owner_retain,xr_rbc_code_owner_release},&plans)==XRT_MANAGED_OK);
+    CHECK(atomic_load(&code->references)==1);
+    XrtBoundClass bound={0};
+    for (uint32_t n=0;n<image->type_count;++n)
+        if (image->types[n].kind==XRT_VALUE_CLASS) {
+            CHECK(xrt_value_image_class(plans,n+1,&bound)==XRT_MANAGED_OK);
+            break;
+        }
+    CHECK(bound.plan && bound.ops);
+
+    XrtManagedRoot *managed_root=NULL; XrtManagedFrame *frame=NULL;
+    CHECK(xrt_managed_root_new(billing,&managed_root)==XRT_MANAGED_OK);
+    CHECK(xrt_managed_frame_enter(managed_root,1,&frame)==XRT_MANAGED_OK);
+    int64_t stored=73;
+    CHECK(xrt_class_create(frame,0,bound.ops,&stored)==XRT_MANAGED_OK);
+    XrtManagedHeader *owned=NULL;
+    CHECK(xrt_managed_slot_borrow(frame,0,&owned)==XRT_MANAGED_OK && owned && xrt_managed_retain(owned));
+    CHECK(xrt_managed_root_destroy(&managed_root)==XRT_MANAGED_OK);
+    xrt_value_image_drop(&plans);
+    CHECK(atomic_load(&code->references)==1);
+    execute(program,42);
+    const XrtValuePlan *field_plan=NULL; const void *bytes=NULL;
+    CHECK(xrt_class_field_borrow(owned,bound.plan,0,&field_plan,&bytes)==XRT_MANAGED_OK);
+    CHECK(*(const int64_t *)bytes==73);
+    xrt_managed_drop(owned);
+    xrt_billing_owner_drop(billing);
+}
+
 int main(void) {
     pure_captures();
+    class_owners_outlive_programs();
     frame_construction_proofs();
     direct_weakened_formal();
     owned_zero_capture();
