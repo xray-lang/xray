@@ -910,11 +910,116 @@ static void array_set_region_receiving(bool range) {
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
 }
 #include "lir_array_region_binding_cases.h"
+static void string_forward_parameters(CArrayFixture *c, XrLirBlock block, XrLirValue values[2]) {
+    for (uint32_t n = 0; n < 2; ++n) OK(xr_lir_block_parameter(c->module, block, n, &values[n]));
+}
+
+static void string_forward(CArrayFixture *c, XrLirBlock block, XrLirBlock target, const XrLirValue values[2]) {
+    OK(xr_lir_set_terminator(c->module, block, &(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+        .edge_count=1,.edges={{target,values,2}}}));
+}
+
+static void string_forwarding_window(uint32_t blocks, bool side_entry) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    OK(xr_lir_string_catalog_install(c.module,false,false,false));
+    XrLirType count=XR_LIR_I64, carries[]={XR_LIR_STRING,XR_LIR_I64};
+    XrLirFunction f={0};
+    OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="string_window",.name_length=13,
+        .parameters=&count,.parameter_count=1,.result=XR_LIR_I64},&f));
+    OK(xr_lir_define_function(c.module,f));
+    XrLirBlock entry={0}, header={0}, route[17]={0}, exit={0};
+    CHECK(blocks < sizeof(route)/sizeof(*route));
+    OK(xr_lir_add_block(c.module,f,NULL,0,&entry)); OK(xr_lir_set_entry(c.module,f,entry));
+    OK(xr_lir_add_block(c.module,f,carries,2,&header));
+    for (uint32_t n=0;n<=blocks;++n) OK(xr_lir_add_block(c.module,f,carries,2,&route[n]));
+    OK(xr_lir_add_block(c.module,f,carries,2,&exit));
+    XrLirValue upper={0}, selected={0}; OK(xr_lir_function_parameter(c.module,f,0,&upper));
+    XrLirValue initial[]={ca_text(&c,entry,"",0),ca_constant(&c,entry,0)};
+    if (side_entry) {
+        XrLirValue args[]={upper,initial[1]};
+        OK(xr_lir_emit_value(c.module,entry,&(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
+            .predicate=XR_LIR_GT,.operands=args,.operand_count=2},&selected));
+        OK(xr_lir_set_terminator(c.module,entry,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+            .operands=&selected,.operand_count=1,.edge_count=2,
+            .edges={{header,initial,2},{route[blocks/2],initial,2}}}));
+    } else string_forward(&c,entry,header,initial);
+    XrLirValue value[2]={{0}}; string_forward_parameters(&c,header,value);
+    XrLirValue header_owner=value[0], compare[]={value[1],upper};
+    selected=(XrLirValue){0};
+    OK(xr_lir_emit_value(c.module,header,&(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
+        .predicate=XR_LIR_LT,.operands=compare,.operand_count=2},&selected));
+    OK(xr_lir_set_terminator(c.module,header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+        .operands=&selected,.operand_count=1,.edge_count=2,.edges={{route[0],value,2},{exit,value,2}}}));
+    for (uint32_t n=0;n<blocks;++n) {
+        string_forward_parameters(&c,route[n],value);
+        string_forward(&c,route[n],route[n+1],value);
+    }
+    XrLirBlock body=route[blocks]; string_forward_parameters(&c,body,value);
+    XrLirValue suffix=ca_text(&c,body,"x",1), args[]={value[0],suffix};
+    XrLirValue appended=string_role(&c,body,XR_LIR_STRING_OP_APPEND_OWNED,XR_LIR_STRING,args,2);
+    ca_effect(&c,body,XR_LIR_STRING_DROP,suffix);
+    XrLirValue one=ca_constant(&c,body,1), next=ca_binary(&c,body,XR_LIR_ADD,value[1],one);
+    XrLirValue incoming[]={appended,next}; string_forward(&c,body,header,incoming);
+    string_forward_parameters(&c,exit,value);
+    XrLirValue length=ca_value(&c,exit,XR_LIR_STRING_LEN,XR_LIR_I64,&value[0],1);
+    ca_effect(&c,exit,XR_LIR_STRING_DROP,value[0]); ca_return(&c,exit,length);
+    OK(xr_lir_module_finish(c.module,NULL));
+
+    XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+    XrLirValueLayoutKey roots[]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_STRING,0,0}};
+    XrLirValueLayouts *layouts=NULL; HOME(xr_lir_value_layouts_create(c.module,roots,4,billing,&layouts));
+    XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
+    XrLirValueHomesRequest request={c.module,f,layouts,plan};
+    XrLirValueHomes *homes=NULL;
+    size_t baseline=live, bytes=home_live_bytes(); attempts=0;
+    HOME(xr_lir_value_homes_create(&request,&homes));
+    size_t sites=attempts;
+    const XrLirStringWindow *window=xr_lir_value_homes_string_window(homes,header.id);
+    if (side_entry) CHECK(!window && !homes->string_window_slot_count && !homes->string_window_slots);
+    else {
+        CHECK(window && window->empty_count==2u*blocks+5u && homes->string_window_slot_count==2u*window->empty_count);
+        CHECK(window->header_owner==homes->values[header_owner.id].first_owner &&
+            window->latch_owner==homes->values[appended.id].first_owner);
+        const size_t *start=homes->string_window_slots+window->header_empty_first;
+        const size_t *end=homes->string_window_slots+window->latch_empty_first;
+        for (size_t n=0;n<window->empty_count;++n) {
+            CHECK(start[n]<homes->frame.slot_count && end[n]<homes->frame.slot_count);
+            CHECK(end[n]==(start[n]==window->latch_owner ? window->header_owner : start[n]));
+        }
+        for (uint32_t n=0;n<=blocks;++n) {
+            string_forward_parameters(&c,route[n],value);
+            const XrLirValueHome *home=&homes->values[value[0].id];
+            CHECK(start[2u*n]==home->temporary_first_owner && start[2u*n+1u]==home->first_owner);
+        }
+    }
+    xr_lir_value_homes_destroy(homes); homes=NULL;
+    CHECK(live==baseline && home_live_bytes()==bytes);
+    if (!side_entry && blocks==16) {
+        for (size_t point=1;point<=sites;++point) {
+            attempts=0; fail_at=point;
+            CHECK(xr_lir_value_homes_create(&request,&homes)==XR_LIR_VALUE_LAYOUT_OOM && !homes &&
+                attempts>=point && live==baseline && home_live_bytes()==bytes);
+        }
+        fail_at=SIZE_MAX;
+        HOME(xr_lir_value_homes_create(&request,&homes));
+        window=xr_lir_value_homes_string_window(homes,header.id); CHECK(window && window->empty_count==37);
+        size_t first=window->header_empty_first;
+        xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts); xr_lir_module_destroy(c.module);
+        CHECK(homes->string_window_slots[first+34]==window->latch_owner);
+        xr_lir_value_homes_destroy(homes);
+    } else {
+        xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts); xr_lir_module_destroy(c.module);
+    }
+    CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
+}
+
 int main(void) {
     for (unsigned shape=0;shape<7;++shape) array_region_binding_projection(shape);
     array_set_region_receiving(false); array_set_region_receiving(true);
     borrowed_map_stages();
     string_projections();
+    string_forwarding_window(0,false); string_forwarding_window(16,false); string_forwarding_window(16,true);
     scoped_cells();
     slice_homes();
     slice_callback_frontier();

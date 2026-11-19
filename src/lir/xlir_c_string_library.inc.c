@@ -255,11 +255,12 @@ static void c_string_library(LirC *c, const XrLirInstructionView *v, uint32_t so
 
 static void c_string_window(LirC *c, const XrLirStringWindow *window) {
     uint32_t index = window->index;
+    const size_t *empty_slots = c->homes->string_window_slots + window->header_empty_first;
     c_format(c, "    if (xrl_frame && v%" PRIu32 " >= INT64_C(0) && v%" PRIu32 " < ", index,index);
     c_value(c, window->limit);
     c_text(c, ") {\n        static const size_t xrl_string_empty[] = {");
     for (size_t n = 0; n < window->empty_count; ++n)
-        c_format(c, "%s%zu", n ? ", " : "", window->empty_slots[n]);
+        c_format(c, "%s%zu", n ? ", " : "", empty_slots[n]);
     c_format(c, "};\n        v%" PRIu32 " += (int64_t)xrt_native_string_append_window(xrl_frame, %zu, %zu, (size_t)(",
         index,window->header_owner,window->suffix_owner);
     c_value(c, window->limit);
