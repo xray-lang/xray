@@ -34,7 +34,9 @@ The default String sizes are 4M, 8M and 16M appends. Repeat --string-size to
 select explicit sizes, including small functional prechecks. String samples
 retain exact LF output and every stream; their ratios include process startup.
 Add --append-forms when preparing or running the String benchmark to compare
-ordinary assignment and compound assignment on the same inputs and controls.
+ordinary assignment, parentheses, and a loop-invariant suffix on the same
+inputs and controls. --gate-string checks all forms at the three default sizes
+against the same-host references. Startup and 1M are retained as diagnostics.
 
 The driver census runs every original smoke input through lir_vm_run, then
 emits, links and runs the generated C. lir_c_run takes no standard library
@@ -59,6 +61,7 @@ import collections
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import pathlib
 import platform
@@ -237,6 +240,13 @@ STRING_APPEND_XR = """fn append(count:i64)->i64 {
 print(append(@N@))
 """
 STRING_APPEND_ASSIGN_XR = STRING_APPEND_XR.replace('text+="x"', 'text=text+"x"')
+STRING_APPEND_CONST_XR = STRING_APPEND_XR.replace('    var i=0', '    const suffix="x"\n    var i=0')
+STRING_APPEND_FORMS = (
+    ("assignment", "_assign", STRING_APPEND_ASSIGN_XR),
+    ("grouped", "_grouped", STRING_APPEND_XR.replace('text+="x"', 'text+=("x")')),
+    ("local const", "_const", STRING_APPEND_CONST_XR.replace('text+="x"', 'text+=suffix')),
+    ("local const assignment", "_const_assign", STRING_APPEND_CONST_XR.replace('text+="x"', 'text=text+suffix')),
+)
 STRING_APPEND_PY = """import sys
 def append(count):
     text = ""
@@ -432,7 +442,8 @@ def string_bench_programs(args, root, env):
     compiler = shutil.which(args.cc) or args.cc
     rows, metadata = {}, {"sizes": list(args.string_size), "expected_stdout": {},
                           "preparation": [], "artifacts": {}, "compiler": compiler}
-    identity = string_command([python, "-c", "import sys; print(sys.version)"], env,
+    python_identity = "import sys\nif sys.implementation.name != 'cpython': sys.exit('CPython required')\nprint(sys.version)"
+    identity = string_command([python, "-c", python_identity], env,
                               work / "python-identity", args.timeout)
     metadata["python_identity"] = identity
     if identity["exit"]:
@@ -445,18 +456,18 @@ def string_bench_programs(args, root, env):
         label = f"String append {count}"
         paths = [work / (stem + suffix) for suffix in (".xr", "_ref.c", ".py")]
         templates = [STRING_APPEND_XR, STRING_APPEND_C, STRING_APPEND_PY]
-        if args.append_forms:
-            assignment = work / (stem + "_assign.xr")
-            paths.append(assignment)
-            templates.append(STRING_APPEND_ASSIGN_XR)
+        forms = STRING_APPEND_FORMS if args.append_forms else ()
+        for _, suffix, template in forms:
+            paths.append(work / (stem + suffix + ".xr"))
+            templates.append(template)
         for path, template in zip(paths, templates):
             if path.exists():
                 raise FileExistsError(f"preserve the existing benchmark input: {path}")
             path.write_text(template.replace("@N@", str(count)), encoding="utf-8", newline="\n")
         row = {"Xray VM": [str(executable), "run", str(paths[0])],
                "CPython": [str(python), str(paths[2])]}
-        if args.append_forms:
-            row["Xray VM assignment"] = [str(executable), "run", str(assignment)]
+        for (name, _, _), path in zip(forms, paths[3:]):
+            row["Xray VM " + name] = [str(executable), "run", str(path)]
         if not args.no_native:
             reference, native = work / (stem + "_ref" + EXE), work / (stem + "_native" + EXE)
             commands = {
@@ -464,11 +475,11 @@ def string_bench_programs(args, root, env):
                 "native-build": [str(executable), "build", str(paths[0]), "--cc", compiler, "-o", str(native)],
             }
             row["C -O2"], row["Xray native"] = [str(reference)], [str(native)]
-            if args.append_forms:
-                assignment_native = work / (stem + "_assign_native" + EXE)
-                commands["assignment-build"] = [
-                    str(executable), "build", str(assignment), "--cc", compiler, "-o", str(assignment_native)]
-                row["Xray native assignment"] = [str(assignment_native)]
+            for (name, suffix, _), path in zip(forms, paths[3:]):
+                product = work / (stem + suffix + "_native" + EXE)
+                commands[suffix.removeprefix("_") + "-build"] = [
+                    str(executable), "build", str(path), "--cc", compiler, "-o", str(product)]
+                row["Xray native " + name] = [str(product)]
             for stage, command in commands.items():
                 result = string_command(command, env, work / (stem + "-" + stage), args.timeout)
                 metadata["preparation"].append(result)
@@ -652,12 +663,29 @@ def string_ratios(medians):
         row = {"vm_to_cpython": values["Xray VM"] / values["CPython"]}
         if "Xray native" in values and "C -O2" in values:
             row["native_to_c"] = values["Xray native"] / values["C -O2"]
-        if "Xray VM assignment" in values:
-            row["assignment_vm_to_compound"] = values["Xray VM assignment"] / values["Xray VM"]
-        if "Xray native assignment" in values:
-            row["assignment_native_to_compound"] = values["Xray native assignment"] / values["Xray native"]
+        for form, _, _ in STRING_APPEND_FORMS:
+            for backend, key in (("Xray VM", "vm"), ("Xray native", "native")):
+                if (engine := f"{backend} {form}") in values:
+                    row[f"{form.replace(' ', '_')}_{key}_to_compound"] = values[engine] / values[backend]
         result[label] = row
     return result
+
+
+def string_performance_gate(medians):
+    """Apply current managed-value and interpreter limits to each spelling."""
+    rows = []
+    for count in STRING_SIZES:
+        measured = medians.get(f"String append {count}", {})
+        for backend, control, limit in (("Xray VM", "CPython", 1.0), ("Xray native", "C -O2", 1.3)):
+            for name, _, _ in (("", "", ""), *STRING_APPEND_FORMS):
+                engine = f"{backend} {name}" if name else backend
+                actual, reference = measured.get(engine), measured.get(control)
+                usable = all(value is not None and math.isfinite(value) and value > 0
+                             for value in (actual, reference))
+                ratio = actual / reference if usable else None
+                rows.append({"count": count, "engine": engine, "reference": control, "ratio": ratio,
+                             "limit": limit, "status": "PASS" if ratio is not None and ratio <= limit else "FAIL"})
+    return {"status": "PASS" if all(row["status"] == "PASS" for row in rows) else "FAIL", "rows": rows}
 
 
 def compile_scale_command(command, env, prefix, timeout):
@@ -796,7 +824,9 @@ def main():
     parser.add_argument("--string-size", action="append", type=int,
                         help="String append count; repeat for explicit sizes (default: 4000000/8000000/16000000)")
     parser.add_argument("--append-forms", action="store_true",
-                        help="compare ordinary and compound String append assignment")
+                        help="compare equivalent String append spellings")
+    parser.add_argument("--gate-string", action="store_true",
+                        help="enforce the String append limits on all spellings in a clean Release build")
     preparation = parser.add_mutually_exclusive_group()
     preparation.add_argument("--prepare-only", action="store_true",
                              help="compile benchmark products and save commands without timing or census")
@@ -812,6 +842,13 @@ def main():
         parser.error("--string-size values must be distinct integers in 0..9223372036854775807")
     if args.no_bench and (args.prepare_only or args.prepared_bench):
         parser.error("benchmark preparation requires benchmarks to be enabled")
+    if args.gate_string:
+        if (args.no_bench or args.no_native or args.prepare_only or args.prepared_bench or args.string_size or
+                args.samples < 5 or (args.bench and args.bench != ["string-append"])):
+            parser.error("--gate-string requires a fresh dual-backend run at the default sizes with at least five samples")
+        args.append_forms = True
+        args.no_census = True
+        args.string_size = (1, 1_000_000, *STRING_SIZES)
     if args.append_forms:
         if args.no_bench or args.prepared_bench or (args.bench and "string-append" not in args.bench):
             parser.error("--append-forms requires a new String benchmark preparation")
@@ -821,6 +858,14 @@ def main():
     args.work.mkdir(parents=True, exist_ok=True)
     version = subprocess.run([str(tool(args.build, "xray")), "--version", "--json"], capture_output=True, text=True).stdout
     print("build:", version.strip())
+    if args.gate_string:
+        identity = json.loads(version)
+        git = ["git", "-C", str(args.root)]
+        commit = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+        changes = subprocess.check_output([*git, "status", "--porcelain", "--untracked-files=no"], text=True)
+        if (changes or identity.get("commit") != commit or identity.get("dirty") is not False or
+                identity.get("buildProfile") != "Release"):
+            sys.exit("String performance requires the current commit's clean Release CLI")
     result = {"version": version.strip()}
     if not args.no_census and not (args.prepare_only or args.prepared_bench):
         result["rows"] = census(args, args.root, load_smoke(args.root))
@@ -837,9 +882,16 @@ def main():
             result["string_bench"] = args.string_bench
     if args.compile_scale:
         result["compile_scale"] = regex_compile_scale(args, args.root)
+    if args.gate_string:
+        result["string_gate"] = string_performance_gate(result["bench"])
     (args.work / "baseline.json").write_text(json.dumps(result, ensure_ascii=False, indent=1))
     print("\nfull result:", args.work / "baseline.json")
     if args.compile_scale and result["compile_scale"]["sample_gate"] != "PASS":
+        raise SystemExit(1)
+    if args.gate_string and result["string_gate"]["status"] != "PASS":
+        for row in result["string_gate"]["rows"]:
+            if row["status"] == "FAIL":
+                print(f"String append {row['count']} {row['engine']}: {row['ratio']} vs {row['limit']} × {row['reference']}")
         raise SystemExit(1)
 
 
