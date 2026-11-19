@@ -20,9 +20,43 @@ fn show_snapshot(end: i64) {
     print(values)
 }
 
+fn show_computed(limit: i64) {
+    const end = limit * 2 - limit
+    var values: Array<i64> = []
+    var i = 0
+    while (i < end) {
+        values.push(i)
+        i += 1
+    }
+    print(values)
+}
+
+fn show_commuted(end: i64) {
+    var values: Array<i64> = []
+    var i = 0
+    while (i < end) {
+        values.push(i)
+        i = 1 + i
+    }
+    print(values)
+}
+
+fn show_dependent(limit: i64) {
+    var values: Array<i64> = []
+    var i = 0
+    while (i < limit - i) {
+        values.push(i)
+        i += 1
+    }
+    print(values)
+}
+
 show_window(0, 0)
 show_window(3, 0)
 show_window(9, -2)
 show_window(7, 9)
 show_window(9223372036854775807, 9223372036854775802)
 show_snapshot(7)
+show_computed(7)
+show_commuted(7)
+show_dependent(7)

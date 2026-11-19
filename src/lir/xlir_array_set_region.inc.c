@@ -350,8 +350,11 @@ static void lir_array_region_range_begin(LirArrayRegionProof *p, const XrLirArra
     const XrLirValueData *end = &f->values[length - 1];
     bool same = shape && shape->operation == XR_LIR_ARRAY_OP_LEN && bound->type == XR_LIR_I64 &&
         bound->operand_count == 1 && bound->operands[0] == region->canonical_value && end->block == region->header;
+    // SSA values defined before the unique loop entry are already evaluated.
+    // Their instruction can have effects outside the window; it is never replayed.
     bool independent = (end->parameter && !end->block) ||
-        (bound && bound->op == XR_LIR_CONST && bound->type == XR_LIR_I64);
+        (bound && bound->type == XR_LIR_I64 && (bound->op == XR_LIR_CONST ||
+            lir_array_region_dominates(&p->graph, end->block - 1, region->entry_block - 1)));
     if (!same && !independent) return;
     const XrLirBlockData *header = &f->blocks[region->header - 1];
     uint32_t argument = 0;
@@ -387,13 +390,18 @@ static void lir_array_region_range_edge(LirArrayRegionProof *p, const XrLirEdgeV
 }
 static void lir_array_region_range_instruction(LirArrayRegionProof *p, const XrLirInstructionView *op,
     uint32_t block, uint32_t instruction) {
-    if (!p->range.kind || op->op != XR_LIR_ADD || op->type != XR_LIR_I64 || op->operand_count != 2 ||
-        lir_array_region_lane(p, op->operands[0]) != LIR_ARRAY_RANGE_CURRENT) return;
-    const XrLirInstructionView *one = xr_lir_internal_value_definition(p->function, op->operands[1]);
+    if (!p->range.kind || op->op != XR_LIR_ADD || op->type != XR_LIR_I64 || op->operand_count != 2) return;
+    uint32_t varying = 0;
+    if (lir_array_region_lane(p, op->operands[0]) != LIR_ARRAY_RANGE_CURRENT) {
+        if (lir_array_region_lane(p, op->operands[1]) != LIR_ARRAY_RANGE_CURRENT) return;
+        varying = 1;
+    }
+    uint32_t constant = op->operands[1 - varying];
+    const XrLirInstructionView *one = xr_lir_internal_value_definition(p->function, constant);
     if (!one || one->op != XR_LIR_CONST || one->type != XR_LIR_I64 || one->bits != 1) return;
     if (p->range.increment) { p->range = (XrLirArraySetRegionRange){0}; return; }
     p->range.increment = op->result; p->range.increment_block = block + 1;
-    p->range.increment_instruction = instruction; p->range.one = op->operands[1];
+    p->range.increment_instruction = instruction; p->range.one = constant;
     p->uses[op->result].range_stamp = p->range_stamp; p->uses[op->result].lane = LIR_ARRAY_RANGE_NEXT;
 }
 static bool lir_array_region_edge(LirArrayRegionProof *p, uint32_t block, uint32_t edge,
