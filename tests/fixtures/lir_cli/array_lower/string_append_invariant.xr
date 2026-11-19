@@ -30,6 +30,27 @@ fn range_append(first: i64, limit: i64) -> i64 {
     return len(text)
 }
 
+fn literal_limit() -> string {
+    var text = ""
+    var i = 0
+    while (i < 18) {
+        text += "z"
+        i += 1
+    }
+    return text
+}
+
+fn computed_limit(count: i64) -> i64 {
+    var text = ""
+    const limit = count * 2
+    var i = 0
+    while (i < limit) {
+        text += "x"
+        i += 1
+    }
+    return len(text)
+}
+
 print(len(fixed(0)))
 print(fixed(3))
 print(len(fixed(4096)))
@@ -38,3 +59,6 @@ print(chosen(3, false))
 print(range_append(-3, 7))
 print(range_append(-3, -3))
 print(range_append(9223372036854775707, 9223372036854775807))
+print(literal_limit())
+print(computed_limit(26))
+print(computed_limit(-1))

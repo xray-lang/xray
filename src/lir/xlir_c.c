@@ -1226,8 +1226,10 @@ static void c_emit(LirC *c, XrLirType root_result) {
                 return;
             c->array_frame_block = 0;
             c_format(c, "bb%" PRIu32 ": ;\n", block.id);
-            if (c->string_values) c_string_window(c, block.id);
+            const XrLirStringWindow *window = c->string_values ?
+                xr_lir_value_homes_string_window(c->homes, block.id) : NULL;
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
+                if (window && i == window->comparison) c_string_window(c, window);
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
                 c->instruction = i + 1;

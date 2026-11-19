@@ -83,6 +83,9 @@ typedef struct XrLirHomeEdge {
 
 typedef struct XrLirStringWindow {
     uint32_t header, index, next_index, limit;
+    uint32_t comparison; /* Zero-based position after any in-header constant. */
+    bool constant_limit;
+    uint64_t limit_bits;
     size_t header_owner, latch_owner, suffix_owner;
     /* At the latch, swap the live result slot in this list for header_owner. */
     size_t empty_slots[7], empty_count;

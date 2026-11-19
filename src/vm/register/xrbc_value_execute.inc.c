@@ -537,11 +537,15 @@ static XR_NOINLINE uint64_t rbc_value_append_window(XrRbcStack *stack, RbcValueA
         window->latch_owner == homes->values[homes->transfers[edge->first].source].first_owner &&
         window->header_owner == homes->values[homes->transfers[edge->first].target].first_owner,
         "the capacity window starts and ends at the actual selected owner slots");
-    if (pair[0] != window->next_index || pair[1] != window->index || bits > INT64_MAX ||
-        code->locations[window->limit].kind != XR_RBC_VALUE_REGISTER) return bits;
-    XrRbcRegister *limit = rbc_value_register(stack, activation, window->limit);
-    if (!limit || limit->bits > INT64_MAX || bits >= limit->bits) return bits;
-    uint64_t remaining = limit->bits - bits;
+    if (pair[0] != window->next_index || pair[1] != window->index || bits > INT64_MAX) return bits;
+    uint64_t limit_bits = window->limit_bits;
+    if (!window->constant_limit) {
+        XrRbcRegister *limit = rbc_value_register(stack, activation, window->limit);
+        if (!limit) return bits;
+        limit_bits = limit->bits;
+    }
+    if (limit_bits > INT64_MAX || bits >= limit_bits) return bits;
+    uint64_t remaining = limit_bits - bits;
     size_t empty_slots[sizeof(window->empty_slots) / sizeof(*window->empty_slots)];
     for (size_t n = 0; n < window->empty_count; ++n) {
         size_t slot = window->empty_slots[n];
