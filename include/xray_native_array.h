@@ -4,11 +4,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xray_native_array.h - One fixed physical prefix for four admitted Array tails
+ * xray_native_array.h - Shared Array prefix and scalar-family operations
  *
  * KEY CONCEPT:
- *   The admitted type supplies the element kind. Every String capacity slot is
- *   a real Header owner or NULL, independently of the logical length.
+ *   The admitted type supplies the tail layout. Every owned field of every
+ *   capacity row holds a real Header owner or NULL, independent of length.
  */
 #ifndef XRAY_NATIVE_ARRAY_H
 #define XRAY_NATIVE_ARRAY_H
@@ -51,7 +51,7 @@ struct XrtArrayBacking {
 _Static_assert(offsetof(XrtArrayBacking, length) == 16 && offsetof(XrtArrayBacking, capacity) == 24 &&
     offsetof(XrtArrayBacking, elements) == 32 && sizeof(XrtArrayBacking) == 32 &&
     32 % _Alignof(uint64_t) == 0 && 32 % _Alignof(XrtManagedHeader *) == 0,
-    "all four Array tails share one aligned physical prefix");
+    "every Array tail begins at the same aligned physical prefix");
 #endif
 #ifdef __cplusplus
 extern "C" {

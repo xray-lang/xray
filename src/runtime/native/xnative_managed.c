@@ -289,8 +289,12 @@ XRAY_API void xrt_managed_ops_drop(XrtManagedOps *ops) {
 }
 XR_FUNCDEF XrtManagedStatus xrt_managed_producer_borrow(const XrtManagedHeader *owner,
     bool (*retain)(void *), void (*drop)(void *), const XrtRuntimeTypeSpec **empty) {
-    if (!owner || !owner->ops || !retain || !drop || !empty || *empty) return XRT_MANAGED_ARGUMENT;
-    const XrtRuntimeTypeSpec *spec = &owner->ops->plan->spec;
+    return xrt_managed_ops_producer_borrow(owner ? owner->ops : NULL, retain, drop, empty);
+}
+XR_FUNCDEF XrtManagedStatus xrt_managed_ops_producer_borrow(const XrtManagedOps *ops,
+    bool (*retain)(void *), void (*drop)(void *), const XrtRuntimeTypeSpec **empty) {
+    if (!ops || !retain || !drop || !empty || *empty) return XRT_MANAGED_ARGUMENT;
+    const XrtRuntimeTypeSpec *spec = &ops->plan->spec;
     if (spec->code.retain != retain || spec->code.drop != drop) return XRT_MANAGED_ARGUMENT;
     *empty = spec;
     return XRT_MANAGED_OK;

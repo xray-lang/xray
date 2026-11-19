@@ -71,6 +71,7 @@ add_executable(test_native_managed_status test_managed_status.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_plan.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_ops.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_status.c")
 target_include_directories(test_native_managed_status PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
@@ -127,7 +128,8 @@ add_executable(test_native_string_backing_ops test_string_backing_ops.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing_ops.c"
-    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c")
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_plan.c")
 target_include_directories(test_native_string_backing_ops PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
 set_target_properties(test_native_string_backing_ops PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
 if(MSVC)
@@ -149,6 +151,7 @@ add_executable(test_native_backing test_backing.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_backing_types.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_string_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_backing.c"
+    "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_value_plan.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_array_ops.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_map_backing.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_set_backing.c")

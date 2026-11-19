@@ -996,12 +996,14 @@ static void map_retirement_and_lifetimes(void) {
 #include "backing_map_literal_cases.h"
 #include "backing_array_local_cases.h"
 #include "backing_array_region_cases.h"
+#include "backing_array_inline_cases.h"
 #include "backing_set_cases.h"
 int main(void) {
     setup_failures();
     string_values();
     scalar_arrays();
     string_arrays();
+    inline_array_rows();
     construction_failures();
     pending_capacity();
     nonlocal_retirement();
