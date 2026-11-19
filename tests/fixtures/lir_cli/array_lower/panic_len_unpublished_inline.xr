@@ -1,0 +1,3 @@
+print(read())
+const rows: Array<(string, i64)> = [("published later", 42)]
+fn read() -> i64 { return len(rows) }

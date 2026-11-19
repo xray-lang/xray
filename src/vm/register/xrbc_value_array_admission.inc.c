@@ -279,7 +279,11 @@ static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcVa
         if (a.other || a.window != UINT32_MAX || a.index > XR_LIR_ARRAY_OP_GET ||
             !rbc_value_array(module,code,array,create)) return false;
         const XrtValueImage *image = xr_rbc_module_value_image(module);
+        if (a.index != XR_LIR_ARRAY_OP_LEN && !xr_rbc_module_code_owner(module) &&
+            (!module->state_spec || module->state_spec->values != image)) return false;
         const XrLirValueHome *home = rbc_value_home(code,array);
+        if (!image || !image->types || !home->type || home->type > image->type_count ||
+            image->types[home->type - 1].kind != XRT_VALUE_ARRAY_INLINE) return false;
         uint32_t element = image->types[home->type - 1].element;
         if (!element || element >= home->type || !xrt_value_kind_has_fields(image->types[element - 1].kind)) return false;
         if (create) {

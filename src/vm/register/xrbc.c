@@ -339,7 +339,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     }
     case XR_RBC_CALL:
         if (a >= registers || index >= module->function_count ||
-            rbc_callable_inline_signature(module,index) ||
+            rbc_requires_typed_call(module,index) ||
             module->functions[index].callable ||
             module->functions[index].aggregate_parameter_count || module->functions[index].aggregate_result_type ||
             a + 1 + module->functions[index].parameter_count != registers) return false;
@@ -352,10 +352,12 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         break;
     case XR_RBC_RET:
         return !function->callable && !function->aggregate_result_type && a < registers && !(word >> 16) &&
+            rbc_result_value_kind(module, (uint32_t)(function - module->functions)) != XRT_VALUE_ARRAY_INLINE &&
             (function->result_kind == XR_RBC_BITS || function->result_kind == XR_RBC_SLICE_I64 ||
                 function->result_kind == XR_RBC_BOXED || function->result_kind == XR_RBC_STRING);
     case XR_RBC_RET0:
-        return !function->callable && !function->aggregate_result_type && word == XR_RBC_RET0;
+        return !function->callable && !function->aggregate_result_type && word == XR_RBC_RET0 &&
+            rbc_result_value_kind(module, (uint32_t)(function - module->functions)) != XRT_VALUE_ARRAY_INLINE;
     default:
         return false;
     }
@@ -550,6 +552,7 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
         module->code_lease.retain,module->code_lease.release});
     bool function_result=function->result_kind==XR_RBC_FUNCTION;
     if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_BOXED ||
+        rbc_result_value_kind(module, entry) == XRT_VALUE_ARRAY_INLINE ||
         (!owned && function->capture_count) || function->state_capture ||
         function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
         (inline_result && (function->aggregate_result_type || function->result_kind != XR_RBC_BITS ||
