@@ -275,7 +275,8 @@ static void c_value(LirC *c, uint32_t id) {
         const XrLirValueHome *home = &c->homes->values[id];
         /* Project only the consumed home; rebuilding every address at each
          * acquisition point makes generated code quadratic in owned values. */
-        c_format(c, "(*(XrlValue_%" PRIu32 " *)((unsigned char *)xrl_payload + %zu))", home->type, home->offset);
+        size_t offset = home->literal_cache_borrow ? home->literal_cache_offset : home->offset;
+        c_format(c, "(*(XrlValue_%" PRIu32 " *)((unsigned char *)xrl_payload + %zu))", home->type, offset);
     } else if (c->homes && c->homes->bindings && c->homes->bindings[id].kind == XR_LIR_HOME_BINDING_LOCAL)
         c_format(c, "(XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL}", c->homes->bindings[id].first_owner);
     else c_format(c, "v%" PRIu32, id);

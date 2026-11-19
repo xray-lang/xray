@@ -1,0 +1,13 @@
+fn save(items:ref Map<string,i64>) {
+    items.set("new",42)
+}
+fn read_back()->i64 {
+    var items={"old": 2}
+    save(ref items)
+    print(items.get("new")!)
+    print(items.delete("new"))
+    print(items.containsKey("new"))
+    print(items.get("absent") ?? -1)
+    return items["old"]
+}
+print(read_back())

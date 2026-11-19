@@ -238,7 +238,7 @@ static void c_string_library(LirC *c, const XrLirInstructionView *v, uint32_t so
         return;
     }
     if (!c_string_append_events(c, v)) return;
-    if (right->literal_append_borrow && !c_string_slot(c, right->literal_cache_owner, right->literal_cache_offset))
+    if (right->literal_cache_borrow && !c_string_slot(c, right->literal_cache_owner, right->literal_cache_offset))
         return;
     /* Frame setup precedes the suffix borrow. The runtime consumes the left
      * owner and publishes the complete result under one registered guard. */
@@ -247,9 +247,7 @@ static void c_string_library(LirC *c, const XrLirInstructionView *v, uint32_t so
         left->first_owner);
     c_format(c, "        .result_slot=%zu, .temporary_slot=%zu, .suffix=(const XrtStringBacking *)",
         result->first_owner, result->temporary_first_owner);
-    if (right->literal_append_borrow)
-        c_format(c, "(*(XrtManagedHeader **)((unsigned char *)xrl_payload + %zu))", right->literal_cache_offset);
-    else c_value(c, v->operands[1]);
+    c_value(c, v->operands[1]);
     c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
 }
 

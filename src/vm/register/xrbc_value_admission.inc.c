@@ -33,7 +33,7 @@ static bool rbc_value_scalar(const XrRbcValueCode *code, const XrRbcFunction *f,
     return location.kind == XR_RBC_VALUE_SPILL ? kind == XR_RBC_BITS || kind == XR_RBC_STATE_REF :
         rbc_register_kind(f,location.index) == kind;
 }
-static bool rbc_value_string(const XrRbcModule *module, const XrRbcValueCode *code,
+static bool rbc_value_string_shape(const XrRbcModule *module, const XrRbcValueCode *code,
     uint32_t value, bool destination) {
     const XrLirValueHome *home = rbc_value_home(code,value);
     const XrtValueImage *image = xr_rbc_module_value_image(module);
@@ -43,8 +43,13 @@ static bool rbc_value_string(const XrRbcModule *module, const XrRbcValueCode *co
         (!destination || (!home->parameter && home->offset != SIZE_MAX &&
             home->temporary_offset != SIZE_MAX && home->temporary_first_owner < code->homes->frame.slot_count));
 }
+static bool rbc_value_string(const XrRbcModule *module, const XrRbcValueCode *code,
+    uint32_t value, bool destination) {
+    return rbc_value_string_shape(module,code,value,destination) &&
+        !rbc_value_home(code,value)->literal_cache_borrow;
+}
 static bool rbc_value_string_literal(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value) {
-    if (!xr_rbc_module_code_owner(module) || !rbc_value_string(module,code,value,true)) return false;
+    if (!xr_rbc_module_code_owner(module) || !rbc_value_string_shape(module,code,value,true)) return false;
     const XrLirValueHome *home=rbc_value_home(code,value);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     const XrtValueImageType *type=&image->types[home->type-1];
@@ -61,6 +66,12 @@ static bool rbc_value_string_literal(const XrRbcModule *module,const XrRbcValueC
         for (size_t p=0;p<n;++p) if (slots[n]==slots[p] || offsets[n]==offsets[p]) return false;
     }
     return true;
+}
+static bool rbc_value_string_borrow_operand(const XrRbcModule *module, const XrRbcValueCode *code,
+    uint32_t value) {
+    const XrLirValueHome *home = rbc_value_home(code,value);
+    return home && (home->literal_cache_borrow ? rbc_value_string_literal(module,code,value) :
+        rbc_value_string(module,code,value,false));
 }
 static const XrLirHomeBinding *rbc_value_binding(const XrRbcValueCode *code, uint32_t value) {
     return rbc_value_id(code,value) && code->homes && code->homes->bindings &&
@@ -331,12 +342,10 @@ static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcV
         !transfer->block || !transfer->instruction ||
         transfer->source!=access.source || transfer->argument || transfer->target || transfer->edge || transfer->target_block ||
         transfer->transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE ||
-        !rbc_value_string(module,code,access.source,false) || !rbc_value_string(module,code,access.other,false) ||
+        !rbc_value_string(module,code,access.source,false) ||
+        !rbc_value_string_borrow_operand(module,code,access.other) ||
         !rbc_value_string(module,code,access.result,true)) return false;
     const XrLirValueHome *source=rbc_value_home(code,access.source),*result=rbc_value_home(code,access.result);
-    const XrLirValueHome *suffix=rbc_value_home(code,access.other);
-    if (source->literal_append_borrow || result->literal_append_borrow ||
-        (suffix->literal_append_borrow && !rbc_value_string_literal(module,code,access.other))) return false;
     size_t slots[]={source->first_owner,result->first_owner,result->temporary_first_owner};
     if (source->parameter || source->offset==SIZE_MAX || !code->homes->frame.owned_offsets) return false;
     for (size_t n=0;n<3;++n) {
