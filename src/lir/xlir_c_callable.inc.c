@@ -142,6 +142,10 @@ static bool c_callable_admit(LirC *c, const XrLirInstructionView *v) {
                 }
                 if (type == XR_LIR_I64_CELL || type == XR_LIR_STATE || type == XR_LIR_STATE_REF ||
                     c_callable_type(c,type,NULL) || c_cell_type(c,type,NULL)) continue;
+                /* The emitted Frame field uses its common natural layout.
+                 * With no owner leaves it needs only a value snapshot. */
+                if (xr_lir_inline_aggregate_type(c->request->module,type) &&
+                    !xr_lir_boxed_type(c->request->module,type)) continue;
                 if (xr_lir_type_layout(c->request->module,type,&layout) != XR_LIR_OK || layout.managed) {
                     c_error(c,XR_LIR_C_UNSUPPORTED,"Frame capture requires an established borrowed payload lifetime"); return false;
                 }
