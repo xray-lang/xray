@@ -10,6 +10,8 @@
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_class_cycles.h"
+#include "xir/xxir_type_description.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_comptime_pending_internal.h"
@@ -351,6 +353,82 @@ static void builtin_loader_identity(void) {
     xr_xir_compile_source_snapshot_free(owned);
 }
 
+static XrXirType cycle_test_type(const XrXirArtifact *artifact, const char *name,
+    XrXirType first, XrXirType second, bool callable) {
+    const XrXirTypes *types = xr_xir_compile_artifact_module(artifact)->types;
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(artifact);
+    size_t length = strlen(name);
+    uint32_t arguments = second != XR_XIR_UNIT ? 2 : first != XR_XIR_UNIT || callable ? 1 : 0;
+    for (uint32_t i = 0; i < types->count; ++i) {
+        XrXirType type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + i);
+        const XrXirTypeNode *node = &types->nodes[i];
+        if (!xr_xir_type_is_class(types, type) || node->parameter_span || node->nominal.argument_count != arguments) continue;
+        XrXirTypeDescription description = {0};
+        XIR_OK(xr_xir_compile_type_description(context, types, type, &description));
+        if (length != description.name.length || memcmp(name, description.name.bytes, length)) continue;
+        const XrXirType *actual = node->nominal.arguments;
+        if (arguments == 2 && actual[1] != second) continue;
+        if (callable) {
+            const XrXirTypeNode *signature = xr_xir_type_node(types, actual[0]);
+            if (!signature || signature->kind != XR_XIR_TYPE_CALLABLE) continue;
+        } else if (arguments && actual[0] != first) continue;
+        return type;
+    }
+    CHECK(false);
+    return XR_XIR_UNIT;
+}
+
+static void class_cycle_facts(void) {
+    const char *text =
+        "class Box<T> { value: T; init(v: T) { this.value = v } }\n"
+        "class Pair<A, B> { first: A; second: B; init(a: A, b: B) { this.first = a; this.second = b } }\n"
+        "class ArrayLoop { backing: Array<ArrayLink>; init() { this.backing = [] } }\n"
+        "struct ArrayLink { next: ArrayLoop? }\n"
+        "class MapLoop { backing: Map<string, MapLink>; init() { this.backing = {} } }\n"
+        "struct MapLink { next: MapLoop? }\n"
+        "class Holder { value: ArrayLoop; init(v: ArrayLoop) { this.value = v } }\n"
+        "var words = Box(\"text\")\n"
+        "var number = Box(42)\n"
+        "var pair = Pair(\"value\", 42)\n"
+        "var callback = Box(fn(v: i64) -> i64 { return v })\n"
+        "var circle = ArrayLoop()\n"
+        "var map_circle = MapLoop()\n"
+        "var incoming = Holder(circle)\n";
+    XrXirSourceResult source = compile_text(text);
+    XrXirClassCycles *cycles = NULL;
+    CHECK(xr_xir_class_cycles_build(source.checked, &cycles, NULL) == XR_XIR_BAD_STAGE && !cycles);
+    XrXirArtifact *closed = NULL;
+    XIR_OK(xr_xir_compile_specialize(source.checked, &closed, NULL, NULL));
+    XIR_OK(xr_xir_class_cycles_build(closed, &cycles, NULL));
+    const XrXirModule *module = xr_xir_compile_artifact_module(closed);
+    const struct { const char *name; XrXirType first, second; bool callable; XrXirClassCycleKind kind; } cases[] = {
+        {"Box", XR_XIR_STRING, XR_XIR_UNIT, false, XR_XIR_CLASS_CYCLE_ACYCLIC},
+        {"Box", XR_XIR_I64, XR_XIR_UNIT, false, XR_XIR_CLASS_CYCLE_ACYCLIC},
+        {"Pair", XR_XIR_STRING, XR_XIR_I64, false, XR_XIR_CLASS_CYCLE_ACYCLIC},
+        {"Box", XR_XIR_UNIT, XR_XIR_UNIT, true, XR_XIR_CLASS_CYCLE_UNKNOWN},
+        {"ArrayLoop", XR_XIR_UNIT, XR_XIR_UNIT, false, XR_XIR_CLASS_CYCLE_POSSIBLE},
+        {"MapLoop", XR_XIR_UNIT, XR_XIR_UNIT, false, XR_XIR_CLASS_CYCLE_POSSIBLE},
+        {"Holder", XR_XIR_UNIT, XR_XIR_UNIT, false, XR_XIR_CLASS_CYCLE_ACYCLIC}
+    };
+    for (size_t n = 0; n < sizeof(cases) / sizeof(*cases); ++n) {
+        XrXirType type = cycle_test_type(closed, cases[n].name, cases[n].first, cases[n].second, cases[n].callable);
+        XrXirClassCycleKind kind = XR_XIR_CLASS_CYCLE_UNKNOWN;
+        XIR_OK(xr_xir_class_cycles_query(cycles, closed, type, &kind));
+        CHECK(kind == cases[n].kind);
+    }
+    XrXirType number = cycle_test_type(closed, "Box", XR_XIR_I64, XR_XIR_UNIT, false);
+    XrXirType callback = cycle_test_type(closed, "Box", XR_XIR_UNIT, XR_XIR_UNIT, true);
+    CHECK(number != callback && xr_xir_type_node(module->types, number)->nominal.declaration ==
+        xr_xir_type_node(module->types, callback)->nominal.declaration);
+    XrXirClassCycleKind preserved = XR_XIR_CLASS_CYCLE_POSSIBLE;
+    CHECK(xr_xir_class_cycles_query(cycles, source.checked, number, &preserved) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_class_cycles_query(cycles, closed, XR_XIR_I64, &preserved) == XR_XIR_BAD_TYPE);
+    CHECK(preserved == XR_XIR_CLASS_CYCLE_POSSIBLE);
+    xr_xir_class_cycles_free(cycles);
+    xr_xir_compile_artifact_free(closed);
+    xr_xir_compile_source_result_free(&source);
+}
+
 int main(void) {
     scalar_input_facts();
     literal_output_source_facts();
@@ -359,5 +437,6 @@ int main(void) {
     specialization_origins();
     lowered_origin_rejected();
     evaluation_origin_rejected();
+    class_cycle_facts();
     return 0;
 }
