@@ -263,7 +263,7 @@ static void array_local_live_cases(void) {
         xr_rbc_execution_free(&probe.execution); CHECK(!live_allocations);
     }
 }
-static void array_local_native_failures(XrRbcProgram *program) {
+static size_t array_native_allocation_failures(XrRbcProgram *program, uint64_t expected) {
     XrtBillingOwner *control=NULL; CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&control)==XRT_MANAGED_OK);
     /* The retained billing owner stays charged after every payload refunds. */
     XrtBillingStats base=xrt_billing_owner_stats(control);
@@ -276,7 +276,7 @@ static void array_local_native_failures(XrRbcProgram *program) {
         XrRbcOutcome *outcome=xr_rbc_execution_run(execution); CHECK(outcome);
         CHECK(!execution->stack.values && !execution->state && xrt_value_root_empty(&execution->values));
         XrRbcStatus status=xr_rbc_outcome_status(outcome); uint64_t bits=0;
-        if (status==XR_RBC_OK) CHECK(xr_rbc_outcome_bits(outcome,&bits) && bits==42);
+        if (status==XR_RBC_OK) CHECK(xr_rbc_outcome_bits(outcome,&bits) && bits==expected);
         else { XrXirValueStatus failure; uint32_t source; const XrtLocationOwner *locations;
             CHECK(status==XR_RBC_VALUE_FAILURE && xr_rbc_outcome_value_failure(outcome,&failure,&source,&locations) &&
                 failure==XR_XIR_VALUE_OOM); ++failures; }
@@ -287,6 +287,7 @@ static void array_local_native_failures(XrRbcProgram *program) {
         CHECK(allowance<SIZE_MAX);
     }
     CHECK(failures); xrt_billing_owner_drop(control);
+    return failures;
 }
 static void array_local_allocation_cases(void) {
     array_local_bytecode_cases(); CHECK(!live_allocations);
@@ -294,7 +295,7 @@ static void array_local_allocation_cases(void) {
     ArrayForwardFixture c=array_local_fixture(true,true);
     callable_allocation_failures(c.module,c.function,42,"local Array snapshot and guest call");
     XrRbcProgram *program=array_forwarding_compile(array_local_fixture(true,true));
-    array_local_native_failures(program); array_forwarding_run_retired(program,NULL,0,42); CHECK(!live_allocations);
+    array_native_allocation_failures(program,42); array_forwarding_run_retired(program,NULL,0,42); CHECK(!live_allocations);
 }
 #endif
 #endif // LIR_ARRAY_LOCAL_BYTECODE_CASES_H

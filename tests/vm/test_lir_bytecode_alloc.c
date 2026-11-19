@@ -333,15 +333,6 @@ static void array_compiler_failures(const char *name,uint64_t expected) {
     printf("Array %s compiler failure points: %zu\n",name,total);
 }
 
-static void inline_array_return_allocation_failures(void) {
-    XrLirFunction root = {0}, pack = {0};
-    XrLirModule *module = inline_array_return_fixture(&root, &pack);
-    XrRbcProgram *program = NULL;
-    XrRbcCompileDiagnostic diagnostic = {0};
-    CHECK(xr_rbc_compile(module, pack, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
-    CHECK(strstr(diagnostic.message, "internal typed caller"));
-    callable_allocation_failures(module, root, 5, "inline-element Array return");
-}
 static void array_reference_compiler_failures(void) {
     const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t family = 0; family < 4; ++family) {
@@ -1051,6 +1042,21 @@ static void aggregate_call_compiler_failures(bool aggregate) {
 #define XR_ARRAY_LOCAL_ALLOC_CASES
 #include "../lir/lir_array_local_bytecode_cases.h"
 #undef XR_ARRAY_LOCAL_ALLOC_CASES
+
+static void inline_array_return_allocation_failures(void) {
+    XrLirFunction root = {0}, pack = {0};
+    XrLirModule *module = inline_array_return_fixture(&root, &pack);
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic = {0};
+    CHECK(xr_rbc_compile(module, pack, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+    CHECK(strstr(diagnostic.message, "internal typed caller"));
+    CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK && program);
+    size_t refunded = array_native_allocation_failures(program, 5);
+    xr_rbc_program_destroy(program);
+    CHECK(!live_allocations);
+    printf("Inline-element Array return refunded %zu native billing failures\n", refunded);
+    callable_allocation_failures(module, root, 5, "inline-element Array return");
+}
 
 static void record_compiler_failures(void) {
     XrLirFunction root = {0};
