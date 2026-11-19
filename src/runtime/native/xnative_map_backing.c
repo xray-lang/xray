@@ -12,6 +12,7 @@
  */
 #include "xnative_map_backing.h"
 #include "xnative_array_backing.h"
+#include "xnative_string_backing.h"
 #include "base/xchecks.h"
 #include "base/xhash.h"
 #include <string.h>
@@ -125,6 +126,50 @@ static size_t map_order_entry(const XrtMapBacking *map, size_t ordinal) {
     if (position >= map->order_count) return SIZE_MAX;
     size_t entry = map->rows[position].order;
     return entry && entry <= map->length ? entry - 1 : SIZE_MAX;
+}
+enum MapFormatNode { MAP_FORMAT_ROOT, MAP_FORMAT_KEY, MAP_FORMAT_VALUE };
+
+static int map_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
+    switch (node.type) {
+    case MAP_FORMAT_ROOT:
+        view->kind = XR_VALUE_FORMAT_MAP;
+        view->unsigned_value = ((const XrtMapBacking *)context)->length;
+        return 1;
+    case MAP_FORMAT_KEY: {
+        const XrtStringBacking *key = node.value;
+        view->kind = XR_VALUE_FORMAT_BYTES;
+        view->bytes = (const unsigned char *)key->bytes;
+        view->size = key->length;
+        view->quote = '"';
+        return 1;
+    }
+    case MAP_FORMAT_VALUE:
+        view->kind = XR_VALUE_FORMAT_SIGNED;
+        view->signed_value = *(const int64_t *)node.value;
+        return 1;
+    default: return 0;
+    }
+}
+
+static int map_format_child(const void *context, XrValueFormatNode node, uint32_t index, XrValueFormatNode *child) {
+    const XrtMapBacking *map = context;
+    if (node.type != MAP_FORMAT_ROOT || index / 2 >= map->length) return 0;
+    size_t position = map_order_entry(map, index / 2);
+    if (position == SIZE_MAX) return 0;
+    const XrtMapBackingRow *entry = &map->rows[position];
+    if (!entry->key || entry->entry_order >= map->order_count ||
+        map->rows[entry->entry_order].order != position + 1) return 0;
+    *child = index % 2 ? (XrValueFormatNode){&entry->value, MAP_FORMAT_VALUE} :
+        (XrValueFormatNode){entry->key, MAP_FORMAT_KEY};
+    return 1;
+}
+
+XR_FUNCDEF XrtManagedStatus xrt_map_backing_display_held(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtMapBacking *map) {
+    if (!map_shape(map)) return XRT_MANAGED_ARGUMENT;
+    if (map->length > INT64_MAX) return XRT_MANAGED_OVERFLOW;
+    XrValueFormatReader reader = {map, map_format_read, map_format_child};
+    return xrt_string_backing_format_create(frame, slot, types, reader, (XrValueFormatNode){map, MAP_FORMAT_ROOT});
 }
 static void map_order_compact(XrtMapBacking *map) {
     size_t count = 0;

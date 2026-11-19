@@ -142,7 +142,7 @@
       "stdout": "tests/smoke/expected/maps_and_sets.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:14:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:41:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
       }
     },
     {
@@ -856,7 +856,7 @@
       "stdout": "tests/smoke/expected/maps_and_sets.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:14:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/02-collections/maps_and_sets.xr:41:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
       }
     },
     {

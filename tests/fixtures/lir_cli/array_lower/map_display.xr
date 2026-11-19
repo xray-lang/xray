@@ -1,0 +1,13 @@
+fn render(values: Map<string, i64>) -> string { return "${values}" }
+
+var scores = {"alice": 95, "bob": 87, "charlie": 92}
+print(scores)
+scores.delete("bob")
+scores.set("地球🌍", -9)
+const before = render(scores)
+scores.clear()
+print("scores: ${before}")
+print(render(scores))
+
+const embedded = {"A\0B": 4}
+print(render(embedded))

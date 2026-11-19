@@ -100,10 +100,11 @@ static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack 
         if (map->length>INT64_MAX) return XRT_MANAGED_OVERFLOW;
         result->bits=map->length; return XRT_MANAGED_OK;
     }
-    if (xr_lir_map_snapshot_element(access.index)) {
+    if (access.index==XR_LIR_MAP_OP_DISPLAY || xr_lir_map_snapshot_element(access.index)) {
         const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
-        xrt_native_map_snapshot(activation->frame,home->temporary_first_owner,&map->managed,
-            access.index==XR_LIR_MAP_OP_KEYS,source);
+        XrtMapProjection projection=access.index==XR_LIR_MAP_OP_DISPLAY ? XRT_MAP_DISPLAY :
+            access.index==XR_LIR_MAP_OP_KEYS ? XRT_MAP_KEYS : XRT_MAP_VALUES;
+        xrt_native_map_project(activation->frame,home->temporary_first_owner,&map->managed,projection,source);
         return rbc_value_array_publish(activation,access.result);
     }
     const XrtStringBacking *key=NULL;

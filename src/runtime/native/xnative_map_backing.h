@@ -40,6 +40,8 @@ XR_FUNC XrtManagedStatus xrt_map_backing_get(const XrtMapBacking *,
  * until the Array commits or aborts. Keys retain their own String references. */
 XR_FUNC XrtManagedStatus xrt_map_backing_snapshot_held(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, const XrtMapBacking *, bool keys);
+XR_FUNC XrtManagedStatus xrt_map_backing_display_held(XrtManagedFrame *, size_t,
+    const XrtBackingTypes *, const XrtMapBacking *);
 
 /* The caller already owns mutation authority for the actual binding. A borrow
  * never grants it. No allocation occurs; OK with applied=false requires COW or

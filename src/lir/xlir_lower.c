@@ -954,6 +954,11 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         return true;
     }
     if (op->op == XR_XIR_TO_STRING &&
+        lower_map_type(c, xr_xir_operand_type(f, op->args[0]))) {
+        c->maps = true;
+        return true;
+    }
+    if (op->op == XR_XIR_TO_STRING &&
         xr_lir_display_type(c->module, lower_type(c, xr_xir_operand_type(f, op->args[0]))))
         c->displays = true;
     if (op->op == XR_XIR_TO_STRING &&
