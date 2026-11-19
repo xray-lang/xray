@@ -48,20 +48,28 @@ static void rbc_lir_callable_select(const XrLirModule *input, XrLirType type, ui
     if (rbc_lir_callable_type(input, type)) map[type - XR_LIR_TYPE_COUNT] = 0;
 }
 
+static XrRbcCompileStatus rbc_lir_callable_seed(const XrLirModule *input, XrLirType type,
+    XrRbcProgram *program, uint32_t count, XrRbcCompileDiagnostic *diagnostic) {
+    if (!rbc_lir_callable_type(input, type)) return XR_RBC_COMPILE_OK;
+    if (!program->physical_callables) {
+        if (sizeof(uint32_t) > SIZE_MAX / count)
+            return rbc_lir_error(diagnostic, XR_RBC_COMPILE_LIMIT,
+                "invocation descriptors exceed address space", (XrLirSource){0});
+        uint32_t *map = xr_malloc((size_t)count * sizeof(*map));
+        if (!map)
+            return rbc_lir_error(diagnostic, XR_RBC_COMPILE_OUT_OF_MEMORY,
+                "cannot receive invocation descriptors", (XrLirSource){0});
+        for (uint32_t n = 0; n < count; ++n) map[n] = UINT32_MAX;
+        program->physical_callables = map;
+    }
+    program->physical_callables[type - XR_LIR_TYPE_COUNT] = 0;
+    return XR_RBC_COMPILE_OK;
+}
+
 static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input, const uint32_t *ids, uint32_t reachable,
     XrRbcProgram *program, const XrLirValueLayouts *layouts, XrRbcCompileDiagnostic *diagnostic) {
     uint32_t count = xr_lir_constructed_type_count(input), functions = 0;
     if (!count) return XR_RBC_COMPILE_OK;
-    if (sizeof(uint32_t) > SIZE_MAX / count)
-        return rbc_lir_error(diagnostic, XR_RBC_COMPILE_LIMIT,
-            "invocation descriptors exceed address space", (XrLirSource){0});
-    uint32_t *map = xr_malloc((size_t)count * sizeof(*map));
-    if (!map)
-        return rbc_lir_error(diagnostic, XR_RBC_COMPILE_OUT_OF_MEMORY,
-            "cannot receive invocation descriptors", (XrLirSource){0});
-    program->physical_callables = map;
-    for (uint32_t n = 0; n < count; ++n) map[n] = UINT32_MAX;
-
     /* The common image includes the exact types used by typed values. Reachable
      * scalar targets can also use a legacy descriptor without a value image. */
     for (size_t n = 0; layouts && n < xr_lir_value_layouts_count(layouts); ++n) {
@@ -70,13 +78,18 @@ static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input, const
         if (xr_lir_value_layouts_at(layouts, n, &key, &plan) != XR_LIR_VALUE_LAYOUT_OK)
             return rbc_lir_error(diagnostic, XR_RBC_COMPILE_INVALID,
                 "invocation descriptor lost its value image row", (XrLirSource){0});
-        if (!key.environment_function) rbc_lir_callable_select(input, key.type, map);
+        if (key.environment_function) continue;
+        XrRbcCompileStatus status = rbc_lir_callable_seed(input, key.type, program, count, diagnostic);
+        if (status != XR_RBC_COMPILE_OK) return status;
     }
     for (uint32_t n = 0; n < reachable; ++n) {
         XrLirClosureTarget target = {0};
-        if (xr_lir_closure_target_view(input, (XrLirFunction){input, ids[n]}, &target) == XR_LIR_OK)
-            rbc_lir_callable_select(input, target.callable, map);
+        if (xr_lir_closure_target_view(input, (XrLirFunction){input, ids[n]}, &target) != XR_LIR_OK) continue;
+        XrRbcCompileStatus status = rbc_lir_callable_seed(input, target.callable, program, count, diagnostic);
+        if (status != XR_RBC_COMPILE_OK) return status;
     }
+    uint32_t *map = program->physical_callables;
+    if (!map) return XR_RBC_COMPILE_OK;
     /* Callable dependencies precede the receiving signature in the LIR pool. */
     for (uint32_t n = count; n-- > 0;) {
         if (map[n] == UINT32_MAX) continue;
@@ -89,7 +102,7 @@ static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input, const
             rbc_lir_callable_select(input, signature.parameters[p].type, map);
         ++functions;
     }
-    if (!functions) return XR_RBC_COMPILE_OK;
+    assert(functions);
     if (sizeof(XrRbcCallableType) > SIZE_MAX / functions)
         return rbc_lir_error(diagnostic, XR_RBC_COMPILE_LIMIT,
             "invocation descriptors exceed address space", (XrLirSource){0});
