@@ -116,13 +116,14 @@ static void c_map_call(LirC *c, const XrLirInstructionView *v, uint32_t role, ui
         c_format(c, "    v%" PRIu32 " = (int64_t)((const XrtMapBacking *)", v->result);
         c_value(c, v->operands[0]); c_text(c, ")->length;\n"); return;
     }
-    if (xr_lir_map_snapshot_element(role)) {
+    if (role == XR_LIR_MAP_OP_DISPLAY || xr_lir_map_snapshot_element(role)) {
         c_values_ensure(c, source);
-        c_format(c, "    xrt_native_map_snapshot(xrl_frame, %zu, ",
+        c_format(c, "    xrt_native_map_project(xrl_frame, %zu, ",
             c->homes->values[v->result].temporary_first_owner);
         c_value(c, v->operands[0]);
         c_format(c, ", %s, UINT32_C(%" PRIu32 "));\n",
-            role == XR_LIR_MAP_OP_KEYS ? "true" : "false", source);
+            role == XR_LIR_MAP_OP_DISPLAY ? "XRT_MAP_DISPLAY" :
+            role == XR_LIR_MAP_OP_KEYS ? "XRT_MAP_KEYS" : "XRT_MAP_VALUES", source);
         c_values_publish_leaf(c, v->result, source);
         return;
     }

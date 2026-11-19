@@ -89,6 +89,10 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
     case XR_XIR_HASH_CONTAINS: operation = XR_LIR_MAP_OP_CONTAINS; break;
     case XR_XIR_HASH_KEYS: operation = XR_LIR_MAP_OP_KEYS; break;
     case XR_XIR_HASH_VALUES: operation = XR_LIR_MAP_OP_VALUES; break;
+    case XR_XIR_TO_STRING:
+        if (!lower_map_type(c, xr_xir_operand_type(f->source, op->args[0]))) return true;
+        operation = XR_LIR_MAP_OP_DISPLAY;
+        break;
     case XR_XIR_HASH_DELETE: operation = XR_LIR_MAP_OP_REMOVE; break;
     case XR_XIR_HASH_CLEAR: operation = XR_LIR_MAP_OP_CLEAR; break;
     default: return true;

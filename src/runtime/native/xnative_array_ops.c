@@ -11,9 +11,8 @@
  *   tail slots so rollback uses the same iterative capacity walk as final drop.
  */
 #include "xnative_array_ops.h"
+#include "xnative_string_backing.h"
 #include "base/xchecks.h"
-#include "shared/xr_utf8_core.h"
-#include "shared/xr_value_format_core.h"
 #include <string.h>
 
 static bool array_item_valid(const XrtArrayItem *item) {
@@ -239,11 +238,6 @@ typedef struct ArrayFormat {
     const XrtArrayBacking *array;
     XrtBackingArrayKind kind;
 } ArrayFormat;
-typedef struct ArrayText {
-    char *bytes;
-    size_t length, capacity;
-    bool overflow;
-} ArrayText;
 static int array_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
     const ArrayFormat *format = context;
     if (node.type == XRT_BACKING_ARRAY_COUNT) {
@@ -274,16 +268,6 @@ static int array_format_child(const void *context, XrValueFormatNode node, uint3
         (uint16_t)format->kind};
     return 1;
 }
-static int array_text_write(void *context, const void *bytes, size_t count) {
-    ArrayText *text = context;
-    if (count > SIZE_MAX - text->length) { text->overflow = true; return 0; }
-    if (text->bytes) {
-        if (count > text->capacity - text->length) return 0;
-        if (count) memcpy(text->bytes + text->length, bytes, count);
-    }
-    text->length += count;
-    return 1;
-}
 XR_FUNCDEF XrtManagedStatus xrt_array_backing_display_create(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, const XrtArrayBacking *array, XrtBackingArrayKind kind) {
     if (!types || !types->string || !array || !xrt_backing_array_stride(kind) || array->length > array->capacity)
@@ -291,25 +275,6 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_display_create(XrtManagedFrame *fr
     if (array->length > INT64_MAX) return XRT_MANAGED_OVERFLOW;
     ArrayFormat format = {array, kind};
     XrValueFormatReader reader = {&format, array_format_read, array_format_child};
-    XrValueFormatNode node = {array, XRT_BACKING_ARRAY_COUNT};
-    ArrayText text = {0};
-    if (!xr_value_format_value(reader, node, (XrValueFormatSink){&text, array_text_write}, 0))
-        return text.overflow ? XRT_MANAGED_OVERFLOW : XRT_MANAGED_ARGUMENT;
-    if (text.length > SIZE_MAX - sizeof(XrtStringBacking) - 1) return XRT_MANAGED_OVERFLOW;
-    XrtManagedHeader *payload = NULL;
-    XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, types->string,
-        sizeof(XrtStringBacking) + text.length + 1, &payload);
-    if (status != XRT_MANAGED_OK) return status;
-    XrtStringBacking *string = (XrtStringBacking *)payload;
-    text = (ArrayText){string->bytes, 0, text.length, false};
-    if (!xr_value_format_value(reader, node, (XrValueFormatSink){&text, array_text_write}, 0))
-        status = text.overflow ? XRT_MANAGED_OVERFLOW : XRT_MANAGED_ARGUMENT;
-    if (status == XRT_MANAGED_OK) {
-        XrUtf8ScanResult scan = xr_utf8_core_scan_strict((const uint8_t *)string->bytes, text.length);
-        XR_CHECK(scan.error == XR_UTF8_OK, "shared formatting preserves admitted String UTF-8");
-        string->length = text.length;
-        string->runes = scan.rune_count;
-        string->bytes[text.length] = 0;
-    }
-    return array_finish(frame, slot, status);
+    return xrt_string_backing_format_create(frame, slot, types, reader,
+        (XrValueFormatNode){array, XRT_BACKING_ARRAY_COUNT});
 }

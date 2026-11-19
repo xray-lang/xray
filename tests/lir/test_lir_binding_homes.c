@@ -248,8 +248,10 @@ static XrLirModule *roles_fixture(XrLirType element,bool map) {
         (void)role(&c,block,XR_LIR_MAP_OP_INDEX,XR_LIR_I64,args,2); (void)role(&c,block,XR_LIR_MAP_OP_CONTAINS,XR_LIR_I1,args,2);
         XrLirValue keys=role(&c,block,XR_LIR_MAP_OP_KEYS,XR_LIR_ARRAY,args,1);
         XrLirValue values=role(&c,block,XR_LIR_MAP_OP_VALUES,XR_LIR_ARRAY,args,1);
+        XrLirValue display=role(&c,block,XR_LIR_MAP_OP_DISPLAY,XR_LIR_STRING,args,1);
         ca_effect(&c,block,XR_LIR_ARRAY_DROP,keys);
         ca_effect(&c,block,XR_LIR_ARRAY_DROP,values);
+        ca_effect(&c,block,XR_LIR_STRING_DROP,display);
         XrLirValue set[]={borrowed,fill,ca_constant(&c,block,42)};
         (void)role(&c,block,XR_LIR_MAP_OP_SET,XR_LIR_UNIT,set,3); args[0]=inputs[1];
         (void)role(&c,block,XR_LIR_MAP_OP_REMOVE,XR_LIR_I1,args,2); (void)role(&c,block,XR_LIR_MAP_OP_CLEAR,XR_LIR_UNIT,args,1);

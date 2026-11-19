@@ -867,6 +867,7 @@ static void map_snapshot_ownership(void) {
     XrtBillingStats before = xrt_billing_owner_stats(fixture.billing);
     xrt_billing_owner_fail_after(fixture.billing, 0);
     CHECK(xrt_map_backing_snapshot_held(fixture.frame, 3, &fixture.types, map, true) == XRT_MANAGED_OOM);
+    CHECK(xrt_map_backing_display_held(fixture.frame, 3, &fixture.types, map) == XRT_MANAGED_OOM);
     CHECK(borrow(&fixture, 3) == old && xr_signed_rc_read(&map->managed.references) == 2);
     same_bill(fixture.billing, before);
     xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
@@ -878,10 +879,15 @@ static void map_snapshot_ownership(void) {
     same_bill(fixture.billing, before);
     OK(xrt_map_backing_snapshot_held(fixture.frame, 3, &fixture.types, map, true));
     OK(xrt_map_backing_snapshot_held(fixture.frame, 4, &fixture.types, map, false));
+    OK(xrt_map_backing_display_held(fixture.frame, 5, &fixture.types, map));
     xrt_managed_drop(&map->managed);
     for (size_t n = 0; n < 3; ++n) OK(xrt_managed_slot_drop(fixture.frame, n));
     const XrtArrayBacking *key_snapshot = (const XrtArrayBacking *)borrow(&fixture, 3);
     const XrtArrayBacking *value_snapshot = (const XrtArrayBacking *)borrow(&fixture, 4);
+    const XrtStringBacking *display = (const XrtStringBacking *)borrow(&fixture, 5);
+    const char expected[] = "{\"a\": 95, \"b\": 92}";
+    CHECK(display->length == sizeof(expected) - 1 && display->runes == display->length &&
+        !memcmp(display->bytes, expected, sizeof(expected)));
     CHECK(key_snapshot->length == 2 && value_snapshot->length == 2);
     for (size_t n = 0; n < 2; ++n) {
         const XrtStringBacking *key = NULL;

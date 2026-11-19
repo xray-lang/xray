@@ -14,6 +14,7 @@
 #include "xnative_backing_types.h"
 
 #include "xray_native_string_value.h"
+#include "shared/xr_value_format_core.h"
 
 /* Reserve counts tail bytes, including the terminator; zero selects length+1.
  * Inputs are synchronous borrows. The stable pending slot exists before any
@@ -23,4 +24,7 @@ XR_FUNC XrtManagedStatus xrt_string_backing_create(XrtManagedFrame *, size_t slo
     const XrtBackingTypes *, const char *bytes, size_t length, size_t reserve);
 XR_FUNC XrtManagedStatus xrt_string_backing_concat_create(XrtManagedFrame *, size_t slot,
     const XrtBackingTypes *, const XrtStringBacking *, const XrtStringBacking *, size_t reserve);
+/* The adapter must keep every formatted borrow stable through allocation. */
+XR_FUNC XrtManagedStatus xrt_string_backing_format_create(XrtManagedFrame *, size_t,
+    const XrtBackingTypes *, XrValueFormatReader, XrValueFormatNode);
 #endif // XNATIVE_STRING_BACKING_H

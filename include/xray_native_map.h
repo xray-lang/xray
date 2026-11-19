@@ -85,8 +85,11 @@ XRAY_API void xrt_native_map_literal_create(XrtManagedFrame *, size_t slot,
     const XrtMapLiteral *, const XrtMapLiteralInput *, uint32_t source_id);
 XRAY_API bool xrt_native_map_get(const XrtManagedHeader *, const XrtStringBacking *,
     int64_t *value, uint32_t source_id);
-XRAY_API void xrt_native_map_snapshot(XrtManagedFrame *, size_t slot,
-    const XrtManagedHeader *, bool keys, uint32_t source_id);
+typedef enum XrtMapProjection {
+    XRT_MAP_KEYS, XRT_MAP_VALUES, XRT_MAP_DISPLAY,
+} XrtMapProjection;
+XRAY_API void xrt_native_map_project(XrtManagedFrame *, size_t slot,
+    const XrtManagedHeader *, XrtMapProjection, uint32_t source_id);
 XRAY_API int64_t xrt_native_map_index(const XrtManagedHeader *, const XrtStringBacking *, uint32_t source_id);
 /* REPLACE checks the actual binding's readiness and existing authority. The
  * distinct workspace is true-empty; failures leave the transaction before
