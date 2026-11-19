@@ -156,8 +156,7 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     if (!rbc_lir_grow(c,&storage,&c->value_access_capacity,code->access_count + 1,sizeof(*code->accesses))) return false;
     code->accesses = storage;
     ((XrRbcValueAccess *)code->accesses)[code->access_count] = access;
-    XrRbcOp op = access.operation == XR_RBC_VALUE_MAP && xr_lir_map_reads_key(access.index) ?
-        XR_RBC_MAP_READ : XR_RBC_VALUE_ACCESS;
+    XrRbcOp op = rbc_value_access_opcode(code, access);
     return rbc_lir_emit(c,op,0,0,0,(int64_t)code->access_count++);
 }
 static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {

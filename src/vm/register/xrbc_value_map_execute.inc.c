@@ -137,11 +137,6 @@ static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack 
     return XRT_MANAGED_ARGUMENT;
 }
 
-static uint32_t rbc_map_source(const XrRbcModule *module, const XrRbcStack *stack, size_t pc) {
-    const XrRbcFunction *function = &module->functions[stack->frames[stack->depth - 1].function];
-    return function->source_ids ? function->source_ids[pc - 1] : 0;
-}
-
 static XrtManagedStatus rbc_map_read(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *activation, const XrRbcValueAccess *access, bool *missing) {
     const XrtManagedFrameLocations *locations = &activation->frame_locations;
@@ -203,7 +198,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_map_read_step(const XrRbcModule *module, X
     RbcValueActivation *activation = stack->values ? stack->values->top : NULL;
     if ((!activation || activation->depth != stack->depth) && stack->depth) {
         XrRbcStatus status = xr_rbc_values_begin(module, stack,
-            (uint32_t)stack->frames[stack->depth - 1].function, rbc_map_source(module, stack, pc));
+            (uint32_t)stack->frames[stack->depth - 1].function, rbc_value_source(module, stack, pc));
         if (status != XR_RBC_OK) return status;
         activation = stack->values ? stack->values->top : NULL;
     }
@@ -216,7 +211,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_map_read_step(const XrRbcModule *module, X
         rbc_value_array_region_forget(activation, activation->active_array_region, RBC_ARRAY_REGION_BYPASS);
     bool missing = false;
     XrtManagedStatus status = rbc_map_read(module, stack, activation, access, &missing);
-    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_map_source(module, stack, pc));
-    if (missing) xrt_typed_panic(431, rbc_map_source(module, stack, pc));
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
+    if (missing) xrt_typed_panic(431, rbc_value_source(module, stack, pc));
     return XR_RBC_OK;
 }

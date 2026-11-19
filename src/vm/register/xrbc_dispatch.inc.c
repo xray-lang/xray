@@ -415,6 +415,11 @@ XR_RBC_CASE(VALUE_ACCESS) {
     XR_RBC_VALUE_EXECUTE();
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(STRING_LITERAL_BORROW) {
+    XrRbcStatus status = xr_rbc_string_literal_borrow_step(module, stack, instruction >> 16, pc);
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(MAP_READ) {
     XrRbcStatus status = xr_rbc_map_read_step(module, stack, instruction >> 16, pc);
     if (status != XR_RBC_OK) return status;
@@ -425,6 +430,11 @@ XR_RBC_CASE(MAP_READ) {
 default:
     if (op == XR_RBC_VALUE_ACCESS) {
         XR_RBC_VALUE_EXECUTE();
+        XR_RBC_NEXT();
+    }
+    if (op == XR_RBC_STRING_LITERAL_BORROW) {
+        XrRbcStatus status = xr_rbc_string_literal_borrow_step(module, stack, instruction >> 16, pc);
+        if (status != XR_RBC_OK) return status;
         XR_RBC_NEXT();
     }
     if (op == XR_RBC_MAP_READ) {

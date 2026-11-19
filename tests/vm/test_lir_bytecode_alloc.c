@@ -1066,6 +1066,7 @@ int main(void) {
     owned_program_admission();
     record_compiler_failures();
     map_compiler_failures();
+    map_borrowed_literal_fault_and_skip();
     composition_compiler_failures();
     tuple_compiler_failures();
     typed_edge_spill_cycles();
