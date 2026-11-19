@@ -37,6 +37,9 @@ static bool rbc_value_callable_argument(const XrRbcModule *module,const XrRbcVal
         return rbc_value_cell(module,code,value,false) && rbc_value_home(code,value)->type==expected.type;
     if (expected.kind==XR_RBC_CALLABLE_FUNCTION)
         return rbc_callable_accepts(module,expected.type+1,rbc_value_signature(module,code,value));
+    if (expected.kind == XR_RBC_CALLABLE_HOME)
+        return rbc_value_array(module, code, value, false) &&
+            rbc_callable_image_value(module, rbc_value_home(code, value)->type, expected);
     if (expected.kind==XR_RBC_CALLABLE_REFERENCE) {
         XrtValueKind kind=rbc_value_kind(module,code,value);
         return rbc_value_owner(module,code,value,false) &&
@@ -120,7 +123,8 @@ static bool rbc_value_function_access_valid(const XrRbcModule *module,const XrRb
         if (result.kind==XR_RBC_CALLABLE_FUNCTION)
             return rbc_callable_accepts(module,rbc_value_signature(module,code,access.result),result.type+1);
         return result.kind==XR_RBC_CALLABLE_SCALAR ? result.type==XR_POD_UNIT ? !access.result :
-            rbc_value_scalar(code,function,access.result,XR_RBC_BITS) : result.kind==XR_RBC_CALLABLE_REFERENCE &&
+            rbc_value_scalar(code,function,access.result,XR_RBC_BITS) :
+            (result.kind == XR_RBC_CALLABLE_REFERENCE || result.kind == XR_RBC_CALLABLE_HOME) &&
             rbc_value_callable_argument(module,code,function,access.result,result) &&
             rbc_value_owner(module,code,access.result,true);
     }

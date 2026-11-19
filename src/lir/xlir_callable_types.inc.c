@@ -13,7 +13,7 @@
 static bool lir_callable_array_shape(const XrLirModule *m, XrLirType type, XrLirType element, uint32_t ordinal) {
     if (!xr_lir_internal_array_type(type)) return !element;
     return element < XR_LIR_TYPE_COUNT + ordinal && xr_lir_internal_array_element(m, element) &&
-        !xr_lir_inline_array_ordinal(m, element);
+        (type == XR_LIR_ARRAY || !xr_lir_inline_array_ordinal(m, element));
 }
 XR_FUNC bool xr_lir_assertion_entry_signature(const XrLirType *parameters, uint32_t count,
     XrLirType result) {
@@ -46,6 +46,7 @@ static bool lir_callable_signature_valid(const XrLirModule *m, const XrLirCallab
         if (!xr_lir_internal_type_valid(m, parameter.type, false) ||
             parameter.type >= XR_LIR_TYPE_COUNT + ordinal ||
             !xr_param_mode_is_valid(parameter.mode) ||
+            (parameter.mode != XR_PARAM_READ && xr_lir_inline_array_ordinal(m, parameter.array_element)) ||
             !lir_callable_array_shape(m, parameter.type, parameter.array_element, ordinal)) return false;
         if (parameter.escaping && (parameter.type < XR_LIR_TYPE_COUNT ||
             m->types[parameter.type - XR_LIR_TYPE_COUNT].shape.kind != XR_LIR_TYPE_CALLABLE)) return false;
