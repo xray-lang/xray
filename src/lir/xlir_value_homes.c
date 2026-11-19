@@ -391,7 +391,7 @@ typedef struct LirHomeChain {
     uint32_t parent, producer, last_block;
     uint32_t binding_input, binding_output, handoff_source;
     uint8_t rank;
-    bool rejected;
+    bool rejected, array_region;
 } LirHomeChain;
 
 static uint32_t lir_home_chain_root(LirHomeChain *chains, uint32_t value) {
@@ -415,7 +415,7 @@ static void lir_home_chain_join(LirHomeChain *chains, uint32_t source, uint32_t 
     part->parent = to;
 }
 
-/* Pair the producer's existing last-use handoffs around a private Map Cell.
+/* Pair the producer's existing last-use handoffs around a private Cell.
  * The Cell keeps its distinct physical slot through mutation. Its source home
  * is empty by the time the adjacent read and release return ownership. */
 static bool lir_home_chain_bindings(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
@@ -424,17 +424,20 @@ static bool lir_home_chain_bindings(LirHomeCompiler *c, const XrLirOwnershipPlan
         XrLirOwnershipFact fact;
         if (xr_lir_ownership_fact_at(plan, function.fact_offset + n, &fact) != XR_LIR_OK)
             return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary binding fact disappeared");
-        if (fact.type != XR_LIR_MAP_STRING_I64_CELL || fact.forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)
+        bool array = fact.type == XR_LIR_ARRAY_CELL && fact.array_element == XR_LIR_I64;
+        if ((!array && fact.type != XR_LIR_MAP_STRING_I64_CELL) ||
+            fact.forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)
             continue;
         bool create = fact.kind == XR_LIR_OWNERSHIP_BINDING_NEW;
         if ((!create && fact.kind != XR_LIR_OWNERSHIP_BINDING_READ) ||
             !fact.value || fact.value > c->view.value_count ||
             !fact.target_value || fact.target_value > c->view.value_count)
-            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary Map binding lost its handoff");
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary binding lost its handoff");
         LirHomeChain *cell = &chains[fact.value];
+        if (cell->array_region || chains[fact.target_value].array_region) continue;
         uint32_t *endpoint = create ? &cell->binding_input : &cell->binding_output;
         if (*endpoint)
-            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary Map binding has conflicting handoffs");
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary binding has conflicting handoffs");
         *endpoint = fact.target_value;
     }
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
@@ -442,7 +445,7 @@ static bool lir_home_chain_bindings(LirHomeCompiler *c, const XrLirOwnershipPlan
         if (!cell->binding_input || !cell->binding_output) continue;
         LirHomeChain *output = &chains[cell->binding_output];
         if (output->handoff_source)
-            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary Map value has multiple handoff sources");
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary value has multiple handoff sources");
         output->handoff_source = cell->binding_input;
     }
     return true;
@@ -477,8 +480,9 @@ static void lir_home_chain_visit(LirHomeChain *chains, uint32_t value, uint32_t 
     root->last_block = block;
 }
 
-static bool lir_home_chain_type(XrLirType type) {
-    return type == XR_LIR_STRING || type == XR_LIR_MAP_STRING_I64;
+static bool lir_home_chain_type(const XrLirValueData *value) {
+    return value->type == XR_LIR_STRING || value->type == XR_LIR_MAP_STRING_I64 ||
+        (value->type == XR_LIR_ARRAY && value->array_element == XR_LIR_I64);
 }
 
 /* The independent literal cache or caller's loan keeps the backing alive
@@ -494,9 +498,16 @@ static bool lir_home_chain_producer(const XrLirFunctionData *f, uint32_t id) {
     return source->parameter && !source->block;
 }
 
-static bool lir_home_map_chain_start(const XrLirModule *module, const XrLirFunctionData *f, uint32_t id) {
+static bool lir_home_container_chain_start(const XrLirModule *module, const XrLirFunctionData *f, uint32_t id) {
     const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
-    if (!definition || definition->type != XR_LIR_MAP_STRING_I64) return false;
+    if (!definition) return false;
+    if (definition->type == XR_LIR_ARRAY) {
+        if (definition->op == XR_LIR_ARRAY_RETAIN) return true;
+        const XrLirArrayIntrinsic *shape = definition->op == XR_LIR_CALL_INTRINSIC ?
+            xr_lir_internal_array_intrinsic(module, definition->intrinsic) : NULL;
+        return shape && (shape->operation == XR_LIR_ARRAY_OP_NEW || shape->operation == XR_LIR_ARRAY_OP_REPEAT);
+    }
+    if (definition->type != XR_LIR_MAP_STRING_I64) return false;
     if (definition->op == XR_LIR_MAP_LITERAL_NEW || definition->op == XR_LIR_MAP_RETAIN) return true;
     XrLirIntrinsic entry;
     return definition->op == XR_LIR_CALL_INTRINSIC &&
@@ -504,33 +515,46 @@ static bool lir_home_map_chain_start(const XrLirModule *module, const XrLirFunct
         xr_lir_map_intrinsic_valid(module, &entry) && entry.operation == XR_LIR_MAP_OP_NEW;
 }
 
+/* Region consumers project these exact moves to distinct physical homes.
+ * Preserve those endpoints, including their original entry and exit moves.
+ * A chain in the same function can still use every other verified MOVE. */
+static void lir_home_chain_array_regions(LirHomeChain *chains, const XrLirArraySetRegionStep *steps, uint32_t count) {
+    for (uint32_t n = 0; n < count; ++n) {
+        chains[steps[n].source].array_region = true;
+        chains[steps[n].target].array_region = true;
+    }
+}
+
 /* A sealed MOVE chain has one origin and at most one independent definition
  * per block. A certified binding round trip continues that same owner, even
  * if the mutation replaces its backing. COPY edges and unrelated origins do
  * not share homes. Explicit releases and checked operations keep their sites.
- * The fixed Map payload contains only identity-free values, so failure drain
- * can release its one live owner from the shared physical slot. */
-static bool lir_home_stationary_owners(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
+ * The fixed container payloads contain only identity-free values, so failure
+ * drain can release the one live owner from the shared physical slot. */
+static bool lir_home_stationary_owners(LirHomeBuilder *builder, const XrLirOwnershipPlan *plan,
     XrLirValueHome *values, size_t count) {
+    LirHomeCompiler *c = &builder->compiler;
     const XrLirFunctionData *f = &c->input->functions[c->function.id - 1];
     bool needed = false;
     for (uint32_t v = 0; v < f->value_count && !needed; ++v)
-        needed = lir_home_chain_type(f->values[v].type) && f->values[v].parameter && f->values[v].block;
+        needed = lir_home_chain_type(&f->values[v]) && f->values[v].parameter && f->values[v].block;
     if (!needed) return true;
     XrLirOwnershipFunction function;
     if (xr_lir_ownership_function_at(plan, c->function.id, &function) != XR_LIR_OK)
         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary homes lost their ownership inventory");
     LirHomeChain *chains = xr_calloc(count, sizeof(*chains));
     if (!chains) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot classify owner forwarding chains");
+    lir_home_chain_array_regions(chains, builder->homes->array_region_steps, builder->homes->array_region_step_count);
+    lir_home_chain_array_regions(chains, builder->homes->array_push_steps, builder->homes->array_push_step_count);
     if (!lir_home_chain_bindings(c, plan, function, chains)) { xr_free(chains); return false; }
     for (uint32_t v = 1; v <= f->value_count; ++v) {
         const XrLirValueData *value = &f->values[v - 1];
-        if (!lir_home_chain_type(value->type) || !value->block) continue;
+        if (!lir_home_chain_type(value) || !value->block || chains[v].array_region) continue;
         chains[v].parent = v;
         if (!value->parameter && !chains[v].handoff_source) {
             chains[v].producer = v;
             chains[v].rejected = !lir_home_chain_producer(f, v) &&
-                !lir_home_map_chain_start(c->input, f, v);
+                !lir_home_container_chain_start(c->input, f, v);
         }
     }
     for (uint32_t v = 1; v <= f->value_count; ++v) {
@@ -538,7 +562,7 @@ static bool lir_home_stationary_owners(LirHomeCompiler *c, const XrLirOwnershipP
         if (!source) continue;
         if (!chains[source].parent || !chains[v].parent) {
             xr_free(chains);
-            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary Map handoff lost its value homes");
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary handoff lost its value homes");
         }
         lir_home_chain_join(chains, source, v, true);
     }
@@ -573,7 +597,7 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
     for (size_t v = 0; v < count; ++v) values[v] = (XrLirValueHome){.type=0,
         .offset=SIZE_MAX, .first_owner=SIZE_MAX, .temporary_offset=SIZE_MAX, .temporary_first_owner=SIZE_MAX,
         .literal_cache_offset=SIZE_MAX, .literal_cache_owner=SIZE_MAX,.view_parameter=UINT32_MAX};
-    if (!lir_home_callable_rows(b,ownership,values) || !lir_home_stationary_owners(c, ownership, values, count)) return false;
+    if (!lir_home_callable_rows(b,ownership,values) || !lir_home_stationary_owners(b, ownership, values, count)) return false;
     for (size_t index = 1; index <= c->view.value_count; ++index) {
         uint32_t v = (uint32_t)index;
         XrLirType type; XrLirValueLayoutKey key;
@@ -838,8 +862,6 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
     XrLirOwnershipFunction function;
     if (xr_lir_ownership_function_at(ownership, b->compiler.function.id, &function) != XR_LIR_OK)
         return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "function has no verified ownership inventory");
-    b->homes->source_function = b->compiler.function.id;
-    b->homes->value_count = b->compiler.view.value_count;
     b->homes->unmodeled = function.unmodeled;
     if (!lir_home_values(b,ownership) || !lir_home_bindings(b)) return false;
     for (uint32_t i = 0; i < function.fact_count; ++i) {
@@ -1014,8 +1036,10 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHome
     if (!b.homes) return XR_LIR_VALUE_LAYOUT_OOM;
     b.homes->frame.payload_alignment = 1;
     b.homes->view_result_parameter = UINT32_MAX;
-    bool success = lir_home_function(&b, request->ownership) && lir_home_array_regions(&b, request->ownership,false) &&
-        lir_home_array_regions(&b, request->ownership,true);
+    b.homes->source_function = request->function.id;
+    b.homes->value_count = b.compiler.view.value_count;
+    bool success = lir_home_array_regions(&b, request->ownership,false) &&
+        lir_home_array_regions(&b, request->ownership,true) && lir_home_function(&b, request->ownership);
     b.homes->frame.slot_count = b.owners.count; b.homes->frame.owned_offsets = b.owners.data;
     b.homes->owned_frame_needed = b.owners.count != 0;
     b.homes->bytes = b.bytes.data; b.homes->byte_count = b.bytes.count;

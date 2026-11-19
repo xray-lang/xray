@@ -1,0 +1,36 @@
+fn changing_slot(limit: i64) -> i64 {
+    var values: Array<i64> = []
+    var end = limit
+    var i = 0
+    while (i < end) {
+        values.push(i)
+        if (i == limit - 2) { end -= 1 }
+        i += 1
+    }
+    var sum = 0
+    var j = 0
+    while (j < len(values)) {
+        sum += values[j]
+        j += 1
+    }
+    return sum
+}
+
+fn snapshot_after_growth(limit: i64) {
+    var values: Array<i64> = [7]
+    const snapshot = values
+    var end = limit
+    var i = 0
+    while (i < end) {
+        values.push(i)
+        if (i == limit - 2) { end -= 1 }
+        i += 1
+    }
+    print(snapshot[0])
+    print(len(snapshot))
+    print(len(values))
+    print(values[len(values) - 1])
+}
+
+print(changing_slot(5000))
+snapshot_after_growth(6)

@@ -31,7 +31,7 @@ def main() -> None:
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
-             "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity",
+             "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
              "element_update", "element_update_carried",
              "panic_region_get", "panic_region_set",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
@@ -117,6 +117,16 @@ def main() -> None:
             assert "xrl_ap_0_ready = true;" in generated_text
             assert "xrt_native_array_update_place(" in generated_text
             assert generated_text.count("xrt_native_array_push_local_i64(") == 4
+        elif name == "array_stationary_edges":
+            # A changing bound keeps pointwise updates. Its selected edges can
+            # be scalar-only while the later read window keeps real owner moves.
+            assert "xrl_ap_spec_" not in generated_text
+            bodies = re.findall(r"^static int64_t xrl_f\d+\([^\n]*\) \{\n(.*?)^}",
+                                generated_text, re.MULTILINE | re.DOTALL)
+            pointwise, = (body for body in bodies if "xrt_array_i64_try_update_local(" in body)
+            append, read = pointwise.split("xrl_ar_0_cache = (", 1)
+            assert "xrt_native_array_update_place(" in append and "xrl_edge_" not in append
+            assert "xrl_ar_loop_" in read and "xrl_edge_" in read
         elif "xrt_native_array_push_local_i64(" in generated_text:
             assert re.search(r"if \(xrl_ap_\d+_ready\) \{\s+xrt_native_array_push_local_i64\(", generated_text)
         if name.startswith("region_") or name.startswith("panic_region_"):
