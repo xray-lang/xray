@@ -1485,7 +1485,9 @@ static void test_backward_owned_dag(void) {
     XrLirBlock entry=test_block(m,f,NULL,0),join=test_block(m,f,&text_type,1),producer=test_block(m,f,NULL,0);
     OK(xr_lir_set_entry(m,f,entry));test_branch(m,entry,producer,NULL,0);
     for(uint32_t n=0;n<260;++n)(void)test_constant(m,producer,XR_LIR_I64,n);
-    XrLirValue text=frame_text(m,producer,"owned",5);test_branch(m,producer,join,&text,1);
+    XrLirValue number=test_constant(m,producer,XR_LIR_I64,12345),text={0};
+    XrLirInstruction create={.op=XR_LIR_STRING_I64,.type=XR_LIR_STRING,.operands=&number,.operand_count=1};
+    OK(xr_lir_emit_value(m,producer,&create,&text));test_branch(m,producer,join,&text,1);
     XrLirValue value=block_parameter(m,join,0),length;
     XrLirInstruction op={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&value,.operand_count=1};
     OK(xr_lir_emit_value(m,join,&op,&length));frame_drop(m,join,value,false);test_return(m,join,length);

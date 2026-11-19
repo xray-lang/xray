@@ -33,7 +33,9 @@ static XrRbcProgram *header_edge_program(unsigned kind) {
     XrLirType types[]={reverse ? type : XR_LIR_STRING,reverse ? XR_LIR_STRING : type};
     XrLirBlock entry=test_block(c.module,root,NULL,0),join=test_block(c.module,root,mixed ? types : &type,mixed ? 2u : 1u);
     OK(xr_lir_set_entry(c.module,root,entry));
-    XrLirValue text=ca_text(&c,entry,"edge",4),source=text,incoming={0};
+    XrLirValue number=ca_constant(&c,entry,1234);
+    XrLirValue text=ca_value(&c,entry,XR_LIR_STRING_I64,XR_LIR_STRING,&number,1);
+    XrLirValue source=text,incoming={0};
     if (tagged) {
         source=ca_value(&c,entry,XR_LIR_NULLABLE_SOME,type,&text,1);
         if (!mixed) ca_effect(&c,entry,XR_LIR_STRING_DROP,text);

@@ -20,7 +20,7 @@ static void set_stage_transactions(const XrLirValueHomes *homes, XrtBillingOwner
     const int64_t key=7; MANAGED(xrt_set_backing_create(incoming,0,&types,&key,1));
     XrtManagedHeader *formal=NULL; MANAGED(xrt_managed_slot_borrow(incoming,0,&formal));
     int32_t references=atomic_load(&formal->references);
-    XrtPlaceEdge edges[2]={{0}}; XrtManagedHeader *previous[2]={0};
+    XrtPlaceEdge edges[2]={0}; XrtManagedHeader *previous[2]={0};
     for (size_t p=0;p<homes->transfer_count;++p) {
         XrLirHomeTransfer transfer=homes->transfers[p];
         const XrLirHomeWorkspace *stage=&homes->workspaces[transfer.borrowed_owner_workspace];
