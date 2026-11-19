@@ -8,6 +8,7 @@
  */
 #include "xlir_value_homes.h"
 #include "xlir_internal.h"
+#include "xlir_map.h"
 #include "xlir_state.h"
 #include "base/xmalloc.h"
 #include "xray_native_array_slice.h"
@@ -380,8 +381,9 @@ static bool lir_home_literal_borrows(LirHomeCompiler *c, XrLirValueHome *values,
 
 typedef struct LirHomeChain {
     uint32_t parent, producer, last_block;
+    uint32_t binding_input, binding_output, handoff_source;
     uint8_t rank;
-    bool rejected;
+    bool rejected, needs_handoff, has_handoff;
 } LirHomeChain;
 
 static uint32_t lir_home_chain_root(LirHomeChain *chains, uint32_t value) {
@@ -400,15 +402,48 @@ static void lir_home_chain_join(LirHomeChain *chains, uint32_t source, uint32_t 
     if (chains[to].rank < chains[from].rank) { uint32_t swap = to; to = from; from = swap; }
     LirHomeChain *root = &chains[to], *part = &chains[from];
     root->rejected |= part->rejected || (root->producer && part->producer);
+    root->needs_handoff |= part->needs_handoff;
+    root->has_handoff |= part->has_handoff;
     if (!root->producer) root->producer = part->producer;
     if (root->rank == part->rank) ++root->rank;
     part->parent = to;
 }
 
-static bool lir_home_chain_transfers(LirHomeCompiler *c, const XrLirOwnershipPlan *plan, LirHomeChain *chains) {
-    XrLirOwnershipFunction function;
-    if (xr_lir_ownership_function_at(plan, c->function.id, &function) != XR_LIR_OK)
-        return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary homes lost their ownership inventory");
+/* Pair the producer's existing last-use handoffs around a private Map Cell.
+ * The Cell keeps its distinct physical slot through mutation. Its source home
+ * is empty by the time the adjacent read and release return ownership. */
+static bool lir_home_chain_bindings(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
+    XrLirOwnershipFunction function, LirHomeChain *chains) {
+    for (uint32_t n = 0; n < function.fact_count; ++n) {
+        XrLirOwnershipFact fact;
+        if (xr_lir_ownership_fact_at(plan, function.fact_offset + n, &fact) != XR_LIR_OK)
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary binding fact disappeared");
+        if (fact.type != XR_LIR_MAP_STRING_I64_CELL || fact.forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)
+            continue;
+        bool create = fact.kind == XR_LIR_OWNERSHIP_BINDING_NEW;
+        if ((!create && fact.kind != XR_LIR_OWNERSHIP_BINDING_READ) ||
+            !fact.value || fact.value > c->view.value_count ||
+            !fact.target_value || fact.target_value > c->view.value_count)
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary Map binding lost its handoff");
+        LirHomeChain *cell = &chains[fact.value];
+        uint32_t *endpoint = create ? &cell->binding_input : &cell->binding_output;
+        if (*endpoint)
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary Map binding has conflicting handoffs");
+        *endpoint = fact.target_value;
+    }
+    for (uint32_t v = 1; v <= c->view.value_count; ++v) {
+        const LirHomeChain *cell = &chains[v];
+        if (!cell->binding_input || !cell->binding_output) continue;
+        LirHomeChain *output = &chains[cell->binding_output];
+        if (output->handoff_source)
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary Map value has multiple handoff sources");
+        output->handoff_source = cell->binding_input;
+    }
+    return true;
+}
+
+static bool lir_home_chain_transfers(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
+    XrLirOwnershipFunction function, LirHomeChain *chains) {
     for (uint32_t n = 0; n < function.fact_count; ++n) {
         XrLirOwnershipFact fact;
         if (xr_lir_ownership_fact_at(plan, function.fact_offset + n, &fact) != XR_LIR_OK)
@@ -453,8 +488,20 @@ static bool lir_home_chain_producer(const XrLirFunctionData *f, uint32_t id) {
     return source->parameter && !source->block;
 }
 
-/* A sealed MOVE chain with one producer and at most one member per block
- * carries a single owner. The selected edge changes its SSA name only. */
+static bool lir_home_map_chain_start(const XrLirModule *module, const XrLirFunctionData *f, uint32_t id) {
+    const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
+    if (!definition || definition->type != XR_LIR_MAP_STRING_I64) return false;
+    if (definition->op == XR_LIR_MAP_LITERAL_NEW || definition->op == XR_LIR_MAP_RETAIN) return true;
+    XrLirIntrinsic entry;
+    return definition->op == XR_LIR_CALL_INTRINSIC &&
+        xr_lir_intrinsic_view(module, definition->intrinsic, &entry) == XR_LIR_OK &&
+        xr_lir_map_intrinsic_valid(module, &entry) && entry.operation == XR_LIR_MAP_OP_NEW;
+}
+
+/* A sealed MOVE chain has one origin and at most one independent definition
+ * per block. A certified binding round trip continues that same owner, even
+ * if the mutation replaces its backing. COPY edges and unrelated origins do
+ * not share homes. This leaves arbitrary user copies and releases in place. */
 static bool lir_home_stationary_owners(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
     XrLirValueHome *values, size_t count) {
     const XrLirFunctionData *f = &c->input->functions[c->function.id - 1];
@@ -462,29 +509,48 @@ static bool lir_home_stationary_owners(LirHomeCompiler *c, const XrLirOwnershipP
     for (uint32_t v = 0; v < f->value_count && !needed; ++v)
         needed = lir_home_chain_type(f->values[v].type) && f->values[v].parameter && f->values[v].block;
     if (!needed) return true;
+    XrLirOwnershipFunction function;
+    if (xr_lir_ownership_function_at(plan, c->function.id, &function) != XR_LIR_OK)
+        return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary homes lost their ownership inventory");
     LirHomeChain *chains = xr_calloc(count, sizeof(*chains));
     if (!chains) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot classify owner forwarding chains");
+    if (!lir_home_chain_bindings(c, plan, function, chains)) { xr_free(chains); return false; }
     for (uint32_t v = 1; v <= f->value_count; ++v) {
         const XrLirValueData *value = &f->values[v - 1];
         if (!lir_home_chain_type(value->type) || !value->block) continue;
         chains[v].parent = v;
-        if (!value->parameter) {
+        if (!value->parameter && !chains[v].handoff_source) {
             chains[v].producer = v;
-            chains[v].rejected = !lir_home_chain_producer(f, v);
+            bool stable = lir_home_chain_producer(f, v);
+            chains[v].needs_handoff = !stable && lir_home_map_chain_start(c->input, f, v);
+            chains[v].rejected = !stable && !chains[v].needs_handoff;
         }
     }
-    if (!lir_home_chain_transfers(c, plan, chains)) { xr_free(chains); return false; }
+    for (uint32_t v = 1; v <= f->value_count; ++v) {
+        uint32_t source = chains[v].handoff_source;
+        if (!source) continue;
+        if (!chains[source].parent || !chains[v].parent) {
+            xr_free(chains);
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary Map handoff lost its value homes");
+        }
+        lir_home_chain_join(chains, source, v, true);
+        chains[lir_home_chain_root(chains, v)].has_handoff = true;
+    }
+    if (!lir_home_chain_transfers(c, plan, function, chains)) { xr_free(chains); return false; }
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirBlockData *block = &f->blocks[b];
         for (uint32_t p = 0; p < block->parameter_count; ++p)
             lir_home_chain_visit(chains, block->parameters[p], b + 1);
-        for (uint32_t n = 0; n < block->instruction_count; ++n)
-            lir_home_chain_visit(chains, block->instructions[n].view.result, b + 1);
+        for (uint32_t n = 0; n < block->instruction_count; ++n) {
+            uint32_t result = block->instructions[n].view.result;
+            if (!chains[result].handoff_source)
+                lir_home_chain_visit(chains, result, b + 1);
+        }
     }
     for (uint32_t v = 1; v <= f->value_count; ++v) {
         if (!chains[v].parent) continue;
         const LirHomeChain *root = &chains[lir_home_chain_root(chains, v)];
-        if (root->rank && root->producer && !root->rejected)
+        if (root->rank && root->producer && !root->rejected && (!root->needs_handoff || root->has_handoff))
             values[v].stationary_owner = root->producer;
     }
     xr_free(chains);

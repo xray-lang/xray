@@ -143,6 +143,8 @@ def main() -> None:
         if name == "map_local_forwarding":
             assert generated_text.count("xrt_managed_frame_try_forward(") == 2
             assert "xrt_place_copy_replace(" in generated_text
+            assert "xrt_place_edge_transfer(owners, 1," in generated_text
+            assert "xrt_place_edge_transfer(owners, 2," not in generated_text
         if name == "map_stationary_reads":
             readers = {function for function, body in re.findall(
                 r"^static int64_t xrl_f(\d+)\([^\n]*\) \{\n(.*?)^}", generated_text, re.MULTILINE | re.DOTALL
