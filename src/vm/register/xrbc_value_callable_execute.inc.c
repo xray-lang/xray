@@ -119,8 +119,8 @@ static XrtManagedStatus rbc_value_function_captures(const XrRbcModule *module,Xr
             RbcFunctionCall checked;
             XrtManagedStatus status=rbc_value_function_target(module,stack,&binding,capture.type+1,&checked);
             if (status!=XRT_MANAGED_OK || (environment && !binding.owner)) return XRT_MANAGED_ARGUMENT;
-            child->capture_parameters[p].function=binding;
-            child->borrowed_parameters[p]=(const uint8_t *)&child->capture_parameters[p].function;
+            child->parameter_storage[p].function=binding;
+            child->borrowed_parameters[p]=(const uint8_t *)&child->parameter_storage[p].function;
             offset+=sizeof(binding);
         } else if (capture.kind==XR_RBC_CALLABLE_CELL) {
             if (environment && kind!=XRT_VALUE_CELL) return XRT_MANAGED_ARGUMENT;
@@ -128,8 +128,8 @@ static XrtManagedStatus rbc_value_function_captures(const XrRbcModule *module,Xr
             if (!cell) return XRT_MANAGED_ARGUMENT;
             /* The physical Frame cache can move with the spill bank. Keep only
              * these borrowed natural bytes in the stable callee activation. */
-            child->capture_parameters[p].cell=cell;
-            child->borrowed_parameters[p]=(const uint8_t *)&child->capture_parameters[p].cell;
+            child->parameter_storage[p].cell=cell;
+            child->borrowed_parameters[p]=(const uint8_t *)&child->parameter_storage[p].cell;
             offset+=sizeof(cell);
         } else if (capture.kind==XR_RBC_CALLABLE_REFERENCE) {
             const XrLirValueHome *home=rbc_value_home(child->code,value);
@@ -143,6 +143,7 @@ static XrtManagedStatus rbc_value_function_captures(const XrRbcModule *module,Xr
              * callee allocation and return. Its Map field is a borrowed formal,
              * not a register owner or a new mutable binding. */
             child->borrowed_parameters[p]=bytes;
+            child->parameter_storage[p].map=(RbcMapParameter){.address=bytes};
             offset+=sizeof(map);
         } else {
             XrRbcRegister *output=rbc_value_register(stack,child,value);

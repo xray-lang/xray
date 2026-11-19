@@ -437,11 +437,12 @@ static void map_outcome_lifetime(void) {
             const XrLirValueHome *receiver=&code->homes->values[code->arguments[row.first]];
             const XrLirValueHome *key_home=&code->homes->values[code->arguments[row.first+1]];
             if (receiver->parameter) {
-                CHECK(key_home->parameter && !row.source && !row.other);
+                CHECK(key_home->parameter && !row.source && !row.other && row.window==receiver->parameter-1);
                 ++formal_reads;
             } else {
                 CHECK(!key_home->parameter && !key_home->literal_cache_borrow &&
-                    row.source==receiver->first_owner+1 && row.other==key_home->first_owner+1);
+                    row.source==receiver->first_owner+1 && row.other==key_home->first_owner+1 &&
+                    row.window==UINT32_MAX);
                 ++local_reads;
             }
         }

@@ -494,6 +494,8 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         } else if (map && xr_lir_map_reads_key(map) && i->operand_count == 2) {
             access.source = rbc_local_borrow_slot(c->homes, i->operands[0]);
             access.other = rbc_local_borrow_slot(c->homes, i->operands[1]);
+            access.window = rbc_map_formal(c->value_code, i->operands[0]);
+            if (access.window != UINT32_MAX) c->value_code->map_formal_reads = true;
         }
         break;
     }

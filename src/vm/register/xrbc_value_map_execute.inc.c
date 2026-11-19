@@ -154,8 +154,16 @@ static XrtManagedStatus rbc_map_read(const XrRbcModule *module, XrRbcStack *stac
     if (access->source) {
         map = (const XrtMapBacking *)rbc_map_borrow_local_slot(locations, access->source - 1);
     } else {
-        XrtManagedStatus status = rbc_value_map_borrow(module, activation, args[0], &map);
-        if (status != XRT_MANAGED_OK) return status;
+        const RbcMapParameter *parameter = access->window != UINT32_MAX ?
+            &activation->parameter_storage[access->window].map : NULL;
+        if (parameter && parameter->address) {
+            if (parameter->slot && (*parameter->busy || parameter->slot->pending.value ||
+                parameter->slot->pending.allocation_bytes)) return XRT_MANAGED_ARGUMENT;
+            memcpy(&map, parameter->address, sizeof(map));
+        } else {
+            XrtManagedStatus status = rbc_value_map_borrow(module, activation, args[0], &map);
+            if (status != XRT_MANAGED_OK) return status;
+        }
     }
     if (!map) return XRT_MANAGED_ARGUMENT;
     if (access->other) {
