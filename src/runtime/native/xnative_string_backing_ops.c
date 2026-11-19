@@ -311,12 +311,12 @@ XRAY_API size_t xrt_native_string_append_window(XrtManagedFrame *frame, size_t o
     return done;
 }
 
-static XrtManagedStatus string_append_candidate(XrtPlaceReplacement *reservation,
-    const XrtBackingTypes *types, const StringAppendTransaction *transaction) {
+static XrtManagedStatus string_append_grow(XrtPlaceReplacement *reservation,
+    const XrtBackingTypes *types, const StringAppendTransaction *transaction, bool allow_resize) {
     const XrtStringBacking *left = transaction->source, *right = transaction->suffix;
     if (right->length > SIZE_MAX - left->length || right->runes > SIZE_MAX - left->runes)
         return XRT_MANAGED_OVERFLOW;
-    size_t length = left->length + right->length;
+    size_t prefix = left->length, length = prefix + right->length, runes = left->runes + right->runes;
     size_t maximum = SIZE_MAX - sizeof(XrtStringBacking);
     if (length >= maximum) return XRT_MANAGED_OVERFLOW;
     size_t required = length + 1, capacity = left->capacity;
@@ -326,20 +326,27 @@ static XrtManagedStatus string_append_candidate(XrtPlaceReplacement *reservation
         if (capacity > maximum / 2) { capacity = required; break; }
         capacity *= 2;
     }
-    XrtManagedHeader *pending = NULL;
+    XrtManagedHeader *storage = NULL;
+    size_t bytes = sizeof(XrtStringBacking) + capacity;
+    XrtManagedStatus status = XRT_MANAGED_OK;
+    /* A self suffix still borrows the old address. Only a distinct suffix
+     * survives a successful resize of a consumed source. */
+    if (allow_resize && left != right && required > left->capacity)
+        status = xrt_managed_slot_reserved_grow_scalar_tail(reservation, types->string, bytes, &storage);
+    if (status != XRT_MANAGED_OK) return status;
+    bool resized = storage != NULL;
     /* The initialized byte span ends at the terminator. Future appends
      * write their own suffix before making that part of the tail readable. */
-    XrtManagedStatus status = xrt_managed_slot_reserved_prepare_scalar_tail(reservation, types->string,
-        sizeof(XrtStringBacking) + capacity, &pending);
+    if (!resized) status = xrt_managed_slot_reserved_prepare_scalar_tail(reservation, types->string, bytes, &storage);
     if (status != XRT_MANAGED_OK) return status;
-    XrtStringBacking *value = (XrtStringBacking *)pending;
+    XrtStringBacking *value = (XrtStringBacking *)storage;
     XR_CHECK(value->capacity == capacity, "String growth charges its actual complete capacity");
-    if (left->length) memcpy(value->bytes, left->bytes, left->length);
-    if (right->length) memcpy(value->bytes + left->length, right->bytes, right->length);
+    if (!resized && prefix) memcpy(value->bytes, left->bytes, prefix);
+    if (right->length) memcpy(value->bytes + prefix, right->bytes, right->length);
     value->bytes[length] = 0;
     value->length = length;
-    value->runes = left->runes + right->runes;
-    return xrt_managed_slot_reserved_commit(reservation);
+    value->runes = runes;
+    return resized ? XRT_MANAGED_OK : xrt_managed_slot_reserved_commit(reservation);
 }
 XR_FUNCDEF XrtManagedStatus xrt_string_backing_append_owned(XrtManagedFrame *frame,
     const XrtBackingTypes *types, const XrtStringAppendOwned *input) {
@@ -356,7 +363,7 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_append_owned(XrtManagedFrame *fra
     if (status == XRT_MANAGED_OK)
         status = xrt_managed_slot_reserved_apply(&reservation, string_append_apply, &transaction);
     if (status == XRT_MANAGED_OK && !transaction.appended)
-        status = string_append_candidate(&reservation, types, &transaction);
+        status = string_append_grow(&reservation, types, &transaction, true);
     if (status == XRT_MANAGED_OK) {
         status = xrt_managed_slot_reserved_consume_publish(&reservation, input->result_slot);
         XR_CHECK(status == XRT_MANAGED_OK, "prechecked stable String slots cannot reject completed publication");
@@ -383,7 +390,7 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_append_place(XrtPlace binding, Xr
             suffix_pin = (XrtManagedHeader *)&suffix->managed;
             if (!xrt_managed_retain(suffix_pin)) { suffix_pin = NULL; status = XRT_MANAGED_REFCOUNT; }
         }
-        if (status == XRT_MANAGED_OK) status = string_append_candidate(&reservation, types, &transaction);
+        if (status == XRT_MANAGED_OK) status = string_append_grow(&reservation, types, &transaction, false);
         if (status == XRT_MANAGED_OK) status = xrt_place_replacement_publish(&reservation);
     }
     xrt_managed_drop(suffix_pin);
