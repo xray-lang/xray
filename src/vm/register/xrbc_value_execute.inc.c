@@ -337,6 +337,20 @@ static XrtManagedStatus rbc_value_borrow_header(RbcValueOrigin origin, const XrL
     place.nulls = XRT_PLACE_NONNULL;
     return xrt_place_borrow(place, output);
 }
+static XrtManagedStatus rbc_value_read_literal_cache(RbcValueActivation *activation,
+    const XrLirValueHome *home, const XrtManagedHeader **out) {
+    const XrtManagedFrameLocations *locations = &activation->frame_locations;
+    if (!activation->owned_code || !activation->frame ||
+        home->literal_cache_owner >= locations->slot_count) return XRT_MANAGED_ARGUMENT;
+    const XrtManagedSlot *slot = &locations->slots[home->literal_cache_owner];
+    XR_DCHECK(locations->frame == activation->frame && locations->payload == activation->payload &&
+        slot->owner_offset == home->literal_cache_offset && slot->owner_offset != SIZE_MAX,
+        "the admitted String cache uses its actual Frame slot");
+    if (*locations->busy || slot->pending.value || slot->pending.allocation_bytes)
+        return XRT_MANAGED_ARGUMENT;
+    *out = *(XrtManagedHeader **)(activation->payload + slot->owner_offset);
+    return XRT_MANAGED_OK;
+}
 static XrtManagedStatus rbc_value_string_borrow(RbcValueActivation *activation, uint32_t value,
     const XrtStringBacking **out) {
     RbcValueOrigin origin = rbc_value_origin(activation,value);
@@ -349,7 +363,10 @@ static XrtManagedStatus rbc_value_string_borrow(RbcValueActivation *activation, 
         *out=borrowed; return XRT_MANAGED_OK;
     }
     const XrtManagedHeader *header = NULL;
-    XrtManagedStatus status = rbc_value_borrow_header(origin, home, &header);
+    XrtManagedStatus status = home && home->literal_cache_borrow ?
+        rbc_value_read_literal_cache(origin.activation, home, &header) :
+        rbc_value_borrow_header(origin, home, &header);
+    if (status == XRT_MANAGED_OK && !header) return XRT_MANAGED_ARGUMENT;
     if (status == XRT_MANAGED_OK) *out=(const XrtStringBacking *)header;
     return status;
 }
@@ -753,9 +770,31 @@ static XrtManagedStatus rbc_value_replace(const XrRbcModule *module, XrRbcStack 
     }
     return xrt_place_edge_transfer(scratch->edges,home->owner_count,&publication);
 }
+static XrtManagedStatus rbc_value_literal_factory(const XrRbcModule *module, RbcValueActivation *activation,
+    XrRbcValueAccess access, uint32_t source, const XrLirValueHome *home) {
+    XrtPlace cache={.frame=activation->frame,.slot=home->literal_cache_owner,.nulls=XRT_PLACE_NULLABLE};
+    const XrtManagedHeader *cached=NULL;
+    XrtManagedStatus status = home->literal_cache_borrow ?
+        rbc_value_read_literal_cache(activation, home, &cached) : xrt_place_borrow(cache, &cached);
+    if (status != XRT_MANAGED_OK) return status;
+    if (!cached) {
+        const XrtBackingTypes *types=NULL;
+        status=xrt_native_values_backings(xrt_value_root_current(source),&types);
+        if (status!=XRT_MANAGED_OK) return status;
+        XrRbcLiteral literal=module->literals[access.index];
+        status=xrt_string_backing_create(activation->frame,home->literal_cache_owner,types,literal.bytes,literal.length,0);
+    }
+    if (status!=XRT_MANAGED_OK || home->literal_cache_borrow) return status;
+    XrtPlace destination;
+    status=rbc_value_place((RbcValueOrigin){activation,access.result},false,0,&destination);
+    cache.nulls=XRT_PLACE_NONNULL;
+    return status==XRT_MANAGED_OK ? xrt_place_copy_replace(destination,cache,NULL) : status;
+}
 static XrtManagedStatus rbc_value_factory(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
     const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
+    if (access.operation==XR_RBC_VALUE_STRING_LITERAL)
+        return rbc_value_literal_factory(module,activation,access,source,home);
     const XrtBackingTypes *types=NULL;
     XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
     if (status!=XRT_MANAGED_OK) return status;
@@ -765,20 +804,6 @@ static XrtManagedStatus rbc_value_factory(const XrRbcModule *module, XrRbcStack 
         if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&right);
         if (status==XRT_MANAGED_OK) status=xrt_string_backing_concat_create(activation->frame,
             home->temporary_first_owner,types,left,right,0);
-    } else if (access.operation==XR_RBC_VALUE_STRING_LITERAL) {
-        XrtPlace cache={.frame=activation->frame,.slot=home->literal_cache_owner,.nulls=XRT_PLACE_NULLABLE};
-        const XrtManagedHeader *cached=NULL;
-        status=xrt_place_borrow(cache,&cached);
-        if (status==XRT_MANAGED_OK && !cached) {
-            XrRbcLiteral literal=module->literals[access.index];
-            status=xrt_string_backing_create(activation->frame,home->literal_cache_owner,types,literal.bytes,literal.length,0);
-        }
-        if (status!=XRT_MANAGED_OK) return status;
-        if (home->literal_append_borrow) return XRT_MANAGED_OK;
-        XrtPlace destination;
-        status=rbc_value_place((RbcValueOrigin){activation,access.result},false,0,&destination);
-        cache.nulls=XRT_PLACE_NONNULL;
-        return status==XRT_MANAGED_OK ? xrt_place_copy_replace(destination,cache,NULL) : status;
     } else {
         XrRbcRegister *input=rbc_value_register(stack,activation,access.source);
         if (!input) return XRT_MANAGED_ARGUMENT;
@@ -800,13 +825,7 @@ static XrtManagedStatus rbc_value_string_append(RbcValueActivation *activation,
     XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
     const XrtStringBacking *suffix=NULL;
     if (status!=XRT_MANAGED_OK) return status;
-    const XrLirValueHome *right=rbc_value_home(activation->code,access.other);
-    if (right->literal_append_borrow) {
-        XrtManagedHeader *cached=NULL;
-        status=xrt_managed_slot_borrow(activation->frame,right->literal_cache_owner,&cached);
-        if (!cached) return XRT_MANAGED_ARGUMENT;
-        suffix=(const XrtStringBacking *)cached;
-    } else status=rbc_value_string_borrow(activation,access.other,&suffix);
+    status=rbc_value_string_borrow(activation,access.other,&suffix);
     if (status!=XRT_MANAGED_OK) return status;
     const XrLirValueHome *from=rbc_value_home(activation->code,access.source),
         *to=rbc_value_home(activation->code,access.result);
@@ -1149,10 +1168,9 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             rbc_value_origin(activation,access.source),access.operation==XR_RBC_VALUE_COPY);
     else if (access.operation==XR_RBC_VALUE_DROP) {
         const XrLirValueHome *home=rbc_value_home(activation->code,access.source);
-        if (!home->literal_append_borrow)
-            status=rbc_value_inline(module,activation->code,access.source,false) ?
-                rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.source},NULL) :
-                xrt_managed_slot_drop(activation->frame,home->first_owner);
+        status=rbc_value_inline(module,activation->code,access.source,false) ?
+            rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.source},NULL) :
+            xrt_managed_slot_drop(activation->frame,home->first_owner);
     } else if (access.operation==XR_RBC_VALUE_ASSERT_CONDITION) {
         const XrtStringBacking *message=NULL;
         status=rbc_value_string_borrow(activation,access.other,&message);

@@ -70,7 +70,7 @@ static bool rbc_value_map_access_valid(const XrRbcModule *module,const XrRbcValu
         const XrLirHomeWorkspace *workspace=&code->homes->workspaces[a.window];
         return workspace->type==binding->type && workspace->first_owner<code->homes->frame.slot_count &&
             code->homes->frame.owned_offsets && code->homes->frame.owned_offsets[workspace->first_owner]==workspace->offset &&
-            (count==1 || rbc_value_string(module,code,args[1],false)) &&
+            (count==1 || rbc_value_string_borrow_operand(module,code,args[1])) &&
             (count!=3 || rbc_value_scalar(code,function,args[2],XR_RBC_BITS));
     }
     if (a.window!=UINT32_MAX || !a.count || !rbc_value_map(module,code,args[0],false)) return false;
@@ -80,7 +80,8 @@ static bool rbc_value_map_access_valid(const XrRbcModule *module,const XrRbcValu
     if (snapshot)
         return a.count==1 && rbc_value_container(module,code,a.result,true) &&
             rbc_value_kind(module,code,a.result)==(snapshot==XR_LIR_STRING ? XRT_VALUE_ARRAY_STRING : XRT_VALUE_ARRAY_I64);
-    if (a.count!=2 || !rbc_value_string(module,code,args[1],false)) return false;
+    if (!xr_lir_map_borrows_key(a.index) || a.count!=2 ||
+        !rbc_value_string_borrow_operand(module,code,args[1])) return false;
     if (a.index==XR_LIR_MAP_OP_GET) return rbc_value_nullable_i64(module,code,function,a.result);
     return rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
 }

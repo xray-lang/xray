@@ -48,7 +48,7 @@ def main() -> None:
              "view_copy_unused_parameter", "view_call_module_write", "panic_nullable_view", "string_append_values", "string_append_ref",
              "string_join", "string_append_loop", "string_append_assignment", "string_append_grouping",
              "string_append_invariant", "string_parameter_loop", "panic_nullable_string_append", "map_snapshots", "map_display",
-             "map_stationary_reads", "map_mixed_scalar_cycle", "map_local_forwarding", "map_key_mutation",
+             "map_stationary_reads", "map_mixed_scalar_cycle", "map_local_forwarding", "map_key_mutation", "map_borrowed_literal_key",
              "set_values")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:

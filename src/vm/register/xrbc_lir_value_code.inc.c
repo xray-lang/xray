@@ -423,9 +423,16 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_VALUE_RETAIN:
     case XR_LIR_SET_RETAIN: case XR_LIR_MAP_RETAIN: case XR_LIR_ARRAY_RETAIN:
     case XR_LIR_STRING_RETAIN: access.operation = XR_RBC_VALUE_COPY; break;
+    case XR_LIR_STRING_DROP:
+        if (c->homes && c->homes->values[access.source].literal_cache_borrow) {
+            *handled=true;
+            return true;
+        }
+        /* An ordinary String still owns its logical home. */
+        access.operation=XR_RBC_VALUE_DROP; break;
     case XR_LIR_VALUE_DROP:
     case XR_LIR_SET_DROP: case XR_LIR_MAP_DROP: case XR_LIR_ARRAY_DROP:
-    case XR_LIR_STRING_DROP: access.operation = XR_RBC_VALUE_DROP; break;
+        access.operation=XR_RBC_VALUE_DROP; break;
     case XR_LIR_STRING_PRINT: access.operation = XR_RBC_VALUE_STRING_PRINT; break;
     case XR_LIR_STRING_LEN: access.operation = XR_RBC_VALUE_STRING_LENGTH; break;
     case XR_LIR_SET_BORROW: case XR_LIR_MAP_BORROW: case XR_LIR_ARRAY_BORROW: *handled=true; return true;

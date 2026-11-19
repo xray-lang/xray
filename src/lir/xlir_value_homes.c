@@ -344,13 +344,20 @@ static bool lir_home_callable_rows(LirHomeBuilder *b, const XrLirOwnershipPlan *
     }
     return true;
 }
-/* The verifier already confines managed owners and their last use to their
- * defining block. Reject every non-suffix use, including selected edges, so
- * no reference to this private immutable keeper can escape or be consumed. */
+static bool lir_home_borrows_literal_key(const XrLirModule *module, const XrLirInstructionView *view) {
+    if (view->op != XR_LIR_CALL_INTRINSIC) return false;
+    XrLirIntrinsic intrinsic;
+    return xr_lir_intrinsic_view(module, view->intrinsic, &intrinsic) == XR_LIR_OK &&
+        xr_lir_map_intrinsic_valid(module, &intrinsic) && xr_lir_map_borrows_key(intrinsic.operation);
+}
+
+/* Managed owners and their last use stay in their defining block. Only
+ * synchronous uses can read the keeper. A Map write retains a new key itself
+ * before publication, just as when the caller owns a separate reference. */
 static bool lir_home_literal_borrows(LirHomeCompiler *c, XrLirValueHome *values, size_t count) {
-    enum { SUFFIX = 1, RELEASE = 2, OTHER = 4 };
+    enum { BORROW = 1, RELEASE = 2, OTHER = 4 };
     uint8_t *uses = xr_calloc(count, sizeof(*uses));
-    if (!uses) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot classify String literal suffix uses");
+    if (!uses) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot classify String literal borrows");
     for (uint32_t block = 0; block < c->view.block_count; ++block) {
         XrLirBlock id; XrLirBlockView view;
         xr_lir_block_at(c->input, c->function, block, &id); xr_lir_block_view(c->input, id, &view);
@@ -364,8 +371,9 @@ static bool lir_home_literal_borrows(LirHomeCompiler *c, XrLirValueHome *values,
                 uint32_t operand = v.operands[a];
                 if (values[operand].literal_cache_owner == SIZE_MAX) continue;
                 if (v.op == XR_LIR_STRING_DROP) uses[operand] |= RELEASE;
-                else if (a == 1 && xr_lir_string_role(c->input, &v) == XR_LIR_STRING_OP_APPEND_OWNED)
-                    uses[operand] |= SUFFIX;
+                else if (a == 1 && (xr_lir_string_role(c->input, &v) == XR_LIR_STRING_OP_APPEND_OWNED ||
+                    lir_home_borrows_literal_key(c->input, &v)))
+                    uses[operand] |= BORROW;
                 else uses[operand] |= OTHER;
             }
             for (uint32_t e = 0; e < v.edge_count; ++e)
@@ -374,7 +382,7 @@ static bool lir_home_literal_borrows(LirHomeCompiler *c, XrLirValueHome *values,
         }
     }
     for (size_t v = 1; v < count; ++v)
-        values[v].literal_append_borrow = uses[v] == (SUFFIX | RELEASE);
+        values[v].literal_cache_borrow = uses[v] == (BORROW | RELEASE);
     xr_free(uses);
     return true;
 }

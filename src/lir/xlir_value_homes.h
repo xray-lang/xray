@@ -41,9 +41,9 @@ typedef struct XrLirValueHome {
      * the Frame retires it. SIZE_MAX means no cache, including all formals.
      * Its actual owner offset is part of the same sealed Frame inventory. */
     size_t literal_cache_offset, literal_cache_owner;
-    /* On this path all reads are owned appends' suffix operands, before release.
-     * Its cache is the only physical owner; the logical SSA home stays empty. */
-    bool literal_append_borrow;
+    /* Only admitted synchronous operands borrow this immutable keeper.
+     * The logical SSA owner remains empty, including at its recorded DROP. */
+    bool literal_cache_borrow;
     /* Verified single-owner MOVE chain. Every member uses the physical
      * owner of this one-based producer. The selected edges do not move it. */
     uint32_t stationary_owner;

@@ -181,7 +181,7 @@ static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *f
         suffix_slot = suffix->first_owner;
     } else {
         if (!literal || !drop || append->operands[1] != literal->result || drop->operands[0] != literal->result ||
-            !suffix->literal_append_borrow) return false;
+            !suffix->literal_cache_borrow) return false;
         suffix_slot = suffix->literal_cache_owner;
     }
     if (suffix_slot == SIZE_MAX || result->temporary_first_owner == SIZE_MAX) return false;

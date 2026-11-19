@@ -537,7 +537,7 @@ static void c_values_string_literal(LirC *c, const XrLirInstructionView *v, uint
     c_format(c, "    if (!*(XrtManagedHeader **)((unsigned char *)xrl_payload + %zu))\n", offset);
     c_format(c, "        xrt_native_string_create(xrl_frame, %zu, (const char *)xrl_literal%" PRIu64 ", %zu, UINT32_C(%" PRIu32 "));\n",
         slot, v->bits, length, source);
-    if (home->literal_append_borrow) return;
+    if (home->literal_cache_borrow) return;
     /* The keeper survives logical SSA consumption. Each executed definition
      * acquires its own reference, so ordinary MOVE and DROP remain exact. */
     c_format(c, "    { XrtManagedStatus status = xrt_place_copy_replace((XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NONNULL},\n",
@@ -616,7 +616,7 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         return true;
     }
     if (v->op == XR_LIR_STRING_DROP) {
-        if (c->homes->values[v->operands[0]].literal_append_borrow) return true;
+        if (c->homes->values[v->operands[0]].literal_cache_borrow) return true;
         c_format(c, "    { XrtManagedStatus status = xrt_managed_slot_drop(xrl_frame, %zu);\n", c->homes->values[v->operands[0]].first_owner);
         c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
         return true;
