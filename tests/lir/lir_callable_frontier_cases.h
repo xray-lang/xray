@@ -26,6 +26,34 @@ static void inline_array_callable_frontier(void) {
 
 static void callable_backend_frontier(void) {
     inline_array_callable_frontier();
+    XrLirModule *loan_module = NULL;
+    OK(xr_lir_module_create(NULL, &loan_module));
+    XrLirType escaped = 0;
+    XrLirCallableType loan_signature = {.result=XR_LIR_I64_REF};
+    CHECK(xr_lir_callable_type(loan_module, &loan_signature, &escaped) == XR_LIR_INVALID_ARGUMENT && !escaped);
+    xr_lir_module_destroy(loan_module);
+    for (unsigned result = 0; result < 2; ++result) {
+        XrLirType parameter = XR_LIR_I64_REF;
+        XrLirIntrinsic intrinsic = {.id=91, .parameters=&parameter, .parameter_count=result ? 0 : 1,
+            .result=result ? XR_LIR_I64_REF : XR_LIR_UNIT, .scalar_sync=true};
+        XrLirRegistry registry = {&intrinsic, 1};
+        loan_module = NULL;
+        OK(xr_lir_module_create(NULL, &loan_module));
+        CHECK(xr_lir_set_registry(loan_module, &registry) == XR_LIR_UNSUPPORTED);
+        xr_lir_module_destroy(loan_module);
+    }
+    loan_module = NULL;
+    OK(xr_lir_module_create(NULL, &loan_module));
+    XrLirType scalar_ref = XR_LIR_I64_REF;
+    XrLirFunctionSpec target = {.name="loan_target", .name_length=11, .parameters=&scalar_ref,
+        .parameter_count=1, .result=XR_LIR_UNIT};
+    XrLirFunction function = {0};
+    OK(xr_lir_declare_function(loan_module, &target, &function));
+    XrLirCallableType no_parameters = {.result=XR_LIR_UNIT};
+    OK(xr_lir_callable_type(loan_module, &no_parameters, &escaped));
+    XrLirClosureTarget capture = {.callable=escaped, .capture_count=1};
+    CHECK(xr_lir_set_closure_target(loan_module, function, capture) == XR_LIR_INVALID_ARGUMENT);
+    xr_lir_module_destroy(loan_module);
     for (unsigned scenario = 0; scenario < 3; ++scenario) {
         XrLirModule *m = NULL;
         OK(xr_lir_module_create(NULL, &m));

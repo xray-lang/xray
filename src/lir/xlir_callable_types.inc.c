@@ -36,7 +36,7 @@ static bool lir_callable_signature_valid(const XrLirModule *m, const XrLirCallab
     if (!type || type->throws || type->parameter_count > 65536 ||
         (type->parameter_count && !type->parameters) ||
         (type->flags & ~(XR_LIR_CALLABLE_NO_SUSPEND | XR_LIR_CALLABLE_C_ABI)) ||
-        !xr_lir_internal_type_valid(m, type->result, true) ||
+        !xr_lir_internal_type_valid(m, type->result, true) || type->result == XR_LIR_I64_REF ||
         type->result >= XR_LIR_TYPE_COUNT + ordinal ||
         !lir_callable_array_shape(m, type->result, type->result_element, ordinal)) return false;
     bool c_abi = (type->flags & XR_LIR_CALLABLE_C_ABI) != 0;

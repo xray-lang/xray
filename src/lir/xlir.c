@@ -222,7 +222,7 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
         XrLirIntrinsic entry = registry->entries[i];
         if (!entry.id || !entry.scalar_sync ||
             !lir_types_valid(m, entry.parameters, entry.parameter_count) ||
-            !xr_lir_internal_type_valid(m, entry.result, true))
+            !xr_lir_internal_type_valid(m, entry.result, true) || entry.result == XR_LIR_I64_REF)
             return XR_LIR_UNSUPPORTED;
         if (entry.operation && !xr_lir_internal_slice_intrinsic_valid(m, &entry) &&
             !xr_lir_display_intrinsic_valid(&entry) && !xr_lir_string_intrinsic_valid(&entry) &&
@@ -232,9 +232,9 @@ static XrLirStatus lir_registry_copy(XrLirModule *m, const XrLirRegistry *regist
             entry.result == XR_LIR_VIEW_FRAME || entry.result == XR_LIR_VIEW_CELL || entry.result == XR_LIR_SLICE_I64))
             return XR_LIR_UNSUPPORTED;
         for (uint32_t p = 0; p < entry.parameter_count; ++p)
-            if (!entry.operation && (xr_lir_internal_slice_type(m, entry.parameters[p]) || entry.parameters[p] == XR_LIR_MAP_STRING_I64_REF || entry.parameters[p] == XR_LIR_STRING_REF || entry.parameters[p] == XR_LIR_STATE || entry.parameters[p] == XR_LIR_STATE_REF ||
+            if (entry.parameters[p] == XR_LIR_I64_REF || (!entry.operation && (xr_lir_internal_slice_type(m, entry.parameters[p]) || entry.parameters[p] == XR_LIR_MAP_STRING_I64_REF || entry.parameters[p] == XR_LIR_STRING_REF || entry.parameters[p] == XR_LIR_STATE || entry.parameters[p] == XR_LIR_STATE_REF ||
                 entry.parameters[p] == XR_LIR_VIEW_FRAME || entry.parameters[p] == XR_LIR_VIEW_CELL ||
-                entry.parameters[p] == XR_LIR_SLICE_I64))
+                entry.parameters[p] == XR_LIR_SLICE_I64)))
                 return XR_LIR_UNSUPPORTED;
         for (uint32_t j = 0; j < i; ++j)
             if (m->intrinsics[j].id == entry.id)
