@@ -61,12 +61,10 @@ static bool rbc_lir_array_read_reduction(const RbcLirCompiler *c, const XrLirArr
         accumulator=rbc_lir_array_read_predecessor(c,&moves[n-1],accumulator);
     if (!accumulator || accumulator==range->iv || accumulator==range->length) return false;
     size_t scalar_parameters=0;
-    bool carried_limit=false;
     for (uint32_t n=0;n<parameters.parameter_count;++n) {
         uint32_t value=parameters.parameters[n];
         if (value==accumulator) ++scalar_parameters;
-        else if (value==range->length) carried_limit=true;
-        else if (value!=range->iv && value!=region->canonical_value) return false;
+        else if (value!=range->length && value!=range->iv && value!=region->canonical_value) return false;
     }
     if (scalar_parameters!=1) return false;
     uint32_t next_accumulator=rbc_lir_array_read_predecessor(c,&moves[latch],accumulator);
@@ -76,14 +74,14 @@ static bool rbc_lir_array_read_reduction(const RbcLirCompiler *c, const XrLirArr
     if (result!=add.result) return false;
     *fold=(XrRbcArrayReadFold){.accumulator=accumulator,.next_accumulator=next_accumulator};
     if (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT) {
-        XrLirInstructionView bound={0};
-        if (range->length_instruction && xr_lir_instruction_view(c->input,header,
-                range->length_instruction-1,&bound)==XR_LIR_OK && bound.result==range->length) {
-            if (bound.op!=XR_LIR_CONST || bound.type!=XR_LIR_I64) return false;
-            fold->constant=true; fold->limit_bits=bound.bits;
+        /* The comparator may encode this constant and never initialize its
+         * nominal register. Use the same verified SSA immediate inventory. */
+        const RbcLirImmediate *bound=&c->immediates[range->length];
+        if (bound->known) {
+            fold->constant=true;
+            fold->limit_bits=(uint64_t)(int64_t)bound->value;
         } else {
-            fold->limit=carried_limit ? rbc_lir_array_read_predecessor(c,&moves[latch],range->length) : range->length;
-            if (!fold->limit) return false;
+            fold->limit=range->length;
         }
     }
     const XrRbcValueLocation *locations=c->value_code->locations;

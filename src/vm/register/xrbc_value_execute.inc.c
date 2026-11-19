@@ -660,54 +660,47 @@ static XR_NOINLINE bool rbc_value_snapshot_edge_scalars(XrRbcStack *stack, RbcVa
     return true;
 }
 
-typedef struct RbcArrayReadPublication {
-    XrRbcRegister *iv, *accumulator;
-    uint64_t limit, sum;
-} RbcArrayReadPublication;
-
 /* The first iteration has already taken the ordinary path. A failed guard
- * leaves subsequent iterations there too, including the original failing GET. */
-static XR_NOINLINE RbcArrayReadPublication rbc_value_array_read_fold(XrRbcStack *stack,
-    RbcValueActivation *activation, XrRbcValueAccess access) {
+ * leaves subsequent iterations there too, including the original failing GET.
+ * Its complete latch publication put the owner and scalars in their header homes. */
+static XR_NOINLINE void rbc_value_array_read_fold(XrRbcStack *stack,
+    RbcValueActivation *activation, uint32_t region) {
     const XrRbcValueCode *code=activation->code;
     const XrLirArrayRegionBindings *bindings=code->array_regions;
-    const XrLirArrayRegionBinding *row=&bindings->regions[access.other-1];
+    const XrLirArrayRegionBinding *row=&bindings->regions[region-1];
     const XrLirArraySetRegionRange *range=&row->region.range;
-    const XrRbcArrayReadFold *fold=&code->array_read_folds[access.other-1];
-    const XrLirArrayRegionMove *latch=&bindings->moves[bindings->edges[access.index].move-1];
+    const XrRbcArrayReadFold *fold=&code->array_read_folds[region-1];
     XrRbcRegister *iv=rbc_value_register(stack,activation,range->iv);
-    XrRbcRegister *next_iv=rbc_value_register(stack,activation,range->latch_iv);
     XrRbcRegister *accumulator=rbc_value_register(stack,activation,fold->accumulator);
-    XrRbcRegister *next_accumulator=rbc_value_register(stack,activation,fold->next_accumulator);
-    if (!iv || !next_iv || !accumulator || !next_accumulator || iv==accumulator)
-        return (RbcArrayReadPublication){0};
-    uint64_t start=next_iv->bits, limit=fold->limit_bits;
+    if (!iv || !accumulator || iv==accumulator) return;
+    uint64_t start=iv->bits, limit=fold->limit_bits;
     if (fold->limit) {
         XrRbcRegister *bound=rbc_value_register(stack,activation,fold->limit);
-        if (!bound) return (RbcArrayReadPublication){0};
+        if (!bound) return;
         limit=bound->bits;
     }
     if (start>INT64_MAX || limit>INT64_MAX ||
         (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT && start>=limit))
-        return (RbcArrayReadPublication){0};
+        return;
     const XrtArrayI64RegionContext context={activation->frame,activation->payload,
         &activation->frame_locations,&code->homes->frame};
-    const XrtArrayI64RegionSpec spec={bindings->slots+row->first_slot,row->slot_count,latch->source_slot-row->first_slot};
+    const XrtArrayI64RegionSpec spec={bindings->slots+row->first_slot,row->slot_count,row->canonical_slot-row->first_slot};
     XrtArrayI64RegionCache cache={0};
-    if (!xrt_array_i64_region_try_begin(&context,&spec,true,&cache)) return (RbcArrayReadPublication){0};
+    if (!xrt_array_i64_region_try_begin(&context,&spec,true,&cache)) return;
     if (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) limit=cache.length;
-    if (start>=limit || limit>cache.length) return (RbcArrayReadPublication){0};
-    uint64_t sum=next_accumulator->bits;
+    if (start>=limit || limit>cache.length) return;
+    uint64_t sum=accumulator->bits;
     for (size_t n=(size_t)start;n<(size_t)limit;++n) {
         uint64_t item;
         memcpy(&item,cache.elements+n*sizeof(item),sizeof(item));
         sum+=item;
     }
-    return (RbcArrayReadPublication){iv,accumulator,limit,sum};
+    iv->bits=limit;
+    accumulator->bits=sum;
 }
 
 static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *activation,
-    XrRbcValueAccess access, const XrLirHomeEdge *edge, bool fold_array) {
+    XrRbcValueAccess access, const XrLirHomeEdge *edge) {
     if (!access.count || !activation->frame) return false;
     const XrRbcValueCode *code = activation->code;
     const XrLirValueHomes *homes = code->homes;
@@ -750,18 +743,12 @@ static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *ac
     if (access.count > 2 && !rbc_value_snapshot_edge_scalars(stack, activation, access, transfer.target, &moves))
         return false;
     if (pair && edge->string_window) bits = rbc_value_append_window(stack, activation, edge, pair, bits);
-    RbcArrayReadPublication folded={0};
-    if (fold_array) folded=rbc_value_array_read_fold(stack,activation,access);
     *destination = *source;
     *source = NULL;
     if (scalar) scalar->bits = bits;
     for (size_t n = 0; n < moves; ++n)
         memcpy(activation->publications[n].destination.address,
             activation->snapshots + n * sizeof(uint64_t), sizeof(uint64_t));
-    if (folded.iv) {
-        folded.iv->bits=folded.limit;
-        folded.accumulator->bits=folded.sum;
-    }
     return true;
 }
 static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *stack,
@@ -783,7 +770,10 @@ static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *st
             }
         }
         if (activation->owned_code && selected->direct_header_move &&
-            rbc_value_edge_move_header(stack, activation, access, selected, fold_array)) return XRT_MANAGED_OK;
+            rbc_value_edge_move_header(stack, activation, access, selected)) {
+            if (fold_array) rbc_value_array_read_fold(stack,activation,access.other);
+            return XRT_MANAGED_OK;
+        }
         status=rbc_value_edge_stage(module,stack,activation,selected,&prepared);
         for (size_t p=0;status==XRT_MANAGED_OK && p<selected->count;++p) {
             XrLirHomeTransfer transfer=code->homes->transfers[selected->first+p];

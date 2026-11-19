@@ -252,7 +252,7 @@ static XrLirBlock rbc_read_fold_block(CArrayFixture *c,XrLirFunction function,Xr
     return block;
 }
 
-static XrLirModule *rbc_read_fold_input(XrLirFunction *root,bool additive) {
+static XrLirModule *rbc_read_fold_input(XrLirFunction *root,bool additive,bool literal) {
     CArrayFixture c={.element=XR_LIR_I64};
     OK(xr_lir_array_module_create(NULL,&c.module));
     XrLirType argument=XR_LIR_I64;
@@ -268,6 +268,7 @@ static XrLirModule *rbc_read_fold_input(XrLirFunction *root,bool additive) {
     XrLirValue items[]={largest,ca_constant(&c,entry,-1),ca_constant(&c,entry,7)};
     XrLirValue initial[]={ca_intrinsic(&c,entry,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,items,3),
         ca_constant(&c,entry,0),largest};
+    if (literal) bound=ca_constant(&c,entry,3);
     OK(xr_lir_set_terminator(c.module,entry,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
         .edge_count=1,.edges={{header,initial,3}}}));
     XrLirValue compare[]={head[1],bound},condition={0};
@@ -288,8 +289,8 @@ static XrLirModule *rbc_read_fold_input(XrLirFunction *root,bool additive) {
     return c.module;
 }
 
-static void rbc_read_fold_cases(bool additive) {
-    XrLirFunction root={0}; XrLirModule *input=rbc_read_fold_input(&root,additive);
+static void rbc_read_fold_cases(bool additive,bool literal) {
+    XrLirFunction root={0}; XrLirModule *input=rbc_read_fold_input(&root,additive,literal);
     XrRbcProgram *program=NULL;
     CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
     xr_lir_module_destroy(input);
@@ -301,9 +302,24 @@ static void rbc_read_fold_cases(bool additive) {
     for (size_t n=0;n<code->access_count;++n)
         marked+=code->accesses[n].operation==XR_RBC_VALUE_EDGE && code->accesses[n].other!=0;
     CHECK(marked==(additive ? 2u : 0u));
+    if (literal) {
+        /* A preheader constant used solely by the compare never writes its
+         * nominal register. The fold must use the same exact immediate bits. */
+        CHECK(code->array_read_folds[0].constant && !code->array_read_folds[0].limit &&
+            code->array_read_folds[0].limit_bits==3);
+        const XrRbcFunction *function=&module->functions[0];
+        size_t immediate_compares=0;
+        for (size_t pc=0;pc<function->code_count;++pc) {
+            uint32_t word=function->code[pc];
+            if ((word&255)==XR_RBC_LTI && (word>>16)==3) ++immediate_compares;
+            CHECK((word&255)!=XR_RBC_LOADI || (word>>16)!=3);
+        }
+        CHECK(immediate_compares==1);
+    }
     const uint64_t bounds[]={UINT64_MAX,0,1,2,3,4};
-    for (size_t n=0;n<sizeof(bounds)/sizeof(bounds[0]);++n) {
-        uint64_t bound=bounds[n];
+    size_t count=literal ? 1u : sizeof(bounds)/sizeof(bounds[0]);
+    for (size_t n=0;n<count;++n) {
+        uint64_t bound=literal ? 3u : bounds[n];
         size_t expects=additive && bound>1 && bound<=INT64_MAX ? 1u : 0u;
         region_begin_attempts=region_begin_successes=0; region_force_bypass=false;
         RbcRegionResult actual=rbc_region_run_with_args(module,program->locations,&bound,1);
@@ -323,8 +339,9 @@ static void rbc_read_fold_cases(bool additive) {
 }
 
 static void rbc_array_region_cases(void) {
-    rbc_read_fold_cases(true);
-    rbc_read_fold_cases(false);
+    rbc_read_fold_cases(true,false);
+    rbc_read_fold_cases(false,false);
+    rbc_read_fold_cases(true,true);
     {
         XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,0,1,0,false,true);
         XrRbcProgram *program=NULL; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
