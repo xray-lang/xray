@@ -101,7 +101,12 @@ XR_FUNC bool xrt_native_values_prepared(const XrtValueRoot *owner) {
             !owner->managed->images && !owner->managed->environments));
 }
 XR_FUNC XrtManagedStatus xrt_native_values_backings(XrtValueRoot *owner, const XrtBackingTypes **output) {
-    if (!output || *output) return XRT_MANAGED_ARGUMENT;
+    if (!owner || owner->draining || !output || *output) return XRT_MANAGED_ARGUMENT;
+    /* The String descriptor is published with the entire backing family. */
+    if (owner->managed && owner->managed->backings.string) {
+        *output = &owner->managed->backings;
+        return XRT_MANAGED_OK;
+    }
     XrtBillingOwner *billing = NULL;
     XrtManagedStatus status = xrt_native_values_prepare(owner,&billing);
     if (status == XRT_MANAGED_OK && !owner->managed->backings.string)
