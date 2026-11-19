@@ -246,6 +246,10 @@ static XrLirModule *roles_fixture(XrLirType element,bool map) {
     if (!map && element==XR_LIR_STRING) ca_effect(&c,block,XR_LIR_STRING_DROP,item);
     if (map) {
         (void)role(&c,block,XR_LIR_MAP_OP_INDEX,XR_LIR_I64,args,2); (void)role(&c,block,XR_LIR_MAP_OP_CONTAINS,XR_LIR_I1,args,2);
+        XrLirValue keys=role(&c,block,XR_LIR_MAP_OP_KEYS,XR_LIR_ARRAY,args,1);
+        XrLirValue values=role(&c,block,XR_LIR_MAP_OP_VALUES,XR_LIR_ARRAY,args,1);
+        ca_effect(&c,block,XR_LIR_ARRAY_DROP,keys);
+        ca_effect(&c,block,XR_LIR_ARRAY_DROP,values);
         XrLirValue set[]={borrowed,fill,ca_constant(&c,block,42)};
         (void)role(&c,block,XR_LIR_MAP_OP_SET,XR_LIR_UNIT,set,3); args[0]=inputs[1];
         (void)role(&c,block,XR_LIR_MAP_OP_REMOVE,XR_LIR_I1,args,2); (void)role(&c,block,XR_LIR_MAP_OP_CLEAR,XR_LIR_UNIT,args,1);
@@ -1037,7 +1041,8 @@ int main(void) {
     project(map_fixture(1),true); project(map_state_fixture(),false); project(roles_fixture(XR_LIR_I64,true),true);
     CHECK(kinds==((1u<<XR_LIR_HOME_BINDING_LOCAL)|(1u<<XR_LIR_HOME_BINDING_PARAMETER)|
         (1u<<XR_LIR_HOME_BINDING_CELL_BORROW)|(1u<<XR_LIR_HOME_BINDING_STATE_BORROW)));
-    CHECK(array_roles==254 && map_roles==255 && literal_caches); array_cell_cfg(); array_block_cells();
+    unsigned expected_map_roles=(1u<<(XR_LIR_MAP_OP_CLEAR-XR_LIR_MAP_OP_NEW+1))-1u;
+    CHECK(array_roles==254 && map_roles==expected_map_roles && literal_caches); array_cell_cfg(); array_block_cells();
     callable_projection(false,false); callable_projection(true,false); callable_projection(true,true);
     callable_targets_and_join(0); callable_targets_and_join(1); callable_targets_and_join(2); callable_targets_and_join(3);
     puts("binding homes: four Array families, Map roles, real pending slots, loop lifetime, input retirement and allocation rollback passed");
