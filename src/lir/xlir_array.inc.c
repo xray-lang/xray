@@ -289,8 +289,11 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
         if (xr_lir_slice_intrinsic_view(m, v->intrinsic, &slice) == XR_LIR_OK &&
             slice.operation == XR_LIR_SLICE_OP_COPY) return slice.element;
         uint32_t index = lir_array_intrinsic_index(m, v->intrinsic);
-        return index != UINT32_MAX && m->array_intrinsics ?
-            m->array_intrinsics[index].result_element : XR_LIR_TYPE_INVALID;
+        if (index == UINT32_MAX) return XR_LIR_TYPE_INVALID;
+        const XrLirIntrinsic *entry = &m->intrinsics[index];
+        XrLirType snapshot = xr_lir_map_snapshot_element(entry->operation);
+        if (snapshot && xr_lir_map_intrinsic_valid(m, entry)) return snapshot;
+        return m->array_intrinsics ? m->array_intrinsics[index].result_element : XR_LIR_TYPE_INVALID;
     }
     if (input && (v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_ARRAY_RETAIN ||
         v->op == XR_LIR_ARRAY_BORROW || v->op == XR_LIR_ARRAY_REF_READ))

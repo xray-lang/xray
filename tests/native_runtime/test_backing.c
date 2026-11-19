@@ -853,6 +853,43 @@ static void map_cow_and_failures(void) {
     map_check(source, keys, 2);
     fixture_done(&fixture);
 }
+static void map_snapshot_ownership(void) {
+    Fixture fixture;
+    fixture_init(&fixture, 16384);
+    XrtStringBacking *a = map_key(&fixture, 0, "a", 1), *b = map_key(&fixture, 1, "b", 1);
+    XrtStringBacking *keys[] = {a, b};
+    const int64_t values[] = {95, 92};
+    OK(xrt_map_backing_create(fixture.frame, 2, &fixture.types, keys, values, 2));
+    XrtMapBacking *map = (XrtMapBacking *)borrow(&fixture, 2);
+    OK(xrt_array_backing_i64_create(fixture.frame, 3, &fixture.types, values, 1, 1));
+    XrtManagedHeader *old = borrow(&fixture, 3);
+    XrtBillingStats before = xrt_billing_owner_stats(fixture.billing);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    CHECK(xrt_map_backing_snapshot(fixture.frame, 3, &fixture.types, map, true) == XRT_MANAGED_OOM);
+    CHECK(borrow(&fixture, 3) == old && xr_signed_rc_read(&map->managed.references) == 1);
+    same_bill(fixture.billing, before);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    atomic_store(&b->managed.references, INT32_MAX);
+    CHECK(xrt_map_backing_snapshot(fixture.frame, 3, &fixture.types, map, true) == XRT_MANAGED_REFCOUNT);
+    CHECK(borrow(&fixture, 3) == old && xr_signed_rc_read(&a->managed.references) == 2 &&
+        xr_signed_rc_read(&map->managed.references) == 1);
+    atomic_store(&b->managed.references, 2);
+    same_bill(fixture.billing, before);
+    OK(xrt_map_backing_snapshot(fixture.frame, 3, &fixture.types, map, true));
+    OK(xrt_map_backing_snapshot(fixture.frame, 4, &fixture.types, map, false));
+    for (size_t n = 0; n < 3; ++n) OK(xrt_managed_slot_drop(fixture.frame, n));
+    const XrtArrayBacking *key_snapshot = (const XrtArrayBacking *)borrow(&fixture, 3);
+    const XrtArrayBacking *value_snapshot = (const XrtArrayBacking *)borrow(&fixture, 4);
+    CHECK(key_snapshot->length == 2 && value_snapshot->length == 2);
+    for (size_t n = 0; n < 2; ++n) {
+        const XrtStringBacking *key = NULL;
+        uint64_t bits = 0;
+        OK(xrt_array_backing_string_at(key_snapshot, n, &key));
+        OK(xrt_array_backing_read_bits(value_snapshot, XRT_BACKING_ARRAY_I64, n, &bits));
+        CHECK(key == keys[n] && bits == (uint64_t)values[n] && xr_signed_rc_read(&key->managed.references) == 1);
+    }
+    fixture_done(&fixture);
+}
 static void map_collisions_and_growth(void) {
     Fixture fixture;
     fixture_init(&fixture, SIZE_MAX);
@@ -970,6 +1007,7 @@ int main(void) {
     map_place_guards();
     map_construction_and_updates();
     map_cow_and_failures();
+    map_snapshot_ownership();
     map_collisions_and_growth();
     map_retirement_and_lifetimes();
     map_literal_semantics();

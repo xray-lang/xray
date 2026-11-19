@@ -38,7 +38,8 @@ static bool lir_array_intrinsic_call(const XrLirModule *m, const XrLirFunctionDa
     const XrLirInstructionView *v) {
     const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(m, v->intrinsic);
     if (!shape) {
-        if (xr_lir_internal_array_type(v->type)) return false;
+        /* The result was checked against its producer above. Only Array
+         * intrinsics may receive Array operands through this verifier. */
         for (uint32_t p = 0; p < v->operand_count; ++p)
             if (xr_lir_internal_array_type(f->values[v->operands[p] - 1].type)) return false;
         return true;

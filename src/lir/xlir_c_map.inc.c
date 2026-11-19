@@ -116,6 +116,16 @@ static void c_map_call(LirC *c, const XrLirInstructionView *v, uint32_t role, ui
         c_format(c, "    v%" PRIu32 " = (int64_t)((const XrtMapBacking *)", v->result);
         c_value(c, v->operands[0]); c_text(c, ")->length;\n"); return;
     }
+    if (xr_lir_map_snapshot_element(role)) {
+        c_values_ensure(c, source);
+        c_format(c, "    xrt_native_map_snapshot(xrl_frame, %zu, ",
+            c->homes->values[v->result].temporary_first_owner);
+        c_value(c, v->operands[0]);
+        c_format(c, ", %s, UINT32_C(%" PRIu32 "));\n",
+            role == XR_LIR_MAP_OP_KEYS ? "true" : "false", source);
+        c_values_publish_leaf(c, v->result, source);
+        return;
+    }
     if (role == XR_LIR_MAP_OP_GET || role == XR_LIR_MAP_OP_INDEX || role == XR_LIR_MAP_OP_CONTAINS) {
         if (role == XR_LIR_MAP_OP_GET)
             c_format(c, "    v%" PRIu32 " = (%s){0};\n    v%" PRIu32 ".tag = ", v->result, c_type(c, v->type), v->result);

@@ -23,10 +23,17 @@ typedef enum XrLirMapOperation {
     XR_LIR_MAP_OP_GET,
     XR_LIR_MAP_OP_INDEX,
     XR_LIR_MAP_OP_CONTAINS,
+    XR_LIR_MAP_OP_KEYS,
+    XR_LIR_MAP_OP_VALUES,
     XR_LIR_MAP_OP_SET,
     XR_LIR_MAP_OP_REMOVE,
     XR_LIR_MAP_OP_CLEAR
 } XrLirMapOperation;
+static inline XrLirType xr_lir_map_snapshot_element(uint32_t operation) {
+    if (operation == XR_LIR_MAP_OP_KEYS) return XR_LIR_STRING;
+    if (operation == XR_LIR_MAP_OP_VALUES) return XR_LIR_I64;
+    return XR_LIR_TYPE_INVALID;
+}
 typedef struct XrLirMapLiteralOrigin { uint32_t kind,line,column; } XrLirMapLiteralOrigin;
 typedef struct XrLirMapLiteral {
     const char *path;
