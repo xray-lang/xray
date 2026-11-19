@@ -165,8 +165,8 @@ static const XrLirHomeEvent *rbc_value_binding_forwarding_event(const XrRbcModul
     }
     return operand && release ? event : NULL;
 }
-/* Runtime reuses this bounded encoding match without repeating the immutable
- * event and home admission. Logical instruction ordinals are never VM PCs. */
+/* Admission proves the actual next word as well as the logical release.
+ * The owned activation can subsequently use the shared MOVE fact. */
 static bool rbc_value_binding_forwarding_words(const XrRbcFunction *function,const XrRbcValueCode *code,
     uint32_t index,size_t pc) {
     if (index>=code->access_count || index>UINT16_MAX || pc>=function->code_count || function->code_count-pc<=2 ||
