@@ -37,6 +37,10 @@ typedef struct XrtBoundInlineArray {
     const XrtValuePlan *element;
     XrtManagedOps *ops;
 } XrtBoundInlineArray;
+typedef struct XrtBoundClass {
+    const XrtValuePlan *plan;
+    XrtManagedOps *ops;
+} XrtBoundClass;
 /* Descriptors remain immutable through binding. Code is an independent real
  * lease for the image's executable code and raw descriptions, never Layout,
  * State, Ops or runtime plans. Binding takes a temporary lease before provider
@@ -57,4 +61,8 @@ XR_FUNC XrtManagedStatus xrt_value_image_get(const XrtValueImagePlans *, uint32_
  * families do not have an inline backing descriptor. */
 XR_FUNC XrtManagedStatus xrt_value_image_inline_array(const XrtValueImagePlans *, uint32_t id,
     XrtBoundInlineArray *empty);
+/* The bound class contains its exact immutable nominal plan and backing Ops.
+ * Either can be retained separately from this receiving image. */
+XR_FUNC XrtManagedStatus xrt_value_image_class(const XrtValueImagePlans *, uint32_t id,
+    XrtBoundClass *empty);
 #endif // XNATIVE_VALUE_IMAGE_H
