@@ -3,8 +3,16 @@
 import argparse
 import importlib.util
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from statistics import median
+
+
+def effective_provider(prepared):
+    provider = prepared["provider"].copy()
+    source_include = str(PurePosixPath(prepared["root"]) / "src")
+    assert provider["flags"].count(source_include) == 1, provider["flags"]
+    provider["flags"] = ["<source>/src" if flag == source_include else flag for flag in provider["flags"]]
+    return provider
 
 
 def main():
@@ -19,7 +27,8 @@ def main():
     spec.loader.exec_module(runner)
     parent, candidate = (json.loads(p.read_bytes()) for p in (args.parent, args.candidate))
     assert parent["source"]["head"] != candidate["source"]["head"]
-    for key in ("platform", "provider", "expected", "rawCases", "ratioCases"):
+    assert effective_provider(parent) == effective_provider(candidate)
+    for key in ("platform", "expected", "rawCases", "ratioCases"):
         assert parent[key] == candidate[key], key
     for variant in (parent, candidate):
         assert variant["state"] == "PREPARED_NOT_MEASURED"
