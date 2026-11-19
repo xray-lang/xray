@@ -252,7 +252,6 @@ XR_FUNC bool xr_lir_internal_callable_persistent(const XrLirModule *, const XrLi
 XR_FUNC XrLirStatus xr_lir_internal_finish_verify(XrLirModule *, XrLirDiagnostic *);
 XR_FUNC void xr_lir_internal_block_multiplicity_free(uint8_t *);
 XR_FUNC bool xr_lir_internal_array_element(const XrLirModule *, XrLirType);
-XR_FUNC uint32_t xr_lir_inline_array_ordinal(const XrLirModule *, XrLirType);
 XR_FUNC uint32_t xr_lir_array_layout_family(const XrLirModule *, XrLirType);
 XR_FUNC XrLirStatus xr_lir_require_inline_array_element(XrLirModule *, XrLirType);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);

@@ -43,6 +43,8 @@ XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *, XrLirModul
 /* Install the same closed catalog in an existing receiving owner before
  * function declarations. The module must have no intrinsic registry yet. */
 XR_FUNC XrLirStatus xr_lir_array_catalog_install(XrLirModule *);
+/* A nonzero index names a required exact inline element in this module. */
+XR_FUNC uint32_t xr_lir_inline_array_ordinal(const XrLirModule *, XrLirType element);
 XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *, XrLirType element,
     XrLirArrayOperation, uint32_t *id);
 /* SET and PUSH have exact ARRAY_CELL and ARRAY_REF receiver signatures.
