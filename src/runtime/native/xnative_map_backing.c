@@ -93,26 +93,42 @@ static XrtManagedStatus map_capacity(size_t current, size_t required, size_t *ou
     *output = capacity;
     return XRT_MANAGED_OK;
 }
-static XrtManagedStatus map_probe(const XrtMapBacking *map, const XrtStringBacking *key, MapProbe *output) {
+static inline bool map_key_equal(const XrtStringBacking *left, const XrtStringBacking *right) {
+    return left == right || (left->length == right->length &&
+        (!right->length || !memcmp(left->bytes, right->bytes, right->length)));
+}
+/* Readers need the matched row, while an edit also needs the insertion
+ * bucket and hash. Inline the common walk to specialize its output. */
+static XR_AINLINE XrtManagedStatus map_find(const XrtMapBacking *map, const XrtStringBacking *key,
+    MapProbe *edit, const XrtMapBackingRow **read) {
     if (!key) return XRT_MANAGED_ARGUMENT;
-    MapProbe probe = {.hash=xrt_string_backing_hash(key)};
-    if (!map->capacity) { *output = probe; return XRT_MANAGED_OK; }
-    size_t mask = map->capacity - 1;
-    probe.bucket = (size_t)probe.hash & mask;
-    for (size_t n = 0; n < map->capacity; ++n, probe.bucket = (probe.bucket + 1) & mask) {
-        size_t index = map->rows[probe.bucket].bucket;
-        if (!index) { *output = probe; return XRT_MANAGED_OK; }
-        if (index > map->length) return XRT_MANAGED_ARGUMENT;
-        probe.entry = index - 1;
-        const XrtMapBackingRow *entry = &map->rows[probe.entry];
-        if (!entry->key) return XRT_MANAGED_ARGUMENT;
-        if (entry->hash == probe.hash && (entry->key == key ||
-            (entry->key->length == key->length && (!key->length ||
-                !memcmp(entry->key->bytes, key->bytes, key->length))))) {
-            probe.found = true; *output = probe; return XRT_MANAGED_OK;
+    uint64_t hash = xrt_string_backing_hash(key);
+    size_t capacity = map->capacity, bucket = 0, found = 0;
+    const XrtMapBackingRow *match = NULL;
+    if (capacity) {
+        size_t mask = capacity - 1;
+        bucket = (size_t)hash & mask;
+        size_t remaining = capacity;
+        for (; remaining; --remaining, bucket = (bucket + 1) & mask) {
+            size_t index = map->rows[bucket].bucket;
+            if (!index) break;
+            if (index > map->length) return XRT_MANAGED_ARGUMENT;
+            const XrtMapBackingRow *entry = &map->rows[index - 1];
+            if (!entry->key) return XRT_MANAGED_ARGUMENT;
+            if (entry->hash == hash && map_key_equal(entry->key, key)) {
+                found = index;
+                match = entry;
+                break;
+            }
         }
+        if (!remaining) return XRT_MANAGED_ARGUMENT;
     }
-    return XRT_MANAGED_ARGUMENT;
+    if (read) *read = match;
+    if (edit) *edit = (MapProbe){.hash=hash, .bucket=bucket, .entry=found ? found - 1 : 0, .found=found != 0};
+    return XRT_MANAGED_OK;
+}
+static XrtManagedStatus map_probe(const XrtMapBacking *map, const XrtStringBacking *key, MapProbe *output) {
+    return map_find(map, key, output, NULL);
 }
 static size_t map_order_entry(const XrtMapBacking *map, size_t ordinal) {
     size_t position = 0;
@@ -350,12 +366,21 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_create(XrtManagedFrame *frame, size_
 #include "xnative_map_literal.inc.c"
 XR_FUNCDEF XrtManagedStatus xrt_map_backing_get(const XrtMapBacking *map,
     const XrtStringBacking *key, int64_t *value, bool *found) {
-    if (!map_shape(map) || !value || !found) return XRT_MANAGED_ARGUMENT;
-    MapProbe probe = {0};
-    XrtManagedStatus status = map_probe(map, key, &probe);
-    if (status != XRT_MANAGED_OK) return status;
-    *value = probe.found ? map->rows[probe.entry].value : 0;
-    *found = probe.found;
+    if (!map_shape(map) || !key || !value || !found) return XRT_MANAGED_ARGUMENT;
+    const XrtMapBackingRow *match = NULL;
+    if (map->length == 1) {
+        /* Publish appends dense entries; removal fills a hole with the last.
+         * The sole live key is therefore in row zero, regardless of its bucket. */
+        const XrtMapBackingRow *only = map->rows;
+        if (!only->key) return XRT_MANAGED_ARGUMENT;
+        if (only->hash == xrt_string_backing_hash(key) && map_key_equal(only->key, key))
+            match = only;
+    } else {
+        XrtManagedStatus status = map_find(map, key, NULL, &match);
+        if (status != XRT_MANAGED_OK) return status;
+    }
+    *value = match ? match->value : 0;
+    *found = match != NULL;
     return XRT_MANAGED_OK;
 }
 XR_FUNCDEF XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *map,
