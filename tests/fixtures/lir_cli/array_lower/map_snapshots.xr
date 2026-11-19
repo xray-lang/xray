@@ -1,0 +1,11 @@
+var scores = {"alice": 95, "bob": 87, "charlie": 92}
+scores.delete("bob")
+scores.set("dave", 88)
+var keys = scores.keys()
+var values = scores.values()
+scores.set("alice", 11)
+scores.clear()
+print("${keys}")
+print("${values}")
+print(len(scores.keys()))
+print(len(scores.values()))

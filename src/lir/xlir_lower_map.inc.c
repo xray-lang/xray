@@ -87,6 +87,8 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
     case XR_XIR_MAP_SET: operation = XR_LIR_MAP_OP_SET; break;
     case XR_XIR_HASH_LEN: operation = XR_LIR_MAP_OP_LEN; break;
     case XR_XIR_HASH_CONTAINS: operation = XR_LIR_MAP_OP_CONTAINS; break;
+    case XR_XIR_HASH_KEYS: operation = XR_LIR_MAP_OP_KEYS; break;
+    case XR_XIR_HASH_VALUES: operation = XR_LIR_MAP_OP_VALUES; break;
     case XR_XIR_HASH_DELETE: operation = XR_LIR_MAP_OP_REMOVE; break;
     case XR_XIR_HASH_CLEAR: operation = XR_LIR_MAP_OP_CLEAR; break;
     default: return true;
@@ -95,7 +97,7 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
     bool construct = operation == XR_LIR_MAP_OP_NEW;
     bool mutation = operation >= XR_LIR_MAP_OP_SET;
     bool grouped = op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_MAP_SET;
-    uint32_t count = grouped ? op->args[1] : operation == XR_LIR_MAP_OP_LEN || operation == XR_LIR_MAP_OP_CLEAR ? 1u : 2u;
+    uint32_t count = grouped ? op->args[1] : lower_operand_count(f->source, op);
     uint32_t source = construct ? UINT32_MAX : lower_operand_at(f->source, op, 0);
     XrXirType type = construct ? op->type : xr_xir_operand_type(f->source, source);
     if (!lower_map_type(c, type)) return lower_unsupported(c, "Map operation requires the String/I64 physical family");

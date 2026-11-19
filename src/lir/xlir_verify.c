@@ -505,7 +505,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
                         XrLirType expected = p % 2 ? XR_LIR_I64 : XR_LIR_STRING;
                         if (f->values[v->operands[p] - 1].type != expected) goto invalid;
                     }
-                } else if (!lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result)) goto invalid;
+                } else if (!lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result) ||
+                    !xr_lir_internal_array_instruction(m, f, v)) goto invalid;
                 return XR_LIR_OK;
             }
             if (xr_lir_range_intrinsic_valid(entry)) {

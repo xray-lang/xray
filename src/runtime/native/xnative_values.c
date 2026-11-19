@@ -372,6 +372,14 @@ XRAY_API bool xrt_native_map_get(const XrtManagedHeader *map, const XrtStringBac
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
     return found;
 }
+XRAY_API void xrt_native_map_snapshot(XrtManagedFrame *frame, size_t slot,
+    const XrtManagedHeader *map, bool keys, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_map_backing_snapshot(frame, slot, types, (const XrtMapBacking *)map, keys);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
 XRAY_API int64_t xrt_native_map_index(const XrtManagedHeader *map, const XrtStringBacking *key, uint32_t source_id) {
     int64_t value = 0;
     if (!xrt_native_map_get(map, key, &value, source_id)) xrt_typed_panic(431, source_id);

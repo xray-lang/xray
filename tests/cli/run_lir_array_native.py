@@ -47,7 +47,7 @@ def main() -> None:
              "view_return_module_unrelated", "view_recursive_module_unrelated", "view_multiple_module_unrelated",
              "view_copy_unused_parameter", "view_call_module_write", "panic_nullable_view", "string_append_values", "string_append_ref",
              "string_join", "string_append_loop", "string_append_assignment", "string_append_grouping",
-             "string_append_invariant", "string_parameter_loop", "panic_nullable_string_append")
+             "string_append_invariant", "string_parameter_loop", "panic_nullable_string_append", "map_snapshots")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:
         parser.error("unknown cases: " + ", ".join(unknown))

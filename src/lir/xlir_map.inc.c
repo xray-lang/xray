@@ -11,7 +11,7 @@
  *   Constructors, observations and mutations share the receiving registry.
  *   Nullable results retain their actual constructed I64 payload type.
  */
-enum { LIR_MAP_CATALOG_COUNT = 11 };
+enum { LIR_MAP_CATALOG_COUNT = 13 };
 typedef struct LirMapSignature {
     XrLirMapOperation operation;
     XrLirType result;
@@ -24,6 +24,8 @@ static const LirMapSignature lir_map_signatures[LIR_MAP_CATALOG_COUNT] = {
     {XR_LIR_MAP_OP_GET, XR_LIR_TYPE_INVALID, {XR_LIR_MAP_STRING_I64, XR_LIR_STRING}, 2},
     {XR_LIR_MAP_OP_INDEX, XR_LIR_I64, {XR_LIR_MAP_STRING_I64, XR_LIR_STRING}, 2},
     {XR_LIR_MAP_OP_CONTAINS, XR_LIR_I1, {XR_LIR_MAP_STRING_I64, XR_LIR_STRING}, 2},
+    {XR_LIR_MAP_OP_KEYS, XR_LIR_ARRAY, {XR_LIR_MAP_STRING_I64}, 1},
+    {XR_LIR_MAP_OP_VALUES, XR_LIR_ARRAY, {XR_LIR_MAP_STRING_I64}, 1},
     {XR_LIR_MAP_OP_SET, XR_LIR_UNIT, {XR_LIR_MAP_STRING_I64_CELL, XR_LIR_STRING, XR_LIR_I64}, 3},
     {XR_LIR_MAP_OP_REMOVE, XR_LIR_I1, {XR_LIR_MAP_STRING_I64_CELL, XR_LIR_STRING}, 2},
     {XR_LIR_MAP_OP_CLEAR, XR_LIR_UNIT, {XR_LIR_MAP_STRING_I64_CELL}, 1},

@@ -100,6 +100,12 @@ static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack 
         if (map->length>INT64_MAX) return XRT_MANAGED_OVERFLOW;
         result->bits=map->length; return XRT_MANAGED_OK;
     }
+    if (xr_lir_map_snapshot_element(access.index)) {
+        const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
+        xrt_native_map_snapshot(activation->frame,home->temporary_first_owner,&map->managed,
+            access.index==XR_LIR_MAP_OP_KEYS,source);
+        return rbc_value_array_publish(activation,access.result);
+    }
     const XrtStringBacking *key=NULL;
     status=rbc_value_string_borrow(activation,args[1],&key);
     int64_t value=0; bool found=false;
