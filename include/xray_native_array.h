@@ -14,6 +14,7 @@
 #define XRAY_NATIVE_ARRAY_H
 #include "xray_native_string_value.h"
 #include "xray_native_place.h"
+#include "xray_native_value_image.h"
 
 typedef enum XrtBackingArrayKind {
     XRT_BACKING_ARRAY_I64, XRT_BACKING_ARRAY_STRING,
@@ -64,6 +65,13 @@ extern "C" {
  * leave the kernel guard before entering the execution's nonlocal recovery. */
 XRAY_API void xrt_native_array_create(XrtManagedFrame *, size_t slot,
     const XrtArrayInput *, uint32_t source_id);
+/* Generated callers provide the same one-based Array type id used by their
+ * receiving homes. Row bytes and owners stay live until construction returns.
+ * A successful read borrows the row while the caller keeps the Array live. */
+XRAY_API void xrt_native_array_inline_create(XrtManagedFrame *, size_t slot,
+    const XrtValueImage *, uint32_t type, const void *rows, size_t count, uint32_t source_id);
+XRAY_API const void *xrt_native_array_inline_at(const XrtManagedHeader *, const XrtValueImage *,
+    uint32_t type, int64_t index, uint32_t source_id);
 XRAY_API void xrt_native_array_repeat(XrtManagedFrame *, size_t slot,
     const XrtArrayItem *, int64_t length, uint32_t source_id);
 /* String GET returns a synchronous borrow, not a new owner. */

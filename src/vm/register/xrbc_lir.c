@@ -571,7 +571,11 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     XrLirSliceIntrinsic slice = {0};
     bool slice_operation = i->op == XR_LIR_CALL_INTRINSIC &&
         xr_lir_slice_intrinsic_view(input, i->intrinsic, &slice) == XR_LIR_OK && slice.id;
-    if (xr_lir_constructed_type_count(input) && !slice_operation &&
+    XrLirArrayIntrinsic array = {0};
+    bool array_new = i->op == XR_LIR_CALL_INTRINSIC && i->type == XR_LIR_ARRAY &&
+        xr_lir_array_intrinsic_view(input,i->intrinsic,&array) == XR_LIR_OK &&
+        array.operation == XR_LIR_ARRAY_OP_NEW && xr_lir_inline_array_ordinal(input,array.result_element);
+    if (xr_lir_constructed_type_count(input) && !slice_operation && !array_new &&
         !rbc_lir_aggregate_point(i) && !xr_lir_display_point(input, i) &&
         !rbc_lir_aggregate_state(input, function, i) && i->op != XR_LIR_CALL && i->op != XR_LIR_RET &&
         i->op != XR_LIR_FUNCTION_REF && i->op != XR_LIR_CALL_INDIRECT && i->op != XR_LIR_FUNCTION_WEAKEN &&

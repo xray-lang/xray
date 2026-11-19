@@ -149,6 +149,7 @@ XRAY_API void xrt_run_standalone_state(const XrtSourceMap *map, XrtSynchronousSt
         failure.detail.value.status = xrt_managed_value_status(status);
         native_failure_exit(map, &failure);
     }
+    xrt_native_values_use_state(&values, state, spec->values);
     XrtStateInvocation invocation = {root, context, state};
     XrtExecutionStatus result = run_bound(map, &failure, state_root_invoke, &invocation, &values);
     xrt_module_state_drop(&state);

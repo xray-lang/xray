@@ -74,9 +74,10 @@ static bool c_value_mark(LirC *c, uint8_t *needed, size_t count, XrLirType type)
         needed[type] = 1;
     return true;
 }
-static void c_values_array_mark(uint8_t *needed, size_t types, XrLirType element) {
-    static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
-    for (size_t k=0;k<4;++k) if (element==elements[k]) needed[types+k]=1;
+static void c_values_array_mark(const XrLirModule *module, uint8_t *needed, size_t types, XrLirType element) {
+    uint32_t family = xr_lir_array_layout_family(module, element);
+    XR_CHECK(family != UINT32_MAX, "a completed Array has a common layout row");
+    needed[types + family] = 1;
 }
 static void c_values_prepare(LirC *c) {
     if (!c_request_poll(c)) return;
@@ -84,19 +85,20 @@ static void c_values_prepare(LirC *c) {
     size_t type_count = (size_t)XR_LIR_TYPE_COUNT + c->constructed_count;
     size_t function_count = xr_lir_function_count(module);
     void *flags = NULL, *memory = NULL;
-    if (type_count > SIZE_MAX - 4 || function_count > SIZE_MAX - type_count - 4) {
+    size_t arrays = (size_t)XR_LIR_ARRAY_FAMILY_COUNT + module->inline_array_count;
+    if (type_count > SIZE_MAX - arrays || function_count > SIZE_MAX - type_count - arrays) {
         c_error(c,XR_LIR_C_OVERFLOW,"C value root inventory overflows"); return;
     }
-    if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, type_count + 4 + function_count, 1, &flags))) return;
+    if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, type_count + arrays + function_count, 1, &flags))) return;
     uint8_t *needed = flags; bool projected = c->state || c->arrays || c->maps || c->sets;
-    uint8_t *environments = needed + type_count + 4;
+    uint8_t *environments = needed + type_count + arrays;
     static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t slot = 0; slot < c->state_layout.slot_count && c_request_poll(c); ++slot) {
         XrLirType payload = c->state_layout.slots[slot].payload;
         if (payload == XR_LIR_I64_CELL) {
             c_error(c,XR_LIR_C_UNSUPPORTED,"callable State requires owned code and environment transport"); break;
         }
-        if (payload == XR_LIR_ARRAY) c_values_array_mark(needed,type_count,c->state_layout.slots[slot].array_element);
+        if (payload == XR_LIR_ARRAY) c_values_array_mark(module,needed,type_count,c->state_layout.slots[slot].array_element);
         if (!c_scalar(c, payload) || !c_value_mark(c, needed, type_count, payload)) break;
     }
     for (uint32_t i = 0; i < c->closure_count && c_request_poll(c); ++i) {
@@ -138,7 +140,7 @@ static void c_values_prepare(LirC *c) {
                 if (xr_lir_array_shape_view(module,(XrLirValue){module,function.id,v},&shape)!=XR_LIR_OK) {
                     c_error(c,XR_LIR_C_INVALID_LIR,"Array root lost its admitted element shape"); break;
                 }
-                c_values_array_mark(needed,type_count,shape.element);
+                c_values_array_mark(module,needed,type_count,shape.element);
             }
             projected |= c_managed_leaf(type) || type >= XR_LIR_TYPE_COUNT;
             if (!c_value_mark(c, needed, type_count, type)) break;
@@ -153,15 +155,20 @@ static void c_values_prepare(LirC *c) {
             needed[XR_LIR_TYPE_COUNT + i] = 1;
     }
     size_t count = 0;
-    for (size_t t = 1; t < type_count + 4; ++t) count += needed[t] != 0;
+    for (size_t t = 1; t < type_count + arrays; ++t) count += needed[t] != 0;
     for (size_t f = 0; f < function_count; ++f) count += environments[f] != 0;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, count, sizeof(XrLirValueLayoutKey), &memory))) {
         xr_compile_resources_free(flags); return;
     }
     XrLirValueLayoutKey *roots = memory; size_t next = 0;
-    for (size_t t = 1; t < type_count + 4; ++t)
+    for (size_t t = 1; t < type_count + XR_LIR_ARRAY_FAMILY_COUNT; ++t)
         if (needed[t]) roots[next++] = t < type_count ? (XrLirValueLayoutKey){(XrLirType)t, 0, 0} :
             (XrLirValueLayoutKey){XR_LIR_ARRAY, elements[t-type_count], 0};
+    for (uint32_t t = 0; module->inline_array_count && t < module->type_count; ++t) {
+        uint32_t ordinal = module->types[t].inline_array_ordinal;
+        if (ordinal && needed[type_count + XR_LIR_ARRAY_FAMILY_COUNT + ordinal - 1])
+            roots[next++] = (XrLirValueLayoutKey){XR_LIR_ARRAY, XR_LIR_TYPE_COUNT + t, 0};
+    }
     bool environment_values = c->cells;
     for (uint32_t f = 0; f < function_count; ++f) if (environments[f]) {
         XrLirClosureTarget target = {0};
@@ -180,7 +187,7 @@ static void c_values_prepare(LirC *c) {
     memory = NULL;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, 1, sizeof(*c->value_types), &memory))) return;
     c->value_types = memory; c_value_types_prepare(c, c->value_layouts, c->value_types);
-    if ((c->state || environment_values) && c_request_poll(c)) {
+    if ((c->state || environment_values || module->inline_array_count) && c_request_poll(c)) {
         c_value_layout_status(c, xr_lir_value_image_create(c->value_layouts, c->value_billing, &c->value_image));
         if (c->state && c_request_poll(c)) c_value_layout_status(c, xr_lir_state_projection_create(module, c->value_layouts,
             xr_lir_value_image_view(c->value_image), c->value_billing, &c->state_projection));

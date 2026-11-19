@@ -159,12 +159,59 @@ static bool rbc_value_array_local_update(XrRbcStack *stack,RbcValueActivation *a
         &activation->code->homes->frame,(XrtArrayI64LocalGeometry){binding->first_owner,binding->offset,
             workspace->first_owner,workspace->offset},&view) && xrt_array_i64_try_update_local(&view,update);
 }
+static XrtManagedStatus rbc_value_array_inline(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,XrRbcValueAccess access,const uint32_t *args) {
+    bool create=access.index==XR_LIR_ARRAY_OP_NEW;
+    const XrLirValueHome *home=rbc_value_home(activation->code,create ? access.result : args[0]);
+    uint32_t element=activation->image->types[home->type-1].element;
+    if (!create && access.index==XR_LIR_ARRAY_OP_LEN) {
+        XrtPlace place;
+        const XrtManagedHeader *owner=NULL;
+        XrtManagedStatus status=rbc_value_place(rbc_value_origin(activation,args[0]),false,0,&place);
+        if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&owner);
+        if (status!=XRT_MANAGED_OK) return status;
+        XrRbcRegister *output=rbc_value_register(stack,activation,access.result);
+        const XrtArrayBacking *array=(const XrtArrayBacking *)owner;
+        if (!output) return XRT_MANAGED_ARGUMENT;
+        if (array->length>INT64_MAX) return XRT_MANAGED_OVERFLOW;
+        output->bits=array->length;
+        return XRT_MANAGED_OK;
+    }
+    XrtBoundInlineArray binding={0};
+    XrtManagedStatus status=rbc_value_plan_set(module,stack);
+    if (status==XRT_MANAGED_OK)
+        status=stack->layout ? xrt_module_layout_inline_array(stack->layout,home->type,&binding) :
+            xrt_value_image_inline_array(stack->values->plans,home->type,&binding);
+    if (status!=XRT_MANAGED_OK) return status;
+    if (create) {
+        size_t stride=activation->image->types[element-1].size;
+        if (access.count>activation->snapshot_capacity/stride) return XRT_MANAGED_ARGUMENT;
+        for (uint32_t p=0;p<access.count && status==XRT_MANAGED_OK;++p)
+            status=rbc_value_inline_pack(module,stack,activation,args[p],element,activation->snapshots+(size_t)p*stride);
+        if (status==XRT_MANAGED_OK)
+            status=xrt_array_backing_inline_create(activation->frame,home->temporary_first_owner,binding.ops,
+                activation->snapshots,access.count,access.count);
+        return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+    }
+    if (access.index!=XR_LIR_ARRAY_OP_GET) return XRT_MANAGED_ARGUMENT;
+    XrRbcRegister *index=rbc_value_register(stack,activation,args[1]);
+    if (!index) return XRT_MANAGED_ARGUMENT;
+    XrtPlace place;
+    const XrtManagedHeader *owner=NULL;
+    int64_t at; memcpy(&at,&index->bits,sizeof(at));
+    status=rbc_value_place(rbc_value_origin(activation,args[0]),false,0,&place);
+    if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&owner);
+    const void *row=NULL;
+    if (status==XRT_MANAGED_OK) status=xrt_array_backing_inline_at((const XrtArrayBacking *)owner,binding.element,at,&row);
+    return status==XRT_MANAGED_OK ? rbc_value_inline_extract(module,stack,activation,access.result,element,row) : status;
+}
 static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     if (access.operation!=XR_RBC_VALUE_ARRAY) return rbc_value_binding_step(module,stack,activation,access);
     const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
     bool create=access.index==XR_LIR_ARRAY_OP_NEW || access.index==XR_LIR_ARRAY_OP_REPEAT;
     XrtValueKind value_kind=rbc_value_kind(module,activation->code,create ? access.result : args[0]);
+    if (value_kind==XRT_VALUE_ARRAY_INLINE) return rbc_value_array_inline(module,stack,activation,access,args);
     XrtBackingArrayKind kind=(XrtBackingArrayKind)(value_kind-XRT_VALUE_ARRAY_I64);
     if ((unsigned)kind>=XRT_BACKING_ARRAY_COUNT) return XRT_MANAGED_ARGUMENT;
     if (access.other && rbc_value_array_local_update(stack,activation,access)) return XRT_MANAGED_OK;

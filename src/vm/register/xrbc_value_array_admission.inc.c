@@ -272,8 +272,25 @@ static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcVa
     for (uint32_t p=0;p<a.count;++p) if (!rbc_value_id(code,code->arguments[a.first+p])) return false;
     const uint32_t *args=a.count ? code->arguments+a.first : NULL;
     bool create=a.index==XR_LIR_ARRAY_OP_NEW || a.index==XR_LIR_ARRAY_OP_REPEAT;
-    XrtValueKind kind=rbc_value_kind(module,code,create ? a.result : a.count ? args[0] : 0);
-    if (kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64) return false;
+    uint32_t array = create ? a.result : a.count ? args[0] : 0;
+    XrtValueKind kind=rbc_value_kind(module,code,array);
+    if (!xrt_value_kind_is_array(kind)) return false;
+    if (kind == XRT_VALUE_ARRAY_INLINE) {
+        if (a.other || a.window != UINT32_MAX || a.index > XR_LIR_ARRAY_OP_GET ||
+            !rbc_value_array(module,code,array,create)) return false;
+        const XrtValueImage *image = xr_rbc_module_value_image(module);
+        const XrLirValueHome *home = rbc_value_home(code,array);
+        uint32_t element = image->types[home->type - 1].element;
+        if (!element || element >= home->type || !xrt_value_kind_has_fields(image->types[element - 1].kind)) return false;
+        if (create) {
+            for (uint32_t p = 0; p < a.count; ++p)
+                if (!rbc_value_inline_operand(module,code,function,args[p],element,false)) return false;
+            return true;
+        }
+        if (a.index == XR_LIR_ARRAY_OP_LEN) return a.count == 1 && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+        return a.count == 2 && rbc_value_scalar(code,function,args[1],XR_RBC_BITS) &&
+            rbc_value_inline_operand(module,code,function,a.result,element,true);
+    }
     if (a.index==XR_LIR_ARRAY_OP_SET || a.index==XR_LIR_ARRAY_OP_PUSH) {
         if (a.result || a.count!=(a.index==XR_LIR_ARRAY_OP_SET ? 3u : 2u) ||
             !rbc_value_binding_valid(module,code,function,args[0]) || a.window>=code->homes->workspace_count) return false;

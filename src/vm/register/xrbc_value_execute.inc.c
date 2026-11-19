@@ -89,6 +89,17 @@ static void rbc_value_environment_set_drop(XrRbcValueRuntime *runtime) {
     runtime->environments=NULL; runtime->environment_count=0;
     xrt_value_image_drop(&runtime->plans);
 }
+static XrtManagedStatus rbc_value_plan_set(const XrRbcModule *module, XrRbcStack *stack) {
+    const XrtValueImage *image = xr_rbc_module_value_image(module);
+    if (stack->layout)
+        return module->state_spec && module->state_spec->values == image ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+    if (stack->values->plans) return XRT_MANAGED_OK;
+    const XrRbcCodeOwner *code = xr_rbc_code_owner_borrow((XrtManagedLease){module->code_lease.owner,
+        module->code_lease.retain,module->code_lease.release});
+    if (!code || !image || !image->type_count) return XRT_MANAGED_ARGUMENT;
+    return xrt_value_image_bind(stack->values->billing,image,
+        (XrtManagedLease){(void *)code,xr_rbc_code_owner_retain,xr_rbc_code_owner_release},&stack->values->plans);
+}
 static XrtManagedStatus rbc_value_environments(const XrRbcModule *module, XrRbcStack *stack) {
     XrRbcValueRuntime *runtime=stack->values;
     if (runtime->environments) return XRT_MANAGED_OK;
@@ -98,10 +109,7 @@ static XrtManagedStatus rbc_value_environments(const XrRbcModule *module, XrRbcS
     if (!code || !image || !image->type_count) return XRT_MANAGED_ARGUMENT;
     size_t count=image->type_count;
     if (count>SIZE_MAX/sizeof(*runtime->environments)) return XRT_MANAGED_OVERFLOW;
-    if (stack->layout && (!module->state_spec || module->state_spec->values!=image)) return XRT_MANAGED_ARGUMENT;
-    XrtManagedStatus status=XRT_MANAGED_OK;
-    if (!stack->layout) status=xrt_value_image_bind(runtime->billing,image,
-        (XrtManagedLease){(void *)code,xr_rbc_code_owner_retain,xr_rbc_code_owner_release},&runtime->plans);
+    XrtManagedStatus status = rbc_value_plan_set(module,stack);
     void *storage=NULL;
     if (status==XRT_MANAGED_OK) status=xrt_managed_metadata_allocate(runtime->billing,
         (size_t)image->type_count*sizeof(*runtime->environments),&storage);
@@ -139,7 +147,8 @@ static XrtManagedStatus rbc_value_runtime(XrRbcStack *stack, uint32_t source) {
     stack->values = runtime;
     return XRT_MANAGED_OK;
 }
-static bool rbc_value_capacities(const XrRbcValueCode *code, size_t *leaves, size_t *rows, size_t *snapshots) {
+static bool rbc_value_capacities(const XrRbcValueCode *code, const XrtValueImage *image,
+    size_t *leaves, size_t *rows, size_t *snapshots) {
     *leaves = 0; *rows = 1; *snapshots = 8;
     const XrLirValueHomes *homes = code->homes;
     if (homes) for (size_t v = 1; v <= (size_t)homes->value_count; ++v) {
@@ -167,9 +176,18 @@ static bool rbc_value_capacities(const XrRbcValueCode *code, size_t *leaves, siz
         }
         if ((access.operation==XR_RBC_VALUE_ARRAY && access.index==XR_LIR_ARRAY_OP_NEW) ||
             (access.operation==XR_RBC_VALUE_MAP && access.index==XR_LIR_MAP_OP_NEW)) {
-            size_t count=access.count;
-            if (count>SIZE_MAX/8) return false;
-            if (count*8>*snapshots) *snapshots=count*8;
+            size_t count=access.count, stride=8;
+            const XrLirValueHome *home=rbc_value_home(code,access.result);
+            if (access.operation==XR_RBC_VALUE_ARRAY && image && image->types &&
+                home && home->type && home->type<=image->type_count) {
+                const XrtValueImageType *array=&image->types[home->type-1];
+                if (array->kind==XRT_VALUE_ARRAY_INLINE) {
+                    if (!array->element || array->element>=home->type) return false;
+                    stride=image->types[array->element-1].size;
+                }
+            }
+            if (!stride || count>SIZE_MAX/stride) return false;
+            if (count*stride>*snapshots) *snapshots=count*stride;
         }
         if (access.operation==XR_RBC_VALUE_CALL || access.operation==XR_RBC_VALUE_FUNCTION_CALL) {
             size_t bytes=0;
@@ -218,7 +236,8 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
      * Only the exact immutable executable owner supplies the closed window. */
     size_t regions=xr_rbc_module_code_owner(module) && code->array_region_runtime ?
         code->array_regions->region_count : 0;
-    if (!rbc_value_capacities(code,&leaves,&rows,&snapshots) ||
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (!rbc_value_capacities(code,image,&leaves,&rows,&snapshots) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(const uint8_t *)) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcParameterStorage)) ||
@@ -231,7 +250,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     status = xrt_managed_metadata_allocate(runtime->billing,bytes,&memory);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
     RbcValueActivation *activation = memory;
-    *activation = (RbcValueActivation){.previous=runtime->top,.code=code,.image=xr_rbc_module_value_image(module),
+    *activation = (RbcValueActivation){.previous=runtime->top,.code=code,.image=image,
         .function=function,.depth=stack->depth,
         .bytes=bytes,.edge_capacity=leaves,.publication_capacity=rows,.snapshot_capacity=snapshots,
         .owned_code=xr_rbc_module_code_owner(module)!=NULL};
@@ -1161,6 +1180,7 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
     stack->cell_count=frame.cell_base; stack->spill_count=frame.spill_base; --stack->depth;
     return XR_RBC_OK;
 }
+#include "xrbc_value_inline_execute.inc.c"
 #include "xrbc_value_array_execute.inc.c"
 #include "xrbc_value_array_region.inc.c"
 #include "xrbc_value_cell_execute.inc.c"
@@ -1172,7 +1192,6 @@ static uint32_t rbc_value_source(const XrRbcModule *module, const XrRbcStack *st
 
 #include "xrbc_value_map_execute.inc.c"
 #include "xrbc_value_set_execute.inc.c"
-#include "xrbc_value_inline_execute.inc.c"
 #include "xrbc_value_callable_factory.inc.c"
 #include "xrbc_value_callable_state.inc.c"
 static XrtManagedStatus rbc_value_display(const XrRbcModule *module,XrRbcStack *stack,

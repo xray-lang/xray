@@ -54,10 +54,10 @@ static bool rbc_home_root_append(RbcLirCompiler *c, RbcHomeVector *roots, uint8_
     if (key.environment_function) {
         if (key.environment_function > xr_lir_function_count(c->input))
             return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"environment root has no exact target");
-        index = array_base + XR_RBC_ARRAY_FAMILY_COUNT + key.environment_function - 1;
+        index = array_base + XR_LIR_ARRAY_FAMILY_COUNT + c->input->inline_array_count + key.environment_function - 1;
     } else if (key.type == XR_LIR_ARRAY) {
-        uint32_t family = rbc_lir_array_family(key.array_element);
-        if (family >= XR_RBC_ARRAY_FAMILY_COUNT)
+        uint32_t family = xr_lir_array_layout_family(c->input,key.array_element);
+        if (family == UINT32_MAX)
             return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"value root Array element is unavailable");
         index = array_base + family;
     }
@@ -73,10 +73,10 @@ static bool rbc_home_roots(RbcLirCompiler *c, const XrLirStateLayout *state, Rbc
     const XrLirModule *input = c->input;
     size_t base = (size_t)XR_LIR_TYPE_COUNT + xr_lir_constructed_type_count(input);
     size_t functions = xr_lir_function_count(input);
-    if (base > SIZE_MAX - XR_RBC_ARRAY_FAMILY_COUNT ||
-        functions > SIZE_MAX - base - XR_RBC_ARRAY_FAMILY_COUNT)
+    size_t arrays = (size_t)XR_LIR_ARRAY_FAMILY_COUNT + input->inline_array_count;
+    if (base > SIZE_MAX - arrays || functions > SIZE_MAX - base - arrays)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"value root bitmap overflows");
-    uint8_t *seen = xr_calloc(base + XR_RBC_ARRAY_FAMILY_COUNT + functions,1);
+    uint8_t *seen = xr_calloc(base + arrays + functions,1);
     if (!seen) return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own value root bitmap");
     XrLirCallableFacts *facts = NULL;
     XrLirStatus collected = xr_lir_callable_facts_create(input,&facts);
