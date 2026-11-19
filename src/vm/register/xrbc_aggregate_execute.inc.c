@@ -91,9 +91,10 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, 
         if (!xr_rbc_aggregate_reserve(stack, frame, f)) return XR_RBC_OUT_OF_MEMORY;
         XrRbcAggregateAccess access = f->aggregate_accesses[index];
         XrRbcAggregateValue value = f->aggregate_values[access.destination];
+        const XrPodType *type = &module->aggregate_types[value.type];
         XrtModuleState *state = stack->slots[frame->base + access.source].state;
-        XrtManagedStatus status = xrt_module_initialize_i64_group(state, access.slot,
-            module->aggregate_types[value.type].count, (const int64_t *)xr_rbc_aggregate_value(stack, frame, value));
+        XrtManagedStatus status = xrt_module_initialize_i64_group(state, access.slot, type->count,
+            xr_rbc_aggregate_value(stack, frame, value), type->physical.size);
         xrt_module_require(status,source);
         return XR_RBC_OK;
     }

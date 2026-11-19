@@ -79,10 +79,11 @@ XRAY_API XrtModuleStatus xrt_module_initialize(XrtModuleState *, uint32_t slot, 
 /* Validate the complete contiguous I64 group before publishing any slot.
  * Mutable members must already be constructed by this initializer. The call
  * preserves their current payloads, including writes before publication.
- * Immutable members receive Tuple fields through budgeted scratch before
- * the whole publication commits. Failure preserves prior construction. */
+ * Immutable members receive contiguous I64 object bytes through budgeted
+ * scratch before the whole publication commits. The span must cover exactly
+ * count values. Failure preserves prior construction. */
 XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *, uint32_t first,
-    uint32_t count, const int64_t *values);
+    uint32_t count, const void *values, size_t value_size);
 XRAY_API XrtModuleStatus xrt_module_reference(XrtModuleState *, uint32_t slot, XrtModuleRef **);
 XRAY_API XrtModuleStatus xrt_module_borrow(const XrtModuleRef *, const void **value);
 /* The destination is stable registered owning storage, or an owner synchronously

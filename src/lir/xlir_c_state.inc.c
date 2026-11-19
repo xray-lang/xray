@@ -123,9 +123,11 @@ static void c_state_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
         uint32_t count = c->constructed_types[type - XR_LIR_TYPE_COUNT].shape.count;
         c_text(c, "    xrt_module_require(xrt_module_initialize_i64_group(");
         c_value(c, v->operands[0]);
-        c_format(c, ", UINT32_C(%" PRIu64 "), UINT32_C(%" PRIu32 "), ", v->bits, count);
+        c_format(c, ", UINT32_C(%" PRIu64 "), UINT32_C(%" PRIu32 "), &", v->bits, count);
         c_value(c, v->operands[1]);
-        c_text(c, ".fields)");
+        c_text(c, ", sizeof(");
+        c_value(c, v->operands[1]);
+        c_text(c, "))");
         c_state_require_end(c, source);
         return;
     }

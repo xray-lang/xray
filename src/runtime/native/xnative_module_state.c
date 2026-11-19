@@ -420,9 +420,12 @@ XRAY_API XrtModuleStatus xrt_module_initialize(XrtModuleState *state, uint32_t s
     return XRT_MANAGED_OK;
 }
 XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *state, uint32_t first,
-    uint32_t count, const int64_t *values) {
+    uint32_t count, const void *values, size_t value_size) {
     if (!state || state->busy || !count || !values || first >= state->layout->view.slot_count ||
         count > state->layout->view.slot_count - first) return XRT_MANAGED_ARGUMENT;
+    size_t bytes = 0;
+    if (!module_extent(&bytes, count, sizeof(int64_t))) return XRT_MANAGED_OVERFLOW;
+    if (value_size != bytes) return XRT_MANAGED_ARGUMENT;
     uint32_t module = state->layout->view.slots[first].module;
     if (state->modules[module] != MODULE_INITIALIZING) return XRT_MANAGED_ARGUMENT;
     bool initialize = false;
@@ -436,8 +439,6 @@ XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *state, 
     }
     /* Sources may alias any mutable binding: snapshot the entire group before
      * publishing an immutable member. Reservation failure changes no slot. */
-    size_t bytes = 0;
-    if (!module_extent(&bytes, count, sizeof(*values))) return XRT_MANAGED_OVERFLOW;
     state->busy = true;
     void *prepared = NULL;
     XrtManagedStatus status = initialize ? xrt_managed_metadata_allocate(state->billing, bytes, &prepared) : XRT_MANAGED_OK;
@@ -445,7 +446,8 @@ XRAY_API XrtModuleStatus xrt_module_initialize_i64_group(XrtModuleState *state, 
         if (initialize) memcpy(prepared, values, bytes);
         for (uint32_t n = 0; n < count; ++n)
             if (!(state->layout->view.slots[first + n].flags & XRT_MODULE_SLOT_MUTABLE))
-                memcpy(module_payload(state, first + n), (int64_t *)prepared + n, sizeof(*values));
+                memcpy(module_payload(state, first + n),
+                    (const unsigned char *)prepared + (size_t)n * sizeof(int64_t), sizeof(int64_t));
         for (uint32_t n = 0; n < count; ++n) {
             state->flags[first + n] = SLOT_CONSTRUCTED | SLOT_PUBLISHED;
             state->publication[state->publication_count++] = first + n;

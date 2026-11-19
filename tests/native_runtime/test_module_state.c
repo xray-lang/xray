@@ -141,6 +141,38 @@ static XrtManagedHeader *borrow(XrtManagedFrame *frame, size_t slot) {
 static bool empty_slot(XrtManagedFrame *frame, size_t slot) {
     XrtManagedHeader *value=NULL; OK(xrt_managed_slot_borrow(frame,slot,&value)); return !value;
 }
+static void atomic_i64_group_span(void) {
+    Audit audit = {0};
+    XrtBillingOwner *billing = billing_new(&audit, SIZE_MAX);
+    XrtModuleLayout *layout = layout_new(billing, (uint32_t[]){2, 2}, 2, false);
+    XrtModuleState *state = NULL;
+    OK(xrt_module_state_new(layout, billing, &state));
+    OK(xrt_module_begin(state, 0));
+    struct Group { int64_t first, second; } group = {42, -17};
+    _Static_assert(sizeof(group) == 2 * sizeof(int64_t), "I64 group has contiguous object bytes");
+    _Static_assert(offsetof(struct Group, second) == sizeof(int64_t), "the second field follows the first");
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    BAD(xrt_module_initialize_i64_group(state, 0, 2, &group, sizeof(group) - 1));
+    BAD(xrt_module_initialize_i64_group(state, 0, 2, &group, sizeof(group) + 1));
+    XrtModuleRef *first = NULL, *second = NULL;
+    BAD(xrt_module_reference(state, 0, &first));
+    BAD(xrt_module_reference(state, 1, &second));
+    CHECK(!first && !second);
+    same_bill(billing, before);
+    OK(xrt_module_initialize_i64_group(state, 0, 2, &group, sizeof(group)));
+    OK(xrt_module_ready(state, 0));
+    OK(xrt_module_reference(state, 0, &first));
+    OK(xrt_module_reference(state, 1, &second));
+    int64_t first_value = 0, second_value = 0;
+    OK(xrt_module_copy(first, &first_value));
+    OK(xrt_module_copy(second, &second_value));
+    CHECK(first_value == group.first && second_value == group.second);
+    xrt_module_state_drop(&state);
+    xrt_module_layout_drop(&layout);
+    CHECK(audit.blocks == 1);
+    xrt_billing_owner_drop(billing);
+    CHECK(!audit.leases && !audit.bytes && !audit.blocks);
+}
 static void atomic_record(void) {
     Audit meta = {0}, values = {0};
     XrtBillingOwner *mb = billing_new(&meta,SIZE_MAX), *vb = billing_new(&values,SIZE_MAX);
@@ -552,7 +584,8 @@ static void function_state(void) {
     printf("Function State: independent plans, Env/code retirement, guarded storage and OOM rollback %zu/%zu PASS\n",layout_sites,state_sites);
 }
 int main(void) {
-    atomic_record(); family_borrows(); array_state_guards(); allocation_failures(); scalar_admission();
+    atomic_i64_group_span(); atomic_record(); family_borrows(); array_state_guards();
+    allocation_failures(); scalar_admission();
     metadata_and_rejection(); deep_nullable(); function_state();
     puts("fixed module State kernel passed"); return 0;
 }
