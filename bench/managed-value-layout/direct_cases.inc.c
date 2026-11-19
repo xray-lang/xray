@@ -40,7 +40,9 @@ static bool mvl_verify_direct_attempt(MvlRangeWrite range, size_t budget,
         *sites = domain.allocations - allocations;
         MVL_REQUIRE(*sites == (shared ? 4u : 2u));
     } else {
-        MVL_REQUIRE(write.status == XR_MVL_OOM && array->length >= 1 && array->length < 10);
+        size_t cow_allocations = shared ? 2 : 0;
+        size_t committed = budget < cow_allocations ? 1 : budget == cow_allocations ? 4 : 8;
+        MVL_REQUIRE(write.status == XR_MVL_OOM && array->length == committed);
     }
     MVL_REQUIRE(array->data[0] == 7);
     for (size_t i = 1; i < array->length; ++i)
