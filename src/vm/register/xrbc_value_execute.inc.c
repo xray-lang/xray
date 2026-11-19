@@ -57,7 +57,7 @@ struct RbcValueActivation {
     RbcValuePublication *publications;
     uint8_t *snapshots;
     size_t edge_capacity, publication_capacity, snapshot_capacity, publication_count;
-    bool array_forwarding; /* Only a genuine immutable code owner supplies this capability. */
+    bool owned_code; /* Only a genuine immutable code owner supplies sealed plans. */
     bool array_backings_ready; /* Set only after this execution's complete backing setup succeeds. */
     bool receiving_call;
     const XrLirHomeCall *receiving_slice_call;
@@ -224,7 +224,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     *activation = (RbcValueActivation){.previous=runtime->top,.code=code,.image=xr_rbc_module_value_image(module),
         .function=function,.depth=stack->depth,
         .bytes=bytes,.edge_capacity=leaves,.publication_capacity=rows,.snapshot_capacity=snapshots,
-        .array_forwarding=xr_rbc_module_code_owner(module)!=NULL};
+        .owned_code=xr_rbc_module_code_owner(module)!=NULL};
     size_t offset = sizeof(*activation);
 #define RBC_VALUE_PART(field,n,t) do { offset=(offset+7u)&~(size_t)7u; \
     activation->field=(t *)((uint8_t *)memory+offset); offset+=(n)*sizeof(t); } while(0)
@@ -523,6 +523,50 @@ static XrtManagedStatus rbc_value_edge_stage(const XrRbcModule *module,XrRbcStac
     }
     return XRT_MANAGED_OK;
 }
+static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *activation,
+    XrRbcValueAccess access, const XrLirHomeEdge *edge) {
+    if (!access.count || access.count > 2 || !activation->frame) return false;
+    const XrRbcValueCode *code = activation->code;
+    const XrLirValueHomes *homes = code->homes;
+    XrLirHomeTransfer transfer = homes->transfers[edge->first];
+    const XrLirValueHome *from = &homes->values[transfer.source], *to = &homes->values[transfer.target];
+    XrRbcRegister *scalar = NULL;
+    uint64_t bits = 0;
+    if (access.count == 2) {
+        const uint32_t *pair = code->arguments + access.first;
+        if (pair[1] == transfer.target) pair += 2;
+        RbcValueOrigin origin = rbc_value_origin(activation, pair[0]);
+        if (origin.activation != activation || origin.value != pair[0]) return false;
+        XrRbcRegister *input = rbc_value_register(stack, activation, pair[0]);
+        scalar = rbc_value_register(stack, activation, pair[1]);
+        if (!input || !scalar) return false;
+        memcpy(&bits, input, sizeof(bits));
+    }
+    const XrtManagedFrameLocations *locations = &activation->frame_locations;
+    const XrtManagedSlot *slots = locations->slots;
+    XR_DCHECK(locations->frame == activation->frame && locations->payload == activation->payload &&
+        locations->slot_count == homes->frame.slot_count &&
+        slots[from->first_owner].owner_offset == from->offset && slots[to->first_owner].owner_offset == to->offset &&
+        slots[to->temporary_first_owner].owner_offset == to->temporary_offset,
+        "the admitted move uses the actual Frame fields of its common plan");
+    if (*locations->busy) return false;
+    const XrtManagedPending *input = &slots[from->first_owner].pending;
+    const XrtManagedPending *output = &slots[to->first_owner].pending;
+    const XrtManagedPending *scratch = &slots[to->temporary_first_owner].pending;
+    if (input->value || input->allocation_bytes || output->value || output->allocation_bytes ||
+        scratch->value || scratch->allocation_bytes) return false;
+    XrtManagedHeader **source = (XrtManagedHeader **)(activation->payload + from->offset);
+    XrtManagedHeader **destination = (XrtManagedHeader **)(activation->payload + to->offset);
+    XrtManagedHeader **temporary = (XrtManagedHeader **)(activation->payload + to->temporary_offset);
+    /* One executor owns this Frame. There is no external observation, failure
+     * or callback between checking the actual busy state and publishing both
+     * destinations. The general transaction retires any occupied result. */
+    if (!*source || *destination || *temporary) return false;
+    *destination = *source;
+    *source = NULL;
+    if (scalar) scalar->bits = bits;
+    return true;
+}
 static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *activation, XrRbcValueAccess access) {
     const XrRbcValueCode *code=activation->code;
@@ -532,6 +576,8 @@ static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *st
     XrtManagedStatus status=XRT_MANAGED_OK;
     if (access.index!=UINT32_MAX) {
         selected=&code->homes->edges[access.index];
+        if (activation->owned_code && selected->direct_header_move &&
+            rbc_value_edge_move_header(stack, activation, access, selected)) return XRT_MANAGED_OK;
         status=rbc_value_edge_stage(module,stack,activation,selected,&prepared);
         for (size_t p=0;status==XRT_MANAGED_OK && p<selected->count;++p) {
             XrLirHomeTransfer transfer=code->homes->transfers[selected->first+p];

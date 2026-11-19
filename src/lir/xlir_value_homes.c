@@ -534,7 +534,7 @@ static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *s
             for (uint32_t e = 0; e < instruction.edge_count; ++e) {
                 XrLirEdgeView edge = instruction.edges[e]; XrLirBlockView target;
                 xr_lir_block_view(c->input, (XrLirBlock){c->input, c->function.id, edge.target}, &target);
-                XrLirHomeEdge row = {id.id, e + 1, edge.target, b->transfers.count, 0};
+                XrLirHomeEdge row = {.block=id.id,.edge=e + 1,.target_block=edge.target,.first=b->transfers.count};
                 for (uint32_t p = 0; p < edge.argument_count; ++p) {
                     const XrLirHomeEvent *event = position < selected_count ? selected[position] : NULL;
                     bool matched = event && event->block == id.id && event->edge == e + 1 && event->argument == p;
@@ -722,6 +722,39 @@ static bool lir_home_array_regions(LirHomeBuilder *b, const XrLirOwnershipPlan *
     }
     return true;
 }
+
+static bool lir_home_direct_header_move(const LirHomeBuilder *b, const XrLirHomeEdge *edge) {
+    const XrLirValueHomes *homes = b->homes;
+    if (edge->count != 1 || !homes->owned_frame_needed) return false;
+    XrLirHomeTransfer transfer = homes->transfers[edge->first];
+    if (transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE || transfer.hold_transfer_mode ||
+        transfer.source_workspace || transfer.target_workspace || transfer.source_storage ||
+        transfer.borrowed_owner_workspace != SIZE_MAX) return false;
+    const XrLirValueHome *from = &homes->values[transfer.source], *to = &homes->values[transfer.target];
+    if (!from->type || from->type != to->type || from->parameter || to->parameter ||
+        from->borrow_source || to->borrow_source || from->transport || to->transport ||
+        from->cell_transport || to->cell_transport || from->view_workspace || to->view_workspace ||
+        from->view_storage || to->view_storage || from->owner_count != 1 || to->owner_count != 1 ||
+        from->byte_count || to->byte_count || from->size != sizeof(XrtManagedHeader *) || to->size != from->size)
+        return false;
+    XrLirValueLayoutKey key;
+    const XrtValuePlan *plan = NULL;
+    XrtValuePlanSpec spec;
+    if (xr_lir_value_layouts_at(b->layouts, from->type - 1, &key, &plan) != XR_LIR_VALUE_LAYOUT_OK ||
+        xrt_value_plan_view(plan, &spec) != XRT_MANAGED_OK || spec.kind < XRT_VALUE_STRING ||
+        spec.kind > XRT_VALUE_MAP_STRING_I64 || spec.owned_count != 1 || !spec.owned_offsets || spec.owned_offsets[0])
+        return false;
+    size_t slots[] = {from->first_owner, to->first_owner, to->temporary_first_owner};
+    size_t offsets[] = {from->offset, to->offset, to->temporary_offset};
+    for (size_t n = 0; n < 3; ++n) {
+        if (slots[n] >= homes->frame.slot_count || offsets[n] > homes->frame.payload_size ||
+            sizeof(XrtManagedHeader *) > homes->frame.payload_size - offsets[n] ||
+            offsets[n] % _Alignof(XrtManagedHeader *) || homes->frame.owned_offsets[slots[n]] != offsets[n]) return false;
+        for (size_t p = 0; p < n; ++p) if (slots[n] == slots[p] || offsets[n] == offsets[p]) return false;
+    }
+    return true;
+}
+
 XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHomesRequest *request,
     XrLirValueHomes **output) {
     if (!request || !request->module || request->function.module != request->module || !request->layouts ||
@@ -751,6 +784,9 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHome
     b.homes->arguments = b.arguments.data; b.homes->argument_count = b.arguments.count;
     b.homes->workspaces = b.workspaces.data; b.homes->workspace_count = b.workspaces.count;
     if (!success) { xr_lir_value_homes_destroy(b.homes); return b.compiler.status; }
+    XrLirHomeEdge *edges = b.edges.data;
+    for (size_t n = 0; n < b.edges.count; ++n)
+        edges[n].direct_header_move = lir_home_direct_header_move(&b, &edges[n]);
     bool typed = b.homes->event_count || b.homes->unmodeled || b.homes->frame.payload_size;
     for (size_t v = 1; !typed && v <= b.homes->value_count; ++v) typed = b.homes->values[v].type != 0;
     if (typed) *output = b.homes;

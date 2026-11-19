@@ -71,6 +71,9 @@ typedef struct XrLirHomeTransfer {
 } XrLirHomeTransfer;
 typedef struct XrLirHomeEdge {
     uint32_t block, edge, target_block;
+    /* One complete nonnullable owner MOVE between disjoint local slots.
+     * Execution must still respect the live guard, pending and old result. */
+    bool direct_header_move;
     size_t first, count;
 } XrLirHomeEdge;
 typedef struct XrLirHomeCall {

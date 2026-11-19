@@ -12,7 +12,7 @@ static bool rbc_value_array_forward(const XrRbcModule *module,RbcValueActivation
     XrRbcValueAccess access=code->accesses[index];
     /* The owning activation borrows immutable admitted facts. Only its actual
      * current/next words and the factory view's live slot state are probed. */
-    if (!activation->array_forwarding || !access.index ||
+    if (!activation->owned_code || !access.index ||
         (access.operation!=XR_RBC_VALUE_BINDING_NEW && access.operation!=XR_RBC_VALUE_BINDING_READ) ||
         access.index>code->homes->event_count ||
         code->homes->events[access.index-1].forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE || !pc ||
@@ -140,7 +140,7 @@ static XrtManagedStatus rbc_value_string_binding_append(const XrRbcModule *modul
 }
 static bool rbc_value_array_local_update(XrRbcStack *stack,RbcValueActivation *activation,
     XrRbcValueAccess access) {
-    if (!activation->array_forwarding || !activation->array_backings_ready || !access.other) return false;
+    if (!activation->owned_code || !activation->array_backings_ready || !access.other) return false;
     const uint32_t *args=activation->code->arguments+access.first;
     const XrLirHomeBinding *binding=rbc_value_binding(activation->code,args[0]);
     const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
