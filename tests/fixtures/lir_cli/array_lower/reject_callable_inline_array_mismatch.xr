@@ -1,0 +1,6 @@
+fn invoke(callback: fn(Array<(string, i64)>) -> Array<(string, i64)>, value: Array<(string, i64)>) -> i64 {
+    const result = callback(value)
+    return result[0].1
+}
+
+print(invoke(fn(value: Array<(string, f64)>) -> Array<(string, f64)> { return value }, [("different", 42)]))

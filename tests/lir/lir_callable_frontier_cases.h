@@ -6,7 +6,26 @@
  *
  * lir_callable_frontier_cases.h - Valid signatures reach both capability checks
  */
+static void inline_array_callable_frontier(void) {
+    for (uint32_t scenario = 0; scenario < 3; ++scenario) {
+        XrLirModule *module = NULL;
+        OK(xr_lir_module_create(NULL, &module));
+        XrLirType element = 0, callable = 0;
+        XrLirRecordField row[] = {{.type=XR_LIR_STRING}, {.type=XR_LIR_I64}};
+        OK(xr_lir_tuple_type(module, row, 2, &element));
+        OK(xr_lir_require_inline_array_element(module, element));
+        XrLirCallableParameter parameter = {.type=XR_LIR_ARRAY, .array_element=element,
+            .mode=scenario == 2 ? XR_PARAM_MOVE : XR_PARAM_READ};
+        XrLirCallableType signature = {.parameters=&parameter, .parameter_count=scenario ? 1 : 0,
+            .result=scenario ? XR_LIR_UNIT : XR_LIR_ARRAY, .result_element=scenario ? 0 : element,
+            .flags=scenario == 2 ? 0 : XR_LIR_CALLABLE_C_ABI | XR_LIR_CALLABLE_NO_SUSPEND};
+        CHECK(xr_lir_callable_type(module, &signature, &callable) == XR_LIR_INVALID_ARGUMENT && !callable);
+        xr_lir_module_destroy(module);
+    }
+}
+
 static void callable_backend_frontier(void) {
+    inline_array_callable_frontier();
     for (unsigned scenario = 0; scenario < 3; ++scenario) {
         XrLirModule *m = NULL;
         OK(xr_lir_module_create(NULL, &m));
