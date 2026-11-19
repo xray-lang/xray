@@ -36,13 +36,13 @@ static bool local_line(XtcHostToolchain *owner, const XrProcessByteBuffer *bytes
     *output = local_copy(owner, (const char *)bytes->data, end); return *output != NULL;
 }
 static bool local_xcrun(XtcHostToolchain *owner, const XtcHostToolchainRequest *request,
-    const char *option, const char *argument, char **output) {
+    const char *probe, const char *option, const char *argument, char **output) {
     XrProcessSpec spec; XrProcessResult result = {0};
     xtc_process_spec_init(&spec, "/usr/bin/xcrun", request->timeout_ms);
     spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT; spec.cwd = "/";
     spec.output_limit = request->output_limit;
     spec.argv[1] = option; spec.argv[2] = argument;
-    bool okay = local_process(owner, &spec, &result) && local_line(owner, &result.stdout_bytes, output);
+    bool okay = local_process(owner, &spec, probe, &result) && local_line(owner, &result.stdout_bytes, output);
     xtc_process_result_free(&result); return okay;
 }
 #endif
@@ -103,9 +103,9 @@ static bool local_discover(XtcHostToolchain *owner, const XtcHostToolchainReques
     bool okay = true;
 #ifdef XR_OS_MACOS
     char *sdk = NULL, *clang = NULL;
-    okay = local_xcrun(owner, request, "--show-sdk-path", NULL, &sdk) &&
+    okay = local_xcrun(owner, request, "xcrun-sdk", "--show-sdk-path", NULL, &sdk) &&
         local_path(owner, sdk, true, &owner->view.posix.sysroot) &&
-        (selected || local_xcrun(owner, request, "--find", "clang", &clang));
+        (selected || local_xcrun(owner, request, "xcrun-clang", "--find", "clang", &clang));
     if (okay && !selected) selected = clang;
     owner->view.posix.arch = XTC_HOST_ARCH;
 #else

@@ -47,6 +47,9 @@ typedef struct XtcHostDiagnostic {
     int code;
     uint32_t os_error;
     int child_exit;
+    /* Process tags are static and outlive the failure's discarded owner. */
+    const char *probe, *operation;
+    bool exit_observed;
 } XtcHostDiagnostic;
 typedef struct XtcHostToolchainRequest {
     const char *compiler, *workspace_parent;

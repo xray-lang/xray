@@ -266,9 +266,11 @@ static bool local_discover(XtcHostToolchain *owner, const XtcHostToolchainReques
         spec.argv[4] = "Microsoft.VisualStudio.Component.VC.Tools.x86.x64";
         spec.argv[5] = "-property"; spec.argv[6] = "installationPath";
         spec.argv[7] = "-format"; spec.argv[8] = "value"; spec.argv[9] = "-latest"; spec.argv[10] = "-utf8";
-        okay = local_process_status(owner,xtc_process_prepare(owner->resources,&spec,&discovery)) &&
-            local_process_status(owner,xtc_process_view(discovery,&snapshot)) &&
-            local_process_prepared(owner,discovery,&result) &&
+        okay = local_process_status(owner, xtc_process_prepare(owner->resources, &spec, &discovery),
+                   "vswhere", (XrProcessDiagnostic){.operation = "prepare"}) &&
+            local_process_status(owner, xtc_process_view(discovery, &snapshot),
+                   "vswhere", (XrProcessDiagnostic){.operation = "snapshot"}) &&
+            local_process_prepared(owner, discovery, "vswhere", &result) &&
             local_installation(owner, &result.stdout_bytes, &installation) &&
             local_join_path(owner, installation, "Common7/Tools/VsDevCmd.bat", false, &script);
     }
@@ -288,7 +290,7 @@ static bool local_discover(XtcHostToolchain *owner, const XtcHostToolchainReques
         spec.argv[1] = "/d"; spec.argv[2] = "/s"; spec.argv[3] = "/u"; spec.argv[4] = "/c";
         spec.argv[5] = "call"; spec.argv[6] = script; spec.argv[7] = "-no_logo";
         spec.argv[8] = "-arch=x64"; spec.argv[9] = "-host_arch=x64"; spec.argv[10] = "&&"; spec.argv[11] = "set";
-        okay = local_process(owner, &spec, &result) &&
+        okay = local_process(owner, &spec, "vsdevcmd", &result) &&
             local_environment(owner, &result.stdout_bytes, values);
     }
     xtc_process_result_free(&result);
