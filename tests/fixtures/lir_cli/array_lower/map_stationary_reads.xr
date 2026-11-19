@@ -1,0 +1,39 @@
+fn local(n:i64)->i64 {
+    const table={"x": 2}
+    const key="x"
+    var i=0
+    var sum=0
+    while (i<n) {
+        sum+=table[key]
+        i+=1
+    }
+    return sum
+}
+
+fn incoming(table:Map<string,i64>,key:string,n:i64)->i64 {
+    var i=0
+    var sum=0
+    while (i<n) {
+        sum+=table[key]
+        i+=1
+    }
+    return sum
+}
+
+fn merged(table:Map<string,i64>,first:bool,n:i64)->i64 {
+    var key="x"
+    if (!first) {key="y"}
+    var i=0
+    var sum=0
+    while (i<n) {
+        sum+=table[key]
+        i+=1
+    }
+    return sum
+}
+
+print(local(0))
+print(local(37))
+print(incoming({"x": 3},"x",37))
+print(merged({"x": 2,"y": 3},true,37))
+print(merged({"x": 2,"y": 3},false,37))

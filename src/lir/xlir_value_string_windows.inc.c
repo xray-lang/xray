@@ -37,7 +37,7 @@ static bool lir_string_window_follow(LirHomeBuilder *b, const XrLirFunctionData 
     bool has_suffix = false, has_index = false;
     for (uint32_t n = 0; n < edge->argument_count; ++n) {
         if (target->parameters[n] == transport.target) continue;
-        if (homes->values[edge->arguments[n]].stationary_string == carry->suffix &&
+        if (homes->values[edge->arguments[n]].stationary_owner == carry->suffix &&
             xr_lir_home_stationary_edge(homes, edge->arguments[n], target->parameters[n])) {
             if (has_suffix) return false;
             has_suffix = true;
@@ -120,7 +120,7 @@ static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *f
         XrLirType type = function->values[id - 1].type;
         if (type == XR_LIR_I64 && !index) index = id;
         else if (type == XR_LIR_STRING) {
-            uint32_t producer = homes->values[id].stationary_string;
+            uint32_t producer = homes->values[id].stationary_owner;
             if (producer && !stable) stable = producer;
             else if (!producer && !owner) owner = id;
             else return false;
@@ -177,7 +177,7 @@ static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *f
     const XrLirValueHome *suffix = &homes->values[append->operands[1]], *result = &homes->values[append->result];
     size_t suffix_slot;
     if (stable) {
-        if (suffix->stationary_string != stable) return false;
+        if (suffix->stationary_owner != stable) return false;
         suffix_slot = suffix->first_owner;
     } else {
         if (!literal || !drop || append->operands[1] != literal->result || drop->operands[0] != literal->result ||
