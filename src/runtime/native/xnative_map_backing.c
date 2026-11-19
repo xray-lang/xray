@@ -416,45 +416,29 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *map,
     if (owned && update->operation == XRT_MAP_UPDATE_REMOVE) xrt_managed_drop(&owned->managed);
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_map_try_update_local(const XrtManagedFrameLocations *locations,
+typedef struct MapBindingUpdate {
+    const XrtMapUpdate *update;
+    XrtMapBacking *source;
+    bool applied, removed;
+} MapBindingUpdate;
+static XrtManagedStatus map_binding_try(XrtManagedHeader *value, void *context) {
+    MapBindingUpdate *binding = context;
+    binding->source = (XrtMapBacking *)value;
+    return xrt_map_backing_try_update(binding->source, binding->update, &binding->applied, &binding->removed);
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_try_update_local(XrtManagedFrame *frame,
     size_t binding, size_t workspace, const XrtMapUpdate *update, bool *applied, bool *removed) {
     if (!update || !applied || !removed) return XRT_MANAGED_ARGUMENT;
     *applied = false;
-    if (!locations || !locations->frame || !locations->payload || !locations->slots ||
-        !locations->busy || *locations->busy ||
-        binding >= locations->slot_count || workspace >= locations->slot_count || binding == workspace)
-        return XRT_MANAGED_OK;
-    const XrtManagedSlot *slot = &locations->slots[binding], *stage = &locations->slots[workspace];
-    if (slot->owner_offset == SIZE_MAX || stage->owner_offset == SIZE_MAX ||
-        slot->owner_offset == stage->owner_offset || slot->pending.value || slot->pending.allocation_bytes ||
-        stage->pending.value || stage->pending.allocation_bytes)
-        return XRT_MANAGED_OK;
-    unsigned char *payload = locations->payload;
-    if (*(XrtManagedHeader **)(payload + stage->owner_offset)) return XRT_MANAGED_OK;
-
-    /* Use the real mutable domain from the Frame, even though the exported
-     * Frame locations expose their busy bit as read-only. */
-    XrtManagedSlotLocation domain;
-    XrtManagedStatus status = xrt_managed_slot_location(locations->frame, binding, &domain);
-    if (status != XRT_MANAGED_OK) return status;
-    if (domain.owner != (XrtManagedHeader **)(payload + slot->owner_offset) ||
-        domain.pending != &slot->pending || domain.busy != locations->busy)
-        return XRT_MANAGED_ARGUMENT;
-    XrtMapBacking *map = (XrtMapBacking *)*domain.owner;
-    if (!map) return XRT_MANAGED_OK;
-
-    /* The common in-place edit holds the Root through key retirement. */
-    status = xrt_managed_domain_enter(domain);
-    if (status != XRT_MANAGED_OK) return status;
-    bool complete = false, did_remove = false;
-    status = xrt_map_backing_try_update(map, update, &complete, &did_remove);
-    xrt_managed_domain_leave(domain);
-    if (status == XRT_MANAGED_OK && complete) {
-        *removed = did_remove;
+    MapBindingUpdate edit = {.update=update};
+    XrtManagedStatus status = xrt_managed_slot_edit_local(frame, binding, workspace, map_binding_try, &edit);
+    if (status == XRT_MANAGED_OK && edit.applied) {
+        *removed = edit.removed;
         *applied = true;
     }
     return status;
 }
+
 static XrtManagedStatus map_update_create(const MapDestination *destination,
     const XrtMapBacking *source, const XrtMapUpdate *update, bool *removed) {
     if (!removed) return XRT_MANAGED_ARGUMENT;
@@ -486,16 +470,6 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_update_create(XrtManagedFrame *frame
     const XrtBackingTypes *types, const XrtMapBacking *source, const XrtMapUpdate *update, bool *removed) {
     MapDestination destination = {frame, slot, types, NULL};
     return map_update_create(&destination, source, update, removed);
-}
-typedef struct MapBindingUpdate {
-    const XrtMapUpdate *update;
-    XrtMapBacking *source;
-    bool applied, removed;
-} MapBindingUpdate;
-static XrtManagedStatus map_binding_try(XrtManagedHeader *value, void *context) {
-    MapBindingUpdate *binding = context;
-    binding->source = (XrtMapBacking *)value;
-    return xrt_map_backing_try_update(binding->source, binding->update, &binding->applied, &binding->removed);
 }
 XR_FUNCDEF XrtManagedStatus xrt_map_update_place(XrtPlace binding, XrtManagedFrame *frame, size_t workspace,
     const XrtBackingTypes *types, const XrtMapUpdate *update, bool *removed) {
