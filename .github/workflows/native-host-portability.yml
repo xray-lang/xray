@@ -1,6 +1,12 @@
 name: Native Array artifact replay
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      compare_layout:
+        description: Compare the direct Array segment against its parent
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -8,6 +14,7 @@ permissions:
 
 jobs:
   replay:
+    if: '!inputs.compare_layout'
     name: macOS arm64 Array replay (${{ matrix.replica }})
     runs-on: macos-latest
     timeout-minutes: 10
@@ -44,3 +51,47 @@ jobs:
         with:
           name: array-replay-macos-${{ matrix.replica }}
           path: replay-results/
+
+
+  compare-layout:
+    if: inputs.compare_layout
+    name: macOS arm64 standalone Array comparison (${{ matrix.replica }})
+    runs-on: macos-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [1, 2]
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      NO_COLOR: '1'
+      XR_ARRAY_PARENT: ad1054d1b6297bee84f476f8634fac73520c0656
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare both clean layouts using the same compiler
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/layout-parent" "$XR_ARRAY_PARENT"
+          clang="$(command -v clang)"
+          python "$RUNNER_TEMP/layout-parent/bench/managed-value-layout/run.py" prepare --cc "$clang" --work "$RUNNER_TEMP/parent-build"
+          python bench/managed-value-layout/run.py prepare --cc "$clang" --work "$RUNNER_TEMP/candidate-build"
+      - name: Alternate the complete workload on the same host
+        run: |
+          python scripts/diagnostics/compare_macos_array_layout.py \
+            --parent "$RUNNER_TEMP/parent-build/prepared.json" \
+            --candidate "$RUNNER_TEMP/candidate-build/prepared.json" \
+            --work "$RUNNER_TEMP/layout-results"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: array-layout-comparison-macos-${{ matrix.replica }}
+          path: |
+            ${{ runner.temp }}/parent-build/
+            ${{ runner.temp }}/candidate-build/
+            ${{ runner.temp }}/layout-results/
