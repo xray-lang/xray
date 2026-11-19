@@ -436,7 +436,13 @@ XRAY_API void xrt_native_map_update_place(XrtPlace binding, XrtManagedFrame *fra
     const XrtMapUpdate *update, bool *removed, uint32_t source_id) {
     const XrtBackingTypes *types = NULL;
     XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
-    if (status == XRT_MANAGED_OK) status = xrt_map_update_place(binding, frame, workspace, types, update, removed);
+    bool applied = false;
+    /* One real Frame already protects both slots during key retirement. */
+    if (status == XRT_MANAGED_OK && frame && binding.frame == frame && !binding.external &&
+        binding.nulls == XRT_PLACE_NONNULL)
+        status = xrt_map_try_update_local(frame, binding.slot, workspace, update, &applied, removed);
+    if (status == XRT_MANAGED_OK && !applied)
+        status = xrt_map_update_place(binding, frame, workspace, types, update, removed);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
 XRAY_API void xrt_native_set_create(XrtManagedFrame *frame, size_t slot,
