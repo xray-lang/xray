@@ -115,7 +115,7 @@ XR_FUNC XrLirStatus xr_lir_set_state_entry(XrLirModule *m, XrLirFunction functio
         f->parameter_types[f->parameter_count - 1] != XR_LIR_STATE)
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     for (uint32_t p = 0; p < f->parameter_count; ++p)
-        if (f->parameter_types[p] == XR_LIR_ARRAY_REF)
+        if (f->parameter_types[p] == XR_LIR_ARRAY_REF || f->parameter_types[p] == XR_LIR_I64_REF)
             return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     m->state_entry = function.id;
     return XR_LIR_OK;

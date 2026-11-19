@@ -604,7 +604,7 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
         for (uint32_t p = 0; p < block->parameter_count; ++p) {
             uint32_t id = block->parameters[p];
             if (!id || id > f->value_count ||
-                f->values[id - 1].type == XR_LIR_FUNCTION_SCOPE ||
+                f->values[id - 1].type == XR_LIR_FUNCTION_SCOPE || f->values[id - 1].type == XR_LIR_I64_REF ||
                 !xr_lir_internal_type_valid(m, f->values[id - 1].type, false) ||
                 !lir_definition(f, seen, id, f->values[id - 1].type, b + 1, p, true))
                 return xr_lir_internal_error(d, "block parameter definition is inconsistent",
@@ -1086,6 +1086,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
     for (uint32_t i = 0; i < m->intrinsic_count; ++i) {
         const XrLirIntrinsic *entry = &m->intrinsics[i];
         if (!entry->id || !entry->scalar_sync || !xr_lir_internal_type_valid(m, entry->result, true) ||
+            entry->result == XR_LIR_I64_REF ||
             (entry->parameter_count && !entry->parameters))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic signature is invalid");
         bool array = xr_lir_internal_array_type(entry->result);
@@ -1093,7 +1094,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
             entry->result == XR_LIR_VIEW_CELL || entry->result == XR_LIR_SLICE_I64 || xr_lir_internal_slice_type(m, entry->result)))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "generic intrinsic cannot produce a view capability");
         for (uint32_t p = 0; p < entry->parameter_count; ++p) {
-            if (!xr_lir_internal_type_valid(m, entry->parameters[p], false))
+            if (!xr_lir_internal_type_valid(m, entry->parameters[p], false) || entry->parameters[p] == XR_LIR_I64_REF)
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic parameter type is invalid");
             array |= xr_lir_internal_array_type(entry->parameters[p]);
             if (!entry->operation && (entry->parameters[p] == XR_LIR_MAP_STRING_I64_REF || entry->parameters[p] == XR_LIR_STRING_REF || entry->parameters[p] == XR_LIR_VIEW_FRAME ||
