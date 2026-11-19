@@ -6,20 +6,17 @@
  *
  * xrbc_value_array_execute.inc.c - Fixed Array owners and actual binding transactions
  */
-static bool rbc_value_binding_forward(const XrRbcModule *module,RbcValueActivation *activation,
-    uint32_t index,size_t pc) {
-    const XrRbcValueCode *code=activation->code;
-    XrRbcValueAccess access=code->accesses[index];
-    /* The owning activation borrows immutable admitted facts. Only its actual
-     * current/next words and the factory view's live slot state are probed. */
-    if (!activation->owned_code || !access.index ||
-        (access.operation!=XR_RBC_VALUE_BINDING_NEW && access.operation!=XR_RBC_VALUE_BINDING_READ) ||
-        access.index>code->homes->event_count ||
-        code->homes->events[access.index-1].forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE || !pc ||
-        !rbc_value_binding_forwarding_words(&module->functions[activation->function],code,index,pc-1)) return false;
-    bool create=access.operation==XR_RBC_VALUE_BINDING_NEW;
-    const XrLirHomeBinding *binding=rbc_value_binding(code,create ? access.result : access.source);
-    const XrLirValueHome *home=rbc_value_home(code,create ? access.source : access.result);
+static inline bool rbc_value_binding_forward(RbcValueActivation *activation, XrRbcValueAccess access) {
+    bool create = access.operation == XR_RBC_VALUE_BINDING_NEW;
+    if ((!create && access.operation != XR_RBC_VALUE_BINDING_READ) ||
+        !activation->owned_code || !access.index) return false;
+    const XrLirValueHomes *homes = activation->code->homes;
+    XR_DCHECK(homes && access.index <= homes->event_count, "owned binding events were admitted");
+    /* Admission paired this immutable instruction with its release word.
+     * Only the current Frame's eligibility to move can vary at execution. */
+    if (homes->events[access.index - 1].forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE) return false;
+    const XrLirHomeBinding *binding = &homes->bindings[create ? access.result : access.source];
+    const XrLirValueHome *home = &homes->values[create ? access.source : access.result];
     return xrt_managed_frame_try_forward(activation->frame,activation->payload,&activation->frame_locations,
         (XrtManagedFrameForward){create ? home->first_owner : binding->first_owner,
             create ? home->offset : binding->offset,create ? binding->first_owner : home->first_owner,
