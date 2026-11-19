@@ -53,7 +53,7 @@ static bool rbc_lir_value_string_slot(RbcLirCompiler *c, uint64_t slot) {
         xrt_value_kind_has_fields(state->values->types[type - 1].kind) ||
         state->values->types[type - 1].kind == XRT_VALUE_FUNCTION ||
         inline_value ||
-        (state->values->types[type - 1].kind >= XRT_VALUE_ARRAY_I64 && state->values->types[type - 1].kind <= XRT_VALUE_ARRAY_U64));
+        xrt_value_kind_is_array(state->values->types[type - 1].kind));
 }
 static bool rbc_lir_value_needed(RbcLirCompiler *c) {
     XrLirClosureTarget target={0};

@@ -10,14 +10,14 @@ static bool c_array_intrinsic(LirC *c, const XrLirInstructionView *v, XrLirArray
     return v->op == XR_LIR_CALL_INTRINSIC &&
         xr_lir_array_intrinsic_view(c->request->module, v->intrinsic, shape) == XR_LIR_OK && shape->id;
 }
-static bool c_array_element_supported(XrLirType element) {
-    return element == XR_LIR_I64 || element == XR_LIR_STRING || element == XR_LIR_U8 || element == XR_LIR_U64;
+static bool c_array_element_supported(const LirC *c, XrLirType element) {
+    return xr_lir_internal_array_element(c->request->module, element);
 }
 static void c_array_admit_shapes(LirC *c) {
     XrLirArrayShape shape = {0};
     if (c->view.result == XR_LIR_ARRAY) {
         if (xr_lir_array_result_view(c->request->module, c->function, &shape) != XR_LIR_OK ||
-            !c_array_element_supported(shape.element))
+            !c_array_element_supported(c, shape.element))
             c_error(c, XR_LIR_C_UNSUPPORTED, "Array result has no native element implementation");
     }
     for (uint32_t id = 1; id <= c->view.value_count && c->status == XR_LIR_C_OK; ++id) {
@@ -25,12 +25,12 @@ static void c_array_admit_shapes(LirC *c) {
         XrLirType type = c_value_type(c, id);
         if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
             if (xr_lir_array_shape_view(c->request->module, value, &shape) != XR_LIR_OK ||
-                !c_array_element_supported(shape.element))
+                !c_array_element_supported(c, shape.element))
                 c_error(c, XR_LIR_C_UNSUPPORTED, "Array value has no native element implementation");
         } else if (type == XR_LIR_STATE_REF) {
             XrLirStateReference reference = {0};
             if (xr_lir_state_reference_view(c->request->module, value, &reference) != XR_LIR_OK ||
-                (reference.payload == XR_LIR_ARRAY && !c_array_element_supported(reference.array_element)))
+                (reference.payload == XR_LIR_ARRAY && !c_array_element_supported(c, reference.array_element)))
                 c_error(c, XR_LIR_C_UNSUPPORTED, "module reference has no native element implementation");
         }
     }
@@ -109,13 +109,55 @@ static void c_array_scalar_get(LirC *c, const XrLirInstructionView *v, uint32_t 
         c_array_kind(v->type),source);
     c_format(c,"        v%" PRIu32 " = item.value.%s;\n    }\n    }\n",v->result,c_array_member(v->type));
 }
+static void c_array_inline(LirC *c, const XrLirInstructionView *v, const XrLirArrayIntrinsic *shape,
+    XrLirType element, uint32_t source) {
+    c_values_ensure(c,source);
+    if (shape->operation == XR_LIR_ARRAY_OP_NEW) {
+        const XrLirValueHome *home = &c->homes->values[v->result];
+        c_format(c,"    xrt_native_array_inline_create(xrl_frame, %zu, &xrl_value_image, UINT32_C(%" PRIu32 "), ",
+            home->temporary_first_owner,home->type);
+        if (!v->operand_count) c_text(c,"NULL");
+        else {
+            c_format(c,"(const %s[]){",c_type(c,element));
+            for (uint32_t i=0;i<v->operand_count;++i) {
+                if (i) c_text(c,", ");
+                c_value(c,v->operands[i]);
+            }
+            c_text(c,"}");
+        }
+        c_format(c,", UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "));\n",v->operand_count,source);
+        c_values_publish_leaf(c,v->result,source);
+        return;
+    }
+    if (shape->operation != XR_LIR_ARRAY_OP_GET) {
+        c_error(c,XR_LIR_C_UNSUPPORTED,"inline Array operation has no target receiver"); return;
+    }
+    const XrLirValueHome *array = &c->homes->values[v->operands[0]];
+    c_text(c,"    { const void *row = xrt_native_array_inline_at("); c_value(c,v->operands[0]);
+    c_format(c,", &xrl_value_image, UINT32_C(%" PRIu32 "), ",array->type);
+    c_value(c,v->operands[1]);
+    c_format(c,", UINT32_C(%" PRIu32 "));\n",source);
+    if (c->homes->values[v->result].owner_count) {
+        c_values_replace_begin(c,v->result,source); c_text(c,"row"); c_values_replace_end(c,source);
+    } else {
+        c_text(c,"    memcpy(&"); c_value(c,v->result); c_text(c,", row, sizeof(");
+        c_value(c,v->result); c_text(c,"));\n");
+    }
+    c_text(c,"    }\n");
+}
 static void c_array_call(LirC *c, const XrLirInstructionView *v,
     const XrLirArrayIntrinsic *shape, uint32_t source) {
     XrLirType element=v->type==XR_LIR_ARRAY ? shape->result_element : shape->parameter_elements[0];
+    if (shape->operation == XR_LIR_ARRAY_OP_LEN) {
+        c_format(c,"    v%" PRIu32 " = (int64_t)((const XrtArrayBacking *)",v->result);
+        c_value(c,v->operands[0]); c_text(c,")->length;\n"); return;
+    }
+    if (xr_lir_inline_array_ordinal(c->request->module,element)) {
+        c_array_inline(c,v,shape,element,source); return;
+    }
     const char *kind=c_array_kind(element);
     if (!kind) { c_error(c,XR_LIR_C_UNSUPPORTED,"Array element has no target receiver"); return; }
-    if (shape->operation != XR_LIR_ARRAY_OP_LEN &&
-        (shape->operation != XR_LIR_ARRAY_OP_GET || element == XR_LIR_STRING)) c_values_ensure(c,source);
+    if (shape->operation != XR_LIR_ARRAY_OP_GET || element == XR_LIR_STRING) c_values_ensure(c,source);
     const XrLirValueHome *home=v->result ? &c->homes->values[v->result] : NULL;
     switch (shape->operation) {
     case XR_LIR_ARRAY_OP_NEW:
@@ -138,9 +180,6 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
          * Merely emitting an ensure inside conditional C proves nothing. */
         if (c->status == XR_LIR_C_OK) c->array_frame_block = c->block;
         return;
-    case XR_LIR_ARRAY_OP_LEN:
-        c_format(c,"    v%" PRIu32 " = (int64_t)((const XrtArrayBacking *)",v->result);
-        c_value(c,v->operands[0]); c_text(c,")->length;\n"); return;
     case XR_LIR_ARRAY_OP_GET:
         if (element != XR_LIR_STRING) { c_array_scalar_get(c,v,source); return; }
         c_text(c,"    { XrtArrayItem item = {0};\n    xrt_native_array_get("); c_value(c,v->operands[0]);

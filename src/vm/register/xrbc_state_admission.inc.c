@@ -24,7 +24,7 @@ static bool rbc_state_register_kind(uint32_t kind, XrRbcRegisterKind *payload) {
 static bool xr_rbc_state_payload_kind(uint32_t kind) {
     XrRbcRegisterKind payload;
     return xrt_value_kind_has_fields(kind) || kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FUNCTION ||
-        kind==XRT_VALUE_MAP_STRING_I64 || kind==XRT_VALUE_SET_I64 || (kind>=XRT_VALUE_ARRAY_I64 && kind<=XRT_VALUE_ARRAY_U64) ||
+        kind==XRT_VALUE_MAP_STRING_I64 || kind==XRT_VALUE_SET_I64 || xrt_value_kind_is_array(kind) ||
         rbc_state_register_kind(kind,&payload);
 }
 static bool rbc_state_span(size_t first, size_t count, size_t total) {
@@ -45,7 +45,7 @@ static bool rbc_state_image_shape(const XrtValueImage *image) {
         !rbc_state_vector(image->names,image->name_bytes,1)) return false;
     for (uint32_t i = 0; i < image->type_count; ++i) {
         const XrtValueImageType *type = &image->types[i];
-        if ((uint32_t)type->kind > XRT_VALUE_SET_I64 || !rbc_state_alignment(type->alignment) ||
+        if ((uint32_t)type->kind > XRT_VALUE_ARRAY_INLINE || !rbc_state_alignment(type->alignment) ||
             type->size % type->alignment ||
             !rbc_state_span(type->first_owned,type->owned_count,image->owned_count) ||
             !rbc_state_span(type->first_field,type->field_count,image->slot_count) ||
@@ -53,6 +53,8 @@ static bool rbc_state_image_shape(const XrtValueImage *image) {
             !rbc_state_span(type->first_parameter,type->parameter_count,image->parameter_count) ||
             type->nullable_element > i || type->result > i || type->entry_signature > i || type->element > i)
             return false;
+        if (type->kind == XRT_VALUE_ARRAY_INLINE &&
+            (!type->element || !xrt_value_kind_has_fields(image->types[type->element - 1].kind))) return false;
         size_t end = 0;
         for (uint32_t o = 0; o < type->owned_count; ++o) {
             size_t offset = image->owned_offsets[type->first_owned + o];

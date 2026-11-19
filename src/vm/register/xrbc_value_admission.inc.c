@@ -90,7 +90,7 @@ static XrtValueKind rbc_value_kind(const XrRbcModule *module,const XrRbcValueCod
 }
 static bool rbc_value_array(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
     const XrLirValueHome *home=rbc_value_home(code,value); XrtValueKind kind=rbc_value_kind(module,code,value);
-    return home && kind>=XRT_VALUE_ARRAY_I64 && kind<=XRT_VALUE_ARRAY_U64 && home->owner_count==1 &&
+    return home && xrt_value_kind_is_array(kind) && home->owner_count==1 &&
         home->size==sizeof(XrtManagedHeader *) && code->locations[value].kind==XR_RBC_VALUE_NOWHERE &&
         (!destination || (!home->parameter && home->offset!=SIZE_MAX && home->temporary_offset!=SIZE_MAX &&
             home->temporary_first_owner<code->homes->frame.slot_count));
@@ -225,6 +225,8 @@ static bool rbc_value_pod(const XrRbcModule *module,const XrRbcValueCode *code,
     return aggregate.type==result-1 && (kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FIXED_U8) &&
         home->size==module->aggregate_types[result-1].physical.size;
 }
+static bool rbc_value_inline_operand(const XrRbcModule *, const XrRbcValueCode *,
+    const XrRbcFunction *, uint32_t value, uint32_t type, bool destination);
 #include "xrbc_value_array_admission.inc.c"
 #include "xrbc_value_map_admission.inc.c"
 #include "xrbc_value_set_admission.inc.c"

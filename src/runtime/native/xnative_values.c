@@ -42,6 +42,8 @@ struct XrtNativeValues {
     XrtBackingTypes backings;
     NativeEnvironmentImage *images;
     NativeEnvironmentType *environments;
+    const XrtModuleState *state;
+    const XrtValueImage *state_image;
 };
 static XR_THREAD_LOCAL XrtValueBinding value_binding;
 XR_FUNC XrtValueBinding xrt_value_root_bind(XrtValueBinding binding) {
@@ -133,10 +135,15 @@ XRAY_API XrtManagedRoot *xrt_native_managed_root(uint32_t source_id) {
     return native_values(source_id)->root;
 }
 
-static XrtManagedStatus native_capture_plan(struct XrtNativeValues *values,
-    const XrtValueImage *source, XrtModuleState *state, XrtManagedLease code,
-    uint32_t type_id, const XrtValuePlan **output) {
-    if (state) return xrt_module_state_plan(state,type_id,output);
+XR_FUNCDEF void xrt_native_values_use_state(XrtValueRoot *root, const XrtModuleState *state,
+    const XrtValueImage *image) {
+    XR_CHECK(root && root->managed && state && image && !root->managed->state,
+        "a prepared native root borrows its one live State and image");
+    root->managed->state = state;
+    root->managed->state_image = image;
+}
+static XrtManagedStatus native_image_plans(struct XrtNativeValues *values,
+    const XrtValueImage *source, XrtManagedLease code, const XrtValueImagePlans **output) {
     if (!source || (code.context ? !code.retain || !code.drop : code.retain || code.drop)) return XRT_MANAGED_ARGUMENT;
     NativeEnvironmentImage *image = values->images;
     while (image && (image->source != source || image->code.context != code.context ||
@@ -157,7 +164,44 @@ static XrtManagedStatus native_capture_plan(struct XrtNativeValues *values,
         status = xrt_value_image_bind(values->billing,source,code,&image->plans);
         if (status != XRT_MANAGED_OK) return status;
     }
-    return xrt_value_image_get(image->plans,type_id,output);
+    *output = image->plans;
+    return XRT_MANAGED_OK;
+}
+static XrtManagedStatus native_capture_plan(struct XrtNativeValues *values,
+    const XrtValueImage *source, XrtModuleState *state, XrtManagedLease code,
+    uint32_t type_id, const XrtValuePlan **output) {
+    if (state) return xrt_module_state_plan(state,type_id,output);
+    const XrtValueImagePlans *plans = NULL;
+    XrtManagedStatus status = native_image_plans(values, source, code, &plans);
+    return status == XRT_MANAGED_OK ? xrt_value_image_get(plans, type_id, output) : status;
+}
+static XrtBoundInlineArray native_inline_array(const XrtValueImage *image, uint32_t type, uint32_t source) {
+    struct XrtNativeValues *values = native_values(source);
+    XrtBoundInlineArray binding = {0};
+    XrtManagedStatus status;
+    if (values->state && values->state_image == image)
+        status = xrt_module_state_inline_array(values->state, type, &binding);
+    else {
+        const XrtValueImagePlans *plans = NULL;
+        status = native_image_plans(values, image, (XrtManagedLease){0}, &plans);
+        if (status == XRT_MANAGED_OK) status = xrt_value_image_inline_array(plans, type, &binding);
+    }
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+    return binding;
+}
+XRAY_API void xrt_native_array_inline_create(XrtManagedFrame *frame, size_t slot,
+    const XrtValueImage *image, uint32_t type, const void *rows, size_t count, uint32_t source) {
+    XrtBoundInlineArray binding = native_inline_array(image,type,source);
+    XrtManagedStatus status = xrt_array_backing_inline_create(frame,slot,binding.ops,rows,count,count);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+}
+XRAY_API const void *xrt_native_array_inline_at(const XrtManagedHeader *owner, const XrtValueImage *image,
+    uint32_t type, int64_t index, uint32_t source) {
+    XrtBoundInlineArray binding = native_inline_array(image,type,source);
+    const void *row = NULL;
+    XrtManagedStatus status = xrt_array_backing_inline_at((const XrtArrayBacking *)owner,binding.element,index,&row);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+    return row;
 }
 static XrtManagedStatus native_environment_type(struct XrtNativeValues *values,
     const XrtValuePlan *plan, const XrtCaptureType **output) {
