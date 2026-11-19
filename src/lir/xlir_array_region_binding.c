@@ -284,8 +284,11 @@ static XrLirValueLayoutStatus region_binding_owner_home(const RegionBindingBuild
         return home.first_active_step || home.exit_step ? XR_LIR_VALUE_LAYOUT_ARGUMENT : XR_LIR_VALUE_LAYOUT_OK;
     uint32_t expected = row->region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET ?
         XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW : XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW;
+    uint32_t range = row->region.range.kind;
     if (home.kind != expected ||
-        row->region.range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN ||
+        (range != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN &&
+            (range != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT ||
+                expected != XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW)) ||
         home.first_active_step < 2 || home.first_active_step >= home.exit_step || home.exit_step != row->move_count ||
         row->move_count != row->region.step_count) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     const XrLirArrayRegionMove *moves = b->moves.data;
@@ -362,7 +365,9 @@ static XrLirValueLayoutStatus region_binding_primary(const RegionBindingBuilder 
     XrLirValueLayoutStatus capacity=region_binding_capacity(b,row);
     if (capacity!=XR_LIR_VALUE_LAYOUT_OK) return capacity;
     if (region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET) return sets==1 ? XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_ARGUMENT;
-    return gets==1 && !sets && region.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN ?
+    bool guarded=region.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
+        region.range.length && region.range.length<=b->homes->value_count;
+    return gets==1 && !sets && (region.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN || guarded) ?
         XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_ARGUMENT;
 }
 static XrLirValueLayoutStatus region_binding_project(RegionBindingBuilder *b, uint32_t ordinal,

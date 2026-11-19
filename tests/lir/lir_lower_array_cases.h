@@ -45,6 +45,36 @@ static void array_readonly_original_source(void) {
     xr_lir_ownership_plan_destroy(plan); xr_lir_lowered_free(&output);
 }
 
+static void array_readonly_invariant_bound_source(void) {
+    /* The ten-million-element workload compares against a formal bound. */
+    static const char text[] = "fn push_sum(n: i64) -> i64 {\n"
+        "    var values: Array<i64> = []\n"
+        "    for (var i: i64 = 0; i < n; i++) {\n"
+        "        values.push(i)\n"
+        "    }\n"
+        "    var sum: i64 = 0\n"
+        "    for (var i: i64 = 0; i < n; i++) {\n"
+        "        sum += values[i]\n"
+        "    }\n"
+        "    return sum\n"
+        "}\n\n"
+        "const n = 10000000\n"
+        "print(push_sum(n))\n";
+    XrLirLowered output=lower_text(text);
+    XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=output.module},&plan,NULL));
+    CHECK(xr_lir_ownership_array_region_count(plan)==1 && xr_lir_ownership_array_push_window_count(plan)==1);
+    XrLirArraySetRegion region={0}; OK(xr_lir_ownership_array_region_at(plan,0,&region));
+    XrLirFunction function={output.module,region.function}; XrLirFunctionView view={0};
+    OK(xr_lir_function_view(output.module,function,&view));
+    CHECK(region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET &&
+        region.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
+        view.parameter_count==1 && region.range.length==view.parameters[0] && !region.range.length_instruction &&
+        region.owner_home.kind==XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW);
+    OK(xr_lir_ownership_array_regions_verify(output.module,plan));
+    xr_lir_ownership_plan_destroy(plan); xr_lir_lowered_free(&output);
+}
+
 static void array_push_exit_retained_source(void) {
     static const char text[] =
         "fn show_window(end: i64, start: i64) {\n"
@@ -126,6 +156,7 @@ static void array_reference_mutator_transport(void) {
 static void array_sources(void) {
     array_reference_mutator_transport();
     array_readonly_original_source();
+    array_readonly_invariant_bound_source();
     array_push_exit_retained_source();
     static const char *cases[] = {
         "fn count(xs:Array<i64>)->i64{return len(xs)}\nprint(count([]))\n",

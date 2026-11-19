@@ -179,12 +179,15 @@ typedef struct XrLirArraySetRegionStep {
 
 enum {
     XR_LIR_ARRAY_SET_RANGE_NONE,
-    XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN
+    XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN,
+    XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT
 };
 /* An exact conditional arithmetic shape, independent of creator lifetimes.
  * NONE has every other field zero. The unit-forward shape still requires a
  * runtime nonnegative IV below an unchanged length representable by I64,
  * after the complete ordinary first iteration and existing runtime admission.
+ * For a guarded limit, length instead names an invariant I64 bound. A consumer
+ * must also prove at entry that the bound is at most the actual backing length.
  * Instruction positions are one-based; iv_argument is a zero-based ordinal. */
 typedef struct XrLirArraySetRegionRange {
     uint32_t kind, iv, iv_argument, entry_iv, length, length_instruction;
