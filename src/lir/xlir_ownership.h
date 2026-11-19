@@ -220,10 +220,12 @@ enum {
 };
 enum { XR_LIR_ARRAY_PUSH_CAPACITY_NONE, XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT };
 /* Conditional capacity-window identity, distinct from unchanged Array LEN.
- * The restart is before the original header: its only parameters are the
- * owned Array and IV. The sole LOCAL PUSH item is CURRENT, increment is +1,
- * and the invariant end is an I64 constant or function parameter. All other
- * operations are nonobserving scalar computations or exact token transfers.
+ * The restart is before the original header. The sole LOCAL PUSH item is
+ * CURRENT and the IV advances by one. All other scalar parameters are
+ * forwarded unchanged, including a loop-invariant end carried in a header
+ * parameter. Other operations are nonobserving scalar computations or exact
+ * token transfers. Parameters have end_instruction zero, and function
+ * parameters also have end_block zero.
  * This does not authorize access or prove any runtime value/capacity/RC.
  * In particular end-IV is not safe until dynamic signed/range checks pass.
  * A future consumer retains the ordinary first trip and must restore original

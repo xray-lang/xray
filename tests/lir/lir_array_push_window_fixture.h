@@ -10,7 +10,8 @@
 #define LIR_ARRAY_PUSH_WINDOW_FIXTURE_H
 #include "lir_array_set_region_fixture.h"
 enum ArrayPushWindowMode {
-    PUSH_WINDOW_CURRENT, PUSH_WINDOW_PARAMETER_END, PUSH_WINDOW_PRECOMPUTED_END, PUSH_WINDOW_COMMUTED_STEP,
+    PUSH_WINDOW_CURRENT, PUSH_WINDOW_PARAMETER_END, PUSH_WINDOW_PRECOMPUTED_END, PUSH_WINDOW_MERGED_END,
+    PUSH_WINDOW_MERGED_CARRIED_END, PUSH_WINDOW_COMMUTED_STEP,
     PUSH_WINDOW_NEGATIVE_IV, PUSH_WINDOW_MAX_END,
     PUSH_WINDOW_MIRRORED_END, PUSH_WINDOW_INCLUSIVE_END, PUSH_WINDOW_CHANGING_END,
     PUSH_WINDOW_STEP_TWO, PUSH_WINDOW_NEXT_ITEM, PUSH_WINDOW_TWO_PUSHES, PUSH_WINDOW_OBSERVER,
@@ -34,7 +35,10 @@ static inline bool ars_push_expected(enum ArrayPushWindowMode mode) {
 }
 static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mode) {
     bool snapshot=mode==PUSH_WINDOW_LIVE_SNAPSHOT;
-    ArraySetRegionFixture c={.count=2,.arity=(mode==PUSH_WINDOW_EXTRA_STATE || snapshot) ? 3 : 2};
+    bool carried=mode==PUSH_WINDOW_MERGED_CARRIED_END;
+    bool merged=mode==PUSH_WINDOW_MERGED_END || carried;
+    uint32_t iv=carried ? 2 : 1;
+    ArraySetRegionFixture c={.count=2,.arity=(mode==PUSH_WINDOW_EXTRA_STATE || snapshot || carried) ? 3 : 2};
     OK(xr_lir_array_module_create(NULL,&c.module));
     XrLirType scalar=XR_LIR_I64,types[]={XR_LIR_ARRAY,XR_LIR_I64,snapshot ? XR_LIR_ARRAY : XR_LIR_I64};
     OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="capacity",.name_length=8,
@@ -65,7 +69,8 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
         OK(xr_lir_block_parameter(c.module,c.bridge,0,&array));
         OK(xr_lir_set_array_shape(c.module,array,&(XrLirArrayShape){XR_LIR_I64}));
     }
-    XrLirValue seed=ars_number(&c,c.entry,7),incoming[]={ars_array_op(&c,c.entry,XR_LIR_ARRAY_OP_NEW,&seed,1),
+    XrLirValue seed=ars_number(&c,c.entry,7),incoming[]={merged ? (XrLirValue){0} :
+        ars_array_op(&c,c.entry,XR_LIR_ARRAY_OP_NEW,&seed,1),
         ars_number(&c,c.entry,mode==PUSH_WINDOW_NEGATIVE_IV ? -1 : 0),ars_number(&c,c.entry,42)};
     XrLirValue end={0};
     if (mode==PUSH_WINDOW_PRECOMPUTED_END) {
@@ -75,21 +80,37 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     }
     if (mode==PUSH_WINDOW_ENTRY_EXIT_RETAINS) incoming[0]=ars_retire_copy(&c,c.entry,incoming[0],true);
     if (snapshot) incoming[2]=ars_retained(&c,c.entry,incoming[0]);
-    if (mode==PUSH_WINDOW_EXIT_BYPASS || mode==PUSH_WINDOW_EXIT_BRIDGE_BYPASS) {
+    if (merged) {
+        OK(xr_lir_add_block(c.module,c.function,&scalar,1,&c.region_entry));
+        XrLirValue choice={0}; OK(xr_lir_function_parameter(c.module,c.function,0,&choice));
+        XrLirValue condition=ars_value(&c,c.entry,(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
+            .predicate=XR_LIR_GT,.operands=(XrLirValue[]){choice,incoming[1]},.operand_count=2});
+        OK(xr_lir_set_terminator(c.module,c.entry,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+            .operands=&condition,.operand_count=1,.edge_count=2,
+            .edges={{c.region_entry,&choice,1},{c.region_entry,&seed,1}}}));
+        OK(xr_lir_block_parameter(c.module,c.region_entry,0,&end));
+        incoming[0]=ars_array_op(&c,c.region_entry,XR_LIR_ARRAY_OP_NEW,&seed,1);
+        if (carried) {
+            incoming[2]=incoming[1];
+            incoming[1]=end;
+        }
+        ars_branch(&c,c.region_entry,c.header,incoming);
+    } else if (mode==PUSH_WINDOW_EXIT_BYPASS || mode==PUSH_WINDOW_EXIT_BRIDGE_BYPASS) {
         XrLirValue bypass=ars_value(&c,c.entry,(XrLirInstruction){.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1});
         OK(xr_lir_set_terminator(c.module,c.entry,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
             .operands=&bypass,.operand_count=1,.edge_count=2,
             .edges={{c.header,incoming,c.arity},{mode==PUSH_WINDOW_EXIT_BYPASS ? c.exit : c.bridge,incoming,c.arity}}}));
     } else ars_branch(&c,c.entry,c.header,incoming);
     XrLirValue values[4]={{0}}; ars_parameters(&c,c.header,values); c.header_array=values[0];
-    if (mode==PUSH_WINDOW_PARAMETER_END) OK(xr_lir_function_parameter(c.module,c.function,0,&end));
+    if (carried) end=values[1];
+    else if (mode==PUSH_WINDOW_PARAMETER_END) OK(xr_lir_function_parameter(c.module,c.function,0,&end));
     else if (mode==PUSH_WINDOW_LENGTH_END) end=ars_array_op(&c,c.header,XR_LIR_ARRAY_OP_LEN,values,1);
     else if (mode==PUSH_WINDOW_CHANGING_END) {
         XrLirValue sub[]={ars_number(&c,c.header,9),values[1]};
         end=ars_value(&c,c.header,(XrLirInstruction){.op=XR_LIR_SUB,.type=XR_LIR_I64,.operands=sub,.operand_count=2});
     } else if (!end.id) end=ars_number(&c,c.header,mode==PUSH_WINDOW_MAX_END ? INT64_MAX : 9);
     bool mirrored=mode==PUSH_WINDOW_MIRRORED_END;
-    XrLirValue compare[]={mirrored ? end : values[1],mirrored ? values[1] : end};
+    XrLirValue compare[]={mirrored ? end : values[iv],mirrored ? values[iv] : end};
     XrLirPredicate predicate=mirrored ? XR_LIR_GT : mode==PUSH_WINDOW_INCLUSIVE_END ? XR_LIR_LE : XR_LIR_LT;
     XrLirValue condition=ars_value(&c,c.header,(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
         .predicate=predicate,.operands=compare,.operand_count=2});
@@ -99,14 +120,14 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     ars_parameters(&c,c.body[0],values); ars_branch(&c,c.body[0],c.body[1],values);
     XrLirBlock block=c.body[1]; ars_parameters(&c,block,values);
     if (mode==PUSH_WINDOW_BODY_RETAIN) values[0]=ars_retire_copy(&c,block,values[0],true);
-    XrLirValue next={0},one=ars_number(&c,block,mode==PUSH_WINDOW_STEP_TWO ? 2 : 1),add[]={values[1],one};
-    if (mode==PUSH_WINDOW_COMMUTED_STEP) { add[0]=one; add[1]=values[1]; }
+    XrLirValue next={0},one=ars_number(&c,block,mode==PUSH_WINDOW_STEP_TWO ? 2 : 1),add[]={values[iv],one};
+    if (mode==PUSH_WINDOW_COMMUTED_STEP) { add[0]=one; add[1]=values[iv]; }
     if (mode==PUSH_WINDOW_NEXT_ITEM) next=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
     XrLirValue cell=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,.operands=values,.operand_count=1});
     ars_effect(&c,block,XR_LIR_ARRAY_DROP,values[0]);
     if (mode==PUSH_WINDOW_OBSERVER) OK(xr_lir_emit_effect(c.module,block,&(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_UNIT,.callee=c.helper}));
     uint32_t push=0; OK(xr_lir_array_operation(c.module,XR_LIR_I64,XR_LIR_ARRAY_OP_PUSH,&push));
-    XrLirValue args[]={cell,mode==PUSH_WINDOW_NEXT_ITEM ? next : values[1]};
+    XrLirValue args[]={cell,mode==PUSH_WINDOW_NEXT_ITEM ? next : values[iv]};
     OK(xr_lir_emit_effect(c.module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_UNIT,
         .intrinsic=push,.operands=args,.operand_count=2}));
     if (mode==PUSH_WINDOW_TWO_PUSHES) OK(xr_lir_emit_effect(c.module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_UNIT,
@@ -114,7 +135,8 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     values[0]=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_ARRAY,.operands=&cell,.operand_count=1});
     ars_effect(&c,block,XR_LIR_ARRAY_CELL_DROP,cell);
     if (!next.id) next=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
-    if (mode!=PUSH_WINDOW_LATCH_CURRENT) values[1]=next;
+    if (mode!=PUSH_WINDOW_LATCH_CURRENT) values[iv]=next;
+    if (mode==PUSH_WINDOW_EXTRA_STATE) values[2]=ars_number(&c,block,0);
     ars_branch(&c,block,c.header,values);
     ars_parameters(&c,c.exit,values);
     XrLirBlock done=c.exit;
