@@ -416,27 +416,36 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *map,
     if (owned && update->operation == XRT_MAP_UPDATE_REMOVE) xrt_managed_drop(&owned->managed);
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF bool xrt_map_try_overwrite_local(const XrtManagedFrameLocations *locations,
-    size_t binding, size_t workspace, const XrtStringBacking *key, int64_t value) {
+XR_FUNCDEF XrtManagedStatus xrt_map_try_update_local(const XrtManagedFrameLocations *locations,
+    size_t binding, size_t workspace, const XrtMapUpdate *update, bool *applied, bool *removed) {
+    if (!update || !applied || !removed) return XRT_MANAGED_ARGUMENT;
+    *applied = false;
     if (!locations || !locations->frame || !locations->payload || !locations->slots ||
         !locations->busy || *locations->busy ||
         binding >= locations->slot_count || workspace >= locations->slot_count || binding == workspace)
-        return false;
+        return XRT_MANAGED_OK;
     const XrtManagedSlot *slot = &locations->slots[binding], *stage = &locations->slots[workspace];
     if (slot->owner_offset == SIZE_MAX || stage->owner_offset == SIZE_MAX ||
-        slot->pending.value || slot->pending.allocation_bytes ||
+        slot->owner_offset == stage->owner_offset || slot->pending.value || slot->pending.allocation_bytes ||
         stage->pending.value || stage->pending.allocation_bytes)
-        return false;
+        return XRT_MANAGED_OK;
     unsigned char *payload = locations->payload;
     XrtMapBacking *map = (XrtMapBacking *)*(XrtManagedHeader **)(payload + slot->owner_offset);
-    if (*(XrtManagedHeader **)(payload + stage->owner_offset) || !map_shape(map) || !map->length ||
-        xr_signed_rc_read(&map->managed.references) != 1) return false;
-    MapProbe probe = {0};
-    if (map_probe(map, key, &probe) != XRT_MANAGED_OK || !probe.found) return false;
-    /* The single executor holds the local binding. The hit only writes its
-     * I64 payload and cannot allocate, invoke a callback, or retire a key. */
-    map->rows[probe.entry].value = value;
-    return true;
+    if (*(XrtManagedHeader **)(payload + stage->owner_offset) || !map) return XRT_MANAGED_OK;
+
+    /* No candidate is allocated or published here. The common in-place
+     * edit still holds the actual Root while a removed key can retire. */
+    XrtManagedSlotLocation domain = {.busy=locations->busy};
+    XrtManagedStatus status = xrt_managed_domain_enter(domain);
+    if (status != XRT_MANAGED_OK) return status;
+    bool complete = false, did_remove = false;
+    status = xrt_map_backing_try_update(map, update, &complete, &did_remove);
+    xrt_managed_domain_leave(domain);
+    if (status == XRT_MANAGED_OK && complete) {
+        *removed = did_remove;
+        *applied = true;
+    }
+    return status;
 }
 static XrtManagedStatus map_update_create(const MapDestination *destination,
     const XrtMapBacking *source, const XrtMapUpdate *update, bool *removed) {

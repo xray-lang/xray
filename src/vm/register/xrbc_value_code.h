@@ -63,7 +63,9 @@ typedef struct XrRbcValueAccess {
      * SSA operands. A mutator's window selects its common pending workspace.
      * Keyed Map reads also project source/other to local Frame owner slots
      * (one-based, zero for a borrowed Map or String origin). For a Map
-     * formal, window is its zero-based parameter, otherwise UINT32_MAX. */
+     * formal, window is its zero-based parameter, otherwise UINT32_MAX.
+     * Local keyed edits project source to the writable binding slot and
+     * other to the borrowed key slot, while keeping their pending workspace. */
     /* SET index is the dedicated LIR operation and other its one-based common
      * SET_OPERATION event. Operands and workspace follow the same real homes. */
     /* SLICE index is its closed role, first/count its full SSA operand span.

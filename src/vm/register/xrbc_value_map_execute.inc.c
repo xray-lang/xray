@@ -59,20 +59,6 @@ static XrtManagedStatus rbc_value_map_new(XrRbcStack *stack,RbcValueActivation *
     XrtManagedStatus status=xrt_map_backing_create(activation->frame,home->temporary_first_owner,types,keys,values,count);
     return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
 }
-static bool rbc_value_map_overwrite(XrRbcStack *stack, RbcValueActivation *activation,
-    const uint32_t *args, uint32_t workspace) {
-    if (!activation->owned_code || !activation->backings_ready) return false;
-    const XrLirHomeBinding *binding = rbc_value_binding(activation->code, args[0]);
-    if (!binding || binding->kind != XR_LIR_HOME_BINDING_LOCAL) return false;
-    const XrtStringBacking *key = NULL;
-    XrRbcRegister *item = rbc_value_register(stack, activation, args[2]);
-    if (!item || rbc_value_string_borrow(activation, args[1], &key) != XRT_MANAGED_OK) return false;
-    int64_t value;
-    memcpy(&value, &item->bits, sizeof(value));
-    const XrLirHomeWorkspace *stage = &activation->code->homes->workspaces[workspace];
-    return xrt_map_try_overwrite_local(&activation->frame_locations, binding->first_owner,
-        stage->first_owner, key, value);
-}
 static inline const XrtManagedHeader *rbc_map_borrow_local_slot(
     const XrtManagedFrameLocations *locations, uint32_t index) {
     if (index >= locations->slot_count) return NULL;
@@ -82,11 +68,38 @@ static inline const XrtManagedHeader *rbc_map_borrow_local_slot(
     return *(XrtManagedHeader *const *)(payload + slot->owner_offset);
 }
 
+static XrtManagedStatus rbc_value_map_edit_local(XrRbcStack *stack, RbcValueActivation *activation,
+    XrRbcValueAccess access, const uint32_t *args, bool *applied) {
+    const XrtManagedFrameLocations *locations = &activation->frame_locations;
+    if (!locations->frame || *locations->busy) return XRT_MANAGED_OK;
+    bool remove = access.index == XR_LIR_MAP_OP_REMOVE;
+    XrRbcRegister *item = rbc_value_register(stack, activation, remove ? access.result : args[2]);
+    if (!item) return XRT_MANAGED_ARGUMENT;
+    XrtMapUpdate update = {.operation=remove ? XRT_MAP_UPDATE_REMOVE : XRT_MAP_UPDATE_SET};
+    if (access.other) update.key = (const XrtStringBacking *)rbc_map_borrow_local_slot(locations, access.other - 1);
+    else {
+        XrtManagedStatus status = rbc_value_string_borrow(activation, args[1], &update.key);
+        if (status != XRT_MANAGED_OK) return status;
+    }
+    if (!update.key) return XRT_MANAGED_ARGUMENT;
+    if (!remove) memcpy(&update.value, &item->bits, sizeof(update.value));
+    const XrLirHomeWorkspace *stage = &activation->code->homes->workspaces[access.window];
+    bool removed = false;
+    XrtManagedStatus status = xrt_map_try_update_local(locations, access.source - 1,
+        stage->first_owner, &update, applied, &removed);
+    if (*applied && remove) item->bits = removed;
+    return status;
+}
+
 static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
-    if (access.index==XR_LIR_MAP_OP_SET && rbc_value_map_overwrite(stack, activation, args, access.window))
-        return XRT_MANAGED_OK;
+    if (access.source && activation->owned_code && activation->backings_ready &&
+        (access.index == XR_LIR_MAP_OP_SET || access.index == XR_LIR_MAP_OP_REMOVE)) {
+        bool applied = false;
+        XrtManagedStatus status = rbc_value_map_edit_local(stack, activation, access, args, &applied);
+        if (status != XRT_MANAGED_OK || applied) return status;
+    }
     bool mutate=access.index==XR_LIR_MAP_OP_SET || access.index==XR_LIR_MAP_OP_REMOVE || access.index==XR_LIR_MAP_OP_CLEAR;
     const XrtBackingTypes *types=NULL;
     if (access.index==XR_LIR_MAP_OP_NEW || mutate) {
