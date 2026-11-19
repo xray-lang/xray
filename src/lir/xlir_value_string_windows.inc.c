@@ -8,11 +8,13 @@
  */
 typedef struct LirStringWindowCarry {
     uint32_t text, index, suffix;
-    size_t edge, empty_slots[7], count;
+    size_t edge;
+    LirHomeVector *slots;
 } LirStringWindowCarry;
 
-static bool lir_string_window_follow(const XrLirValueHomes *homes, const XrLirFunctionData *function,
+static bool lir_string_window_follow(LirHomeBuilder *b, const XrLirFunctionData *function,
     uint32_t block, const XrLirInstructionView *term, uint32_t selected, LirStringWindowCarry *carry, bool back) {
+    const XrLirValueHomes *homes = b->homes;
     const XrLirEdgeView *edge = &term->edges[selected];
     uint32_t ordinal = selected + 1;
     size_t first = 0, end = homes->edge_count;
@@ -47,16 +49,17 @@ static bool lir_string_window_follow(const XrLirValueHomes *homes, const XrLirFu
     carry->edge = first;
     carry->text = transport.target;
     const XrLirValueHome *home = &homes->values[carry->text];
-    carry->empty_slots[carry->count++] = home->temporary_first_owner;
-    if (!back) carry->empty_slots[carry->count++] = home->first_owner;
-    return true;
+    return lir_home_append(b, carry->slots, &home->temporary_first_owner) &&
+        (back || lir_home_append(b, carry->slots, &home->first_owner));
 }
+
+static uint8_t *lir_string_window_predecessors(const XrLirFunctionData *function);
 
 /* The skipped path consists only of a bound test, owner/index forwarding,
  * an append, and an increment. A non-stationary suffix must already have a
  * private literal cache; a cold cache makes the runtime guard decline. */
-static bool lir_home_string_window(const LirHomeBuilder *b, const XrLirFunctionData *function,
-    uint32_t header_id, XrLirStringWindow *out, size_t *latch_edge, uint32_t *body_id, uint32_t *bridge_id) {
+static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *function, uint32_t header_id,
+    XrLirStringWindow *out, size_t *latch_edge, LirHomeVector *slots, uint8_t **predecessors) {
     const XrLirBlockData *header = &function->blocks[header_id - 1];
     if (header->parameter_count < 2 || header->parameter_count > 3 ||
         header->instruction_count < 2 || header->instruction_count > 3)
@@ -88,17 +91,25 @@ static bool lir_home_string_window(const LirHomeBuilder *b, const XrLirFunctionD
     const XrLirInstructionView *limit = xr_lir_internal_value_definition(function, bound);
     bool constant_limit = limit && limit->op == XR_LIR_CONST;
     if (comparison && (!constant_limit || limit != &header->instructions[0].view)) return false;
-    LirStringWindowCarry carry = {.text=owner,.index=index,.suffix=stable};
-    if (!lir_string_window_follow(homes, function, header_id, branch, selected, &carry, false)) return false;
-    *body_id = branch->edges[selected].target;
-    const XrLirBlockData *body = &function->blocks[*body_id - 1];
-    if (body->instruction_count == 1) {
-        const XrLirInstructionView *bridge = &body->instructions[0].view;
-        if (bridge->op != XR_LIR_BR || !lir_string_window_follow(homes, function, *body_id, bridge, 0,
-            &carry, false)) return false;
-        *bridge_id = *body_id;
-        *body_id = bridge->edges[0].target;
-        body = &function->blocks[*body_id - 1];
+    size_t first_empty = slots->count;
+    LirStringWindowCarry carry = {.text=owner,.index=index,.suffix=stable,.slots=slots};
+    if (!lir_string_window_follow(b, function, header_id, branch, selected, &carry, false)) return false;
+    if (!*predecessors) *predecessors = lir_string_window_predecessors(function);
+    if (!*predecessors)
+        return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_OOM, "cannot count String window predecessors");
+    uint32_t body_id = branch->edges[selected].target;
+    const XrLirBlockData *body;
+    /* A cycle in the forwarding path would either reach the header or enter
+     * a block with two incoming edges. The same check excludes side entries. */
+    for (;;) {
+        if (body_id == header_id || body_id == function->entry || (*predecessors)[body_id - 1] != 1)
+            return false;
+        body = &function->blocks[body_id - 1];
+        if (body->instruction_count != 1) break;
+        const XrLirInstructionView *forward = &body->instructions[0].view;
+        if (forward->op != XR_LIR_BR || !lir_string_window_follow(b, function, body_id, forward, 0, &carry, false))
+            return false;
+        body_id = forward->edges[0].target;
     }
     if (body->instruction_count != (stable ? 4u : 6u) || body->parameter_count != header->parameter_count) return false;
     const XrLirInstructionView *literal = NULL, *append = NULL, *step = NULL, *add = NULL, *drop = NULL;
@@ -125,19 +136,25 @@ static bool lir_home_string_window(const LirHomeBuilder *b, const XrLirFunctionD
         suffix_slot = suffix->literal_cache_owner;
     }
     if (suffix_slot == SIZE_MAX || result->temporary_first_owner == SIZE_MAX) return false;
-    carry.empty_slots[carry.count++] = result->first_owner;
-    carry.empty_slots[carry.count++] = result->temporary_first_owner;
+    if (!lir_home_append(b, slots, &result->first_owner) || !lir_home_append(b, slots, &result->temporary_first_owner))
+        return false;
     carry.text = append->result;
     carry.index = add->result;
     const XrLirInstructionView *latch = &body->instructions[body->instruction_count - 1].view;
     if (latch->op != XR_LIR_BR || latch->edges[0].target != header_id ||
-        !lir_string_window_follow(homes, function, *body_id, latch, 0, &carry, true) ||
+        !lir_string_window_follow(b, function, body_id, latch, 0, &carry, true) ||
         carry.text != owner || carry.index != index) return false;
+    size_t latch_empty = slots->count;
+    size_t header_owner = homes->values[owner].first_owner;
+    for (size_t n = first_empty; n < latch_empty; ++n) {
+        size_t slot = ((const size_t *)slots->data)[n];
+        if (slot == result->first_owner) slot = header_owner;
+        if (!lir_home_append(b, slots, &slot)) return false;
+    }
     *out = (XrLirStringWindow){.header=header_id,.index=index,.next_index=add->result,.limit=bound,
         .comparison=comparison,.constant_limit=constant_limit,.limit_bits=constant_limit ? limit->bits : 0,
-        .header_owner=homes->values[owner].first_owner,.latch_owner=result->first_owner,.suffix_owner=suffix_slot,
-        .empty_count=carry.count};
-    memcpy(out->empty_slots, carry.empty_slots, carry.count * sizeof(*out->empty_slots));
+        .header_owner=header_owner,.latch_owner=result->first_owner,.suffix_owner=suffix_slot,
+        .header_empty_first=first_empty,.latch_empty_first=latch_empty,.empty_count=latch_empty - first_empty};
     *latch_edge = carry.edge;
     return true;
 }
@@ -160,27 +177,31 @@ static bool lir_home_string_windows(LirHomeBuilder *b) {
     if (!b->homes->owned_frame_needed || !b->edges.count) return true;
     const XrLirFunctionData *function = &b->compiler.input->functions[b->compiler.function.id - 1];
     LirHomeVector windows = {.stride=sizeof(XrLirStringWindow)};
+    LirHomeVector slots = {.stride=sizeof(size_t)};
     uint8_t *predecessors = NULL;
     for (uint32_t header = 1; header <= function->block_count; ++header) {
         XrLirStringWindow window;
         size_t latch = 0;
-        uint32_t body = 0, bridge = 0;
-        if (!lir_home_string_window(b, function, header, &window, &latch, &body, &bridge) ||
-            body == function->entry || bridge == function->entry) continue;
-        if (!predecessors) predecessors = lir_string_window_predecessors(function);
-        if (!predecessors) {
-            lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_OOM, "cannot count String window predecessors");
-            break;
+        size_t first = slots.count;
+        if (!lir_home_string_window(b, function, header, &window, &latch, &slots, &predecessors)) {
+            slots.count = first;
+            if (b->compiler.status != XR_LIR_VALUE_LAYOUT_OK) break;
+            continue;
         }
-        if (predecessors[body - 1] != 1 || (bridge && predecessors[bridge - 1] != 1)) continue;
         if (!lir_home_append(b, &windows, &window)) break;
         /* A nonconstant bound is live into the original comparison. The
          * closed header does not redefine it, and no skipped step changes it. */
         ((XrLirHomeEdge *)b->edges.data)[latch].string_window = (uint32_t)windows.count;
     }
     xr_free(predecessors);
+    if (!slots.count) {
+        xr_free(slots.data);
+        slots.data = NULL;
+    }
     b->homes->string_windows = windows.data;
     b->homes->string_window_count = windows.count;
+    b->homes->string_window_slots = slots.data;
+    b->homes->string_window_slot_count = slots.count;
     return b->compiler.status == XR_LIR_VALUE_LAYOUT_OK;
 }
 

@@ -87,8 +87,9 @@ typedef struct XrLirStringWindow {
     bool constant_limit;
     uint64_t limit_bits;
     size_t header_owner, latch_owner, suffix_owner;
-    /* At the latch, swap the live result slot in this list for header_owner. */
-    size_t empty_slots[7], empty_count;
+    /* Guard the same route at either boundary. The slot holding the live
+     * String differs between the header and latch. */
+    size_t header_empty_first, latch_empty_first, empty_count;
 } XrLirStringWindow;
 typedef struct XrLirHomeCall {
     uint32_t block, instruction, callee, result;
@@ -180,6 +181,8 @@ typedef struct XrLirValueHomes {
     size_t transfer_count, edge_count;
     const XrLirStringWindow *string_windows; /* Sorted by header block. */
     size_t string_window_count;
+    const size_t *string_window_slots;
+    size_t string_window_slot_count;
     const XrLirHomeCall *calls;
     const uint32_t *arguments;
     size_t call_count, argument_count;

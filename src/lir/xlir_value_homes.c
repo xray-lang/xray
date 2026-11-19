@@ -35,6 +35,7 @@ XR_FUNCDEF void xr_lir_value_homes_destroy(XrLirValueHomes *homes) {
     xr_free((void *)homes->array_regions); xr_free((void *)homes->array_region_steps);
     xr_free((void *)homes->array_push_windows); xr_free((void *)homes->array_push_steps);
     xr_free((void *)homes->string_windows);
+    xr_free((void *)homes->string_window_slots);
     xr_free(homes);
 }
 

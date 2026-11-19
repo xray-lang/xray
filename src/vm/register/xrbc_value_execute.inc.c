@@ -533,7 +533,8 @@ static XR_NOINLINE uint64_t rbc_value_append_window(XrRbcStack *stack, RbcValueA
     XR_DCHECK(edge->string_window && edge->string_window <= homes->string_window_count,
         "the sealed latch names its own String window");
     const XrLirStringWindow *window = &homes->string_windows[edge->string_window - 1];
-    XR_DCHECK(window->empty_count <= sizeof(window->empty_slots) / sizeof(*window->empty_slots) &&
+    XR_DCHECK(window->latch_empty_first <= homes->string_window_slot_count &&
+        window->empty_count <= homes->string_window_slot_count - window->latch_empty_first &&
         window->latch_owner == homes->values[homes->transfers[edge->first].source].first_owner &&
         window->header_owner == homes->values[homes->transfers[edge->first].target].first_owner,
         "the capacity window starts and ends at the actual selected owner slots");
@@ -546,14 +547,9 @@ static XR_NOINLINE uint64_t rbc_value_append_window(XrRbcStack *stack, RbcValueA
     }
     if (limit_bits > INT64_MAX || bits >= limit_bits) return bits;
     uint64_t remaining = limit_bits - bits;
-    size_t empty_slots[sizeof(window->empty_slots) / sizeof(*window->empty_slots)];
-    for (size_t n = 0; n < window->empty_count; ++n) {
-        size_t slot = window->empty_slots[n];
-        empty_slots[n] = slot == window->latch_owner ? window->header_owner : slot;
-    }
     size_t count = remaining > SIZE_MAX ? SIZE_MAX : (size_t)remaining;
     return bits + xrt_native_string_append_window(activation->frame, window->latch_owner,
-        window->suffix_owner, count, empty_slots, window->empty_count);
+        window->suffix_owner, count, homes->string_window_slots + window->latch_empty_first, window->empty_count);
 }
 
 static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *activation,
