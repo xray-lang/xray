@@ -10,8 +10,9 @@
 #define LIR_ARRAY_PUSH_WINDOW_FIXTURE_H
 #include "lir_array_set_region_fixture.h"
 enum ArrayPushWindowMode {
-    PUSH_WINDOW_CURRENT, PUSH_WINDOW_PARAMETER_END, PUSH_WINDOW_NEGATIVE_IV, PUSH_WINDOW_MAX_END,
-    PUSH_WINDOW_MIRRORED_END, PUSH_WINDOW_INCLUSIVE_END,
+    PUSH_WINDOW_CURRENT, PUSH_WINDOW_PARAMETER_END, PUSH_WINDOW_PRECOMPUTED_END, PUSH_WINDOW_COMMUTED_STEP,
+    PUSH_WINDOW_NEGATIVE_IV, PUSH_WINDOW_MAX_END,
+    PUSH_WINDOW_MIRRORED_END, PUSH_WINDOW_INCLUSIVE_END, PUSH_WINDOW_CHANGING_END,
     PUSH_WINDOW_STEP_TWO, PUSH_WINDOW_NEXT_ITEM, PUSH_WINDOW_TWO_PUSHES, PUSH_WINDOW_OBSERVER,
     PUSH_WINDOW_LENGTH_END, PUSH_WINDOW_EXTRA_STATE, PUSH_WINDOW_LATCH_CURRENT,
     PUSH_WINDOW_EXIT_RETAIN_SOURCE, PUSH_WINDOW_EXIT_RETAIN_TARGET, PUSH_WINDOW_ENTRY_EXIT_RETAINS,
@@ -66,6 +67,12 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     }
     XrLirValue seed=ars_number(&c,c.entry,7),incoming[]={ars_array_op(&c,c.entry,XR_LIR_ARRAY_OP_NEW,&seed,1),
         ars_number(&c,c.entry,mode==PUSH_WINDOW_NEGATIVE_IV ? -1 : 0),ars_number(&c,c.entry,42)};
+    XrLirValue end={0};
+    if (mode==PUSH_WINDOW_PRECOMPUTED_END) {
+        XrLirValue parameter={0}; OK(xr_lir_function_parameter(c.module,c.function,0,&parameter));
+        XrLirValue add[]={parameter,ars_number(&c,c.entry,2)};
+        end=ars_value(&c,c.entry,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
+    }
     if (mode==PUSH_WINDOW_ENTRY_EXIT_RETAINS) incoming[0]=ars_retire_copy(&c,c.entry,incoming[0],true);
     if (snapshot) incoming[2]=ars_retained(&c,c.entry,incoming[0]);
     if (mode==PUSH_WINDOW_EXIT_BYPASS || mode==PUSH_WINDOW_EXIT_BRIDGE_BYPASS) {
@@ -75,10 +82,12 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
             .edges={{c.header,incoming,c.arity},{mode==PUSH_WINDOW_EXIT_BYPASS ? c.exit : c.bridge,incoming,c.arity}}}));
     } else ars_branch(&c,c.entry,c.header,incoming);
     XrLirValue values[4]={{0}}; ars_parameters(&c,c.header,values); c.header_array=values[0];
-    XrLirValue end={0};
     if (mode==PUSH_WINDOW_PARAMETER_END) OK(xr_lir_function_parameter(c.module,c.function,0,&end));
     else if (mode==PUSH_WINDOW_LENGTH_END) end=ars_array_op(&c,c.header,XR_LIR_ARRAY_OP_LEN,values,1);
-    else end=ars_number(&c,c.header,mode==PUSH_WINDOW_MAX_END ? INT64_MAX : 9);
+    else if (mode==PUSH_WINDOW_CHANGING_END) {
+        XrLirValue sub[]={ars_number(&c,c.header,9),values[1]};
+        end=ars_value(&c,c.header,(XrLirInstruction){.op=XR_LIR_SUB,.type=XR_LIR_I64,.operands=sub,.operand_count=2});
+    } else if (!end.id) end=ars_number(&c,c.header,mode==PUSH_WINDOW_MAX_END ? INT64_MAX : 9);
     bool mirrored=mode==PUSH_WINDOW_MIRRORED_END;
     XrLirValue compare[]={mirrored ? end : values[1],mirrored ? values[1] : end};
     XrLirPredicate predicate=mirrored ? XR_LIR_GT : mode==PUSH_WINDOW_INCLUSIVE_END ? XR_LIR_LE : XR_LIR_LT;
@@ -91,6 +100,7 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     XrLirBlock block=c.body[1]; ars_parameters(&c,block,values);
     if (mode==PUSH_WINDOW_BODY_RETAIN) values[0]=ars_retire_copy(&c,block,values[0],true);
     XrLirValue next={0},one=ars_number(&c,block,mode==PUSH_WINDOW_STEP_TWO ? 2 : 1),add[]={values[1],one};
+    if (mode==PUSH_WINDOW_COMMUTED_STEP) { add[0]=one; add[1]=values[1]; }
     if (mode==PUSH_WINDOW_NEXT_ITEM) next=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
     XrLirValue cell=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_CELL_NEW,.type=XR_LIR_ARRAY_CELL,.operands=values,.operand_count=1});
     ars_effect(&c,block,XR_LIR_ARRAY_DROP,values[0]);

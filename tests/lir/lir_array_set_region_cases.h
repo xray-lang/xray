@@ -113,17 +113,17 @@ static void ars_range_preparations(void) {
         CHECK(xr_lir_ownership_array_region_count(plan) == 1);
         XrLirArraySetRegion region; OK(xr_lir_ownership_array_region_at(plan, 0, &region));
         OK(xr_lir_ownership_array_regions_verify(c.module, plan));
-        if (mode == ARRAY_REGION_RANGE_UNIT || mode == ARRAY_REGION_RANGE_NEXT_COPIES) {
+        if (mode == ARRAY_REGION_RANGE_UNIT || mode == ARRAY_REGION_RANGE_COMMUTED || mode == ARRAY_REGION_RANGE_NEXT_COPIES) {
             XrLirArraySetRegionRange range = region.range;
             const XrLirFunctionData *f = &c.module->functions[c.function.id - 1];
             CHECK(range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN && range.iv_argument == 3 &&
                 range.iv == f->blocks[c.header.id - 1].parameters[3] && range.entry_iv == f->parameters[0] &&
                 range.length && range.length_instruction && range.condition && range.condition_instruction &&
-                range.increment && range.increment_block == c.body[mode == ARRAY_REGION_RANGE_UNIT ? 2 : 0].id &&
+                range.increment && range.increment_block == c.body[mode == ARRAY_REGION_RANGE_NEXT_COPIES ? 0 : 2].id &&
                 range.increment_instruction && range.one && range.latch_iv);
             CHECK(region.owner_home.kind == XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW &&
                 region.owner_home.first_active_step == 2 && region.owner_home.exit_step == region.step_count);
-            if (mode == ARRAY_REGION_RANGE_UNIT) {
+            if (mode != ARRAY_REGION_RANGE_NEXT_COPIES) {
                 CHECK(range.latch_iv == range.increment); ars_range_current(c, plan, range);
             } else CHECK(range.latch_iv != range.increment);
         } else {
