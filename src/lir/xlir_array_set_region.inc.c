@@ -337,23 +337,21 @@ static void lir_array_region_range_begin(LirArrayRegionProof *p, const XrLirArra
     uint32_t body_edge) {
     const XrLirFunctionData *f = p->function;
     const XrLirInstructionView *term = lir_terminator(f, region->header - 1);
-    if (body_edge || term->operand_count != 1) return;
-    uint32_t condition = term->operands[0];
-    const XrLirInstructionView *compare = xr_lir_internal_value_definition(f, condition);
-    if (!compare || compare->op != XR_LIR_ICMP || compare->type != XR_LIR_I1 ||
-        compare->predicate != XR_LIR_LT || compare->operand_count != 2 ||
-        f->values[condition - 1].block != region->header) return;
-    uint32_t iv = compare->operands[0], length = compare->operands[1];
+    uint32_t order[2];
+    if (body_edge) return;
+    const XrLirInstructionView *compare = xr_lir_internal_branch_i64_lt(f, term, body_edge, order);
+    if (!compare || f->values[compare->result - 1].block != region->header) return;
+    uint32_t condition = compare->result, iv = order[0], length = order[1];
     const XrLirValueData *definition = &f->values[iv - 1];
     const XrLirInstructionView *bound = xr_lir_internal_value_definition(f, length);
     const XrLirArrayIntrinsic *shape = bound && bound->op == XR_LIR_CALL_INTRINSIC ?
         xr_lir_internal_array_intrinsic(p->module, bound->intrinsic) : NULL;
-    if (definition->type != XR_LIR_I64 || !definition->parameter || definition->block != region->header) return;
+    if (!definition->parameter || definition->block != region->header) return;
     const XrLirValueData *end = &f->values[length - 1];
     bool same = shape && shape->operation == XR_LIR_ARRAY_OP_LEN && bound->type == XR_LIR_I64 &&
         bound->operand_count == 1 && bound->operands[0] == region->canonical_value && end->block == region->header;
-    bool independent = end->type == XR_LIR_I64 && ((end->parameter && !end->block) ||
-        (bound && bound->op == XR_LIR_CONST && bound->type == XR_LIR_I64));
+    bool independent = (end->parameter && !end->block) ||
+        (bound && bound->op == XR_LIR_CONST && bound->type == XR_LIR_I64);
     if (!same && !independent) return;
     const XrLirBlockData *header = &f->blocks[region->header - 1];
     uint32_t argument = 0;

@@ -11,6 +11,7 @@
 #include "lir_array_set_region_fixture.h"
 enum ArrayPushWindowMode {
     PUSH_WINDOW_CURRENT, PUSH_WINDOW_PARAMETER_END, PUSH_WINDOW_NEGATIVE_IV, PUSH_WINDOW_MAX_END,
+    PUSH_WINDOW_MIRRORED_END, PUSH_WINDOW_INCLUSIVE_END,
     PUSH_WINDOW_STEP_TWO, PUSH_WINDOW_NEXT_ITEM, PUSH_WINDOW_TWO_PUSHES, PUSH_WINDOW_OBSERVER,
     PUSH_WINDOW_LENGTH_END, PUSH_WINDOW_EXTRA_STATE, PUSH_WINDOW_LATCH_CURRENT,
     PUSH_WINDOW_EXIT_RETAIN_SOURCE, PUSH_WINDOW_EXIT_RETAIN_TARGET, PUSH_WINDOW_ENTRY_EXIT_RETAINS,
@@ -27,7 +28,7 @@ static inline bool ars_push_same(XrLirArrayPushCapacity a,XrLirArrayPushCapacity
     return true;
 }
 static inline bool ars_push_expected(enum ArrayPushWindowMode mode) {
-    return mode<=PUSH_WINDOW_MAX_END || (mode>=PUSH_WINDOW_EXIT_RETAIN_SOURCE && mode<=PUSH_WINDOW_ENTRY_EXIT_RETAINS) ||
+    return mode<=PUSH_WINDOW_MIRRORED_END || (mode>=PUSH_WINDOW_EXIT_RETAIN_SOURCE && mode<=PUSH_WINDOW_ENTRY_EXIT_RETAINS) ||
         mode==PUSH_WINDOW_EXIT_BRIDGE;
 }
 static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mode) {
@@ -78,9 +79,11 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     if (mode==PUSH_WINDOW_PARAMETER_END) OK(xr_lir_function_parameter(c.module,c.function,0,&end));
     else if (mode==PUSH_WINDOW_LENGTH_END) end=ars_array_op(&c,c.header,XR_LIR_ARRAY_OP_LEN,values,1);
     else end=ars_number(&c,c.header,mode==PUSH_WINDOW_MAX_END ? INT64_MAX : 9);
-    XrLirValue compare[]={values[1],end};
+    bool mirrored=mode==PUSH_WINDOW_MIRRORED_END;
+    XrLirValue compare[]={mirrored ? end : values[1],mirrored ? values[1] : end};
+    XrLirPredicate predicate=mirrored ? XR_LIR_GT : mode==PUSH_WINDOW_INCLUSIVE_END ? XR_LIR_LE : XR_LIR_LT;
     XrLirValue condition=ars_value(&c,c.header,(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
-        .predicate=XR_LIR_LT,.operands=compare,.operand_count=2});
+        .predicate=predicate,.operands=compare,.operand_count=2});
     OK(xr_lir_set_terminator(c.module,c.header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
         .operands=&condition,.operand_count=1,.edge_count=2,
         .edges={{c.body[0],values,c.arity},{c.exit,values,c.arity}}}));

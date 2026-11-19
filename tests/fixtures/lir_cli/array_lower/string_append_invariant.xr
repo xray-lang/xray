@@ -51,6 +51,26 @@ fn computed_limit(count: i64) -> i64 {
     return len(text)
 }
 
+fn mirrored_limit(first: i64, count: i64) -> i64 {
+    var text = ""
+    var i = first
+    while (count > i) {
+        text += "é"
+        i += 1
+    }
+    return len(text)
+}
+
+fn inclusive_limit(count: i64) -> i64 {
+    var text = ""
+    var i = 0
+    while (i <= count) {
+        text += "é"
+        i += 1
+    }
+    return len(text)
+}
+
 print(len(fixed(0)))
 print(fixed(3))
 print(len(fixed(4096)))
@@ -62,3 +82,8 @@ print(range_append(9223372036854775707, 9223372036854775807))
 print(literal_limit())
 print(computed_limit(26))
 print(computed_limit(-1))
+print(mirrored_limit(-3, 7))
+print(mirrored_limit(4, 4))
+print(mirrored_limit(9223372036854775707, 9223372036854775807))
+print(inclusive_limit(0))
+print(inclusive_limit(100))
