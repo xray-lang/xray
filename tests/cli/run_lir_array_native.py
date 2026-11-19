@@ -27,7 +27,7 @@ def main() -> None:
              "factory_bindings", "factory_loop", "factory_transfer_temporaries",
              "module_double", "module_snapshot", "module_counter", "counter_shared_binding", "tuple_values", "tuple_flow",
              "map_values", "map_bindings", "map_pod_calls", "map_fixed_operations", "record_values", "record_nullable", "record_lifetimes", "record_multileaf", "record_nullable_pod", "record_state_first_read", "record_generic_branch", "record_generic_owned_branch", "nullable_managed",
-             "panic_map_index_missing", "panic_map_direct_missing", "panic_nullable_managed", "callable_map_capture", "callable_map_value", "callable_unit_owned", "reject_owned_binding",
+             "panic_map_index_missing", "panic_map_direct_missing", "panic_map_stationary_cleanup", "panic_nullable_managed", "callable_map_capture", "callable_map_value", "callable_unit_owned", "reject_owned_binding",
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
@@ -140,7 +140,7 @@ def main() -> None:
         if name == "string_append_invariant":
             assert generated_text.count("xrt_native_string_append_window(") == 9
             assert generated_text.count("xrt_native_string_append_owned(") == 12
-        if name == "map_local_forwarding":
+        if name in ("map_local_forwarding", "panic_map_stationary_cleanup"):
             assert generated_text.count("xrt_managed_frame_try_forward(") == 2
             assert "xrt_place_copy_replace(" in generated_text
             assert "xrt_place_edge_transfer(owners, 1," in generated_text
