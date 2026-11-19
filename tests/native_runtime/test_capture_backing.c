@@ -450,8 +450,10 @@ static void failures_and_pending(void) {
     STATUS(xrt_map_cell_read_copy(f.frame,4,(XrtMapCell *)borrow(&f,3)),XRT_MANAGED_ARGUMENT);
     *location.busy=false; CHECK(borrow(&f,4)==old); same_bill(&f,base);
     XrtManagedHeader *foreign=NULL;
-    OK(xrt_managed_slot_prepare(f.frame,4,f.types.string,42,&foreign));
-    XrtStringBacking *text=(XrtStringBacking *)foreign; text->length=text->runes=1; memcpy(text->bytes,"p",2);
+    OK(xrt_managed_slot_prepare(f.frame,4,f.types.string,sizeof(XrtStringBacking)+2,&foreign));
+    XrtStringBacking *text=(XrtStringBacking *)foreign;
+    atomic_init(&text->cached_hash,0);
+    text->length=text->runes=1; memcpy(text->bytes,"p",2);
     XrtBillingStats pending=xrt_billing_owner_stats(f.billing);
     STATUS(xrt_environment_create(f.frame,4,env_type,&input),XRT_MANAGED_ARGUMENT);
     STATUS(xrt_i64_cell_create(f.frame,4,i64_type,1),XRT_MANAGED_ARGUMENT);

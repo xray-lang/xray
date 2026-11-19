@@ -613,7 +613,7 @@ static void inline_frame_replacement(void) {
     STATUS(xrt_inline_value_replace(&home, &spec, home.temporary), XRT_MANAGED_ARGUMENT);
     atomic_store(&f.audit.remaining, SIZE_MAX);
     XrtManagedHeader *pending = NULL;
-    OK(xrt_managed_slot_prepare(frame, 2, f.types.string, 42, &pending));
+    OK(xrt_managed_slot_prepare(frame, 2, f.types.string, sizeof(XrtStringBacking) + 2, &pending));
     XrtManagedSlotLocation location; OK(xrt_managed_slot_location(frame, 2, &location));
     STATUS(xrt_inline_value_replace(&home, &spec, &next), XRT_MANAGED_ARGUMENT);
     CHECK(location.pending->value == pending && !memcmp(home.value, &next, sizeof(next)));
