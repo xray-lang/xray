@@ -119,6 +119,7 @@ static bool proc_read_i64(int fd, int64_t *out) {
 
 XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *o, XrProcId *output) {
+    if (o && o->os_error) *o->os_error = 0;
     if (o && o->completion_policy != XR_PROC_COMPLETE_TREE)
         return o->completion_policy == XR_PROC_COMPLETE_ROOT ? XR_PROC_UNSUPPORTED : XR_PROC_INVALID_ARGUMENT;
     if (o && o->image_mode != XR_PROC_IMAGES_NONE)
@@ -127,6 +128,7 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
         !o->memory.alloc || !o->memory.free ||
         (o->detached && o->new_process_group)) return XR_PROC_INVALID_ARGUMENT;
+    int os_error = 0;
     XrProcMemory m = o->memory;
     XrOsProcStatus status = proc_spawn_options_valid(o);
     if (status != XR_PROC_OK) return status;
@@ -152,13 +154,13 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
         }
         environment[count] = NULL;
     }
-    if (pipe(report) != 0) { status = xr_proc_last_error(); goto done; }
-    if (fcntl(report[1], F_SETFD, FD_CLOEXEC) < 0) { status = xr_proc_last_error(); goto done; }
+    if (pipe(report) != 0) { os_error = errno; status = xr_proc_last_error(); goto done; }
+    if (fcntl(report[1], F_SETFD, FD_CLOEXEC) < 0) { os_error = errno; status = xr_proc_last_error(); goto done; }
     if (o->detached) {
-        if (pipe(detached_pipe) != 0) { status = xr_proc_last_error(); goto done; }
+        if (pipe(detached_pipe) != 0) { os_error = errno; status = xr_proc_last_error(); goto done; }
     }
 
-    pid = fork(); if (pid < 0) { status = xr_proc_last_error(); goto done; }
+    pid = fork(); if (pid < 0) { os_error = errno; status = xr_proc_last_error(); goto done; }
     if (!pid) {
         close(report[0]);
         if (o->detached) {
@@ -187,6 +189,7 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     do { received = read(report[0], &failure, sizeof(failure)); } while (received < 0 && errno == EINTR);
     if (received != 0) {
         if (received > 0) errno = (int)failure;
+        if (received < 0 || received == (ssize_t)sizeof(failure)) os_error = errno;
         status = received > 0 && received != sizeof(failure) ? XR_PROC_IO : xr_proc_last_error();
         (void)kill(pid, SIGKILL);
         pid_t reaped; do { reaped = waitpid(pid, NULL, 0); } while (reaped < 0 && errno == EINTR);
@@ -196,7 +199,10 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
         close(detached_pipe[1]); detached_pipe[1] = -1;
         int64_t detached_pid = -1; bool ok = proc_read_i64(detached_pipe[0], &detached_pid);
         pid_t reaped; do { reaped = waitpid(pid, NULL, 0); } while (reaped < 0 && errno == EINTR);
-        if (!ok || reaped < 0 || detached_pid <= 0) { status = XR_PROC_IO; goto done; }
+        if (!ok || reaped < 0 || detached_pid <= 0) {
+            if (reaped < 0) os_error = errno;
+            status = XR_PROC_IO; goto done;
+        }
         *output = detached_pid;
     } else {
         if (group_slot >= 0) atomic_store_explicit(&proc_groups[group_slot], pid, memory_order_release);
@@ -207,6 +213,7 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     for (int i = 0; i < 2; ++i) { if (report[i] >= 0) close(report[i]); if (detached_pipe[i] >= 0) close(detached_pipe[i]); }
     for (size_t i = 0; i < count; ++i) m.free(m.context, environment[i]);
     if (environment) m.free(m.context, environment);
+    if (o->os_error) *o->os_error = (uint32_t)os_error;
     return status;
 }
 
@@ -231,17 +238,21 @@ XR_FUNC XrOsProcStatus xr_proc_release(XrProcId *owner) {
 }
 XR_FUNC int xr_proc_close(XrProcId pid) {
     if (pid <= 0 || (XrProcId)(pid_t)pid != pid) { errno = EINVAL; return -1; }
-    int slot = proc_group_slot(pid); bool stopped = true;
+    int slot = proc_group_slot(pid), stop_error = 0;
     if (slot < 0) { errno = EINVAL; return -1; }
     /* A registered leader remains unreaped, so both identifiers still name
      * this owner while termination is sent. Release the slot only after reap. */
-    if (slot >= 0 && proc_group_signal((pid_t)pid, SIGKILL) != 0 && errno != ESRCH) stopped = false;
-    if (kill((pid_t)pid, SIGKILL) != 0 && errno != ESRCH) stopped = false;
+    if (proc_group_signal((pid_t)pid, SIGKILL) != 0 && errno != ESRCH) stop_error = errno;
+    if (kill((pid_t)pid, SIGKILL) != 0 && errno != ESRCH && !stop_error) stop_error = errno;
     pid_t result;
-    do { result = waitpid((pid_t)pid, NULL, stopped ? 0 : WNOHANG); } while (result < 0 && errno == EINTR);
-    if (result == 0 || (result < 0 && errno != ECHILD)) return -1;
-    if (slot >= 0) atomic_store_explicit(&proc_groups[slot], 0, memory_order_release);
-    return stopped ? 0 : -1;
+    do { result = waitpid((pid_t)pid, NULL, stop_error ? WNOHANG : 0); } while (result < 0 && errno == EINTR);
+    if (result == 0 || (result < 0 && errno != ECHILD)) {
+        if (stop_error) errno = stop_error;
+        return -1;
+    }
+    atomic_store_explicit(&proc_groups[slot], 0, memory_order_release);
+    if (stop_error) errno = stop_error;
+    return stop_error ? -1 : 0;
 }
 static XrProcWaitResult proc_group_wait(XrProcId pid, bool block, int *exit_code) {
     siginfo_t info = {0}; int result;

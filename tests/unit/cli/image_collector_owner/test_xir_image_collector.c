@@ -330,7 +330,7 @@ static void real_process(const ProcessTest *test) {
     spec.environment_source=XTC_PROCESS_ENV_SNAPSHOT;spec.image_mode=XR_PROC_IMAGES_WINDOWS_TREE;
     spec.image_observer=xtc_xir_images_observer(images);XrToolchainProcess *process=NULL;
     CHECK(xtc_process_prepare(r,&spec,&process)==XTC_PROCESS_OK);XrProcessResult result={0};
-    XrProcessStatus status=xtc_process_run(process,NULL,NULL,&result);
+    XrProcessStatus status=xtc_process_run(process,NULL,NULL,&result, NULL);
     if(status!=XTC_PROCESS_OK)fprintf(stderr,"real run %s collector %d\n",xtc_process_status_name(status),xtc_xir_images_status(images));
     if(result.exit_code) {
         if(result.stdout_bytes.length)fwrite(result.stdout_bytes.data,1,result.stdout_bytes.length,stderr);

@@ -74,6 +74,15 @@ typedef struct XrProcessResult {
     XrProcessByteBuffer stderr_bytes;
 } XrProcessResult;
 
+/* A failed run reports the original operation and OS code separately from
+ * the transactional result. No exit code is meaningful before a wait. */
+typedef struct XrProcessDiagnostic {
+    const char *operation;
+    uint32_t os_error;
+    bool exit_observed;
+    int child_exit;
+} XrProcessDiagnostic;
+
 typedef struct XrProcessView {
     const char *executable, *cwd;
     const char *const *argv;
@@ -111,7 +120,8 @@ XR_FUNC XrCompileResources *xtc_process_resources(const XrToolchainProcess *proc
 XR_FUNC XrProcessStatus xtc_process_view(const XrToolchainProcess *process,
     XrProcessView *output);
 XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *process,
-    XrProcessCancelled cancelled, void *context, XrProcessResult *output);
+    XrProcessCancelled cancelled, void *context, XrProcessResult *output,
+    XrProcessDiagnostic *diagnostic);
 XR_FUNC void xtc_process_free(XrToolchainProcess *process);
 XR_FUNC const char *xtc_process_status_name(XrProcessStatus status);
 XR_FUNC void xtc_process_redact_bytes(const uint8_t *input, size_t input_size, char *output,

@@ -175,7 +175,7 @@ static void run_lifetime(bool observed) {
     XrProcessView view; CHECK(xtc_process_view(copy, &view) == XTC_PROCESS_OK);
     CHECK(view.completion_policy == prepare_completion && view.image_mode == XR_PROC_IMAGES_WINDOWS_TREE && !strcmp(view.executable, executable) && strcmp(view.executable, view.argv[0]));
     XrProcessResult result = {0}; unsigned before_events = new_events;
-    CHECK(xtc_process_run(copy, NULL, NULL, &result) == XTC_PROCESS_OK);
+    CHECK(xtc_process_run(copy, NULL, NULL, &result, NULL) == XTC_PROCESS_OK);
     if (result.exit_code || result.stderr_bytes.length) {
         fprintf(stderr, "child exit=%d stderr=%zu: ", result.exit_code, result.stderr_bytes.length);
         if (result.stderr_bytes.length) fwrite(result.stderr_bytes.data, 1, result.stderr_bytes.length, stderr);

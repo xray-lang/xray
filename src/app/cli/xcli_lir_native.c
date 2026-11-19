@@ -200,16 +200,22 @@ static void native_command_init(NativeCommand *command, XrCompileResources *reso
 #endif
 }
 
-static bool native_command_run(NativeCommand *command, bool prepared) {
+static bool native_command_run(NativeCommand *command, const char *step, bool prepared) {
     XrToolchainProcess *process = NULL;
     XrProcessResult output = {0};
+    XrProcessDiagnostic diagnostic = {.operation = "prepare"};
     XrProcessStatus status = prepared ? xtc_process_prepare(command->resources,
         &command->spec, &process) : XTC_PROCESS_INVALID;
-    if (status == XTC_PROCESS_OK) status = xtc_process_run(process, NULL, NULL, &output);
+    if (status == XTC_PROCESS_OK) status = xtc_process_run(process, NULL, NULL, &output, &diagnostic);
     bool okay = status == XTC_PROCESS_OK && !output.exit_code &&
         !output.stdout_bytes.truncated && !output.stderr_bytes.truncated;
     if (!okay) {
-        fprintf(stderr, "native compiler failed (status=%u child=%d)\n", (unsigned)status, output.exit_code);
+        const char *operation = diagnostic.operation ? diagnostic.operation :
+            output.exit_code ? "child-exit" : "capture-limit";
+        fprintf(stderr, "native %s failed (status=%u operation=%s os=%u child=", step,
+            (unsigned)status, operation, (unsigned)diagnostic.os_error);
+        if (diagnostic.exit_observed) fprintf(stderr, "%d)\n", diagnostic.child_exit);
+        else fputs("unobserved)\n", stderr);
         if (output.stdout_bytes.length)
             (void)fwrite(output.stdout_bytes.data, 1, output.stdout_bytes.length, stderr);
         if (output.stderr_bytes.length)
@@ -266,7 +272,7 @@ static bool native_compile(NativeCommand *command, const XtcHostToolchainView *h
     if (okay) okay = native_arg(command, "-fsanitize=undefined");
 #endif
 #endif
-    return native_command_run(command, okay);
+    return native_command_run(command, "compile", okay);
 }
 
 static bool native_link(NativeCommand *command, const XtcHostToolchainView *host,
@@ -321,7 +327,7 @@ static bool native_link(NativeCommand *command, const XtcHostToolchainView *host
     if (okay) okay = native_arg(command, "-fsanitize=undefined");
 #endif
 #endif
-    return native_command_run(command, okay);
+    return native_command_run(command, "link", okay);
 }
 
 static bool native_workspace_close(XtcXirWorkspace **workspace) {

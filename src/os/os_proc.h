@@ -114,6 +114,9 @@ typedef struct XrProcSpawnOptions {
      * This is independent of process-group ownership; GUI windows are outside
      * this request. POSIX spawn does not create a console window. */
     bool no_console_window;
+    /* Optional OS failure code captured before spawn cleanup. Zero means
+     * no raw host error was reported. Borrowed for the spawn call only. */
+    uint32_t *os_error;
 } XrProcSpawnOptions;
 
 typedef struct XrProcImagePumpResult {

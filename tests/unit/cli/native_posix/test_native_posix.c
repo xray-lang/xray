@@ -140,10 +140,24 @@ static void processes(void) {
         spec.completion_policy = i % 2 ? XR_PROC_COMPLETE_ROOT : XR_PROC_COMPLETE_TREE;
         spec.argv[1] = "-c"; spec.argv[2] = i % 4 < 2 ? "exit 0" : "exit 3";
         CHECK(xtc_process_prepare(resources, &spec, &process) == XTC_PROCESS_OK);
-        CHECK(xtc_process_run(process, NULL, NULL, &result) == XTC_PROCESS_OK);
+        XrProcessDiagnostic diagnostic = {0};
+        CHECK(xtc_process_run(process, NULL, NULL, &result, &diagnostic) == XTC_PROCESS_OK);
         CHECK(result.exit_code == (i % 4 < 2 ? 0 : 3));
+        CHECK(!diagnostic.operation && !diagnostic.os_error && diagnostic.exit_observed &&
+            diagnostic.child_exit == result.exit_code);
         xtc_process_result_free(&result); xtc_process_free(process);
     }
+    char missing[PATH_MAX]; path_in(missing, root, "missing-cwd");
+    XrProcessSpec spec; xtc_process_spec_init(&spec, "/bin/sh", 30000);
+    spec.cwd = missing; spec.argv[1] = "-c"; spec.argv[2] = "exit 0";
+    XrToolchainProcess *process = NULL;
+    CHECK(xtc_process_prepare(resources, &spec, &process) == XTC_PROCESS_OK);
+    XrProcessResult result = {.exit_code = 912};
+    XrProcessDiagnostic diagnostic = {0};
+    CHECK(xtc_process_run(process, NULL, NULL, &result, &diagnostic) == XTC_PROCESS_UNRESOLVED);
+    CHECK(!strcmp(diagnostic.operation, "spawn") && diagnostic.os_error == ENOENT && !diagnostic.exit_observed);
+    CHECK(result.exit_code == 912 && !result.stdout_bytes.data && !result.stderr_bytes.data);
+    xtc_process_free(process);
     ledger_done(resources, &empty);
 }
 int main(int argc, char **argv) {
