@@ -19,7 +19,7 @@ jobs:
       PYTHONUTF8: '1'
       PYTHONDONTWRITEBYTECODE: '1'
       NO_COLOR: '1'
-        XR_ARRAY_PARENT: 5229d31c4aeb0b99d09fd2e8e761cd2842da89dd
+      XR_ARRAY_PARENT: 5229d31c4aeb0b99d09fd2e8e761cd2842da89dd
     steps:
       - uses: actions/checkout@v4
         with:
