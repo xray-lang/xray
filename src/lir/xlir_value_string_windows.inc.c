@@ -7,14 +7,16 @@
  * xlir_value_string_windows.inc.c - Closed String loops over real owning slots
  */
 typedef struct LirStringWindowCarry {
-    uint32_t text, index, suffix;
+    uint32_t header, text, index, suffix;
     size_t edge;
     LirHomeVector *slots;
 } LirStringWindowCarry;
 
 static bool lir_string_window_follow(LirHomeBuilder *b, const XrLirFunctionData *function,
-    uint32_t block, const XrLirInstructionView *term, uint32_t selected, LirStringWindowCarry *carry, bool back) {
+    uint32_t block, uint32_t selected, LirStringWindowCarry *carry, bool require_index) {
     const XrLirValueHomes *homes = b->homes;
+    const XrLirBlockData *source = &function->blocks[block - 1];
+    const XrLirInstructionView *term = &source->instructions[source->instruction_count - 1].view;
     const XrLirEdgeView *edge = &term->edges[selected];
     uint32_t ordinal = selected + 1;
     size_t first = 0, end = homes->edge_count;
@@ -45,15 +47,48 @@ static bool lir_string_window_follow(LirHomeBuilder *b, const XrLirFunctionData 
         carry->index = target->parameters[n];
         has_index = true;
     }
-    if (has_suffix != (carry->suffix != 0) || (back && !has_index)) return false;
+    if (has_suffix != (carry->suffix != 0) || (require_index && !has_index)) return false;
     carry->edge = first;
     carry->text = transport.target;
     const XrLirValueHome *home = &homes->values[carry->text];
     return lir_home_append(b, carry->slots, &home->temporary_first_owner) &&
-        (back || lir_home_append(b, carry->slots, &home->first_owner));
+        (edge->target == carry->header || lir_home_append(b, carry->slots, &home->first_owner));
 }
 
-static uint8_t *lir_string_window_predecessors(const XrLirFunctionData *function);
+static uint8_t *lir_string_window_predecessors(const XrLirFunctionData *function) {
+    uint8_t *counts = xr_calloc(function->block_count, sizeof(*counts));
+    uint32_t *queue = xr_calloc(function->block_count, sizeof(*queue));
+    if (!counts || !queue) {
+        xr_free(counts);
+        xr_free(queue);
+        return NULL;
+    }
+    uint32_t length = 1;
+    queue[0] = function->entry;
+    counts[function->entry - 1] = 1;
+    for (uint32_t n = 0; n < length; ++n) {
+        const XrLirBlockData *block = &function->blocks[queue[n] - 1];
+        const XrLirInstructionView *term = &block->instructions[block->instruction_count - 1].view;
+        uint32_t selected = xr_lir_internal_known_edge(function, term);
+        uint32_t first = selected == UINT32_MAX ? 0 : selected;
+        uint32_t end = selected == UINT32_MAX ? term->edge_count : selected + 1;
+        for (uint32_t e = first; e < end; ++e) {
+            uint32_t target = term->edges[e].target;
+            uint8_t *count = &counts[target - 1];
+            if (*count == 0) queue[length++] = target;
+            if (*count < 2) ++*count;
+        }
+    }
+    xr_free(queue);
+    return counts;
+}
+
+static bool lir_string_window_forward(LirHomeBuilder *b, const XrLirFunctionData *function,
+    uint32_t *block, LirStringWindowCarry *carry, uint32_t selected) {
+    if (!lir_string_window_follow(b, function, *block, selected, carry, false)) return false;
+    *block = b->homes->edges[carry->edge].target_block;
+    return true;
+}
 
 static bool lir_string_window_header(const XrLirFunctionData *function, const XrLirBlockData *header,
     uint32_t comparison) {
@@ -107,11 +142,12 @@ static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *f
     const XrLirInstructionView *limit = xr_lir_internal_value_definition(function, bound);
     bool constant_limit = limit && limit->op == XR_LIR_CONST;
     size_t first_empty = slots->count;
-    LirStringWindowCarry carry = {.text=owner,.index=index,.suffix=stable,.slots=slots};
-    if (!lir_string_window_follow(b, function, header_id, branch, selected, &carry, false)) return false;
+    LirStringWindowCarry carry = {.header=header_id,.text=owner,.index=index,.suffix=stable,.slots=slots};
+    if (!lir_string_window_follow(b, function, header_id, selected, &carry, false)) return false;
     if (!*predecessors) *predecessors = lir_string_window_predecessors(function);
     if (!*predecessors)
         return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_OOM, "cannot count String window predecessors");
+    if (!(*predecessors)[header_id - 1]) return false;
     uint32_t body_id = branch->edges[selected].target;
     const XrLirBlockData *body;
     /* A cycle in the forwarding path would either reach the header or enter
@@ -120,11 +156,9 @@ static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *f
         if (body_id == header_id || body_id == function->entry || (*predecessors)[body_id - 1] != 1)
             return false;
         body = &function->blocks[body_id - 1];
-        if (body->instruction_count != 1) break;
-        const XrLirInstructionView *forward = &body->instructions[0].view;
-        if (forward->op != XR_LIR_BR || !lir_string_window_follow(b, function, body_id, forward, 0, &carry, false))
-            return false;
-        body_id = forward->edges[0].target;
+        uint32_t forward = xr_lir_internal_forward_edge(function, body);
+        if (forward == UINT32_MAX) break;
+        if (!lir_string_window_forward(b, function, &body_id, &carry, forward)) return false;
     }
     if (body->instruction_count != (stable ? 4u : 6u) || body->parameter_count != header->parameter_count) return false;
     const XrLirInstructionView *literal = NULL, *append = NULL, *step = NULL, *add = NULL, *drop = NULL;
@@ -156,9 +190,24 @@ static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *f
     carry.text = append->result;
     carry.index = add->result;
     const XrLirInstructionView *latch = &body->instructions[body->instruction_count - 1].view;
-    if (latch->op != XR_LIR_BR || latch->edges[0].target != header_id ||
-        !lir_string_window_follow(b, function, body_id, latch, 0, &carry, true) ||
-        carry.text != owner || carry.index != index) return false;
+    uint32_t latch_edge_index = xr_lir_internal_known_edge(function, latch);
+    if (latch_edge_index == UINT32_MAX ||
+        !lir_string_window_follow(b, function, body_id, latch_edge_index, &carry, true)) return false;
+    size_t actual_latch = carry.edge;
+    uint32_t latch_index = carry.index;
+    size_t latch_target_owner = homes->values[carry.text].first_owner;
+    uint32_t next = homes->edges[actual_latch].target_block;
+    /* Only the first returning block may also be entered from outside. A
+     * second entry before the comparison could change the values we skip. */
+    bool first = true;
+    while (next != header_id) {
+        if (next == function->entry || (!first && (*predecessors)[next - 1] != 1)) return false;
+        const XrLirBlockData *forward = &function->blocks[next - 1];
+        uint32_t edge = xr_lir_internal_forward_edge(function, forward);
+        if (edge == UINT32_MAX || !lir_string_window_forward(b, function, &next, &carry, edge)) return false;
+        first = false;
+    }
+    if (carry.text != owner || carry.index != index) return false;
     size_t latch_empty = slots->count;
     size_t header_owner = homes->values[owner].first_owner;
     for (size_t n = first_empty; n < latch_empty; ++n) {
@@ -166,26 +215,12 @@ static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *f
         if (slot == result->first_owner) slot = header_owner;
         if (!lir_home_append(b, slots, &slot)) return false;
     }
-    *out = (XrLirStringWindow){.header=header_id,.index=index,.next_index=add->result,.limit=bound,
+    *out = (XrLirStringWindow){.header=header_id,.index=index,.next_index=add->result,.latch_index=latch_index,.limit=bound,
         .comparison=comparison,.constant_limit=constant_limit,.limit_bits=constant_limit ? limit->bits : 0,
-        .header_owner=header_owner,.latch_owner=result->first_owner,.suffix_owner=suffix_slot,
+        .header_owner=header_owner,.latch_owner=result->first_owner,.latch_target_owner=latch_target_owner,.suffix_owner=suffix_slot,
         .header_empty_first=first_empty,.latch_empty_first=latch_empty,.empty_count=latch_empty - first_empty};
-    *latch_edge = carry.edge;
+    *latch_edge = actual_latch;
     return true;
-}
-
-static uint8_t *lir_string_window_predecessors(const XrLirFunctionData *function) {
-    uint8_t *counts = xr_calloc(function->block_count, sizeof(*counts));
-    if (!counts) return NULL;
-    for (uint32_t n = 0; n < function->block_count; ++n) {
-        const XrLirBlockData *block = &function->blocks[n];
-        const XrLirInstructionView *term = &block->instructions[block->instruction_count - 1].view;
-        for (uint32_t e = 0; e < term->edge_count; ++e) {
-            uint8_t *count = &counts[term->edges[e].target - 1];
-            if (*count < 2) ++*count;
-        }
-    }
-    return counts;
 }
 
 static bool lir_home_string_windows(LirHomeBuilder *b) {

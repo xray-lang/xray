@@ -536,9 +536,9 @@ static XR_NOINLINE uint64_t rbc_value_append_window(XrRbcStack *stack, RbcValueA
     XR_DCHECK(window->latch_empty_first <= homes->string_window_slot_count &&
         window->empty_count <= homes->string_window_slot_count - window->latch_empty_first &&
         window->latch_owner == homes->values[homes->transfers[edge->first].source].first_owner &&
-        window->header_owner == homes->values[homes->transfers[edge->first].target].first_owner,
+        window->latch_target_owner == homes->values[homes->transfers[edge->first].target].first_owner,
         "the capacity window starts and ends at the actual selected owner slots");
-    if (pair[0] != window->next_index || pair[1] != window->index || bits > INT64_MAX) return bits;
+    if (pair[0] != window->next_index || pair[1] != window->latch_index || bits > INT64_MAX) return bits;
     uint64_t limit_bits = window->limit_bits;
     if (!window->constant_limit) {
         XrRbcRegister *limit = rbc_value_register(stack, activation, window->limit);

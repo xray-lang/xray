@@ -82,11 +82,11 @@ typedef struct XrLirHomeEdge {
 } XrLirHomeEdge;
 
 typedef struct XrLirStringWindow {
-    uint32_t header, index, next_index, limit;
+    uint32_t header, index, next_index, latch_index, limit;
     uint32_t comparison; /* Zero-based position after any in-header constant. */
     bool constant_limit;
     uint64_t limit_bits;
-    size_t header_owner, latch_owner, suffix_owner;
+    size_t header_owner, latch_owner, latch_target_owner, suffix_owner;
     /* Guard the same route at either boundary. The slot holding the live
      * String differs between the header and latch. */
     size_t header_empty_first, latch_empty_first, empty_count;
