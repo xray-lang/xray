@@ -58,6 +58,12 @@ XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
  * and cannot retire the participating Frame while this transaction is active. */
 XRAY_API void xrt_native_string_append_owned(XrtManagedFrame *,
     const XrtStringAppendOwned *, uint32_t source_id);
+/* One admitted closed loop keeps its current String and invariant suffix in
+ * this Frame. Empty slots are the positions visited by its ordinary edge and
+ * append moves. Consume only available capacity. Zero leaves all state alone
+ * and the caller executes its original iteration. */
+XRAY_API size_t xrt_native_string_append_window(XrtManagedFrame *, size_t owner,
+    size_t suffix, size_t count, const size_t *empty_slots, size_t empty_count);
 /* Cold preparation only: initialize this execution's existing backing setup
  * before taking any checked String binding or suffix projection. This grants
  * no access permission and creates no Cell or managed Frame. */
