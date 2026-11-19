@@ -1,7 +1,7 @@
-scores: #{"alice": 95, "bob": 87, "charlie": 92}
+scores: {"alice": 95, "bob": 87, "charlie": 92}
 alice: 95
 has bob: true
-after delete bob: #{"alice": 95, "charlie": 92, "dave": 88}
+after delete bob: {"alice": 95, "charlie": 92, "dave": 88}
 length: 3
 keys: ["alice", "charlie", "dave"]
 values: [95, 92, 88]
@@ -9,8 +9,8 @@ values: [95, 92, 88]
   charlie -> 92
   dave -> 88
 empty map length: 0
-set: #[1, 2, 3], length: 3
+set: Set([1, 2, 3]), length: 3
 has 3: true
-after delete 1: #[2, 3, 4]
-point: {label: "A", x: 3.0, y: 4.0}
+after delete 1: Set([2, 3, 4])
+point: x=3.0, y=4.0, label=A
 x: 3.0, label: A
