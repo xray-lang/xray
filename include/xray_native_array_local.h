@@ -119,7 +119,7 @@ XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_shl(XrtArrayI64Pair va
     return value << amount;
 }
 
-#elif defined(_MSC_VER) && !defined(__clang__) && defined(_M_X64)
+#elif defined(_MSC_VER) && !defined(__clang__) && defined(_M_X64) && !defined(_M_ARM64EC)
 /* SSE2 is part of the MSVC x64 baseline. Use copies so even a byte-aligned
  * admitted backing does not acquire an intrinsic pointer alignment contract. */
 #include <emmintrin.h>
