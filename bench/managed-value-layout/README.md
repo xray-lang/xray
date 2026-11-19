@@ -73,9 +73,10 @@ retain/alias/call/rebind. These are native C protocol tests, not a language loan
 module effect proof, Root/longjmp test, or support for class/for-ref.
 
 `push-direct` retains the original `push-prepared` as an ABI-cost control. Its
-hot iterations hold owner/data/length/capacity as ordinary C locals and store
-elements plus canonical length directly. Only cold preparation constructs and
-receives descriptors; no large result is built at each fast iteration. The
+hot segments hold owner/data/length/capacity as ordinary C locals. Each
+segment only stores elements within the current capacity, then publishes the
+exact initialized length before any fallible growth. Only cold preparation
+constructs and receives descriptors. The
 shared range helper moves one real reference in and returns the current owner
 even after failure. Zero iterations do not prepare a borrow. State checks run
 that same helper with a committed prefix, local/shared aliases, zero count and
