@@ -346,7 +346,7 @@ static bool lir_plan_slice_boundary(XrLirOwnershipPlan *plan, const XrLirModule 
         fact.view_parameter = f->values[value - 1].instruction;
     return lir_plan_add(plan, fact);
 }
-#include "xlir_array_forwarding.inc.c"
+#include "xlir_binding_forwarding.inc.c"
 #include "xlir_array_set_region.inc.c"
 static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan,
     const XrLirCallableFacts *callables, const XrLirBlockConstructionFacts *fresh, XrLirDiagnostic *d) {
@@ -484,7 +484,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                 }
             }
         }
-        XrLirStatus forwarding_status=lir_plan_array_forwarding(plan,m,f,function);
+        XrLirStatus forwarding_status=lir_plan_binding_forwarding(plan,m,f,function);
         if (forwarding_status!=XR_LIR_OK) return forwarding_status;
         XrLirStatus region_status=lir_plan_array_set_regions(plan,m,f,function);
         if (region_status!=XR_LIR_OK) return region_status;

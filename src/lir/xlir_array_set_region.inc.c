@@ -7,7 +7,7 @@
  * xlir_array_set_region.inc.c - Structural local Array loop preparations
  */
 typedef struct LirArrayRegionUse {
-    LirArrayForwardUse direct;
+    LirBindingForwardUse direct;
     uint32_t saving_uses, next_retain;
     uint64_t range_stamp;
     uint32_t lane, edge_lane;
@@ -66,8 +66,8 @@ static bool lir_array_region_needed(const XrLirOwnershipPlan *plan, uint32_t fun
             fact->array_operation == XR_LIR_ARRAY_OP_SET;
         push |= fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION && fact->array_element == XR_LIR_I64 &&
             fact->array_operation == XR_LIR_ARRAY_OP_PUSH;
-        create |= fact->kind == XR_LIR_OWNERSHIP_BINDING_NEW && fact->forwarding_mode != 0;
-        read |= fact->kind == XR_LIR_OWNERSHIP_BINDING_READ && fact->forwarding_mode != 0;
+        create |= fact->kind == XR_LIR_OWNERSHIP_BINDING_NEW && fact->type == XR_LIR_ARRAY_CELL && fact->forwarding_mode != 0;
+        read |= fact->kind == XR_LIR_OWNERSHIP_BINDING_READ && fact->type == XR_LIR_ARRAY_CELL && fact->forwarding_mode != 0;
         get |= fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION && fact->array_element == XR_LIR_I64 &&
             fact->array_operation == XR_LIR_ARRAY_OP_GET;
         edge |= fact->kind == XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER && fact->type == XR_LIR_ARRAY &&
@@ -96,7 +96,7 @@ static bool lir_array_region_recorded_pair(const LirArrayRegionProof *p, uint32_
         fact->block == block + 1 && fact->instruction == instruction && fact->value == cell && fact->target_value == array &&
         fact->type == XR_LIR_ARRAY_CELL && fact->array_element == XR_LIR_I64 &&
         fact->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_NONE && fact->forwarding_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE &&
-        fact->forwarding_drop == instruction + 1 && lir_array_forward_cell(p->function, cell) &&
+        fact->forwarding_drop == instruction + 1 && lir_forward_cell(p->function, cell, XR_LIR_ARRAY_CELL) &&
         lir_array_region_array(p->function, array) && drop->operand_count == 1 && drop->operands[0] == op->operands[0] &&
         drop->op == (XrLirOp)(read ? XR_LIR_ARRAY_CELL_DROP : XR_LIR_ARRAY_DROP);
 }
@@ -116,7 +116,7 @@ static bool lir_array_region_inventory(LirArrayRegionProof *p) {
             else if (!moves[1]) moves[1] = ordinal + 1;
             else return false;
         }
-        if (!fact->forwarding_mode) continue;
+        if (fact->type != XR_LIR_ARRAY_CELL || !fact->forwarding_mode) continue;
         uint32_t value = fact->kind == XR_LIR_OWNERSHIP_BINDING_NEW ? fact->value : fact->target_value;
         if (!value || value > f->value_count || p->pairs[value]) return false;
         p->pairs[value] = ordinal + 1;
@@ -146,24 +146,24 @@ static bool lir_array_region_inventory(LirArrayRegionProof *p) {
             }
             for (uint32_t a = 0; a < op->operand_count; ++a) {
                 uint32_t value = op->operands[a];
-                LirArrayForwardUse *use = &p->uses[value].direct;
-                lir_array_forward_use(use, b + 1, i + 1);
+                LirBindingForwardUse *use = &p->uses[value].direct;
+                lir_forward_use(use, b + 1, i + 1);
                 XrLirType type = f->values[value - 1].type;
                 if (type == XR_LIR_ARRAY && !lir_array_region_array_role(p->module, op, a)) use->blocked = true;
-                if (type == XR_LIR_ARRAY_CELL && !lir_array_forward_role(p->module, op, a)) use->blocked = true;
+                if (type == XR_LIR_ARRAY_CELL && !lir_forward_role(p->module, op, a, type)) use->blocked = true;
                 if (type == XR_LIR_ARRAY && !a && (op->op == XR_LIR_ARRAY_RETAIN ||
                     (op->op == XR_LIR_CELL_NEW && op->type == XR_LIR_ARRAY_CELL)) && p->uses[value].saving_uses < 2)
                     ++p->uses[value].saving_uses;
             }
             for (uint32_t e = 0; e < op->edge_count; ++e)
                 for (uint32_t a = 0; a < op->edges[e].argument_count; ++a)
-                    lir_array_forward_use(&p->uses[op->edges[e].arguments[a]].direct, b + 1, i + 1);
+                    lir_forward_use(&p->uses[op->edges[e].arguments[a]].direct, b + 1, i + 1);
         }
     for (uint32_t v = 1; v <= f->value_count; ++v) {
         if (f->values[v - 1].type == XR_LIR_ARRAY && f->values[v - 1].parameter && !f->values[v - 1].block)
             return false;
         if (f->values[v - 1].type == XR_LIR_ARRAY_CELL &&
-            (!lir_array_forward_cell(f, v) || p->uses[v].direct.blocked ||
+            (!lir_forward_cell(f, v, XR_LIR_ARRAY_CELL) || p->uses[v].direct.blocked ||
                 p->uses[v].direct.block != f->values[v - 1].block))
             return false;
     }
@@ -439,7 +439,7 @@ static bool lir_array_region_pair(LirArrayRegionProof *p, uint32_t block, uint32
     uint32_t cell = read ? *current : op->result, array = read ? op->result : *current;
     if (p->uses[cell].direct.blocked || p->uses[cell].direct.block != block + 1 || p->uses[array].direct.blocked ||
         f->values[array - 1].block != block + 1) return false;
-    const LirArrayForwardUse *dying = &p->uses[*current].direct;
+    const LirBindingForwardUse *dying = &p->uses[*current].direct;
     if (dying->block != block + 1 || dying->last != instruction + 1) return false;
     uint32_t source = *current; *current = op->result;
     return lir_array_region_step(p, (XrLirArraySetRegionStep){
@@ -530,11 +530,11 @@ static XrLirArraySetRegionOwnerHome lir_array_region_token_home(const LirArrayRe
             if (!lir_array_region_array(p->function,current) || !lir_array_region_array(p->function,step.target) ||
                 !step.edge || step.drop) return none;
         } else if (step.kind == XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE || step.kind == XR_LIR_ARRAY_SET_REGION_READ_CANDIDATE) {
-            const LirArrayForwardUse *use = &p->uses[current].direct;
+            const LirBindingForwardUse *use = &p->uses[current].direct;
             bool create = step.kind == XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE;
             if (step.edge || step.drop != step.instruction + 1 || use->block != step.block || use->last != step.drop ||
-                (create ? !lir_array_region_array(p->function,current) || !lir_array_forward_cell(p->function,step.target) :
-                    !lir_array_forward_cell(p->function,current) || !lir_array_region_array(p->function,step.target))) return none;
+                (create ? !lir_array_region_array(p->function,current) || !lir_forward_cell(p->function,step.target,XR_LIR_ARRAY_CELL) :
+                    !lir_forward_cell(p->function,current,XR_LIR_ARRAY_CELL) || !lir_array_region_array(p->function,step.target))) return none;
         } else return none;
         current = step.target;
     }
@@ -770,7 +770,8 @@ static bool lir_array_region_step_equal(XrLirArraySetRegionStep a, XrLirArraySet
         a.source == b.source && a.target == b.target && a.drop == b.drop;
 }
 static bool lir_array_region_proof_fact(const XrLirOwnershipFact *fact) {
-    return fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION || fact->forwarding_mode != 0 ||
+    return fact->kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION ||
+        (fact->type == XR_LIR_ARRAY_CELL && fact->forwarding_mode != 0) ||
         (fact->kind == XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER && fact->type == XR_LIR_ARRAY) ||
         ((fact->kind == XR_LIR_OWNERSHIP_BINDING_NEW || fact->kind == XR_LIR_OWNERSHIP_BINDING_READ) &&
             fact->type == XR_LIR_ARRAY_CELL);

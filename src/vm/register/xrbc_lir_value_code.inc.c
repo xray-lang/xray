@@ -269,34 +269,40 @@ static uint32_t rbc_lir_binding_event(RbcLirCompiler *c,uint32_t kind,uint32_t r
     }
     return 0;
 }
-static bool rbc_lir_array_forwarding_metadata(RbcLirCompiler *c,XrRbcValueAccess *access) {
+static bool rbc_lir_binding_forwarding_metadata(RbcLirCompiler *c,XrRbcValueAccess *access) {
     bool create=access->operation==XR_RBC_VALUE_BINDING_NEW;
     if (!c->homes || (!create && access->operation!=XR_RBC_VALUE_BINDING_READ)) return true;
     uint32_t receiver=create ? access->result : access->source;
     uint32_t value=create ? access->source : access->result;
     /* Other event families can precede the ordered binding facts. Advance only
      * through forwarding candidates before comparing their real LIR positions. */
-    while (c->array_forwarding_cursor<c->homes->event_count) {
-        size_t n=c->array_forwarding_cursor;
+    while (c->binding_forwarding_cursor<c->homes->event_count) {
+        size_t n=c->binding_forwarding_cursor;
         const XrLirHomeEvent *event=&c->homes->events[n];
-        if (!event->forwarding_mode && !event->forwarding_drop) { ++c->array_forwarding_cursor; continue; }
+        if (!event->forwarding_mode && !event->forwarding_drop) { ++c->binding_forwarding_cursor; continue; }
         if (event->block>c->diagnostic->block || (event->block==c->diagnostic->block &&
                 event->instruction>c->diagnostic->instruction)) break;
-        ++c->array_forwarding_cursor;
+        ++c->binding_forwarding_cursor;
         if (event->block!=c->diagnostic->block || event->instruction!=c->diagnostic->instruction) continue;
         XrLirInstructionView drop={0};
         const XrLirHomeBinding *binding=c->homes->bindings ? &c->homes->bindings[receiver] : NULL;
         const XrtValueImage *image=xr_lir_value_image_view(c->literals->program->value_image);
+        if (!binding || !binding->type || !image || binding->type>image->type_count)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"binding forwarding lost its admitted type");
+        XrtValueKind kind=image->types[binding->type-1].kind;
+        bool map=kind==XRT_VALUE_MAP_STRING_I64;
+        bool valid_index=map ? access->index==n+1 : access->index==0;
+        XrLirOp release=map ? (create ? XR_LIR_MAP_DROP : XR_LIR_MAP_CELL_DROP) :
+            (create ? XR_LIR_ARRAY_DROP : XR_LIR_ARRAY_CELL_DROP);
         if (event->kind!=(uint32_t)(create ? XR_LIR_OWNERSHIP_BINDING_NEW : XR_LIR_OWNERSHIP_BINDING_READ) ||
             event->source!=receiver || event->target!=value || event->forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE ||
             event->instruction==UINT32_MAX || event->forwarding_drop!=event->instruction+1 ||
-            !binding || binding->kind!=XR_LIR_HOME_BINDING_LOCAL || !binding->type || !image ||
-            binding->type>image->type_count || image->types[binding->type-1].kind!=XRT_VALUE_ARRAY_I64 ||
+            binding->kind!=XR_LIR_HOME_BINDING_LOCAL || (!map && kind!=XRT_VALUE_ARRAY_I64) || !valid_index ||
             xr_lir_instruction_view(c->input,(XrLirBlock){c->input,c->function.id,c->diagnostic->block},
                 c->diagnostic->instruction,&drop)!=XR_LIR_OK ||
-            drop.op!=(create ? XR_LIR_ARRAY_DROP : XR_LIR_ARRAY_CELL_DROP) || drop.result ||
+            drop.op!=release || drop.result ||
             drop.operand_count!=1 || drop.operands[0]!=access->source || n>=UINT32_MAX)
-            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array forwarding lost its actual adjacent binding and release");
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"binding forwarding lost its actual adjacent release");
         access->index=(uint32_t)n+1;
         return true;
     }
@@ -334,7 +340,7 @@ static bool rbc_lir_binding_metadata(RbcLirCompiler *c,XrRbcValueAccess *access)
                 return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"binding copy lost its pending workspace");
         }
     }
-    return rbc_lir_array_forwarding_metadata(c,access);
+    return rbc_lir_binding_forwarding_metadata(c,access);
 }
 static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionView *i, bool *handled) {
     *handled = false;

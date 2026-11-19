@@ -1,0 +1,13 @@
+fn updates(n:i64)->i64 {
+    var table={"x": 7, "y": 3}
+    const snapshot=table
+    var i=0
+    while (i<n) {
+        table.set("x", i+1)
+        i+=1
+    }
+    return table["x"]*1000+table["y"]*10+snapshot["x"]
+}
+
+print(updates(0))
+print(updates(3))

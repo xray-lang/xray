@@ -109,7 +109,7 @@ typedef struct {
     uint32_t *value_edges;
     size_t value_access_capacity, value_argument_capacity, value_display_capacity, value_call_cursor;
     size_t value_region_access_capacity;
-    size_t binding_event_cursor, binding_workspace_cursor, array_forwarding_cursor, array_local_cursor;
+    size_t binding_event_cursor, binding_workspace_cursor, binding_forwarding_cursor, array_local_cursor;
     bool typed_values;
     uint32_t *slots, *spill_home, *edge_spill;
     uint32_t *aggregate_home, *aggregate_scratch;

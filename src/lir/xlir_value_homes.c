@@ -782,9 +782,10 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
         if ((fact.forwarding_mode || fact.forwarding_drop) &&
             (fact.forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE ||
              (fact.kind!=XR_LIR_OWNERSHIP_BINDING_NEW && fact.kind!=XR_LIR_OWNERSHIP_BINDING_READ) ||
-             fact.type!=XR_LIR_ARRAY_CELL || fact.array_element!=XR_LIR_I64 ||
+             (fact.type!=XR_LIR_MAP_STRING_I64_CELL &&
+              (fact.type!=XR_LIR_ARRAY_CELL || fact.array_element!=XR_LIR_I64)) ||
              !fact.instruction || fact.instruction==UINT32_MAX || fact.forwarding_drop!=fact.instruction+1))
-            return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"invalid Array forwarding preparation");
+            return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"invalid local binding forwarding preparation");
         uint32_t view_workspace = 0;
         if (fact.kind == XR_LIR_OWNERSHIP_VIEW_VALUE || fact.kind == XR_LIR_OWNERSHIP_VIEW_END ||
             (fact.kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER && fact.view_storage)) {

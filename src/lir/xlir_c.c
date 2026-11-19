@@ -77,7 +77,7 @@ typedef struct LirC {
     XrLirSource source;
     uint32_t location_count, location_cursor;
     bool runtime, runtime_header, f64, state, arrays, views, displays, maps, sets;
-    bool string_values, inline_values, callables, cells, header_edges, array_forwarding;
+    bool string_values, inline_values, callables, cells, header_edges, binding_forwarding;
     bool array_local, array_local_runtime;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
@@ -100,8 +100,8 @@ typedef struct LirC {
     size_t view_call_cursor, view_event_cursor;
     /* Only a complete, unconditional Array NEW establishes this block fact. */
     uint32_t array_frame_block;
-    size_t array_forward_cursor;
-    const XrLirHomeEvent *array_forward_pending;
+    size_t binding_forward_cursor;
+    const XrLirHomeEvent *binding_forward_pending;
     size_t array_local_event_cursor;
     LirCArrayRegions *array_regions;
     const LirCArrayRegions *array_region;
@@ -125,8 +125,8 @@ static void c_cell_scope_release(LirC *, uint32_t);
 static void c_cell_events_prepare(LirC *);
 static void c_cell_instruction(LirC *, const XrLirInstructionView *, uint32_t);
 static void c_hash_binding_stage_copy(LirC *, uint32_t, uint32_t, uint32_t);
-static bool c_array_forward_begin(LirC *, const XrLirInstructionView *);
-static bool c_array_forward_drop(LirC *, const XrLirInstructionView *);
+static bool c_binding_forward_begin(LirC *, const XrLirInstructionView *);
+static bool c_binding_forward_drop(LirC *, const XrLirInstructionView *);
 static bool c_array_local_begin(LirC *, const XrLirInstructionView *, const XrLirArrayIntrinsic *, const XrLirHomeWorkspace *);
 static void c_array_local_ready(LirC *);
 static void c_array_local_invalidate(LirC *, const XrLirInstructionView *);
@@ -1282,7 +1282,7 @@ static void c_verify_text(LirC *c) {
 #include "xlir_c_value_types.inc.c"
 #include "xlir_c_cell.inc.c"
 #include "xlir_c_value_transfers.inc.c"
-#include "xlir_c_array_forwarding.inc.c"
+#include "xlir_c_binding_forwarding.inc.c"
 #include "xlir_c_array_local.inc.c"
 #include "xlir_c_values.inc.c"
 #include "xlir_c_array_region.inc.c"

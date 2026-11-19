@@ -18,12 +18,12 @@ def array_forward_observer_source(generated):
     emitted = generated.read_text(encoding="ascii")
     selected = {}
     pattern = re.compile(
-        r"    xrl_array_forwarded = xrt_managed_frame_try_forward\(xrl_frame, xrl_payload, "
+        r"    xrl_binding_forwarded = xrt_managed_frame_try_forward\(xrl_frame, xrl_payload, "
         r"&xrl_frame_locations, \(XrtManagedFrameForward\)\{(\d+), (\d+), (\d+), (\d+)\}\);\n")
     for match in pattern.finditer(emitted):
         position = match.end()
         for _ in range(2):
-            conditional = re.match(r"\s*if \(!xrl_array_forwarded\) \{", emitted[position:])
+            conditional = re.match(r"\s*if \(!xrl_binding_forwarded\) \{", emitted[position:])
             if not conditional:
                 raise ValueError("COPY and adjacent DROP must be the two consecutive guarded blocks")
             position = _block_end(emitted, position + conditional.end() - 1)
@@ -141,7 +141,7 @@ static _Noreturn void observed_failure(XrtManagedStatus status, uint32_t source)
         text += f'''static void emitted_pair_{index}(XrtManagedFrame *xrl_frame, void *xrl_payload,
     const XrtManagedFrameLocations *factory) {{
     XrtManagedFrameLocations xrl_frame_locations=*factory;
-    bool xrl_array_forwarded=false;
+    bool xrl_binding_forwarded=false;
 {fragment}
 }}
 '''

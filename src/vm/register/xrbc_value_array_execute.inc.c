@@ -6,7 +6,7 @@
  *
  * xrbc_value_array_execute.inc.c - Fixed Array owners and actual binding transactions
  */
-static bool rbc_value_array_forward(const XrRbcModule *module,RbcValueActivation *activation,
+static bool rbc_value_binding_forward(const XrRbcModule *module,RbcValueActivation *activation,
     uint32_t index,size_t pc) {
     const XrRbcValueCode *code=activation->code;
     XrRbcValueAccess access=code->accesses[index];
@@ -16,7 +16,7 @@ static bool rbc_value_array_forward(const XrRbcModule *module,RbcValueActivation
         (access.operation!=XR_RBC_VALUE_BINDING_NEW && access.operation!=XR_RBC_VALUE_BINDING_READ) ||
         access.index>code->homes->event_count ||
         code->homes->events[access.index-1].forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE || !pc ||
-        !rbc_value_array_forwarding_words(&module->functions[activation->function],code,index,pc-1)) return false;
+        !rbc_value_binding_forwarding_words(&module->functions[activation->function],code,index,pc-1)) return false;
     bool create=access.operation==XR_RBC_VALUE_BINDING_NEW;
     const XrLirHomeBinding *binding=rbc_value_binding(code,create ? access.result : access.source);
     const XrLirValueHome *home=rbc_value_home(code,create ? access.source : access.result);
