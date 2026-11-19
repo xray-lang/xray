@@ -103,12 +103,14 @@ static uint64_t run(XrRbcProgram *program, uint64_t argument) {
 static void local_map_edit(void) {
     XrRbcProgram *program = callable(
         "fn edit(n:i64)->i64 {\n"
-        "    var table={\"keep\":7}\n"
+        "    var table={\"keep\":7,\"a\":1,\"b\":2,\"c\":3}\n"
+        "    table.set(\"keep\",8)\n"
         "    const snapshot=table\n"
         "    table.set(\"new\",n)\n"
+        "    const old_count=len(snapshot)\n"
         "    const seen=table[\"new\"]\n"
         "    if (!table.delete(\"new\")) {return -1}\n"
-        "    return seen*100+len(table)*10+len(snapshot)\n"
+        "    return seen*100+len(table)*10+old_count\n"
         "}\nedit(3)\n");
     const XrRbcModule *module = xr_rbc_program_view(program);
     const XrRbcFunction *entry = &module->functions[0];
@@ -125,7 +127,7 @@ static void local_map_edit(void) {
             &execution) == XR_RBC_INVALID && !execution);
         words[pc] = original;
     }
-    CHECK(edits == 2 && run(program, 3) == 311 && run(program, 8) == 811);
+    CHECK(edits == 3 && run(program, 3) == 344 && run(program, 8) == 844);
     xr_rbc_program_destroy(program);
 }
 
