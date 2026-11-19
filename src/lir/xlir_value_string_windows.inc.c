@@ -55,14 +55,28 @@ static bool lir_string_window_follow(LirHomeBuilder *b, const XrLirFunctionData 
 
 static uint8_t *lir_string_window_predecessors(const XrLirFunctionData *function);
 
+static bool lir_string_window_header(const XrLirFunctionData *function, const XrLirBlockData *header,
+    uint32_t comparison) {
+    for (uint32_t n = 0; n + 1 < header->instruction_count; ++n) {
+        const XrLirInstructionView *op = &header->instructions[n].view;
+        if (n == comparison || (op->op == XR_LIR_CONST && (op->type == XR_LIR_I64 || op->type == XR_LIR_I1)))
+            continue;
+        /* Generated C enters the window at the signed comparison. Earlier
+         * definitions must be constant so none can keep a stale index. */
+        if (n < comparison || op->op != XR_LIR_ICMP || op->operand_count != 2 || op->type != XR_LIR_I1 ||
+            function->values[op->operands[0] - 1].type != XR_LIR_I1 ||
+            function->values[op->operands[1] - 1].type != XR_LIR_I1) return false;
+    }
+    return true;
+}
+
 /* The skipped path consists only of a bound test, owner/index forwarding,
  * an append, and an increment. A non-stationary suffix must already have a
  * private literal cache; a cold cache makes the runtime guard decline. */
 static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *function, uint32_t header_id,
     XrLirStringWindow *out, size_t *latch_edge, LirHomeVector *slots, uint8_t **predecessors) {
     const XrLirBlockData *header = &function->blocks[header_id - 1];
-    if (header->parameter_count < 2 || header->parameter_count > 3 ||
-        header->instruction_count < 2 || header->instruction_count > 3)
+    if (header->parameter_count < 2 || header->parameter_count > 3 || header->instruction_count < 2)
         return false;
     uint32_t index = 0, owner = 0, stable = 0;
     const XrLirValueHomes *homes = b->homes;
@@ -78,19 +92,20 @@ static bool lir_home_string_window(LirHomeBuilder *b, const XrLirFunctionData *f
         } else return false;
     }
     if (!index || !owner) return false;
-    uint32_t comparison = header->instruction_count - 2;
-    const XrLirInstructionView *branch = &header->instructions[comparison + 1].view;
+    const XrLirInstructionView *branch = &header->instructions[header->instruction_count - 1].view;
     uint32_t order[2] = {0}, selected = 0;
     const XrLirInstructionView *cmp = xr_lir_internal_branch_i64_lt(function, branch, selected, order);
     if (!cmp || order[0] != index) {
         selected = 1;
         cmp = xr_lir_internal_branch_i64_lt(function, branch, selected, order);
     }
-    if (cmp != &header->instructions[comparison].view || order[0] != index || order[1] == index) return false;
+    if (!cmp || function->values[cmp->result - 1].block != header_id || order[0] != index || order[1] == index)
+        return false;
+    uint32_t comparison = function->values[cmp->result - 1].instruction;
+    if (!lir_string_window_header(function, header, comparison)) return false;
     uint32_t bound = order[1];
     const XrLirInstructionView *limit = xr_lir_internal_value_definition(function, bound);
     bool constant_limit = limit && limit->op == XR_LIR_CONST;
-    if (comparison && (!constant_limit || limit != &header->instructions[0].view)) return false;
     size_t first_empty = slots->count;
     LirStringWindowCarry carry = {.text=owner,.index=index,.suffix=stable,.slots=slots};
     if (!lir_string_window_follow(b, function, header_id, branch, selected, &carry, false)) return false;

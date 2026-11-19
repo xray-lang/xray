@@ -1730,30 +1730,38 @@ static bool source_boolean_check(SourceContext *ctx,AstNode *node,XrHirBooleanOp
     if(status!=XR_XIR_OK)return source_fail(ctx,node,status,reason);
     operand->type=typed->type;return true;
 }
-static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) {
-    SourceValue left, initial, place, right;
-    SourceExpressionPlan *plan=ctx->active_expression;
-    if (!plan->left || !source_plan_complete(ctx,plan->left,&left)) return false;
-    XrHirBoolean typed;
-    if (!source_boolean_check(ctx,node,source_boolean_operation(node->type),&left,&typed)) return false;
-    bool negate=typed.operation==XR_HIR_BOOLEAN_NOT;
-    initial = left;
-    if (negate && !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, typed.type, {0}, {0}, 0, {0}}, &initial)) return false;
-    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_NEW, typed.type, {initial.id, 0}, {0}, 0, {0}}, &place)) return false;
-    SourceFunction *body = &ctx->bodies[ctx->function];
-    uint32_t branch = body->count, rhs = body->block_count;
-    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {left.id, 0}, {0}, 0, {0}}, NULL) || !begin_block(ctx)) return false;
-    SourceConditionFlow *left_flow=plan->left->condition_flow;
-    if (!left_flow || !source_condition_enter(ctx,plan->left,node->type==AST_BINARY_AND)) return false;
-    if (negate) {
-        if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, typed.type, {0}, {0}, 1, {0}}, &right)) return false;
-    } else if (!plan->right || !source_plan_complete(ctx,plan->right,&right)) return false;
+static bool source_logic_finish_flow(SourceContext *ctx,SourceExpressionPlan *plan,SourceConditionFlow *right) {
     SourceConditionFlow *flow=NULL;
-    if (!source_condition_combine(ctx,node,left_flow,negate?NULL:plan->right->condition_flow,&flow)) return false;
+    if (!source_condition_combine(ctx,plan->syntax,plan->left->condition_flow,right,&flow)) return false;
     plan->condition_flow=flow;
     SourceFact *continuation=NULL;
     if (!source_facts_join(ctx,flow->facts[0],flow->epochs[0],flow->facts[1],flow->epochs[1],&continuation)) return false;
     ctx->facts=continuation;
+    return true;
+}
+
+static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    SourceValue left, place, right;
+    SourceExpressionPlan *plan=ctx->active_expression;
+    if (!plan->left || !source_plan_complete(ctx,plan->left,&left)) return false;
+    XrHirBoolean typed;
+    if (!source_boolean_check(ctx,node,source_boolean_operation(node->type),&left,&typed)) return false;
+    if (!plan->left->condition_flow) return false;
+    if (typed.operation==XR_HIR_BOOLEAN_NOT) {
+        SourceValue zero;
+        /* Negation has no conditional evaluation. Keep the same directional
+         * facts and construct the result directly from the evaluated value. */
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_BOOL,typed.type,{0},{0},0,{0}},&zero) &&
+            source_condition_enter(ctx,plan->left,false) && source_logic_finish_flow(ctx,plan,NULL) &&
+            source_recipe_record(ctx,(XrXirInstruction){XR_XIR_EQUAL,typed.type,{left.id,zero.id},{0},0,{0}},value);
+    }
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_NEW, typed.type, {left.id, 0}, {0}, 0, {0}}, &place)) return false;
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    uint32_t branch = body->count, rhs = body->block_count;
+    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_BRANCH, XR_XIR_UNIT, {left.id, 0}, {0}, 0, {0}}, NULL) || !begin_block(ctx)) return false;
+    if (!source_condition_enter(ctx,plan->left,node->type==AST_BINARY_AND) ||
+        !plan->right || !source_plan_complete(ctx,plan->right,&right) ||
+        !source_logic_finish_flow(ctx,plan,plan->right->condition_flow)) return false;
     if (!source_boolean_check(ctx,node,typed.operation,&right,&typed)) return false;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_WRITE, XR_XIR_UNIT, {place.id, right.id}, {0}, 0, {0}}, NULL)) return false;
     uint32_t join = body->block_count;
