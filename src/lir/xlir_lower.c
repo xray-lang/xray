@@ -102,7 +102,7 @@ typedef struct LowerFunction {
     XrLirType *cell_types, *cell_elements;
     uint32_t *cell_for, *phis, *order, *stack, *next;
     uint8_t *reachable, *use, *define, *live;
-    uint8_t *literal_uses;
+    uint8_t *literal_uses, *string_updates;
     uint32_t value_count, cell_count, ordered, frame_cell_count, retired_value_count;
     LowerArrayCells array_cells;
     LowerLexical lexical;
@@ -945,6 +945,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         }
         return true;
     }
+    if (op->op == XR_XIR_CONCAT_STRING) c->string_appends = true;
     if (op->op == XR_XIR_CONST_STRING)
         return lower_literal_valid(c, f, (uint32_t)(op - f->instructions));
     if (op->op == XR_XIR_RANGE_CHECK) {
@@ -1273,6 +1274,7 @@ static void lower_function_free(LowerFunction *f) {
     xr_free(f->array_cells.define);
     xr_free(f->array_cells.live);
     xr_free(f->literal_uses);
+    xr_free(f->string_updates);
     xr_free(f->frame_cells);
     xr_free(f->promoted_arrays);
     xr_free(f->array_values);
@@ -2453,7 +2455,7 @@ static bool lower_function(Lower *c, uint32_t index) {
         .owner = c, .source = &c->source->functions[index], .function = c->functions[index]};
     f.literal_uses = lower_literal_uses(c, f.source);
     bool good = f.literal_uses && lower_build(c, xr_lir_define_function(c->module, f.function)) && lower_order(&f) &&
-                lower_cell_inventory(&f) && lower_lexical_inventory(&f) &&
+                lower_cell_inventory(&f) && lower_lexical_inventory(&f) && lower_string_updates(&f) &&
                 lower_liveness(&f) && lower_blocks(&f);
     for (uint32_t p = 0; p < f.source->parameter_count && good; ++p)
         good = lower_build(c, xr_lir_function_parameter(c->module, f.function, p, &f.values[p]));

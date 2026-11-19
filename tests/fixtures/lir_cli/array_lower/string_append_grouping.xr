@@ -18,5 +18,29 @@ fn assignment(count: i64) -> string {
     return text
 }
 
+fn grouped_assignment(count: i64) -> string {
+    var text = ""
+    var i = 0
+    while (i < count) {
+        text = ((text) + "x")
+        i += 1
+    }
+    return text
+}
+
+fn observed_length(count: i64) -> i64 {
+    var text = ""
+    var total = 0
+    var i = 0
+    while (i < count) {
+        text = (text + "x")
+        total += len(text)
+        i += 1
+    }
+    return total
+}
+
 print(compound(4))
 print(assignment(4))
+print(grouped_assignment(4))
+print(observed_length(4))
