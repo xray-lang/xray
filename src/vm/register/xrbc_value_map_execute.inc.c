@@ -85,7 +85,7 @@ static XrtManagedStatus rbc_value_map_edit_local(XrRbcStack *stack, RbcValueActi
     if (!remove) memcpy(&update.value, &item->bits, sizeof(update.value));
     const XrLirHomeWorkspace *stage = &activation->code->homes->workspaces[access.window];
     bool removed = false;
-    XrtManagedStatus status = xrt_map_try_update_local(locations, access.source - 1,
+    XrtManagedStatus status = xrt_map_try_update_local(activation->frame, access.source - 1,
         stage->first_owner, &update, applied, &removed);
     if (*applied && remove) item->bits = removed;
     return status;

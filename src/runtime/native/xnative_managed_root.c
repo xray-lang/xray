@@ -458,6 +458,26 @@ XR_FUNCDEF XrtManagedRoot *xrt_managed_frame_root(XrtManagedFrame *frame) {
     return frame ? frame->root : NULL;
 }
 
+XR_FUNCDEF XrtManagedStatus xrt_managed_slot_edit_local(XrtManagedFrame *frame, size_t binding,
+    size_t workspace, XrtManagedPayloadEdit edit, void *context) {
+    if (!edit) return XRT_MANAGED_ARGUMENT;
+    if (!frame || !frame->root || frame->root->busy ||
+        binding >= frame->slot_count || workspace >= frame->slot_count || binding == workspace)
+        return XRT_MANAGED_OK;
+    XrtManagedSlot *slots = frame_slots(frame);
+    XrtManagedSlot *slot = &slots[binding], *stage = &slots[workspace];
+    if (slot->owner_offset == SIZE_MAX || stage->owner_offset == SIZE_MAX ||
+        slot->owner_offset == stage->owner_offset || slot->pending.value || slot->pending.allocation_bytes ||
+        !slot_empty(frame, stage)) return XRT_MANAGED_OK;
+    XrtManagedHeader *owner = *frame_owner(frame, slot);
+    if (!owner) return XRT_MANAGED_OK;
+    XrtManagedRoot *root = frame->root;
+    root->busy = true;
+    XrtManagedStatus status = edit(owner, context);
+    root->busy = false;
+    return status;
+}
+
 enum { RESERVED_EMPTY, RESERVED_PENDING, RESERVED_COMMITTED, RESERVED_PUBLISHED, RESERVED_CALLBACK };
 static XrtManagedSlot *reserved_slot(const XrtManagedSlotReservation *handle) {
     if (!handle || !handle->root) return NULL;
@@ -482,7 +502,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_begin(XrtManagedFrame *fra
     return XRT_MANAGED_OK;
 }
 XR_FUNCDEF XrtManagedStatus xrt_managed_slot_reserved_apply(XrtManagedSlotReservation *handle,
-    XrtManagedReservedApply apply, void *context) {
+    XrtManagedPayloadEdit apply, void *context) {
     XrtManagedSlot *slot=reserved_slot(handle);
     if (!slot || !apply || handle->root->reserved_phase!=RESERVED_EMPTY) return XRT_MANAGED_ARGUMENT;
     XrtManagedRoot *root=handle->root;

@@ -52,7 +52,7 @@ XR_FUNC XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *,
 /* The caller supplies an admitted local binding and its distinct workspace
  * from the real private Frame. Both share one protected domain through key
  * retirement. With OK and applied=false a normal replacement is still needed. */
-XR_FUNC XrtManagedStatus xrt_map_try_update_local(const XrtManagedFrameLocations *,
+XR_FUNC XrtManagedStatus xrt_map_try_update_local(XrtManagedFrame *,
     size_t binding, size_t workspace, const XrtMapUpdate *, bool *applied, bool *removed);
 /* All candidate key owners are installed before one commit. Source and RHS
  * borrows remain live through that commit; failure preserves the old binding

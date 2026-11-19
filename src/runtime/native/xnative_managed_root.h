@@ -49,7 +49,14 @@ typedef bool (*XrtManagedTryEdit)(XrtManagedHeader *, const void *);
  * unchanged so the caller can retry through the registered transaction. */
 XR_FUNC bool xrt_managed_slot_try_edit_move(XrtManagedFrame *, size_t source,
     size_t result, size_t workspace, XrtManagedTryEdit, const void *);
-typedef XrtManagedStatus (*XrtManagedReservedApply)(XrtManagedHeader *, void *);
+typedef XrtManagedStatus (*XrtManagedPayloadEdit)(XrtManagedHeader *, void *);
+/* Edit the live payload of an admitted local binding with its distinct
+ * Frame workspace empty. A miss leaves the context and slots untouched.
+ * The caller supplies the write authority and retains the allocation path.
+ * The callback returns normally under the Root guard and cannot replace
+ * owners or mutate the Root or any Place. */
+XR_FUNC XrtManagedStatus xrt_managed_slot_edit_local(XrtManagedFrame *, size_t binding,
+    size_t workspace, XrtManagedPayloadEdit, void *);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_begin(XrtManagedFrame *, size_t,
     XrtManagedSlotLocation binding, XrtManagedSlotReservation *empty);
 /* Apply lends the current owner for an admitted allocation-free payload edit.
@@ -57,7 +64,7 @@ XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_begin(XrtManagedFrame *, size
  * cannot perform Root/Place operations, replace a binding, or change a domain.
  * Reentrant use of the registered handle is rejected during every callback. */
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_apply(XrtManagedSlotReservation *,
-    XrtManagedReservedApply, void *);
+    XrtManagedPayloadEdit, void *);
 /* Grow only the registered local binding during an empty reservation. The
  * caller has ended old payload borrows and must initialize newly used elements
  * before ending the reservation. An empty output leaves the old owner intact. */

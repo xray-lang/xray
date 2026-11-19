@@ -138,7 +138,7 @@ static void array_place_updates(void) {
 }
 typedef struct MapPlaceWatch {
     Fixture *fixture;
-    const XrtManagedFrameLocations *locations;
+    XrtManagedFrame *local_frame;
     XrtPlace place;
     XrtMapUpdate update;
     XrtManagedHeader *old;
@@ -149,9 +149,9 @@ static void map_place_observe(void *context, void *memory, bool allocating) {
     MapPlaceWatch *watch = context;
     XrtManagedHeader *before = borrow(watch->fixture, 0);
     bool removed = true;
-    if (watch->locations) {
+    if (watch->local_frame) {
         bool applied = true;
-        OK(xrt_map_try_update_local(watch->locations, 0, 1, &watch->update, &applied, &removed));
+        OK(xrt_map_try_update_local(watch->local_frame, 0, 1, &watch->update, &applied, &removed));
         CHECK(!applied && removed);
     }
     BAD(xrt_map_update_place(watch->place, watch->fixture->frame, 1, &watch->fixture->types, &watch->update, &removed));
@@ -249,48 +249,54 @@ static void map_local_edits(void) {
     xrt_billing_owner_fail_after(f.billing, 0);
     XrtMapUpdate edit = {XRT_MAP_UPDATE_SET, keys[0], 42};
     bool applied = false, removed = true;
-    OK(xrt_map_try_update_local(&locations, 0, 1, &edit, &applied, &removed));
+    OK(xrt_map_try_update_local(frame, 0, 1, &edit, &applied, &removed));
     CHECK(applied && !removed);
     edit = (XrtMapUpdate){XRT_MAP_UPDATE_SET, keys[1], 99};
-    OK(xrt_map_try_update_local(&locations, 0, 0, &edit, &applied, &removed));
+    OK(xrt_map_try_update_local(frame, 0, 0, &edit, &applied, &removed));
     CHECK(!applied && !removed && map->length == 1);
     int32_t refs = xr_signed_rc_read(&keys[1]->managed.references);
     atomic_store(&keys[1]->managed.references, INT32_MIN);
-    CHECK(xrt_map_try_update_local(&locations, 0, 1, &edit, &applied, &removed) == XRT_MANAGED_REFCOUNT);
+    CHECK(xrt_map_try_update_local(frame, 0, 1, &edit, &applied, &removed) == XRT_MANAGED_REFCOUNT);
     atomic_store(&keys[1]->managed.references, refs);
     CHECK(!applied && !removed && map->length == 1 && !*locations.busy);
-    OK(xrt_map_try_update_local(&locations, 0, 1, &edit, &applied, &removed));
+    OK(xrt_map_try_update_local(frame, 0, 1, &edit, &applied, &removed));
     CHECK(applied && !removed && map->length == 2 && map->order_count == 2);
     CHECK(map->rows[0].key == keys[0] && map->rows[1].key == keys[1]);
     same_bill(f.billing, baseline);
     CHECK(xrt_billing_owner_stats(f.billing).allocations == baseline.allocations);
     edit = (XrtMapUpdate){XRT_MAP_UPDATE_REMOVE, keys[1], 0};
     OK(xrt_backing_slot_copy(frame, 2, owner));
-    OK(xrt_map_try_update_local(&locations, 0, 1, &edit, &applied, &removed));
+    OK(xrt_map_try_update_local(frame, 0, 1, &edit, &applied, &removed));
     CHECK(!applied && !removed && map->length == 2);
     OK(xrt_managed_slot_drop(frame, 2));
 
     XrtPlace binding = {.frame=frame, .slot=0, .nulls=XRT_PLACE_NONNULL};
     XrtPlaceReplacement held = {0};
     OK(xrt_place_replacement_begin(binding, frame, 1, &held));
-    OK(xrt_map_try_update_local(&locations, 0, 1, &edit, &applied, &removed));
+    OK(xrt_map_try_update_local(frame, 0, 1, &edit, &applied, &removed));
     CHECK(!applied && !removed && map->length == 2);
     OK(xrt_place_replacement_end(&held));
     xrt_billing_owner_fail_after(f.billing, SIZE_MAX);
     XrtManagedHeader *pending = NULL;
     OK(xrt_managed_slot_prepare(frame, 1, f.types.map, sizeof(XrtMapBacking), &pending));
-    OK(xrt_map_try_update_local(&locations, 0, 1, &edit, &applied, &removed));
+    OK(xrt_map_try_update_local(frame, 0, 1, &edit, &applied, &removed));
     CHECK(!applied && !removed && locations.slots[1].pending.value == pending);
     OK(xrt_managed_slot_abort(frame, 1));
+    OK(xrt_backing_slot_copy(frame, 1, &keys[0]->managed));
+    OK(xrt_map_try_update_local(frame, 0, 1, &edit, &applied, &removed));
+    XrtManagedHeader *occupied = NULL;
+    OK(xrt_managed_slot_borrow(frame, 1, &occupied));
+    CHECK(!applied && !removed && occupied == &keys[0]->managed && map->length == 2);
+    OK(xrt_managed_slot_drop(frame, 1));
 
     XrtManagedFrame *parent = f.frame;
     OK(xrt_managed_slot_drop(parent, 1));
     f.frame = frame;
-    MapPlaceWatch watch = {.fixture=&f, .locations=&locations, .place=binding, .update=edit,
+    MapPlaceWatch watch = {.fixture=&f, .local_frame=frame, .place=binding, .update=edit,
         .old=&keys[1]->managed, .removed=&removed};
     f.audit.observe = map_place_observe; f.audit.observer = &watch;
     xrt_billing_owner_fail_after(f.billing, 0);
-    OK(xrt_map_try_update_local(&locations, 0, 1, &edit, &applied, &removed));
+    OK(xrt_map_try_update_local(frame, 0, 1, &edit, &applied, &removed));
     f.audit.observe = NULL;
     f.frame = parent;
     CHECK(applied && removed && watch.retirements == 1 && !watch.allocations && !*locations.busy);
