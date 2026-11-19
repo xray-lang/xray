@@ -15,6 +15,7 @@
 #if defined(XR_OS_WINDOWS)
 #include <windows.h>
 #else
+#include <errno.h>
 #include <unistd.h>
 #endif
 #include "../../os/os_time.h"
@@ -530,25 +531,44 @@ static XrProcessStatus process_capture_append(XrCompileResources *r, XtcCapture 
     memcpy(c->data + c->len, bytes, accepted); c->len += accepted; c->data[c->len] = 0;
     return XTC_PROCESS_OK;
 }
+static uint32_t process_system_error(void) {
+#if XR_OS_WINDOWS
+    return (uint32_t)GetLastError();
+#else
+    return (uint32_t)errno;
+#endif
+}
 /* A single bounded read per stream keeps cancellation and the other pipe fair. */
-static XrProcessStatus process_capture_read(XrCompileResources *r, XrPipeHandle handle, XtcCapture *c) {
+static XrProcessStatus process_capture_read(XrCompileResources *r, XrPipeHandle handle,
+    XtcCapture *c, uint32_t *os_error) {
     if (c->eof) return XTC_PROCESS_OK;
     uint8_t bytes[4096]; size_t available = 0; bool eof = false;
 
     XrPipeIoStatus result = xr_pipe_probe(handle, &available, &eof);
     if (result == XR_PIPE_IO_WOULD_BLOCK) return XTC_PROCESS_OK;
-    if (result == XR_PIPE_IO_ERROR) return process_os(xr_proc_last_error());
+    if (result == XR_PIPE_IO_ERROR) {
+        *os_error = process_system_error();
+        return process_os(xr_proc_last_error());
+    }
     if (eof) { c->eof = true; return XTC_PROCESS_OK; }
     size_t requested = available < sizeof(bytes) ? available : sizeof(bytes);
 
     int64_t n = xr_pipe_read(handle, bytes, requested);
-    if (n < 0) return process_os(xr_proc_last_error());
+    if (n < 0) {
+        *os_error = process_system_error();
+        return process_os(xr_proc_last_error());
+    }
     if (!n) { c->eof = true; return XTC_PROCESS_OK; }
     return process_capture_append(r, c, bytes, (size_t)n);
 }
 XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
-    XrProcessCancelled cancelled, void *context, XrProcessResult *output) {
-    if (!p || !output || output->stdout_bytes.data || output->stderr_bytes.data) return XTC_PROCESS_INVALID;
+    XrProcessCancelled cancelled, void *context, XrProcessResult *output,
+    XrProcessDiagnostic *diagnostic) {
+    if (diagnostic) *diagnostic = (XrProcessDiagnostic){0};
+    if (!p || !output || output->stdout_bytes.data || output->stderr_bytes.data) {
+        if (diagnostic) diagnostic->operation = "validate";
+        return XTC_PROCESS_INVALID;
+    }
     /* Ordinary ROOT requests use the existing managed group. Once the root
      * exits, revoke its descendants before draining inherited pipe handles.
      * Image-observed requests keep the debug-pump's own ROOT completion path. */
@@ -559,15 +579,20 @@ XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
     XtcCapture captures[2] = {{0},{0}};
     XrPipe pipes[2] = {{XR_PIPE_INVALID, XR_PIPE_INVALID},{XR_PIPE_INVALID, XR_PIPE_INVALID}};
     XrProcId pid = XR_PROC_INVALID; bool exited = false;
+    const char *operation = "allocate-capture";
+    uint32_t os_error = 0;
     bool images_drained = p->spec.image_mode == XR_PROC_IMAGES_NONE;
     uint64_t start = xr_time_monotonic_ms();
     XrProcessStatus s = process_capture_init(r, &captures[0], p->spec.output_limit);
     if (s != XTC_PROCESS_OK) goto done;
     s = process_capture_init(r, &captures[1], p->spec.output_limit); if (s != XTC_PROCESS_OK) goto done;
+    operation = "create-pipe";
     for (unsigned i = 0; i < 2; ++i) {
-        if (xr_pipe_create(&pipes[i], NULL) != 0) { s = process_os(xr_proc_last_error()); goto done; }
+        if (xr_pipe_create(&pipes[i], NULL) != 0) {
+            os_error = process_system_error(); s = process_os(xr_proc_last_error()); goto done;
+        }
     }
-    if (cancelled && cancelled(context)) { s = XTC_PROCESS_CANCELLED; goto done; }
+    if (cancelled && cancelled(context)) { operation = "cancel"; s = XTC_PROCESS_CANCELLED; goto done; }
     XrProcSpawnOptions options = {0};
     options.memory = (XrProcMemory){r, process_allocate, process_release};
     options.cwd = p->spec.cwd; options.env_keys = p->spec.env_keys; options.env_values = p->spec.env_values; options.env_count = p->spec.env_count;
@@ -576,28 +601,40 @@ XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
 
     options.completion_policy = revoke_on_root_exit ? XR_PROC_COMPLETE_TREE : p->spec.completion_policy;
     options.has_stdout = options.has_stderr = true; options.stdout_write = pipes[0].write; options.stderr_write = pipes[1].write;
+    operation = "spawn";
+    options.os_error = &os_error;
     s = process_os(xr_proc_spawn(p->spec.executable, p->spec.argv, &options, &pid));
-    for (unsigned i = 0; i < 2; ++i) { if (xr_pipe_close(pipes[i].write) != 0 && s == XTC_PROCESS_OK) s = XTC_PROCESS_IO; pipes[i].write = XR_PIPE_INVALID; }
+    for (unsigned i = 0; i < 2; ++i) {
+        if (xr_pipe_close(pipes[i].write) != 0 && s == XTC_PROCESS_OK) {
+            operation = "close-write-pipe"; os_error = process_system_error(); s = XTC_PROCESS_IO;
+        }
+        pipes[i].write = XR_PIPE_INVALID;
+    }
     if (s != XTC_PROCESS_OK) goto done;
     while (!exited || !images_drained || !captures[0].eof || !captures[1].eof) {
-        if (cancelled && cancelled(context)) { s = XTC_PROCESS_CANCELLED; break; }
-        if (xr_time_monotonic_ms() - start >= p->spec.timeout_ms) { s = XTC_PROCESS_TIMEOUT; break; }
+        if (cancelled && cancelled(context)) { operation = "cancel"; s = XTC_PROCESS_CANCELLED; break; }
+        if (xr_time_monotonic_ms() - start >= p->spec.timeout_ms) {
+            operation = "deadline"; s = XTC_PROCESS_TIMEOUT; break;
+        }
         bool image_progress = false;
         if (!images_drained) {
             XrProcImagePumpResult pump;
             s = process_os(xr_proc_pump_images(pid, &pump));
-            if (s != XTC_PROCESS_OK) break;
+            if (s != XTC_PROCESS_OK) { operation = "observe-image"; break; }
             images_drained = pump.drained; image_progress = pump.progressed;
         }
-        s = process_capture_read(r, pipes[0].read, &captures[0]); if (s != XTC_PROCESS_OK) break;
-        s = process_capture_read(r, pipes[1].read, &captures[1]); if (s != XTC_PROCESS_OK) break;
+        s = process_capture_read(r, pipes[0].read, &captures[0], &os_error);
+        if (s != XTC_PROCESS_OK) { operation = "capture-stdout"; break; }
+        s = process_capture_read(r, pipes[1].read, &captures[1], &os_error);
+        if (s != XTC_PROCESS_OK) { operation = "capture-stderr"; break; }
         if (!exited) {
-
             XrProcWaitResult wait = xr_proc_try_wait(pid, &result.exit_code);
-            if (wait == XR_PROC_WAIT_ERROR) { s = process_os(xr_proc_last_error()); break; }
+            if (wait == XR_PROC_WAIT_ERROR) {
+                operation = "wait"; os_error = process_system_error(); s = process_os(xr_proc_last_error()); break;
+            }
             exited = wait == XR_PROC_WAIT_EXITED;
             if (exited && revoke_on_root_exit && xr_proc_kill_tree(pid, 9) != 0) {
-                s = process_os(xr_proc_last_error()); break;
+                operation = "revoke"; os_error = process_system_error(); s = process_os(xr_proc_last_error()); break;
             }
         }
         /* The active image pump already waits for an event that can wake it.
@@ -611,15 +648,21 @@ XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
             (void)xr_proc_kill_tree(pid, 9);
             /* Close owns the final reap even if termination or polling failed. */
         }
-        if (xr_proc_close(pid) != 0 && s == XTC_PROCESS_OK) s = XTC_PROCESS_IO;
+        if (xr_proc_close(pid) != 0 && s == XTC_PROCESS_OK) {
+            operation = "close-process"; os_error = process_system_error(); s = XTC_PROCESS_IO;
+        }
     }
     for (unsigned i = 0; i < 2; ++i) {
         if (s != XTC_PROCESS_OK && pipes[i].read != XR_PIPE_INVALID) {
             uint8_t discard[4096]; int64_t n;
             while (xr_pipe_try_read(pipes[i].read, discard, sizeof(discard), &n) == XR_PIPE_IO_OK && n > 0) {}
         }
-        if (xr_pipe_close(pipes[i].read) != 0 && s == XTC_PROCESS_OK) s = XTC_PROCESS_IO;
-        if (xr_pipe_close(pipes[i].write) != 0 && s == XTC_PROCESS_OK) s = XTC_PROCESS_IO;
+        if (xr_pipe_close(pipes[i].read) != 0 && s == XTC_PROCESS_OK) {
+            operation = "close-read-pipe"; os_error = process_system_error(); s = XTC_PROCESS_IO;
+        }
+        if (xr_pipe_close(pipes[i].write) != 0 && s == XTC_PROCESS_OK) {
+            operation = "close-write-pipe"; os_error = process_system_error(); s = XTC_PROCESS_IO;
+        }
     }
     if (s == XTC_PROCESS_OK) {
         result.duration_ms = xr_time_monotonic_ms() - start;
@@ -627,6 +670,8 @@ XR_FUNC XrProcessStatus xtc_process_run(const XrToolchainProcess *p,
         result.stderr_bytes = (XrProcessByteBuffer){captures[1].data, captures[1].len, captures[1].truncated};
         *output = result;
     } else { xr_compile_resources_free(captures[0].data); xr_compile_resources_free(captures[1].data); }
+    if (diagnostic) *diagnostic = (XrProcessDiagnostic){s == XTC_PROCESS_OK ? NULL : operation,
+        os_error, exited, result.exit_code};
     return s;
 }
 XR_FUNC void xtc_process_spec_init(XrProcessSpec *spec, const char *executable, uint32_t timeout_ms) {

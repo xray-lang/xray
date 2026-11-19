@@ -52,10 +52,16 @@ static void track_handle(HANDLE h) {
     for (unsigned i = 0; i < 512; ++i) if (!owned_handles[i]) { owned_handles[i] = h; ++physical_handles; ReleaseSRWLockExclusive(&handle_trace_lock); return; }
     CHECK(false);
 }
+static bool overwrite_close_error;
 static BOOL test_close(HANDLE h) {
     AcquireSRWLockExclusive(&handle_trace_lock);
     BOOL ok = CloseHandle(h);
-    if (ok) for (unsigned i = 0; i < 512; ++i) if (owned_handles[i] == h) { owned_handles[i] = NULL; --physical_handles; ReleaseSRWLockExclusive(&handle_trace_lock); return ok; }
+    if (ok) for (unsigned i = 0; i < 512; ++i) if (owned_handles[i] == h) {
+        owned_handles[i] = NULL; --physical_handles;
+        ReleaseSRWLockExclusive(&handle_trace_lock);
+        if (overwrite_close_error) SetLastError(ERROR_ACCESS_DENIED);
+        return ok;
+    }
     ReleaseSRWLockExclusive(&handle_trace_lock); CHECK(!ok); return ok;
 }
 static BOOL test_pipe(PHANDLE read, PHANDLE write, LPSECURITY_ATTRIBUTES attributes, DWORD size) {
@@ -119,7 +125,11 @@ static BOOL test_environment_free(LPWCH p) {
 }
 #define GetEnvironmentStringsW test_environment
 #define FreeEnvironmentStringsW test_environment_free
-static bool fail_read, fail_peek, fail_exit;
+static bool fail_read, fail_peek, fail_exit, fail_close_job;
+static BOOL test_terminate_job(HANDLE job, UINT code) {
+    if (fail_close_job) { fail_close_job = false; SetLastError(ERROR_WRITE_FAULT); return FALSE; }
+    return TerminateJobObject(job, code);
+}
 static BOOL test_read(HANDLE file, LPVOID bytes, DWORD size, LPDWORD count, LPOVERLAPPED overlapped) {
     if (fail_read) { fail_read = false; SetLastError(ERROR_READ_FAULT); return FALSE; }
     return ReadFile(file, bytes, size, count, overlapped);
@@ -162,7 +172,9 @@ static DWORD test_wait(HANDLE process, DWORD milliseconds) {
     return WaitForSingleObject(process, milliseconds);
 }
 #define WaitForSingleObject test_wait
+#define TerminateJobObject test_terminate_job
 #include "os/win/proc_win.c"
+#undef TerminateJobObject
 #undef WaitForSingleObject
 #include "app/toolchain/xtc_process.c"
 #include "os/win/pipe_win.c"
@@ -235,7 +247,7 @@ static void basic(void) {
     CHECK(view.timeout_ms == 3000 && view.output_limit == XTC_PROCESS_DEFAULT_OUTPUT_LIMIT &&
         view.image_mode == XR_PROC_IMAGES_NONE);
     frozen_environment(p, "OWNED_VALUE", "yes");
-    XrProcessResult result = {0}; CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_OK);
+    XrProcessResult result = {0}; CHECK(xtc_process_run(p, NULL, NULL, &result, NULL) == XTC_PROCESS_OK);
     CHECK(result.exit_code == 23);
     CHECK(result.stdout_bytes.length == strlen("out|yes|absent|space \\\" value"));
     CHECK(!memcmp(result.stdout_bytes.data, "out|yes|absent|space \\\" value", result.stdout_bytes.length));
@@ -249,15 +261,15 @@ static void failures(void) {
     XrProcessResult result = {0}, before = {0}; result.exit_code = 912; before = result;
     spec_init(&s, "--sleep"); s.timeout_ms = 30;
     CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
-    CHECK(xtc_process_run(p, cancel_now, NULL, &result) == XTC_PROCESS_CANCELLED);
+    CHECK(xtc_process_run(p, cancel_now, NULL, &result, NULL) == XTC_PROCESS_CANCELLED);
     CHECK(!memcmp(&result, &before, sizeof(result)));
-    CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_TIMEOUT);
+    CHECK(xtc_process_run(p, NULL, NULL, &result, NULL) == XTC_PROCESS_TIMEOUT);
     CHECK(!memcmp(&result, &before, sizeof(result)));
     xtc_process_free(p); p = NULL;
     s.timeout_ms = 3000;
     CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
     fail_wait = true;
-    CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_IO);
+    CHECK(xtc_process_run(p, NULL, NULL, &result, NULL) == XTC_PROCESS_IO);
     CHECK(!fail_wait);
     CHECK(!memcmp(&result, &before, sizeof(result)));
     xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live);
@@ -274,7 +286,7 @@ static void descendants(void) {
         spec_init(&s, "--descendant-parent"); s.timeout_ms = 500; s.argv[2] = path; s.argv[3] = cancel == 2 ? "close-streams" : NULL;
         CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
         XrProcessResult result = {0};
-        CHECK(xtc_process_run(p, cancel == 1 ? cancel_after_child : NULL, path, &result) == (cancel == 2 ? XTC_PROCESS_OK : cancel ? XTC_PROCESS_CANCELLED : XTC_PROCESS_TIMEOUT));
+        CHECK(xtc_process_run(p, cancel == 1 ? cancel_after_child : NULL, path, &result, NULL) == (cancel == 2 ? XTC_PROCESS_OK : cancel ? XTC_PROCESS_CANCELLED : XTC_PROCESS_TIMEOUT));
         FILE *stream = fopen(path, "rb"); CHECK(stream); unsigned long child = 0; CHECK(fscanf(stream, "%lu", &child) == 1); CHECK(!fclose(stream));
         HANDLE process = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, child);
         if (process) { CHECK(WaitForSingleObject(process, 5000) == WAIT_OBJECT_0); CHECK(CloseHandle(process)); }
@@ -301,7 +313,7 @@ static void root_completion_without_observer(void) {
     CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
     xr_compile_resources_release(r); memset(&s, 0xCD, sizeof(s));
     XrProcessResult result = {0};
-    CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_OK);
+    CHECK(xtc_process_run(p, NULL, NULL, &result, NULL) == XTC_PROCESS_OK);
     CHECK(result.exit_code == 0 && !result.stdout_bytes.length && !result.stderr_bytes.length);
     FILE *stream = fopen(path, "rb"); CHECK(stream); unsigned long child = 0;
     CHECK(fscanf(stream, "%lu", &child) == 1 && !fclose(stream));
@@ -319,13 +331,17 @@ static void os_failures(void) {
     XrCompileResources *r = ledger(unlimited); XrToolchainProcess *p = NULL;
     CHECK(xtc_process_prepare(r, &spec, &p) == XTC_PROCESS_OK);
     XrProcessResult result = {0}; unsigned checks = 0; size_t begin = os_attempts;
-    CHECK(xtc_process_run(p, cancel_started, &checks, &result) == XTC_PROCESS_CANCELLED);
+    CHECK(xtc_process_run(p, cancel_started, &checks, &result, NULL) == XTC_PROCESS_CANCELLED);
     size_t count = os_attempts - begin;
     xtc_process_free(p); xr_compile_resources_release(r);
     for (unsigned memory = 0; memory < 2; ++memory) for (size_t i = 0; i < count; ++i) {
         r = ledger(unlimited); p = NULL; CHECK(xtc_process_prepare(r, &spec, &p) == XTC_PROCESS_OK);
         os_fail_at = os_attempts + i; os_failure = memory ? ERROR_NOT_ENOUGH_MEMORY : ERROR_READ_FAULT; checks = 0;
-        CHECK(xtc_process_run(p, cancel_started, &checks, &result) == (memory ? XTC_PROCESS_OUT_OF_MEMORY : XTC_PROCESS_IO));
+        XrProcessDiagnostic diagnostic = {0};
+        CHECK(xtc_process_run(p, cancel_started, &checks, &result, &diagnostic) ==
+            (memory ? XTC_PROCESS_OUT_OF_MEMORY : XTC_PROCESS_IO));
+        CHECK(!strcmp(diagnostic.operation, "create-pipe") || !strcmp(diagnostic.operation, "spawn"));
+        CHECK(diagnostic.os_error == os_failure && !diagnostic.exit_observed);
         CHECK(!result.stdout_bytes.data && !result.stderr_bytes.data);
         xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live && !physical_handles);
         os_fail_at = SIZE_MAX;
@@ -334,10 +350,28 @@ static void os_failures(void) {
     for (unsigned operation = 0; operation < 3; ++operation) {
         r = ledger(unlimited); p = NULL; CHECK(xtc_process_prepare(r, &spec, &p) == XTC_PROCESS_OK);
         fail_read = !operation; fail_peek = operation == 1; fail_exit = operation == 2;
-        CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_IO);
+        XrProcessDiagnostic diagnostic = {0};
+        overwrite_close_error = true;
+        CHECK(xtc_process_run(p, NULL, NULL, &result, &diagnostic) == XTC_PROCESS_IO);
+        overwrite_close_error = false;
         CHECK(!fail_read && !fail_peek && !fail_exit);
+        if (operation == 0)
+            CHECK(!strcmp(diagnostic.operation, "capture-stdout") || !strcmp(diagnostic.operation, "capture-stderr"));
+        else CHECK(!strcmp(diagnostic.operation, operation == 2 ? "wait" : "capture-stdout"));
+        CHECK(diagnostic.os_error == ERROR_READ_FAULT);
+        if (operation != 0) CHECK(!diagnostic.exit_observed);
         xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live && !physical_handles);
     }
+    spec_init(&spec, "--exit");
+    r = ledger(unlimited); p = NULL; CHECK(xtc_process_prepare(r, &spec, &p) == XTC_PROCESS_OK);
+    XrProcessDiagnostic diagnostic = {0};
+    fail_close_job = true; overwrite_close_error = true;
+    CHECK(xtc_process_run(p, NULL, NULL, &result, &diagnostic) == XTC_PROCESS_IO);
+    overwrite_close_error = false;
+    CHECK(!fail_close_job && !strcmp(diagnostic.operation, "close-process"));
+    CHECK(diagnostic.os_error == ERROR_WRITE_FAULT && diagnostic.exit_observed && !diagnostic.child_exit);
+    CHECK(!result.stdout_bytes.data && !result.stderr_bytes.data);
+    xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live && !physical_handles);
     printf("process startup OS failures: %zu IO + %zu OOM; read, peek, exit and wait IO\n", count, count);
 }
 
@@ -370,7 +404,7 @@ static void unicode_environment(void) {
     CHECK(prepared == XTC_PROCESS_OK);
     for (unsigned i = 0; i < 2; ++i) CHECK(SetEnvironmentVariableW(names[i], L"changed"));
     frozen_environment(p, "XR_OWNED_测试", "frozen"); frozen_environment(p, "XR OWNED SPACE", "frozen");
-    XrProcessResult result = {0}; CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_OK);
+    XrProcessResult result = {0}; CHECK(xtc_process_run(p, NULL, NULL, &result, NULL) == XTC_PROCESS_OK);
     CHECK(result.exit_code == 0 && result.stdout_bytes.length == 13);
     CHECK(!memcmp(result.stdout_bytes.data, "frozen|frozen", 13));
     xtc_process_result_free(&result); xtc_process_free(p); p = NULL;
@@ -409,7 +443,7 @@ static void hidden_environment(void) {
     frozen_environment(process, "=XR_PRIVATE", "private-A");
     frozen_environment(process, "XR_OWNED_测试", "unicode-A");
     frozen_environment(process, "XR OWNED SPACE", "space-A");
-    XrProcessResult result = {0}; CHECK(xtc_process_run(process, NULL, NULL, &result) == XTC_PROCESS_OK);
+    XrProcessResult result = {0}; CHECK(xtc_process_run(process, NULL, NULL, &result, NULL) == XTC_PROCESS_OK);
     CHECK(result.exit_code == 0 && result.stderr_bytes.length == 0);
     const char expected[] = "hidden|unicode|space";
     CHECK(result.stdout_bytes.length == sizeof(expected) - 1);
@@ -553,13 +587,14 @@ static void cumulative_requests(void) {
 
 static void capture_idle(void) {
     XrCompileResources *r = ledger(unlimited); XtcCapture capture = {0}; XrPipe pipe;
+    uint32_t os_error = 0;
     CHECK(xr_pipe_create(&pipe, NULL) == 0); XrCompileResourceStats before, after;
     CHECK(xr_compile_resources_stats(r, &before) == XR_COMPILE_RESOURCE_OK);
-    for (unsigned i = 0; i < 20; ++i) CHECK(process_capture_read(r, pipe.read, &capture) == XTC_PROCESS_OK);
+    for (unsigned i = 0; i < 20; ++i) CHECK(process_capture_read(r, pipe.read, &capture, &os_error) == XTC_PROCESS_OK);
     CHECK(xr_compile_resources_stats(r, &after) == XR_COMPILE_RESOURCE_OK);
     CHECK(!memcmp(&before, &after, sizeof(before)));
     CHECK(!capture.eof); CHECK(!xr_pipe_close(pipe.write));
-    CHECK(process_capture_read(r, pipe.read, &capture) == XTC_PROCESS_OK && capture.eof);
+    CHECK(process_capture_read(r, pipe.read, &capture, &os_error) == XTC_PROCESS_OK && capture.eof && !os_error);
     CHECK(!xr_pipe_close(pipe.read)); xr_compile_resources_release(r); CHECK(!live && !physical_handles);
 }
 static void missing_inputs(void) {
@@ -569,7 +604,7 @@ static void missing_inputs(void) {
         XrCompileResources *r = ledger(unlimited); XrToolchainProcess *p = NULL; XrProcessSpec spec;
         spec_init(&spec, "--exit"); if (cwd) spec.cwd = missing; else spec.executable = missing;
         CHECK(xtc_process_prepare(r, &spec, &p) == XTC_PROCESS_OK); XrProcessResult result = {0};
-        CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_UNRESOLVED);
+        CHECK(xtc_process_run(p, NULL, NULL, &result, NULL) == XTC_PROCESS_UNRESOLVED);
         CHECK(!result.stdout_bytes.data && !result.stderr_bytes.data);
         xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live && !physical_handles);
     }
@@ -588,7 +623,7 @@ static void oom(void) {
     size_t begin = attempts; XrCompileResources *r = ledger(unlimited); XrProcessSpec s; spec_init(&s, "--large");
     XrToolchainProcess *p = NULL; XrProcessResult result = {0};
     CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
-    CHECK(xtc_process_run(p, NULL, NULL, &result) == XTC_PROCESS_OK);
+    CHECK(xtc_process_run(p, NULL, NULL, &result, NULL) == XTC_PROCESS_OK);
     CHECK(result.stdout_bytes.length == 20000 && result.stderr_bytes.length == 20000);
     size_t count = attempts - begin;
     xtc_process_result_free(&result); xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live);
@@ -597,7 +632,7 @@ static void oom(void) {
         XrCompileResourceStatus rs = xr_compile_resources_new(&unlimited, &r);
         XrProcessStatus status = rs == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XTC_PROCESS_OUT_OF_MEMORY : XTC_PROCESS_OK;
         if (status == XTC_PROCESS_OK) status = xtc_process_prepare(r, &s, &p);
-        if (status == XTC_PROCESS_OK) status = xtc_process_run(p, NULL, NULL, &result);
+        if (status == XTC_PROCESS_OK) status = xtc_process_run(p, NULL, NULL, &result, NULL);
         CHECK(status == XTC_PROCESS_OUT_OF_MEMORY);
         CHECK(!result.stdout_bytes.data && !result.stderr_bytes.data);
         xtc_process_free(p); xr_compile_resources_release(r); CHECK(!live && !physical_bytes && !physical_handles);

@@ -164,6 +164,7 @@ static bool proc_debug_cleanup(ProcDebug *d, HANDLE process) {
 
 XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *o, XrProcId *output) {
+    if (o && o->os_error) *o->os_error = 0;
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
         !o->memory.alloc || !o->memory.free ||
         (o->env_count && (!o->env_keys || !o->env_values)) || (o->detached && o->new_process_group) ||
@@ -204,13 +205,13 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     if (!o->complete_environment && !exact_program) {
 
         DWORD needed = SearchPathW(NULL, program, L".exe", 0, NULL, NULL);
-        if (!needed) { b.status = xr_proc_last_error(); goto done; }
+        if (!needed) { b.status = proc_build_last_error(&b); goto done; }
         wchar_t *resolved = proc_alloc(&b, (size_t)needed * sizeof(wchar_t));
         if (!resolved) goto done;
 
         DWORD length = SearchPathW(NULL, program, L".exe", needed, resolved, NULL);
         if (!length || length >= needed) {
-            b.status = !length ? xr_proc_last_error() : XR_PROC_IO; proc_free(&b, resolved); goto done;
+            b.status = !length ? proc_build_last_error(&b) : XR_PROC_IO; proc_free(&b, resolved); goto done;
         }
         proc_free(&b, program); program = resolved;
     }
@@ -224,10 +225,10 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     }
     if (o->new_process_group) {
 
-        job = CreateJobObjectW(NULL, NULL); if (!job) { b.status = xr_proc_last_error(); goto done; }
+        job = CreateJobObjectW(NULL, NULL); if (!job) { b.status = proc_build_last_error(&b); goto done; }
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {0};
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) { b.status = xr_proc_last_error(); goto done; }
+        if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) { b.status = proc_build_last_error(&b); goto done; }
     }
     {
         HANDLE originals[3] = {o->has_stdin ? (HANDLE)(intptr_t)o->stdin_read : GetStdHandle(STD_INPUT_HANDLE),
@@ -237,28 +238,28 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
             if (!originals[i] || originals[i] == INVALID_HANDLE_VALUE) {
                 SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
                 redirected[i] = CreateFileW(L"NUL", i ? GENERIC_WRITE : GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
-                if (redirected[i] == INVALID_HANDLE_VALUE) { redirected[i] = NULL; b.status = xr_proc_last_error(); goto done; }
-            } else if (!DuplicateHandle(GetCurrentProcess(), originals[i], GetCurrentProcess(), &redirected[i], 0, TRUE, DUPLICATE_SAME_ACCESS)) { b.status = xr_proc_last_error(); goto done; }
+                if (redirected[i] == INVALID_HANDLE_VALUE) { redirected[i] = NULL; b.status = proc_build_last_error(&b); goto done; }
+            } else if (!DuplicateHandle(GetCurrentProcess(), originals[i], GetCurrentProcess(), &redirected[i], 0, TRUE, DUPLICATE_SAME_ACCESS)) { b.status = proc_build_last_error(&b); goto done; }
         }
         SIZE_T size = 0;
 
         (void)InitializeProcThreadAttributeList(NULL, 1, 0, &size);
-        if (!size) { b.status = xr_proc_last_error(); goto done; }
+        if (!size) { b.status = proc_build_last_error(&b); goto done; }
         si.lpAttributeList = proc_alloc(&b, size); if (!si.lpAttributeList) goto done;
-        if (!InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &size)) { b.status = xr_proc_last_error(); goto done; }
+        if (!InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &size)) { b.status = proc_build_last_error(&b); goto done; }
         attributes_ready = true;
-        if (!UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, redirected, sizeof(redirected), NULL, NULL)) { b.status = xr_proc_last_error(); goto done; }
+        if (!UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, redirected, sizeof(redirected), NULL, NULL)) { b.status = proc_build_last_error(&b); goto done; }
         si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
         si.StartupInfo.hStdInput = redirected[0]; si.StartupInfo.hStdOutput = redirected[1]; si.StartupInfo.hStdError = redirected[2];
     }
     if (!CreateProcessW(program, command, NULL, NULL, attributes_ready, CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED |
         ((o->new_process_group || o->no_console_window) ? CREATE_NO_WINDOW : 0) | (debug ? DEBUG_PROCESS : 0) |
-        (attributes_ready ? EXTENDED_STARTUPINFO_PRESENT : 0) | ((o->detached || o->new_process_group) ? CREATE_NEW_PROCESS_GROUP : 0), environment, cwd, &si.StartupInfo, &pi)) { b.status = xr_proc_last_error(); goto done; }
+        (attributes_ready ? EXTENDED_STARTUPINFO_PRESENT : 0) | ((o->detached || o->new_process_group) ? CREATE_NEW_PROCESS_GROUP : 0), environment, cwd, &si.StartupInfo, &pi)) { b.status = proc_build_last_error(&b); goto done; }
     started = true; if (debug) debug->root = pi.dwProcessId;
     if (job) {
-        if (!AssignProcessToJobObject(job, pi.hProcess)) { b.status = xr_proc_last_error(); goto done; }
+        if (!AssignProcessToJobObject(job, pi.hProcess)) { b.status = proc_build_last_error(&b); goto done; }
     }
-    if (ResumeThread(pi.hThread) == (DWORD)-1) { b.status = xr_proc_last_error(); goto done; }
+    if (ResumeThread(pi.hThread) == (DWORD)-1) { b.status = proc_build_last_error(&b); goto done; }
     if (slot >= 0) {
         AcquireSRWLockExclusive(&g_live_lock);
         g_live[slot] = (ProcLive){pi.dwProcessId, pi.hProcess, job, false, debug_thread, debug, false};
@@ -284,6 +285,7 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     proc_free(&b, si.lpAttributeList);
     for (unsigned i = 0; i < 3; ++i) if (redirected[i]) CloseHandle(redirected[i]);
     proc_free(&b, environment); proc_free(&b, cwd); proc_free(&b, program); proc_free(&b, command);
+    if (o->os_error) *o->os_error = (uint32_t)b.os_error;
     return b.status;
 }
 static ProcLive *proc_find(XrProcId pid) {
@@ -376,7 +378,20 @@ XR_FUNC int xr_proc_kill(XrProcId pid, int signal) {
 XR_FUNC int xr_proc_kill_tree(XrProcId pid, int signal) {
     AcquireSRWLockExclusive(&g_live_lock); ProcLive *p = proc_find(pid);
     bool ok = p && p->job && !p->releasing && signal > 0 && TerminateJobObject(p->job, XR_PROC_KILLED_EXIT_CODE);
-    ReleaseSRWLockExclusive(&g_live_lock); return ok ? 0 : -1;
+    DWORD error = ok ? ERROR_SUCCESS : GetLastError();
+    ReleaseSRWLockExclusive(&g_live_lock);
+    if (!ok) SetLastError(error);
+    return ok ? 0 : -1;
+}
+static void proc_close_failure(bool *okay, DWORD *first, DWORD error) {
+    if (*okay) *first = error;
+    *okay = false;
+}
+static void proc_close_stop_root(HANDLE process, bool *okay, DWORD *first) {
+    if (TerminateProcess(process, XR_PROC_KILLED_EXIT_CODE)) return;
+    DWORD error = GetLastError();
+    if (WaitForSingleObject(process, 0) != WAIT_OBJECT_0)
+        proc_close_failure(okay, first, error);
 }
 XR_FUNC int xr_proc_close(XrProcId pid) {
     AcquireSRWLockExclusive(&g_live_lock); ProcLive *p = proc_find(pid); ProcLive owner = {0};
@@ -384,28 +399,34 @@ XR_FUNC int xr_proc_close(XrProcId pid) {
         ReleaseSRWLockExclusive(&g_live_lock); SetLastError(ERROR_INVALID_PARAMETER); return -1;
     }
     if (p && p->job) { owner = *p; memset(p, 0, sizeof(*p)); }
-    ReleaseSRWLockExclusive(&g_live_lock); if (!owner.process) return -1;
+    ReleaseSRWLockExclusive(&g_live_lock);
+    if (!owner.process) { SetLastError(ERROR_INVALID_HANDLE); return -1; }
     bool ok = true, job_stopped = false;
+    DWORD error = ERROR_SUCCESS;
     if (owner.job) {
-        if (!TerminateJobObject(owner.job, XR_PROC_KILLED_EXIT_CODE)) ok = false;
+        if (!TerminateJobObject(owner.job, XR_PROC_KILLED_EXIT_CODE))
+            proc_close_failure(&ok, &error, GetLastError());
         else job_stopped = true;
         /* Closing the kill-on-close job still stops descendants after a failed explicit termination. */
-        if (!CloseHandle(owner.job)) ok = false;
+        if (!CloseHandle(owner.job)) proc_close_failure(&ok, &error, GetLastError());
         else job_stopped = true;
     }
     if (owner.debug) {
         /* A killed debuggee cannot signal until its EXIT event is continued.
          * Re-terminating it now may report ACCESS_DENIED despite successful job termination. */
-        if (!job_stopped && !TerminateProcess(owner.process, XR_PROC_KILLED_EXIT_CODE) && WaitForSingleObject(owner.process, 0) != WAIT_OBJECT_0) ok = false;
-        if (!proc_debug_cleanup(owner.debug, owner.process)) ok = false;
+        if (!job_stopped) proc_close_stop_root(owner.process, &ok, &error);
+        if (!proc_debug_cleanup(owner.debug, owner.process)) proc_close_failure(&ok, &error, ERROR_SUCCESS);
         owner.debug->memory.free(owner.debug->memory.context, owner.debug);
     } else if (!owner.waited) {
         /* Job termination already revoked execution. A second termination can
          * race the leader's final signal and report a spurious ACCESS_DENIED. */
-        if (!job_stopped && !TerminateProcess(owner.process, XR_PROC_KILLED_EXIT_CODE) && WaitForSingleObject(owner.process, 0) != WAIT_OBJECT_0) ok = false;
-        if (WaitForSingleObject(owner.process, INFINITE) != WAIT_OBJECT_0) ok = false;
+        if (!job_stopped) proc_close_stop_root(owner.process, &ok, &error);
+        DWORD wait = WaitForSingleObject(owner.process, INFINITE);
+        if (wait != WAIT_OBJECT_0)
+            proc_close_failure(&ok, &error, wait == WAIT_FAILED ? GetLastError() : ERROR_SUCCESS);
     }
-    if (!CloseHandle(owner.process)) ok = false;
+    if (!CloseHandle(owner.process)) proc_close_failure(&ok, &error, GetLastError());
+    if (!ok) SetLastError(error);
     return ok ? 0 : -1;
 }
 #include "proc_handoff_win.inc.c"

@@ -76,7 +76,7 @@ static int toolchain_probe(XrCompileState *state, const XrCliInvocation *inv) {
     command.cwd = paths->output;
     command.output_limit = 4096;
     if (xtc_process_prepare(resources, &command, &process) != XTC_PROCESS_OK ||
-        xtc_process_run(process, NULL, NULL, &outcome) != XTC_PROCESS_OK)
+        xtc_process_run(process, NULL, NULL, &outcome, NULL) != XTC_PROCESS_OK)
         goto cleanup;
     ready = outcome.exit_code == 0 && !outcome.stdout_bytes.truncated &&
         outcome.stdout_bytes.length == 3 && !memcmp(outcome.stdout_bytes.data, "42\n", 3) &&

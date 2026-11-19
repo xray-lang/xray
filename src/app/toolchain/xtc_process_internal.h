@@ -15,7 +15,7 @@ static inline XrProcessStatus xtc_process_request_run(XrToolchainProcessContext 
     XrToolchainProcess *owner = NULL;
     XrProcessStatus status = !context || !context->resources ? XTC_PROCESS_INVALID : context->status;
     if (status == XTC_PROCESS_OK) status = xtc_process_prepare(context->resources, spec, &owner);
-    if (status == XTC_PROCESS_OK) status = xtc_process_run(owner, NULL, NULL, result);
+    if (status == XTC_PROCESS_OK) status = xtc_process_run(owner, NULL, NULL, result, NULL);
     xtc_process_free(owner);
     if (context) context->status = status;
     if (status != XTC_PROCESS_OK && error && error_size)

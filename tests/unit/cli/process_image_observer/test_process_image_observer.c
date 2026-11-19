@@ -258,7 +258,7 @@ static XrProcessStatus command(const char *mode, Observation *o, XrProcessResult
     spec.image_observer=(XrProcImageObserver){o,observe_image};
     XrToolchainProcess *process=NULL;
     XrProcessStatus status=xtc_process_prepare(o->resources,&spec,&process);
-    if (status==XTC_PROCESS_OK) status=xtc_process_run(process,cancellation,cancellation_context,result);
+    if (status==XTC_PROCESS_OK) status=xtc_process_run(process,cancellation,cancellation_context,result, NULL);
     xtc_process_free(process); return status;
 }
 static void simple(bool warmup) {
@@ -486,7 +486,7 @@ static void boundaries_and_lifetime(void) {
     spec.image_mode=XR_PROC_IMAGES_WINDOWS_TREE; spec.image_observer=(XrProcImageObserver){&o,observe_image};
     XrToolchainProcess *process=NULL; CHECK(xtc_process_prepare(r,&spec,&process)==XTC_PROCESS_OK);
     memset(&spec,0xcd,sizeof(spec)); xr_compile_resources_release(r);
-    XrProcessResult result={0}; CHECK(xtc_process_run(process,NULL,NULL,&result)==XTC_PROCESS_OK && result.exit_code==0);
+    XrProcessResult result={0}; CHECK(xtc_process_run(process,NULL,NULL,&result, NULL)==XTC_PROCESS_OK && result.exit_code==0);
     xtc_process_free(process); count_fixtures(&o); CHECK(o.fixture_loads==2);
     xtc_process_result_free(&result); release_images(&o); CHECK(!physical && !image_handle_count);
     reset_faults(); CHECK(trial("--debug-chain",&unlimited,XR_PROC_OK,&used)==XTC_PROCESS_UNSUPPORTED);

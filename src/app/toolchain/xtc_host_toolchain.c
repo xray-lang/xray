@@ -162,7 +162,7 @@ static bool local_process_status(XtcHostToolchain *owner, XrProcessStatus status
 }
 static bool local_process_prepared(XtcHostToolchain *owner, const XrToolchainProcess *process,
     XrProcessResult *output) {
-    if (!local_process_status(owner,xtc_process_run(process,NULL,NULL,output))) return false;
+    if (!local_process_status(owner,xtc_process_run(process,NULL,NULL,output, NULL))) return false;
     if (output->stdout_bytes.truncated || output->stderr_bytes.truncated)
         return local_fail(owner, XTC_HOST_BUDGET, XTC_HOST_PROCESS, XTC_PROCESS_BUDGET);
     if (output->exit_code) {

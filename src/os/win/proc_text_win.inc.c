@@ -16,10 +16,15 @@ static XrOsProcStatus proc_text_last_error(void) {
 typedef struct ProcBuild {
     XrProcMemory memory;
     XrOsProcStatus status;
+    DWORD os_error;
     void *query_context;
     bool (*current)(void *);
     const wchar_t *inherited;
 } ProcBuild;
+static XrOsProcStatus proc_build_last_error(ProcBuild *build) {
+    build->os_error = GetLastError();
+    return proc_text_last_error();
+}
 static bool proc_text_current(ProcBuild *b) {
     if(b->status!=XR_PROC_OK)return false;
     if(b->current&&!b->current(b->query_context)){b->status=XR_PROC_IO;return false;}
@@ -53,11 +58,11 @@ static wchar_t *proc_wide(ProcBuild *b, const char *s) {
     if (!proc_length(b, s, &n)) return NULL;
     if (n >= INT_MAX) { b->status = XR_PROC_BUDGET; return NULL; }
     int units = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s, (int)n + 1, NULL, 0);
-    if (!units) { b->status = proc_text_last_error(); return NULL; }
+    if (!units) { b->status = proc_build_last_error(b); return NULL; }
     wchar_t *out = proc_alloc(b, (size_t)units * sizeof(wchar_t));
     if (!out) return NULL;
     if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s, (int)n + 1, out, units)!=units) {
-        if (b->status == XR_PROC_OK) b->status = proc_text_last_error();
+        if (b->status == XR_PROC_OK) b->status = proc_build_last_error(b);
         proc_free(b, out); return NULL;
     }
     return out;
@@ -136,7 +141,7 @@ static wchar_t *proc_environment(ProcBuild *b, const XrProcSpawnOptions *o) {
     if (!o->complete_environment) {
 
         inherited = b->inherited?(LPWCH)b->inherited:GetEnvironmentStringsW();
-        if (!inherited) { b->status = proc_text_last_error(); goto done; }
+        if (!inherited) { b->status = proc_build_last_error(b); goto done; }
         for (const wchar_t *p = inherited; *p;) {
             size_t n; if (!proc_wlength(b, p, &n)) goto done;
             if (cap == SIZE_MAX) { b->status = XR_PROC_OVERFLOW; goto done; }
@@ -175,7 +180,7 @@ static wchar_t *proc_environment(ProcBuild *b, const XrProcSpawnOptions *o) {
             if (!proc_wlength(b, entries[j], &n)) break;
             if (n > k && entries[j][k] == L'=') {
                 int order = CompareStringOrdinal(entries[j], (int)k, key, (int)k, TRUE);
-                if (!order) { b->status = proc_text_last_error(); break; }
+                if (!order) { b->status = proc_build_last_error(b); break; }
                 if (order == CSTR_EQUAL) { slot = j; break; }
             }
         }
@@ -196,7 +201,7 @@ static wchar_t *proc_environment(ProcBuild *b, const XrProcSpawnOptions *o) {
             if (!proc_wlength(b, entries[j - 1], &previous)) goto done;
             if (n >= INT_MAX || previous >= INT_MAX) { b->status = XR_PROC_BUDGET; goto done; }
             int order = CompareStringOrdinal(entries[j - 1], (int)previous, entries[j], (int)n, TRUE);
-            if (!order) { b->status = proc_text_last_error(); goto done; }
+            if (!order) { b->status = proc_build_last_error(b); goto done; }
             if (order != CSTR_GREATER_THAN) break;
 
             wchar_t *swap = entries[j]; entries[j] = entries[j - 1]; entries[j - 1] = swap;
