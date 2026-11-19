@@ -16,6 +16,8 @@
 #include "lir/xlir_print.h"
 #include "lir/xlir_state.h"
 #include "lir/xlir_callable.h"
+#include "lir/xlir_value_image.h"
+#include "runtime/native/xnative_value_image.h"
 
 typedef struct Text {
     char bytes[65536];
@@ -307,10 +309,88 @@ static void unsupported(void) {
     rejected(
         "fn answer()->i64{const values=Set<f64>()\nreturn len(values)}\nprint(answer())\n",
         false, "SET_NEW");
-    rejected("class Box{value:i64\ninit(value){this.value=value}}\nfn answer()->i64{const "
-             "b=Box(42)\nreturn b.value}\nprint(answer())\n",
-             false, "CALL");
+    rejected("class Box<T>{value:T; init(value:T){this.value=value}}\n"
+             "const opaque=Box(fn(n:i64)->i64{return n})\n", false, "proven acyclic allocation layout");
+    rejected("class Loop{edges:Array<Link>;init(){this.edges=[]}}\nstruct Link{target:Loop?}\n"
+             "const root=Loop()\n", false, "proven acyclic allocation layout");
+    rejected("class Box{value:i64; init(value:i64){this.value=value}}\n"
+             "var value=Box(42)\nvalue.value=7\n", false, "CLASS_SET");
     rejected("print(1)\n", true, "overflow-checks");
+}
+
+static void class_layout_sources(void) {
+    XrLirLowered output = lower_text(
+        "class Box<T>{value:T; init(value:T){this.value=value}}\n"
+        "class Pair<A,B>{first:A;second:B;init(a:A,b:B){this.first=a;this.second=b}}\n"
+        "var number=Box(42)\nvar word=Box(\"hello\")\nvar pair=Pair(\"year\",2026)\n"
+        "print(number.value)\nprint(word.value)\nprint(pair.first)\nprint(pair.second)\n");
+    XrLirStateLayout state = {0};
+    OK(xr_lir_state_layout_view(output.module, &state));
+    CHECK(state.slot_count == 3);
+    XrLirValueLayoutKey keys[3] = {{0}};
+    for (uint32_t n = 0; n < state.slot_count; ++n) {
+        XrLirType row = 0;
+        CHECK(xr_lir_class_payload(output.module, state.slots[n].payload, &row));
+        CHECK(state.slots[n].size == sizeof(void *) && state.slots[n].alignment == _Alignof(void *));
+        XrLirRecordIdentity identity = {0};
+        OK(xr_lir_record_identity(output.module, row, &identity));
+        CHECK(identity.argument_count == (n == 2 ? 2u : 1u));
+        CHECK(identity.arguments[0].type == (XrLirType)(n ? XR_LIR_STRING : XR_LIR_I64));
+        if (n == 2) CHECK(identity.arguments[1].type == XR_LIR_I64);
+        keys[n].type = state.slots[n].payload;
+    }
+    CHECK(keys[0].type != keys[1].type && keys[1].type != keys[2].type);
+
+    uint32_t constructs = 0, reads = 0;
+    for (uint32_t f = 0; f < xr_lir_function_count(output.module); ++f) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        OK(xr_lir_function_at(output.module, f, &function));
+        OK(xr_lir_function_view(output.module, function, &view));
+        for (uint32_t b = 0; b < view.block_count; ++b) {
+            XrLirBlock block;
+            XrLirBlockView body;
+            OK(xr_lir_block_at(output.module, function, b, &block));
+            OK(xr_lir_block_view(output.module, block, &body));
+            for (uint32_t i = 0; i < body.instruction_count; ++i) {
+                XrLirInstructionView op;
+                OK(xr_lir_instruction_view(output.module, block, i, &op));
+                constructs += op.op == XR_LIR_CLASS_NEW;
+                reads += op.op == XR_LIR_CLASS_FIELD;
+            }
+        }
+    }
+    CHECK(constructs == 3 && reads == 4);
+
+    XrtBillingOwner *billing = NULL;
+    CHECK(xrt_billing_owner_new(NULL, SIZE_MAX, &billing) == XRT_MANAGED_OK);
+    XrLirValueLayouts *layouts = NULL;
+    CHECK(xr_lir_value_layouts_create(output.module, keys, 3, billing, &layouts) == XR_LIR_VALUE_LAYOUT_OK);
+    XrLirValueImage *image = NULL;
+    CHECK(xr_lir_value_image_create(layouts, billing, &image) == XR_LIR_VALUE_LAYOUT_OK);
+    uint32_t ids[3] = {0};
+    for (size_t i = 0; i < 3; ++i) {
+        const XrtValuePlan *plan = NULL;
+        CHECK(xr_lir_value_layouts_lookup(layouts, keys[i], &plan, &ids[i]) == XR_LIR_VALUE_LAYOUT_OK);
+    }
+    CHECK(ids[0] && ids[0] != ids[1] && ids[1] != ids[2]);
+    xr_lir_value_layouts_destroy(layouts);
+    xr_lir_lowered_free(&output);
+    XrtValueImagePlans *bound = NULL;
+    CHECK(xrt_value_image_bind(billing, xr_lir_value_image_view(image), (XrtManagedLease){0}, &bound) == XRT_MANAGED_OK);
+    xr_lir_value_image_destroy(image);
+    for (size_t i = 0; i < 3; ++i) {
+        const XrtValuePlan *plan = NULL;
+        XrtValuePlanSpec owner, payload;
+        CHECK(xrt_value_image_get(bound, ids[i], &plan) == XRT_MANAGED_OK);
+        CHECK(xrt_value_plan_view(plan, &owner) == XRT_MANAGED_OK && owner.kind == XRT_VALUE_CLASS &&
+            owner.size == sizeof(XrtManagedHeader *) && owner.owned_count == 1 && owner.owned_offsets[0] == 0);
+        CHECK(xrt_value_plan_view(owner.element, &payload) == XRT_MANAGED_OK && payload.kind == XRT_VALUE_RECORD);
+        CHECK(payload.field_count == (i == 2 ? 2u : 1u) && payload.owned_count == (i ? 1u : 0u));
+        if (i) CHECK(payload.owned_offsets[0] == 0);
+    }
+    xrt_value_image_drop(&bound);
+    xrt_billing_owner_drop(billing);
 }
 static void fixed_division_source(const char *text, bool slot_frontier) {
     SourceFixture fixture = source_fixture(text);
@@ -1101,6 +1181,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 3);
     callable_source();
     assertion_declaration_and_scope_sources(argv[1]);
+    class_layout_sources();
     module_i64_groups();
     view_cold_checked_sources(argv[1]);
     fixed_sources();

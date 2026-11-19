@@ -22,6 +22,7 @@
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_types.h"
 #include "../xir/xxir_type_description.h"
+#include "../xir/xxir_class_cycles.h"
 #include "../xir/xxir_map.h"
 #include "../xir/xxir_operand_roles.h"
 #include "../xir/xxir_closure_placement.h"
@@ -40,6 +41,7 @@ typedef struct Lower {
     XrLirModule *module;
     XrLirType *constructed_types;
     LowerRecordFrame *constructed_frames;
+    XrXirClassCycles *class_cycles;
     XrLirType *closure_types;
     uint8_t **owned_bindings;
     XrLirType owned_i64_cell, owned_map_cell;
@@ -370,7 +372,8 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
     }
     XrXirTypeDescription description = {0};
     if (node && (node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
-        (node->kind == XR_XIR_TYPE_NOMINAL && lower_record_description(c, type, &description))))
+        (node->kind == XR_XIR_TYPE_NOMINAL && (xr_xir_type_is_class(c->source->types, type) ||
+            lower_record_description(c, type, &description)))))
         return lower_receive_record_shapes(c, type);
     if (!node || node->kind != XR_XIR_TYPE_FIXED_ARRAY) return true;
     if (!c->constructed_types) {
@@ -385,6 +388,7 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
 static bool lower_known(XrXirOp op) {
     switch (op) {
         case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET:
+        case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET:
         case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN: case XR_XIR_CALL_INDIRECT:
         case XR_XIR_RANGE_CHECK:
         case XR_XIR_ASSERT_CONDITION:
@@ -451,6 +455,7 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_CELL_READ:
         case XR_XIR_CELL_WRITE:
         case XR_XIR_LOCAL_NEW:
+        case XR_XIR_LOCAL_UNINIT:
         case XR_XIR_LOCAL_READ:
         case XR_XIR_LOCAL_WRITE:
         case XR_XIR_JUMP:
@@ -570,6 +575,7 @@ static uint32_t lower_module_cell(const Lower *c, uint32_t function, uint32_t va
 }
 
 static void lower_modules_free(Lower *c) {
+    xr_xir_class_cycles_free(c->class_cycles);
     xr_free(c->constructed_types);
     xr_free(c->constructed_frames);
     if (c->module_cells)
@@ -793,7 +799,7 @@ static bool lower_local_pure(Lower *c, uint32_t selected) {
 /* Compiler-only locals, including short-circuit results, obey the same SSA
  * state equations as nonescaping Cells but have no heap identity. */
 static bool lower_state_new(XrXirOp op) {
-    return op == XR_XIR_CELL_NEW || op == XR_XIR_LOCAL_NEW;
+    return op == XR_XIR_CELL_NEW || op == XR_XIR_LOCAL_NEW || op == XR_XIR_LOCAL_UNINIT;
 }
 static bool lower_state_read(XrXirOp op) {
     return op == XR_XIR_CELL_READ || op == XR_XIR_LOCAL_READ;
@@ -876,7 +882,7 @@ static uint8_t *lower_literal_uses(Lower *c, const XrXirFunction *f) {
         if (op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI ||
             op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET ||
             op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_STRUCT_NEW ||
-            op->op == XR_XIR_SLOT_GROUP_INIT) {
+            op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT) {
             if (op->args[0] > f->operand_count || op->args[1] > f->operand_count - op->args[0]) {
                 lower_unsupported(c, "literal use range");
                 xr_free(uses);
@@ -1762,8 +1768,10 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         c->owned_bindings[c->function][f->source->parameter_count + i])
         return lower_value(f, op->args[0], &f->values[f->source->parameter_count + i]);
     uint32_t result = f->source->parameter_count + i;
-    bool aggregate_new = op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_TUPLE_NEW;
-    if (aggregate_new || op->op == XR_XIR_STRUCT_GET || op->op == XR_XIR_TUPLE_FIELD) {
+    bool class_new = op->op == XR_XIR_CLASS_NEW;
+    bool class_field = op->op == XR_XIR_CLASS_GET;
+    bool aggregate_new = class_new || op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_TUPLE_NEW;
+    if (aggregate_new || class_field || op->op == XR_XIR_STRUCT_GET || op->op == XR_XIR_TUPLE_FIELD) {
         uint32_t count = aggregate_new ? op->args[1] : 1;
         if (aggregate_new && (op->args[0] > f->source->operand_count ||
             count > f->source->operand_count - op->args[0])) {
@@ -1775,7 +1783,8 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         bool good = true;
         for (uint32_t n = 0; n < count && good; ++n)
             good = lower_value(f, aggregate_new ? f->source->operands[op->args[0] + n] : op->args[0], &arguments[n]);
-        XrLirInstruction value = {.op=aggregate_new ? XR_LIR_RECORD_NEW : XR_LIR_RECORD_FIELD,
+        XrLirInstruction value = {.op=class_new ? XR_LIR_CLASS_NEW : class_field ? XR_LIR_CLASS_FIELD :
+            aggregate_new ? XR_LIR_RECORD_NEW : XR_LIR_RECORD_FIELD,
             .type=lower_type(c, op->type), .operands=arguments, .operand_count=count,
             .bits=aggregate_new ? 0 : (uint64_t)op->immediate, .source=lower_source(c)};
         if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &value, &f->values[result]));
@@ -2255,7 +2264,11 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
             uint32_t cell = 0;
             if (!lower_cell_index(f, lower_state_new(op->op) ? result : op->args[0], &cell))
                 return false;
-            if (lower_state_read(op->op)) {
+            if (op->op == XR_XIR_LOCAL_UNINIT) {
+                /* The Checked initialization proof allows SSA transport without an
+                 * initial value. A later write must supply any observed state. */
+                f->current[cell] = (XrLirValue){0};
+            } else if (lower_state_read(op->op)) {
                 if (!f->current[cell].id) {
                     lower_error(c, XR_LIR_VERIFY_ERROR, "Cell read has no SSA state");
                     return false;

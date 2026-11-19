@@ -65,8 +65,7 @@ XR_FUNC XrLirValueLayoutStatus xr_lir_value_layouts_get(const XrLirValueLayouts 
  * outputs remain unchanged on rejection; consumers never search enumeration. */
 XR_FUNC XrLirValueLayoutStatus xr_lir_value_layouts_lookup(const XrLirValueLayouts *,
     XrLirValueLayoutKey, const XrtValuePlan **, uint32_t *type_id);
-/* Only generated Record/Nullable rows occur here, including false for inline
- * POD. These facts are copied from the receiving plans' actual owned_count,
+/* These facts are copied from the receiving plans' actual owned_count,
  * not inferred again by the lifetime verifier or either execution backend. */
 XR_FUNC XrLirValueLayoutStatus xr_lir_value_layouts_ownership(const XrLirValueLayouts *,
     const XrLirOwnershipTypeFact **types, uint32_t *count);

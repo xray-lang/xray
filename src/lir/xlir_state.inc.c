@@ -20,7 +20,7 @@ XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *m, XrLirType type,
     case XR_LIR_STRING: case XR_LIR_ARRAY: case XR_LIR_MAP_STRING_I64: case XR_LIR_SET_I64:
         *size = sizeof(void *); *alignment = _Alignof(void *); return true;
     default: {
-        if (xr_lir_inline_aggregate_type(m, type)) {
+        if (xr_lir_inline_aggregate_type(m, type) || xr_lir_class_payload(m, type, NULL)) {
             *size = sizeof(void *); *alignment = _Alignof(void *); return true;
         }
         XrLirTypeView view;
