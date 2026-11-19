@@ -161,7 +161,8 @@ static inline XrMvlStatus xr_mvl_array_commit_mutation(XrMvlArray **binding, XrM
 
 static inline XrMvlStatus xr_mvl_array_push(XrMvlArray **binding, int64_t value) {
     XrMvlArray *array = *binding;
-    if (xr_signed_rc_unique(&array->header.refs) && array->length < array->capacity) {
+    // The existing slow mutation acquires a published unique owner before editing.
+    if (xr_signed_rc_read(&array->header.refs) == 1 && array->length < array->capacity) {
         array->data[array->length++] = value;
         return XR_MVL_OK;
     }

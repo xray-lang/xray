@@ -28,13 +28,26 @@ static bool mvl_verify_array(void) {
     XrMvlArray *array = xr_mvl_array_new(&domain), *snapshot = NULL;
     bool ok = true;
     MVL_REQUIRE(array);
-    for (int64_t i = 0; i < 4; ++i)
+    for (int64_t i = 0; i < 3; ++i)
         MVL_REQUIRE(xr_mvl_array_push(&array, i) == XR_MVL_OK);
     XrMvlArray *before = array;
     size_t bytes = domain.live_bytes, blocks = domain.live_blocks;
+    /* Model a published leaf after its other owners retired. A push into
+     * spare capacity acquires the exact backing without allocating. */
+    atomic_store_explicit(&array->header.refs, -1, memory_order_release);
     domain.fail_after = 0;
+    MVL_REQUIRE(xr_mvl_array_push(&array, 3) == XR_MVL_OK);
+    MVL_REQUIRE(array == before && array->length == 4 && array->data[3] == 3 &&
+        xr_signed_rc_read(&array->header.refs) == 1);
+    MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
+    int64_t *data = array->data;
     MVL_REQUIRE(xr_mvl_array_push(&array, 4) == XR_MVL_OOM);
-    MVL_REQUIRE(array == before && array->length == 4 && array->capacity == 4);
+    MVL_REQUIRE(array == before && array->data == data && array->length == 4 && array->capacity == 4);
+    MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
+    atomic_store_explicit(&array->header.refs, -1, memory_order_release);
+    MVL_REQUIRE(xr_mvl_array_push(&array, 4) == XR_MVL_OOM);
+    MVL_REQUIRE(array == before && array->data == data && array->length == 4 && array->capacity == 4 &&
+        array->data[3] == 3 && xr_signed_rc_read(&array->header.refs) == 1);
     MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
     MVL_REQUIRE(xr_mvl_array_set(&array, 4, 99) == XR_MVL_BOUNDS);
     MVL_REQUIRE(xr_mvl_retain(&array->header));
@@ -61,6 +74,27 @@ static bool mvl_verify_array(void) {
     domain.fail_after = SIZE_MAX;
     MVL_REQUIRE(xr_mvl_array_set(&array, 0, 99) == XR_MVL_OK);
     MVL_REQUIRE(array != snapshot && array->data[0] == 99 && snapshot->data[0] == 0);
+    xr_mvl_drop(&snapshot->header);
+    snapshot = NULL;
+    MVL_REQUIRE(array->length == 5 && array->capacity > array->length);
+    atomic_store_explicit(&array->header.refs, -1, memory_order_release);
+    MVL_REQUIRE(xr_mvl_retain(&array->header));
+    snapshot = array;
+    bytes = domain.live_bytes;
+    blocks = domain.live_blocks;
+    for (size_t budget = 0; budget < 2; ++budget) {
+        domain.fail_after = budget;
+        MVL_REQUIRE(xr_mvl_array_push(&array, 5) == XR_MVL_OOM);
+        MVL_REQUIRE(array == snapshot && snapshot->length == 5 && snapshot->data[4] == 4 &&
+            xr_signed_rc_read(&snapshot->header.refs) == -2);
+        MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
+    }
+    domain.fail_after = SIZE_MAX;
+    MVL_REQUIRE(xr_mvl_array_push(&array, 5) == XR_MVL_OK);
+    MVL_REQUIRE(array != snapshot && array->length == 6 && array->data[5] == 5 &&
+        xr_signed_rc_read(&array->header.refs) == 1);
+    MVL_REQUIRE(snapshot->length == 5 && snapshot->data[4] == 4 &&
+        xr_signed_rc_read(&snapshot->header.refs) == -1);
 cleanup:
     if (array)
         xr_mvl_drop(&array->header);
