@@ -698,8 +698,18 @@ static void module_cells_source(const char *directory) {
     xr_lir_lowered_free(&out);
     out = lower_text("if (true) {print(1)}\nvar n=7\nprint(n)\n");
     xr_lir_lowered_free(&out);
-    rejected("var n=7\nfn bump(v:ref i64)->i64{v=v+1\nreturn v}\nprint(bump(ref n))\n",
-        false,"function parameter type");
+    out = lower_text("var n=7\nfn bump(v:ref i64)->i64{v=v+1\nreturn v}\nprint(bump(ref n))\n");
+    unsigned ref_formals = 0;
+    for (uint32_t index = 0; index < xr_lir_function_count(out.module); ++index) {
+        XrLirFunction function;
+        XrLirFunctionView view;
+        OK(xr_lir_function_at(out.module, index, &function));
+        OK(xr_lir_function_view(out.module, function, &view));
+        for (uint32_t p = 0; p < view.parameter_count; ++p)
+            ref_formals += view.parameter_types[p] == XR_LIR_I64_REF;
+    }
+    CHECK(ref_formals == 1);
+    xr_lir_lowered_free(&out);
     out = lower_text("var n=7\nfn outer()->i64{const f=fn()->i64{return n}\nreturn f()}\nprint(outer())\n");
     unsigned environments = 0;
     for (uint32_t index = 0; index < xr_lir_function_count(out.module); ++index) {
