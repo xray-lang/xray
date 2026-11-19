@@ -124,7 +124,12 @@ static void copied_names_and_real_values(void) {
             CHECK(view->owned_offsets[type->first_owned + n] == a.owned_offsets[n] && b.owned_offsets[n] == a.owned_offsets[n]);
         for (size_t field = 0; field < a.field_count; ++field) {
             CHECK(b.fields[field].offset == a.fields[field].offset && b.fields[field].name_length == a.fields[field].name_length);
-            CHECK(!memcmp(b.fields[field].name, a.fields[field].name, a.fields[field].name_length));
+            if (a.kind == XRT_VALUE_TUPLE) {
+                CHECK(!a.fields[field].name_length && !a.fields[field].name && !b.fields[field].name);
+            } else {
+                CHECK(a.fields[field].name_length && a.fields[field].name && b.fields[field].name);
+                CHECK(!memcmp(b.fields[field].name, a.fields[field].name, a.fields[field].name_length));
+            }
             CHECK(view->slots[type->first_field + field].type < id);
         }
         if (key.type == f.record) record_id = id;
