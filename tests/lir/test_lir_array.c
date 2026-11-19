@@ -117,6 +117,87 @@ static void inline_array_external_result(void) {
     xr_lir_module_destroy(module);
 }
 
+static void inline_array_callable_reachability(void) {
+    CArrayFixture c = {0};
+    OK(xr_lir_module_create(NULL, &c.module));
+    XrLirType unused_element = 0, unused_callable = 0;
+    OK(xr_lir_tuple_i64_type(c.module, 1, &c.element));
+    XrLirRecordField other = {.type=XR_LIR_STRING};
+    OK(xr_lir_tuple_type(c.module, &other, 1, &unused_element));
+    OK(xr_lir_require_inline_array_element(c.module, c.element));
+    OK(xr_lir_require_inline_array_element(c.module, unused_element));
+    XrLirCallableType signature = {.result=XR_LIR_ARRAY, .result_element=unused_element};
+    OK(xr_lir_callable_type(c.module, &signature, &unused_callable));
+    OK(xr_lir_array_catalog_install(c.module));
+
+    XrLirFunction scalar = {0}, root = {0}, borrow = {0};
+    XrLirType array_type = XR_LIR_ARRAY;
+    XrLirFunctionSpec spec = {.name="borrow", .name_length=6, .result=XR_LIR_I64,
+        .parameters=&array_type, .parameter_count=1};
+    OK(xr_lir_declare_function(c.module, &spec, &borrow));
+    XrLirValue formal = {0};
+    OK(xr_lir_function_parameter(c.module, borrow, 0, &formal));
+    OK(xr_lir_set_array_shape(c.module, formal, &(XrLirArrayShape){c.element}));
+    spec = (XrLirFunctionSpec){.name="scalar", .name_length=6, .result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module, &spec, &scalar));
+    spec = (XrLirFunctionSpec){.name="root", .name_length=4, .result=XR_LIR_I64};
+    OK(xr_lir_declare_function(c.module, &spec, &root));
+
+    XrLirFunction entries[] = {borrow, scalar, root};
+    for (size_t i = 0; i < sizeof(entries) / sizeof(*entries); ++i) {
+        XrLirFunction function = entries[i];
+        XrLirBlock body = {0};
+        OK(xr_lir_define_function(c.module, function));
+        OK(xr_lir_add_block(c.module, function, NULL, 0, &body));
+        OK(xr_lir_set_entry(c.module, function, body));
+        XrLirValue value = ca_constant(&c, body, 42);
+        if (function.id == root.id) {
+            XrLirValue tuple = ca_value(&c, body, XR_LIR_RECORD_NEW, c.element, &value, 1);
+            XrLirValue array = ca_intrinsic(&c, body, XR_LIR_ARRAY_OP_NEW, XR_LIR_ARRAY, &tuple, 1);
+            XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_I64, .callee=borrow,
+                .operands=&array, .operand_count=1, .source=ca_source()};
+            OK(xr_lir_emit_value(c.module, body, &call, &value));
+            ca_effect(&c, body, XR_LIR_ARRAY_DROP, array);
+        }
+        ca_return(&c, body, value);
+    }
+    OK(xr_lir_module_finish(c.module, NULL));
+    OK(xr_lir_callable_type_view(c.module, unused_callable, &signature));
+    CHECK(signature.result_element == unused_element);
+
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(c.module, borrow, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    for (size_t i = 1; i < sizeof(entries) / sizeof(*entries); ++i) {
+        XrLirCRequest request = {.module=c.module, .entry=entries[i], .resources=resources,
+            .translation_unit="inline-array-callable-reachability.c"};
+        XrLirCOutput output = {0};
+        CHECK(xr_lir_emit_c(&request, &output, NULL) == XR_LIR_C_OK && output.bytes && output.entry_result == XR_LIR_I64);
+        xr_lir_c_output_free(&output);
+        CHECK(xr_rbc_compile(c.module, entries[i], &program, NULL) == XR_RBC_COMPILE_OK && program);
+        const XrRbcModule *owned = xr_rbc_program_view(program);
+        CHECK(owned && owned->callable_type_count == 0 && owned->function_count == i);
+        XrRbcExecution *execution = NULL;
+        if (i == 2) {
+            uint64_t external = 42;
+            CHECK(xr_rbc_module_prepare(owned, 1, &external, 1, xr_rbc_program_locations(program), &execution) ==
+                XR_RBC_INVALID && !execution);
+        }
+        CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        uint64_t value = 0;
+        CHECK(xr_rbc_outcome_bits(outcome, &value) && value == 42);
+        xr_rbc_outcome_free(&outcome);
+        xr_rbc_execution_free(&execution);
+        xr_rbc_program_destroy(program);
+        program = NULL;
+    }
+    xr_compile_resources_release(resources);
+    xr_lir_module_destroy(c.module);
+}
+
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
     XrLirArrayIntrinsic intrinsic;
@@ -976,6 +1057,7 @@ static void frame_scalar_cell_admission(void) {
 
 int main(int argc, char **argv) {
     inline_array_external_result();
+    inline_array_callable_reachability();
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     frame_scalar_cell_admission();array_c_output("frame-scalar-cells",NULL);
     static const char *const set_cases[]={"set-i64-local","set-i64-state","set-formal-cell","set-formal-ref","set-formal-state",
