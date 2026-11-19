@@ -1,4 +1,4 @@
-name: macOS Array VM comparison
+name: macOS native Array append comparison
 
 on:
   workflow_dispatch:
@@ -7,21 +7,20 @@ permissions:
   contents: read
 
 jobs:
-  compare-array-vm:
-    name: macOS arm64 Array VM comparison (${{ matrix.alignment }})
+  compare-layout:
+    name: macOS arm64 native Array append (${{ matrix.replica }})
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        alignment: [16, 32, 64]
+        replica: [1, 2]
     env:
       PYTHONUTF8: '1'
       PYTHONDONTWRITEBYTECODE: '1'
       NO_COLOR: '1'
-      XR_ARRAY_PARENT: fcab5af91db976110d7183e05b2cfdad829b4e0b
-      XR_ARRAY_CANDIDATE: 9f49580267dce213f29ebff056cf21c56cdd20da
-      XR_ALIGNMENT: ${{ matrix.alignment }}
+      XR_ARRAY_PARENT: f946163a5724606906b2324d27fe3900e6e2b48a
+      XR_ARRAY_CANDIDATE: 915e731ca6ecd90e6099f4a033b37613207082b1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,34 +29,38 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Build both exact sources with the same Clang configuration
+      - name: Prepare both exact sources with the same Apple Clang
         run: |
-          mkdir "$RUNNER_TEMP/build-receipts"
+          test "$(uname -m)" = arm64
+          test "$(git diff --name-only "$XR_ARRAY_PARENT" "$XR_ARRAY_CANDIDATE")" = bench/managed-value-layout/layout.h
+          mkdir "$RUNNER_TEMP/code-receipts"
+          uname -a > "$RUNNER_TEMP/code-receipts/host.txt"
+          clang="$(command -v clang)"
           for variant in parent candidate; do
             source="$XR_ARRAY_PARENT"
             if [ "$variant" = candidate ]; then source="$XR_ARRAY_CANDIDATE"; fi
             git worktree add --detach "$RUNNER_TEMP/$variant-src" "$source"
-            cmake -S "$RUNNER_TEMP/$variant-src" -B "$RUNNER_TEMP/$variant-build" -G Ninja \
-              -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release \
-              "-DCMAKE_C_FLAGS=-falign-functions=$XR_ALIGNMENT" \
-              "-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG" \
-              > "$RUNNER_TEMP/build-receipts/$variant-configure.txt" 2>&1
-            cmake --build "$RUNNER_TEMP/$variant-build" --target xray --parallel 4 \
-              > "$RUNNER_TEMP/build-receipts/$variant-build.txt" 2>&1
-            cp "$RUNNER_TEMP/$variant-build/CMakeCache.txt" "$RUNNER_TEMP/build-receipts/$variant-cache.txt"
-            cp "$RUNNER_TEMP/$variant-build/xray" "$RUNNER_TEMP/build-receipts/$variant-xray"
+            test "$(git -C "$RUNNER_TEMP/$variant-src" rev-parse HEAD)" = "$source"
+            python "$RUNNER_TEMP/$variant-src/bench/managed-value-layout/run.py" prepare \
+              --cc "$clang" --work "$RUNNER_TEMP/$variant-build"
+            for product in managed raw; do
+              binary="$RUNNER_TEMP/$variant-build/$product"
+              file "$binary" >> "$RUNNER_TEMP/code-receipts/architectures.txt"
+              otool -tvV "$binary" > "$RUNNER_TEMP/code-receipts/$variant-$product-disassembly.txt"
+            done
           done
-      - name: Alternate the real Array workload and scalar controls
+      - name: Alternate the original native Array append workload on this host
         run: |
-          python scripts/diagnostics/compare_macos_array_vm.py \
-            --root "$RUNNER_TEMP/parent-src" --root "$RUNNER_TEMP/candidate-src" \
-            --binary "$RUNNER_TEMP/parent-build/xray" --binary "$RUNNER_TEMP/candidate-build/xray" \
-            --commit "$XR_ARRAY_PARENT" --commit "$XR_ARRAY_CANDIDATE" --alignment "$XR_ALIGNMENT" \
-            --work "$RUNNER_TEMP/array-vm-results"
+          python scripts/diagnostics/compare_macos_array_layout.py \
+            --parent "$RUNNER_TEMP/parent-build/prepared.json" \
+            --candidate "$RUNNER_TEMP/candidate-build/prepared.json" \
+            --case push --work "$RUNNER_TEMP/layout-results"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: array-vm-comparison-macos-${{ matrix.alignment }}
+          name: array-native-append-macos-${{ matrix.replica }}
           path: |
-            ${{ runner.temp }}/build-receipts/
-            ${{ runner.temp }}/array-vm-results/
+            ${{ runner.temp }}/parent-build/
+            ${{ runner.temp }}/candidate-build/
+            ${{ runner.temp }}/code-receipts/
+            ${{ runner.temp }}/layout-results/

@@ -20,6 +20,8 @@ def main():
     parser.add_argument("--parent", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--work", type=Path, required=True)
+    cases = ("push-direct", "push", "push-noalias")
+    parser.add_argument("--case", choices=cases, action="append")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     spec = importlib.util.spec_from_file_location("layout", root / "bench/managed-value-layout/run.py")
@@ -32,6 +34,7 @@ def main():
         assert parent[key] == candidate[key], key
     for variant in (parent, candidate):
         assert variant["state"] == "PREPARED_NOT_MEASURED"
+        assert variant["timeoutSeconds"] == 30
         runner.evidence.verify_fingerprints(variant["fingerprints"])
     args.work.mkdir()
     receipt = args.work / "result.json"
@@ -41,6 +44,7 @@ def main():
         "parent": parent["source"],
         "candidate": candidate["source"],
         "provider": candidate["provider"],
+        "timeoutSeconds": candidate["timeoutSeconds"],
         "prepared": [runner.evidence.fingerprint(path) for path in (args.parent, args.candidate)],
         "cases": {},
     }
@@ -54,7 +58,7 @@ def main():
         "raw": parent["products"]["raw"],
     }
     env = runner.evidence.environment(root)
-    names = ("push-direct", "push", "push-noalias")
+    names = tuple(dict.fromkeys(args.case or cases))
     try:
         for label in names:
             result["cases"][label] = {"samples": []}
@@ -68,11 +72,12 @@ def main():
                 for engine in order if turn % 2 == 0 else reversed(order):
                     mode = candidate["rawCases"].get(name, name) if engine == "raw" else name
                     row = runner.evidence.execute(
-                        [programs[engine], mode], args.work, f"{name}-{turn}-{engine}", env, expected)
+                        [programs[engine], mode], args.work, f"{name}-{turn}-{engine}", env, expected,
+                        timeout=result["timeoutSeconds"])
                     row.update(engine=engine, round=turn)
                     samples.append(row)
                     save()
-                    if not row["ok"]:
+                    if not row["ok"] or Path(row["streams"]["stderr"]["path"]).stat().st_size:
                         raise RuntimeError(f"{name}: {engine} exited or produced different output")
         for name, case in result["cases"].items():
             medians = {
@@ -82,6 +87,7 @@ def main():
             case["medians"] = medians
             case["candidateToRaw"] = medians["candidate"] / medians["raw"]
             case["candidateToParent"] = medians["candidate"] / medians["parent"]
+            case["layoutGate"] = {"limit": 1.3, "pass": case["candidateToRaw"] <= 1.3}
             print(name, f"before {medians['parent']:.6f}s after {medians['candidate']:.6f}s raw {medians['raw']:.6f}s")
         for variant in (parent, candidate):
             runner.evidence.verify_fingerprints(variant["fingerprints"])
