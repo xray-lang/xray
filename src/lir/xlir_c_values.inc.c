@@ -187,7 +187,7 @@ static void c_values_prepare(LirC *c) {
     memory = NULL;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, 1, sizeof(*c->value_types), &memory))) return;
     c->value_types = memory; c_value_types_prepare(c, c->value_layouts, c->value_types);
-    if ((c->state || environment_values || module->inline_array_count) && c_request_poll(c)) {
+    if ((c->state || environment_values || module->inline_array_count || c->tuple_displays) && c_request_poll(c)) {
         c_value_layout_status(c, xr_lir_value_image_create(c->value_layouts, c->value_billing, &c->value_image));
         if (c->state && c_request_poll(c)) c_value_layout_status(c, xr_lir_state_projection_create(module, c->value_layouts,
             xr_lir_value_image_view(c->value_image), c->value_billing, &c->state_projection));
