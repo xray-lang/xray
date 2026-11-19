@@ -129,7 +129,8 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     uint32_t push=0; OK(xr_lir_array_operation(c.module,XR_LIR_I64,XR_LIR_ARRAY_OP_PUSH,&push));
     XrLirValue args[]={cell,mode==PUSH_WINDOW_NEXT_ITEM ? next : values[iv]};
     OK(xr_lir_emit_effect(c.module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_UNIT,
-        .intrinsic=push,.operands=args,.operand_count=2}));
+        .intrinsic=push,.operands=args,.operand_count=2,
+        .source={.path="window.xr",.path_length=9,.line=7,.column=9}}));
     if (mode==PUSH_WINDOW_TWO_PUSHES) OK(xr_lir_emit_effect(c.module,block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_UNIT,
         .intrinsic=push,.operands=args,.operand_count=2}));
     values[0]=ars_value(&c,block,(XrLirInstruction){.op=XR_LIR_CELL_READ,.type=XR_LIR_ARRAY,.operands=&cell,.operand_count=1});

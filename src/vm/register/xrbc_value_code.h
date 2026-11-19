@@ -58,7 +58,8 @@ typedef struct XrRbcValueAccess {
      * one-based common RETURN_TRANSFER event.
      * EDGE uses first/count source/target SSA pairs, count measuring pairs,
      * for type-zero transport absent from common typed homes. Its index is
-     * UINT32_MAX when there is no common typed edge, never ambiguous edge zero. */
+     * UINT32_MAX when there is no common typed edge, never ambiguous edge zero.
+     * A sealed Array capacity ENTRY or LATCH uses a one-based window. */
     /* ARRAY/MAP index is the verified catalog role, first/count its complete
      * SSA operands. A mutator's window selects its common pending workspace.
      * Keyed Map reads also project source/other to local Frame owner slots
@@ -99,6 +100,12 @@ typedef struct XrRbcArrayReadFold {
     bool constant;
 } XrRbcArrayReadFold;
 
+typedef struct XrRbcArrayPushLimit {
+    uint64_t bits;
+    uint32_t value; /* Zero uses constant bits instead of a real scalar location. */
+    bool available;
+} XrRbcArrayPushLimit;
+
 typedef struct XrRbcValueCode {
     const XrLirValueHomes *homes;
     const XrRbcValueLocation *locations; /* SSA indexed, including unused zero. */
@@ -122,6 +129,8 @@ typedef struct XrRbcValueCode {
     bool array_region_runtime; /* Compile-time SET-window consumption. */
     const XrRbcArrayRegionAccess *array_region_accesses; /* Same ordinal/count as accesses, or absent. */
     const XrRbcArrayReadFold *array_read_folds; /* Indexed like array_regions->regions, or absent. */
+    XrLirArrayRegionBindings *array_push_windows;
+    const XrRbcArrayPushLimit *array_push_limits; /* Indexed like array_push_windows->regions. */
 } XrRbcValueCode;
 
 /* A leaf needs no call, return or owning destination. Both emission and
