@@ -157,7 +157,14 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     code->accesses = storage;
     ((XrRbcValueAccess *)code->accesses)[code->access_count] = access;
     XrRbcOp op = rbc_value_access_opcode(code, access);
-    return rbc_lir_emit(c,op,0,0,0,(int64_t)code->access_count++);
+    if (!rbc_lir_emit(c, op, 0, 0, 0, (int64_t)code->access_count++)) return false;
+    if (op == XR_RBC_MAP_READ && c->code_count - c->blocks[c->diagnostic->block] >= 2) {
+        uint32_t *literal = &c->code[c->code_count - 2];
+        if ((*literal & 255u) == XR_RBC_STRING_LITERAL_BORROW &&
+            rbc_literal_map_pair(code, *literal, literal[1]))
+            *literal = (*literal & ~255u) | XR_RBC_STRING_LITERAL_MAP_READ;
+    }
+    return true;
 }
 static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
     XrRbcValueAccess access = {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX};

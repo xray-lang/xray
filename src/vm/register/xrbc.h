@@ -93,7 +93,8 @@
     X(AGGREGATE_ACCESS, ABX)                                                                        \
     X(VALUE_ACCESS, ABX)                                                                           \
     X(MAP_READ, ABX) \
-    X(STRING_LITERAL_BORROW, ABX)
+    X(STRING_LITERAL_BORROW, ABX) \
+    X(STRING_LITERAL_MAP_READ, ABX)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,

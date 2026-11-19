@@ -125,6 +125,20 @@ static inline XrRbcOp rbc_value_access_opcode(const XrRbcValueCode *code, XrRbcV
     return XR_RBC_VALUE_ACCESS;
 }
 
+/* Pair existing bytecode words so both original source positions and
+ * transfer facts remain available. The query must read this exact keeper. */
+static inline bool rbc_literal_map_pair(const XrRbcValueCode *code, uint32_t first, uint32_t second) {
+    if (((first >> 8) & 255u) || (second & 65535u) != XR_RBC_MAP_READ ||
+        (first >> 16) >= code->access_count || (second >> 16) >= code->access_count) return false;
+    const XrRbcValueAccess literal = code->accesses[first >> 16];
+    const XrRbcValueAccess read = code->accesses[second >> 16];
+    return rbc_value_access_opcode(code, literal) == XR_RBC_STRING_LITERAL_BORROW &&
+        rbc_value_access_opcode(code, read) == XR_RBC_MAP_READ &&
+        read.other && read.other == rbc_local_borrow_slot(code->homes, literal.result) &&
+        read.count == 2 && code->arguments && read.first <= code->argument_count &&
+        code->argument_count - read.first >= 2 && code->arguments[(size_t)read.first + 1] == literal.result;
+}
+
 static inline uint32_t rbc_map_formal(const XrRbcValueCode *code, uint32_t value) {
     if (!code->homes || !value || value > code->homes->value_count) return UINT32_MAX;
     const XrLirValueHome *home = &code->homes->values[value];

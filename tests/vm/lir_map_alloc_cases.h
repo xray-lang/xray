@@ -87,13 +87,26 @@ static void map_borrowed_literal_fault_and_skip(void) {
     uint32_t literal_source = 0;
     uint32_t *words = (uint32_t *)(void *)function->code;
     for (size_t pc = 0; pc < function->code_count; ++pc) {
-        if ((words[pc] & 255u) != XR_RBC_STRING_LITERAL_BORROW) continue;
-        CHECK(!literal_source);
+        if ((words[pc] & 255u) != XR_RBC_STRING_LITERAL_MAP_READ) continue;
+        CHECK(!literal_source && pc + 1 < function->code_count);
+        CHECK((words[pc + 1] & 255u) == XR_RBC_MAP_READ);
         literal_source = function->source_ids[pc];
         uint32_t original = words[pc];
         words[pc] = (original & ~255u) | XR_RBC_VALUE_ACCESS;
         CHECK(!xr_rbc_value_instruction_valid(&program->module, function, pc));
         words[pc] = original;
+        uint32_t read_word = words[pc + 1];
+        words[pc + 1] = (read_word & ~255u) | XR_RBC_VALUE_ACCESS;
+        CHECK(!xr_rbc_value_instruction_valid(&program->module, function, pc));
+        words[pc + 1] = read_word;
+        const XrRbcValueCode *code = xr_rbc_module_value_code(&program->module, 0);
+        CHECK(code && (read_word >> 16) < code->access_count);
+        const XrRbcValueAccess *lookup = &code->accesses[read_word >> 16];
+        uint32_t *read_key = (uint32_t *)(void *)&code->arguments[lookup->first + 1];
+        uint32_t key_id = *read_key;
+        *read_key = lookup->result;
+        CHECK(!xr_rbc_value_instruction_valid(&program->module, function, pc));
+        *read_key = key_id;
     }
     CHECK(literal_source);
 

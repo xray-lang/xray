@@ -420,8 +420,14 @@ XR_RBC_CASE(STRING_LITERAL_BORROW) {
     if (status != XR_RBC_OK) return status;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(STRING_LITERAL_MAP_READ) {
+    uint32_t read = code[pc++];
+    XrRbcStatus status = xr_rbc_map_read_step(module, stack, read >> 16, pc, instruction >> 16);
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(MAP_READ) {
-    XrRbcStatus status = xr_rbc_map_read_step(module, stack, instruction >> 16, pc);
+    XrRbcStatus status = xr_rbc_map_read_step(module, stack, instruction >> 16, pc, UINT32_MAX);
     if (status != XR_RBC_OK) return status;
     XR_RBC_NEXT();
 }
@@ -437,8 +443,13 @@ default:
         if (status != XR_RBC_OK) return status;
         XR_RBC_NEXT();
     }
-    if (op == XR_RBC_MAP_READ) {
-        XrRbcStatus status = xr_rbc_map_read_step(module, stack, instruction >> 16, pc);
+    if (op == XR_RBC_MAP_READ || op == XR_RBC_STRING_LITERAL_MAP_READ) {
+        uint32_t literal = UINT32_MAX;
+        if (op == XR_RBC_STRING_LITERAL_MAP_READ) {
+            literal = instruction >> 16;
+            instruction = code[pc++];
+        }
+        XrRbcStatus status = xr_rbc_map_read_step(module, stack, instruction >> 16, pc, literal);
         if (status != XR_RBC_OK) return status;
         XR_RBC_NEXT();
     }

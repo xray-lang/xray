@@ -138,13 +138,12 @@ static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack 
 }
 
 static XrtManagedStatus rbc_map_read(const XrRbcModule *module, XrRbcStack *stack,
-    RbcValueActivation *activation, const XrRbcValueAccess *access, bool *missing) {
+    RbcValueActivation *activation, const XrRbcValueAccess *access, const XrtStringBacking *key, bool *missing) {
     const XrtManagedFrameLocations *locations = &activation->frame_locations;
     if ((access->source || access->other) && (!locations->frame || *locations->busy))
         return XRT_MANAGED_ARGUMENT;
 
     const XrtMapBacking *map = NULL;
-    const XrtStringBacking *key = NULL;
     const uint32_t *args = activation->code->arguments + access->first;
     if (access->source) {
         map = (const XrtMapBacking *)rbc_map_borrow_local_slot(locations, access->source - 1);
@@ -161,11 +160,13 @@ static XrtManagedStatus rbc_map_read(const XrRbcModule *module, XrRbcStack *stac
         }
     }
     if (!map) return XRT_MANAGED_ARGUMENT;
-    if (access->other) {
-        key = (const XrtStringBacking *)rbc_map_borrow_local_slot(locations, access->other - 1);
-    } else {
-        XrtManagedStatus status = rbc_value_string_borrow(activation, args[1], &key);
-        if (status != XRT_MANAGED_OK) return status;
+    if (!key) {
+        if (access->other) {
+            key = (const XrtStringBacking *)rbc_map_borrow_local_slot(locations, access->other - 1);
+        } else {
+            XrtManagedStatus status = rbc_value_string_borrow(activation, args[1], &key);
+            if (status != XRT_MANAGED_OK) return status;
+        }
     }
     if (!key) return XRT_MANAGED_ARGUMENT;
 
@@ -194,11 +195,12 @@ static XrtManagedStatus rbc_map_read(const XrRbcModule *module, XrRbcStack *stac
 }
 
 static XR_NOINLINE XrRbcStatus xr_rbc_map_read_step(const XrRbcModule *module, XrRbcStack *stack,
-    uint32_t index, size_t pc) {
+    uint32_t index, size_t pc, uint32_t literal_index) {
     RbcValueActivation *activation = stack->values ? stack->values->top : NULL;
     if ((!activation || activation->depth != stack->depth) && stack->depth) {
+        size_t first_pc = literal_index == UINT32_MAX ? pc : pc - 1;
         XrRbcStatus status = xr_rbc_values_begin(module, stack,
-            (uint32_t)stack->frames[stack->depth - 1].function, rbc_value_source(module, stack, pc));
+            (uint32_t)stack->frames[stack->depth - 1].function, rbc_value_source(module, stack, first_pc));
         if (status != XR_RBC_OK) return status;
         activation = stack->values ? stack->values->top : NULL;
     }
@@ -209,8 +211,25 @@ static XR_NOINLINE XrRbcStatus xr_rbc_map_read_step(const XrRbcModule *module, X
      * activation. Preserve the same region exit as an ordinary access. */
     if (activation->active_array_region)
         rbc_value_array_region_forget(activation, activation->active_array_region, RBC_ARRAY_REGION_BYPASS);
+    const XrtManagedHeader *keeper = NULL;
+    if (literal_index != UINT32_MAX) {
+        /* The code owner proved the preceding word creates this exact key.
+         * Borrow it once. A cold creation fails at the literal, before any
+         * Map lookup or result publication. */
+        const XrRbcValueAccess *literal = &activation->code->accesses[literal_index];
+        const XrLirValueHome *home = &activation->code->homes->values[literal->result];
+        XrtManagedStatus status = rbc_value_read_literal_cache(activation, home, &keeper);
+        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc - 1));
+        if (!keeper) {
+            uint32_t source = rbc_value_source(module, stack, pc - 1);
+            status = rbc_value_literal_factory(module, activation, *literal, source, home);
+            if (status == XRT_MANAGED_OK) status = rbc_value_read_literal_cache(activation, home, &keeper);
+            if (status != XRT_MANAGED_OK || !keeper)
+                xrt_native_managed_failure(status == XRT_MANAGED_OK ? XRT_MANAGED_ARGUMENT : status, source);
+        }
+    }
     bool missing = false;
-    XrtManagedStatus status = rbc_map_read(module, stack, activation, access, &missing);
+    XrtManagedStatus status = rbc_map_read(module, stack, activation, access, (const XrtStringBacking *)keeper, &missing);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
     if (missing) xrt_typed_panic(431, rbc_value_source(module, stack, pc));
     return XR_RBC_OK;

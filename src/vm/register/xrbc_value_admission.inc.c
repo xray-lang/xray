@@ -378,7 +378,11 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     if (!code || !code->accesses || index >= code->access_count || code->access_count > 65536 ||
         !code->locations || (code->homes && code->homes->value_count != code->value_count)) return false;
     XrRbcValueAccess a = code->accesses[index];
-    if (op != rbc_value_access_opcode(code, a)) return false;
+    XrRbcOp access_op = rbc_value_access_opcode(code, a);
+    if (op == XR_RBC_STRING_LITERAL_MAP_READ) {
+        if (access_op != XR_RBC_STRING_LITERAL_BORROW || function->code_count - pc < 2 ||
+            !rbc_literal_map_pair(code, word, function->code[pc + 1])) return false;
+    } else if (op != access_op) return false;
     if (op != XR_RBC_VALUE_ACCESS && (!xr_rbc_module_code_owner(module) ||
         (code->array_region_accesses && code->array_region_accesses[index].region))) return false;
     if (a.operation!=XR_RBC_VALUE_CALL && a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY &&
