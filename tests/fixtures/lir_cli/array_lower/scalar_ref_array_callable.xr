@@ -1,0 +1,22 @@
+fn relay(slot: ref i64, callback: fn(Array<(string, i64)>) -> Array<(string, i64)>,
+         rows: Array<(string, i64)>) -> Array<(string, i64)> {
+    slot = slot + 1
+    return callback(rows)
+}
+
+fn exerciseLocal() {
+    var answer = 42
+    const original: Array<(string, i64)> = [("item-42", 42)]
+    const kept = relay(ref answer, fn(rows: Array<(string, i64)>) -> Array<(string, i64)> {
+        return rows
+    }, original)
+    print("${answer}:${original[0].0}:${kept[0].1}:${len(kept)}")
+}
+
+var answer = 42
+exerciseLocal()
+const original: Array<(string, i64)> = [("item-42", 42)]
+const kept = relay(ref answer, fn(rows: Array<(string, i64)>) -> Array<(string, i64)> {
+    return rows
+}, original)
+print("${answer}:${original[0].0}:${kept[0].1}:${len(kept)}")
