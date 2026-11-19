@@ -1,6 +1,9 @@
+fn lookup(table:Map<string,i64>)->i64 { return table["x"] }
+fn forward(table:Map<string,i64>)->i64 { return lookup(table) }
+
 fn make()->fn()->i64 {
     const table = {"x":1}
-    return fn()->i64 { return len(table) }
+    return fn()->i64 { return len(table) + table["x"] + forward(table) - 2 }
 }
 const answer = make()
 print(answer())

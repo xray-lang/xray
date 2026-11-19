@@ -61,7 +61,8 @@ typedef struct XrRbcValueAccess {
     /* ARRAY/MAP index is the verified catalog role, first/count its complete
      * SSA operands. A mutator's window selects its common pending workspace.
      * Keyed Map reads also project source/other to local Frame owner slots
-     * (one-based, zero for a dynamically resolved Map or String origin). */
+     * (one-based, zero for a borrowed Map or String origin). For a Map
+     * formal, window is its zero-based parameter, otherwise UINT32_MAX. */
     /* SET index is the dedicated LIR operation and other its one-based common
      * SET_OPERATION event. Operands and workspace follow the same real homes. */
     /* SLICE index is its closed role, first/count its full SSA operand span.
@@ -99,6 +100,7 @@ typedef struct XrRbcValueCode {
      * The compiler projects this bit once; ordinary scalar functions never
      * acquire a typed activation or execute a new dispatch path. */
     bool string_binding_setup;
+    bool map_formal_reads; /* Prepare borrowed Map addresses only for keyed formal reads. */
     const XrRbcValueAccess *accesses;
     size_t access_count;
     const uint32_t *arguments;
@@ -111,6 +113,14 @@ typedef struct XrRbcValueCode {
     bool array_region_runtime; /* Compile-time SET-window consumption; read-only facts stay ordinary. */
     const XrRbcArrayRegionAccess *array_region_accesses; /* Same ordinal/count as accesses, or absent. */
 } XrRbcValueCode;
+
+static inline uint32_t rbc_map_formal(const XrRbcValueCode *code, uint32_t value) {
+    if (!code->homes || !value || value > code->homes->value_count) return UINT32_MAX;
+    const XrLirValueHome *home = &code->homes->values[value];
+    uint32_t parameter = home->parameter - 1;
+    return parameter < code->parameter_count && code->parameters && code->parameters[parameter] == value ?
+        parameter : UINT32_MAX;
+}
 
 /* Descriptions borrow the actual code lease, as the existing common homes do.
  * Raw bytecode cannot acquire typed owning permissions from forged pointers.

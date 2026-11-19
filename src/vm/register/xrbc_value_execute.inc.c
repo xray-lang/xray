@@ -31,10 +31,18 @@ typedef struct RbcValuePublication {
     RbcValuePayload destination, clear;
     const uint8_t *snapshot;
 } RbcValuePublication;
-typedef union RbcValueCapture {
+typedef struct RbcMapParameter {
+    const uint8_t *address; /* Actual owner field, never a cached backing. */
+    const XrtManagedSlot *slot;
+    const bool *busy;
+} RbcMapParameter;
+typedef union RbcParameterStorage {
+    RbcMapParameter map;
     XrtFunction function;
     XrtManagedHeader *cell;
-} RbcValueCapture;
+} RbcParameterStorage;
+XR_STATIC_ASSERT(sizeof(RbcParameterStorage) == sizeof(XrtFunction),
+    "Map parameter addresses reuse the existing capture storage");
 typedef enum RbcArrayRegionPhase {
     RBC_ARRAY_REGION_COLD, RBC_ARRAY_REGION_ELIGIBLE, RBC_ARRAY_REGION_ACTIVE, RBC_ARRAY_REGION_BYPASS
 } RbcArrayRegionPhase;
@@ -54,7 +62,7 @@ struct RbcValueActivation {
     XrtManagedFrameLocations frame_locations;
     RbcValueOrigin *parameters;
     const uint8_t **borrowed_parameters;
-    RbcValueCapture *capture_parameters;
+    RbcParameterStorage *parameter_storage;
     XrtPlaceEdge *edges;
     RbcValuePublication *publications;
     uint8_t *snapshots;
@@ -213,7 +221,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     if (!rbc_value_capacities(code,&leaves,&rows,&snapshots) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(const uint8_t *)) ||
-        !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueCapture)) ||
+        !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcParameterStorage)) ||
         !rbc_value_extent(&bytes,leaves,sizeof(XrtPlaceEdge)) ||
         !rbc_value_extent(&bytes,rows,sizeof(RbcValuePublication)) || !rbc_value_extent(&bytes,snapshots,1) ||
         !rbc_value_extent(&bytes,regions,sizeof(RbcArrayRegionState)) ||
@@ -232,7 +240,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     activation->field=(t *)((uint8_t *)memory+offset); offset+=(n)*sizeof(t); } while(0)
     RBC_VALUE_PART(parameters,code->parameter_count,RbcValueOrigin);
     RBC_VALUE_PART(borrowed_parameters,code->parameter_count,const uint8_t *);
-    RBC_VALUE_PART(capture_parameters,code->parameter_count,RbcValueCapture);
+    RBC_VALUE_PART(parameter_storage,code->parameter_count,RbcParameterStorage);
     RBC_VALUE_PART(edges,leaves,XrtPlaceEdge);
     RBC_VALUE_PART(publications,rows,RbcValuePublication);
     RBC_VALUE_PART(snapshots,snapshots,uint8_t);
@@ -247,7 +255,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
 #undef RBC_VALUE_PART
     for (uint32_t p = 0; p < code->parameter_count; ++p) {
         activation->parameters[p]=(RbcValueOrigin){0}; activation->borrowed_parameters[p]=NULL;
-        activation->capture_parameters[p]=(RbcValueCapture){0};
+        activation->parameter_storage[p]=(RbcParameterStorage){.map={0}};
     }
     runtime->top = activation;
     const XrRbcFunction *physical=&module->functions[function];
@@ -389,6 +397,25 @@ static XrtManagedStatus rbc_value_map_borrow(const XrRbcModule *module,RbcValueA
     if (status==XRT_MANAGED_OK) *output=(const XrtMapBacking *)header;
     return status;
 }
+/* Call admission has already proved the typed actual. The caller stays
+ * alive while its stable managed Frame or the invocation's Env is borrowed. */
+static RbcMapParameter rbc_map_parameter_source(const XrRbcModule *module, RbcValueOrigin origin) {
+    RbcValueActivation *owner = origin.activation;
+    if (!owner || !owner->owned_code || !rbc_value_map(module, owner->code, origin.value, false))
+        return (RbcMapParameter){0};
+    uint32_t formal = rbc_map_formal(owner->code, origin.value);
+    if (formal != UINT32_MAX)
+        return owner->parameter_storage[formal].map; /* Normalized Env capture. */
+
+    const XrtManagedFrameLocations *locations = &owner->frame_locations;
+    uint32_t slot = rbc_local_borrow_slot(owner->code->homes, origin.value);
+    if (!slot || !locations->frame || slot > locations->slot_count) return (RbcMapParameter){0};
+    const XrtManagedSlot *actual = &locations->slots[slot - 1];
+    if (actual->owner_offset == SIZE_MAX) return (RbcMapParameter){0};
+    return (RbcMapParameter){.address=(const uint8_t *)locations->payload + actual->owner_offset,
+        .slot=actual, .busy=locations->busy};
+}
+
 static XrtManagedStatus rbc_value_set_borrow(const XrRbcModule *module,RbcValueActivation *activation,
     uint32_t value,const XrtSetBacking **output) {
     RbcValueOrigin origin=rbc_value_origin(activation,value);
@@ -1002,7 +1029,12 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
                 if (!rbc_value_formal_accepts(module,receiving,to,caller->code,from) ||
                     formal->parameter!=parameter+1) return XR_RBC_INVALID;
                 if (formal->owner_count || rbc_value_inline(module,receiving,to,false) || rbc_value_slice(module,receiving,to)) {
-                    child->parameters[parameter]=rbc_value_origin(caller,from); continue;
+                    RbcValueOrigin origin = rbc_value_origin(caller, from);
+                    child->parameters[parameter] = origin;
+                    if (receiving->map_formal_reads && child->owned_code && formal->owner_count &&
+                        child->image->types[formal->type - 1].kind == XRT_VALUE_MAP_STRING_I64)
+                        child->parameter_storage[parameter].map = rbc_map_parameter_source(module, origin);
+                    continue;
                 }
                 /* POD formal locations have their own ordinary by-value bank. */
                 XrRbcValueLocation location=receiving->locations[to];

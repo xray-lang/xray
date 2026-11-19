@@ -1,0 +1,8 @@
+fn lookup(table:Map<string,i64>)->i64 {
+    return table["missing"]
+}
+fn forward(table:Map<string,i64>)->i64 {
+    return lookup(table)
+}
+const table = {"present":7}
+print(forward(table))

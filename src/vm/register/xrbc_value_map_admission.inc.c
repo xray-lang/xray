@@ -76,14 +76,16 @@ static bool rbc_value_map_access_valid(const XrRbcModule *module,const XrRbcValu
             (count==1 || rbc_value_string_borrow_operand(module,code,args[1])) &&
             (count!=3 || rbc_value_scalar(code,function,args[2],XR_RBC_BITS));
     }
-    if (a.window!=UINT32_MAX || !a.count || !rbc_value_map(module,code,args[0],false)) return false;
+    bool read = xr_lir_map_reads_key(a.index);
+    if ((!read && a.window!=UINT32_MAX) || !a.count || !rbc_value_map(module,code,args[0],false)) return false;
     if (a.index==XR_LIR_MAP_OP_LEN) return a.count==1 && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     if (a.index==XR_LIR_MAP_OP_DISPLAY) return a.count==1 && rbc_value_string(module,code,a.result,true);
     XrLirType snapshot=xr_lir_map_snapshot_element(a.index);
     if (snapshot)
         return a.count==1 && rbc_value_container(module,code,a.result,true) &&
             rbc_value_kind(module,code,a.result)==(snapshot==XR_LIR_STRING ? XRT_VALUE_ARRAY_STRING : XRT_VALUE_ARRAY_I64);
-    if (!xr_lir_map_reads_key(a.index) || a.count!=2 ||
+    if (!read || a.count!=2 || a.window != rbc_map_formal(code, args[0]) ||
+        (a.window != UINT32_MAX && !code->map_formal_reads) ||
         !rbc_value_string_borrow_operand(module,code,args[1]) ||
         a.source != rbc_local_borrow_slot(code->homes, args[0]) ||
         a.other != rbc_local_borrow_slot(code->homes, args[1])) return false;
