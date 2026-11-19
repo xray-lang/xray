@@ -26,17 +26,23 @@ static bool rbc_lir_array_push_prepare(RbcLirCompiler *c) {
         const XrLirArrayRegionBinding *row=&bindings->regions[n];
         const XrLirArrayPushCapacity *capacity=&row->region.push_capacity;
         if (!row->slot_count || !rbc_lir_array_push_scalar(code->locations[capacity->iv])) continue;
-        const RbcLirImmediate *end=&c->immediates[capacity->end];
-        if (!end->known && !rbc_lir_array_push_scalar(code->locations[capacity->end])) continue;
+        XrLirInstructionView end={0};
+        if (capacity->end_instruction &&
+            (xr_lir_instruction_view(c->input,(XrLirBlock){c->input,c->function.id,capacity->end_block},
+                capacity->end_instruction-1,&end)!=XR_LIR_OK || end.result!=capacity->end))
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array capacity limit lost its SSA definition");
+        bool constant=end.op==XR_LIR_CONST && end.type==XR_LIR_I64;
+        if (!constant && ((capacity->end_block==row->region.header && capacity->end_instruction) ||
+            !rbc_lir_array_push_scalar(code->locations[capacity->end]))) continue;
         if (!limits) {
             limits=xr_calloc(bindings->region_count,sizeof(*limits));
             if (!limits) return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own Array capacity limits");
             code->array_push_limits=limits;
         }
-        /* A comparison immediate has no materialized register. Existing
-         * register/spill locations supply every other invariant bound. */
-        limits[n]=(XrRbcArrayPushLimit){.available=true,.value=end->known ? 0 : capacity->end,
-            .bits=end->known ? (uint64_t)(int64_t)end->value : 0};
+        /* An immediate can lack storage, and a header constant's register
+         * can be reused before the latch. Both use the verified SSA bits. */
+        limits[n]=(XrRbcArrayPushLimit){.available=true,.value=constant ? 0 : capacity->end,
+            .bits=constant ? end.bits : 0};
     }
     return true;
 }
