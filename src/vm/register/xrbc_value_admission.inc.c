@@ -498,8 +498,8 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_BINDING_NEW: case XR_RBC_VALUE_BINDING_READ:
     case XR_RBC_VALUE_BINDING_WRITE: case XR_RBC_VALUE_BINDING_DROP:
         return rbc_value_binding_access_valid(module,code,function,a) &&
-            (!a.index || rbc_value_kind(module,code,a.operation==XR_RBC_VALUE_BINDING_NEW ? a.result : a.source)!=XRT_VALUE_ARRAY_I64 ||
-             rbc_value_array_forwarding_words(function,code,(uint32_t)index,pc));
+            (!a.index || !code->homes->events[a.index-1].forwarding_mode ||
+             rbc_value_binding_forwarding_words(function,code,(uint32_t)index,pc));
     case XR_RBC_VALUE_EDGE:
         return !a.result && !a.source && !a.other && rbc_value_edge_valid(module,code,a);
     default: return false;

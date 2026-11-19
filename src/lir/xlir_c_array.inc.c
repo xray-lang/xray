@@ -190,7 +190,7 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
 static void c_array_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     XrLirArrayIntrinsic shape={0};
     if (c_array_intrinsic(c,v,&shape)) { c_array_call(c,v,&shape,source); return; }
-    bool forwarded_drop=(v->op==XR_LIR_ARRAY_DROP || v->op==XR_LIR_ARRAY_CELL_DROP) && c_array_forward_drop(c,v);
+    bool forwarded_drop=(v->op==XR_LIR_ARRAY_DROP || v->op==XR_LIR_ARRAY_CELL_DROP) && c_binding_forward_drop(c,v);
     if (!forwarded_drop && v->op!=XR_LIR_ARRAY_BORROW) c_values_ensure(c,source);
     if (v->op==XR_LIR_ARRAY_BORROW) {
         const XrLirHomeBinding *binding=&c->homes->bindings[v->result];
@@ -208,7 +208,7 @@ static void c_array_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
         bool read=v->op==XR_LIR_CELL_READ || v->op==XR_LIR_ARRAY_REF_READ;
         const XrLirValueHome *home=&c->homes->values[read ? v->result : v->operands[v->operand_count-1]];
         if (!read && (!home->owner_count || home->parameter)) { c_error(c,XR_LIR_C_UNSUPPORTED,"Array assignment requires its final owned source home"); return; }
-        bool forwarded_copy=c_array_forward_begin(c,v);
+        bool forwarded_copy=c_binding_forward_begin(c,v);
         c_text(c,"    { XrtManagedStatus status=xrt_place_copy_replace(");
         if (read) c_format(c,"(XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NULLABLE}",home->first_owner);
         else c_value(c,v->op==XR_LIR_CELL_NEW ? v->result : v->operands[0]);

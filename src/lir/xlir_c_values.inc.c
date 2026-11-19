@@ -233,11 +233,11 @@ static void c_values_function(LirC *c) {
     c->array_frame_block = 0;
     c->array_local_event_cursor = 0;
     c->array_local = c_array_local_function(c,c->homes);
-    c->array_forward_cursor = 0;
-    c->array_forward_pending = NULL;
-    c->array_forwarding = false;
+    c->binding_forward_cursor = 0;
+    c->binding_forward_pending = NULL;
+    c->binding_forwarding = false;
     for (size_t n=0;c->homes && n<c->homes->event_count;++n)
-        c->array_forwarding |= c->homes->events[n].forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE;
+        c->binding_forwarding |= c->homes->events[n].forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE;
     c->header_edges = false;
     for (size_t n = 0; c->homes && n < c->homes->edge_count && c_request_poll(c); ++n)
         c->header_edges |= c->homes->edges[n].direct_header_move;
@@ -250,9 +250,9 @@ static void c_values_declarations(LirC *c) {
     if (c_values_owned_type(c, c->view.result) || c_slice_type(c, c->view.result)) c_text(c, "    (void)xrl_result;\n");
     if (!c->homes || !c->homes->owned_frame_needed) return;
     c_text(c, "    XrtManagedRoot *xrl_root = NULL;\n    XrtManagedFrame *xrl_frame = NULL;\n    void *xrl_payload = NULL;\n");
-    if (c->header_edges || c->array_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c))
+    if (c->header_edges || c->binding_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c))
         c_text(c, "    XrtManagedFrameLocations xrl_frame_locations = {0};\n");
-    if (c->array_forwarding) c_text(c, "    bool xrl_array_forwarded = false;\n    (void)xrl_array_forwarded;\n");
+    if (c->binding_forwarding) c_text(c, "    bool xrl_binding_forwarded = false;\n    (void)xrl_binding_forwarded;\n");
     if (c->array_local) {
         c_text(c,"    bool xrl_array_ready = false;\n    (void)xrl_array_ready;\n");
         c_format(c,"    XrlArrayLocals_%" PRIu32 " xrl_array_locals = {0};\n",c->function.id);
@@ -271,11 +271,11 @@ static void c_values_ensure(LirC *c, uint32_t source) {
     if (c->array_frame_block && c->array_frame_block == c->block) return;
     c_text(c, "    if (!xrl_frame) {\n");
     c_format(c, "        xrl_root = xrt_native_managed_root(UINT32_C(%" PRIu32 "));\n", source);
-    if (c->header_edges || c->array_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c))
+    if (c->header_edges || c->binding_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c))
         c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_locations(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame_locations);\n", c->function.id);
     else c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_payload(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame, &xrl_payload);\n", c->function.id);
     c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
-    if (c->header_edges || c->array_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c))
+    if (c->header_edges || c->binding_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c))
         c_text(c, "        xrl_frame = xrl_frame_locations.frame; xrl_payload = xrl_frame_locations.payload;\n");
     if (c->array_local)
         c_format(c,"        xrl_array_local_prepare_%" PRIu32 "(xrl_frame, xrl_payload, &xrl_frame_locations, &xrl_array_locals);\n",c->function.id);

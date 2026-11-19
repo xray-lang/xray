@@ -64,14 +64,17 @@ static const XrLirHomeWorkspace *rbc_value_binding_workspace(const XrRbcValueCod
 }
 static bool rbc_value_binding_event(const XrRbcModule *module,const XrRbcValueCode *code,
     XrRbcValueAccess access,uint32_t receiver,uint32_t target,XrLirOwnershipFactKind kind) {
-    bool string=rbc_value_kind(module,code,receiver)==XRT_VALUE_STRING;
+    uint32_t value_kind=rbc_value_kind(module,code,receiver);
+    bool string=value_kind==XRT_VALUE_STRING;
+    bool can_forward=value_kind==XRT_VALUE_MAP_STRING_I64 &&
+        (kind==XR_LIR_OWNERSHIP_BINDING_NEW || kind==XR_LIR_OWNERSHIP_BINDING_READ);
     if (!xr_rbc_module_code_owner(module) || (string && !code->string_binding_setup) || !code->homes->events ||
         !access.index || access.index>code->homes->event_count) return false;
     const XrLirHomeEvent *event=&code->homes->events[access.index-1];
     if (event->kind!=(uint32_t)kind || event->source!=receiver || event->target!=target || !event->block || !event->instruction ||
         event->argument || event->edge || event->target_block || event->callable_transport || event->cell_transport ||
         event->view_operation || event->hold_transfer_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE ||
-        event->forwarding_mode || event->forwarding_drop) return false;
+        (!can_forward && (event->forwarding_mode || event->forwarding_drop))) return false;
     bool append=kind==XR_LIR_OWNERSHIP_STRING_OPERATION;
     if (event->transfer_mode!=(append ? XR_LIR_OWNERSHIP_TRANSFER_BORROW : XR_LIR_OWNERSHIP_TRANSFER_NONE)) return false;
     if (append) {
@@ -101,7 +104,7 @@ static bool rbc_value_binding_event(const XrRbcModule *module,const XrRbcValueCo
     }
     return false;
 }
-static bool rbc_value_array_forwarding_event_plain(const XrLirHomeEvent *event) {
+static bool rbc_value_binding_forwarding_event_plain(const XrLirHomeEvent *event) {
     return !event->argument && !event->edge && !event->target_block && !event->operation &&
         !event->callable_function && !event->callable_scope && !event->callable_transport && !event->callable_materialize &&
         !event->transfer_mode && !event->view_operation && !event->view_workspace && !event->view_cleanup &&
@@ -110,7 +113,7 @@ static bool rbc_value_array_forwarding_event_plain(const XrLirHomeEvent *event) 
 }
 /* An event index is only a projection. The receiving code owner, exact homes,
  * original operand/result event and adjacent logical release grant this use. */
-static const XrLirHomeEvent *rbc_value_array_forwarding_event(const XrRbcModule *module,
+static const XrLirHomeEvent *rbc_value_binding_forwarding_event(const XrRbcModule *module,
     const XrRbcValueCode *code,const XrRbcFunction *function,XrRbcValueAccess access) {
     bool create=access.operation==XR_RBC_VALUE_BINDING_NEW;
     const XrLirValueHomes *homes=code->homes;
@@ -119,17 +122,19 @@ static const XrLirHomeEvent *rbc_value_array_forwarding_event(const XrRbcModule 
     if ((!create && access.operation!=XR_RBC_VALUE_BINDING_READ) || !owner || ordinal>=owner->function_count ||
         !owner->value_homes || !owner->value_codes || owner->value_homes[ordinal]!=homes || owner->value_codes[ordinal]!=code ||
         !homes || !homes->events || !access.index || access.index>homes->event_count ||
-        access.other || access.first || access.count || access.window || !homes->owned_frame_needed ||
+        access.other || access.first || access.count || !homes->owned_frame_needed ||
         !homes->frame.owned_offsets || homes->frame.payload_alignment<_Alignof(XrtManagedHeader *)) return NULL;
     uint32_t receiver=create ? access.result : access.source, value=create ? access.source : access.result;
     const XrLirHomeBinding *binding=rbc_value_binding(code,receiver);
     const XrLirValueHome *home=rbc_value_home(code,value);
+    uint32_t kind=rbc_value_kind(module,code,receiver);
+    bool map=kind==XRT_VALUE_MAP_STRING_I64;
     if (!binding || binding->kind!=XR_LIR_HOME_BINDING_LOCAL || binding->parameter || binding->source ||
         !home || home->type!=binding->type || home->parameter || home->borrow_source ||
         home->owner_count!=1 || home->size!=sizeof(XrtManagedHeader *) || home->byte_count ||
         home->transport || home->cell_transport || home->view_workspace || home->view_storage ||
         code->locations[value].kind!=XR_RBC_VALUE_NOWHERE ||
-        rbc_value_kind(module,code,receiver)!=XRT_VALUE_ARRAY_I64) return NULL;
+        (!map && kind!=XRT_VALUE_ARRAY_I64) || access.window!=(map && create ? UINT32_MAX : 0)) return NULL;
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     const XrtValueImageType *type=&image->types[binding->type-1];
     if (type->size!=sizeof(XrtManagedHeader *) || type->alignment!=_Alignof(XrtManagedHeader *) ||
@@ -145,7 +150,7 @@ static const XrLirHomeEvent *rbc_value_array_forwarding_event(const XrRbcModule 
     if (event->kind!=(uint32_t)(create ? XR_LIR_OWNERSHIP_BINDING_NEW : XR_LIR_OWNERSHIP_BINDING_READ) ||
         event->source!=receiver || event->target!=value || !event->block || !event->instruction ||
         event->instruction==UINT32_MAX || event->forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE ||
-        event->forwarding_drop!=event->instruction+1 || !rbc_value_array_forwarding_event_plain(event)) return NULL;
+        event->forwarding_drop!=event->instruction+1 || !rbc_value_binding_forwarding_event_plain(event)) return NULL;
     bool operand=false, release=false;
     for (size_t n=access.index;n<homes->event_count;++n) {
         const XrLirHomeEvent *next=&homes->events[n];
@@ -156,22 +161,29 @@ static const XrLirHomeEvent *rbc_value_array_forwarding_event(const XrRbcModule 
             next->transfer_mode==(create ? XR_LIR_OWNERSHIP_TRANSFER_BORROW : XR_LIR_OWNERSHIP_TRANSFER_NONE)) operand=true;
         if (next->instruction==event->forwarding_drop && next->source==access.source && !next->target &&
             next->kind==(uint32_t)(create ? XR_LIR_OWNERSHIP_RELEASE : XR_LIR_OWNERSHIP_BINDING_RELEASE) &&
-            !next->forwarding_mode && !next->forwarding_drop && rbc_value_array_forwarding_event_plain(next)) release=true;
+            !next->forwarding_mode && !next->forwarding_drop && rbc_value_binding_forwarding_event_plain(next)) release=true;
     }
     return operand && release ? event : NULL;
 }
 /* Runtime reuses this bounded encoding match without repeating the immutable
  * event and home admission. Logical instruction ordinals are never VM PCs. */
-static bool rbc_value_array_forwarding_words(const XrRbcFunction *function,const XrRbcValueCode *code,
+static bool rbc_value_binding_forwarding_words(const XrRbcFunction *function,const XrRbcValueCode *code,
     uint32_t index,size_t pc) {
     if (index>=code->access_count || index>UINT16_MAX || pc>=function->code_count || function->code_count-pc<=2 ||
         function->code[pc]!=(XR_RBC_VALUE_ACCESS | (index<<16))) return false;
     uint32_t word=function->code[pc+1], drop_index=word>>16;
     if ((word&65535u)!=XR_RBC_VALUE_ACCESS || drop_index>=code->access_count) return false;
     XrRbcValueAccess access=code->accesses[index], drop=code->accesses[drop_index];
-    return (access.operation==XR_RBC_VALUE_BINDING_NEW || access.operation==XR_RBC_VALUE_BINDING_READ) &&
-        drop.operation==(access.operation==XR_RBC_VALUE_BINDING_NEW ? XR_RBC_VALUE_DROP : XR_RBC_VALUE_BINDING_DROP) &&
-        drop.source==access.source && !drop.result && !drop.other && !drop.index && !drop.first && !drop.count && !drop.window;
+    bool create=access.operation==XR_RBC_VALUE_BINDING_NEW;
+    const XrLirValueHomes *homes=code->homes;
+    if ((!create && access.operation!=XR_RBC_VALUE_BINDING_READ) ||
+        drop.operation!=(create ? XR_RBC_VALUE_DROP : XR_RBC_VALUE_BINDING_DROP) || drop.source!=access.source ||
+        drop.result || drop.other || drop.first || drop.count || drop.window) return false;
+    if (!drop.index) return true;
+    if (create || !access.index || access.index>homes->event_count || drop.index>homes->event_count) return false;
+    const XrLirHomeEvent *forward=&homes->events[access.index-1], *release=&homes->events[drop.index-1];
+    return release->kind==XR_LIR_OWNERSHIP_BINDING_RELEASE && release->source==drop.source &&
+        release->block==forward->block && release->instruction==forward->forwarding_drop;
 }
 static bool rbc_value_binding_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
@@ -187,7 +199,10 @@ static bool rbc_value_binding_access_valid(const XrRbcModule *module,const XrRbc
             a.operation==XR_RBC_VALUE_BINDING_READ ? XR_LIR_OWNERSHIP_BINDING_READ :
             a.operation==XR_RBC_VALUE_BINDING_WRITE ? XR_LIR_OWNERSHIP_BINDING_WRITE : XR_LIR_OWNERSHIP_BINDING_RELEASE;
         if (!rbc_value_binding_event(module,code,a,value,target,kind)) return false;
-    } else if (a.window || (a.index && !rbc_value_array_forwarding_event(module,code,function,a))) return false;
+        const XrLirHomeEvent *event=&code->homes->events[a.index-1];
+        if ((event->forwarding_mode || event->forwarding_drop) &&
+            !rbc_value_binding_forwarding_event(module,code,function,a)) return false;
+    } else if (a.window || (a.index && !rbc_value_binding_forwarding_event(module,code,function,a))) return false;
     if (a.operation==XR_RBC_VALUE_BINDING_DROP)
         return !a.result && !a.other && binding->kind==XR_LIR_HOME_BINDING_LOCAL;
     if (a.operation==XR_RBC_VALUE_BINDING_NEW)
@@ -248,7 +263,7 @@ static bool rbc_value_array_local_valid(const XrRbcModule *module,const XrRbcVal
     XrLirHomeEvent plain=*event; plain.operation=0;
     return event->kind==XR_LIR_OWNERSHIP_ARRAY_OPERATION && event->source==args[0] && !event->target &&
         event->block && event->instruction && event->operation==access.index &&
-        !event->forwarding_mode && !event->forwarding_drop && rbc_value_array_forwarding_event_plain(&plain);
+        !event->forwarding_mode && !event->forwarding_drop && rbc_value_binding_forwarding_event_plain(&plain);
 }
 static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
