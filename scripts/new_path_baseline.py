@@ -244,6 +244,7 @@ STRING_APPEND_CONST_XR = STRING_APPEND_XR.replace('    var i=0', '    const suff
 STRING_APPEND_FORMS = (
     ("assignment", "_assign", STRING_APPEND_ASSIGN_XR),
     ("grouped", "_grouped", STRING_APPEND_XR.replace('text+="x"', 'text+=("x")')),
+    ("grouped assignment", "_grouped_assign", STRING_APPEND_XR.replace('text+="x"', 'text=((text)+"x")')),
     ("local const", "_const", STRING_APPEND_CONST_XR.replace('text+="x"', 'text+=suffix')),
     ("local const assignment", "_const_assign", STRING_APPEND_CONST_XR.replace('text+="x"', 'text=text+suffix')),
 )

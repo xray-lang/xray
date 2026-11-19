@@ -40,7 +40,36 @@ fn observed_length(count: i64) -> i64 {
     return total
 }
 
+fn piece(index: i64) -> string {
+    if (index == 2) {
+        return "a"
+    }
+    return "b"
+}
+
+fn call_suffix() -> string {
+    var text = ""
+    text = (text + piece(2))
+    return text
+}
+
+fn rebound() -> string {
+    var text = "before"
+    text = (text + (text = "again"))
+    return text
+}
+
+fn used_result() -> string {
+    var text = "before"
+    const result = (text = (text + "after"))
+    print(result)
+    return text
+}
+
 print(compound(4))
 print(assignment(4))
 print(grouped_assignment(4))
 print(observed_length(4))
+print(call_suffix())
+print(rebound())
+print(used_result())
