@@ -716,6 +716,7 @@ static void array_c_output(const char *name, const char *path) {
     else if (!strcmp(name,"cell-i64-owned")) callable_cell_c_fixture(&m,&root,false,true);
     else if (!strcmp(name,"cell-map-frame")) callable_cell_c_fixture(&m,&root,true,false);
     else if (!strcmp(name,"cell-map-owned")) callable_cell_c_fixture(&m,&root,true,true);
+    else if (!strcmp(name,"tuple-frame-capture")) tuple_frame_c_fixture(&m,&root);
     else if (!strncmp(name,"map-literal-",12)) {
         unsigned mode = !strcmp(name,"map-literal-spread") ? 1u : !strcmp(name,"map-literal-empty") ? 2u :
             !strcmp(name,"map-literal-duplicate") ? 3u : !strcmp(name,"map-literal-unknown-duplicate") ? 4u :
@@ -949,6 +950,7 @@ int main(int argc, char **argv) {
     tuple_receiving_owners();
     tuple_root_result();
     tuple_group_admission();
+    array_c_output("tuple-frame-capture",NULL);
     callable_owned_factory_cases();
     captured_cell_frame_extent();
     for (unsigned shape = 0; shape < 4; ++shape) {

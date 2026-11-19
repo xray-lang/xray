@@ -173,7 +173,7 @@ def main():
                 'slice-proof-loop-i64': 43, 'slice-proof-loop-u8': 43,
                 'slice-proof-call-before-i64': 43, 'slice-proof-call-before-u8': 43,
                 'slice-proof-call-after-i64': 43, 'slice-proof-call-after-u8': 43,
-                'string-bindings': 14, 'string-ref-bindings': 2, 'frame-scalar-cells': 73,
+                'string-bindings': 14, 'string-ref-bindings': 2, 'frame-scalar-cells': 73, 'tuple-frame-capture': 42,
                 'set-i64-local': 1, 'set-i64-state': 1,
                 'set-formal-cell': 6, 'set-formal-ref': 6, 'set-formal-state': 6,
                 'set-header-copy': 3, 'set-header-duplicate': 4, 'set-block-cell-loop': 3,
