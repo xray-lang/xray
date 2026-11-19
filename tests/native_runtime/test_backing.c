@@ -159,7 +159,7 @@ static void string_values(void) {
     CHECK(first->managed.ops == fixture.types.string && first->length == 4 && first->runes == 3);
     CHECK(first->capacity == 16 && !memcmp(first->bytes, "\303\251\0x", 5));
     XrtBillingStats after = xrt_billing_owner_stats(fixture.billing);
-    CHECK(after.bytes == before.bytes + 56 && after.blocks == before.blocks + 1);
+    CHECK(after.bytes == before.bytes + sizeof(*first) + 16 && after.blocks == before.blocks + 1);
     OK(xrt_string_backing_create(fixture.frame, 1, &fixture.types, NULL, 0, 0));
     XrtStringBacking *empty = (XrtStringBacking *)borrow(&fixture, 1);
     CHECK(!empty->length && !empty->runes && empty->capacity == 1 && !empty->bytes[0]);
@@ -184,8 +184,9 @@ static void string_values(void) {
     CHECK(!memcmp(joined->bytes, first->bytes, 4) && !memcmp(joined->bytes + 4, first->bytes, 4));
     CHECK(!joined->bytes[8] && xr_signed_rc_read(&first->managed.references) == 1);
     XrtManagedHeader *pending = NULL;
-    OK(xrt_managed_slot_prepare(fixture.frame, 0, fixture.types.string, 43, &pending));
+    OK(xrt_managed_slot_prepare(fixture.frame, 0, fixture.types.string, sizeof(XrtStringBacking) + 3, &pending));
     XrtStringBacking *manual = (XrtStringBacking *)pending;
+    atomic_init(&manual->cached_hash, 0);
     manual->length = manual->runes = 1; manual->bytes[0] = 'z'; manual->bytes[1] = 0;
     BAD(xrt_string_backing_create(fixture.frame, 0, &fixture.types, "other", 5, 0));
     OK(xrt_managed_slot_commit(fixture.frame, 0));
@@ -576,7 +577,7 @@ static void sole_child_updates(void) {
     same_bill(fixture.billing, baseline);
     xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
     XrtManagedHeader *pending = NULL;
-    OK(xrt_managed_slot_prepare(fixture.frame, 1, fixture.types.string, 42, &pending));
+    OK(xrt_managed_slot_prepare(fixture.frame, 1, fixture.types.string, sizeof(XrtStringBacking) + 2, &pending));
     ((XrtStringBacking *)pending)->bytes[0] = 0;
     BAD(xrt_array_backing_update_create(fixture.frame, 1, &fixture.types, array, &edit));
     CHECK(borrow(&fixture, 1) == &array->managed);
@@ -844,7 +845,7 @@ static void map_cow_and_failures(void) {
     CHECK(xrt_map_backing_create(fixture.frame, 4, &fixture.types, many, numbers, 256) == XRT_MANAGED_LIMIT);
     CHECK(borrow(&fixture, 4) == &next->managed); same_bill(fixture.billing, before);
     XrtManagedHeader *pending = NULL;
-    OK(xrt_managed_slot_prepare(fixture.frame, 4, fixture.types.string, 42, &pending));
+    OK(xrt_managed_slot_prepare(fixture.frame, 4, fixture.types.string, sizeof(XrtStringBacking) + 2, &pending));
     update = (XrtMapUpdate){XRT_MAP_UPDATE_CLEAR, NULL, 0};
     BAD(xrt_map_backing_update_create(fixture.frame, 4, &fixture.types, next, &update, &removed));
     CHECK(borrow(&fixture, 4) == &next->managed);

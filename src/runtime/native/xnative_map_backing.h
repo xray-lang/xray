@@ -50,7 +50,7 @@ XR_FUNC XrtManagedStatus xrt_map_backing_display_held(XrtManagedFrame *, size_t,
 XR_FUNC XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *,
     const XrtMapUpdate *, bool *applied, bool *removed);
 /* The caller supplies an admitted local Map binding and its distinct update
- * workspace from the real private Frame. A miss has no effects. */
+ * workspace from the real private Frame. A miss leaves both slots and the Map unchanged. */
 XR_FUNC bool xrt_map_try_overwrite_local(const XrtManagedFrameLocations *,
     size_t binding, size_t workspace, const XrtStringBacking *, int64_t);
 /* All candidate key owners are installed before one commit. Source and RHS

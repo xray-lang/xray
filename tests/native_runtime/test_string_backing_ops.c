@@ -375,7 +375,7 @@ static void pod_display_values(void) {
     STATUS(xrt_string_backing_pod_display_create(f.frame, 0, &f.types, &description, &value), XRT_MANAGED_OOM);
     CHECK(borrow(&f, 0) == old); same_bill(&f, baseline); atomic_store(&f.audit.remaining, SIZE_MAX);
     XrtManagedHeader *pending = NULL;
-    OK(xrt_managed_slot_prepare(f.frame, 0, f.types.string, 42, &pending));
+    OK(xrt_managed_slot_prepare(f.frame, 0, f.types.string, sizeof(XrtStringBacking) + 2, &pending));
     XrtManagedSlotLocation location; OK(xrt_managed_slot_location(f.frame, 0, &location));
     baseline = xrt_billing_owner_stats(f.billing);
     STATUS(xrt_string_backing_pod_display_create(f.frame, 0, &f.types, &description, &value), XRT_MANAGED_ARGUMENT);
@@ -407,8 +407,10 @@ static void split_values(void) {
     result = xrt_string_backing_split_create(f.frame, 5, &f.types, unicode, separator, 2); STATUS(result.status, XRT_MANAGED_ARGUMENT);
     CHECK(borrow(&f, 5) == old && borrow(&f, 2) == &empty->managed); same_bill(&f, baseline);
     XrtManagedHeader *payload = NULL;
-    OK(xrt_managed_slot_prepare(f.frame, 23, f.types.string, 44, &payload));
-    XrtStringBacking *pending = (XrtStringBacking *)payload; pending->length = 3; pending->runes = 3; memcpy(pending->bytes, "own", 4);
+    OK(xrt_managed_slot_prepare(f.frame, 23, f.types.string, sizeof(XrtStringBacking) + 4, &payload));
+    XrtStringBacking *pending = (XrtStringBacking *)payload;
+    atomic_init(&pending->cached_hash, 0);
+    pending->length = 3; pending->runes = 3; memcpy(pending->bytes, "own", 4);
     XrtBillingStats with_pending = xrt_billing_owner_stats(f.billing);
     result = xrt_string_backing_split_create(f.frame, 5, &f.types, unicode, separator, 23); STATUS(result.status, XRT_MANAGED_ARGUMENT);
     CHECK(borrow(&f, 5) == old && !borrow(&f, 23)); same_bill(&f, with_pending);
@@ -458,7 +460,7 @@ static void failures_and_refunds(void) {
     STATUS(xrt_string_backing_repeat_create(f.frame, 3, &f.types, text, 1), XRT_MANAGED_REFCOUNT);
     CHECK(borrow(&f, 3) == old); atomic_store(&text->managed.references, 1); same_bill(&f, baseline);
     XrtManagedHeader *pending = NULL;
-    OK(xrt_managed_slot_prepare(f.frame, 3, f.types.string, 42, &pending));
+    OK(xrt_managed_slot_prepare(f.frame, 3, f.types.string, sizeof(XrtStringBacking) + 2, &pending));
     XrtStringBacking *partial = (XrtStringBacking *)pending;
     partial->length = partial->runes = 1; memcpy(partial->bytes, "p", 2);
     XrtBillingStats with_pending = xrt_billing_owner_stats(f.billing);
