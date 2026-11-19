@@ -332,6 +332,40 @@ static bool lir_home_callable_rows(LirHomeBuilder *b, const XrLirOwnershipPlan *
     }
     return true;
 }
+/* The verifier already confines managed owners and their last use to their
+ * defining block. Reject every non-suffix use, including selected edges, so
+ * no reference to this private immutable keeper can escape or be consumed. */
+static bool lir_home_literal_borrows(LirHomeCompiler *c, XrLirValueHome *values, size_t count) {
+    enum { SUFFIX = 1, RELEASE = 2, OTHER = 4 };
+    uint8_t *uses = xr_calloc(count, sizeof(*uses));
+    if (!uses) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot classify String literal suffix uses");
+    for (uint32_t block = 0; block < c->view.block_count; ++block) {
+        XrLirBlock id; XrLirBlockView view;
+        xr_lir_block_at(c->input, c->function, block, &id); xr_lir_block_view(c->input, id, &view);
+        for (uint32_t n = 0; n < view.instruction_count; ++n) {
+            XrLirInstructionView v;
+            if (xr_lir_instruction_view(c->input, id, n, &v) != XR_LIR_OK) {
+                xr_free(uses);
+                return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "String literal use disappeared");
+            }
+            for (uint32_t a = 0; a < v.operand_count; ++a) {
+                uint32_t operand = v.operands[a];
+                if (values[operand].literal_cache_owner == SIZE_MAX) continue;
+                if (v.op == XR_LIR_STRING_DROP) uses[operand] |= RELEASE;
+                else if (a == 1 && xr_lir_string_role(c->input, &v) == XR_LIR_STRING_OP_APPEND_OWNED)
+                    uses[operand] |= SUFFIX;
+                else uses[operand] |= OTHER;
+            }
+            for (uint32_t e = 0; e < v.edge_count; ++e)
+                for (uint32_t a = 0; a < v.edges[e].argument_count; ++a)
+                    uses[v.edges[e].arguments[a]] |= OTHER;
+        }
+    }
+    for (size_t v = 1; v < count; ++v)
+        values[v].literal_append_borrow = uses[v] == (SUFFIX | RELEASE);
+    xr_free(uses);
+    return true;
+}
 static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownership) {
     LirHomeCompiler *c = &b->compiler;
     size_t count = (size_t)c->view.value_count + 1;
@@ -374,6 +408,7 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
         if (borrowed) home->first_owner = SIZE_MAX;
         if (!lir_home_byte_spans(b, home, &spec)) return false;
     }
+    bool has_literal_cache = false;
     for (uint32_t block = 0; block < c->view.block_count; ++block) {
         XrLirBlock id; XrLirBlockView view;
         xr_lir_block_at(c->input, c->function, block, &id); xr_lir_block_view(c->input, id, &view);
@@ -396,8 +431,10 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
                 spec.kind != XRT_VALUE_STRING || home->literal_cache_owner != SIZE_MAX)
                 return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "literal cache lost its exact String home");
             if (!lir_home_reserve(b, &spec, &home->literal_cache_offset, &home->literal_cache_owner)) return false;
+            has_literal_cache = true;
         }
     }
+    if (has_literal_cache && !lir_home_literal_borrows(c, values, count)) return false;
     XrLirValueLayoutKey key; XrtValuePlanSpec result;
     if (lir_home_key(c->input, c->function, 0, c->view.result, &key)) {
         uint32_t ordinal;
