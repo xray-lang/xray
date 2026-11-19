@@ -11,6 +11,7 @@
  */
 #include "xnative_string_backing.h"
 #include "base/xchecks.h"
+#include "shared/xr_float_to_decimal.h"
 #include "shared/xr_utf8_core.h"
 #include <string.h>
 
@@ -112,4 +113,84 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_format_create(XrtManagedFrame *fr
     string->length = length;
     string->runes = scan.rune_count;
     return string_finish(frame, slot);
+}
+
+static const XrtValueImageType *tuple_format_unwrap(const XrtValueImage *image, XrValueFormatNode *node) {
+    const XrtValueImageType *type = &image->types[node->type - 1];
+    while (type->kind == XRT_VALUE_NULLABLE) {
+        const unsigned char *bytes = node->value;
+        uint8_t tag = bytes[type->nullable_tag];
+        if (tag > 1) return NULL;
+        if (!tag) {
+            node->value = NULL;
+            break;
+        }
+        node->value = bytes + type->nullable_payload;
+        node->type = type->nullable_element;
+        type = &image->types[node->type - 1];
+    }
+    return type;
+}
+
+static int tuple_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
+    const XrtValueImageType *type = tuple_format_unwrap(context, &node);
+    if (!type) return 0;
+    if (!node.value) {
+        view->kind = XR_VALUE_FORMAT_LITERAL;
+        view->name = "null";
+        view->name_size = 4;
+        return 1;
+    }
+    switch (type->kind) {
+        case XRT_VALUE_TUPLE:
+            view->kind = XR_VALUE_FORMAT_TUPLE;
+            view->unsigned_value = type->field_count;
+            return 1;
+        case XRT_VALUE_I64:
+            view->kind = XR_VALUE_FORMAT_SIGNED;
+            memcpy(&view->signed_value, node.value, sizeof(view->signed_value));
+            return 1;
+        case XRT_VALUE_BOOL:
+            view->kind = XR_VALUE_FORMAT_BOOL;
+            view->unsigned_value = *(const uint8_t *)node.value;
+            return view->unsigned_value <= 1;
+        case XRT_VALUE_F64: {
+            uint64_t bits = 0;
+            memcpy(&bits, node.value, sizeof(bits));
+            view->kind = XR_VALUE_FORMAT_BYTES;
+            view->bytes = view->scalar_bytes;
+            return xr_float_to_decimal(64, bits, (char *)view->scalar_bytes, sizeof(view->scalar_bytes), &view->size);
+        }
+        case XRT_VALUE_STRING: {
+            const XrtStringBacking *string = NULL;
+            memcpy(&string, node.value, sizeof(string));
+            if (!string) return 0;
+            view->kind = XR_VALUE_FORMAT_BYTES;
+            view->bytes = (const unsigned char *)string->bytes;
+            view->size = string->length;
+            view->quote = '"';
+            return 1;
+        }
+        default:
+            return 0;
+    }
+}
+
+static int tuple_format_child(const void *context, XrValueFormatNode node, uint32_t index,
+    XrValueFormatNode *child) {
+    const XrtValueImage *image = context;
+    const XrtValueImageType *type = tuple_format_unwrap(image, &node);
+    if (!type || !node.value || type->kind != XRT_VALUE_TUPLE || index >= type->field_count) return 0;
+    const XrtValueImageSlot *field = &image->slots[type->first_field + index];
+    *child = (XrValueFormatNode){(const unsigned char *)node.value + field->offset, field->type};
+    return 1;
+}
+
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_tuple_display_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const XrtValueImage *image, uint32_t type_id, const void *bytes) {
+    if (!bytes || !image || !image->types || !type_id || type_id > image->type_count ||
+        image->types[type_id - 1].kind != XRT_VALUE_TUPLE)
+        return XRT_MANAGED_ARGUMENT;
+    XrValueFormatReader reader = {image, tuple_format_read, tuple_format_child};
+    return xrt_string_backing_format_create(frame, slot, types, reader, (XrValueFormatNode){bytes, type_id});
 }

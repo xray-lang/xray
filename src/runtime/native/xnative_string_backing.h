@@ -14,6 +14,7 @@
 #include "xnative_backing_types.h"
 
 #include "xray_native_string_value.h"
+#include "xray_native_value_image.h"
 #include "base/xhash.h"
 #include "shared/xr_value_format_core.h"
 
@@ -53,4 +54,8 @@ XR_FUNC XrtManagedStatus xrt_string_backing_concat_create(XrtManagedFrame *, siz
 /* The adapter must keep every formatted borrow stable through allocation. */
 XR_FUNC XrtManagedStatus xrt_string_backing_format_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, XrValueFormatReader, XrValueFormatNode);
+/* Borrow a display-admitted Tuple from a validated value image. Its bytes
+ * and all active String leaves stay live and stable through allocation. */
+XR_FUNC XrtManagedStatus xrt_string_backing_tuple_display_create(XrtManagedFrame *, size_t,
+    const XrtBackingTypes *, const XrtValueImage *, uint32_t type_id, const void *bytes);
 #endif // XNATIVE_STRING_BACKING_H
