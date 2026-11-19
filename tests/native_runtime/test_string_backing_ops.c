@@ -28,7 +28,7 @@ typedef struct Audit {
     XrtManagedFrame *probe_frame;
     XrtManagedHeader *before_source, *before_result;
     size_t allocation_probes, retirement_probes, published_length;
-    bool probe_allocate, probe_free;
+    bool probe_allocate, probe_free, poison_allocations;
     void (*observe)(void *, void *, bool);
     void *observation;
 } Audit;
@@ -81,7 +81,11 @@ static void *provider_allocate(void *context, size_t bytes) {
         if (atomic_compare_exchange_weak(&audit->remaining, &remaining, remaining - 1)) break;
     }
     void *memory = xr_malloc(bytes);
-    if (memory) { atomic_fetch_add(&audit->bytes, bytes); atomic_fetch_add(&audit->blocks, 1); }
+    if (memory) {
+        if (audit->poison_allocations) memset(memory, 0xa5, bytes);
+        atomic_fetch_add(&audit->bytes, bytes);
+        atomic_fetch_add(&audit->blocks, 1);
+    }
     return memory;
 }
 static void provider_free(void *context, void *memory, size_t bytes) {
@@ -568,11 +572,15 @@ static void owned_append_growth_and_callbacks(void) {
     f.audit.probe_root = f.root; f.audit.probe_frame = f.frame;
     f.audit.before_source = borrow(&f, 0); f.audit.before_result = borrow(&f, 1);
     f.audit.published_length = 2; f.audit.probe_allocate = f.audit.probe_free = true;
+    f.audit.poison_allocations = true;
     XrtStringAppendOwned input = {0,1,2,suffix};
     OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
     f.audit.probe_allocate = f.audit.probe_free = false;
     CHECK(f.audit.allocation_probes && f.audit.retirement_probes >= 2);
     slot_is(&f, 1, "az");
+    XrtStringBacking *grown = string(&f, 1);
+    CHECK(grown->capacity > grown->length + 1);
+    CHECK((unsigned char)grown->bytes[grown->length + 1] == 0xa5);
     size_t calls = atomic_load(&f.audit.calls), source = 1;
     for (size_t i = 0; i < 4096; ++i) {
         input = (XrtStringAppendOwned){source,1-source,2,suffix};
