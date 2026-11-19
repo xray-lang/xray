@@ -1112,12 +1112,17 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
             continue;
         }
         if ((array && empty) || (!empty && (shape->id != entry->id ||
-            !xr_lir_internal_array_intrinsic_valid(entry, shape))))
+            !xr_lir_internal_array_intrinsic_valid(m, entry, shape))))
             return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array intrinsic shape is invalid");
         if (!empty) {
             XrLirType element = entry->result == XR_LIR_ARRAY ?
                 shape->result_element : shape->parameter_elements[0];
             uint32_t family = xr_lir_internal_array_family(element);
+            if (family == UINT32_MAX) {
+                if (m->types[element - XR_LIR_TYPE_COUNT].inline_array_operations[shape->operation - 1] != i + 1)
+                    return lir_status_error(d, XR_LIR_VERIFY_ERROR, "inline Array operation index is invalid");
+                continue;
+            }
             bool reference = entry->parameter_count && entry->parameters[0] == XR_LIR_ARRAY_REF;
             uint32_t *id = reference ? &array_ref_operations[family][(uint32_t)shape->operation - XR_LIR_ARRAY_OP_SET] :
                 &array_operations[family][(uint32_t)shape->operation - 1];
@@ -1129,6 +1134,27 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array operation index is invalid");
     if (memcmp(array_ref_operations, m->array_ref_operations, sizeof(array_ref_operations)))
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array reference operation index is invalid");
+    if (m->inline_array_count) {
+        uint32_t count = 0;
+        for (uint32_t t = 0; t < m->type_count; ++t) {
+            const XrLirTypeData *type = &m->types[t];
+            if (!type->inline_array_ordinal) continue;
+            if (type->inline_array_ordinal != ++count || !type->layout.size ||
+                (type->shape.kind != XR_LIR_TYPE_RECORD && type->shape.kind != XR_LIR_TYPE_TUPLE))
+                return lir_status_error(d, XR_LIR_VERIFY_ERROR, "inline Array element plan is invalid");
+            for (uint32_t op = 0; op < XR_LIR_ARRAY_OP_GET; ++op) {
+                uint32_t index = type->inline_array_operations[op];
+                if (!index || index > m->intrinsic_count || !m->array_intrinsics)
+                    return lir_status_error(d, XR_LIR_VERIFY_ERROR, "inline Array operation is missing");
+                const XrLirArrayIntrinsic *shape = &m->array_intrinsics[index - 1];
+                if ((uint32_t)shape->operation != op + 1 ||
+                    (shape->result_element ? shape->result_element : shape->parameter_elements[0]) != XR_LIR_TYPE_COUNT + t)
+                    return lir_status_error(d, XR_LIR_VERIFY_ERROR, "inline Array operation disagrees with its element");
+            }
+        }
+        if (count != m->inline_array_count)
+            return lir_status_error(d, XR_LIR_VERIFY_ERROR, "inline Array element count is invalid");
+    }
     for (uint32_t i = 0; i < m->literal_count; ++i)
         if (!m->literals[i].bytes || m->literals[i].length == SIZE_MAX)
             return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal record");
@@ -1140,7 +1166,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
     }
     for (uint32_t index = 0; index < m->function_count; ++index) {
         const XrLirFunctionData *f = &m->functions[index];
-        if (!lir_function_shape(m, f) || !lir_state_signature(m, f) || !lir_array_function_shape(f))
+        if (!lir_function_shape(m, f) || !lir_state_signature(m, f) || !lir_array_function_shape(m, f))
             return xr_lir_internal_error(d, "function signature or entry is invalid", index + 1, 0,
                                          0, NULL);
         if (index + 1 == m->state_entry && (f->kind != XR_LIR_FUNCTION_DEFINITION ||

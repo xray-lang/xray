@@ -112,7 +112,7 @@ static bool lir_state_instruction_types(const XrLirModule *m, const XrLirFunctio
     if (a != XR_LIR_STATE_REF || v->bits) return false;
     XrLirStateReference shape = f->values[v->operands[0] - 1].state_reference;
     if (shape.payload == XR_LIR_TYPE_INVALID) return false;
-    if (shape.payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(shape.array_element) :
+    if (shape.payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(m, shape.array_element) :
         shape.array_element != XR_LIR_TYPE_INVALID) return false;
     if (v->op == XR_LIR_STATE_PUBLISH) return v->type == XR_LIR_UNIT && shape.mutable;
     if (v->op == XR_LIR_STATE_READ) return v->type == shape.payload;

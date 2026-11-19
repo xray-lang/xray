@@ -84,7 +84,7 @@ static bool lir_type_index_grow(XrLirModule *m) {
 static bool lir_cell_payload_valid(const XrLirModule *m, XrLirType payload,
     XrLirType element, uint32_t ordinal) {
     if (!xr_lir_internal_type_valid(m, payload, true) || payload >= XR_LIR_TYPE_COUNT + ordinal) return false;
-    if (payload == XR_LIR_ARRAY) return xr_lir_internal_array_element(element);
+    if (payload == XR_LIR_ARRAY) return xr_lir_internal_array_family(element) != UINT32_MAX;
     if (element) return false;
     if (xr_lir_internal_slice_type(m, payload)) return false;
     if (payload < XR_LIR_TYPE_COUNT) return lir_pod_scalar(payload) < XR_POD_SCALAR_COUNT ||
@@ -469,6 +469,8 @@ XR_FUNC XrLirStatus xr_lir_copy_types(XrLirModule *target, const XrLirModule *so
             source->types[n].shape.kind==XR_LIR_TYPE_RECORD ? &source->types[n].record : NULL, &imported);
         if (status != XR_LIR_OK) return status;
         XR_DCHECK(imported == XR_LIR_TYPE_COUNT + n, "a fresh receiving pool preserves canonical order");
+        target->types[n].inline_array_ordinal = source->types[n].inline_array_ordinal;
     }
+    target->inline_array_count = source->inline_array_count;
     return XR_LIR_OK;
 }

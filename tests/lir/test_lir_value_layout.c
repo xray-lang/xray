@@ -514,9 +514,47 @@ static void slice_layouts(void) {
     CHECK(view(plan).size == sizeof(XrtReadonlyArraySlice) && !view(plan).owned_count);
     xrt_value_plan_drop((XrtValuePlan *)plan); CHECK(atomic_load(&owner.audit.final) == 1);
 }
+static void inline_array_layouts(void) {
+    XrLirModule *module = NULL;
+    LIR(xr_lir_module_create(NULL,&module));
+    const XrLirRecordField int_fields[] = {{.type=XR_LIR_STRING},{.type=XR_LIR_I64}};
+    const XrLirRecordField float_fields[] = {{.type=XR_LIR_STRING},{.type=XR_LIR_F64}};
+    XrLirType integers = 0, floats = 0;
+    LIR(xr_lir_tuple_type(module,int_fields,2,&integers));
+    LIR(xr_lir_tuple_type(module,float_fields,2,&floats));
+    LIR(xr_lir_require_inline_array_element(module,floats));
+    LIR(xr_lir_require_inline_array_element(module,integers));
+    LIR(xr_lir_array_catalog_install(module));
+    uint32_t integer_new = 0, float_new = 0;
+    LIR(xr_lir_array_operation(module,integers,XR_LIR_ARRAY_OP_NEW,&integer_new));
+    LIR(xr_lir_array_operation(module,floats,XR_LIR_ARRAY_OP_NEW,&float_new));
+    CHECK(integer_new != float_new);
+    uint32_t write = 0;
+    CHECK(xr_lir_array_operation(module,integers,XR_LIR_ARRAY_OP_SET,&write) == XR_LIR_UNSUPPORTED && !write);
+    LIR(xr_lir_module_finish(module,NULL));
+
+    Owner owner; owner_new(&owner,SIZE_MAX);
+    const XrLirValueLayoutKey roots[] = {{XR_LIR_ARRAY,integers,0},{XR_LIR_ARRAY,floats,0}};
+    XrLirValueLayouts *layouts = NULL;
+    LAYOUT(xr_lir_value_layouts_create(module,roots,2,owner.billing,&layouts));
+    const XrtValuePlan *integer_array = NULL, *float_array = NULL;
+    uint32_t integer_id = 0, float_id = 0;
+    LAYOUT(xr_lir_value_layouts_lookup(layouts,roots[0],&integer_array,&integer_id));
+    LAYOUT(xr_lir_value_layouts_lookup(layouts,roots[1],&float_array,&float_id));
+    CHECK(integer_id != float_id);
+    const XrtValuePlanSpec a = view(integer_array), b = view(float_array);
+    CHECK(a.kind == XRT_VALUE_ARRAY_INLINE && b.kind == a.kind &&
+        a.owned_count == 1 && b.owned_count == 1 && a.size == sizeof(void *) && b.size == a.size);
+    CHECK(a.element == get(layouts,integers) && b.element == get(layouts,floats) && a.element != b.element);
+    CHECK(view(a.element).owned_count == 1 && view(b.element).owned_count == 1);
+    xr_lir_value_layouts_destroy(layouts);
+    xr_lir_module_destroy(module);
+    owner_drop(&owner);
+    CHECK(atomic_load(&owner.audit.final) == 1);
+}
 int main(void) {
     natural_layouts(); creator_retirement(); failures_and_boundaries(); inline_overflow(); callable_layouts();
-    slice_layouts(); cell_layouts();
+    slice_layouts(); cell_layouts(); inline_array_layouts();
     puts("Admitted LIR value layouts: natural offsets, independent plans, billed rollback and real inline owners passed");
     return 0;
 }

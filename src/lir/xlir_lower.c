@@ -113,9 +113,17 @@ static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
 static bool lower_map_borrow(LowerFunction *, uint32_t, XrLirValue *);
 static bool lower_view_store(LowerFunction *, uint32_t, XrLirValue);
 
+static XrLirType lower_constructed_type(const Lower *c, XrXirType type) {
+    uint32_t id = (uint32_t)type;
+    return c->constructed_types && id >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
+        id - XR_XIR_CONSTRUCTED_TYPE_BASE < c->source->types->count
+        ? c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE] : XR_LIR_TYPE_INVALID;
+}
 static XrLirType lower_array_element(const Lower *c, XrXirType type) {
     if (!xr_xir_type_is_array(c->source->types, type)) return XR_LIR_TYPE_INVALID;
     XrXirType element = xr_xir_array_element(c->source->types, type);
+    XrLirType owned = lower_constructed_type(c, element);
+    if (xr_lir_inline_array_ordinal(c->module, owned)) return owned;
     return element == XR_XIR_I64 ? XR_LIR_I64 :
         element == XR_XIR_STRING ? XR_LIR_STRING :
         element == XR_XIR_U8 ? XR_LIR_U8 : element == XR_XIR_U64 ? XR_LIR_U64 : XR_LIR_TYPE_INVALID;
@@ -143,11 +151,8 @@ static bool lower_set_type(const Lower *c,XrXirType type) {
     return node && node->kind==XR_XIR_TYPE_SET && node->element==XR_XIR_I64 && node->result==XR_XIR_UNIT;
 }
 static XrLirType lower_type(const Lower *c, XrXirType type) {
-    uint32_t id = (uint32_t)type;
-    if (c->constructed_types && id >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
-        id - XR_XIR_CONSTRUCTED_TYPE_BASE < c->source->types->count &&
-        c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE])
-        return c->constructed_types[id - XR_XIR_CONSTRUCTED_TYPE_BASE];
+    XrLirType owned = lower_constructed_type(c, type);
+    if (owned) return owned;
     if (lower_set_type(c,type))return XR_LIR_SET_I64;
     if(xr_xir_type_is_cell(c->source->types,type) && lower_set_type(c,xr_xir_cell_element(c->source->types,type)))return XR_LIR_SET_I64_CELL;
     if (lower_map_type(c, type)) return XR_LIR_MAP_STRING_I64;
@@ -155,7 +160,7 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
         lower_map_type(c, xr_xir_cell_element(c->source->types, type))) return XR_LIR_MAP_STRING_I64_CELL;
     if (lower_array_element(c, type)) return XR_LIR_ARRAY;
     if (xr_xir_type_is_cell(c->source->types, type) &&
-        lower_array_element(c, xr_xir_cell_element(c->source->types, type)))
+        xr_lir_internal_array_family(lower_array_element(c, xr_xir_cell_element(c->source->types, type))) != UINT32_MAX)
         return XR_LIR_ARRAY_CELL;
     if (xr_xir_type_is_cell(c->source->types, type) &&
         xr_xir_cell_element(c->source->types, type) == XR_XIR_STRING) return XR_LIR_STRING_CELL;
@@ -338,6 +343,15 @@ static bool lower_receive_type(Lower *, XrXirType);
  * An unused source descriptor cannot change the retained program's frontier. */
 static bool lower_receive_type(Lower *c, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
+    if (node && node->kind == XR_XIR_TYPE_ARRAY) {
+        const XrXirTypeNode *row = xr_xir_type_node(c->source->types, node->element);
+        XrXirTypeDescription record = {0};
+        if (row && (row->kind == XR_XIR_TYPE_TUPLE ||
+            (row->kind == XR_XIR_TYPE_NOMINAL && lower_record_description(c, node->element, &record)))) {
+            if (!lower_receive_record_shapes(c, node->element)) return false;
+            return lower_build(c, xr_lir_require_inline_array_element(c->module, lower_type(c, node->element)));
+        }
+    }
     if (node && node->kind == XR_XIR_TYPE_SLICE) {
         XrLirType element = lower_type(c, node->element);
         if (element != XR_LIR_I64 && element != XR_LIR_U8) return lower_unsupported(c, "readonly Array Slice element type");
