@@ -38,7 +38,7 @@ static XrtManagedStatus rbc_value_map_literal(const XrRbcModule *module, XrRbcSt
     const XrLirValueHome *home = rbc_value_home(activation->code,access.result);
     if (!home) return XRT_MANAGED_ARGUMENT;
     xrt_native_map_literal_create(activation->frame,home->temporary_first_owner,literal,inputs,source);
-    return rbc_value_array_publish(activation,access.result);
+    return rbc_value_publish_leaf(activation,access.result);
 }
 static XrtManagedStatus rbc_value_map_new(XrRbcStack *stack,RbcValueActivation *activation,
     XrRbcValueAccess access,const XrtBackingTypes *types) {
@@ -57,7 +57,7 @@ static XrtManagedStatus rbc_value_map_new(XrRbcStack *stack,RbcValueActivation *
     }
     const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
     XrtManagedStatus status=xrt_map_backing_create(activation->frame,home->temporary_first_owner,types,keys,values,count);
-    return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+    return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
 }
 static inline const XrtManagedHeader *rbc_map_borrow_local_slot(
     const XrtManagedFrameLocations *locations, uint32_t index) {
@@ -139,7 +139,7 @@ static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack 
         XrtMapProjection projection=access.index==XR_LIR_MAP_OP_DISPLAY ? XRT_MAP_DISPLAY :
             access.index==XR_LIR_MAP_OP_KEYS ? XRT_MAP_KEYS : XRT_MAP_VALUES;
         xrt_native_map_project(activation->frame,home->temporary_first_owner,&map->managed,projection,source);
-        return rbc_value_array_publish(activation,access.result);
+        return rbc_value_publish_leaf(activation,access.result);
     }
     return XRT_MANAGED_ARGUMENT;
 }

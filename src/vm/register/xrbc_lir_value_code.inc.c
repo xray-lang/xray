@@ -529,11 +529,14 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         }
         break;
     }
-    case XR_LIR_RECORD_NEW:
-        access.operation=XR_RBC_VALUE_RECORD_NEW; access.source=access.other=0; access.count=i->operand_count;
+    case XR_LIR_RECORD_NEW: case XR_LIR_CLASS_NEW:
+        access.operation=i->op==XR_LIR_CLASS_NEW ? XR_RBC_VALUE_CLASS_NEW : XR_RBC_VALUE_RECORD_NEW;
+        access.source=access.other=0; access.count=i->operand_count;
         if (!rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first)) return false;
         break;
-    case XR_LIR_RECORD_FIELD: access.operation=XR_RBC_VALUE_RECORD_FIELD; access.index=(uint32_t)i->bits; break;
+    case XR_LIR_RECORD_FIELD: case XR_LIR_CLASS_FIELD:
+        access.operation=i->op==XR_LIR_CLASS_FIELD ? XR_RBC_VALUE_CLASS_FIELD : XR_RBC_VALUE_RECORD_FIELD;
+        access.index=(uint32_t)i->bits; break;
     case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
     case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP: {
         XrLirType type=(i->op==XR_LIR_NULLABLE_NONE || i->op==XR_LIR_NULLABLE_SOME) ? i->type : rbc_lir_value_type(c,access.source);

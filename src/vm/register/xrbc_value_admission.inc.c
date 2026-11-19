@@ -176,7 +176,8 @@ static bool rbc_value_inline(const XrRbcModule *module,const XrRbcValueCode *cod
     const XrtValueImageType *type=&image->types[home->type-1];
     if (type->kind==XRT_VALUE_FUNCTION) return rbc_value_function(module,code,value,destination);
     if (type->kind==XRT_VALUE_CELL) return rbc_value_cell(module,code,value,destination);
-    return (xrt_value_kind_has_fields(type->kind) || type->kind==XRT_VALUE_NULLABLE) && home->size==type->size &&
+    return (xrt_value_kind_has_fields(type->kind) || type->kind==XRT_VALUE_NULLABLE ||
+        type->kind==XRT_VALUE_CLASS) && home->size==type->size &&
         home->owner_count==type->owned_count && (!destination || (!home->parameter && home->offset!=SIZE_MAX &&
             (!home->owner_count || (home->temporary_offset!=SIZE_MAX && home->temporary_first_owner<code->homes->frame.slot_count))));
 }
@@ -511,7 +512,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     if (op != XR_RBC_VALUE_ACCESS && (!xr_rbc_module_code_owner(module) ||
         (code->array_region_accesses && code->array_region_accesses[index].region))) return false;
     if (a.operation!=XR_RBC_VALUE_CALL && a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY &&
-        a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_SET && a.operation!=XR_RBC_VALUE_MAP_LITERAL && a.operation!=XR_RBC_VALUE_RECORD_NEW &&
+        a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_SET && a.operation!=XR_RBC_VALUE_MAP_LITERAL && a.operation!=XR_RBC_VALUE_RECORD_NEW && a.operation!=XR_RBC_VALUE_CLASS_NEW &&
         a.operation!=XR_RBC_VALUE_BINDING_NEW && a.operation!=XR_RBC_VALUE_BINDING_WRITE &&
         a.operation!=XR_RBC_VALUE_STRING_APPEND_BINDING &&
         a.operation!=XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_FUNCTION_CALL &&
@@ -520,7 +521,8 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_STATE_GROUP_INITIALIZE &&
         a.operation!=XR_RBC_VALUE_CALL &&
         a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY && a.operation!=XR_RBC_VALUE_MAP &&
-        a.operation!=XR_RBC_VALUE_DISPLAY && a.operation!=XR_RBC_VALUE_RECORD_FIELD && a.operation!=XR_RBC_VALUE_RETURN &&
+        a.operation!=XR_RBC_VALUE_DISPLAY && a.operation!=XR_RBC_VALUE_RECORD_FIELD && a.operation!=XR_RBC_VALUE_CLASS_FIELD &&
+        a.operation!=XR_RBC_VALUE_RETURN &&
         !(a.operation>=XR_RBC_VALUE_BINDING_NEW && a.operation<=XR_RBC_VALUE_BINDING_DROP) &&
         a.operation<XR_RBC_VALUE_FUNCTION_NEW && a.index) return false;
     switch (a.operation) {
@@ -626,7 +628,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             callee->homes->result_type==rbc_value_home(code,a.result)->type :
             target->result_kind==XR_RBC_BITS && (!a.result || rbc_value_scalar(code,function,a.result,XR_RBC_BITS));
     }
-    case XR_RBC_VALUE_RECORD_NEW: case XR_RBC_VALUE_RECORD_FIELD:
+    case XR_RBC_VALUE_RECORD_NEW: case XR_RBC_VALUE_RECORD_FIELD: case XR_RBC_VALUE_CLASS_NEW: case XR_RBC_VALUE_CLASS_FIELD:
     case XR_RBC_VALUE_NULLABLE_NONE: case XR_RBC_VALUE_NULLABLE_SOME:
     case XR_RBC_VALUE_NULLABLE_IS_SOME: case XR_RBC_VALUE_NULLABLE_UNWRAP:
         return rbc_value_inline_access_valid(module,code,function,a);

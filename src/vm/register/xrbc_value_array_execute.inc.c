@@ -48,12 +48,6 @@ static XrtManagedStatus rbc_value_binding_place(const XrRbcModule *module,XrRbcS
     if (status==XRT_MANAGED_OK) *place=(XrtPlace){.external=external,.nulls=XRT_PLACE_NONNULL};
     return status;
 }
-static XrtManagedStatus rbc_value_array_publish(RbcValueActivation *activation,uint32_t result) {
-    XrtPlace destination,temporary;
-    XrtManagedStatus status=rbc_value_place((RbcValueOrigin){activation,result},false,0,&destination);
-    if (status==XRT_MANAGED_OK) status=rbc_value_place((RbcValueOrigin){activation,result},true,0,&temporary);
-    return status==XRT_MANAGED_OK ? xrt_place_move_replace(destination,temporary,NULL) : status;
-}
 static XrtManagedStatus rbc_value_array_item(XrRbcStack *stack,RbcValueActivation *activation,
     uint32_t value,XrtBackingArrayKind kind,XrtArrayItem *item) {
     *item=(XrtArrayItem){.kind=kind};
@@ -219,7 +213,7 @@ static XrtManagedStatus rbc_value_array_inline(const XrRbcModule *module,XrRbcSt
         if (status==XRT_MANAGED_OK)
             status=xrt_array_backing_inline_create(activation->frame,home->temporary_first_owner,binding.ops,
                 activation->snapshots,access.count,access.count);
-        return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+        return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
     }
     if (access.index!=XR_LIR_ARRAY_OP_GET) return XRT_MANAGED_ARGUMENT;
     XrRbcRegister *index=rbc_value_register(stack,activation,args[1]);
@@ -269,7 +263,7 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
             status=rbc_value_array_item(stack,activation,args[1],kind,&item);
             if (status==XRT_MANAGED_OK) status=xrt_array_backing_repeat_create(activation->frame,result->temporary_first_owner,types,&item,count);
         }
-        return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+        return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
     }
     XrtPlace place; const XrtManagedHeader *header=NULL;
     XrtManagedStatus status=rbc_value_place(rbc_value_origin(activation,args[0]),false,0,&place);
@@ -278,7 +272,7 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     const XrtArrayBacking *array=(const XrtArrayBacking *)header;
     if (access.index==XR_LIR_ARRAY_OP_DISPLAY) {
         status=xrt_array_backing_display_create(activation->frame,result->temporary_first_owner,types,array,kind);
-        return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+        return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
     }
     XrRbcRegister *output=rbc_value_register(stack,activation,access.result);
     if (access.index==XR_LIR_ARRAY_OP_LEN) {
@@ -292,7 +286,7 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     if (status!=XRT_MANAGED_OK) return status;
     if (kind==XRT_BACKING_ARRAY_STRING) {
         status=xrt_backing_slot_copy(activation->frame,result->temporary_first_owner,&item.value.string->managed);
-        return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+        return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
     }
     if (!output) return XRT_MANAGED_ARGUMENT;
     output->bits=kind==XRT_BACKING_ARRAY_U8 ? item.value.u8 : kind==XRT_BACKING_ARRAY_U64 ? item.value.u64 : (uint64_t)item.value.i64;

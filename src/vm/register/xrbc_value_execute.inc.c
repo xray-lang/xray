@@ -160,6 +160,14 @@ static bool rbc_value_capacities(const XrRbcValueCode *code, const XrtValueImage
     }
     for (size_t n = 0; n < code->access_count; ++n) {
         XrRbcValueAccess access = code->accesses[n];
+        if (access.operation == XR_RBC_VALUE_CLASS_NEW) {
+            const XrLirValueHome *home=rbc_value_home(code,access.result);
+            if (!image || !image->types || !home || !home->type || home->type>image->type_count) return false;
+            const XrtValueImageType *type=&image->types[home->type-1];
+            if (type->kind!=XRT_VALUE_CLASS || !type->element || type->element>=home->type) return false;
+            size_t bytes=image->types[type->element-1].size;
+            if (bytes>*snapshots) *snapshots=bytes;
+        }
         if (access.operation == XR_RBC_VALUE_MAP_LITERAL) {
             size_t count = access.count;
             if (count > SIZE_MAX / sizeof(XrtMapLiteralInput)) return false;
@@ -337,7 +345,8 @@ static XrtManagedStatus rbc_value_place(RbcValueOrigin origin, bool temporary, s
     if (!home || !image || !home->type || home->type>image->type_count) return XRT_MANAGED_ARGUMENT;
     XrtValueKind kind=image->types[home->type-1].kind;
     XrtPlaceNull nulls = kind == XRT_VALUE_STRING || xrt_value_kind_is_array(kind) ||
-        kind == XRT_VALUE_MAP_STRING_I64 || kind == XRT_VALUE_SET_I64 ? XRT_PLACE_NONNULL : XRT_PLACE_NULLABLE;
+        kind == XRT_VALUE_MAP_STRING_I64 || kind == XRT_VALUE_SET_I64 || kind == XRT_VALUE_CLASS ?
+        XRT_PLACE_NONNULL : XRT_PLACE_NULLABLE;
     return xr_rbc_value_home_place((XrRbcHomeLocation){origin.activation->code->homes,
         origin.activation->frame,origin.value,temporary},leaf,nulls,out);
 }
@@ -1239,6 +1248,12 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
     stack->cell_count=frame.cell_base; stack->spill_count=frame.spill_base; --stack->depth;
     return XR_RBC_OK;
 }
+static XrtManagedStatus rbc_value_publish_leaf(RbcValueActivation *activation,uint32_t result) {
+    XrtPlace destination,temporary;
+    XrtManagedStatus status=rbc_value_place((RbcValueOrigin){activation,result},false,0,&destination);
+    if (status==XRT_MANAGED_OK) status=rbc_value_place((RbcValueOrigin){activation,result},true,0,&temporary);
+    return status==XRT_MANAGED_OK ? xrt_place_move_replace(destination,temporary,NULL) : status;
+}
 #include "xrbc_value_inline_execute.inc.c"
 #include "xrbc_value_array_execute.inc.c"
 #include "xrbc_value_array_region.inc.c"
@@ -1270,7 +1285,7 @@ static XrtManagedStatus rbc_value_display(const XrRbcModule *module,XrRbcStack *
         else status=xrt_string_backing_pod_display_create(activation->frame,result->temporary_first_owner,
             types,&activation->code->displays[access.index],payload.address);
     }
-    return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+    return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
 }
 static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc, uint32_t source) {

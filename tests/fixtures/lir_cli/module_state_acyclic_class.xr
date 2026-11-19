@@ -1,0 +1,33 @@
+class Box<T> {
+    value: T
+
+    init(value: T) {
+        this.value = value
+    }
+}
+
+class Pair<A, B> {
+    first: A
+    second: B
+
+    init(first: A, second: B) {
+        this.first = first
+        this.second = second
+    }
+}
+
+fn buildPair() -> Pair<string, i64> {
+    return Pair("year", 2026)
+}
+
+fn readName(box: Box<string>) -> string {
+    return box.value
+}
+
+var number = Box(42)
+var word = Box("hello")
+var pair = buildPair()
+print(number.value)
+print(readName(word))
+print(pair.first)
+print(pair.second)

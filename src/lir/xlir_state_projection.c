@@ -49,7 +49,8 @@ static XrLirValueLayoutStatus state_key(const XrLirModule *module, const XrLirSt
         XrLirTypeView shape;
         if (xr_lir_type_view(module,type,&shape) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         supported = shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
-            shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE || shape.kind == XR_LIR_TYPE_CALLABLE;
+            shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE || shape.kind == XR_LIR_TYPE_CALLABLE ||
+            shape.kind == XR_LIR_TYPE_CLASS;
     }
     if (!supported && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64 &&
         type != XR_LIR_SET_I64)
