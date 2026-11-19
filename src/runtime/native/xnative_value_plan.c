@@ -11,6 +11,7 @@
  *   leaves before publication; physical object retirement stays in the kernel.
  */
 #include "xnative_value_plan.h"
+#include "xnative_managed_root.h"
 #include "xray_native_array_slice.h"
 #include "xray_native_function.h"
 #include "base/xchecks.h"
@@ -312,6 +313,94 @@ static bool plan_lease_retain(void *plan) { return xrt_value_plan_retain(plan); 
 static void plan_lease_drop(void *plan) { xrt_value_plan_drop(plan); }
 XR_FUNCDEF XrtManagedLease xrt_value_plan_lease(XrtValuePlan *plan) {
     return plan ? (XrtManagedLease){plan, plan_lease_retain, plan_lease_drop} : (XrtManagedLease){0};
+}
+XR_FUNCDEF XrtManagedStatus xrt_inline_payload_backing_bind(XrtBillingOwner *billing,
+    const XrtValuePlanSpec *payload, size_t *shifted_offsets, XrtManagedLease code, XrtManagedOps **empty) {
+    if (!billing || !payload || !empty || *empty || !payload->alignment ||
+        sizeof(XrtManagedHeader) % payload->alignment ||
+        (payload->owned_count && (!payload->owned_offsets || !shifted_offsets)))
+        return XRT_MANAGED_ARGUMENT;
+    if (payload->size > SIZE_MAX - sizeof(XrtManagedHeader)) return XRT_MANAGED_OVERFLOW;
+    for (size_t i = 0; i < payload->owned_count; ++i)
+        shifted_offsets[i] = sizeof(XrtManagedHeader) + payload->owned_offsets[i];
+    size_t alignment = payload->alignment > alignof(XrtManagedHeader) ? payload->alignment : alignof(XrtManagedHeader);
+    XrtRuntimeTypeSpec physical = {.fixed_size=sizeof(XrtManagedHeader) + payload->size, .alignment=alignment,
+        .capacity_offset=SIZE_MAX, .child_offsets=payload->owned_count ? shifted_offsets : NULL,
+        .child_count=payload->owned_count, .code=code};
+    XrtRuntimeTypePlan *received = NULL;
+    XrtManagedStatus status = xrt_runtime_type_plan_new(billing, &physical, &received);
+    if (status == XRT_MANAGED_OK) status = xrt_managed_ops_bind(billing, received, empty);
+    xrt_runtime_type_plan_drop(received);
+    return status;
+}
+static XrtManagedHeader *payload_child(const void *payload, size_t offset);
+
+static bool class_plan_retain(void *plan) {
+    return plan && ((XrtValuePlan *)plan)->view.kind == XRT_VALUE_CLASS && xrt_value_plan_retain(plan);
+}
+static void class_plan_drop(void *plan) { xrt_value_plan_drop(plan); }
+XR_FUNCDEF XrtManagedStatus xrt_class_backing_bind(XrtBillingOwner *billing,
+    const XrtValuePlan *class_plan, XrtManagedOps **empty) {
+    if (!class_plan || class_plan->view.kind != XRT_VALUE_CLASS) return XRT_MANAGED_ARGUMENT;
+    const XrtValuePlanSpec *payload = &class_plan->view.element->view;
+    size_t local_offsets[8], *offsets = local_offsets;
+    size_t bytes = 0;
+    XrtManagedStatus status = XRT_MANAGED_OK;
+    if (payload->owned_count > sizeof(local_offsets) / sizeof(*local_offsets)) {
+        void *memory = NULL;
+        if (!extent_add(&bytes, payload->owned_count, sizeof(*offsets))) return XRT_MANAGED_OVERFLOW;
+        status = xrt_managed_metadata_allocate(billing, bytes, &memory);
+        if (status != XRT_MANAGED_OK) return status;
+        offsets = memory;
+    }
+    status = xrt_inline_payload_backing_bind(billing, payload, offsets,
+        (XrtManagedLease){(void *)class_plan, class_plan_retain, class_plan_drop}, empty);
+    if (bytes) xrt_managed_metadata_free(billing, offsets, bytes);
+    return status;
+}
+typedef struct ClassConstruction {
+    const XrtValuePlan *payload;
+    const void *row;
+} ClassConstruction;
+static XrtManagedStatus class_initialize(XrtManagedHeader *pending, void *context) {
+    const ClassConstruction *construction = context;
+    return xrt_value_copy_empty(construction->payload, construction->row, pending + 1);
+}
+static void class_finish(void *context) {
+    /* Inputs borrow existing owners and need no retirement. */
+    (void)context;
+}
+XR_FUNCDEF XrtManagedStatus xrt_class_create(XrtManagedFrame *frame, size_t slot,
+    XrtManagedOps *ops, const void *row) {
+    const XrtRuntimeTypeSpec *physical = NULL;
+    XrtManagedStatus status = xrt_managed_ops_producer_borrow(ops, class_plan_retain, class_plan_drop, &physical);
+    if (status != XRT_MANAGED_OK) return status;
+    const XrtValuePlan *plan = physical->code.context;
+    const XrtValuePlan *payload = plan->view.element;
+    if (!row || (uintptr_t)row % payload->view.alignment) return XRT_MANAGED_ARGUMENT;
+    for (size_t i = 0; i < payload->view.field_count; ++i) {
+        const XrtValueSlotSpec *field = &payload->view.fields[i];
+        if (field->type->view.kind == XRT_VALUE_STRING && !payload_child(row, field->offset))
+            return XRT_MANAGED_ARGUMENT;
+    }
+    ClassConstruction context = {payload,row};
+    const XrtManagedSlotConstruction construction = {class_initialize,class_finish,&context};
+    return xrt_managed_slot_construct(frame, slot, ops, physical->fixed_size, &construction);
+}
+XR_FUNCDEF bool xrt_class_backing_matches(const XrtManagedHeader *owner, const XrtValuePlan *expected) {
+    const XrtRuntimeTypeSpec *physical = NULL;
+    return expected && xrt_managed_producer_borrow(owner, class_plan_retain, class_plan_drop, &physical) == XRT_MANAGED_OK
+        && physical->code.context == expected;
+}
+XR_FUNCDEF XrtManagedStatus xrt_class_field_borrow(const XrtManagedHeader *owner,
+    const XrtValuePlan *expected, size_t index, const XrtValuePlan **empty_type, const void **empty_payload) {
+    if (!empty_type || *empty_type || !empty_payload || *empty_payload ||
+        !xrt_class_backing_matches(owner, expected)) return XRT_MANAGED_ARGUMENT;
+    const XrtValuePlanSpec *row = &expected->view.element->view;
+    if (index >= row->field_count) return XRT_MANAGED_BOUNDS;
+    *empty_type = row->fields[index].type;
+    *empty_payload = (const unsigned char *)(owner + 1) + row->fields[index].offset;
+    return XRT_MANAGED_OK;
 }
 static bool payload_valid(const XrtValuePlan *plan, const void *payload) {
     return plan && (!plan->view.size || (payload && (uintptr_t)payload % plan->view.alignment == 0));

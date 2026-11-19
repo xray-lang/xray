@@ -15,11 +15,16 @@
 #include "base/xchecks.h"
 #include <stdalign.h>
 
+typedef struct ImageBacking {
+    const XrtValuePlan *plan;
+    XrtManagedOps *ops;
+    XrtValueKind kind;
+} ImageBacking;
 struct XrtValueImagePlans {
     XrtBillingOwner *billing;
     size_t bytes;
     uint32_t count;
-    XrtBoundInlineArray *inline_arrays;
+    ImageBacking *backings;
 };
 typedef struct ImageScratch {
     void *memory;
@@ -29,9 +34,9 @@ typedef struct ImageScratch {
 } ImageScratch;
 _Static_assert(sizeof(XrtValueImagePlans) % alignof(XrtValuePlan *) == 0,
     "receiving plan references follow the aligned set prefix");
-_Static_assert(alignof(XrtValuePlan *) >= alignof(XrtBoundInlineArray) &&
-    sizeof(XrtValuePlan *) % alignof(XrtBoundInlineArray) == 0,
-    "inline Array bindings follow the aligned plan vector");
+_Static_assert(alignof(XrtValuePlan *) >= alignof(ImageBacking) &&
+    sizeof(XrtValuePlan *) % alignof(ImageBacking) == 0,
+    "object bindings follow the aligned plan vector");
 _Static_assert(sizeof(XrtValueSlotSpec) % alignof(XrtValueParameterSpec) == 0,
     "cold scratch preserves parameter vector alignment");
 
@@ -55,7 +60,7 @@ static bool image_extent(size_t *bytes, size_t count, size_t stride) {
     *bytes += count * stride;
     return true;
 }
-static bool image_shape(const XrtValueImage *image, bool *inline_arrays) {
+static bool image_shape(const XrtValueImage *image, bool *has_backings) {
     if (!image || ((image->type_count != 0) != (image->types != NULL)) ||
         ((image->slot_count != 0) != (image->slots != NULL)) ||
         ((image->parameter_count != 0) != (image->parameters != NULL)) ||
@@ -76,7 +81,7 @@ static bool image_shape(const XrtValueImage *image, bool *inline_arrays) {
     }
     for (uint32_t i = 0; i < image->type_count; ++i) {
         const XrtValueImageType *type = &image->types[i];
-        *inline_arrays |= type->kind == XRT_VALUE_ARRAY_INLINE;
+        *has_backings |= type->kind == XRT_VALUE_ARRAY_INLINE || type->kind == XRT_VALUE_CLASS;
         if ((unsigned)type->kind > XRT_VALUE_CLASS || type->throws > 1 ||
             !image_span(type->first_owned, type->owned_count, image->owned_count) ||
             !image_span(type->first_field, type->field_count, image->slot_count) ||
@@ -156,8 +161,8 @@ XR_FUNCDEF void xrt_value_image_drop(XrtValueImagePlans **owned) {
     *owned = NULL;
     XrtBillingOwner *billing = set->billing;
     size_t bytes = set->bytes;
-    if (set->inline_arrays)
-        for (uint32_t i = set->count; i; --i) xrt_managed_ops_drop(set->inline_arrays[i - 1].ops);
+    if (set->backings)
+        for (uint32_t i = set->count; i; --i) xrt_managed_ops_drop(set->backings[i - 1].ops);
     for (uint32_t i = set->count; i; --i) xrt_value_plan_drop(image_plans(set)[i - 1]);
     xrt_managed_metadata_free(billing, set, bytes);
     xrt_billing_owner_drop(billing);
@@ -166,14 +171,14 @@ XR_FUNCDEF XrtManagedStatus xrt_value_image_bind(XrtBillingOwner *billing,
     const XrtValueImage *image, XrtManagedLease code, XrtValueImagePlans **output) {
     if (!billing || !image || !output || *output || !image_lease_valid(code)) return XRT_MANAGED_ARGUMENT;
     if (code.retain && !code.retain(code.context)) return XRT_MANAGED_REFCOUNT;
-    bool arrays = false;
-    XrtManagedStatus status = image_shape(image, &arrays) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+    bool has_backings = false;
+    XrtManagedStatus status = image_shape(image, &has_backings) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
     XrtValueImagePlans *set = NULL;
     ImageScratch scratch = {0};
     if (status == XRT_MANAGED_OK && image->type_count) {
         size_t bytes = sizeof(*set);
         if (!image_extent(&bytes, image->type_count, sizeof(XrtValuePlan *)) ||
-            (arrays && !image_extent(&bytes, image->type_count, sizeof(XrtBoundInlineArray)))) status = XRT_MANAGED_OVERFLOW;
+            (has_backings && !image_extent(&bytes, image->type_count, sizeof(ImageBacking)))) status = XRT_MANAGED_OVERFLOW;
         else if (!xrt_billing_owner_retain(billing)) status = XRT_MANAGED_REFCOUNT;
         else {
             void *memory = NULL;
@@ -182,8 +187,8 @@ XR_FUNCDEF XrtManagedStatus xrt_value_image_bind(XrtBillingOwner *billing,
             else {
                 set = memory;
                 *set = (XrtValueImagePlans){.billing = billing, .bytes = bytes};
-                if (arrays)
-                    set->inline_arrays = (XrtBoundInlineArray *)(image_plans(set) + image->type_count);
+                if (has_backings)
+                    set->backings = (ImageBacking *)(image_plans(set) + image->type_count);
                 status = image_scratch(billing, image, &scratch);
             }
         }
@@ -193,11 +198,16 @@ XR_FUNCDEF XrtManagedStatus xrt_value_image_bind(XrtBillingOwner *billing,
             status = xrt_value_plan_new(billing, &spec, &plan);
             if (status == XRT_MANAGED_OK) {
                 image_plans(set)[set->count++] = plan;
-                if (set->inline_arrays) set->inline_arrays[i] = (XrtBoundInlineArray){0};
-                if (spec.kind == XRT_VALUE_ARRAY_INLINE) {
-                    XrtBoundInlineArray *array = &set->inline_arrays[i];
-                    status = xrt_array_backing_inline_bind(billing, spec.element, &array->ops);
-                    if (status == XRT_MANAGED_OK) array->element = spec.element;
+                if (set->backings) {
+                    ImageBacking *backing = &set->backings[i];
+                    *backing = (ImageBacking){0};
+                    if (spec.kind == XRT_VALUE_ARRAY_INLINE) {
+                        status = xrt_array_backing_inline_bind(billing, spec.element, &backing->ops);
+                        if (status == XRT_MANAGED_OK) *backing = (ImageBacking){spec.element,backing->ops,spec.kind};
+                    } else if (spec.kind == XRT_VALUE_CLASS) {
+                        status = xrt_class_backing_bind(billing, plan, &backing->ops);
+                        if (status == XRT_MANAGED_OK) *backing = (ImageBacking){plan,backing->ops,spec.kind};
+                    }
                 }
             }
         }
@@ -218,7 +228,16 @@ XR_FUNCDEF XrtManagedStatus xrt_value_image_get(const XrtValueImagePlans *set, u
 XR_FUNCDEF XrtManagedStatus xrt_value_image_inline_array(const XrtValueImagePlans *set, uint32_t id,
     XrtBoundInlineArray *empty) {
     if (!set || !id || id > set->count || !empty || empty->element || empty->ops ||
-        !set->inline_arrays || !set->inline_arrays[id - 1].ops) return XRT_MANAGED_ARGUMENT;
-    *empty = set->inline_arrays[id - 1];
+        !set->backings || set->backings[id - 1].kind != XRT_VALUE_ARRAY_INLINE) return XRT_MANAGED_ARGUMENT;
+    ImageBacking backing = set->backings[id - 1];
+    *empty = (XrtBoundInlineArray){backing.plan,backing.ops};
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_value_image_class(const XrtValueImagePlans *set, uint32_t id,
+    XrtBoundClass *empty) {
+    if (!set || !id || id > set->count || !empty || empty->plan || empty->ops ||
+        !set->backings || set->backings[id - 1].kind != XRT_VALUE_CLASS) return XRT_MANAGED_ARGUMENT;
+    ImageBacking backing = set->backings[id - 1];
+    *empty = (XrtBoundClass){backing.plan,backing.ops};
     return XRT_MANAGED_OK;
 }
