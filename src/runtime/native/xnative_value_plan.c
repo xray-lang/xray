@@ -88,12 +88,12 @@ static bool scalar_layout(XrtValueKind kind, size_t *size, size_t *alignment) {
 }
 static bool managed_nullable(const XrtValuePlan *plan) {
     while (plan->view.kind == XRT_VALUE_NULLABLE) plan = plan->view.nullable.element;
-    return plan->view.kind == XRT_VALUE_STRING || plan->view.kind == XRT_VALUE_RECORD;
+    return plan->view.kind == XRT_VALUE_STRING || xrt_value_kind_has_fields(plan->view.kind);
 }
 static bool record_field(const XrtValuePlan *plan) {
     XrtValueKind kind = plan->view.kind;
     return kind == XRT_VALUE_I64 || kind == XRT_VALUE_BOOL || kind == XRT_VALUE_F64 ||
-        kind == XRT_VALUE_STRING || kind == XRT_VALUE_RECORD ||
+        kind == XRT_VALUE_STRING || xrt_value_kind_has_fields(kind) ||
         (kind == XRT_VALUE_NULLABLE && managed_nullable(plan));
 }
 static bool capture_type(const XrtValuePlan *plan) {
@@ -105,11 +105,14 @@ static bool capture_type(const XrtValuePlan *plan) {
 static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *slots, size_t count, bool record) {
     /* Portable C has no empty structure. Its one private padding byte carries
      * no language field and is shared with bytecode's physical home. */
-    if (record && !count) return spec->size == 1 && spec->alignment == 1 && !spec->owned_count;
+    if (record && !count)
+        return spec->kind == XRT_VALUE_RECORD && spec->size == 1 && spec->alignment == 1 && !spec->owned_count;
+    bool named = spec->kind == XRT_VALUE_RECORD;
     size_t end = 0, alignment = 1, owned = 0;
     for (size_t i = 0; i < count; ++i) {
         XrtValueSlotSpec field = slots[i];
-        if (!field.type || (record ? !record_field(field.type) || !field.name_length : !capture_type(field.type))) return false;
+        if (!field.type || (record ? !record_field(field.type) || named != (field.name_length != 0) :
+            !capture_type(field.type))) return false;
         const XrtValuePlanSpec *type = &field.type->view;
         if (type->alignment > alignment) alignment = type->alignment;
         if (end > SIZE_MAX - (type->alignment - 1)) return false;
@@ -141,8 +144,8 @@ static bool nullable_valid(const XrtValuePlanSpec *spec) {
         return false;
     XrtValueKind kind = element->view.kind;
     size_t scalar_size, scalar_alignment;
-    if (!scalar_layout(kind, &scalar_size, &scalar_alignment) && kind != XRT_VALUE_STRING && kind != XRT_VALUE_RECORD &&
-        kind != XRT_VALUE_NULLABLE && kind != XRT_VALUE_FIXED_U8 && kind != XRT_VALUE_TUPLE_I64) return false;
+    if (!scalar_layout(kind, &scalar_size, &scalar_alignment) && kind != XRT_VALUE_STRING && !xrt_value_kind_has_fields(kind) &&
+        kind != XRT_VALUE_NULLABLE && kind != XRT_VALUE_FIXED_U8) return false;
     size_t end = spec->nullable.payload_offset + element->view.size;
     if (end > SIZE_MAX - (spec->alignment - 1) ||
         spec->size != ((end + spec->alignment - 1) & ~(spec->alignment - 1)) ||
@@ -154,12 +157,12 @@ static bool nullable_valid(const XrtValuePlanSpec *spec) {
 static bool spec_valid(const XrtValuePlanSpec *spec) {
     if (!spec->alignment || spec->alignment > alignof(XrMaxAlignment) || (spec->alignment & (spec->alignment - 1)) ||
         spec->size % spec->alignment || !lease_valid(spec->code) ||
-        (spec->kind != XRT_VALUE_RECORD && spec->field_count) ||
+        (!xrt_value_kind_has_fields(spec->kind) && spec->field_count) ||
         (spec->kind != XRT_VALUE_ENVIRONMENT && (spec->capture_count || spec->entry.signature || spec->entry.ordinal)) ||
         (spec->kind != XRT_VALUE_FUNCTION && !signature_empty(spec->signature)) ||
         (spec->kind != XRT_VALUE_NULLABLE && (spec->nullable.element || spec->nullable.tag_offset || spec->nullable.payload_offset)) ||
         (spec->kind != XRT_VALUE_CELL && spec->element) ||
-        (spec->kind != XRT_VALUE_FIXED_U8 && spec->kind != XRT_VALUE_TUPLE_I64 && spec->count)) return false;
+        (spec->kind != XRT_VALUE_FIXED_U8 && spec->count)) return false;
     for (size_t i = 0; i < spec->owned_count; ++i) {
         size_t offset = spec->owned_offsets[i];
         if (spec->alignment < alignof(XrtManagedHeader *) || offset % alignof(XrtManagedHeader *) ||
@@ -175,7 +178,7 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
     if (spec->kind == XRT_VALUE_FUNCTION) return spec->size == sizeof(XrtFunction) &&
         spec->alignment == alignof(XrtFunction) && spec->owned_count == 1 &&
         spec->owned_offsets[0] == offsetof(XrtFunction, owner) && signature_valid(&spec->signature);
-    if (spec->kind == XRT_VALUE_RECORD) return layout_slots(spec, spec->fields, spec->field_count, true);
+    if (xrt_value_kind_has_fields(spec->kind)) return layout_slots(spec, spec->fields, spec->field_count, true);
     if (spec->kind == XRT_VALUE_NULLABLE) return nullable_valid(spec);
     if (spec->kind == XRT_VALUE_ENVIRONMENT) return spec->entry.signature &&
         spec->entry.signature->view.kind == XRT_VALUE_FUNCTION &&
@@ -186,8 +189,6 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
         return spec->size == sizeof(XrtReadonlyArraySlice) && spec->alignment == alignof(XrtReadonlyArraySlice);
     if (spec->kind == XRT_VALUE_FIXED_U8) return spec->count && spec->count <= 65535 &&
         spec->size == spec->count && spec->alignment == 1;
-    if (spec->kind == XRT_VALUE_TUPLE_I64) return spec->count && spec->count <= SIZE_MAX / 8 &&
-        spec->size == spec->count * 8 && spec->alignment == 8;
     size_t size = 0, alignment = 0;
     return scalar_layout(spec->kind, &size, &alignment) && spec->size == size && spec->alignment == alignment;
 }

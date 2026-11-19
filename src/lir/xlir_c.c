@@ -536,7 +536,6 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
         case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
-        case XR_LIR_TUPLE_NEW: case XR_LIR_TUPLE_FIELD:
         case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST:
@@ -961,8 +960,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         c_record_instruction(c, v, source);
         return;
     }
-    if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET ||
-        v->op == XR_LIR_TUPLE_NEW || v->op == XR_LIR_TUPLE_FIELD) {
+    if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET) {
         c_fixed_instruction(c, v);
         return;
     }
@@ -1372,8 +1370,12 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     if (c_request_poll(&c)) {
         XrLirTypeView shape = {0};
         XrLirTypeLayout layout = {0};
-        XR_CHECK(xr_lir_type_view(request->module, entry.result, &shape) == XR_LIR_OK &&
-            xr_lir_type_layout(request->module, entry.result, &layout) == XR_LIR_OK,
+        XR_CHECK(xr_lir_type_view(request->module, entry.result, &shape) == XR_LIR_OK,
+            "admitted C result has a complete value identity");
+        if (xr_lir_inline_aggregate_type(request->module, entry.result)) {
+            layout = c.constructed_types[entry.result - XR_LIR_TYPE_COUNT].layout;
+            XR_CHECK(layout.size && !layout.managed, "plain inline result uses its receiving plan");
+        } else XR_CHECK(xr_lir_type_layout(request->module, entry.result, &layout) == XR_LIR_OK,
             "admitted C result has a complete value layout");
         *output = (XrLirCOutput) {.bytes = c.text, .length = c.length, .entry_result = entry.result,
             .entry_shape = shape, .entry_layout = layout};

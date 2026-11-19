@@ -146,7 +146,7 @@ static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType 
         XrtValuePlanSpec *spec = &top->spec;
         const XrtValuePlan *child = NULL;
         uint8_t *payload = NULL;
-        if (spec->kind == XRT_VALUE_RECORD) {
+        if (xrt_value_kind_has_fields(spec->kind)) {
             if (top->next < spec->field_count) {
                 const XrtValueSlotSpec *field = &spec->fields[top->next++];
                 child = field->type; payload = top->value + field->offset;

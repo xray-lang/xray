@@ -865,6 +865,15 @@ static XrtManagedStatus rbc_value_state(const XrRbcModule *module,XrRbcStack *st
     XrRbcValueAccess access) {
     XrRbcRegister *operand=rbc_value_register(stack,activation,access.source);
     if (!operand) return XRT_MANAGED_ARGUMENT;
+    if (access.operation==XR_RBC_VALUE_STATE_GROUP_INITIALIZE) {
+        RbcValuePayload payload;
+        XrtManagedStatus status = rbc_value_payload(module,stack,rbc_value_origin(activation,access.other),&payload);
+        if (status != XRT_MANAGED_OK) return status;
+        const XrLirValueHome *home = rbc_value_home(activation->code,access.other);
+        const XrtValueImageType *type = &activation->image->types[home->type - 1];
+        return xrt_module_initialize_i64_group(operand->state,access.index,(uint32_t)type->field_count,
+            payload.address,payload.size);
+    }
     if (access.operation==XR_RBC_VALUE_STATE_READ || access.operation==XR_RBC_VALUE_STATE_WRITE) {
         uint32_t value=access.operation==XR_RBC_VALUE_STATE_READ ? access.result : access.other;
         const XrLirValueHome *home=rbc_value_home(activation->code,value);
@@ -1225,7 +1234,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             else if (string->runes>INT64_MAX) status=XRT_MANAGED_OVERFLOW;
             else output->bits=(uint64_t)string->runes;
         }
-    } else if (access.operation>=XR_RBC_VALUE_STATE_READ && access.operation<=XR_RBC_VALUE_STATE_INITIALIZE)
+    } else if (access.operation>=XR_RBC_VALUE_STATE_READ && access.operation<=XR_RBC_VALUE_STATE_GROUP_INITIALIZE)
         status=rbc_value_state(module,stack,activation,access);
     else if (access.operation==XR_RBC_VALUE_EDGE) status=rbc_value_edge(module,stack,activation,access);
     else if (access.operation>=XR_RBC_VALUE_ARRAY && access.operation<=XR_RBC_VALUE_BINDING_DROP)

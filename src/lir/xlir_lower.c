@@ -355,20 +355,9 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
             return lower_unsupported(c, "Nullable Slice requires a checked optional loan");
     }
     XrXirTypeDescription description = {0};
-    if (node && (node->kind == XR_XIR_TYPE_NULLABLE ||
+    if (node && (node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
         (node->kind == XR_XIR_TYPE_NOMINAL && lower_record_description(c, type, &description))))
         return lower_receive_record_shapes(c, type);
-    if (node && node->kind == XR_XIR_TYPE_TUPLE) {
-        for (uint32_t p = 0; p < node->parameter_count; ++p)
-            if (node->parameters[p].type != XR_XIR_I64)
-                return lower_unsupported(c, "Tuple fields require the admitted I64 physical layout");
-        if (!c->constructed_types)
-            c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
-        if (!c->constructed_types) return false;
-        uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
-        return c->constructed_types[index] || lower_build(c,
-            xr_lir_tuple_i64_type(c->module, node->parameter_count, &c->constructed_types[index]));
-    }
     if (!node || node->kind != XR_XIR_TYPE_FIXED_ARRAY) return true;
     if (!c->constructed_types) {
         c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
@@ -1672,15 +1661,6 @@ static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
             .bits=xr_xir_fixed_array_length(c->source->types, type), .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &length, result));
     }
-    if (op->op == XR_XIR_TUPLE_FIELD) {
-        if (op->type != XR_XIR_I64)
-            return lower_unsupported(c, "Tuple field has no admitted I64 physical result");
-        if (!lower_receive_type(c, xr_xir_operand_type(f->source, op->args[0]))) return false;
-        if (!lower_value(f, op->args[0], &operands[0])) return false;
-        XrLirInstruction field = {.op=XR_LIR_TUPLE_FIELD, .type=XR_LIR_I64,
-            .operands=operands, .operand_count=1, .bits=(uint64_t)op->immediate, .source=lower_source(c)};
-        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &field, result));
-    }
     if (op->op == XR_XIR_FIXED_ARRAY_GET) {
         if (!lower_value(f, op->args[0], &operands[0]) ||
             !lower_value(f, op->args[1], &operands[1])) return false;
@@ -1698,7 +1678,7 @@ static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
     bool good = true;
     for (uint32_t a = 0; a < op->args[1] && good; ++a)
         good = lower_value(f, f->source->operands[op->args[0] + a], &elements[a]);
-    XrLirInstruction construct = {.op=op->op == XR_XIR_TUPLE_NEW ? XR_LIR_TUPLE_NEW : XR_LIR_FIXED_ARRAY_NEW,
+    XrLirInstruction construct = {.op=XR_LIR_FIXED_ARRAY_NEW,
         .type=lower_type(c, op->type),
         .operands=elements, .operand_count=op->args[1], .source=lower_source(c)};
     if (good) good = lower_build(c,
@@ -1755,16 +1735,22 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         c->owned_bindings[c->function][f->source->parameter_count + i])
         return lower_value(f, op->args[0], &f->values[f->source->parameter_count + i]);
     uint32_t result = f->source->parameter_count + i;
-    if (op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_STRUCT_GET) {
-        uint32_t count = op->op == XR_XIR_STRUCT_NEW ? op->args[1] : 1;
+    bool aggregate_new = op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_TUPLE_NEW;
+    if (aggregate_new || op->op == XR_XIR_STRUCT_GET || op->op == XR_XIR_TUPLE_FIELD) {
+        uint32_t count = aggregate_new ? op->args[1] : 1;
+        if (aggregate_new && (op->args[0] > f->source->operand_count ||
+            count > f->source->operand_count - op->args[0])) {
+            lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked aggregate operand range");
+            return false;
+        }
         XrLirValue *arguments = count ? lower_alloc(c, count, sizeof(*arguments)) : NULL;
         if (count && !arguments) return false;
         bool good = true;
         for (uint32_t n = 0; n < count && good; ++n)
-            good = lower_value(f, op->op == XR_XIR_STRUCT_NEW ? f->source->operands[op->args[0] + n] : op->args[0], &arguments[n]);
-        XrLirInstruction value = {.op=op->op == XR_XIR_STRUCT_NEW ? XR_LIR_RECORD_NEW : XR_LIR_RECORD_FIELD,
+            good = lower_value(f, aggregate_new ? f->source->operands[op->args[0] + n] : op->args[0], &arguments[n]);
+        XrLirInstruction value = {.op=aggregate_new ? XR_LIR_RECORD_NEW : XR_LIR_RECORD_FIELD,
             .type=lower_type(c, op->type), .operands=arguments, .operand_count=count,
-            .bits=op->op == XR_XIR_STRUCT_GET ? (uint64_t)op->immediate : 0, .source=lower_source(c)};
+            .bits=aggregate_new ? 0 : (uint64_t)op->immediate, .source=lower_source(c)};
         if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &value, &f->values[result]));
         xr_free(arguments);
         return good;
@@ -1781,8 +1767,7 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     if (op->op == XR_XIR_NULLABLE_NONE || op->op == XR_XIR_NULLABLE_SOME ||
         op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP)
         return lower_nullable_instruction(f, b, i);
-    if (op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_TUPLE_FIELD ||
-        op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_FIXED_ARRAY_GET ||
+    if (op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_FIXED_ARRAY_GET ||
         op->op == XR_XIR_FIXED_ARRAY_LEN) return lower_fixed_instruction(f, b, i);
     if (op->op == XR_XIR_CLOCK_NANOS) {
         XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_I64,
@@ -2074,7 +2059,7 @@ static bool lower_module_group(LowerFunction *f, uint32_t block, const XrXirInst
     XrLirType type = XR_LIR_TYPE_INVALID;
     if (good) good = lower_build(c, xr_lir_tuple_i64_type(c->module, count, &type));
     /* Pack already evaluated fields into the existing atomic publication carrier. */
-    XrLirInstruction tuple = {.op=XR_LIR_TUPLE_NEW, .type=type,
+    XrLirInstruction tuple = {.op=XR_LIR_RECORD_NEW, .type=type,
         .operands=elements, .operand_count=count, .source=lower_source(c)};
     if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &tuple, &args[1]));
     XrLirInstruction instruction = {.op=XR_LIR_STATE_GROUP_INITIALIZE, .type=XR_LIR_UNIT,

@@ -224,7 +224,7 @@ static void module_i64_groups(void) {
                 --checked;
                 XrLirInstructionView tuple;
                 OK(xr_lir_instruction_view(output.module, block, i - 1, &tuple));
-                CHECK(tuple.op == XR_LIR_TUPLE_NEW && tuple.result == instruction.operands[1]);
+                CHECK(tuple.op == XR_LIR_RECORD_NEW && tuple.result == instruction.operands[1]);
                 CHECK(tuple.operand_count == (instruction.bits ? 1u : 2u));
                 CHECK(tuple.source.line == instruction.source.line && tuple.source.column == instruction.source.column);
                 ++groups;

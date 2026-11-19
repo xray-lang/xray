@@ -27,10 +27,20 @@ static uint32_t lir_type_hash(XrLirTypeView shape, const XrLirCallableType *call
     XrLirType cell_element, const XrLirRecordField *record, const XrLirRecordIdentity *identity) {
     uint32_t fields[] = {(uint32_t)shape.kind, shape.element, shape.count};
     uint32_t hash = xr_hash_bytes(fields, sizeof(fields));
-    (void)record;
+    if (shape.kind == XR_LIR_TYPE_TUPLE) {
+        for (uint32_t f = 0; f < shape.count; ++f)
+            hash = (hash ^ record[f].type) * UINT32_C(16777619);
+    }
     if (shape.kind == XR_LIR_TYPE_RECORD) return lir_record_identity_hash(identity);
     if (shape.kind == XR_LIR_TYPE_CELL) hash ^= xr_hash_bytes(&cell_element, sizeof(cell_element));
     return shape.kind == XR_LIR_TYPE_CALLABLE ? lir_callable_hash(hash, callable) : hash;
+}
+
+static bool lir_tuple_fields_equal(const XrLirRecordField *left,
+    const XrLirRecordField *right, uint32_t count) {
+    for (uint32_t f = 0; f < count; ++f)
+        if (left[f].type != right[f].type) return false;
+    return true;
 }
 
 static uint32_t lir_type_slot(const XrLirModule *m, XrLirTypeView shape,
@@ -41,8 +51,9 @@ static uint32_t lir_type_slot(const XrLirModule *m, XrLirTypeView shape,
         if (shape.kind == XR_LIR_TYPE_RECORD && found->shape.kind == shape.kind &&
             lir_record_identity_equal(&found->record, identity)) break;
         if (shape.kind != XR_LIR_TYPE_RECORD && found->shape.kind == shape.kind && found->shape.element == shape.element &&
-            found->shape.count == shape.count && found->cell_element == cell_element && (shape.kind != XR_LIR_TYPE_CALLABLE ||
-                lir_callable_equal(&found->callable, callable)))
+            found->shape.count == shape.count && found->cell_element == cell_element &&
+            (shape.kind != XR_LIR_TYPE_TUPLE || lir_tuple_fields_equal(found->fields, record, shape.count)) &&
+            (shape.kind != XR_LIR_TYPE_CALLABLE || lir_callable_equal(&found->callable, callable)))
             break;
         slot = (slot + 1) & (m->type_index_capacity - 1);
     }
@@ -81,7 +92,25 @@ static bool lir_cell_payload_valid(const XrLirModule *m, XrLirType payload,
     return true;
 }
 
-static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape,
+static bool lir_tuple_shape(const XrLirModule *m, XrLirTypeView shape, const XrLirRecordField *fields,
+    uint32_t ordinal, XrLirTypeLayout *output) {
+    if (shape.element || !fields || !shape.count || shape.count > 65535) return false;
+    bool managed = false;
+    for (uint32_t f = 0; f < shape.count; ++f) {
+        XrLirRecordField field = fields[f];
+        if (field.name || field.name_length || field.flags || field.type >= XR_LIR_TYPE_COUNT + ordinal)
+            return false;
+        if (field.type != XR_LIR_I64 && field.type != XR_LIR_I1 && field.type != XR_LIR_F64 &&
+            field.type != XR_LIR_STRING && !xr_lir_inline_aggregate_type(m, field.type)) return false;
+        managed |= field.type == XR_LIR_STRING || xr_lir_boxed_type(m, field.type);
+    }
+    /* Offsets and extent belong to the common inline plan. Ownership is also
+     * needed before that plan exists to construct valid LIR edges. */
+    *output = (XrLirTypeLayout){0, 1, 0, managed};
+    return true;
+}
+
+static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape, const XrLirRecordField *fields,
     uint32_t ordinal, XrLirTypeLayout *output) {
     if (shape.kind == XR_LIR_TYPE_SLICE) {
         if (shape.count || (shape.element != XR_LIR_I64 && shape.element != XR_LIR_U8)) return false;
@@ -92,12 +121,7 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape,
         *output = (XrLirTypeLayout){shape.count, 1, shape.count, false};
         return true;
     }
-    if (shape.kind == XR_LIR_TYPE_TUPLE && shape.element == XR_LIR_I64) {
-        XrPodLayout layout;
-        if (!xr_pod_tuple_i64_layout(shape.count, &layout)) return false;
-        *output = (XrLirTypeLayout){layout.size, layout.alignment, layout.scalar_count, false};
-        return true;
-    }
+    if (shape.kind == XR_LIR_TYPE_TUPLE) return lir_tuple_shape(m, shape, fields, ordinal, output);
     if (shape.kind == XR_LIR_TYPE_RECORD) {
         if (shape.element || shape.count > 65536) return false;
         *output = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
@@ -114,6 +138,13 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape,
     }
     if (shape.kind != XR_LIR_TYPE_NULLABLE || shape.count ||
         shape.element >= XR_LIR_TYPE_COUNT + ordinal) return false;
+    if (shape.element >= XR_LIR_TYPE_COUNT) {
+        XrLirTypeData child = m->types[shape.element - XR_LIR_TYPE_COUNT];
+        if (!child.layout.size && xr_lir_inline_aggregate_type(m, shape.element)) {
+            *output = child.layout;
+            return true;
+        }
+    }
     if (shape.element == XR_LIR_STRING || xr_lir_boxed_type(m, shape.element)) {
         *output = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
         return true;
@@ -142,7 +173,7 @@ static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField
             ((field.flags & (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) == (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) ||
             field.type >= XR_LIR_TYPE_COUNT + earlier ||
             !(field.type == XR_LIR_STRING || field.type == XR_LIR_I64 || field.type == XR_LIR_I1 ||
-              field.type == XR_LIR_F64 || xr_lir_boxed_type(m, field.type))) return false;
+              field.type == XR_LIR_F64 || xr_lir_inline_aggregate_type(m, field.type))) return false;
     }
     return true;
 }
@@ -161,7 +192,7 @@ XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
     for (uint32_t n = 0; n < m->type_count; ++n) {
         XrLirTypeData type = m->types[n];
         XrLirTypeLayout expected;
-        if (!lir_shape_layout(m, type.shape, n, &expected) ||
+        if (!lir_shape_layout(m, type.shape, type.fields, n, &expected) ||
             expected.size != type.layout.size || expected.alignment != type.layout.alignment ||
             expected.scalar_count != type.layout.scalar_count || expected.managed != type.layout.managed ||
             (type.shape.kind == XR_LIR_TYPE_CALLABLE &&
@@ -171,7 +202,7 @@ XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
             (type.shape.kind == XR_LIR_TYPE_RECORD ?
                 (!lir_record_fields_valid(m, type.fields, type.shape.count, n) ||
                  !lir_record_identity_valid(m,&type.record,n) || !lir_record_name_index_valid(&type)) :
-                (type.fields || type.record.module || type.record.name || type.record.arguments || type.record.module_length ||
+                ((type.shape.kind != XR_LIR_TYPE_TUPLE && type.fields) || type.record.module || type.record.name || type.record.arguments || type.record.module_length ||
                  type.record.name_length || type.record.argument_count || type.record.exported || type.record.flags ||
                  type.record_names || type.record_name_capacity)) ||
             (type.shape.kind == XR_LIR_TYPE_CELL ? !lir_cell_payload_valid(m, type.shape.element, type.cell_element, n) :
@@ -192,7 +223,7 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
     XrLirStatus status = lir_writable(m);
     if (status != XR_LIR_OK) return status;
     XrLirTypeLayout layout;
-    if (!output || !lir_shape_layout(m, shape, m->type_count, &layout) ||
+    if (!output || !lir_shape_layout(m, shape, fields, m->type_count, &layout) ||
         (shape.kind == XR_LIR_TYPE_CALLABLE && !lir_callable_signature_valid(m, callable, m->type_count)) ||
         (shape.kind == XR_LIR_TYPE_CELL ? !lir_cell_payload_valid(m, shape.element, cell_element, m->type_count) : cell_element != 0))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
@@ -200,7 +231,7 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
         if (!lir_record_fields_valid(m, fields, shape.count, m->type_count) ||
             !lir_record_identity_valid(m,record,m->type_count) ||
             !lir_record_declaration_consistent(m,record,fields,shape.count)) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
-    } else if (fields || record) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    } else if (record || (fields && shape.kind != XR_LIR_TYPE_TUPLE)) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     if (!m->type_index_capacity || m->type_count >= m->type_index_capacity / 2)
         if (!lir_type_index_grow(m)) return m->failure;
     uint32_t slot = lir_type_slot(m, shape, callable, cell_element, fields, record);
@@ -221,16 +252,18 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
             if (callable->parameter_count && !received.parameters) return m->failure;
         }
         XrLirRecordField *owned_fields = NULL;
-        if (shape.kind == XR_LIR_TYPE_RECORD && shape.count) {
+        if (fields) {
             owned_fields = lir_copy(m, fields, shape.count, sizeof(*fields));
             if (!owned_fields) return m->failure;
-            for (uint32_t f = 0; f < shape.count; ++f) owned_fields[f].name = NULL;
-            for (uint32_t f = 0; f < shape.count; ++f) {
-                owned_fields[f].name = lir_copy(m, fields[f].name, fields[f].name_length, 1);
-                if (!owned_fields[f].name) {
-                    for (uint32_t k = 0; k < f; ++k) xr_free((void *)owned_fields[k].name);
-                    xr_free(owned_fields);
-                    return m->failure;
+            if (shape.kind == XR_LIR_TYPE_RECORD) {
+                for (uint32_t f = 0; f < shape.count; ++f) owned_fields[f].name = NULL;
+                for (uint32_t f = 0; f < shape.count; ++f) {
+                    owned_fields[f].name = lir_copy(m, fields[f].name, fields[f].name_length, 1);
+                    if (!owned_fields[f].name) {
+                        for (uint32_t k = 0; k < f; ++k) xr_free((void *)owned_fields[k].name);
+                        xr_free(owned_fields);
+                        return m->failure;
+                    }
                 }
             }
         }
@@ -259,8 +292,20 @@ XR_FUNC XrLirStatus xr_lir_fixed_array_type(XrLirModule *m, XrLirType element,
 XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *m, XrLirType element, XrLirType *output) {
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_NULLABLE, element, 0}, NULL, 0, NULL, NULL, output);
 }
+XR_FUNC XrLirStatus xr_lir_tuple_type(XrLirModule *m, const XrLirRecordField *fields,
+    uint32_t count, XrLirType *output) {
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_TUPLE, 0, count}, NULL, 0, fields, NULL, output);
+}
 XR_FUNC XrLirStatus xr_lir_tuple_i64_type(XrLirModule *m, uint32_t count, XrLirType *output) {
-    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_TUPLE, XR_LIR_I64, count}, NULL, 0, NULL, NULL, output);
+    XrLirStatus status = lir_writable(m);
+    if (status != XR_LIR_OK) return status;
+    if (!count || count > 65535 || !output) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirRecordField *fields = lir_allocate(m, count, sizeof(*fields));
+    if (!fields) return m->failure;
+    for (uint32_t f = 0; f < count; ++f) fields[f] = (XrLirRecordField){.type=XR_LIR_I64};
+    status = xr_lir_tuple_type(m, fields, count, output);
+    xr_free(fields);
+    return status;
 }
 
 XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *m, const XrLirRecordIdentity *identity, const XrLirRecordField *fields,
@@ -271,10 +316,11 @@ XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *m, const XrLirRecordIdentity
 XR_FUNC XrLirStatus xr_lir_slice_type(XrLirModule *m, XrLirType element, XrLirType *output) {
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_SLICE, element, 0}, NULL, 0, NULL, NULL, output);
 }
-XR_FUNC XrLirStatus xr_lir_record_fields(const XrLirModule *m, XrLirType type,
+XR_FUNC XrLirStatus xr_lir_aggregate_fields(const XrLirModule *m, XrLirType type,
     const XrLirRecordField **fields, uint32_t *count) {
     XrLirTypeView shape;
-    if (!fields || !count || xr_lir_type_view(m, type, &shape) != XR_LIR_OK || shape.kind != XR_LIR_TYPE_RECORD)
+    if (!fields || !count || xr_lir_type_view(m, type, &shape) != XR_LIR_OK ||
+        (shape.kind != XR_LIR_TYPE_RECORD && shape.kind != XR_LIR_TYPE_TUPLE))
         return XR_LIR_INVALID_ARGUMENT;
     *fields = m->types[type - XR_LIR_TYPE_COUNT].fields;
     *count = shape.count;
@@ -290,7 +336,8 @@ XR_FUNC XrLirStatus xr_lir_record_identity(const XrLirModule *m,XrLirType type,X
 XR_FUNC bool xr_lir_boxed_type(const XrLirModule *m, XrLirType type) {
     if (!m || type < XR_LIR_TYPE_COUNT || type - XR_LIR_TYPE_COUNT >= m->type_count) return false;
     XrLirTypeData data = m->types[type - XR_LIR_TYPE_COUNT];
-    return data.shape.kind == XR_LIR_TYPE_RECORD || (data.shape.kind == XR_LIR_TYPE_NULLABLE && data.layout.managed);
+    return data.shape.kind == XR_LIR_TYPE_RECORD ||
+        ((data.shape.kind == XR_LIR_TYPE_NULLABLE || data.shape.kind == XR_LIR_TYPE_TUPLE) && data.layout.managed);
 }
 
 XR_FUNC XrLirStatus xr_lir_callable_type(XrLirModule *m, const XrLirCallableType *signature,
@@ -320,6 +367,17 @@ XR_FUNC bool xr_lir_cell_value_type(const XrLirModule *m, XrLirType type, XrLirC
     return true;
 }
 
+XR_FUNC bool xr_lir_inline_aggregate_type(const XrLirModule *m, XrLirType type) {
+    while (m && type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < m->type_count) {
+        XrLirTypeData data = m->types[type - XR_LIR_TYPE_COUNT];
+        if (data.shape.kind == XR_LIR_TYPE_RECORD || data.shape.kind == XR_LIR_TYPE_TUPLE) return true;
+        if (data.shape.kind != XR_LIR_TYPE_NULLABLE || data.shape.element >= type) return false;
+        if (data.layout.managed) return true;
+        type = data.shape.element;
+    }
+    return false;
+}
+
 XR_FUNC XrLirStatus xr_lir_type_view(const XrLirModule *m, XrLirType type,
     XrLirTypeView *output) {
     if (!m || m->failure != XR_LIR_OK || !output || !xr_lir_internal_type_valid(m, type, true))
@@ -335,7 +393,8 @@ XR_FUNC XrLirStatus xr_lir_type_layout(const XrLirModule *m, XrLirType type,
     XrLirTypeView view;
     XrLirStatus status = xr_lir_type_view(m, type, &view);
     if (!output || status != XR_LIR_OK) return XR_LIR_INVALID_ARGUMENT;
-    if (view.kind == XR_LIR_TYPE_CALLABLE ||
+    if (view.kind == XR_LIR_TYPE_CALLABLE || view.kind == XR_LIR_TYPE_TUPLE ||
+        (view.kind == XR_LIR_TYPE_NULLABLE && !m->types[type - XR_LIR_TYPE_COUNT].layout.size) ||
         (view.kind == XR_LIR_TYPE_CELL && !xr_lir_cell_value_type(m,type,NULL))) return XR_LIR_UNSUPPORTED;
     XrLirTypeLayout layout = {0, 1, 1, false};
     if (view.kind != XR_LIR_TYPE_BUILTIN) {
@@ -369,10 +428,6 @@ XR_FUNC XrLirStatus xr_lir_type_scalar(const XrLirModule *m, XrLirType type,
         XrLirTypeView shape = m->types[type - XR_LIR_TYPE_COUNT].shape;
         if (shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
             *output = (XrLirScalarPart){XR_LIR_U8, offset + ordinal};
-            return XR_LIR_OK;
-        }
-        if (shape.kind == XR_LIR_TYPE_TUPLE) {
-            *output = (XrLirScalarPart){XR_LIR_I64, offset + (uint64_t)ordinal * 8};
             return XR_LIR_OK;
         }
         if (!ordinal) { *output = (XrLirScalarPart){XR_LIR_U8, offset}; return XR_LIR_OK; }

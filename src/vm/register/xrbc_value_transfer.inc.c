@@ -250,6 +250,9 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
                 rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.scope=1}));
     case XR_RBC_VALUE_STATE_WRITE:
         return rbc_value_flow_reference(state,code,access.source,rbc_value_kind(state->module,code,access.other),true);
+    case XR_RBC_VALUE_STATE_GROUP_INITIALIZE:
+        return rbc_value_flow_read(state,code,access.source,&incoming) && incoming.value.state==RBC_STATE_BORROWED &&
+            rbc_value_flow_read(state,code,access.other,&incoming);
     case XR_RBC_VALUE_STATE_CONSTRUCT: case XR_RBC_VALUE_STATE_INITIALIZE:
         if (!rbc_value_flow_read(state,code,access.source,&incoming) || incoming.value.state!=RBC_STATE_BORROWED)
             return false;

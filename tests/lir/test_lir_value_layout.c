@@ -148,7 +148,11 @@ static void natural_layouts(void) {
     CHECK(pod.fields[1].offset == offsetof(Pod, b) && pod.fields[2].offset == offsetof(Pod, c));
     optional = view(get(set, t.optional_pod));
     CHECK(optional.size == sizeof(OptionalPod) && optional.nullable.payload_offset == offsetof(OptionalPod, payload) && !optional.owned_count);
-    CHECK(view(get(set, t.fixed)).count == 17 && view(get(set, t.tuple)).count == 3);
+    CHECK(view(get(set, t.fixed)).count == 17);
+    XrtValuePlanSpec tuple = view(get(set, t.tuple));
+    CHECK(tuple.kind == XRT_VALUE_TUPLE && tuple.field_count == 3 && !tuple.owned_count);
+    for (size_t i = 0; i < tuple.field_count; ++i)
+        CHECK(!tuple.fields[i].name && !tuple.fields[i].name_length && tuple.fields[i].offset == i * sizeof(int64_t));
     XrtValuePlanSpec empty = view(get(set, t.empty));
     CHECK(empty.size == sizeof(Empty) && empty.alignment == alignof(Empty) && !empty.field_count && !empty.owned_count);
     optional = view(get(set, t.optional_empty));
@@ -172,15 +176,17 @@ static void natural_layouts(void) {
     }
     const XrLirOwnershipTypeFact *facts = NULL; uint32_t fact_count = 0;
     LAYOUT(xr_lir_value_layouts_ownership(set, &facts, &fact_count)); CHECK(facts && fact_count > 6);
-    bool pod_fact = false, record_fact = false;
+    bool pod_fact = false, record_fact = false, tuple_fact = false;
     for (uint32_t i = 0; i < fact_count; ++i) {
         XrtValuePlanSpec spec = view(get(set, facts[i].type));
         CHECK((!i || facts[i - 1].type < facts[i].type) &&
-            (spec.kind == XRT_VALUE_RECORD || spec.kind == XRT_VALUE_NULLABLE) && facts[i].has_owned == (spec.owned_count != 0));
+            (xrt_value_kind_has_fields(spec.kind) || spec.kind == XRT_VALUE_NULLABLE) &&
+            facts[i].has_owned == (spec.owned_count != 0));
         if (facts[i].type == t.optional_pod) pod_fact = !facts[i].has_owned;
         if (facts[i].type == t.optional_outer) record_fact = facts[i].has_owned;
+        if (facts[i].type == t.tuple) tuple_fact = !facts[i].has_owned;
     }
-    CHECK(pod_fact && record_fact);
+    CHECK(pod_fact && record_fact && tuple_fact);
     XrLirTypeLayout old;
     LIR(xr_lir_type_layout(t.module, t.outer, &old)); CHECK(old.size == 8 && outer.size != old.size);
     xr_lir_module_destroy(t.module); xr_lir_value_layouts_destroy(set); owner_drop(&owner);

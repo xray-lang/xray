@@ -12,8 +12,8 @@ static XrLirModule *tuple_fixture(void) {
     OK(xr_lir_add_block(c.module, root, NULL, 0, &block));
     OK(xr_lir_set_entry(c.module, root, block));
     XrLirValue values[] = {ca_constant(&c, block, -17), ca_constant(&c, block, 42)};
-    XrLirValue value = ca_value(&c, block, XR_LIR_TUPLE_NEW, tuple, values, 2), field = {0};
-    XrLirInstruction get = {.op=XR_LIR_TUPLE_FIELD, .type=XR_LIR_I64,
+    XrLirValue value = ca_value(&c, block, XR_LIR_RECORD_NEW, tuple, values, 2), field = {0};
+    XrLirInstruction get = {.op=XR_LIR_RECORD_FIELD, .type=XR_LIR_I64,
         .operands=&value, .operand_count=1, .bits=1};
     OK(xr_lir_emit_value(c.module, block, &get, &field));
     ca_return(&c, block, field);

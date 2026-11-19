@@ -277,7 +277,7 @@ static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock ent
     XrLirValue array=ca_call_array(c,entry,ca_helper(c,1),seven);
     XrLirValue initial[]={array,ca_constant(c,entry,10),ca_constant(c,entry,20),ca_constant(c,entry,0),{0}};
     if (mode==2) {
-        initial[4]=ca_value(c,entry,XR_LIR_TUPLE_NEW,extra,&seven,1);
+        initial[4]=ca_value(c,entry,XR_LIR_RECORD_NEW,extra,&seven,1);
     } else if (mixed) {
         XrLirInstruction null_pointer={.op=XR_LIR_CONST,.type=XR_LIR_PTR};
         OK(xr_lir_emit_value(c->module,entry,&null_pointer,&initial[4]));
@@ -296,7 +296,7 @@ static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock ent
     XrLirValue total=ca_binary(c,done,XR_LIR_MUL,result[1],ca_constant(c,done,100));
     total=ca_binary(c,done,XR_LIR_ADD,total,result[2]);
     total=ca_binary(c,done,XR_LIR_ADD,total,ca_intrinsic(c,done,XR_LIR_ARRAY_OP_LEN,XR_LIR_I64,result,1));
-    if (mode==2) total=ca_binary(c,done,XR_LIR_ADD,total,ca_value(c,done,XR_LIR_TUPLE_FIELD,XR_LIR_I64,&result[3],1));
+    if (mode==2) total=ca_binary(c,done,XR_LIR_ADD,total,ca_value(c,done,XR_LIR_RECORD_FIELD,XR_LIR_I64,&result[3],1));
     ca_effect(c,done,XR_LIR_ARRAY_DROP,result[0]);
     ca_return(c,done,total);
 }

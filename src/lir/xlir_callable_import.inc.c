@@ -37,7 +37,7 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
         if (!needed[n]) continue;
         const XrLirTypeData *data = &source->types[n];
         lir_import_dependency(needed, data->shape.element);
-        if (data->shape.kind == XR_LIR_TYPE_RECORD) {
+        if (data->shape.kind == XR_LIR_TYPE_RECORD || data->shape.kind == XR_LIR_TYPE_TUPLE) {
             if (data->shape.count > largest_record) largest_record = data->shape.count;
             for (uint32_t f = 0; f < data->shape.count; ++f) lir_import_dependency(needed, data->fields[f].type);
             if (data->record.argument_count > largest_arguments) largest_arguments = data->record.argument_count;
@@ -70,7 +70,7 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
                 parameters[p].type = lir_imported_dependency(mapping, parameters[p].type);
             }
         }
-        if (shape.kind == XR_LIR_TYPE_RECORD) {
+        if (shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_TUPLE) {
             for (uint32_t f = 0; f < shape.count; ++f) {
                 fields[f] = data->fields[f];
                 fields[f].type = lir_imported_dependency(mapping, fields[f].type);
@@ -83,7 +83,7 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
         }
         status = lir_intern_type(target, shape,
             shape.kind == XR_LIR_TYPE_CALLABLE ? &callable : NULL, data->cell_element,
-            shape.kind == XR_LIR_TYPE_RECORD && shape.count ? fields : NULL,
+            (shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_TUPLE) && shape.count ? fields : NULL,
             shape.kind == XR_LIR_TYPE_RECORD ? &record : NULL, &mapping[n]);
     }
     if (status == XR_LIR_OK) *output = mapping[count - 1];

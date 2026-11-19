@@ -29,12 +29,12 @@ static inline bool lir_builtin_or_fixed_type(const XrLirModule *module, XrLirTyp
     XrLirTypeView view = {0};
     XrLirTypeLayout layout;
     return xr_lir_type_view(module, type, &view) == XR_LIR_OK &&
-        (view.kind == XR_LIR_TYPE_FIXED_ARRAY || view.kind == XR_LIR_TYPE_NULLABLE || view.kind == XR_LIR_TYPE_TUPLE) &&
+        (view.kind == XR_LIR_TYPE_FIXED_ARRAY || view.kind == XR_LIR_TYPE_NULLABLE) &&
         xr_lir_type_layout(module, type, &layout) == XR_LIR_OK && !layout.managed;
 }
 
 static inline bool lir_definition_type(const XrLirModule *module, XrLirType type) {
-    if (xr_lir_boxed_type(module, type)) return true;
+    if (xr_lir_inline_aggregate_type(module, type)) return true;
     if (lir_builtin_or_fixed_type(module, type)) return true;
     XrLirCallableType signature;
     XrLirCellType cell;

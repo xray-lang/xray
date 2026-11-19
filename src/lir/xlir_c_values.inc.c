@@ -149,7 +149,8 @@ static void c_values_prepare(LirC *c) {
      * Record/Nullable facts include definitions outside the selected closure. */
     for (uint32_t i = 0; i < c->constructed_count; ++i) {
         XrLirTypeKind kind = c->constructed_types[i].shape.kind;
-        if (kind == XR_LIR_TYPE_RECORD || kind == XR_LIR_TYPE_NULLABLE) needed[XR_LIR_TYPE_COUNT + i] = 1;
+        if (kind == XR_LIR_TYPE_RECORD || kind == XR_LIR_TYPE_TUPLE || kind == XR_LIR_TYPE_NULLABLE)
+            needed[XR_LIR_TYPE_COUNT + i] = 1;
     }
     size_t count = 0;
     for (size_t t = 1; t < type_count + 4; ++t) count += needed[t] != 0;

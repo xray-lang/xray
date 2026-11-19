@@ -129,9 +129,9 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
             if (!xr_lir_cell_value_type(module, type, &cell)) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
             XrLirValueLayoutStatus status = need_type(set, cell.payload, type);
             if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
-        } else if (shape.kind == XR_LIR_TYPE_RECORD) {
+        } else if (shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_TUPLE) {
             const XrLirRecordField *fields = NULL; uint32_t count = 0;
-            if (xr_lir_record_fields(module, type, &fields, &count) != XR_LIR_OK || count != shape.count || (count && !fields))
+            if (xr_lir_aggregate_fields(module, type, &fields, &count) != XR_LIR_OK || count != shape.count || (count && !fields))
                 return XR_LIR_VALUE_LAYOUT_ARGUMENT;
             for (uint32_t f = 0; f < count; ++f) {
                 XrLirValueLayoutStatus status = need_type(set, fields[f].type, type);
@@ -145,8 +145,7 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
             for (uint32_t p = 0; p < signature.parameter_count && status == XR_LIR_VALUE_LAYOUT_OK; ++p)
                 status = need_callable_type(set, signature.parameters[p].type, signature.parameters[p].array_element, type);
             if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
-        } else if (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_TUPLE &&
-            shape.kind != XR_LIR_TYPE_SLICE)
+        } else if (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_SLICE)
             return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     }
     return XR_LIR_VALUE_LAYOUT_OK;
@@ -260,13 +259,10 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
             !extent_add(scratch_bytes, 1, sizeof(size_t))) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
         return XR_LIR_VALUE_LAYOUT_OK;
     }
-    if (shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE) {
-        bool fixed = shape.kind == XR_LIR_TYPE_FIXED_ARRAY;
-        XrLirType element = fixed ? XR_LIR_U8 : XR_LIR_I64;
-        if (!shape.count || shape.element != element) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
-        spec->kind = fixed ? XRT_VALUE_FIXED_U8 : XRT_VALUE_TUPLE_I64;
-        spec->count = shape.count; spec->alignment = fixed ? 1 : 8;
-        if (!extent_add(&spec->size, shape.count, spec->alignment)) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+    if (shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
+        if (!shape.count || shape.element != XR_LIR_U8) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        spec->kind = XRT_VALUE_FIXED_U8;
+        spec->count = spec->size = shape.count; spec->alignment = 1;
         return XR_LIR_VALUE_LAYOUT_OK;
     }
     if (shape.kind == XR_LIR_TYPE_NULLABLE) {
@@ -280,10 +276,11 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
             !extent_add(scratch_bytes, child.owned_count, sizeof(size_t))) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
         return XR_LIR_VALUE_LAYOUT_OK;
     }
-    if (shape.kind != XR_LIR_TYPE_RECORD) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+    if (shape.kind != XR_LIR_TYPE_RECORD && shape.kind != XR_LIR_TYPE_TUPLE) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     const XrLirRecordField *fields = NULL; uint32_t count = 0;
-    if (xr_lir_record_fields(module, type, &fields, &count) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
-    spec->kind = XRT_VALUE_RECORD; spec->alignment = 1; spec->field_count = count;
+    if (xr_lir_aggregate_fields(module, type, &fields, &count) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    spec->kind = shape.kind == XR_LIR_TYPE_TUPLE ? XRT_VALUE_TUPLE : XRT_VALUE_RECORD;
+    spec->alignment = 1; spec->field_count = count;
     if (!count) { spec->size = 1; return XR_LIR_VALUE_LAYOUT_OK; }
     for (uint32_t f = 0; f < count; ++f) {
         XrtValuePlanSpec child;
@@ -326,9 +323,9 @@ static void fill_composite(const XrLirModule *module, const XrLirValueLayouts *s
         for (size_t i = 0; i < child.owned_count; ++i) owned[i] = spec->nullable.payload_offset + child.owned_offsets[i];
         return;
     }
-    if (spec->kind != XRT_VALUE_RECORD) return;
+    if (!xrt_value_kind_has_fields(spec->kind)) return;
     const XrLirRecordField *fields = NULL; uint32_t count = 0;
-    XR_CHECK(xr_lir_record_fields(module, type, &fields, &count) == XR_LIR_OK, "finished record fields stay borrowed during projection");
+    XR_CHECK(xr_lir_aggregate_fields(module, type, &fields, &count) == XR_LIR_OK, "finished record fields stay borrowed during projection");
     if (!count) return;
     XrtValueSlotSpec *slots = scratch;
     owned = (size_t *)(slots + count);
@@ -420,7 +417,7 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
         if (!set->values[i].plan) continue;
         XrtValuePlanSpec spec;
         status = memory_status(xrt_value_plan_view(set->values[i].plan, &spec));
-        if (status == XR_LIR_VALUE_LAYOUT_OK && (spec.kind == XRT_VALUE_RECORD || spec.kind == XRT_VALUE_NULLABLE ||
+        if (status == XR_LIR_VALUE_LAYOUT_OK && (xrt_value_kind_has_fields(spec.kind) || spec.kind == XRT_VALUE_NULLABLE ||
             spec.kind == XRT_VALUE_CELL)) {
             XR_CHECK(set->type_count < set->constructed, "each ownership fact belongs to one generated constructed plan");
             set->types[set->type_count++] = (XrLirOwnershipTypeFact){(XrLirType)i, spec.owned_count != 0};

@@ -34,7 +34,7 @@ static void record_identity_cases(void) {
         identity.flags==XR_LIR_RECORD_MODULE_LITERAL && identity.argument_count==1 &&
         identity.arguments[0].type==XR_LIR_ARRAY && identity.arguments[0].array_element==XR_LIR_I64);
     const XrLirRecordField *owned; uint32_t count;
-    OK(xr_lir_record_fields(copy,received,&owned,&count));
+    OK(xr_lir_aggregate_fields(copy,received,&owned,&count));
     CHECK(count==2 && owned[0].name[0]=='z' && owned[1].name[0]=='a' &&
         owned[0].flags==XR_LIR_RECORD_MUTABLE && owned[1].flags==XR_LIR_RECORD_PRIVATE);
     OK(xr_lir_module_finish(copy,NULL)); OK(xr_lir_verify(copy,NULL)); xr_lir_module_destroy(copy);

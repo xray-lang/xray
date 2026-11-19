@@ -53,19 +53,13 @@ static void c_constructed_types(LirC *c) {
 }
 
 static void c_fixed_instruction(LirC *c, const XrLirInstructionView *v) {
-    if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_TUPLE_NEW) {
+    if (v->op == XR_LIR_FIXED_ARRAY_NEW) {
         c_format(c, "    v%" PRIu32 " = (%s){{", v->result, c_type(c, v->type));
         for (uint32_t n = 0; n < v->operand_count && c_request_poll(c); ++n) {
             if (n) c_text(c, ", ");
             c_value(c, v->operands[n]);
         }
         c_text(c, "}};\n");
-        return;
-    }
-    if (v->op == XR_LIR_TUPLE_FIELD) {
-        c_format(c, "    v%" PRIu32 " = ", v->result);
-        c_value(c, v->operands[0]);
-        c_format(c, ".fields[UINT64_C(%" PRIu64 ")];\n", v->bits);
         return;
     }
     XrLirType type = c_value_type(c, v->operands[0]);

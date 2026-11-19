@@ -16,34 +16,35 @@ static void tuple_receiving_owners(void) {
     for (unsigned n = 0; n < 3; ++n) {
         XrLirModule *module = copies[n];
         XrLirTypeView view;
-        XrLirTypeLayout layout;
-        XrLirScalarPart part;
+        const XrLirRecordField *fields = NULL;
+        uint32_t count = 0;
         OK(xr_lir_type_view(module, XR_LIR_TYPE_COUNT, &view));
-        OK(xr_lir_type_layout(module, XR_LIR_TYPE_COUNT, &layout));
-        OK(xr_lir_type_scalar(module, XR_LIR_TYPE_COUNT, 1, &part));
-        CHECK(view.kind == XR_LIR_TYPE_TUPLE && view.element == XR_LIR_I64 && view.count == 2);
-        CHECK(layout.size == 16 && layout.alignment == 8 && layout.scalar_count == 2 && !layout.managed);
-        CHECK(part.type == XR_LIR_I64 && part.offset == 8);
+        OK(xr_lir_aggregate_fields(module, XR_LIR_TYPE_COUNT, &fields, &count));
+        CHECK(view.kind == XR_LIR_TYPE_TUPLE && !view.element && view.count == 2 && count == 2);
+        CHECK(fields[0].type == XR_LIR_I64 && fields[1].type == XR_LIR_I64 && !fields[0].name && !fields[1].name);
         XrRbcProgram *program = NULL;
         XrRbcCompileDiagnostic diagnostic = {0};
         CHECK(xr_rbc_compile(module, (XrLirFunction){module, 1}, &program, &diagnostic) == XR_RBC_COMPILE_OK);
         xr_lir_module_destroy(module);
         const XrRbcModule *owned = xr_rbc_program_view(program);
-        XrRbcModule bad = *owned;
-        XrPodType type = owned->aggregate_types[0];
-        bad.aggregate_types = &type;
-        type.element = XR_POD_U64;
+        const XrtValueImage *image = xr_rbc_module_value_image(owned);
+        const XrRbcValueCode *code = xr_rbc_module_value_code(owned, 0);
+        CHECK(image && code && !owned->aggregate_type_count);
+        bool projected = false;
+        for (size_t a = 0; a < code->access_count; ++a) if (code->accesses[a].operation == XR_RBC_VALUE_RECORD_NEW) {
+            uint32_t value = code->accesses[a].result;
+            const XrtValueImageType *type = &image->types[code->homes->values[value].type - 1];
+            CHECK(type->kind == XRT_VALUE_TUPLE && type->size == 16 && type->alignment == 8 &&
+                type->field_count == 2 && !type->owned_count && image->slots[type->first_field + 1].offset == 8);
+            projected = true;
+        }
+        CHECK(projected);
+        XrRbcModule raw = *owned;
+        XrRbcValueCode code_copy = *code;
+        const XrRbcValueCode *codes[] = {&code_copy};
+        raw.borrowed_value_codes = codes;
         XrRbcExecution *execution = NULL;
-        CHECK(xr_rbc_module_prepare(&bad, 0, NULL, 0, xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID && !execution);
-        XrRbcFunction function = owned->functions[0];
-        XrRbcAggregateAccess accesses[2];
-        CHECK(function.aggregate_access_count == 2);
-        memcpy(accesses, function.aggregate_accesses, sizeof(accesses));
-        accesses[1].slot = 2;
-        function.aggregate_accesses = accesses;
-        bad = *owned;
-        bad.functions = &function;
-        CHECK(xr_rbc_module_prepare(&bad, 0, NULL, 0, xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID && !execution);
+        CHECK(xr_rbc_module_prepare(&raw, 0, NULL, 0, xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID && !execution);
         CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
         XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
         xr_rbc_execution_free(&execution);
@@ -52,7 +53,7 @@ static void tuple_receiving_owners(void) {
         CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == 42);
         xr_rbc_outcome_free(&outcome);
     }
-    puts("I64 Tuple receiving owners, physical layouts and raw field bounds passed");
+    puts("I64 Tuple receiving owners, physical layouts and sealed field projection passed");
 }
 
 static void tuple_group_admission(void) {
@@ -81,7 +82,7 @@ static void tuple_group_admission(void) {
     OK(xr_lir_function_parameter(c.module, root, 0, &state));
     ca_effect(&c, block, XR_LIR_MODULE_BEGIN, state);
     XrLirValue values[] = {ca_constant(&c, block, 42), ca_constant(&c, block, 17)};
-    XrLirValue value = ca_value(&c, block, XR_LIR_TUPLE_NEW, tuple, values, 2), refs[2] = {{0}};
+    XrLirValue value = ca_value(&c, block, XR_LIR_RECORD_NEW, tuple, values, 2), refs[2] = {{0}};
     for (uint32_t n = 0; n < 2; ++n) {
         XrLirValue args[] = {state, values[n]};
         XrLirInstruction create = {.op=XR_LIR_STATE_CONSTRUCT, .type=XR_LIR_STATE_REF,
@@ -105,17 +106,20 @@ static void tuple_group_admission(void) {
     xr_lir_module_destroy(c.module);
     const XrRbcModule *owned = xr_rbc_program_view(program);
     XrRbcModule bad = *owned;
-    XrRbcFunction function = owned->functions[0];
-    size_t bytes = function.aggregate_access_count * sizeof(*function.aggregate_accesses);
-    XrRbcAggregateAccess *accesses = xr_malloc(bytes);
+    const XrRbcValueCode *code = xr_rbc_module_value_code(owned, 0);
+    CHECK(code);
+    size_t bytes = code->access_count * sizeof(*code->accesses);
+    XrRbcValueAccess *accesses = xr_malloc(bytes);
     CHECK(accesses);
-    memcpy(accesses, function.aggregate_accesses, bytes);
+    memcpy(accesses, code->accesses, bytes);
     bool changed = false;
-    for (size_t n = 0; n < function.aggregate_access_count; ++n)
-        if (accesses[n].operation == XR_RBC_STATE_GROUP_INITIALIZE) { accesses[n].slot = 1; changed = true; }
+    for (size_t n = 0; n < code->access_count; ++n)
+        if (accesses[n].operation == XR_RBC_VALUE_STATE_GROUP_INITIALIZE) { accesses[n].index = 1; changed = true; }
     CHECK(changed);
-    function.aggregate_accesses = accesses;
-    bad.functions = &function;
+    XrRbcValueCode raw = *code;
+    raw.accesses = accesses;
+    const XrRbcValueCode *codes[] = {&raw};
+    bad.borrowed_value_codes = codes;
     XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_module_prepare(&bad, 0, NULL, 0, xr_rbc_program_locations(program), &execution) == XR_RBC_INVALID && !execution);
     xr_free(accesses);

@@ -610,8 +610,8 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
         if (!lir_home_key(c->input, c->function, v, type, &key)) continue;
         XrtValuePlanSpec spec; uint32_t ordinal;
         if (!lir_home_spec(b, key, &spec, &ordinal)) return false;
-        if (!spec.owned_count && spec.kind != XRT_VALUE_RECORD && spec.kind != XRT_VALUE_NULLABLE &&
-            spec.kind != XRT_VALUE_FIXED_U8 && spec.kind != XRT_VALUE_TUPLE_I64 &&
+        if (!spec.owned_count && !xrt_value_kind_has_fields(spec.kind) && spec.kind != XRT_VALUE_NULLABLE &&
+            spec.kind != XRT_VALUE_FIXED_U8 &&
             spec.kind != XRT_VALUE_SLICE_I64 && spec.kind != XRT_VALUE_SLICE_U8) continue;
         XrLirValueHome *home = &values[v];
         home->type = ordinal + 1; home->size = spec.size; home->owner_count = spec.owned_count;
