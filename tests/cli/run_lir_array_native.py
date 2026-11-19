@@ -48,6 +48,7 @@ def main() -> None:
              "view_copy_unused_parameter", "view_call_module_write", "panic_nullable_view", "string_append_values", "string_append_ref",
              "string_join", "string_append_loop", "string_append_assignment", "string_append_grouping",
              "string_append_invariant", "string_parameter_loop", "panic_nullable_string_append", "map_snapshots", "map_display",
+             "map_stationary_reads",
              "set_values")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:
@@ -139,6 +140,9 @@ def main() -> None:
         if name == "string_append_invariant":
             assert generated_text.count("xrt_native_string_append_window(") == 9
             assert generated_text.count("xrt_native_string_append_owned(") == 12
+        if name == "map_stationary_reads":
+            assert "xrt_native_map_index(" in generated_text
+            assert "xrt_place_edge_transfer(owners, 2," not in generated_text
         # The original large-case oracles check both length and element 299.
         # Keep that executed span check independent of C literal spelling.
         for ordinal, compiler in enumerate(args.compiler or [None]):

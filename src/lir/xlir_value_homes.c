@@ -378,13 +378,13 @@ static bool lir_home_literal_borrows(LirHomeCompiler *c, XrLirValueHome *values,
     return true;
 }
 
-typedef struct LirStringChain {
+typedef struct LirHomeChain {
     uint32_t parent, producer, last_block;
     uint8_t rank;
-    bool suffix, rejected;
-} LirStringChain;
+    bool rejected;
+} LirHomeChain;
 
-static uint32_t lir_string_chain_root(LirStringChain *chains, uint32_t value) {
+static uint32_t lir_home_chain_root(LirHomeChain *chains, uint32_t value) {
     while (chains[value].parent != value) {
         chains[value].parent = chains[chains[value].parent].parent;
         value = chains[value].parent;
@@ -392,88 +392,100 @@ static uint32_t lir_string_chain_root(LirStringChain *chains, uint32_t value) {
     return value;
 }
 
-static void lir_string_chain_join(LirStringChain *chains, uint32_t source, uint32_t target) {
-    uint32_t to = lir_string_chain_root(chains, target);
-    if (!chains[source].parent) { chains[to].rejected = true; return; }
-    uint32_t from = lir_string_chain_root(chains, source);
+static void lir_home_chain_join(LirHomeChain *chains, uint32_t source, uint32_t target, bool move) {
+    uint32_t to = lir_home_chain_root(chains, target);
+    if (!move || !chains[source].parent) { chains[to].rejected = true; return; }
+    uint32_t from = lir_home_chain_root(chains, source);
     if (to == from) return;
     if (chains[to].rank < chains[from].rank) { uint32_t swap = to; to = from; from = swap; }
-    LirStringChain *root = &chains[to], *part = &chains[from];
+    LirHomeChain *root = &chains[to], *part = &chains[from];
     root->rejected |= part->rejected || (root->producer && part->producer);
     if (!root->producer) root->producer = part->producer;
-    root->suffix |= part->suffix;
     if (root->rank == part->rank) ++root->rank;
     part->parent = to;
 }
 
-/* Verified owned Strings die within their defining block or transfer once on
- * each selected edge. A suffix-only chain with a single producer and at most
- * one member per block therefore has one live owner across its edges. Keep
- * the separate literal cache so failure cleanup still retires the backing at
- * the cache's original position relative to other literal allocations. */
-static void lir_string_chain_edges(const XrLirModule *module, const XrLirFunctionData *f,
-    LirStringChain *chains) {
-    for (uint32_t b = 0; b < f->block_count; ++b) {
-        const XrLirBlockData *block = &f->blocks[b];
-        for (uint32_t n = 0; n < block->instruction_count; ++n) {
-            const XrLirInstructionView *i = &block->instructions[n].view;
-            for (uint32_t p = 0; p < i->operand_count; ++p) {
-                uint32_t operand = i->operands[p];
-                if (!chains[operand].parent) continue;
-                LirStringChain *root = &chains[lir_string_chain_root(chains, operand)];
-                bool suffix = p == 1 && xr_lir_string_role(module, i) == XR_LIR_STRING_OP_APPEND_OWNED;
-                root->suffix |= suffix;
-                root->rejected |= !suffix && i->op != XR_LIR_STRING_DROP;
-            }
-            for (uint32_t e = 0; e < i->edge_count; ++e) {
-                const XrLirEdgeView *edge = &i->edges[e];
-                const XrLirBlockData *target = &f->blocks[edge->target - 1];
-                for (uint32_t p = 0; p < edge->argument_count; ++p)
-                    if (chains[target->parameters[p]].parent)
-                        lir_string_chain_join(chains, edge->arguments[p], target->parameters[p]);
-            }
+static bool lir_home_chain_transfers(LirHomeCompiler *c, const XrLirOwnershipPlan *plan, LirHomeChain *chains) {
+    XrLirOwnershipFunction function;
+    if (xr_lir_ownership_function_at(plan, c->function.id, &function) != XR_LIR_OK)
+        return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary homes lost their ownership inventory");
+    for (uint32_t n = 0; n < function.fact_count; ++n) {
+        XrLirOwnershipFact fact;
+        if (xr_lir_ownership_fact_at(plan, function.fact_offset + n, &fact) != XR_LIR_OK)
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary home fact disappeared");
+        switch (fact.kind) {
+        case XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER:
+            if (chains[fact.target_value].parent)
+                lir_home_chain_join(chains, fact.value, fact.target_value, fact.transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE);
+            break;
+        case XR_LIR_OWNERSHIP_APPEND_TRANSFER:
+        case XR_LIR_OWNERSHIP_RETURN_TRANSFER:
+            if (chains[fact.value].parent)
+                chains[lir_home_chain_root(chains, fact.value)].rejected = true;
+            break;
+        default: break;
         }
     }
+    return true;
 }
 
-static void lir_string_chain_visit(LirStringChain *chains, uint32_t value, uint32_t block) {
+static void lir_home_chain_visit(LirHomeChain *chains, uint32_t value, uint32_t block) {
     if (!value || !chains[value].parent) return;
-    LirStringChain *root = &chains[lir_string_chain_root(chains, value)];
+    LirHomeChain *root = &chains[lir_home_chain_root(chains, value)];
     root->rejected |= root->last_block == block;
     root->last_block = block;
 }
 
-static bool lir_home_stationary_strings(LirHomeCompiler *c, XrLirValueHome *values, size_t count) {
+static bool lir_home_chain_type(XrLirType type) {
+    return type == XR_LIR_STRING || type == XR_LIR_MAP_STRING_I64;
+}
+
+/* The independent literal cache or caller's loan keeps the backing alive
+ * throughout Frame cleanup. Coalescing its local owner therefore cannot move
+ * the final release relative to other cleanup. Keep the original producer
+ * and explicit DROP, including failure at the original retain. */
+static bool lir_home_chain_producer(const XrLirFunctionData *f, uint32_t id) {
+    const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
+    if (!definition) return false;
+    if (definition->op == XR_LIR_STRING_LITERAL) return true;
+    if (definition->op != XR_LIR_STRING_RETAIN && definition->op != XR_LIR_MAP_RETAIN) return false;
+    const XrLirValueData *source = &f->values[definition->operands[0] - 1];
+    return source->parameter && !source->block;
+}
+
+/* A sealed MOVE chain with one producer and at most one member per block
+ * carries a single owner. The selected edge changes its SSA name only. */
+static bool lir_home_stationary_owners(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
+    XrLirValueHome *values, size_t count) {
     const XrLirFunctionData *f = &c->input->functions[c->function.id - 1];
     bool needed = false;
     for (uint32_t v = 0; v < f->value_count && !needed; ++v)
-        needed = f->values[v].type == XR_LIR_STRING && f->values[v].parameter && f->values[v].block;
+        needed = lir_home_chain_type(f->values[v].type) && f->values[v].parameter && f->values[v].block;
     if (!needed) return true;
-    LirStringChain *chains = xr_calloc(count, sizeof(*chains));
-    if (!chains) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot classify String forwarding chains");
+    LirHomeChain *chains = xr_calloc(count, sizeof(*chains));
+    if (!chains) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot classify owner forwarding chains");
     for (uint32_t v = 1; v <= f->value_count; ++v) {
         const XrLirValueData *value = &f->values[v - 1];
-        if (value->type != XR_LIR_STRING || !value->block) continue;
+        if (!lir_home_chain_type(value->type) || !value->block) continue;
         chains[v].parent = v;
         if (!value->parameter) {
             chains[v].producer = v;
-            const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v);
-            chains[v].rejected = !definition || definition->op != XR_LIR_STRING_LITERAL;
+            chains[v].rejected = !lir_home_chain_producer(f, v);
         }
     }
-    lir_string_chain_edges(c->input, f, chains);
+    if (!lir_home_chain_transfers(c, plan, chains)) { xr_free(chains); return false; }
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirBlockData *block = &f->blocks[b];
         for (uint32_t p = 0; p < block->parameter_count; ++p)
-            lir_string_chain_visit(chains, block->parameters[p], b + 1);
+            lir_home_chain_visit(chains, block->parameters[p], b + 1);
         for (uint32_t n = 0; n < block->instruction_count; ++n)
-            lir_string_chain_visit(chains, block->instructions[n].view.result, b + 1);
+            lir_home_chain_visit(chains, block->instructions[n].view.result, b + 1);
     }
     for (uint32_t v = 1; v <= f->value_count; ++v) {
         if (!chains[v].parent) continue;
-        const LirStringChain *root = &chains[lir_string_chain_root(chains, v)];
-        if (root->rank && root->suffix && !root->rejected)
-            values[v].stationary_string = root->producer;
+        const LirHomeChain *root = &chains[lir_home_chain_root(chains, v)];
+        if (root->rank && root->producer && !root->rejected)
+            values[v].stationary_owner = root->producer;
     }
     xr_free(chains);
     return true;
@@ -489,7 +501,7 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
     for (size_t v = 0; v < count; ++v) values[v] = (XrLirValueHome){.type=0,
         .offset=SIZE_MAX, .first_owner=SIZE_MAX, .temporary_offset=SIZE_MAX, .temporary_first_owner=SIZE_MAX,
         .literal_cache_offset=SIZE_MAX, .literal_cache_owner=SIZE_MAX,.view_parameter=UINT32_MAX};
-    if (!lir_home_callable_rows(b,ownership,values) || !lir_home_stationary_strings(c, values, count)) return false;
+    if (!lir_home_callable_rows(b,ownership,values) || !lir_home_stationary_owners(c, ownership, values, count)) return false;
     for (size_t index = 1; index <= c->view.value_count; ++index) {
         uint32_t v = (uint32_t)index;
         XrLirType type; XrLirValueLayoutKey key;
@@ -517,17 +529,17 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
             if (c->view.parameters[p] == v) home->parameter = p + 1;
         bool slice = spec.kind == XRT_VALUE_SLICE_I64 || spec.kind == XRT_VALUE_SLICE_U8;
         if (slice) { if (!lir_home_slice(b, home, v)) return false; }
-        else if (!home->parameter && (!home->stationary_string || home->stationary_string == v) &&
+        else if (!home->parameter && (!home->stationary_owner || home->stationary_owner == v) &&
             !lir_home_reserve(b, &spec, &home->offset, &home->first_owner)) return false;
         if (borrowed) home->first_owner = SIZE_MAX;
         if (!lir_home_byte_spans(b, home, &spec)) return false;
     }
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
         XrLirValueHome *home = &values[v];
-        if (!home->stationary_string || home->stationary_string == v) continue;
-        const XrLirValueHome *owner = &values[home->stationary_string];
+        if (!home->stationary_owner || home->stationary_owner == v) continue;
+        const XrLirValueHome *owner = &values[home->stationary_owner];
         if (home->type != owner->type || owner->owner_count != 1 || owner->first_owner == SIZE_MAX)
-            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary String lost its producer home");
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary owner lost its producer home");
         home->offset = owner->offset;
         home->first_owner = owner->first_owner;
     }
@@ -699,7 +711,7 @@ static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *s
                         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "owned edge has no verified transfer event");
                     if (xr_lir_home_stationary_edge(b->homes, edge.arguments[p], target.parameters[p])) {
                         if (!matched || event->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)
-                            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary String requires its original MOVE");
+                            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary owner requires its original MOVE");
                         continue;
                     }
                     bool slice = values[target.parameters[p]].view_storage != XR_LIR_SLICE_STORAGE_NONE;
