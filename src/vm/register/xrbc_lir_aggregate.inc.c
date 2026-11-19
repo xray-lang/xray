@@ -9,7 +9,7 @@
 /* This selects the existing admitted inline family, never its owned count or
  * physical offsets. Those facts come exclusively from the common image. */
 static bool rbc_lir_inline_type(const XrLirModule *module,XrLirType type) {
-    return xr_lir_inline_aggregate_type(module,type);
+    return xr_lir_inline_aggregate_type(module,type) || xr_lir_class_payload(module,type,NULL);
 }
 static bool rbc_lir_aggregate_point(const XrLirInstructionView *instruction) {
     return instruction->op == XR_LIR_FIXED_ARRAY_NEW || instruction->op == XR_LIR_FIXED_ARRAY_GET ||

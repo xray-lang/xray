@@ -31,16 +31,34 @@ static XrtManagedStatus rbc_value_inline_extract(const XrRbcModule *module,XrRbc
 }
 static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
-    bool create=access.operation==XR_RBC_VALUE_RECORD_NEW || access.operation==XR_RBC_VALUE_NULLABLE_NONE ||
-        access.operation==XR_RBC_VALUE_NULLABLE_SOME;
+    bool class_new=access.operation==XR_RBC_VALUE_CLASS_NEW, class_field=access.operation==XR_RBC_VALUE_CLASS_FIELD;
+    bool create=class_new || access.operation==XR_RBC_VALUE_RECORD_NEW ||
+        access.operation==XR_RBC_VALUE_NULLABLE_NONE || access.operation==XR_RBC_VALUE_NULLABLE_SOME;
     const XrLirValueHome *home=rbc_value_home(activation->code,create ? access.result : access.source);
     const XrtValueImageType *type=&activation->image->types[home->type-1];
+    XrtBoundClass binding={0};
+    if (class_new || class_field) {
+        XrtManagedStatus status=rbc_value_plan_set(module,stack);
+        if (status==XRT_MANAGED_OK) status=stack->layout ? xrt_module_layout_class(stack->layout,home->type,&binding) :
+            xrt_value_image_class(stack->values->plans,home->type,&binding);
+        if (status!=XRT_MANAGED_OK) return status;
+        type=&activation->image->types[type->element-1];
+        if (class_field) {
+            const XrtManagedHeader *instance=NULL;
+            status=rbc_value_borrow_header(rbc_value_origin(activation,access.source),home,&instance);
+            const XrtValuePlan *field_plan=NULL; const void *field=NULL;
+            if (status==XRT_MANAGED_OK) status=xrt_class_field_borrow(instance,binding.plan,access.index,&field_plan,&field);
+            if (status!=XRT_MANAGED_OK) return status;
+            uint32_t field_type=activation->image->slots[type->first_field+access.index].type;
+            return rbc_value_inline_extract(module,stack,activation,access.result,field_type,field);
+        }
+    }
     if (access.operation==XR_RBC_VALUE_NULLABLE_NONE)
         return rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.result},NULL);
     if (create) {
         if (type->size>activation->snapshot_capacity) return XRT_MANAGED_ARGUMENT;
         uint8_t *snapshot=activation->snapshots; memset(snapshot,0,type->size);
-        if (access.operation==XR_RBC_VALUE_RECORD_NEW) {
+        if (class_new || access.operation==XR_RBC_VALUE_RECORD_NEW) {
             for (uint32_t p=0;p<access.count;++p) {
                 XrtValueImageSlot field=activation->image->slots[type->first_field+p];
                 XrtManagedStatus status=rbc_value_inline_pack(module,stack,activation,
@@ -52,6 +70,10 @@ static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcSta
                 type->nullable_element,snapshot+type->nullable_payload);
             if (status!=XRT_MANAGED_OK) return status;
             snapshot[type->nullable_tag]=1;
+        }
+        if (class_new) {
+            XrtManagedStatus status=xrt_class_create(activation->frame,home->temporary_first_owner,binding.ops,snapshot);
+            return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
         }
         /* The snapshot only borrows bytes. The shared transaction acquires its
          * owners in the actual Root staging slots before publishing anything. */

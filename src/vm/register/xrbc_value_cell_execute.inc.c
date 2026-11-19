@@ -61,6 +61,6 @@ static XrtManagedStatus rbc_value_cell_step(const XrRbcModule *module,XrRbcStack
             xrt_map_cell_write_exclusive((XrtMapCell *)cell,(const XrtMapBacking *)map);
     }
     if (status==XRT_MANAGED_OK && (create || (!integer && read)))
-        status=rbc_value_array_publish(activation,create ? access.result : payload);
+        status=rbc_value_publish_leaf(activation,create ? access.result : payload);
     return status;
 }

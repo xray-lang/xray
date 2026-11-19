@@ -30,4 +30,8 @@ XR_FUNC XrtManagedStatus xrt_module_layout_inline_array(const XrtModuleLayout *,
     XrtBoundInlineArray *empty);
 XR_FUNC XrtManagedStatus xrt_module_state_inline_array(const XrtModuleState *, uint32_t type,
     XrtBoundInlineArray *empty);
+XR_FUNC XrtManagedStatus xrt_module_layout_class(const XrtModuleLayout *, uint32_t type,
+    XrtBoundClass *empty);
+XR_FUNC XrtManagedStatus xrt_module_state_class(const XrtModuleState *, uint32_t type,
+    XrtBoundClass *empty);
 #endif // XNATIVE_MODULE_STATE_H
