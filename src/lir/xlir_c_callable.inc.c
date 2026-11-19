@@ -62,7 +62,7 @@ static bool c_callable_point(LirC *c, const XrLirInstructionView *v) {
 static const char *c_callable_parameter_type(LirC *c, XrLirCallableParameter parameter) {
     if (parameter.mode != XR_PARAM_REF) return c_type(c, parameter.type);
     if (parameter.type == XR_LIR_I64) return "int64_t *";
-    if (parameter.type == XR_LIR_ARRAY || parameter.type == XR_LIR_MAP_STRING_I64) return "XrtPlace";
+    if (parameter.type == XR_LIR_ARRAY || parameter.type == XR_LIR_MAP_STRING_I64 || parameter.type == XR_LIR_SET_I64) return "XrtPlace";
     return NULL;
 }
 static bool c_callable_signature_admit(LirC *c, XrLirCallableType signature) {

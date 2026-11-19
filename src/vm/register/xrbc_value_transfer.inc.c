@@ -136,6 +136,20 @@ static bool rbc_value_map_transfer(RbcStringAdmission *state,const XrRbcValueCod
     }
     return !access.result || rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
 }
+static bool rbc_value_set_transfer(RbcStringAdmission *state,const XrRbcValueCode *code,XrRbcValueAccess access) {
+    const uint32_t *args=access.count ? code->arguments+access.first : NULL;
+    bool mutate=access.index==XR_LIR_SET_ADD || access.index==XR_LIR_SET_REMOVE || access.index==XR_LIR_SET_CLEAR;
+    uint32_t first=0;
+    if (mutate) {
+        if (!rbc_value_flow_binding(state,code,args[0],true)) return false;
+        first=1;
+    }
+    for (uint32_t p=first;p<access.count;++p) {
+        RbcValueEdgeState input;
+        if (!rbc_value_flow_read(state,code,args[p],&input)) return false;
+    }
+    return !access.result || rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
+}
 static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     const XrRbcValueCode *code=rbc_value_code(state->module,state->function);
     if (!code || !code->accesses || index>=code->access_count) return false;
@@ -293,6 +307,7 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
     case XR_RBC_VALUE_ARRAY: return rbc_value_array_transfer(state,code,access);
     case XR_RBC_VALUE_MAP: return rbc_value_map_transfer(state,code,access);
+    case XR_RBC_VALUE_SET: return rbc_value_set_transfer(state,code,access);
     case XR_RBC_VALUE_BINDING_NEW: return rbc_value_flow_read(state,code,access.source,&incoming);
     case XR_RBC_VALUE_BINDING_READ: return rbc_value_flow_binding(state,code,access.source,false) &&
         rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});

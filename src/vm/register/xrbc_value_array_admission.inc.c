@@ -9,10 +9,10 @@
 static bool rbc_value_binding_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,uint32_t value) {
     const XrLirHomeBinding *binding=rbc_value_binding(code,value); XrtValueKind kind=rbc_value_kind(module,code,value);
-    if (!binding || (kind!=XRT_VALUE_STRING && kind!=XRT_VALUE_MAP_STRING_I64 &&
+    if (!binding || (kind!=XRT_VALUE_STRING && kind!=XRT_VALUE_MAP_STRING_I64 && kind!=XRT_VALUE_SET_I64 &&
             (kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64))) return false;
-    if ((kind==XRT_VALUE_STRING || kind==XRT_VALUE_MAP_STRING_I64) && !xr_rbc_module_code_owner(module)) return false;
-    if (kind==XRT_VALUE_STRING || kind==XRT_VALUE_MAP_STRING_I64) {
+    if ((kind==XRT_VALUE_STRING || kind==XRT_VALUE_MAP_STRING_I64 || kind==XRT_VALUE_SET_I64) && !xr_rbc_module_code_owner(module)) return false;
+    if (kind==XRT_VALUE_STRING || kind==XRT_VALUE_MAP_STRING_I64 || kind==XRT_VALUE_SET_I64) {
         const XrtValueImage *image=xr_rbc_module_value_image(module);
         const XrtValueImageType *type=&image->types[binding->type-1];
         if (type->size!=sizeof(XrtManagedHeader *) || type->alignment!=_Alignof(XrtManagedHeader *) ||
@@ -21,7 +21,7 @@ static bool rbc_value_binding_valid(const XrRbcModule *module,const XrRbcValueCo
     }
     bool state_cap=binding->kind==XR_LIR_HOME_BINDING_STATE_BORROW && binding->source==value;
     if (state_cap) {
-        if ((kind!=XRT_VALUE_STRING && kind!=XRT_VALUE_MAP_STRING_I64) ||
+        if ((kind!=XRT_VALUE_STRING && kind!=XRT_VALUE_MAP_STRING_I64 && kind!=XRT_VALUE_SET_I64) ||
             !rbc_value_scalar(code,function,value,XR_RBC_STATE_REF)) return false;
     } else if (code->locations[value].kind!=XR_RBC_VALUE_NOWHERE) return false;
     if (binding->kind==XR_LIR_HOME_BINDING_LOCAL)
@@ -180,7 +180,7 @@ static bool rbc_value_binding_access_valid(const XrRbcModule *module,const XrRbc
     const XrLirHomeBinding *binding=rbc_value_binding(code,value);
     if (!rbc_value_binding_valid(module,code,function,value)) return false;
     bool string=rbc_value_kind(module,code,value)==XRT_VALUE_STRING;
-    if (string || rbc_value_kind(module,code,value)==XRT_VALUE_MAP_STRING_I64) {
+    if (string || rbc_value_kind(module,code,value)==XRT_VALUE_MAP_STRING_I64 || rbc_value_kind(module,code,value)==XRT_VALUE_SET_I64) {
         uint32_t target=a.operation==XR_RBC_VALUE_BINDING_DROP ? 0 : a.operation==XR_RBC_VALUE_BINDING_NEW ? a.source :
             a.operation==XR_RBC_VALUE_BINDING_READ ? a.result : a.other;
         XrLirOwnershipFactKind kind=a.operation==XR_RBC_VALUE_BINDING_NEW ? XR_LIR_OWNERSHIP_BINDING_NEW :

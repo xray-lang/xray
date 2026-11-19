@@ -1,0 +1,15 @@
+fn render(values: Set<i64>) -> string { return "${values}" }
+
+var values = Set([1, 2, 3, 2, 1])
+const original = values
+print(render(values))
+print(len(values))
+values.add(4)
+print(values.contains(3))
+print(values.delete(1))
+print(values.delete(1))
+values.add(1)
+print(values)
+values.clear()
+print(render(values))
+print(render(original))

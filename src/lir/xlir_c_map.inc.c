@@ -164,30 +164,34 @@ static void c_map_call(LirC *c, const XrLirInstructionView *v, uint32_t role, ui
     if (v->type != XR_LIR_UNIT) c_format(c, "    v%" PRIu32 " = removed;\n", v->result);
     c_text(c, "    }\n");
 }
-static void c_map_binding_stage_copy(LirC *c,uint32_t receiver,uint32_t input,uint32_t source) {
+static void c_hash_binding_stage_copy(LirC *c,uint32_t receiver,uint32_t input,uint32_t source) {
     const XrLirHomeBinding *binding=&c->homes->bindings[receiver];
     const XrLirValueHome *home=&c->homes->values[input];
-    const XrtValueImage *image=xr_lir_value_image_view(c->value_image);
     const XrLirHomeEvent *event=NULL; const XrLirHomeWorkspace *stage=NULL;
-    if (!image || !binding->type || binding->type>image->type_count ||
-        image->types[binding->type-1].kind!=XRT_VALUE_MAP_STRING_I64 || home->type!=binding->type ||
+    XrLirType type=c_value_type(c,input);bool set=type==XR_LIR_SET_I64;
+    const XrtValuePlan *plan=NULL;
+    uint32_t value_type=0;
+    size_t *event_cursor=set?&c->set_stage_event_cursor:&c->map_stage_event_cursor;
+    size_t *workspace_cursor=set?&c->set_stage_workspace_cursor:&c->map_stage_workspace_cursor;
+    if ((type!=XR_LIR_MAP_STRING_I64 && !set) ||
+        xr_lir_value_layouts_lookup(c->value_layouts,(XrLirValueLayoutKey){type,0,0},&plan,&value_type)!=
+            XR_LIR_VALUE_LAYOUT_OK || binding->type!=value_type || home->type!=binding->type ||
         !home->parameter || home->offset!=SIZE_MAX || home->first_owner!=SIZE_MAX) {
-        c_error(c,XR_LIR_C_INVALID_LIR,"Map binding copy lost its genuine borrowed formal"); return;
+        c_error(c,XR_LIR_C_INVALID_LIR,"collection binding copy lost its genuine borrowed formal"); return;
     }
-    while (c->map_stage_event_cursor<c->homes->event_count && c_request_poll(c)) {
-        const XrLirHomeEvent *candidate=&c->homes->events[c->map_stage_event_cursor++];
+    while (*event_cursor<c->homes->event_count && c_request_poll(c)) {
+        const XrLirHomeEvent *candidate=&c->homes->events[(*event_cursor)++];
         if ((candidate->kind!=XR_LIR_OWNERSHIP_BINDING_NEW && candidate->kind!=XR_LIR_OWNERSHIP_BINDING_WRITE) ||
             !candidate->target || !c->homes->values[candidate->target].parameter ||
-            c_value_type(c,candidate->target)!=XR_LIR_MAP_STRING_I64) continue;
+            c_value_type(c,candidate->target)!=type) continue;
         if (candidate->block==c->block && candidate->instruction==c->instruction &&
             candidate->source==receiver && candidate->target==input && !candidate->operation &&
             candidate->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_NONE) event=candidate;
         break;
     }
-    while (event && c->map_stage_workspace_cursor<c->homes->workspace_count && c_request_poll(c)) {
-        const XrLirHomeWorkspace *candidate=&c->homes->workspaces[c->map_stage_workspace_cursor++];
-        if (candidate->kind!=XR_LIR_HOME_WORKSPACE_VALUE || !candidate->value || !candidate->type ||
-            candidate->type>image->type_count || image->types[candidate->type-1].kind!=XRT_VALUE_MAP_STRING_I64) continue;
+    while (event && *workspace_cursor<c->homes->workspace_count && c_request_poll(c)) {
+        const XrLirHomeWorkspace *candidate=&c->homes->workspaces[(*workspace_cursor)++];
+        if (candidate->kind!=XR_LIR_HOME_WORKSPACE_VALUE || !candidate->value || candidate->type!=value_type) continue;
         if (candidate->block==c->block && candidate->instruction==c->instruction &&
             candidate->value==receiver && candidate->type==binding->type) stage=candidate;
         break;
@@ -198,7 +202,7 @@ static void c_map_binding_stage_copy(LirC *c,uint32_t receiver,uint32_t input,ui
         stage->first_owner>=frame->slot_count || stage->offset%_Alignof(XrtManagedHeader *) ||
         stage->offset>frame->payload_size || sizeof(XrtManagedHeader *)>frame->payload_size-stage->offset ||
         frame->owned_offsets[stage->first_owner]!=stage->offset || stage->first_owner==binding->first_owner) {
-        c_error(c,XR_LIR_C_INVALID_LIR,"Map binding copy lost its exact common pending workspace"); return;
+        c_error(c,XR_LIR_C_INVALID_LIR,"collection binding copy lost its exact common pending workspace"); return;
     }
     c_values_ensure(c,source);
     if (c_value_type(c,receiver)==XR_LIR_STATE_REF) {
@@ -263,7 +267,7 @@ static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t s
         (v->op==XR_LIR_CELL_NEW && v->type==XR_LIR_MAP_STRING_I64_CELL) ||
         (v->op==XR_LIR_CELL_WRITE && c_value_type(c,v->operands[0])==XR_LIR_MAP_STRING_I64_CELL);
     if (binding_copy && c->homes->values[v->operands[v->operand_count-1]].parameter) {
-        c_map_binding_stage_copy(c,v->op==XR_LIR_CELL_NEW ? v->result : v->operands[0],
+        c_hash_binding_stage_copy(c,v->op==XR_LIR_CELL_NEW ? v->result : v->operands[0],
             v->operands[v->operand_count-1],source); return;
     }
     if (v->op == XR_LIR_MAP_REF_WRITE && c->homes->bindings[v->operands[0]].kind == XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW) {

@@ -65,8 +65,8 @@ typedef struct XrLirHomeTransfer {
      * remain BORROW; these one-based workspace ordinals describe physical RC. */
     XrLirOwnershipTransferMode hold_transfer_mode;
     uint32_t source_workspace, target_workspace;
-    /* SIZE_MAX is absent. A borrowed Cell/Slice formal's logical COPY first
-     * retains into its real CELL_BORROW_STAGE/VIEW_BORROW_STAGE owner. After all
+    /* SIZE_MAX is absent. A borrowed Cell/Slice/Set formal's logical COPY first
+     * retains into its real CELL/VIEW/HEADER_BORROW_STAGE owner. After all
      * staging succeeds the edge MOVEs that owner into its destination, using the
      * destination's distinct temporary. The formal never acquires a slot. */
     size_t borrowed_owner_workspace;
@@ -117,7 +117,10 @@ typedef enum XrLirHomeWorkspaceKind {
     XR_LIR_HOME_WORKSPACE_CELL_BORROW_STAGE,
     /* One real Header-only slot, no temporary. Logical formal COPY first
      * retains all sources here before one physical edge MOVE publication. */
-    XR_LIR_HOME_WORKSPACE_VIEW_BORROW_STAGE
+    XR_LIR_HOME_WORKSPACE_VIEW_BORROW_STAGE,
+    /* A READ Set formal has natural Header bytes and no owning Place. Its
+     * selected-edge COPY pins one Header here before the complete edge MOVE. */
+    XR_LIR_HOME_WORKSPACE_HEADER_BORROW_STAGE
 } XrLirHomeWorkspaceKind;
 typedef struct XrLirHomeWorkspace {
     uint32_t block, instruction, type;
@@ -126,11 +129,11 @@ typedef struct XrLirHomeWorkspace {
      * offset/temporary_offset start complete bundles; each has one actual hold
      * slot. Other workspaces keep their existing VALUE interpretation. */
     XrLirHomeWorkspaceKind kind;
-    /* A String append or borrowed String/Map copy VALUE stage names the actual
+    /* A String append or borrowed String/Map/Set copy VALUE stage names the actual
      * nonconsumed binding here.
      * It has one pending/owner slot and no separate temporary. The matching
      * STRING_OPERATION supplies an append suffix; BINDING_NEW/WRITE supplies
-     * a borrowed String/Map formal copied into this true-empty stage. Its
+     * a borrowed String/Map/Set formal copied into this true-empty stage. Its
      * registered owner is distinct from the actual destination; a single
      * replacement MOVEs it after retain/adopt without fabricating a formal
      * source Place. Selected-edge temporary storage keeps its separate role. */
@@ -194,7 +197,7 @@ typedef struct XrLirValueHomes {
      * and first_owner are SIZE_MAX. Builtin activation CELL/REF values remain
      * type zero; a constructed Cell has its own separate identity home.
      * String CELL/REF use the same scheme with the String image row. A String
-     * or Map STATE_REF row borrows its actual capability (source is its SSA id).
+     * or Map/Set STATE_REF row borrows its actual capability (source is its SSA id).
      * These rows confer no aliasing, mutation or escaping authority. */
     const XrLirHomeBinding *bindings;
     /* Real instruction-local pending owners for allocating mutators, including

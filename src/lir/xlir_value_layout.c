@@ -169,6 +169,7 @@ static XrLirValueLayoutStatus scalar_spec(XrLirValueLayoutKey key, XrtValuePlanS
     case XR_LIR_F64: kind = XRT_VALUE_F64; size = alignment = 8; break;
     case XR_LIR_STRING: kind = XRT_VALUE_STRING; size = alignment = 8; break;
     case XR_LIR_MAP_STRING_I64: kind = XRT_VALUE_MAP_STRING_I64; size = alignment = 8; break;
+    case XR_LIR_SET_I64: kind = XRT_VALUE_SET_I64; size = alignment = 8; break;
     case XR_LIR_ARRAY:
         kind = key.array_element == XR_LIR_I64 ? XRT_VALUE_ARRAY_I64 : key.array_element == XR_LIR_STRING ?
             XRT_VALUE_ARRAY_STRING : key.array_element == XR_LIR_U8 ? XRT_VALUE_ARRAY_U8 : XRT_VALUE_ARRAY_U64;
@@ -177,7 +178,8 @@ static XrLirValueLayoutStatus scalar_spec(XrLirValueLayoutKey key, XrtValuePlanS
     default: return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     }
     *spec = (XrtValuePlanSpec){.kind=kind, .size=size, .alignment=alignment};
-    if (kind >= XRT_VALUE_STRING && kind <= XRT_VALUE_MAP_STRING_I64) spec->owned_count = 1;
+    if ((kind >= XRT_VALUE_STRING && kind <= XRT_VALUE_MAP_STRING_I64) || kind == XRT_VALUE_SET_I64)
+        spec->owned_count = 1;
     return XR_LIR_VALUE_LAYOUT_OK;
 }
 static const XrtValuePlan *dependency(const XrLirValueLayouts *set, XrLirType type) {

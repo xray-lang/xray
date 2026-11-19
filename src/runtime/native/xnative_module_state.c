@@ -169,7 +169,8 @@ static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType 
         else if (spec->kind == XRT_VALUE_RUNE) {
             int64_t rune; memcpy(&rune, top->value, sizeof(rune));
             if (rune < 0 || rune > 0x10ffff || (rune >= 0xd800 && rune <= 0xdfff)) return XRT_MANAGED_ARGUMENT;
-        } else if (spec->kind >= XRT_VALUE_STRING && spec->kind <= XRT_VALUE_MAP_STRING_I64) {
+        } else if ((spec->kind >= XRT_VALUE_STRING && spec->kind <= XRT_VALUE_MAP_STRING_I64) ||
+            spec->kind == XRT_VALUE_SET_I64) {
             XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
             if (!owner) return XRT_MANAGED_ARGUMENT;
         } else if (spec->kind == XRT_VALUE_FUNCTION) {

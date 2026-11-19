@@ -40,7 +40,8 @@ typedef enum XrLirOwnershipFactKind {
     XR_LIR_OWNERSHIP_CELL_VALUE,
     XR_LIR_OWNERSHIP_CELL_OPERATION,
     XR_LIR_OWNERSHIP_CELL_SCOPE_EXIT,
-    XR_LIR_OWNERSHIP_STRING_OPERATION
+    XR_LIR_OWNERSHIP_STRING_OPERATION,
+    XR_LIR_OWNERSHIP_SET_OPERATION
 } XrLirOwnershipFactKind;
 
 /* Transfer semantics belong to the verified event, not to a type's possible
@@ -87,6 +88,8 @@ typedef struct XrLirOwnershipFact {
     XrLirType type, array_element;
     XrLirArrayOperation array_operation;
     XrLirMapOperation map_operation;
+    /* The existing dedicated SET_* instruction, not an intrinsic or permission. */
+    XrLirOp set_operation;
     XrLirCallableTransport callable_transport;
     XrLirOp callable_operation;
     uint32_t callable_function, callable_scope;

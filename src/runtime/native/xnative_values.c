@@ -17,6 +17,7 @@
 #include "xnative_string_backing_ops.h"
 #include "xnative_array_ops.h"
 #include "xnative_map_backing.h"
+#include "xnative_set_backing.h"
 #include "xnative_status.h"
 #include "xnative_capture_backing.h"
 #include "xnative_module_state.h"
@@ -372,19 +373,23 @@ XRAY_API bool xrt_native_map_get(const XrtManagedHeader *map, const XrtStringBac
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
     return found;
 }
-XRAY_API void xrt_native_map_project(XrtManagedFrame *frame, size_t slot,
-    const XrtManagedHeader *map, XrtMapProjection projection, uint32_t source_id) {
+typedef enum CollectionProjection {
+    COLLECTION_MAP_KEYS=XRT_MAP_KEYS,
+    COLLECTION_MAP_VALUES=XRT_MAP_VALUES,
+    COLLECTION_MAP_DISPLAY=XRT_MAP_DISPLAY,
+    COLLECTION_SET_DISPLAY,
+} CollectionProjection;
+static void native_collection_project(XrtManagedFrame *frame, size_t slot,
+    const XrtManagedHeader *collection, CollectionProjection projection, uint32_t source_id) {
     XrtValueRoot *owner = xrt_value_root_current(source_id);
     XrtManagedSlotLocation guard = {0};
-    if (projection != XRT_MAP_KEYS && projection != XRT_MAP_VALUES && projection != XRT_MAP_DISPLAY)
-        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source_id);
-    XrtManagedStatus status = map ? xrt_managed_slot_location(frame, slot, &guard) : XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = collection ? xrt_managed_slot_location(frame, slot, &guard) : XRT_MANAGED_ARGUMENT;
     if (status == XRT_MANAGED_OK) status = xrt_managed_domain_enter(guard);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 
     /* Even the lazy backing family may invoke an allocator callback. Pin the
-     * actual Map before either allocation so another root must detach it. */
-    XrtManagedHeader *pin = (XrtManagedHeader *)map;
+     * source before either allocation so another root must detach it. */
+    XrtManagedHeader *pin = (XrtManagedHeader *)collection;
     if (!xrt_managed_retain(pin)) {
         xrt_managed_domain_leave(guard);
         xrt_native_managed_failure(XRT_MANAGED_REFCOUNT, source_id);
@@ -392,15 +397,35 @@ XRAY_API void xrt_native_map_project(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types = NULL;
     status = xrt_native_values_backings(owner, &types);
     xrt_managed_domain_leave(guard);
-    if (status == XRT_MANAGED_OK)
-        status = projection == XRT_MAP_DISPLAY ?
-            xrt_map_backing_display_held(frame, slot, types, (const XrtMapBacking *)map) :
-            xrt_map_backing_snapshot_held(frame, slot, types, (const XrtMapBacking *)map, projection == XRT_MAP_KEYS);
+    if (status == XRT_MANAGED_OK) {
+        switch (projection) {
+        case COLLECTION_MAP_KEYS: case COLLECTION_MAP_VALUES:
+            status = xrt_map_backing_snapshot_held(frame, slot, types,
+                (const XrtMapBacking *)collection, projection == COLLECTION_MAP_KEYS);
+            break;
+        case COLLECTION_MAP_DISPLAY:
+            status = xrt_map_backing_display_held(frame, slot, types, (const XrtMapBacking *)collection);
+            break;
+        case COLLECTION_SET_DISPLAY:
+            status = xrt_set_backing_display_held(frame, slot, types, (const XrtSetBacking *)collection);
+            break;
+        }
+    }
     XR_CHECK(xrt_managed_domain_enter(guard) == XRT_MANAGED_OK,
-        "Map projection retirement uses the same live caller Root domain");
+        "collection projection retirement uses the same live caller Root domain");
     xrt_managed_drop(pin);
     xrt_managed_domain_leave(guard);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+XRAY_API void xrt_native_map_project(XrtManagedFrame *frame, size_t slot,
+    const XrtManagedHeader *map, XrtMapProjection projection, uint32_t source_id) {
+    if (projection != XRT_MAP_KEYS && projection != XRT_MAP_VALUES && projection != XRT_MAP_DISPLAY)
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source_id);
+    native_collection_project(frame, slot, map, (CollectionProjection)projection, source_id);
+}
+XRAY_API void xrt_native_set_display(XrtManagedFrame *frame, size_t slot,
+    const XrtManagedHeader *set, uint32_t source_id) {
+    native_collection_project(frame, slot, set, COLLECTION_SET_DISPLAY, source_id);
 }
 XRAY_API int64_t xrt_native_map_index(const XrtManagedHeader *map, const XrtStringBacking *key, uint32_t source_id) {
     int64_t value = 0;
@@ -413,6 +438,26 @@ XRAY_API void xrt_native_map_update_place(XrtPlace binding, XrtManagedFrame *fra
     XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
     if (status == XRT_MANAGED_OK) status = xrt_map_update_place(binding, frame, workspace, types, update, removed);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+XRAY_API void xrt_native_set_create(XrtManagedFrame *frame, size_t slot,
+    const XrtSetInput *input, uint32_t source_id) {
+    const XrtBackingTypes *types=NULL;
+    XrtManagedStatus status=input ? xrt_native_values_backings(xrt_value_root_current(source_id),&types) : XRT_MANAGED_ARGUMENT;
+    if (status==XRT_MANAGED_OK) status=xrt_set_backing_create(frame,slot,types,input->values,input->count);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
+XRAY_API bool xrt_native_set_contains(const XrtManagedHeader *set, int64_t key, uint32_t source_id) {
+    bool found=false;
+    XrtManagedStatus status=xrt_set_backing_contains((const XrtSetBacking *)set,key,&found);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+    return found;
+}
+XRAY_API void xrt_native_set_update_place(XrtPlace binding, XrtManagedFrame *frame, size_t workspace,
+    const XrtSetUpdate *update, bool *removed, uint32_t source_id) {
+    const XrtBackingTypes *types=NULL;
+    XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source_id),&types);
+    if (status==XRT_MANAGED_OK) status=xrt_set_update_place(binding,frame,workspace,types,update,removed);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
 }
 XRAY_API void xrt_native_pod_display_create(XrtManagedFrame *frame, size_t slot,
     const XrtPodDisplay *description, const void *bytes, uint32_t source_id) {

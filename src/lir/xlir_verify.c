@@ -278,6 +278,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_SET_NEW:return v->type==XR_LIR_SET_I64;
         case XR_LIR_SET_LEN:return v->type==XR_LIR_I64 && a==XR_LIR_SET_I64;
         case XR_LIR_SET_CONTAINS:return v->type==XR_LIR_I1 && a==XR_LIR_SET_I64 && b==XR_LIR_I64;
+        case XR_LIR_SET_DISPLAY:return v->type==XR_LIR_STRING && a==XR_LIR_SET_I64;
         case XR_LIR_SET_ADD:case XR_LIR_SET_REMOVE:
             return v->type==(XrLirType)(v->op==XR_LIR_SET_ADD?XR_LIR_UNIT:XR_LIR_I1) &&
                 (a==XR_LIR_SET_I64_CELL || a==XR_LIR_SET_I64_REF) && b==XR_LIR_I64;
@@ -618,7 +619,8 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
                 v->op == XR_LIR_FUNCTION_BIND || xr_lir_cell_value_type(m,v->type,NULL);
             scope_count += v->op == XR_LIR_FUNCTION_SCOPE_ENTER;
             if (v->op == XR_LIR_CELL_NEW && b + 1 != f->entry && v->type != XR_LIR_I64_CELL && v->type != XR_LIR_ARRAY_CELL &&
-                v->type != XR_LIR_MAP_STRING_I64_CELL && !xr_lir_cell_value_type(m,v->type,NULL))
+                v->type != XR_LIR_MAP_STRING_I64_CELL && v->type != XR_LIR_SET_I64_CELL &&
+                !xr_lir_cell_value_type(m,v->type,NULL))
                 return xr_lir_internal_error(d, "Cell storage requires the activation entry block",
                                              index + 1, b + 1, i + 1, &v->source);
             bool terminal = xr_lir_internal_terminal(v->op);
@@ -890,10 +892,15 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
 static bool lir_managed_value(const XrLirModule *m, XrLirType type) {
     /* Lexical Cell identities have COPY edges and scope retirement; they do
      * not use this ordinary block-local owner's consuming edge protocol. */
-    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || xr_lir_boxed_type(m, type);
+    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 ||
+        type == XR_LIR_SET_I64 || xr_lir_boxed_type(m, type);
 }
 static bool lir_managed_cell(XrLirType type) {
     return type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_SET_I64_CELL;
+}
+static bool lir_borrowed_set_formal(const XrLirFunctionData *f, uint32_t value) {
+    const XrLirValueData *row = &f->values[value - 1];
+    return row->type == XR_LIR_SET_I64 && row->parameter && !row->block;
 }
 
 static bool lir_frame_cell_owner(const XrLirFunctionData *f, uint32_t id) {
@@ -1030,10 +1037,11 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
             for (uint32_t a = 0; a < edge->argument_count; ++a) {
                 uint32_t id = edge->arguments[a];
                 if (!lir_managed_value(m, f->values[id - 1].type)) continue;
-                if (!owned[id - 1])
+                bool borrowed = lir_borrowed_set_formal(f, id);
+                if (!owned[id - 1] && !borrowed)
                     return xr_lir_internal_error(d, "Managed edge requires a distinct owned reference", function, b + 1, 0, &term->source);
                 for (uint32_t p = 0; p < a; ++p)
-                    if (edge->arguments[p] == id)
+                    if (!borrowed && edge->arguments[p] == id)
                         return xr_lir_internal_error(d, "Managed edge duplicates one owned reference", function, b + 1, 0, &term->source);
             }
             for (uint32_t id = 1; id <= f->value_count; ++id) {

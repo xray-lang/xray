@@ -51,7 +51,8 @@ static XrLirValueLayoutStatus state_key(const XrLirModule *module, const XrLirSt
         supported = shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
             shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE || shape.kind == XR_LIR_TYPE_CALLABLE;
     }
-    if (!supported && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64)
+    if (!supported && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64 &&
+        type != XR_LIR_SET_I64)
         return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     *key = (XrLirValueLayoutKey){type,type == XR_LIR_ARRAY ? slot->array_element : 0,0};
     return XR_LIR_VALUE_LAYOUT_OK;

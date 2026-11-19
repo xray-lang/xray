@@ -252,6 +252,8 @@ static bool xr_rbc_typed_container_function_valid(const XrRbcModule *module,cons
     XrtValueKind kind=image->types[code->homes->result_type-1].kind;
     if (kind==XRT_VALUE_MAP_STRING_I64) {
         if (function->result_kind!=XR_RBC_MAP_STRING_I64) return false;
+    } else if (kind==XRT_VALUE_SET_I64) {
+        if (function->result_kind!=XR_RBC_SET_I64) return false;
     } else if (kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64 ||
         function->result_kind!=xr_rbc_array_kind_at((uint32_t)(kind-XRT_VALUE_ARRAY_I64))) return false;
     /* Only the sealed CodeOwner grants this extension. Keep the raw function
@@ -882,7 +884,7 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     xrt_execution_failure_drop(&owned->failure);
     xr_free(owned->aggregate_bytes);
     xr_free(owned->aggregate_types);
-    if (owned->result_kind == XR_RBC_STRING || owned->result_kind == XR_RBC_MAP_STRING_I64 ||
+    if (owned->result_kind == XR_RBC_STRING || owned->result_kind == XR_RBC_MAP_STRING_I64 || owned->result_kind == XR_RBC_SET_I64 ||
         rbc_array_kind(owned->result_kind)) xrt_managed_drop(owned->value.string);
     xrt_managed_drop(owned->function.owner);
     xrt_locations_release(owned->locations);

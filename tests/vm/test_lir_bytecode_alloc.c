@@ -1010,6 +1010,7 @@ static void record_compiler_failures(void) {
     attempts = 0;
 }
 #include "lir_slice_alloc_cases.h"
+#include "lir_set_admission_cases.h"
 #include "lir_slice_cleanup_alloc_cases.h"
 static void compacted_frame_scalar_cells(void) {
     uint32_t words[8]={0},sources[8]={0}; XrRbcRegisterKind kinds[]={XR_RBC_BITS,XR_RBC_BITS};
@@ -1041,6 +1042,7 @@ int main(void) {
     // Keep the last completed allocation fixture visible even after a fatal abort.
     CHECK(!setvbuf(stdout,NULL,_IONBF,0));
     compacted_frame_scalar_cells();
+    set_new_admission();
     owned_program_admission();
     record_compiler_failures();
     map_compiler_failures();

@@ -869,6 +869,7 @@ static void callable_targets_and_join(unsigned shape) {
     puts(mixed ? "mixed callable join remains explicit and unsupported" : "same-signature targets stay distinct and only a checked code-only escape materializes");
 }
 #include "lir_slice_homes_cases.h"
+#include "lir_set_homes_cases.h"
 #include "lir_slice_call_cases.h"
 #include "lir_slice_boundary_cases.h"
 #include "lir_scoped_cell_homes_cases.h"
@@ -1030,6 +1031,7 @@ int main(void) {
     string_forwarding_window(0,false); string_forwarding_window(16,false); string_forwarding_window(16,true);
     scoped_cells();
     slice_homes();
+    set_homes();
     slice_callback_frontier();
     slice_boundaries();
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_STRING,XR_LIR_U8,XR_LIR_U64};

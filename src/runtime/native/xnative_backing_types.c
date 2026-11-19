@@ -11,11 +11,12 @@
  */
 #include "xnative_array_backing.h"
 #include "xnative_map_backing.h"
+#include "xnative_set_backing.h"
 #include "base/xchecks.h"
 #include <stdalign.h>
 
 static bool backing_types_empty(const XrtBackingTypes *types) {
-    if (!types || types->string || types->map) return false;
+    if (!types || types->string || types->map || types->set) return false;
     for (size_t i = 0; i < XRT_BACKING_ARRAY_COUNT; ++i)
         if (types->arrays[i]) return false;
     return true;
@@ -32,6 +33,7 @@ XR_FUNCDEF void xrt_backing_types_drop(XrtBackingTypes *types) {
     if (!types) return;
     XrtBackingTypes owned = *types;
     *types = (XrtBackingTypes){0};
+    xrt_managed_ops_drop(owned.set);
     xrt_managed_ops_drop(owned.map);
     for (size_t i = XRT_BACKING_ARRAY_COUNT; i; --i) xrt_managed_ops_drop(owned.arrays[i - 1]);
     xrt_managed_ops_drop(owned.string);
@@ -56,8 +58,14 @@ XR_FUNCDEF XrtManagedStatus xrt_backing_types_init(XrtBillingOwner *billing, Xrt
             .tail_child_offsets=&tail, .tail_child_count=1};
         status = backing_bind(billing, spec, &types.map);
     }
+    if (status == XRT_MANAGED_OK) {
+        spec = (XrtRuntimeTypeSpec){.fixed_size=sizeof(XrtSetBacking), .alignment=alignof(XrtSetBacking),
+            .capacity_offset=offsetof(XrtSetBacking,capacity), .stride=sizeof(XrtSetBackingRow)};
+        status = backing_bind(billing,spec,&types.set);
+    }
     if (status != XRT_MANAGED_OK) { xrt_backing_types_drop(&types); return status; }
-    XR_CHECK(types.string && types.arrays[XRT_BACKING_ARRAY_STRING] && types.map, "complete setup owns every typed descriptor");
+    XR_CHECK(types.string && types.arrays[XRT_BACKING_ARRAY_STRING] && types.map && types.set,
+        "complete setup owns every typed descriptor");
     *output = types;
     return XRT_MANAGED_OK;
 }

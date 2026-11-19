@@ -27,6 +27,7 @@ typedef struct XrtBackingTypes {
     XrtManagedOps *string;
     XrtManagedOps *arrays[XRT_BACKING_ARRAY_COUNT];
     XrtManagedOps *map;
+    XrtManagedOps *set;
 } XrtBackingTypes;
 
 /* Cold setup only. Failure leaves the empty output unchanged and refunds every

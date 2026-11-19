@@ -1,0 +1,8 @@
+Set([1, 2, 3])
+3
+true
+true
+false
+Set([2, 3, 4, 1])
+Set([])
+Set([1, 2, 3])

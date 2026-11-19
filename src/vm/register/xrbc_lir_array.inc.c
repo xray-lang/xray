@@ -39,7 +39,7 @@ static XrRbcArrayLocation rbc_lir_array_location(RbcLirCompiler *c, uint32_t val
     return (XrRbcArrayLocation){spill ? c->spill_home[value] : c->slots[value], spill};
 }
 static bool rbc_lir_array_move(RbcLirCompiler *c, XrRbcRegisterKind kind, uint32_t destination, uint32_t source) {
-    if (kind == XR_RBC_STRING || kind == XR_RBC_MAP_STRING_I64 ||
+    if (kind == XR_RBC_STRING || kind == XR_RBC_MAP_STRING_I64 || kind == XR_RBC_SET_I64 ||
         xr_rbc_array_family(kind) < XR_RBC_ARRAY_FAMILY_COUNT)
         return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"managed transfer requires common stable homes");
     if (destination == source) return true;

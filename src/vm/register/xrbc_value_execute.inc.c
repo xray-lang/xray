@@ -13,6 +13,7 @@
 #include "runtime/native/xnative_string_backing_ops.h"
 #include "runtime/native/xnative_array_ops.h"
 #include "runtime/native/xnative_map_backing.h"
+#include "runtime/native/xnative_set_backing.h"
 #include "runtime/native/xnative_values.h"
 #include "xray_native_array_local.h"
 #include "xray_native_values.h"
@@ -306,7 +307,7 @@ static XrtManagedStatus rbc_value_place(RbcValueOrigin origin, bool temporary, s
     const XrtValueImage *image=origin.activation->image;
     if (!home || !image || !home->type || home->type>image->type_count) return XRT_MANAGED_ARGUMENT;
     XrtValueKind kind=image->types[home->type-1].kind;
-    XrtPlaceNull nulls=kind>=XRT_VALUE_STRING && kind<=XRT_VALUE_MAP_STRING_I64 ? XRT_PLACE_NONNULL : XRT_PLACE_NULLABLE;
+    XrtPlaceNull nulls=((kind>=XRT_VALUE_STRING && kind<=XRT_VALUE_MAP_STRING_I64) || kind==XRT_VALUE_SET_I64) ? XRT_PLACE_NONNULL : XRT_PLACE_NULLABLE;
     return xr_rbc_value_home_place((XrRbcHomeLocation){origin.activation->code->homes,
         origin.activation->frame,origin.value,temporary},leaf,nulls,out);
 }
@@ -346,6 +347,24 @@ static XrtManagedStatus rbc_value_map_borrow(const XrRbcModule *module,RbcValueA
     XrtManagedStatus status=rbc_value_place(origin,false,0,&place);
     if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&header);
     if (status==XRT_MANAGED_OK) *output=(const XrtMapBacking *)header;
+    return status;
+}
+static XrtManagedStatus rbc_value_set_borrow(const XrRbcModule *module,RbcValueActivation *activation,
+    uint32_t value,const XrtSetBacking **output) {
+    RbcValueOrigin origin=rbc_value_origin(activation,value);
+    const XrLirValueHome *home=origin.activation ? rbc_value_home(origin.activation->code,origin.value) : NULL;
+    if (!origin.activation || !rbc_value_set(module,origin.activation->code,origin.value,false)) return XRT_MANAGED_ARGUMENT;
+    if (home->parameter && home->parameter<=origin.activation->code->parameter_count &&
+        origin.activation->borrowed_parameters[home->parameter-1]) {
+        const XrtSetBacking *set=NULL;
+        memcpy(&set,origin.activation->borrowed_parameters[home->parameter-1],sizeof(set));
+        if (!set) return XRT_MANAGED_ARGUMENT;
+        *output=set; return XRT_MANAGED_OK;
+    }
+    XrtPlace place; const XrtManagedHeader *header=NULL;
+    XrtManagedStatus status=rbc_value_place(origin,false,0,&place);
+    if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&header);
+    if (status==XRT_MANAGED_OK) *output=(const XrtSetBacking *)header;
     return status;
 }
 static XrtManagedStatus rbc_value_payload(const XrRbcModule *module, XrRbcStack *stack,
@@ -452,7 +471,7 @@ static XrtManagedStatus rbc_value_edge_pair(RbcValueEdgeBuilder *builder, uint32
     }
     if (home && home->owner_count) {
         const XrLirHomeWorkspace *stage=loan && loan->borrowed_owner_workspace!=SIZE_MAX ?
-            rbc_value_cell_stage(code,*loan) : NULL;
+            rbc_value_borrow_stage(code,*loan) : NULL;
         if (!source_home || (source_home->parameter && !stage) || builder->owners>activation->edge_capacity ||
             home->owner_count>activation->edge_capacity-builder->owners) return XRT_MANAGED_ARGUMENT;
         for (size_t leaf=0;leaf<home->owner_count;++leaf) {
@@ -1027,6 +1046,7 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
 #include "xrbc_value_cell_execute.inc.c"
 #include "xrbc_value_slice_execute.inc.c"
 #include "xrbc_value_map_execute.inc.c"
+#include "xrbc_value_set_execute.inc.c"
 #include "xrbc_value_inline_execute.inc.c"
 #include "xrbc_value_callable_factory.inc.c"
 #include "xrbc_value_callable_state.inc.c"
@@ -1106,6 +1126,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation>=XR_RBC_VALUE_ARRAY && access.operation<=XR_RBC_VALUE_BINDING_DROP)
         status=rbc_value_array_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_MAP) status=rbc_value_map_step(module,stack,activation,access,source);
+    else if (access.operation==XR_RBC_VALUE_SET) status=rbc_value_set_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_MAP_LITERAL) status=rbc_value_map_literal(module,stack,activation,access,source);
     else if (access.operation>=XR_RBC_VALUE_RECORD_NEW && access.operation<=XR_RBC_VALUE_NULLABLE_UNWRAP)
         status=rbc_value_inline_step(module,stack,activation,access,source);

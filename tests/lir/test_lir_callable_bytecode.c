@@ -67,6 +67,7 @@ static void execute(XrRbcProgram *program, uint64_t expected) {
     CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits == expected);
     xr_rbc_outcome_free(&outcome);
 }
+#include "lir_set_bytecode_cases.h"
 static void pure_captures(void) {
     for (unsigned capture = 0; capture < 3; ++capture) {
         XrLirModule *module = NULL;
@@ -808,6 +809,7 @@ int main(void) {
     supported_and_rejected_captures();
     owned_map_captures();
     borrowed_map_binding_frontier();
+    set_bytecode_boundaries();
     slice_call_boundaries();
     late_frame_scalar_cells();
     slice_state_reads();

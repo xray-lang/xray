@@ -17,11 +17,21 @@ static XrtManagedStatus rbc_value_slice_storage(RbcValueActivation *activation,
 }
 
 static const XrLirHomeWorkspace *rbc_value_borrow_stage(const XrRbcValueCode *code,XrLirHomeTransfer transfer) {
+    const XrLirValueHomes *homes=code ? code->homes : NULL;
+    if (homes && homes->workspaces && transfer.borrowed_owner_workspace<homes->workspace_count &&
+        homes->workspaces[transfer.borrowed_owner_workspace].kind==XR_LIR_HOME_WORKSPACE_HEADER_BORROW_STAGE)
+        return rbc_value_header_stage(code,transfer);
     return transfer.source_storage==XR_LIR_SLICE_STORAGE_BORROWED_FORMAL ?
         rbc_value_slice_stage(code,transfer) : rbc_value_cell_stage(code,transfer);
 }
 static XrtManagedStatus rbc_value_borrow_stage_owner(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrLirHomeTransfer transfer,XrtManagedHeader **output) {
+    if (rbc_value_header_stage(activation->code,transfer)) {
+        const XrtSetBacking *set=NULL;
+        XrtManagedStatus status=rbc_value_set_borrow(module,activation,transfer.source,&set);
+        if (status==XRT_MANAGED_OK) *output=(XrtManagedHeader *)set;
+        return status;
+    }
     if (transfer.source_storage!=XR_LIR_SLICE_STORAGE_BORROWED_FORMAL)
         return rbc_value_cell_borrow(module,stack,activation,transfer.source,output);
     RbcValuePayload payload;

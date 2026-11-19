@@ -106,12 +106,15 @@ static XrtManagedStatus rbc_value_binding_step(const XrRbcModule *module,XrRbcSt
     bool read=access.operation==XR_RBC_VALUE_BINDING_READ;
     uint32_t value=read ? access.result : access.operation==XR_RBC_VALUE_BINDING_NEW ? access.source : access.other;
     XrtValueKind kind=rbc_value_kind(module,activation->code,binding);
-    if (!read && (kind==XRT_VALUE_STRING || kind==XRT_VALUE_MAP_STRING_I64) && access.window!=UINT32_MAX) {
+    if (!read && (kind==XRT_VALUE_STRING || kind==XRT_VALUE_MAP_STRING_I64 || kind==XRT_VALUE_SET_I64) && access.window!=UINT32_MAX) {
         const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
         const XrtManagedHeader *borrowed=NULL;
         if (kind==XRT_VALUE_STRING) {
             const XrtStringBacking *string=NULL;
             status=rbc_value_string_borrow(activation,value,&string); borrowed=(const XrtManagedHeader *)string;
+        } else if (kind==XRT_VALUE_SET_I64) {
+            const XrtSetBacking *set=NULL;
+            status=rbc_value_set_borrow(module,activation,value,&set); borrowed=(const XrtManagedHeader *)set;
         } else {
             const XrtMapBacking *map=NULL;
             status=rbc_value_map_borrow(module,activation,value,&map); borrowed=(const XrtManagedHeader *)map;
