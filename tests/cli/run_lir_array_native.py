@@ -130,9 +130,12 @@ def main() -> None:
             assert "xrt_native_array_update_place(" in append and "xrl_edge_" not in append
             assert "xrl_pc_owner->length = xrl_pc_length" in append
             assert "++xrl_pc_length" in append and "xrl_pc_spec_" in append
+            assert generated_text.count("xrt_native_array_push_local_i64(") == 1
+            assert re.search(r"if \(xrl_pc_growth\) \{\s+xrt_native_array_push_local_i64\(", append)
+            assert append.index("xrl_pc_owner->length = xrl_pc_length") < append.index("xrl_pc_growth = xrl_pc_body")
             assert "xrl_ar_loop_" in read and "xrl_edge_" in read
         elif "xrt_native_array_push_local_i64(" in generated_text:
-            assert re.search(r"if \(xrl_ap_\d+_ready\) \{\s+xrt_native_array_push_local_i64\(", generated_text)
+            assert re.search(r"if \((?:xrl_ap_\d+_ready|xrl_pc_growth)\) \{\s+xrt_native_array_push_local_i64\(", generated_text)
         if name.startswith("region_") or name.startswith("panic_region_"):
             specs = re.findall(r"static const XrtArrayI64RegionSpec xrl_ar_spec_", generated_text)
             clones = re.findall(r"^xrl_ar_\d+_bb\d+: ;\n(.*?)(?=^xrl_ar_\d+_bb\d+: ;|^}\n)",

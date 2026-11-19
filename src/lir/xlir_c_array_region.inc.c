@@ -111,7 +111,7 @@ static void c_array_region_declarations(LirC *c) {
     if (c->array_region && c->array_region->pointwise.header)
         c_text(c,"    XrtArrayBacking *xrl_pc_owner = NULL;\n"
             "    size_t xrl_pc_length = 0, xrl_pc_capacity = 0;\n"
-            "    bool xrl_pc_ready = false;\n");
+            "    bool xrl_pc_ready = false, xrl_pc_growth = false;\n");
     if (c_array_region_present(c)) {
         const XrLirArrayRegionBindings *binding = c->array_region->bindings;
         for (size_t r = 0; r < binding->region_count; ++r)

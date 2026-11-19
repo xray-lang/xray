@@ -202,8 +202,10 @@ static void c_pointwise_push_header(LirC *c, const XrLirInstructionView *term) {
     c_text(c,"    const bool xrl_pc_body = ");
     if (!plan->body_on_true) c_text(c,"!");
     c_value(c,term->operands[0]); c_text(c,";\n");
+    /* Finish the private segment before the next real append can grow it. */
     c_text(c,"    if (xrl_pc_owner && (!xrl_pc_body || xrl_pc_length == xrl_pc_capacity)) {\n"
         "        xrl_pc_owner->length = xrl_pc_length; xrl_pc_owner = NULL;\n"
+        "        xrl_pc_growth = xrl_pc_body;\n"
         "    } else if (xrl_pc_body && !xrl_pc_owner && xrl_pc_ready) {\n"
         "        XrtArrayI64RegionCache xrl_pc_start = {0};\n");
     c_format(c,"        if (xrt_array_i64_region_try_begin(&(XrtArrayI64RegionContext){xrl_frame, xrl_payload, "
@@ -232,6 +234,6 @@ static void c_pointwise_push_instruction(LirC *c, const XrLirInstructionView *op
             "&xrl_pc_item, sizeof(xrl_pc_item));\n        ++xrl_pc_length;\n    } else {\n");
     } else if (i==plan->create || i==plan->read) c_text(c,"    if (!xrl_pc_owner) {\n");
     c_array_instruction(c,op,source);
-    if (push) c_text(c,"        xrl_pc_ready = true;\n    }\n");
+    if (push) c_text(c,"        xrl_pc_ready = true; xrl_pc_growth = false;\n    }\n");
     else if (i==plan->create+1 || i==plan->read+1) c_text(c,"    }\n");
 }
