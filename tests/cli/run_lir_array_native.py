@@ -136,8 +136,8 @@ def main() -> None:
             assert generated_text.count("xrt_native_string_append_window(") == 3
             assert generated_text.count("xrt_native_string_concat_create(") == 2
         if name == "string_append_invariant":
-            assert generated_text.count("xrt_native_string_append_window(") == 4
-            assert generated_text.count("xrt_native_string_append_owned(") == 5
+            assert generated_text.count("xrt_native_string_append_window(") == 5
+            assert generated_text.count("xrt_native_string_append_owned(") == 7
         # The original large-case oracles check both length and element 299.
         # Keep that executed span check independent of C literal spelling.
         for ordinal, compiler in enumerate(args.compiler or [None]):

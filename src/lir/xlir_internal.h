@@ -168,6 +168,29 @@ static inline const XrLirInstructionView *xr_lir_internal_value_definition(
     const XrLirInstructionView *definition = &block->instructions[value->instruction].view;
     return definition->result == id ? definition : NULL;
 }
+/* Return the signed strict order implied by a selected conditional edge.
+ * This describes operand identities only. It does not prove a recurrence or
+ * grant permission to skip any of the original control flow. */
+static inline const XrLirInstructionView *xr_lir_internal_branch_i64_lt(
+    const XrLirFunctionData *f, const XrLirInstructionView *branch, uint32_t edge, uint32_t order[2]) {
+    if (branch->op != XR_LIR_CONDBR || branch->operand_count != 1 || branch->edge_count != 2 || edge >= 2)
+        return NULL;
+    const XrLirInstructionView *compare = xr_lir_internal_value_definition(f, branch->operands[0]);
+    if (!compare || compare->op != XR_LIR_ICMP || compare->type != XR_LIR_I1 || compare->operand_count != 2)
+        return NULL;
+    uint32_t left = compare->operands[0], right = compare->operands[1];
+    if (!left || left > f->value_count || !right || right > f->value_count ||
+        f->values[left - 1].type != XR_LIR_I64 || f->values[right - 1].type != XR_LIR_I64)
+        return NULL;
+    if (compare->predicate == (edge ? XR_LIR_GE : XR_LIR_LT)) {
+        order[0] = left;
+        order[1] = right;
+    } else if (compare->predicate == (edge ? XR_LIR_LE : XR_LIR_GT)) {
+        order[0] = right;
+        order[1] = left;
+    } else return NULL;
+    return compare;
+}
 XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *, XrLirType type, bool unit);
 XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *);
 XR_FUNC bool xr_lir_internal_map_literals_valid(const XrLirModule *);

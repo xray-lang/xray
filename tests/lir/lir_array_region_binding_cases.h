@@ -227,7 +227,7 @@ static void array_push_binding_slot(const XrLirArrayRegionBindings *bindings,con
     CHECK(found);
 }
 static void array_push_binding_projection(void) {
-    const enum ArrayPushWindowMode modes[]={PUSH_WINDOW_CURRENT,PUSH_WINDOW_PARAMETER_END,PUSH_WINDOW_ENTRY_EXIT_RETAINS,
+    const enum ArrayPushWindowMode modes[]={PUSH_WINDOW_CURRENT,PUSH_WINDOW_PARAMETER_END,PUSH_WINDOW_MIRRORED_END,PUSH_WINDOW_ENTRY_EXIT_RETAINS,
         PUSH_WINDOW_EXIT_BRIDGE};
     for (size_t test=0;test<sizeof(modes)/sizeof(*modes);++test) {
         enum ArrayPushWindowMode mode=modes[test];
