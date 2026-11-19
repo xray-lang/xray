@@ -327,7 +327,9 @@ static XrtManagedStatus string_append_candidate(XrtPlaceReplacement *reservation
         capacity *= 2;
     }
     XrtManagedHeader *pending = NULL;
-    XrtManagedStatus status = xrt_managed_slot_reserved_prepare(reservation, types->string,
+    /* The initialized byte span ends at the terminator. Future appends
+     * write their own suffix before making that part of the tail readable. */
+    XrtManagedStatus status = xrt_managed_slot_reserved_prepare_scalar_tail(reservation, types->string,
         sizeof(XrtStringBacking) + capacity, &pending);
     if (status != XRT_MANAGED_OK) return status;
     XrtStringBacking *value = (XrtStringBacking *)pending;
