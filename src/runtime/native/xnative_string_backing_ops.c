@@ -24,11 +24,10 @@ static XrtManagedStatus string_prepare(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, size_t length, size_t runes, XrtStringBacking **output) {
     if (!types || !types->string) return XRT_MANAGED_ARGUMENT;
     if (length > SIZE_MAX - sizeof(XrtStringBacking) - 1) return XRT_MANAGED_OVERFLOW;
-    XrtManagedHeader *payload = NULL;
-    XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, types->string,
-        sizeof(XrtStringBacking) + length + 1, &payload);
+    XrtStringBacking *string = NULL;
+    XrtManagedStatus status = xrt_string_backing_prepare(frame, slot, types->string,
+        sizeof(XrtStringBacking) + length + 1, &string);
     if (status == XRT_MANAGED_OK) {
-        XrtStringBacking *string = (XrtStringBacking *)payload;
         XR_CHECK(string->capacity == length + 1, "derived bytes use the actual pending extent");
         string->length = length;
         string->runes = runes;
@@ -246,7 +245,10 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_try_append_exclusive(XrtStringBac
         *appended = false;
         return XRT_MANAGED_OK;
     }
-    if (suffix->length) memmove(text->bytes + text->length, suffix->bytes, suffix->length);
+    if (suffix->length) {
+        memmove(text->bytes + text->length, suffix->bytes, suffix->length);
+        atomic_store_explicit(&text->cached_hash, 0, memory_order_relaxed);
+    }
     text->bytes[length] = 0;
     text->length = length;
     text->runes = runes;
@@ -288,6 +290,7 @@ static size_t string_fill_window(XrtStringBacking *text, const XrtStringBacking 
     text->length += steps * suffix->length;
     text->runes += steps * suffix->runes;
     text->bytes[text->length] = 0;
+    atomic_store_explicit(&text->cached_hash, 0, memory_order_relaxed);
     return steps;
 }
 
@@ -340,6 +343,8 @@ static XrtManagedStatus string_append_grow(XrtPlaceReplacement *reservation,
     if (!resized) status = xrt_managed_slot_reserved_prepare_scalar_tail(reservation, types->string, bytes, &storage);
     if (status != XRT_MANAGED_OK) return status;
     XrtStringBacking *value = (XrtStringBacking *)storage;
+    /* A newly allocated or resized object has no readers until publication. */
+    atomic_init(&value->cached_hash, 0);
     XR_CHECK(value->capacity == capacity, "String growth charges its actual complete capacity");
     if (!resized && prefix) memcpy(value->bytes, left->bytes, prefix);
     if (right->length) memcpy(value->bytes + prefix, right->bytes, right->length);

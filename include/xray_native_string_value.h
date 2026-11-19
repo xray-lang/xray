@@ -31,6 +31,7 @@ typedef struct XrtStringAppendOwned {
 struct XrtStringBacking {
     XrtManagedHeader managed;
     size_t length, runes, capacity;
+    _Atomic(uint64_t) cached_hash;
     char bytes[];
 };
 #if defined(_MSC_VER)
@@ -38,7 +39,7 @@ struct XrtStringBacking {
 #endif
 _Static_assert(sizeof(size_t) == 8 && offsetof(XrtStringBacking, length) == 16 &&
     offsetof(XrtStringBacking, runes) == 24 && offsetof(XrtStringBacking, capacity) == 32 &&
-    offsetof(XrtStringBacking, bytes) == 40 && sizeof(XrtStringBacking) == 40,
-    "String backing has a fixed forty-byte prefix");
+    offsetof(XrtStringBacking, cached_hash) == 40 && offsetof(XrtStringBacking, bytes) == 48 &&
+    sizeof(XrtStringBacking) == 48, "String backing has a fixed forty-eight-byte prefix");
 #endif
 #endif // XRAY_NATIVE_STRING_VALUE_H
