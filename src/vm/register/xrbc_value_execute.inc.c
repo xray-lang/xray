@@ -1243,6 +1243,31 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     return XR_RBC_OK;
 }
 
+/* A verified local edit has neither a forwarding word nor an Array role.
+ * Its cold transaction can replace the backing, but cannot change the VM
+ * cursor, activation, or register bank. */
+static XR_NOINLINE XrRbcStatus xr_rbc_map_edit_step(const XrRbcModule *module,
+    XrRbcStack *stack, uint32_t index, size_t pc) {
+    RbcValueActivation *activation = stack->values ? stack->values->top : NULL;
+    if (!activation || activation->depth != stack->depth)
+        return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+    if (!activation->owned_code || index >= activation->code->access_count) return XR_RBC_INVALID;
+    if (activation->active_array_region)
+        rbc_value_array_region_forget(activation, activation->active_array_region, RBC_ARRAY_REGION_BYPASS);
+    XrRbcValueAccess access = activation->code->accesses[index];
+    if (activation->backings_ready) {
+        const uint32_t *args = activation->code->arguments + access.first;
+        bool applied = false;
+        XrtManagedStatus status = rbc_value_map_edit_local(stack, activation, access, args, &applied);
+        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
+        if (applied) return XR_RBC_OK;
+    }
+    uint32_t source = rbc_value_source(module, stack, pc);
+    XrtManagedStatus status = rbc_value_map_step(module, stack, activation, access, source);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    return XR_RBC_OK;
+}
+
 /* A borrowed literal only materializes its Frame keeper. The ordinary
  * factory still owns first use and failure, including the source and cleanup. */
 static XR_NOINLINE XrRbcStatus xr_rbc_string_literal_borrow_step(const XrRbcModule *module,

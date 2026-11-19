@@ -120,7 +120,11 @@ typedef struct XrRbcValueCode {
 /* A leaf needs no call, return or owning destination. Both emission and
  * admission select the word from the same admitted access description. */
 static inline XrRbcOp rbc_value_access_opcode(const XrRbcValueCode *code, XrRbcValueAccess access) {
-    if (access.operation == XR_RBC_VALUE_MAP && xr_lir_map_reads_key(access.index)) return XR_RBC_MAP_READ;
+    if (access.operation == XR_RBC_VALUE_MAP) {
+        if (xr_lir_map_reads_key(access.index)) return XR_RBC_MAP_READ;
+        if (access.source && (access.index == XR_LIR_MAP_OP_SET || access.index == XR_LIR_MAP_OP_REMOVE))
+            return XR_RBC_MAP_EDIT;
+    }
     if (access.operation == XR_RBC_VALUE_STRING_LITERAL && code->homes && code->homes->values &&
         access.result && access.result <= code->homes->value_count &&
         code->homes->values[access.result].literal_cache_borrow) return XR_RBC_STRING_LITERAL_BORROW;

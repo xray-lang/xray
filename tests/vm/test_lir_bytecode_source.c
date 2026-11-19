@@ -100,6 +100,35 @@ static uint64_t run(XrRbcProgram *program, uint64_t argument) {
     return result;
 }
 
+static void local_map_edit(void) {
+    XrRbcProgram *program = callable(
+        "fn edit(n:i64)->i64 {\n"
+        "    var table={\"keep\":7}\n"
+        "    const snapshot=table\n"
+        "    table.set(\"new\",n)\n"
+        "    const seen=table[\"new\"]\n"
+        "    if (!table.delete(\"new\")) {return -1}\n"
+        "    return seen*100+len(table)*10+len(snapshot)\n"
+        "}\nedit(3)\n");
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    const XrRbcFunction *entry = &module->functions[0];
+    uint32_t *words = (uint32_t *)(void *)entry->code;
+    size_t edits = 0;
+    for (size_t pc = 0; pc < entry->code_count; ++pc) {
+        uint32_t original = words[pc];
+        if ((original & 255u) != XR_RBC_MAP_EDIT) continue;
+        ++edits;
+        words[pc] = (original & ~255u) | XR_RBC_MAP_READ;
+        uint64_t argument = 3;
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_module_prepare(module, 0, &argument, 1, xr_rbc_program_locations(program),
+            &execution) == XR_RBC_INVALID && !execution);
+        words[pc] = original;
+    }
+    CHECK(edits == 2 && run(program, 3) == 311 && run(program, 8) == 811);
+    xr_rbc_program_destroy(program);
+}
+
 static const char i64_equality_source[] =
     "fn equality(x:i64,y:i64)->i64{if(x==y){return 1}\n"
     "if(x!=y){return 2}\nreturn 3}\nprint(equality(1,2))\n";
@@ -774,6 +803,7 @@ int main(int argc, char **argv) {
     i64_identity_cast();
     i64_equality();
     metadata_lifetime();
+    local_map_edit();
     numerical_oracles();
     actual_entry_and_refusal();
     f64_transport();

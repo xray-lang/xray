@@ -94,12 +94,6 @@ static XrtManagedStatus rbc_value_map_edit_local(XrRbcStack *stack, RbcValueActi
 static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
-    if (access.source && activation->owned_code && activation->backings_ready &&
-        (access.index == XR_LIR_MAP_OP_SET || access.index == XR_LIR_MAP_OP_REMOVE)) {
-        bool applied = false;
-        XrtManagedStatus status = rbc_value_map_edit_local(stack, activation, access, args, &applied);
-        if (status != XRT_MANAGED_OK || applied) return status;
-    }
     bool mutate=access.index==XR_LIR_MAP_OP_SET || access.index==XR_LIR_MAP_OP_REMOVE || access.index==XR_LIR_MAP_OP_CLEAR;
     const XrtBackingTypes *types=NULL;
     if (access.index==XR_LIR_MAP_OP_NEW || mutate) {
