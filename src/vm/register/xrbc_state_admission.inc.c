@@ -79,6 +79,8 @@ static bool rbc_state_image_shape(const XrtValueImage *image) {
             if (!parameter->type || parameter->type > i || parameter->mode > 2 || parameter->escaping > 1 ||
                 !rbc_state_span(parameter->name_offset,parameter->name_length,image->name_bytes)) return false;
         }
+        if ((type->flags & XRT_VALUE_INLINE_DISPLAY) && !xrt_value_image_inline_display_shape(image, i))
+            return false;
     }
     return true;
 }
@@ -120,7 +122,11 @@ static bool xr_rbc_state_layout_valid(const XrRbcModule *module) {
         if (!entry->parameter_count || !entry->register_kinds || entry->register_kind_count != entry->register_count ||
             entry->parameter_count > entry->register_count ||
             rbc_register_kind(entry,entry->parameter_count - 1) != XR_RBC_STATE) return false;
-    } else if (module->state_entry) return false;
+    } else {
+        if (module->state_entry) return false;
+        const XrtValueImage *image = xr_rbc_module_value_image(module);
+        if (image && !rbc_state_image_shape(image)) return false;
+    }
     for (size_t f = 0; f < module->function_count; ++f) {
         const XrRbcFunction *function = &module->functions[f];
         if (!spec && function->register_kinds && function->register_kind_count == function->register_count)

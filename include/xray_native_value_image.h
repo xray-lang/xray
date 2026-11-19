@@ -34,6 +34,13 @@ static inline int xrt_value_kind_is_array(XrtValueKind kind) {
     return (kind >= XRT_VALUE_ARRAY_I64 && kind <= XRT_VALUE_ARRAY_U64) || kind == XRT_VALUE_ARRAY_INLINE;
 }
 enum { XRT_VALUE_NO_SUSPEND = 1u, XRT_VALUE_C_ABI = 2u };
+/* Tuple and Nullable rows may carry a verified display closure. */
+enum { XRT_VALUE_INLINE_DISPLAY = 4u };
+
+static inline int xrt_value_kind_is_display_leaf(XrtValueKind kind) {
+    return kind == XRT_VALUE_BOOL || kind == XRT_VALUE_I64 ||
+        kind == XRT_VALUE_F64 || kind == XRT_VALUE_STRING;
+}
 
 /* Type references are one-based; zero means absent. A type depends only on
  * earlier rows. Vector spans are zero-based. Empty spans start at zero. Names

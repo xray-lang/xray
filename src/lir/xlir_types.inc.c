@@ -217,6 +217,20 @@ XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
     return true;
 }
 
+static bool lir_inline_display_member(const XrLirModule *m, XrLirType type) {
+    if (type < XR_LIR_TYPE_COUNT)
+        return type == XR_LIR_STRING || type == XR_LIR_I64 || type == XR_LIR_F64 || type == XR_LIR_I1;
+    return m->types[type - XR_LIR_TYPE_COUNT].inline_display;
+}
+
+static bool lir_inline_display_shape(const XrLirModule *m, XrLirTypeView shape, const XrLirRecordField *fields) {
+    if (shape.kind == XR_LIR_TYPE_NULLABLE) return lir_inline_display_member(m, shape.element);
+    if (shape.kind != XR_LIR_TYPE_TUPLE) return false;
+    for (uint32_t i = 0; i < shape.count; ++i)
+        if (!lir_inline_display_member(m, fields[i].type)) return false;
+    return true;
+}
+
 static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
     const XrLirCallableType *callable, XrLirType cell_element, const XrLirRecordField *fields,
     const XrLirRecordIdentity *record, XrLirType *output) {
@@ -277,7 +291,8 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
         }
         m->types[m->type_count] = (XrLirTypeData){.shape=shape, .layout=layout, .callable=received,
             .cell_element=cell_element, .fields=owned_fields,.record=owned_record,
-            .record_names=names,.record_name_capacity=name_capacity};
+            .record_names=names,.record_name_capacity=name_capacity,
+            .inline_display=lir_inline_display_shape(m,shape,owned_fields)};
         m->type_index[slot] = ++m->type_count;
     }
     *output = XR_LIR_TYPE_COUNT + m->type_index[slot] - 1;

@@ -1201,8 +1201,15 @@ static XrtManagedStatus rbc_value_display(const XrRbcModule *module,XrRbcStack *
     const XrtBackingTypes *types=NULL;
     if (status==XRT_MANAGED_OK) status=xrt_native_values_backings(xrt_value_root_current(source),&types);
     const XrLirValueHome *result=rbc_value_home(activation->code,access.result);
-    if (status==XRT_MANAGED_OK) status=xrt_string_backing_pod_display_create(activation->frame,result->temporary_first_owner,
-        types,&activation->code->displays[access.index],payload.address);
+    if (status==XRT_MANAGED_OK) {
+        const XrLirValueHome *home = rbc_value_home(activation->code, access.source);
+        const XrtValueImage *image = activation->image;
+        if (home && home->type && image->types[home->type - 1].kind == XRT_VALUE_TUPLE)
+            status = xrt_string_backing_tuple_display_create(activation->frame,
+                result->temporary_first_owner, types, image, home->type, payload.address);
+        else status=xrt_string_backing_pod_display_create(activation->frame,result->temporary_first_owner,
+            types,&activation->code->displays[access.index],payload.address);
+    }
     return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
 }
 static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrRbcStack *stack,

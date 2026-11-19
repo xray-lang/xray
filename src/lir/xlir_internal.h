@@ -94,6 +94,7 @@ typedef struct XrLirTypeData {
     uint32_t *record_names, record_name_capacity;
     uint32_t inline_array_ordinal;
     uint32_t inline_array_operations[XR_LIR_ARRAY_OP_GET];
+    bool inline_display;
 } XrLirTypeData;
 struct XrLirModule {
     XrLirTypeData *types;

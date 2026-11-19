@@ -8,6 +8,7 @@
  */
 XR_FUNC bool xr_lir_display_type(const XrLirModule *m, XrLirType type) {
     if (type == XR_LIR_I1 || type == XR_LIR_U8 || type == XR_LIR_U64) return true;
+    if (xr_lir_tuple_display_type(m, type)) return true;
     bool nullable = false;
     while (type >= XR_LIR_TYPE_COUNT) {
         XrLirTypeView shape = {0};
@@ -17,6 +18,11 @@ XR_FUNC bool xr_lir_display_type(const XrLirModule *m, XrLirType type) {
         type = shape.element;
     }
     return nullable && lir_pod_scalar(type) < XR_POD_SCALAR_COUNT;
+}
+XR_FUNC bool xr_lir_tuple_display_type(const XrLirModule *m, XrLirType type) {
+    if (!m || type < XR_LIR_TYPE_COUNT || type - XR_LIR_TYPE_COUNT >= m->type_count) return false;
+    const XrLirTypeData *row = &m->types[type - XR_LIR_TYPE_COUNT];
+    return row->shape.kind == XR_LIR_TYPE_TUPLE && row->inline_display;
 }
 XR_FUNC bool xr_lir_display_intrinsic_valid(const XrLirIntrinsic *entry) {
     return entry && entry->operation == XR_LIR_INTRINSIC_DISPLAY && entry->scalar_sync &&

@@ -1,0 +1,16 @@
+fn show_pair(value: (i64, string)) {
+    print(value)
+    print("interpolated ${value}")
+}
+
+fn exercise() {
+    const label = "value ${7}"
+    show_pair((1, label))
+    print((42,))
+    print(((true, 3.14), ("é",)))
+    const present: string? = label
+    const absent: string? = null
+    print((present, absent))
+}
+
+exercise()
