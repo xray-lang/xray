@@ -77,25 +77,17 @@
       "id": "demos/01-basics/tuples.xr",
       "path": "demos/01-basics/tuples.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/tuples.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/tuples.xr:12:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/tuples.txt"
     },
     {
       "id": "native:demos/01-basics/tuples.xr",
       "path": "demos/01-basics/tuples.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/tuples.txt",
-      "gap": {
-        "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/tuples.xr:12:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/tuples.txt"
     },
     {
       "id": "demos/01-basics/variables.xr",

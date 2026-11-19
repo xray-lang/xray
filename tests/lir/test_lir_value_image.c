@@ -211,8 +211,27 @@ static void deep_single_inventory(void) {
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
     puts("raw value image: 513 rows use exactly 513 enumeration reads and earlier-only dependencies");
 }
+static void rejects_forged_display_closure(void) {
+    XrtValueImageType types[] = {
+        {.kind = XRT_VALUE_RECORD, .size = 1, .alignment = 1},
+        {.kind = XRT_VALUE_TUPLE, .size = 1, .alignment = 1, .field_count = 1},
+    };
+    const XrtValueImageSlot fields[] = {{.type = 1}};
+    const XrtValueImage image = {.types = types, .type_count = 2, .slots = fields, .slot_count = 1};
+    Owner owner;
+    owner_new(&owner, SIZE_MAX);
+    XrtValueImagePlans *bound = NULL;
+    MANAGED(xrt_value_image_bind(owner.billing, &image, (XrtManagedLease){0}, &bound));
+    xrt_value_image_drop(&bound);
+    XrtBillingStats before = xrt_billing_owner_stats(owner.billing);
+    types[1].flags = XRT_VALUE_INLINE_DISPLAY;
+    CHECK(xrt_value_image_bind(owner.billing, &image, (XrtManagedLease){0}, &bound) == XRT_MANAGED_ARGUMENT);
+    CHECK(!bound && xrt_billing_owner_stats(owner.billing).allocations == before.allocations);
+    owner_drop(&owner);
+    CHECK(owner.audit.final == 1);
+}
 int main(void) {
-    copied_names_and_real_values(); failures_and_empty(); deep_single_inventory();
+    copied_names_and_real_values(); failures_and_empty(); deep_single_inventory(); rejects_forged_display_closure();
     puts("raw value images: billed ownership, copied names, exact ids, creator retirement and real inline values passed");
     return 0;
 }
