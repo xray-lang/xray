@@ -509,6 +509,10 @@ static bool lir_home_container_chain_start(const XrLirModule *module, const XrLi
     }
     if (definition->type != XR_LIR_MAP_STRING_I64) return false;
     if (definition->op == XR_LIR_MAP_LITERAL_NEW || definition->op == XR_LIR_MAP_RETAIN) return true;
+    /* Reading a local Map Cell creates an independent owning snapshot. */
+    if (definition->op == XR_LIR_CELL_READ)
+        return definition->operand_count == 1 &&
+            f->values[definition->operands[0] - 1].type == XR_LIR_MAP_STRING_I64_CELL;
     XrLirIntrinsic entry;
     return definition->op == XR_LIR_CALL_INTRINSIC &&
         xr_lir_intrinsic_view(module, definition->intrinsic, &entry) == XR_LIR_OK &&

@@ -1,0 +1,16 @@
+fn mixed(n: i64) -> i64 {
+    var table = {"hot": 7, "hold": 11}
+    const before = table
+    var sum = 0
+    var i = 0
+    while (i < n) {
+        table.set("hot", i+1)
+        sum += table["hot"]
+        table.delete("hot")
+        i += 1
+    }
+    return sum + len(table)*100 + before["hot"]*1000
+}
+
+print(mixed(0))
+print(mixed(3))

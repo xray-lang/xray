@@ -27,11 +27,13 @@ static uint32_t lower_operand_at(const XrXirFunction *f, const XrXirInstruction 
     return lower_grouped_operands(op->op) ? f->operands[op->args[0] + a] : op->args[a];
 }
 static bool lower_array_place_consumer(XrXirOp op, uint32_t a) {
+    /* Map edits require their original writable binding. Promoting it would
+     * rebuild and retire a temporary Cell at each edit. */
     return a == 0 && (op == XR_XIR_ARRAY_GET || op == XR_XIR_ARRAY_LEN ||
         op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH ||
         op == XR_XIR_PLACE_READ || op == XR_XIR_PLACE_WRITE || op == XR_XIR_MAP_GET ||
-        op == XR_XIR_MAP_SET || op == XR_XIR_HASH_LEN || op == XR_XIR_HASH_CONTAINS ||
-        op == XR_XIR_HASH_DELETE || op == XR_XIR_HASH_CLEAR || op == XR_XIR_HASH_KEYS || op == XR_XIR_HASH_VALUES);
+        op == XR_XIR_HASH_LEN || op == XR_XIR_HASH_CONTAINS ||
+        op == XR_XIR_HASH_KEYS || op == XR_XIR_HASH_VALUES);
 }
 
 static bool lower_array_flow_inventory(LowerFunction *f) {
@@ -149,18 +151,13 @@ static void lower_array_flow_liveness(LowerFunction *f, uint32_t b, uint32_t i) 
         if (cell != UINT32_MAX && f->value_blocks[value] != block)
             f->use[(size_t)block * f->cell_count + cell] = 1;
     }
-    if (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_LEN || op->op == XR_XIR_ARRAY_SET ||
-        op->op == XR_XIR_ARRAY_PUSH || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE ||
-        op->op == XR_XIR_MAP_GET || op->op == XR_XIR_MAP_SET || op->op == XR_XIR_HASH_LEN ||
-        op->op == XR_XIR_HASH_CONTAINS || op->op == XR_XIR_HASH_DELETE || op->op == XR_XIR_HASH_CLEAR ||
-        op->op == XR_XIR_HASH_KEYS || op->op == XR_XIR_HASH_VALUES) {
+    if (lower_array_place_consumer(op->op, 0)) {
         uint32_t receiver = lower_operand_at(source, op, 0);
         uint32_t cell = f->array_places[receiver];
         if (cell == UINT32_MAX) return;
         size_t at = (size_t)b * f->cell_count + cell;
         if (op->op != XR_XIR_PLACE_WRITE && !f->define[at]) f->use[at] = 1;
-        if (op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_ARRAY_PUSH || op->op == XR_XIR_PLACE_WRITE ||
-            op->op == XR_XIR_MAP_SET || op->op == XR_XIR_HASH_DELETE || op->op == XR_XIR_HASH_CLEAR)
+        if (op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_ARRAY_PUSH || op->op == XR_XIR_PLACE_WRITE)
             f->define[at] = 1;
     }
 }
