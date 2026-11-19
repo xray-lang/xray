@@ -1447,15 +1447,15 @@ static void test_string_binding_aliases(void) {
     xr_rbc_outcome_free(&outcome);
 }
 
-static void test_typed_spill_copy_cycle(void) {
+static void test_scalar_edge_in_typed_function(bool spill) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType integer=XR_LIR_I64;
     XrLirFunction f=test_function(m,"mixed_typed_copy_cycle",&integer,1,integer);
     XrLirType carried_types[]={integer,integer,integer};
     XrLirBlock entry=test_block(m,f,NULL,0),loop=test_block(m,f,carried_types,3);
     XrLirBlock body=test_block(m,f,NULL,0),done=test_block(m,f,NULL,0);
     OK(xr_lir_set_entry(m,f,entry));
-    for(uint32_t n=0;n<260;++n)(void)test_constant(m,entry,integer,n);
-    // A local String uses its real owner home beside the parallel scalar edge.
+    if (spill) for (uint32_t n=0;n<260;++n) (void)test_constant(m,entry,integer,n);
+    // The function owns a String, but no owner crosses the scalar edge.
     XrLirValue text=frame_text(m,entry,"temporary",9);frame_drop(m,entry,text,false);
     XrLirValue initial[]={test_constant(m,entry,integer,1),test_constant(m,entry,integer,2),parameter(m,f,0)};
     test_branch(m,entry,loop,initial,3);
@@ -1469,19 +1469,12 @@ static void test_typed_spill_copy_cycle(void) {
     XrRbcProgram *program=compile(m,f);
     const XrRbcModule *physical=xr_rbc_program_view(program);
     const XrRbcValueCode *code=xr_rbc_module_value_code(physical,0);
-    CHECK(code && code->homes && physical->functions[0].spill_count);
+    CHECK(code && code->homes && (physical->functions[0].spill_count > 0)==spill);
     CHECK(code->homes->values[text.id].owner_count==1 &&
         code->locations[text.id].kind==XR_RBC_VALUE_NOWHERE);
-    bool parallel=false;
-    for(size_t index=0;index<code->access_count;++index) {
-        const XrRbcValueAccess *access=&code->accesses[index];
-        if(access->operation!=XR_RBC_VALUE_EDGE || access->count!=3)continue;
-        const uint32_t *pairs=code->arguments+access->first;
-        parallel|=pairs[0]==carried[1].id && pairs[1]==carried[0].id &&
-            pairs[2]==carried[0].id && pairs[3]==carried[1].id &&
-            pairs[4]==next.id && pairs[5]==carried[2].id;
-    }
-    CHECK(parallel);xr_lir_module_destroy(m);
+    for (size_t index=0;index<code->access_count;++index)
+        CHECK(code->accesses[index].operation!=XR_RBC_VALUE_EDGE);
+    xr_lir_module_destroy(m);
     for(uint64_t n=0;n<4;++n)CHECK(run(program,&n,1)==(n%2?2u:1u));
     xr_rbc_program_destroy(program);
 }
@@ -1523,7 +1516,8 @@ int main(void) {
     test_f64_constant_comparison();
     test_f64_constant_spills_and_phi();
     test_many_spilled_conditions();
-    test_typed_spill_copy_cycle();
+    test_scalar_edge_in_typed_function(false);
+    test_scalar_edge_in_typed_function(true);
     test_backward_owned_dag();
     test_string_binding_aliases();
     test_scalar_spill_branches();
