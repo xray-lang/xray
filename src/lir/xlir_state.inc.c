@@ -20,7 +20,7 @@ XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *m, XrLirType type,
     case XR_LIR_STRING: case XR_LIR_ARRAY: case XR_LIR_MAP_STRING_I64: case XR_LIR_SET_I64:
         *size = sizeof(void *); *alignment = _Alignof(void *); return true;
     default: {
-        if (xr_lir_boxed_type(m, type)) {
+        if (xr_lir_inline_aggregate_type(m, type)) {
             *size = sizeof(void *); *alignment = _Alignof(void *); return true;
         }
         XrLirTypeView view;
@@ -31,8 +31,7 @@ XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *m, XrLirType type,
             *size = sizeof(void *); *alignment = _Alignof(void *); return true;
         }
         if (xr_lir_type_view(m, type, &view) != XR_LIR_OK ||
-            (view.kind != XR_LIR_TYPE_FIXED_ARRAY && view.kind != XR_LIR_TYPE_NULLABLE &&
-             view.kind != XR_LIR_TYPE_TUPLE) ||
+            (view.kind != XR_LIR_TYPE_FIXED_ARRAY && view.kind != XR_LIR_TYPE_NULLABLE) ||
             xr_lir_type_layout(m, type, &layout) != XR_LIR_OK || layout.managed || layout.size > UINT32_MAX) return false;
         *size = (uint32_t)layout.size;
         *alignment = layout.alignment;

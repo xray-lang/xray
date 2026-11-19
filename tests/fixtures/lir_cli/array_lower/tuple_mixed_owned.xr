@@ -1,0 +1,21 @@
+fn pack(label: string, code: i64) -> (bool, f64, (string, i64)) {
+    return (code > 0, 1.25, (label, code))
+}
+fn choose(flag: bool, held: string) -> (bool, f64, (string, i64)) {
+    if (flag) {
+        return pack("left ${held}", 42)
+    }
+    return pack("right ${held}", -17)
+}
+fn show(result: (bool, f64, (string, i64))) {
+    print(result.0)
+    print(result.1)
+    print(result.2.0)
+    print(result.2.1)
+}
+fn exercise() {
+    const held = "branch ${37}"
+    show(choose(true, held))
+    show(choose(false, held))
+}
+exercise()

@@ -107,7 +107,7 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
         c_format(c, "typedef %s XrlValue_%zu;\n", scalar, type_id);
     } else {
         c_format(c, "typedef struct XrlValue_%zu {\n", type_id);
-        if (spec->kind == XRT_VALUE_RECORD) {
+        if (xrt_value_kind_has_fields(spec->kind)) {
             if (!spec->field_count) c_text(c, "    uint8_t padding;\n");
             for (size_t f = 0; f < spec->field_count && c_request_poll(c); ++f) {
                 size_t child = c_value_dependency(c, types, spec->fields[f].type, ordinal);
@@ -125,8 +125,6 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
             }
         } else if (spec->kind == XRT_VALUE_FIXED_U8) {
             c_format(c, "    uint8_t bytes[%zu];\n", spec->count);
-        } else if (spec->kind == XRT_VALUE_TUPLE_I64) {
-            c_format(c, "    int64_t fields[%zu];\n", spec->count);
         } else {
             c_error(c, XR_LIR_C_UNSUPPORTED, "C value type requires a dedicated callable or capability ABI");
         }

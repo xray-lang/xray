@@ -23,7 +23,7 @@ static bool rbc_state_register_kind(uint32_t kind, XrRbcRegisterKind *payload) {
 }
 static bool xr_rbc_state_payload_kind(uint32_t kind) {
     XrRbcRegisterKind payload;
-    return kind==XRT_VALUE_RECORD || kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FUNCTION ||
+    return xrt_value_kind_has_fields(kind) || kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FUNCTION ||
         kind==XRT_VALUE_MAP_STRING_I64 || kind==XRT_VALUE_SET_I64 || (kind>=XRT_VALUE_ARRAY_I64 && kind<=XRT_VALUE_ARRAY_U64) ||
         rbc_state_register_kind(kind,&payload);
 }
@@ -102,7 +102,7 @@ static bool rbc_state_spec_shape(const XrtModuleLayoutSpec *spec) {
             (slot->flags & ~XRT_MODULE_SLOT_MUTABLE)) return false;
         const XrtValueImageType *type = &spec->values->types[slot->type - 1];
         bool pod = !type->owned_count && (type->kind == XRT_VALUE_FIXED_U8 ||
-            type->kind == XRT_VALUE_TUPLE_I64 || type->kind == XRT_VALUE_NULLABLE);
+            type->kind == XRT_VALUE_NULLABLE);
         if ((!xr_rbc_state_payload_kind(type->kind) && !pod) || slot->size != type->size || slot->alignment != type->alignment ||
             slot->alignment > spec->payload_alignment || slot->offset % slot->alignment || slot->offset < end ||
             slot->offset > spec->payload_size || slot->size > spec->payload_size - slot->offset) return false;

@@ -79,24 +79,30 @@ XR_FUNC uint32_t xr_lir_constructed_type_count(const XrLirModule *);
  * No descriptor borrows a frontend type pool or allocates an execution value. */
 XR_FUNC XrLirStatus xr_lir_fixed_array_type(XrLirModule *, XrLirType element,
     uint32_t count, XrLirType *output);
-/* Nullable keeps an inline tag for POD payloads. String and canonical record
- * payloads use independently owned canonical objects. Authority capabilities
- * have no nullable physical projection through this operation. */
+/* Nullable keeps an inline tag for a physical payload. The common value
+ * plan describes constructed payloads and any owner leaves. Authority
+ * capabilities have no nullable physical projection here. */
 XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *, XrLirType element, XrLirType *output);
-/* This physical Tuple family contains count I64 fields in logical order.
- * Other Tuple payload families require their own admitted exact layout. */
+/* Tuple identity consists of its ordered field types. Positional fields have
+ * no name, visibility or mutation metadata. The module owns the copied fields. */
+XR_FUNC XrLirStatus xr_lir_tuple_type(XrLirModule *, const XrLirRecordField *, uint32_t count, XrLirType *output);
+/* The State preparation pack is a Tuple with one I64 field per target slot. */
 XR_FUNC XrLirStatus xr_lir_tuple_i64_type(XrLirModule *, uint32_t count, XrLirType *output);
 /* Fields retain declaration order. A real nominal identity is mandatory.
  * The receiving module owns every name and exact dependency; no frontend metadata is borrowed.
- * String, I64, Bool, F64 and earlier boxed fields have complete transports. */
+ * String, I64, Bool, F64 and earlier inline aggregates have complete transports. */
 XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *, const XrLirRecordIdentity *, const XrLirRecordField *,
     uint32_t count, XrLirType *output);
-XR_FUNC XrLirStatus xr_lir_record_fields(const XrLirModule *, XrLirType,
+/* Returns declared fields for a record or positions for a Tuple. */
+XR_FUNC XrLirStatus xr_lir_aggregate_fields(const XrLirModule *, XrLirType,
     const XrLirRecordField **, uint32_t *count);
 /* The copied descriptor borrows only separately owned module storage, so
  * growing the type vector does not invalidate its byte spans or arguments. */
 XR_FUNC XrLirStatus xr_lir_record_identity(const XrLirModule *, XrLirType, XrLirRecordIdentity *);
 XR_FUNC bool xr_lir_boxed_type(const XrLirModule *, XrLirType);
+/* Selects the common inline plan for named and positional aggregate values,
+ * including Nullable over an inline aggregate. It does not imply ownership. */
+XR_FUNC bool xr_lir_inline_aggregate_type(const XrLirModule *, XrLirType);
 /* The readonly natural family admits exact I64 and U8 Array windows. Its bytes
  * have no owned leaves; loan validity and private keepers are separate facts. */
 XR_FUNC XrLirStatus xr_lir_slice_type(XrLirModule *, XrLirType element, XrLirType *output);

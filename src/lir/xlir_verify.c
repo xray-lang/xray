@@ -183,7 +183,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_RECORD_NEW: {
             const XrLirRecordField *fields;
             uint32_t count;
-            if (xr_lir_record_fields(m, v->type, &fields, &count) != XR_LIR_OK || count != v->operand_count) return false;
+            if (xr_lir_aggregate_fields(m, v->type, &fields, &count) != XR_LIR_OK || count != v->operand_count) return false;
             for (uint32_t n = 0; n < count; ++n)
                 if (f->values[v->operands[n] - 1].type != fields[n].type) return false;
             return true;
@@ -191,7 +191,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_RECORD_FIELD: {
             const XrLirRecordField *fields;
             uint32_t count;
-            return xr_lir_record_fields(m, a, &fields, &count) == XR_LIR_OK && v->bits < count && fields[v->bits].type == v->type;
+            return xr_lir_aggregate_fields(m, a, &fields, &count) == XR_LIR_OK && v->bits < count && fields[v->bits].type == v->type;
         }
         case XR_LIR_FUNCTION_SCOPE_ENTER:
             return v->type == XR_LIR_FUNCTION_SCOPE && v->operand_count <= 1 &&
@@ -208,11 +208,10 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 (xr_lir_callable_type_view(m, b, &signature) == XR_LIR_OK ||
                     xr_lir_cell_value_type(m,b,NULL));
         }
-        case XR_LIR_TUPLE_NEW:
         case XR_LIR_FIXED_ARRAY_NEW: {
             XrLirTypeView shape;
             if (xr_lir_type_view(m, v->type, &shape) != XR_LIR_OK ||
-                shape.kind != (v->op == XR_LIR_TUPLE_NEW ? XR_LIR_TYPE_TUPLE : XR_LIR_TYPE_FIXED_ARRAY) ||
+                shape.kind != XR_LIR_TYPE_FIXED_ARRAY ||
                 v->operand_count != shape.count) return false;
             for (uint32_t p = 0; p < v->operand_count; ++p)
                 if (f->values[v->operands[p] - 1].type != shape.element) return false;
@@ -222,11 +221,6 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             XrLirTypeView shape;
             return v->type == XR_LIR_U8 && b == XR_LIR_I64 &&
                 xr_lir_type_view(m, a, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_FIXED_ARRAY;
-        }
-        case XR_LIR_TUPLE_FIELD: {
-            XrLirTypeView shape;
-            return v->type == XR_LIR_I64 && xr_lir_type_view(m, a, &shape) == XR_LIR_OK &&
-                shape.kind == XR_LIR_TYPE_TUPLE && v->bits < shape.count;
         }
         case XR_LIR_CONST:
             return lir_constant_valid(v->type, v->bits);
@@ -434,7 +428,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_MODULE_READY && v->op != XR_LIR_STATE_CONSTRUCT &&
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
-        v->op != XR_LIR_TUPLE_FIELD && v->op != XR_LIR_RECORD_FIELD &&
+        v->op != XR_LIR_RECORD_FIELD &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
         goto invalid;

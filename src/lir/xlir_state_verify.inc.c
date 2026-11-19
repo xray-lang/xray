@@ -75,13 +75,17 @@ static bool lir_state_instruction_types(const XrLirModule *m, const XrLirFunctio
     if (v->op == XR_LIR_STATE_GROUP_INITIALIZE) {
         if (a != XR_LIR_STATE || v->type != XR_LIR_UNIT || v->operand_count != 2 ||
             v->bits >= m->state_layout.slot_count) return false;
+        XrLirType type = f->values[v->operands[1] - 1].type;
         XrLirTypeView tuple;
-        if (xr_lir_type_view(m, f->values[v->operands[1] - 1].type, &tuple) != XR_LIR_OK ||
-            tuple.kind != XR_LIR_TYPE_TUPLE || tuple.count > m->state_layout.slot_count - v->bits) return false;
+        const XrLirRecordField *fields = NULL;
+        uint32_t count = 0;
+        if (xr_lir_type_view(m, type, &tuple) != XR_LIR_OK || tuple.kind != XR_LIR_TYPE_TUPLE ||
+            xr_lir_aggregate_fields(m, type, &fields, &count) != XR_LIR_OK ||
+            count > m->state_layout.slot_count - v->bits) return false;
         uint32_t module = m->state_layout.slots[v->bits].module;
-        for (uint32_t n = 0; n < tuple.count; ++n) {
+        for (uint32_t n = 0; n < count; ++n) {
             const XrLirStateSlot *slot = &m->state_layout.slots[v->bits + n];
-            if (slot->module != module || slot->payload != XR_LIR_I64) return false;
+            if (slot->module != module || slot->payload != XR_LIR_I64 || fields[n].type != XR_LIR_I64) return false;
         }
         return true;
     }

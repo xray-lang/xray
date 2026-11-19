@@ -30,7 +30,7 @@ typedef struct MaybeString { uint8_t tag; XrtManagedHeader *value; } MaybeString
 typedef struct Pair { XrtManagedHeader *left; MaybeString right; int64_t score; } Pair;
 _Static_assert(sizeof(Pair) == 32 && offsetof(Pair, right.value) == 16, "typed C uses the shared inline layout");
 static const size_t owned[] = {0,0,0,0,0,0,8,0,16,8,24};
-static const XrtValueImageSlot fields[] = {{1,0,0,4},{10,8,4,5},{2,24,9,5}};
+static const XrtValueImageSlot fields[] = {{1,0,0,4},{10,8,4,5},{2,24,9,5},{2,0,0,0},{2,8,0,0}};
 static const XrtValueImageType types[] = {
     {.kind=XRT_VALUE_STRING,.size=8,.alignment=8,.owned_count=1},
     {.kind=XRT_VALUE_I64,.size=8,.alignment=8},
@@ -49,9 +49,9 @@ static const XrtValueImageType types[] = {
     {.kind=XRT_VALUE_RECORD,.size=1,.alignment=1},
     {.kind=XRT_VALUE_NULLABLE,.size=2,.alignment=1,.nullable_element=13,.nullable_payload=1},
     {.kind=XRT_VALUE_FIXED_U8,.size=3,.alignment=1,.count=3},
-    {.kind=XRT_VALUE_TUPLE_I64,.size=16,.alignment=8,.count=2}
+    {.kind=XRT_VALUE_TUPLE,.size=16,.alignment=8,.first_field=3,.field_count=2}
 };
-static const XrtValueImage image = {types,16,fields,3,NULL,0,owned,11,"leftrightscore",14};
+static const XrtValueImage image = {types,16,fields,5,NULL,0,owned,11,"leftrightscore",14};
 typedef struct Audit {
     size_t leases, bytes, blocks, calls, observed;
     void *watched[2];

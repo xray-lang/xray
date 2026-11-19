@@ -30,7 +30,7 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     const XrtValueImageType *type=&image->types[home->type-1];
     if (a.operation==XR_RBC_VALUE_RECORD_NEW) {
-        if (a.source || a.other || a.window || type->kind!=XRT_VALUE_RECORD || a.count!=type->field_count ||
+        if (a.source || a.other || a.window || !xrt_value_kind_has_fields(type->kind) || a.count!=type->field_count ||
             a.first>code->argument_count || a.count>code->argument_count-a.first ||
             (a.count && (!code->arguments || !image->slots)) || type->first_field>image->slot_count ||
             type->field_count>image->slot_count-type->first_field) return false;
@@ -39,7 +39,7 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
         return true;
     }
     if (a.operation==XR_RBC_VALUE_RECORD_FIELD)
-        return !a.other && type->kind==XRT_VALUE_RECORD && a.index<type->field_count && image->slots &&
+        return !a.other && xrt_value_kind_has_fields(type->kind) && a.index<type->field_count && image->slots &&
             type->first_field<=image->slot_count && type->field_count<=image->slot_count-type->first_field &&
             rbc_value_inline_operand(module,code,function,a.result,image->slots[type->first_field+a.index].type,true);
     if (type->kind!=XRT_VALUE_NULLABLE || !type->nullable_element || type->nullable_element>=home->type ||

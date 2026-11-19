@@ -169,13 +169,36 @@ static bool rbc_value_inline(const XrRbcModule *module,const XrRbcValueCode *cod
     const XrtValueImageType *type=&image->types[home->type-1];
     if (type->kind==XRT_VALUE_FUNCTION) return rbc_value_function(module,code,value,destination);
     if (type->kind==XRT_VALUE_CELL) return rbc_value_cell(module,code,value,destination);
-    return (type->kind==XRT_VALUE_RECORD || type->kind==XRT_VALUE_NULLABLE) && home->size==type->size &&
+    return (xrt_value_kind_has_fields(type->kind) || type->kind==XRT_VALUE_NULLABLE) && home->size==type->size &&
         home->owner_count==type->owned_count && (!destination || (!home->parameter && home->offset!=SIZE_MAX &&
             (!home->owner_count || (home->temporary_offset!=SIZE_MAX && home->temporary_first_owner<code->homes->frame.slot_count))));
 }
 static bool rbc_value_owner(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
     return rbc_value_string(module,code,value,destination) || rbc_value_container(module,code,value,destination) ||
         rbc_value_inline(module,code,value,destination);
+}
+static bool rbc_value_state_group(const XrRbcModule *module, const XrRbcValueCode *code,
+    const XrRbcFunction *function, XrRbcValueAccess access) {
+    const XrtModuleLayoutSpec *state = module->state_spec;
+    const XrtValueImage *image = xr_rbc_module_value_image(module);
+    if (access.result || !rbc_value_scalar(code, function, access.source, XR_RBC_STATE) ||
+        !rbc_value_inline(module, code, access.other, false) || !state || !state->slots || !state->values ||
+        !state->values->types || access.index >= state->slot_count || !image->slots) return false;
+    const XrtValueImageType *type = &image->types[rbc_value_home(code, access.other)->type - 1];
+    if (type->kind != XRT_VALUE_TUPLE || !type->field_count || type->owned_count ||
+        type->field_count > state->slot_count - access.index || type->first_field > image->slot_count ||
+        type->field_count > image->slot_count - type->first_field || type->size % sizeof(int64_t) ||
+        type->size / sizeof(int64_t) != type->field_count) return false;
+    uint32_t owner = state->slots[access.index].module;
+    for (size_t n = 0; n < type->field_count; ++n) {
+        XrtModuleSlotSpec slot = state->slots[access.index + n];
+        XrtValueImageSlot field = image->slots[type->first_field + n];
+        if (slot.module != owner || !slot.type || slot.type > state->values->type_count || field.type != slot.type ||
+            slot.type > image->type_count || field.name_length || field.offset != n * sizeof(int64_t) ||
+            image->types[field.type - 1].kind != XRT_VALUE_I64 ||
+            state->values->types[slot.type - 1].kind != XRT_VALUE_I64) return false;
+    }
+    return true;
 }
 static bool rbc_value_pod(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,uint32_t value,uint32_t result) {
@@ -187,7 +210,7 @@ static bool rbc_value_pod(const XrRbcModule *module,const XrRbcValueCode *code,
         code->locations[value].kind!=XR_RBC_VALUE_AGGREGATE) return false;
     XrtValueKind kind=image->types[home->type-1].kind;
     XrRbcAggregateValue aggregate=function->aggregate_values[code->locations[value].index];
-    return aggregate.type==result-1 && (kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FIXED_U8 || kind==XRT_VALUE_TUPLE_I64) &&
+    return aggregate.type==result-1 && (kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FIXED_U8) &&
         home->size==module->aggregate_types[result-1].physical.size;
 }
 #include "xrbc_value_array_admission.inc.c"
@@ -392,7 +415,8 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         a.operation!=XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_FUNCTION_CALL &&
         a.operation!=XR_RBC_VALUE_FUNCTION_ALIAS && a.operation!=XR_RBC_VALUE_SLICE && (a.first || a.count || a.window)) return false;
     if (a.operation!=XR_RBC_VALUE_STRING_LITERAL && a.operation!=XR_RBC_VALUE_STATE_CONSTRUCT &&
-        a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_CALL &&
+        a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_STATE_GROUP_INITIALIZE &&
+        a.operation!=XR_RBC_VALUE_CALL &&
         a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY && a.operation!=XR_RBC_VALUE_MAP &&
         a.operation!=XR_RBC_VALUE_DISPLAY && a.operation!=XR_RBC_VALUE_RECORD_FIELD && a.operation!=XR_RBC_VALUE_RETURN &&
         !(a.operation>=XR_RBC_VALUE_BINDING_NEW && a.operation<=XR_RBC_VALUE_BINDING_DROP) &&
@@ -433,6 +457,8 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_STATE_WRITE:
         return !a.result && rbc_value_scalar(code,function,a.source,XR_RBC_STATE_REF) &&
             rbc_value_owner(module,code,a.other,false);
+    case XR_RBC_VALUE_STATE_GROUP_INITIALIZE:
+        return rbc_value_state_group(module,code,function,a);
     case XR_RBC_VALUE_STATE_CONSTRUCT: case XR_RBC_VALUE_STATE_INITIALIZE: {
         const XrtModuleLayoutSpec *spec = module->state_spec;
         if (!spec || !spec->values || !spec->values->types || !spec->slots || a.index >= spec->slot_count ||

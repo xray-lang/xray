@@ -50,7 +50,7 @@ static bool rbc_lir_value_string_slot(RbcLirCompiler *c, uint64_t slot) {
     return type && type <= state->values->type_count && (state->values->types[type - 1].kind == XRT_VALUE_STRING ||
         state->values->types[type - 1].kind == XRT_VALUE_MAP_STRING_I64 ||
         state->values->types[type - 1].kind == XRT_VALUE_SET_I64 ||
-        state->values->types[type - 1].kind == XRT_VALUE_RECORD ||
+        xrt_value_kind_has_fields(state->values->types[type - 1].kind) ||
         state->values->types[type - 1].kind == XRT_VALUE_FUNCTION ||
         inline_value ||
         (state->values->types[type - 1].kind >= XRT_VALUE_ARRAY_I64 && state->values->types[type - 1].kind <= XRT_VALUE_ARRAY_U64));
@@ -535,6 +535,9 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         access.operation = i->op == XR_LIR_STATE_READ ? XR_RBC_VALUE_STATE_READ : XR_RBC_VALUE_STATE_WRITE;
         break;
     }
+    case XR_LIR_STATE_GROUP_INITIALIZE:
+        access.operation = XR_RBC_VALUE_STATE_GROUP_INITIALIZE; access.index = (uint32_t)i->bits;
+        break;
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_INITIALIZE:
         if (!rbc_lir_value_string_slot(c,i->bits)) return true;
         access.operation = i->op == XR_LIR_STATE_CONSTRUCT ? XR_RBC_VALUE_STATE_CONSTRUCT : XR_RBC_VALUE_STATE_INITIALIZE;

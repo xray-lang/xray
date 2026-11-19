@@ -495,7 +495,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     if (v->kind != XR_LIR_FUNCTION_DEFINITION ||
         (v->result != XR_LIR_UNIT && v->result != XR_LIR_STRING && v->result != XR_LIR_ARRAY && v->result != XR_LIR_MAP_STRING_I64 && v->result != XR_LIR_SET_I64 &&
          v->result != XR_LIR_SLICE_I64 &&
-         !xr_lir_boxed_type(input, v->result) && !rbc_lir_scalar(v->result) && !rbc_lir_callable_type(input, v->result) && !rbc_lir_slice_type(input,v->result) && !rbc_lir_aggregate_type(input, v->result))) {
+         !rbc_lir_inline_type(input, v->result) && !rbc_lir_scalar(v->result) && !rbc_lir_callable_type(input, v->result) && !rbc_lir_slice_type(input,v->result) && !rbc_lir_aggregate_type(input, v->result))) {
         rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "execution requires a supported typed function definition",
             rbc_lir_value_source(input, f, v, 0, d));
@@ -529,7 +529,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
              type != XR_LIR_MAP_STRING_I64 && type != XR_LIR_MAP_STRING_I64_CELL && type != XR_LIR_MAP_STRING_I64_REF &&
              type != XR_LIR_SET_I64 && type != XR_LIR_SET_I64_CELL && type != XR_LIR_SET_I64_REF &&
              type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF && type != XR_LIR_STRING_REF &&
-             !xr_lir_boxed_type(input, type) && !rbc_lir_aggregate_type(input, type) && !rbc_lir_callable_type(input, type) && !rbc_lir_captured_cell(input, type) && !rbc_lir_slice_type(input,type) &&
+             !rbc_lir_inline_type(input, type) && !rbc_lir_aggregate_type(input, type) && !rbc_lir_callable_type(input, type) && !rbc_lir_captured_cell(input, type) && !rbc_lir_slice_type(input,type) &&
              !(type == XR_LIR_PTR && output->literals[value]) &&
              !(type == XR_LIR_U64 && output->lengths[value]))) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
@@ -635,7 +635,6 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         return true;
     case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
     case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
-    case XR_LIR_TUPLE_NEW: case XR_LIR_TUPLE_FIELD:
     case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
     case XR_LIR_LITERAL_ADDR:
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
@@ -1129,7 +1128,7 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     case XR_LIR_MODULE_BEGIN: case XR_LIR_MODULE_READY:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_PUBLISH:
     case XR_LIR_STATE_INITIALIZE: case XR_LIR_STATE_REFERENCE:
-    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE: case XR_LIR_STATE_GROUP_INITIALIZE:
+    case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE:
         return rbc_lir_state_instruction(c, i);
     case XR_LIR_CONST:
         if (c->immediates[i->result].pooled)

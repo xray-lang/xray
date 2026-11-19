@@ -17,9 +17,6 @@ static bool rbc_lir_state_payload(RbcLirCompiler *c, XrLirType type, XrLirType e
 }
 static bool rbc_lir_state_instruction(RbcLirCompiler *c, const XrLirInstructionView *i) {
     uint32_t first = c->slots[i->operands[0]], result = i->result ? c->slots[i->result] : 0;
-    if (i->op == XR_LIR_STATE_GROUP_INITIALIZE)
-        return rbc_lir_aggregate_append(c, (XrRbcAggregateAccess){.operation=XR_RBC_STATE_GROUP_INITIALIZE,
-            .source=first, .destination=c->aggregate_home[i->operands[1]], .slot=(uint32_t)i->bits});
     if (i->op == XR_LIR_MODULE_BEGIN || i->op == XR_LIR_MODULE_READY)
         return rbc_lir_emit(c, i->op == XR_LIR_MODULE_BEGIN ? XR_RBC_MODULE_BEGIN : XR_RBC_MODULE_READY,
             first, 0, 0, (int64_t)i->bits);

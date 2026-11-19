@@ -39,7 +39,7 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
         good = lower_record_member(c, description, n, &member);
         XrLirType field = good ? lower_type(c, member.type) : XR_LIR_TYPE_INVALID;
         if (good && !(field == XR_LIR_STRING || field == XR_LIR_I64 || field == XR_LIR_I1 || field == XR_LIR_F64 ||
-            xr_lir_boxed_type(c->module, field))) good = lower_unsupported(c, "record field has no canonical physical carrier");
+            xr_lir_inline_aggregate_type(c->module, field))) good = lower_unsupported(c, "record field has no canonical physical carrier");
         fields[n] = (XrLirRecordField){member.name.bytes, member.name.length, field, member.flags};
     }
     for (uint32_t a = 0; a < argument_count && good; ++a) {
@@ -54,6 +54,25 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
     if (good) good = lower_build(c, xr_lir_record_type(c->module, &identity, fields, count,
         &c->constructed_types[(uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE]));
     xr_free(arguments);
+    xr_free(fields);
+    return good;
+}
+static bool lower_tuple_finish(Lower *c, XrXirType type, const XrXirTypeNode *node) {
+    uint32_t count = node->parameter_count;
+    if (!count || count > 65535) return lower_unsupported(c, "Tuple has no admitted positional arity");
+    XrLirRecordField *fields = lower_alloc(c, count, sizeof(*fields));
+    if (!fields) return false;
+    for (uint32_t f = 0; f < count; ++f) {
+        XrLirType field = lower_type(c, node->parameters[f].type);
+        if (field != XR_LIR_I64 && field != XR_LIR_I1 && field != XR_LIR_F64 && field != XR_LIR_STRING &&
+            !xr_lir_inline_aggregate_type(c->module, field)) {
+            xr_free(fields);
+            return lower_unsupported(c, "Tuple field has no canonical inline value carrier");
+        }
+        fields[f] = (XrLirRecordField){.type=field};
+    }
+    bool good = lower_build(c, xr_lir_tuple_type(c->module, fields, count,
+        &c->constructed_types[(uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE]));
     xr_free(fields);
     return good;
 }
@@ -74,11 +93,12 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
         XrXirTypeDescription description = {0};
         bool record = node && node->kind == XR_XIR_TYPE_NOMINAL && lower_record_description(c, frame->type, &description);
         bool callable = node && node->kind == XR_XIR_TYPE_CALLABLE;
-        if (!node || (!record && !callable && node->kind != XR_XIR_TYPE_NULLABLE)) {
+        bool tuple = node && node->kind == XR_XIR_TYPE_TUPLE;
+        if (!node || (!record && !callable && !tuple && node->kind != XR_XIR_TYPE_NULLABLE)) {
             good = lower_unsupported(c, "Nullable payload has no inline POD layout"); break;
         }
         uint32_t count = record ? description.field_count + description.instance->argument_count :
-            callable ? node->parameter_count + 1u : 1u;
+            callable ? node->parameter_count + 1u : tuple ? node->parameter_count : 1u;
         if (frame->next < count) {
             XrXirType dependency = node->element;
             if (record) {
@@ -88,18 +108,21 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
                     dependency = member.type;
                 } else dependency = description.instance->arguments[frame->next - description.field_count];
             } else if (callable) dependency = frame->next ? node->parameters[frame->next - 1].type : node->result;
+            else if (tuple) dependency = node->parameters[frame->next].type;
             ++frame->next;
             const XrXirTypeNode *child = xr_xir_type_node(c->source->types, dependency);
             if (!child || c->constructed_types[(uint32_t)dependency - XR_XIR_CONSTRUCTED_TYPE_BASE]) continue;
-            if (child->kind == XR_XIR_TYPE_NULLABLE || child->kind == XR_XIR_TYPE_NOMINAL || child->kind == XR_XIR_TYPE_CALLABLE) {
+            if (child->kind == XR_XIR_TYPE_NULLABLE || child->kind == XR_XIR_TYPE_NOMINAL ||
+                child->kind == XR_XIR_TYPE_CALLABLE || child->kind == XR_XIR_TYPE_TUPLE) {
                 if (depth == capacity) { good = lower_unsupported(c, "cyclic canonical record dependency"); break; }
                 frames[depth++] = (LowerRecordFrame){dependency, 0};
-            } else if (child->kind == XR_XIR_TYPE_FIXED_ARRAY || child->kind == XR_XIR_TYPE_TUPLE)
+            } else if (child->kind == XR_XIR_TYPE_FIXED_ARRAY)
                 good = lower_receive_type(c, dependency);
             continue;
         }
         if (record) good = lower_record_finish(c, frame->type, &description);
         else if (callable) good = lower_receive_callable(c, frame->type, node);
+        else if (tuple) good = lower_tuple_finish(c, frame->type, node);
         else {
             XrLirType element = lower_pod_element(c, node->element);
             if (!element || element == XR_LIR_ARRAY) good = lower_unsupported(c, "Nullable payload has no inline POD layout");

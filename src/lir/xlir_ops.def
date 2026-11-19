@@ -74,8 +74,6 @@ XR_LIR_OP(CALL_INDIRECT, "call_indirect", -1)
 XR_LIR_OP(FUNCTION_SCOPE_ENTER, "function_scope_enter", -1)
 XR_LIR_OP(FUNCTION_SCOPE_LEAVE, "function_scope_leave", -1)
 XR_LIR_OP(FUNCTION_BIND, "function_bind", 2)
-XR_LIR_OP(TUPLE_NEW, "tuple_new", -1)
-XR_LIR_OP(TUPLE_FIELD, "tuple_field", 1)
 XR_LIR_OP(STATE_GROUP_INITIALIZE, "state_group_initialize", -1)
 XR_LIR_OP(FUNCTION_WEAKEN, "function_weaken", 1)
 /* bits names a local Slice resource target, not a readable SSA operand. */
@@ -91,6 +89,7 @@ XR_LIR_OP(MAP_LITERAL_NEW, "map_literal_new", -1)
 /* Canonical boxes preserve their exact constructed identity through copies. */
 XR_LIR_OP(VALUE_RETAIN, "value_retain", 1)
 XR_LIR_OP(VALUE_DROP, "value_drop", 1)
+/* Both nominal records and structural Tuples use these inline field operations. */
 XR_LIR_OP(RECORD_NEW, "record_new", -1)
 XR_LIR_OP(RECORD_FIELD, "record_field", 1)
 

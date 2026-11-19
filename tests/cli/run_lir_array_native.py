@@ -25,7 +25,8 @@ def main() -> None:
     args = parser.parse_args()
     cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose", "callable_compose_weaken",
              "factory_bindings", "factory_loop", "factory_transfer_temporaries",
-             "module_double", "module_snapshot", "module_counter", "counter_shared_binding", "tuple_values", "tuple_flow",
+             "module_double", "module_snapshot", "module_counter", "counter_shared_binding",
+             "tuple_values", "tuple_flow", "tuple_mixed_fields", "tuple_mixed_owned",
              "map_values", "map_bindings", "map_pod_calls", "map_fixed_operations", "record_values", "record_nullable", "record_lifetimes", "record_multileaf", "record_nullable_pod", "record_state_first_read", "record_generic_branch", "record_generic_owned_branch", "nullable_managed",
              "panic_map_index_missing", "panic_map_direct_missing", "panic_map_formal_missing", "panic_map_stationary_cleanup", "panic_nullable_managed", "callable_map_capture", "callable_map_value", "callable_unit_owned", "reject_owned_binding",
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
@@ -190,11 +191,11 @@ def main() -> None:
                 if result != reference:
                     failures.append((name, "VM/native byte comparison", reference, result))
     for name in ("reject_bool", "reject_nested", "reject_function_reassign",
-                 "reject_function_alias", "reject_function_ref", "reject_tuple_mixed", "reject_tuple_unit"):
+                 "reject_function_alias", "reject_function_ref", "reject_tuple_unit"):
         source = fixtures / (name + ".xr")
         run(name + "-check", [binary, "check", source], 0)
         _, out, err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
-        diagnostic = (b"Tuple fields require the admitted I64 physical layout" if name.startswith("reject_tuple_") else
+        diagnostic = (b"Tuple field has no canonical inline value carrier" if name == "reject_tuple_unit" else
                       b"owned mutable function binding extent" if name == "reject_function_reassign" else
                       b"FUNCTION_REF captured physical binding transport" if name == "reject_function_alias" else
                       b"COPY is not supported" if name == "reject_function_ref" else

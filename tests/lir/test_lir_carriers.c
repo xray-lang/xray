@@ -436,7 +436,7 @@ static void record_metadata(void) {
     for (unsigned n = 0; n < 513; ++n) {
         const XrLirRecordField *fields = NULL;
         uint32_t count = 0;
-        OK(xr_lir_record_fields(target, type, &fields, &count));
+        OK(xr_lir_aggregate_fields(target, type, &fields, &count));
         CHECK(count == 1 && fields[0].name_length == (n == 512 ? 4u : 5u));
         CHECK(!memcmp(fields[0].name, n == 512 ? "name" : "child", fields[0].name_length));
         type = fields[0].type;
