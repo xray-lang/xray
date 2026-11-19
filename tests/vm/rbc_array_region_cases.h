@@ -338,7 +338,67 @@ static void rbc_read_fold_cases(bool additive,bool literal) {
     CHECK(!tracked_live);
 }
 
+static void rbc_push_region_case(enum ArrayPushWindowMode mode,uint64_t bound,size_t trips,size_t normal_pushes,
+    size_t attempts_if_fast,bool eligible) {
+    ArraySetRegionFixture fixture=array_push_window_build(mode);
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(fixture.module,fixture.function,&program,NULL)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(fixture.module);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
+    CHECK(code && (code->array_push_limits!=NULL)==eligible);
+    size_t tags=0;
+    for (size_t n=0;n<code->access_count;++n) {
+        XrRbcValueAccess access=code->accesses[n];
+        if (access.operation!=XR_RBC_VALUE_EDGE || !access.window) continue;
+        ++tags;
+        CHECK(access.window==1 && !access.other);
+        XrRbcModule raw=*module;
+        memset(&raw.code_lease,0,sizeof(raw.code_lease));
+        CHECK(!rbc_value_array_push_edge_valid(&raw,code,&module->functions[0],access));
+    }
+    CHECK(tags==(eligible ? 2u : 0u));
+    region_begin_attempts=region_begin_successes=array_pushes=array_push_transactions=0;
+    region_force_bypass=false;
+    RbcRegionResult actual=rbc_region_run_with_args(module,program->locations,&bound,1);
+    CHECK(actual.status==XR_RBC_OK && actual.bits==trips+1 && array_pushes==normal_pushes &&
+        region_begin_attempts==attempts_if_fast && region_begin_successes==attempts_if_fast);
+    region_begin_attempts=region_begin_successes=array_pushes=array_push_transactions=0;
+    region_force_bypass=true;
+    RbcRegionResult ordinary=rbc_region_run_with_args(module,program->locations,&bound,1);
+    CHECK(ordinary.status==actual.status && ordinary.bits==actual.bits && array_pushes==trips &&
+        region_begin_attempts==(attempts_if_fast ? 1u : 0u) && !region_begin_successes);
+    if (mode==PUSH_WINDOW_PARAMETER_END && bound==9) {
+        RbcRegionResult failure[2];
+        for (unsigned bypass=0;bypass<2;++bypass) {
+            array_push_fault=3;
+            region_begin_attempts=region_begin_successes=array_pushes=array_push_transactions=failed_array_length=0;
+            region_force_bypass=bypass!=0;
+            size_t live=tracked_live;
+            failure[bypass]=rbc_region_run_with_args(module,program->locations,&bound,1);
+            CHECK(tracked_live==live && failed_array_length==8 && array_push_transactions==3 &&
+                array_pushes==(bypass ? 8u : 3u));
+            CHECK(failure[bypass].status==XR_RBC_VALUE_FAILURE && failure[bypass].failure==XR_XIR_VALUE_OOM);
+        }
+        CHECK(failure[0].source && failure[0].source==failure[1].source);
+        array_push_fault=0;
+    }
+    region_force_bypass=false;
+    xr_rbc_program_destroy(program);
+    CHECK(!tracked_live);
+}
+
 static void rbc_array_region_cases(void) {
+    rbc_push_region_case(PUSH_WINDOW_PARAMETER_END,0,0,0,0,true);
+    rbc_push_region_case(PUSH_WINDOW_PARAMETER_END,1,1,1,0,true);
+    rbc_push_region_case(PUSH_WINDOW_PARAMETER_END,3,3,1,1,true);
+    rbc_push_region_case(PUSH_WINDOW_PARAMETER_END,7,7,2,2,true);
+    rbc_push_region_case(PUSH_WINDOW_PARAMETER_END,9,9,3,3,true);
+    rbc_push_region_case(PUSH_WINDOW_CURRENT,0,9,3,3,true);
+    rbc_push_region_case(PUSH_WINDOW_PRECOMPUTED_END,7,9,3,3,true);
+    rbc_push_region_case(PUSH_WINDOW_LIVE_SNAPSHOT,0,9,9,0,false);
+    rbc_push_region_case(PUSH_WINDOW_NEXT_ITEM,0,9,9,0,false);
+    rbc_push_region_case(PUSH_WINDOW_OBSERVER,0,9,9,0,false);
     rbc_read_fold_cases(true,false);
     rbc_read_fold_cases(false,false);
     rbc_read_fold_cases(true,true);

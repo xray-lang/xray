@@ -15,9 +15,12 @@
 #include "vm/register/xrbc_lir.h"
 #include "xray_native_string_value.h"
 #include "xray_native_array_local.h"
+#include "runtime/native/xnative_array_ops.h"
 
 static size_t region_begin_attempts,region_begin_successes;
 static bool region_force_bypass;
+static size_t array_pushes,array_push_transactions,array_push_fault;
+static size_t failed_array_length;
 static bool counted_region_begin(const XrtArrayI64RegionContext *context,const XrtArrayI64RegionSpec *spec,
     bool ready,XrtArrayI64RegionCache *cache) {
     ++region_begin_attempts;
@@ -26,6 +29,10 @@ static bool counted_region_begin(const XrtArrayI64RegionContext *context,const X
     bool result=xrt_array_i64_region_try_begin(context,spec,ready,cache);
     if (result) ++region_begin_successes;
     return result;
+}
+static bool counted_array_local_update(const XrtArrayI64LocalView *view,XrtArrayI64LocalUpdate update) {
+    if (update.operation==XRT_ARRAY_UPDATE_PUSH) ++array_pushes;
+    return xrt_array_i64_try_update_local(view,update);
 }
 
 static size_t attempts, fail_at = SIZE_MAX, tracked_live;
@@ -80,12 +87,51 @@ static void *resize(void *memory, size_t bytes) {
 #include "runtime/native/xnative_managed.c"
 #include "runtime/native/xnative_locations.c"
 #include "runtime/native/xnative_module_state.c"
+static XrtManagedStatus counted_array_update(XrtPlace binding,XrtBackingArrayKind kind,XrtManagedFrame *frame,
+    size_t temporary,const XrtBackingTypes *types,const XrtArrayUpdate *update) {
+    if (update->operation!=XRT_ARRAY_UPDATE_PUSH || ++array_push_transactions!=array_push_fault)
+        return xrt_array_update_place(binding,kind,frame,temporary,types,update);
+    XrtManagedSlotLocation source={0},workspace={0};
+    CHECK(kind==XRT_BACKING_ARRAY_I64 && binding.frame==frame && !binding.external);
+    CHECK(xrt_managed_slot_location(frame,binding.slot,&source)==XRT_MANAGED_OK &&
+        xrt_managed_slot_location(frame,temporary,&workspace)==XRT_MANAGED_OK);
+    XrtManagedHeader *owner=*source.owner;
+    const XrtArrayBacking *array=(const XrtArrayBacking *)owner;
+    CHECK(array && array->length==array->capacity && array->length==8 && !*workspace.owner);
+    unsigned char original[8*sizeof(int64_t)];
+    memcpy(original,array->elements,sizeof(original));
+    for (size_t n=0;n<8;++n) {
+        int64_t item;
+        memcpy(&item,original+n*sizeof(item),sizeof(item));
+        CHECK(item==(n ? (int64_t)n-1 : 7));
+    }
+    XrtBillingOwner *billing=owner->ops->billing;
+    XrtBillingStats before=xrt_billing_owner_stats(billing);
+    CHECK(fail_at==SIZE_MAX);
+    fail_at=attempts+1;
+    XrtManagedStatus status=xrt_array_update_place(binding,kind,frame,temporary,types,update);
+    CHECK(attempts==fail_at);
+    fail_at=SIZE_MAX;
+    CHECK(status==XRT_MANAGED_OOM && *source.owner==owner && !*workspace.owner &&
+        !source.pending->value && !source.pending->allocation_bytes &&
+        !workspace.pending->value && !workspace.pending->allocation_bytes && !*source.busy &&
+        array->length==8 && !memcmp(original,array->elements,sizeof(original)));
+    XrtBillingStats after=xrt_billing_owner_stats(billing);
+    CHECK(after.blocks==before.blocks && after.bytes==before.bytes);
+    failed_array_length=array->length;
+    return status;
+}
 #define xrt_array_i64_region_try_begin counted_region_begin
+#define xrt_array_i64_try_update_local counted_array_local_update
+#define xrt_array_update_place counted_array_update
 #include "vm/register/xrbc.c"
+#undef xrt_array_update_place
+#undef xrt_array_i64_try_update_local
 #undef xrt_array_i64_region_try_begin
 #include "vm/register/xrbc_lir.c"
 #include "../lir/lir_fixed_bytecode_fixture.h"
 #include "../lir/lir_array_c_fixture.h"
+#include "../lir/lir_array_push_window_fixture.h"
 #include "../lir/lir_callable_fixture.h"
 #include "../lir/lir_callable_bytecode_cases.h"
 

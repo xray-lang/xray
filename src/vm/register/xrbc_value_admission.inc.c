@@ -367,6 +367,23 @@ static bool rbc_value_array_fold_valid(const XrRbcModule *module,const XrRbcValu
     }
     return accumulator && induction && fold.accumulator!=range->iv;
 }
+static bool rbc_value_array_push_edge_valid(const XrRbcModule *module,const XrRbcValueCode *code,
+    const XrRbcFunction *function,XrRbcValueAccess access) {
+    if (!access.window) return true;
+    const XrLirArrayRegionBindings *bindings=code->array_push_windows;
+    if (!xr_rbc_module_code_owner(module) || access.other || !bindings || access.index>=bindings->edge_count ||
+        access.window>bindings->region_count || !code->array_push_limits) return false;
+    XrLirArrayRegionEdge edge=bindings->edges[access.index];
+    if (edge.region!=access.window ||
+        (edge.kind!=XR_LIR_ARRAY_REGION_EDGE_ENTRY && edge.kind!=XR_LIR_ARRAY_REGION_EDGE_LATCH)) return false;
+    const XrLirArrayRegionBinding *row=&bindings->regions[edge.region-1];
+    const XrLirArrayPushCapacity *capacity=&row->region.push_capacity;
+    const XrRbcArrayPushLimit *limit=&code->array_push_limits[edge.region-1];
+    return row->slot_count && row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH &&
+        capacity->kind==XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT && limit->available &&
+        rbc_value_scalar(code,function,capacity->iv,XR_RBC_BITS) &&
+        (!limit->value || (limit->value==capacity->end && rbc_value_scalar(code,function,limit->value,XR_RBC_BITS)));
+}
 static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess access) {
     if (access.other || !rbc_value_id(code,access.source) || !rbc_value_string(module,code,access.result,true)) return false;
@@ -617,7 +634,8 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             (!a.index || !code->homes->events[a.index-1].forwarding_mode ||
              rbc_value_binding_forwarding_words(function,code,(uint32_t)index,pc));
     case XR_RBC_VALUE_EDGE:
-        return !a.result && !a.source && rbc_value_edge_valid(module,code,a) && rbc_value_array_fold_valid(module,code,a);
+        return !a.result && !a.source && rbc_value_edge_valid(module,code,a) &&
+            rbc_value_array_fold_valid(module,code,a) && rbc_value_array_push_edge_valid(module,code,function,a);
     default: return false;
     }
 }
