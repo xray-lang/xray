@@ -19,8 +19,8 @@ jobs:
       PYTHONUTF8: '1'
       PYTHONDONTWRITEBYTECODE: '1'
       NO_COLOR: '1'
-      XR_ARRAY_PARENT: 874d23f314e4019b55c60e64f215a3961b7275c5
-      XR_ARRAY_CANDIDATE: fcab5af91db976110d7183e05b2cfdad829b4e0b
+      XR_ARRAY_PARENT: fcab5af91db976110d7183e05b2cfdad829b4e0b
+      XR_ARRAY_CANDIDATE: 9f49580267dce213f29ebff056cf21c56cdd20da
       XR_ALIGNMENT: ${{ matrix.alignment }}
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +45,7 @@ jobs:
             cmake --build "$RUNNER_TEMP/$variant-build" --target xray --parallel 4 \
               > "$RUNNER_TEMP/build-receipts/$variant-build.txt" 2>&1
             cp "$RUNNER_TEMP/$variant-build/CMakeCache.txt" "$RUNNER_TEMP/build-receipts/$variant-cache.txt"
+            cp "$RUNNER_TEMP/$variant-build/xray" "$RUNNER_TEMP/build-receipts/$variant-xray"
           done
       - name: Alternate the real Array workload and scalar controls
         run: |

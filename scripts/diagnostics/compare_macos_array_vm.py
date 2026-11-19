@@ -24,7 +24,7 @@ def main() -> None:
     parent, candidate = args.root
     args.work.mkdir(parents=True)
     log = args.work / 'result.json'
-    result = {'state': 'PREPARING', 'alignment': args.alignment, 'products': [], 'cases': {}}
+    result = {'state': 'PREPARING', 'alignment': args.alignment, 'pairedRounds': 12, 'products': [], 'cases': {}}
     try:
         for root, binary, commit in zip(args.root, args.binary, args.commit, strict=True):
             entry = {'product': evidence.fingerprint(binary), 'source': commit}
@@ -56,9 +56,9 @@ def main() -> None:
             result['cases'][name] = {'input': evidence.fingerprint(path), 'samples': []}
         result['state'] = 'RUNNING'
         evidence.save(log, result)
-        for round_number in range(9):
-            order = range(2) if round_number % 2 == 0 else (1, 0)
-            for name, _, expected in cases if round_number % 2 == 0 else reversed(cases):
+        for name, _, expected in cases:
+            for round_number in range(12):
+                order = range(2) if round_number % 2 == 0 else (1, 0)
                 record = result['cases'][name]
                 for arm in order:
                     sample = evidence.execute([args.binary[arm], 'run', record['input']['path']], args.work,
