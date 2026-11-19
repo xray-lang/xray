@@ -54,7 +54,7 @@ static bool rbc_lir_edge_spill_copy(RbcLirCompiler *c, XrLirEdgeView edge,
     const XrLirBlockView *target, bool publish) {
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
         uint32_t actual = edge.arguments[p], formal = target->parameters[p];
-        if (!rbc_lir_spill_edge_type(c, actual)) continue;
+        if (rbc_lir_common_value(c, actual) || !rbc_lir_spill_edge_type(c, actual)) continue;
         XrRbcRegisterKind kind = rbc_lir_register_kind(c, actual, rbc_lir_value_type(c, actual));
         uint32_t temporary = rbc_lir_copy_temporary(c, kind);
         if (temporary == UINT32_MAX) return false;

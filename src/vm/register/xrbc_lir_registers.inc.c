@@ -300,18 +300,32 @@ static bool rbc_lir_assign_slots(RbcLirCompiler *c) {
     return true;
 }
 
-static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, bool emit,
+/* A stationary owner only changes its SSA name. An edge that otherwise
+ * carries physical scalars can use ordinary parallel register/spill copies. */
+static bool rbc_lir_scalar_edge(RbcLirCompiler *c, XrLirEdgeView edge, const XrLirBlockView *target) {
+    for (uint32_t p = 0; p < edge.argument_count; ++p) {
+        uint32_t actual = edge.arguments[p], formal = target->parameters[p];
+        if (xr_lir_home_stationary_edge(c->homes, actual, formal)) continue;
+        if (!rbc_lir_scalar(rbc_lir_value_type(c, actual)) || c->output.literals[actual] ||
+            c->output.lengths[actual]) return false;
+    }
+    return true;
+}
+static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal, bool emit,
     bool *scratch) {
-    if (c->typed_values) return true;
-    if (emit && !rbc_lir_aggregate_edge(c, edge)) return false;
     XrLirBlockView target;
     xr_lir_block_view(c->input,
         (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
+    if (c->typed_values && !rbc_lir_scalar_edge(c, edge, &target))
+        return !emit || rbc_lir_value_edge(c, edge, ordinal);
+    if (!c->typed_values && emit && !rbc_lir_aggregate_edge(c, edge)) return false;
     bool spilled = c->typed_spills && rbc_lir_spilled_edge(c, edge, &target);
     if (spilled && emit && !rbc_lir_edge_spill_copy(c, edge, &target, false)) return false;
     uint32_t destinations[255], sources[255], count = 0;
     XrRbcRegisterKind kinds[255];
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
+        if (c->typed_values && xr_lir_home_stationary_edge(c->homes, edge.arguments[p], target.parameters[p]))
+            continue;
         if (c->aggregate_home && c->aggregate_home[edge.arguments[p]] != UINT32_MAX) continue;
         if (spilled && rbc_lir_spill_edge_type(c, edge.arguments[p])) continue;
         uint32_t destination = c->slots[target.parameters[p]], source = c->slots[edge.arguments[p]];

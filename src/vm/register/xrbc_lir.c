@@ -840,6 +840,7 @@ static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind
     return c->slot_count + offset;
 }
 
+static bool rbc_lir_value_edge(RbcLirCompiler *, XrLirEdgeView, uint32_t);
 #include "xrbc_lir_registers.inc.c"
 
 static bool rbc_lir_layout(RbcLirCompiler *c) {
@@ -931,7 +932,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             if (i.op == XR_LIR_INTCAST && i.type == XR_LIR_U8 && !c->scratch_count) c->scratch_count = 1;
             for (uint32_t e = 0; e < i.edge_count; ++e) {
                 bool scratch = false;
-                if (!rbc_lir_copies(c, i.edges[e], false, &scratch)) return false;
+                if (!rbc_lir_copies(c, i.edges[e], e + 1, false, &scratch)) return false;
                 if (scratch) {
                     uint32_t count = c->state_ref_scratch ? 4u : c->state_scratch ? 3u : c->string_scratch ? 2u : 1u;
                     for (uint32_t a = 0; a < XR_RBC_ARRAY_FAMILY_COUNT; ++a)
@@ -1060,10 +1061,9 @@ static bool rbc_lir_comparison(RbcLirCompiler *c, const XrLirInstructionView *i)
         rbc_lir_emit(c, XR_RBC_LOADI, result, 0, 0, inverse ? 0 : 1);
 }
 
-static bool rbc_lir_value_edge(RbcLirCompiler *, XrLirEdgeView, uint32_t);
 static bool rbc_lir_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
     bool scratch = false;
-    return (c->typed_values ? rbc_lir_value_edge(c,edge,ordinal) : rbc_lir_copies(c,edge,true,&scratch)) &&
+    return rbc_lir_copies(c, edge, ordinal, true, &scratch) &&
         rbc_lir_jump(c, edge.target);
 }
 
