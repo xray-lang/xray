@@ -69,7 +69,6 @@ typedef struct LirC {
     uint32_t *closure;
     uint32_t closure_count;
     uint8_t *seen, *fixed_divisors, *used_literals, *used_map_literals, *callable_used;
-    uint8_t *string_window_predecessors;
     LirCConstructedType *constructed_types;
     uint32_t constructed_count, pod_count;
     XrLirFunction function;
@@ -1227,7 +1226,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
                 return;
             c->array_frame_block = 0;
             c_format(c, "bb%" PRIu32 ": ;\n", block.id);
-            if (c->string_values) c_string_window(c, block, &view);
+            if (c->string_values) c_string_window(c, block.id);
             for (uint32_t i = 0; i < view.instruction_count && c->status == XR_LIR_C_OK; ++i) {
                 XrLirInstructionView v;
                 xr_lir_instruction_view(c->request->module, block, i, &v);
@@ -1238,8 +1237,6 @@ static void c_emit(LirC *c, XrLirType root_result) {
         }
         c_array_region_clones(c);
         c_text(c, "}\n\n");
-        xr_compile_resources_free(c->string_window_predecessors);
-        c->string_window_predecessors = NULL;
     }
     if (c->runtime && c->status == XR_LIR_C_OK)
         c_standalone_root(c, root_result);
@@ -1376,7 +1373,6 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     xr_compile_resources_free(c.used_literals);
     xr_compile_resources_free(c.used_map_literals);
     xr_compile_resources_free(c.callable_used);
-    xr_compile_resources_free(c.string_window_predecessors);
     xr_compile_resources_free(c.constructed_types);
     xr_compile_resources_free(c.callable_events);
     xr_compile_resources_free(c.cell_events);

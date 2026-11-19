@@ -15,6 +15,7 @@
 #include "runtime/native/xnative_map_backing.h"
 #include "runtime/native/xnative_values.h"
 #include "xray_native_array_local.h"
+#include "xray_native_values.h"
 
 typedef struct RbcValueActivation RbcValueActivation;
 typedef struct RbcValueOrigin { RbcValueActivation *activation; uint32_t value; } RbcValueOrigin;
@@ -523,6 +524,34 @@ static XrtManagedStatus rbc_value_edge_stage(const XrRbcModule *module,XrRbcStac
     }
     return XRT_MANAGED_OK;
 }
+/* Called only after checking the exact ordinary move. Once the capacity
+ * helper changes bytes, the caller publishes that move without a fallback. */
+static XR_NOINLINE uint64_t rbc_value_append_window(XrRbcStack *stack, RbcValueActivation *activation,
+    const XrLirHomeEdge *edge, const uint32_t *pair, uint64_t bits) {
+    const XrRbcValueCode *code = activation->code;
+    const XrLirValueHomes *homes = code->homes;
+    XR_DCHECK(edge->string_window && edge->string_window <= homes->string_window_count,
+        "the sealed latch names its own String window");
+    const XrLirStringWindow *window = &homes->string_windows[edge->string_window - 1];
+    XR_DCHECK(window->empty_count <= sizeof(window->empty_slots) / sizeof(*window->empty_slots) &&
+        window->latch_owner == homes->values[homes->transfers[edge->first].source].first_owner &&
+        window->header_owner == homes->values[homes->transfers[edge->first].target].first_owner,
+        "the capacity window starts and ends at the actual selected owner slots");
+    if (pair[0] != window->next_index || pair[1] != window->index || bits > INT64_MAX ||
+        code->locations[window->limit].kind != XR_RBC_VALUE_REGISTER) return bits;
+    XrRbcRegister *limit = rbc_value_register(stack, activation, window->limit);
+    if (!limit || limit->bits > INT64_MAX || bits >= limit->bits) return bits;
+    uint64_t remaining = limit->bits - bits;
+    size_t empty_slots[sizeof(window->empty_slots) / sizeof(*window->empty_slots)];
+    for (size_t n = 0; n < window->empty_count; ++n) {
+        size_t slot = window->empty_slots[n];
+        empty_slots[n] = slot == window->latch_owner ? window->header_owner : slot;
+    }
+    size_t count = remaining > SIZE_MAX ? SIZE_MAX : (size_t)remaining;
+    return bits + xrt_native_string_append_window(activation->frame, window->latch_owner,
+        window->suffix_owner, count, empty_slots, window->empty_count);
+}
+
 static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *activation,
     XrRbcValueAccess access, const XrLirHomeEdge *edge) {
     if (!access.count || access.count > 2 || !activation->frame) return false;
@@ -531,9 +560,10 @@ static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *ac
     XrLirHomeTransfer transfer = homes->transfers[edge->first];
     const XrLirValueHome *from = &homes->values[transfer.source], *to = &homes->values[transfer.target];
     XrRbcRegister *scalar = NULL;
+    const uint32_t *pair = NULL;
     uint64_t bits = 0;
     if (access.count == 2) {
-        const uint32_t *pair = code->arguments + access.first;
+        pair = code->arguments + access.first;
         if (pair[1] == transfer.target) pair += 2;
         RbcValueOrigin origin = rbc_value_origin(activation, pair[0]);
         if (origin.activation != activation || origin.value != pair[0]) return false;
@@ -562,6 +592,7 @@ static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *ac
      * or callback between checking the actual busy state and publishing both
      * destinations. The general transaction retires any occupied result. */
     if (!*source || *destination || *temporary) return false;
+    if (pair && edge->string_window) bits = rbc_value_append_window(stack, activation, edge, pair, bits);
     *destination = *source;
     *source = NULL;
     if (scalar) scalar->bits = bits;

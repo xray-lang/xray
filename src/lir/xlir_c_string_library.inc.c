@@ -253,155 +253,17 @@ static void c_string_library(LirC *c, const XrLirInstructionView *v, uint32_t so
     c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
 }
 
-typedef struct LirCStringCarry {
-    uint32_t text, index, suffix;
-    size_t empty_slots[7], count;
-} LirCStringCarry;
-
-static bool c_string_window_closed(LirC *c, uint32_t body, uint32_t bridge) {
-    if (body == c->view.entry || bridge == c->view.entry) return false;
-    if (!c->string_window_predecessors) {
-        void *slots = NULL;
-        if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, c->view.block_count, 1, &slots)))
-            return false;
-        c->string_window_predecessors = slots;
-        const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
-        for (uint32_t n = 0; n < c->view.block_count && c_request_poll(c); ++n) {
-            const XrLirBlockData *block = &function->blocks[n];
-            const XrLirInstructionView *term = &block->instructions[block->instruction_count - 1].view;
-            for (uint32_t e = 0; e < term->edge_count; ++e) {
-                uint8_t *count = &c->string_window_predecessors[term->edges[e].target - 1];
-                if (*count < 2) ++*count;
-            }
-        }
-    }
-    return c->status == XR_LIR_C_OK && c->string_window_predecessors[body - 1] == 1 &&
-        (!bridge || c->string_window_predecessors[bridge - 1] == 1);
-}
-
-static const XrLirHomeEdge *c_string_window_move(const XrLirValueHomes *homes, uint32_t block) {
-    size_t first = 0, end = homes->edge_count;
-    while (first < end) {
-        size_t at = first + (end - first) / 2;
-        if (homes->edges[at].block < block) first = at + 1;
-        else end = at;
-    }
-    if (first == homes->edge_count) return NULL;
-    const XrLirHomeEdge *edge = &homes->edges[first];
-    return edge->block == block && edge->edge == 1 && edge->direct_header_move ? edge : NULL;
-}
-
-static bool c_string_window_follow(LirC *c, uint32_t block, XrLirEdgeView edge,
-    LirCStringCarry *carry, bool back) {
-    const XrLirHomeEdge *move = c_string_window_move(c->homes, block);
-    if (!move || move->target_block != edge.target || !edge.argument_count || edge.argument_count > 3) return false;
-    XrLirHomeTransfer transport = c->homes->transfers[move->first];
-    if (transport.source != carry->text) return false;
-    XrLirBlockView target;
-    if (xr_lir_block_view(c->request->module, (XrLirBlock){c->request->module,c->function.id,edge.target},
-        &target) != XR_LIR_OK || target.parameter_count != edge.argument_count) return false;
-    bool has_suffix = false;
-    for (uint32_t n = 0; n < edge.argument_count; ++n) {
-        if (target.parameters[n] == transport.target) continue;
-        if (c->homes->values[edge.arguments[n]].stationary_string == carry->suffix &&
-            xr_lir_home_stationary_edge(c->homes, edge.arguments[n], target.parameters[n])) {
-            if (has_suffix) return false;
-            has_suffix = true;
-            continue;
-        }
-        if (edge.arguments[n] != carry->index) return false;
-        carry->index = target.parameters[n];
-    }
-    if (has_suffix != (carry->suffix != 0)) return false;
-    carry->text = transport.target;
-    const XrLirValueHome *home = &c->homes->values[carry->text];
-    carry->empty_slots[carry->count++] = home->temporary_first_owner;
-    if (!back) carry->empty_slots[carry->count++] = home->first_owner;
-    return true;
-}
-
-/* The closed loop moves the text and index only. Its suffix lives in either
- * one verified stationary home or a private literal cache. */
-static void c_string_window(LirC *c, XrLirBlock block, const XrLirBlockView *header) {
-    if (!c->homes || !c->homes->owned_frame_needed || header->parameter_count < 2 ||
-        header->parameter_count > 3 || header->instruction_count != 2)
-        return;
-    uint32_t index = 0, owner = 0, stable = 0;
-    for (uint32_t p = 0; p < header->parameter_count; ++p) {
-        uint32_t id = header->parameters[p];
-        if (c_value_type(c, id) == XR_LIR_I64 && !index) index = id;
-        else if (c_value_type(c, id) == XR_LIR_STRING) {
-            uint32_t producer = c->homes->values[id].stationary_string;
-            if (producer && !stable) stable = producer;
-            else if (!producer && !owner) owner = id;
-            else return;
-        } else return;
-    }
-    if (!index || !owner) return;
-    const XrLirModule *m = c->request->module;
-    XrLirInstructionView cmp, branch;
-    xr_lir_instruction_view(m, block, 0, &cmp);
-    xr_lir_instruction_view(m, block, 1, &branch);
-    if (cmp.op != XR_LIR_ICMP || cmp.predicate != XR_LIR_LT || cmp.operands[0] != index ||
-        cmp.operands[1] == index || c_value_type(c, cmp.operands[1]) != XR_LIR_I64 ||
-        branch.op != XR_LIR_CONDBR || branch.operands[0] != cmp.result) return;
-    LirCStringCarry carry = {.text=owner,.index=index,.suffix=stable};
-    XrLirEdgeView edge = branch.edges[0];
-    if (!c_string_window_follow(c, block.id, edge, &carry, false)) return;
-    XrLirBlock body = {m,c->function.id,edge.target};
-    uint32_t bridge_block = 0;
-    XrLirBlockView view;
-    xr_lir_block_view(m, body, &view);
-    if (view.instruction_count == 1) {
-        XrLirInstructionView bridge;
-        xr_lir_instruction_view(m, body, 0, &bridge);
-        if (bridge.op != XR_LIR_BR || !c_string_window_follow(c, body.id, bridge.edges[0], &carry, false)) return;
-        bridge_block = body.id;
-        body.id = bridge.edges[0].target;
-        xr_lir_block_view(m, body, &view);
-    }
-    if (view.instruction_count != (stable ? 4u : 6u) || view.parameter_count != header->parameter_count) return;
-    XrLirInstructionView literal = {0}, append = {0}, step = {0}, add = {0}, drop = {0}, latch;
-    for (uint32_t n = 0; n + 1 < view.instruction_count; ++n) {
-        XrLirInstructionView op;
-        xr_lir_instruction_view(m, body, n, &op);
-        if (op.op == XR_LIR_STRING_LITERAL) literal = op;
-        else if (op.op == XR_LIR_CONST) step = op;
-        else if (op.op == XR_LIR_ADD) add = op;
-        else if (op.op == XR_LIR_STRING_DROP) drop = op;
-        else if (xr_lir_string_role(m, &op) == XR_LIR_STRING_OP_APPEND_OWNED) append = op;
-        else return;
-    }
-    if (!append.result || !add.result || !step.result || append.operands[0] != carry.text ||
-        step.type != XR_LIR_I64 || step.bits != 1 || add.type != XR_LIR_I64 ||
-        add.operands[0] != carry.index || add.operands[1] != step.result) return;
-    const XrLirValueHome *suffix = &c->homes->values[append.operands[1]], *result = &c->homes->values[append.result];
-    size_t suffix_slot;
-    if (stable) {
-        if (suffix->stationary_string != stable) return;
-        suffix_slot = suffix->first_owner;
-    } else {
-        if (append.operands[1] != literal.result || drop.op != XR_LIR_STRING_DROP ||
-            drop.operands[0] != literal.result || !suffix->literal_append_borrow) return;
-        suffix_slot = suffix->literal_cache_owner;
-    }
-    if (suffix_slot == SIZE_MAX || result->temporary_first_owner == SIZE_MAX) return;
-    carry.empty_slots[carry.count++] = result->first_owner;
-    carry.empty_slots[carry.count++] = result->temporary_first_owner;
-    carry.text = append.result; carry.index = add.result;
-    xr_lir_instruction_view(m, body, view.instruction_count - 1, &latch);
-    if (latch.op != XR_LIR_BR || latch.edges[0].target != block.id ||
-        !c_string_window_follow(c, body.id, latch.edges[0], &carry, true) || carry.text != owner || carry.index != index ||
-        !c_string_window_closed(c, body.id, bridge_block))
-        return;
-
+static void c_string_window(LirC *c, uint32_t block) {
+    const XrLirStringWindow *window = xr_lir_value_homes_string_window(c->homes, block);
+    if (!window) return;
+    uint32_t index = window->index;
     c_format(c, "    if (xrl_frame && v%" PRIu32 " >= INT64_C(0) && v%" PRIu32 " < ", index,index);
-    c_value(c, cmp.operands[1]);
+    c_value(c, window->limit);
     c_text(c, ") {\n        static const size_t xrl_string_empty[] = {");
-    for (size_t n = 0; n < carry.count; ++n)
-        c_format(c, "%s%zu", n ? ", " : "", carry.empty_slots[n]);
+    for (size_t n = 0; n < window->empty_count; ++n)
+        c_format(c, "%s%zu", n ? ", " : "", window->empty_slots[n]);
     c_format(c, "};\n        v%" PRIu32 " += (int64_t)xrt_native_string_append_window(xrl_frame, %zu, %zu, (size_t)(",
-        index,c->homes->values[owner].first_owner,suffix_slot);
-    c_value(c, cmp.operands[1]);
-    c_format(c, " - v%" PRIu32 "), xrl_string_empty, %zu);\n    }\n", index,carry.count);
+        index,window->header_owner,window->suffix_owner);
+    c_value(c, window->limit);
+    c_format(c, " - v%" PRIu32 "), xrl_string_empty, %zu);\n    }\n", index,window->empty_count);
 }
