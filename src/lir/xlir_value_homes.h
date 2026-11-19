@@ -77,8 +77,16 @@ typedef struct XrLirHomeEdge {
     /* One complete nonnullable owner MOVE between disjoint local slots.
      * Execution must still respect the live guard, pending and old result. */
     bool direct_header_move;
+    uint32_t string_window; /* One-based capacity plan for a verified latch, or zero. */
     size_t first, count;
 } XrLirHomeEdge;
+
+typedef struct XrLirStringWindow {
+    uint32_t header, index, next_index, limit;
+    size_t header_owner, latch_owner, suffix_owner;
+    /* At the latch, swap the live result slot in this list for header_owner. */
+    size_t empty_slots[7], empty_count;
+} XrLirStringWindow;
 typedef struct XrLirHomeCall {
     uint32_t block, instruction, callee, result;
     size_t first, count;
@@ -167,6 +175,8 @@ typedef struct XrLirValueHomes {
     const XrLirHomeTransfer *transfers;
     const XrLirHomeEdge *edges;
     size_t transfer_count, edge_count;
+    const XrLirStringWindow *string_windows; /* Sorted by header block. */
+    size_t string_window_count;
     const XrLirHomeCall *calls;
     const uint32_t *arguments;
     size_t call_count, argument_count;
@@ -227,5 +237,6 @@ typedef struct XrLirValueHomesRequest {
  * real owner/pending slots. Scalar-only functions return a NULL descriptor.
  * Output must start NULL; a rejection preserves output and all input owners. */
 XR_FUNC XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHomesRequest *, XrLirValueHomes **empty);
+XR_FUNC const XrLirStringWindow *xr_lir_value_homes_string_window(const XrLirValueHomes *, uint32_t header);
 XR_FUNC void xr_lir_value_homes_destroy(XrLirValueHomes *);
 #endif // XLIR_VALUE_HOMES_H
