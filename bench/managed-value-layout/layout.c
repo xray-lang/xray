@@ -167,22 +167,10 @@ XR_FUNCDEF XrMvlArrayWrite xr_mvl_array_access_write(XrMvlArrayAccess access,
     return result;
 }
 
-XR_FUNCDEF XrMvlStatus xr_mvl_array_push_slow(XrMvlArray **binding, int64_t value) {
-    XrMvlArrayWrite result = xr_mvl_array_access_write(xr_mvl_array_access_start(*binding), 0, value, true);
-    if (result.status == XR_MVL_OK) {
-        *binding = result.access.owner;
-        if (result.previous) xr_mvl_drop(&result.previous->header);
-    }
-    return result.status;
-}
-
-XR_FUNCDEF XrMvlStatus xr_mvl_array_set_slow(XrMvlArray **binding, size_t index, int64_t value) {
-    XrMvlArrayWrite result = xr_mvl_array_access_write(xr_mvl_array_access_start(*binding), index, value, false);
-    if (result.status == XR_MVL_OK) {
-        *binding = result.access.owner;
-        if (result.previous) xr_mvl_drop(&result.previous->header);
-    }
-    return result.status;
+XR_FUNCDEF XrMvlArrayMutation xr_mvl_array_mutate_slow(XrMvlArray *array, size_t index,
+    int64_t value, bool append) {
+    XrMvlArrayWrite result = xr_mvl_array_access_write(xr_mvl_array_access_start(array), index, value, append);
+    return (XrMvlArrayMutation) {result.previous ? result.access.owner : NULL, result.status};
 }
 
 XR_FUNCDEF XrMvlString *xr_mvl_string_new(XrMvlDomain *domain, const char *bytes, size_t length) {

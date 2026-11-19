@@ -129,8 +129,16 @@ static inline void xr_mvl_string_drop(XrMvlString *string) {
 }
 
 XR_FUNC XrMvlArray *xr_mvl_array_new(XrMvlDomain *domain);
-XR_FUNC XrMvlStatus xr_mvl_array_push_slow(XrMvlArray **binding, int64_t value);
-XR_FUNC XrMvlStatus xr_mvl_array_set_slow(XrMvlArray **binding, size_t index, int64_t value);
+typedef struct {
+    XrMvlArray *replacement;
+    XrMvlStatus status;
+} XrMvlArrayMutation;
+
+/* A replacement owns one fresh reference. The caller still owns the original
+ * and publishes the new binding before retiring it. In-place success and
+ * failure never return a replacement. */
+XR_FUNC XrMvlArrayMutation xr_mvl_array_mutate_slow(XrMvlArray *array, size_t index,
+    int64_t value, bool append);
 XR_FUNC XrMvlString *xr_mvl_string_new(XrMvlDomain *domain, const char *bytes, size_t length);
 XR_FUNC XrMvlMap *xr_mvl_map_new(XrMvlDomain *domain);
 XR_FUNC XrMvlStatus xr_mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key, int64_t value);
@@ -141,13 +149,23 @@ XR_FUNC XrMvlPairObject *xr_mvl_pair_escaped(void);
 XR_FUNC void xr_mvl_pair_escape_clear(void);
 XR_FUNC bool xr_mvl_verify(void);
 
+static inline XrMvlStatus xr_mvl_array_commit_mutation(XrMvlArray **binding, XrMvlArray *original,
+    XrMvlArrayMutation mutation) {
+    if (mutation.replacement) {
+        assert(mutation.status == XR_MVL_OK && mutation.replacement != original);
+        *binding = mutation.replacement;
+        xr_mvl_drop(&original->header);
+    }
+    return mutation.status;
+}
+
 static inline XrMvlStatus xr_mvl_array_push(XrMvlArray **binding, int64_t value) {
     XrMvlArray *array = *binding;
     if (xr_signed_rc_unique(&array->header.refs) && array->length < array->capacity) {
         array->data[array->length++] = value;
         return XR_MVL_OK;
     }
-    return xr_mvl_array_push_slow(binding, value);
+    return xr_mvl_array_commit_mutation(binding, array, xr_mvl_array_mutate_slow(array, 0, value, true));
 }
 
 static inline XrMvlStatus xr_mvl_array_set(XrMvlArray **binding, size_t index, int64_t value) {
@@ -155,7 +173,7 @@ static inline XrMvlStatus xr_mvl_array_set(XrMvlArray **binding, size_t index, i
     if (index >= array->length)
         return XR_MVL_BOUNDS;
     if (!xr_signed_rc_unique(&array->header.refs))
-        return xr_mvl_array_set_slow(binding, index, value);
+        return xr_mvl_array_commit_mutation(binding, array, xr_mvl_array_mutate_slow(array, index, value, false));
     array->data[index] = value;
     return XR_MVL_OK;
 }
