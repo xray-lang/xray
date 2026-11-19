@@ -129,6 +129,8 @@ static bool source_compound(SourceContext *ctx, AstNode *node, SourceValue *valu
 /* Only scalar/string reads and literal template parts prove that the RHS
  * cannot rebind the receiver. Calls and member getters keep ordinary ordering. */
 static bool source_string_append_rhs(SourceContext *ctx, AstNode *node, unsigned depth) {
+    /* Inspect the underlying expression while keeping its grouping for lowering. */
+    while (node && node->type == AST_GROUPING) node = node->as.grouping;
     if (!node || depth >= 64) return false;
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     if (node->type == AST_LITERAL_STRING) return true;
