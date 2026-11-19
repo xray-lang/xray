@@ -73,6 +73,15 @@ static bool rbc_value_map_overwrite(XrRbcStack *stack, RbcValueActivation *activ
     return xrt_map_try_overwrite_local(&activation->frame_locations, binding->first_owner,
         stage->first_owner, key, value);
 }
+static inline const XrtManagedHeader *rbc_map_borrow_local_slot(
+    const XrtManagedFrameLocations *locations, uint32_t index) {
+    if (index >= locations->slot_count) return NULL;
+    const XrtManagedSlot *slot = &locations->slots[index];
+    if (slot->owner_offset == SIZE_MAX || slot->pending.value || slot->pending.allocation_bytes) return NULL;
+    const unsigned char *payload = locations->payload;
+    return *(XrtManagedHeader *const *)(payload + slot->owner_offset);
+}
+
 static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
@@ -108,9 +117,17 @@ static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack 
         }
         return status;
     }
-    const XrtMapBacking *map=NULL;
-    XrtManagedStatus status=rbc_value_map_borrow(module,activation,args[0],&map);
-    if (status!=XRT_MANAGED_OK) return status;
+    const XrtManagedFrameLocations *locations = &activation->frame_locations;
+    if ((access.source || access.other) &&
+        (!activation->owned_code || !locations->frame || *locations->busy)) return XRT_MANAGED_ARGUMENT;
+    const XrtMapBacking *map = NULL;
+    XrtManagedStatus status = XRT_MANAGED_OK;
+    if (access.source)
+        map = (const XrtMapBacking *)rbc_map_borrow_local_slot(locations, access.source - 1);
+    else
+        status = rbc_value_map_borrow(module, activation, args[0], &map);
+    if (status != XRT_MANAGED_OK) return status;
+    if (!map) return XRT_MANAGED_ARGUMENT;
     if (access.index==XR_LIR_MAP_OP_LEN) {
         XrRbcRegister *result=rbc_value_register(stack,activation,access.result);
         if (!result) return XRT_MANAGED_ARGUMENT;
@@ -124,10 +141,15 @@ static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack 
         xrt_native_map_project(activation->frame,home->temporary_first_owner,&map->managed,projection,source);
         return rbc_value_array_publish(activation,access.result);
     }
-    const XrtStringBacking *key=NULL;
-    status=rbc_value_string_borrow(activation,args[1],&key);
+    const XrtStringBacking *key = NULL;
+    if (access.other)
+        key = (const XrtStringBacking *)rbc_map_borrow_local_slot(locations, access.other - 1);
+    else
+        status = rbc_value_string_borrow(activation, args[1], &key);
+    if (status != XRT_MANAGED_OK) return status;
+    if (!key) return XRT_MANAGED_ARGUMENT;
     int64_t value=0; bool found=false;
-    if (status==XRT_MANAGED_OK) status=xrt_map_backing_get(map,key,&value,&found);
+    status=xrt_map_backing_get(map,key,&value,&found);
     if (status!=XRT_MANAGED_OK) return status;
     if (access.index==XR_LIR_MAP_OP_GET) {
         RbcValuePayload payload;

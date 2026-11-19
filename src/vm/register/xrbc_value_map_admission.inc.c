@@ -50,8 +50,11 @@ static bool rbc_value_map_literal_valid(const XrRbcModule *module, const XrRbcVa
 }
 static bool rbc_value_map_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
-    if (a.source || a.other || a.first>code->argument_count || a.count>code->argument_count-a.first ||
+    if (a.first>code->argument_count || a.count>code->argument_count-a.first ||
         (a.count && !code->arguments) || a.index<XR_LIR_MAP_OP_NEW || a.index>XR_LIR_MAP_OP_CLEAR) return false;
+    if ((a.source || a.other) && (!xr_rbc_module_code_owner(module) ||
+        !xr_lir_map_borrows_key(a.index) || a.index == XR_LIR_MAP_OP_SET || a.index == XR_LIR_MAP_OP_REMOVE))
+        return false;
     for (uint32_t p=0;p<a.count;++p) if (!rbc_value_id(code,code->arguments[a.first+p])) return false;
     const uint32_t *args=a.count ? code->arguments+a.first : NULL;
     if (a.index==XR_LIR_MAP_OP_NEW) {
@@ -81,7 +84,9 @@ static bool rbc_value_map_access_valid(const XrRbcModule *module,const XrRbcValu
         return a.count==1 && rbc_value_container(module,code,a.result,true) &&
             rbc_value_kind(module,code,a.result)==(snapshot==XR_LIR_STRING ? XRT_VALUE_ARRAY_STRING : XRT_VALUE_ARRAY_I64);
     if (!xr_lir_map_borrows_key(a.index) || a.count!=2 ||
-        !rbc_value_string_borrow_operand(module,code,args[1])) return false;
+        !rbc_value_string_borrow_operand(module,code,args[1]) ||
+        a.source != rbc_local_borrow_slot(code->homes, args[0]) ||
+        a.other != rbc_local_borrow_slot(code->homes, args[1])) return false;
     if (a.index==XR_LIR_MAP_OP_GET) return rbc_value_nullable_i64(module,code,function,a.result);
     return rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
 }

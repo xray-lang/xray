@@ -489,6 +489,9 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
             }
             if (access.window==UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"container mutator lost its common pending workspace");
             if (!map && !rbc_lir_array_local_metadata(c,&access,i->operands[0])) return false;
+        } else if (map && xr_lir_map_borrows_key(map) && i->operand_count == 2) {
+            access.source = rbc_local_borrow_slot(c->homes, i->operands[0]);
+            access.other = rbc_local_borrow_slot(c->homes, i->operands[1]);
         }
         break;
     }

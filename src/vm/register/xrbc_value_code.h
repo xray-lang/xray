@@ -59,7 +59,9 @@ typedef struct XrRbcValueAccess {
      * for type-zero transport absent from common typed homes. Its index is
      * UINT32_MAX when there is no common typed edge, never ambiguous edge zero. */
     /* ARRAY/MAP index is the verified catalog role, first/count its complete
-     * SSA operands. A mutator's window selects its common pending workspace. */
+     * SSA operands. A mutator's window selects its common pending workspace.
+     * Keyed Map reads also project source/other to local Frame owner slots
+     * (one-based, zero for a dynamically resolved Map or String origin). */
     /* SET index is the dedicated LIR operation and other its one-based common
      * SET_OPERATION event. Operands and workspace follow the same real homes. */
     /* SLICE index is its closed role, first/count its full SSA operand span.
