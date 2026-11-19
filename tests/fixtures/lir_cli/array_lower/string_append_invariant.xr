@@ -1,0 +1,27 @@
+fn fixed(count: i64) -> string {
+    var text = ""
+    const suffix = "π!"
+    var i = 0
+    while (i < count) {
+        text = text + suffix
+        i += 1
+    }
+    return text
+}
+
+fn chosen(count: i64, select_left: bool) -> string {
+    var text = ""
+    const suffix = select_left ? "x" : "y"
+    var i = 0
+    while (i < count) {
+        text += suffix
+        i += 1
+    }
+    return text
+}
+
+print(len(fixed(0)))
+print(fixed(3))
+print(len(fixed(4096)))
+print(chosen(3, true))
+print(chosen(3, false))

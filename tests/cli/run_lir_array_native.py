@@ -47,7 +47,7 @@ def main() -> None:
              "view_return_module_unrelated", "view_recursive_module_unrelated", "view_multiple_module_unrelated",
              "view_copy_unused_parameter", "view_call_module_write", "panic_nullable_view", "string_append_values", "string_append_ref",
              "string_join", "string_append_loop", "string_append_assignment", "string_append_grouping",
-             "string_parameter_loop", "panic_nullable_string_append")
+             "string_append_invariant", "string_parameter_loop", "panic_nullable_string_append")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:
         parser.error("unknown cases: " + ", ".join(unknown))
@@ -134,6 +134,9 @@ def main() -> None:
         if name == "string_append_grouping":
             assert generated_text.count("xrt_native_string_append_owned(") == 2
             assert "xrt_native_string_concat_create(" not in generated_text
+        if name == "string_append_invariant":
+            assert generated_text.count("xrt_native_string_append_window(") == 1
+            assert generated_text.count("xrt_native_string_append_owned(") == 2
         # The original large-case oracles check both length and element 299.
         # Keep that executed span check independent of C literal spelling.
         for ordinal, compiler in enumerate(args.compiler or [None]):

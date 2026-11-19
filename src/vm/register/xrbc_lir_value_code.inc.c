@@ -156,7 +156,7 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     return rbc_lir_emit(c,XR_RBC_VALUE_ACCESS,0,0,0,(int64_t)code->access_count++);
 }
 static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
-    XrRbcValueAccess access = {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX,.count=edge.argument_count};
+    XrRbcValueAccess access = {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX};
     if (c->value_edges) access.index = c->value_edges[((size_t)c->diagnostic->block - 1) * 2 + ordinal - 1];
     XrLirBlockView target;
     xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,edge.target},&target);
@@ -167,7 +167,9 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
     access.first = first;
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
         uint32_t pair[] = {edge.arguments[p],target.parameters[p]};
+        if (xr_lir_home_stationary_edge(c->homes, pair[0], pair[1])) continue;
         if (!rbc_lir_value_arguments(c,pair,2,&first)) return false;
+        ++access.count;
     }
     return rbc_lir_value_append(c,access);
 }
