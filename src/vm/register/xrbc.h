@@ -416,6 +416,10 @@ XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
     XrPodType *type, const uint8_t **bytes);
 XR_FUNC bool xr_rbc_outcome_aggregate_type(const XrRbcOutcome *,
     uint32_t ordinal, XrPodType *type);
+/* Natural owner-free Tuple bytes and their one-based canonical image type
+ * remain valid after execution and program release, until outcome_free. */
+XR_FUNC bool xr_rbc_outcome_inline(const XrRbcOutcome *, const XrtValueImage **,
+    uint32_t *type, const uint8_t **bytes);
 XR_FUNC bool xr_rbc_outcome_string(const XrRbcOutcome *outcome, const XrtManagedHeader **borrowed);
 XR_FUNC bool xr_rbc_outcome_take_string(XrRbcOutcome *outcome, XrtManagedHeader **output);
 XR_FUNC bool xr_rbc_outcome_array(const XrRbcOutcome *, const XrtManagedHeader **borrowed);

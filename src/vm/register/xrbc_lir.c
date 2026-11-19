@@ -1949,7 +1949,8 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     if (all > SIZE_MAX / sizeof(uint32_t))
         return rbc_lir_error(d, XR_RBC_COMPILE_LIMIT, "function table exceeds address space",
             (XrLirSource) {0});
-    if (rbc_lir_inline_type(input,root.result) || rbc_lir_slice_type(input,root.result))
+    if ((rbc_lir_inline_type(input,root.result) && xr_lir_boxed_type(input,root.result)) ||
+        rbc_lir_slice_type(input,root.result))
         return rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"inline value results require an internal typed caller",(XrLirSource){0});
     uint32_t *ids = xr_malloc(all * sizeof(*ids));
     uint32_t *mapping = xr_calloc(all, sizeof(*mapping));

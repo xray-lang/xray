@@ -113,6 +113,9 @@ struct XrRbcOutcome {
     size_t aggregate_type_count;
     uint8_t *aggregate_bytes;
     XrtFunction function;
+    const XrtValueImage *inline_image;
+    uint32_t inline_type;
+    XrRbcCodeLease inline_code;
 };
 
 struct XrRbcExecution {
@@ -541,12 +544,16 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
     bool inject_state = !owned && module->state_spec && entry == module->state_entry;
     const XrRbcValueCode *value_code=xr_rbc_module_value_code(module,entry);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
+    uint32_t result_type = value_code && value_code->homes ? value_code->homes->result_type : 0;
+    bool inline_result = rbc_inline_tuple_result(image,result_type);
     const XrRbcCodeOwner *owner=xr_rbc_code_owner_borrow((XrtManagedLease){module->code_lease.owner,
         module->code_lease.retain,module->code_lease.release});
     bool function_result=function->result_kind==XR_RBC_FUNCTION;
     if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_BOXED ||
         (!owned && function->capture_count) || function->state_capture ||
         function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
+        (inline_result && (function->aggregate_result_type || function->result_kind != XR_RBC_BITS ||
+            !xr_rbc_module_code_owner(module))) ||
         captures>function->parameter_count ||
         argument_count != function->parameter_count - captures - (inject_state ? 1u : 0u) ||
         (function_result && (!owner || !image || !value_code || !value_code->homes ||
@@ -611,6 +618,20 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
         memcpy(execution->pending->aggregate_types, module->aggregate_types,
             module->aggregate_type_count * sizeof(*module->aggregate_types));
         execution->pending->aggregate_type_count = module->aggregate_type_count;
+        execution->stack.aggregate_result = execution->pending->aggregate_bytes;
+    } else if (inline_result) {
+        execution->pending->aggregate_bytes = xr_malloc(image->types[result_type - 1].size);
+        if (!execution->pending->aggregate_bytes) {
+            xr_rbc_execution_free(&execution);
+            return XR_RBC_OUT_OF_MEMORY;
+        }
+        if (!execution->code_lease.retain(execution->code_lease.owner)) {
+            xr_rbc_execution_free(&execution);
+            return XR_RBC_VALUE_FAILURE;
+        }
+        execution->pending->inline_code = execution->code_lease;
+        execution->pending->inline_image = image;
+        execution->pending->inline_type = result_type;
         execution->stack.aggregate_result = execution->pending->aggregate_bytes;
     }
     if (module->state_spec) {
@@ -763,8 +784,17 @@ XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output) 
 }
 XR_FUNC bool xr_rbc_outcome_aggregate(const XrRbcOutcome *outcome,
     XrPodType *type, const uint8_t **bytes) {
-    if (!outcome || outcome->status != XR_RBC_OK || !outcome->aggregate_bytes || !type || !bytes) return false;
+    if (!outcome || outcome->status != XR_RBC_OK || !outcome->aggregate_bytes || outcome->inline_type || !type || !bytes)
+        return false;
     *type = outcome->aggregate_type;
+    *bytes = outcome->aggregate_bytes;
+    return true;
+}
+XR_FUNC bool xr_rbc_outcome_inline(const XrRbcOutcome *outcome,
+    const XrtValueImage **image, uint32_t *type, const uint8_t **bytes) {
+    if (!outcome || outcome->status != XR_RBC_OK || !outcome->inline_type || !image || !type || !bytes) return false;
+    *image = outcome->inline_image;
+    *type = outcome->inline_type;
     *bytes = outcome->aggregate_bytes;
     return true;
 }
@@ -888,6 +918,7 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     xrt_execution_failure_drop(&owned->failure);
     xr_free(owned->aggregate_bytes);
     xr_free(owned->aggregate_types);
+    if (owned->inline_code.owner) owned->inline_code.release(owned->inline_code.owner);
     if (owned->result_kind == XR_RBC_STRING || owned->result_kind == XR_RBC_MAP_STRING_I64 || owned->result_kind == XR_RBC_SET_I64 ||
         rbc_array_kind(owned->result_kind)) xrt_managed_drop(owned->value.string);
     xrt_managed_drop(owned->function.owner);

@@ -177,6 +177,18 @@ static bool rbc_value_owner(const XrRbcModule *module,const XrRbcValueCode *code
     return rbc_value_string(module,code,value,destination) || rbc_value_container(module,code,value,destination) ||
         rbc_value_inline(module,code,value,destination);
 }
+/* An owner-free Tuple (possibly wrapped in Nullable) can leave the outer
+ * activation as natural bytes and its original image type. */
+static bool rbc_inline_tuple_result(const XrtValueImage *image, uint32_t type) {
+    if (!image || !image->types || !type || type > image->type_count) return false;
+    for (;;) {
+        const XrtValueImageType *row = &image->types[type - 1];
+        if (row->owned_count || !row->size) return false;
+        if (row->kind == XRT_VALUE_TUPLE) return true;
+        if (row->kind != XRT_VALUE_NULLABLE || !row->nullable_element || row->nullable_element >= type) return false;
+        type = row->nullable_element;
+    }
+}
 static bool rbc_value_state_group(const XrRbcModule *module, const XrRbcValueCode *code,
     const XrRbcFunction *function, XrRbcValueAccess access) {
     const XrtModuleLayoutSpec *state = module->state_spec;
@@ -390,9 +402,9 @@ static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcV
     }
     return borrowed && owned;
 }
-static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
+XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     const XrRbcFunction *function, size_t pc) {
-    if (pc>=function->code_count) return false;
+    if (!module || !function || !function->code || pc>=function->code_count) return false;
     uint32_t word=function->code[pc];
     XrRbcOp op = (XrRbcOp)(word & 255u);
     if ((word >> 8) & 255) return false;
@@ -532,6 +544,10 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         if (function->aggregate_result_type)
             return rbc_value_pod(module,code,function,a.source,function->aggregate_result_type) &&
                 code->homes->result_type==rbc_value_home(code,a.source)->type;
+        if (rbc_value_inline(module,code,a.source,false))
+            return code->homes->result_type == rbc_value_home(code,a.source)->type;
+        if (code->homes && rbc_inline_tuple_result(xr_rbc_module_value_image(module),code->homes->result_type))
+            return false;
         return !a.source || rbc_value_owner(module,code,a.source,false) || rbc_value_scalar(code,function,a.source,XR_RBC_BITS);
     case XR_RBC_VALUE_ARRAY: return rbc_value_array_access_valid(module,code,function,a);
     case XR_RBC_VALUE_MAP: return rbc_value_map_access_valid(module,code,function,a);

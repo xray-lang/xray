@@ -1091,10 +1091,20 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
             if (!caller || caller->depth!=depth-1) return XR_RBC_INVALID;
             status=rbc_value_replace(module,stack,activation,(RbcValueOrigin){caller,frame.destination},from,home->parameter!=0);
         } else {
-            if (rbc_value_inline(module,activation->code,access.source,false)) return XR_RBC_INVALID;
-            if (home->parameter || home->owner_count!=1 || !stack->value_result || *stack->value_result)
-                return XR_RBC_INVALID;
-            status=xrt_managed_slot_take(activation->frame,home->first_owner,stack->value_result);
+            if (rbc_value_inline(module,activation->code,access.source,false)) {
+                if (!stack->aggregate_result || !rbc_inline_tuple_result(activation->image,home->type) ||
+                    home->type != activation->code->homes->result_type) return XR_RBC_INVALID;
+                RbcValuePayload payload;
+                status = rbc_value_payload(module,stack,from,&payload);
+                if (status == XRT_MANAGED_OK) {
+                    memcpy(stack->aggregate_result,payload.address,payload.size);
+                    stack->slots[0] = (XrRbcRegister){0};
+                }
+            } else {
+                if (home->parameter || home->owner_count!=1 || !stack->value_result || *stack->value_result)
+                    return XR_RBC_INVALID;
+                status=xrt_managed_slot_take(activation->frame,home->first_owner,stack->value_result);
+            }
         }
     } else if (home && home->type) {
         RbcValuePayload input;
