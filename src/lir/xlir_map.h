@@ -30,10 +30,12 @@ typedef enum XrLirMapOperation {
     XR_LIR_MAP_OP_REMOVE,
     XR_LIR_MAP_OP_CLEAR
 } XrLirMapOperation;
+static inline bool xr_lir_map_reads_key(uint32_t operation) {
+    return operation == XR_LIR_MAP_OP_GET || operation == XR_LIR_MAP_OP_INDEX || operation == XR_LIR_MAP_OP_CONTAINS;
+}
 /* These operations take one borrowed key in argument 1. */
 static inline bool xr_lir_map_borrows_key(uint32_t operation) {
-    return operation == XR_LIR_MAP_OP_GET || operation == XR_LIR_MAP_OP_INDEX ||
-        operation == XR_LIR_MAP_OP_CONTAINS || operation == XR_LIR_MAP_OP_SET || operation == XR_LIR_MAP_OP_REMOVE;
+    return xr_lir_map_reads_key(operation) || operation == XR_LIR_MAP_OP_SET || operation == XR_LIR_MAP_OP_REMOVE;
 }
 static inline XrLirType xr_lir_map_snapshot_element(uint32_t operation) {
     if (operation == XR_LIR_MAP_OP_KEYS) return XR_LIR_STRING;

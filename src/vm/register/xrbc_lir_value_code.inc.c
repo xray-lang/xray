@@ -156,7 +156,9 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     if (!rbc_lir_grow(c,&storage,&c->value_access_capacity,code->access_count + 1,sizeof(*code->accesses))) return false;
     code->accesses = storage;
     ((XrRbcValueAccess *)code->accesses)[code->access_count] = access;
-    return rbc_lir_emit(c,XR_RBC_VALUE_ACCESS,0,0,0,(int64_t)code->access_count++);
+    XrRbcOp op = access.operation == XR_RBC_VALUE_MAP && xr_lir_map_reads_key(access.index) ?
+        XR_RBC_MAP_READ : XR_RBC_VALUE_ACCESS;
+    return rbc_lir_emit(c,op,0,0,0,(int64_t)code->access_count++);
 }
 static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
     XrRbcValueAccess access = {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX};
@@ -489,7 +491,7 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
             }
             if (access.window==UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"container mutator lost its common pending workspace");
             if (!map && !rbc_lir_array_local_metadata(c,&access,i->operands[0])) return false;
-        } else if (map && xr_lir_map_borrows_key(map) && i->operand_count == 2) {
+        } else if (map && xr_lir_map_reads_key(map) && i->operand_count == 2) {
             access.source = rbc_local_borrow_slot(c->homes, i->operands[0]);
             access.other = rbc_local_borrow_slot(c->homes, i->operands[1]);
         }
