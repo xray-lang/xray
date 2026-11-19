@@ -928,6 +928,7 @@ static void string_forwarding_window(uint32_t blocks, bool side_entry) {
         .parameters=&count,.parameter_count=1,.result=XR_LIR_I64},&f));
     OK(xr_lir_define_function(c.module,f));
     XrLirBlock entry={0}, header={0}, route[17]={0}, exit={0};
+    XrLirValue route_owner[17]={0};
     CHECK(blocks < sizeof(route)/sizeof(*route));
     OK(xr_lir_add_block(c.module,f,NULL,0,&entry)); OK(xr_lir_set_entry(c.module,f,entry));
     OK(xr_lir_add_block(c.module,f,carries,2,&header));
@@ -952,9 +953,11 @@ static void string_forwarding_window(uint32_t blocks, bool side_entry) {
         .operands=&selected,.operand_count=1,.edge_count=2,.edges={{route[0],value,2},{exit,value,2}}}));
     for (uint32_t n=0;n<blocks;++n) {
         string_forward_parameters(&c,route[n],value);
+        route_owner[n]=value[0];
         string_forward(&c,route[n],route[n+1],value);
     }
     XrLirBlock body=route[blocks]; string_forward_parameters(&c,body,value);
+    route_owner[blocks]=value[0];
     XrLirValue suffix=ca_text(&c,body,"x",1), args[]={value[0],suffix};
     XrLirValue appended=string_role(&c,body,XR_LIR_STRING_OP_APPEND_OWNED,XR_LIR_STRING,args,2);
     ca_effect(&c,body,XR_LIR_STRING_DROP,suffix);
@@ -988,8 +991,7 @@ static void string_forwarding_window(uint32_t blocks, bool side_entry) {
             CHECK(end[n]==(start[n]==window->latch_owner ? window->header_owner : start[n]));
         }
         for (uint32_t n=0;n<=blocks;++n) {
-            string_forward_parameters(&c,route[n],value);
-            const XrLirValueHome *home=&homes->values[value[0].id];
+            const XrLirValueHome *home=&homes->values[route_owner[n].id];
             CHECK(start[2u*n]==home->temporary_first_owner && start[2u*n+1u]==home->first_owner);
         }
     }
