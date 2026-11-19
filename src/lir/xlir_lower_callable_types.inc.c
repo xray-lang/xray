@@ -19,6 +19,9 @@ static bool lower_receive_callable(Lower *c, XrXirType type, const XrXirTypeNode
     if (result && result->kind == XR_XIR_TYPE_CALLABLE)
         return lower_unsupported(c, "owned callable result transport");
     if (!lower_receive_type(c, node->result)) return false;
+    XrLirType result_element = lower_array_element(c, node->result);
+    if (xr_lir_inline_array_ordinal(c->module, result_element))
+        return lower_unsupported(c, "inline-element Arrays in callable signatures");
     XrLirCallableParameter *parameters = lower_alloc(c, node->parameter_count, sizeof(*parameters));
     if (node->parameter_count && !parameters) return false;
     bool good = true;
@@ -34,9 +37,11 @@ static bool lower_receive_callable(Lower *c, XrXirType type, const XrXirTypeNode
             .array_element=lower_array_element(c, source.type), .mode=(XrParamMode)source.mode,
             .escaping=source.escaping != 0};
         if (!parameters[p].type) good = lower_unsupported(c, "callable parameter physical type");
+        else if (xr_lir_inline_array_ordinal(c->module, parameters[p].array_element))
+            good = lower_unsupported(c, "inline-element Arrays in callable signatures");
     }
     XrLirCallableType shape = {.parameters=parameters, .parameter_count=node->parameter_count,
-        .result=lower_type(c, node->result), .result_element=lower_array_element(c, node->result),
+        .result=lower_type(c, node->result), .result_element=result_element,
         .flags=(node->flags & XR_XIR_CALLABLE_NO_SUSPEND ? XR_LIR_CALLABLE_NO_SUSPEND : 0u) |
             (node->flags & XR_XIR_CALLABLE_C_ABI ? XR_LIR_CALLABLE_C_ABI : 0u)};
     if (good && !shape.result) good = lower_unsupported(c, "callable result physical type");

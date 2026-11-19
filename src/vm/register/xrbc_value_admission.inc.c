@@ -523,6 +523,9 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 if (!rbc_value_scalar(code,function,source,kind)) return false;
             }
         }
+        if (rbc_result_value_kind(module, a.index) == XRT_VALUE_ARRAY_INLINE)
+            return !a.other && rbc_value_array(module, code, a.result, true) &&
+                callee->homes->result_type == rbc_value_home(code, a.result)->type;
         if (callee && rbc_value_slice(module,code,a.result))
             return rbc_value_slice_call(module,code,callee,a)!=NULL;
         if (a.other) return false;
@@ -549,6 +552,9 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 (event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY || event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE);
         }
         if (a.index) return false;
+        if (rbc_result_value_kind(module, (uint32_t)(function - module->functions)) == XRT_VALUE_ARRAY_INLINE)
+            return rbc_value_array(module, code, a.source, false) &&
+                code->homes->result_type == rbc_value_home(code, a.source)->type;
         if (function->aggregate_result_type)
             return rbc_value_pod(module,code,function,a.source,function->aggregate_result_type) &&
                 code->homes->result_type==rbc_value_home(code,a.source)->type;

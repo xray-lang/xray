@@ -26,7 +26,7 @@ def main() -> None:
     cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose", "callable_compose_weaken",
              "factory_bindings", "factory_loop", "factory_transfer_temporaries",
              "module_double", "module_snapshot", "module_counter", "counter_shared_binding",
-             "tuple_values", "tuple_flow", "tuple_mixed_fields", "tuple_mixed_owned", "tuple_array_state",
+             "tuple_values", "tuple_flow", "tuple_mixed_fields", "tuple_mixed_owned", "tuple_array_state", "tuple_array_return",
              "map_values", "map_bindings", "map_pod_calls", "map_fixed_operations", "record_values", "record_nullable", "record_lifetimes", "record_multileaf", "record_nullable_pod", "record_state_first_read", "record_generic_branch", "record_generic_owned_branch", "nullable_managed",
              "panic_map_index_missing", "panic_map_direct_missing", "panic_map_formal_missing", "panic_map_stationary_cleanup", "panic_nullable_managed", "callable_map_capture", "callable_map_value", "callable_unit_owned", "reject_owned_binding",
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
@@ -38,7 +38,7 @@ def main() -> None:
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
              "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
              "panic_bounds", "panic_get_i64_negative", "panic_get_u8_length", "panic_get_u64_huge", "panic_get_inline_length",
-             "panic_unpublished", "fixed_values", "fixed_flow", "fixed_length_effects",
+             "panic_unpublished", "panic_len_unpublished_inline", "fixed_values", "fixed_flow", "fixed_length_effects",
              "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length",
              "nullable_scalar", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
              "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit",
@@ -190,6 +190,13 @@ def main() -> None:
                     failures.append((name, "output", out, err))
                 if result != reference:
                     failures.append((name, "VM/native byte comparison", reference, result))
+    for name in ("reject_callable_inline_array_result", "reject_callable_inline_array_parameter"):
+        source = fixtures / (name + ".xr")
+        run(name + "-check", [binary, "check", source], 0)
+        _, vm_out, vm_err = run(name + "-vm", [binary, "run", source], 1)
+        _, c_out, c_err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
+        if vm_out or c_out or vm_err != c_err or b"inline-element Arrays in callable signatures" not in vm_err:
+            failures.append((name, "shared callable Array diagnostic", vm_out, vm_err, c_out, c_err))
     for name in ("reject_bool", "reject_nested", "reject_function_reassign",
                  "reject_function_alias", "reject_function_ref", "reject_tuple_unit"):
         source = fixtures / (name + ".xr")

@@ -94,8 +94,8 @@ static XrtManagedStatus rbc_value_plan_set(const XrRbcModule *module, XrRbcStack
     if (stack->layout)
         return module->state_spec && module->state_spec->values == image ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
     if (stack->values->plans) return XRT_MANAGED_OK;
-    const XrRbcCodeOwner *code = xr_rbc_code_owner_borrow((XrtManagedLease){module->code_lease.owner,
-        module->code_lease.retain,module->code_lease.release});
+    /* A sealed value image can be owned by code with no callable entries. */
+    const XrRbcCodeOwner *code = xr_rbc_module_code_owner(module);
     if (!code || !image || !image->type_count) return XRT_MANAGED_ARGUMENT;
     return xrt_value_image_bind(stack->values->billing,image,
         (XrtManagedLease){(void *)code,xr_rbc_code_owner_retain,xr_rbc_code_owner_release},&stack->values->plans);
@@ -334,7 +334,8 @@ static XrtManagedStatus rbc_value_place(RbcValueOrigin origin, bool temporary, s
     const XrtValueImage *image=origin.activation->image;
     if (!home || !image || !home->type || home->type>image->type_count) return XRT_MANAGED_ARGUMENT;
     XrtValueKind kind=image->types[home->type-1].kind;
-    XrtPlaceNull nulls=((kind>=XRT_VALUE_STRING && kind<=XRT_VALUE_MAP_STRING_I64) || kind==XRT_VALUE_SET_I64) ? XRT_PLACE_NONNULL : XRT_PLACE_NULLABLE;
+    XrtPlaceNull nulls = kind == XRT_VALUE_STRING || xrt_value_kind_is_array(kind) ||
+        kind == XRT_VALUE_MAP_STRING_I64 || kind == XRT_VALUE_SET_I64 ? XRT_PLACE_NONNULL : XRT_PLACE_NULLABLE;
     return xr_rbc_value_home_place((XrRbcHomeLocation){origin.activation->code->homes,
         origin.activation->frame,origin.value,temporary},leaf,nulls,out);
 }

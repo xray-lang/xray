@@ -12,6 +12,7 @@
 #include "vm/register/xrbc_value_code.h"
 #include "xray_native_values.h"
 #include "xray_native_array_slice.h"
+#include "lir/xlir_internal.h"
 
 
 // The sole guest result is owned; this test helper consumes it after inspection.
@@ -147,6 +148,7 @@ static XrRbcStatus compile_admission(const XrRbcModule *module,const XrtLocation
 #include "vm/register/xrbc_lir.c"
 #undef xr_rbc_module_admit
 #include "../lir/lir_array_c_fixture.h"
+#include "../lir/lir_inline_array_return_fixture.h"
 #include "../lir/lir_array_ref_fixture.h"
 #include "../lir/lir_fixed_bytecode_fixture.h"
 #include "lir_array_copy_cases.h"
@@ -329,6 +331,16 @@ static void array_compiler_failures(const char *name,uint64_t expected) {
     uint64_t result=0;CHECK(execute(program,NULL,0,&result)==XR_RBC_OK && result==expected);
     xr_rbc_program_destroy(program);CHECK(!live_allocations);
     printf("Array %s compiler failure points: %zu\n",name,total);
+}
+
+static void inline_array_return_allocation_failures(void) {
+    XrLirFunction root = {0}, pack = {0};
+    XrLirModule *module = inline_array_return_fixture(&root, &pack);
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic = {0};
+    CHECK(xr_rbc_compile(module, pack, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+    CHECK(strstr(diagnostic.message, "internal typed caller"));
+    callable_allocation_failures(module, root, 5, "inline-element Array return");
 }
 static void array_reference_compiler_failures(void) {
     const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
@@ -1119,6 +1131,7 @@ int main(void) {
     string_reference_allocation_failures();
     slice_boundary_allocation_failures();
     slice_cleanup_allocation_failures();
+    inline_array_return_allocation_failures();
     aggregate_call_compiler_failures(false);
     aggregate_call_compiler_failures(true);
     aggregate_state_compiler_failures();

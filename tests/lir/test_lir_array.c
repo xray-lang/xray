@@ -25,6 +25,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #c); exit(1); } } while (0)
 #define OK(c) CHECK((c) == XR_LIR_OK)
 #include "lir_array_c_fixture.h"
+#include "lir_inline_array_return_fixture.h"
 #include "lir_array_unsigned_frontier_cases.h"
 #include "lir_array_ref_cases.h"
 #include "lir_constructed_frontier_cases.h"
@@ -53,6 +54,51 @@
 #include "lir_string_fixture.h"
 #include "lir_array_forwarding_bytecode_cases.h"
 #include "lir_array_local_bytecode_cases.h"
+
+static void inline_array_external_result(void) {
+    XrLirFunction root = {0}, pack = {0};
+    XrLirModule *module = inline_array_return_fixture(&root, &pack);
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirCRequest request = {.module=module, .entry=pack, .resources=resources,
+        .translation_unit="inline-array-return.c"};
+    XrLirCOutput output = {0};
+    XrLirCDiagnostic c_diagnostic = {0};
+    CHECK(xr_lir_emit_c(&request, &output, &c_diagnostic) == XR_LIR_C_UNSUPPORTED && !output.bytes);
+    CHECK(strstr(c_diagnostic.message, "internal typed caller"));
+    xr_compile_resources_release(resources);
+
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(module, root, &program, NULL) == XR_RBC_COMPILE_OK && program);
+    const XrRbcModule *owned = xr_rbc_program_view(program);
+    CHECK(owned && !owned->state_spec && owned->function_count == 2);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(owned, 1, NULL, 0, xr_rbc_program_locations(program), &execution) ==
+        XR_RBC_INVALID && !execution);
+
+    XrRbcModule borrowed = *owned;
+    borrowed.code_lease = (XrRbcCodeLease){0};
+    uint32_t boundaries = 0;
+    for (uint32_t f = 0; f < owned->function_count; ++f) {
+        const XrRbcFunction *function = &owned->functions[f];
+        const XrRbcValueCode *code = xr_rbc_module_value_code(owned, f);
+        CHECK(code);
+        for (size_t pc = 0; pc < function->code_count; ++pc) {
+            uint32_t word = function->code[pc], index = word >> 16;
+            if ((word & 255u) != XR_RBC_VALUE_ACCESS || index >= code->access_count) continue;
+            XrRbcValueAccess access = code->accesses[index];
+            if (access.operation != XR_RBC_VALUE_ARRAY ||
+                (access.index != XR_LIR_ARRAY_OP_NEW && access.index != XR_LIR_ARRAY_OP_GET)) continue;
+            CHECK(xr_rbc_value_instruction_valid(owned, function, pc));
+            CHECK(!xr_rbc_value_instruction_valid(&borrowed, function, pc));
+            ++boundaries;
+        }
+    }
+    CHECK(boundaries == 2);
+    xr_rbc_program_destroy(program);
+    xr_lir_module_destroy(module);
+}
 
 static void array_shapes(const XrLirModule *m, XrLirType element) {
     OK(xr_lir_verify(m, NULL));
@@ -912,6 +958,7 @@ static void frame_scalar_cell_admission(void) {
 }
 
 int main(int argc, char **argv) {
+    inline_array_external_result();
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     frame_scalar_cell_admission();array_c_output("frame-scalar-cells",NULL);
     static const char *const set_cases[]={"set-i64-local","set-i64-state","set-formal-cell","set-formal-ref","set-formal-state",

@@ -1,0 +1,8 @@
+fn apply(callback: fn(i64) -> Array<(string, i64)>, value: i64) -> i64 {
+    const rows = callback(value)
+    return rows[0].1
+}
+
+print(apply(fn(value: i64) -> Array<(string, i64)> {
+    return [("item-${value}", value)]
+}, 42))

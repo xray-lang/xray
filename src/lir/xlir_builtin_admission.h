@@ -104,7 +104,7 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
         if (view.result == XR_LIR_ARRAY) {
             XrLirArrayShape shape;
             if (xr_lir_array_result_view(module, function, &shape) != XR_LIR_OK ||
-                (uint32_t)shape.element >= XR_LIR_TYPE_COUNT) return false;
+                !lir_definition_array_element(module, view.result, shape.element)) return false;
         }
         for (uint32_t value = 0; value < view.value_count; ++value) {
             XrLirValue handle = {module, function.id, value + 1};

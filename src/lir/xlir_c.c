@@ -1325,6 +1325,13 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     }
     if (!c_request_poll(&c))
         return c.status;
+    XrLirArrayShape array_result = {0};
+    if (entry.result == XR_LIR_ARRAY &&
+        xr_lir_array_result_view(request->module, request->entry, &array_result) == XR_LIR_OK &&
+        xr_lir_inline_array_ordinal(request->module, array_result.element)) {
+        c_error(&c, XR_LIR_C_UNSUPPORTED, "inline value results require an internal typed caller");
+        return c.status;
+    }
     if (xr_lir_boxed_type(request->module, entry.result)) {
         c_error(&c, XR_LIR_C_UNSUPPORTED, "standalone boxed results require an external outcome owner");
         return c.status;

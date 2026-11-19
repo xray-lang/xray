@@ -515,7 +515,8 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     if (v->result == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};
         if (xr_lir_array_result_view(input, f, &shape) != XR_LIR_OK ||
-            rbc_lir_array_family(shape.element) == XR_RBC_ARRAY_FAMILY_COUNT) {
+            (rbc_lir_array_family(shape.element) == XR_RBC_ARRAY_FAMILY_COUNT &&
+                !xr_lir_inline_array_ordinal(input, shape.element))) {
             rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, "Array result has no bytecode element implementation", (XrLirSource){0});
             return false;
         }
@@ -1595,6 +1596,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
     XrLirArrayShape array_result={0};
     if(c->view.result==XR_LIR_ARRAY && xr_lir_array_result_view(c->input,c->function,&array_result)!=XR_LIR_OK)
         return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"cannot read owned Array result shape");
+    /* Exact inline Array results live in the typed home image. They have no
+     * legacy result bank, and only typed CALL and RETURN consume their homes. */
     *out = (XrRbcFunction) {.code=c->code, .code_count=c->code_count,
         .constants=c->constants, .constant_count=c->constant_count,
         .register_count=c->register_count, .parameter_count=c->scalar_parameter_count,
@@ -1970,7 +1973,11 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     if (all > SIZE_MAX / sizeof(uint32_t))
         return rbc_lir_error(d, XR_RBC_COMPILE_LIMIT, "function table exceeds address space",
             (XrLirSource) {0});
-    if ((rbc_lir_inline_type(input,root.result) && xr_lir_boxed_type(input,root.result)) ||
+    XrLirArrayShape root_array = {0};
+    bool inline_array_result = root.result == XR_LIR_ARRAY &&
+        xr_lir_array_result_view(input, entry, &root_array) == XR_LIR_OK &&
+        xr_lir_inline_array_ordinal(input, root_array.element);
+    if (inline_array_result || (rbc_lir_inline_type(input,root.result) && xr_lir_boxed_type(input,root.result)) ||
         rbc_lir_slice_type(input,root.result))
         return rbc_lir_error(d,XR_RBC_COMPILE_UNSUPPORTED,"inline value results require an internal typed caller",(XrLirSource){0});
     uint32_t *ids = xr_malloc(all * sizeof(*ids));

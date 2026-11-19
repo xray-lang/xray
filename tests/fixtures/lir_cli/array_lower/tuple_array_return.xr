@@ -1,0 +1,15 @@
+fn pack(n: i64) -> Array<(string, i64)> {
+    return [("item-${n}", n)]
+}
+
+fn relay(rows: Array<(string, i64)>) -> Array<(string, i64)> {
+    return rows
+}
+
+fn exercise() {
+    const actual = pack(42)
+    const kept = relay(actual)
+    print("${actual[0].0}:${kept[0].1}:${len(kept)}")
+}
+
+exercise()

@@ -268,14 +268,24 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     return true;
 }
 
-static bool rbc_callable_inline_signature(const XrRbcModule *module,uint32_t function) {
+static XrtValueKind rbc_result_value_kind(const XrRbcModule *module, uint32_t function) {
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,function);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    uint32_t type = code && code->homes ? code->homes->result_type : 0;
+    return type && image && image->types && type <= image->type_count ?
+        image->types[type - 1].kind : XRT_VALUE_UNIT;
+}
+
+static bool rbc_requires_typed_call(const XrRbcModule *module,uint32_t function) {
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,function);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     if (!code || !code->homes || !image) return false;
-    if (code->homes->result_type && image->types[code->homes->result_type-1].kind==XRT_VALUE_FUNCTION) return true;
+    XrtValueKind result = rbc_result_value_kind(module, function);
+    if (result == XRT_VALUE_FUNCTION || result == XRT_VALUE_ARRAY_INLINE) return true;
     for (uint32_t p=0;p<code->parameter_count;++p) {
         uint32_t type=code->homes->values[code->parameters[p]].type;
-        if (type && image->types[type-1].kind==XRT_VALUE_FUNCTION) return true;
+        if (type && (image->types[type-1].kind==XRT_VALUE_FUNCTION ||
+            image->types[type-1].kind==XRT_VALUE_ARRAY_INLINE)) return true;
     }
     return false;
 }
@@ -325,7 +335,7 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
     if (access.operation == XR_RBC_FUNCTION_REFERENCE) {
         if (access.source || access.window || access.callee >= m->function_count) return false;
         const XrRbcFunction *callee = &m->functions[access.callee];
-        if (rbc_callable_inline_signature(m,access.callee)) return false;
+        if (rbc_requires_typed_call(m,access.callee)) return false;
         uint32_t count = callee->capture_count + callee->state_capture;
         if (count) {
             if (!access.destination || access.destination > f->environment_count || access.count != count ||

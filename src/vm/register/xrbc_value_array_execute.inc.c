@@ -164,12 +164,14 @@ static XrtManagedStatus rbc_value_array_inline(const XrRbcModule *module,XrRbcSt
     bool create=access.index==XR_LIR_ARRAY_OP_NEW;
     const XrLirValueHome *home=rbc_value_home(activation->code,create ? access.result : args[0]);
     uint32_t element=activation->image->types[home->type-1].element;
+    const XrtManagedHeader *owner = NULL;
+    if (!create) {
+        RbcValueOrigin origin = rbc_value_origin(activation, args[0]);
+        const XrLirValueHome *borrow = origin.activation ? rbc_value_home(origin.activation->code, origin.value) : NULL;
+        XrtManagedStatus status = rbc_value_borrow_header(origin, borrow, &owner);
+        if (status != XRT_MANAGED_OK) return status;
+    }
     if (!create && access.index==XR_LIR_ARRAY_OP_LEN) {
-        XrtPlace place;
-        const XrtManagedHeader *owner=NULL;
-        XrtManagedStatus status=rbc_value_place(rbc_value_origin(activation,args[0]),false,0,&place);
-        if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&owner);
-        if (status!=XRT_MANAGED_OK) return status;
         XrRbcRegister *output=rbc_value_register(stack,activation,access.result);
         const XrtArrayBacking *array=(const XrtArrayBacking *)owner;
         if (!output) return XRT_MANAGED_ARGUMENT;
@@ -196,13 +198,9 @@ static XrtManagedStatus rbc_value_array_inline(const XrRbcModule *module,XrRbcSt
     if (access.index!=XR_LIR_ARRAY_OP_GET) return XRT_MANAGED_ARGUMENT;
     XrRbcRegister *index=rbc_value_register(stack,activation,args[1]);
     if (!index) return XRT_MANAGED_ARGUMENT;
-    XrtPlace place;
-    const XrtManagedHeader *owner=NULL;
     int64_t at; memcpy(&at,&index->bits,sizeof(at));
-    status=rbc_value_place(rbc_value_origin(activation,args[0]),false,0,&place);
-    if (status==XRT_MANAGED_OK) status=xrt_place_borrow(place,&owner);
     const void *row=NULL;
-    if (status==XRT_MANAGED_OK) status=xrt_array_backing_inline_at((const XrtArrayBacking *)owner,binding.element,at,&row);
+    status=xrt_array_backing_inline_at((const XrtArrayBacking *)owner,binding.element,at,&row);
     return status==XRT_MANAGED_OK ? rbc_value_inline_extract(module,stack,activation,access.result,element,row) : status;
 }
 static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStack *stack,
