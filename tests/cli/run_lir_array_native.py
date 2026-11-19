@@ -113,11 +113,16 @@ def main() -> None:
         generated_text = generated.read_text(encoding="utf-8")
         assert "({" not in generated_text
         if name == "push_capacity":
-            # The dependent bound and live snapshot must keep ordinary updates.
+            # Four counted windows and one dependent bound may grow; the live snapshot stays ordinary.
             assert generated_text.count("static const XrtArrayI64RegionSpec xrl_ap_spec_") == 4
+            assert generated_text.count("static const XrtArrayI64RegionSpec xrl_pc_spec_") == 1
             assert "xrl_ap_0_ready = true;" in generated_text
             assert "xrt_native_array_update_place(" in generated_text
-            assert generated_text.count("xrt_native_array_push_local_i64(") == 4
+            fixed_growth = r"if \(xrl_ap_\d+_ready\) \{\s+xrt_native_array_push_local_i64\("
+            pointwise_growth = r"if \(xrl_pc_growth\) \{\s+xrt_native_array_push_local_i64\("
+            assert len(re.findall(fixed_growth, generated_text)) == 4
+            assert len(re.findall(pointwise_growth, generated_text)) == 1
+            assert generated_text.count("xrt_native_array_push_local_i64(") == 5
         elif name == "array_stationary_edges":
             # The pure changing-bound loop keeps its scalar CFG. Observers,
             # extra exits and shared snapshots retain pointwise updates.
