@@ -71,6 +71,26 @@ fn inclusive_limit(count: i64) -> i64 {
     return len(text)
 }
 
+fn negated_limit(first: i64, count: i64) -> i64 {
+    var text = ""
+    var i = first
+    while (!(i >= count)) {
+        text += "é"
+        i += 1
+    }
+    return len(text)
+}
+
+fn nested_boolean_limit(count: i64) -> i64 {
+    var text = ""
+    var i = 0
+    while (!(false == (i < count))) {
+        text += "x"
+        i += 1
+    }
+    return len(text)
+}
+
 print(len(fixed(0)))
 print(fixed(3))
 print(len(fixed(4096)))
@@ -87,3 +107,7 @@ print(mirrored_limit(4, 4))
 print(mirrored_limit(9223372036854775707, 9223372036854775807))
 print(inclusive_limit(0))
 print(inclusive_limit(100))
+print(negated_limit(-3, 7))
+print(negated_limit(4, 4))
+print(negated_limit(9223372036854775707, 9223372036854775807))
+print(nested_boolean_limit(71))

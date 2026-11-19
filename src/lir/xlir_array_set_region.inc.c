@@ -340,7 +340,7 @@ static void lir_array_region_range_begin(LirArrayRegionProof *p, const XrLirArra
     uint32_t order[2];
     if (body_edge) return;
     const XrLirInstructionView *compare = xr_lir_internal_branch_i64_lt(f, term, body_edge, order);
-    if (!compare || f->values[compare->result - 1].block != region->header) return;
+    if (!compare || term->operands[0] != compare->result || f->values[compare->result - 1].block != region->header) return;
     uint32_t condition = compare->result, iv = order[0], length = order[1];
     const XrLirValueData *definition = &f->values[iv - 1];
     const XrLirInstructionView *bound = xr_lir_internal_value_definition(f, length);

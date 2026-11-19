@@ -175,13 +175,32 @@ static inline const XrLirInstructionView *xr_lir_internal_branch_i64_lt(
     const XrLirFunctionData *f, const XrLirInstructionView *branch, uint32_t edge, uint32_t order[2]) {
     if (branch->op != XR_LIR_CONDBR || branch->operand_count != 1 || branch->edge_count != 2 || edge >= 2)
         return NULL;
-    const XrLirInstructionView *compare = xr_lir_internal_value_definition(f, branch->operands[0]);
-    if (!compare || compare->op != XR_LIR_ICMP || compare->type != XR_LIR_I1 || compare->operand_count != 2)
-        return NULL;
-    uint32_t left = compare->operands[0], right = compare->operands[1];
-    if (!left || left > f->value_count || !right || right > f->value_count ||
-        f->values[left - 1].type != XR_LIR_I64 || f->values[right - 1].type != XR_LIR_I64)
-        return NULL;
+    const XrLirInstructionView *compare;
+    uint32_t condition = branch->operands[0], left, right, block = 0;
+    for (;;) {
+        compare = xr_lir_internal_value_definition(f, condition);
+        if (!compare || compare->op != XR_LIR_ICMP || compare->type != XR_LIR_I1 || compare->operand_count != 2)
+            return NULL;
+        uint32_t current_block = f->values[condition - 1].block;
+        if (block && block != current_block) return NULL;
+        block = current_block;
+        left = compare->operands[0]; right = compare->operands[1];
+        if (!left || left > f->value_count || !right || right > f->value_count) return NULL;
+        XrLirType type = f->values[left - 1].type;
+        if (type != f->values[right - 1].type) return NULL;
+        if (type == XR_LIR_I64) break;
+        /* An equality of a boolean and a known bit only changes the polarity
+         * of its SSA operand. Admission already proves acyclic definitions. */
+        if (type != XR_LIR_I1 || (compare->predicate != XR_LIR_EQ && compare->predicate != XR_LIR_NE)) return NULL;
+        const XrLirInstructionView *bit = xr_lir_internal_value_definition(f, right);
+        condition = left;
+        if (!bit || bit->op != XR_LIR_CONST) {
+            bit = xr_lir_internal_value_definition(f, left);
+            condition = right;
+        }
+        if (!bit || bit->op != XR_LIR_CONST || bit->type != XR_LIR_I1 || bit->bits > 1) return NULL;
+        edge ^= (compare->predicate == XR_LIR_EQ) != (bit->bits != 0);
+    }
     if (compare->predicate == (edge ? XR_LIR_GE : XR_LIR_LT)) {
         order[0] = left;
         order[1] = right;
