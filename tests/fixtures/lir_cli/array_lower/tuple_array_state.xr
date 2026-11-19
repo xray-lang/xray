@@ -1,0 +1,15 @@
+fn label(n: i64) -> string {
+    return "item-${n}"
+}
+
+fn first(rows: Array<(string, i64)>) -> (string, i64) {
+    return rows[0]
+}
+
+var pairs: Array<(string, i64)> = [(label(41), 41), (label(7), 7)]
+for ((name, n) in pairs) {
+    print("${name}=${n}")
+}
+const saved = first(pairs)
+pairs = [("replacement", 1)]
+print("${saved.0}:${saved.1 + 1}")

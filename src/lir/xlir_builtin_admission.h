@@ -65,6 +65,10 @@ static inline bool lir_definition_cell_captures(const XrLirModule *module,
     return true;
 }
 
+static inline bool lir_definition_array_element(const XrLirModule *module, XrLirType type, XrLirType element) {
+    return element < XR_LIR_TYPE_COUNT || (type == XR_LIR_ARRAY && xr_lir_inline_array_ordinal(module,element));
+}
+
 /* Definitions and State use the owned Fixed projection. Intrinsic and external
  * boundaries retain their closed builtin ABI until a typed consumer exists. */
 static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
@@ -76,8 +80,15 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
         if (xr_lir_map_intrinsic_valid(module, &signature)) continue;
         XrLirSliceIntrinsic slice;
         if (xr_lir_slice_intrinsic_view(module, signature.id, &slice) == XR_LIR_OK) continue;
-        if (!lir_builtin_signature(signature.result, signature.parameters, signature.parameter_count))
-            return false;
+        if (lir_builtin_signature(signature.result, signature.parameters, signature.parameter_count)) continue;
+        XrLirArrayIntrinsic array;
+        if (xr_lir_array_intrinsic_view(module,signature.id,&array) == XR_LIR_OK && array.id) {
+            if (array.operation == XR_LIR_ARRAY_OP_NEW && xr_lir_inline_array_ordinal(module,array.result_element))
+                continue;
+            if (array.operation == XR_LIR_ARRAY_OP_GET && array.parameter_count == 2 && array.parameter_elements &&
+                xr_lir_inline_array_ordinal(module,array.parameter_elements[0])) continue;
+        }
+        return false;
     }
     for (uint32_t i = 0; i < xr_lir_function_count(module); ++i) {
         XrLirFunction function;
@@ -103,11 +114,11 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
                 XrLirStateReference shape;
                 if (xr_lir_state_reference_view(module, handle, &shape) != XR_LIR_OK ||
                     !lir_definition_type(module, shape.payload) ||
-                    (uint32_t)shape.array_element >= XR_LIR_TYPE_COUNT) return false;
+                    !lir_definition_array_element(module,shape.payload,shape.array_element)) return false;
             } else if (type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) {
                 XrLirArrayShape shape;
                 if (xr_lir_array_shape_view(module, handle, &shape) != XR_LIR_OK ||
-                    (uint32_t)shape.element >= XR_LIR_TYPE_COUNT) return false;
+                    !lir_definition_array_element(module,type,shape.element)) return false;
             }
         }
     }
@@ -115,7 +126,7 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
     if (xr_lir_state_layout_view(module, &layout) != XR_LIR_OK) return false;
     for (uint32_t i = 0; i < layout.slot_count; ++i)
         if (!lir_definition_type(module, layout.slots[i].payload) ||
-            (uint32_t)layout.slots[i].array_element >= XR_LIR_TYPE_COUNT) return false;
+            !lir_definition_array_element(module,layout.slots[i].payload,layout.slots[i].array_element)) return false;
     return true;
 }
 #endif // XLIR_BUILTIN_ADMISSION_H

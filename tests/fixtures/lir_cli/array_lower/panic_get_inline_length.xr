@@ -1,0 +1,4 @@
+fn index() -> i64 { return 1 }
+const rows: Array<(string, i64)> = [("unused", 11)]
+const field = rows[index()]
+print(field.0)
