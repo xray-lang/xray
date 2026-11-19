@@ -13,6 +13,7 @@
 #include "xnative_string_backing_ops.h"
 #include "xnative_array_backing.h"
 #include "xnative_place.h"
+#include "xray_native_values.h"
 #include "base/xchecks.h"
 #include "shared/xr_string_core.h"
 #include "shared/xr_text_kernel.h"
@@ -271,6 +272,45 @@ static bool string_append_edit(XrtManagedHeader *source, const void *suffix) {
     StringAppendTransaction transaction = {.suffix=suffix};
     return string_append_apply(source, &transaction) == XRT_MANAGED_OK && transaction.appended;
 }
+static size_t string_fill_window(XrtStringBacking *text, const XrtStringBacking *suffix, size_t count) {
+    if (!text || !suffix || text == suffix || text->length >= text->capacity || text->runes > text->length ||
+        !suffix->length || suffix->length >= suffix->capacity || suffix->runes > suffix->length ||
+        xr_signed_rc_read(&text->managed.references) != 1) return 0;
+    size_t steps = (text->capacity - text->length - 1) / suffix->length;
+    if (steps > count) steps = count;
+    if (!steps) return 0;
+    char *next = text->bytes + text->length;
+    if (suffix->length == 1) memset(next, (unsigned char)suffix->bytes[0], steps);
+    else for (size_t n = 0; n < steps; ++n) {
+        memcpy(next, suffix->bytes, suffix->length);
+        next += suffix->length;
+    }
+    text->length += steps * suffix->length;
+    text->runes += steps * suffix->runes;
+    text->bytes[text->length] = 0;
+    return steps;
+}
+
+XRAY_API size_t xrt_native_string_append_window(XrtManagedFrame *frame, size_t owner,
+    size_t suffix, size_t count, const size_t *empty_slots, size_t empty_count) {
+    XrtManagedSlotLocation text, piece;
+    if (!count || (empty_count && !empty_slots) || owner == suffix ||
+        xrt_managed_slot_location(frame, owner, &text) != XRT_MANAGED_OK ||
+        xrt_managed_slot_location(frame, suffix, &piece) != XRT_MANAGED_OK ||
+        xrt_managed_domain_enter(text) != XRT_MANAGED_OK) return 0;
+    size_t done = 0;
+    bool ready = !text.pending->value && !text.pending->allocation_bytes &&
+        !piece.pending->value && !piece.pending->allocation_bytes;
+    for (size_t n = 0; ready && n < empty_count; ++n) {
+        XrtManagedSlotLocation empty;
+        ready = xrt_managed_slot_location(frame, empty_slots[n], &empty) == XRT_MANAGED_OK &&
+            !*empty.owner && !empty.pending->value && !empty.pending->allocation_bytes;
+    }
+    if (ready) done = string_fill_window((XrtStringBacking *)*text.owner, (const XrtStringBacking *)*piece.owner, count);
+    xrt_managed_domain_leave(text);
+    return done;
+}
+
 static XrtManagedStatus string_append_candidate(XrtPlaceReplacement *reservation,
     const XrtBackingTypes *types, const StringAppendTransaction *transaction) {
     const XrtStringBacking *left = transaction->source, *right = transaction->suffix;

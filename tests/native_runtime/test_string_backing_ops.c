@@ -12,6 +12,7 @@
  */
 #include "runtime/native/xnative_string_backing_ops.h"
 #include "runtime/native/xnative_array_backing.h"
+#include "xray_native_values.h"
 #include "base/xmalloc.h"
 #include <limits.h>
 #include <stdio.h>
@@ -533,6 +534,34 @@ static void owned_append_preflight(void) {
     slot_is(&f, 1, "pz");
     fixture_done(&f);
 }
+static void append_capacity_window(void) {
+    Fixture f; fixture_init(&f, SIZE_MAX);
+    size_t empty[] = {1, 2};
+    OK(xrt_string_backing_create(f.frame, 0, &f.types, "p", 1, 11));
+    OK(xrt_string_backing_create(f.frame, 3, &f.types, "\xc3\xa9\0", 3, 0));
+    XrtStringBacking *text = string(&f, 0);
+    OK(xrt_string_backing_copy_into(f.frame, 1, text));
+    CHECK(!xrt_native_string_append_window(f.frame, 0, 3, 8, NULL, 0));
+    CHECK(!xrt_native_string_append_window(f.frame, 0, 3, 8, empty, 2));
+    OK(xrt_managed_slot_drop(f.frame, 1));
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(f.frame, 2, f.types.string, sizeof(XrtStringBacking) + 2, &pending));
+    CHECK(!xrt_native_string_append_window(f.frame, 0, 3, 8, empty, 2));
+    CHECK(text->length == 1 && text->runes == 1);
+    OK(xrt_managed_slot_abort(f.frame, 2));
+    XrtManagedSlotLocation location;
+    OK(xrt_managed_slot_location(f.frame, 0, &location));
+    OK(xrt_managed_domain_enter(location));
+    CHECK(!xrt_native_string_append_window(f.frame, 0, 3, 8, empty, 2));
+    xrt_managed_domain_leave(location);
+    size_t calls = atomic_load(&f.audit.calls);
+    CHECK(xrt_native_string_append_window(f.frame, 0, 3, 8, empty, 2) == 3);
+    CHECK(string(&f, 0) == text && atomic_load(&f.audit.calls) == calls);
+    text_is(text, "p\xc3\xa9\0\xc3\xa9\0\xc3\xa9\0", 10, 7);
+    CHECK(!xrt_native_string_append_window(f.frame, 0, 3, 8, empty, 2));
+    fixture_done(&f);
+}
+
 static void owned_append_growth_and_callbacks(void) {
     Fixture f; fixture_init(&f, SIZE_MAX);
     make(&f, 0, "a"); make(&f, 1, "old"); XrtStringBacking *suffix = make(&f, 3, "z");
@@ -694,6 +723,7 @@ int main(void) {
     independent_owners();
     owned_append_aliases();
     owned_append_preflight();
+    append_capacity_window();
     owned_append_growth_and_callbacks();
     binding_append_aliases();
     binding_append_preflight();
