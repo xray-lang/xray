@@ -1,0 +1,22 @@
+fn compound(count: i64) -> string {
+    var text = ""
+    var i = 0
+    while (i < count) {
+        text += ("x")
+        i += 1
+    }
+    return text
+}
+
+fn assignment(count: i64) -> string {
+    var text = ""
+    var i = 0
+    while (i < count) {
+        text = text + (("x"))
+        i += 1
+    }
+    return text
+}
+
+print(compound(4))
+print(assignment(4))
