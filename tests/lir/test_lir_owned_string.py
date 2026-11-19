@@ -416,6 +416,10 @@ def main():
             for optimization in (('Od', 'O1', 'O2', 'Ox') if mode == 'raw' else ('O2',)):
                 compile_run(folder,generated,main,optimization,expected * 2)
             if name == 'literal-cache' and mode == 'raw':
+                # The initializer still owns its own reference. The append
+                # suffix only borrows the keeper inside the loop.
+                assert text.count('xrt_place_copy_replace(') == 1
+                assert '.suffix=(const XrtStringBacking *)(*(XrtManagedHeader **)' in text
                 observation = folder / 'literal-cache-observation'
                 observation.mkdir()
                 observer = folder / 'literal-cache-observer.c'

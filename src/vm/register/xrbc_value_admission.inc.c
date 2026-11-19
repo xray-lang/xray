@@ -295,6 +295,9 @@ static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcV
         !rbc_value_string(module,code,access.source,false) || !rbc_value_string(module,code,access.other,false) ||
         !rbc_value_string(module,code,access.result,true)) return false;
     const XrLirValueHome *source=rbc_value_home(code,access.source),*result=rbc_value_home(code,access.result);
+    const XrLirValueHome *suffix=rbc_value_home(code,access.other);
+    if (source->literal_append_borrow || result->literal_append_borrow ||
+        (suffix->literal_append_borrow && !rbc_value_string_literal(module,code,access.other))) return false;
     size_t slots[]={source->first_owner,result->first_owner,result->temporary_first_owner};
     if (source->parameter || source->offset==SIZE_MAX || !code->homes->frame.owned_offsets) return false;
     for (size_t n=0;n<3;++n) {
