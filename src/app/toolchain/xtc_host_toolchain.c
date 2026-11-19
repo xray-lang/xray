@@ -146,7 +146,19 @@ static bool local_join_path(XtcHostToolchain *owner, const char *root, const cha
 }
 #endif
 #if defined(XR_OS_WINDOWS) || defined(XR_OS_MACOS)
-static bool local_process_status(XtcHostToolchain *owner, XrProcessStatus status) {
+static bool local_process_failure(XtcHostToolchain *owner, XtcHostStatus status, int code,
+    const char *probe, XrProcessDiagnostic process) {
+    if (owner->diagnostic.status == XTC_HOST_OK) {
+        owner->diagnostic.probe = probe;
+        owner->diagnostic.operation = process.operation;
+        owner->diagnostic.os_error = process.os_error;
+        owner->diagnostic.child_exit = process.child_exit;
+        owner->diagnostic.exit_observed = process.exit_observed;
+    }
+    return local_fail(owner, status, XTC_HOST_PROCESS, code);
+}
+static bool local_process_status(XtcHostToolchain *owner, XrProcessStatus status,
+    const char *probe, XrProcessDiagnostic process) {
     if (status != XTC_PROCESS_OK) {
         XtcHostStatus mapped = status == XTC_PROCESS_BUDGET ? XTC_HOST_BUDGET :
             status == XTC_PROCESS_OUT_OF_MEMORY ? XTC_HOST_OUT_OF_MEMORY :
@@ -156,25 +168,31 @@ static bool local_process_status(XtcHostToolchain *owner, XrProcessStatus status
             status == XTC_PROCESS_UNRESOLVED ? XTC_HOST_UNRESOLVED :
             status == XTC_PROCESS_UNSUPPORTED ? XTC_HOST_UNSUPPORTED :
             status == XTC_PROCESS_INVALID ? XTC_HOST_INVALID : XTC_HOST_IO;
-        return local_fail(owner, mapped, XTC_HOST_PROCESS, status);
+        return local_process_failure(owner, mapped, status, probe, process);
     }
     return true;
 }
 static bool local_process_prepared(XtcHostToolchain *owner, const XrToolchainProcess *process,
-    XrProcessResult *output) {
-    if (!local_process_status(owner,xtc_process_run(process,NULL,NULL,output, NULL))) return false;
-    if (output->stdout_bytes.truncated || output->stderr_bytes.truncated)
-        return local_fail(owner, XTC_HOST_BUDGET, XTC_HOST_PROCESS, XTC_PROCESS_BUDGET);
+    const char *probe, XrProcessResult *output) {
+    XrProcessDiagnostic diagnostic = {0};
+    XrProcessStatus status = xtc_process_run(process, NULL, NULL, output, &diagnostic);
+    if (!local_process_status(owner, status, probe, diagnostic)) return false;
+    if (output->stdout_bytes.truncated || output->stderr_bytes.truncated) {
+        diagnostic.operation = "capture-limit";
+        return local_process_failure(owner, XTC_HOST_BUDGET, XTC_PROCESS_BUDGET, probe, diagnostic);
+    }
     if (output->exit_code) {
-        owner->diagnostic.child_exit = output->exit_code;
-        return local_fail(owner, XTC_HOST_CHILD_FAILED, XTC_HOST_PROCESS, output->exit_code);
+        diagnostic.operation = "child-exit";
+        return local_process_failure(owner, XTC_HOST_CHILD_FAILED, output->exit_code, probe, diagnostic);
     }
     return true;
 }
-static bool local_process(XtcHostToolchain *owner, const XrProcessSpec *spec, XrProcessResult *output) {
+static bool local_process(XtcHostToolchain *owner, const XrProcessSpec *spec,
+    const char *probe, XrProcessResult *output) {
     XrToolchainProcess *process=NULL;
-    bool okay=local_process_status(owner,xtc_process_prepare(owner->resources,spec,&process));
-    if (okay) okay=local_process_prepared(owner,process,output);
+    bool okay=local_process_status(owner, xtc_process_prepare(owner->resources, spec, &process),
+        probe, (XrProcessDiagnostic){.operation = "prepare"});
+    if (okay) okay=local_process_prepared(owner, process, probe, output);
     xtc_process_free(process); return okay;
 }
 #endif
@@ -186,7 +204,7 @@ static bool local_process(XtcHostToolchain *owner, const XrProcessSpec *spec, Xr
 
 XR_FUNC XtcHostStatus xtc_host_toolchain_open(XrCompileResources *resources,
     const XtcHostToolchainRequest *request, XtcHostToolchain **output, XtcHostDiagnostic *diagnostic) {
-    XtcHostDiagnostic initial = {XTC_HOST_INVALID, XTC_HOST_REQUEST, XTC_HOST_SELF, 0, 0, 0};
+    XtcHostDiagnostic initial = {.status = XTC_HOST_INVALID, .stage = XTC_HOST_REQUEST, .domain = XTC_HOST_SELF};
     if (!resources || !request || !output || *output || !request->timeout_ms ||
         !request->output_limit || request->output_limit == SIZE_MAX || (unsigned)request->crt > XTC_HOST_CRT_DYNAMIC_DEBUG) {
         if (diagnostic) *diagnostic = initial;

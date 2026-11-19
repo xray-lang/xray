@@ -401,8 +401,14 @@ XR_FUNC int xr_cli_lir_native(XrCompileResources *resources, const XrCliNativeOp
 #endif
     if (!native_inputs_open(resources, &inputs)) goto cleanup;
     if (xtc_host_toolchain_open(resources, &request, &toolchain, &diagnostic) != XTC_HOST_OK) {
-        fprintf(stderr, "host compiler discovery failed (status=%u stage=%u code=%d os=%u)\n",
+        fprintf(stderr, "host compiler discovery failed (status=%u stage=%u code=%d os=%u",
             (unsigned)diagnostic.status, (unsigned)diagnostic.stage, diagnostic.code, diagnostic.os_error);
+        if (diagnostic.probe && diagnostic.operation) {
+            fprintf(stderr, " probe=%s operation=%s child=", diagnostic.probe, diagnostic.operation);
+            if (diagnostic.exit_observed) fprintf(stderr, "%d", diagnostic.child_exit);
+            else fputs("unobserved", stderr);
+        }
+        fputs(")\n", stderr);
         goto cleanup;
     }
     const XtcHostToolchainView *host = xtc_host_toolchain_view(toolchain);
