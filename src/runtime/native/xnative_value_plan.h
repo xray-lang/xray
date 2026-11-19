@@ -82,6 +82,24 @@ XR_FUNC XrtManagedStatus xrt_value_plan_view(const XrtValuePlan *, XrtValuePlanS
  * own reference when it receives the lease; ValuePlan never owns that plan. */
 XR_FUNC XrtManagedLease xrt_value_plan_lease(XrtValuePlan *);
 
+/* Fixed-size object backing for an inline payload following its Header.
+ * Shifted offsets borrow scratch through binding, then belong to Ops. */
+XR_FUNC XrtManagedStatus xrt_inline_payload_backing_bind(XrtBillingOwner *,
+    const XrtValuePlanSpec *, size_t *shifted_offsets, XrtManagedLease, XrtManagedOps **empty);
+XR_FUNC XrtManagedStatus xrt_class_backing_bind(XrtBillingOwner *,
+    const XrtValuePlan *class_plan, XrtManagedOps **empty);
+/* The row is complete and borrows its input owners. The destination is a real
+ * empty Frame slot and remains empty on failure. */
+XR_FUNC XrtManagedStatus xrt_class_create(XrtManagedFrame *, size_t slot,
+    XrtManagedOps *, const void *row);
+XR_FUNC bool xrt_class_backing_matches(const XrtManagedHeader *, const XrtValuePlan *expected);
+/* The live owner and exact nominal plan must remain live through a field
+ * borrow. A caller taking an independent value copies it before dropping the
+ * class, using the returned field plan. */
+XR_FUNC XrtManagedStatus xrt_class_field_borrow(const XrtManagedHeader *,
+    const XrtValuePlan *expected, size_t index, const XrtValuePlan **empty_type,
+    const void **empty_payload);
+
 /* Payload memory has the plan's size/alignment and a real active lifetime.
  * Zero is only for storage without live owners; it initializes every owned
  * pointer to true NULL. Retire live owners with drop rather than zero. Empty destinations have

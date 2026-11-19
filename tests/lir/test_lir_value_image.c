@@ -230,8 +230,75 @@ static void rejects_forged_display_closure(void) {
     owner_drop(&owner);
     CHECK(owner.audit.final == 1);
 }
+typedef struct ClassRow { int64_t id; XrtManagedHeader *name; } ClassRow;
+static void class_values_follow_their_exact_owner(void) {
+    static const char names[] = "idname";
+    const size_t offsets[] = {0,offsetof(ClassRow,name)};
+    const XrtValueImageSlot fields[] = {
+        {1,offsetof(ClassRow,id),0,2}, {2,offsetof(ClassRow,name),2,4}
+    };
+    const XrtValueImageType types[] = {
+        {.kind=XRT_VALUE_I64,.size=sizeof(int64_t),.alignment=_Alignof(int64_t)},
+        {.kind=XRT_VALUE_STRING,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
+        {.kind=XRT_VALUE_RECORD,.size=sizeof(ClassRow),.alignment=_Alignof(ClassRow),
+            .first_owned=1,.owned_count=1,.field_count=2},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=3},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=3}
+    };
+    XrtValueImage image = {.types=types,.type_count=5,.slots=fields,.slot_count=2,
+        .owned_offsets=offsets,.owned_count=2,.names=names,.name_bytes=sizeof(names)-1};
+    Owner owner; owner_new(&owner,SIZE_MAX);
+    XrtValueImagePlans *bound = NULL;
+    MANAGED(xrt_value_image_bind(owner.billing,&image,(XrtManagedLease){0},&bound));
+    XrtBoundClass box = {0}, unrelated = {0}, rejected = {0};
+    MANAGED(xrt_value_image_class(bound,4,&box)); MANAGED(xrt_value_image_class(bound,5,&unrelated));
+    CHECK(box.plan != unrelated.plan && box.ops != unrelated.ops);
+    CHECK(xrt_value_image_class(bound,3,&rejected) == XRT_MANAGED_ARGUMENT);
+    XrtBoundInlineArray array = {0};
+    CHECK(xrt_value_image_inline_array(bound,4,&array) == XRT_MANAGED_ARGUMENT);
+    XrtBackingTypes backings = {0}; XrtManagedRoot *root = NULL; XrtManagedFrame *frame = NULL;
+    MANAGED(xrt_backing_types_init(owner.billing,&backings));
+    MANAGED(xrt_managed_root_new(owner.billing,&root));
+    MANAGED(xrt_managed_frame_enter(root,2,&frame));
+    MANAGED(xrt_string_backing_create(frame,0,&backings,"alive",5,0));
+    XrtManagedHeader *text = NULL, *instance = NULL;
+    MANAGED(xrt_managed_slot_borrow(frame,0,&text)); MANAGED(xrt_managed_slot_borrow(frame,1,&instance));
+    const XrtValuePlan *field_plan = NULL; const void *field_bytes = NULL;
+    CHECK(!instance && xrt_class_field_borrow(instance,box.plan,0,&field_plan,&field_bytes) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_class_create(frame,1,box.ops,NULL) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_class_create(frame,1,box.ops,&(ClassRow){42,NULL}) == XRT_MANAGED_ARGUMENT);
+    ClassRow row = {42,text};
+    XrtBillingStats before = xrt_billing_owner_stats(owner.billing);
+    xrt_billing_owner_fail_after(owner.billing,0);
+    CHECK(xrt_class_create(frame,1,box.ops,&row) == XRT_MANAGED_OOM);
+    xrt_billing_owner_fail_after(owner.billing,SIZE_MAX);
+    atomic_store(&text->references,INT32_MAX);
+    CHECK(xrt_class_create(frame,1,box.ops,&row) == XRT_MANAGED_REFCOUNT);
+    atomic_store(&text->references,1);
+    XrtBillingStats after = xrt_billing_owner_stats(owner.billing);
+    CHECK(before.blocks == after.blocks && before.bytes == after.bytes);
+    MANAGED(xrt_managed_slot_borrow(frame,1,&instance)); CHECK(!instance);
+    MANAGED(xrt_class_create(frame,1,box.ops,&row));
+    MANAGED(xrt_managed_slot_borrow(frame,1,&instance)); CHECK(instance && xrt_managed_retain(instance));
+    CHECK(xrt_class_field_borrow(instance,unrelated.plan,0,&field_plan,&field_bytes) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_class_field_borrow(instance,box.plan,2,&field_plan,&field_bytes) == XRT_MANAGED_BOUNDS);
+    const XrtValuePlan *live_plan = box.plan; /* Retained by the owning Header's Ops. */
+    MANAGED(xrt_managed_root_destroy(&root)); xrt_backing_types_drop(&backings);
+    xrt_value_image_drop(&bound); owner_drop(&owner); CHECK(!owner.audit.final);
+    MANAGED(xrt_class_field_borrow(instance,live_plan,0,&field_plan,&field_bytes));
+    CHECK(*(const int64_t *)field_bytes == 42);
+    field_plan = NULL; field_bytes = NULL;
+    MANAGED(xrt_class_field_borrow(instance,live_plan,1,&field_plan,&field_bytes));
+    XrtManagedHeader *kept = NULL;
+    MANAGED(xrt_value_copy_empty(field_plan,field_bytes,&kept));
+    xrt_managed_drop(instance); CHECK(!owner.audit.final);
+    const XrtStringBacking *live = (const XrtStringBacking *)kept;
+    CHECK(live->length == 5 && !memcmp(live->bytes,"alive",5));
+    xrt_managed_drop(kept); CHECK(owner.audit.final == 1);
+}
 int main(void) {
     copied_names_and_real_values(); failures_and_empty(); deep_single_inventory(); rejects_forged_display_closure();
+    class_values_follow_their_exact_owner();
     puts("raw value images: billed ownership, copied names, exact ids, creator retirement and real inline values passed");
     return 0;
 }

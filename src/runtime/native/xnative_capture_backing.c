@@ -67,18 +67,10 @@ XR_FUNCDEF XrtManagedStatus xrt_capture_type_new(XrtBillingOwner *billing,
     XrtCaptureType *type = memory;
     *type = (XrtCaptureType){.billing=billing, .plan=plan, .allocation_bytes=bytes,
         .object_bytes=sizeof(XrtManagedHeader) + payload.size, .shape=shape, .payload=payload};
-    size_t *offsets = (size_t *)(type + 1);
-    for (size_t i = 0; i < payload.owned_count; ++i) offsets[i] = sizeof(XrtManagedHeader) + payload.owned_offsets[i];
-    size_t alignment = payload.alignment > alignof(XrtManagedHeader) ? payload.alignment : alignof(XrtManagedHeader);
-    XrtRuntimeTypeSpec physical = {.fixed_size=type->object_bytes, .alignment=alignment,
-        .capacity_offset=SIZE_MAX, .child_offsets=payload.owned_count ? offsets : NULL,
-        .child_count=payload.owned_count, .code=shape.kind == XRT_VALUE_ENVIRONMENT ?
-            (XrtManagedLease){(void *)plan, environment_plan_retain, environment_plan_drop} :
-            xrt_value_plan_lease((XrtValuePlan *)plan)};
-    XrtRuntimeTypePlan *received = NULL;
-    status = xrt_runtime_type_plan_new(billing, &physical, &received);
-    if (status == XRT_MANAGED_OK) status = xrt_managed_ops_bind(billing, received, &type->ops);
-    xrt_runtime_type_plan_drop(received);
+    XrtManagedLease lease = shape.kind == XRT_VALUE_ENVIRONMENT ?
+        (XrtManagedLease){(void *)plan, environment_plan_retain, environment_plan_drop} :
+        xrt_value_plan_lease((XrtValuePlan *)plan);
+    status = xrt_inline_payload_backing_bind(billing, &payload, (size_t *)(type + 1), lease, &type->ops);
     if (status != XRT_MANAGED_OK) { xrt_capture_type_drop(&type); return status; }
     *empty = type;
     return XRT_MANAGED_OK;
