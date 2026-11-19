@@ -291,6 +291,38 @@ static bool rbc_value_edge_valid(const XrRbcModule *module,const XrRbcValueCode 
     }
     return typed == (edge ? edge->count : 0);
 }
+static bool rbc_value_array_fold_valid(const XrRbcModule *module,const XrRbcValueCode *code,
+    XrRbcValueAccess access) {
+    if (!access.other) return true;
+    const XrLirArrayRegionBindings *bindings=code->array_regions;
+    if (!xr_rbc_module_code_owner(module) || !bindings || access.index>=bindings->edge_count ||
+        !code->array_read_folds || access.other>bindings->region_count ||
+        !code->homes || access.index>=code->homes->edge_count) return false;
+    XrRbcArrayReadFold fold=code->array_read_folds[access.other-1];
+    XrLirArrayRegionEdge edge=bindings->edges[access.index];
+    if (!fold.accumulator || access.other!=edge.region) return false;
+    const XrLirArrayRegionBinding *row=&bindings->regions[access.other-1];
+    const XrLirArraySetRegionRange *range=&row->region.range;
+    if (row->region.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_GET ||
+        row->owner_home.kind!=XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW ||
+        (range->kind!=XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN &&
+            range->kind!=XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT) ||
+        (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN && (fold.constant || fold.limit)) ||
+        (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
+            (fold.constant ? fold.limit!=0 : !rbc_value_id(code,fold.limit)))) return false;
+    if (edge.kind==XR_LIR_ARRAY_REGION_EDGE_ENTRY) return true;
+    if (edge.kind!=XR_LIR_ARRAY_REGION_EDGE_LATCH || access.count<3 ||
+        !code->homes->edges[access.index].direct_header_move) return false;
+    bool accumulator=false, induction=false;
+    for (uint32_t p=0;p<access.count;++p) {
+        const uint32_t *pair=code->arguments+access.first+(size_t)p*2;
+        const XrLirValueHome *target=rbc_value_home(code,pair[1]);
+        if (!target || target->type) continue;
+        accumulator|=pair[0]==fold.next_accumulator && pair[1]==fold.accumulator;
+        induction|=pair[0]==range->latch_iv && pair[1]==range->iv;
+    }
+    return accumulator && induction && fold.accumulator!=range->iv;
+}
 static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess access) {
     if (access.other || !rbc_value_id(code,access.source) || !rbc_value_string(module,code,access.result,true) ||
@@ -518,7 +550,7 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             (!a.index || !code->homes->events[a.index-1].forwarding_mode ||
              rbc_value_binding_forwarding_words(function,code,(uint32_t)index,pc));
     case XR_RBC_VALUE_EDGE:
-        return !a.result && !a.source && !a.other && rbc_value_edge_valid(module,code,a);
+        return !a.result && !a.source && rbc_value_edge_valid(module,code,a) && rbc_value_array_fold_valid(module,code,a);
     default: return false;
     }
 }
