@@ -141,8 +141,14 @@ def main() -> None:
             assert generated_text.count("xrt_native_string_append_window(") == 9
             assert generated_text.count("xrt_native_string_append_owned(") == 12
         if name == "map_stationary_reads":
-            assert "xrt_native_map_index(" in generated_text
-            assert "xrt_place_edge_transfer(owners, 2," not in generated_text
+            readers = {function for function, body in re.findall(
+                r"^static int64_t xrl_f(\d+)\([^\n]*\) \{\n(.*?)^}", generated_text, re.MULTILINE | re.DOTALL
+            ) if "xrt_native_map_index(" in body}
+            moving = {function for function, body in re.findall(
+                r"^static XrtManagedStatus xrl_edge_(\d+)_\d+_\d+\([^\n]*\) \{\n(.*?)^}",
+                generated_text, re.MULTILINE | re.DOTALL
+            ) if "xrt_place_edge_transfer(owners, 2," in body}
+            assert len(readers) == 3 and len(readers & moving) == 1
         # The original large-case oracles check both length and element 299.
         # Keep that executed span check independent of C literal spelling.
         for ordinal, compiler in enumerate(args.compiler or [None]):
