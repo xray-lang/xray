@@ -85,10 +85,10 @@ typedef struct MapLiteralConstruction {
 
 static XrtManagedStatus map_literal_entry(XrtMapBacking *map, const XrtStringBacking *key,
     int64_t value, bool explicit_entry, size_t ordinal, MapLiteralConstruction *construction) {
-    MapProbe probe = {0};
+    MapProbe probe;
     XrtManagedStatus status = map_probe(map, key, &probe);
     if (status != XRT_MANAGED_OK) return status;
-    size_t entry = probe.found ? probe.entry : map->length;
+    size_t entry = probe.entry_id ? probe.entry_id - 1 : map->length;
     XR_CHECK(entry < map->capacity / 2, "literal input extent reserves every possible distinct key");
     /* Dense owners occupy at most half the rows. Their unused upper-half
      * entry_order scalars track first explicit ordinals until publication.
@@ -98,7 +98,7 @@ static XrtManagedStatus map_literal_entry(XrtMapBacking *map, const XrtStringBac
         construction->duplicate = (XrtMapLiteralDuplicate){*first - 1, ordinal};
         return XRT_MANAGED_DUPLICATE_KEY;
     }
-    if (probe.found) map->rows[entry].value = value;
+    if (probe.entry_id) map->rows[entry].value = value;
     else status = map_append(map, key, value, probe.hash);
     if (status == XRT_MANAGED_OK && explicit_entry) *first = ordinal + 1;
     return status;
