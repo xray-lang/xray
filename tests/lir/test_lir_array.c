@@ -79,11 +79,20 @@ static void inline_array_external_result(void) {
 
     XrRbcModule borrowed = *owned;
     borrowed.code_lease = (XrRbcCodeLease){0};
+    const XrRbcValueCode *borrowed_codes[] = {
+        xr_rbc_module_value_code(owned, 0), xr_rbc_module_value_code(owned, 1)
+    };
+    const XrtValueImage *image = xr_rbc_module_value_image(owned);
+    CHECK(image && borrowed_codes[0] && borrowed_codes[1]);
+    borrowed.borrowed_value_codes = borrowed_codes;
+    borrowed.borrowed_value_code_count = owned->function_count;
+    borrowed.borrowed_value_image = image;
+    const XrtValueImage other_image = *image;
+    XrtModuleLayoutSpec state = {0};
     uint32_t boundaries = 0;
     for (uint32_t f = 0; f < owned->function_count; ++f) {
         const XrRbcFunction *function = &owned->functions[f];
-        const XrRbcValueCode *code = xr_rbc_module_value_code(owned, f);
-        CHECK(code);
+        const XrRbcValueCode *code = borrowed_codes[f];
         for (size_t pc = 0; pc < function->code_count; ++pc) {
             uint32_t word = function->code[pc], index = word >> 16;
             if ((word & 255u) != XR_RBC_VALUE_ACCESS || index >= code->access_count) continue;
@@ -92,6 +101,14 @@ static void inline_array_external_result(void) {
                 (access.index != XR_LIR_ARRAY_OP_NEW && access.index != XR_LIR_ARRAY_OP_GET)) continue;
             CHECK(xr_rbc_value_instruction_valid(owned, function, pc));
             CHECK(!xr_rbc_value_instruction_valid(&borrowed, function, pc));
+            /* Isolate the instruction's image-lifetime check. This partial
+             * State is not presented for complete module admission. */
+            borrowed.state_spec = &state;
+            state.values = &other_image;
+            CHECK(!xr_rbc_value_instruction_valid(&borrowed, function, pc));
+            state.values = image;
+            CHECK(xr_rbc_value_instruction_valid(&borrowed, function, pc));
+            borrowed.state_spec = NULL;
             ++boundaries;
         }
     }
