@@ -223,6 +223,51 @@ static void map_place_updates(void) {
     fixture_done(&f);
 }
 
+static void map_local_overwrite(void) {
+    Fixture f;
+    fixture_init(&f, SIZE_MAX);
+    XrtStringBacking *keys[] = {map_key(&f, 0, "hit", 3), map_key(&f, 1, "miss", 4)};
+    size_t width = sizeof(XrtManagedHeader *);
+    size_t offsets[] = {0, width, 2 * width};
+    XrtManagedFrameSpec spec = {3, 3 * width, _Alignof(XrtManagedHeader *), offsets};
+    XrtManagedFrameLocations locations = {0};
+    OK(xrt_managed_frame_enter_locations(f.root, &spec, &locations));
+    XrtManagedFrame *frame = locations.frame;
+    int64_t value = 7;
+    OK(xrt_map_backing_create(frame, 0, &f.types, keys, &value, 1));
+    XrtManagedHeader *owner = NULL;
+    OK(xrt_managed_slot_borrow(frame, 0, &owner));
+    XrtMapBacking *map = (XrtMapBacking *)owner;
+
+    XrtBillingStats baseline = xrt_billing_owner_stats(f.billing);
+    xrt_billing_owner_fail_after(f.billing, 0);
+    CHECK(xrt_map_try_overwrite_local(&locations, 0, 1, keys[0], 42));
+    CHECK(!xrt_map_try_overwrite_local(&locations, 0, 1, keys[1], 99));
+    CHECK(!xrt_map_try_overwrite_local(&locations, 0, 0, keys[0], 99));
+    CHECK(map->length == 1 && map->order_count == 1 && map->rows[0].key == keys[0]);
+    same_bill(f.billing, baseline);
+    CHECK(xrt_billing_owner_stats(f.billing).allocations == baseline.allocations);
+    OK(xrt_backing_slot_copy(frame, 2, owner));
+    CHECK(!xrt_map_try_overwrite_local(&locations, 0, 1, keys[0], 99));
+    OK(xrt_managed_slot_drop(frame, 2));
+
+    XrtPlace binding = {.frame=frame, .slot=0, .nulls=XRT_PLACE_NONNULL};
+    XrtPlaceReplacement held = {0};
+    OK(xrt_place_replacement_begin(binding, frame, 1, &held));
+    CHECK(!xrt_map_try_overwrite_local(&locations, 0, 1, keys[0], 99));
+    OK(xrt_place_replacement_end(&held));
+    xrt_billing_owner_fail_after(f.billing, SIZE_MAX);
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(frame, 1, f.types.map, sizeof(XrtMapBacking), &pending));
+    CHECK(!xrt_map_try_overwrite_local(&locations, 0, 1, keys[0], 99));
+    CHECK(locations.slots[1].pending.value == pending);
+    OK(xrt_managed_slot_abort(frame, 1));
+    map_value(map, keys[0], true, 42);
+    map_value(map, keys[1], false, 0);
+    same_bill(f.billing, baseline);
+    fixture_done(&f);
+}
+
 typedef struct ArrayFieldGuard { XrtManagedHeader *owner; bool busy,ready,mutable; size_t borrows,replaces; } ArrayFieldGuard;
 static XrtManagedStatus array_field_guard(void *context, XrtPlaceAction action) {
     ArrayFieldGuard *field=context;

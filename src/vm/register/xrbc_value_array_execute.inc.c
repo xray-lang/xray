@@ -143,7 +143,7 @@ static XrtManagedStatus rbc_value_string_binding_append(const XrRbcModule *modul
 }
 static bool rbc_value_array_local_update(XrRbcStack *stack,RbcValueActivation *activation,
     XrRbcValueAccess access) {
-    if (!activation->owned_code || !activation->array_backings_ready || !access.other) return false;
+    if (!activation->owned_code || !activation->backings_ready || !access.other) return false;
     const uint32_t *args=activation->code->arguments+access.first;
     const XrLirHomeBinding *binding=rbc_value_binding(activation->code,args[0]);
     const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
@@ -175,7 +175,7 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     if (create || access.index==XR_LIR_ARRAY_OP_SET || access.index==XR_LIR_ARRAY_OP_PUSH || access.index==XR_LIR_ARRAY_OP_DISPLAY) {
         XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
         if (status!=XRT_MANAGED_OK) return status;
-        activation->array_backings_ready=true;
+        activation->backings_ready=true;
     }
     if (access.index==XR_LIR_ARRAY_OP_SET || access.index==XR_LIR_ARRAY_OP_PUSH) {
         XrtExternalOwner external; XrtPlace binding;

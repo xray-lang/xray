@@ -391,6 +391,28 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *map,
     if (owned && update->operation == XRT_MAP_UPDATE_REMOVE) xrt_managed_drop(&owned->managed);
     return XRT_MANAGED_OK;
 }
+XR_FUNCDEF bool xrt_map_try_overwrite_local(const XrtManagedFrameLocations *locations,
+    size_t binding, size_t workspace, const XrtStringBacking *key, int64_t value) {
+    if (!locations || !locations->frame || !locations->payload || !locations->slots ||
+        !locations->busy || *locations->busy ||
+        binding >= locations->slot_count || workspace >= locations->slot_count || binding == workspace)
+        return false;
+    const XrtManagedSlot *slot = &locations->slots[binding], *stage = &locations->slots[workspace];
+    if (slot->owner_offset == SIZE_MAX || stage->owner_offset == SIZE_MAX ||
+        slot->pending.value || slot->pending.allocation_bytes ||
+        stage->pending.value || stage->pending.allocation_bytes)
+        return false;
+    unsigned char *payload = locations->payload;
+    XrtMapBacking *map = (XrtMapBacking *)*(XrtManagedHeader **)(payload + slot->owner_offset);
+    if (*(XrtManagedHeader **)(payload + stage->owner_offset) || !map_shape(map) || !map->length ||
+        xr_signed_rc_read(&map->managed.references) != 1) return false;
+    MapProbe probe = {0};
+    if (map_probe(map, key, &probe) != XRT_MANAGED_OK || !probe.found) return false;
+    /* The single executor holds the local binding. The hit only writes its
+     * I64 payload and cannot allocate, invoke a callback, or retire a key. */
+    map->rows[probe.entry].value = value;
+    return true;
+}
 static XrtManagedStatus map_update_create(const MapDestination *destination,
     const XrtMapBacking *source, const XrtMapUpdate *update, bool *removed) {
     if (!removed) return XRT_MANAGED_ARGUMENT;

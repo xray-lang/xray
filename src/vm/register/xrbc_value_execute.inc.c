@@ -60,7 +60,7 @@ struct RbcValueActivation {
     uint8_t *snapshots;
     size_t edge_capacity, publication_capacity, snapshot_capacity, publication_count;
     bool owned_code; /* Only a genuine immutable code owner supplies sealed plans. */
-    bool array_backings_ready; /* Set only after this execution's complete backing setup succeeds. */
+    bool backings_ready; /* Set only after this execution's complete backing setup succeeds. */
     bool receiving_call;
     const XrLirHomeCall *receiving_slice_call;
     RbcArrayRegionState *array_regions;
@@ -879,7 +879,7 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
     bool indirect=access.operation==XR_RBC_VALUE_FUNCTION_CALL;
     /* Keep setup evidence across known guest calls, but do not carry it
      * through a callable boundary whose external lifetime is not assumed. */
-    if (indirect) for (RbcValueActivation *a=caller;a;a=a->previous) a->array_backings_ready=false;
+    if (indirect) for (RbcValueActivation *a=caller;a;a=a->previous) a->backings_ready=false;
     RbcFunctionCall invoked={0};
     if (indirect) {
         XrtFunction binding;
