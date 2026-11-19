@@ -84,7 +84,8 @@ static XrtManagedStatus module_layout_types(XrtModuleLayout *layout, const XrtVa
         status = xrt_value_plan_view(type->plan, &type->spec);
         if (status != XRT_MANAGED_OK) return status;
         type->depth = 1;
-        type->supported = type->spec.kind <= XRT_VALUE_NULLABLE || type->spec.kind == XRT_VALUE_FUNCTION;
+        type->supported = type->spec.kind <= XRT_VALUE_NULLABLE || type->spec.kind == XRT_VALUE_FUNCTION ||
+            type->spec.kind == XRT_VALUE_SET_I64;
         const XrtValueImageType *raw = &image->types[i];
         if (type->spec.kind == XRT_VALUE_RECORD) {
             for (uint32_t f = 0; f < raw->field_count; ++f)

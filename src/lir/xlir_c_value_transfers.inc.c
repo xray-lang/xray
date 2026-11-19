@@ -74,6 +74,31 @@ static const XrLirHomeWorkspace *c_value_borrow_stage(LirC *c, const XrLirValueH
     XrLirHomeTransfer transfer, const XrLirHomeEdge *edge) {
     const XrLirValueHome *source = &homes->values[transfer.source], *target = &homes->values[transfer.target];
     if (source->view_storage) return c_view_borrow_stage(c, homes, transfer, edge);
+    if (transfer.borrowed_owner_workspace < homes->workspace_count && source->type &&
+        source->type <= c->value_types->count && c->value_types->rows[source->type - 1].spec.kind == XRT_VALUE_SET_I64) {
+        const XrLirHomeWorkspace *stage = &homes->workspaces[transfer.borrowed_owner_workspace];
+        if (!source->parameter || source->cell_transport || source->transport || source->owner_count != 1 ||
+            source->offset != SIZE_MAX || source->first_owner != SIZE_MAX ||
+            source->temporary_offset != SIZE_MAX || source->temporary_first_owner != SIZE_MAX ||
+            target->parameter || target->cell_transport || target->transport || target->view_storage ||
+            target->owner_count != 1 || source->type != target->type ||
+            target->offset == SIZE_MAX || target->temporary_offset == SIZE_MAX ||
+            transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY ||
+            transfer.hold_transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_NONE ||
+            transfer.source_storage != XR_LIR_SLICE_STORAGE_NONE || transfer.source_workspace || transfer.target_workspace ||
+            stage->kind != XR_LIR_HOME_WORKSPACE_HEADER_BORROW_STAGE || stage->type != target->type ||
+            stage->value != transfer.source || stage->block != edge->block || !stage->instruction ||
+            !homes->frame.owned_offsets || stage->first_owner >= homes->frame.slot_count ||
+            target->first_owner >= homes->frame.slot_count || target->temporary_first_owner >= homes->frame.slot_count ||
+            stage->first_owner == target->first_owner || stage->first_owner == target->temporary_first_owner ||
+            stage->offset % _Alignof(XrtManagedHeader *) || stage->offset > homes->frame.payload_size ||
+            sizeof(XrtManagedHeader *) > homes->frame.payload_size - stage->offset ||
+            homes->frame.owned_offsets[stage->first_owner] != stage->offset ||
+            stage->temporary_offset != SIZE_MAX || stage->temporary_first_owner != SIZE_MAX) {
+            c_error(c,XR_LIR_C_INVALID_LIR,"Set edge lost its actual borrowed Header staging contract"); return NULL;
+        }
+        return stage;
+    }
     if (transfer.borrowed_owner_workspace >= homes->workspace_count || source->cell_transport != XR_LIR_CELL_TRANSPORT_BORROW ||
         !source->parameter || source->owner_count || target->cell_transport != XR_LIR_CELL_TRANSPORT_OWNED ||
         target->owner_count != 1 || source->type != target->type || transfer.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY) {

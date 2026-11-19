@@ -12,7 +12,7 @@ static bool rbc_callable_value_valid(const XrRbcModule *m, XrRbcCallableValue va
         return value.type == XR_POD_UNIT || value.type == XR_POD_BOOL || value.type == XR_POD_I64 ||
             value.type == XR_POD_U8 || value.type == XR_POD_U64 || value.type == XR_POD_F64;
     case XR_RBC_CALLABLE_REFERENCE:
-        return value.type == XR_RBC_STRING || value.type == XR_RBC_MAP_STRING_I64 || rbc_array_kind((XrRbcRegisterKind)value.type);
+        return value.type == XR_RBC_STRING || value.type == XR_RBC_MAP_STRING_I64 || value.type == XR_RBC_SET_I64 || rbc_array_kind((XrRbcRegisterKind)value.type);
     case XR_RBC_CALLABLE_AGGREGATE: return value.type < m->aggregate_type_count;
     case XR_RBC_CALLABLE_FUNCTION: return value.type < before;
     default: return false;
@@ -60,7 +60,8 @@ static bool rbc_callable_image_value(const XrRbcModule *module, uint32_t id, XrR
         return xr_pod_value_kind((XrPodScalar)value.type,&scalar) && scalar==kind;
     }
     if (value.kind==XR_RBC_CALLABLE_REFERENCE)
-        return value.type==XR_RBC_STRING ? kind==XRT_VALUE_STRING : value.type==XR_RBC_MAP_STRING_I64 ?
+        return value.type==XR_RBC_STRING ? kind==XRT_VALUE_STRING : value.type==XR_RBC_SET_I64 ?
+            kind==XRT_VALUE_SET_I64 : value.type==XR_RBC_MAP_STRING_I64 ?
             kind==XRT_VALUE_MAP_STRING_I64 : rbc_array_kind((XrRbcRegisterKind)value.type) &&
             kind==(XrtValueKind)(XRT_VALUE_ARRAY_I64+xr_rbc_array_family((XrRbcRegisterKind)value.type));
     return false;

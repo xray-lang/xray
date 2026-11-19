@@ -68,8 +68,9 @@ static bool c_value_mark(LirC *c, uint8_t *needed, size_t count, XrLirType type)
     }
     /* Arrays are keyed by their admitted element shape in the separate family
      * bitmap; the bare Array tag cannot name a receiving value layout. */
+    if (type==XR_LIR_SET_I64_CELL || type==XR_LIR_SET_I64_REF) type=XR_LIR_SET_I64;
     if ((type >= XR_LIR_UNIT && type <= XR_LIR_F64) || type==XR_LIR_STRING ||
-        type==XR_LIR_MAP_STRING_I64 || type >= XR_LIR_TYPE_COUNT)
+        type==XR_LIR_MAP_STRING_I64 || type==XR_LIR_SET_I64 || type >= XR_LIR_TYPE_COUNT)
         needed[type] = 1;
     return true;
 }
@@ -87,7 +88,7 @@ static void c_values_prepare(LirC *c) {
         c_error(c,XR_LIR_C_OVERFLOW,"C value root inventory overflows"); return;
     }
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, type_count + 4 + function_count, 1, &flags))) return;
-    uint8_t *needed = flags; bool projected = c->state || c->arrays || c->maps;
+    uint8_t *needed = flags; bool projected = c->state || c->arrays || c->maps || c->sets;
     uint8_t *environments = needed + type_count + 4;
     static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t slot = 0; slot < c->state_layout.slot_count && c_request_poll(c); ++slot) {
@@ -227,6 +228,7 @@ static void c_values_function(LirC *c) {
     c->home_edge_cursor = 0;
     c->string_event_cursor = c->string_workspace_cursor = 0;
     c->map_stage_event_cursor = c->map_stage_workspace_cursor = 0;
+    c->set_stage_event_cursor = c->set_stage_workspace_cursor = c->set_event_cursor = 0;
     c->view_call_cursor = c->view_event_cursor = 0;
     c->array_frame_block = 0;
     c->array_local_event_cursor = 0;

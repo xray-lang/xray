@@ -53,9 +53,9 @@ static bool lir_plan_constructed_value(const XrLirModule *m, XrLirType type) {
 static uint32_t lir_plan_unmodeled(const XrLirModule *m, const XrLirOwnershipPlan *plan, XrLirType type) {
     switch (type) {
         case XR_LIR_I64_CELL: case XR_LIR_ARRAY_CELL:
-        case XR_LIR_MAP_STRING_I64_CELL: return XR_LIR_OWNERSHIP_UNMODELED_CELL;
+        case XR_LIR_MAP_STRING_I64_CELL: case XR_LIR_SET_I64_CELL: return XR_LIR_OWNERSHIP_UNMODELED_CELL;
         case XR_LIR_STATE_REF: case XR_LIR_ARRAY_REF:
-        case XR_LIR_MAP_STRING_I64_REF: return XR_LIR_OWNERSHIP_UNMODELED_REFERENCE;
+        case XR_LIR_MAP_STRING_I64_REF: case XR_LIR_SET_I64_REF: return XR_LIR_OWNERSHIP_UNMODELED_REFERENCE;
         case XR_LIR_STATE: return XR_LIR_OWNERSHIP_UNMODELED_STATE;
         case XR_LIR_VIEW_FRAME: case XR_LIR_VIEW_CELL: case XR_LIR_SLICE_I64:
             return XR_LIR_OWNERSHIP_UNMODELED_VIEW;
@@ -138,7 +138,8 @@ static XrLirOwnershipFactKind lir_plan_transfer(const XrLirModule *m, const XrLi
         return XR_LIR_OWNERSHIP_RETURN_TRANSFER;
     if (xr_lir_string_role(m,v) == XR_LIR_STRING_OP_APPEND_OWNED) return XR_LIR_OWNERSHIP_APPEND_TRANSFER;
     if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP ||
-        v->op == XR_LIR_VALUE_DROP || v->op == XR_LIR_MAP_DROP) return XR_LIR_OWNERSHIP_RELEASE;
+        v->op == XR_LIR_VALUE_DROP || v->op == XR_LIR_MAP_DROP || v->op == XR_LIR_SET_DROP)
+        return XR_LIR_OWNERSHIP_RELEASE;
     return 0;
 }
 static bool lir_plan_binding(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
@@ -148,21 +149,21 @@ static bool lir_plan_binding(XrLirOwnershipPlan *plan, const XrLirFunctionData *
     case XR_LIR_CELL_NEW:
         if (!lir_cfg_cell(v->type) && v->type != XR_LIR_STRING_CELL) return true;
         fact.kind=XR_LIR_OWNERSHIP_BINDING_NEW; fact.value=v->result; fact.target_value=v->operands[0]; break;
-    case XR_LIR_ARRAY_CELL_DROP: case XR_LIR_MAP_CELL_DROP: case XR_LIR_STRING_CELL_DROP:
+    case XR_LIR_ARRAY_CELL_DROP: case XR_LIR_MAP_CELL_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_SET_CELL_DROP:
         fact.kind=XR_LIR_OWNERSHIP_BINDING_RELEASE; fact.value=v->operands[0]; break;
-    case XR_LIR_ARRAY_BORROW: case XR_LIR_MAP_BORROW:
+    case XR_LIR_ARRAY_BORROW: case XR_LIR_MAP_BORROW: case XR_LIR_SET_BORROW:
         fact.kind=XR_LIR_OWNERSHIP_BINDING_BORROW; fact.value=v->result; fact.target_value=v->operands[0]; break;
     case XR_LIR_CELL_READ:
         if (!lir_cfg_cell(f->values[v->operands[0] - 1].type) &&
             f->values[v->operands[0] - 1].type != XR_LIR_STRING_CELL) return true;
         fact.kind=XR_LIR_OWNERSHIP_BINDING_READ; fact.value=v->operands[0]; fact.target_value=v->result; break;
-    case XR_LIR_ARRAY_REF_READ: case XR_LIR_MAP_REF_READ:
+    case XR_LIR_ARRAY_REF_READ: case XR_LIR_MAP_REF_READ: case XR_LIR_SET_REF_READ:
         fact.kind=XR_LIR_OWNERSHIP_BINDING_READ; fact.value=v->operands[0]; fact.target_value=v->result; break;
     case XR_LIR_CELL_WRITE:
         if (!lir_cfg_cell(f->values[v->operands[0] - 1].type) &&
             f->values[v->operands[0] - 1].type != XR_LIR_STRING_CELL) return true;
         fact.kind=XR_LIR_OWNERSHIP_BINDING_WRITE; fact.value=v->operands[0]; fact.target_value=v->operands[1]; break;
-    case XR_LIR_ARRAY_REF_WRITE: case XR_LIR_MAP_REF_WRITE:
+    case XR_LIR_ARRAY_REF_WRITE: case XR_LIR_MAP_REF_WRITE: case XR_LIR_SET_REF_WRITE:
         fact.kind=XR_LIR_OWNERSHIP_BINDING_WRITE; fact.value=v->operands[0]; fact.target_value=v->operands[1]; break;
     default: return true;
     }
@@ -186,7 +187,8 @@ static bool lir_plan_payload_binding(XrLirOwnershipPlan *plan, const XrLirModule
         fact.transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_BORROW;
     } else if ((v->op == XR_LIR_STATE_READ || v->op == XR_LIR_STATE_WRITE) &&
         (f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_STRING ||
-         f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_MAP_STRING_I64)) {
+         f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_MAP_STRING_I64 ||
+         f->values[v->operands[0] - 1].state_reference.payload == XR_LIR_SET_I64)) {
         fact.kind = v->op == XR_LIR_STATE_READ ? XR_LIR_OWNERSHIP_BINDING_READ : XR_LIR_OWNERSHIP_BINDING_WRITE;
         fact.value = v->operands[0]; fact.target_value = v->op == XR_LIR_STATE_READ ? v->result : v->operands[1];
     } else return true;
@@ -406,6 +408,13 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                     return XR_LIR_OUT_OF_MEMORY;
                 if (v->result && lir_managed_value(m,v->type) && !lir_plan_value(plan,f,
                     XR_LIR_OWNERSHIP_RESULT_OWNER,function,b + 1,i + 1,v->result,0)) return XR_LIR_OUT_OF_MEMORY;
+                if (v->op >= XR_LIR_SET_NEW && v->op <= XR_LIR_SET_CLEAR) {
+                    uint32_t receiver = v->op == XR_LIR_SET_NEW ? 0 : v->operands[0];
+                    if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SET_OPERATION,
+                        .function=function,.block=b + 1,.instruction=i + 1,.value=receiver,
+                        .type=receiver ? f->values[receiver - 1].type : XR_LIR_TYPE_INVALID,
+                        .set_operation=v->op})) return XR_LIR_OUT_OF_MEMORY;
+                }
                 if (v->op == XR_LIR_CALL_INTRINSIC) {
                     XrLirSliceIntrinsic slice;
                     if (xr_lir_slice_intrinsic_view(m, v->intrinsic, &slice) == XR_LIR_OK &&
@@ -469,7 +478,8 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                             .argument=a,.edge=e + 1,.target_block=edge->target,
                             .target_value=f->blocks[edge->target - 1].parameters[a],
                             .type=f->values[id - 1].type,.array_element=f->values[id - 1].array_element,
-                            .transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_MOVE}))
+                            .transfer_mode=lir_borrowed_set_formal(f,id) ?
+                                XR_LIR_OWNERSHIP_TRANSFER_COPY : XR_LIR_OWNERSHIP_TRANSFER_MOVE}))
                         return XR_LIR_OUT_OF_MEMORY;
                 }
             }

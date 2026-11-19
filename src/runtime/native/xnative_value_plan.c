@@ -72,7 +72,8 @@ static XrtManagedStatus plan_extent(const XrtValuePlanSpec *spec, size_t *bytes,
     return XRT_MANAGED_OK;
 }
 static bool pointer_kind(XrtValueKind kind) {
-    return (kind >= XRT_VALUE_STRING && kind <= XRT_VALUE_MAP_STRING_I64) || kind == XRT_VALUE_CELL;
+    return (kind >= XRT_VALUE_STRING && kind <= XRT_VALUE_MAP_STRING_I64) ||
+        kind == XRT_VALUE_CELL || kind == XRT_VALUE_SET_I64;
 }
 static bool scalar_layout(XrtValueKind kind, size_t *size, size_t *alignment) {
     switch (kind) {

@@ -16,6 +16,7 @@ static bool rbc_home_key(const XrLirModule *module, XrLirFunction function,
     uint32_t value, XrLirType type, XrLirValueLayoutKey *key) {
     if (value && xr_lir_string_binding(module,(XrLirValue){module,function.id,value})) type=XR_LIR_STRING;
     if (type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF) type = XR_LIR_ARRAY;
+    if (type == XR_LIR_SET_I64_CELL || type == XR_LIR_SET_I64_REF) type = XR_LIR_SET_I64;
     if (type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF) type = XR_LIR_MAP_STRING_I64;
     bool plain = type >= XR_LIR_UNIT && type <= XR_LIR_F64;
     if (type >= XR_LIR_TYPE_COUNT) {
@@ -24,7 +25,7 @@ static bool rbc_home_key(const XrLirModule *module, XrLirFunction function,
         plain = shape.kind == XR_LIR_TYPE_CALLABLE || rbc_lir_captured_cell(module,type) || shape.kind == XR_LIR_TYPE_SLICE || shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
             shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE;
     }
-    if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64) return false;
+    if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64 && type != XR_LIR_SET_I64) return false;
     *key = (XrLirValueLayoutKey){type,0,0};
     if (type == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};

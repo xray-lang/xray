@@ -73,7 +73,8 @@ static bool lir_home_key(const XrLirModule *module, XrLirFunction function,
             shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_SLICE ||
             xr_lir_cell_value_type(module,type,NULL);
     }
-    if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64) return false;
+    if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64 &&
+        type != XR_LIR_SET_I64) return false;
     *key = (XrLirValueLayoutKey){type, 0, 0};
     if (type == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};
@@ -162,12 +163,13 @@ static bool lir_home_state_binding(LirHomeCompiler *c, uint32_t value, XrLirType
     XrLirStateReference reference;
     return type == XR_LIR_STATE_REF && xr_lir_state_reference_view(c->input,
         (XrLirValue){c->input,c->function.id,value},&reference) == XR_LIR_OK &&
-        (reference.payload == XR_LIR_MAP_STRING_I64 || (reference.payload == XR_LIR_ARRAY &&
+        (reference.payload == XR_LIR_MAP_STRING_I64 || reference.payload == XR_LIR_SET_I64 || (reference.payload == XR_LIR_ARRAY &&
             (reference.array_element == XR_LIR_I64 || reference.array_element == XR_LIR_U8)));
 }
 static bool lir_home_binding_type(LirHomeCompiler *c, uint32_t value, XrLirType type) {
     return type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
         type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
+        type == XR_LIR_SET_I64_CELL || type == XR_LIR_SET_I64_REF ||
         xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,value}) || lir_home_state_binding(c,value,type);
 }
 static bool lir_home_binding_spec(LirHomeBuilder *b, uint32_t type, XrtValuePlanSpec *spec) {
@@ -175,7 +177,7 @@ static bool lir_home_binding_spec(LirHomeBuilder *b, uint32_t type, XrtValuePlan
     if (!type || xr_lir_value_layouts_at(b->layouts,type - 1,&key,&plan) != XR_LIR_VALUE_LAYOUT_OK ||
         xrt_value_plan_view(plan,spec) != XRT_MANAGED_OK || spec->size != sizeof(XrtManagedHeader *) ||
         spec->owned_count != 1 || !spec->owned_offsets || spec->owned_offsets[0] ||
-        (spec->kind != XRT_VALUE_STRING &&
+        (spec->kind != XRT_VALUE_STRING && spec->kind != XRT_VALUE_SET_I64 &&
          (spec->kind < XRT_VALUE_ARRAY_I64 || spec->kind > XRT_VALUE_MAP_STRING_I64)))
         return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding lost its exact Header payload plan");
     return true;
@@ -215,6 +217,8 @@ static bool lir_home_bindings(LirHomeBuilder *b) {
             if (xr_lir_array_shape_view(c->input,(XrLirValue){c->input,c->function.id,v},&shape) != XR_LIR_OK)
                 return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding lost its exact Array element");
             key = (XrLirValueLayoutKey){XR_LIR_ARRAY,shape.element,0};
+        } else if (type == XR_LIR_SET_I64_CELL || type == XR_LIR_SET_I64_REF) {
+            key = (XrLirValueLayoutKey){XR_LIR_SET_I64,0,0};
         } else if (lir_home_state_binding(c,v,type)) {
             XrLirStateReference reference;
             if (xr_lir_state_reference_view(c->input,(XrLirValue){c->input,c->function.id,v},&reference) != XR_LIR_OK)
@@ -252,7 +256,8 @@ static bool lir_home_binding_fact(LirHomeBuilder *b, XrLirOwnershipFact fact) {
         else if (xr_lir_cell_value_type(b->compiler.input,type,NULL) &&
             b->homes->values[fact.target_value].cell_payload_type == row->type)
             row->kind = XR_LIR_HOME_BINDING_CELL_PAYLOAD_BORROW;
-        else if ((type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_STRING_CELL) &&
+        else if ((type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_STRING_CELL ||
+                type == XR_LIR_SET_I64_CELL) &&
             bindings[fact.target_value].type == row->type)
             row->kind = XR_LIR_HOME_BINDING_CELL_BORROW;
         else return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_UNSUPPORTED,"binding source is not an activation or State binding");
@@ -269,16 +274,19 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
         (fact.array_operation == XR_LIR_ARRAY_OP_SET || fact.array_operation == XR_LIR_ARRAY_OP_PUSH);
     bool map = fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION &&
         (fact.map_operation == XR_LIR_MAP_OP_SET || fact.map_operation == XR_LIR_MAP_OP_REMOVE || fact.map_operation == XR_LIR_MAP_OP_CLEAR);
+    bool set = fact.kind == XR_LIR_OWNERSHIP_SET_OPERATION &&
+        (fact.set_operation == XR_LIR_SET_ADD || fact.set_operation == XR_LIR_SET_REMOVE || fact.set_operation == XR_LIR_SET_CLEAR);
     bool string = fact.kind == XR_LIR_OWNERSHIP_STRING_OPERATION;
     bool borrowed_copy = (fact.kind == XR_LIR_OWNERSHIP_BINDING_NEW || fact.kind == XR_LIR_OWNERSHIP_BINDING_WRITE) &&
         fact.target_value && fact.target_value <= b->homes->value_count && b->homes->values[fact.target_value].parameter;
-    if (!array && !map && !string && !borrowed_copy) return true;
+    if (!array && !map && !set && !string && !borrowed_copy) return true;
     if (!fact.value || fact.value > b->homes->value_count || !b->homes->bindings || !b->homes->bindings[fact.value].type)
         return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"mutator has no actual binding payload");
     uint32_t type = b->homes->bindings[fact.value].type;
     XrtValuePlanSpec spec;
     if (!lir_home_binding_spec(b,type,&spec)) return false;
-    if (borrowed_copy && spec.kind != XRT_VALUE_STRING && spec.kind != XRT_VALUE_MAP_STRING_I64) return true;
+    if (borrowed_copy && spec.kind != XRT_VALUE_STRING && spec.kind != XRT_VALUE_MAP_STRING_I64 &&
+        spec.kind != XRT_VALUE_SET_I64) return true;
     XrLirHomeWorkspace workspace = {.block=fact.block,.instruction=fact.instruction,
         .type=type,.value=string || borrowed_copy ? fact.value : 0};
     if (string || borrowed_copy) workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
@@ -591,6 +599,30 @@ static bool lir_home_cell_stage(LirHomeBuilder *b, const XrLirValueHome *source,
     transfer->borrowed_owner_workspace = b->workspaces.count;
     return lir_home_append(b,&b->workspaces,&workspace);
 }
+static bool lir_home_header_stage(LirHomeBuilder *b, const XrLirValueHome *source,
+    const XrLirValueHome *target, XrLirHomeWorkspace workspace, XrLirHomeTransfer *transfer) {
+    if (!source->parameter || source->cell_transport || source->view_storage) return true;
+    const XrtValuePlan *plan = NULL; XrLirValueLayoutKey key; XrtValuePlanSpec spec;
+    if (xr_lir_value_layouts_at(b->layouts,source->type - 1,&key,&plan) != XR_LIR_VALUE_LAYOUT_OK ||
+        xrt_value_plan_view(plan,&spec) != XRT_MANAGED_OK)
+        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"borrowed Header edge lost its receiving plan");
+    if (key.type != XR_LIR_SET_I64) return true;
+    if (spec.kind != XRT_VALUE_SET_I64 || spec.size != sizeof(XrtManagedHeader *) ||
+        spec.owned_count != 1 || spec.owned_offsets[0] != 0 || source->type != target->type ||
+        source->owner_count != 1 || source->offset != SIZE_MAX || source->first_owner != SIZE_MAX ||
+        source->temporary_offset != SIZE_MAX || source->temporary_first_owner != SIZE_MAX ||
+        target->parameter || target->owner_count != 1 || target->offset == SIZE_MAX ||
+        target->first_owner == SIZE_MAX || target->temporary_offset == SIZE_MAX ||
+        target->temporary_first_owner == SIZE_MAX || transfer->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY ||
+        transfer->hold_transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_NONE)
+        return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"borrowed Set edge lost its actual formal COPY");
+    workspace.kind = XR_LIR_HOME_WORKSPACE_HEADER_BORROW_STAGE;
+    workspace.type = target->type; workspace.value = transfer->source;
+    workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
+    if (!lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner)) return false;
+    transfer->borrowed_owner_workspace = b->workspaces.count;
+    return lir_home_append(b,&b->workspaces,&workspace);
+}
 static bool lir_home_slice_stage(LirHomeBuilder *b, const XrLirValueHome *source,
     const XrLirValueHome *target, XrLirHomeWorkspace workspace, XrLirHomeTransfer *transfer) {
     if (source->view_storage != XR_LIR_SLICE_STORAGE_BORROWED_FORMAL) return true;
@@ -685,6 +717,8 @@ static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *s
                         .source_storage=slice ? values[edge.arguments[p]].view_storage : XR_LIR_SLICE_STORAGE_NONE};
                     if (!lir_home_cell_stage(b,&values[transfer.source],&values[transfer.target],
                         (XrLirHomeWorkspace){.block=id.id,.instruction=n + 1},&transfer)) return false;
+                    if (!lir_home_header_stage(b,&values[transfer.source],&values[transfer.target],
+                        (XrLirHomeWorkspace){.block=id.id,.instruction=n + 1},&transfer)) return false;
                     if (slice && !lir_home_slice_stage(b,&values[transfer.source],&values[transfer.target],
                         (XrLirHomeWorkspace){.block=id.id,.instruction=n + 1},&transfer)) return false;
                     if (!lir_home_append(b, &b->transfers, &transfer)) return false;
@@ -771,7 +805,8 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
         }
         XrLirHomeEvent row = {.kind=(uint32_t)fact.kind,.block=fact.block,.instruction=fact.instruction,.source=fact.value,
             .argument=fact.argument,.edge=fact.edge,.target_block=fact.target_block,.target=fact.target_value,
-            .operation=fact.string_operation ? (uint32_t)fact.string_operation :
+            .operation=fact.set_operation ? (uint32_t)fact.set_operation :
+                fact.string_operation ? (uint32_t)fact.string_operation :
                 fact.cell_transport ? (uint32_t)fact.cell_operation :
                 fact.kind >= XR_LIR_OWNERSHIP_CALLABLE_VALUE ? (uint32_t)fact.callable_operation :
                 fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION ? (uint32_t)fact.map_operation : (uint32_t)fact.array_operation,

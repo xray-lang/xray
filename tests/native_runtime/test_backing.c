@@ -127,19 +127,19 @@ static void setup_failures(void) {
     XrtBillingOwner *billing = NULL;
     billing_new(&audit, SIZE_MAX, &billing);
     XrtBillingStats baseline = xrt_billing_owner_stats(billing);
-    for (size_t allowed = 0; allowed < 12; ++allowed) {
+    for (size_t allowed = 0; allowed < 14; ++allowed) {
         XrtBackingTypes types = {0};
         xrt_billing_owner_fail_after(billing, allowed);
         CHECK(xrt_backing_types_init(billing, &types) == XRT_MANAGED_OOM);
-        CHECK(!types.string && !types.map);
+        CHECK(!types.string && !types.map && !types.set);
         for (size_t i = 0; i < XRT_BACKING_ARRAY_COUNT; ++i) CHECK(!types.arrays[i]);
         xrt_backing_types_drop(&types);
         same_bill(billing, baseline);
     }
-    xrt_billing_owner_fail_after(billing, 12);
+    xrt_billing_owner_fail_after(billing, 14);
     XrtBackingTypes types = {0};
     OK(xrt_backing_types_init(billing, &types));
-    CHECK(xrt_billing_owner_stats(billing).blocks == baseline.blocks + 12 && types.map);
+    CHECK(xrt_billing_owner_stats(billing).blocks == baseline.blocks + 14 && types.map && types.set);
     XrtManagedOps *stable = types.string;
     BAD(xrt_backing_types_init(billing, &types));
     CHECK(types.string == stable);
@@ -991,6 +991,7 @@ static void map_retirement_and_lifetimes(void) {
 #include "backing_map_literal_cases.h"
 #include "backing_array_local_cases.h"
 #include "backing_array_region_cases.h"
+#include "backing_set_cases.h"
 int main(void) {
     setup_failures();
     string_values();
@@ -1022,6 +1023,8 @@ int main(void) {
     map_literal_rejections();
     map_literal_callback_lifetimes();
     map_literal_large_inputs();
-    puts("fixed String, Array and Map backings: operations, rollback, order and retirement passed");
+    set_values_and_transactions();
+    set_growth_and_lifetimes();
+    puts("fixed String, Array, Map and Set backings: operations, rollback, order and retirement passed");
     return 0;
 }

@@ -41,6 +41,9 @@
 #include "lir_map_cases.h"
 #include "lir_c_cell_fixture.h"
 #include "lir_frame_scalar_cell_fixture.h"
+#include "lir_set_binding_fixture.h"
+#include "lir_set_header_edge_fixture.h"
+#include "lir_set_block_cell_fixture.h"
 #include "lir_c_map_literal_fixture.h"
 #include "lir_map_borrow_fixture.h"
 #include "lir_slice_boundary_root_fixture.h"
@@ -690,6 +693,21 @@ static void array_c_output(const char *name, const char *path) {
         XrLirValue reference = {0};
         callable_construction_fixture(!strcmp(name,"callable-loop-before-frame") ? 1u : 0u,&m,&root,&reference);
     }
+    else if (!strcmp(name,"set-i64-local") || !strcmp(name,"set-i64-state")) {
+        SetLirFixture f=set_lir_fixture(!strcmp(name,"set-i64-state"));
+        m=f.module;root=f.entry;OK(xr_lir_module_finish(m,NULL));
+    }
+    else if (!strcmp(name,"set-header-copy") || !strcmp(name,"set-header-duplicate")) {
+        SetLirFixture f=set_header_edge_fixture(!strcmp(name,"set-header-duplicate")?1u:0u);
+        m=f.module;root=f.entry;OK(xr_lir_module_finish(m,NULL));
+    }
+    else if (!strcmp(name,"set-block-cell-loop")) {
+        SetLirFixture f=set_block_cell_fixture(0);m=f.module;root=f.entry;OK(xr_lir_module_finish(m,NULL));
+    }
+    else if (!strncmp(name,"set-formal-",11)) {
+        unsigned mode=!strcmp(name,"set-formal-cell")?0u:!strcmp(name,"set-formal-ref")?1u:2u;
+        SetLirFixture f=set_binding_formal_fixture(mode);m=f.module;root=f.entry;OK(xr_lir_module_finish(m,NULL));
+    }
     else if (!strcmp(name,"frame-scalar-cells")) {
         FrameScalarCellFixture f=frame_scalar_cell_fixture(FRAME_SCALAR_CELL_VALID);
         m=f.module;root=f.root;OK(xr_lir_module_finish(m,NULL));
@@ -737,6 +755,16 @@ static void array_c_output(const char *name, const char *path) {
     XrLirCStatus status = xr_lir_emit_c(&request, &output, &diagnostic);
     if (status != XR_LIR_C_OK) fprintf(stderr, "C emission status=%u %s\n", (unsigned)status, diagnostic.message);
     CHECK(status == XR_LIR_C_OK && output.bytes);
+    if (!strcmp(name,"set-header-copy") || !strcmp(name,"set-header-duplicate")) {
+        const char *pin="if (!xrt_managed_retain(incoming))",*cursor=output.bytes,*first=NULL;
+        size_t count=0;
+        while ((cursor=strstr(cursor,pin))!=NULL) {if (!first) first=cursor;++count;cursor+=strlen(pin);}
+        CHECK(count==(!strcmp(name,"set-header-duplicate")?2u:1u));
+        CHECK(first && strstr(output.bytes,"borrowed_0"));
+        const char *publication=strstr(first,"status = xrt_place_edge_transfer(");CHECK(publication);
+        if (count==2) {const char *second=strstr(first+strlen(pin),pin);CHECK(second && second<publication);}
+        CHECK(strstr(publication,"xrl_borrow_failed:") && strstr(publication,"xrt_managed_slot_drop(frame,"));
+    }
     if (!strcmp(name, "state-layout")) {
         XrRbcProgram *program = NULL;
         CHECK(xr_rbc_compile(m, root, &program, NULL) == XR_RBC_COMPILE_OK && program);
@@ -885,6 +913,9 @@ static void frame_scalar_cell_admission(void) {
 int main(int argc, char **argv) {
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
     frame_scalar_cell_admission();array_c_output("frame-scalar-cells",NULL);
+    static const char *const set_cases[]={"set-i64-local","set-i64-state","set-formal-cell","set-formal-ref","set-formal-state",
+        "set-header-copy","set-header-duplicate","set-block-cell-loop"};
+    for (size_t n=0;n<sizeof(set_cases)/sizeof(*set_cases);++n) array_c_output(set_cases[n],NULL);
     CHECK(argc == 1);
     array_c_output("string-bindings",NULL);
     array_c_output("string-ref-bindings",NULL);

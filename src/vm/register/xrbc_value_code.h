@@ -39,6 +39,7 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_FUNCTION_NEW, XR_RBC_VALUE_FUNCTION_CALL, XR_RBC_VALUE_FUNCTION_ALIAS,
     XR_RBC_VALUE_FUNCTION_SCOPE_EXIT, XR_RBC_VALUE_SLICE, XR_RBC_VALUE_STRING_APPEND_OWNED,
     XR_RBC_VALUE_CELL, XR_RBC_VALUE_MAP_LITERAL, XR_RBC_VALUE_STRING_APPEND_BINDING,
+    XR_RBC_VALUE_SET,
     XR_RBC_VALUE_ASSERT_CONDITION
 } XrRbcValueOperation;
 
@@ -59,6 +60,8 @@ typedef struct XrRbcValueAccess {
      * UINT32_MAX when there is no common typed edge, never ambiguous edge zero. */
     /* ARRAY/MAP index is the verified catalog role, first/count its complete
      * SSA operands. A mutator's window selects its common pending workspace. */
+    /* SET index is the dedicated LIR operation and other its one-based common
+     * SET_OPERATION event. Operands and workspace follow the same real homes. */
     /* SLICE index is its closed role, first/count its full SSA operand span.
      * Only NEW over a real State reference uses source=XR_LIR_STATE_REF as the
      * received closed READ binding role, not another SSA operand or write cap.

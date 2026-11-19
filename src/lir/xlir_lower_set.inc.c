@@ -56,6 +56,7 @@ static bool lower_set_instruction(LowerFunction *f,uint32_t block,uint32_t index
     case XR_XIR_HASH_CONTAINS:operation=XR_LIR_SET_CONTAINS;count=2;break;
     case XR_XIR_HASH_DELETE:operation=XR_LIR_SET_REMOVE;count=2;break;
     case XR_XIR_HASH_CLEAR:operation=XR_LIR_SET_CLEAR;count=1;break;
+    case XR_XIR_TO_STRING:operation=XR_LIR_SET_DISPLAY;count=1;break;
     default:return true;
     }
     if(count && !lower_set_type(c,xr_xir_operand_type(f->source,op->args[0])))return true;

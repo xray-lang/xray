@@ -40,7 +40,8 @@ static bool rbc_value_callable_argument(const XrRbcModule *module,const XrRbcVal
     if (expected.kind==XR_RBC_CALLABLE_REFERENCE) {
         XrtValueKind kind=rbc_value_kind(module,code,value);
         return rbc_value_owner(module,code,value,false) &&
-            (expected.type==XR_RBC_STRING ? kind==XRT_VALUE_STRING : expected.type==XR_RBC_MAP_STRING_I64 ?
+            (expected.type==XR_RBC_STRING ? kind==XRT_VALUE_STRING : expected.type==XR_RBC_SET_I64 ?
+             kind==XRT_VALUE_SET_I64 : expected.type==XR_RBC_MAP_STRING_I64 ?
              kind==XRT_VALUE_MAP_STRING_I64 : rbc_array_kind((XrRbcRegisterKind)expected.type) &&
              kind==(XrtValueKind)(XRT_VALUE_ARRAY_I64+xr_rbc_array_family((XrRbcRegisterKind)expected.type)));
     }
