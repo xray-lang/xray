@@ -96,6 +96,12 @@ typedef struct XrRbcArrayRegionAccess {
     XrLirArrayRegionOperation operation;
 } XrRbcArrayRegionAccess;
 
+typedef struct XrRbcArrayReadFold {
+    uint32_t accumulator, next_accumulator, limit;
+    uint64_t limit_bits;
+    bool constant;
+} XrRbcArrayReadFold;
+
 typedef struct XrRbcValueCode {
     const XrLirValueHomes *homes;
     const XrRbcValueLocation *locations; /* SSA indexed, including unused zero. */
@@ -116,8 +122,9 @@ typedef struct XrRbcValueCode {
     const uint32_t *scope_values; /* Physical scope ordinal -> original SSA capability. */
     uint32_t scope_count;
     XrLirArrayRegionBindings *array_regions; /* Owned numeric projection, no live addresses. */
-    bool array_region_runtime; /* Compile-time SET-window consumption; read-only facts stay ordinary. */
+    bool array_region_runtime; /* Compile-time SET-window consumption. */
     const XrRbcArrayRegionAccess *array_region_accesses; /* Same ordinal/count as accesses, or absent. */
+    const XrRbcArrayReadFold *array_read_folds; /* Indexed like array_regions->regions, or absent. */
 } XrRbcValueCode;
 
 /* A leaf needs no call, return or owning destination. Both emission and
