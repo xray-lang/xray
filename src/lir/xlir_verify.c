@@ -184,18 +184,22 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return v->type == a && (xr_lir_boxed_type(m, a) || xr_lir_cell_value_type(m,a,NULL));
         case XR_LIR_VALUE_DROP:
             return v->type == XR_LIR_UNIT && (xr_lir_boxed_type(m, a) || xr_lir_cell_value_type(m,a,NULL));
-        case XR_LIR_RECORD_NEW: {
+        case XR_LIR_RECORD_NEW: case XR_LIR_CLASS_NEW: {
+            XrLirType target = v->type;
+            if (v->op == XR_LIR_CLASS_NEW && !xr_lir_class_payload(m, target, &target)) return false;
             const XrLirRecordField *fields;
             uint32_t count;
-            if (xr_lir_aggregate_fields(m, v->type, &fields, &count) != XR_LIR_OK || count != v->operand_count) return false;
+            if (xr_lir_aggregate_fields(m, target, &fields, &count) != XR_LIR_OK || count != v->operand_count) return false;
             for (uint32_t n = 0; n < count; ++n)
                 if (f->values[v->operands[n] - 1].type != fields[n].type) return false;
             return true;
         }
-        case XR_LIR_RECORD_FIELD: {
+        case XR_LIR_RECORD_FIELD: case XR_LIR_CLASS_FIELD: {
+            if (v->op == XR_LIR_CLASS_FIELD && !xr_lir_class_payload(m, a, &a)) return false;
             const XrLirRecordField *fields;
             uint32_t count;
-            return xr_lir_aggregate_fields(m, a, &fields, &count) == XR_LIR_OK && v->bits < count && fields[v->bits].type == v->type;
+            return xr_lir_aggregate_fields(m, a, &fields, &count) == XR_LIR_OK &&
+                v->bits < count && fields[v->bits].type == v->type;
         }
         case XR_LIR_FUNCTION_SCOPE_ENTER:
             return v->type == XR_LIR_FUNCTION_SCOPE && v->operand_count <= 1 &&
@@ -432,7 +436,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_MODULE_READY && v->op != XR_LIR_STATE_CONSTRUCT &&
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
-        v->op != XR_LIR_RECORD_FIELD &&
+        v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
         goto invalid;

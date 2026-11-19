@@ -92,6 +92,8 @@ XR_LIR_OP(VALUE_DROP, "value_drop", 1)
 /* Both nominal records and structural Tuples use these inline field operations. */
 XR_LIR_OP(RECORD_NEW, "record_new", -1)
 XR_LIR_OP(RECORD_FIELD, "record_field", 1)
+XR_LIR_OP(CLASS_NEW, "class_new", -1)
+XR_LIR_OP(CLASS_FIELD, "class_field", 1)
 
 /* Exact Set<i64> roles, independent of Map intrinsic identity. */
 XR_LIR_OP(SET_NEW, "set_new", 0)

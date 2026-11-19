@@ -137,7 +137,7 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
         XrLirType type = (XrLirType)row;
         XrLirTypeView shape;
         if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
-        if (shape.kind == XR_LIR_TYPE_NULLABLE) {
+        if (shape.kind == XR_LIR_TYPE_NULLABLE || shape.kind == XR_LIR_TYPE_CLASS) {
             XrLirValueLayoutStatus status = need_type(set, shape.element, type);
             if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
         } else if (shape.kind == XR_LIR_TYPE_CELL) {
@@ -251,6 +251,11 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
     XrLirTypeView shape;
     if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     *spec = (XrtValuePlanSpec){0};
+    if (shape.kind == XR_LIR_TYPE_CLASS) {
+        *spec = (XrtValuePlanSpec){.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=alignof(void *),
+            .owned_count=1,.element=dependency(set,shape.element)};
+        return extent_add(scratch_bytes,1,sizeof(size_t)) ? XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_OVERFLOW;
+    }
     if (shape.kind == XR_LIR_TYPE_CELL) {
         XrLirCellType cell;
         if (!xr_lir_cell_value_type(module, type, &cell)) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
@@ -315,7 +320,7 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
 static void fill_composite(const XrLirModule *module, const XrLirValueLayouts *set, XrLirType type,
     XrtValuePlanSpec *spec, void *scratch) {
     size_t *owned;
-    if (spec->kind == XRT_VALUE_CELL) {
+    if (spec->kind == XRT_VALUE_CELL || spec->kind == XRT_VALUE_CLASS) {
         owned = scratch; *owned = 0; spec->owned_offsets = owned;
         return;
     }
@@ -454,7 +459,7 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
         XrtValuePlanSpec spec;
         status = memory_status(xrt_value_plan_view(set->values[i].plan, &spec));
         if (status == XR_LIR_VALUE_LAYOUT_OK && (xrt_value_kind_has_fields(spec.kind) || spec.kind == XRT_VALUE_NULLABLE ||
-            spec.kind == XRT_VALUE_CELL)) {
+            spec.kind == XRT_VALUE_CELL || spec.kind == XRT_VALUE_CLASS)) {
             XR_CHECK(set->type_count < set->constructed, "each ownership fact belongs to one generated constructed plan");
             set->types[set->type_count++] = (XrLirOwnershipTypeFact){(XrLirType)i, spec.owned_count != 0};
         }

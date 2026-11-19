@@ -19,6 +19,27 @@ static bool lower_record_description(Lower *c, XrXirType type, XrXirTypeDescript
     uint32_t native = description->definition ? description->definition->native.native_id : description->identity->native.native_id;
     return description->nominal_kind == XR_XIR_NOMINAL_STRUCT && !native && !(flags & ~XR_XIR_NOMINAL_MODULE_LITERAL);
 }
+static bool lower_class_description(Lower *c, XrXirType type, XrXirTypeDescription *description) {
+    const XrXirArtifact *artifact = c->request->closed;
+    if (!c->class_cycles) {
+        XrXirStatus status = xr_xir_class_cycles_build(artifact, &c->class_cycles, NULL);
+        if (status != XR_XIR_OK) {
+            lower_error(c, status == XR_XIR_OUT_OF_MEMORY ? XR_LIR_OUT_OF_MEMORY : XR_LIR_VERIFY_ERROR,
+                "class lowering requires Checked allocation-cycle facts");
+            return false;
+        }
+    }
+    XrXirClassCycleKind cycle;
+    if (xr_xir_class_cycles_query(c->class_cycles, artifact, type, &cycle) != XR_XIR_OK ||
+        cycle != XR_XIR_CLASS_CYCLE_ACYCLIC)
+        return lower_unsupported(c, "class without a proven acyclic allocation layout");
+    if (xr_xir_compile_type_description(xr_xir_compile_artifact_context(artifact), c->source->types,
+        type, description) != XR_XIR_OK || description->nominal_kind != XR_XIR_NOMINAL_CLASS)
+        return lower_unsupported(c, "class with unresolved Checked field types");
+    uint32_t parent = description->definition ? description->definition->parent : description->identity->parent;
+    if (parent) return lower_unsupported(c, "derived class allocation layout");
+    return true;
+}
 static bool lower_record_member(Lower *c, const XrXirTypeDescription *description,
     uint32_t index, XrXirFieldDescription *field) {
     if (xr_xir_compile_description_field(xr_xir_compile_artifact_context(c->request->closed),
@@ -26,7 +47,7 @@ static bool lower_record_member(Lower *c, const XrXirTypeDescription *descriptio
         return lower_unsupported(c, "record field has no resolved Checked description");
     return true;
 }
-static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescription *description) {
+static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescription *description, bool class_type) {
     uint32_t count = description->field_count;
     XrLirRecordField *fields = count ? lower_alloc(c, count, sizeof(*fields)) : NULL;
     if (count && !fields) return false;
@@ -50,9 +71,11 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
     XrLirRecordIdentity identity = {.module=description->module.bytes, .module_length=description->module.length,
         .name=description->name.bytes, .name_length=description->name.length, .arguments=arguments,
         .argument_count=argument_count, .exported=description->definition ? description->definition->exported : description->identity->exported,
-        .flags=description->definition ? description->definition->flags : description->identity->flags};
-    if (good) good = lower_build(c, xr_lir_record_type(c->module, &identity, fields, count,
-        &c->constructed_types[(uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE]));
+        .flags=class_type ? 0 : description->definition ? description->definition->flags : description->identity->flags};
+    XrLirType physical = XR_LIR_TYPE_INVALID;
+    if (good) good = lower_build(c, xr_lir_record_type(c->module, &identity, fields, count, &physical));
+    if (good && class_type) good = lower_build(c, xr_lir_internal_class_type(c->module, physical, &physical));
+    if (good) c->constructed_types[(uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE] = physical;
     xr_free(arguments);
     xr_free(fields);
     return good;
@@ -91,7 +114,10 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
         LowerRecordFrame *frame = &frames[depth - 1];
         const XrXirTypeNode *node = xr_xir_type_node(c->source->types, frame->type);
         XrXirTypeDescription description = {0};
-        bool record = node && node->kind == XR_XIR_TYPE_NOMINAL && lower_record_description(c, frame->type, &description);
+        bool class_type = node && node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_class(c->source->types, frame->type);
+        bool record = node && node->kind == XR_XIR_TYPE_NOMINAL &&
+            (class_type ? lower_class_description(c, frame->type, &description) : lower_record_description(c, frame->type, &description));
+        if (class_type && !record) return false;
         bool callable = node && node->kind == XR_XIR_TYPE_CALLABLE;
         bool tuple = node && node->kind == XR_XIR_TYPE_TUPLE;
         if (!node || (!record && !callable && !tuple && node->kind != XR_XIR_TYPE_NULLABLE)) {
@@ -120,7 +146,7 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
                 good = lower_receive_type(c, dependency);
             continue;
         }
-        if (record) good = lower_record_finish(c, frame->type, &description);
+        if (record) good = lower_record_finish(c, frame->type, &description, class_type);
         else if (callable) good = lower_receive_callable(c, frame->type, node);
         else if (tuple) good = lower_tuple_finish(c, frame->type, node);
         else {

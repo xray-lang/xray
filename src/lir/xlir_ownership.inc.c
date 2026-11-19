@@ -49,7 +49,7 @@ static const XrLirTypeData *lir_plan_constructed_type(const XrLirModule *m, XrLi
 static bool lir_plan_constructed_value(const XrLirModule *m, XrLirType type) {
     const XrLirTypeData *value = lir_plan_constructed_type(m, type);
     return value && (value->shape.kind == XR_LIR_TYPE_RECORD || value->shape.kind == XR_LIR_TYPE_TUPLE ||
-        value->shape.kind == XR_LIR_TYPE_NULLABLE);
+        value->shape.kind == XR_LIR_TYPE_NULLABLE || value->shape.kind == XR_LIR_TYPE_CLASS);
 }
 static uint32_t lir_plan_unmodeled(const XrLirModule *m, const XrLirOwnershipPlan *plan, XrLirType type) {
     switch (type) {
@@ -516,8 +516,8 @@ static XrLirStatus lir_plan_receive(const XrLirOwnershipRequest *request,
         XrLirTypeView view;
         if (xr_lir_type_view(m, request->types[i].type, &view) != XR_LIR_OK ||
             (view.kind != XR_LIR_TYPE_RECORD && view.kind != XR_LIR_TYPE_TUPLE && view.kind != XR_LIR_TYPE_NULLABLE &&
-                !xr_lir_cell_value_type(m,request->types[i].type,NULL)) ||
-            (view.kind == XR_LIR_TYPE_CELL && !request->types[i].has_owned) ||
+                view.kind != XR_LIR_TYPE_CLASS && !xr_lir_cell_value_type(m,request->types[i].type,NULL)) ||
+            ((view.kind == XR_LIR_TYPE_CELL || view.kind == XR_LIR_TYPE_CLASS) && !request->types[i].has_owned) ||
             (i && request->types[i - 1].type >= request->types[i].type))
             return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid constructed ownership facts");
     }

@@ -122,7 +122,7 @@ static bool lower_array_flow_values(LowerFunction *f) {
                 XrXirType type = parameter ? source->parameters[value] : definition->type;
                 if (!lower_managed_type(f->owner, lower_type(c, type)) || (definition &&
                     (definition->op == XR_XIR_CELL_PLACE || definition->op == XR_XIR_SLOT_PLACE ||
-                     definition->op == XR_XIR_LOCAL_NEW))) continue;
+                     definition->op == XR_XIR_LOCAL_NEW || definition->op == XR_XIR_LOCAL_UNINIT))) continue;
                 XR_DCHECK(f->cell_count < f->value_count, "each managed state has a distinct source value");
                 uint32_t cell = f->cell_count++;
                 f->array_values[value] = cell;

@@ -77,7 +77,7 @@ static bool image_shape(const XrtValueImage *image, bool *inline_arrays) {
     for (uint32_t i = 0; i < image->type_count; ++i) {
         const XrtValueImageType *type = &image->types[i];
         *inline_arrays |= type->kind == XRT_VALUE_ARRAY_INLINE;
-        if ((unsigned)type->kind > XRT_VALUE_ARRAY_INLINE || type->throws > 1 ||
+        if ((unsigned)type->kind > XRT_VALUE_CLASS || type->throws > 1 ||
             !image_span(type->first_owned, type->owned_count, image->owned_count) ||
             !image_span(type->first_field, type->field_count, image->slot_count) ||
             !image_span(type->first_capture, type->capture_count, image->slot_count) ||
