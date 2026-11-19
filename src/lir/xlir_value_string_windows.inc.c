@@ -55,7 +55,8 @@ static bool lir_string_window_follow(const XrLirValueHomes *homes, const XrLirFu
 static bool lir_home_string_window(const LirHomeBuilder *b, const XrLirFunctionData *function,
     uint32_t header_id, XrLirStringWindow *out, size_t *latch_edge, uint32_t *body_id, uint32_t *bridge_id) {
     const XrLirBlockData *header = &function->blocks[header_id - 1];
-    if (header->parameter_count < 2 || header->parameter_count > 3 || header->instruction_count != 2)
+    if (header->parameter_count < 2 || header->parameter_count > 3 ||
+        header->instruction_count < 2 || header->instruction_count > 3)
         return false;
     uint32_t index = 0, owner = 0, stable = 0;
     const XrLirValueHomes *homes = b->homes;
@@ -71,10 +72,15 @@ static bool lir_home_string_window(const LirHomeBuilder *b, const XrLirFunctionD
         } else return false;
     }
     if (!index || !owner) return false;
-    const XrLirInstructionView *cmp = &header->instructions[0].view, *branch = &header->instructions[1].view;
+    uint32_t comparison = header->instruction_count - 2;
+    const XrLirInstructionView *cmp = &header->instructions[comparison].view,
+        *branch = &header->instructions[comparison + 1].view;
     if (cmp->op != XR_LIR_ICMP || cmp->predicate != XR_LIR_LT || cmp->operands[0] != index ||
         cmp->operands[1] == index || function->values[cmp->operands[1] - 1].type != XR_LIR_I64 ||
         branch->op != XR_LIR_CONDBR || branch->operand_count != 1 || branch->operands[0] != cmp->result) return false;
+    const XrLirInstructionView *limit = xr_lir_internal_value_definition(function, cmp->operands[1]);
+    bool constant_limit = limit && limit->op == XR_LIR_CONST;
+    if (comparison && (!constant_limit || limit != &header->instructions[0].view)) return false;
     LirStringWindowCarry carry = {.text=owner,.index=index,.suffix=stable};
     const XrLirEdgeView *edge = &branch->edges[0];
     if (!lir_string_window_follow(homes, function, header_id, edge, &carry, false)) return false;
@@ -122,6 +128,7 @@ static bool lir_home_string_window(const LirHomeBuilder *b, const XrLirFunctionD
         !lir_string_window_follow(homes, function, *body_id, &latch->edges[0], &carry, true) ||
         carry.text != owner || carry.index != index) return false;
     *out = (XrLirStringWindow){.header=header_id,.index=index,.next_index=add->result,.limit=cmp->operands[1],
+        .comparison=comparison,.constant_limit=constant_limit,.limit_bits=constant_limit ? limit->bits : 0,
         .header_owner=homes->values[owner].first_owner,.latch_owner=result->first_owner,.suffix_owner=suffix_slot,
         .empty_count=carry.count};
     memcpy(out->empty_slots, carry.empty_slots, carry.count * sizeof(*out->empty_slots));
@@ -161,11 +168,9 @@ static bool lir_home_string_windows(LirHomeBuilder *b) {
         }
         if (predecessors[body - 1] != 1 || (bridge && predecessors[bridge - 1] != 1)) continue;
         if (!lir_home_append(b, &windows, &window)) break;
-        /* The VM consumes the plan at a selected latch. An incoming formal
-         * has a stable register there without any extra SSA/PC remapping. */
-        const XrLirValueData *limit = &function->values[window.limit - 1];
-        if (!limit->block && limit->parameter)
-            ((XrLirHomeEdge *)b->edges.data)[latch].string_window = (uint32_t)windows.count;
+        /* A nonconstant bound is live into the original comparison. The
+         * closed header does not redefine it, and no skipped step changes it. */
+        ((XrLirHomeEdge *)b->edges.data)[latch].string_window = (uint32_t)windows.count;
     }
     xr_free(predecessors);
     b->homes->string_windows = windows.data;

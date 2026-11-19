@@ -253,9 +253,7 @@ static void c_string_library(LirC *c, const XrLirInstructionView *v, uint32_t so
     c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
 }
 
-static void c_string_window(LirC *c, uint32_t block) {
-    const XrLirStringWindow *window = xr_lir_value_homes_string_window(c->homes, block);
-    if (!window) return;
+static void c_string_window(LirC *c, const XrLirStringWindow *window) {
     uint32_t index = window->index;
     c_format(c, "    if (xrl_frame && v%" PRIu32 " >= INT64_C(0) && v%" PRIu32 " < ", index,index);
     c_value(c, window->limit);
