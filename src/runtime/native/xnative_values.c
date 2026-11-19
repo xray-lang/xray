@@ -374,10 +374,28 @@ XRAY_API bool xrt_native_map_get(const XrtManagedHeader *map, const XrtStringBac
 }
 XRAY_API void xrt_native_map_snapshot(XrtManagedFrame *frame, size_t slot,
     const XrtManagedHeader *map, bool keys, uint32_t source_id) {
+    XrtValueRoot *owner = xrt_value_root_current(source_id);
+    XrtManagedSlotLocation guard = {0};
+    XrtManagedStatus status = map ? xrt_managed_slot_location(frame, slot, &guard) : XRT_MANAGED_ARGUMENT;
+    if (status == XRT_MANAGED_OK) status = xrt_managed_domain_enter(guard);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+
+    /* Even the lazy backing family may invoke an allocator callback. Pin the
+     * actual Map before either allocation so another root must detach it. */
+    XrtManagedHeader *pin = (XrtManagedHeader *)map;
+    if (!xrt_managed_retain(pin)) {
+        xrt_managed_domain_leave(guard);
+        xrt_native_managed_failure(XRT_MANAGED_REFCOUNT, source_id);
+    }
     const XrtBackingTypes *types = NULL;
-    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    status = xrt_native_values_backings(owner, &types);
+    xrt_managed_domain_leave(guard);
     if (status == XRT_MANAGED_OK)
-        status = xrt_map_backing_snapshot(frame, slot, types, (const XrtMapBacking *)map, keys);
+        status = xrt_map_backing_snapshot_held(frame, slot, types, (const XrtMapBacking *)map, keys);
+    XR_CHECK(xrt_managed_domain_enter(guard) == XRT_MANAGED_OK,
+        "Map snapshot retirement uses the same live caller Root domain");
+    xrt_managed_drop(pin);
+    xrt_managed_domain_leave(guard);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
 XRAY_API int64_t xrt_native_map_index(const XrtManagedHeader *map, const XrtStringBacking *key, uint32_t source_id) {

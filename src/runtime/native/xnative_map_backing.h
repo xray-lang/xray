@@ -36,9 +36,9 @@ XR_FUNC void xrt_map_literal_inputs_drop(const XrtMapLiteral *, const XrtMapLite
 /* A miss publishes value=0 and found=false; a failure leaves both unchanged. */
 XR_FUNC XrtManagedStatus xrt_map_backing_get(const XrtMapBacking *,
     const XrtStringBacking *, int64_t *value, bool *found);
-/* Allocate one independent Array in insertion order and preserve the old
- * destination on failure. Key snapshots retain their own String references. */
-XR_FUNC XrtManagedStatus xrt_map_backing_snapshot(XrtManagedFrame *, size_t,
+/* The caller holds an independent Map pin before preparing backing types and
+ * until the Array commits or aborts. Keys retain their own String references. */
+XR_FUNC XrtManagedStatus xrt_map_backing_snapshot_held(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, const XrtMapBacking *, bool keys);
 
 /* The caller already owns mutation authority for the actual binding. A borrow
