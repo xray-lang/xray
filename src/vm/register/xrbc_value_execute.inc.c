@@ -593,9 +593,31 @@ static XR_NOINLINE uint64_t rbc_value_append_window(XrRbcStack *stack, RbcValueA
         window->suffix_owner, count, homes->string_window_slots + window->latch_empty_first, window->empty_count);
 }
 
+/* This edge moves one complete Header and otherwise transports raw scalar
+ * bits. Snapshot all changed destinations before publishing any of them. */
+static XR_NOINLINE bool rbc_value_snapshot_edge_scalars(XrRbcStack *stack, RbcValueActivation *activation,
+    XrRbcValueAccess access, uint32_t owner_target, size_t *count) {
+    size_t scalars = access.count - 1;
+    if (scalars > activation->publication_capacity ||
+        scalars > activation->snapshot_capacity / sizeof(uint64_t)) return false;
+    const uint32_t *pairs = activation->code->arguments + access.first;
+    for (uint32_t p = 0; p < access.count; ++p, pairs += 2) {
+        if (pairs[1] == owner_target) continue;
+        RbcValueOrigin origin = rbc_value_origin(activation, pairs[0]);
+        XrRbcRegister *from = rbc_value_register(stack, origin.activation, origin.value);
+        XrRbcRegister *to = rbc_value_register(stack, activation, pairs[1]);
+        if (!from || !to) return false;
+        if (from == to) continue;
+        activation->publications[*count].destination.address = (uint8_t *)&to->bits;
+        memcpy(activation->snapshots + *count * sizeof(uint64_t), &from->bits, sizeof(uint64_t));
+        ++*count;
+    }
+    return true;
+}
+
 static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *activation,
     XrRbcValueAccess access, const XrLirHomeEdge *edge) {
-    if (!access.count || access.count > 2 || !activation->frame) return false;
+    if (!access.count || !activation->frame) return false;
     const XrRbcValueCode *code = activation->code;
     const XrLirValueHomes *homes = code->homes;
     XrLirHomeTransfer transfer = homes->transfers[edge->first];
@@ -633,10 +655,16 @@ static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *ac
      * or callback between checking the actual busy state and publishing both
      * destinations. The general transaction retires any occupied result. */
     if (!*source || *destination || *temporary) return false;
+    size_t moves = 0;
+    if (access.count > 2 && !rbc_value_snapshot_edge_scalars(stack, activation, access, transfer.target, &moves))
+        return false;
     if (pair && edge->string_window) bits = rbc_value_append_window(stack, activation, edge, pair, bits);
     *destination = *source;
     *source = NULL;
     if (scalar) scalar->bits = bits;
+    for (size_t n = 0; n < moves; ++n)
+        memcpy(activation->publications[n].destination.address,
+            activation->snapshots + n * sizeof(uint64_t), sizeof(uint64_t));
     return true;
 }
 static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *stack,
