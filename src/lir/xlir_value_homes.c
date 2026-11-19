@@ -168,7 +168,7 @@ static bool lir_home_state_binding(LirHomeCompiler *c, uint32_t value, XrLirType
             (reference.array_element == XR_LIR_I64 || reference.array_element == XR_LIR_U8)));
 }
 static bool lir_home_binding_type(LirHomeCompiler *c, uint32_t value, XrLirType type) {
-    return type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
+    return type == XR_LIR_I64_REF || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
         type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
         type == XR_LIR_SET_I64_CELL || type == XR_LIR_SET_I64_REF ||
         xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,value}) || lir_home_state_binding(c,value,type);
@@ -207,7 +207,9 @@ static bool lir_home_bindings(LirHomeBuilder *b) {
         XrLirType type; xr_lir_value_type(c->input,(XrLirValue){c->input,c->function.id,v},&type);
         if (!lir_home_binding_type(c,v,type)) continue;
         XrLirValueLayoutKey key = {XR_LIR_MAP_STRING_I64,0,0};
-        if (xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,v})) {
+        if (type == XR_LIR_I64_REF) {
+            key = (XrLirValueLayoutKey){XR_LIR_I64,0,0};
+        } else if (xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,v})) {
             key = (XrLirValueLayoutKey){XR_LIR_STRING,0,0};
             if (type == XR_LIR_STATE_REF) {
                 bindings[v].kind = XR_LIR_HOME_BINDING_STATE_BORROW;
@@ -231,7 +233,7 @@ static bool lir_home_bindings(LirHomeBuilder *b) {
         XrtValuePlanSpec spec; uint32_t ordinal;
         if (!lir_home_spec(b,key,&spec,&ordinal)) return false;
         bindings[v].type = ordinal + 1;
-        if (!lir_home_binding_spec(b,bindings[v].type,&spec)) return false;
+        if (type != XR_LIR_I64_REF && !lir_home_binding_spec(b,bindings[v].type,&spec)) return false;
     }
     return true;
 }
@@ -780,9 +782,11 @@ static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *s
                         return lir_home_fail(c,XR_LIR_VALUE_LAYOUT_ARGUMENT,"Slice call lost its same-family input origin");
                 }
                 bool typed = instruction.result && values[instruction.result].type != 0;
+                const XrLirFunctionData *target = &c->input->functions[instruction.callee - 1];
                 for (uint32_t p = 0; p < instruction.operand_count; ++p) {
                     uint32_t value = instruction.operands[p];
-                    typed |= values[value].type != 0 || (b->homes->bindings && b->homes->bindings[value].type != 0);
+                    typed |= target->parameter_types[p] == XR_LIR_I64_REF || values[value].type != 0 ||
+                        (b->homes->bindings && b->homes->bindings[value].type != 0);
                 }
                 if (typed) {
                     for (uint32_t p = 0; p < instruction.operand_count; ++p)
@@ -1058,7 +1062,8 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHome
     for (size_t n = 0; n < b.edges.count; ++n)
         edges[n].direct_header_move = lir_home_direct_header_move(&b, &edges[n]);
     if (!lir_home_string_windows(&b)) { xr_lir_value_homes_destroy(b.homes); return b.compiler.status; }
-    bool typed = b.homes->event_count || b.homes->unmodeled || b.homes->frame.payload_size;
+    bool typed = b.homes->event_count || b.homes->unmodeled || b.homes->frame.payload_size ||
+        b.homes->bindings || b.homes->call_count;
     for (size_t v = 1; !typed && v <= b.homes->value_count; ++v) typed = b.homes->values[v].type != 0;
     if (typed) *output = b.homes;
     else xr_lir_value_homes_destroy(b.homes);

@@ -1049,6 +1049,11 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
             uint32_t to=receiving->parameters[parameter];
             const XrLirValueHome *formal=rbc_value_home(receiving,to);
             const XrLirHomeBinding *binding=rbc_value_binding(receiving,to);
+            if (!indirect && rbc_value_i64_ref(module,receiving,to)) {
+                RbcValueOrigin origin=rbc_value_origin(caller,from);
+                if (!origin.activation || binding->parameter!=parameter+1) return XR_RBC_INVALID;
+                child->parameters[parameter]=origin; continue;
+            }
             if (binding && !rbc_value_binding_state_cap(receiving,to)) {
                 const XrLirHomeBinding *actual=rbc_value_binding(caller->code,from);
                 if (!actual || actual->type!=binding->type || binding->parameter!=parameter+1) return XR_RBC_INVALID;

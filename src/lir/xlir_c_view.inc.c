@@ -304,12 +304,14 @@ static void c_view_call_instruction(LirC *c, const XrLirInstructionView *v, uint
      * used. Preparing the landing cannot retire the caller's live source. */
     c_values_ensure(c, source);
     c_text(c, "    "); c_function_name(c, v->callee);
+    XrLirFunctionView signature;
+    xr_lir_function_view(c->request->module,(XrLirFunction){c->request->module,v->callee},&signature);
     c_format(c, "((XrlLanding_%" PRIu32 "){xrl_frame, %zu, %zu, ",
         v->callee, workspace->first_owner, workspace->temporary_first_owner);
     c_format(c, "(void *)((unsigned char *)xrl_payload + %zu), (void *)((unsigned char *)xrl_payload + %zu)}",
         workspace->offset, workspace->temporary_offset);
     for (uint32_t a = 0; a < v->operand_count && c_request_poll(c); ++a) {
-        c_text(c, ", "); c_value(c, v->operands[a]);
+        c_text(c, ", "); c_call_argument(c, signature.parameter_types[a], v->operands[a]);
     }
     c_text(c, ");\n");
 }

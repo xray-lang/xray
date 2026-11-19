@@ -22,13 +22,20 @@ static void rbc_lir_value_codes_free(XrRbcValueCode **codes, size_t count) {
     for (size_t f = 0; codes && f < count; ++f) rbc_lir_value_code_free(codes[f]);
     xr_free(codes);
 }
+static bool rbc_lir_scalar_ref_call(const RbcLirCompiler *c, const XrLirInstructionView *instruction) {
+    if (instruction->op != XR_LIR_CALL) return false;
+    const XrLirFunctionData *target = &c->input->functions[instruction->callee - 1];
+    for (uint32_t p = 0; p < target->parameter_count; ++p)
+        if (target->parameter_types[p] == XR_LIR_I64_REF) return true;
+    return false;
+}
 static bool rbc_lir_value_call(RbcLirCompiler *c,const XrLirInstructionView *instruction) {
     if (instruction->op!=XR_LIR_CALL || !c->homes || c->value_call_cursor>=c->homes->call_count) return false;
     const XrLirHomeCall *row=&c->homes->calls[c->value_call_cursor];
     if (row->block!=c->diagnostic->block || row->instruction!=c->diagnostic->instruction) return false;
     ++c->value_call_cursor;
-    bool typed=instruction->result && c->homes->values[instruction->result].type &&
-        c->value_code->locations[instruction->result].kind==XR_RBC_VALUE_NOWHERE;
+    bool typed=rbc_lir_scalar_ref_call(c,instruction) || (instruction->result &&
+        c->homes->values[instruction->result].type && c->value_code->locations[instruction->result].kind==XR_RBC_VALUE_NOWHERE);
     for (size_t p=0;p<row->count;++p) {
         uint32_t value=c->homes->arguments[row->first+p];
         typed|=(c->homes->values[value].type && c->value_code->locations[value].kind==XR_RBC_VALUE_NOWHERE) ||
@@ -65,13 +72,14 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
             rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64 || rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_CELL ||
             rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_REF ||
             rbc_lir_value_type(c,v) == XR_LIR_SET_I64 || rbc_lir_value_type(c,v) == XR_LIR_SET_I64_CELL ||
-            rbc_lir_value_type(c,v) == XR_LIR_SET_I64_REF) return true;
+            rbc_lir_value_type(c,v) == XR_LIR_SET_I64_REF || rbc_lir_value_type(c,v) == XR_LIR_I64_REF) return true;
     if (rbc_lir_captured_cell(c->input,c->view.result) || rbc_lir_callable_type(c->input,c->view.result) || rbc_lir_inline_type(c->input,c->view.result) || c->view.result == XR_LIR_STRING || c->view.result == XR_LIR_ARRAY || c->view.result == XR_LIR_MAP_STRING_I64 || c->view.result == XR_LIR_SET_I64) return true;
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         XrLirBlock block; XrLirBlockView view;
         xr_lir_block_at(c->input,c->function,b,&block); xr_lir_block_view(c->input,block,&view);
         for (uint32_t n = 0; n < view.instruction_count; ++n) {
             XrLirInstructionView instruction; xr_lir_instruction_view(c->input,block,n,&instruction);
+            if (rbc_lir_scalar_ref_call(c,&instruction)) return true;
             if ((instruction.op == XR_LIR_STATE_CONSTRUCT || instruction.op == XR_LIR_STATE_INITIALIZE) &&
                 rbc_lir_value_string_slot(c,instruction.bits)) return true;
         }
@@ -454,7 +462,7 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_SET_REF_WRITE: case XR_LIR_MAP_REF_WRITE: case XR_LIR_ARRAY_REF_WRITE: access.operation=XR_RBC_VALUE_BINDING_WRITE; break;
     case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE: {
         uint32_t binding=i->op==XR_LIR_CELL_NEW ? i->result : access.source;
-        if (!c->homes->bindings || !c->homes->bindings[binding].type) return true;
+        if (!c->homes || !c->homes->bindings || !c->homes->bindings[binding].type) return true;
         access.operation=i->op==XR_LIR_CELL_NEW ? XR_RBC_VALUE_BINDING_NEW :
             i->op==XR_LIR_CELL_READ ? XR_RBC_VALUE_BINDING_READ : XR_RBC_VALUE_BINDING_WRITE;
         break;

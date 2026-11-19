@@ -545,6 +545,8 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
     size_t captures=owned ? function->capture_count : 0;
     bool inject_state = !owned && module->state_spec && entry == module->state_entry;
     const XrRbcValueCode *value_code=xr_rbc_module_value_code(module,entry);
+    for (uint32_t p=0;value_code && value_code->parameters && p<value_code->parameter_count;++p)
+        if (rbc_value_i64_ref(module,value_code,value_code->parameters[p])) return XR_RBC_INVALID;
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     uint32_t result_type = value_code && value_code->homes ? value_code->homes->result_type : 0;
     bool inline_result = rbc_inline_tuple_result(image,result_type);

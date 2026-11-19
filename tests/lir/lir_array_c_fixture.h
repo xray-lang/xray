@@ -301,7 +301,47 @@ static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock ent
     ca_return(c,done,total);
 }
 
+static void ca_unpublished_scalar_ref(XrLirModule **output, XrLirFunction *root) {
+    CArrayFixture c={0};
+    OK(xr_lir_module_create(NULL,&c.module));
+    XrLirStateModule owner={0};
+    XrLirStateSlot slot={.payload=XR_LIR_I64,.mutable=true,.size=8,.alignment=8};
+    XrLirStateLayout layout={.modules=&owner,.module_count=1,.slots=&slot,.slot_count=1,
+        .payload_size=8,.payload_alignment=8};
+    OK(xr_lir_set_state_layout(c.module,&layout));
+    XrLirType type=XR_LIR_I64_REF;
+    XrLirFunction assign={0}; XrLirBlock body={0}; XrLirValue formal={0};
+    OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="assign",.name_length=6,
+        .parameters=&type,.parameter_count=1,.result=XR_LIR_I64},&assign));
+    OK(xr_lir_define_function(c.module,assign));
+    OK(xr_lir_function_parameter(c.module,assign,0,&formal));
+    OK(xr_lir_add_block(c.module,assign,NULL,0,&body)); OK(xr_lir_set_entry(c.module,assign,body));
+    XrLirValue replacement=ca_constant(&c,body,42), fields[]={formal,replacement};
+    OK(xr_lir_emit_effect(c.module,body,&(XrLirInstruction){.op=XR_LIR_CELL_WRITE,.type=XR_LIR_UNIT,
+        .operands=fields,.operand_count=2,.source={"array-c.xr",10,41,7,41,15}}));
+    ca_return(&c,body,replacement);
+
+    type=XR_LIR_STATE;
+    OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="root",.name_length=4,
+        .parameters=&type,.parameter_count=1,.result=XR_LIR_I64},root));
+    OK(xr_lir_set_state_entry(c.module,*root)); OK(xr_lir_define_function(c.module,*root));
+    XrLirBlock entry={0}; XrLirValue state={0}, result={0};
+    OK(xr_lir_function_parameter(c.module,*root,0,&state));
+    OK(xr_lir_add_block(c.module,*root,NULL,0,&entry)); OK(xr_lir_set_entry(c.module,*root,entry));
+    ca_effect(&c,entry,XR_LIR_MODULE_BEGIN,state);
+    XrLirValue initial[]={state,ca_constant(&c,entry,5)};
+    (void)ca_value(&c,entry,XR_LIR_STATE_CONSTRUCT,XR_LIR_STATE_REF,initial,2);
+    XrLirValue reference=ca_value(&c,entry,XR_LIR_STATE_REFERENCE,XR_LIR_STATE_REF,&state,1);
+    OK(xr_lir_emit_value(c.module,entry,&(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_I64,
+        .callee=assign,.operands=&reference,.operand_count=1},&result));
+    ca_return(&c,entry,result); OK(xr_lir_module_finish(c.module,NULL));
+    *output=c.module;
+}
 static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunction *root) {
+    if (!strcmp(name,"state-uninitialized-ref-write")) {
+        ca_unpublished_scalar_ref(output,root);
+        return;
+    }
     bool string = strstr(name, "string") != NULL, state = !strncmp(name, "state-", 6);
     bool layout_only = !strcmp(name, "state-layout"), returned = !strncmp(name, "return-", 7);
     CArrayFixture c = {.element=string ? XR_LIR_STRING : XR_LIR_I64};

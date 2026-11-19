@@ -88,6 +88,13 @@ static XrtValueKind rbc_value_kind(const XrRbcModule *module,const XrRbcValueCod
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     return type && image && image->types && type<=image->type_count ? image->types[type-1].kind : XRT_VALUE_UNIT;
 }
+static bool rbc_value_i64_ref(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value) {
+    const XrLirHomeBinding *binding=rbc_value_binding(code,value);
+    return binding && binding->kind==XR_LIR_HOME_BINDING_PARAMETER && !binding->source &&
+        binding->parameter && binding->parameter<=code->parameter_count && code->parameters &&
+        code->parameters[binding->parameter-1]==value && binding->offset==SIZE_MAX && binding->first_owner==SIZE_MAX &&
+        code->locations[value].kind==XR_RBC_VALUE_NOWHERE && rbc_value_kind(module,code,value)==XRT_VALUE_I64;
+}
 static bool rbc_value_array(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
     const XrLirValueHome *home=rbc_value_home(code,value); XrtValueKind kind=rbc_value_kind(module,code,value);
     return home && xrt_value_kind_is_array(kind) && home->owner_count==1 &&
@@ -508,7 +515,11 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 formal=rbc_value_home(callee,callee->parameters[p]); location=callee->locations[callee->parameters[p]];
             }
             const XrLirHomeBinding *binding=rbc_value_binding(callee,callee ? callee->parameters[p] : 0);
-            if (binding && !rbc_value_binding_state_cap(callee,callee->parameters[p])) {
+            if (rbc_value_i64_ref(module,callee,callee ? callee->parameters[p] : 0)) {
+                if (binding->parameter != p+1 || (!rbc_value_i64_ref(module,code,source) &&
+                    !rbc_value_scalar(code,function,source,XR_RBC_I64_BINDING) &&
+                    !rbc_value_scalar(code,function,source,XR_RBC_STATE_REF))) return false;
+            } else if (binding && !rbc_value_binding_state_cap(callee,callee->parameters[p])) {
                 const XrLirHomeBinding *actual=rbc_value_binding(code,source);
                 if (!actual || binding->kind!=XR_LIR_HOME_BINDING_PARAMETER || binding->parameter!=p+1 ||
                     binding->type!=actual->type || !rbc_value_binding_valid(module,code,function,source)) return false;

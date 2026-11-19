@@ -280,7 +280,7 @@ static void array_forwarding_probe_root(void *context) {
             uint32_t word=module->functions[0].code[probe->pc+1];
             CHECK(xr_rbc_values_step(module,stack,word>>16,probe->pc+2,0)==XR_RBC_OK && !*from.owner &&
                 *to.owner==incoming && atomic_load(&incoming->references)==references);
-        } else CHECK(rbc_value_binding_step(module,stack,activation,access)==(probe->mode==3 ? XRT_MANAGED_REFCOUNT : XRT_MANAGED_ARGUMENT) &&
+        } else CHECK(rbc_value_binding_step(module,stack,activation,access,0)==(probe->mode==3 ? XRT_MANAGED_REFCOUNT : XRT_MANAGED_ARGUMENT) &&
             *from.owner==old_source && *to.owner==old_target && (!old_source || atomic_load(&old_source->references)==references));
     }
     if (probe->mode==1) { XrtManagedSlotLocation saved={0};

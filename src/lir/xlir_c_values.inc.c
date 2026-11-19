@@ -564,13 +564,15 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_view_call_instruction(c, v, source); return true;
     }
     if (v->op == XR_LIR_CALL && c_values_owned_type(c, v->type)) {
+        XrLirFunctionView callee;
+        xr_lir_function_view(c->request->module,(XrLirFunction){c->request->module,v->callee},&callee);
         c_values_ensure(c, source);
         const XrLirValueHome *home = &c->homes->values[v->result];
         c_text(c, "    "); c_function_name(c, v->callee);
         c_format(c, "((XrlLanding_%" PRIu32 "){xrl_frame, %zu, %zu, (void *)((unsigned char *)xrl_payload + %zu), (void *)((unsigned char *)xrl_payload + %zu)}",
             v->callee, home->first_owner, home->temporary_first_owner, home->offset, home->temporary_offset);
         for (uint32_t a = 0; a < v->operand_count && c_request_poll(c); ++a) {
-            c_text(c, ", "); c_value(c, v->operands[a]);
+            c_text(c, ", "); c_call_argument(c, callee.parameter_types[a], v->operands[a]);
         }
         c_text(c, ");\n");
         return true;

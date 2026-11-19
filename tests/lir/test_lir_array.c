@@ -1135,11 +1135,11 @@ int main(int argc, char **argv) {
     array_state_shapes(XR_LIR_U64);
     const char *cases[]={"i64","string","large","state-i64","state-string","state-layout",
         "return-i64","return-string","array-spills","array-spills-string","phi-i64","phi-string",
-        "state-uninitialized-read","state-uninitialized-write","repeat-i64","repeat-string",
+        "state-uninitialized-read","state-uninitialized-write","state-uninitialized-ref-write","repeat-i64","repeat-string",
         "repeat-empty-i64","repeat-empty-string","repeat-negative-i64","repeat-negative-string",
         "u8","u64","phi-u8","phi-u64","state-u8","state-u64","return-u8","return-u64",
         "unsigned-spills-u8","unsigned-spills-u64","scalar-edge-swap"};
-    const int64_t expected[]={1202,511,1500,1202,511,9,13,7,44850,1500,1202,511,0,0,19,10,0,0,0,0,
+    const int64_t expected[]={1202,511,1500,1202,511,9,13,7,44850,1500,1202,511,0,0,0,19,10,0,0,0,0,
         264,8,262,6,264,8,258,2,33586,-45150,2011};
     for(size_t c=0;c<sizeof(cases)/sizeof(*cases);++c)array_vm_fixture(cases[c],expected[c]);
     puts("Closed Array shapes, dynamic constructors and receiving owners passed");

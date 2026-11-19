@@ -195,7 +195,7 @@ def main():
                 'state-string': 511, 'state-layout': 9, 'return-i64': 13, 'return-string': 7,
                 'array-spills': 44850, 'array-spills-string': 1500,
                 'phi-i64': 1202, 'phi-string': 511,
-                'state-uninitialized-read': None, 'state-uninitialized-write': None,
+                'state-uninitialized-read': None, 'state-uninitialized-write': None, 'state-uninitialized-ref-write': None,
                 'repeat-i64': 19, 'repeat-string': 10, 'repeat-empty-i64': 0, 'repeat-empty-string': 0,
                 'repeat-negative-i64': None, 'repeat-negative-string': None,
                 'u8': 264, 'u64': 8, 'phi-u8': 262, 'phi-u64': 6, 'state-u8': 264, 'state-u64': 8,

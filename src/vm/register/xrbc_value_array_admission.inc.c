@@ -190,6 +190,13 @@ static bool rbc_value_binding_access_valid(const XrRbcModule *module,const XrRbc
     if (a.first || a.count) return false;
     uint32_t value=a.operation==XR_RBC_VALUE_BINDING_NEW ? a.result : a.source;
     const XrLirHomeBinding *binding=rbc_value_binding(code,value);
+    if (rbc_value_i64_ref(module,code,value)) {
+        if (a.index || a.window) return false;
+        if (a.operation==XR_RBC_VALUE_BINDING_READ)
+            return !a.other && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+        return a.operation==XR_RBC_VALUE_BINDING_WRITE && !a.result &&
+            rbc_value_scalar(code,function,a.other,XR_RBC_BITS);
+    }
     if (!rbc_value_binding_valid(module,code,function,value)) return false;
     bool string=rbc_value_kind(module,code,value)==XRT_VALUE_STRING;
     if (string || rbc_value_kind(module,code,value)==XRT_VALUE_MAP_STRING_I64 || rbc_value_kind(module,code,value)==XRT_VALUE_SET_I64) {
