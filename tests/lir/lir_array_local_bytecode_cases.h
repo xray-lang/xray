@@ -176,11 +176,11 @@ static void array_local_probe_root(void *context) {
         if (a.index==XR_LIR_ARRAY_OP_SET) set=a;
         if (a.index==XR_LIR_ARRAY_OP_PUSH) push=a;
     }
-    CHECK(make.count==2 && set.other && push.other && !activation->array_backings_ready &&
+    CHECK(make.count==2 && set.other && push.other && !activation->backings_ready &&
         !rbc_value_array_local_update(stack,activation,set));
     rbc_value_register(stack,activation,code->arguments[make.first])->bits=17;
     rbc_value_register(stack,activation,code->arguments[make.first+1])->bits=25;
-    CHECK(rbc_value_array_step(module,stack,activation,make,0)==XRT_MANAGED_OK && activation->array_backings_ready);
+    CHECK(rbc_value_array_step(module,stack,activation,make,0)==XRT_MANAGED_OK && activation->backings_ready);
     CHECK(rbc_value_binding_step(module,stack,activation,binding_new)==XRT_MANAGED_OK);
     CHECK(xrt_managed_slot_drop(activation->frame,code->homes->values[binding_new.source].first_owner)==XRT_MANAGED_OK);
     const uint32_t *args=code->arguments+set.first;
@@ -194,9 +194,9 @@ static void array_local_probe_root(void *context) {
     XrtManagedHeader *incoming=*from.owner; CHECK(incoming && atomic_load(&incoming->references)==1);
     const XrtBackingTypes *types=NULL; CHECK(xrt_native_values_backings(xrt_value_root_current(0),&types)==XRT_MANAGED_OK);
     if (!probe->mode) {
-        activation->array_backings_ready=false;
+        activation->backings_ready=false;
         CHECK(!rbc_value_array_local_update(stack,activation,set) && *from.owner==incoming && array_local_at(incoming,0)==17);
-        CHECK(rbc_value_array_step(module,stack,activation,set,0)==XRT_MANAGED_OK && activation->array_backings_ready &&
+        CHECK(rbc_value_array_step(module,stack,activation,set,0)==XRT_MANAGED_OK && activation->backings_ready &&
             *from.owner==incoming && array_local_at(incoming,0)==41);
         rbc_value_register(stack,activation,args[2])->bits=42;
     }
