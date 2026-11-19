@@ -57,7 +57,7 @@ typedef struct XrtValuePlanSpec {
     size_t capture_count;
     XrtValueSignatureSpec signature;
     XrtValueEntrySpec entry;
-    const XrtValuePlan *element; /* Cell's admitted payload description. */
+    const XrtValuePlan *element; /* Cell payload or the exact inline Array row. */
     XrtManagedLease code;
 } XrtValuePlanSpec;
 

@@ -38,6 +38,8 @@ XR_FUNC XrtManagedStatus xrt_array_backing_inline_bind(XrtBillingOwner *,
     const XrtValuePlan *element, XrtManagedOps **empty);
 XR_FUNC XrtManagedStatus xrt_array_backing_inline_create(XrtManagedFrame *, size_t,
     XrtManagedOps *, const void *rows, size_t count, size_t capacity);
+/* The State boundary accepts only the exact runtime element identity. */
+XR_FUNC bool xrt_array_backing_inline_matches(const XrtManagedHeader *, const XrtValuePlan *element);
 /* A synchronous row borrow. The caller keeps the Array live and may publish
  * an independent result through the ordinary owned inline destination. */
 XR_FUNC XrtManagedStatus xrt_array_backing_inline_at(const XrtArrayBacking *,

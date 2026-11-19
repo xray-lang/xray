@@ -15,6 +15,10 @@
 #include "xnative_value_plan.h"
 
 typedef struct XrtValueImagePlans XrtValueImagePlans;
+typedef struct XrtBoundInlineArray {
+    const XrtValuePlan *element;
+    XrtManagedOps *ops;
+} XrtBoundInlineArray;
 /* Descriptors remain immutable through binding. Code is an independent real
  * lease for the image's executable code and raw descriptions, never Layout,
  * State, Ops or runtime plans. Binding takes a temporary lease before provider
@@ -31,4 +35,8 @@ XR_FUNC uint32_t xrt_value_image_count(const XrtValueImagePlans *);
  * The one-based id belongs to this exact image, not another module's pool. */
 XR_FUNC XrtManagedStatus xrt_value_image_get(const XrtValueImagePlans *, uint32_t id,
     const XrtValuePlan **empty);
+/* Both references borrow the live image. Non-Array rows and the closed scalar
+ * families do not have an inline backing descriptor. */
+XR_FUNC XrtManagedStatus xrt_value_image_inline_array(const XrtValueImagePlans *, uint32_t id,
+    XrtBoundInlineArray *empty);
 #endif // XNATIVE_VALUE_IMAGE_H

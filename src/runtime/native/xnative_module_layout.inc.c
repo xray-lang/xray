@@ -85,7 +85,7 @@ static XrtManagedStatus module_layout_types(XrtModuleLayout *layout, const XrtVa
         if (status != XRT_MANAGED_OK) return status;
         type->depth = 1;
         type->supported = type->spec.kind <= XRT_VALUE_NULLABLE || type->spec.kind == XRT_VALUE_FUNCTION ||
-            type->spec.kind == XRT_VALUE_SET_I64;
+            type->spec.kind == XRT_VALUE_SET_I64 || type->spec.kind == XRT_VALUE_ARRAY_INLINE;
         const XrtValueImageType *raw = &image->types[i];
         if (xrt_value_kind_has_fields(type->spec.kind)) {
             for (uint32_t f = 0; f < raw->field_count; ++f)
@@ -183,4 +183,8 @@ XR_FUNCDEF XrtManagedStatus xrt_module_layout_plan(const XrtModuleLayout *layout
     if (!layout || !empty || *empty || !type || type > layout->view.type_count) return XRT_MANAGED_ARGUMENT;
     *empty = layout->types[type - 1].plan;
     return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_module_layout_inline_array(const XrtModuleLayout *layout,
+    uint32_t type, XrtBoundInlineArray *empty) {
+    return xrt_value_image_inline_array(layout ? layout->plans : NULL, type, empty);
 }
