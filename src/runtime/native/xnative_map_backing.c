@@ -430,13 +430,21 @@ XR_FUNCDEF XrtManagedStatus xrt_map_try_update_local(const XrtManagedFrameLocati
         stage->pending.value || stage->pending.allocation_bytes)
         return XRT_MANAGED_OK;
     unsigned char *payload = locations->payload;
-    XrtMapBacking *map = (XrtMapBacking *)*(XrtManagedHeader **)(payload + slot->owner_offset);
-    if (*(XrtManagedHeader **)(payload + stage->owner_offset) || !map) return XRT_MANAGED_OK;
+    if (*(XrtManagedHeader **)(payload + stage->owner_offset)) return XRT_MANAGED_OK;
 
-    /* No candidate is allocated or published here. The common in-place
-     * edit still holds the actual Root while a removed key can retire. */
-    XrtManagedSlotLocation domain = {.busy=locations->busy};
-    XrtManagedStatus status = xrt_managed_domain_enter(domain);
+    /* Use the real mutable domain from the Frame, even though the exported
+     * Frame locations expose their busy bit as read-only. */
+    XrtManagedSlotLocation domain;
+    XrtManagedStatus status = xrt_managed_slot_location(locations->frame, binding, &domain);
+    if (status != XRT_MANAGED_OK) return status;
+    if (domain.owner != (XrtManagedHeader **)(payload + slot->owner_offset) ||
+        domain.pending != &slot->pending || domain.busy != locations->busy)
+        return XRT_MANAGED_ARGUMENT;
+    XrtMapBacking *map = (XrtMapBacking *)*domain.owner;
+    if (!map) return XRT_MANAGED_OK;
+
+    /* The common in-place edit holds the Root through key retirement. */
+    status = xrt_managed_domain_enter(domain);
     if (status != XRT_MANAGED_OK) return status;
     bool complete = false, did_remove = false;
     status = xrt_map_backing_try_update(map, update, &complete, &did_remove);
