@@ -427,9 +427,13 @@ static void map_outcome_lifetime(void) {
     size_t local_reads=0, formal_reads=0;
     for (uint32_t f=0;f<view->function_count;++f) {
         const XrRbcValueCode *code=xr_rbc_module_value_code(view,f);
-        for (size_t n=0;code && n<code->access_count;++n) {
-            XrRbcValueAccess row=code->accesses[n];
-            if (row.operation!=XR_RBC_VALUE_MAP || row.index!=XR_LIR_MAP_OP_GET) continue;
+        const XrRbcFunction *physical=&view->functions[f];
+        for (size_t pc=0;code && pc<physical->code_count;++pc) {
+            uint32_t word=physical->code[pc];
+            if ((word&255)!=XR_RBC_MAP_READ) continue;
+            CHECK(!(word&0xff00u) && (word>>16)<code->access_count);
+            XrRbcValueAccess row=code->accesses[word>>16];
+            CHECK(row.operation==XR_RBC_VALUE_MAP && row.index==XR_LIR_MAP_OP_GET);
             const XrLirValueHome *receiver=&code->homes->values[code->arguments[row.first]];
             const XrLirValueHome *key_home=&code->homes->values[code->arguments[row.first+1]];
             if (receiver->parameter) {

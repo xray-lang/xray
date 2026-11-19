@@ -91,7 +91,8 @@
     X(STATE_READ, ABK8)                                                                            \
     X(STATE_WRITE, ABK8)                                                                            \
     X(AGGREGATE_ACCESS, ABX)                                                                        \
-    X(VALUE_ACCESS, ABX)
+    X(VALUE_ACCESS, ABX)                                                                           \
+    X(MAP_READ, ABX)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
