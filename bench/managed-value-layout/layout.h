@@ -129,7 +129,6 @@ static inline void xr_mvl_string_drop(XrMvlString *string) {
 }
 
 XR_FUNC XrMvlArray *xr_mvl_array_new(XrMvlDomain *domain);
-XR_FUNC XrMvlStatus xr_mvl_array_push_slow(XrMvlArray **binding, int64_t value);
 XR_FUNC XrMvlStatus xr_mvl_array_set_slow(XrMvlArray **binding, size_t index, int64_t value);
 XR_FUNC XrMvlString *xr_mvl_string_new(XrMvlDomain *domain, const char *bytes, size_t length);
 XR_FUNC XrMvlMap *xr_mvl_map_new(XrMvlDomain *domain);
@@ -140,15 +139,6 @@ XR_FUNC bool xr_mvl_pair_escape(XrMvlPairObject *value);
 XR_FUNC XrMvlPairObject *xr_mvl_pair_escaped(void);
 XR_FUNC void xr_mvl_pair_escape_clear(void);
 XR_FUNC bool xr_mvl_verify(void);
-
-static inline XrMvlStatus xr_mvl_array_push(XrMvlArray **binding, int64_t value) {
-    XrMvlArray *array = *binding;
-    if (xr_signed_rc_unique(&array->header.refs) && array->length < array->capacity) {
-        array->data[array->length++] = value;
-        return XR_MVL_OK;
-    }
-    return xr_mvl_array_push_slow(binding, value);
-}
 
 static inline XrMvlStatus xr_mvl_array_set(XrMvlArray **binding, size_t index, int64_t value) {
     XrMvlArray *array = *binding;

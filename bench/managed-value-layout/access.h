@@ -45,6 +45,22 @@ static inline XrMvlArrayAccess xr_mvl_array_access_start(XrMvlArray *current) {
 XR_FUNC XrMvlArrayWrite xr_mvl_array_access_write(XrMvlArrayAccess access,
     size_t index, int64_t value, bool append);
 
+/* Keep the caller binding out of the cold function. Publication remains
+ * local to the caller and always precedes retirement of the old reference. */
+static inline XrMvlStatus xr_mvl_array_push(XrMvlArray **binding, int64_t value) {
+    XrMvlArray *array = *binding;
+    if (xr_signed_rc_unique(&array->header.refs) && array->length < array->capacity) {
+        array->data[array->length++] = value;
+        return XR_MVL_OK;
+    }
+    XrMvlArrayWrite result = xr_mvl_array_access_write(xr_mvl_array_access_start(array), 0, value, true);
+    if (result.status == XR_MVL_OK) {
+        *binding = result.access.owner;
+        if (result.previous) xr_mvl_drop(&result.previous->header);
+    }
+    return result.status;
+}
+
 static inline XrMvlArrayWrite xr_mvl_array_access_push(XrMvlArrayAccess access, int64_t value) {
     if (!access.owner || !access.writable)
         return (XrMvlArrayWrite) {XR_MVL_INVALID_OWNER, access, NULL};
