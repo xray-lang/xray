@@ -54,8 +54,8 @@ _Static_assert(offsetof(XrMvlHeader, refs) == 0 && offsetof(XrMvlHeader, flags) 
 
 typedef struct {
     XrMvlHeader header;
-    int64_t *data;
     size_t length;
+    int64_t *data;
     size_t capacity;
 } XrMvlArray;
 
