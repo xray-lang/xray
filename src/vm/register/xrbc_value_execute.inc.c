@@ -1146,6 +1146,11 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
 #include "xrbc_value_array_region.inc.c"
 #include "xrbc_value_cell_execute.inc.c"
 #include "xrbc_value_slice_execute.inc.c"
+static uint32_t rbc_value_source(const XrRbcModule *module, const XrRbcStack *stack, size_t pc) {
+    const XrRbcFunction *function = &module->functions[stack->frames[stack->depth - 1].function];
+    return function->source_ids ? function->source_ids[pc - 1] : 0;
+}
+
 #include "xrbc_value_map_execute.inc.c"
 #include "xrbc_value_set_execute.inc.c"
 #include "xrbc_value_inline_execute.inc.c"
@@ -1236,4 +1241,20 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     if (activation->array_regions) rbc_value_array_region_after(activation,index);
     stack->frames[stack->depth-1].pc=pc;
     return XR_RBC_OK;
+}
+
+/* A borrowed literal only materializes its Frame keeper. The ordinary
+ * factory still owns first use and failure, including the source and cleanup. */
+static XR_NOINLINE XrRbcStatus xr_rbc_string_literal_borrow_step(const XrRbcModule *module,
+    XrRbcStack *stack, uint32_t index, size_t pc) {
+    RbcValueActivation *activation = stack->values ? stack->values->top : NULL;
+    if (activation && activation->depth == stack->depth && activation->owned_code &&
+        !activation->active_array_region && index < activation->code->access_count) {
+        const XrRbcValueAccess *access = &activation->code->accesses[index];
+        const XrLirValueHome *home = &activation->code->homes->values[access->result];
+        const XrtManagedHeader *cached = NULL;
+        if (rbc_value_read_literal_cache(activation, home, &cached) == XRT_MANAGED_OK && cached)
+            return XR_RBC_OK;
+    }
+    return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
 }

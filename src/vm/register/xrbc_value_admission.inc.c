@@ -371,16 +371,15 @@ static bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     const XrRbcFunction *function, size_t pc) {
     if (pc>=function->code_count) return false;
     uint32_t word=function->code[pc];
-    uint32_t op = word & 255u;
-    if ((op != XR_RBC_VALUE_ACCESS && op != XR_RBC_MAP_READ) || ((word >> 8) & 255)) return false;
+    XrRbcOp op = (XrRbcOp)(word & 255u);
+    if ((word >> 8) & 255) return false;
     const XrRbcValueCode *code = rbc_value_code(module,function);
     size_t index = word >> 16;
     if (!code || !code->accesses || index >= code->access_count || code->access_count > 65536 ||
         !code->locations || (code->homes && code->homes->value_count != code->value_count)) return false;
     XrRbcValueAccess a = code->accesses[index];
-    bool map_read = a.operation == XR_RBC_VALUE_MAP && xr_lir_map_reads_key(a.index);
-    if (map_read != (op == XR_RBC_MAP_READ)) return false;
-    if (map_read && (!xr_rbc_module_code_owner(module) ||
+    if (op != rbc_value_access_opcode(code, a)) return false;
+    if (op != XR_RBC_VALUE_ACCESS && (!xr_rbc_module_code_owner(module) ||
         (code->array_region_accesses && code->array_region_accesses[index].region))) return false;
     if (a.operation!=XR_RBC_VALUE_CALL && a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY &&
         a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_SET && a.operation!=XR_RBC_VALUE_MAP_LITERAL && a.operation!=XR_RBC_VALUE_RECORD_NEW &&

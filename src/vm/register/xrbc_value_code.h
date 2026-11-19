@@ -16,6 +16,7 @@
 #include "xrbc_value_homes.h"
 #include "xray_native_pod.h"
 #include "lir/xlir_array_region_binding.h"
+#include "lir/xlir_map.h"
 
 typedef enum XrRbcValueLocationKind {
     XR_RBC_VALUE_NOWHERE, XR_RBC_VALUE_REGISTER, XR_RBC_VALUE_SPILL, XR_RBC_VALUE_AGGREGATE
@@ -113,6 +114,16 @@ typedef struct XrRbcValueCode {
     bool array_region_runtime; /* Compile-time SET-window consumption; read-only facts stay ordinary. */
     const XrRbcArrayRegionAccess *array_region_accesses; /* Same ordinal/count as accesses, or absent. */
 } XrRbcValueCode;
+
+/* A leaf needs no call, return or owning destination. Both emission and
+ * admission select the word from the same admitted access description. */
+static inline XrRbcOp rbc_value_access_opcode(const XrRbcValueCode *code, XrRbcValueAccess access) {
+    if (access.operation == XR_RBC_VALUE_MAP && xr_lir_map_reads_key(access.index)) return XR_RBC_MAP_READ;
+    if (access.operation == XR_RBC_VALUE_STRING_LITERAL && code->homes && code->homes->values &&
+        access.result && access.result <= code->homes->value_count &&
+        code->homes->values[access.result].literal_cache_borrow) return XR_RBC_STRING_LITERAL_BORROW;
+    return XR_RBC_VALUE_ACCESS;
+}
 
 static inline uint32_t rbc_map_formal(const XrRbcValueCode *code, uint32_t value) {
     if (!code->homes || !value || value > code->homes->value_count) return UINT32_MAX;
