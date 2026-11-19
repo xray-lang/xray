@@ -214,8 +214,10 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
             if(xr_frontend_report_info(owner.failure.report,&report)&&report.roots) {
                 for(uint32_t i=0;i<report.roots;++i) {
                     XrFrontendRoot root={0};if(!xr_frontend_report_root(owner.failure.report,i,&root))break;
+                    // A generic frontend report can carry the message without a diagnostic code.
+                    int code = !root.code && status == XR_XIR_OUT_OF_MEMORY ? (int)status : (int)root.code;
                     XrJsonValue *item=make_diagnostic(root.primary.line,root.primary.column,
-                        root.primary.end_line,root.primary.end_column,"error",(int)root.code,root.message,"source");
+                        root.primary.end_line,root.primary.end_column,"error",code,root.message,"source");
                     XrJsonValue *related=xjson_new_array();
                     for(uint32_t j=0;j<root.labels;++j) {
                         XrFrontendLabel label={0};if(!xr_frontend_report_label(owner.failure.report,i,j,&label))break;
