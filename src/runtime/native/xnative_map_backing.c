@@ -60,16 +60,12 @@ static XrtManagedStatus map_snapshot_fill(XrtArrayBacking *array, const XrtMapBa
     array->length = count;
     return XRT_MANAGED_OK;
 }
-XR_FUNCDEF XrtManagedStatus xrt_map_backing_snapshot(XrtManagedFrame *frame, size_t slot,
+XR_FUNCDEF XrtManagedStatus xrt_map_backing_snapshot_held(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, const XrtMapBacking *map, bool keys) {
     XrtBackingArrayKind kind = keys ? XRT_BACKING_ARRAY_STRING : XRT_BACKING_ARRAY_I64;
     if (!map_shape(map) || !types || !types->arrays[kind]) return XRT_MANAGED_ARGUMENT;
     size_t stride = xrt_backing_array_stride(kind);
     if (map->length > (SIZE_MAX - sizeof(XrtArrayBacking)) / stride) return XRT_MANAGED_OVERFLOW;
-    /* The allocator may call out. Pin the entire source, including its order
-     * and keys, before any allocation. A reentrant writer must detach. */
-    XrtManagedHeader *pin = (XrtManagedHeader *)&map->managed;
-    if (!xrt_managed_retain(pin)) return XRT_MANAGED_REFCOUNT;
     XrtManagedHeader *pending = NULL;
     size_t bytes = sizeof(XrtArrayBacking) + map->length * stride;
     XrtManagedStatus status = xrt_managed_slot_prepare(frame, slot, types->arrays[kind], bytes, &pending);
@@ -80,7 +76,6 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_snapshot(XrtManagedFrame *frame, siz
             XR_CHECK(xrt_managed_slot_abort(frame, slot) == XRT_MANAGED_OK,
                 "a failed Map snapshot retires every pending key owner");
     }
-    xrt_managed_drop(pin);
     return status;
 }
 static XrtManagedStatus map_capacity(size_t current, size_t required, size_t *output) {
