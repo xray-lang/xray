@@ -501,7 +501,9 @@ static bool lir_home_map_chain_start(const XrLirModule *module, const XrLirFunct
 /* A sealed MOVE chain has one origin and at most one independent definition
  * per block. A certified binding round trip continues that same owner, even
  * if the mutation replaces its backing. COPY edges and unrelated origins do
- * not share homes. This leaves arbitrary user copies and releases in place. */
+ * not share homes. Explicit releases and checked operations keep their sites.
+ * The fixed Map payload contains only identity-free values, so failure drain
+ * can release its one live owner from the shared physical slot. */
 static bool lir_home_stationary_owners(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
     XrLirValueHome *values, size_t count) {
     const XrLirFunctionData *f = &c->input->functions[c->function.id - 1];

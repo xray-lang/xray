@@ -1,0 +1,13 @@
+fn fail(n:i64)->i64 {
+    var table={"x": 7}
+    const snapshot=table
+    var i=0
+    while (i<n) {
+        table.set("x", i+1)
+        i+=1
+    }
+    const missing=table["absent"]
+    return missing+snapshot["x"]
+}
+
+print(fail(3))
