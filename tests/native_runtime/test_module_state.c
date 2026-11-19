@@ -53,7 +53,7 @@ static const XrtValueImageType types[] = {
 };
 static const XrtValueImage image = {types,16,fields,5,NULL,0,owned,11,"leftrightscore",14};
 typedef struct Audit {
-    size_t leases, bytes, blocks, calls, observed;
+    size_t leases, bytes, blocks, calls, observed, fail_at;
     void *watched[2];
     const Pair *payload;
     Pair expected;
@@ -72,7 +72,8 @@ typedef struct Audit {
 static bool provider_retain(void *context) { ++((Audit *)context)->leases; return true; }
 static void provider_drop(void *context) { CHECK(((Audit *)context)->leases); --((Audit *)context)->leases; }
 static void *provider_allocate(void *context, size_t bytes) {
-    Audit *a = context; ++a->calls;
+    Audit *a = context;
+    if (++a->calls == a->fail_at) return NULL;
     void *memory = xr_malloc(bytes);
     if (memory) { a->bytes += bytes; ++a->blocks; }
     return memory;
@@ -144,10 +145,12 @@ static bool empty_slot(XrtManagedFrame *frame, size_t slot) {
 static void atomic_i64_group_span(void) {
     Audit audit = {0};
     XrtBillingOwner *billing = billing_new(&audit, SIZE_MAX);
-    XrtModuleLayout *layout = layout_new(billing, (uint32_t[]){2, 2}, 2, false);
+    XrtModuleLayout *layout = layout_new(billing, (uint32_t[]){2, 2, 2}, 3, false);
     XrtModuleState *state = NULL;
     OK(xrt_module_state_new(layout, billing, &state));
     OK(xrt_module_begin(state, 0));
+    const int64_t sentinel = 37;
+    OK(xrt_module_initialize(state, 2, &sentinel));
     struct Group { int64_t first, second; } group = {42, -17};
     _Static_assert(sizeof(group) == 2 * sizeof(int64_t), "I64 group has contiguous object bytes");
     _Static_assert(offsetof(struct Group, second) == sizeof(int64_t), "the second field follows the first");
@@ -159,6 +162,22 @@ static void atomic_i64_group_span(void) {
     BAD(xrt_module_reference(state, 1, &second));
     CHECK(!first && !second);
     same_bill(billing, before);
+
+    audit.fail_at = audit.calls + 1;
+    CHECK(xrt_module_initialize_i64_group(state, 0, 2, &group, sizeof(group)) == XRT_MANAGED_OOM);
+    CHECK(audit.calls == audit.fail_at);
+    same_bill(billing, before);
+    CHECK(xrt_billing_owner_stats(billing).allocations == before.allocations);
+    BAD(xrt_module_reference(state, 0, &first));
+    BAD(xrt_module_reference(state, 1, &second));
+    CHECK(!first && !second);
+    XrtModuleRef *published = NULL;
+    int64_t observed = 0;
+    OK(xrt_module_reference(state, 2, &published));
+    OK(xrt_module_copy(published, &observed));
+    CHECK(observed == sentinel);
+    BAD(xrt_module_ready(state, 0));
+
     OK(xrt_module_initialize_i64_group(state, 0, 2, &group, sizeof(group)));
     OK(xrt_module_ready(state, 0));
     OK(xrt_module_reference(state, 0, &first));
@@ -172,6 +191,7 @@ static void atomic_i64_group_span(void) {
     CHECK(audit.blocks == 1);
     xrt_billing_owner_drop(billing);
     CHECK(!audit.leases && !audit.bytes && !audit.blocks);
+    puts("I64 State group staging allocation failure left no publication and allowed retry");
 }
 static void atomic_record(void) {
     Audit meta = {0}, values = {0};
