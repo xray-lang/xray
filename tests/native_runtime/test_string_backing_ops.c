@@ -594,6 +594,52 @@ static void owned_append_growth_and_callbacks(void) {
     for (size_t i = 1; i < value->length; ++i) CHECK(value->bytes[i] == 'z');
     fixture_done(&f);
 }
+static void owned_append_default_growth(void) {
+    Fixture f = {0};
+    OK(xrt_billing_owner_new(NULL, SIZE_MAX, &f.billing));
+    XrtBillingStats initial = xrt_billing_owner_stats(f.billing);
+    OK(xrt_backing_types_init(f.billing, &f.types));
+    OK(xrt_managed_root_new(f.billing, &f.root));
+    OK(xrt_managed_frame_enter(f.root, 5, &f.frame));
+    XrtStringBacking *left = make(&f, 0, "\xc3\xa9");
+    XrtStringBacking *old = make(&f, 1, "old"), *suffix = make(&f, 3, "z");
+    XrtStringAppendOwned input = {0, 1, 2, suffix};
+    XrtBillingStats before = xrt_billing_owner_stats(f.billing);
+    xrt_billing_owner_fail_after(f.billing, 0);
+    STATUS(xrt_string_backing_append_owned(f.frame, &f.types, &input), XRT_MANAGED_OOM);
+    CHECK(string(&f, 0) == left && string(&f, 1) == old && !borrow(&f, 2));
+    text_is(left, "\xc3\xa9", 2, 1);
+    slot_is(&f, 1, "old");
+    XrtBillingStats failed = xrt_billing_owner_stats(f.billing);
+    CHECK(failed.bytes == before.bytes && failed.blocks == before.blocks && failed.allocations == before.allocations);
+
+    xrt_billing_owner_fail_after(f.billing, 1);
+    OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
+    CHECK(!borrow(&f, 0) && !borrow(&f, 2));
+    text_is(string(&f, 1), "\xc3\xa9z", 3, 2);
+    slot_is(&f, 3, "z");
+    CHECK(!xrt_billing_owner_stats(f.billing).fail_after);
+
+    xrt_billing_owner_fail_after(f.billing, SIZE_MAX);
+    left = make(&f, 0, "p");
+    input.suffix = left;
+    OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
+    CHECK(!borrow(&f, 0) && !borrow(&f, 2));
+    slot_is(&f, 1, "pp");
+    left = make(&f, 0, "q");
+    OK(xrt_string_backing_copy_into(f.frame, 4, left));
+    input.suffix = suffix;
+    OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
+    CHECK(!borrow(&f, 0) && !borrow(&f, 2));
+    slot_is(&f, 1, "qz");
+    slot_is(&f, 4, "q");
+
+    OK(xrt_managed_root_destroy(&f.root));
+    xrt_backing_types_drop(&f.types);
+    XrtBillingStats final = xrt_billing_owner_stats(f.billing);
+    CHECK(final.bytes == initial.bytes && final.blocks == initial.blocks);
+    xrt_billing_owner_drop(f.billing);
+}
 static XrtPlace binding(Fixture *fixture, size_t slot) {
     return (XrtPlace){.frame=fixture->frame,.slot=slot,.nulls=XRT_PLACE_NONNULL};
 }
@@ -733,6 +779,7 @@ int main(void) {
     owned_append_preflight();
     append_capacity_window();
     owned_append_growth_and_callbacks();
+    owned_append_default_growth();
     binding_append_aliases();
     binding_append_preflight();
     binding_append_growth_and_callbacks();
