@@ -419,29 +419,36 @@ def main():
                 # The initializer still owns its own reference. The append
                 # suffix only borrows the keeper inside the loop.
                 assert text.count('xrt_place_copy_replace(') == 1
-                assert '.suffix=(const XrtStringBacking *)(*(XrtManagedHeader **)' in text
                 observation = folder / 'literal-cache-observation'
                 observation.mkdir()
                 observer = folder / 'literal-cache-observer.c'
                 observer.write_text('#include "xray_native_values.h"\n#include <string.h>\n#include <stdlib.h>\n'
-                    'unsigned observed_literals,observed_empty,observed_suffix;\n'
+                    'unsigned observed_literals,observed_empty,observed_suffix,observed_appends;\n'
+                    'static size_t suffix_slot;\n'
                     'static void observe_literal(XrtManagedFrame *frame,size_t slot,const char *bytes,size_t length,uint32_t source){\n'
                     ' ++observed_literals;\n if(!length)++observed_empty;\n'
-                    ' else if(length==3 && !memcmp(bytes,"\\303\\251\\0",3))++observed_suffix;else abort();\n'
+                    ' else if(length==3 && !memcmp(bytes,"\\303\\251\\0",3)){++observed_suffix;suffix_slot=slot;}else abort();\n'
                     ' xrt_native_string_create(frame,slot,bytes,length,source);}\n'
+                    'static void observe_append(XrtManagedFrame *frame,const XrtStringAppendOwned *append,uint32_t source){\n'
+                    ' XrtManagedHeader *keeper=NULL;\n'
+                    ' if(xrt_managed_slot_borrow(frame,suffix_slot,&keeper)!=XRT_MANAGED_OK || !keeper ||\n'
+                    '    append->suffix!=(const XrtStringBacking *)keeper)abort();\n'
+                    ' ++observed_appends;xrt_native_string_append_owned(frame,append,source);}\n'
                     '#define xrt_native_string_create(frame,slot,bytes,length,source) observe_literal((frame),(slot),(bytes),(length),(source))\n'
+                    '#define xrt_native_string_append_owned observe_append\n'
                     f'#include "{generated.name}"\n'
-                    '#undef xrt_native_string_create\n', encoding='ascii')
+                    '#undef xrt_native_string_append_owned\n#undef xrt_native_string_create\n', encoding='ascii')
                 observed_main = folder / 'literal-cache-main.c'
                 observed_main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
-                    'extern unsigned observed_literals,observed_empty,observed_suffix;\nint main(void){\n'
-                    ' if(xray_lir_entry()!=0 || observed_literals!=5u || observed_empty!=3u || observed_suffix!=2u)return 1;\n'
-                    ' if(xray_lir_entry()!=0 || observed_literals!=10u || observed_empty!=6u || observed_suffix!=4u)return 2;\nreturn 0;}\n', encoding='ascii')
+                    'extern unsigned observed_literals,observed_empty,observed_suffix,observed_appends;\nint main(void){\n'
+                    ' if(xray_lir_entry()!=0 || observed_literals!=5u || observed_empty!=3u || observed_suffix!=2u || observed_appends<2u)return 1;\n'
+                    ' observed_appends=0;\n'
+                    ' if(xray_lir_entry()!=0 || observed_literals!=10u || observed_empty!=6u || observed_suffix!=4u || observed_appends<2u)return 2;\nreturn 0;}\n', encoding='ascii')
                 for optimization in ('Od', 'O2'):
                     compile_run(observation, observer, observed_main, optimization, expected * 2)
                 records.append({'case': name, 'result': 'FIRST_USE_PER_ACTIVATION',
                                 'entryRuns': 2, 'literalFactoryCalls': 10, 'emptyFactories': 6, 'suffixFactories': 4,
-                                'zeroIterationBodyCalls': 0})
+                                'zeroIterationBodyCalls': 0, 'borrowedSuffixMatchesKeeper': True})
             if name in frame_drops:
                 frame_observer(folder,generated,expected,frame_drops[name])
                 sink=folder/'standalone-read-only-output';sink.write_bytes(b'')
