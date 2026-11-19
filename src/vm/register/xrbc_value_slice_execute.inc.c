@@ -75,7 +75,7 @@ static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStac
         status=xrt_native_values_backings(xrt_value_root_current(source),&types);
         const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
         if (status==XRT_MANAGED_OK) status=xrt_array_slice_copy_create(activation->frame,home->temporary_first_owner,types,kind,&slice);
-        return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+        return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
     }
     XrRbcRegister *output=rbc_value_register(stack,activation,access.result);
     if (!output) return XRT_MANAGED_ARGUMENT;

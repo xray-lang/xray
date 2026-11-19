@@ -19,7 +19,7 @@ static XrtManagedStatus rbc_value_set_step(const XrRbcModule *module,XrRbcStack 
         if (access.count) return XRT_MANAGED_ARGUMENT;
         const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
         XrtManagedStatus status=xrt_set_backing_create(activation->frame,home->temporary_first_owner,types,NULL,0);
-        return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
+        return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
     }
     if (mutate) {
         XrtExternalOwner external; XrtPlace binding;
@@ -48,7 +48,7 @@ static XrtManagedStatus rbc_value_set_step(const XrRbcModule *module,XrRbcStack 
     if (access.index==XR_LIR_SET_DISPLAY) {
         const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
         xrt_native_set_display(activation->frame,home->temporary_first_owner,&set->managed,source);
-        return rbc_value_array_publish(activation,access.result);
+        return rbc_value_publish_leaf(activation,access.result);
     }
     XrRbcRegister *result=rbc_value_register(stack,activation,access.result);
     if (!result) return XRT_MANAGED_ARGUMENT;

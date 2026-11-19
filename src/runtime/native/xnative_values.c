@@ -203,6 +203,35 @@ XRAY_API const void *xrt_native_array_inline_at(const XrtManagedHeader *owner, c
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
     return row;
 }
+static XrtBoundClass native_class(const XrtValueImage *image, uint32_t type, uint32_t source) {
+    struct XrtNativeValues *values = native_values(source);
+    XrtBoundClass binding = {0};
+    XrtManagedStatus status;
+    if (values->state && values->state_image == image)
+        status = xrt_module_state_class(values->state, type, &binding);
+    else {
+        const XrtValueImagePlans *plans = NULL;
+        status = native_image_plans(values, image, (XrtManagedLease){0}, &plans);
+        if (status == XRT_MANAGED_OK) status = xrt_value_image_class(plans, type, &binding);
+    }
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+    return binding;
+}
+XRAY_API void xrt_native_class_create(XrtManagedFrame *frame, size_t slot, const XrtValueImage *image,
+    uint32_t type, const void *row, uint32_t source) {
+    XrtBoundClass binding = native_class(image,type,source);
+    XrtManagedStatus status = xrt_class_create(frame,slot,binding.ops,row);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+}
+XRAY_API const void *xrt_native_class_field(const XrtManagedHeader *owner, const XrtValueImage *image,
+    uint32_t type, uint32_t field, uint32_t source) {
+    XrtBoundClass binding = native_class(image,type,source);
+    const XrtValuePlan *field_type = NULL;
+    const void *bytes = NULL;
+    XrtManagedStatus status = xrt_class_field_borrow(owner,binding.plan,field,&field_type,&bytes);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+    return bytes;
+}
 static XrtManagedStatus native_environment_type(struct XrtNativeValues *values,
     const XrtValuePlan *plan, const XrtCaptureType **output) {
     NativeEnvironmentType *type = values->environments;

@@ -315,10 +315,10 @@ static bool rbc_requires_typed_call(const XrRbcModule *module,uint32_t function)
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     if (!code || !code->homes || !image) return false;
     XrtValueKind result = rbc_result_value_kind(module, function);
-    if (result == XRT_VALUE_FUNCTION || result == XRT_VALUE_ARRAY_INLINE) return true;
+    if (result == XRT_VALUE_FUNCTION || result == XRT_VALUE_ARRAY_INLINE || result == XRT_VALUE_CLASS) return true;
     for (uint32_t p=0;p<code->parameter_count;++p) {
         XrtValueKind kind = rbc_formal_value_kind(code, image, p);
-        if (kind == XRT_VALUE_FUNCTION || kind == XRT_VALUE_ARRAY_INLINE) return true;
+        if (kind == XRT_VALUE_FUNCTION || kind == XRT_VALUE_ARRAY_INLINE || kind == XRT_VALUE_CLASS) return true;
     }
     return false;
 }

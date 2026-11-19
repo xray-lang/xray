@@ -350,14 +350,15 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
                 module->natives[index] == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u) >= registers)
             return false;
         break;
-    case XR_RBC_RET:
-        return !function->callable && !function->aggregate_result_type && a < registers && !(word >> 16) &&
-            rbc_result_value_kind(module, (uint32_t)(function - module->functions)) != XRT_VALUE_ARRAY_INLINE &&
+    case XR_RBC_RET: case XR_RBC_RET0: {
+        XrtValueKind kind=rbc_result_value_kind(module,(uint32_t)(function-module->functions));
+        if (function->callable || function->aggregate_result_type ||
+            kind==XRT_VALUE_ARRAY_INLINE || kind==XRT_VALUE_CLASS) return false;
+        if (op==XR_RBC_RET0) return word==XR_RBC_RET0;
+        return a < registers && !(word >> 16) &&
             (function->result_kind == XR_RBC_BITS || function->result_kind == XR_RBC_SLICE_I64 ||
                 function->result_kind == XR_RBC_BOXED || function->result_kind == XR_RBC_STRING);
-    case XR_RBC_RET0:
-        return !function->callable && !function->aggregate_result_type && word == XR_RBC_RET0 &&
-            rbc_result_value_kind(module, (uint32_t)(function - module->functions)) != XRT_VALUE_ARRAY_INLINE;
+    }
     default:
         return false;
     }
@@ -553,8 +554,9 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
     const XrRbcCodeOwner *owner=xr_rbc_code_owner_borrow((XrtManagedLease){module->code_lease.owner,
         module->code_lease.retain,module->code_lease.release});
     bool function_result=function->result_kind==XR_RBC_FUNCTION;
+    XrtValueKind result_kind=rbc_result_value_kind(module,entry);
     if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_BOXED ||
-        rbc_result_value_kind(module, entry) == XRT_VALUE_ARRAY_INLINE ||
+        result_kind==XRT_VALUE_ARRAY_INLINE || result_kind==XRT_VALUE_CLASS ||
         (!owned && function->capture_count) || function->state_capture ||
         function->aggregate_parameter_count || (inject_state && !function->parameter_count) ||
         (inline_result && (function->aggregate_result_type || function->result_kind != XR_RBC_BITS ||
@@ -568,8 +570,9 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
          rbc_register_kind(function, function->parameter_count - 1) == XR_RBC_STATE)) return XR_RBC_INVALID;
     for (size_t p = 0; p < argument_count; ++p) {
         uint32_t parameter = (uint32_t)(captures + p);
+        XrtValueKind kind = rbc_formal_value_kind(value_code, image, parameter);
         if ((function->register_kinds && function->register_kinds[parameter] != XR_RBC_BITS) ||
-            rbc_formal_value_kind(value_code, image, parameter) == XRT_VALUE_ARRAY_INLINE) return XR_RBC_INVALID;
+            kind == XRT_VALUE_ARRAY_INLINE || kind == XRT_VALUE_CLASS) return XR_RBC_INVALID;
     }
     if (function->callable) {
         XrRbcCallableType type = module->callable_types[function->callable - 1];

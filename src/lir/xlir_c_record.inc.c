@@ -12,6 +12,7 @@
  */
 static bool c_record_point(const XrLirInstructionView *v) {
     return v->op == XR_LIR_RECORD_NEW || v->op == XR_LIR_RECORD_FIELD ||
+        v->op == XR_LIR_CLASS_NEW || v->op == XR_LIR_CLASS_FIELD ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
 }
 static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
@@ -21,17 +22,40 @@ static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         if (owned) { c_values_replace_begin(c, destination, source); c_text(c, "NULL"); c_values_replace_end(c, source); }
         return;
     }
-    if (v->op == XR_LIR_RECORD_NEW) {
-        c_format(c, "    { const %s input = {", c_type(c, v->type));
+    bool class_new = v->op == XR_LIR_CLASS_NEW;
+    if (class_new || v->op == XR_LIR_RECORD_NEW) {
+        XrLirType row = v->type;
+        if (class_new) XR_CHECK(xr_lir_class_payload(c->request->module, v->type, &row),
+            "verified class creation has a complete nominal payload");
+        c_format(c, "    { const %s input = {", c_type(c, row));
         if (!v->operand_count) c_text(c, "0");
         for (uint32_t a = 0; a < v->operand_count && c_request_poll(c); ++a) {
             if (a) c_text(c, ", ");
             c_value(c, v->operands[a]);
         }
         c_text(c, "};\n");
-        if (owned) { c_values_replace_begin(c, destination, source); c_text(c, "&input"); c_values_replace_end(c, source); }
-        else c_format(c, "    v%" PRIu32 " = input;\n", destination);
+        if (class_new) {
+            c_values_ensure(c, source);
+            const XrLirValueHome *home = &c->homes->values[destination];
+            c_format(c, "    xrt_native_class_create(xrl_frame, %zu, &xrl_value_image, UINT32_C(%" PRIu32
+                "), &input, UINT32_C(%" PRIu32 "));\n", home->temporary_first_owner, home->type, source);
+            c_values_publish_leaf(c, destination, source);
+        } else if (owned) {
+            c_values_replace_begin(c, destination, source); c_text(c, "&input"); c_values_replace_end(c, source);
+        } else c_format(c, "    v%" PRIu32 " = input;\n", destination);
         c_text(c, "    }\n"); return;
+    }
+    if (v->op == XR_LIR_CLASS_FIELD) {
+        if (owned) c_values_ensure(c, source);
+        const XrLirValueHome *object = &c->homes->values[v->operands[0]];
+        c_text(c, "    { const void *field = xrt_native_class_field("); c_value(c, v->operands[0]);
+        c_format(c, ", &xrl_value_image, UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu64 "), UINT32_C(%" PRIu32 "));\n",
+            object->type, v->bits, source);
+        if (owned) {
+            c_values_replace_begin(c, destination, source); c_text(c, "field"); c_values_replace_end(c, source);
+        } else c_format(c, "    memcpy(&v%" PRIu32 ", field, sizeof(v%" PRIu32 "));\n", destination, destination);
+        c_text(c, "    }\n");
+        return;
     }
     if (owned) { c_values_replace_begin(c, destination, source); c_text(c, "&"); }
     else c_format(c, "    v%" PRIu32 " = ", destination);

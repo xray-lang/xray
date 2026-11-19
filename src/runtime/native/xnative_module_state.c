@@ -91,6 +91,9 @@ XR_FUNCDEF XrtManagedStatus xrt_module_state_inline_array(const XrtModuleState *
     uint32_t type, XrtBoundInlineArray *empty) {
     return xrt_module_layout_inline_array(state ? state->layout : NULL, type, empty);
 }
+XR_FUNCDEF XrtManagedStatus xrt_module_state_class(const XrtModuleState *state, uint32_t type, XrtBoundClass *empty) {
+    return xrt_module_layout_class(state ? state->layout : NULL, type, empty);
+}
 static void *module_payload(const XrtModuleState *state, uint32_t slot) {
     return state->payload + state->layout->view.slots[slot].offset;
 }
@@ -181,6 +184,10 @@ static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType 
         } else if (spec->kind == XRT_VALUE_ARRAY_INLINE) {
             XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
             if (!xrt_array_backing_inline_matches(owner, spec->element)) return XRT_MANAGED_ARGUMENT;
+        } else if (spec->kind == XRT_VALUE_CLASS) {
+            XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
+            if (top != &state->validation[0] || !xrt_class_backing_matches(owner, type->plan))
+                return XRT_MANAGED_ARGUMENT;
         } else if (spec->kind == XRT_VALUE_FUNCTION) {
             XrtManagedStatus status = module_function_storage(top->value);
             if (status != XRT_MANAGED_OK) return status;

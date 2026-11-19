@@ -149,10 +149,12 @@ static void c_values_prepare(LirC *c) {
     if (!projected || c->status != XR_LIR_C_OK) { xr_compile_resources_free(flags); return; }
     /* Ownership events cover the complete immutable final module, so its exact
      * Record/Nullable facts include definitions outside the selected closure. */
+    bool class_values = false;
     for (uint32_t i = 0; i < c->constructed_count; ++i) {
         XrLirTypeKind kind = c->constructed_types[i].shape.kind;
-        if (kind == XR_LIR_TYPE_RECORD || kind == XR_LIR_TYPE_TUPLE || kind == XR_LIR_TYPE_NULLABLE)
-            needed[XR_LIR_TYPE_COUNT + i] = 1;
+        if (kind == XR_LIR_TYPE_RECORD || kind == XR_LIR_TYPE_TUPLE || kind == XR_LIR_TYPE_NULLABLE ||
+            kind == XR_LIR_TYPE_CLASS) needed[XR_LIR_TYPE_COUNT + i] = 1;
+        class_values |= kind == XR_LIR_TYPE_CLASS;
     }
     size_t count = 0;
     for (size_t t = 1; t < type_count + arrays; ++t) count += needed[t] != 0;
@@ -187,7 +189,7 @@ static void c_values_prepare(LirC *c) {
     memory = NULL;
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, 1, sizeof(*c->value_types), &memory))) return;
     c->value_types = memory; c_value_types_prepare(c, c->value_layouts, c->value_types);
-    if ((c->state || environment_values || module->inline_array_count || c->tuple_displays) && c_request_poll(c)) {
+    if ((c->state || environment_values || module->inline_array_count || c->tuple_displays || class_values) && c_request_poll(c)) {
         c_value_layout_status(c, xr_lir_value_image_create(c->value_layouts, c->value_billing, &c->value_image));
         if (c->state && c_request_poll(c)) c_value_layout_status(c, xr_lir_state_projection_create(module, c->value_layouts,
             xr_lir_value_image_view(c->value_image), c->value_billing, &c->state_projection));

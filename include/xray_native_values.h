@@ -36,6 +36,13 @@ XRAY_API XrtManagedRoot *xrt_native_managed_root(uint32_t source_id);
 #else
 _Noreturn XRAY_API void xrt_native_managed_failure(XrtManagedStatus, uint32_t source_id);
 #endif
+/* Generated callers supply an exact type id from their own receiving image.
+ * The constructor row is complete and borrowed until the call returns. A
+ * field read is a synchronous borrow under the caller's live class owner. */
+XRAY_API void xrt_native_class_create(XrtManagedFrame *, size_t slot,
+    const XrtValueImage *, uint32_t type, const void *row, uint32_t source_id);
+XRAY_API const void *xrt_native_class_field(const XrtManagedHeader *, const XrtValueImage *,
+    uint32_t type, uint32_t field, uint32_t source_id);
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

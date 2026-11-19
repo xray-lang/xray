@@ -23,13 +23,21 @@ static bool rbc_value_inline_operand(const XrRbcModule *module,const XrRbcValueC
 }
 static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
-    bool create=a.operation==XR_RBC_VALUE_RECORD_NEW || a.operation==XR_RBC_VALUE_NULLABLE_NONE || a.operation==XR_RBC_VALUE_NULLABLE_SOME;
+    bool class_new=a.operation==XR_RBC_VALUE_CLASS_NEW, class_field=a.operation==XR_RBC_VALUE_CLASS_FIELD;
+    bool create=class_new || a.operation==XR_RBC_VALUE_RECORD_NEW ||
+        a.operation==XR_RBC_VALUE_NULLABLE_NONE || a.operation==XR_RBC_VALUE_NULLABLE_SOME;
     uint32_t value=create ? a.result : a.source;
     if (!rbc_value_inline(module,code,value,create)) return false;
     const XrLirValueHome *home=rbc_value_home(code,value);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     const XrtValueImageType *type=&image->types[home->type-1];
-    if (a.operation==XR_RBC_VALUE_RECORD_NEW) {
+    if (class_new || class_field) {
+        if (!xr_rbc_module_code_owner(module) || type->kind!=XRT_VALUE_CLASS ||
+            !type->element || type->element>=home->type) return false;
+        type=&image->types[type->element-1];
+        if (type->kind!=XRT_VALUE_RECORD) return false;
+    }
+    if (class_new || a.operation==XR_RBC_VALUE_RECORD_NEW) {
         if (a.source || a.other || a.window || !xrt_value_kind_has_fields(type->kind) || a.count!=type->field_count ||
             a.first>code->argument_count || a.count>code->argument_count-a.first ||
             (a.count && (!code->arguments || !image->slots)) || type->first_field>image->slot_count ||
@@ -38,7 +46,7 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
             if (!rbc_value_inline_operand(module,code,function,code->arguments[a.first+p],image->slots[type->first_field+p].type,false)) return false;
         return true;
     }
-    if (a.operation==XR_RBC_VALUE_RECORD_FIELD)
+    if (class_field || a.operation==XR_RBC_VALUE_RECORD_FIELD)
         return !a.other && xrt_value_kind_has_fields(type->kind) && a.index<type->field_count && image->slots &&
             type->first_field<=image->slot_count && type->field_count<=image->slot_count-type->first_field &&
             rbc_value_inline_operand(module,code,function,a.result,image->slots[type->first_field+a.index].type,true);
