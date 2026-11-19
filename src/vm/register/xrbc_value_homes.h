@@ -60,4 +60,15 @@ static inline uint32_t rbc_local_borrow_slot(const XrLirValueHomes *homes, uint3
         !homes->frame.owned_offsets || homes->frame.owned_offsets[slot] != offset) return 0;
     return (uint32_t)slot + 1;
 }
+/* The binding's type and write authority are checked separately. Only a
+ * local receiving Frame provides a one-based slot for the in-place edit. */
+static inline uint32_t rbc_local_map_binding_slot(const XrLirValueHomes *homes, uint32_t value) {
+    if (!homes || !homes->bindings || !value || value > homes->value_count) return 0;
+    const XrLirHomeBinding *binding = &homes->bindings[value];
+    size_t slot = binding->first_owner;
+    if (binding->kind != XR_LIR_HOME_BINDING_LOCAL || slot >= UINT32_MAX ||
+        slot >= homes->frame.slot_count || !homes->frame.owned_offsets ||
+        homes->frame.owned_offsets[slot] != binding->offset) return 0;
+    return (uint32_t)slot + 1;
+}
 #endif // XRBC_VALUE_HOMES_H

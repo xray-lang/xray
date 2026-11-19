@@ -497,6 +497,10 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
             }
             if (access.window==UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"container mutator lost its common pending workspace");
             if (!map && !rbc_lir_array_local_metadata(c,&access,i->operands[0])) return false;
+            if (map == XR_LIR_MAP_OP_SET || map == XR_LIR_MAP_OP_REMOVE) {
+                access.source = rbc_local_map_binding_slot(c->homes, i->operands[0]);
+                if (access.source) access.other = rbc_local_borrow_slot(c->homes, i->operands[1]);
+            }
         } else if (map && xr_lir_map_reads_key(map) && i->operand_count == 2) {
             access.source = rbc_local_borrow_slot(c->homes, i->operands[0]);
             access.other = rbc_local_borrow_slot(c->homes, i->operands[1]);

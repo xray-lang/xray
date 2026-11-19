@@ -52,9 +52,9 @@ static bool rbc_value_map_access_valid(const XrRbcModule *module,const XrRbcValu
     const XrRbcFunction *function,XrRbcValueAccess a) {
     if (a.first>code->argument_count || a.count>code->argument_count-a.first ||
         (a.count && !code->arguments) || a.index<XR_LIR_MAP_OP_NEW || a.index>XR_LIR_MAP_OP_CLEAR) return false;
+    bool keyed_edit = a.index == XR_LIR_MAP_OP_SET || a.index == XR_LIR_MAP_OP_REMOVE;
     if ((a.source || a.other) && (!xr_rbc_module_code_owner(module) ||
-        !xr_lir_map_reads_key(a.index)))
-        return false;
+        (!xr_lir_map_reads_key(a.index) && !keyed_edit))) return false;
     for (uint32_t p=0;p<a.count;++p) if (!rbc_value_id(code,code->arguments[a.first+p])) return false;
     const uint32_t *args=a.count ? code->arguments+a.first : NULL;
     if (a.index==XR_LIR_MAP_OP_NEW) {
@@ -71,6 +71,10 @@ static bool rbc_value_map_access_valid(const XrRbcModule *module,const XrRbcValu
             (a.index==XR_LIR_MAP_OP_REMOVE ? !rbc_value_scalar(code,function,a.result,XR_RBC_BITS) : !!a.result)) return false;
         const XrLirHomeBinding *binding=rbc_value_binding(code,args[0]);
         const XrLirHomeWorkspace *workspace=&code->homes->workspaces[a.window];
+        uint32_t slot = keyed_edit && xr_rbc_module_code_owner(module) ?
+            rbc_local_map_binding_slot(code->homes, args[0]) : 0;
+        if (a.source != slot || a.other != (slot ? rbc_local_borrow_slot(code->homes, args[1]) : 0))
+            return false;
         return workspace->type==binding->type && workspace->first_owner<code->homes->frame.slot_count &&
             code->homes->frame.owned_offsets && code->homes->frame.owned_offsets[workspace->first_owner]==workspace->offset &&
             (count==1 || rbc_value_string_borrow_operand(module,code,args[1])) &&
