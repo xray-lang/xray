@@ -1,64 +1,13 @@
-name: Native Array artifact replay
+name: macOS Array binding comparison
 
 on:
   workflow_dispatch:
-    inputs:
-      compare_layout:
-        description: Compare the Array slow-path owner return against its parent
-        type: boolean
-        default: false
-      append_cost:
-        description: Isolate uniqueness and length publication in ordinary Array append
-        type: boolean
-        default: false
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  replay:
-    if: '!inputs.compare_layout && !inputs.append_cost'
-    name: macOS arm64 Array replay (${{ matrix.replica }})
-    runs-on: macos-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        replica: [1, 2]
-    env:
-      PYTHONUTF8: '1'
-      PYTHONDONTWRITEBYTECODE: '1'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ github.token }}
-          run-id: 44484191076
-          name: current-macos-latest-a2d0a2db97d81dedf167567d8ec6354e63e7adb6
-          path: replay-inputs/snapshot
-      - uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ github.token }}
-          run-id: 44485868575
-          name: current-macos-latest-0a7645d9fb9aa563c7c6966abc2dae340f986d21
-          path: replay-inputs/display
-      - name: Replay the exact native binaries against the shared C reference
-        run: python scripts/diagnostics/replay_macos_array.py replay-inputs replay-results
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: array-replay-macos-${{ matrix.replica }}
-          path: replay-results/
-
-
   compare-layout:
-    if: inputs.compare_layout
     name: macOS arm64 standalone Array comparison (${{ matrix.replica }})
     runs-on: macos-latest
     timeout-minutes: 10
@@ -99,32 +48,3 @@ jobs:
             ${{ runner.temp }}/parent-build/
             ${{ runner.temp }}/candidate-build/
             ${{ runner.temp }}/layout-results/
-
-  measure-append-cost:
-    if: inputs.append_cost
-    name: macOS arm64 Array per-element costs (${{ matrix.replica }})
-    runs-on: macos-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        replica: [1, 2]
-    env:
-      PYTHONUTF8: '1'
-      PYTHONDONTWRITEBYTECODE: '1'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Measure all four builds with matched growth
-        run: >-
-          python scripts/diagnostics/measure_array_append_cost.py
-          --cc "$(command -v clang)" --work "$RUNNER_TEMP/append-cost"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: array-append-cost-macos-${{ matrix.replica }}
-          path: ${{ runner.temp }}/append-cost/
