@@ -947,6 +947,7 @@ int main(int argc, char **argv) {
     map_receiving_owners();
     map_state_receiver();
     tuple_receiving_owners();
+    tuple_root_result();
     tuple_group_admission();
     callable_owned_factory_cases();
     captured_cell_frame_extent();

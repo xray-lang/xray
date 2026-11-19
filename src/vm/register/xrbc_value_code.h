@@ -18,6 +18,9 @@
 #include "lir/xlir_array_region_binding.h"
 #include "lir/xlir_map.h"
 
+/* Check a typed word after its module and home directories are available. */
+XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *, const XrRbcFunction *, size_t pc);
+
 typedef enum XrRbcValueLocationKind {
     XR_RBC_VALUE_NOWHERE, XR_RBC_VALUE_REGISTER, XR_RBC_VALUE_SPILL, XR_RBC_VALUE_AGGREGATE
 } XrRbcValueLocationKind;
