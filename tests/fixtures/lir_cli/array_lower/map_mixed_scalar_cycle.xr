@@ -1,0 +1,20 @@
+fn mixed(n:i64)->i64 {
+    const table={"x": 3}
+    const key="x"
+    var left=1
+    var right=2
+    var sum=0
+    var i=0
+    while (i<n) {
+        sum+=table[key]+left
+        const previous=left
+        left=right
+        right=previous
+        i+=1
+    }
+    return sum*10+left
+}
+
+print(mixed(0))
+print(mixed(5))
+print(mixed(6))
