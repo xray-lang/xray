@@ -213,6 +213,7 @@ def main() -> None:
         if status or out or err:
             failures.append((name, "Source callback borrowing control", out, err))
     rejected_sources = {
+        "reject_callable_inline_array_mismatch": b"callback argument requires exact shape and an admitted advertised bound",
         "ref_global_alias": b"E0382: ref of module binding `shared` conflicts with access by `update` via `inspect`",
         "string_append_ref": b"E0382: ref of module binding `published` conflicts with access by `actual` via `actual`",
         "reject_display_nullable_fixed": b"value has no admitted builtin display",

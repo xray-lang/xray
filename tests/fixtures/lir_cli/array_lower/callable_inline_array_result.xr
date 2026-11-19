@@ -1,8 +1,10 @@
-fn apply(callback: fn(i64) -> Array<(string, i64)>, value: i64) -> i64 {
-    const rows = callback(value)
+fn apply(callback: fn() -> Array<(string, i64)>) -> i64 {
+    const rows = callback()
     return rows[0].1
 }
 
-print(apply(fn(value: i64) -> Array<(string, i64)> {
-    return [("item-${value}", value)]
-}, 42))
+fn exercise(value: i64) {
+    print(apply(fn() -> Array<(string, i64)> { return [("item-${value}", value)] }))
+}
+
+exercise(42)

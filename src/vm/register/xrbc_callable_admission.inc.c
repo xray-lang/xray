@@ -117,6 +117,12 @@ static bool rbc_callable_image_valid(const XrRbcModule *module) {
     return true;
 }
 
+static bool rbc_callable_needs_homes(XrRbcCallableType signature) {
+    if (signature.result.kind == XR_RBC_CALLABLE_HOME) return true;
+    for (uint32_t p = 0; p < signature.parameter_count; ++p)
+        if (signature.parameters[p].value.kind == XR_RBC_CALLABLE_HOME) return true;
+    return false;
+}
 static bool rbc_callable_signatures_valid(const XrRbcModule *m) {
     if (m->callable_type_count>UINT32_MAX || (!m->callable_types && m->callable_type_count)) return false;
     if (m->callable_results ? m->callable_result_count!=m->function_count : m->callable_result_count!=0) return false;
@@ -127,6 +133,7 @@ static bool rbc_callable_signatures_valid(const XrRbcModule *m) {
         XrRbcCallableType type = m->callable_types[t];
         if (type.parameter_count > 65536 || (type.parameter_count && !type.parameters) ||
             (type.flags & ~3u) || ((type.flags & 2u) && !(type.flags & 1u)) ||
+            ((type.flags & 2u) && rbc_callable_needs_homes(type)) ||
             !rbc_callable_value_valid(m, type.result, t)) return false;
         for (uint32_t p = 0; p < type.parameter_count; ++p) {
             XrRbcCallableParameter parameter = type.parameters[p];
@@ -145,12 +152,6 @@ static bool rbc_callable_home_parameter(const XrRbcValueCode *code, uint32_t par
     const XrLirValueHome *home = &code->homes->values[id];
     return home->type == type && home->parameter == parameter + 1 && home->owner_count == 1 &&
         home->size == sizeof(XrtManagedHeader *) && code->locations[id].kind == XR_RBC_VALUE_NOWHERE;
-}
-static bool rbc_callable_needs_homes(XrRbcCallableType signature) {
-    if (signature.result.kind == XR_RBC_CALLABLE_HOME) return true;
-    for (uint32_t p = 0; p < signature.parameter_count; ++p)
-        if (signature.parameters[p].value.kind == XR_RBC_CALLABLE_HOME) return true;
-    return false;
 }
 static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     if (!rbc_callable_signatures_valid(m)) return false;
