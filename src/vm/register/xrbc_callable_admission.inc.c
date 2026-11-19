@@ -301,6 +301,15 @@ static XrtValueKind rbc_result_value_kind(const XrRbcModule *module, uint32_t fu
         image->types[type - 1].kind : XRT_VALUE_UNIT;
 }
 
+static XrtValueKind rbc_formal_value_kind(const XrRbcValueCode *code, const XrtValueImage *image, uint32_t parameter) {
+    if (!code || !code->homes || !code->homes->values || !code->parameters ||
+        parameter >= code->parameter_count || !image || !image->types) return XRT_VALUE_UNIT;
+    uint32_t value = code->parameters[parameter];
+    if (!value || value > code->value_count || value > code->homes->value_count) return XRT_VALUE_UNIT;
+    uint32_t type = code->homes->values[value].type;
+    return type && type <= image->type_count ? image->types[type - 1].kind : XRT_VALUE_UNIT;
+}
+
 static bool rbc_requires_typed_call(const XrRbcModule *module,uint32_t function) {
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,function);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
@@ -308,9 +317,8 @@ static bool rbc_requires_typed_call(const XrRbcModule *module,uint32_t function)
     XrtValueKind result = rbc_result_value_kind(module, function);
     if (result == XRT_VALUE_FUNCTION || result == XRT_VALUE_ARRAY_INLINE) return true;
     for (uint32_t p=0;p<code->parameter_count;++p) {
-        uint32_t type=code->homes->values[code->parameters[p]].type;
-        if (type && (image->types[type-1].kind==XRT_VALUE_FUNCTION ||
-            image->types[type-1].kind==XRT_VALUE_ARRAY_INLINE)) return true;
+        XrtValueKind kind = rbc_formal_value_kind(code, image, p);
+        if (kind == XRT_VALUE_FUNCTION || kind == XRT_VALUE_ARRAY_INLINE) return true;
     }
     return false;
 }

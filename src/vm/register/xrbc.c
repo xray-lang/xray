@@ -564,8 +564,11 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
             image->types[value_code->homes->result_type-1].kind!=XRT_VALUE_FUNCTION)) ||
         (!inject_state && function->parameter_count &&
          rbc_register_kind(function, function->parameter_count - 1) == XR_RBC_STATE)) return XR_RBC_INVALID;
-    for (size_t p = 0; function->register_kinds && p < argument_count; ++p)
-        if (function->register_kinds[captures+p] != XR_RBC_BITS) return XR_RBC_INVALID;
+    for (size_t p = 0; p < argument_count; ++p) {
+        uint32_t parameter = (uint32_t)(captures + p);
+        if ((function->register_kinds && function->register_kinds[parameter] != XR_RBC_BITS) ||
+            rbc_formal_value_kind(value_code, image, parameter) == XRT_VALUE_ARRAY_INLINE) return XR_RBC_INVALID;
+    }
     if (function->callable) {
         XrRbcCallableType type = module->callable_types[function->callable - 1];
         if (rbc_callable_needs_homes(type)) return XR_RBC_INVALID;

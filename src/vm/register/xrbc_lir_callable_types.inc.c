@@ -37,32 +37,71 @@ static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram 
         return true;
     }
     if (!rbc_lir_callable_type(input, type)) return false;
-    *output = (XrRbcCallableValue){XR_RBC_CALLABLE_FUNCTION,
-        program->physical_callables[type - XR_LIR_TYPE_COUNT]};
+    if (!program->physical_callables) return false;
+    uint32_t ordinal = program->physical_callables[type - XR_LIR_TYPE_COUNT];
+    if (ordinal == UINT32_MAX) return false;
+    *output = (XrRbcCallableValue){XR_RBC_CALLABLE_FUNCTION, ordinal};
     return true;
 }
 
-static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input,
+static void rbc_lir_callable_select(const XrLirModule *input, XrLirType type, uint32_t *map) {
+    if (rbc_lir_callable_type(input, type)) map[type - XR_LIR_TYPE_COUNT] = 0;
+}
+
+static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input, const uint32_t *ids, uint32_t reachable,
     XrRbcProgram *program, const XrLirValueLayouts *layouts, XrRbcCompileDiagnostic *diagnostic) {
     uint32_t count = xr_lir_constructed_type_count(input), functions = 0;
-    for (uint32_t n = 0; n < count; ++n)
-        functions += rbc_lir_callable_type(input, XR_LIR_TYPE_COUNT + n);
-    if (!functions) return XR_RBC_COMPILE_OK;
-    if (sizeof(uint32_t) > SIZE_MAX / count || sizeof(XrRbcCallableType) > SIZE_MAX / functions)
+    if (!count) return XR_RBC_COMPILE_OK;
+    if (sizeof(uint32_t) > SIZE_MAX / count)
         return rbc_lir_error(diagnostic, XR_RBC_COMPILE_LIMIT,
             "invocation descriptors exceed address space", (XrLirSource){0});
-    program->physical_callables = xr_malloc((size_t)count * sizeof(*program->physical_callables));
-    XrRbcCallableType *types = xr_calloc(functions, sizeof(*types));
-    if (!program->physical_callables || !types) {
-        xr_free(types);
+    uint32_t *map = xr_malloc((size_t)count * sizeof(*map));
+    if (!map)
         return rbc_lir_error(diagnostic, XR_RBC_COMPILE_OUT_OF_MEMORY,
             "cannot receive invocation descriptors", (XrLirSource){0});
+    program->physical_callables = map;
+    for (uint32_t n = 0; n < count; ++n) map[n] = UINT32_MAX;
+
+    /* The common image includes the exact types used by typed values. Reachable
+     * scalar targets can also use a legacy descriptor without a value image. */
+    for (size_t n = 0; layouts && n < xr_lir_value_layouts_count(layouts); ++n) {
+        XrLirValueLayoutKey key;
+        const XrtValuePlan *plan = NULL;
+        if (xr_lir_value_layouts_at(layouts, n, &key, &plan) != XR_LIR_VALUE_LAYOUT_OK)
+            return rbc_lir_error(diagnostic, XR_RBC_COMPILE_INVALID,
+                "invocation descriptor lost its value image row", (XrLirSource){0});
+        if (!key.environment_function) rbc_lir_callable_select(input, key.type, map);
     }
+    for (uint32_t n = 0; n < reachable; ++n) {
+        XrLirClosureTarget target = {0};
+        if (xr_lir_closure_target_view(input, (XrLirFunction){input, ids[n]}, &target) == XR_LIR_OK)
+            rbc_lir_callable_select(input, target.callable, map);
+    }
+    /* Callable dependencies precede the receiving signature in the LIR pool. */
+    for (uint32_t n = count; n-- > 0;) {
+        if (map[n] == UINT32_MAX) continue;
+        XrLirCallableType signature;
+        if (xr_lir_callable_type_view(input, XR_LIR_TYPE_COUNT + n, &signature) != XR_LIR_OK)
+            return rbc_lir_error(diagnostic, XR_RBC_COMPILE_INVALID,
+                "invocation descriptor lost its signature", (XrLirSource){0});
+        rbc_lir_callable_select(input, signature.result, map);
+        for (uint32_t p = 0; p < signature.parameter_count; ++p)
+            rbc_lir_callable_select(input, signature.parameters[p].type, map);
+        ++functions;
+    }
+    if (!functions) return XR_RBC_COMPILE_OK;
+    if (sizeof(XrRbcCallableType) > SIZE_MAX / functions)
+        return rbc_lir_error(diagnostic, XR_RBC_COMPILE_LIMIT,
+            "invocation descriptors exceed address space", (XrLirSource){0});
+    XrRbcCallableType *types = xr_calloc(functions, sizeof(*types));
+    if (!types)
+        return rbc_lir_error(diagnostic, XR_RBC_COMPILE_OUT_OF_MEMORY,
+            "cannot receive invocation descriptors", (XrLirSource){0});
     program->module.callable_types = types;
     program->module.callable_type_count = functions;
     uint32_t index = 0;
     for (uint32_t n = 0; n < count; ++n)
-        program->physical_callables[n] = rbc_lir_callable_type(input, XR_LIR_TYPE_COUNT + n) ? index++ : UINT32_MAX;
+        if (map[n] != UINT32_MAX) map[n] = index++;
     for (uint32_t n = 0; n < count; ++n) {
         uint32_t ordinal = program->physical_callables[n];
         if (ordinal == UINT32_MAX) continue;
