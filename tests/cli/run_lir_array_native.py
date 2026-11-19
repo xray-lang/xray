@@ -48,7 +48,8 @@ def main() -> None:
              "view_copy_unused_parameter", "view_call_module_write", "panic_nullable_view", "string_append_values", "string_append_ref",
              "string_join", "string_append_loop", "string_append_assignment", "string_append_grouping",
              "string_append_invariant", "string_parameter_loop", "panic_nullable_string_append", "map_snapshots", "map_display",
-             "map_stationary_reads", "map_mixed_scalar_cycle", "map_local_forwarding", "map_key_mutation", "map_borrowed_literal_key",
+             "map_stationary_reads", "map_mixed_scalar_cycle", "map_local_forwarding", "map_edit_lifetime",
+             "map_key_mutation", "map_borrowed_literal_key",
              "set_values")
     unknown = sorted(set(args.case) - set(cases))
     if unknown:
@@ -151,10 +152,13 @@ def main() -> None:
         if name == "string_append_invariant":
             assert generated_text.count("xrt_native_string_append_window(") == 9
             assert generated_text.count("xrt_native_string_append_owned(") == 12
-        if name in ("map_local_forwarding", "panic_map_stationary_cleanup"):
-            assert generated_text.count("xrt_managed_frame_try_forward(") == 2
+        if name in ("map_local_forwarding", "panic_map_stationary_cleanup", "map_edit_lifetime"):
+            assert "xrt_managed_frame_try_forward(" not in generated_text
             assert "xrt_place_copy_replace(" in generated_text
             assert "xrt_place_edge_transfer(owners," not in generated_text
+            updates = re.findall(r"xrt_native_map_update_place\(\(XrtPlace\)\{\.frame=xrl_frame, \.slot=(\d+),",
+                                 generated_text)
+            assert len(updates) == (2 if name == "map_edit_lifetime" else 1) and len(set(updates)) == 1
         if name == "map_stationary_reads":
             readers = {function for function, body in re.findall(
                 r"^static int64_t xrl_f(\d+)\([^\n]*\) \{\n(.*?)^}", generated_text, re.MULTILINE | re.DOTALL

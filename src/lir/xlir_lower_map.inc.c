@@ -119,18 +119,7 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
             captured.payload == XR_LIR_MAP_STRING_I64;
         if (!mutation) good = lower_map_read(f, block, args[0], &args[0]);
         else if (receiver == XR_LIR_STATE_REF || captured_cell) good = lower_map_borrow(f, block, &args[0]);
-        else if (cell != UINT32_MAX) {
-            XrLirValue current = {0};
-            good = lower_map_read(f, block, args[0], &current);
-            XrLirInstruction create = {.op=XR_LIR_CELL_NEW, .type=XR_LIR_MAP_STRING_I64_CELL,
-                .operands=&current, .operand_count=1, .source=lower_source(c)};
-            if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &create, &args[0]));
-            if (good && receiver == XR_LIR_MAP_STRING_I64) {
-                XrLirInstruction drop = {.op=XR_LIR_MAP_DROP, .type=XR_LIR_UNIT,
-                    .operands=&current, .operand_count=1, .source=lower_source(c)};
-                good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[block], &drop));
-            }
-        } else if (receiver != XR_LIR_MAP_STRING_I64_CELL && receiver != XR_LIR_MAP_STRING_I64_REF)
+        else if (receiver != XR_LIR_MAP_STRING_I64_CELL && receiver != XR_LIR_MAP_STRING_I64_REF)
             good = lower_unsupported(c, "Map mutation requires its actual mutable binding");
     }
     uint32_t intrinsic = 0;
@@ -141,12 +130,6 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
     if (good) good = lower_build(c, call.type == XR_LIR_UNIT ?
         xr_lir_emit_effect(c->module, f->blocks[block], &call) :
         xr_lir_emit_value(c->module, f->blocks[block], &call, &f->values[result]));
-    if (good && mutation && cell != UINT32_MAX) {
-        good = lower_map_read(f, block, args[0], &f->current[cell]);
-        XrLirInstruction drop = {.op=XR_LIR_MAP_CELL_DROP, .type=XR_LIR_UNIT,
-            .operands=args, .operand_count=1, .source=lower_source(c)};
-        if (good) good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[block], &drop));
-    }
     xr_free(args);
     return good;
 }
