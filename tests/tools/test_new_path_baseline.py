@@ -28,6 +28,9 @@ class StringBaselineTests(unittest.TestCase):
 
     def test_workloads_append_and_print_length(self):
         self.assertIn('text+="x"', BASELINE.STRING_APPEND_XR)
+        self.assertIn('text=text+"x"', BASELINE.STRING_APPEND_ASSIGN_XR)
+        self.assertEqual(BASELINE.STRING_APPEND_XR,
+                         BASELINE.STRING_APPEND_ASSIGN_XR.replace('text=text+"x"', 'text+="x"'))
         self.assertIn('text += "x"', BASELINE.STRING_APPEND_PY)
         self.assertIn("for _ in range(count):", BASELINE.STRING_APPEND_PY)
         self.assertNotIn("while", BASELINE.STRING_APPEND_PY)
@@ -36,6 +39,18 @@ class StringBaselineTests(unittest.TestCase):
         self.assertNotIn("noinline", BASELINE.STRING_APPEND_C)
         self.assertNotIn("volatile", BASELINE.STRING_APPEND_C)
         self.assertIn('printf("%zu\\n", text.length)', BASELINE.STRING_APPEND_C)
+
+    def test_assignment_ratios_compare_each_backend_to_its_compound_form(self):
+        medians = {
+            "String append 1": {"Xray VM": 4, "CPython": 2},
+            "String append 17": {"Xray VM": 4, "CPython": 2, "Xray VM assignment": 6,
+                                 "Xray native": 2, "C -O2": 1, "Xray native assignment": 1},
+        }
+        self.assertEqual(BASELINE.string_ratios(medians), {
+            "String append 1": {"vm_to_cpython": 2},
+            "String append 17": {"vm_to_cpython": 2, "native_to_c": 2,
+                                 "assignment_vm_to_compound": 1.5, "assignment_native_to_compound": 0.5},
+        })
 
     def test_windows_reference_uses_optimized_static_crt(self):
         command = BASELINE.string_reference_command("clang-cl.exe", pathlib.Path("ref.c"), pathlib.Path("ref.exe"))

@@ -33,6 +33,8 @@ String append is opt-in. Prepare its native products before the timing window:
 The default String sizes are 4M, 8M and 16M appends. Repeat --string-size to
 select explicit sizes, including small functional prechecks. String samples
 retain exact LF output and every stream; their ratios include process startup.
+Add --append-forms when preparing or running the String benchmark to compare
+ordinary assignment and compound assignment on the same inputs and controls.
 
 The driver census runs every original smoke input through lir_vm_run, then
 emits, links and runs the generated C. lir_c_run takes no standard library
@@ -234,6 +236,7 @@ STRING_APPEND_XR = """fn append(count:i64)->i64 {
 }
 print(append(@N@))
 """
+STRING_APPEND_ASSIGN_XR = STRING_APPEND_XR.replace('text+="x"', 'text=text+"x"')
 STRING_APPEND_PY = """import sys
 def append(count):
     text = ""
@@ -441,23 +444,37 @@ def string_bench_programs(args, root, env):
         stem = "string_append_" + str(count)
         label = f"String append {count}"
         paths = [work / (stem + suffix) for suffix in (".xr", "_ref.c", ".py")]
-        for path, template in zip(paths, (STRING_APPEND_XR, STRING_APPEND_C, STRING_APPEND_PY)):
+        templates = [STRING_APPEND_XR, STRING_APPEND_C, STRING_APPEND_PY]
+        if args.append_forms:
+            assignment = work / (stem + "_assign.xr")
+            paths.append(assignment)
+            templates.append(STRING_APPEND_ASSIGN_XR)
+        for path, template in zip(paths, templates):
             if path.exists():
                 raise FileExistsError(f"preserve the existing benchmark input: {path}")
             path.write_text(template.replace("@N@", str(count)), encoding="utf-8", newline="\n")
         row = {"Xray VM": [str(executable), "run", str(paths[0])],
                "CPython": [str(python), str(paths[2])]}
+        if args.append_forms:
+            row["Xray VM assignment"] = [str(executable), "run", str(assignment)]
         if not args.no_native:
             reference, native = work / (stem + "_ref" + EXE), work / (stem + "_native" + EXE)
-            commands = (string_reference_command(compiler, paths[1], reference),
-                        [str(executable), "build", str(paths[0]), "--cc", compiler, "-o", str(native)])
-            for stage, command in zip(("reference-build", "native-build"), commands):
+            commands = {
+                "reference-build": string_reference_command(compiler, paths[1], reference),
+                "native-build": [str(executable), "build", str(paths[0]), "--cc", compiler, "-o", str(native)],
+            }
+            row["C -O2"], row["Xray native"] = [str(reference)], [str(native)]
+            if args.append_forms:
+                assignment_native = work / (stem + "_assign_native" + EXE)
+                commands["assignment-build"] = [
+                    str(executable), "build", str(assignment), "--cc", compiler, "-o", str(assignment_native)]
+                row["Xray native assignment"] = [str(assignment_native)]
+            for stage, command in commands.items():
                 result = string_command(command, env, work / (stem + "-" + stage), args.timeout)
                 metadata["preparation"].append(result)
                 (args.work / "string-preparation.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
                 if result["exit"]:
                     raise RuntimeError(f"{label} {stage} failed; see {result['stderr']}")
-            row["C -O2"], row["Xray native"] = [str(reference)], [str(native)]
         rows[label] = row
         metadata["expected_stdout"][label] = (str(count) + "\n").encode("ascii").hex()
         products = paths + [pathlib.Path(command[0]) for command in row.values()]
@@ -552,8 +569,10 @@ def bench(args, root):
     string_samples = []
     for sample in range(args.samples):  # Alternate engines so drift hits them evenly.
         for label, row in engines.items():
-            for engine, command in row.items():
-                if label.startswith("String append "):
+            is_string = label.startswith("String append ")
+            ordered = reversed(row.items()) if is_string and sample % 2 else row.items()
+            for engine, command in ordered:
+                if is_string:
                     prefix = args.work / f"sample-{sample}-{label.replace(' ', '-')}-{engine.replace(' ', '-')}"
                     value = string_command(command, env, prefix, args.timeout)
                     value.update(label=label, engine=engine, sample=sample)
@@ -633,6 +652,10 @@ def string_ratios(medians):
         row = {"vm_to_cpython": values["Xray VM"] / values["CPython"]}
         if "Xray native" in values and "C -O2" in values:
             row["native_to_c"] = values["Xray native"] / values["C -O2"]
+        if "Xray VM assignment" in values:
+            row["assignment_vm_to_compound"] = values["Xray VM assignment"] / values["Xray VM"]
+        if "Xray native assignment" in values:
+            row["assignment_native_to_compound"] = values["Xray native assignment"] / values["Xray native"]
         result[label] = row
     return result
 
@@ -772,6 +795,8 @@ def main():
                         help="run only this benchmark; repeat for multiple affected benchmarks")
     parser.add_argument("--string-size", action="append", type=int,
                         help="String append count; repeat for explicit sizes (default: 4000000/8000000/16000000)")
+    parser.add_argument("--append-forms", action="store_true",
+                        help="compare ordinary and compound String append assignment")
     preparation = parser.add_mutually_exclusive_group()
     preparation.add_argument("--prepare-only", action="store_true",
                              help="compile benchmark products and save commands without timing or census")
@@ -787,6 +812,10 @@ def main():
         parser.error("--string-size values must be distinct integers in 0..9223372036854775807")
     if args.no_bench and (args.prepare_only or args.prepared_bench):
         parser.error("benchmark preparation requires benchmarks to be enabled")
+    if args.append_forms:
+        if args.no_bench or args.prepared_bench or (args.bench and "string-append" not in args.bench):
+            parser.error("--append-forms requires a new String benchmark preparation")
+        args.bench = args.bench or ["string-append"]
     args.string_size = args.string_size or STRING_SIZES
     args.root, args.build, args.work = (p.resolve() for p in (args.root, args.build, args.work))
     args.work.mkdir(parents=True, exist_ok=True)
