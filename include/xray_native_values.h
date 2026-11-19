@@ -53,7 +53,8 @@ XRAY_API void xrt_native_string_f64_create(XrtManagedFrame *, size_t slot,
  * slot is empty. Publication preserves both input objects and their owners. */
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
     const XrtManagedHeader *left, const XrtManagedHeader *right, uint32_t source_id);
-/* The exact admitted Tuple bytes and their backing owners are live until return. */
+/* The generated image and all its vectors are immutable static storage. The
+ * exact admitted Tuple bytes and their backing owners are live until return. */
 XRAY_API void xrt_native_tuple_display_create(XrtManagedFrame *, size_t slot,
     const XrtValueImage *, uint32_t type, const void *bytes, uint32_t source_id);
 /* Consume the admitted MOVE input into the result with no extra retain. All
