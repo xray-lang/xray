@@ -328,7 +328,6 @@ static bool rbc_value_edge_valid(const XrRbcModule *module,const XrRbcValueCode 
     }
     return typed == (edge ? edge->count : 0);
 }
-#include "xrbc_value_inline_admission.inc.c"
 static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess access) {
     if (access.other || !rbc_value_id(code,access.source) || !rbc_value_string(module,code,access.result,true)) return false;
@@ -338,7 +337,7 @@ static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCo
         const XrtValueImageType *row = &image->types[home->type - 1];
         if (row->kind == XRT_VALUE_TUPLE)
             return !access.index && (row->flags & XRT_VALUE_INLINE_DISPLAY) &&
-                rbc_value_inline_operand(module, code, function, access.source, home->type, false);
+                rbc_value_inline(module, code, access.source, false);
     }
     if (access.index>=code->display_count || !code->displays) return false;
     const XrtPodDisplay *display=&code->displays[access.index];
@@ -376,6 +375,7 @@ static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCo
     }
     return false;
 }
+#include "xrbc_value_inline_admission.inc.c"
 #include "xrbc_value_callable_admission.inc.c"
 #include "xrbc_value_cell_admission.inc.c"
 static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcValueCode *code,
