@@ -132,7 +132,8 @@ def main() -> None:
             assert generated_text.count("xrt_native_string_append_owned(") == 4
             assert generated_text.count("xrt_native_string_concat_create(") == 1
         if name == "string_append_grouping":
-            assert generated_text.count("xrt_native_string_append_owned(") == 2
+            assert generated_text.count("xrt_native_string_append_owned(") == 4
+            assert generated_text.count("xrt_native_string_append_window(") == 3
             assert "xrt_native_string_concat_create(" not in generated_text
         if name == "string_append_invariant":
             assert generated_text.count("xrt_native_string_append_window(") == 4
