@@ -209,7 +209,14 @@ static void ars_push_preparations(void) {
             XrLirArrayPushCapacity p=window.push_capacity;
             CHECK(window.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH && !window.range.kind && !window.owner_home.kind &&
                 p.kind==XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT && p.iv && p.end && p.item && p.first_active_step==2 &&
-                p.checkpoint_step==window.step_count-1 && (mode==PUSH_WINDOW_PARAMETER_END ? !p.end_block && !p.end_instruction : p.end_block && p.end_instruction));
+                p.checkpoint_step==window.step_count-1);
+            if (mode==PUSH_WINDOW_PARAMETER_END)
+                CHECK(!p.end_block && !p.end_instruction);
+            else if (mode==PUSH_WINDOW_MERGED_END)
+                CHECK(p.end_block==c.region_entry.id && !p.end_instruction);
+            else if (mode==PUSH_WINDOW_MERGED_CARRIED_END)
+                CHECK(p.end_block==c.header.id && !p.end_instruction && p.iv_argument==2);
+            else CHECK(p.end_block && p.end_instruction);
             XrLirArraySetRegionStep entry={0},latch={0};
             OK(xr_lir_ownership_array_push_step_at(plan,window.first_step,&entry));
             OK(xr_lir_ownership_array_push_step_at(plan,window.first_step+p.checkpoint_step-1,&latch));

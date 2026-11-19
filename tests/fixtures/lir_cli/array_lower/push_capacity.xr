@@ -41,6 +41,18 @@ fn show_commuted(end: i64) {
     print(values)
 }
 
+fn show_merged(limit: i64, use_full: bool) {
+    var end = 0
+    if (use_full) { end = limit } else { end = limit - 1 }
+    var values: Array<i64> = []
+    var i = 0
+    while (i < end) {
+        values.push(i)
+        i += 1
+    }
+    print(values)
+}
+
 fn show_dependent(limit: i64) {
     var values: Array<i64> = []
     var i = 0
@@ -60,3 +72,5 @@ show_snapshot(7)
 show_computed(7)
 show_commuted(7)
 show_dependent(7)
+show_merged(7, true)
+show_merged(7, false)

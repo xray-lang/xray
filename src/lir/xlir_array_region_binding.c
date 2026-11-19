@@ -319,8 +319,8 @@ static XrLirValueLayoutStatus region_binding_capacity(const RegionBindingBuilder
     uint32_t values[]={p.iv,p.entry_iv,p.end,p.condition,p.increment,p.one,p.latch_iv,p.item};
     for (size_t n=0;n<sizeof(values)/sizeof(*values);++n)
         if (!values[n] || values[n]>b->homes->value_count) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
-    if (p.kind!=XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT || p.iv_argument>=2 || !p.condition_instruction ||
-        !p.increment_block || !p.increment_instruction || p.iv==p.end || (!p.end_block)!=(!p.end_instruction) ||
+    if (p.kind!=XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT || p.iv_argument>=b->homes->value_count || !p.condition_instruction ||
+        !p.increment_block || !p.increment_instruction || p.iv==p.end || (p.end_instruction && !p.end_block) ||
         region->range.kind || region->owner_home.kind || p.first_active_step!=2 || row->move_count<6 ||
         p.checkpoint_step!=row->move_count-1 || row->move_count!=region->step_count)
         return XR_LIR_VALUE_LAYOUT_ARGUMENT;
