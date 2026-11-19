@@ -22,7 +22,8 @@ typedef enum XrLirTypeKind {
     XR_LIR_TYPE_CELL,
     XR_LIR_TYPE_TUPLE,
     XR_LIR_TYPE_RECORD,
-    XR_LIR_TYPE_SLICE
+    XR_LIR_TYPE_SLICE,
+    XR_LIR_TYPE_CLASS
 } XrLirTypeKind;
 
 typedef struct XrLirTypeView {
@@ -99,6 +100,9 @@ XR_FUNC XrLirStatus xr_lir_aggregate_fields(const XrLirModule *, XrLirType,
 /* The copied descriptor borrows only separately owned module storage, so
  * growing the type vector does not invalidate its byte spans or arguments. */
 XR_FUNC XrLirStatus xr_lir_record_identity(const XrLirModule *, XrLirType, XrLirRecordIdentity *);
+/* A class owns one Header and uses a fixed nominal Field payload plan. The
+ * payload type describes the allocation's fields, not the class value ABI. */
+XR_FUNC bool xr_lir_class_payload(const XrLirModule *, XrLirType, XrLirType *);
 XR_FUNC bool xr_lir_boxed_type(const XrLirModule *, XrLirType);
 /* Selects the common inline plan for named and positional aggregate values,
  * including Nullable over an inline aggregate. It does not imply ownership. */

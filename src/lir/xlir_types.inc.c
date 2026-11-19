@@ -127,6 +127,12 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape, const Xr
         *output = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
         return true;
     }
+    if (shape.kind == XR_LIR_TYPE_CLASS) {
+        if (shape.count || shape.element < XR_LIR_TYPE_COUNT || shape.element >= XR_LIR_TYPE_COUNT + ordinal ||
+            m->types[shape.element - XR_LIR_TYPE_COUNT].shape.kind != XR_LIR_TYPE_RECORD) return false;
+        *output = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
+        return true;
+    }
     if (shape.kind == XR_LIR_TYPE_CALLABLE) {
         *output = (XrLirTypeLayout){0, 1, 0, true};
         return true;
@@ -328,6 +334,17 @@ XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *m, const XrLirRecordIdentity
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_RECORD, 0, count}, NULL, 0, fields, identity, output);
 }
 
+XR_FUNC XrLirStatus xr_lir_internal_class_type(XrLirModule *m, XrLirType payload, XrLirType *output) {
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_CLASS, payload, 0}, NULL, 0, NULL, NULL, output);
+}
+
+XR_FUNC bool xr_lir_class_payload(const XrLirModule *m, XrLirType type, XrLirType *output) {
+    XrLirTypeView shape;
+    if (xr_lir_type_view(m, type, &shape) != XR_LIR_OK || shape.kind != XR_LIR_TYPE_CLASS) return false;
+    if (output) *output = shape.element;
+    return true;
+}
+
 XR_FUNC XrLirStatus xr_lir_slice_type(XrLirModule *m, XrLirType element, XrLirType *output) {
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_SLICE, element, 0}, NULL, 0, NULL, NULL, output);
 }
@@ -351,7 +368,7 @@ XR_FUNC XrLirStatus xr_lir_record_identity(const XrLirModule *m,XrLirType type,X
 XR_FUNC bool xr_lir_boxed_type(const XrLirModule *m, XrLirType type) {
     if (!m || type < XR_LIR_TYPE_COUNT || type - XR_LIR_TYPE_COUNT >= m->type_count) return false;
     XrLirTypeData data = m->types[type - XR_LIR_TYPE_COUNT];
-    return data.shape.kind == XR_LIR_TYPE_RECORD ||
+    return data.shape.kind == XR_LIR_TYPE_RECORD || data.shape.kind == XR_LIR_TYPE_CLASS ||
         ((data.shape.kind == XR_LIR_TYPE_NULLABLE || data.shape.kind == XR_LIR_TYPE_TUPLE) && data.layout.managed);
 }
 
