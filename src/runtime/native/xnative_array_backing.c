@@ -144,12 +144,20 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_create(XrtManagedFrame *fra
     return array_finish(frame, slot, array, count, status);
 }
 
+static const XrtRuntimeTypeSpec *array_inline_spec(const XrtManagedHeader *owner, const XrtValuePlan *element) {
+    const XrtRuntimeTypeSpec *spec = NULL;
+    if (!element || xrt_managed_producer_borrow(owner, array_element_retain, array_element_drop, &spec) != XRT_MANAGED_OK ||
+        spec->code.context != element) return NULL;
+    return spec;
+}
+XR_FUNCDEF bool xrt_array_backing_inline_matches(const XrtManagedHeader *owner, const XrtValuePlan *element) {
+    return array_inline_spec(owner, element) != NULL;
+}
 XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_at(const XrtArrayBacking *array,
     const XrtValuePlan *element, int64_t index, const void **empty_borrow) {
-    const XrtRuntimeTypeSpec *spec = NULL;
-    if (!array || !element || !empty_borrow || *empty_borrow ||
-        xrt_managed_producer_borrow(&array->managed, array_element_retain, array_element_drop, &spec) != XRT_MANAGED_OK ||
-        spec->code.context != element || array->length > array->capacity) return XRT_MANAGED_ARGUMENT;
+    if (!array || !empty_borrow || *empty_borrow) return XRT_MANAGED_ARGUMENT;
+    const XrtRuntimeTypeSpec *spec = array_inline_spec(&array->managed, element);
+    if (!spec || array->length > array->capacity) return XRT_MANAGED_ARGUMENT;
     if (index < 0 || (uint64_t)index >= array->length) return XRT_MANAGED_BOUNDS;
     *empty_borrow = array->elements + (size_t)index * spec->stride;
     return XRT_MANAGED_OK;

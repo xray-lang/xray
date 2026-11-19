@@ -26,4 +26,8 @@ XR_FUNC XrtManagedStatus xrt_module_layout_plan(const XrtModuleLayout *, uint32_
  * Frame borrows cannot be published into State. */
 XR_FUNC XrtManagedStatus xrt_module_state_plan(const XrtModuleState *, uint32_t type,
     const XrtValuePlan **empty);
+XR_FUNC XrtManagedStatus xrt_module_layout_inline_array(const XrtModuleLayout *, uint32_t type,
+    XrtBoundInlineArray *empty);
+XR_FUNC XrtManagedStatus xrt_module_state_inline_array(const XrtModuleState *, uint32_t type,
+    XrtBoundInlineArray *empty);
 #endif // XNATIVE_MODULE_STATE_H

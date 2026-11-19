@@ -11,6 +11,7 @@
  *   No executing value needs the image's vectors, a compiler pool or a Layout.
  */
 #include "xnative_value_image.h"
+#include "xnative_array_backing.h"
 #include "base/xchecks.h"
 #include <stdalign.h>
 
@@ -18,6 +19,7 @@ struct XrtValueImagePlans {
     XrtBillingOwner *billing;
     size_t bytes;
     uint32_t count;
+    XrtBoundInlineArray *inline_arrays;
 };
 typedef struct ImageScratch {
     void *memory;
@@ -27,6 +29,9 @@ typedef struct ImageScratch {
 } ImageScratch;
 _Static_assert(sizeof(XrtValueImagePlans) % alignof(XrtValuePlan *) == 0,
     "receiving plan references follow the aligned set prefix");
+_Static_assert(alignof(XrtValuePlan *) >= alignof(XrtBoundInlineArray) &&
+    sizeof(XrtValuePlan *) % alignof(XrtBoundInlineArray) == 0,
+    "inline Array bindings follow the aligned plan vector");
 _Static_assert(sizeof(XrtValueSlotSpec) % alignof(XrtValueParameterSpec) == 0,
     "cold scratch preserves parameter vector alignment");
 
@@ -50,7 +55,7 @@ static bool image_extent(size_t *bytes, size_t count, size_t stride) {
     *bytes += count * stride;
     return true;
 }
-static bool image_shape(const XrtValueImage *image) {
+static bool image_shape(const XrtValueImage *image, bool *inline_arrays) {
     if (!image || ((image->type_count != 0) != (image->types != NULL)) ||
         ((image->slot_count != 0) != (image->slots != NULL)) ||
         ((image->parameter_count != 0) != (image->parameters != NULL)) ||
@@ -71,7 +76,8 @@ static bool image_shape(const XrtValueImage *image) {
     }
     for (uint32_t i = 0; i < image->type_count; ++i) {
         const XrtValueImageType *type = &image->types[i];
-        if ((unsigned)type->kind > XRT_VALUE_SET_I64 || type->throws > 1 ||
+        *inline_arrays |= type->kind == XRT_VALUE_ARRAY_INLINE;
+        if ((unsigned)type->kind > XRT_VALUE_ARRAY_INLINE || type->throws > 1 ||
             !image_span(type->first_owned, type->owned_count, image->owned_count) ||
             !image_span(type->first_field, type->field_count, image->slot_count) ||
             !image_span(type->first_capture, type->capture_count, image->slot_count) ||
@@ -148,6 +154,8 @@ XR_FUNCDEF void xrt_value_image_drop(XrtValueImagePlans **owned) {
     *owned = NULL;
     XrtBillingOwner *billing = set->billing;
     size_t bytes = set->bytes;
+    if (set->inline_arrays)
+        for (uint32_t i = set->count; i; --i) xrt_managed_ops_drop(set->inline_arrays[i - 1].ops);
     for (uint32_t i = set->count; i; --i) xrt_value_plan_drop(image_plans(set)[i - 1]);
     xrt_managed_metadata_free(billing, set, bytes);
     xrt_billing_owner_drop(billing);
@@ -156,12 +164,14 @@ XR_FUNCDEF XrtManagedStatus xrt_value_image_bind(XrtBillingOwner *billing,
     const XrtValueImage *image, XrtManagedLease code, XrtValueImagePlans **output) {
     if (!billing || !image || !output || *output || !image_lease_valid(code)) return XRT_MANAGED_ARGUMENT;
     if (code.retain && !code.retain(code.context)) return XRT_MANAGED_REFCOUNT;
-    XrtManagedStatus status = image_shape(image) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+    bool arrays = false;
+    XrtManagedStatus status = image_shape(image, &arrays) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
     XrtValueImagePlans *set = NULL;
     ImageScratch scratch = {0};
     if (status == XRT_MANAGED_OK && image->type_count) {
         size_t bytes = sizeof(*set);
-        if (!image_extent(&bytes, image->type_count, sizeof(XrtValuePlan *))) status = XRT_MANAGED_OVERFLOW;
+        if (!image_extent(&bytes, image->type_count, sizeof(XrtValuePlan *)) ||
+            (arrays && !image_extent(&bytes, image->type_count, sizeof(XrtBoundInlineArray)))) status = XRT_MANAGED_OVERFLOW;
         else if (!xrt_billing_owner_retain(billing)) status = XRT_MANAGED_REFCOUNT;
         else {
             void *memory = NULL;
@@ -169,7 +179,9 @@ XR_FUNCDEF XrtManagedStatus xrt_value_image_bind(XrtBillingOwner *billing,
             if (status != XRT_MANAGED_OK) xrt_billing_owner_drop(billing);
             else {
                 set = memory;
-                *set = (XrtValueImagePlans){billing, bytes, 0};
+                *set = (XrtValueImagePlans){.billing = billing, .bytes = bytes};
+                if (arrays)
+                    set->inline_arrays = (XrtBoundInlineArray *)(image_plans(set) + image->type_count);
                 status = image_scratch(billing, image, &scratch);
             }
         }
@@ -177,7 +189,15 @@ XR_FUNCDEF XrtManagedStatus xrt_value_image_bind(XrtBillingOwner *billing,
             XrtValuePlanSpec spec = image_plan(set, image, i, &scratch, code);
             XrtValuePlan *plan = NULL;
             status = xrt_value_plan_new(billing, &spec, &plan);
-            if (status == XRT_MANAGED_OK) image_plans(set)[set->count++] = plan;
+            if (status == XRT_MANAGED_OK) {
+                image_plans(set)[set->count++] = plan;
+                if (set->inline_arrays) set->inline_arrays[i] = (XrtBoundInlineArray){0};
+                if (spec.kind == XRT_VALUE_ARRAY_INLINE) {
+                    XrtBoundInlineArray *array = &set->inline_arrays[i];
+                    status = xrt_array_backing_inline_bind(billing, spec.element, &array->ops);
+                    if (status == XRT_MANAGED_OK) array->element = spec.element;
+                }
+            }
         }
     }
     if (scratch.memory) xrt_managed_metadata_free(billing, scratch.memory, scratch.bytes);
@@ -191,5 +211,12 @@ XR_FUNCDEF XrtManagedStatus xrt_value_image_get(const XrtValueImagePlans *set, u
     const XrtValuePlan **output) {
     if (!set || !id || id > set->count || !output || *output) return XRT_MANAGED_ARGUMENT;
     *output = image_plans((XrtValueImagePlans *)set)[id - 1];
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_value_image_inline_array(const XrtValueImagePlans *set, uint32_t id,
+    XrtBoundInlineArray *empty) {
+    if (!set || !id || id > set->count || !empty || empty->element || empty->ops ||
+        !set->inline_arrays || !set->inline_arrays[id - 1].ops) return XRT_MANAGED_ARGUMENT;
+    *empty = set->inline_arrays[id - 1];
     return XRT_MANAGED_OK;
 }

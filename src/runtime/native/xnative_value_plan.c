@@ -72,7 +72,7 @@ static XrtManagedStatus plan_extent(const XrtValuePlanSpec *spec, size_t *bytes,
     return XRT_MANAGED_OK;
 }
 static bool pointer_kind(XrtValueKind kind) {
-    return (kind >= XRT_VALUE_STRING && kind <= XRT_VALUE_MAP_STRING_I64) ||
+    return kind == XRT_VALUE_STRING || xrt_value_kind_is_array(kind) || kind == XRT_VALUE_MAP_STRING_I64 ||
         kind == XRT_VALUE_CELL || kind == XRT_VALUE_SET_I64;
 }
 static bool scalar_layout(XrtValueKind kind, size_t *size, size_t *alignment) {
@@ -161,7 +161,7 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
         (spec->kind != XRT_VALUE_ENVIRONMENT && (spec->capture_count || spec->entry.signature || spec->entry.ordinal)) ||
         (spec->kind != XRT_VALUE_FUNCTION && !signature_empty(spec->signature)) ||
         (spec->kind != XRT_VALUE_NULLABLE && (spec->nullable.element || spec->nullable.tag_offset || spec->nullable.payload_offset)) ||
-        (spec->kind != XRT_VALUE_CELL && spec->element) ||
+        (spec->kind != XRT_VALUE_CELL && spec->kind != XRT_VALUE_ARRAY_INLINE && spec->element) ||
         (spec->kind != XRT_VALUE_FIXED_U8 && spec->count)) return false;
     for (size_t i = 0; i < spec->owned_count; ++i) {
         size_t offset = spec->owned_offsets[i];
@@ -170,6 +170,8 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
             (i && offset - spec->owned_offsets[i - 1] < sizeof(XrtManagedHeader *)) ||
             (i && offset < spec->owned_offsets[i - 1])) return false;
     }
+    if (spec->kind == XRT_VALUE_ARRAY_INLINE && (!spec->element || !spec->element->view.size ||
+        !xrt_value_kind_has_fields(spec->element->view.kind))) return false;
     if (pointer_kind(spec->kind))
         return spec->size == sizeof(XrtManagedHeader *) && spec->alignment == alignof(XrtManagedHeader *) &&
             spec->owned_count == 1 && !spec->owned_offsets[0] &&

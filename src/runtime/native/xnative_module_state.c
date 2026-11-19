@@ -11,6 +11,7 @@
  *   replacement is published before any previous owner can run its destructor.
  */
 #include "xnative_module_state.h"
+#include "xnative_array_backing.h"
 #include "xnative_capture_backing.h"
 #include "xray_native_function.h"
 #include "xray_native_values.h"
@@ -85,6 +86,10 @@ XR_FUNCDEF XrtManagedStatus xrt_module_state_plan(const XrtModuleState *state, u
     const XrtValuePlan **empty) {
     if (!state) return XRT_MANAGED_ARGUMENT;
     return xrt_module_layout_plan(state->layout, type, empty);
+}
+XR_FUNCDEF XrtManagedStatus xrt_module_state_inline_array(const XrtModuleState *state,
+    uint32_t type, XrtBoundInlineArray *empty) {
+    return xrt_module_layout_inline_array(state ? state->layout : NULL, type, empty);
 }
 static void *module_payload(const XrtModuleState *state, uint32_t slot) {
     return state->payload + state->layout->view.slots[slot].offset;
@@ -173,6 +178,9 @@ static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType 
             spec->kind == XRT_VALUE_SET_I64) {
             XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
             if (!owner) return XRT_MANAGED_ARGUMENT;
+        } else if (spec->kind == XRT_VALUE_ARRAY_INLINE) {
+            XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
+            if (!xrt_array_backing_inline_matches(owner, spec->element)) return XRT_MANAGED_ARGUMENT;
         } else if (spec->kind == XRT_VALUE_FUNCTION) {
             XrtManagedStatus status = module_function_storage(top->value);
             if (status != XRT_MANAGED_OK) return status;

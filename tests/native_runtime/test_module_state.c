@@ -345,6 +345,71 @@ static void array_state_guards(void) {
         CHECK(!audit.leases && !audit.bytes && !audit.blocks);
     }
 }
+static void inline_array_state(void) {
+    Audit audit = {0};
+    XrtBillingOwner *billing = billing_new(&audit, SIZE_MAX);
+    const XrtValueImageSlot row_fields[] = {{1,0,0,0},{2,0,0,0}};
+    XrtValueImageType rows[] = {
+        {.kind=XRT_VALUE_I64,.size=8,.alignment=8},
+        {.kind=XRT_VALUE_F64,.size=8,.alignment=8},
+        {.kind=XRT_VALUE_TUPLE,.size=8,.alignment=8,.field_count=1},
+        {.kind=XRT_VALUE_TUPLE,.size=8,.alignment=8,.first_field=1,.field_count=1},
+        {.kind=XRT_VALUE_ARRAY_INLINE,.size=8,.alignment=8,.owned_count=1,.element=3},
+        {.kind=XRT_VALUE_ARRAY_INLINE,.size=8,.alignment=8,.owned_count=1,.element=4}
+    };
+    const size_t owners[] = {0};
+    XrtValueImage raw = {rows,6,row_fields,2,NULL,0,owners,1,NULL,0};
+    const XrtModuleSpec module = {0};
+    const XrtModuleSlotSpec slot = {0,5,XRT_MODULE_SLOT_MUTABLE,0,8,8};
+    const XrtModuleLayoutSpec spec = {&raw,&module,1,NULL,0,&slot,1,8,8};
+    XrtModuleLayout *layout = NULL;
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    rows[5].element = 6;
+    BAD(xrt_module_layout_new(billing,&spec,(XrtManagedLease){0},&layout));
+    rows[5].element = 1;
+    BAD(xrt_module_layout_new(billing,&spec,(XrtManagedLease){0},&layout));
+    CHECK(!layout);
+    same_bill(billing,before);
+    rows[5].element = 4;
+    OK(xrt_module_layout_new(billing,&spec,(XrtManagedLease){0},&layout));
+    XrtModuleState *state = NULL;
+    OK(xrt_module_state_new(layout,billing,&state));
+    XrtBoundInlineArray integer = {0}, decimal = {0};
+    OK(xrt_module_layout_inline_array(layout,5,&integer));
+    OK(xrt_module_state_inline_array(state,6,&decimal));
+    CHECK(integer.element != decimal.element && integer.ops != decimal.ops);
+    BAD(xrt_module_state_inline_array(state,3,&(XrtBoundInlineArray){0}));
+    xrt_module_layout_drop(&layout);
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    OK(xrt_managed_root_new(billing,&root));
+    OK(xrt_managed_frame_enter(root,2,&frame));
+    int64_t value = 42;
+    double other = 42.0;
+    OK(xrt_array_backing_inline_create(frame,0,integer.ops,&value,1,1));
+    OK(xrt_array_backing_inline_create(frame,1,decimal.ops,&other,1,1));
+    XrtManagedHeader *right = borrow(frame,0), *wrong = borrow(frame,1);
+    XrtModuleRef *reference = NULL;
+    OK(xrt_module_begin(state,0));
+    BAD(xrt_module_construct(state,0,&wrong,&reference));
+    OK(xrt_module_construct(state,0,&right,&reference));
+    OK(xrt_module_publish(reference));
+    OK(xrt_module_ready(state,0));
+    BAD(xrt_module_replace(reference,&wrong));
+    XrtManagedHeader *read = NULL;
+    OK(xrt_module_copy(reference,&read));
+    CHECK(read == right);
+    xrt_module_state_drop(&state);
+    OK(xrt_managed_root_destroy(&root));
+    const void *row = NULL;
+    OK(xrt_array_backing_inline_at((const XrtArrayBacking *)read,integer.element,0,&row));
+    int64_t observed = 0;
+    memcpy(&observed,row,sizeof(observed));
+    CHECK(observed == value);
+    xrt_managed_drop(read);
+    xrt_billing_owner_drop(billing);
+    CHECK(!audit.leases && !audit.bytes && !audit.blocks);
+}
 static void allocation_failures(void) {
     Audit audit = {0}; XrtBillingOwner *billing = billing_new(&audit,SIZE_MAX);
     XrtBillingStats baseline = xrt_billing_owner_stats(billing);
@@ -605,6 +670,7 @@ static void function_state(void) {
 }
 int main(void) {
     atomic_i64_group_span(); atomic_record(); family_borrows(); array_state_guards();
+    inline_array_state();
     allocation_failures(); scalar_admission();
     metadata_and_rejection(); deep_nullable(); function_state();
     puts("fixed module State kernel passed"); return 0;
