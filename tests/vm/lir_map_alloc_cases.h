@@ -97,6 +97,10 @@ static void map_borrowed_literal_fault_and_skip(void) {
     }
     CHECK(literal_source);
 
+    XrtBillingOwner *control = NULL;
+    CHECK(xrt_billing_owner_new(NULL, SIZE_MAX, &control) == XRT_MANAGED_OK);
+    XrtBillingStats baseline = xrt_billing_owner_stats(control);
+    xrt_billing_owner_drop(control);
     size_t literal_budget = SIZE_MAX;
     for (size_t budget = 0;; ++budget) {
         XrRbcExecution *execution = NULL;
@@ -105,7 +109,6 @@ static void map_borrowed_literal_fault_and_skip(void) {
         XrtBillingOwner *billing = NULL;
         CHECK(xrt_native_values_prepare(&execution->values, &billing) == XRT_MANAGED_OK &&
             xrt_billing_owner_retain(billing));
-        XrtBillingStats control = xrt_billing_owner_stats(billing);
         xrt_billing_owner_fail_after(billing, budget);
         XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
         CHECK(outcome && !execution->stack.values && xrt_value_root_empty(&execution->values));
@@ -124,7 +127,7 @@ static void map_borrowed_literal_fault_and_skip(void) {
         xr_rbc_execution_free(&execution);
         xr_rbc_outcome_free(&outcome);
         XrtBillingStats retired = xrt_billing_owner_stats(billing);
-        CHECK(retired.blocks == control.blocks && retired.bytes == control.bytes);
+        CHECK(retired.blocks == baseline.blocks && retired.bytes == baseline.bytes);
         xrt_billing_owner_drop(billing);
         if (status == XR_RBC_OK) break;
         CHECK(budget < 64);
