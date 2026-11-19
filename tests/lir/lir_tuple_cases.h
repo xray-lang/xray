@@ -44,7 +44,7 @@ static void tuple_reject_corrupt_access(const XrRbcProgram *program, XrRbcValueO
 }
 
 static void tuple_receiving_owners(void) {
-    XrLirModule *source = tuple_fixture(), *copies[3] = {0};
+    XrLirModule *source = tuple_fixture(TUPLE_PROJECT), *copies[3] = {0};
     OK(xr_lir_rebuild(source, &copies[0]));
     OK(xr_lir_inline(source, &copies[1]));
     OK(xr_lir_sccp(source, &copies[2]));
@@ -90,28 +90,12 @@ static void tuple_receiving_owners(void) {
 
 static void tuple_root_result(void) {
     for (uint32_t nullable = 0; nullable < 2; ++nullable) {
-        CArrayFixture c = {0};
-        OK(xr_lir_module_create(NULL, &c.module));
-        XrLirType tuple = 0;
-        OK(xr_lir_tuple_i64_type(c.module, 2, &tuple));
-        XrLirType result = tuple;
-        if (nullable) OK(xr_lir_nullable_type(c.module, tuple, &result));
-        XrLirFunctionSpec spec = {.name="root", .name_length=4, .result=result};
-        XrLirFunction root = {0};
-        OK(xr_lir_declare_function(c.module, &spec, &root));
-        OK(xr_lir_define_function(c.module, root));
-        XrLirBlock block = {0};
-        OK(xr_lir_add_block(c.module, root, NULL, 0, &block));
-        OK(xr_lir_set_entry(c.module, root, block));
-        XrLirValue fields[] = {ca_constant(&c, block, 42), ca_constant(&c, block, -17)};
-        XrLirValue value = ca_value(&c, block, XR_LIR_RECORD_NEW, tuple, fields, 2);
-        if (nullable) value = ca_value(&c, block, XR_LIR_NULLABLE_SOME, result, &value, 1);
-        ca_return(&c, block, value);
-        OK(xr_lir_module_finish(c.module, NULL));
+        XrLirModule *module = tuple_fixture(nullable ? TUPLE_RETURN_NULLABLE : TUPLE_RETURN);
+        XrLirFunction root = {module, 1};
         XrRbcProgram *program = NULL;
         XrRbcCompileDiagnostic diagnostic = {0};
-        CHECK(xr_rbc_compile(c.module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
-        xr_lir_module_destroy(c.module);
+        CHECK(xr_rbc_compile(module, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+        xr_lir_module_destroy(module);
         XrRbcExecution *execution = NULL;
         CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
         XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
@@ -131,7 +115,7 @@ static void tuple_root_result(void) {
         int64_t payload[2];
         for (uint32_t f = 0; f < 2; ++f)
             memcpy(&payload[f], bytes + image->slots[row->first_field + f].offset, sizeof(payload[f]));
-        CHECK(payload[0] == 42 && payload[1] == -17);
+        CHECK(payload[0] == -17 && payload[1] == 42);
         uint64_t untouched = 11;
         CHECK(!xr_rbc_outcome_bits(outcome, &untouched) && untouched == 11);
         xr_rbc_outcome_free(&outcome);

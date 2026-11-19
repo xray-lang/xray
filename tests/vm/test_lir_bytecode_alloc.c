@@ -33,7 +33,7 @@ static size_t attempts, fail_at = SIZE_MAX, live_allocations;
 static bool in_compile_admission;
 static unsigned admission_attempts,admission_failure;
 static unsigned compile_admission_calls, admission_source_map_passes;
-static size_t fail_home_size;
+static size_t fail_allocation_size;
 static enum {LITERAL_NO_FAULT,LITERAL_MAP_FAULT,LITERAL_PAYLOAD_FAULT,LITERAL_TABLE_FAULT,LITERAL_TABLE_INITIAL_FAULT} literal_fault;
 static size_t literal_payload_count, literal_payload_failure, literal_table_requests;
 static struct { void *pointer; size_t size; } buffers[32];
@@ -41,7 +41,10 @@ static struct { void *pointer; size_t size; } buffers[32];
 static void *allocate(size_t size) {
     if(in_compile_admission && ++admission_attempts==admission_failure) return NULL;
     if (++attempts == fail_at) return NULL;
-    if(fail_home_size && size==fail_home_size){fail_home_size=0;return NULL;}
+    if (fail_allocation_size && size == fail_allocation_size) {
+        fail_allocation_size = 0;
+        return NULL;
+    }
     if (literal_fault == LITERAL_PAYLOAD_FAULT && size == 29 &&
         ++literal_payload_count == literal_payload_failure) {literal_fault=LITERAL_NO_FAULT;return NULL;}
     void *pointer=xr_malloc(size);if(pointer)++live_allocations;return pointer;
@@ -554,9 +557,9 @@ static void compiled_spills(void) {
         CHECK(execute(program,NULL,0,&bits)==XR_RBC_OK && bits==259);
         xr_rbc_program_destroy(program);program=NULL;CHECK(!live_allocations);
     }
-    fail_home_size=((size_t)input.value_count+1)*sizeof(uint32_t);
+    fail_allocation_size=((size_t)input.value_count+1)*sizeof(uint32_t);
     CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OUT_OF_MEMORY);
-    CHECK(!program&&!fail_home_size&&!live_allocations);
+    CHECK(!program&&!fail_allocation_size&&!live_allocations);
     CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
     CHECK(execute(program,NULL,0,&bits)==XR_RBC_OK&&bits==259);
     xr_rbc_program_destroy(program);xr_lir_module_destroy(m);CHECK(!live_allocations);
@@ -896,7 +899,7 @@ static void composition_compiler_failures(void) {
 }
 
 static void tuple_compiler_failures(void) {
-    XrLirModule *module = tuple_fixture();
+    XrLirModule *module = tuple_fixture(TUPLE_PROJECT);
     XrLirFunction root = {module, 1};
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic = {0};
@@ -919,6 +922,48 @@ static void tuple_compiler_failures(void) {
     CHECK(!live_allocations);
     printf("Tuple compiler %zu allocation failures and retired LIR PASS\n", total);
     attempts = 0;
+}
+
+static void tuple_outcome_buffer_failure(void) {
+    XrLirModule *input = tuple_fixture(TUPLE_RETURN);
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(input, (XrLirFunction){input, 1}, &program, NULL) == XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(input);
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    const XrRbcCodeOwner *code = xr_rbc_module_code_owner(module);
+    const XrRbcValueCode *entry = xr_rbc_module_value_code(module, 0);
+    CHECK(code && entry && entry->homes && entry->homes->result_type && code->values &&
+        entry->homes->result_type <= code->values->type_count);
+    const XrtValueImageType *type = &code->values->types[entry->homes->result_type - 1];
+    CHECK(type->kind == XRT_VALUE_TUPLE && type->size == 2 * sizeof(int64_t) && !type->owned_count);
+    /* For this admitted single entry without State, the other malloc sites
+     * during prepare are its entry table and branch targets. */
+    CHECK(module->function_count == 1 && !module->state_spec && !module->functions[0].aggregate_result_type);
+    CHECK(type->size != sizeof(XrRbcEntry) && type->size != module->functions[0].code_count);
+    const size_t live_before = live_allocations;
+    const uint32_t references = atomic_load(&code->references);
+    XrRbcExecution *execution = NULL;
+    fail_allocation_size = type->size;
+    CHECK(xr_rbc_module_prepare_admitted(module, 0, NULL, 0, xr_rbc_program_locations(program), &execution) ==
+        XR_RBC_OUT_OF_MEMORY);
+    CHECK(!fail_allocation_size && !execution && live_allocations == live_before);
+    CHECK(atomic_load(&code->references) == references);
+
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_program_destroy(program);
+    const XrtValueImage *image = NULL;
+    uint32_t ordinal = 0;
+    const uint8_t *bytes = NULL;
+    int64_t fields[2];
+    CHECK(xr_rbc_outcome_inline(outcome, &image, &ordinal, &bytes) && image && ordinal && bytes);
+    CHECK(&image->types[ordinal - 1] == type);
+    memcpy(fields, bytes, sizeof(fields));
+    CHECK(fields[0] == -17 && fields[1] == 42);
+    xr_rbc_outcome_free(&outcome);
+    CHECK(!live_allocations);
+    puts("Tuple outcome buffer allocation failure refunded and retry passed");
 }
 
 static void aggregate_state_compiler_failures(void) {
@@ -1069,6 +1114,7 @@ int main(void) {
     map_borrowed_literal_fault_and_skip();
     composition_compiler_failures();
     tuple_compiler_failures();
+    tuple_outcome_buffer_failure();
     typed_edge_spill_cycles();
     string_reference_allocation_failures();
     slice_boundary_allocation_failures();
