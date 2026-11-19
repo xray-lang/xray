@@ -1081,7 +1081,8 @@ int main(void) {
     aggregate_value_compiler_failures(17, false, true);
     aggregate_type_projection_failures();
     array_reference_compiler_failures();
-    compiled_array_edge_owners();
+    compiled_array_edge_owners(false);
+    compiled_array_edge_owners(true);
     array_forwarding_allocation_cases();
     array_local_allocation_cases();
     array_compiler_failures("string",511);

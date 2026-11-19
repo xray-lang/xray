@@ -86,6 +86,14 @@ static XrLirFunction ca_helper(CArrayFixture *c, uint32_t count) {
     return function;
 }
 
+static XrLirValue ca_call_array(CArrayFixture *c, XrLirBlock block, XrLirFunction callee, XrLirValue seed) {
+    XrLirValue result = {0};
+    XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_ARRAY, .callee=callee,
+        .operands=&seed, .operand_count=1, .source=ca_source()};
+    OK(xr_lir_emit_value(c->module, block, &call, &result));
+    return result;
+}
+
 static void ca_module(CArrayFixture *c) {
     XrLirStateModule module = {0};
     XrLirStateSlot slot = {.payload=XR_LIR_ARRAY, .mutable=true, .size=8, .alignment=8,
@@ -265,7 +273,8 @@ static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock ent
     OK(xr_lir_set_array_shape(c->module,values[0],&shape));
     OK(xr_lir_set_array_shape(c->module,result[0],&shape));
     XrLirValue seven=ca_constant(c,entry,7);
-    XrLirValue array=ca_intrinsic(c,entry,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,&seven,1);
+    /* A call result needs a real edge move even when its payload is fixed I64. */
+    XrLirValue array=ca_call_array(c,entry,ca_helper(c,1),seven);
     XrLirValue initial[]={array,ca_constant(c,entry,10),ca_constant(c,entry,20),ca_constant(c,entry,0),{0}};
     if (mode==2) {
         initial[4]=ca_value(c,entry,XR_LIR_TUPLE_NEW,extra,&seven,1);
