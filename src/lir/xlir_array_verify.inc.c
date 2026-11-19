@@ -6,13 +6,14 @@
  *
  * xlir_array_verify.inc.c - Exact element admission through real SSA producers
  */
-static bool lir_array_function_shape(const XrLirFunctionData *f) {
+static bool lir_array_function_shape(const XrLirModule *m, const XrLirFunctionData *f) {
     if (f->result == XR_LIR_ARRAY_CELL || f->result == XR_LIR_ARRAY_REF || (f->result == XR_LIR_ARRAY ?
-        !xr_lir_internal_array_element(f->array_result) : f->array_result != XR_LIR_TYPE_INVALID))
+        !xr_lir_internal_array_element(m, f->array_result) : f->array_result != XR_LIR_TYPE_INVALID))
         return false;
     for (uint32_t v = 0; v < f->value_count; ++v)
         if (xr_lir_internal_array_type(f->values[v].type) ?
-            !xr_lir_internal_array_element(f->values[v].array_element) :
+            (!xr_lir_internal_array_element(m, f->values[v].array_element) ||
+             (f->values[v].type != XR_LIR_ARRAY && xr_lir_inline_array_ordinal(m, f->values[v].array_element))) :
             f->values[v].array_element != XR_LIR_TYPE_INVALID) return false;
     if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
         if (f->result == XR_LIR_ARRAY) return false;
@@ -28,7 +29,7 @@ static bool lir_array_call_shape(const XrLirModule *m, const XrLirFunctionData *
     for (uint32_t p = 0; p < v->operand_count; ++p) {
         const XrLirValueData *actual = &f->values[v->operands[p] - 1];
         if (xr_lir_internal_array_type(actual->type) &&
-            (!xr_lir_internal_array_element(actual->array_element) ||
+            (!xr_lir_internal_array_element(m, actual->array_element) ||
              actual->array_element != callee->values[callee->parameters[p] - 1].array_element)) return false;
     }
     return true;
@@ -54,7 +55,7 @@ static bool lir_array_intrinsic_call(const XrLirModule *m, const XrLirFunctionDa
 
 static bool lir_array_intrinsic_signature(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *v, const XrLirIntrinsic *entry, const XrLirArrayIntrinsic *shape) {
-    if (!entry->scalar_sync || !xr_lir_internal_array_intrinsic_valid(entry, shape)) return false;
+    if (!entry->scalar_sync || !xr_lir_internal_array_intrinsic_valid(m, entry, shape)) return false;
     if (!shape->variadic)
         return lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result);
     if (v->type != entry->result) return false;
@@ -66,7 +67,7 @@ static bool lir_array_intrinsic_signature(const XrLirModule *m, const XrLirFunct
 XR_FUNC bool xr_lir_internal_array_instruction(const XrLirModule *m,
     const XrLirFunctionData *f, const XrLirInstructionView *v) {
     if (xr_lir_internal_array_type(v->type) &&
-        !xr_lir_internal_array_element(xr_lir_internal_array_result(m, f, v))) return false;
+        !xr_lir_internal_array_element(m, xr_lir_internal_array_result(m, f, v))) return false;
     if (v->result && v->result <= f->value_count &&
         f->values[v->result - 1].array_element != xr_lir_internal_array_result(m, f, v)) return false;
     if (v->op == XR_LIR_CALL) return lir_array_call_shape(m, f, v);

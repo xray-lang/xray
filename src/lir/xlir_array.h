@@ -58,8 +58,8 @@ XR_FUNC XrLirStatus xr_lir_array_mutator(const XrLirModule *, XrLirType element,
  * READ creates an owned Array snapshot. WRITE replaces the referenced binding.
  * Borrowing reads no payload or readiness flags, and neither owns nor releases
  * the underlying Cell or state. References cannot cross edges or escape calls.
- * Closed elements are I64, owned String, U8 and U64. Their shape never implies
- * that a backend implements that family or its scalar operations. */
+ * The closed scalar families are I64, owned String, U8 and U64. An admitted
+ * inline aggregate element keeps its exact canonical LIR identity. */
 XR_FUNC XrLirStatus xr_lir_set_array_shape(XrLirModule *, XrLirValue,
     const XrLirArrayShape *);
 XR_FUNC XrLirStatus xr_lir_set_array_result(XrLirModule *, XrLirFunction,

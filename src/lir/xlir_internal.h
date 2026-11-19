@@ -92,6 +92,8 @@ typedef struct XrLirTypeData {
     const XrLirRecordField *fields;
     XrLirRecordIdentity record;
     uint32_t *record_names, record_name_capacity;
+    uint32_t inline_array_ordinal;
+    uint32_t inline_array_operations[XR_LIR_ARRAY_OP_GET];
 } XrLirTypeData;
 struct XrLirModule {
     XrLirTypeData *types;
@@ -106,6 +108,7 @@ struct XrLirModule {
     XrLirIntrinsic *intrinsics;
     uint32_t intrinsic_count;
     XrLirArrayIntrinsic *array_intrinsics;
+    uint32_t inline_array_count;
     uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_DISPLAY];
     uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2];
     XrLirStatus failure;
@@ -248,12 +251,14 @@ XR_FUNC bool xr_lir_internal_callable_persistent(const XrLirModule *, const XrLi
  * is not an alternate admission path or a caller-selectable trust flag. */
 XR_FUNC XrLirStatus xr_lir_internal_finish_verify(XrLirModule *, XrLirDiagnostic *);
 XR_FUNC void xr_lir_internal_block_multiplicity_free(uint8_t *);
-XR_FUNC bool xr_lir_internal_array_element(XrLirType);
+XR_FUNC bool xr_lir_internal_array_element(const XrLirModule *, XrLirType);
+XR_FUNC uint32_t xr_lir_inline_array_ordinal(const XrLirModule *, XrLirType);
+XR_FUNC XrLirStatus xr_lir_require_inline_array_element(XrLirModule *, XrLirType);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {
     return type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;
 }
-XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirIntrinsic *,
+XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirModule *, const XrLirIntrinsic *,
     const XrLirArrayIntrinsic *);
 XR_FUNC const XrLirArrayIntrinsic *xr_lir_internal_array_intrinsic(const XrLirModule *, uint32_t);
 XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *,

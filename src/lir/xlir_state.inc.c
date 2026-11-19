@@ -71,7 +71,7 @@ static bool lir_state_layout_shape(const XrLirModule *m, const XrLirStateLayout 
         const XrLirStateSlot *slot = &layout->slots[s];
         uint32_t size, alignment;
         if (slot->module >= layout->module_count ||
-            (slot->payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(slot->array_element) :
+            (slot->payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(m, slot->array_element) :
                 slot->array_element != XR_LIR_TYPE_INVALID) ||
             !xr_lir_internal_state_payload(m, slot->payload, &size, &alignment) ||
             slot->size != size || slot->alignment != alignment ||
@@ -128,7 +128,7 @@ XR_FUNC XrLirStatus xr_lir_set_state_reference(XrLirModule *m, XrLirValue value,
     XrLirFunctionData *f = lir_function(m, (XrLirFunction){value.module, value.function});
     uint32_t size, alignment;
     if (!f || !value.id || value.id > f->value_count || !shape ||
-        (shape->payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(shape->array_element) :
+        (shape->payload == XR_LIR_ARRAY ? !xr_lir_internal_array_element(m, shape->array_element) :
             shape->array_element != XR_LIR_TYPE_INVALID) ||
         !xr_lir_internal_state_payload(m, shape->payload, &size, &alignment))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
