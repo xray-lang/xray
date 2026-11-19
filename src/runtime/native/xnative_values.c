@@ -516,6 +516,17 @@ XRAY_API void xrt_native_pod_display_create(XrtManagedFrame *frame, size_t slot,
     if (status == XRT_MANAGED_OK) status = xrt_string_backing_pod_display_create(frame, slot, types, description, bytes);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
+XRAY_API void xrt_native_tuple_display_create(XrtManagedFrame *frame, size_t slot,
+    const XrtValueImage *image, uint32_t type, const void *bytes, uint32_t source_id) {
+    if (!image || !image->types || !type || type > image->type_count ||
+        !(image->types[type - 1].flags & XRT_VALUE_INLINE_DISPLAY))
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source_id);
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_string_backing_tuple_display_create(frame, slot, types, image, type, bytes);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
 
 XR_FUNC void xrt_native_values_drain(XrtValueRoot *owner) {
     struct XrtNativeValues *values = owner->managed;

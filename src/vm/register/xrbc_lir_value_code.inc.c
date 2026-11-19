@@ -186,6 +186,10 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
 }
 static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *i,XrRbcValueAccess *access) {
     XrLirType type=rbc_lir_value_type(c,i->operands[0]);
+    if (xr_lir_tuple_display_type(c->input, type)) {
+        access->operation = XR_RBC_VALUE_DISPLAY;
+        return true;
+    }
     XrLirTypeLayout layout={0};
     if (xr_lir_type_layout(c->input,type,&layout)!=XR_LIR_OK || layout.managed || layout.size>UINT32_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_UNSUPPORTED,"display value has no exact inline scalar layout");

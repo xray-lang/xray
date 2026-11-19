@@ -12,6 +12,7 @@
  */
 #include "xlir_value_image.h"
 #include "base/xchecks.h"
+#include "runtime/native/xnative_value_image.h"
 #include <stdalign.h>
 #include <string.h>
 
@@ -131,10 +132,14 @@ static bool image_type(ImageBuilder *builder, const XrtValuePlanSpec *spec, uint
         builder->parameters[builder->used.parameters++] = (XrtValueImageParameter){child, (uint32_t)source.mode, source.escaping,
             image_name(builder, source.name, source.name_length), source.name_length};
     }
-    return image_child(builder, spec->nullable.element, id, &row->nullable_element) &&
+    bool complete = image_child(builder, spec->nullable.element, id, &row->nullable_element) &&
         image_child(builder, spec->signature.result, id, &row->result) &&
         image_child(builder, spec->entry.signature, id, &row->entry_signature) &&
         image_child(builder, spec->element, id, &row->element);
+    const XrtValueImage view = {.types=builder->types, .slots=builder->slots};
+    if (complete && xrt_value_image_inline_display_shape(&view, id - 1))
+        row->flags |= XRT_VALUE_INLINE_DISPLAY;
+    return complete;
 }
 static XrLirValueLayoutStatus image_build(XrtBillingOwner *billing, ImageInventory inventory, XrLirValueImage **output) {
     uint32_t count = inventory.count; ImageCounts counts = inventory.counts;

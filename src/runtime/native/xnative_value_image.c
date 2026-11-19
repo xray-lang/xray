@@ -90,6 +90,8 @@ static bool image_shape(const XrtValueImage *image, bool *inline_arrays) {
             if (image->slots[type->first_capture + n].type > i) return false;
         for (uint32_t n = 0; n < type->parameter_count; ++n)
             if (image->parameters[type->first_parameter + n].type > i) return false;
+        if ((type->flags & XRT_VALUE_INLINE_DISPLAY) && !xrt_value_image_inline_display_shape(image, i))
+            return false;
     }
     return true;
 }
@@ -142,7 +144,7 @@ static XrtValuePlanSpec image_plan(XrtValueImagePlans *set, const XrtValueImage 
         .capture_count=type->capture_count, .nullable={type->nullable_tag, type->nullable_payload,
             image_dependency(set, type->nullable_element)},
         .signature={type->parameter_count ? scratch->parameters : NULL, type->parameter_count,
-            image_dependency(set, type->result), type->flags, type->throws != 0},
+            image_dependency(set, type->result), type->flags & ~(uint32_t)XRT_VALUE_INLINE_DISPLAY, type->throws != 0},
         .entry={type->entry_ordinal, image_dependency(set, type->entry_signature)},
         .element=image_dependency(set, type->element)};
     if (type->kind == XRT_VALUE_FUNCTION || type->kind == XRT_VALUE_ENVIRONMENT) spec.code = code;

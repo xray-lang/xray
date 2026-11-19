@@ -1,0 +1,5 @@
+(1, "value 7")
+interpolated (1, "value 7")
+(42,)
+((true, 3.14), ("é",))
+("value 7", null)

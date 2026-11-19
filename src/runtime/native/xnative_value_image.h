@@ -14,6 +14,24 @@
 #define XNATIVE_VALUE_IMAGE_H
 #include "xnative_value_plan.h"
 
+/* Call after verifying the row's vector spans and its earlier dependencies. */
+static inline bool xrt_value_image_inline_display_shape(const XrtValueImage *image, uint32_t index) {
+    const XrtValueImageType *row = &image->types[index];
+    if (row->kind == XRT_VALUE_NULLABLE) {
+        if (!row->nullable_element || row->nullable_element > index) return false;
+        const XrtValueImageType *child = &image->types[row->nullable_element - 1];
+        return xrt_value_kind_is_display_leaf(child->kind) || (child->flags & XRT_VALUE_INLINE_DISPLAY);
+    }
+    if (row->kind != XRT_VALUE_TUPLE) return false;
+    for (uint32_t field = 0; field < row->field_count; ++field) {
+        uint32_t type = image->slots[row->first_field + field].type;
+        if (!type || type > index) return false;
+        const XrtValueImageType *child = &image->types[type - 1];
+        if (!xrt_value_kind_is_display_leaf(child->kind) && !(child->flags & XRT_VALUE_INLINE_DISPLAY)) return false;
+    }
+    return true;
+}
+
 typedef struct XrtValueImagePlans XrtValueImagePlans;
 typedef struct XrtBoundInlineArray {
     const XrtValuePlan *element;

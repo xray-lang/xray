@@ -16,6 +16,7 @@ enum { XR_LIR_INTRINSIC_DISPLAY = 256 };
  * type selects the catalog entry, including every Nullable layer. The empty
  * declaration signature never authorizes an untyped external call. */
 XR_FUNC bool xr_lir_display_type(const XrLirModule *, XrLirType);
+XR_FUNC bool xr_lir_tuple_display_type(const XrLirModule *, XrLirType);
 XR_FUNC bool xr_lir_display_intrinsic_valid(const XrLirIntrinsic *);
 XR_FUNC bool xr_lir_display_point(const XrLirModule *, const XrLirInstructionView *);
 XR_FUNC XrLirStatus xr_lir_display_operation(const XrLirModule *, uint32_t *);

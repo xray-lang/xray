@@ -42,7 +42,7 @@ def main() -> None:
              "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length",
              "nullable_scalar", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
              "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit",
-             "display_nullable", "display_nullable_values", "display_nullable_array", "display_values", "display_strings", "display_imports", "display_loop", "panic_display_unpublished",
+             "display_nullable", "display_nullable_values", "display_nullable_array", "display_values", "display_strings", "display_imports", "display_loop", "display_tuples", "panic_display_unpublished",
              "view_local", "view_late_callable", "view_scalar_callable_write", "view_scalar_branch_cells", "view_state_callback_read", "view_callback_relay", "view_callback_scalar_context", "view_call", "view_return", "view_loop", "view_copy", "view_module_alias",
              "view_module_const", "view_conditional_cleanup", "view_phi", "view_phi_mixed", "view_copy_argument",
              "view_return_module_unrelated", "view_recursive_module_unrelated", "view_multiple_module_unrelated",

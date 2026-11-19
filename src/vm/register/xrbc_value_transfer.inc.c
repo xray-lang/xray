@@ -240,7 +240,11 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         if (!access.result) return true;
         return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS},
             .scope=rbc_value_function(state->module,code,access.result,false) ? 2u : 0u});
-    case XR_RBC_VALUE_STRING_I64: case XR_RBC_VALUE_STRING_F64: case XR_RBC_VALUE_DISPLAY:
+    case XR_RBC_VALUE_DISPLAY:
+        if (rbc_value_kind(state->module, code, access.source) == XRT_VALUE_TUPLE)
+            return rbc_value_flow_read(state, code, access.source, &incoming);
+        return rbc_value_flow_bits(state,code,access.source);
+    case XR_RBC_VALUE_STRING_I64: case XR_RBC_VALUE_STRING_F64:
         return rbc_value_flow_bits(state,code,access.source);
     case XR_RBC_VALUE_STRING_LENGTH:
         return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});

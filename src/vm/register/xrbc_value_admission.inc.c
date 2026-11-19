@@ -328,12 +328,20 @@ static bool rbc_value_edge_valid(const XrRbcModule *module,const XrRbcValueCode 
     }
     return typed == (edge ? edge->count : 0);
 }
+#include "xrbc_value_inline_admission.inc.c"
 static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess access) {
-    if (access.other || !rbc_value_id(code,access.source) || !rbc_value_string(module,code,access.result,true) ||
-        access.index>=code->display_count || !code->displays) return false;
-    const XrtPodDisplay *display=&code->displays[access.index];
+    if (access.other || !rbc_value_id(code,access.source) || !rbc_value_string(module,code,access.result,true)) return false;
     const XrLirValueHome *home=rbc_value_home(code,access.source);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (home && image && image->types && home->type && home->type <= image->type_count) {
+        const XrtValueImageType *row = &image->types[home->type - 1];
+        if (row->kind == XRT_VALUE_TUPLE)
+            return !access.index && (row->flags & XRT_VALUE_INLINE_DISPLAY) &&
+                rbc_value_inline_operand(module, code, function, access.source, home->type, false);
+    }
+    if (access.index>=code->display_count || !code->displays) return false;
+    const XrtPodDisplay *display=&code->displays[access.index];
     XrPodLayout expected={0};
     if (!xr_pod_scalar_layout(display->scalar,&expected)) return false;
     if (!display->nullable_depth)
@@ -341,7 +349,6 @@ static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCo
             rbc_value_scalar(code,function,access.source,XR_RBC_BITS) &&
             display->physical.size==expected.size && display->physical.alignment==expected.alignment &&
             display->physical.scalar_count==expected.scalar_count;
-    const XrtValueImage *image=xr_rbc_module_value_image(module);
     if (!home || !home->type || home->owner_count || !image || !image->types || home->type>image->type_count ||
         display->nullable_depth>image->type_count || !rbc_value_location_valid(function,code->locations[access.source]) ||
         code->locations[access.source].kind!=XR_RBC_VALUE_AGGREGATE) return false;
@@ -369,7 +376,6 @@ static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCo
     }
     return false;
 }
-#include "xrbc_value_inline_admission.inc.c"
 #include "xrbc_value_callable_admission.inc.c"
 #include "xrbc_value_cell_admission.inc.c"
 static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcValueCode *code,
