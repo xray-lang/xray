@@ -754,6 +754,16 @@ static void fixed_cold_setup(void) {
     xrt_billing_owner_drop(billing); fixture_finish(&fixture);
     billing = NULL;
     OK(xrt_native_values_prepare(&owner, &billing)); CHECK(xrt_billing_owner_retain(billing));
+    const XrtBackingTypes *types = NULL, *ready = NULL;
+    OK(xrt_native_values_backings(&owner, &types));
+    XrtBillingStats initialized = xrt_billing_owner_stats(billing);
+    OK(xrt_native_values_backings(&owner, &ready)); CHECK(ready == types);
+    same_storage(initialized, xrt_billing_owner_stats(billing));
+    BAD(xrt_native_values_backings(&owner, &ready)); CHECK(ready == types);
+    owner.draining = true;
+    ready = NULL;
+    BAD(xrt_native_values_backings(&owner, &ready)); CHECK(!ready);
+    owner.draining = false;
     xrt_value_root_drain(&owner);
     CHECK(xrt_value_root_empty(&owner) && xrt_billing_owner_stats(billing).blocks == 1);
     xrt_billing_owner_drop(billing); xrt_locations_release(locations);
