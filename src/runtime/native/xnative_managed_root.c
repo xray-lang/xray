@@ -357,6 +357,27 @@ XRAY_API XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, si
     destination->root->busy = false;
     return status;
 }
+XR_FUNCDEF bool xrt_managed_slot_try_edit_move(XrtManagedFrame *frame, size_t source,
+    size_t result, size_t workspace, XrtManagedTryEdit edit, const void *context) {
+    if (!frame || !edit || source >= frame->slot_count || result >= frame->slot_count ||
+        workspace >= frame->slot_count || source == result || source == workspace || result == workspace)
+        return false;
+    XrtManagedRoot *root = frame->root;
+    if (!root_begin(root)) return false;
+
+    XrtManagedSlot *slots = frame_slots(frame);
+    XrtManagedHeader **from = frame_owner(frame, &slots[source]);
+    XrtManagedHeader **to = frame_owner(frame, &slots[result]);
+    bool moved = *from && !slots[source].pending.value && !slots[source].pending.allocation_bytes &&
+        !*to && !slots[result].pending.value && !slots[result].pending.allocation_bytes &&
+        slot_empty(frame, &slots[workspace]) && edit(*from, context);
+    if (moved) {
+        *to = *from;
+        *from = NULL;
+    }
+    root->busy = false;
+    return moved;
+}
 XRAY_API XrtManagedStatus xrt_managed_slot_drop(XrtManagedFrame *frame, size_t index) {
     XrtManagedSlot *slot = slot_begin(frame, index);
     if (!slot) return XRT_MANAGED_ARGUMENT;
