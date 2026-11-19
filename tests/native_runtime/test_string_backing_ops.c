@@ -518,6 +518,19 @@ static void owned_append_preflight(void) {
     input.result_slot = 1; make(&f, 2, "occupied");
     STATUS(xrt_string_backing_append_owned(f.frame, &f.types, &input), XRT_MANAGED_ARGUMENT);
     slot_is(&f, 0, "p"); slot_is(&f, 1, "old"); slot_is(&f, 2, "occupied");
+    OK(xrt_managed_slot_drop(f.frame, 1));
+    OK(xrt_managed_slot_drop(f.frame, 2));
+    pending = NULL;
+    OK(xrt_managed_slot_prepare(f.frame, 2, f.types.string, sizeof(XrtStringBacking) + 2, &pending));
+    before = xrt_billing_owner_stats(f.billing);
+    STATUS(xrt_string_backing_append_owned(f.frame, &f.types, &input), XRT_MANAGED_ARGUMENT);
+    CHECK(!borrow(&f, 1) && !borrow(&f, 2)); slot_is(&f, 0, "p"); same_bill(&f, before);
+    OK(xrt_managed_slot_abort(f.frame, 2));
+    size_t calls = atomic_load(&f.audit.calls);
+    OK(xrt_string_backing_append_owned(f.frame, &f.types, &input));
+    CHECK(!borrow(&f, 0) && !borrow(&f, 2) && string(&f, 1) == source);
+    CHECK(atomic_load(&f.audit.calls) == calls);
+    slot_is(&f, 1, "pz");
     fixture_done(&f);
 }
 static void owned_append_growth_and_callbacks(void) {

@@ -40,6 +40,15 @@ XR_FUNC bool xrt_managed_domain_same(XrtManagedSlotLocation, XrtManagedSlotLocat
 XR_FUNC XrtManagedStatus xrt_managed_domain_enter(XrtManagedSlotLocation);
 XR_FUNC bool xrt_managed_domain_held(XrtManagedSlotLocation);
 XR_FUNC void xrt_managed_domain_leave(XrtManagedSlotLocation);
+typedef bool (*XrtManagedTryEdit)(XrtManagedHeader *, const void *);
+/* Try a single allocation-free edit and owner move between three distinct
+ * slots in one live Frame. The caller supplies the admitted move and edit
+ * authority. The callback must leave the payload unchanged on false and
+ * cannot allocate, retire owners, call user code or leave nonlocally. Busy
+ * stays held through both the edit and publication. A miss leaves all slots
+ * unchanged so the caller can retry through the registered transaction. */
+XR_FUNC bool xrt_managed_slot_try_edit_move(XrtManagedFrame *, size_t source,
+    size_t result, size_t workspace, XrtManagedTryEdit, const void *);
 typedef XrtManagedStatus (*XrtManagedReservedApply)(XrtManagedHeader *, void *);
 XR_FUNC XrtManagedStatus xrt_managed_slot_reserved_begin(XrtManagedFrame *, size_t,
     XrtManagedSlotLocation binding, XrtManagedSlotReservation *empty);

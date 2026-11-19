@@ -267,6 +267,10 @@ static XrtManagedStatus string_append_apply(XrtManagedHeader *source, void *cont
     return xrt_string_backing_try_append_exclusive(transaction->source,
         transaction->suffix, &transaction->appended);
 }
+static bool string_append_edit(XrtManagedHeader *source, const void *suffix) {
+    StringAppendTransaction transaction = {.suffix=suffix};
+    return string_append_apply(source, &transaction) == XRT_MANAGED_OK && transaction.appended;
+}
 static XrtManagedStatus string_append_candidate(XrtPlaceReplacement *reservation,
     const XrtBackingTypes *types, const StringAppendTransaction *transaction) {
     const XrtStringBacking *left = transaction->source, *right = transaction->suffix;
@@ -298,6 +302,9 @@ static XrtManagedStatus string_append_candidate(XrtPlaceReplacement *reservation
 XR_FUNCDEF XrtManagedStatus xrt_string_backing_append_owned(XrtManagedFrame *frame,
     const XrtBackingTypes *types, const XrtStringAppendOwned *input) {
     if (!frame || !types || !types->string || !input || !input->suffix) return XRT_MANAGED_ARGUMENT;
+    if (xrt_managed_slot_try_edit_move(frame, input->source_slot, input->result_slot,
+        input->temporary_slot, string_append_edit, input->suffix)) return XRT_MANAGED_OK;
+
     XrtPlaceReplacement reservation = {0};
     XrtPlace source = {.frame=frame, .slot=input->source_slot, .nulls=XRT_PLACE_NONNULL};
     XrtManagedStatus status = xrt_place_replacement_begin(source, frame, input->temporary_slot, &reservation);
