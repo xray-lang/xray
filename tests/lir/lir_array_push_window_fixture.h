@@ -12,7 +12,7 @@
 enum ArrayPushWindowMode {
     PUSH_WINDOW_CURRENT, PUSH_WINDOW_PARAMETER_END, PUSH_WINDOW_PRECOMPUTED_END, PUSH_WINDOW_MERGED_END,
     PUSH_WINDOW_MERGED_CARRIED_END, PUSH_WINDOW_COMMUTED_STEP,
-    PUSH_WINDOW_NEGATIVE_IV, PUSH_WINDOW_MAX_END,
+    PUSH_WINDOW_NEGATIVE_IV, PUSH_WINDOW_MAX_END, PUSH_WINDOW_LARGE_END,
     PUSH_WINDOW_MIRRORED_END, PUSH_WINDOW_INCLUSIVE_END, PUSH_WINDOW_CHANGING_END,
     PUSH_WINDOW_STEP_TWO, PUSH_WINDOW_NEXT_ITEM, PUSH_WINDOW_TWO_PUSHES, PUSH_WINDOW_OBSERVER,
     PUSH_WINDOW_LENGTH_END, PUSH_WINDOW_EXTRA_STATE, PUSH_WINDOW_LATCH_CURRENT,
@@ -71,7 +71,8 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     }
     XrLirValue seed=ars_number(&c,c.entry,7),incoming[]={merged ? (XrLirValue){0} :
         ars_array_op(&c,c.entry,XR_LIR_ARRAY_OP_NEW,&seed,1),
-        ars_number(&c,c.entry,mode==PUSH_WINDOW_NEGATIVE_IV ? -1 : 0),ars_number(&c,c.entry,42)};
+        ars_number(&c,c.entry,mode==PUSH_WINDOW_NEGATIVE_IV ? -1 : mode==PUSH_WINDOW_LARGE_END ? 999991 : 0),
+        ars_number(&c,c.entry,42)};
     XrLirValue end={0};
     if (mode==PUSH_WINDOW_PRECOMPUTED_END) {
         XrLirValue parameter={0}; OK(xr_lir_function_parameter(c.module,c.function,0,&parameter));
@@ -108,7 +109,8 @@ static ArraySetRegionFixture array_push_window_build(enum ArrayPushWindowMode mo
     else if (mode==PUSH_WINDOW_CHANGING_END) {
         XrLirValue sub[]={ars_number(&c,c.header,9),values[1]};
         end=ars_value(&c,c.header,(XrLirInstruction){.op=XR_LIR_SUB,.type=XR_LIR_I64,.operands=sub,.operand_count=2});
-    } else if (!end.id) end=ars_number(&c,c.header,mode==PUSH_WINDOW_MAX_END ? INT64_MAX : 9);
+    } else if (!end.id) end=ars_number(&c,c.header,mode==PUSH_WINDOW_MAX_END ? INT64_MAX :
+        mode==PUSH_WINDOW_LARGE_END ? 1000000 : 9);
     bool mirrored=mode==PUSH_WINDOW_MIRRORED_END;
     XrLirValue compare[]={mirrored ? end : values[iv],mirrored ? values[iv] : end};
     XrLirPredicate predicate=mirrored ? XR_LIR_GT : mode==PUSH_WINDOW_INCLUSIVE_END ? XR_LIR_LE : XR_LIR_LT;

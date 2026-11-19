@@ -347,6 +347,8 @@ static void rbc_push_region_case(enum ArrayPushWindowMode mode,uint64_t bound,si
     const XrRbcModule *module=xr_rbc_program_view(program);
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
     CHECK(code && (code->array_push_limits!=NULL)==eligible);
+    if (mode==PUSH_WINDOW_LARGE_END)
+        CHECK(!code->array_push_limits[0].value && code->array_push_limits[0].bits==1000000);
     size_t tags=0;
     for (size_t n=0;n<code->access_count;++n) {
         XrRbcValueAccess access=code->accesses[n];
@@ -395,6 +397,7 @@ static void rbc_array_region_cases(void) {
     rbc_push_region_case(PUSH_WINDOW_PARAMETER_END,7,7,2,2,true);
     rbc_push_region_case(PUSH_WINDOW_PARAMETER_END,9,9,3,3,true);
     rbc_push_region_case(PUSH_WINDOW_CURRENT,0,9,3,3,true);
+    rbc_push_region_case(PUSH_WINDOW_LARGE_END,0,9,3,3,true);
     rbc_push_region_case(PUSH_WINDOW_PRECOMPUTED_END,7,9,3,3,true);
     rbc_push_region_case(PUSH_WINDOW_LIVE_SNAPSHOT,0,9,9,0,false);
     rbc_push_region_case(PUSH_WINDOW_NEXT_ITEM,0,9,9,0,false);
