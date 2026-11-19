@@ -238,7 +238,7 @@ static void c_values_function(LirC *c) {
         c->array_forwarding |= c->homes->events[n].forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE;
     c->header_edges = false;
     for (size_t n = 0; c->homes && n < c->homes->edge_count && c_request_poll(c); ++n)
-        c->header_edges |= c_value_header_edge(c, c->homes, &c->homes->edges[n]);
+        c->header_edges |= c->homes->edges[n].direct_header_move;
 }
 static bool c_values_owned_type(LirC *c, XrLirType type) {
     return c_managed_leaf(type) || (type >= XR_LIR_TYPE_COUNT &&
@@ -452,7 +452,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
     }
     c_format(c, "    XrtManagedStatus status = xrl_edge_%" PRIu32 "_%" PRIu32 "_%" PRIu32 "(xrl_frame, xrl_payload, %s",
         c->function.id, c->block, selected, scalars && !private_scalars ? "&scalar_publication" : "NULL");
-    if (c_value_header_edge(c, c->homes, home)) c_text(c, ", &xrl_frame_locations");
+    if (home->direct_header_move) c_text(c, ", &xrl_frame_locations");
     for (size_t a = 0; a < home->count && c_request_poll(c); ++a) {
         XrLirHomeTransfer transfer = c->homes->transfers[home->first + a];
         if (transfer.borrowed_owner_workspace != SIZE_MAX && !transfer.target_workspace) {

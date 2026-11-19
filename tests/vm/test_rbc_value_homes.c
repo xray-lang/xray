@@ -237,6 +237,7 @@ static void selected_edge_sources(void) {
     CHECK(homes && homes->edge_count == 2 && homes->transfer_count == 4);
     XrLirHomeEdge first = homes->edges[0], second = homes->edges[1];
     CHECK(first.block == second.block && first.target_block == second.target_block && first.edge == 1 && second.edge == 2);
+    CHECK(!first.direct_header_move && !second.direct_header_move);
     CHECK(homes->transfers[first.first].source == homes->transfers[second.first + 1].source &&
         homes->transfers[first.first + 1].source == homes->transfers[second.first].source);
     XrtManagedRoot *root = NULL; XrtManagedFrame *frame = NULL; XrtBackingTypes types = {0};
