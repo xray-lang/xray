@@ -82,7 +82,7 @@
       "stdout": "tests/smoke/expected/tuples.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/tuples.xr:47:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/tuples.xr:12:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
       }
     },
     {
@@ -94,7 +94,7 @@
       "stdout": "tests/smoke/expected/tuples.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/tuples.xr:47:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/tuples.xr:12:1: String conversion other than i64, f64 or String is not supported by LIR lowering yet"
       }
     },
     {

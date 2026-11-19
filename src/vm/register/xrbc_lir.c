@@ -858,7 +858,10 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     uint32_t value=i.edges[e].arguments[a];
                     if(rbc_lir_value_type(c,value)==XR_LIR_ARRAY) {
                         uint32_t family=xr_rbc_array_family(rbc_lir_register_kind(c,value,XR_LIR_ARRAY));
-                        if(!c->temporary_arrays[family])c->temporary_arrays[family]=1;
+                        if (family < XR_RBC_ARRAY_FAMILY_COUNT) {
+                            if (!c->temporary_arrays[family]) c->temporary_arrays[family]=1;
+                        } else if (!rbc_lir_common_value(c,value))
+                            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array edge lacks an exact common home");
                     } else if (rbc_lir_value_type(c, value) == XR_LIR_MAP_STRING_I64) {
                         if (!c->temporary_maps) c->temporary_maps = 1;
                     } else if (rbc_lir_value_type(c, value) == XR_LIR_STRING) {
@@ -877,12 +880,22 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     type==XR_LIR_I64_CELL || type==XR_LIR_STATE ||
                     type==XR_LIR_VIEW_FRAME || type==XR_LIR_VIEW_CELL || type==XR_LIR_SLICE_I64 || type>=XR_LIR_TYPE_COUNT)continue;
                 if(type==XR_LIR_MAP_STRING_I64)++maps;else if(type==XR_LIR_STRING)++strings;else if(type==XR_LIR_STATE_REF)++refs;
-                else if(type==XR_LIR_ARRAY)++arrays[xr_rbc_array_family(rbc_lir_register_kind(c,v,type))];else ++bits;
+                else if(type==XR_LIR_ARRAY) {
+                    uint32_t family=xr_rbc_array_family(rbc_lir_register_kind(c,v,type));
+                    if (family < XR_RBC_ARRAY_FAMILY_COUNT) ++arrays[family];
+                    else if (!rbc_lir_common_value(c,v))
+                        return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array operand lacks an exact common home");
+                } else ++bits;
             }
             if(i.result && !c->output.literals[i.result] && !c->output.lengths[i.result]) {
                 if(i.type==XR_LIR_MAP_STRING_I64)++maps;
                 else if(i.type==XR_LIR_STRING)++strings;
-                else if(i.type==XR_LIR_ARRAY)++arrays[xr_rbc_array_family(rbc_lir_register_kind(c,i.result,i.type))];
+                else if(i.type==XR_LIR_ARRAY) {
+                    uint32_t family=xr_rbc_array_family(rbc_lir_register_kind(c,i.result,i.type));
+                    if (family < XR_RBC_ARRAY_FAMILY_COUNT) ++arrays[family];
+                    else if (!rbc_lir_common_value(c,i.result))
+                        return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array result lacks an exact common home");
+                }
                 else if(i.type==XR_LIR_STATE_REF)++refs;
                 else if(i.type!=XR_LIR_MAP_STRING_I64_CELL && i.type!=XR_LIR_MAP_STRING_I64_REF && i.type!=XR_LIR_SET_I64_CELL && i.type!=XR_LIR_SET_I64_REF && i.type!=XR_LIR_STRING_CELL && i.type!=XR_LIR_ARRAY_CELL && i.type!=XR_LIR_ARRAY_REF && i.type!=XR_LIR_STRING_REF &&
                     i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE && i.type!=XR_LIR_VIEW_FRAME &&
@@ -1273,6 +1286,10 @@ static uint32_t rbc_lir_stage_slot(RbcLirCompiler *c, uint32_t value, RbcLirTemp
         used = &use->strings; offset = 0; capacity = c->temporary_strings;
     } else if (type == XR_LIR_ARRAY) {
         uint32_t family=xr_rbc_array_family(rbc_lir_register_kind(c,value,type));
+        if (family >= XR_RBC_ARRAY_FAMILY_COUNT) {
+            rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"inline Array cannot stage through a legacy spill register");
+            return UINT32_MAX;
+        }
         used=&use->arrays[family];offset=c->temporary_strings+(uint32_t)rbc_lir_array_temporaries(c,family);
         capacity=c->temporary_arrays[family];
     } else if (type == XR_LIR_MAP_STRING_I64) {
