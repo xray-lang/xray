@@ -391,7 +391,7 @@ typedef struct LirHomeChain {
     uint32_t parent, producer, last_block;
     uint32_t binding_input, binding_output, handoff_source;
     uint8_t rank;
-    bool rejected, needs_handoff, has_handoff;
+    bool rejected;
 } LirHomeChain;
 
 static uint32_t lir_home_chain_root(LirHomeChain *chains, uint32_t value) {
@@ -410,8 +410,6 @@ static void lir_home_chain_join(LirHomeChain *chains, uint32_t source, uint32_t 
     if (chains[to].rank < chains[from].rank) { uint32_t swap = to; to = from; from = swap; }
     LirHomeChain *root = &chains[to], *part = &chains[from];
     root->rejected |= part->rejected || (root->producer && part->producer);
-    root->needs_handoff |= part->needs_handoff;
-    root->has_handoff |= part->has_handoff;
     if (!root->producer) root->producer = part->producer;
     if (root->rank == part->rank) ++root->rank;
     part->parent = to;
@@ -531,9 +529,8 @@ static bool lir_home_stationary_owners(LirHomeCompiler *c, const XrLirOwnershipP
         chains[v].parent = v;
         if (!value->parameter && !chains[v].handoff_source) {
             chains[v].producer = v;
-            bool stable = lir_home_chain_producer(f, v);
-            chains[v].needs_handoff = !stable && lir_home_map_chain_start(c->input, f, v);
-            chains[v].rejected = !stable && !chains[v].needs_handoff;
+            chains[v].rejected = !lir_home_chain_producer(f, v) &&
+                !lir_home_map_chain_start(c->input, f, v);
         }
     }
     for (uint32_t v = 1; v <= f->value_count; ++v) {
@@ -544,7 +541,6 @@ static bool lir_home_stationary_owners(LirHomeCompiler *c, const XrLirOwnershipP
             return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary Map handoff lost its value homes");
         }
         lir_home_chain_join(chains, source, v, true);
-        chains[lir_home_chain_root(chains, v)].has_handoff = true;
     }
     if (!lir_home_chain_transfers(c, plan, function, chains)) { xr_free(chains); return false; }
     for (uint32_t b = 0; b < f->block_count; ++b) {
@@ -560,7 +556,7 @@ static bool lir_home_stationary_owners(LirHomeCompiler *c, const XrLirOwnershipP
     for (uint32_t v = 1; v <= f->value_count; ++v) {
         if (!chains[v].parent) continue;
         const LirHomeChain *root = &chains[lir_home_chain_root(chains, v)];
-        if (root->rank && root->producer && !root->rejected && (!root->needs_handoff || root->has_handoff))
+        if (root->rank && root->producer && !root->rejected)
             values[v].stationary_owner = root->producer;
     }
     xr_free(chains);

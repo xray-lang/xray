@@ -32,8 +32,22 @@ fn merged(table:Map<string,i64>,first:bool,n:i64)->i64 {
     return sum
 }
 
+fn alternative(first:bool,n:i64)->i64 {
+    const one={"x": 4}
+    const two={"x": 5}
+    const table=first ? one : two
+    var i=0
+    var sum=0
+    while (i<n) {
+        sum+=table["x"]
+        i+=1
+    }
+    return sum
+}
 print(local(0))
 print(local(37))
 print(incoming({"x": 3},"x",37))
 print(merged({"x": 2,"y": 3},true,37))
 print(merged({"x": 2,"y": 3},false,37))
+print(alternative(true,37))
+print(alternative(false,37))
