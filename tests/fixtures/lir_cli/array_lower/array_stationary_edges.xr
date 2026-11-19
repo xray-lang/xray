@@ -32,5 +32,30 @@ fn snapshot_after_growth(limit: i64) {
     print(values[len(values) - 1])
 }
 
+fn observe_length(limit: i64) {
+    var values: Array<i64> = []
+    var i = 0
+    while (i < limit) {
+        values.push(i)
+        print(len(values))
+        i += 1
+    }
+}
+
+fn early_exit(limit: i64) {
+    var values: Array<i64> = []
+    var i = 0
+    while (i < limit) {
+        if (i == limit - 2) { break }
+        values.push(i)
+        i += 1
+    }
+    print(len(values))
+}
+
 print(changing_slot(5000))
+print(changing_slot(0))
+print(changing_slot(6))
 snapshot_after_growth(6)
+observe_length(3)
+early_exit(6)

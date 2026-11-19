@@ -31,7 +31,8 @@ static void c_array_regions_admit(LirC *c) {
     bool needed = false;
     for (uint32_t n = 0; n < c->closure_count; ++n) {
         const XrLirValueHomes *homes = c->value_homes[c->closure[n] - 1];
-        needed |= homes && (homes->array_region_count || homes->array_push_window_count);
+        needed |= homes && (homes->array_region_count || homes->array_push_window_count ||
+            c_pointwise_push_event(homes));
     }
     if (!needed || !c_request_poll(c)) return;
     void *memory = NULL;
@@ -43,6 +44,14 @@ static void c_array_regions_admit(LirC *c) {
         const XrLirValueHomes *homes = c->value_homes[function - 1];
         if (!homes) continue;
         LirCArrayRegions *receiver = &c->array_regions[function - 1];
+        XrLirFunction previous=c->function;
+        const XrLirValueHomes *prior_homes=c->homes;
+        c->function=(XrLirFunction){c->request->module,function};
+        c->homes=homes;
+        c_pointwise_push_prepare(c,function,homes,&receiver->pointwise);
+        c->function=previous;
+        c->homes=prior_homes;
+        c->array_local_runtime |= receiver->pointwise.header!=0;
         if (homes->array_push_window_count) {
             if (!c_value_layout_status(c,xr_lir_array_push_window_bindings_create(homes,c->value_layouts,
                 &receiver->push_windows))) return;
@@ -86,6 +95,7 @@ static void c_array_region_spec(LirC *c, const XrLirArrayRegionBindings *binding
         row.slot_count,row.canonical_slot-row.first_slot);
 }
 static void c_array_region_specs(LirC *c) {
+    if (c->array_region && c->array_region->pointwise.header) c_pointwise_push_spec(c);
     if (c_array_region_present(c)) {
         const XrLirArrayRegionBindings *binding = c->array_region->bindings;
         for (size_t r = 0; r < binding->region_count && c_request_poll(c); ++r)
@@ -98,6 +108,10 @@ static void c_array_region_specs(LirC *c) {
     }
 }
 static void c_array_region_declarations(LirC *c) {
+    if (c->array_region && c->array_region->pointwise.header)
+        c_text(c,"    XrtArrayBacking *xrl_pc_owner = NULL;\n"
+            "    size_t xrl_pc_length = 0, xrl_pc_capacity = 0;\n"
+            "    bool xrl_pc_ready = false;\n");
     if (c_array_region_present(c)) {
         const XrLirArrayRegionBindings *binding = c->array_region->bindings;
         for (size_t r = 0; r < binding->region_count; ++r)

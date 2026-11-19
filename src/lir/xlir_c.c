@@ -49,6 +49,11 @@ typedef struct LirCArrayRegionScalar {
 typedef struct LirCArrayRegionHelper {
     size_t first, count, inputs, outputs;
 } LirCArrayRegionHelper;
+typedef struct LirCPointwisePush {
+    uint32_t header, push_block, push, create, read;
+    bool body_on_true;
+    XrtArrayI64RegionSlot slots[3];
+} LirCPointwisePush;
 typedef struct LirCArrayRegions {
     XrLirArrayRegionBindings *bindings;
     XrLirArrayRegionBindings *push_windows;
@@ -56,6 +61,7 @@ typedef struct LirCArrayRegions {
     LirCArrayRegionHelper *helpers;
     LirCArrayRegionScalar *scalars;
     size_t scalar_count, scalar_capacity;
+    LirCPointwisePush pointwise;
     bool has_set_helper;
     bool has_push_window;
 } LirCArrayRegions;
@@ -143,6 +149,8 @@ static bool c_array_push_present(const LirC *);
 static size_t c_array_push_window_at(const LirC *);
 static void c_array_push_edge_end(LirC *, size_t);
 static void c_array_push_before_branch(LirC *);
+static void c_pointwise_push_header(LirC *, const XrLirInstructionView *);
+static void c_pointwise_push_instruction(LirC *, const XrLirInstructionView *, uint32_t);
 static void c_array_helpers_prepare(LirC *, uint32_t, LirCArrayRegions *);
 static bool c_array_helper_enabled(const LirC *, size_t);
 static void c_array_helpers(LirC *);
@@ -974,7 +982,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (c_array_point(c, v) || v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_ARRAY_CELL_DROP) {
         uint32_t source = c_array_point(c, v) && c_located(&v->source) ? ++c->location_cursor : 0;
         c_array_region_slow(c);
-        c_array_instruction(c, v, source);
+        c_pointwise_push_instruction(c, v, source);
         return;
     }
     if (c_map_point(c, v) || v->op == XR_LIR_MAP_DROP || v->op == XR_LIR_MAP_CELL_DROP) {
@@ -1093,6 +1101,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_CONDBR:
             c_array_push_before_branch(c);
+            c_pointwise_push_header(c,v);
             c_text(c, "    if (");
             c_value(c, v->operands[0]);
             c_text(c, ") {\n");
@@ -1286,6 +1295,7 @@ static void c_verify_text(LirC *c) {
 #include "xlir_c_binding_forwarding.inc.c"
 #include "xlir_c_array_local.inc.c"
 #include "xlir_c_values.inc.c"
+#include "xlir_c_array_pointwise.inc.c"
 #include "xlir_c_array_region.inc.c"
 #include "xlir_c_array_region_helper.inc.c"
 static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {

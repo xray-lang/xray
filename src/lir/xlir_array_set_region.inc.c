@@ -6,6 +6,8 @@
  *
  * xlir_array_set_region.inc.c - Structural local Array loop preparations
  */
+#include "xlir_array_scalar_region.h"
+
 typedef struct LirArrayRegionUse {
     LirBindingForwardUse direct;
     uint32_t saving_uses, next_retain;
@@ -49,9 +51,6 @@ static bool lir_array_region_append(LirArrayRegionVector *vector, const void *it
     memcpy((unsigned char *)vector->data + (size_t)vector->count * stride, item, stride);
     ++vector->count;
     return true;
-}
-static bool lir_array_region_scalar(XrLirType type) {
-    return type == XR_LIR_I1 || type == XR_LIR_I64;
 }
 static bool lir_array_region_array(const XrLirFunctionData *f, uint32_t value) {
     return value && value <= f->value_count && f->values[value - 1].type == XR_LIR_ARRAY &&
@@ -430,17 +429,6 @@ static bool lir_array_region_edge(LirArrayRegionProof *p, uint32_t block, uint32
     *current = destination;
     return lir_array_region_step(p, (XrLirArraySetRegionStep){.kind=kind,.block=block + 1,
         .instruction=f->blocks[block].instruction_count,.edge=edge + 1,.source=source,.target=destination});
-}
-static bool lir_array_region_pure(const XrLirFunctionData *f, const XrLirInstructionView *op) {
-    if (!lir_array_region_scalar(op->type)) return false;
-    switch (op->op) {
-    case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
-    case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST: break;
-    default: return false;
-    }
-    for (uint32_t a = 0; a < op->operand_count; ++a)
-        if (!lir_array_region_scalar(f->values[op->operands[a] - 1].type)) return false;
-    return true;
 }
 static bool lir_array_region_pair(LirArrayRegionProof *p, uint32_t block, uint32_t instruction,
     uint32_t *current, bool read) {
