@@ -59,14 +59,31 @@ static XrtManagedStatus rbc_value_map_new(XrRbcStack *stack,RbcValueActivation *
     XrtManagedStatus status=xrt_map_backing_create(activation->frame,home->temporary_first_owner,types,keys,values,count);
     return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
 }
+static bool rbc_value_map_overwrite(XrRbcStack *stack, RbcValueActivation *activation,
+    const uint32_t *args, uint32_t workspace) {
+    if (!activation->owned_code || !activation->backings_ready) return false;
+    const XrLirHomeBinding *binding = rbc_value_binding(activation->code, args[0]);
+    if (!binding || binding->kind != XR_LIR_HOME_BINDING_LOCAL) return false;
+    const XrtStringBacking *key = NULL;
+    XrRbcRegister *item = rbc_value_register(stack, activation, args[2]);
+    if (!item || rbc_value_string_borrow(activation, args[1], &key) != XRT_MANAGED_OK) return false;
+    int64_t value;
+    memcpy(&value, &item->bits, sizeof(value));
+    const XrLirHomeWorkspace *stage = &activation->code->homes->workspaces[workspace];
+    return xrt_map_try_overwrite_local(&activation->frame_locations, binding->first_owner,
+        stage->first_owner, key, value);
+}
 static XrtManagedStatus rbc_value_map_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
+    if (access.index==XR_LIR_MAP_OP_SET && rbc_value_map_overwrite(stack, activation, args, access.window))
+        return XRT_MANAGED_OK;
     bool mutate=access.index==XR_LIR_MAP_OP_SET || access.index==XR_LIR_MAP_OP_REMOVE || access.index==XR_LIR_MAP_OP_CLEAR;
     const XrtBackingTypes *types=NULL;
     if (access.index==XR_LIR_MAP_OP_NEW || mutate) {
         XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
         if (status!=XRT_MANAGED_OK) return status;
+        activation->backings_ready=true;
     }
     if (access.index==XR_LIR_MAP_OP_NEW) return rbc_value_map_new(stack,activation,access,types);
     if (mutate) {
