@@ -593,7 +593,7 @@ static void frame_cfg_compiler_failures(void) {
     xr_rbc_program_destroy(program);CHECK(!live_allocations);
 }
 
-static void compiled_string_edge_owners(void) {
+static void compiled_string_edge_owners(bool stationary) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
     XrLirFunction f=test_function(m,"forward_owned_copy",NULL,0,XR_LIR_I64);
     XrLirType texts[]={XR_LIR_STRING,XR_LIR_STRING};
@@ -601,9 +601,22 @@ static void compiled_string_edge_owners(void) {
     OK(xr_lir_set_entry(m,f,entry));XrLirValue values[2]={{0},{0}},parameters[2]={{0},{0}};
     const char *bytes[]={"FIRST","LONG"};size_t lengths[]={5,4};
     for(unsigned n=0;n<2;++n) {
-        XrLirLiteral literal={0};OK(xr_lir_add_literal(m,bytes[n],lengths[n],&literal));
-        XrLirInstruction op={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
-        OK(xr_lir_emit_value(m,entry,&op,&values[n]));OK(xr_lir_block_parameter(m,join,n,&parameters[n]));
+        XrLirInstruction op={.type=XR_LIR_STRING};
+        XrLirValue number={0};
+        if (stationary) {
+            XrLirLiteral literal={0};
+            OK(xr_lir_add_literal(m,bytes[n],lengths[n],&literal));
+            op.op=XR_LIR_STRING_LITERAL;
+            op.bits=literal.id;
+        } else {
+            XrLirInstruction constant={.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=n ? 1234 : 12345};
+            OK(xr_lir_emit_value(m,entry,&constant,&number));
+            op.op=XR_LIR_STRING_I64;
+            op.operands=&number;
+            op.operand_count=1;
+        }
+        OK(xr_lir_emit_value(m,entry,&op,&values[n]));
+        OK(xr_lir_block_parameter(m,join,n,&parameters[n]));
     }
     test_branch(m,entry,join,values,2);XrLirValue length={0};
     XrLirInstruction op={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&parameters[0],.operand_count=1};
@@ -621,7 +634,14 @@ static void compiled_string_edge_owners(void) {
     const XrLirValueHomes *homes=xr_rbc_module_value_homes(module,0);
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
     CHECK(homes && code && code->homes==homes && homes->frame.slot_count>=4);
-    CHECK(homes->edge_count==1 && homes->edges[0].count==2);
+    if (stationary) {
+        CHECK(!homes->edge_count);
+        for (unsigned n=0;n<2;++n)
+            CHECK(xr_lir_home_stationary_edge(homes,values[n].id,parameters[n].id));
+        CHECK(homes->values[values[0].id].first_owner != homes->values[values[1].id].first_owner);
+    } else {
+        CHECK(homes->edge_count==1 && homes->edges[0].count==2);
+    }
     for(unsigned repeat=0;repeat<2;++repeat) {
         uint64_t result=0;
         CHECK(execute(program,NULL,0,&result)==XR_RBC_OK && result==5);
@@ -1069,7 +1089,8 @@ int main(void) {
     compiled_float_constants();
     jump_threading();
     jump_compaction();
-    compiled_string_edge_owners();
+    compiled_string_edge_owners(false);
+    compiled_string_edge_owners(true);
     compiled_spills();
     literal_allocation_failures();
     register_workspace_failure();
