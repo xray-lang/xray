@@ -176,27 +176,57 @@ static bool source_string_append_scalar_query(SourceContext *ctx, AstNode *node)
 }
 static bool source_string_append_statement(SourceContext *ctx, AstNode *node, bool *handled) {
     *handled = false;
-    if (!node || node->type != AST_COMPOUND_ASSIGNMENT) return true;
-    CompoundAssignmentNode *assignment = &node->as.compound_assignment;
-    if (assignment->object || assignment->op != TK_PLUS_ASSIGN || !assignment->name) return true;
-    SourceName *symbol = visible_name(ctx, assignment->name);
+    if (!node) return true;
+    AstNode *concat = NULL, *left = NULL, *right;
+    const char *name;
+    if (node->type == AST_COMPOUND_ASSIGNMENT) {
+        CompoundAssignmentNode *assignment = &node->as.compound_assignment;
+        if (assignment->object || assignment->op != TK_PLUS_ASSIGN) return true;
+        name = assignment->name;
+        right = assignment->value;
+    } else if (node->type == AST_ASSIGNMENT) {
+        name = node->as.assignment.name;
+        concat = node->as.assignment.value;
+        if (!concat || concat->type != AST_BINARY_ADD) return true;
+        left = concat->as.binary.left;
+        if (!left || left->type != AST_VARIABLE || !left->as.variable.name) return true;
+        right = concat->as.binary.right;
+    } else return true;
+    if (!name) return true;
+    SourceName *symbol = visible_name(ctx, name);
     if (!symbol || !symbol->mutable || symbol->type != XR_XIR_STRING || symbol->construction ||
         (symbol->kind != SOURCE_LOCAL && symbol->kind != SOURCE_SLOT) ||
         (symbol->kind == SOURCE_LOCAL && symbol->index < ctx->functions[ctx->function].parameter_count)) return true;
-    if (!source_string_append_rhs(ctx, assignment->value, 0)) return ctx->diagnostic.status == XR_XIR_OK;
+    /* Local identity and a non-rebinding RHS keep the old left value current
+     * until append. In particular, a call may change the binding after its
+     * old value was read and must keep the ordinary snapshot path. */
+    if (left && (symbol->kind != SOURCE_LOCAL || symbol->direct_borrowed ||
+        visible_name(ctx, left->as.variable.name) != symbol)) return true;
+    if (!source_string_append_rhs(ctx, right, 0)) return ctx->diagnostic.status == XR_XIR_OK;
     *handled = true;
     SourceValue cell = {0}, suffix = {0};
-    if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_READ_WRITE) ||
+    if (left) {
+        XrHirBindingAction assignment;
+        if (!source_hir_binding_use(ctx, node, symbol, XR_HIR_BINDING_ASSIGN, (SourceValue){0}, &assignment) ||
+            !source_hir_binding_emitted(ctx, &assignment, NULL, ctx->bodies[ctx->function].count) ||
+            !source_query_reference(ctx, left, symbol, symbol, XR_XIR_SOURCE_READ) ||
+            !source_query_expression(ctx, left, XR_XIR_STRING)) return false;
+    }
+    if (!source_query_reference(ctx, node, symbol, symbol, left ? XR_XIR_SOURCE_WRITE : XR_XIR_SOURCE_READ_WRITE) ||
         !source_binding_cell(ctx, symbol, &cell)) return false;
-    AstNode *scalar = source_string_append_scalar(ctx, assignment->value);
+    AstNode *scalar = source_string_append_scalar(ctx, right);
     if (scalar) {
         if (!expression(ctx, scalar, &suffix)) return false;
         if (suffix.type == XR_XIR_BOOL || suffix.type == XR_XIR_RUNE || xr_xir_type_is_number(suffix.type))
             return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_STRING_APPEND, XR_XIR_UNIT,
                 {cell.id, suffix.id}, {0}, 1, {0}}, NULL) &&
-                source_string_append_scalar_query(ctx, assignment->value) && source_query_expression(ctx, node, XR_XIR_STRING);
+                source_string_append_scalar_query(ctx, right) &&
+                (!concat || source_query_expression(ctx, concat, XR_XIR_STRING)) &&
+                source_query_expression(ctx, node, XR_XIR_STRING);
     }
-    return source_plan_expression(ctx, assignment->value, (SourceExpectedType){true, XR_XIR_STRING, false, false}, &suffix) &&
+    return source_plan_expression(ctx, right, (SourceExpectedType){true, XR_XIR_STRING, false, false}, &suffix) &&
         source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_STRING_APPEND, XR_XIR_UNIT,
-            {cell.id, suffix.id}, {0}, 0, {0}}, NULL) && source_query_expression(ctx, node, XR_XIR_STRING);
+            {cell.id, suffix.id}, {0}, 0, {0}}, NULL) &&
+        (!concat || source_query_expression(ctx, concat, XR_XIR_STRING)) &&
+        source_query_expression(ctx, node, XR_XIR_STRING);
 }
