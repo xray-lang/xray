@@ -1,5 +1,0 @@
-fn apply(callback: fn(Array<(string, i64)>) -> i64, rows: Array<(string, i64)>) -> i64 {
-    return callback(rows)
-}
-
-print(apply(fn(rows: Array<(string, i64)>) -> i64 { return rows[0].1 }, [("item", 42)]))

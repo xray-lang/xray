@@ -7,7 +7,7 @@
  * xrbc_lir_callable_types.inc.c - Receive exact invocation descriptors
  */
 static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram *program,
-    XrLirType type, XrLirType element, XrRbcCallableValue *output) {
+    const XrLirValueLayouts *layouts, XrLirType type, XrLirType element, XrRbcCallableValue *output) {
     XrPodScalar scalar = lir_pod_scalar(type);
     if (scalar < XR_POD_SCALAR_COUNT) {
         *output = (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, scalar};
@@ -15,7 +15,15 @@ static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram 
     }
     if (type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_SET_I64) {
         uint32_t family = rbc_lir_array_family(element);
-        if (type == XR_LIR_ARRAY && family == XR_RBC_ARRAY_FAMILY_COUNT) return false;
+        if (type == XR_LIR_ARRAY && family == XR_RBC_ARRAY_FAMILY_COUNT) {
+            const XrtValuePlan *plan = NULL;
+            uint32_t id = 0;
+            if (!xr_lir_inline_array_ordinal(input, element) ||
+                xr_lir_value_layouts_lookup(layouts, (XrLirValueLayoutKey){type, element, 0}, &plan, &id) !=
+                    XR_LIR_VALUE_LAYOUT_OK || !id) return false;
+            *output = (XrRbcCallableValue){XR_RBC_CALLABLE_HOME, id};
+            return true;
+        }
         *output = (XrRbcCallableValue){XR_RBC_CALLABLE_REFERENCE,
             type == XR_LIR_SET_I64 ? XR_RBC_SET_I64 :
             type == XR_LIR_MAP_STRING_I64 ? XR_RBC_MAP_STRING_I64 :
@@ -35,7 +43,7 @@ static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram 
 }
 
 static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input,
-    XrRbcProgram *program, XrRbcCompileDiagnostic *diagnostic) {
+    XrRbcProgram *program, const XrLirValueLayouts *layouts, XrRbcCompileDiagnostic *diagnostic) {
     uint32_t count = xr_lir_constructed_type_count(input), functions = 0;
     for (uint32_t n = 0; n < count; ++n)
         functions += rbc_lir_callable_type(input, XR_LIR_TYPE_COUNT + n);
@@ -70,14 +78,14 @@ static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input,
                 "cannot own invocation parameters", (XrLirSource){0});
         types[ordinal] = (XrRbcCallableType){.parameters=parameters,
             .parameter_count=signature.parameter_count, .flags=signature.flags};
-        if (!rbc_lir_callable_value(input, program, signature.result, signature.result_element, &types[ordinal].result))
+        if (!rbc_lir_callable_value(input, program, layouts, signature.result, signature.result_element, &types[ordinal].result))
             return rbc_lir_error(diagnostic, XR_RBC_COMPILE_UNSUPPORTED,
                 "invocation result has no exact bytecode carrier", (XrLirSource){0});
         for (uint32_t p = 0; p < signature.parameter_count; ++p) {
             XrLirCallableParameter parameter = signature.parameters[p];
             parameters[p].mode = (uint32_t)parameter.mode;
             parameters[p].escaping = parameter.escaping;
-            if (!rbc_lir_callable_value(input, program, parameter.type, parameter.array_element, &parameters[p].value))
+            if (!rbc_lir_callable_value(input, program, layouts, parameter.type, parameter.array_element, &parameters[p].value))
                 return rbc_lir_error(diagnostic, XR_RBC_COMPILE_UNSUPPORTED,
                     "invocation parameter has no exact bytecode carrier", (XrLirSource){0});
         }
@@ -86,7 +94,8 @@ static XrRbcCompileStatus rbc_lir_callable_types(const XrLirModule *input,
 }
 
 static XrRbcCompileStatus rbc_lir_callable_parameters(const XrLirModule *input,
-    const uint32_t *ids, uint32_t count, XrRbcProgram *program, XrRbcCompileDiagnostic *diagnostic) {
+    const uint32_t *ids, uint32_t count, XrRbcProgram *program, const XrLirValueLayouts *layouts,
+    XrRbcCompileDiagnostic *diagnostic) {
     bool needed = false;
     for (uint32_t f = 0; f < count; ++f) {
         XrLirFunctionView view;
@@ -121,7 +130,7 @@ static XrRbcCompileStatus rbc_lir_callable_parameters(const XrLirModule *input,
             rows[p].parameter = from.parameter;
             rows[p].contract.mode = (uint32_t)from.contract.mode;
             rows[p].contract.escaping = from.contract.escaping;
-            if (!rbc_lir_callable_value(input, program, from.contract.type, from.contract.array_element,
+            if (!rbc_lir_callable_value(input, program, layouts, from.contract.type, from.contract.array_element,
                     &rows[p].contract.value)) return rbc_lir_error(diagnostic,XR_RBC_COMPILE_UNSUPPORTED,
                         "callable parameter has no exact bytecode carrier",(XrLirSource){0});
         }

@@ -267,10 +267,11 @@ typedef struct {
 
 typedef enum XrRbcCallableValueKind {
     XR_RBC_CALLABLE_SCALAR, XR_RBC_CALLABLE_REFERENCE,
-    XR_RBC_CALLABLE_AGGREGATE, XR_RBC_CALLABLE_FUNCTION, XR_RBC_CALLABLE_BINDING, XR_RBC_CALLABLE_CELL
+    XR_RBC_CALLABLE_AGGREGATE, XR_RBC_CALLABLE_FUNCTION, XR_RBC_CALLABLE_BINDING, XR_RBC_CALLABLE_CELL,
+    XR_RBC_CALLABLE_HOME
 } XrRbcCallableValueKind;
-/* A hidden CELL capture names its exact same-image Cell row. It is not a
- * legacy captured-cell register kind or a public callable signature carrier. */
+/* Hidden CELL captures and typed HOME signatures name exact ValueImage rows.
+ * HOME is used for inline-element Arrays with ordinary typed call homes. */
 typedef struct XrRbcCallableValue { XrRbcCallableValueKind kind; uint32_t type; } XrRbcCallableValue;
 typedef struct XrRbcCallableParameter {
     XrRbcCallableValue value;

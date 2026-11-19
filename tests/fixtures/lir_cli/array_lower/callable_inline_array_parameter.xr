@@ -1,0 +1,11 @@
+fn apply(callback: fn(Array<(string, i64)>) -> Array<(string, i64)>, rows: Array<(string, i64)>) -> Array<(string, i64)> {
+    return callback(rows)
+}
+
+fn exercise(value: i64) {
+    const original: Array<(string, i64)> = [("item-${value}", value)]
+    const kept = apply(fn(rows: Array<(string, i64)>) -> Array<(string, i64)> { return rows }, original)
+    print("${original[0].0}:${kept[0].1}:${len(kept)}")
+}
+
+exercise(42)

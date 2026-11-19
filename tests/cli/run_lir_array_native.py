@@ -24,6 +24,7 @@ def main() -> None:
     parser.add_argument("--case", action="append", default=[])
     args = parser.parse_args()
     cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose", "callable_compose_weaken",
+             "callable_inline_array_parameter", "callable_inline_array_result",
              "factory_bindings", "factory_loop", "factory_transfer_temporaries",
              "module_double", "module_snapshot", "module_counter", "counter_shared_binding",
              "tuple_values", "tuple_flow", "tuple_mixed_fields", "tuple_mixed_owned", "tuple_array_state", "tuple_array_return",
@@ -190,13 +191,6 @@ def main() -> None:
                     failures.append((name, "output", out, err))
                 if result != reference:
                     failures.append((name, "VM/native byte comparison", reference, result))
-    for name in ("reject_callable_inline_array_result", "reject_callable_inline_array_parameter"):
-        source = fixtures / (name + ".xr")
-        run(name + "-check", [binary, "check", source], 0)
-        _, vm_out, vm_err = run(name + "-vm", [binary, "run", source], 1)
-        _, c_out, c_err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
-        if vm_out or c_out or vm_err != c_err or b"inline-element Arrays in callable signatures" not in vm_err:
-            failures.append((name, "shared callable Array diagnostic", vm_out, vm_err, c_out, c_err))
     for name in ("reject_bool", "reject_nested", "reject_function_reassign",
                  "reject_function_alias", "reject_function_ref", "reject_tuple_unit"):
         source = fixtures / (name + ".xr")

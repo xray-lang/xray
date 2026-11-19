@@ -568,6 +568,7 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
         if (function->register_kinds[captures+p] != XR_RBC_BITS) return XR_RBC_INVALID;
     if (function->callable) {
         XrRbcCallableType type = module->callable_types[function->callable - 1];
+        if (rbc_callable_needs_homes(type)) return XR_RBC_INVALID;
         for (size_t p = 0; p < argument_count; ++p)
             if (!xr_rbc_callable_scalar_valid(type.parameters[p].value, arguments[p])) return XR_RBC_INVALID;
     }

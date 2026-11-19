@@ -2019,7 +2019,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     if (status != XR_RBC_COMPILE_OK) goto done;
     status = rbc_lir_aggregate_types(input, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
-    status = rbc_lir_callable_types(input, p, d);
+    status = rbc_lir_callable_types(input, p, preparation.layouts, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     if (root.parameter_count && root.parameter_types[root.parameter_count - 1] == XR_LIR_STATE &&
         !p->module.state_spec) {
@@ -2027,7 +2027,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
             "only the designated entry receives module state", (XrLirSource){0});
         goto done;
     }
-    status = rbc_lir_callable_parameters(input, ids, count, p, d);
+    status = rbc_lir_callable_parameters(input, ids, count, p, preparation.layouts, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
     for (uint32_t f = 0; p->module.callable_type_count && f < count; ++f) {
         XrLirFunctionView view;
