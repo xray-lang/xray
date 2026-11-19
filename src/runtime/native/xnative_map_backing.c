@@ -18,12 +18,12 @@
 
 typedef struct MapProbe {
     uint64_t hash;
-    size_t bucket, entry;
-    bool found;
+    size_t bucket;
+    size_t entry_id; // One-based dense index. Zero means no match.
 } MapProbe;
 typedef struct MapEdit {
     MapProbe probe;
-    size_t length, capacity;
+    size_t capacity;
     bool noop;
 } MapEdit;
 typedef struct MapDelete {
@@ -124,7 +124,7 @@ static XR_AINLINE XrtManagedStatus map_find(const XrtMapBacking *map, const XrtS
         if (!remaining) return XRT_MANAGED_ARGUMENT;
     }
     if (read) *read = match;
-    if (edit) *edit = (MapProbe){.hash=hash, .bucket=bucket, .entry=found ? found - 1 : 0, .found=found != 0};
+    if (edit) *edit = (MapProbe){.hash=hash, .bucket=bucket, .entry_id=found};
     return XRT_MANAGED_OK;
 }
 static XrtManagedStatus map_probe(const XrtMapBacking *map, const XrtStringBacking *key, MapProbe *output) {
@@ -256,54 +256,55 @@ static XrtManagedStatus map_finish(const MapDestination *destination, XrtManaged
     }
     return status;
 }
-static XrtManagedStatus map_edit(const XrtMapBacking *map, const XrtMapUpdate *update, MapEdit *output) {
+/* Construct the final plan in its consumer. Keeping the common lookup and
+ * plan together lets in-place edits keep the fields they actually use. */
+static XR_AINLINE XrtManagedStatus map_edit(const XrtMapBacking *map, const XrtMapUpdate *update, MapEdit *edit) {
     if (!map_shape(map) || !update) return XRT_MANAGED_ARGUMENT;
-    MapEdit edit = {.length=map->length, .capacity=map->capacity};
     if (update->operation == XRT_MAP_UPDATE_CLEAR) {
-        edit.noop = !map->length; edit.length = edit.capacity = 0;
-    } else if (update->operation == XRT_MAP_UPDATE_SET || update->operation == XRT_MAP_UPDATE_REMOVE) {
-        XrtManagedStatus status = map_probe(map, update->key, &edit.probe);
-        if (status != XRT_MANAGED_OK) return status;
-        if (update->operation == XRT_MAP_UPDATE_SET) {
-            if (!edit.probe.found) ++edit.length;
-            status = map_capacity(map->capacity, edit.length, &edit.capacity);
-            if (status != XRT_MANAGED_OK) return status;
-        } else {
-            edit.noop = !edit.probe.found;
-            if (edit.probe.found) --edit.length;
-        }
-    } else return XRT_MANAGED_ARGUMENT;
-    *output = edit;
+        *edit = (MapEdit){.noop=!map->length};
+        return XRT_MANAGED_OK;
+    }
+    if (update->operation != XRT_MAP_UPDATE_SET && update->operation != XRT_MAP_UPDATE_REMOVE)
+        return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = map_find(map, update->key, &edit->probe, NULL);
+    if (status != XRT_MANAGED_OK) return status;
+    edit->noop = update->operation == XRT_MAP_UPDATE_REMOVE && !edit->probe.entry_id;
+    if (update->operation == XRT_MAP_UPDATE_SET)
+        return map_capacity(map->capacity, map->length + !edit->probe.entry_id, &edit->capacity);
+    edit->capacity = map->capacity;
     return XRT_MANAGED_OK;
 }
-static XrtManagedStatus map_delete_preflight(const XrtMapBacking *map, MapProbe probe, MapDelete *output) {
+static XrtManagedStatus map_delete_preflight(const XrtMapBacking *map,
+    size_t entry_id, size_t hit_bucket, MapDelete *output) {
     MapDelete plan = {0};
     size_t last = map->length - 1, mask = map->capacity - 1;
-    size_t position = map->rows[probe.entry].entry_order;
-    if (position >= map->order_count || map->rows[position].order != probe.entry + 1) return XRT_MANAGED_ARGUMENT;
+    size_t entry = entry_id - 1;
+    size_t position = map->rows[entry].entry_order;
+    if (position >= map->order_count || map->rows[position].order != entry_id) return XRT_MANAGED_ARGUMENT;
     for (size_t p = position; p < map->capacity; p |= p + 1)
         if (!map->rows[p].rank || map->rows[p].rank > map->length) return XRT_MANAGED_ARGUMENT;
-    if (probe.entry != last) {
+    if (entry != last) {
         size_t bucket = (size_t)map->rows[last].hash & mask;
         bool found = false;
         for (size_t n = 0; n < map->capacity; ++n, bucket = (bucket + 1) & mask) {
-            size_t entry = map->rows[bucket].bucket;
-            if (!entry || entry > map->length) return XRT_MANAGED_ARGUMENT;
-            if (entry == last + 1) { plan.last_bucket = bucket; found = true; break; }
+            size_t candidate = map->rows[bucket].bucket;
+            if (!candidate || candidate > map->length) return XRT_MANAGED_ARGUMENT;
+            if (candidate == last + 1) { plan.last_bucket = bucket; found = true; break; }
         }
         if (!found) return XRT_MANAGED_ARGUMENT;
     }
-    size_t bucket = (probe.bucket + 1) & mask;
+    size_t bucket = (hit_bucket + 1) & mask;
     for (size_t n = 0; n < map->capacity; ++n, bucket = (bucket + 1) & mask) {
         if (!map->rows[bucket].bucket) { plan.end = bucket; *output = plan; return XRT_MANAGED_OK; }
         if (map->rows[bucket].bucket > map->length) return XRT_MANAGED_ARGUMENT;
     }
     return XRT_MANAGED_ARGUMENT;
 }
-static XrtStringBacking *map_delete_publish(XrtMapBacking *map, MapProbe probe, MapDelete plan) {
-    size_t last = map->length - 1, mask = map->capacity - 1, hole = probe.bucket;
-    XrtStringBacking *owned = map->rows[probe.entry].key;
-    size_t position = map->rows[probe.entry].entry_order;
+static XrtStringBacking *map_delete_publish(XrtMapBacking *map, size_t entry_id, size_t hit_bucket, MapDelete plan) {
+    size_t last = map->length - 1, mask = map->capacity - 1, hole = hit_bucket;
+    size_t removed = entry_id - 1;
+    XrtStringBacking *owned = map->rows[removed].key;
+    size_t position = map->rows[removed].entry_order;
     map->rows[position].order = 0;
     for (size_t p = position; p < map->capacity; p |= p + 1) --map->rows[p].rank;
     for (size_t bucket = (hole + 1) & mask; bucket != plan.end; bucket = (bucket + 1) & mask) {
@@ -316,14 +317,14 @@ static XrtStringBacking *map_delete_publish(XrtMapBacking *map, MapProbe probe, 
         }
     }
     map->rows[hole].bucket = 0;
-    if (probe.entry != last) {
+    if (removed != last) {
         // Move only entry fields; the other columns index physical row positions.
-        map->rows[probe.entry].key = map->rows[last].key;
-        map->rows[probe.entry].value = map->rows[last].value;
-        map->rows[probe.entry].hash = map->rows[last].hash;
-        map->rows[probe.entry].entry_order = map->rows[last].entry_order;
-        map->rows[plan.last_bucket].bucket = probe.entry + 1;
-        map->rows[map->rows[probe.entry].entry_order].order = probe.entry + 1;
+        map->rows[removed].key = map->rows[last].key;
+        map->rows[removed].value = map->rows[last].value;
+        map->rows[removed].hash = map->rows[last].hash;
+        map->rows[removed].entry_order = map->rows[last].entry_order;
+        map->rows[plan.last_bucket].bucket = entry_id;
+        map->rows[map->rows[removed].entry_order].order = entry_id;
     }
     map->rows[last].key = NULL;
     map->rows[last].value = 0; map->rows[last].hash = 0; map->rows[last].entry_order = 0;
@@ -354,10 +355,10 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_create(XrtManagedFrame *frame, size_
     status = map_prepare(&destination, capacity, &map);
     if (status != XRT_MANAGED_OK) return status;
     for (size_t i = 0; i < count; ++i) {
-        MapProbe probe = {0};
+        MapProbe probe;
         status = map_probe(map, keys[i], &probe);
         if (status != XRT_MANAGED_OK) break;
-        if (probe.found) map->rows[probe.entry].value = values[i];
+        if (probe.entry_id) map->rows[probe.entry_id - 1].value = values[i];
         else status = map_append(map, keys[i], values[i], probe.hash);
         if (status != XRT_MANAGED_OK) break;
     }
@@ -387,7 +388,7 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *map,
     const XrtMapUpdate *update, bool *applied, bool *removed) {
     if (!applied || !removed) return XRT_MANAGED_ARGUMENT;
     *applied = false;
-    MapEdit edit = {0};
+    MapEdit edit;
     XrtManagedStatus status = map_edit(map, update, &edit);
     if (status != XRT_MANAGED_OK) return status;
     if (edit.noop) { *applied = true; *removed = false; return XRT_MANAGED_OK; }
@@ -395,11 +396,11 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *map,
     if ((references != 1 && references != -1) || edit.capacity > map->capacity) return XRT_MANAGED_OK;
     MapDelete deletion = {0};
     if (update->operation == XRT_MAP_UPDATE_REMOVE) {
-        status = map_delete_preflight(map, edit.probe, &deletion);
+        status = map_delete_preflight(map, edit.probe.entry_id, edit.probe.bucket, &deletion);
         if (status != XRT_MANAGED_OK) return status;
     }
     XrtStringBacking *owned = NULL;
-    if (update->operation == XRT_MAP_UPDATE_SET && !edit.probe.found) {
+    if (update->operation == XRT_MAP_UPDATE_SET && !edit.probe.entry_id) {
         owned = (XrtStringBacking *)update->key;
         if (!xrt_managed_retain(&owned->managed)) return XRT_MANAGED_REFCOUNT;
     }
@@ -408,10 +409,11 @@ XR_FUNCDEF XrtManagedStatus xrt_map_backing_try_update(XrtMapBacking *map,
         return XRT_MANAGED_OK;
     }
     if (update->operation == XRT_MAP_UPDATE_SET) {
-        if (edit.probe.found) map->rows[edit.probe.entry].value = update->value;
+        if (edit.probe.entry_id) map->rows[edit.probe.entry_id - 1].value = update->value;
         else map_publish(map, owned, update->value, edit.probe.hash, edit.probe.bucket);
-    } else if (update->operation == XRT_MAP_UPDATE_REMOVE) owned = map_delete_publish(map, edit.probe, deletion);
-    else map_clear_publish(map);
+    } else if (update->operation == XRT_MAP_UPDATE_REMOVE) {
+        owned = map_delete_publish(map, edit.probe.entry_id, edit.probe.bucket, deletion);
+    } else map_clear_publish(map);
     *applied = true; *removed = update->operation == XRT_MAP_UPDATE_REMOVE;
     if (owned && update->operation == XRT_MAP_UPDATE_REMOVE) xrt_managed_drop(&owned->managed);
     return XRT_MANAGED_OK;
@@ -442,7 +444,7 @@ XR_FUNCDEF XrtManagedStatus xrt_map_try_update_local(XrtManagedFrame *frame,
 static XrtManagedStatus map_update_create(const MapDestination *destination,
     const XrtMapBacking *source, const XrtMapUpdate *update, bool *removed) {
     if (!removed) return XRT_MANAGED_ARGUMENT;
-    MapEdit edit = {0};
+    MapEdit edit;
     XrtManagedStatus status = map_edit(source, update, &edit);
     if (status != XRT_MANAGED_OK) return status;
     XrtMapBacking *map = NULL;
@@ -452,16 +454,17 @@ static XrtManagedStatus map_update_create(const MapDestination *destination,
         for (size_t ordinal = 0; ordinal < source->length; ++ordinal) {
             size_t entry = map_order_entry(source, ordinal);
             if (entry == SIZE_MAX) { status = XRT_MANAGED_ARGUMENT; break; }
-            if (update->operation == XRT_MAP_UPDATE_REMOVE && edit.probe.found && entry == edit.probe.entry) continue;
-            int64_t value = update->operation == XRT_MAP_UPDATE_SET && edit.probe.found && entry == edit.probe.entry ?
+            bool matched = entry + 1 == edit.probe.entry_id;
+            if (update->operation == XRT_MAP_UPDATE_REMOVE && matched) continue;
+            int64_t value = update->operation == XRT_MAP_UPDATE_SET && matched ?
                 update->value : source->rows[entry].value;
             status = map_append(map, source->rows[entry].key, value, source->rows[entry].hash);
             if (status != XRT_MANAGED_OK) break;
         }
-        if (status == XRT_MANAGED_OK && update->operation == XRT_MAP_UPDATE_SET && !edit.probe.found)
+        if (status == XRT_MANAGED_OK && update->operation == XRT_MAP_UPDATE_SET && !edit.probe.entry_id)
             status = map_append(map, update->key, update->value, edit.probe.hash);
     }
-    bool did_remove = update->operation == XRT_MAP_UPDATE_REMOVE && edit.probe.found;
+    bool did_remove = update->operation == XRT_MAP_UPDATE_REMOVE && edit.probe.entry_id;
     status = map_finish(destination, status);
     if (status == XRT_MANAGED_OK) *removed = did_remove;
     return status;
