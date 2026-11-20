@@ -231,8 +231,15 @@ and must retain all samples. The only ratio limits are the `run.py` gates below.
 
 The portable `run.py` driver measures all eight original and variant workloads,
 eleven alternating rounds each, with the corresponding unchanged raw workload.
-Shared CI runners swing single samples by up to 2x, and with five rounds the Map
-medians crossed 1.3 on GCC, MSVC and clang-cl in different runs of unchanged code.
+Each ratio compares the lower quartile of the per-process wall times; the median
+ratio is still reported. Runner interference only adds time: on shared Linux x86
+VMs (Intel Xeon 6975P-C, AMD EPYC 9V74 and 9V45) the managed Map workloads have a
+second mode about 15% slower with identical instruction, L1 and TLB miss counts,
+and it survives disabled ASLR with a fixed environment. Typical GCC Map ratios
+there are 1.13-1.17, yet a median taken while most processes landed in the slow
+mode reached 1.30-1.34 on GCC, MSVC and clang-cl with unchanged code. Over the
+same five runs the lower quartile crossed 1.3 once instead of five times. A real
+regression moves every sample, so the lower quartile still detects it.
 `record-escape` remains a separate ownership control, outside those eight modes.
 The automatic five-provider workflow holds `push-direct`, `push-noalias`, `map`,
 `map-take` and `map-typed-drop` to 1.3x their raw controls. The per-operation
