@@ -321,6 +321,39 @@ static void rbc_fixed_array_leaf_locations(void) {
     CHECK(!rbc_value_try_fixed_array_leaf(&stack,2,&status) && status==XRT_MANAGED_OK && elements[1]==23);
     CHECK(state.phase==RBC_ARRAY_REGION_BYPASS && !activation.active_array_region && !state.cache.owner);
 }
+
+static void rbc_array_read_sum_checkpoint(void) {
+    enum { IV=1, ACCUMULATOR, BOUND };
+    XrLirFixedArrayUpdateHome row={.region={.primary_kind=XR_LIR_ARRAY_REGION_PRIMARY_GET,
+        .range={.kind=XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT,.iv=IV,.length=BOUND},
+        .read_sum={.accumulator=ACCUMULATOR,.next_accumulator=ACCUMULATOR,.limit=BOUND}}};
+    const XrLirValueHomes homes={.fixed_array_updates=&row,.fixed_array_update_count=1};
+    const XrRbcValueLocation locations[]={
+        [IV]={XR_RBC_VALUE_SPILL,0}, [ACCUMULATOR]={XR_RBC_VALUE_REGISTER,0}, [BOUND]={XR_RBC_VALUE_REGISTER,1}
+    };
+    const XrRbcValueAccess latch={.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX};
+    const XrRbcArrayRegionAccess role={.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_LATCH,
+        .sum_checkpoint=true};
+    const XrRbcValueCode code={.homes=&homes,.locations=locations,.value_count=BOUND,.accesses=&latch,.access_count=1,
+        .array_region_accesses=&role};
+    int64_t elements[]={42,7,-1,9};
+    XrtManagedHeader owner={0};
+    const RbcArrayRegionState ready={.phase=RBC_ARRAY_REGION_ACTIVE,
+        .cache={.owner=&owner,.elements=(unsigned char *)elements,.length=4}};
+    RbcArrayRegionState state=ready;
+    RbcValueActivation activation={.code=&code,.depth=1,.owned_code=true,.array_regions=&state,.active_array_region=1};
+    XrRbcValueRuntime values={.top=&activation};
+    XrRbcFrame frame={.pc=19,.base=1,.spill_base=1};
+    XrRbcRegister slots[3]={{0},{.bits=UINT64_MAX},{.bits=3}}, spills[2]={{0},{.bits=1}};
+    XrRbcStack stack={.values=&values,.depth=1,.frames=&frame,.slots=slots,.spills=spills};
+    XrtManagedStatus status=XRT_MANAGED_OK;
+    CHECK(rbc_value_try_fixed_array_leaf(&stack,0,&status)==1);
+    CHECK(state.sum_attempted && status==XRT_MANAGED_OK && frame.pc==19 && spills[1].bits==3 && slots[1].bits==5);
+    state=ready; slots[1].bits=123; slots[2].bits=5; spills[1].bits=1;
+    CHECK(rbc_value_try_fixed_array_leaf(&stack,0,&status)==1);
+    CHECK(state.sum_attempted && status==XRT_MANAGED_OK && spills[1].bits==1 && slots[1].bits==123);
+}
+
 static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool bypass,bool observer) {
     XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,trips,loops,failure,observer,RBC_REGION_NORMAL);
     XrRbcProgram *program=NULL; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
@@ -534,7 +567,8 @@ static void rbc_read_fold_cases(bool additive,RbcReadFoldBound mode) {
     const XrRbcModule *module=xr_rbc_program_view(program);
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
     CHECK(code && code->array_regions && code->array_regions->region_count==1);
-    CHECK((code->array_read_folds!=NULL)==additive);
+    const XrLirArrayReadSum *sum=&code->array_regions->regions[0].region.read_sum;
+    CHECK((sum->accumulator!=0)==additive);
     size_t marked=0;
     for (size_t n=0;n<code->access_count;++n)
         marked+=code->accesses[n].operation==XR_RBC_VALUE_EDGE && code->accesses[n].other!=0;
@@ -542,8 +576,7 @@ static void rbc_read_fold_cases(bool additive,RbcReadFoldBound mode) {
     if (mode==RBC_READ_FOLD_IMMEDIATE) {
         /* A preheader constant used solely by the compare never writes its
          * nominal register. The fold must use the same exact immediate bits. */
-        CHECK(code->array_read_folds[0].constant && !code->array_read_folds[0].limit &&
-            code->array_read_folds[0].limit_bits==3);
+        CHECK(!sum->limit && sum->limit_bits==3);
         const XrRbcFunction *function=&module->functions[0];
         size_t immediate_compares=0;
         for (size_t pc=0;pc<function->code_count;++pc) {
@@ -554,8 +587,7 @@ static void rbc_read_fold_cases(bool additive,RbcReadFoldBound mode) {
         CHECK(immediate_compares==1);
     }
     bool large=rbc_read_large_bound(mode);
-    if (large) CHECK(code->array_read_folds[0].constant && !code->array_read_folds[0].limit &&
-        code->array_read_folds[0].limit_bits==32768);
+    if (large) CHECK(!sum->limit && sum->limit_bits==32768);
     const uint64_t bounds[]={UINT64_MAX,0,1,2,3,4};
     size_t count=mode==RBC_READ_FOLD_FORMAL ? sizeof(bounds)/sizeof(bounds[0]) : 1u;
     for (size_t n=0;n<count;++n) {
@@ -587,7 +619,7 @@ static void rbc_fixed_read_cases(bool additive,RbcReadFoldBound mode) {
     xr_lir_module_destroy(input);
     const XrRbcModule *module=xr_rbc_program_view(program);
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
-    CHECK(code && code->array_region_runtime && !code->array_regions && !code->array_read_folds &&
+    CHECK(code && code->array_region_runtime && !code->array_regions &&
         code->homes->fixed_array_update_count==1);
     const XrLirFixedArrayUpdateHome *row=&code->homes->fixed_array_updates[0];
     CHECK(row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && row->body_edge==2 &&
@@ -595,6 +627,16 @@ static void rbc_fixed_read_cases(bool additive,RbcReadFoldBound mode) {
     bool same_length=mode==RBC_READ_FOLD_SAME_LEN || mode==RBC_READ_FOLD_EMPTY_LEN;
     CHECK(row->region.range.kind==(uint32_t)(same_length ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN :
         XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT));
+    CHECK((row->region.read_sum.accumulator!=0)==additive);
+    size_t checkpoints=0;
+    for (size_t n=0;n<code->access_count;++n) {
+        const XrRbcArrayRegionAccess *role=&code->array_region_accesses[n];
+        if (role->sum_checkpoint) {
+            CHECK(role->fixed && role->fixed_edge==XR_LIR_ARRAY_REGION_EDGE_LATCH);
+            ++checkpoints;
+        }
+    }
+    CHECK(checkpoints==(size_t)additive);
 
     const uint64_t bounds[]={UINT64_MAX,0,1,2,3,4};
     const uint64_t sum[]={INT64_MAX,INT64_MAX,UINT64_MAX-1,UINT64_MAX-2,4};
@@ -788,6 +830,7 @@ static void rbc_array_region_cases(void) {
     rbc_fixed_region_case(4,1,RBC_REGION_FIXED_FALSE);
     rbc_fixed_adjacent_regions();
     rbc_fixed_array_leaf_locations();
+    rbc_array_read_sum_checkpoint();
     RbcArrayRegionState state={.cache={(void *)1,(void *)2,3},.phase=RBC_ARRAY_REGION_ACTIVE};
     RbcValueActivation activation={.array_regions=&state,.active_array_region=1,.frame=(void *)4,.payload=(void *)5};
     rbc_value_array_region_forget(&activation,1,RBC_ARRAY_REGION_BYPASS);

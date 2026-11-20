@@ -124,6 +124,10 @@ static bool rbc_lir_array_region_role(RbcLirCompiler *c,const XrRbcValueAccess *
         role->region = c->fixed_array_marker.region;
         role->fixed_edge = (uint8_t)c->fixed_array_marker.kind;
         role->fixed = true;
+        if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_LATCH) {
+            size_t index = role->region - 1 - rbc_value_legacy_array_region_count(c->value_code);
+            role->sum_checkpoint = rbc_lir_array_read_ready(c->value_code, &c->homes->fixed_array_updates[index].region);
+        }
         return true;
     }
     if (c->fixed_array_blocks) {

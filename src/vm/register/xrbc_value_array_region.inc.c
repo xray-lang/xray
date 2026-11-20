@@ -159,6 +159,9 @@ static bool rbc_value_fixed_array_before(XrRbcStack *stack, RbcValueActivation *
             const XrRbcArrayCountedPush *counted = code->array_counted_push ? &code->array_counted_push[ordinal] : NULL;
             if (counted && counted->iv)
                 rbc_value_fixed_array_counted_push(stack, activation, row, counted, role->region);
+        } else if (role->sum_checkpoint && state->phase == RBC_ARRAY_REGION_ACTIVE && !state->sum_attempted) {
+            state->sum_attempted = true;
+            rbc_value_array_read_fold(stack, activation, &row->region, NULL, &state->cache);
         } else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_BODY && state->phase == RBC_ARRAY_REGION_ELIGIBLE) {
             XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
             const XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(homes, row, slots);

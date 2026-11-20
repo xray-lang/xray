@@ -16,7 +16,6 @@ static void rbc_lir_value_code_free(XrRbcValueCode *code) {
     xr_free((void *)code->displays);
     xr_free((void *)code->scope_values);
     xr_free((void *)code->array_region_accesses);
-    xr_free((void *)code->array_read_folds);
     xr_free((void *)code->array_counted_push);
     xr_lir_array_region_bindings_destroy(code->array_regions);
     xr_free(code);
@@ -89,8 +88,8 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
     }
     return false;
 }
-#include "xrbc_lir_array_region.inc.c"
 #include "xrbc_lir_array_read.inc.c"
+#include "xrbc_lir_array_region.inc.c"
 static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
     if (!c->typed_values) return true;
     if (c->homes && c->homes->value_count != c->view.value_count)
@@ -150,7 +149,7 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
         else if (c->slots[v] != UINT32_MAX)
             locations[v] = (XrRbcValueLocation){XR_RBC_VALUE_REGISTER,c->slots[v]};
     }
-    return rbc_lir_array_read_prepare(c) && rbc_lir_counted_push_prepare(c);
+    return rbc_lir_counted_push_prepare(c);
 }
 static bool rbc_lir_value_arguments(RbcLirCompiler *c, const uint32_t *values, uint32_t count, uint32_t *first) {
     XrRbcValueCode *code = c->value_code;

@@ -98,14 +98,9 @@ typedef struct XrRbcArrayRegionAccess {
     uint8_t fixed_edge; /* Selected physical edge marker, independent of HomeEdge. */
     bool fixed;
     bool binding_identity; /* Admitted forwarding pair shares a single Frame slot. */
+    bool sum_checkpoint; /* After the ordinary latch copies published the header state. */
     XrLirArrayRegionOperation operation;
 } XrRbcArrayRegionAccess;
-
-typedef struct XrRbcArrayReadFold {
-    uint32_t accumulator, next_accumulator, limit;
-    uint64_t limit_bits;
-    bool constant;
-} XrRbcArrayReadFold;
 
 typedef struct XrRbcArrayCountedPush {
     uint64_t bits;
@@ -141,7 +136,6 @@ typedef struct XrRbcValueCode {
     XrLirArrayRegionBindings *array_regions; /* Owned numeric projection, no live addresses. */
     bool array_region_runtime; /* Compile-time SET-window consumption. */
     const XrRbcArrayRegionAccess *array_region_accesses; /* Same ordinal/count as accesses, or absent. */
-    const XrRbcArrayReadFold *array_read_folds; /* Indexed like array_regions->regions, or absent. */
     const XrRbcArrayCountedPush *array_counted_push; /* Optional lowering indexed like homes->fixed_array_updates. */
 } XrRbcValueCode;
 

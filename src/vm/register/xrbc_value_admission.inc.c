@@ -335,25 +335,32 @@ static bool rbc_value_edge_valid(const XrRbcModule *module,const XrRbcValueCode 
     }
     return typed == (edge ? edge->count : 0);
 }
+static bool rbc_value_array_sum_valid(const XrRbcFunction *function, const XrRbcValueCode *code,
+    const XrLirArraySetRegion *region) {
+    const XrLirArraySetRegionRange *range = &region->range;
+    const XrLirArrayReadSum *sum = &region->read_sum;
+    return region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET && sum->accumulator != range->iv &&
+        rbc_value_id(code, sum->next_accumulator) && rbc_value_scalar(code, function, range->iv, XR_RBC_BITS) &&
+        rbc_value_scalar(code, function, sum->accumulator, XR_RBC_BITS) &&
+        (range->kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN ? !sum->limit && !sum->limit_bits :
+         range->kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
+         (!sum->limit || (sum->limit == range->length && !sum->limit_bits &&
+             rbc_value_scalar(code, function, sum->limit, XR_RBC_BITS))));
+}
 static bool rbc_value_array_fold_valid(const XrRbcModule *module,const XrRbcValueCode *code,
-    XrRbcValueAccess access) {
+    const XrRbcFunction *function, XrRbcValueAccess access) {
     if (!access.other) return true;
     const XrLirArrayRegionBindings *bindings=code->array_regions;
     if (!xr_rbc_module_code_owner(module) || !bindings || access.index>=bindings->edge_count ||
-        !code->array_read_folds || access.other>bindings->region_count ||
+        access.other>bindings->region_count ||
         !code->homes || access.index>=code->homes->edge_count) return false;
-    XrRbcArrayReadFold fold=code->array_read_folds[access.other-1];
     XrLirArrayRegionEdge edge=bindings->edges[access.index];
-    if (!fold.accumulator || access.other!=edge.region) return false;
+    if (access.other!=edge.region) return false;
     const XrLirArrayRegionBinding *row=&bindings->regions[access.other-1];
     const XrLirArraySetRegionRange *range=&row->region.range;
-    if (row->region.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_GET ||
-        row->owner_home.kind!=XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW ||
-        (range->kind!=XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN &&
-            range->kind!=XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT) ||
-        (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN && (fold.constant || fold.limit)) ||
-        (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
-            (fold.constant ? fold.limit!=0 : !rbc_value_id(code,fold.limit)))) return false;
+    const XrLirArrayReadSum *fold=&row->region.read_sum;
+    if (row->owner_home.kind!=XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW ||
+        !rbc_value_array_sum_valid(function,code,&row->region)) return false;
     if (edge.kind==XR_LIR_ARRAY_REGION_EDGE_ENTRY) return true;
     if (edge.kind!=XR_LIR_ARRAY_REGION_EDGE_LATCH || access.count<3 ||
         !code->homes->edges[access.index].direct_header_move) return false;
@@ -362,10 +369,10 @@ static bool rbc_value_array_fold_valid(const XrRbcModule *module,const XrRbcValu
         const uint32_t *pair=code->arguments+access.first+(size_t)p*2;
         const XrLirValueHome *target=rbc_value_home(code,pair[1]);
         if (!target || target->type) continue;
-        accumulator|=pair[0]==fold.next_accumulator && pair[1]==fold.accumulator;
+        accumulator|=pair[0]==fold->next_accumulator && pair[1]==fold->accumulator;
         induction|=pair[0]==range->latch_iv && pair[1]==range->iv;
     }
-    return accumulator && induction && fold.accumulator!=range->iv;
+    return accumulator && induction;
 }
 static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess access) {
@@ -567,6 +574,14 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     if (op != XR_RBC_VALUE_ACCESS && (!xr_rbc_module_code_owner(module) ||
         (code->array_region_accesses && code->array_region_accesses[index].region))) return false;
     const XrRbcArrayRegionAccess *region = code->array_region_accesses ? &code->array_region_accesses[index] : NULL;
+    if (region && region->sum_checkpoint) {
+        size_t legacy = rbc_value_legacy_array_region_count(code);
+        if (!xr_rbc_module_code_owner(module) || !region->fixed || region->fixed_edge != XR_LIR_ARRAY_REGION_EDGE_LATCH ||
+            region->region <= legacy || !code->homes || region->region - legacy > code->homes->fixed_array_update_count ||
+            a.operation != XR_RBC_VALUE_EDGE || a.index != UINT32_MAX || a.count || a.other || a.window ||
+            !rbc_value_array_sum_valid(function, code,
+                &code->homes->fixed_array_updates[region->region - 1 - legacy].region)) return false;
+    }
     if (region && region->binding_identity &&
         (!xr_rbc_module_code_owner(module) || !region->fixed || !region->region || region->fixed_edge ||
          (a.operation != XR_RBC_VALUE_BINDING_NEW && a.operation != XR_RBC_VALUE_BINDING_READ))) return false;
@@ -726,7 +741,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
              rbc_value_binding_forwarding_words(function,code,(uint32_t)index,pc));
     case XR_RBC_VALUE_EDGE:
         return !a.result && !a.source && !a.window && rbc_value_edge_valid(module,code,a) &&
-            rbc_value_array_fold_valid(module,code,a);
+            rbc_value_array_fold_valid(module,code,function,a);
     default: return false;
     }
 }
