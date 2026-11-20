@@ -1,0 +1,14 @@
+fn total(table: Map<string, i64>, key: string, n: i64) -> i64 {
+    var sum = 0
+    var i = 0
+    while (i < n) {
+        sum = sum + table[key]
+        i = i + 1
+    }
+    return sum
+}
+fn main() {
+    const table = {"x": 2, "y": 3}
+    print(total(table, "x", @N@))
+}
+main()

@@ -1,0 +1,18 @@
+fn main() {
+    var a: Array<i64> = []
+    var acc = 0
+    var i = 0
+    while (i < @N@) {
+        a.push(i)
+        acc = acc + 1
+        i = i + 1
+    }
+    var total = 0
+    i = 0
+    while (i < len(a)) {
+        total = total + a[i]
+        i = i + 1
+    }
+    print(total + acc - @N@)
+}
+main()

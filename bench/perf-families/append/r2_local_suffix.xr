@@ -1,0 +1,11 @@
+fn main() {
+    var text = ""
+    const piece = "ab"
+    var i = 0
+    while (i < @N@) {
+        text += piece
+        i = i + 1
+    }
+    print(len(text))
+}
+main()

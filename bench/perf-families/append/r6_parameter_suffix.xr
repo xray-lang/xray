@@ -1,0 +1,13 @@
+fn grow(piece: string, n: i64) -> i64 {
+    var text = ""
+    var i = 0
+    while (i < n) {
+        text += piece
+        i = i + 1
+    }
+    return len(text)
+}
+fn main() {
+    print(grow("ab", @N@))
+}
+main()

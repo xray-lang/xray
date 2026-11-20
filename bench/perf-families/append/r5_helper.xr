@@ -1,0 +1,13 @@
+fn grow(n: i64) -> string {
+    var text = ""
+    var i = 0
+    while (i < n) {
+        text += "ab"
+        i = i + 1
+    }
+    return text
+}
+fn main() {
+    print(len(grow(@N@)))
+}
+main()
