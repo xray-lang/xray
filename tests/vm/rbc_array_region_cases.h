@@ -39,10 +39,10 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
             ca_intrinsic(&c,current,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,seeds,fixed ? trips : readonly ? 3 : 1),
             ca_constant(&c,current,fixed && failure ? -1 : 0),
             ca_constant(&c,current,11),ca_constant(&c,current,22)};
-        /* A live snapshot requires the first ordinary update to detach the
-         * owner. Later iterations may borrow the newly unique backing. */
-        XrLirValue snapshot={0};
-        if (fixed) snapshot=ca_value(&c,current,XR_LIR_ARRAY_RETAIN,XR_LIR_ARRAY,values,1);
+        /* The separate frame Cell keeps a shared snapshot through the loop.
+         * The first update detaches the carried owner before it can borrow. */
+        XrLirValue snapshot_cell={0};
+        if (fixed) snapshot_cell=ca_value(&c,current,XR_LIR_CELL_NEW,XR_LIR_ARRAY_CELL,values,1);
         OK(xr_lir_set_terminator(c.module,current,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
             .edge_count=1,.edges={{header,values,4}}}));
         rbc_region_parameters(&c,header,values);
@@ -75,6 +75,8 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
             XR_LIR_I64,at,fixed && !trips ? 1 : 2);
         ca_effect(&c,exit_block,XR_LIR_ARRAY_DROP,values[0]);
         if (fixed) {
+            XrLirValue snapshot=ca_value(&c,exit_block,XR_LIR_CELL_READ,XR_LIR_ARRAY,&snapshot_cell,1);
+            ca_effect(&c,exit_block,XR_LIR_ARRAY_CELL_DROP,snapshot_cell);
             at[0]=snapshot;
             XrLirValue original=ca_intrinsic(&c,exit_block,trips ? XR_LIR_ARRAY_OP_GET : XR_LIR_ARRAY_OP_LEN,
                 XR_LIR_I64,at,trips ? 2 : 1);
