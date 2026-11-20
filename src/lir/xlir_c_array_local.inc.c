@@ -181,7 +181,6 @@ static bool c_array_held_shared_handoff(LirC *c, const XrLirInstructionView *op)
  * operations may panic, which never returns to the held state. Array edits
  * through local views maintain their own acquisition; other edits clear it. */
 static bool c_array_held_keeps(LirC *c, const XrLirInstructionView *op) {
-    if (c_array_held_region_block(c,c->block)) return false;
     switch (op->op) {
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG:
     case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL:
