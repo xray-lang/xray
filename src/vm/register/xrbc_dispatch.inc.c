@@ -47,7 +47,13 @@
 } while (0)
 
 #define XR_RBC_VALUE_EXECUTE() do { \
-    XrRbcStatus status = xr_rbc_values_step(module, stack, instruction >> 16, pc, XR_RBC_SOURCE()); \
+    uint32_t value_index = instruction >> 16; \
+    XrtManagedStatus leaf_status = XRT_MANAGED_OK; \
+    if (rbc_value_try_fixed_array_leaf(stack, value_index, &leaf_status)) { \
+        if (leaf_status != XRT_MANAGED_OK) xrt_native_managed_failure(leaf_status, XR_RBC_SOURCE()); \
+        break; \
+    } \
+    XrRbcStatus status = xr_rbc_values_step(module, stack, value_index, pc, XR_RBC_SOURCE()); \
     if (status != XR_RBC_OK) return status; \
     if (!stack->depth) { \
         if (function->result_kind == XR_RBC_BITS) *result = stack->slots[0]; \
