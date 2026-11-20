@@ -38,8 +38,10 @@ static inline XrMvlArrayAccess xr_mvl_array_access_start(XrMvlArray *current) {
 }
 
 /* Inputs and outputs contain values, never a binding or automatic owner address.
- * On success publish access.owner immediately, then drop the caller's previous
- * reference if present. A fresh owner must be dropped if publication is aborted.
+ * On success publish access.owner and replace cached access immediately. A
+ * unique resize can consume the original owner and invalidate all old pointers.
+ * Only COW supplies a previous reference to drop after publication. Its fresh
+ * owner may instead be dropped to abandon that replacement.
  * The caller supplies real ownership and a window excluding aliases and calls;
  * RC uniqueness alone does not establish that authority. */
 XR_FUNC XrMvlArrayWrite xr_mvl_array_access_write(XrMvlArrayAccess access,

@@ -43,7 +43,7 @@ static bool mvl_verify_access_cow(size_t budget, bool negative, bool abort_write
         MVL_REQUIRE(write.status == XR_MVL_OK);
         pending = true;
         *sites = domain.allocations - allocations;
-        MVL_REQUIRE(*sites == 2 && write.previous == array && array == snapshot);
+        MVL_REQUIRE(*sites == 1 && write.previous == array && array == snapshot);
         MVL_REQUIRE(xr_signed_rc_read(&array->header.refs) == (negative ? -2 : 2));
         MVL_REQUIRE(write.access.owner != array && write.access.owner->data[1] == 8);
         MVL_REQUIRE(xr_signed_rc_read(&write.access.owner->header.refs) == 1);
@@ -163,10 +163,11 @@ static bool mvl_verify_access_grow(void) {
     access = xr_mvl_array_access_start(NULL);
     domain.fail_after = SIZE_MAX;
     write = xr_mvl_array_access_write(xr_mvl_array_access_start(array), 0, 4, true);
-    MVL_REQUIRE(write.status == XR_MVL_OK);
+    MVL_REQUIRE(write.status == XR_MVL_OK && !write.previous);
     mvl_access_commit(&array, &access, write);
     MVL_REQUIRE(array->length == 5 && array->data[4] == 4 && access.data == array->data);
     MVL_REQUIRE(access.capacity == array->capacity && array->capacity == 8);
+    MVL_REQUIRE(domain.live_blocks == blocks && domain.live_bytes == bytes + 4 * sizeof(int64_t));
     write = xr_mvl_array_access_set(access, 4, 40);
     MVL_REQUIRE(write.status == XR_MVL_OK && array->data[4] == 40 && array->length == 5);
 cleanup:

@@ -61,6 +61,8 @@ RC==1. Retain, alias observation, rebinding and observing calls close the window
 before executing. Close by discarding the descriptor, evaluate RHS effects, read
 the current binding, and prepare again at the actual write. The internal cold
 allocator/COW operation belongs to the window and returns refreshed pointers.
+Unique growth can relocate the entire allocation. Use the returned owner and
+descriptor before accessing any elements or the length again.
 Its successful COW result leaves the old caller reference unconsumed: immediately
 publish the returned owner, then drop that old reference. An explicit abort
 drops the fresh replacement instead. Do not insert a fallible call between
@@ -88,9 +90,9 @@ is used, and this introduces no product access authority or new runtime carrier.
 capacity-bounded hot segment. Its safety argument is limited to the existing
 canonical i64 layout and the same trusted owned, nonobserving window:
 
-* `array_new` allocates the owner separately; `resize` and `array_copy` allocate
-  its data separately. Successful live allocations do not overlap. First-write
-  preparation supplies nonnull data with sufficient capacity before a hot block.
+* Each Array occupies one allocation. Its fixed length field and the bounded
+  scalar tail are disjoint subobjects. First-write preparation supplies a live
+  tail with sufficient capacity before a hot block.
 * Within that block, element storage is accessed only through `block_data` and
   canonical length only through `block_owner`. Conditions and indices use scalar
   locals. No original-owner, descriptor, alias, callback or RC access occurs there.
@@ -135,7 +137,7 @@ tagged value, VM frame, or per-element admission traversal.
 These static descriptors do not implement dynamic allocator or Instance lifetime
 leases; a static billing Domain must outlive every object that refers to it.
 
-* Array<i64>: header, `i64 *data`, `size_t length`, `size_t capacity`.
+* Array<i64>: header, `size_t length`, `size_t capacity`, trailing `i64` elements.
 * String: header, byte length, cached byte hash, trailing UTF-8 bytes and NUL.
   The stored length, rather than the NUL, defines equality.
 * Record: inline `{i64 x,y}` payload; escaping storage adds a header around that
@@ -149,8 +151,8 @@ Allocation goes through `src/base/xmalloc.h`; FNV comes directly from
 helpers in `algorithms.h`. The raw-C control shares these algorithms, not a
 managed-value runtime. Domain accounting is constant-time on allocation/free;
 ordinary element access does not consult it.
-Object refunds use the fixed family size, or `sizeof(String) + length + 1`.
-Separate Array data and Map slots use their actual capacity and element size;
+Object refunds use the fixed family size, `sizeof(String) + length + 1`, or
+`sizeof(Array) + capacity * sizeof(i64)`. Map slots refund separately;
 construction/growth checks these additions and multiplications before allocating.
 Every key retains its own descriptor, so a Map and its String keys may refund
 different billing Domains. No hidden allocation prefix or per-object side table

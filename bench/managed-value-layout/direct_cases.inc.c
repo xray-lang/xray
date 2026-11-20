@@ -38,9 +38,9 @@ static bool mvl_verify_direct_attempt(MvlRangeWrite range, size_t budget,
     if (budget == SIZE_MAX) {
         MVL_REQUIRE(write.status == XR_MVL_OK && array->length == 10);
         *sites = domain.allocations - allocations;
-        MVL_REQUIRE(*sites == (shared ? 4u : 2u));
+        MVL_REQUIRE(*sites == (shared ? 3u : 2u));
     } else {
-        size_t cow_allocations = shared ? 2 : 0;
+        size_t cow_allocations = *sites - 2;
         size_t committed = budget < cow_allocations ? 1 : budget == cow_allocations ? 4 : 8;
         MVL_REQUIRE(write.status == XR_MVL_OOM && array->length == committed);
     }
@@ -48,12 +48,12 @@ static bool mvl_verify_direct_attempt(MvlRangeWrite range, size_t budget,
     for (size_t i = 1; i < array->length; ++i)
         MVL_REQUIRE(array->data[i] == (int64_t)i - 1);
     size_t expected_bytes = sizeof(*array) + array->capacity * sizeof(*array->data);
-    size_t expected_blocks = 2;
+    size_t expected_blocks = 1;
     if (snapshot && snapshot != array) {
         MVL_REQUIRE(snapshot->length == 1 && snapshot->data[0] == 7);
         MVL_REQUIRE(xr_signed_rc_read(&snapshot->header.refs) == (negative ? -1 : 1));
         expected_bytes += sizeof(*snapshot) + snapshot->capacity * sizeof(*snapshot->data);
-        expected_blocks += 2;
+        ++expected_blocks;
     } else if (snapshot) {
         MVL_REQUIRE(xr_signed_rc_read(&snapshot->header.refs) == (negative ? -2 : 2));
     }

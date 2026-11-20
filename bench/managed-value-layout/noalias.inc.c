@@ -8,9 +8,9 @@
  * noalias.inc.c - Capacity-bounded C11 restrict windows on canonical storage
  *
  * KEY CONCEPT:
- *   Owner and data are separate live allocations. Within each nested block,
- *   modified elements and canonical length use only their respective restricted
- *   pointer. No call, growth, retirement or restricted pointer escapes the block.
+ *   Elements and canonical length occupy disjoint subobjects. Within each
+ *   nested block they use only their respective restricted pointer. No call,
+ *   growth, retirement or restricted pointer escapes the block.
  */
 static XrMvlArrayWrite mvl_array_push_noalias_range(XrMvlArray *owner, int64_t count) {
     XrMvlStatus status = XR_MVL_OK;

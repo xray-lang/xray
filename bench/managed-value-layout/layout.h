@@ -54,10 +54,14 @@ _Static_assert(offsetof(XrMvlHeader, refs) == 0 && offsetof(XrMvlHeader, flags) 
 
 typedef struct {
     XrMvlHeader header;
-    int64_t *data;
     size_t length;
     size_t capacity;
+    int64_t data[];
 } XrMvlArray;
+
+_Static_assert(sizeof(XrMvlArray) == 32 && offsetof(XrMvlArray, length) == 16 &&
+    offsetof(XrMvlArray, capacity) == 24 && offsetof(XrMvlArray, data) == 32,
+    "inline I64 Array storage matches the native backing prefix and tail offsets");
 
 typedef struct {
     XrMvlHeader header;
