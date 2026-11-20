@@ -320,7 +320,39 @@ static void ars_current_retained(void) {
     OK(xr_lir_ownership_array_regions_verify(snapshot.module, old_snapshot));
     xr_lir_ownership_plan_destroy(old_snapshot); xr_lir_module_destroy(snapshot.module);
 }
+static void ars_fixed_update_preparations(void) {
+    const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT, ARRAY_REGION_RANGE_FALSE_BODY,
+        ARRAY_REGION_RANGE_BOUND, ARRAY_REGION_RANGE_STEP_TWO, ARRAY_REGION_RANGE_COMPUTED_GET,
+        ARRAY_REGION_RANGE_FAILING_RHS};
+    for (size_t n = 0; n < sizeof(modes) / sizeof(*modes); ++n) {
+        bool expected = n < 2;
+        ArraySetRegionFixture c = ars_range_build_seeded(NULL, 3, modes[n], true);
+        OK(xr_lir_module_finish(c.module, NULL));
+        XrLirOwnershipPlan *plan = NULL;
+        OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
+        XrLirOwnershipFunction row;
+        OK(xr_lir_ownership_function_at(plan, c.function.id, &row));
+        CHECK(!row.region_count && !row.push_window_count && row.fixed_update_count == (uint32_t)expected);
+        OK(xr_lir_ownership_array_regions_verify(c.module, plan));
+        xr_lir_module_destroy(c.module);
+        if (expected) {
+            XrLirArraySetRegion update;
+            OK(xr_lir_ownership_fixed_array_update_at(plan, row.fixed_update_offset, &update));
+            CHECK(update.header == c.header.id && update.latch == c.body[2].id &&
+                update.exit_block == c.exit.id && update.exit_edge == (n ? 1u : 2u) &&
+                update.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET && update.primary_block == c.body[0].id &&
+                update.range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN && !update.owner_home.kind);
+            XrLirArraySetRegionStep entry, exit;
+            OK(xr_lir_ownership_fixed_array_update_step_at(plan, update.first_step, &entry));
+            OK(xr_lir_ownership_fixed_array_update_step_at(plan, update.first_step + update.step_count - 1, &exit));
+            CHECK(entry.kind == XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE && entry.target == update.canonical_value &&
+                exit.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE && exit.edge == update.exit_edge);
+        }
+        xr_lir_ownership_plan_destroy(plan);
+    }
+}
 static void array_set_region_preparations(void) {
+    ars_fixed_update_preparations();
     ars_range_preparations();
     ars_readonly_preparations();
     ars_push_preparations();

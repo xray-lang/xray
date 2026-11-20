@@ -83,15 +83,16 @@ static XrLirValue ars_range_mutate(ArraySetRegionFixture *c, XrLirValue values[4
     ars_effect(c, block, XR_LIR_ARRAY_CELL_DROP, cell);
     return result;
 }
-static ArraySetRegionFixture ars_range_build(XrLirModule *module, uint32_t count, enum ArrayRegionRangeMode mode) {
+static ArraySetRegionFixture ars_range_build_seeded(XrLirModule *module, uint32_t count,
+    enum ArrayRegionRangeMode mode, bool borrowed) {
     CHECK(count && count <= ARRAY_SET_REGION_BODY_CAPACITY);
     ArraySetRegionFixture c = {.module=module,.count=count,.arity=4};
     if (!module) OK(xr_lir_array_module_create(NULL, &c.module));
-    XrLirType scalar = XR_LIR_I64, types[] = {XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,XR_LIR_I64};
+    XrLirType formals[] = {XR_LIR_I64, XR_LIR_ARRAY}, types[] = {XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,XR_LIR_I64};
     char name[40]; int length = snprintf(name,sizeof(name),"range_%u_%u",(unsigned)mode,(unsigned)count);
     CHECK(length > 0 && (size_t)length < sizeof(name));
     OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name=name,.name_length=(size_t)length,
-        .parameters=&scalar,.parameter_count=1,.result=XR_LIR_I64},&c.function));
+        .parameters=formals,.parameter_count=borrowed ? 2 : 1,.result=XR_LIR_I64},&c.function));
     OK(xr_lir_define_function(c.module,c.function));
     OK(xr_lir_add_block(c.module,c.function,NULL,0,&c.entry)); OK(xr_lir_set_entry(c.module,c.function,c.entry));
     c.region_entry = c.entry;
@@ -103,19 +104,28 @@ static ArraySetRegionFixture ars_range_build(XrLirModule *module, uint32_t count
         XrLirValue array = {0}; OK(xr_lir_block_parameter(c.module,block,0,&array));
         OK(xr_lir_set_array_shape(c.module,array,&(XrLirArrayShape){XR_LIR_I64}));
     }
-    XrLirValue seed = ars_number(&c,c.entry,7), start = {0};
+    XrLirValue start = {0}, seed = {0};
     OK(xr_lir_function_parameter(c.module,c.function,0,&start));
-    XrLirValue incoming[] = {ars_array_op(&c,c.entry,XR_LIR_ARRAY_OP_NEW,&seed,1),
-        ars_number(&c,c.entry,-1),ars_number(&c,c.entry,0),start};
+    if (borrowed) {
+        XrLirValue input = {0};
+        OK(xr_lir_function_parameter(c.module,c.function,1,&input));
+        OK(xr_lir_set_array_shape(c.module,input,&(XrLirArrayShape){XR_LIR_I64}));
+        seed = ars_value(&c,c.entry,(XrLirInstruction){.op=XR_LIR_ARRAY_RETAIN,.type=XR_LIR_ARRAY,
+            .operands=&input,.operand_count=1});
+    } else {
+        XrLirValue item = ars_number(&c,c.entry,7);
+        seed = ars_array_op(&c,c.entry,XR_LIR_ARRAY_OP_NEW,&item,1);
+    }
+    XrLirValue incoming[] = {seed,ars_number(&c,c.entry,-1),ars_number(&c,c.entry,0),start};
     ars_range_edge(&c,c.entry,c.header,incoming);
     XrLirValue header[4]; ars_range_parameters(&c,c.header,header); c.header_array = header[0];
     XrLirValue bound = ars_array_op(&c,c.header,XR_LIR_ARRAY_OP_LEN,header,1);
     if (mode == ARRAY_REGION_RANGE_BOUND) bound = ars_number(&c,c.header,4);
+    bool reverse = mode == ARRAY_REGION_RANGE_FALSE_BODY;
     XrLirValue compared[] = {header[3],bound};
     XrLirValue condition = ars_value(&c,c.header,(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
-        .predicate=mode == ARRAY_REGION_RANGE_PREDICATE ? XR_LIR_LE : XR_LIR_LT,.operands=compared,.operand_count=2});
+        .predicate=borrowed && reverse ? XR_LIR_GE : mode == ARRAY_REGION_RANGE_PREDICATE ? XR_LIR_LE : XR_LIR_LT,.operands=compared,.operand_count=2});
     XrLirValue routed[] = {header[0],header[3],header[3],header[1]};
-    bool reverse = mode == ARRAY_REGION_RANGE_FALSE_BODY;
     OK(xr_lir_set_terminator(c.module,c.header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
         .operands=&condition,.operand_count=1,.edge_count=2,
         .edges={{reverse ? c.exit : c.body[0],routed,4},{reverse ? c.body[0] : c.exit,routed,4}}}));
@@ -160,5 +170,8 @@ static ArraySetRegionFixture ars_range_build(XrLirModule *module, uint32_t count
     OK(xr_lir_set_terminator(c.module,c.exit,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
         .operands=&c.result,.operand_count=1}));
     return c;
+}
+static ArraySetRegionFixture ars_range_build(XrLirModule *module, uint32_t count, enum ArrayRegionRangeMode mode) {
+    return ars_range_build_seeded(module, count, mode, false);
 }
 #endif // LIR_ARRAY_REGION_RANGE_FIXTURE_H

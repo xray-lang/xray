@@ -260,6 +260,7 @@ typedef struct XrLirOwnershipFunction {
     uint32_t fact_offset, fact_count, unmodeled;
     uint32_t region_offset, region_count;
     uint32_t push_window_offset, push_window_count;
+    uint32_t fixed_update_offset, fixed_update_count;
     bool external;
 } XrLirOwnershipFunction;
 
@@ -318,6 +319,15 @@ XR_FUNC uint32_t xr_lir_ownership_array_push_step_count(const XrLirOwnershipPlan
 XR_FUNC XrLirStatus xr_lir_ownership_array_push_window_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirArraySetRegion *);
 XR_FUNC XrLirStatus xr_lir_ownership_array_push_step_at(const XrLirOwnershipPlan *,
+    uint32_t ordinal, XrLirArraySetRegionStep *);
+/* A conditional update over the same logical Array owner. The route uses
+ * exact MOVE and private Cell handoffs, a signed induction range over that
+ * Array's length, and no alias publication. This preparation changes no
+ * physical home. A receiver must establish the fixed home and runtime
+ * bounds and exclusivity before borrowing its remaining element range. */
+XR_FUNC XrLirStatus xr_lir_ownership_fixed_array_update_at(const XrLirOwnershipPlan *,
+    uint32_t ordinal, XrLirArraySetRegion *);
+XR_FUNC XrLirStatus xr_lir_ownership_fixed_array_update_step_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirArraySetRegionStep *);
 /* Explicit independent current-IR verification for mutable/external inspection
  * and PARANOID tests. It validates the module once and rederives every function
