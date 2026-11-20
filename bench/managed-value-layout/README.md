@@ -236,6 +236,15 @@ five alternating rounds each, with the corresponding unchanged raw workload.
 The automatic five-provider workflow retains the original `push` and `map`
 ratio limits of 1.3 and applies the same limit to `push-direct`, `push-noalias`,
 `map-take` and `map-typed-drop`.
+The Array object keeps its pointer between `length` and `capacity`. With the two
+counters adjacent, Clang merged the per-push `length < capacity` check into one
+16-byte `ldp` that reloads the previous push's 8-byte `length` store. That load
+cannot forward from the narrower store, and on an Apple M5 Pro it cost about 1.3 ns
+per push: `push` measured 13.1 ms against raw 6.5 ms (2.0x), and faster macOS CI
+runners showed 1.85-2.18x while slower ones passed. Separating the counters
+measured 1.40-1.47x on the same host. The remainder is the per-operation
+protocol itself (binding reload, counter check and two taken branches); the
+scalar-local variants stay at raw parity.
 `push-prepared` remains the aggregate-ABI diagnostic control; `record` can fold
 and still has no heap-allocation ratio gate. Every sample must execute and match
 its independent golden, including the diagnostic controls. This is prototype

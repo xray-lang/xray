@@ -52,10 +52,15 @@ _Static_assert(sizeof(XrMvlHeader) == 16, "the prototype uses a 16-byte managed 
 _Static_assert(offsetof(XrMvlHeader, refs) == 0 && offsetof(XrMvlHeader, flags) == 4 &&
     offsetof(XrMvlHeader, ops) == 8, "the prototype header has explicit field offsets");
 
+/* `length` must not sit next to `capacity`. Every push commits `length` with
+ * an 8-byte store, and the next push compares it with `capacity`. When the two
+ * fields are adjacent, AArch64 compilers merge that check into one 16-byte
+ * load pair, which cannot forward from the narrower pending store; recent
+ * Apple cores then wait for the store to retire, about 1.3 ns per push. */
 typedef struct {
     XrMvlHeader header;
-    int64_t *data;
     size_t length;
+    int64_t *data;
     size_t capacity;
 } XrMvlArray;
 
