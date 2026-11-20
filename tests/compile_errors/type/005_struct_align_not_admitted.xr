@@ -1,0 +1,13 @@
+// Explicit struct alignment is refused, and must stay refused until a backend
+// can carry the alignment in its canonical target data layout.
+//
+// `align(N)` raises a type's minimum alignment. Lowering decides that layout,
+// so accepting the declaration before the layout work exists would run every
+// user of this type at the natural alignment and silently discard the request.
+// This case pins the current explicit rejection so the gate cannot be opened by
+// accident; promoting it to acceptance requires the alignment implementation
+// and a positive test in the same change.
+struct Aligned16 align(16) {
+    value: i64
+}
+print(1)
