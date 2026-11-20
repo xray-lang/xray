@@ -53,6 +53,8 @@ static bool lir_fixed_array_project(LirHomeBuilder *b, const XrLirOwnershipPlan 
         workspace->instruction != region->primary_instruction || workspace->type != owner->type || workspace->value ||
         workspace->first_owner == owner->first_owner ||
         !lir_fixed_array_slot(&homes->frame, workspace->first_owner, workspace->offset)) return false;
+    XrtValuePlanSpec spec;
+    if (!lir_home_binding_spec(b, owner->type, &spec) || spec.kind != XRT_VALUE_ARRAY_I64) return false;
     const XrLirFunctionData *function = &b->compiler.input->functions[b->compiler.function.id - 1];
     const XrLirBlockData *body = &function->blocks[region->primary_block - 1];
     if (!region->primary_instruction || region->primary_instruction > body->instruction_count) return false;
@@ -103,8 +105,11 @@ static bool lir_home_fixed_array_updates(LirHomeBuilder *b, const XrLirOwnership
         }
         size_t workspace = by_block[region.primary_block - 1];
         XrLirFixedArrayUpdateHome row;
-        if (!workspace || workspace == SIZE_MAX ||
-            !lir_fixed_array_project(b, plan, &region, &b->homes->workspaces[workspace - 1], &row)) continue;
+        if (!workspace || workspace == SIZE_MAX) continue;
+        if (!lir_fixed_array_project(b, plan, &region, &b->homes->workspaces[workspace - 1], &row)) {
+            if (c->status != XR_LIR_VALUE_LAYOUT_OK) break;
+            continue;
+        }
         if (!lir_home_grow(c, (void **)&rows, &row_capacity, (size_t)row_count + 1, sizeof(*rows)) ||
             !lir_home_grow(c, (void **)&steps, &step_capacity, (size_t)step_count + region.step_count, sizeof(*steps))) break;
         row.region.first_step = step_count;
