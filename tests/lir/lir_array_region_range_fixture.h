@@ -55,7 +55,7 @@ static XrLirValue ars_range_mutate(ArraySetRegionFixture *c, XrLirValue values[4
         args[1] = ars_value(c, block, (XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
     }
     XrLirValue item = ars_array_op(c, block, XR_LIR_ARRAY_OP_GET, args, 2);
-    if (mode >= ARRAY_REGION_RANGE_READ_ONLY) {
+    if (mode >= ARRAY_REGION_RANGE_READ_ONLY && mode <= ARRAY_REGION_RANGE_READ_EFFECT) {
         if (mode == ARRAY_REGION_RANGE_READ_EXTRA) (void)ars_array_op(c,block,XR_LIR_ARRAY_OP_GET,args,2);
         if (mode == ARRAY_REGION_RANGE_READ_EFFECT) {
             XrLirValue operands[]={item,ars_number(c,block,1)};
