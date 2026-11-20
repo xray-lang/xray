@@ -170,11 +170,13 @@ def main():
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix='managed-strings-', dir=args.work)).resolve()
     programs = Path(__file__).resolve().parent / 'programs'
-    crt = {'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd',
-           'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd'}[args.msvc_runtime]
-    flags = ['/nologo', '/std:c11', '/W4', '/WX', '/utf-8', crt]
-    gnu_flags, link_flags = [], []
+    flags, gnu_flags, link_flags = [], [], []
     if args.kind == 'msvc':
+        # Only MSVC targets carry a runtime library property; GNU providers
+        # receive an empty generator value.
+        crt = {'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd',
+               'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd'}[args.msvc_runtime]
+        flags = ['/nologo', '/std:c11', '/W4', '/WX', '/utf-8', crt]
         if args.compiler.stem.lower() != 'clang-cl':
             flags.append('/experimental:c11atomics')
         if args.asan:
