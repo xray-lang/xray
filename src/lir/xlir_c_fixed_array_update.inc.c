@@ -184,7 +184,13 @@ static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target, bool after
     c_text(c, "    }\n");
 }
 
-static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView *v, bool pointwise) {
+typedef enum LirCFixedArrayAddress {
+    LIR_C_ARRAY_INDEX,
+    LIR_C_ARRAY_CHECKED_INDEX,
+    LIR_C_ARRAY_CURSOR,
+} LirCFixedArrayAddress;
+
+static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView *v, LirCFixedArrayAddress address) {
     XrLirArrayIntrinsic shape = {0};
     if (!c_array_intrinsic(c, v, &shape)) {
         c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array update lost its original operation");
@@ -205,7 +211,7 @@ static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView
         c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array update cannot change its backing size");
         return;
     }
-    if (pointwise) {
+    if (address == LIR_C_ARRAY_CHECKED_INDEX) {
         c_text(c, "    if (");
         c_value(c, v->operands[1]);
         c_text(c, " < INT64_C(0) || (uint64_t)");
@@ -217,9 +223,12 @@ static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView
     bool read = shape.operation == XR_LIR_ARRAY_OP_GET;
     c_text(c, "    XRT_ARRAY_I64_REGION_COPY(");
     if (read) c_format(c, "&v%" PRIu32 ", ", v->result);
-    c_format(c, "xrl_fixed_cache_%" PRIu32 ".elements + (size_t)", n);
-    c_value(c, v->operands[1]);
-    c_text(c, " * sizeof(int64_t)");
+    if (address == LIR_C_ARRAY_CURSOR) c_text(c, "xrl_fixed_cursor");
+    else {
+        c_format(c, "xrl_fixed_cache_%" PRIu32 ".elements + (size_t)", n);
+        c_value(c, v->operands[1]);
+        c_text(c, " * sizeof(int64_t)");
+    }
     if (!read) {
         c_text(c, ", &");
         c_value(c, v->operands[2]);
@@ -228,7 +237,7 @@ static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView
 }
 
 static const XrLirInstructionView *c_fixed_array_block(LirC *c, uint32_t n,
-    const XrLirArraySetRegionStep *first, const XrLirArraySetRegionStep *edge, bool pointwise) {
+    const XrLirArraySetRegionStep *first, const XrLirArraySetRegionStep *edge, LirCFixedArrayAddress address) {
     const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
     const XrLirBlockData *block = &function->blocks[edge->block - 1];
     c->block = edge->block;
@@ -241,7 +250,7 @@ static const XrLirInstructionView *c_fixed_array_block(LirC *c, uint32_t n,
             continue;
         }
         const XrLirInstructionView *v = &block->instructions[i].view;
-        if (v->op == XR_LIR_CALL_INTRINSIC) c_fixed_array_access(c, n, v, pointwise);
+        if (v->op == XR_LIR_CALL_INTRINSIC) c_fixed_array_access(c, n, v, address);
         else {
             uint32_t source = c->location_cursor;
             c->source = v->source;
@@ -260,12 +269,12 @@ static const XrLirInstructionView *c_fixed_array_block(LirC *c, uint32_t n,
 }
 
 static void c_fixed_array_iteration(LirC *c, uint32_t label, const XrLirArraySetRegion *region,
-    const XrLirArraySetRegionStep *steps, uint32_t start) {
+    const XrLirArraySetRegionStep *steps, uint32_t start, LirCFixedArrayAddress address) {
     const XrLirArraySetRegionStep *first = steps + start;
     for (uint32_t s = start; s < region->step_count - 1 && c_request_poll(c); ++s) {
         const XrLirArraySetRegionStep *step = &steps[s];
         if (step->kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) continue;
-        const XrLirInstructionView *term = c_fixed_array_block(c, label, first, step, !region->range.kind);
+        const XrLirInstructionView *term = c_fixed_array_block(c, label, first, step, address);
         if (!term) return;
         uint32_t skipped = step->block == region->latch ? region->range.iv : 0;
         c_scalar_edge_values(c, &term->edges[step->edge - 1], skipped);
@@ -297,7 +306,7 @@ static void c_fixed_array_push_clone(LirC *c, uint32_t label, const XrLirArraySe
     } else {
         c_format(c, "        int64_t xrl_stop = v%" PRIu32 " + (int64_t)xrl_count;\n"
             "        for (; v%" PRIu32 " < xrl_stop; ++v%" PRIu32 ") {\n", iv, iv, iv);
-        c_fixed_array_iteration(c, label, region, steps, 1);
+        c_fixed_array_iteration(c, label, region, steps, 1, LIR_C_ARRAY_INDEX);
         c_text(c, "        }\n");
     }
     c_format(c, "        xrl_array->length = xrl_fixed_cache_%" PRIu32 ".length;\n    }\n"
@@ -310,7 +319,7 @@ static void c_fixed_array_push_clone(LirC *c, uint32_t label, const XrLirArraySe
 static void c_fixed_array_pointwise(LirC *c, uint32_t label, const XrLirFixedArrayUpdateHome *row,
     const XrLirArraySetRegionStep *steps) {
     const XrLirArraySetRegion *region = &row->region;
-    const XrLirInstructionView *term = c_fixed_array_block(c, label, steps + 1, steps + 1, true);
+    const XrLirInstructionView *term = c_fixed_array_block(c, label, steps + 1, steps + 1, LIR_C_ARRAY_CHECKED_INDEX);
     if (!term) return;
     XR_DCHECK(term->op == XR_LIR_CONDBR && term->operand_count == 1, "pointwise header keeps its original condition");
     c_text(c, row->body_edge == 1 ? "    if (" : "    if (!");
@@ -318,10 +327,29 @@ static void c_fixed_array_pointwise(LirC *c, uint32_t label, const XrLirFixedArr
     c_text(c, ") {\n");
     c_scalar_edge_values(c, &term->edges[row->body_edge - 1], 0);
     c_text(c, "    }\n");
-    c_fixed_array_iteration(c, label, region, steps, 2);
+    c_fixed_array_iteration(c, label, region, steps, 2, LIR_C_ARRAY_CHECKED_INDEX);
     c_format(c, "    goto xrl_fixed_%" PRIu32 "_bb%" PRIu32 ";\n    }\n", label, region->header);
     c_format(c, "    xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
         "    goto xrl_fixed_exit_%" PRIu32 ";\n", label, label);
+}
+
+/* The same-length route proved every access uses the current IV. Carry byte
+ * addresses through the remainder so a host compiler can optimize the loop
+ * even when its length is only known after entering the function. */
+static void c_fixed_array_set_remainder(LirC *c, uint32_t label, const XrLirArraySetRegion *region,
+    const XrLirArraySetRegionStep *steps) {
+    uint32_t iv = region->range.iv;
+    XR_DCHECK(region->range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN,
+        "Array cursor requires the common same-length proof");
+    c_format(c, "    {\n"
+        "        unsigned char *xrl_fixed_cursor = xrl_fixed_cache_%" PRIu32 ".elements + (size_t)v%" PRIu32
+        " * sizeof(int64_t);\n"
+        "        const unsigned char *xrl_fixed_stop = xrl_fixed_cache_%" PRIu32 ".elements + xrl_fixed_cache_%" PRIu32
+        ".length * sizeof(int64_t);\n"
+        "        for (; xrl_fixed_cursor < xrl_fixed_stop; xrl_fixed_cursor += sizeof(int64_t), ++v%" PRIu32 ") {\n",
+        label, iv, label, label, iv);
+    c_fixed_array_iteration(c, label, region, steps, 1, LIR_C_ARRAY_CURSOR);
+    c_text(c, "        }\n    }\n");
 }
 
 static void c_fixed_array_clones(LirC *c) {
@@ -356,19 +384,21 @@ static void c_fixed_array_clones(LirC *c) {
             c_format(c,
                 "            for (size_t xrl_fixed_offset = 0; xrl_fixed_offset < xrl_fixed_span; ++xrl_fixed_offset) {\n"
                 "                v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_offset);\n", iv);
-            c_fixed_array_iteration(c, label, region, steps, 1);
+            c_fixed_array_iteration(c, label, region, steps, 1, LIR_C_ARRAY_INDEX);
             c_format(c, "            }\n"
                 "            v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_span);\n"
                 "        }\n"
                 "    }\n#endif\n", iv);
+            c_fixed_array_set_remainder(c, label, region, steps);
+        } else {
+            c_format(c, "    for (; v%" PRIu32 " < ", iv);
+            c_fixed_array_limit(c, region, label);
+            c_format(c, "; ++v%" PRIu32 ") {\n", iv);
+            c_fixed_array_iteration(c, label, region, steps, 1, LIR_C_ARRAY_INDEX);
+            c_text(c, "    }\n");
         }
-        c_format(c, "    for (; v%" PRIu32 " < ", iv);
-        c_fixed_array_limit(c, region, label);
-        c_format(c, "; ++v%" PRIu32 ") {\n", iv);
-        c_fixed_array_iteration(c, label, region, steps, 1);
-        c_text(c, "    }\n");
         /* The exit may read values computed by the original final header. */
-        (void)c_fixed_array_block(c, label, steps + 1, steps + 1, false);
+        (void)c_fixed_array_block(c, label, steps + 1, steps + 1, LIR_C_ARRAY_INDEX);
         c_format(c, "    xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
             "    goto xrl_fixed_exit_%" PRIu32 ";\n", label, label);
     }

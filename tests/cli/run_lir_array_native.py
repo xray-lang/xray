@@ -111,18 +111,23 @@ def assert_fixed_update_loop(name: str, generated: str) -> None:
     span, end = body_at(loop.end())
     residue = re.match(
         rf"\n            {iv} = \(int64_t\)\(xrl_fixed_start \+ xrl_fixed_span\);\n"
-        rf"        \}}\n    \}}\n#endif\n    for \(; {iv} < \(int64_t\){cache}\.length; \+\+{iv}\) \{{\n",
+        rf"        \}}\n    \}}\n#endif\n    \{{\n"
+        rf"        unsigned char \*xrl_fixed_cursor = {cache}\.elements \+ \(size_t\){iv} \* sizeof\(int64_t\);\n"
+        rf"        const unsigned char \*xrl_fixed_stop = {cache}\.elements \+ {cache}\.length \* sizeof\(int64_t\);\n"
+        rf"        for \(; xrl_fixed_cursor < xrl_fixed_stop; xrl_fixed_cursor \+= sizeof\(int64_t\), \+\+{iv}\) \{{\n",
         generated[end:],
     )
-    assert residue, (name, "fixed Array loop did not publish the span IV before its remainder")
+    assert residue, (name, "fixed Array loop did not publish the span IV before opening its cursor")
     body, _ = body_at(end + residue.end())
-    assert body.rstrip() == span.rstrip(), (name, "fixed Array loop bodies differ")
+    element = rf"{cache}\.elements \+ \(size_t\)v\d+ \* sizeof\(int64_t\)"
+    assert re.sub(element, "xrl_fixed_cursor", span).rstrip() == body.rstrip(), (
+        name, "fixed Array loop bodies differ beyond address induction"
+    )
 
     # Match the two access directions on the proven backing rather than
     # counting unrelated scalar bit copies or ordinary fallback calls.
-    element = rf"{cache}\.elements\s*\+\s*[^,\n]+"
-    assert re.search(rf"\bXRT_ARRAY_I64_REGION_COPY\(&v\d+,\s*{element}\);", body), (name, "fixed Array read missing")
-    assert re.search(rf"\bXRT_ARRAY_I64_REGION_COPY\({element},\s*&v\d+\);", body), (name, "fixed Array write missing")
+    assert re.search(r"\bXRT_ARRAY_I64_REGION_COPY\(&v\d+,\s*xrl_fixed_cursor\);", body), (name, "fixed Array read missing")
+    assert re.search(r"\bXRT_ARRAY_I64_REGION_COPY\(xrl_fixed_cursor,\s*&v\d+\);", body), (name, "fixed Array write missing")
     assert not re.search(r"\b(?:xrt_\w+|xrl_edge_\w+)\s*\(", body), (name, "runtime work in fixed Array loop")
 
 
