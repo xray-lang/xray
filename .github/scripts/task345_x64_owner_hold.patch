@@ -1,0 +1,351 @@
+--- inplace.c
++++ inplace.c
+@@ -6,0 +7,3 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++#include <stdio.h>
++#endif
+@@ -279,2 +282,127 @@
+-static XrtManagedStatus xrl_edge_3_5_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations) {
+-    if (!frame || !payload || (scalars && !scalars->publish)) return XRT_MANAGED_ARGUMENT;
++/* Artifact-only experiment. Slot 5 holds the only real ownership reference
++ * between the six verified owner-only edges. The pointer below tracks identity. */
++typedef struct XrlDiagnosticOwnerHold {
++    void *payload;
++    XrtManagedHeader *owner;
++    _Bool considered;
++} XrlDiagnosticOwnerHold;
++
++static _Bool xrl_diagnostic_hold_requested;
++#ifdef XRL_VERIFY_HOLD_OWNER
++
++typedef struct XrlHoldWitness {
++    unsigned int skipped[6];
++    unsigned int rejected[6];
++    unsigned int slow[6];
++    unsigned int arm_attempts;
++    unsigned int arm_successes;
++    unsigned int entry_guard_accepts;
++    unsigned int entry_guard_declines;
++    unsigned int latch_guard_attempts;
++    unsigned int latch_guard_declines;
++    unsigned int real_exit_reached;
++    unsigned int real_exit_restored;
++    unsigned int real_exit_published;
++} XrlHoldWitness;
++
++static XrlHoldWitness xrl_hold_witness;
++
++static void xrl_witness_vector(const unsigned int values[6]) {
++    (void)fprintf(stderr, "[%u,%u,%u,%u,%u,%u]", values[0], values[1], values[2],
++        values[3], values[4], values[5]);
++}
++
++static int xrl_finish_hold_witness(void) {
++    const XrlHoldWitness *result = &xrl_hold_witness;
++    static const unsigned int expected[6] = {20000, 20000, 20000, 19999, 19999, 19999};
++    _Bool passed = result->arm_attempts == 1 && result->arm_successes == 1 &&
++        result->entry_guard_accepts == 20000 && !result->entry_guard_declines &&
++        !result->latch_guard_attempts && !result->latch_guard_declines &&
++        result->real_exit_reached == 1 && result->real_exit_restored == 1 &&
++        result->real_exit_published == 1;
++    unsigned int skipped_edges = 0;
++    for (size_t edge = 0; edge < 6; ++edge) {
++        skipped_edges += result->skipped[edge];
++        if (result->skipped[edge] != expected[edge] || result->rejected[edge] ||
++                result->slow[edge]) passed = 0;
++    }
++    fputs("{\"hold_owner_witness\":true,\"skipped\":", stderr);
++    xrl_witness_vector(result->skipped);
++    fputs(",\"rejected\":", stderr);
++    xrl_witness_vector(result->rejected);
++    fputs(",\"slow\":", stderr);
++    xrl_witness_vector(result->slow);
++    (void)fprintf(stderr,
++        ",\"skipped_owner_writes\":%u,\"arm_attempts\":%u,\"arm_successes\":%u,"
++        "\"entry_guard_accepts\":%u,\"entry_guard_declines\":%u,"
++        "\"latch_guard_attempts\":%u,\"latch_guard_declines\":%u,"
++        "\"real_exit_reached\":%u,\"real_exit_restored\":%u,\"real_exit_published\":%u,"
++        "\"passed\":%s}\n",
++        2u * skipped_edges, result->arm_attempts, result->arm_successes,
++        result->entry_guard_accepts, result->entry_guard_declines,
++        result->latch_guard_attempts, result->latch_guard_declines,
++        result->real_exit_reached, result->real_exit_restored, result->real_exit_published,
++        passed ? "true" : "false");
++    return passed ? 0 : 3;
++}
++
++#endif
++
++static void xrl_diagnostic_restore(XrlDiagnosticOwnerHold *hold, size_t predecessor) {
++    if (!hold->owner) return;
++    XrtManagedHeader **anchor = (XrtManagedHeader **)((unsigned char *)hold->payload + 40);
++    XrtManagedHeader **source = (XrtManagedHeader **)((unsigned char *)hold->payload + predecessor);
++    if (*anchor != hold->owner || (source != anchor && *source)) {
++#ifdef XRL_VERIFY_HOLD_OWNER
++        (void)fprintf(stderr, "hold-owner restoration rejected at predecessor offset %zu\n", predecessor);
++#endif
++        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, 0);
++        return;
++    }
++    if (source != anchor) {
++        *source = *anchor;
++        *anchor = NULL;
++    }
++    hold->owner = NULL;
++}
++
++static void xrl_diagnostic_try_hold(XrlDiagnosticOwnerHold *hold,
++        const XrtManagedFrameLocations *locations, XrtManagedFrame *frame, void *payload) {
++    if (!xrl_diagnostic_hold_requested || hold->considered) return;
++    hold->considered = 1;
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.arm_attempts;
++#endif
++    if (!frame || !payload || locations->frame != frame || locations->payload != payload ||
++            !locations->slots || !locations->busy || locations->slot_count != 46 ||
++            *locations->busy) return;
++
++    static const struct { size_t slot; size_t offset; } empty[] = {
++        {3, 24}, {4, 32}, {6, 48}, {12, 96}, {14, 112},
++        {28, 224}, {29, 232}, {30, 240}, {34, 272}, {40, 320}, {43, 344},
++    };
++    for (size_t i = 0; i < sizeof(empty) / sizeof(empty[0]); ++i) {
++        const size_t slot = empty[i].slot;
++        const size_t offset = empty[i].offset;
++        if (locations->slots[slot].owner_offset != offset ||
++                locations->slots[slot].pending.value ||
++                locations->slots[slot].pending.allocation_bytes ||
++                *(XrtManagedHeader **)((unsigned char *)payload + offset)) return;
++    }
++    if (locations->slots[5].owner_offset != 40 || locations->slots[5].pending.value ||
++            locations->slots[5].pending.allocation_bytes) return;
++    hold->payload = payload;
++    hold->owner = *(XrtManagedHeader **)((unsigned char *)payload + 40);
++#ifdef XRL_VERIFY_HOLD_OWNER
++    if (hold->owner) ++xrl_hold_witness.arm_successes;
++#endif
++}
++
++static XrtManagedStatus xrl_edge_3_5_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations, XrlDiagnosticOwnerHold *hold) {
++    if (!frame || !payload || (scalars && !scalars->publish)) {
++#ifdef XRL_VERIFY_HOLD_OWNER
++        ++xrl_hold_witness.rejected[3];
++#endif
++        xrl_diagnostic_restore(hold, 24);
++        return XRT_MANAGED_ARGUMENT;
++    }
+@@ -290,0 +419,8 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++        if (hold->owner) {
++            ++xrl_hold_witness.skipped[3];
++            return XRT_MANAGED_OK;
++        }
++#else
++        if (hold->owner) return XRT_MANAGED_OK;
++#endif
+@@ -295,0 +432,4 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.slow[3];
++#endif
++    xrl_diagnostic_restore(hold, 24);
+@@ -341,2 +481,8 @@
+-static XrtManagedStatus xrl_edge_3_6_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations) {
+-    if (!frame || !payload || (scalars && !scalars->publish)) return XRT_MANAGED_ARGUMENT;
++static XrtManagedStatus xrl_edge_3_6_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations, XrlDiagnosticOwnerHold *hold) {
++    if (!frame || !payload || (scalars && !scalars->publish)) {
++#ifdef XRL_VERIFY_HOLD_OWNER
++        ++xrl_hold_witness.rejected[5];
++#endif
++        xrl_diagnostic_restore(hold, 32);
++        return XRT_MANAGED_ARGUMENT;
++    }
+@@ -351 +497 @@
+-        !*(XrtManagedHeader **)((unsigned char *)payload + 40) &&
++        *(XrtManagedHeader **)((unsigned char *)payload + 40) == hold->owner &&
+@@ -352,0 +499,8 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++        if (hold->owner) {
++            ++xrl_hold_witness.skipped[5];
++            return XRT_MANAGED_OK;
++        }
++#else
++        if (hold->owner) return XRT_MANAGED_OK;
++#endif
+@@ -357,0 +512,4 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.slow[5];
++#endif
++    xrl_diagnostic_restore(hold, 32);
+@@ -372,2 +530,8 @@
+-static XrtManagedStatus xrl_edge_3_7_2(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations) {
+-    if (!frame || !payload || (scalars && !scalars->publish)) return XRT_MANAGED_ARGUMENT;
++static XrtManagedStatus xrl_edge_3_7_2(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations, XrlDiagnosticOwnerHold *hold) {
++    if (!frame || !payload || (scalars && !scalars->publish)) {
++#ifdef XRL_VERIFY_HOLD_OWNER
++        ++xrl_hold_witness.rejected[0];
++#endif
++        xrl_diagnostic_restore(hold, 40);
++        return XRT_MANAGED_ARGUMENT;
++    }
+@@ -383,0 +548,8 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++        if (hold->owner) {
++            ++xrl_hold_witness.skipped[0];
++            return XRT_MANAGED_OK;
++        }
++#else
++        if (hold->owner) return XRT_MANAGED_OK;
++#endif
+@@ -388,0 +561,4 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.slow[0];
++#endif
++    xrl_diagnostic_restore(hold, 40);
+@@ -403,2 +579,8 @@
+-static XrtManagedStatus xrl_edge_3_9_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations) {
+-    if (!frame || !payload || (scalars && !scalars->publish)) return XRT_MANAGED_ARGUMENT;
++static XrtManagedStatus xrl_edge_3_9_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations, XrlDiagnosticOwnerHold *hold) {
++    if (!frame || !payload || (scalars && !scalars->publish)) {
++#ifdef XRL_VERIFY_HOLD_OWNER
++        ++xrl_hold_witness.rejected[2];
++#endif
++        xrl_diagnostic_restore(hold, 48);
++        return XRT_MANAGED_ARGUMENT;
++    }
+@@ -414,0 +597,8 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++        if (hold->owner) {
++            ++xrl_hold_witness.skipped[2];
++            return XRT_MANAGED_OK;
++        }
++#else
++        if (hold->owner) return XRT_MANAGED_OK;
++#endif
+@@ -419,0 +610,4 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.slow[2];
++#endif
++    xrl_diagnostic_restore(hold, 48);
+@@ -620,2 +814,8 @@
+-static XrtManagedStatus xrl_edge_3_16_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations) {
+-    if (!frame || !payload || (scalars && !scalars->publish)) return XRT_MANAGED_ARGUMENT;
++static XrtManagedStatus xrl_edge_3_16_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations, XrlDiagnosticOwnerHold *hold) {
++    if (!frame || !payload || (scalars && !scalars->publish)) {
++#ifdef XRL_VERIFY_HOLD_OWNER
++        ++xrl_hold_witness.rejected[4];
++#endif
++        xrl_diagnostic_restore(hold, 96);
++        return XRT_MANAGED_ARGUMENT;
++    }
+@@ -631,0 +832,8 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++        if (hold->owner) {
++            ++xrl_hold_witness.skipped[4];
++            return XRT_MANAGED_OK;
++        }
++#else
++        if (hold->owner) return XRT_MANAGED_OK;
++#endif
+@@ -636,0 +845,4 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.slow[4];
++#endif
++    xrl_diagnostic_restore(hold, 96);
+@@ -682,2 +894,8 @@
+-static XrtManagedStatus xrl_edge_3_19_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations) {
+-    if (!frame || !payload || (scalars && !scalars->publish)) return XRT_MANAGED_ARGUMENT;
++static XrtManagedStatus xrl_edge_3_19_1(XrtManagedFrame *frame, void *payload, const XrtPlacePublication *scalars, const XrtManagedFrameLocations *locations, XrlDiagnosticOwnerHold *hold) {
++    if (!frame || !payload || (scalars && !scalars->publish)) {
++#ifdef XRL_VERIFY_HOLD_OWNER
++        ++xrl_hold_witness.rejected[1];
++#endif
++        xrl_diagnostic_restore(hold, 112);
++        return XRT_MANAGED_ARGUMENT;
++    }
+@@ -693,0 +912,8 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++        if (hold->owner) {
++            ++xrl_hold_witness.skipped[1];
++            return XRT_MANAGED_OK;
++        }
++#else
++        if (hold->owner) return XRT_MANAGED_OK;
++#endif
+@@ -698,0 +925,4 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.slow[1];
++#endif
++    xrl_diagnostic_restore(hold, 112);
+@@ -897,0 +1128 @@
++    XrlDiagnosticOwnerHold xrl_diagnostic_hold = {0};
+@@ -1210 +1441 @@
+-    XrtManagedStatus status = xrl_edge_3_5_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations);
++    XrtManagedStatus status = xrl_edge_3_5_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations, &xrl_diagnostic_hold);
+@@ -1222,0 +1454,12 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.real_exit_reached;
++    XrtManagedHeader *xrl_expected_exit_owner = xrl_diagnostic_hold.owner;
++#endif
++    xrl_diagnostic_restore(&xrl_diagnostic_hold, 24);
++#ifdef XRL_VERIFY_HOLD_OWNER
++    if (xrl_expected_exit_owner &&
++            *(XrtManagedHeader **)((unsigned char *)xrl_payload + 24) == xrl_expected_exit_owner &&
++            !*(XrtManagedHeader **)((unsigned char *)xrl_payload + 40)) {
++        ++xrl_hold_witness.real_exit_restored;
++    }
++#endif
+@@ -1224,0 +1468,3 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.real_exit_published;
++#endif
+@@ -1242 +1488 @@
+-    XrtManagedStatus status = xrl_edge_3_6_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations);
++    XrtManagedStatus status = xrl_edge_3_6_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations, &xrl_diagnostic_hold);
+@@ -1251,0 +1498,4 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++            ++xrl_hold_witness.entry_guard_accepts;
++#endif
++            xrl_diagnostic_try_hold(&xrl_diagnostic_hold, &xrl_frame_locations, xrl_frame, xrl_payload);
+@@ -1255,0 +1506,4 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    ++xrl_hold_witness.entry_guard_declines;
++#endif
++    xrl_diagnostic_restore(&xrl_diagnostic_hold, 40);
+@@ -1276 +1530 @@
+-    XrtManagedStatus status = xrl_edge_3_7_2(xrl_frame, xrl_payload, NULL, &xrl_frame_locations);
++    XrtManagedStatus status = xrl_edge_3_7_2(xrl_frame, xrl_payload, NULL, &xrl_frame_locations, &xrl_diagnostic_hold);
+@@ -1342,0 +1597,3 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++        ++xrl_hold_witness.latch_guard_attempts;
++#endif
+@@ -1350,0 +1608,3 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++        ++xrl_hold_witness.latch_guard_declines;
++#endif
+@@ -1369 +1629 @@
+-    XrtManagedStatus status = xrl_edge_3_9_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations);
++    XrtManagedStatus status = xrl_edge_3_9_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations, &xrl_diagnostic_hold);
+@@ -1561 +1821 @@
+-    XrtManagedStatus status = xrl_edge_3_16_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations);
++    XrtManagedStatus status = xrl_edge_3_16_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations, &xrl_diagnostic_hold);
+@@ -1599 +1859 @@
+-    XrtManagedStatus status = xrl_edge_3_19_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations);
++    XrtManagedStatus status = xrl_edge_3_19_1(xrl_frame, xrl_payload, NULL, &xrl_frame_locations, &xrl_diagnostic_hold);
+@@ -1720 +1980,8 @@
+-int main(void) {
++int main(int argc, char **argv) {
++    xrl_diagnostic_hold_requested = argc == 2 && strcmp(argv[1], "--hold-owner") == 0;
++#ifdef XRL_VERIFY_HOLD_OWNER
++    if (!xrl_diagnostic_hold_requested) {
++        fputs("engagement build requires --hold-owner\n", stderr);
++        return 2;
++    }
++#endif
+@@ -1721,0 +1989,3 @@
++#ifdef XRL_VERIFY_HOLD_OWNER
++    return xrl_finish_hold_witness();
++#else
+@@ -1723 +1993,2 @@
+-}
++#endif
++}
