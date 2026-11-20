@@ -6,14 +6,19 @@
  *
  * xrbc_value_array_execute.inc.c - Fixed Array owners and actual binding transactions
  */
-static inline bool rbc_value_binding_forward(RbcValueActivation *activation, XrRbcValueAccess access) {
+static inline bool rbc_value_binding_forward(RbcValueActivation *activation, XrRbcValueAccess access,
+    XrtManagedStatus *status) {
     XrtManagedFrameForward places;
     if (!activation->owned_code || !rbc_value_binding_forwarding_places(activation->code, access, &places))
         return false;
     /* Admission paired this immutable instruction with its release word.
      * Only the current Frame's eligibility to move can vary at execution. */
-    return places.source_slot == places.destination_slot ||
-        xrt_managed_frame_try_forward(activation->frame, activation->payload, &activation->frame_locations, places);
+    if (places.source_slot == places.destination_slot) {
+        XrtManagedHeader *owner = *(XrtManagedHeader **)(activation->payload + places.source_offset);
+        if (!xrt_managed_identity_retain(owner)) *status = XRT_MANAGED_REFCOUNT;
+        return true;
+    }
+    return xrt_managed_frame_try_forward(activation->frame, activation->payload, &activation->frame_locations, places);
 }
 static XrtManagedStatus rbc_value_binding_place(const XrRbcModule *module,XrRbcStack *stack,RbcValueOrigin origin,
     XrtExternalOwner *external,XrtPlace *place) {

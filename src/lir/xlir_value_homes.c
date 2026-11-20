@@ -555,6 +555,67 @@ static void lir_home_chain_array_regions(LirHomeChain *chains, const XrLirArrayS
     }
 }
 
+static size_t lir_home_fixed_owned_values(const XrLirArraySetRegionStep *step, uint32_t ids[2]) {
+    switch (step->kind) {
+    case XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE:
+    case XR_LIR_ARRAY_SET_REGION_READ_CANDIDATE:
+        ids[0] = step->target;
+        return 1;
+    case XR_LIR_ARRAY_SET_REGION_EXIT_MOVE:
+    case XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE:
+        ids[0] = step->source;
+        return 1;
+    case XR_LIR_ARRAY_SET_REGION_EDGE_MOVE:
+        ids[0] = step->source;
+        ids[1] = step->target;
+        return 2;
+    default: return 0;
+    }
+}
+
+/* A proved entry MOVE installs a fresh local owner even if an earlier window
+ * reserves the predecessor's slot. Reserve only the inside of this route.
+ * Ordinary selected edges must still carry the actual entry and exit values. */
+static bool lir_home_fixed_local_owners(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
+    XrLirOwnershipFunction function, const LirHomeChain *chains, XrLirValueHome *values) {
+    for (uint32_t r = 0; r < function.fixed_update_count; ++r) {
+        XrLirArraySetRegion region;
+        if (xr_lir_ownership_fixed_array_update_at(plan, function.fixed_update_offset + r, &region) != XR_LIR_OK ||
+            !region.canonical_value || region.canonical_value > c->view.value_count ||
+            !region.step_count || region.first_step > UINT32_MAX - (region.step_count - 1))
+            return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "fixed Array owner route disappeared");
+        uint32_t owner = region.canonical_value;
+        if (values[owner].stationary_owner) continue;
+        bool available = true;
+        for (uint32_t n = 0; n < region.step_count && available; ++n) {
+            XrLirArraySetRegionStep step;
+            if (xr_lir_ownership_fixed_array_update_step_at(plan, region.first_step + n, &step) != XR_LIR_OK ||
+                !step.source || step.source > c->view.value_count || !step.target || step.target > c->view.value_count)
+                return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "fixed Array owner step disappeared");
+            uint32_t ids[2];
+            size_t count = lir_home_fixed_owned_values(&step, ids);
+            for (size_t i = 0; i < count; ++i)
+                available &= chains[ids[i]].parent != 0 && !chains[ids[i]].array_region &&
+                    !values[ids[i]].stationary_owner && ids[i] != region.entry_value && ids[i] != region.exit_value;
+            if (step.kind == XR_LIR_ARRAY_SET_REGION_NEW_CANDIDATE)
+                available &= chains[step.target].array_cell && chains[step.target].binding_input == step.source;
+            if (step.kind == XR_LIR_ARRAY_SET_REGION_READ_CANDIDATE)
+                available &= chains[step.source].array_cell && chains[step.source].binding_output == step.target;
+            available &= count != 0;
+        }
+        if (!available) continue;
+        for (uint32_t n = 0; n < region.step_count; ++n) {
+            XrLirArraySetRegionStep step;
+            if (xr_lir_ownership_fixed_array_update_step_at(plan, region.first_step + n, &step) != XR_LIR_OK)
+                return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "fixed Array owner step disappeared");
+            uint32_t ids[2];
+            size_t count = lir_home_fixed_owned_values(&step, ids);
+            for (size_t i = 0; i < count; ++i) values[ids[i]].stationary_owner = owner;
+        }
+    }
+    return true;
+}
+
 /* A sealed MOVE chain has one origin and at most one independent definition
  * per block. A certified binding round trip continues that same owner, even
  * if the mutation replaces its backing. COPY edges and unrelated origins do
@@ -615,6 +676,7 @@ static bool lir_home_stationary_owners(LirHomeBuilder *builder, const XrLirOwner
         if (root->rank && root->producer && !root->rejected)
             values[v].stationary_owner = root->producer;
     }
+    if (!lir_home_fixed_local_owners(c, plan, function, chains, values)) { xr_free(chains); return false; }
     /* A mutation Cell between two names of one stationary owner holds that
      * same owner for its whole life: the MOVE in empties the source and the
      * MOVE out refills it. Giving the Cell the owner's slot turns both

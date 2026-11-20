@@ -68,7 +68,7 @@ static bool c_binding_forward_geometry(LirC *c, const XrLirHomeEvent *event,
         (LirCBindingForward){slots[0],offsets[0],slots[1],offsets[1]};
     return true;
 }
-static LirCForward c_binding_forward_begin(LirC *c, const XrLirInstructionView *op) {
+static LirCForward c_binding_forward_begin(LirC *c, const XrLirInstructionView *op, uint32_t source) {
     if (!c->binding_forwarding || (op->op!=XR_LIR_CELL_NEW && op->op!=XR_LIR_CELL_READ)) return LIR_C_FORWARD_NONE;
     while (c->binding_forward_cursor<c->homes->event_count) {
         const XrLirHomeEvent *event=&c->homes->events[c->binding_forward_cursor];
@@ -84,7 +84,12 @@ static LirCForward c_binding_forward_begin(LirC *c, const XrLirInstructionView *
         /* The logical COPY retains into the owner's own field and the paired
          * DROP releases it again; with one shared field the pair is the identity. */
         c->binding_forward_elided=transfer.source==transfer.destination;
-        if (c->binding_forward_elided) return LIR_C_FORWARD_ELIDED;
+        if (c->binding_forward_elided) {
+            c_format(c, "    if (!xrt_managed_identity_retain(*(XrtManagedHeader **)((unsigned char *)xrl_payload + %zu)))\n"
+                "        xrt_native_managed_failure(XRT_MANAGED_REFCOUNT, UINT32_C(%" PRIu32 "));\n",
+                transfer.source_offset, source);
+            return LIR_C_FORWARD_ELIDED;
+        }
         c_format(c,"    xrl_binding_forwarded = xrt_managed_frame_try_forward(xrl_frame, xrl_payload, &xrl_frame_locations, (XrtManagedFrameForward){%zu, %zu, %zu, %zu});\n",
             transfer.source,transfer.source_offset,transfer.destination,transfer.destination_offset);
         c_text(c,"    if (!xrl_binding_forwarded) {\n");

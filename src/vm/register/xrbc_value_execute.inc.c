@@ -1361,7 +1361,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         stack->frames[stack->depth-1].pc=pc;
         return XR_RBC_OK;
     }
-    if (rbc_value_binding_forward(activation, access)) {
+    if (rbc_value_binding_forward(activation, access, &region_status)) {
+        if (region_status != XRT_MANAGED_OK) xrt_native_managed_failure(region_status,source);
         stack->frames[stack->depth-1].pc=pc+1;
         return XR_RBC_OK;
     }
