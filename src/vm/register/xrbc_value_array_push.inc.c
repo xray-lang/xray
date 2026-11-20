@@ -23,7 +23,7 @@ static XR_NOINLINE bool rbc_value_array_push_segment(XrRbcStack *stack,RbcValueA
     if (start>=end) return true;
     const XrtArrayI64RegionContext context={activation->frame,activation->payload,
         &activation->frame_locations,&code->homes->frame};
-    const XrtArrayI64RegionSpec spec={bindings->slots+row->first_slot,row->slot_count,row->canonical_slot-row->first_slot};
+    const XrtArrayI64RegionSpec spec=xr_lir_array_region_guard_spec(bindings,row);
     XrtArrayI64RegionCache cache={0};
     if (!xrt_array_i64_region_try_begin(&context,&spec,true,&cache)) return false;
     XrtArrayBacking *array=(XrtArrayBacking *)cache.owner;

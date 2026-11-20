@@ -79,14 +79,15 @@ static void c_array_region_spec(LirC *c, const XrLirArrayRegionBindings *binding
     XrLirArrayRegionBinding row = binding->regions[r];
     XR_DCHECK(row.canonical_slot >= row.first_slot && row.canonical_slot-row.first_slot < row.slot_count,
         "runtime canonical index is relative to this region slot span");
+    XrtArrayI64RegionSpec spec = xr_lir_array_region_guard_spec(binding, &row);
     c_format(c,"static const XrtArrayI64RegionSlot %s_slots_%" PRIu32 "_%zu[] = {\n",prefix,c->function.id,r);
-    for (size_t n = 0; n < row.slot_count; ++n) {
-        XrtArrayI64RegionSlot slot = binding->slots[row.first_slot + n];
+    for (size_t n = 0; n < spec.slot_count; ++n) {
+        XrtArrayI64RegionSlot slot = spec.slots[n];
         c_format(c,"    {%zu, %zu},\n",slot.slot,slot.offset);
     }
     c_format(c,"};\nstatic const XrtArrayI64RegionSpec %s_spec_%" PRIu32 "_%zu = {%s_slots_%" PRIu32
         "_%zu, %zu, %zu};\n",prefix,c->function.id,r,prefix,c->function.id,r,
-        row.slot_count,row.canonical_slot-row.first_slot);
+        spec.slot_count,spec.canonical);
 }
 static void c_array_region_specs(LirC *c) {
     if (c_array_region_present(c)) {
