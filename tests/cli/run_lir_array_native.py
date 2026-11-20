@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -10,9 +12,83 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from xraytest.artifacts import complete_native_artifacts
+
+class CaseCancelled(Exception):
+    pass
+
+
+class SpawnGate:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._stopped = False
+
+    def stopped(self):
+        with self._lock:
+            return self._stopped
+
+    def stop(self):
+        with self._lock:
+            self._stopped = True
+
+    @contextmanager
+    def launch(self):
+        with self._lock:
+            if self._stopped:
+                raise CaseCancelled()
+            yield
+
+
+def run_ordered(cases, execute, jobs, gate, recovery_required):
+    pending = {}
+    queued = iter(enumerate(cases))
+    outcomes = {}
+    fatal = []
+
+    def guarded(index, case):
+        try:
+            if gate.stopped():
+                raise CaseCancelled()
+            return execute(index, case)
+        except CaseCancelled:
+            raise
+        except BaseException:
+            gate.stop()
+            raise
+
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        def queue_one():
+            if not gate.stopped() and (entry := next(queued, None)) is not None:
+                index, case = entry
+                pending[pool.submit(guarded, index, case)] = index
+
+        try:
+            for _ in range(jobs):
+                queue_one()
+            while pending:
+                done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                for future in sorted(done, key=pending.__getitem__):
+                    index = pending.pop(future)
+                    try:
+                        outcomes[index] = future.result()
+                    except CaseCancelled:
+                        pass
+                    except BaseException as error:
+                        fatal.append((index, error))
+                    queue_one()
+        except BaseException:
+            gate.stop()
+            for future in pending:
+                future.cancel()
+            raise
+
+    if fatal:
+        # Never lose unverified child drain behind an ordinary assertion.
+        _, error = min(fatal, key=lambda failure: (
+            not isinstance(failure[1], recovery_required), failure[0]))
+        raise error
+    return [outcomes[index] for index in range(len(cases))]
 
 
 def main() -> None:
@@ -58,44 +134,66 @@ def main() -> None:
     if unknown:
         parser.error("unknown cases: " + ", ".join(unknown))
     root, binary = args.root.resolve(), args.binary.resolve()
+    sys.path.insert(0, str(root / "tests/lib"))
+    from xraytest.artifacts import complete_native_artifacts
     sys.path.insert(0, str(root / "scripts"))
-    from xray_process import run_child
+    from xray_process import RecoveryRequired, run_child
 
     args.output.mkdir(parents=True, exist_ok=True)
-    work = Path(tempfile.mkdtemp(prefix="array-native-", dir=args.output.resolve()))
+    attempt = Path(tempfile.mkdtemp(prefix="array-native-", dir=args.output.resolve()))
     fixtures = root / "tests/fixtures/lir_cli/array_lower"
     environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
     if os.name == "nt":
         environment["PATH"] = str(binary.parent) + os.pathsep + environment.get("PATH", "")
-    records = []
-    failures = []
+    rejected_sources = {
+        "reject_i64_try_parse_type": b"expression cannot satisfy its declared type",
+        "reject_i64_try_parse_shadow": b"'i64' is a keyword and cannot be used as an identifier",
+        "reject_callable_inline_array_mismatch": b"callback argument requires exact shape and an admitted advertised bound",
+        "ref_global_alias": b"E0382: ref of module binding `shared` conflicts with access by `update` via `inspect`",
+        "string_append_ref": b"E0382: ref of module binding `published` conflicts with access by `actual` via `actual`",
+        "reject_display_nullable_fixed": b"value has no admitted builtin display",
+        "reject_fixed_empty": b"this fixed byte length",
+        "reject_fixed_length_mismatch": b"expression cannot satisfy its declared type",
+        "reject_repeat_string_default": b"type has no admitted default initializer",
+        "reject_unsigned_family": b"expression cannot satisfy its declared type",
+        "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",
+        "reject_ref_alias": b"ref arguments of one call must not alias",
+        "reject_scalar_ref_callback_write": b"E0382: ref of module binding `shared` conflicts with",
+        "reject_local_scalar_ref_callback_write": b"ref argument conflicts with a callable capture of the same mutable root",
+        "reject_view_live_write": b"during view lifetime normalization",
+        "reject_view_copy_live_write": b"during view lifetime normalization",
+        "reject_view_module_alias": b"during view lifetime normalization",
+        "reject_view_module_write": b"E0382: Slice of module binding `values` conflicts with write by `first` via `grow`",
+        "reject_view_capture_module_write": b"during view lifetime normalization",
+        # These are capability boundaries, not proof of captured local Array
+        # write conflict checking. Their original inputs remain unchanged.
+        "reject_view_indirect_callback_write": b"borrowing captured Array storage is not implemented yet",
+        "reject_view_local_byte_capture": b"borrowing captured Array storage is not implemented yet",
+        "reject_callable_local_array_transport": b"callable transport of captured Array storage is not implemented yet",
+        "reject_callable_local_byte_transport": b"callable transport of captured Array storage is not implemented yet",
+        "reject_callable_unknown_before_array_transport": b"constructed XIR failed checking",
+        "reject_view_state_indirect_callback_write": b"E0382: Slice of module binding `values` conflicts with write",
+        "reject_view_callback_relay_write": b"E0382: Slice of module binding `values` conflicts with write",
+        "reject_view_callback_opaque": b"callback arguments require a completed readonly Slice borrowing contract",
+        "reject_view_local_return": b"constructed XIR failed checking",
+    }
 
-    def run(name, command, expected_exit):
-        command = list(map(str, command))
-        paths = {stream: work / (name + "." + stream) for stream in ("stdout", "stderr")}
-        with paths["stdout"].open("xb") as out, paths["stderr"].open("xb") as err:
-            status = run_child(command, cwd=work, env=environment, stdin=subprocess.DEVNULL,
-                               stdout=out, stderr=err, timeout=30)
-        row = {"name": name, "argv": command, "exit": status, "expected_exit": expected_exit,
-               "state": "TERMINAL_DRAINED"}
-        for stream, path in paths.items():
-            row[stream] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
-        records.append(row)
-        (work / "result.json").write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
-        if status != expected_exit:
-            failures.append((name, status, paths["stderr"].read_text(encoding="utf-8", errors="replace")))
-        return status, paths["stdout"].read_bytes(), paths["stderr"].read_bytes()
+    lower_names = ("reject_bool", "reject_nested", "reject_function_reassign",
+                 "reject_function_alias", "reject_function_ref", "reject_tuple_unit")
+    callback_names = ("check_view_state_indirect_callback_read", "check_view_callback_declaration", "check_view_callback_derived")
+    cases = ([("ordinary", name, None) for name in cases
+              if (not args.case or name in args.case) and name not in ("ref_global_alias", "string_append_ref")]
+             + [("lower", name, None) for name in lower_names]
+             + [("callback", name, None) for name in callback_names]
+             + [("rejected", name, diagnostic) for name, diagnostic in rejected_sources.items()])
+    gate = SpawnGate()
 
-    for name in cases:
-        if args.case and name not in args.case:
-            continue
-        if name in ("ref_global_alias", "string_append_ref"):
-            continue
+    def run_ordinary(name, work, run, failures):
         source = fixtures / (name + ".xr")
         panic = name.startswith("panic_")
         status, _, _ = run(name + "-check", [binary, "check", source], 0)
         if status:
-            continue
+            return
         reference = None
         for repeat in range(2):
             result = run(name + f"-vm-{repeat}", [binary, "run", source], 1 if panic else 0)
@@ -112,7 +210,7 @@ def main() -> None:
         generated = work / (name + ".c")
         status, _, _ = run(name + "-c", [binary, "build", "-c", source, "-o", generated], 0)
         if status:
-            continue
+            return
         generated_text = generated.read_text(encoding="utf-8")
         assert "({" not in generated_text
         if name == "push_capacity":
@@ -192,8 +290,8 @@ def main() -> None:
                     failures.append((name, "output", out, err))
                 if result != reference:
                     failures.append((name, "VM/native byte comparison", reference, result))
-    for name in ("reject_bool", "reject_nested", "reject_function_reassign",
-                 "reject_function_alias", "reject_function_ref", "reject_tuple_unit"):
+
+    def run_lower_refusal(name, work, run, failures):
         source = fixtures / (name + ".xr")
         run(name + "-check", [binary, "check", source], 0)
         _, out, err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
@@ -207,45 +305,13 @@ def main() -> None:
         _, vm_out, vm_err = run(name + "-vm", [binary, "run", source], 1)
         if vm_out != out or vm_err != err:
             failures.append((name, "VM/native refusal byte comparison", (out, err), (vm_out, vm_err)))
-    # This paired State control tests semantic admission. The indirect higher-
-    # order callable ABI still has its separate Lower implementation frontier.
-    for name in ("check_view_state_indirect_callback_read", "check_view_callback_declaration", "check_view_callback_derived"):
+
+    def run_callback_check(name, run, failures):
         status, out, err = run(name + "-check", [binary, "check", fixtures / (name + ".xr")], 0)
         if status or out or err:
             failures.append((name, "Source callback borrowing control", out, err))
-    rejected_sources = {
-        "reject_i64_try_parse_type": b"expression cannot satisfy its declared type",
-        "reject_i64_try_parse_shadow": b"'i64' is a keyword and cannot be used as an identifier",
-        "reject_callable_inline_array_mismatch": b"callback argument requires exact shape and an admitted advertised bound",
-        "ref_global_alias": b"E0382: ref of module binding `shared` conflicts with access by `update` via `inspect`",
-        "string_append_ref": b"E0382: ref of module binding `published` conflicts with access by `actual` via `actual`",
-        "reject_display_nullable_fixed": b"value has no admitted builtin display",
-        "reject_fixed_empty": b"this fixed byte length",
-        "reject_fixed_length_mismatch": b"expression cannot satisfy its declared type",
-        "reject_repeat_string_default": b"type has no admitted default initializer",
-        "reject_unsigned_family": b"expression cannot satisfy its declared type",
-        "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",
-        "reject_ref_alias": b"ref arguments of one call must not alias",
-        "reject_scalar_ref_callback_write": b"E0382: ref of module binding `shared` conflicts with",
-        "reject_local_scalar_ref_callback_write": b"ref argument conflicts with a callable capture of the same mutable root",
-        "reject_view_live_write": b"during view lifetime normalization",
-        "reject_view_copy_live_write": b"during view lifetime normalization",
-        "reject_view_module_alias": b"during view lifetime normalization",
-        "reject_view_module_write": b"E0382: Slice of module binding `values` conflicts with write by `first` via `grow`",
-        "reject_view_capture_module_write": b"during view lifetime normalization",
-        # These are capability boundaries, not proof of captured local Array
-        # write conflict checking. Their original inputs remain unchanged.
-        "reject_view_indirect_callback_write": b"borrowing captured Array storage is not implemented yet",
-        "reject_view_local_byte_capture": b"borrowing captured Array storage is not implemented yet",
-        "reject_callable_local_array_transport": b"callable transport of captured Array storage is not implemented yet",
-        "reject_callable_local_byte_transport": b"callable transport of captured Array storage is not implemented yet",
-        "reject_callable_unknown_before_array_transport": b"constructed XIR failed checking",
-        "reject_view_state_indirect_callback_write": b"E0382: Slice of module binding `values` conflicts with write",
-        "reject_view_callback_relay_write": b"E0382: Slice of module binding `values` conflicts with write",
-        "reject_view_callback_opaque": b"callback arguments require a completed readonly Slice borrowing contract",
-        "reject_view_local_return": b"constructed XIR failed checking",
-    }
-    for name, diagnostic in rejected_sources.items():
+
+    def run_source_refusal(name, diagnostic, work, run, failures):
         source = fixtures / (name + ".xr")
         _, out, err = run(name + "-check", [binary, "check", source], 1)
         if out or diagnostic not in err:
@@ -258,8 +324,56 @@ def main() -> None:
             _, actual_out, actual_err = run(name + "-" + stage, command, 1)
             if actual_out != out or actual_err != err:
                 failures.append((name, "Source refusal byte comparison", stage, (out, err), (actual_out, actual_err)))
+
+    def execute(index, case):
+        kind, name, diagnostic = case
+        work = attempt / f"{index:03d}"
+        work.mkdir()
+        temporary = work / "t"
+        temporary.mkdir()
+        case_environment = environment | dict.fromkeys(("TEMP", "TMP", "TMPDIR"), str(temporary))
+        records = []
+        failures = []
+        journal = work / "result.jsonl"
+
+        def run(name, command, expected_exit):
+            command = list(map(str, command))
+            paths = {stream: work / (name + "." + stream) for stream in ("stdout", "stderr")}
+            with paths["stdout"].open("xb") as out, paths["stderr"].open("xb") as err:
+                status = run_child(command, cwd=work, env=case_environment, stdin=subprocess.DEVNULL,
+                                   stdout=out, stderr=err, timeout=30, spawn_guard=gate.launch)
+            row = {"name": name, "argv": command, "exit": status, "expected_exit": expected_exit,
+                   "state": "TERMINAL_DRAINED"}
+            for stream, path in paths.items():
+                row[stream] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            # Keep the completed command available even if the suite times out.
+            with journal.open("a", encoding="utf-8", newline="\n") as output:
+                output.write(json.dumps(row, separators=(",", ":")) + "\n")
+            records.append(row)
+            if status != expected_exit:
+                failures.append((name, status, paths["stderr"].read_text(encoding="utf-8", errors="replace")))
+            return status, paths["stdout"].read_bytes(), paths["stderr"].read_bytes()
+
+        if kind == "ordinary":
+            run_ordinary(name, work, run, failures)
+        elif kind == "lower":
+            run_lower_refusal(name, work, run, failures)
+        elif kind == "callback":
+            run_callback_check(name, run, failures)
+        elif kind == "rejected":
+            run_source_refusal(name, diagnostic, work, run, failures)
+        else:
+            raise AssertionError(f"invalid case class: {kind}")
+        return records, failures
+
+    outputs = run_ordered(cases, execute, 2, gate, RecoveryRequired)
+    records = [record for case_records, _ in outputs for record in case_records]
+    failures = [failure for _, case_failures in outputs for failure in case_failures]
+    report = attempt / "result.json.tmp"
+    report.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
+    report.replace(attempt / "result.json")
     assert not failures, failures
-    complete_native_artifacts(work)
+    complete_native_artifacts(attempt)
     print(f"{len(records)} Array Source/VM/native commands passed")
 
 

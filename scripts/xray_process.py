@@ -1,5 +1,6 @@
 """Run a command with an owned process tree, including abnormal parent exits."""
 
+from contextlib import nullcontext
 import ctypes
 from ctypes import wintypes
 import os
@@ -36,19 +37,26 @@ def _kill_group(group: int) -> None:
             time.sleep(0.01)
 
 
-def run_child(command: list[str], *, timeout: float | None = None, **kwargs) -> int:
-    """Wait for the leader; cleanup completes before a timeout is propagated."""
+def run_child(command: list[str], *, timeout: float | None = None, spawn_guard=nullcontext, **kwargs) -> int:
+    """Wait for the leader; cleanup completes before propagating a timeout.
+
+    The optional context factory guards process creation only. It may raise
+    to deny a launch and must not suppress launch errors.
+    """
     if os.name != "nt":
-        child = subprocess.Popen(command, start_new_session=True, **kwargs)
+        child = None
         try:
+            with spawn_guard():
+                child = subprocess.Popen(command, start_new_session=True, **kwargs)
             return child.wait(timeout=timeout)
         finally:
-            _kill_group(child.pid)
-            child.wait()
-    return _run_windows(command, timeout=timeout, **kwargs)
+            if child is not None:
+                _kill_group(child.pid)
+                child.wait()
+    return _run_windows(command, timeout=timeout, spawn_guard=spawn_guard, **kwargs)
 
 
-def _run_windows(command: list[str], *, timeout: float | None = None, **kwargs) -> int:
+def _run_windows(command: list[str], *, timeout: float | None = None, spawn_guard=nullcontext, **kwargs) -> int:
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     native = ctypes.WinDLL("ntdll")
 
@@ -122,7 +130,8 @@ def _run_windows(command: list[str], *, timeout: float | None = None, **kwargs) 
         limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         if not kernel.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
             raise ctypes.WinError(ctypes.get_last_error())
-        child = subprocess.Popen(command, creationflags=0x00000004, **kwargs)  # CREATE_SUSPENDED
+        with spawn_guard():
+            child = subprocess.Popen(command, creationflags=0x00000004, **kwargs)  # CREATE_SUSPENDED
         if not kernel.AssignProcessToJobObject(job, int(child._handle)):
             raise ctypes.WinError(ctypes.get_last_error())
         assigned = True
