@@ -492,6 +492,79 @@ static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcV
     }
     return borrowed && owned;
 }
+static const XrLirHomeArrayCall *rbc_value_array_call_move(const XrRbcValueCode *code, uint32_t ordinal) {
+    return code && code->homes && code->homes->array_call_moves && ordinal &&
+        ordinal <= code->homes->array_call_move_count ? &code->homes->array_call_moves[ordinal-1] : NULL;
+}
+
+static bool rbc_value_array_call_slot(const XrRbcModule *module, const XrRbcValueCode *code,
+    uint32_t value, size_t slot, bool temporary) {
+    if (!rbc_value_array(module,code,value,true) || rbc_value_kind(module,code,value)!=XRT_VALUE_ARRAY_I64 ||
+        !code->homes->owned_frame_needed) return false;
+    const XrLirValueHome *home = rbc_value_home(code,value);
+    const XrtManagedFrameSpec *frame = &code->homes->frame;
+    size_t offset = temporary ? home->temporary_offset : home->offset;
+    return !home->parameter && !home->borrow_source && !home->byte_count &&
+        slot == (temporary ? home->temporary_first_owner : home->first_owner) &&
+        frame->owned_offsets && slot < frame->slot_count && offset % _Alignof(XrtManagedHeader *) == 0 &&
+        offset <= frame->payload_size && sizeof(XrtManagedHeader *) <= frame->payload_size-offset &&
+        frame->owned_offsets[slot] == offset;
+}
+
+static bool rbc_value_array_entry_valid(const XrRbcModule *module, const XrRbcValueCode *callee,
+    uint32_t parameter, uint32_t type) {
+    if (!callee || !callee->homes || !callee->accesses || !callee->array_entry_access ||
+        callee->array_entry_access > callee->access_count) return false;
+    const XrLirArrayEntryRetain *entry = &callee->homes->array_entry_retain;
+    XrRbcValueAccess retain = callee->accesses[callee->array_entry_access-1];
+    if (!entry->block || !entry->instruction || entry->parameter != parameter ||
+        parameter >= callee->parameter_count || !callee->parameters ||
+        retain.operation != XR_RBC_VALUE_COPY || retain.other || retain.index || retain.first ||
+        retain.count || retain.window || retain.result != entry->result ||
+        retain.source != callee->parameters[parameter] || callee->homes->result_type != type ||
+        !rbc_value_array(module,callee,retain.source,false) ||
+        !rbc_value_array_call_slot(module,callee,entry->result,callee->homes->array_entry_owner,false))
+        return false;
+    const XrLirValueHome *formal = rbc_value_home(callee,retain.source);
+    const XrLirValueHome *local = rbc_value_home(callee,entry->result);
+    return formal->parameter == parameter+1 && !formal->borrow_source && formal->type == type && local->type == type;
+}
+
+static bool rbc_value_array_call_pair_valid(const XrRbcModule *module, const XrRbcValueCode *code,
+    uint32_t ordinal, size_t index, bool at_retain) {
+    if (!xr_rbc_module_code_owner(module) || !code->array_calls) return false;
+    const XrLirHomeArrayCall *row = rbc_value_array_call_move(code,ordinal);
+    if (!row) return false;
+    XrRbcArrayCallAccess pair = code->array_calls[ordinal-1];
+    if (!pair.retain || pair.retain >= pair.call || pair.call > code->access_count ||
+        (at_retain ? pair.retain : pair.call) != index+1) return false;
+    XrRbcValueAccess retain = code->accesses[pair.retain-1], call = code->accesses[pair.call-1];
+    const XrLirArrayCallMove *move = &row->logical;
+    if (retain.operation != XR_RBC_VALUE_COPY || retain.other != ordinal ||
+        retain.source != move->owner || retain.result != move->temporary || retain.index ||
+        retain.first || retain.count || retain.window || call.operation != XR_RBC_VALUE_CALL ||
+        call.source != ordinal || call.other || !move->block || !move->retain ||
+        move->retain >= move->instruction || move->owner_drop <= move->instruction ||
+        move->temporary_drop <= move->instruction ||
+        call.index >= module->function_count || row->parameter >= call.count || !code->arguments ||
+        call.first > code->argument_count || call.count > code->argument_count-call.first ||
+        code->arguments[call.first+row->parameter] != move->temporary) return false;
+    if (!rbc_value_array_call_slot(module,code,retain.source,row->source_slot,false) ||
+        !rbc_value_array_call_slot(module,code,retain.result,row->staged_slot,false) ||
+        !rbc_value_array_call_slot(module,code,call.result,row->result_slot,false) ||
+        !rbc_value_array_call_slot(module,code,call.result,row->landing_slot,true)) return false;
+    size_t slots[] = {row->source_slot,row->staged_slot,row->result_slot,row->landing_slot};
+    for (size_t n = 1; n < sizeof(slots)/sizeof(*slots); ++n)
+        for (size_t earlier = 0; earlier < n; ++earlier)
+            if (slots[n] == slots[earlier]) return false;
+    uint32_t type = rbc_value_home(code,call.result)->type;
+    if (rbc_value_home(code,retain.source)->type != type ||
+        rbc_value_home(code,retain.result)->type != type) return false;
+    const XrRbcValueCode *callee = xr_rbc_module_value_code(module,call.index);
+    return callee && callee->homes && callee->homes->source_function == move->callee &&
+        rbc_value_array_entry_valid(module,callee,row->parameter,type);
+}
+
 XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     const XrRbcFunction *function, size_t pc) {
     if (!module || !function || !function->code || pc>=function->code_count) return false;
@@ -539,7 +612,8 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return rbc_value_string(module,code,a.result,true) && rbc_value_string(module,code,a.source,false) &&
             rbc_value_string(module,code,a.other,false);
     case XR_RBC_VALUE_COPY: case XR_RBC_VALUE_MOVE:
-        return !a.other && !rbc_value_function(module,code,a.result,false) && !rbc_value_cell(module,code,a.result,false) &&
+        return (!a.other || (a.operation == XR_RBC_VALUE_COPY && rbc_value_array_call_pair_valid(module,code,a.other,index,true))) &&
+            !rbc_value_function(module,code,a.result,false) && !rbc_value_cell(module,code,a.result,false) &&
             rbc_value_owner(module,code,a.result,true) && rbc_value_owner(module,code,a.source,false) &&
             rbc_value_home(code,a.result)->type==rbc_value_home(code,a.source)->type && (a.operation == XR_RBC_VALUE_COPY || !rbc_value_home(code,a.source)->parameter);
     case XR_RBC_VALUE_DROP:
@@ -575,7 +649,8 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     }
     case XR_RBC_VALUE_CALL: {
         if (a.index >= module->function_count || a.first > code->argument_count ||
-            a.count > code->argument_count - a.first || (a.count && !code->arguments) || a.window >= function->register_count)
+            a.count > code->argument_count - a.first || (a.count && !code->arguments) || a.window >= function->register_count ||
+            (a.source && !rbc_value_array_call_pair_valid(module,code,a.source,index,false)))
             return false;
         for (uint32_t p = 0; p < a.count; ++p) if (!rbc_value_id(code,code->arguments[a.first + p])) return false;
         const XrRbcValueCode *callee = xr_rbc_module_value_code(module,a.index);

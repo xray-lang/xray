@@ -761,12 +761,59 @@ static void inline_home_transfers(void) {
     fixture_done(&fixture);
     puts("inline owner places: parallel swaps, real aliases and publish-before-drop PASS");
 }
+static void call_argument_staging(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtManagedHeader *value = make(&fixture, 0, 9);
+    OK(xrt_place_copy_replace(slot(&fixture, 2), slot(&fixture, 0), NULL));
+    CHECK(!xrt_managed_slot_try_stage_unique(fixture.frame, 1, 0));
+    CHECK(*owner_field(&fixture, 0) == value && !*owner_field(&fixture, 1) &&
+        *owner_field(&fixture, 2) == value && atomic_load(&value->references) == 2);
+    OK(xrt_managed_slot_drop(fixture.frame, 2));
+    atomic_store(&value->references, INT32_MAX - 1);
+    CHECK(!xrt_managed_slot_try_stage_unique(fixture.frame, 1, 0));
+    CHECK(atomic_load(&value->references) == INT32_MAX - 1);
+    atomic_store(&value->references, 1);
+
+    XrtManagedHeader *pending = NULL;
+    OK(xrt_managed_slot_prepare(fixture.frame, 1, fixture.ops, sizeof(Payload), &pending));
+    ((Payload *)pending)->value = 4;
+    CHECK(!xrt_managed_slot_try_stage_unique(fixture.frame, 1, 0));
+    CHECK(*owner_field(&fixture, 0) == value && !*owner_field(&fixture, 1));
+    OK(xrt_managed_slot_abort(fixture.frame, 1));
+
+    CHECK(xrt_managed_slot_try_stage_unique(fixture.frame, 1, 0));
+    CHECK(!*owner_field(&fixture, 0) && *owner_field(&fixture, 1) == value &&
+        atomic_load(&value->references) == 1);
+    XrtManagedFrame *caller = fixture.frame;
+    XrtManagedFrame *child = NULL;
+    OK(xrt_managed_frame_enter(fixture.root, 2, &child));
+    fixture.frame = child;
+    XrtManagedHeader *occupied = make(&fixture, 0, 5);
+    BAD(xrt_managed_slot_move(fixture.frame, 0, caller, 1));
+    CHECK(*owner_field(&fixture, 0) == occupied && atomic_load(&value->references) == 1);
+    OK(xrt_managed_slot_move(fixture.frame, 1, caller, 1));
+    CHECK(*owner_field(&fixture, 1) == value && atomic_load(&value->references) == 1);
+    OK(xrt_managed_slot_drop(caller, 0));
+    OK(xrt_managed_slot_drop(caller, 1));
+    OK(xrt_managed_frame_leave(fixture.root, fixture.frame));
+    fixture.frame = caller;
+    CHECK(atomic_load(&fixture.audit.retired) == 3);
+
+    value = make(&fixture, 0, 7);
+    CHECK(xrt_managed_slot_try_stage_unique(caller, 1, 0));
+    CHECK(!*owner_field(&fixture, 0) && *owner_field(&fixture, 1) == value);
+    fixture_done(&fixture);
+    CHECK(atomic_load(&fixture.audit.retired) == 4);
+}
+
 int main(void) {
     publication_boundaries();
     edge_publication();
     duplicate_copy_publication(); copy_overflow_rollback(); mixed_edge_overlap();
     external_edge_copies(); nullable_edge_copies(); single_edge_boundaries();
     inline_home_transfers();
+    call_argument_staging();
     root_transfers(); frame_move_transfers(); frame_move_inline_owner(); external_transfers();
     edges_and_domains(); edge_guards_and_retirement(); escaped_lifetime();
     puts("stable places: guarded replacement, whole-edge transfers and complete owner/code retirement passed");

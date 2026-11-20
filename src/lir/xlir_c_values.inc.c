@@ -234,6 +234,7 @@ static void c_values_function(LirC *c) {
     c->homes = c->value_homes ? c->value_homes[c->function.id - 1] : NULL;
     c->array_region = c->array_regions ? &c->array_regions[c->function.id - 1] : NULL;
     c->home_edge_cursor = 0;
+    c->array_call_cursor = 0;
     c->string_event_cursor = c->string_workspace_cursor = 0;
     c->map_stage_event_cursor = c->map_stage_workspace_cursor = 0;
     c->set_stage_event_cursor = c->set_stage_workspace_cursor = c->set_event_cursor = 0;
@@ -260,6 +261,8 @@ static void c_values_declarations(LirC *c) {
     if (c_values_owned_type(c, c->view.result) || c_slice_type(c, c->view.result)) c_text(c, "    (void)xrl_result;\n");
     if (!c->homes || !c->homes->owned_frame_needed) return;
     c_text(c, "    XrtManagedRoot *xrl_root = NULL;\n    XrtManagedFrame *xrl_frame = NULL;\n    void *xrl_payload = NULL;\n");
+    if (c->homes->array_call_move_count)
+        c_text(c,"    bool xrl_array_argument_staged = false;\n    (void)xrl_array_argument_staged;\n");
     if (c->header_edges || c->binding_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c) ||
         (c->array_region && c->array_region->fixed_edges))
         c_text(c, "    XrtManagedFrameLocations xrl_frame_locations = {0};\n");
@@ -499,6 +502,7 @@ static bool c_values_signature(LirC *c, bool definition) {
     c_format(c, "(XrlLanding_%" PRIu32 " xrl_result", c->function.id);
     for (uint32_t p = 0; p < c->view.parameter_count && c_request_poll(c); ++p)
         c_format(c, ", %s p%" PRIu32, c_type(c, c->view.parameter_types[p]), p);
+    if (c_array_call_receiver(c,c->function.id)) c_text(c,", XrtPlace xrl_array_argument");
     c_text(c, definition ? ") {\n" : ");\n");
     return true;
 }
@@ -580,6 +584,14 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
             v->callee, home->first_owner, home->temporary_first_owner, home->offset, home->temporary_offset);
         for (uint32_t a = 0; a < v->operand_count && c_request_poll(c); ++a) {
             c_text(c, ", "); c_call_argument(c, callee.parameter_types[a], v->operands[a]);
+        }
+        const XrLirHomeArrayCall *call = c_array_call_next(c);
+        bool staged = call && call->logical.block == c->block && call->logical.instruction == c->instruction;
+        if (staged) ++c->array_call_cursor;
+        if (c_array_call_receiver(c,v->callee)) {
+            if (staged)
+                c_format(c,", (XrtPlace){.frame=xrl_array_argument_staged ? xrl_frame : NULL, .slot=%zu}",call->staged_slot);
+            else c_text(c,", (XrtPlace){0}");
         }
         c_text(c, ");\n");
         return true;

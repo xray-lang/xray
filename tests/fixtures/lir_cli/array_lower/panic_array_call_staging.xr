@@ -1,0 +1,20 @@
+fn bump(input: Array<i64>) -> Array<i64> {
+    var values = input
+    var i = 0
+    while (i < 2) {
+        values[i] = values[i] + 1
+        i += 1
+    }
+    return values
+}
+
+fn main() {
+    var values = [3]
+    var i = 0
+    while (i < 2) {
+        values = bump(values)
+        i += 1
+    }
+    print(values[0])
+}
+main()

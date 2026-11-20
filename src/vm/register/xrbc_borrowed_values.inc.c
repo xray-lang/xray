@@ -52,7 +52,7 @@ static bool rbc_borrowed_home_ranges(const XrRbcModule *module,const XrRbcValueC
 }
 static XrRbcStatus rbc_borrowed_home_admit(const XrRbcModule *module,const XrRbcFunction *function,
     const XrRbcValueCode *code) {
-    if (code->string_binding_setup || code->value_count==UINT32_MAX || !code->locations || code->parameter_count!=function->parameter_count ||
+    if (code->string_binding_setup || code->array_entry_access || code->array_calls || code->value_count==UINT32_MAX || !code->locations || code->parameter_count!=function->parameter_count ||
         (code->parameter_count && !code->parameters) || code->access_count>65536 ||
         (code->access_count && !code->accesses) || (code->argument_count && !code->arguments) ||
         code->scope_count!=rbc_function_scopes(module,function).count ||
@@ -73,7 +73,8 @@ static XrRbcStatus rbc_borrowed_home_admit(const XrRbcModule *module,const XrRbc
     if (homes->result_type && (!image || homes->result_type>image->type_count)) return XR_RBC_INVALID;
     if (homes->result_type && image->types[homes->result_type-1].kind==XRT_VALUE_FUNCTION) return XR_RBC_INVALID;
     if (homes->value_count!=code->value_count || !homes->values || homes->frame.slot_count ||
-        homes->owned_frame_needed || homes->workspace_count ||
+        homes->owned_frame_needed || homes->workspace_count || homes->array_call_moves || homes->array_call_move_count ||
+        homes->array_entry_retain.instruction ||
         (homes->frame.payload_size && homes->frame.payload_alignment!=_Alignof(XrtFunction)) ||
         (homes->event_count && !homes->events) || (homes->byte_count && !homes->bytes) ||
         (homes->edge_count && !homes->edges) || (homes->transfer_count && !homes->transfers)) return XR_RBC_INVALID;

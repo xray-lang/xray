@@ -101,6 +101,7 @@ typedef struct LirC {
     size_t cell_operation_cursor, cell_scope_cursor;
     _Atomic(XrCompileResourceStatus) value_allocation_failure;
     size_t home_edge_cursor;
+    size_t array_call_cursor;
     size_t string_event_cursor, string_workspace_cursor;
     size_t map_stage_event_cursor, map_stage_workspace_cursor;
     size_t set_stage_event_cursor, set_stage_workspace_cursor, set_event_cursor;
