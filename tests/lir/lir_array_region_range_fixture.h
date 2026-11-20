@@ -33,13 +33,6 @@ static inline uint64_t ars_range_digest(XrLirArraySetRegionRange range) {
     uint32_t fields[] = {ARS_RANGE_FIELDS(range)};
     return xr_hash_bytes64(fields, sizeof(fields));
 }
-static inline bool ars_owner_home_same(XrLirArraySetRegionOwnerHome a, XrLirArraySetRegionOwnerHome b) {
-    return a.kind == b.kind && a.first_active_step == b.first_active_step && a.exit_step == b.exit_step;
-}
-static inline uint64_t ars_owner_home_digest(XrLirArraySetRegionOwnerHome home) {
-    uint32_t fields[] = {home.kind,home.first_active_step,home.exit_step};
-    return xr_hash_bytes64(fields,sizeof(fields));
-}
 static void ars_range_edge(ArraySetRegionFixture *c, XrLirBlock block, XrLirBlock target, XrLirValue values[4]) {
     OK(xr_lir_set_terminator(c->module, block, &(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
         .edge_count=1,.edges={{target,values,4}}}));

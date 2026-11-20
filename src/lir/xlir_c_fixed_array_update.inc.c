@@ -35,6 +35,7 @@ static void c_array_regions_admit(LirC *c) {
         uint32_t f = c->closure[n];
         const XrLirValueHomes *homes = c->value_homes[f - 1];
         if (homes && homes->fixed_array_update_count) c_fixed_array_prepare(c, f, &c->array_regions[f - 1]);
+        if (c->status != XR_LIR_C_OK) return;
     }
 }
 
@@ -86,9 +87,14 @@ static void c_fixed_array_prepare(LirC *c, uint32_t function, LirCArrayRegions *
             receiver->pointwise_blocks = blocks;
         }
         const XrLirArraySetRegionStep *steps = homes->fixed_array_update_steps + r->first_step;
-        for (uint32_t p = 1; p + 1 < r->step_count; ++p)
-            if (steps[p].kind == XR_LIR_ARRAY_SET_REGION_EDGE_MOVE)
-                receiver->pointwise_blocks[steps[p].block] = true;
+        for (uint32_t p = 1; p + 1 < r->step_count; ++p) {
+            if (steps[p].kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) continue;
+            if (!steps[p].block || steps[p].block > view.block_count) {
+                c_error(c, XR_LIR_C_INVALID_LIR, "point-checked Array route lost its block");
+                return;
+            }
+            receiver->pointwise_blocks[steps[p].block] = true;
+        }
     }
 }
 

@@ -332,7 +332,7 @@ static void *home_resize(void *old,size_t bytes) {
 #define xr_realloc(old,bytes) home_resize(old,bytes)
 #define xr_free(memory) home_free(memory)
 #include "lir/xlir_value_homes.c"
-#include "lir/xlir_array_region_binding.c"
+#include "lir/xlir_fixed_array_guard.h"
 
 static void borrowed_map_stages(void) {
     for (unsigned writes=0;writes<2;++writes) {
@@ -883,23 +883,18 @@ static void array_set_region_receiving(bool range) {
     XrLirValueLayoutKey roots[] = {{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
     XrLirValueLayouts *layouts = NULL; HOME(xr_lir_value_layouts_create(c.module, roots, 4, billing, &layouts));
     XrLirOwnershipPlan *plan = NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
-    CHECK(xr_lir_ownership_array_region_count(plan) == (range ? 1u : 2u));
     XrLirOwnershipFunction function;
     OK(xr_lir_ownership_function_at(plan, c.function.id, &function));
-    CHECK(function.fixed_update_count == (uint32_t)range);
+    CHECK(function.fixed_update_count == 1 && function.fixed_update_offset == 1);
     XrLirValueHomesRequest request = {c.module,c.function,layouts,plan}; XrLirValueHomes *homes = NULL;
     size_t baseline = live, bytes = home_live_bytes(); attempts = 0;
     HOME(xr_lir_value_homes_create(&request, &homes)); size_t sites = attempts;
-    CHECK(homes && homes->array_region_count == (uint32_t)!range &&
-        homes->fixed_array_update_count == (uint32_t)range && sites && live > baseline);
+    CHECK(homes && homes->fixed_array_update_count == 1 && sites && live > baseline);
     XrLirArraySetRegion published;
-    OK(range ? xr_lir_ownership_fixed_array_update_at(plan, function.fixed_update_offset, &published) :
-        xr_lir_ownership_array_region_at(plan, function.region_offset, &published));
-    const XrLirArraySetRegion *received = range ? &homes->fixed_array_updates[0].region : &homes->array_regions[0];
+    OK(xr_lir_ownership_fixed_array_update_at(plan, function.fixed_update_offset, &published));
+    const XrLirArraySetRegion *received = &homes->fixed_array_updates[0].region;
     uint32_t expected_range = range ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN : XR_LIR_ARRAY_SET_RANGE_NONE;
     CHECK(ars_range_same(received->range, published.range) && published.range.kind == expected_range);
-    CHECK(ars_owner_home_same(received->owner_home,published.owner_home) &&
-        published.owner_home.kind == XR_LIR_ARRAY_SET_OWNER_HOME_NONE);
     xr_lir_value_homes_destroy(homes); homes = NULL;
     CHECK(live == baseline && home_live_bytes() == bytes);
     for (size_t point = 1; point <= sites; ++point) {
@@ -908,20 +903,17 @@ static void array_set_region_receiving(bool range) {
             attempts >= point && live == baseline && home_live_bytes() == bytes);
     }
     fail_at = SIZE_MAX; HOME(xr_lir_value_homes_create(&request, &homes));
-    received = range ? &homes->fixed_array_updates[0].region : &homes->array_regions[0];
-    uint32_t count = range ? homes->fixed_array_update_step_count : homes->array_region_step_count;
-    const XrLirArraySetRegionStep *steps = range ? homes->fixed_array_update_steps : homes->array_region_steps;
+    received = &homes->fixed_array_updates[0].region;
+    uint32_t count = homes->fixed_array_update_step_count;
+    const XrLirArraySetRegionStep *steps = homes->fixed_array_update_steps;
     CHECK(count && received->step_count == count);
     XrLirArraySetRegionStep first = steps[0], last = steps[count - 1];
     uint64_t range_digest = ars_range_digest(published.range);
-    uint64_t owner_home_digest = ars_owner_home_digest(published.owner_home);
     xr_lir_module_destroy(c.module); xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
     CHECK(received->canonical_value == c.header_array.id && received->body_block_count == c.count &&
         steps[0].source == first.source && steps[count - 1].target == last.target &&
         first.kind == XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE && last.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE);
     CHECK(ars_range_same(received->range, published.range) && ars_range_digest(received->range) == range_digest);
-    CHECK(ars_owner_home_same(received->owner_home,published.owner_home) &&
-        ars_owner_home_digest(received->owner_home) == owner_home_digest);
     xr_lir_value_homes_destroy(homes); CHECK(live == baseline && home_live_bytes() == bytes);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
 }
@@ -1119,7 +1111,7 @@ static void string_forwarding_window(uint32_t blocks, bool side_entry) {
 
 int main(void) {
     array_call_receiving();
-    for (unsigned shape=0;shape<7;++shape) array_region_binding_projection(shape);
+    for (unsigned shape=0;shape<8;++shape) array_region_binding_projection(shape);
     array_set_region_receiving(false); array_set_region_receiving(true);
     borrowed_map_stages();
     string_projections();

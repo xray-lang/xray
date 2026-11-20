@@ -89,8 +89,6 @@ static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint3
     size_t occupied_count = live, occupied_bytes = live_bytes;
     CHECK(occupied_count > input_count && occupied_bytes > input_bytes);
     XrLirOwnershipPlan *saved = output;
-    uint32_t regions = xr_lir_ownership_array_region_count(output);
-    uint32_t region_steps = xr_lir_ownership_array_region_step_count(output);
     uint32_t fixed_regions = output->fixed_array_updates.regions.count;
     uint32_t fixed_steps = output->fixed_array_updates.steps.count;
     attempt = 0; fail_at = 0;
@@ -98,12 +96,6 @@ static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint3
         output == saved && !attempt && live == occupied_count && live_bytes == occupied_bytes);
     fail_at = SIZE_MAX;
     xr_lir_module_destroy(input);
-    if (regions) {
-        XrLirArraySetRegion region; XrLirArraySetRegionStep step;
-        OK(xr_lir_ownership_array_region_at(output, regions - 1, &region));
-        OK(xr_lir_ownership_array_region_step_at(output, region_steps - 1, &step));
-        CHECK(region.function && region.step_count && step.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE);
-    }
     if (fixed_regions) {
         XrLirArraySetRegion region; XrLirArraySetRegionStep step;
         OK(xr_lir_ownership_fixed_array_update_at(output, fixed_regions - 1, &region));
@@ -143,7 +135,7 @@ static void array_region_tampering(void) {
     ArraySetRegionFixture c = array_set_region_fixture(3, ARRAY_SET_REGION_LOCAL);
     XrLirOwnershipPlan *plan = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
-    CHECK(plan->array_regions.regions.count == 1 && plan->array_regions.steps.count);
+    CHECK(plan->fixed_array_updates.regions.count == 1 && plan->fixed_array_updates.steps.count);
     size_t baseline = live, bytes = live_bytes;
     XrLirOwnershipFact *move = NULL;
     for (uint32_t n = 0; n < plan->fact_count; ++n)
@@ -155,7 +147,7 @@ static void array_region_tampering(void) {
     CHECK(xr_lir_ownership_array_regions_verify(c.module, plan) == XR_LIR_VERIFY_ERROR &&
         live == baseline && live_bytes == bytes);
     move->transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_MOVE;
-    XrLirArraySetRegionStep *steps = plan->array_regions.steps.data;
+    XrLirArraySetRegionStep *steps = plan->fixed_array_updates.steps.data;
     XrLirArraySetRegionStepKind saved = steps[0].kind; steps[0].kind = XR_LIR_ARRAY_SET_REGION_EXIT_MOVE;
     CHECK(xr_lir_ownership_array_regions_verify(c.module, plan) == XR_LIR_VERIFY_ERROR &&
         live == baseline && live_bytes == bytes);
@@ -182,8 +174,8 @@ static void array_region_range_tampering(void) {
         OK(xr_lir_module_finish(c.module, NULL));
         XrLirOwnershipPlan *plan = NULL;
         OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
-        CHECK(plan->array_regions.regions.count == (kind ? 0u : 1u) && plan->fixed_array_updates.regions.count == kind);
-        XrLirArraySetRegion *region = kind ? plan->fixed_array_updates.regions.data : plan->array_regions.regions.data;
+        CHECK(plan->fixed_array_updates.regions.count == 1);
+        XrLirArraySetRegion *region = plan->fixed_array_updates.regions.data;
         XrLirArraySetRegionRange *range = &region->range;
         CHECK(range->kind == kind);
         uint32_t *fields[] = {&range->kind,&range->iv,&range->iv_argument,&range->entry_iv,&range->length,
@@ -198,17 +190,6 @@ static void array_region_range_tampering(void) {
             *fields[n] = saved;
             CHECK(ars_range_same(*range, original));
         }
-        XrLirArraySetRegionOwnerHome *home = &region->owner_home;
-        CHECK(ars_owner_home_same(*home,(XrLirArraySetRegionOwnerHome){0}));
-        uint32_t *home_fields[] = {&home->kind,&home->first_active_step,&home->exit_step};
-        XrLirArraySetRegionOwnerHome original_home = *home;
-        for (size_t n = 0; n < sizeof(home_fields) / sizeof(*home_fields); ++n) {
-            uint32_t saved = *home_fields[n]; *home_fields[n] ^= 1;
-            CHECK(xr_lir_ownership_array_regions_verify(c.module,plan) == XR_LIR_VERIFY_ERROR &&
-                live == baseline && live_bytes == bytes);
-            *home_fields[n] = saved;
-            CHECK(ars_owner_home_same(*home,original_home));
-        }
         OK(xr_lir_ownership_array_regions_verify(c.module, plan));
         xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module);
         CHECK(!live && !live_bytes);
@@ -219,12 +200,11 @@ static void array_region_readonly_tampering(void) {
     OK(xr_lir_module_finish(c.module,NULL));
     XrLirOwnershipPlan *plan=NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
-    CHECK(plan->array_regions.regions.count == 1);
+    CHECK(plan->fixed_array_updates.regions.count == 1);
     size_t baseline = live, bytes = live_bytes;
-    XrLirArraySetRegion *region=plan->array_regions.regions.data;
+    XrLirArraySetRegion *region=plan->fixed_array_updates.regions.data;
     CHECK(region->primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && region->primary_block==c.body[0].id &&
-        region->range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN &&
-        region->owner_home.kind==XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW);
+        region->range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN);
     uint32_t *fields[]={&region->primary_kind,&region->primary_block,&region->primary_instruction};
     for (size_t n=0;n<3;++n) {
         uint32_t saved=*fields[n]; *fields[n]^=1;
@@ -291,8 +271,7 @@ static void array_region_verification_faults(unsigned shape) {
     XrLirOwnershipPlan *plan = NULL, *saved = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module}, &plan, NULL));
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=reference.module}, &saved, NULL));
-    CHECK(plan->fixed_array_updates.regions.count == (fixed ? 2u : 0u) &&
-        plan->array_regions.regions.count == (fixed ? 0u : 2u) && lir_array_region_plans_equal(plan, saved));
+    CHECK(plan->fixed_array_updates.regions.count == 2 && lir_array_region_plans_equal(plan, saved));
     size_t baseline = live, bytes = live_bytes;
     attempt = 0; OK(xr_lir_ownership_array_regions_verify(input.module, plan));
     size_t count = attempt; CHECK(count && live == baseline && live_bytes == bytes);

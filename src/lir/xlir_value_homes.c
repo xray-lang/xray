@@ -542,9 +542,8 @@ static bool lir_home_container_chain_start(const XrLirModule *module, const XrLi
         xr_lir_map_intrinsic_valid(module, &entry) && entry.operation == XR_LIR_MAP_OP_NEW;
 }
 
-/* Region consumers project these exact moves to distinct physical homes.
- * Preserve those endpoints, including their original entry and exit moves.
- * A chain in the same function can still use every other verified MOVE. */
+/* The source outside the entry and the destination outside the exit do not
+ * belong to the region's stationary chain. Their selected moves stay real. */
 static size_t lir_home_fixed_owned_values(const XrLirArraySetRegionStep *step, uint32_t ids[2]) {
     switch (step->kind) {
     case XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE:
@@ -1042,8 +1041,6 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
     }
     return lir_home_edges(b);
 }
-/* Opaque Plan and this same-process receiver share the exact final module.
- * Copy the producer tables once; independent current-body proof is explicit. */
 static bool lir_home_direct_header_move(const LirHomeBuilder *b, const XrLirHomeEdge *edge) {
     const XrLirValueHomes *homes = b->homes;
     if (edge->count != 1 || !homes->owned_frame_needed) return false;

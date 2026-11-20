@@ -166,9 +166,8 @@ typedef enum XrLirArraySetRegionStepKind {
  * Every future execution must preserve the complete original first iteration,
  * including its RHS, COPY failures, COW and error ordering. A numeric range
  * shape authorizes no runtime access; ordinary events/homes remain intact.
- * canonical_value alone does not merge ordinary physical homes. The separate
- * optional owner_home fact describes only its admitted unobserved window;
- * entry_value and exit_value retain the actual outside owners.
+ * The homes projection proves whether the same frame slot can carry the
+ * owner's entire route. Entry and exit retain their actual outside owners.
  * NEW/READ_CANDIDATE preserve a COPY plus its adjacent logical death; they are
  * not original MOVE events. source dies at drop, or at the selected MOVE edge.
  * Positions/edges are one-based, and first_step is a zero-based table offset. */

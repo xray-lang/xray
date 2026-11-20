@@ -44,7 +44,7 @@ static void compare_internal(const XrLirOwnershipRequest *request, const XrLirOw
         OK(xr_lir_ownership_function_at(internal,i,&a)); OK(xr_lir_ownership_function_at(public_plan,i,&b));
         CHECK(a.fact_offset == b.fact_offset && a.fact_count == b.fact_count &&
             a.unmodeled == b.unmodeled && a.external == b.external &&
-            a.region_offset == b.region_offset && a.region_count == b.region_count);
+            a.fixed_update_offset == b.fixed_update_offset && a.fixed_update_count == b.fixed_update_count);
     }
     for (uint32_t i = 0; i < xr_lir_ownership_fact_count(internal); ++i) {
         XrLirOwnershipFact a, b;

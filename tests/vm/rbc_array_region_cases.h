@@ -100,40 +100,33 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
     ca_return(&c,current,result); OK(xr_lir_module_finish(c.module,NULL)); return c.module;
 }
 typedef struct RbcRegionResult { XrRbcStatus status; uint64_t bits; uint32_t source; XrXirValueStatus failure; } RbcRegionResult;
-static void rbc_region_roles(const XrRbcModule *module,const XrRbcValueCode *code,unsigned loops,uint32_t supported) {
-    if (!supported) { CHECK(!code->array_region_accesses); return; }
-    const XrLirArrayRegionBindings *bindings=code->array_regions;
-    CHECK(bindings && bindings->slot_count && code->array_region_accesses);
-    uint32_t seen=0;
+static void rbc_region_roles(const XrRbcModule *module,const XrRbcValueCode *code,unsigned loops) {
+    CHECK(loops<=2);
+    if (!loops) { CHECK(!code->array_region_accesses); return; }
+    CHECK(code->homes->fixed_array_update_count==loops && code->array_region_accesses);
+    uint32_t roles[2][XR_LIR_ARRAY_REGION_EDGE_EXIT+1]={0}, writes[2]={0};
     for (size_t n=0;n<code->access_count;++n) {
         const XrRbcArrayRegionAccess *role=&code->array_region_accesses[n];
         XrRbcValueAccess access=code->accesses[n];
-        if (access.operation==XR_RBC_VALUE_EDGE && access.index!=UINT32_MAX)
-            CHECK(role->region==bindings->edges[access.index].region);
-        if (!role->region) {
-            CHECK(!role->operation.access && !role->operation.move && !role->operation.drop); continue;
-        }
-        CHECK(role->region<=loops && bindings->regions[role->region-1].slot_count);
-        seen|=1u<<(role->region-1);
-        if (role->operation.move) {
-            CHECK(role->operation.move<=bindings->move_count);
-            const XrLirArrayRegionMove *move=&bindings->moves[role->operation.move-1];
-            CHECK((access.operation==XR_RBC_VALUE_BINDING_NEW || access.operation==XR_RBC_VALUE_BINDING_READ) &&
-                access.source==move->step.source && access.result==move->step.target);
-        }
-        if (role->operation.drop) {
-            CHECK(role->operation.drop<=bindings->move_count);
-            CHECK((access.operation==XR_RBC_VALUE_DROP || access.operation==XR_RBC_VALUE_BINDING_DROP) &&
-                access.source==bindings->moves[role->operation.drop-1].step.source);
-        }
-        if (role->operation.access) {
-            CHECK(role->operation.access<=bindings->access_count);
-            const XrLirArrayRegionAccess *shared=&bindings->accesses[role->operation.access-1];
-            CHECK(access.operation==XR_RBC_VALUE_ARRAY && access.index==(uint32_t)shared->operation &&
-                access.result==shared->result && code->arguments[access.first]==shared->receiver);
-        }
+        if (access.operation==XR_RBC_VALUE_EDGE) CHECK(!access.other && !access.window);
+        if (!role->region) continue;
+        CHECK(role->region<=loops);
+        uint32_t slot=role->region-1;
+        if (role->fixed_edge) {
+            CHECK(role->fixed_edge<=XR_LIR_ARRAY_REGION_EDGE_EXIT && access.operation==XR_RBC_VALUE_EDGE &&
+                access.index==UINT32_MAX && !access.count);
+            ++roles[slot][role->fixed_edge];
+        } else if (access.operation==XR_RBC_VALUE_ARRAY && access.index==XR_LIR_ARRAY_OP_SET) {
+            const XrLirFixedArrayUpdateHome *row=&code->homes->fixed_array_updates[slot];
+            CHECK(code->homes->bindings[code->arguments[access.first]].first_owner==row->owner_slot);
+            ++writes[slot];
+        } else if (role->binding_identity)
+            CHECK(rbc_value_binding_identity(code,access));
     }
-    CHECK(seen==supported);
+    for (unsigned n=0;n<loops;++n) {
+        CHECK(writes[n]==1);
+        for (size_t role=1;role<sizeof(roles[0])/sizeof(*roles[0]);++role) CHECK(roles[n][role]==1);
+    }
     const XrRbcFunction *function=&module->functions[0];
     for (size_t pc=0;pc<function->code_count;++pc) if ((function->code[pc]&255)==XR_RBC_VALUE_ACCESS)
         CHECK((function->code[pc]>>16)<code->access_count);
@@ -177,9 +170,10 @@ static void rbc_fixed_identity_words(const XrRbcModule *module, const XrRbcValue
         words[pc + 1] = XR_RBC_LOADI;
         CHECK(!xr_rbc_value_instruction_valid(module,function,pc));
         words[pc + 1] = drop;
-        role->fixed = false;
+        uint32_t region=role->region;
+        role->region=0;
         CHECK(!xr_rbc_value_instruction_valid(module,function,pc));
-        role->fixed = true;
+        role->region=region;
         CHECK(xr_rbc_value_instruction_valid(module,function,pc));
         ++pairs;
     }
@@ -194,13 +188,13 @@ static void rbc_fixed_region_case(unsigned trips, unsigned failure, RbcRegionMod
     xr_lir_module_destroy(input);
     const XrRbcModule *module=xr_rbc_program_view(program);
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
-    CHECK(code && !code->array_regions && code->array_region_runtime && code->homes->fixed_array_update_count==1);
+    CHECK(code && code->array_region_runtime && code->homes->fixed_array_update_count==1);
     CHECK(code->homes->fixed_array_updates[0].body_edge==(mode==RBC_REGION_FIXED_FALSE ? 2u : 1u));
     uint32_t markers[XR_LIR_ARRAY_REGION_EDGE_EXIT+1]={0};
     for (size_t n=0;n<code->access_count;++n) {
         const XrRbcArrayRegionAccess *role=&code->array_region_accesses[n];
         if (!role->fixed_edge) continue;
-        CHECK(role->fixed && role->region==1 && role->fixed_edge<=XR_LIR_ARRAY_REGION_EDGE_EXIT);
+        CHECK(role->region==1 && role->fixed_edge<=XR_LIR_ARRAY_REGION_EDGE_EXIT);
         const XrRbcValueAccess *access=&code->accesses[n];
         CHECK(access->operation==XR_RBC_VALUE_EDGE && access->index==UINT32_MAX && !access->count);
         ++markers[role->fixed_edge];
@@ -240,8 +234,8 @@ static void rbc_fixed_adjacent_regions(void) {
     size_t adjacent=0;
     for (size_t n=1;n<code->access_count;++n) {
         const XrRbcArrayRegionAccess *from=&code->array_region_accesses[n-1], *to=&code->array_region_accesses[n];
-        adjacent+=from->fixed && from->region==1 && from->fixed_edge==XR_LIR_ARRAY_REGION_EDGE_EXIT &&
-            to->fixed && to->region==2 && to->fixed_edge==XR_LIR_ARRAY_REGION_EDGE_ENTRY;
+        adjacent+=from->region==1 && from->fixed_edge==XR_LIR_ARRAY_REGION_EDGE_EXIT &&
+            to->region==2 && to->fixed_edge==XR_LIR_ARRAY_REGION_EDGE_ENTRY;
     }
     CHECK(adjacent==1);
     region_begin_attempts=region_begin_successes=0; region_force_bypass=false;
@@ -275,13 +269,13 @@ static void rbc_fixed_array_leaf_locations(void) {
         {.operation=XR_RBC_VALUE_DROP}
     };
     const XrRbcArrayRegionAccess roles[]={
-        {.region=1,.fixed=true}, {.region=1,.fixed=true}, {.region=1,.fixed=true},
-        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY},
-        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_LATCH},
-        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_ENTRY},
-        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_EXIT},
-        {.region=2,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY}, {.region=1,.fixed=true},
-        {.region=1,.fixed=true,.binding_identity=true}, {0}
+        {.region=1}, {.region=1}, {.region=1},
+        {.region=1,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY},
+        {.region=1,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_LATCH},
+        {.region=1,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_ENTRY},
+        {.region=1,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_EXIT},
+        {.region=2,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY}, {.region=1},
+        {.region=1,.binding_identity=true}, {0}
     };
     const XrRbcValueCode code={.locations=locations,.value_count=RESULT,.arguments=args,.argument_count=3,
         .accesses=accesses,.access_count=sizeof(accesses)/sizeof(accesses[0]),.array_region_accesses=roles};
@@ -332,7 +326,7 @@ static void rbc_array_read_sum_checkpoint(void) {
         [IV]={XR_RBC_VALUE_SPILL,0}, [ACCUMULATOR]={XR_RBC_VALUE_REGISTER,0}, [BOUND]={XR_RBC_VALUE_REGISTER,1}
     };
     const XrRbcValueAccess latch={.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX};
-    const XrRbcArrayRegionAccess role={.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_LATCH,
+    const XrRbcArrayRegionAccess role={.region=1,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_LATCH,
         .sum_checkpoint=true};
     const XrRbcValueCode code={.homes=&homes,.locations=locations,.value_count=BOUND,.accesses=&latch,.access_count=1,
         .array_region_accesses=&role};
@@ -358,13 +352,12 @@ static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool 
     XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,trips,loops,failure,observer,RBC_REGION_NORMAL);
     XrRbcProgram *program=NULL; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
     XrRbcModule module=*xr_rbc_program_view(program); const XrRbcValueCode *code=xr_rbc_module_value_code(&module,0);
-    CHECK(code && (observer ? !code->array_regions : code->array_regions && code->array_regions->region_count==loops));
-    if (loops==2) CHECK(code->array_regions->regions[1].first_slot && code->array_regions->regions[1].first_move &&
-        code->array_regions->regions[1].first_access);
+    CHECK(code && code->homes->fixed_array_update_count==(observer ? 0u : loops));
+    if (loops==2) CHECK(code->homes->fixed_array_updates[1].region.first_step);
     CHECK(module.code_lease.retain(module.code_lease.owner));
     XrtLocationOwner *locations=program->locations; CHECK(xrt_locations_retain(locations));
     xr_lir_module_destroy(input); xr_rbc_program_destroy(program);
-    rbc_region_roles(&module,code,loops,observer ? 0 : (1u<<loops)-1);
+    rbc_region_roles(&module,code,observer ? 0 : loops);
     region_begin_attempts=region_begin_successes=0; region_force_bypass=bypass;
     RbcRegionResult actual=rbc_region_run(&module,locations);
     size_t expected=observer || trips<2 ? 0 : failure ? 1 : loops;
@@ -411,50 +404,6 @@ static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool 
     xr_free(codes); xr_free(accesses); xr_free(functions);
     xrt_locations_release(locations); module.code_lease.release(module.code_lease.owner);
     CHECK(!tracked_live);
-}
-static void rbc_region_role_fallbacks(void) {
-    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,2,0,false,RBC_REGION_NORMAL); XrRbcProgram *program=NULL;
-    CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
-    const XrRbcModule *module=xr_rbc_program_view(program);
-    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0); const XrLirValueHomes *homes=code->homes;
-    XrRbcCompileDiagnostic diagnostic={0}; RbcLirCompiler collector={.input=input,.diagnostic=&diagnostic};
-    RbcHomeVector roots={0}; CHECK(rbc_home_roots(&collector,NULL,&roots,&root.id,1));
-    XrtBillingOwner *billing=NULL; CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing)==XRT_MANAGED_OK);
-    XrLirValueLayouts *layouts=NULL;
-    CHECK(xr_lir_value_layouts_create(input,roots.data,roots.count,billing,&layouts)==XR_LIR_VALUE_LAYOUT_OK);
-    xr_free(roots.data);
-    size_t bytes=((size_t)homes->value_count+1)*sizeof(*homes->values);
-    XrLirValueHome *values=xr_malloc(bytes); CHECK(values);
-    for (unsigned shape=0;shape<3;++shape) {
-        memcpy(values,homes->values,bytes); XrLirValueHomes view=*homes; view.values=values;
-        if (!shape) view.frame.payload_alignment=1;
-        else values[homes->array_regions[shape-1].canonical_value].parameter=1;
-        XrLirArrayRegionBindings *bindings=NULL;
-        CHECK(xr_lir_array_region_bindings_create(&view,layouts,&bindings)==XR_LIR_VALUE_LAYOUT_OK);
-        uint32_t supported=shape ? 3u&~(1u<<(shape-1)) : 0;
-        CHECK(bindings->region_count==2 && (bindings->slot_count!=0)==(supported!=0));
-        XrRbcValueCode projected=*code; projected.array_regions=bindings; projected.array_region_accesses=NULL;
-        projected.array_region_runtime=rbc_lir_array_region_uses_runtime(bindings);
-        CHECK(projected.array_region_runtime==(supported!=0));
-        projected.access_count=0; RbcLirCompiler builder={.value_code=&projected,.diagnostic=&diagnostic};
-        for (size_t n=0;n<code->access_count;++n) {
-            const XrLirArrayRegionOperation *operation=&code->array_region_accesses[n].operation;
-            diagnostic.block=diagnostic.instruction=0;
-            if (operation->access) {
-                const XrLirArrayRegionAccess *access=&code->array_regions->accesses[operation->access-1];
-                diagnostic.block=access->block; diagnostic.instruction=access->instruction;
-            } else if (operation->move || operation->drop) {
-                const XrLirArraySetRegionStep *step=&code->array_regions->moves[
-                    (operation->move ? operation->move : operation->drop)-1].step;
-                diagnostic.block=step->block; diagnostic.instruction=operation->move ? step->instruction : step->drop;
-            }
-            CHECK(rbc_lir_array_region_append(&builder,&code->accesses[n])); ++projected.access_count;
-        }
-        rbc_region_roles(module,&projected,2,supported);
-        xr_free((void *)projected.array_region_accesses); xr_lir_array_region_bindings_destroy(bindings);
-    }
-    xr_free(values); xr_lir_value_layouts_destroy(layouts); xrt_billing_owner_drop(billing);
-    xr_lir_module_destroy(input); xr_rbc_program_destroy(program); CHECK(!tracked_live);
 }
 static void rbc_region_failures(unsigned loops) {
     XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,loops,0,false,RBC_REGION_NORMAL); XrRbcProgram *program=NULL;
@@ -559,80 +508,41 @@ static XrLirModule *rbc_read_fold_input(XrLirFunction *root,bool additive,RbcRea
     return c.module;
 }
 
-static void rbc_read_fold_cases(bool additive,RbcReadFoldBound mode) {
-    XrLirFunction root={0}; XrLirModule *input=rbc_read_fold_input(&root,additive,mode,false);
+static void rbc_fixed_read_cases(bool additive,RbcReadFoldBound mode,bool reverse) {
+    XrLirFunction root={0}; XrLirModule *input=rbc_read_fold_input(&root,additive,mode,reverse);
     XrRbcProgram *program=NULL;
     CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
     xr_lir_module_destroy(input);
     const XrRbcModule *module=xr_rbc_program_view(program);
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
-    CHECK(code && code->array_regions && code->array_regions->region_count==1);
-    const XrLirArrayReadSum *sum=&code->array_regions->regions[0].region.read_sum;
-    CHECK((sum->accumulator!=0)==additive);
-    size_t marked=0;
-    for (size_t n=0;n<code->access_count;++n)
-        marked+=code->accesses[n].operation==XR_RBC_VALUE_EDGE && code->accesses[n].other!=0;
-    CHECK(marked==(additive ? 2u : 0u));
+    CHECK(code && code->array_region_runtime &&
+        code->homes->fixed_array_update_count==1);
+    const XrLirFixedArrayUpdateHome *row=&code->homes->fixed_array_updates[0];
+    CHECK(row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && row->body_edge==(reverse ? 2u : 1u) &&
+        row->workspace_slot==SIZE_MAX);
+    bool same_length=mode==RBC_READ_FOLD_SAME_LEN || mode==RBC_READ_FOLD_EMPTY_LEN;
+    CHECK(row->region.range.kind==(uint32_t)(same_length ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN :
+        XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT));
+    const XrLirArrayReadSum *sum_plan=&row->region.read_sum;
+    CHECK((sum_plan->accumulator!=0)==additive);
     if (mode==RBC_READ_FOLD_IMMEDIATE) {
-        /* A preheader constant used solely by the compare never writes its
-         * nominal register. The fold must use the same exact immediate bits. */
-        CHECK(!sum->limit && sum->limit_bits==3);
+        /* The compare may use an immediate without creating a live scalar location. */
+        CHECK(!sum_plan->limit && sum_plan->limit_bits==3);
         const XrRbcFunction *function=&module->functions[0];
         size_t immediate_compares=0;
         for (size_t pc=0;pc<function->code_count;++pc) {
             uint32_t word=function->code[pc];
             if ((word&255)==XR_RBC_LTI && (word>>16)==3) ++immediate_compares;
-            CHECK((word&255)!=XR_RBC_LOADI || (word>>16)!=3);
+            if (!reverse) CHECK((word&255)!=XR_RBC_LOADI || (word>>16)!=3);
         }
-        CHECK(immediate_compares==1);
+        if (!reverse) CHECK(immediate_compares==1);
     }
-    bool large=rbc_read_large_bound(mode);
-    if (large) CHECK(!sum->limit && sum->limit_bits==32768);
-    const uint64_t bounds[]={UINT64_MAX,0,1,2,3,4};
-    size_t count=mode==RBC_READ_FOLD_FORMAL ? sizeof(bounds)/sizeof(bounds[0]) : 1u;
-    for (size_t n=0;n<count;++n) {
-        uint64_t bound=large ? 32768u : mode==RBC_READ_FOLD_IMMEDIATE ? 3u : bounds[n];
-        size_t expects=additive && bound>1 && bound<=INT64_MAX ? 1u : 0u;
-        region_begin_attempts=region_begin_successes=0; region_force_bypass=false;
-        RbcRegionResult actual=rbc_region_run_with_args(module,program->locations,&bound,1);
-        CHECK(region_begin_attempts==expects && region_begin_successes==expects);
-        region_begin_attempts=region_begin_successes=0; region_force_bypass=true;
-        RbcRegionResult ordinary=rbc_region_run_with_args(module,program->locations,&bound,1);
-        CHECK(region_begin_attempts==expects && !region_begin_successes);
-        CHECK(actual.status==ordinary.status && actual.bits==ordinary.bits &&
-            actual.failure==ordinary.failure && actual.source==ordinary.source);
-        if (bound==4 || mode==RBC_READ_FOLD_PAST_END_LITERAL)
-            CHECK(actual.status==XR_RBC_VALUE_FAILURE && actual.failure==XR_XIR_VALUE_BOUNDS && actual.source);
-        else CHECK(actual.status==XR_RBC_OK);
-        if (bound==3) CHECK(actual.bits==(additive ? 4u : 8u));
-        if (mode==RBC_READ_FOLD_LARGE_LITERAL) CHECK(actual.bits==(uint64_t)INT64_MAX+21);
-    }
-    region_force_bypass=false;
-    xr_rbc_program_destroy(program);
-    CHECK(!tracked_live);
-}
-
-static void rbc_fixed_read_cases(bool additive,RbcReadFoldBound mode) {
-    XrLirFunction root={0}; XrLirModule *input=rbc_read_fold_input(&root,additive,mode,true);
-    XrRbcProgram *program=NULL;
-    CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
-    xr_lir_module_destroy(input);
-    const XrRbcModule *module=xr_rbc_program_view(program);
-    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
-    CHECK(code && code->array_region_runtime && !code->array_regions &&
-        code->homes->fixed_array_update_count==1);
-    const XrLirFixedArrayUpdateHome *row=&code->homes->fixed_array_updates[0];
-    CHECK(row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && row->body_edge==2 &&
-        row->workspace_slot==SIZE_MAX);
-    bool same_length=mode==RBC_READ_FOLD_SAME_LEN || mode==RBC_READ_FOLD_EMPTY_LEN;
-    CHECK(row->region.range.kind==(uint32_t)(same_length ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN :
-        XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT));
-    CHECK((row->region.read_sum.accumulator!=0)==additive);
+    if (rbc_read_large_bound(mode)) CHECK(!sum_plan->limit && sum_plan->limit_bits==32768);
     size_t checkpoints=0;
     for (size_t n=0;n<code->access_count;++n) {
         const XrRbcArrayRegionAccess *role=&code->array_region_accesses[n];
         if (role->sum_checkpoint) {
-            CHECK(role->fixed && role->fixed_edge==XR_LIR_ARRAY_REGION_EDGE_LATCH);
+            CHECK(role->fixed_edge==XR_LIR_ARRAY_REGION_EDGE_LATCH);
             ++checkpoints;
         }
     }
@@ -694,7 +604,7 @@ static void rbc_push_region_case(enum ArrayPushWindowMode mode,uint64_t bound,si
             XrRbcValueAccess access=code->accesses[n];
             if (access.operation==XR_RBC_VALUE_EDGE) CHECK(!access.window);
             const XrRbcArrayRegionAccess *role=&code->array_region_accesses[n];
-            if (!role->fixed || role->fixed_edge!=XR_LIR_ARRAY_REGION_EDGE_LATCH) continue;
+            if (role->fixed_edge!=XR_LIR_ARRAY_REGION_EDGE_LATCH) continue;
             CHECK(access.operation==XR_RBC_VALUE_EDGE && access.index==UINT32_MAX && !access.count);
             ++latch;
         }
@@ -791,37 +701,37 @@ static void rbc_array_region_cases(void) {
     rbc_push_region_case(PUSH_WINDOW_LIVE_SNAPSHOT,0,9,9,0,false);
     rbc_push_region_case(PUSH_WINDOW_OBSERVER,0,9,9,0,false);
     rbc_fixed_push_cases();
-    rbc_read_fold_cases(true,RBC_READ_FOLD_FORMAL);
-    rbc_read_fold_cases(false,RBC_READ_FOLD_FORMAL);
-    rbc_read_fold_cases(true,RBC_READ_FOLD_IMMEDIATE);
-    rbc_read_fold_cases(true,RBC_READ_FOLD_LARGE_LITERAL);
-    rbc_read_fold_cases(true,RBC_READ_FOLD_PAST_END_LITERAL);
-    rbc_fixed_read_cases(true,RBC_READ_FOLD_FORMAL);
-    rbc_fixed_read_cases(false,RBC_READ_FOLD_FORMAL);
-    rbc_fixed_read_cases(true,RBC_READ_FOLD_IMMEDIATE);
-    rbc_fixed_read_cases(true,RBC_READ_FOLD_LARGE_LITERAL);
-    rbc_fixed_read_cases(true,RBC_READ_FOLD_PAST_END_LITERAL);
-    rbc_fixed_read_cases(true,RBC_READ_FOLD_SAME_LEN);
-    rbc_fixed_read_cases(true,RBC_READ_FOLD_EMPTY_LEN);
-    rbc_fixed_read_cases(true,RBC_READ_FOLD_SHARED_FORMAL);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_FORMAL,false);
+    rbc_fixed_read_cases(false,RBC_READ_FOLD_FORMAL,false);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_IMMEDIATE,false);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_LARGE_LITERAL,false);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_PAST_END_LITERAL,false);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_FORMAL,true);
+    rbc_fixed_read_cases(false,RBC_READ_FOLD_FORMAL,true);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_IMMEDIATE,true);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_LARGE_LITERAL,true);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_PAST_END_LITERAL,true);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_SAME_LEN,true);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_EMPTY_LEN,true);
+    rbc_fixed_read_cases(true,RBC_READ_FOLD_SHARED_FORMAL,true);
     {
         XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,0,1,0,false,RBC_REGION_READ_ONLY);
         XrRbcProgram *program=NULL; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
         const XrRbcModule *module=xr_rbc_program_view(program); const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
-        CHECK(code && code->array_regions && code->array_regions->region_count==1 &&
-            code->array_regions->regions[0].region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET &&
-            !code->array_region_runtime && !code->array_region_accesses);
+        CHECK(code && code->homes->fixed_array_update_count==1 &&
+            code->homes->fixed_array_updates[0].region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET &&
+            code->array_region_runtime && code->array_region_accesses);
         xr_lir_module_destroy(input);
         region_begin_attempts=region_begin_successes=0; region_force_bypass=false;
         RbcRegionResult result=rbc_region_run(module,program->locations);
-        CHECK(result.status==XR_RBC_OK && result.bits==2218 && !region_begin_attempts && !region_begin_successes);
+        CHECK(result.status==XR_RBC_OK && result.bits==2218 && region_begin_attempts==1 && region_begin_successes==1);
         xr_rbc_program_destroy(program);
     }
     rbc_region_case(0,1,0,false,false); rbc_region_case(1,1,0,false,false);
     rbc_region_case(4,1,0,false,false); rbc_region_case(5,1,0,false,false);
     rbc_region_case(5,2,0,false,false); rbc_region_case(5,1,0,true,false);
     rbc_region_case(4,1,1,false,false); rbc_region_case(4,1,2,false,false);
-    rbc_region_case(4,1,0,false,true); rbc_region_role_fallbacks();
+    rbc_region_case(4,1,0,false,true);
     rbc_region_failures(1); rbc_region_failures(2);
     rbc_fixed_region_case(0,0,RBC_REGION_FIXED);
     rbc_fixed_region_case(1,0,RBC_REGION_FIXED);
