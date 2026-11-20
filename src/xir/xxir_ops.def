@@ -241,3 +241,5 @@ XR_XIR_OP(DATA_UNION_INJECT,3,VALUE,1,0,0)
 /* Exact folded JSON facts; physical lowering remains explicitly unsupported. */
 XR_XIR_OP(JSON_NULL,3,VALUE,0,0,0)
 XR_XIR_OP(JSON_VALUE_INJECT,3,VALUE,1,0,0)
+
+XR_XIR_OP(I64_TRY_PARSE,7,OWNED,1,0,0)

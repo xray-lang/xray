@@ -16,9 +16,18 @@
 #include "xray_native_values.h"
 #include "base/xchecks.h"
 #include "shared/xr_string_core.h"
+#include "shared/xr_string_parse_core.h"
 #include "shared/xr_text_kernel.h"
 #include "shared/xr_float_to_decimal.h"
 #include <limits.h>
+
+XRAY_API bool xrt_native_string_try_parse_i64(const XrtStringBacking *string, int64_t *output) {
+    XR_DCHECK(string && output, "integer conversion requires a live String and scalar destination");
+    XrStringParseIntResult parsed = xr_string_parse_int64(string->bytes, string->length);
+    if (parsed.failure != XR_NUMBER_PARSE_OK) return false;
+    *output = parsed.value;
+    return true;
+}
 
 static XrtManagedStatus string_prepare(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, size_t length, size_t runes, XrtStringBacking **output) {

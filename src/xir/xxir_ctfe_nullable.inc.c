@@ -11,21 +11,32 @@
  *   preserves active payload types and refuses unsupported authority.
  */
 #include "xxir_equal.h"
+#include "../shared/xr_string_parse_core.h"
 static bool ctfe_nullable_opcode(const XrXirInstruction *op) {
-    return op->op==XR_XIR_F64_TRY_PARSE || op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME ||
+    return op->op==XR_XIR_I64_TRY_PARSE || op->op==XR_XIR_F64_TRY_PARSE ||
+        op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME ||
         op->op==XR_XIR_NULLABLE_IS_SOME || op->op==XR_XIR_NULLABLE_UNWRAP;
 }
 static XrXirCtfeStatus ctfe_nullable_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];XrXirValue result={0};
-    bool create=op->op==XR_XIR_F64_TRY_PARSE || op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME;
+    bool parse=op->op==XR_XIR_I64_TRY_PARSE || op->op==XR_XIR_F64_TRY_PARSE;
+    bool create=parse || op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME;
     XrXirType type=create?op->type:xr_xir_operand_type(run->function,op->args[0]);
     XrXirCtfeStatus status=ctfe_value_type_admit(run,state,type);
     if (status!=XR_XIR_CTFE_OK) return status;
     XrXirValueAdmission admission=ctfe_value_admission(state);
     XrXirValueStatus value_status=XR_XIR_VALUE_OK;
-    if (op->op==XR_XIR_F64_TRY_PARSE) {
+    if (parse) {
         XrXirValue text={XR_XIR_STRING,0,xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])};
-        value_status=xr_xir_f64_try_parse(&text,type,&admission,&result);
+        if (op->op==XR_XIR_F64_TRY_PARSE) {
+            value_status=xr_xir_f64_try_parse(&text,type,&admission,&result);
+        } else {
+            const char *bytes=NULL; size_t length=0;
+            if (!xr_xir_string_view(&text,&bytes,&length)) return XR_XIR_CTFE_BAD_ARTIFACT;
+            XrStringParseIntResult parsed=xr_string_parse_int64(bytes,length);
+            XrXirValue payload={XR_XIR_I64,0,(uint64_t)parsed.value};
+            value_status=xr_xir_nullable_new(type,parsed.failure==XR_NUMBER_PARSE_OK?&payload:NULL,&admission,&result);
+        }
     } else if (create) {
         XrXirValue payload={0};
         if (op->op==XR_XIR_NULLABLE_SOME) {

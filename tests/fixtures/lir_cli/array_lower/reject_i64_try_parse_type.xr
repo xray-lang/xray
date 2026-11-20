@@ -1,0 +1,1 @@
+print(i64.tryParse(1) ?? 0)

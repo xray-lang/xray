@@ -7,6 +7,7 @@ enum NumberParseError {
 class i64 {
     // @lowered
     static parse(text: string) -> i64
+    // @native-operation I64_TRY_PARSE allocation=may_heap failures=allocation,retain,limit ownership=owned
     // @lowered
     static tryParse(text: string) -> i64?
     // @native-operation INTEGER_ABS allocation=no_heap failures=none ownership=owned

@@ -118,6 +118,6 @@ static bool source_scalar_ground_result(SourceContext *ctx,AstNode *node,
     const XrNativeMemberDeclaration *member=source_native_member(ctx,native,node->as.call_expr.callee->as.member_access.name);
     if (!member || member->operation==XR_NATIVE_OPERATION_NONE || member->is_static || !member->is_method) return true;
     XrXirType type;
-    if (!source_primitive_result_type(ctx,member->result,&type)) return false;
+    if (!source_primitive_query_type(ctx,member->result,&type)) return false;
     *output=(SourceExpectedType){true,type,false,false};return true;
 }

@@ -419,7 +419,7 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_COPY:
         case XR_XIR_TO_STRING:
         case XR_XIR_CONCAT_STRING:
-        case XR_XIR_STRING_LEN:
+        case XR_XIR_STRING_LEN: case XR_XIR_I64_TRY_PARSE:
         case XR_XIR_ADD_INT:
         case XR_XIR_SUB_INT:
         case XR_XIR_MUL_INT:
@@ -1848,12 +1848,13 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         xr_free(captures);
         return good;
     }
-    if (op->op == XR_XIR_STRING_LEN) {
+    if (op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_I64_TRY_PARSE) {
         XrLirValue input = {0};
         if (!lower_value(f, op->args[0], &input)) return false;
-        XrLirInstruction length = {.op=XR_LIR_STRING_LEN, .type=XR_LIR_I64,
-            .operands=&input, .operand_count=1, .source=lower_source(c)};
-        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &length, &f->values[result]));
+        XrLirInstruction instruction = {
+            .op=op->op == XR_XIR_STRING_LEN ? XR_LIR_STRING_LEN : XR_LIR_I64_TRY_PARSE,
+            .type=lower_type(c, op->type), .operands=&input, .operand_count=1, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &instruction, &f->values[result]));
     }
     if ((op->op == XR_XIR_COPY && lower_managed_type(f->owner, lower_type(c, op->type))) ||
         op->op == XR_XIR_TO_STRING || op->op == XR_XIR_CONCAT_STRING) {

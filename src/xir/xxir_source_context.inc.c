@@ -57,6 +57,9 @@ typedef struct SourceImportedParameterNames {
     bool present;
 } SourceImportedParameterNames;
 
+typedef struct SourceDecimalQuery {
+    uint32_t declaration, member;
+} SourceDecimalQuery;
 typedef struct SourceContext {
     XrModuleGraph *graph;
     XrHirEscapeBuilder *escape_builder; /* Synchronous single-inventory lifetime observer. */
@@ -171,5 +174,5 @@ typedef struct SourceContext {
     uint32_t iterator_module, iterator_declaration, iterator_members[3];
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
-    uint32_t f64_module, f64_declaration, f64_parse_member;
+    SourceDecimalQuery i64_parse, f64_parse;
 } SourceContext;

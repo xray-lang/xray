@@ -1334,10 +1334,10 @@ static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValu
 static bool source_string_runes_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value);
 #include "xxir_source_string.inc.c"
-#include "xxir_source_decimal.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
     size_t length, uint32_t *literal);
 #include "xxir_source_integer_methods.inc.c"
+#include "xxir_source_decimal.inc.c"
 #include "xxir_source_scalar_methods.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
@@ -1525,8 +1525,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             return source_from_utf8_call(ctx,node,value);
         if (source_task_aggregate_receiver(ctx,callee))
             return source_task_aggregate_call(ctx,node,value);
-        if (source_decimal_static_receiver(ctx, member->object))
-            return source_decimal_static_call(ctx, node, value);
+        XrXirType decimal = source_decimal_static_receiver(ctx, member);
+        if (decimal != XR_XIR_UNIT)
+            return source_decimal_static_call(ctx, node, decimal, value);
         if (source_array_static_receiver(ctx, member->object))
             return source_array_static_call(ctx, node, value);
         SourceName *base = member->object->type == AST_VARIABLE ?

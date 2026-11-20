@@ -1,0 +1,24 @@
+fn tryParse(text: string) -> i64 { return -999 }
+fn read(text: string) -> i64? { return i64.tryParse(text) }
+fn show(text: string) { print(read(text) ?? -911) }
+
+show("")
+show(" \t\r\n")
+show(" \t\r\n-17\r\t ")
+show("+42")
+show("-0")
+show("9223372036854775807")
+show("-9223372036854775808")
+show("9223372036854775808")
+show("-9223372036854775809")
+show("9999999999999999999999999999999999999")
+show("12\0")
+show("12\0" + "3")
+show("12tail")
+show("12.0")
+show("0x12")
+show("-")
+show("１")
+print(read("43")!)
+print(comptime (i64.tryParse(" 44 ") ?? -911))
+print(comptime (i64.tryParse("45\0") ?? -911))

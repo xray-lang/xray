@@ -42,7 +42,7 @@ def main() -> None:
              "panic_bounds", "panic_get_i64_negative", "panic_get_u8_length", "panic_get_u64_huge", "panic_get_inline_length",
              "panic_unpublished", "panic_len_unpublished_inline", "fixed_values", "fixed_flow", "fixed_length_effects",
              "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length",
-             "nullable_scalar", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
+             "nullable_scalar", "i64_try_parse", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
              "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit",
              "display_nullable", "display_nullable_values", "display_nullable_array", "display_values", "display_strings", "display_imports", "display_loop", "display_tuples", "panic_display_unpublished",
              "view_local", "view_late_callable", "view_scalar_callable_write", "view_scalar_branch_cells", "view_state_callback_read", "view_callback_relay", "view_callback_scalar_context", "view_call", "view_return", "view_loop", "view_copy", "view_module_alias",
@@ -214,6 +214,8 @@ def main() -> None:
         if status or out or err:
             failures.append((name, "Source callback borrowing control", out, err))
     rejected_sources = {
+        "reject_i64_try_parse_type": b"expression cannot satisfy its declared type",
+        "reject_i64_try_parse_shadow": b"'i64' is a keyword and cannot be used as an identifier",
         "reject_callable_inline_array_mismatch": b"callback argument requires exact shape and an admitted advertised bound",
         "ref_global_alias": b"E0382: ref of module binding `shared` conflicts with access by `update` via `inspect`",
         "string_append_ref": b"E0382: ref of module binding `published` conflicts with access by `actual` via `actual`",

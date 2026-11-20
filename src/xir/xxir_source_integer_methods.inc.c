@@ -27,7 +27,7 @@ static bool source_primitive_type(SourceContext *ctx,uint32_t identity,XrXirType
     default: return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"primitive declaration identity is not admitted");
     }
 }
-static bool source_primitive_result_type(SourceContext *ctx,XrNativeTypeTerm term,XrXirType *type) {
+static bool source_primitive_query_type(SourceContext *ctx,XrNativeTypeTerm term,XrXirType *type) {
     switch (term) {
     case XR_NATIVE_TERM_I64: *type=XR_XIR_I64;return true;
     case XR_NATIVE_TERM_F64: *type=XR_XIR_F64;return true;
@@ -35,7 +35,8 @@ static bool source_primitive_result_type(SourceContext *ctx,XrNativeTypeTerm ter
     case XR_NATIVE_TERM_BOOL: *type=XR_XIR_BOOL;return true;
     case XR_NATIVE_TERM_U32: *type=XR_XIR_U32;return true;
     case XR_NATIVE_TERM_NULLABLE_I64: return source_nullable_type(ctx,XR_XIR_I64,type);
-    default: return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"primitive result has no admitted type contract");
+    case XR_NATIVE_TERM_NULLABLE_F64: return source_nullable_type(ctx,XR_XIR_F64,type);
+    default: return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"primitive declaration has no admitted type contract");
     }
 }
 static uint32_t source_primitive_declaration(SourceContext *ctx,
@@ -60,33 +61,37 @@ static uint32_t source_primitive_declaration(SourceContext *ctx,
     row->type = (XrXirSourceType){type,0,true};
     return symbol.declaration;
 }
+static uint32_t source_primitive_member_declaration(SourceContext *ctx, uint32_t parent,
+    const XrNativeMemberDeclaration *member) {
+    uint32_t declaration = source_primitive_query_find(ctx,XR_XIR_SOURCE_MEMBER,parent,member->id);
+    if (declaration || ctx->diagnostic.status != XR_XIR_OK) return declaration;
+    SourceName symbol = {0}; symbol.name = source_owned_text(ctx,member->name);
+    uint32_t module = ctx->query.declarations[parent-1].range.module;
+    XrXirSourceRange range = {module,(int)member->line,(int)member->column,
+        (int)member->line,(int)(member->column+source_text_size(ctx,member->name))};
+    if (!symbol.name || !source_query_declare(ctx,&symbol,XR_XIR_SOURCE_MEMBER,parent,range)) return 0;
+    const char *signature = source_owned_text(ctx,member->signature);
+    XrXirSourceType *parameters = member->parameter_count ?
+        source_alloc(ctx,member->parameter_count,sizeof(*parameters)) : NULL;
+    if (!signature || (member->parameter_count && !parameters)) return 0;
+    for (uint32_t p = 0; p < member->parameter_count; ++p) {
+        XrXirType type;
+        if (!source_primitive_query_type(ctx,member->parameters[p].type,&type)) return 0;
+        parameters[p] = (XrXirSourceType){type,0,true};
+    }
+    XrXirType result;
+    if (!source_primitive_query_type(ctx,member->result,&result)) return 0;
+    XrXirSourceDeclaration *row = (XrXirSourceDeclaration *)&ctx->query.declarations[symbol.declaration-1];
+    row->native_identity = member->id; row->signature = signature;
+    row->type = (XrXirSourceType){result,0,true}; row->exported = true;
+    row->parameters = parameters; row->parameter_count = member->parameter_count;
+    return symbol.declaration;
+}
 static bool source_primitive_member_reference(SourceContext *ctx, AstNode *node,
     const XrNativeTypeDeclaration *native,const XrNativeMemberDeclaration *member) {
     uint32_t parent = source_primitive_declaration(ctx,native);
-    if (!parent) return false;
-    uint32_t declaration = source_primitive_query_find(ctx,XR_XIR_SOURCE_MEMBER,parent,member->id);
-    if (ctx->diagnostic.status != XR_XIR_OK) return false;
-    if (!declaration) {
-        SourceName symbol = {0}; symbol.name = source_owned_text(ctx,member->name);
-        uint32_t module = ctx->query.declarations[parent-1].range.module;
-        XrXirSourceRange range = {module,(int)member->line,(int)member->column,
-            (int)member->line,(int)(member->column+source_text_size(ctx,member->name))};
-        if (!symbol.name || !source_query_declare(ctx,&symbol,XR_XIR_SOURCE_MEMBER,parent,range)) return false;
-        declaration = symbol.declaration;
-        const char *signature = source_owned_text(ctx,member->signature);
-        XrXirSourceType *parameters = member->parameter_count ?
-            source_alloc(ctx,member->parameter_count,sizeof(*parameters)) : NULL;
-        if (!signature || (member->parameter_count && !parameters)) return false;
-        for (uint32_t p = 0; p < member->parameter_count; ++p)
-            parameters[p] = (XrXirSourceType){XR_XIR_I64,0,true};
-        XrXirSourceDeclaration *row = (XrXirSourceDeclaration *)&ctx->query.declarations[declaration-1];
-        row->native_identity = member->id; row->signature = signature;
-        XrXirType result;
-        if (!source_primitive_result_type(ctx,member->result,&result)) return false;
-        row->type = (XrXirSourceType){result,0,true}; row->exported = true;
-        row->parameters = parameters; row->parameter_count = member->parameter_count;
-    }
-    return source_query_target_token_reference(ctx,node,declaration,XR_XIR_SOURCE_CALL);
+    uint32_t declaration = parent ? source_primitive_member_declaration(ctx,parent,member) : 0;
+    return declaration && source_query_target_token_reference(ctx,node,declaration,XR_XIR_SOURCE_CALL);
 }
 static bool source_integer_abs(SourceContext *ctx,SourceValue receiver,SourceValue *value) {
     SourceValue count, sign, folded;
