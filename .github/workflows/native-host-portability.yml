@@ -1,4 +1,4 @@
-name: macOS native Array tail comparison
+name: macOS standalone Array value length comparison
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   compare-layout:
-    name: macOS arm64 native Array tail (${{ matrix.replica }})
+    name: macOS arm64 Array value length (${{ matrix.replica }})
     runs-on: macos-latest
     timeout-minutes: 10
     strategy:
@@ -19,8 +19,8 @@ jobs:
       PYTHONUTF8: '1'
       PYTHONDONTWRITEBYTECODE: '1'
       NO_COLOR: '1'
-      XR_ARRAY_PARENT: 5229d31c4aeb0b99d09fd2e8e761cd2842da89dd
-      XR_ARRAY_CANDIDATE: 5f3304be7a393581bc050a941bd3d1d8b7540e4d
+      XR_ARRAY_PARENT: 5f3304be7a393581bc050a941bd3d1d8b7540e4d
+      XR_ARRAY_CANDIDATE: b3ea23fdb0652922b4350f3abc4348b4af1f8bdf
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,8 +32,9 @@ jobs:
       - name: Prepare both exact sources with the same Apple Clang
         run: |
           test "$(uname -m)" = arm64
+          test "$(git rev-parse "$XR_ARRAY_CANDIDATE^")" = "$XR_ARRAY_PARENT"
           git diff --exit-code "$XR_ARRAY_PARENT" "$XR_ARRAY_CANDIDATE" -- src/base/xsigned_rc.h \
-            bench/managed-value-layout/main.c bench/managed-value-layout/raw.c \
+            bench/managed-value-layout/raw.c \
             bench/managed-value-layout/raw_keys.c bench/managed-value-layout/algorithms.h \
             bench/managed-value-layout/run.py
           mkdir "$RUNNER_TEMP/code-receipts"
@@ -66,7 +67,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: array-native-inline-tail-macos-${{ matrix.replica }}
+          name: array-value-length-macos-${{ matrix.replica }}
           path: |
             ${{ runner.temp }}/parent-build/
             ${{ runner.temp }}/candidate-build/
