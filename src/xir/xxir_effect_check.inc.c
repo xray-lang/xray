@@ -908,6 +908,9 @@ static bool effect_check_instruction_metadata(EffectCheckBuild *build, uint32_t 
     EffectCheckNode *contents = &build->roots->node[row.contents + function->parameter_count + i];
     contents->type = op->type;
     contents->contents_value = true;
+    /* An uninitialized place has a type but no reaching contents. Local
+     * writes supply its value and callable origin through the ordinary edges. */
+    if (op->op == XR_XIR_LOCAL_UNINIT) return true;
     contents->value_upper = true;
     switch (op->op) {
     case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_REPEAT: case XR_XIR_ARRAY_WITH_CAPACITY:
@@ -1013,6 +1016,7 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     if (build->status != XR_XIR_OK) return false;
     if (!effect_check_instruction_metadata(build, f, i)) return false;
     if (!effect_module_instruction(build, f, i)) return false;
+    if (op->op == XR_XIR_LOCAL_UNINIT) return true;
     bool callable = effect_check_callable_result(build->module->types, op->type);
     switch (op->op) {
     case XR_XIR_GO: case XR_XIR_SCOPED_GO: {
