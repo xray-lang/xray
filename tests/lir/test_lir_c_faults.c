@@ -473,8 +473,8 @@ static void map_literal_memory_boundaries(void) {
         !strstr(output.bytes, "zap-fault.xr") && output.entry_result == XR_LIR_I64);
     xr_lir_c_output_free(&output); CHECK(!runtime_live && !runtime_bytes);
 }
-static XrLirFunction array_helper_root(ArraySetRegionFixture *input) {
-    static const char name[] = "array_helper_root";
+static XrLirFunction array_loop_test_root(ArraySetRegionFixture *input) {
+    static const char name[] = "array_loop_test_root";
     XrLirFunction root = {0}; XrLirBlock block = {0}; XrLirValue start = {0}, result = {0};
     OK(xr_lir_declare_function(input->module,&(XrLirFunctionSpec){.name=name,.name_length=sizeof(name) - 1,
         .result=XR_LIR_I64},&root));
@@ -487,20 +487,19 @@ static XrLirFunction array_helper_root(ArraySetRegionFixture *input) {
         .operands=&result,.operand_count=1}));
     return root;
 }
-typedef struct ArrayHelperCancelPoint {
+typedef struct ArrayCloneCancelPoint {
     const LirC *compiler;
-    size_t stop, polls, attempts, projected;
-    bool reached;
-} ArrayHelperCancelPoint;
-static bool array_helper_cancel(const void *context) {
-    ArrayHelperCancelPoint *point = (ArrayHelperCancelPoint *)context;
-    ++point->polls;
-    size_t projected = point->compiler->array_region->scalar_count;
-    if (point->polls > 1 && projected >= point->stop) {
-        point->projected = projected;
-        point->reached = true; point->attempts = runtime_attempts; return true;
-    }
-    return false;
+    bool after_read, reached;
+    size_t attempts, emitted;
+} ArrayCloneCancelPoint;
+static bool array_clone_cancel(const void *context) {
+    ArrayCloneCancelPoint *point = (ArrayCloneCancelPoint *)context;
+    if (point->after_read && (!point->compiler->text ||
+            !strstr(point->compiler->text, "XRT_ARRAY_I64_REGION_COPY(&v"))) return false;
+    point->reached = true;
+    point->emitted = point->compiler->length;
+    point->attempts = runtime_attempts;
+    return true;
 }
 static bool array_local_index_cancel(const void *context) {
     ArrayLocalIndexCancelPoint *point = (ArrayLocalIndexCancelPoint *)context;
@@ -559,10 +558,9 @@ static void array_local_index_fixture(XrCompileResources *resources) {
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
     xr_lir_module_destroy(input.module);
 }
-static void array_helper_cancellation(void) {
-    /* A read-only range still uses the scalar helper after SET promotion. */
+static void array_clone_cancellation(void) {
     ArraySetRegionFixture input = ars_range_build(NULL,12,ARRAY_REGION_RANGE_READ_ONLY);
-    XrLirFunction root = array_helper_root(&input); OK(xr_lir_module_finish(input.module,NULL));
+    XrLirFunction root = array_loop_test_root(&input); OK(xr_lir_module_finish(input.module,NULL));
     XrtBillingOwner *billing = NULL; CHECK(xrt_billing_owner_new(NULL,SIZE_MAX,&billing) == XRT_MANAGED_OK);
     XrLirValueLayoutKey keys[] = {{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
     XrLirValueLayouts *layouts = NULL;
@@ -570,34 +568,40 @@ static void array_helper_cancellation(void) {
     XrLirOwnershipPlan *plan = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module},&plan,NULL));
     XrLirValueHomes *homes = NULL;
-    CHECK(xr_lir_value_homes_create(&(XrLirValueHomesRequest){input.module,input.function,layouts,plan},&homes) == XR_LIR_VALUE_LAYOUT_OK);
+    CHECK(xr_lir_value_homes_create(&(XrLirValueHomesRequest){input.module,input.function,layouts,plan},
+        &homes) == XR_LIR_VALUE_LAYOUT_OK);
+    CHECK(homes->fixed_array_update_count == 1 &&
+        homes->fixed_array_updates[0].region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET);
+    XrLirValueHomes *function_homes[2] = {0};
+    CHECK(xr_lir_function_count(input.module) == 2 && input.function.id && input.function.id <= 2);
+    function_homes[input.function.id - 1] = homes;
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
     XrCompileResources *resources = sdk_ledger(&limits);
     uint64_t held = sdk_stats(resources).held_bytes; size_t live = runtime_live, bytes = runtime_bytes;
-    const size_t stops[] = {0,32};
-    for (size_t n = 0; n < sizeof(stops) / sizeof(*stops); ++n) {
-        XrLirCRequest request = {input.module,root,resources,"array-helper-cancellation",NULL};
-        LirC compiler = {.request=&request}; void *memory = NULL;
-        CHECK(xr_compile_resources_calloc(resources,xr_lir_function_count(input.module),
-            sizeof(*compiler.array_regions),&memory) == XR_COMPILE_RESOURCE_OK);
+    for (unsigned n = 0; n < 2; ++n) {
+        XrLirCRequest request = {input.module,root,resources,"array-clone-cancellation",NULL};
+        LirC compiler = {.request=&request,.function=input.function,.value_homes=function_homes,.homes=homes};
+        OK(xr_lir_function_view(input.module,input.function,&compiler.view));
+        compiler.scratch = compiler.view.value_count;
+        void *memory = NULL;
+        CHECK(xr_compile_resources_calloc(resources,2,sizeof(*compiler.array_regions),&memory) ==
+            XR_COMPILE_RESOURCE_OK);
         compiler.array_regions = memory;
-        LirCArrayRegions *receiver = &compiler.array_regions[input.function.id - 1];
-        CHECK(xr_lir_array_region_bindings_create(homes,layouts,&receiver->bindings) == XR_LIR_VALUE_LAYOUT_OK);
-        CHECK(!homes->fixed_array_update_count && receiver->bindings->region_count == 1 &&
-            receiver->bindings->regions[0].slot_count &&
-            receiver->bindings->regions[0].region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET);
-        receiver->bound_count = 1; compiler.array_region = receiver;
-        ArrayHelperCancelPoint point = {.compiler=&compiler,.stop=stops[n]};
+        compiler.array_region = &compiler.array_regions[input.function.id - 1];
+        c_fixed_array_prepare(&compiler,input.function.id,compiler.array_region);
+        CHECK(compiler.status == XR_LIR_C_OK && compiler.array_region->fixed_edges);
+        ArrayCloneCancelPoint point = {.compiler=&compiler,.after_read=n != 0};
         XrCompileRequestControl control = {0};
-        XrCompileRequestOptions options = {array_helper_cancel,&point,XR_COMPILE_DEADLINE_NONE,0};
+        XrCompileRequestOptions options = {array_clone_cancel,&point,XR_COMPILE_DEADLINE_NONE,0};
         CHECK(xr_compile_request_control_init(&options,&control) == XR_COMPILE_RESOURCE_OK);
         request.control = &control;
-        c_array_helpers_prepare(&compiler,input.function.id,receiver);
+        c_fixed_array_clones(&compiler);
         CHECK(point.reached && compiler.status == XR_LIR_C_CANCELLED && control.status == XR_COMPILE_RESOURCE_CANCELLED);
-        CHECK(receiver->scalar_count == point.projected && runtime_attempts == point.attempts);
-        CHECK(stops[n] ? point.projected >= stops[n] : point.projected == 0);
-        CHECK(stops[n] ? receiver->scalars != NULL : receiver->scalars == NULL);
+        CHECK(compiler.length == point.emitted && runtime_attempts == point.attempts);
+        CHECK((point.emitted != 0) == point.after_read && (compiler.text != NULL) == point.after_read);
+        if (compiler.text) CHECK(!strstr(compiler.text,"goto xrl_fixed_exit_1;"));
         c_array_regions_destroy(&compiler);
+        xr_compile_resources_free(compiler.text);
         CHECK(sdk_stats(resources).held_bytes == held && runtime_live == live && runtime_bytes == bytes);
     }
     array_local_index_fixture(resources);
@@ -606,25 +610,6 @@ static void array_helper_cancellation(void) {
     xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
     xr_lir_module_destroy(input.module); CHECK(!runtime_live && !runtime_bytes);
-}
-static void array_helper_owner_exit(const char *text, size_t expected) {
-    const char *helper = text; size_t helpers = 0;
-    while ((helper = strstr(helper,"(\n    unsigned char *restrict xrl_ar_payload,\n")) != NULL) {
-        const char *end = strstr(helper,"\n}\n\n"); CHECK(end);
-        const char *read = strstr(helper,"XrtManagedHeader *xrl_ar_owner = *(XrtManagedHeader **)(xrl_ar_payload + ");
-        CHECK(read && read < end);
-        const char *publish = strstr(read," = xrl_ar_owner;"), *clear = publish ? strstr(publish," = NULL;") : NULL;
-        CHECK(publish && clear && clear < end && read < publish && publish < clear);
-        const char *ret = strstr(clear,"return (XrlArResult_"); CHECK(ret && ret < end);
-        size_t stores = 0; const char *store = helper;
-        while ((store = strstr(store,"    *(XrtManagedHeader **)")) != NULL && store < end) {
-            ++stores; ++store;
-        }
-        CHECK(stores == 2);
-        const char *borrow = strstr(helper,"_cache.owner"); CHECK(!borrow || borrow > end);
-        ++helpers; helper = end + 1;
-    }
-    CHECK(helpers == expected);
 }
 static const char *array_fixed_c_marker(const char *text, const char *pattern, uint32_t number) {
     char marker[96];
@@ -688,57 +673,66 @@ static void array_fixed_header_liveout(const char *text, const char *clone, cons
     CHECK(scalar && scalar < target);
 }
 
-static void array_helper_boundaries(void) {
+static void array_checked_clone(const char *text, uint32_t loop, bool pointwise, bool readonly) {
+    const char *guard = array_fixed_c_marker(text," &xrl_fixed_cache_%" PRIu32 ")",loop);
+    const char *entry = array_fixed_c_marker(guard,"goto xrl_fixed_%" PRIu32 "_bb",loop);
+    const char *clone = array_fixed_c_marker(entry,"\nxrl_fixed_%" PRIu32 "_bb",loop);
+    const char *leave = array_fixed_c_marker(clone,"goto xrl_fixed_exit_%" PRIu32 ";",loop);
+    const char *release = array_fixed_c_marker(clone,"xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};",loop);
+    const char *read = strstr(clone,"XRT_ARRAY_I64_REGION_COPY(&v");
+    const char *write = strstr(clone,"XRT_ARRAY_I64_REGION_COPY(xrl_fixed_cache_");
+    const char *runtime = strstr(clone,"xrt_");
+    CHECK(entry < clone && read && read < leave && release < leave && (!runtime || runtime > leave));
+    CHECK((write && write < leave) == !readonly);
+    if (pointwise) {
+        const char *check = array_fixed_c_marker(clone," >= xrl_fixed_cache_%" PRIu32 ".length) {",loop);
+        const char *slow = strstr(check,"goto xrl_fixed_slow_");
+        CHECK(check < release && slow && release < slow && slow < read);
+    } else {
+        CHECK(read < release);
+    }
+    (void)array_fixed_c_marker(text,"\nxrl_fixed_exit_%" PRIu32 ": ;",loop);
+}
+static void array_loop_boundaries(void) {
     const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT,ARRAY_REGION_RANGE_C_HEADER_LIVEOUT,
         ARRAY_REGION_RANGE_NEXT_COPIES,ARRAY_REGION_RANGE_STEP_TWO,ARRAY_REGION_RANGE_PARALLEL_BAD,ARRAY_REGION_RANGE_READ_ONLY};
-    (void)ars_range_same; (void)ars_range_digest; (void)ars_owner_home_same; (void)ars_owner_home_digest;
+    (void)ars_range_same; (void)ars_range_digest;
     (void)array_set_region_fixture;
     size_t mode_count = sizeof(modes) / sizeof(*modes);
     for (size_t n = 0; n < mode_count + 3; ++n) {
         bool dual = n >= mode_count, mixed = n == mode_count + 1, shared = n == mode_count + 2;
         bool readonly = !dual && modes[n] == ARRAY_REGION_RANGE_READ_ONLY;
+        bool pointwise = !dual && (modes[n] == ARRAY_REGION_RANGE_STEP_TWO ||
+            modes[n] == ARRAY_REGION_RANGE_PARALLEL_BAD);
         ArraySetRegionFixture input = mixed ? array_region_binding_loops(false,false,true,2,false) :
             dual ? array_region_binding_two_loops(shared,false,true) :
             ars_range_build(NULL,n == 0 ? 8 : 3,modes[n]);
-        XrLirFunction root = dual ? input.function : array_helper_root(&input);
+        XrLirFunction root = dual ? input.function : array_loop_test_root(&input);
         if (!dual) OK(xr_lir_module_finish(input.module,NULL));
         XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY,0,true};
         XrCompileResources *resources = sdk_ledger(&limits);
-        XrLirCRequest request = {input.module,root,resources,"array-helper-publication",NULL};
+        XrLirCRequest request = {input.module,root,resources,"array-loop-publication",NULL};
         XrLirCOutput output = {0};
         if (!n || readonly) output = memory_boundaries(&request);
         else {
             XrLirCDiagnostic diagnostic = {0};
             XrLirCStatus status = xr_lir_emit_c(&request,&output,&diagnostic);
-            if (status != XR_LIR_C_OK) fprintf(stderr,"array helper status%u: %s\n",(unsigned)status,diagnostic.message);
+            if (status != XR_LIR_C_OK) fprintf(stderr,"array loop status%u: %s\n",(unsigned)status,diagnostic.message);
             CHECK(status == XR_LIR_C_OK);
         }
 
-        uint32_t fixed = n < 3 || mixed ? 1 : dual && !shared ? 2 : 0;
-        bool helper = readonly || mixed || shared;
-        CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_payload") != NULL) == helper);
-        CHECK((strstr(output.bytes,"unsigned char *restrict xrl_ar_elements") != NULL) == helper);
-        CHECK((strstr(output.bytes,"XRT_ARRAY_I64_REGION_COPY(xrl_ar_elements") != NULL) == shared);
-        CHECK((strstr(output.bytes,"XRT_ARRAY_I64_REGION_RECONSTRUCT(v") != NULL) == shared);
-        CHECK((strstr(output.bytes,"xrl_ar_0_phase == 1") != NULL) == (helper || !fixed));
-        CHECK(strstr(output.bytes,"xrt_array_i64_region_try_begin"));
-        CHECK((strstr(output.bytes,"\nxrl_fixed_exit_1: ;") != NULL) == (fixed > 0));
-        CHECK((strstr(output.bytes,"\nxrl_fixed_exit_2: ;") != NULL) == (fixed == 2));
-        for (uint32_t loop = 1; loop <= fixed; ++loop) {
-            const char *clone = array_fixed_update(output.bytes,loop);
-            if (n == 1) array_fixed_header_liveout(output.bytes,clone,&input);
+        CHECK((strstr(output.bytes,"\nxrl_fixed_exit_2: ;") != NULL) == dual);
+        CHECK(!strstr(output.bytes,"\nxrl_fixed_exit_3: ;"));
+        for (uint32_t loop = 1; loop <= (dual ? 2u : 1u); ++loop) {
+            bool read_loop = readonly || (mixed && loop == 2);
+            if (read_loop || pointwise) array_checked_clone(output.bytes,loop,pointwise,read_loop);
+            else {
+                const char *clone = array_fixed_update(output.bytes,loop);
+                if (n == 1) array_fixed_header_liveout(output.bytes,clone,&input);
+            }
         }
-        if (fixed && (!dual || !mixed)) array_fixed_first_write(output.bytes,input.body[0]);
-        if (helper) {
-            array_helper_owner_exit(output.bytes,1);
-            CHECK(strstr(output.bytes,"UINTPTR_MAX - xrl_ar_payload_begin") &&
-                strstr(output.bytes,"UINTPTR_MAX - xrl_ar_elements_begin") &&
-                strstr(output.bytes,"(uintmax_t)INT64_MAX") && strstr(output.bytes,"XrlArResult_"));
-            CHECK(strstr(output.bytes,"xrt_native_array_get("));
-            if (!shared) CHECK(!strstr(output.bytes,"goto xrl_ar_slow_"));
-        } else if (!fixed) {
-            CHECK(strstr(output.bytes,"goto xrl_ar_slow_") && !strstr(output.bytes,"xrl_ar_loop_"));
-        }
+        CHECK(strstr(output.bytes,"xrt_native_array_get("));
+        if (!readonly && !mixed) array_fixed_first_write(output.bytes,input.body[0]);
         xr_lir_module_destroy(input.module); xr_compile_resources_release(resources);
         CHECK(output.bytes && output.length); xr_lir_c_output_free(&output);
         CHECK(!runtime_live && !runtime_bytes);
@@ -757,8 +751,8 @@ int main(int argc, char **argv) {
     }
     if (argc == 1) edge_control_boundaries();
     if (argc == 1) record_memory_boundaries();
-    if (argc == 1) array_helper_boundaries();
-    if (argc == 1) array_helper_cancellation();
+    if (argc == 1) array_loop_boundaries();
+    if (argc == 1) array_clone_cancellation();
     (void)sdk_fixture_malloc; (void)sdk_fixture_free;
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--ice")));
     XrLirModule *module = NULL;

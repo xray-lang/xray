@@ -126,6 +126,41 @@ def assert_fixed_update_loop(name: str, generated: str) -> None:
     assert not re.search(r"\b(?:xrt_\w+|xrl_edge_\w+)\s*\(", body), (name, "runtime work in fixed Array loop")
 
 
+def assert_pointwise_update_loops(name: str, generated: str) -> None:
+    clones = list(re.finditer(
+        r"^(?P<label>xrl_fixed_(?P<region>\d+)_bb\d+): ;\n"
+        r"(?P<body>.*?)(?=^xrl_fixed_\d+_bb\d+: ;|^}\n)",
+        generated, re.MULTILINE | re.DOTALL,
+    ))
+    assert len(clones) == (2 if name == "region_two" else 1), (name, len(clones))
+    for clone in clones:
+        label, region, body = clone.group("label", "region", "body")
+        cache = f"xrl_fixed_cache_{region}"
+        guard = re.search(
+            rf"xrt_array_i64_region_try_begin\([^\n;]+, true, &{cache}\) \{{[^{{}}]*\bgoto {label};",
+            generated[:clone.start()],
+        )
+        assert guard, (name, "missing checked pointwise admission")
+        assert f"goto xrl_fixed_exit_{region};" in body, (name, "missing ordinary exit")
+        assert not re.search(r"\b(?:xrt_\w+|xrl_edge_\w+)\s*\(", body), (name, "runtime work in pointwise clone")
+
+        index_checks = re.findall(
+            rf"\bif \((?P<index>v\d+) < INT64_C\(0\) \|\| \(uint64_t\)(?P=index) >= {cache}\.length\) \{{\n"
+            rf"\s*{cache} = \(XrtArrayI64RegionCache\)\{{0\}};\n"
+            r"\s*goto (?P<slow>xrl_fixed_slow_\d+_\d+);\n\s*}\n"
+            r"\s*XRT_ARRAY_I64_REGION_COPY\((?P<access>[^\n]+)\);",
+            body,
+        )
+        reads, writes = 0, 0
+        for index, slow, access in index_checks:
+            element = rf"{cache}\.elements \+ \(size_t\){index} \* sizeof\(int64_t\)"
+            reads += bool(re.fullmatch(rf"&v\d+, {element}", access))
+            writes += bool(re.fullmatch(rf"{element}, &v\d+", access))
+            assert re.search(rf"^{slow}: ;$", generated, re.MULTILINE), (name, slow)
+        assert reads and writes, (name, "missing checked read or write")
+        assert reads + writes == len(index_checks) == body.count(f"{cache}.elements"), (name, "unchecked access")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
@@ -262,10 +297,15 @@ def main() -> None:
             bodies = re.findall(r"^static int64_t xrl_f\d+\([^\n]*\) \{\n(.*?)^}",
                                 generated_text, re.MULTILINE | re.DOTALL)
             pointwise, = (body for body in bodies if "xrt_array_i64_update_held(" in body)
-            append, read = pointwise.split("xrl_ar_0_cache = (", 1)
-            assert ("xrt_native_array_push_local_i64(" in append or
-                    "xrt_native_array_update_place(" in append) and "xrl_edge_" not in append
-            assert "xrl_ar_loop_" in read and "xrl_edge_" in read
+            append = re.search(r"xrt_native_array_(?:push_local_i64|update_place)\(", pointwise)
+            read = re.search(r"^xrl_fixed_(?P<region>\d+)_bb\d+: ;$", pointwise, re.MULTILINE)
+            assert append and read and append.start() < read.start(), name
+            assert "xrl_edge_" not in pointwise[:append.start()], name
+            exit_edge = re.search(rf"^xrl_fixed_exit_{read['region']}: ;\n(?P<body>.*?)(?=^\w+: ;)",
+                                  pointwise, re.MULTILINE | re.DOTALL)
+            assert exit_edge and "xrl_edge_" in exit_edge["body"], name
+            assert re.search(rf"XRT_ARRAY_I64_REGION_COPY\(&v\d+, xrl_fixed_cache_{read['region']}\.elements",
+                             pointwise[read.start():]), name
         elif name == "array_stationary_cells":
             # Each mutation Cell shares its stationary owner's slot: no runtime
             # forwarding remains, and every slow update edits a local view's binding.
@@ -309,14 +349,7 @@ def main() -> None:
                 prefix = generated_text[max(0, match.start() - 600):match.start()]
                 assert re.search(r"xrt_array_i64_update_held\([^;]*\{\n(?:.*\n)*?\s+xrl_held\d+ = NULL;", prefix), name
         if name.startswith("region_") or name.startswith("panic_region_"):
-            specs = re.findall(r"static const XrtArrayI64RegionSpec xrl_ar_spec_", generated_text)
-            clones = re.findall(r"^xrl_ar_\d+_bb\d+: ;\n(.*?)(?=^xrl_ar_\d+_bb\d+: ;|^}\n)",
-                                generated_text, re.MULTILINE | re.DOTALL)
-            assert len(specs) == (2 if name == "region_two" else 1), (name, len(specs))
-            assert clones and all("xrt_" not in body for body in clones), name
-            if name == "region_set":
-                assert "XRT_ARRAY_I64_REGION_COPY(" not in generated_text
-                assert "XRT_ARRAY_I64_REGION_RECONSTRUCT(" not in generated_text
+            assert_pointwise_update_loops(name, generated_text)
         if name == "string_append_assignment":
             assert generated_text.count("xrt_native_string_append_owned(") == 4
             assert generated_text.count("xrt_native_string_concat_create(") == 1
