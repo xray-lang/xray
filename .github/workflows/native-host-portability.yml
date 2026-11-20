@@ -213,11 +213,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: windows-2022, name: Layout experiment (MSVC), cc: cl}
-          - {os: windows-2022, name: Layout experiment (clang-cl), cc: clang-cl}
-          - {os: macos-latest, name: Layout experiment (macOS Clang), cc: clang}
-          - {os: ubuntu-24.04, name: Layout experiment (Linux Clang), cc: clang}
-          - {os: ubuntu-24.04, name: Layout experiment (Linux GCC), cc: gcc}
+          # Shared macOS runners swing single samples by up to 2x even over
+          # eleven rounds, so their ratios are reported, not enforced.
+          # Execution and golden output still block on every provider.
+          - {os: windows-2022, name: Layout experiment (MSVC), cc: cl, ratios: gate}
+          - {os: windows-2022, name: Layout experiment (clang-cl), cc: clang-cl, ratios: gate}
+          - {os: macos-latest, name: Layout experiment (macOS Clang), cc: clang, ratios: report}
+          - {os: ubuntu-24.04, name: Layout experiment (Linux Clang), cc: clang, ratios: gate}
+          - {os: ubuntu-24.04, name: Layout experiment (Linux GCC), cc: gcc, ratios: gate}
     env:
       PYTHONUTF8: '1'
       PYTHONDONTWRITEBYTECODE: '1'
@@ -251,9 +254,9 @@ jobs:
       - name: Prepare the Unix layout experiment
         if: runner.os != 'Windows'
         run: python bench/managed-value-layout/run.py prepare --cc "$LAYOUT_CC" --work build/layout-prepare
-      - name: Measure and gate the standalone layout
+      - name: Measure the standalone layout (ratios ${{ matrix.ratios }})
         run: >-
-          python bench/managed-value-layout/run.py measure --gate
+          python bench/managed-value-layout/run.py measure --ratios ${{ matrix.ratios }}
           --prepared build/layout-prepare/prepared.json --work build/layout-measured
       - uses: actions/upload-artifact@v4
         if: always()

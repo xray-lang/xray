@@ -182,8 +182,11 @@ def measure(args) -> int:
                                        "pass": complete and
                                        result["ratios"].get(case, float("inf")) <= RATIO_LIMITS[case]}
                                  for case in RATIO_CASES}
-        if args.gate and complete and not all(gate["pass"] for gate in result["layoutGates"].values()):
+        result["ratioMode"] = args.ratios
+        over = complete and not all(gate["pass"] for gate in result["layoutGates"].values())
+        if over and args.ratios == "gate":
             result["state"] = "FAIL_LAYOUT_RATIO"
+        report_ratios(result, over)
         return 0 if result["state"] == "PASS_EXECUTION_ONLY" else 1
     except BaseException as error:
         result.update(state="NEEDS_RECOVERY" if isinstance(error, xray_process.RecoveryRequired)
@@ -191,6 +194,29 @@ def measure(args) -> int:
         raise
     finally:
         evidence.save(args.work / "result.json", result)
+
+
+def report_ratios(result: dict, over: bool) -> None:
+    """Print every ratio against its limit, also into the CI step summary.
+
+    Execution, golden output and source identity always decide the exit
+    status. In report mode a ratio over its limit only raises a warning.
+    """
+    mode = "blocking" if result["ratioMode"] == "gate" else "report only"
+    lines = [f"## Layout ratios ({mode}): {result['state']}", "",
+             "| case | managed / raw | limit | |", "|---|---|---|---|"]
+    for case, gate in result["layoutGates"].items():
+        ratio = "n/a" if gate["ratio"] is None else f"{gate['ratio']:.2f}"
+        lines.append(f"| {case} | {ratio} | {gate['limit']:.1f} | {'pass' if gate['pass'] else 'OVER'} |")
+    text = "\n".join(lines) + "\n"
+    print(text, end="")
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as output:
+            output.write(text + "\n")
+    if over and result["ratioMode"] == "report":
+        names = ", ".join(case for case, gate in result["layoutGates"].items() if not gate["pass"])
+        print(f"::warning title=Layout ratios over limit (report only)::{names}")
 
 
 def main() -> int:
@@ -202,7 +228,8 @@ def main() -> int:
     measure_parser = commands.add_parser("measure")
     measure_parser.add_argument("--prepared", type=Path, required=True)
     measure_parser.add_argument("--work", type=Path, required=True)
-    measure_parser.add_argument("--gate", action="store_true")
+    measure_parser.add_argument("--ratios", choices=("gate", "report"), required=True,
+                                help="gate fails on a ratio over its limit; report only warns")
     args = parser.parse_args()
     for name, value in vars(args).items():
         if isinstance(value, Path):

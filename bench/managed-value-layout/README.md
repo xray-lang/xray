@@ -239,6 +239,11 @@ The automatic five-provider workflow holds `push-direct`, `push-noalias`, `map`,
 `push` re-resolves its binding and commits length on every element; it is the
 generic path and is held to 3x, the bound every generic spelling must meet,
 while its scalar-local forms carry the fast-path limit.
+`measure --ratios gate` fails on any ratio over its limit; `--ratios report`
+prints the same table and warns instead. The macOS provider uses report mode:
+its shared runners swung single samples from 59 to 107 ms within one eleven-round
+run, enough to move an unchanged Map median past 1.3. Execution, golden output
+and source identity still block on every provider.
 The Array object keeps its pointer between `length` and `capacity`. With the two
 counters adjacent, Clang merged the per-push `length < capacity` check into one
 16-byte `ldp` that reloads the previous push's 8-byte `length` store. That load
