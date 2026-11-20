@@ -135,7 +135,8 @@ static bool image_type(ImageBuilder *builder, const XrtValuePlanSpec *spec, uint
     bool complete = image_child(builder, spec->nullable.element, id, &row->nullable_element) &&
         image_child(builder, spec->signature.result, id, &row->result) &&
         image_child(builder, spec->entry.signature, id, &row->entry_signature) &&
-        image_child(builder, spec->element, id, &row->element);
+        image_child(builder, spec->element, id, &row->element) &&
+        image_child(builder, spec->class_parent, id, &row->class_parent);
     const XrtValueImage view = {.types=builder->types, .slots=builder->slots};
     if (complete && xrt_value_image_inline_display_shape(&view, id - 1))
         row->flags |= XRT_VALUE_INLINE_DISPLAY;

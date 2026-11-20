@@ -87,7 +87,9 @@ static bool image_shape(const XrtValueImage *image, bool *has_backings) {
             !image_span(type->first_field, type->field_count, image->slot_count) ||
             !image_span(type->first_capture, type->capture_count, image->slot_count) ||
             !image_span(type->first_parameter, type->parameter_count, image->parameter_count) ||
-            type->nullable_element > i || type->result > i || type->entry_signature > i || type->element > i)
+            type->nullable_element > i || type->result > i || type->entry_signature > i || type->element > i ||
+            type->class_parent > i || (type->class_parent && (type->kind != XRT_VALUE_CLASS ||
+                image->types[type->class_parent - 1].kind != XRT_VALUE_CLASS)))
             return false;
         for (uint32_t n = 0; n < type->field_count; ++n)
             if (image->slots[type->first_field + n].type > i) return false;
@@ -151,7 +153,7 @@ static XrtValuePlanSpec image_plan(XrtValueImagePlans *set, const XrtValueImage 
         .signature={type->parameter_count ? scratch->parameters : NULL, type->parameter_count,
             image_dependency(set, type->result), type->flags & ~(uint32_t)XRT_VALUE_INLINE_DISPLAY, type->throws != 0},
         .entry={type->entry_ordinal, image_dependency(set, type->entry_signature)},
-        .element=image_dependency(set, type->element)};
+        .element=image_dependency(set, type->element), .class_parent=image_dependency(set, type->class_parent)};
     if (type->kind == XRT_VALUE_FUNCTION || type->kind == XRT_VALUE_ENVIRONMENT) spec.code = code;
     return spec;
 }

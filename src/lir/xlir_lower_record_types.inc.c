@@ -19,7 +19,31 @@ static bool lower_record_description(Lower *c, XrXirType type, XrXirTypeDescript
     uint32_t native = description->definition ? description->definition->native.native_id : description->identity->native.native_id;
     return description->nominal_kind == XR_XIR_NOMINAL_STRUCT && !native && !(flags & ~XR_XIR_NOMINAL_MODULE_LITERAL);
 }
-static bool lower_class_description(Lower *c, XrXirType type, XrXirTypeDescription *description) {
+static bool lower_class_parent_type(Lower *c, uint32_t declaration, XrXirType *parent) {
+    const XrXirTypes *types = c->source->types;
+    const XrXirNominalTable *table = types->nominals;
+    if (!table || declaration >= table->count)
+        return lower_unsupported(c, "class ancestry has no exact Checked declaration");
+    if (!c->class_types) {
+        c->class_types = lower_alloc(c, table->count, sizeof(*c->class_types));
+        if (!c->class_types) return false;
+        for (uint32_t i = 0; i < types->count; ++i) {
+            const XrXirTypeNode *node = &types->nodes[i];
+            XrXirType type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + i);
+            if (!xr_xir_type_is_class(types, type) || node->nominal.argument_count) continue;
+            uint32_t owner = node->nominal.declaration;
+            if (c->class_types[owner]) {
+                lower_error(c, XR_LIR_VERIFY_ERROR, "class declaration has multiple concrete Checked identities");
+                return false;
+            }
+            c->class_types[owner] = type;
+        }
+    }
+    *parent = c->class_types[declaration];
+    if (!*parent) return lower_unsupported(c, "class ancestry has no exact non-generic Checked instance");
+    return true;
+}
+static bool lower_class_description(Lower *c, XrXirType type, XrXirTypeDescription *description, XrXirType *base) {
     const XrXirArtifact *artifact = c->request->closed;
     if (!c->class_cycles) {
         XrXirStatus status = xr_xir_class_cycles_build(artifact, &c->class_cycles, NULL);
@@ -37,8 +61,7 @@ static bool lower_class_description(Lower *c, XrXirType type, XrXirTypeDescripti
         type, description) != XR_XIR_OK || description->nominal_kind != XR_XIR_NOMINAL_CLASS)
         return lower_unsupported(c, "class with unresolved Checked field types");
     uint32_t parent = description->definition ? description->definition->parent : description->identity->parent;
-    if (parent) return lower_unsupported(c, "derived class allocation layout");
-    return true;
+    return !parent || lower_class_parent_type(c, parent - 1, base);
 }
 static bool lower_record_member(Lower *c, const XrXirTypeDescription *description,
     uint32_t index, XrXirFieldDescription *field) {
@@ -47,7 +70,8 @@ static bool lower_record_member(Lower *c, const XrXirTypeDescription *descriptio
         return lower_unsupported(c, "record field has no resolved Checked description");
     return true;
 }
-static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescription *description, bool class_type) {
+static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescription *description,
+    bool class_type, XrXirType base) {
     uint32_t count = description->field_count;
     XrLirRecordField *fields = count ? lower_alloc(c, count, sizeof(*fields)) : NULL;
     if (count && !fields) return false;
@@ -76,7 +100,11 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
         .flags=class_type ? 0 : description->definition ? description->definition->flags : description->identity->flags};
     XrLirType physical = XR_LIR_TYPE_INVALID;
     if (good) good = lower_build(c, xr_lir_record_type(c->module, &identity, fields, count, &physical));
-    if (good && class_type) good = lower_build(c, xr_lir_internal_class_type(c->module, physical, &physical));
+    if (good && class_type) {
+        XrLirType parent = base ? lower_type(c, base) : XR_LIR_TYPE_INVALID;
+        if (base && !parent) good = lower_unsupported(c, "class parent layout has no exact physical carrier");
+        else good = lower_build(c, xr_lir_internal_class_type(c->module, physical, parent, &physical));
+    }
     if (good) c->constructed_types[(uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE] = physical;
     xr_free(arguments);
     xr_free(fields);
@@ -120,16 +148,17 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
         if (node && node->kind == XR_XIR_TYPE_NULLABLE && xr_xir_type_is_class(c->source->types, node->element))
             return lower_unsupported(c, "Nullable class requires a receiving optional owner layout");
         XrXirTypeDescription description = {0};
+        XrXirType base = 0;
         bool class_type = node && node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_class(c->source->types, frame->type);
         bool record = node && node->kind == XR_XIR_TYPE_NOMINAL &&
-            (class_type ? lower_class_description(c, frame->type, &description) : lower_record_description(c, frame->type, &description));
+            (class_type ? lower_class_description(c, frame->type, &description, &base) : lower_record_description(c, frame->type, &description));
         if (class_type && !record) return false;
         bool callable = node && node->kind == XR_XIR_TYPE_CALLABLE;
         bool tuple = node && node->kind == XR_XIR_TYPE_TUPLE;
         if (!node || (!record && !callable && !tuple && node->kind != XR_XIR_TYPE_NULLABLE)) {
             good = lower_unsupported(c, "Nullable payload has no inline POD layout"); break;
         }
-        uint32_t count = record ? description.field_count + description.instance->argument_count :
+        uint32_t count = record ? description.field_count + description.instance->argument_count + (base != 0) :
             callable ? node->parameter_count + 1u : tuple ? node->parameter_count : 1u;
         if (frame->next < count) {
             XrXirType dependency = node->element;
@@ -138,7 +167,10 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
                     XrXirFieldDescription member = {0};
                     if (!lower_record_member(c, &description, frame->next, &member)) { good = false; break; }
                     dependency = member.type;
-                } else dependency = description.instance->arguments[frame->next - description.field_count];
+                } else {
+                    uint32_t argument = frame->next - description.field_count;
+                    dependency = argument < description.instance->argument_count ? description.instance->arguments[argument] : base;
+                }
             } else if (callable) dependency = frame->next ? node->parameters[frame->next - 1].type : node->result;
             else if (tuple) dependency = node->parameters[frame->next].type;
             ++frame->next;
@@ -152,7 +184,7 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
                 good = lower_receive_type(c, dependency);
             continue;
         }
-        if (record) good = lower_record_finish(c, frame->type, &description, class_type);
+        if (record) good = lower_record_finish(c, frame->type, &description, class_type, base);
         else if (callable) good = lower_receive_callable(c, frame->type, node);
         else if (tuple) good = lower_tuple_finish(c, frame->type, node);
         else {

@@ -60,6 +60,7 @@ static XrtManagedStatus plan_extent(const XrtValuePlanSpec *spec, size_t *bytes,
         !extent_add(dependencies, spec->signature.result != NULL, 1) ||
         !extent_add(dependencies, spec->entry.signature != NULL, 1) ||
         !extent_add(dependencies, spec->element != NULL, 1) ||
+        !extent_add(dependencies, spec->class_parent != NULL, 1) ||
         !extent_add(bytes, *dependencies, sizeof(XrtValuePlan *))) return XRT_MANAGED_OVERFLOW;
     for (size_t i = 0; i < spec->field_count + spec->capture_count; ++i) {
         XrtValueSlotSpec slot = i < spec->field_count ? spec->fields[i] : spec->captures[i - spec->field_count];
@@ -156,6 +157,21 @@ static bool nullable_valid(const XrtValuePlanSpec *spec) {
         if (spec->owned_offsets[i] != spec->nullable.payload_offset + element->view.owned_offsets[i]) return false;
     return true;
 }
+static bool class_payload_valid(const XrtValuePlanSpec *spec) {
+    if (!spec->element || spec->element->view.kind != XRT_VALUE_RECORD) return false;
+    if (!spec->class_parent) return true;
+    const XrtValuePlanSpec *parent = &spec->class_parent->view;
+    if (parent->kind != XRT_VALUE_CLASS || parent->element == spec->element) return false;
+    const XrtValuePlanSpec *base = &parent->element->view, *payload = &spec->element->view;
+    if (base->field_count > payload->field_count) return false;
+    for (size_t i = 0; i < base->field_count; ++i) {
+        XrtValueSlotSpec inherited = base->fields[i], concrete = payload->fields[i];
+        if (inherited.type != concrete.type || inherited.offset != concrete.offset ||
+            inherited.name_length != concrete.name_length ||
+            memcmp(inherited.name, concrete.name, inherited.name_length)) return false;
+    }
+    return true;
+}
 static bool spec_valid(const XrtValuePlanSpec *spec) {
     if (!spec->alignment || spec->alignment > alignof(XrMaxAlignment) || (spec->alignment & (spec->alignment - 1)) ||
         spec->size % spec->alignment || !lease_valid(spec->code) ||
@@ -165,6 +181,7 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
         (spec->kind != XRT_VALUE_NULLABLE && (spec->nullable.element || spec->nullable.tag_offset || spec->nullable.payload_offset)) ||
         (spec->kind != XRT_VALUE_CELL && spec->kind != XRT_VALUE_ARRAY_INLINE &&
             spec->kind != XRT_VALUE_CLASS && spec->element) ||
+        (spec->kind != XRT_VALUE_CLASS && spec->class_parent) ||
         (spec->kind != XRT_VALUE_FIXED_U8 && spec->count)) return false;
     for (size_t i = 0; i < spec->owned_count; ++i) {
         size_t offset = spec->owned_offsets[i];
@@ -175,7 +192,7 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
     }
     if (spec->kind == XRT_VALUE_ARRAY_INLINE && (!spec->element || !spec->element->view.size ||
         !xrt_value_kind_has_fields(spec->element->view.kind))) return false;
-    if (spec->kind == XRT_VALUE_CLASS && (!spec->element || spec->element->view.kind != XRT_VALUE_RECORD)) return false;
+    if (spec->kind == XRT_VALUE_CLASS && !class_payload_valid(spec)) return false;
     if (pointer_kind(spec->kind))
         return spec->size == sizeof(XrtManagedHeader *) && spec->alignment == alignof(XrtManagedHeader *) &&
             spec->owned_count == 1 && !spec->owned_offsets[0] &&
@@ -225,7 +242,8 @@ static bool copy_dependencies(XrtValuePlan *plan, char *names) {
         if (!dependency_take(plan, parameters[i].type)) return false;
     }
     return dependency_take(plan, view->nullable.element) && dependency_take(plan, view->signature.result) &&
-        dependency_take(plan, view->entry.signature) && dependency_take(plan, view->element);
+        dependency_take(plan, view->entry.signature) && dependency_take(plan, view->element) &&
+        dependency_take(plan, view->class_parent);
 }
 XR_FUNCDEF XrtManagedStatus xrt_value_plan_new(XrtBillingOwner *billing, const XrtValuePlanSpec *spec, XrtValuePlan **empty) {
     if (!billing || !spec || !empty || *empty ||

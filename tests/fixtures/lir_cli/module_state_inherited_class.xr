@@ -1,0 +1,29 @@
+class Animal {
+    name: string
+    sound: string
+
+    init(name: string, sound: string) {
+        this.name = name
+        this.sound = sound
+    }
+}
+
+class Dog extends Animal {
+    breed: string
+    tag: i64
+
+    init(name: string, breed: string, tag: i64) {
+        super(name, "woof")
+        this.breed = breed
+        this.tag = tag
+    }
+}
+
+const cat = Animal("Cat", "meow")
+const dog = Dog("Rex", "Labrador", 7)
+print(cat.name)
+print(cat.sound)
+print(dog.name)
+print(dog.sound)
+print(dog.breed)
+print(dog.tag)

@@ -65,6 +65,7 @@ typedef struct XrtValueImageType {
     uint32_t nullable_element, result, flags, throws;
     size_t nullable_tag, nullable_payload;
     uint32_t entry_ordinal, entry_signature, element;
+    uint32_t class_parent; /* Earlier concrete class row, zero for a root. */
 } XrtValueImageType;
 typedef struct XrtValueImage {
     const XrtValueImageType *types;

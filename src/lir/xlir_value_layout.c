@@ -139,6 +139,8 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
         if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         if (shape.kind == XR_LIR_TYPE_NULLABLE || shape.kind == XR_LIR_TYPE_CLASS) {
             XrLirValueLayoutStatus status = need_type(set, shape.element, type);
+            XrLirType parent = xr_lir_class_parent(module, type);
+            if (status == XR_LIR_VALUE_LAYOUT_OK && parent) status = need_type(set, parent, type);
             if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
         } else if (shape.kind == XR_LIR_TYPE_CELL) {
             XrLirCellType cell;
@@ -252,8 +254,9 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
     if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     *spec = (XrtValuePlanSpec){0};
     if (shape.kind == XR_LIR_TYPE_CLASS) {
+        XrLirType parent = xr_lir_class_parent(module, type);
         *spec = (XrtValuePlanSpec){.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=alignof(void *),
-            .owned_count=1,.element=dependency(set,shape.element)};
+            .owned_count=1,.element=dependency(set,shape.element),.class_parent=parent ? dependency(set,parent) : NULL};
         return extent_add(scratch_bytes,1,sizeof(size_t)) ? XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_OVERFLOW;
     }
     if (shape.kind == XR_LIR_TYPE_CELL) {

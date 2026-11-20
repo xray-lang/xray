@@ -83,6 +83,7 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
         }
         status = lir_intern_type(target, shape,
             shape.kind == XR_LIR_TYPE_CALLABLE ? &callable : NULL, data->cell_element,
+            lir_imported_dependency(mapping, data->class_parent),
             (shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_TUPLE) && shape.count ? fields : NULL,
             shape.kind == XR_LIR_TYPE_RECORD ? &record : NULL, &mapping[n]);
     }

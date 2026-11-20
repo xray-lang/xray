@@ -809,7 +809,7 @@ static void class_owners_outlive_programs(void) {
     XrLirRecordField field={"value",5,XR_LIR_I64,0, 0};
     XrLirRecordIdentity identity={.module="tests.lir.class",.module_length=15,.name="Box",.name_length=3};
     OK(xr_lir_record_type(c.module,&identity,&field,1,&row));
-    OK(xr_lir_internal_class_type(c.module,row,&instance_type));
+    OK(xr_lir_internal_class_type(c.module,row,0,&instance_type));
 
     XrLirFunction make={0}, read={0}, root={0};
     OK(xr_lir_declare_function(c.module,
