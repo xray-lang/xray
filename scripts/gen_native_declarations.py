@@ -1352,7 +1352,7 @@ def render_path_getcwd(declarations):
             row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
             row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
             row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-            '(): string', '0', '', 'internal', '', '', 'fresh', 'system', '', '', False, '',
+            '(): string', '0', '', 'internal', '', '', 'fresh', 'system', 'path_getcwd', 'xrt_path_getcwd', True, 'method',
             '', 'normal', '', '', 'value', False, None, (), ''):
         raise ValueError('Path query differs from its complete source contract')
     return [
@@ -1362,6 +1362,44 @@ def render_path_getcwd(declarations):
         '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING,',
         '};',
     ], ['    {XR_NATIVE_CALLABLE_PATH_GETCWD, NULL, &xr_native_path_getcwd, NULL, false, "path", "stdlib/defs/core.def", FINGERPRINT}']
+
+
+def render_path_host_facts(declarations):
+    lines, rows = [], []
+    contracts = (
+        ('__isWindows', 2, 'PATH_IS_WINDOWS', '(): bool', '0', '', 'no_heap', 'bool'),
+        ('__fullpath', 3, 'PATH_FULLPATH', '(raw: string): string', '1', 's', '', 'string'),
+    )
+    for name, ordinal, identity, signature, count, arguments, allocation, result in contracts:
+        candidates = [r for r in declarations if r.module == 'path' and r.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Path host fact requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        vm = 'path_is_windows' if name == '__isWindows' else 'path_fullpath'
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
+                row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
+                row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                signature, count, arguments, 'internal', '', allocation, 'fresh' if result == 'string' else '',
+                'system', vm, 'xrt_' + vm, True, 'method', '', 'normal', '', '', 'value', False, None, (),
+                ''):
+            raise ValueError('Path host fact differs from its complete source contract: ' + name)
+        symbol = 'xr_native_path_' + ('is_windows' if name == '__isWindows' else 'fullpath')
+        if name == '__fullpath':
+            lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {',
+                      '    {"raw", "string", XR_NATIVE_TERM_STRING, false, false, false},', '};']
+        term = 'BOOL' if result == 'bool' else 'STRING'
+        operand = 'NULL, 0' if count == '0' else 'xr_native_path_fullpath_parameters, 1'
+        lines += [
+            'static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' + c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, ' +
+                ('XR_NATIVE_ALLOCATION_NO_HEAP' if allocation == 'no_heap' else 'XR_NATIVE_ALLOCATION_UNKNOWN') + ',',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + operand + ', XR_NATIVE_TERM_' + term + ',',
+            '};',
+        ]
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "path", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
 
 
 def render_sys_dylibs(declarations):
@@ -1786,6 +1824,9 @@ def render_unicode_callable(root, decoder):
     path_lines, path_rows = render_path_getcwd(declarations)
     buffer_lines += path_lines
     buffer_rows += path_rows
+    path_host_lines, path_host_rows = render_path_host_facts(declarations)
+    buffer_lines += path_host_lines
+    buffer_rows += path_host_rows
     exec_lines, exec_rows = render_os_exec_pipe_close(declarations)
     buffer_lines += exec_lines
     buffer_rows += exec_rows
