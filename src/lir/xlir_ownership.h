@@ -221,29 +221,9 @@ enum {
     XR_LIR_ARRAY_REGION_PRIMARY_GET,
     XR_LIR_ARRAY_REGION_PRIMARY_PUSH
 };
-enum { XR_LIR_ARRAY_PUSH_CAPACITY_NONE, XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT };
-/* Conditional capacity-window identity, distinct from unchanged Array LEN.
- * The restart is before the original header. The sole LOCAL PUSH item is
- * CURRENT and the IV advances by one. All other scalar parameters are
- * forwarded unchanged, including a loop-invariant end carried in a header
- * parameter. Other operations are nonobserving scalar computations or exact
- * token transfers. Parameters have end_instruction zero, and function
- * parameters also have end_block zero.
- * This does not authorize access or prove any runtime value/capacity/RC.
- * In particular end-IV is not safe until dynamic signed/range checks pass.
- * A future consumer retains the ordinary first trip and must restore original
- * homes before growth, COW, failure or observation. Step anchors are one-based
- * in this window's slice; checkpoint is the original latch back to canonical.
- * NONE has all fields zero. */
-typedef struct XrLirArrayPushCapacity {
-    uint32_t kind, iv, iv_argument, entry_iv, end, end_block, end_instruction;
-    uint32_t condition, condition_instruction, increment, increment_block, increment_instruction;
-    uint32_t one, latch_iv, item, first_active_step, checkpoint_step;
-} XrLirArrayPushCapacity;
 /* The primary access is an original element operation, not CELL_READ/death.
  * GET names the sole element read in a closed loop with an unchanged length
- * or guarded bound. A fixed PUSH uses its actual original item and scalar
- * edge assignments, without the legacy push_capacity shortcut. */
+ * or guarded bound. PUSH uses the original item and scalar assignments. */
 typedef struct XrLirArraySetRegion {
     uint32_t function, header, entry_block, entry_edge, latch;
     uint32_t exit_edge, exit_block, entry_value, canonical_value, exit_value;
@@ -254,7 +234,9 @@ typedef struct XrLirArraySetRegion {
      * ending at the primary SET. No changed scalar recurrence except the IV.
      * Consumers must still run the original final iteration and owner exit. */
     uint32_t element_read;
-    XrLirArrayPushCapacity push_capacity;
+    /* PUSH only: item is the current IV and all other carried scalars are unchanged.
+     * Both modes still use the same selected edges, owner home and capacity guard. */
+    bool push_counted;
 } XrLirArraySetRegion;
 
 /* Local fact suitable for linking by function identity. The borrowed Array
@@ -275,7 +257,6 @@ typedef struct XrLirArrayCallMove {
 typedef struct XrLirOwnershipFunction {
     uint32_t fact_offset, fact_count, unmodeled;
     uint32_t region_offset, region_count;
-    uint32_t push_window_offset, push_window_count;
     uint32_t fixed_update_offset, fixed_update_count;
     uint32_t array_call_offset, array_call_count;
     XrLirArrayEntryRetain array_entry_retain;
@@ -331,14 +312,6 @@ XR_FUNC uint32_t xr_lir_ownership_array_region_step_count(const XrLirOwnershipPl
 XR_FUNC XrLirStatus xr_lir_ownership_array_region_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirArraySetRegion *);
 XR_FUNC XrLirStatus xr_lir_ownership_array_region_step_at(const XrLirOwnershipPlan *,
-    uint32_t ordinal, XrLirArraySetRegionStep *);
-/* Separate, owned numeric tables; existing SET/GET consumers do not receive
- * PUSH windows through their executable region directory. */
-XR_FUNC uint32_t xr_lir_ownership_array_push_window_count(const XrLirOwnershipPlan *);
-XR_FUNC uint32_t xr_lir_ownership_array_push_step_count(const XrLirOwnershipPlan *);
-XR_FUNC XrLirStatus xr_lir_ownership_array_push_window_at(const XrLirOwnershipPlan *,
-    uint32_t ordinal, XrLirArraySetRegion *);
-XR_FUNC XrLirStatus xr_lir_ownership_array_push_step_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirArraySetRegionStep *);
 /* A conditional update over the same logical Array owner. The route uses
  * exact MOVE and private Cell handoffs, a signed induction range over that

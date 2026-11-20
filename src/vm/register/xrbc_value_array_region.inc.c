@@ -99,14 +99,52 @@ static bool rbc_value_fixed_array_push(XrRbcStack *stack, RbcValueActivation *ac
     return true;
 }
 
+/* At the real latch, ordinary owner and scalar copies have already
+ * published the header values. Only the verified IV needs advancement. */
+static XR_NOINLINE void rbc_value_fixed_array_counted_push(XrRbcStack *stack, RbcValueActivation *activation,
+    const XrLirFixedArrayUpdateHome *row, const XrRbcArrayCountedPush *counted, uint32_t region) {
+    if (!activation->backings_ready) return;
+    XrRbcRegister *iv = rbc_value_register(stack, activation, counted->iv);
+    if (!iv) return;
+    uint64_t start = iv->bits, end = counted->bits;
+    if (counted->limit) {
+        const XrRbcRegister *limit = rbc_value_register(stack, activation, counted->limit);
+        if (!limit) return;
+        end = limit->bits;
+    }
+    if (start > INT64_MAX || end > INT64_MAX || start >= end) return;
+
+    XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
+    const XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(activation->code->homes, row, slots);
+    const XrtArrayI64RegionContext context = {activation->frame, activation->payload,
+        &activation->frame_locations, &activation->code->homes->frame};
+    XrtArrayI64RegionCache cache = {0};
+    if (!xrt_array_i64_region_try_begin(&context, &spec, true, &cache)) {
+        rbc_value_array_region_forget(activation, region, RBC_ARRAY_REGION_BYPASS);
+        return;
+    }
+    XrtArrayBacking *array = (XrtArrayBacking *)cache.owner;
+    size_t room = array->capacity - cache.length;
+    uint64_t length_room = (uint64_t)INT64_MAX - cache.length, remaining = end - start;
+    if (length_room < room) room = (size_t)length_room;
+    size_t count = remaining < room ? (size_t)remaining : room;
+    for (size_t n = 0; n < count; ++n) {
+        uint64_t item = start + n;
+        memcpy(cache.elements + (cache.length + n) * sizeof(item), &item, sizeof(item));
+    }
+    array->length = cache.length + count;
+    iv->bits = start + count;
+    rbc_value_array_region_forget(activation, region, RBC_ARRAY_REGION_COLD);
+}
+
 static bool rbc_value_fixed_array_before(XrRbcStack *stack, RbcValueActivation *activation,
     const XrRbcArrayRegionAccess *role, XrRbcValueAccess access, XrtManagedStatus *status) {
     RbcArrayRegionState *state = &activation->array_regions[role->region - 1];
     if (role->fixed_edge) {
         const XrRbcValueCode *code = activation->code;
         const XrLirValueHomes *homes = code->homes;
-        const XrLirFixedArrayUpdateHome *row =
-            &homes->fixed_array_updates[role->region - 1 - rbc_value_legacy_array_region_count(code)];
+        size_t ordinal = role->region - 1 - rbc_value_legacy_array_region_count(code);
+        const XrLirFixedArrayUpdateHome *row = &homes->fixed_array_updates[ordinal];
         if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_ENTRY) {
             /* The selected BODY follows publication of the initial owner.
              * Reads can borrow it immediately; writes keep the first transaction. */
@@ -116,9 +154,12 @@ static bool rbc_value_fixed_array_before(XrRbcStack *stack, RbcValueActivation *
         } else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_EXIT)
             rbc_value_array_region_forget(activation, role->region, RBC_ARRAY_REGION_BYPASS);
         else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_LATCH &&
-                state->phase == RBC_ARRAY_REGION_COLD && state->completed_write)
+                state->phase == RBC_ARRAY_REGION_COLD && state->completed_write) {
             state->phase = RBC_ARRAY_REGION_ELIGIBLE;
-        else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_BODY && state->phase == RBC_ARRAY_REGION_ELIGIBLE) {
+            const XrRbcArrayCountedPush *counted = code->array_counted_push ? &code->array_counted_push[ordinal] : NULL;
+            if (counted && counted->iv)
+                rbc_value_fixed_array_counted_push(stack, activation, row, counted, role->region);
+        } else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_BODY && state->phase == RBC_ARRAY_REGION_ELIGIBLE) {
             XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
             const XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(homes, row, slots);
             rbc_value_array_region_begin(activation, role->region, state, &spec);

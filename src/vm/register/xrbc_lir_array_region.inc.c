@@ -49,6 +49,46 @@ static bool rbc_lir_fixed_array_region(RbcLirCompiler *c, const XrLirFixedArrayU
     return true;
 }
 
+static bool rbc_lir_counted_push_scalar(XrRbcValueLocation location) {
+    return location.kind==XR_RBC_VALUE_REGISTER || location.kind==XR_RBC_VALUE_SPILL;
+}
+
+/* The single common route determines whether this lowering can skip scalar
+ * replay. Project only its bound and physical header IV at the real latch. */
+static bool rbc_lir_counted_push_prepare(RbcLirCompiler *c) {
+    if (!c->homes || !c->homes->fixed_array_update_count) return true;
+    XrRbcValueCode *code = c->value_code;
+    XrRbcArrayCountedPush *counted = NULL;
+    for (uint32_t n = 0; n < c->homes->fixed_array_update_count; ++n) {
+        const XrLirArraySetRegion *region = &c->homes->fixed_array_updates[n].region;
+        if (!region->push_counted) continue;
+        XrLirArraySetRegionRange range = region->range;
+        if (region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_PUSH ||
+            range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT ||
+            !range.iv || range.iv > code->value_count || !range.length || range.length > code->value_count)
+            return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "counted append lost common Array facts");
+        if (!rbc_lir_counted_push_scalar(code->locations[range.iv])) continue;
+        /* An invariant header parameter has already been republished; a
+         * pre-loop definition is live here by ordinary CFG liveness. Read
+         * constant bits directly, even if the emitter used an immediate. */
+        const XrLirFunctionData *function = &c->input->functions[c->function.id - 1];
+        const XrLirInstructionView *end = xr_lir_internal_value_definition(function, range.length);
+        if (end && end->type != XR_LIR_I64)
+            return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "counted append bound is not an i64");
+        bool constant = end && end->op == XR_LIR_CONST;
+        if (!constant && !rbc_lir_counted_push_scalar(code->locations[range.length])) continue;
+        if (!counted) {
+            counted = xr_calloc(c->homes->fixed_array_update_count, sizeof(*counted));
+            if (!counted)
+                return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own counted append bounds");
+            code->array_counted_push = counted;
+        }
+        counted[n] = (XrRbcArrayCountedPush){.iv=range.iv, .limit=constant ? 0 : range.length,
+            .bits=constant ? end->bits : 0};
+    }
+    return true;
+}
+
 static bool rbc_lir_fixed_array_prepare(RbcLirCompiler *c) {
     const XrLirValueHomes *homes = c->homes;
     if (!homes || !homes->fixed_array_update_count) return true;

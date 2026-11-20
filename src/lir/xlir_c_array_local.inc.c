@@ -152,13 +152,10 @@ static void c_array_held_clear(LirC *c) {
     for (size_t k=0;k<c->array_held_count;++k) c_format(c," xrl_held%zu = NULL;",k);
     c_text(c,"\n");
 }
-/* Region and push-window code moves real owners between its own slots. */
+/* Legacy region code moves owners between different Frame slots. */
 static bool c_array_held_region_block(const LirC *c, uint32_t block) {
-    if (!c->array_region) return false;
-    const XrLirArrayRegionBindings *sets[]={c->array_region->bindings,c->array_region->push_windows};
-    for (size_t n=0;n<2;++n)
-        if (sets[n] && block<sets[n]->block_index_count && sets[n]->block_index[block].region) return true;
-    return false;
+    const XrLirArrayRegionBindings *bindings=c->array_region ? c->array_region->bindings : NULL;
+    return bindings && block<bindings->block_index_count && bindings->block_index[block].region;
 }
 /* An edge keeps held acquisitions when it only assigns C locals: scalar
  * arguments and stationary owners whose shared slot does not change. */

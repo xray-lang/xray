@@ -63,8 +63,7 @@ typedef struct XrRbcValueAccess {
      * one-based common RETURN_TRANSFER event.
      * EDGE uses first/count source/target SSA pairs, count measuring pairs,
      * for type-zero transport absent from common typed homes. Its index is
-     * UINT32_MAX when there is no common typed edge, never ambiguous edge zero.
-     * A sealed Array capacity ENTRY or LATCH uses a one-based window. */
+     * UINT32_MAX when there is no common typed edge, never ambiguous edge zero. */
     /* ARRAY/MAP index is the verified catalog role, first/count its complete
      * SSA operands. A mutator's window selects its common pending workspace.
      * Keyed Map reads also project source/other to local Frame owner slots
@@ -108,11 +107,11 @@ typedef struct XrRbcArrayReadFold {
     bool constant;
 } XrRbcArrayReadFold;
 
-typedef struct XrRbcArrayPushLimit {
+typedef struct XrRbcArrayCountedPush {
     uint64_t bits;
-    uint32_t value; /* Zero uses constant bits instead of a real scalar location. */
-    bool available;
-} XrRbcArrayPushLimit;
+    uint32_t iv; /* Zero leaves this fixed row on ordinary scalar replay. */
+    uint32_t limit; /* Zero uses constant bits instead of a scalar location. */
+} XrRbcArrayCountedPush;
 
 typedef struct XrRbcArrayCallAccess {
     uint32_t retain, call; /* One-based access ordinals; independent of compacted branches. */
@@ -143,8 +142,7 @@ typedef struct XrRbcValueCode {
     bool array_region_runtime; /* Compile-time SET-window consumption. */
     const XrRbcArrayRegionAccess *array_region_accesses; /* Same ordinal/count as accesses, or absent. */
     const XrRbcArrayReadFold *array_read_folds; /* Indexed like array_regions->regions, or absent. */
-    XrLirArrayRegionBindings *array_push_windows;
-    const XrRbcArrayPushLimit *array_push_limits; /* Indexed like array_push_windows->regions. */
+    const XrRbcArrayCountedPush *array_counted_push; /* Optional lowering indexed like homes->fixed_array_updates. */
 } XrRbcValueCode;
 
 static inline size_t rbc_value_legacy_array_region_count(const XrRbcValueCode *code) {

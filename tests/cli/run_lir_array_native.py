@@ -246,16 +246,16 @@ def main() -> None:
                 assert generated_text.count("size_t xrl_room = xrl_array->capacity - xrl_fixed_cache_") == 1
                 assert re.search(r"xrl_array->length = xrl_fixed_cache_\d+\.length;", generated_text), name
         if name == "push_capacity":
-            # The dependent bound and live snapshot must keep ordinary updates.
-            assert generated_text.count("static const XrtArrayI64RegionSpec xrl_ap_spec_") == 4
-            assert "xrl_ap_0_ready = true;" in generated_text
+            # The four original loops use the shared fixed route. Keep the
+            # ordinary owner and growth transactions available as a fallback.
+            assert generated_text.count("size_t xrl_room = xrl_array->capacity - ") == 4
+            assert generated_text.count("for (size_t xrl_offset = 0; xrl_offset < xrl_count; ++xrl_offset)") == 4
             assert "xrt_native_array_update_place(" in generated_text
-            assert len(re.findall(r"if \(xrl_ap_\d+_ready\) \{\s+xrt_native_array_push_local_i64\(",
-                                  generated_text)) == 4
+            assert "xrt_native_array_push_local_i64(" in generated_text
         elif name == "array_stationary_edges":
             # A changing bound keeps pointwise updates. Its selected edges can
             # be scalar-only while the later read window keeps real owner moves.
-            assert "xrl_ap_spec_" not in generated_text
+            assert "size_t xrl_room = xrl_array->capacity - " not in generated_text
             bodies = re.findall(r"^static int64_t xrl_f\d+\([^\n]*\) \{\n(.*?)^}",
                                 generated_text, re.MULTILINE | re.DOTALL)
             pointwise, = (body for body in bodies if "xrt_array_i64_update_held(" in body)
@@ -301,12 +301,10 @@ def main() -> None:
                       "panic_fixed_update_first_get"):
             assert_fixed_update_loop(name, generated_text)
         elif "xrt_native_array_push_local_i64(" in generated_text:
-            # Growth in place follows only a capacity window or a failed held
-            # local edit, whose acquisitions were cleared before the call.
+            # A failed held edit clears its acquisition before ordinary growth.
             for match in re.finditer(r"xrt_native_array_push_local_i64\(", generated_text):
                 prefix = generated_text[max(0, match.start() - 600):match.start()]
-                assert (re.search(r"if \(xrl_ap_\d+_ready\) \{\s+$", prefix) or
-                        re.search(r"xrt_array_i64_update_held\([^;]*\{\n(?:.*\n)*?\s+xrl_held\d+ = NULL;", prefix)), name
+                assert re.search(r"xrt_array_i64_update_held\([^;]*\{\n(?:.*\n)*?\s+xrl_held\d+ = NULL;", prefix), name
         if name.startswith("region_") or name.startswith("panic_region_"):
             specs = re.findall(r"static const XrtArrayI64RegionSpec xrl_ar_spec_", generated_text)
             clones = re.findall(r"^xrl_ar_\d+_bb\d+: ;\n(.*?)(?=^xrl_ar_\d+_bb\d+: ;|^}\n)",

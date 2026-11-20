@@ -9,9 +9,6 @@
 static bool c_array_region_present(const LirC *c) {
     return c->array_region && c->array_region->bound_count != 0;
 }
-static bool c_array_push_present(const LirC *c) {
-    return c->array_region && c->array_region->has_push_window;
-}
 static bool c_array_region_usable(const LirC *c, size_t region) {
     const XrLirArrayRegionBinding *row=&c->array_region->bindings->regions[region];
     return row->slot_count && (row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET ||
@@ -21,7 +18,6 @@ static void c_array_regions_destroy(LirC *c) {
     if (!c->array_regions) return;
     for (uint32_t f = 0; f < xr_lir_function_count(c->request->module); ++f) {
         xr_lir_array_region_bindings_destroy(c->array_regions[f].bindings);
-        xr_lir_array_region_bindings_destroy(c->array_regions[f].push_windows);
         xr_compile_resources_free(c->array_regions[f].fixed_edges);
         xr_compile_resources_free(c->array_regions[f].helpers);
         xr_compile_resources_free(c->array_regions[f].scalars);
@@ -32,7 +28,7 @@ static void c_array_regions_admit(LirC *c) {
     bool needed = false;
     for (uint32_t n = 0; n < c->closure_count; ++n) {
         const XrLirValueHomes *homes = c->value_homes[c->closure[n] - 1];
-        needed |= homes && (homes->array_region_count || homes->array_push_window_count || homes->fixed_array_update_count);
+        needed |= homes && (homes->array_region_count || homes->fixed_array_update_count);
     }
     if (!needed || !c_request_poll(c)) return;
     void *memory = NULL;
@@ -46,13 +42,6 @@ static void c_array_regions_admit(LirC *c) {
         LirCArrayRegions *receiver = &c->array_regions[function - 1];
         if (homes->fixed_array_update_count) c_fixed_array_prepare(c, function, receiver);
         if (c->status != XR_LIR_C_OK) return;
-        if (homes->array_push_window_count) {
-            if (!c_value_layout_status(c,xr_lir_array_push_window_bindings_create(homes,c->value_layouts,
-                &receiver->push_windows))) return;
-            for (size_t r = 0; r < receiver->push_windows->region_count; ++r)
-                receiver->has_push_window |= receiver->push_windows->regions[r].slot_count != 0;
-            c->array_local_runtime |= receiver->has_push_window;
-        }
         if (!homes->array_region_count) continue;
         if (!c_value_layout_status(c,xr_lir_array_region_bindings_create(homes,c->value_layouts,&receiver->bindings))) return;
         for (size_t r = 0; r < receiver->bindings->region_count; ++r)
@@ -95,11 +84,6 @@ static void c_array_region_specs(LirC *c) {
         for (size_t r = 0; r < binding->region_count && c_request_poll(c); ++r)
             if (c_array_region_usable(c,r)) c_array_region_spec(c,binding,r,"xrl_ar");
     }
-    if (c_array_push_present(c)) {
-        const XrLirArrayRegionBindings *binding = c->array_region->push_windows;
-        for (size_t r = 0; r < binding->region_count && c_request_poll(c); ++r)
-            if (binding->regions[r].slot_count) c_array_region_spec(c,binding,r,"xrl_ap");
-    }
 }
 static void c_array_region_declarations(LirC *c) {
     if (c_array_region_present(c)) {
@@ -108,67 +92,6 @@ static void c_array_region_declarations(LirC *c) {
             if (c_array_region_usable(c,r))
                 c_format(c,"    XrtArrayI64RegionCache xrl_ar_%zu_cache = {0};\n    unsigned xrl_ar_%zu_phase = 0;\n",r,r);
     }
-    if (c_array_push_present(c)) {
-        const XrLirArrayRegionBindings *binding = c->array_region->push_windows;
-        for (size_t r = 0; r < binding->region_count; ++r)
-            if (binding->regions[r].slot_count) c_format(c,"    bool xrl_ap_%zu_ready = false;\n",r);
-    }
-}
-static void c_array_push_edge_end(LirC *c, size_t edge) {
-    if (!c_array_push_present(c)) return;
-    const XrLirArrayRegionBindings *binding = c->array_region->push_windows;
-    if (edge >= binding->edge_count || !binding->edges[edge].region) return;
-    XrLirArrayRegionEdge role = binding->edges[edge];
-    if (role.kind == XR_LIR_ARRAY_REGION_EDGE_ENTRY || role.kind == XR_LIR_ARRAY_REGION_EDGE_LATCH)
-        c_format(c,"    xrl_ap_%zu_ready = %s;\n",(size_t)role.region-1,
-            role.kind == XR_LIR_ARRAY_REGION_EDGE_LATCH ? "true" : "false");
-}
-static size_t c_array_push_window_at(const LirC *c) {
-    if (!c_array_push_present(c) || c->array_helper_kind) return 0;
-    const XrLirArrayRegionBindings *binding = c->array_region->push_windows;
-    if (c->block >= binding->block_index_count) return 0;
-    size_t window = binding->block_index[c->block].region;
-    if (!window) return 0;
-    const XrLirArrayRegionBinding *row = &binding->regions[window - 1];
-    return row->slot_count && row->region.primary_block == c->block &&
-        row->region.primary_instruction == c->instruction ? window : 0;
-}
-/* Enter only at the original condition, with the real owner in its header
- * home. A successful segment has exactly one observable checkpoint: the
- * next ordinary header, with its scalar induction and Array length updated. */
-static void c_array_push_before_branch(LirC *c) {
-    if (!c_array_push_present(c) || c->array_helper_kind) return;
-    const XrLirArrayRegionBindings *binding = c->array_region->push_windows;
-    if (c->block >= binding->block_index_count || !binding->block_index[c->block].region) return;
-    size_t r = binding->block_index[c->block].region - 1;
-    const XrLirArrayRegionBinding *row = &binding->regions[r];
-    if (!row->slot_count || row->region.header != c->block) return;
-    XrLirArrayPushCapacity p = row->region.push_capacity;
-    c_text(c,"    if (!"); c_value(c,p.condition);
-    c_format(c,") xrl_ap_%zu_ready = false;\n    else if (xrl_ap_%zu_ready && ",r,r);
-    c_value(c,p.iv); c_text(c," >= 0) {\n");
-    c_text(c,"        XrtArrayI64RegionCache xrl_push = {0};\n");
-    c_format(c,"        if (xrt_array_i64_region_try_begin(&(XrtArrayI64RegionContext){xrl_frame, xrl_payload, "
-        "&xrl_frame_locations, &xrl_frame_%" PRIu32 "}, &xrl_ap_spec_%" PRIu32 "_%zu, true, &xrl_push)) {\n",
-        c->function.id,c->function.id,r);
-    c_text(c,"            XrtArrayBacking *xrl_array = (XrtArrayBacking *)xrl_push.owner;\n"
-        "            size_t xrl_space = xrl_array->capacity - xrl_push.length;\n"
-        "            uint64_t xrl_remaining = (uint64_t)(");
-    c_value(c,p.end); c_text(c," - "); c_value(c,p.iv);
-    c_text(c,");\n"
-        "            size_t xrl_count = xrl_remaining < xrl_space ? (size_t)xrl_remaining : xrl_space;\n"
-        "            if (xrl_count) {\n"
-        "                for (size_t xrl_offset = 0; xrl_offset < xrl_count; ++xrl_offset) {\n"
-        "                    int64_t xrl_item = ");
-    c_value(c,p.iv);
-    c_text(c," + (int64_t)xrl_offset;\n"
-        "                    memcpy(xrl_push.elements + (xrl_push.length + xrl_offset) * sizeof(xrl_item),\n"
-        "                        &xrl_item, sizeof(xrl_item));\n"
-        "                }\n"
-        "                xrl_array->length = xrl_push.length + xrl_count;\n"
-        "                ");
-    c_value(c,p.iv); c_text(c," += (int64_t)xrl_count;\n");
-    c_format(c,"                goto bb%" PRIu32 ";\n            }\n        }\n    }\n",row->region.header);
 }
 static void c_array_region_slow(LirC *c) {
     const XrLirArrayRegionOperation *operation = c_array_region_operation(c);

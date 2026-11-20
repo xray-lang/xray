@@ -75,16 +75,18 @@ static void array_readonly_original_source(void) {
     OK(xr_lir_instruction_view(output.module,block,region.primary_instruction-1,&get));
     XrLirArrayIntrinsic shape={0}; OK(xr_lir_array_intrinsic_view(output.module,get.intrinsic,&shape));
     CHECK(get.op==XR_LIR_CALL_INTRINSIC && shape.operation==XR_LIR_ARRAY_OP_GET && get.result && get.operand_count==2);
-    CHECK(xr_lir_ownership_array_push_window_count(plan)==1);
-    XrLirArraySetRegion push={0}; OK(xr_lir_ownership_array_push_window_at(plan,0,&push));
+    XrLirOwnershipFunction owner;
+    OK(xr_lir_ownership_function_at(plan,region.function,&owner));
+    CHECK(owner.fixed_update_count==1);
+    XrLirArraySetRegion push={0}; OK(xr_lir_ownership_fixed_array_update_at(plan,owner.fixed_update_offset,&push));
     CHECK(push.function==region.function && push.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH &&
-        push.push_capacity.kind==XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT && !push.range.kind && !push.owner_home.kind);
+        push.push_counted && push.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT && !push.owner_home.kind);
     function=(XrLirFunction){output.module,push.function};
     OK(xr_lir_block_at(output.module,function,push.primary_block-1,&block));
     XrLirInstructionView append={0}; OK(xr_lir_instruction_view(output.module,block,push.primary_instruction-1,&append));
     OK(xr_lir_array_intrinsic_view(output.module,append.intrinsic,&shape));
     CHECK(append.op==XR_LIR_CALL_INTRINSIC && shape.operation==XR_LIR_ARRAY_OP_PUSH && append.operand_count==2 &&
-        append.operands[1]==push.push_capacity.item);
+        append.operands[1]);
     OK(xr_lir_ownership_array_regions_verify(output.module,plan));
     xr_lir_ownership_plan_destroy(plan); xr_lir_lowered_free(&output);
 }
@@ -107,7 +109,7 @@ static void array_readonly_invariant_bound_source(void) {
     XrLirLowered output=lower_text(text);
     XrLirOwnershipPlan *plan=NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=output.module},&plan,NULL));
-    CHECK(xr_lir_ownership_array_region_count(plan)==1 && xr_lir_ownership_array_push_window_count(plan)==1);
+    CHECK(xr_lir_ownership_array_region_count(plan)==1);
     XrLirArraySetRegion region={0}; OK(xr_lir_ownership_array_region_at(plan,0,&region));
     XrLirFunction function={output.module,region.function}; XrLirFunctionView view={0};
     OK(xr_lir_function_view(output.module,function,&view));
@@ -115,6 +117,11 @@ static void array_readonly_invariant_bound_source(void) {
         region.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
         view.parameter_count==1 && region.range.length==view.parameters[0] && !region.range.length_instruction &&
         region.owner_home.kind==XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW);
+    XrLirOwnershipFunction owner;
+    OK(xr_lir_ownership_function_at(plan,region.function,&owner));
+    CHECK(owner.fixed_update_count==1);
+    XrLirArraySetRegion push={0}; OK(xr_lir_ownership_fixed_array_update_at(plan,owner.fixed_update_offset,&push));
+    CHECK(push.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH && push.push_counted && push.range.length==view.parameters[0]);
     OK(xr_lir_ownership_array_regions_verify(output.module,plan));
     xr_lir_ownership_plan_destroy(plan); xr_lir_lowered_free(&output);
 }
@@ -131,14 +138,25 @@ static void array_push_exit_retained_source(void) {
         "show_window(9223372036854775807, 9223372036854775802)\nshow_snapshot(7)\n";
     XrLirLowered output=lower_text(text); XrLirOwnershipPlan *plan=NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=output.module},&plan,NULL));
-    CHECK(xr_lir_ownership_array_push_window_count(plan)==1);
-    XrLirArraySetRegion window={0}; OK(xr_lir_ownership_array_push_window_at(plan,0,&window));
+    XrLirArraySetRegion window={0};
+    for (uint32_t f=1; f<=xr_lir_function_count(output.module); ++f) {
+        XrLirOwnershipFunction owner;
+        OK(xr_lir_ownership_function_at(plan,f,&owner));
+        for (uint32_t r=0; r<owner.fixed_update_count; ++r) {
+            XrLirArraySetRegion push;
+            OK(xr_lir_ownership_fixed_array_update_at(plan,owner.fixed_update_offset+r,&push));
+            if (push.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_PUSH) continue;
+            CHECK(!window.function);
+            window=push;
+        }
+    }
+    CHECK(window.function);
     XrLirFunction function={output.module,window.function}; XrLirFunctionView view={0};
     OK(xr_lir_function_view(output.module,function,&view));
     CHECK(view.parameter_count==2 && window.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH &&
-        window.push_capacity.kind==XR_LIR_ARRAY_PUSH_CAPACITY_UNIT_CURRENT &&
-        window.push_capacity.end==view.parameters[0] && window.push_capacity.entry_iv==view.parameters[1] &&
-        !window.push_capacity.end_block && !window.push_capacity.end_instruction);
+        window.push_counted && window.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
+        window.range.length==view.parameters[0] && window.range.entry_iv==view.parameters[1] &&
+        !window.range.length_instruction);
     XrLirBlock current={0}; XrLirBlockView body={0}; bool retained=false,displayed=false;
     OK(xr_lir_block_at(output.module,function,window.exit_block-1,&current));
     OK(xr_lir_block_view(output.module,current,&body));

@@ -227,13 +227,7 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         }
         bool local=c_array_local_begin(c,v,shape,workspace);
         if (!local) c_array_held_clear(c);
-        size_t window = local && shape->operation == XR_LIR_ARRAY_OP_PUSH ? c_array_push_window_at(c) : 0;
-        if (window) {
-            c_format(c,"    if (xrl_ap_%zu_ready) {\n    xrt_native_array_push_local_i64(",window-1);
-            c_value(c,v->operands[0]);
-            c_format(c,", %zu, xrl_array_update.item.value.i64, UINT32_C(%" PRIu32 "));\n    } else {\n",
-                workspace->first_owner,source);
-        } else if (local && shape->operation == XR_LIR_ARRAY_OP_PUSH) {
+        if (local && shape->operation == XR_LIR_ARRAY_OP_PUSH) {
             /* A full local backing grows in place when it has one owner; the
              * held acquisitions were cleared above and no raw borrow remains. */
             c_text(c,"    xrt_native_array_push_local_i64("); c_value(c,v->operands[0]);
@@ -251,7 +245,6 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
             c_text(c,", "); c_array_item(c,element,v->operands[v->operand_count-1]);
             c_format(c,"}, UINT32_C(%" PRIu32 "));\n",source);
         }
-        if (window) c_text(c,"    }\n");
         c_array_local_ready(c);
         if (local) c_text(c,"    }\n    }\n");
         return;

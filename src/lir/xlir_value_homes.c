@@ -38,7 +38,6 @@ XR_FUNCDEF void xr_lir_value_homes_destroy(XrLirValueHomes *homes) {
     xr_free((void *)homes->arguments); xr_free((void *)homes->frame.owned_offsets);
     xr_free((void *)homes->bindings); xr_free((void *)homes->workspaces);
     xr_free((void *)homes->array_regions); xr_free((void *)homes->array_region_steps);
-    xr_free((void *)homes->array_push_windows); xr_free((void *)homes->array_push_steps);
     xr_free((void *)homes->fixed_array_updates); xr_free((void *)homes->fixed_array_update_steps);
     xr_free((void *)homes->string_windows);
     xr_free((void *)homes->string_window_slots);
@@ -636,7 +635,6 @@ static bool lir_home_stationary_owners(LirHomeBuilder *builder, const XrLirOwner
     LirHomeChain *chains = xr_calloc(count, sizeof(*chains));
     if (!chains) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot classify owner forwarding chains");
     lir_home_chain_array_regions(chains, builder->homes->array_region_steps, builder->homes->array_region_step_count);
-    lir_home_chain_array_regions(chains, builder->homes->array_push_steps, builder->homes->array_push_step_count);
     if (!lir_home_chain_origins(c, plan, function, chains)) { xr_free(chains); return false; }
     for (uint32_t v = 1; v <= f->value_count; ++v) {
         const XrLirValueData *value = &f->values[v - 1];
@@ -1056,24 +1054,21 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
 }
 /* Opaque Plan and this same-process receiver share the exact final module.
  * Copy the producer tables once; independent current-body proof is explicit. */
-static bool lir_home_array_regions(LirHomeBuilder *b, const XrLirOwnershipPlan *plan, bool push) {
+static bool lir_home_array_regions(LirHomeBuilder *b, const XrLirOwnershipPlan *plan) {
     XrLirOwnershipFunction function;
     if (xr_lir_ownership_function_at(plan, b->compiler.function.id, &function) != XR_LIR_OK)
         return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Array region function is unavailable");
-    uint32_t count=push ? function.push_window_count : function.region_count;
-    uint32_t offset=push ? function.push_window_offset : function.region_offset;
-    uint32_t *received=push ? &b->homes->array_push_window_count : &b->homes->array_region_count;
-    uint32_t *received_steps=push ? &b->homes->array_push_step_count : &b->homes->array_region_step_count;
+    uint32_t count = function.region_count, offset = function.region_offset;
+    uint32_t *received_steps = &b->homes->array_region_step_count;
     if (!count) return true;
     size_t capacity = 0, step_capacity = 0;
     XrLirArraySetRegion *regions = NULL; XrLirArraySetRegionStep *steps = NULL;
     if (!lir_home_grow(&b->compiler, (void **)&regions, &capacity, count, sizeof(*regions))) return false;
-    if (push) b->homes->array_push_windows=regions; else b->homes->array_regions=regions;
+    b->homes->array_regions = regions;
     for (uint32_t n = 0; n < count; ++n) {
         XrLirArraySetRegion region;
         if (offset > UINT32_MAX - n ||
-            (push ? xr_lir_ownership_array_push_window_at(plan,offset+n,&region) :
-                xr_lir_ownership_array_region_at(plan,offset+n,&region)) != XR_LIR_OK ||
+            xr_lir_ownership_array_region_at(plan,offset+n,&region) != XR_LIR_OK ||
             region.function != b->compiler.function.id || !region.header || region.header > b->compiler.view.block_count ||
             !region.entry_value || !region.canonical_value || !region.exit_value ||
             region.entry_value > b->homes->value_count || region.canonical_value > b->homes->value_count ||
@@ -1082,19 +1077,19 @@ static bool lir_home_array_regions(LirHomeBuilder *b, const XrLirOwnershipPlan *
         uint32_t first = *received_steps;
         bool grown = lir_home_grow(&b->compiler, (void **)&steps, &step_capacity,
             (size_t)first + region.step_count, sizeof(*steps));
-        if (push) b->homes->array_push_steps=steps; else b->homes->array_region_steps=steps;
+        b->homes->array_region_steps = steps;
         if (!grown) return false;
         for (uint32_t s = 0; s < region.step_count; ++s) {
             XrLirArraySetRegionStep step;
             if (region.first_step > UINT32_MAX - s ||
-                (push ? xr_lir_ownership_array_push_step_at(plan,region.first_step+s,&step) :
-                    xr_lir_ownership_array_region_step_at(plan,region.first_step+s,&step)) != XR_LIR_OK ||
+                xr_lir_ownership_array_region_step_at(plan,region.first_step+s,&step) != XR_LIR_OK ||
                 !step.source || step.source > b->homes->value_count || !step.target || step.target > b->homes->value_count)
                 return lir_home_fail(&b->compiler, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Array region step lost its receiving representation");
             steps[first + s] = step;
         }
         region.first_step = first; regions[n] = region;
-        ++*received; *received_steps += region.step_count;
+        ++b->homes->array_region_count;
+        *received_steps += region.step_count;
     }
     return true;
 }
@@ -1160,8 +1155,7 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHome
     b.homes->view_result_parameter = UINT32_MAX;
     b.homes->source_function = request->function.id;
     b.homes->value_count = b.compiler.view.value_count;
-    bool success = lir_home_array_regions(&b, request->ownership,false) &&
-        lir_home_array_regions(&b, request->ownership,true) && lir_home_function(&b, request->ownership);
+    bool success = lir_home_array_regions(&b, request->ownership) && lir_home_function(&b, request->ownership);
     xr_free(b.stationary_cells);
     b.stationary_cells = NULL;
     b.homes->frame.slot_count = b.owners.count; b.homes->frame.owned_offsets = b.owners.data;

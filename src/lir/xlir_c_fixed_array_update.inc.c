@@ -216,11 +216,22 @@ static void c_fixed_array_push_clone(LirC *c, uint32_t label, const XrLirArraySe
         "        uint64_t xrl_remaining = (uint64_t)(", label, label);
     c_fixed_array_limit(c, region, label);
     c_format(c, ") - (uint64_t)v%" PRIu32 ";\n"
-        "        int64_t xrl_stop = v%" PRIu32 " + "
-        "(int64_t)(xrl_remaining < xrl_room ? xrl_remaining : xrl_room);\n"
-        "        for (; v%" PRIu32 " < xrl_stop; ++v%" PRIu32 ") {\n", iv, iv, iv, iv);
-    c_fixed_array_iteration(c, label, region, steps);
-    c_format(c, "        }\n        xrl_array->length = xrl_fixed_cache_%" PRIu32 ".length;\n    }\n"
+        "        size_t xrl_count = xrl_remaining < xrl_room ? (size_t)xrl_remaining : xrl_room;\n", iv);
+    if (region->push_counted) {
+        c_format(c, "        for (size_t xrl_offset = 0; xrl_offset < xrl_count; ++xrl_offset) {\n"
+            "            int64_t xrl_item = v%" PRIu32 " + (int64_t)xrl_offset;\n"
+            "            XRT_ARRAY_I64_REGION_COPY(xrl_fixed_cache_%" PRIu32 ".elements + "
+            "(xrl_fixed_cache_%" PRIu32 ".length + xrl_offset) * sizeof(xrl_item), &xrl_item);\n"
+            "        }\n"
+            "        v%" PRIu32 " += (int64_t)xrl_count;\n"
+            "        xrl_fixed_cache_%" PRIu32 ".length += xrl_count;\n", iv, label, label, iv, label);
+    } else {
+        c_format(c, "        int64_t xrl_stop = v%" PRIu32 " + (int64_t)xrl_count;\n"
+            "        for (; v%" PRIu32 " < xrl_stop; ++v%" PRIu32 ") {\n", iv, iv, iv);
+        c_fixed_array_iteration(c, label, region, steps);
+        c_text(c, "        }\n");
+    }
+    c_format(c, "        xrl_array->length = xrl_fixed_cache_%" PRIu32 ".length;\n    }\n"
         "    xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
         "    goto bb%" PRIu32 ";\n", label, label, region->header);
 }

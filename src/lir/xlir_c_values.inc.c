@@ -263,7 +263,7 @@ static void c_values_declarations(LirC *c) {
     c_text(c, "    XrtManagedRoot *xrl_root = NULL;\n    XrtManagedFrame *xrl_frame = NULL;\n    void *xrl_payload = NULL;\n");
     if (c->homes->array_call_move_count)
         c_text(c,"    bool xrl_array_argument_staged = false;\n    (void)xrl_array_argument_staged;\n");
-    if (c->header_edges || c->binding_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c) ||
+    if (c->header_edges || c->binding_forwarding || c->array_local || c_array_region_present(c) ||
         (c->array_region && c->array_region->fixed_edges))
         c_text(c, "    XrtManagedFrameLocations xrl_frame_locations = {0};\n");
     if (c->binding_forwarding) c_text(c, "    bool xrl_binding_forwarded = false;\n    (void)xrl_binding_forwarded;\n");
@@ -288,7 +288,7 @@ static void c_values_ensure(LirC *c, uint32_t source) {
     c_text(c, "    if (!xrl_frame) {\n");
     c_format(c, "        xrl_root = xrt_native_managed_root(UINT32_C(%" PRIu32 "));\n", source);
     bool locations = c->header_edges || c->binding_forwarding || c->array_local || c_array_region_present(c) ||
-        c_array_push_present(c) || (c->array_region && c->array_region->fixed_edges);
+        (c->array_region && c->array_region->fixed_edges);
     if (locations)
         c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_locations(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame_locations);\n", c->function.id);
     else c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_payload(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame, &xrl_payload);\n", c->function.id);
@@ -492,7 +492,6 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected,
             }
     }
     c_array_region_edge_end(c,region_edge);
-    c_array_push_edge_end(c,region_edge);
     if (fixed_entry) c_fixed_array_guard(c, fixed_entry, edge->target, false);
     c_format(c, "    goto bb%" PRIu32 ";\n    }\n", edge->target);
     return true;

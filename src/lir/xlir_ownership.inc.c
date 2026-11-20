@@ -20,7 +20,6 @@ struct XrLirOwnershipPlan {
     XrLirOwnershipTypeFact *types;
     uint32_t type_count;
     LirArrayRegionTables array_regions;
-    LirArrayRegionTables array_push_windows;
     LirArrayRegionTables fixed_array_updates;
     LirArrayRegionVector array_calls;
 };
@@ -500,7 +499,6 @@ XR_FUNC void xr_lir_ownership_plan_destroy(XrLirOwnershipPlan *plan) {
     if (!plan) return;
     xr_free(plan->facts);
     lir_array_regions_free(&plan->array_regions);
-    lir_array_regions_free(&plan->array_push_windows);
     lir_array_regions_free(&plan->fixed_array_updates);
     xr_free(plan->array_calls.data);
     xr_free(plan->types);

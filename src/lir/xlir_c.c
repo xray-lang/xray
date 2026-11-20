@@ -54,14 +54,12 @@ typedef struct LirCFixedArrayEdge {
 } LirCFixedArrayEdge;
 typedef struct LirCArrayRegions {
     XrLirArrayRegionBindings *bindings;
-    XrLirArrayRegionBindings *push_windows;
     LirCFixedArrayEdge *fixed_edges;
     size_t bound_count;
     LirCArrayRegionHelper *helpers;
     LirCArrayRegionScalar *scalars;
     size_t scalar_count, scalar_capacity;
     bool has_set_helper;
-    bool has_push_window;
 } LirCArrayRegions;
 
 typedef struct LirC {
@@ -156,10 +154,6 @@ static void c_array_region_edge_begin(LirC *, size_t, const XrLirEdgeView *);
 static void c_array_region_edge_end(LirC *, size_t);
 static void c_array_region_clones(LirC *);
 static bool c_array_region_present(const LirC *);
-static bool c_array_push_present(const LirC *);
-static size_t c_array_push_window_at(const LirC *);
-static void c_array_push_edge_end(LirC *, size_t);
-static void c_array_push_before_branch(LirC *);
 static void c_array_helpers_prepare(LirC *, uint32_t, LirCArrayRegions *);
 static bool c_array_helper_enabled(const LirC *, size_t);
 static void c_array_helpers(LirC *);
@@ -1184,7 +1178,6 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_edge(c, &v->edges[0], 1);
             break;
         case XR_LIR_CONDBR:
-            c_array_push_before_branch(c);
             c_text(c, "    if (");
             c_value(c, v->operands[0]);
             c_text(c, ") {\n");

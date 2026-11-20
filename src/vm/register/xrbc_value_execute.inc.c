@@ -75,7 +75,6 @@ struct RbcValueActivation {
     RbcArrayRegionState *array_regions;
     uint32_t active_array_region;
     uint32_t pending_array_read_fold; /* Reset by the exact entry edge and consumed at its first latch. */
-    uint32_t blocked_array_push; /* A declined capacity window stays ordinary until its next entry. */
 };
 struct XrRbcValueRuntime {
     XrtBillingOwner *billing;
@@ -1259,7 +1258,6 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
 #include "xrbc_value_inline_execute.inc.c"
 #include "xrbc_value_array_execute.inc.c"
 #include "xrbc_value_array_region.inc.c"
-#include "xrbc_value_array_push.inc.c"
 #include "xrbc_value_cell_execute.inc.c"
 #include "xrbc_value_slice_execute.inc.c"
 
@@ -1357,8 +1355,6 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     XrtManagedStatus region_status=XRT_MANAGED_OK;
     if (rbc_value_array_region_before(module,stack,activation,index,&region_status)) {
         if (region_status!=XRT_MANAGED_OK) xrt_native_managed_failure(region_status,source);
-        if (access.operation==XR_RBC_VALUE_EDGE && access.window)
-            rbc_value_array_push_after_edge(stack,activation,access);
         stack->frames[stack->depth-1].pc=pc;
         return XR_RBC_OK;
     }
@@ -1443,10 +1439,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         }
     } else if (access.operation>=XR_RBC_VALUE_STATE_READ && access.operation<=XR_RBC_VALUE_STATE_GROUP_INITIALIZE)
         status=rbc_value_state(module,stack,activation,access);
-    else if (access.operation==XR_RBC_VALUE_EDGE) {
-        status=rbc_value_edge(module,stack,activation,access);
-        if (status==XRT_MANAGED_OK && access.window) rbc_value_array_push_after_edge(stack,activation,access);
-    }
+    else if (access.operation==XR_RBC_VALUE_EDGE) status=rbc_value_edge(module,stack,activation,access);
     else if (access.operation>=XR_RBC_VALUE_ARRAY && access.operation<=XR_RBC_VALUE_BINDING_DROP)
         status=rbc_value_array_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_MAP) status=rbc_value_map_step(module,stack,activation,access,source);

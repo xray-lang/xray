@@ -21,14 +21,6 @@ enum ArrayPushWindowMode {
     PUSH_WINDOW_EXIT_BRIDGE, PUSH_WINDOW_EXIT_BRIDGE_OBSERVER, PUSH_WINDOW_EXIT_BRIDGE_BYPASS,
     PUSH_WINDOW_EXIT_BRIDGE_BRANCH
 };
-#define ARS_PUSH_FIELDS(p) (p).kind,(p).iv,(p).iv_argument,(p).entry_iv,(p).end,(p).end_block,(p).end_instruction, \
-    (p).condition,(p).condition_instruction,(p).increment,(p).increment_block,(p).increment_instruction, \
-    (p).one,(p).latch_iv,(p).item,(p).first_active_step,(p).checkpoint_step
-static inline bool ars_push_same(XrLirArrayPushCapacity a,XrLirArrayPushCapacity b) {
-    const uint32_t x[]={ARS_PUSH_FIELDS(a)},y[]={ARS_PUSH_FIELDS(b)};
-    for (size_t n=0;n<sizeof(x)/sizeof(*x);++n) if (x[n]!=y[n]) return false;
-    return true;
-}
 static inline bool ars_push_expected(enum ArrayPushWindowMode mode) {
     return mode<=PUSH_WINDOW_MIRRORED_END || (mode>=PUSH_WINDOW_EXIT_RETAIN_SOURCE && mode<=PUSH_WINDOW_ENTRY_EXIT_RETAINS) ||
         mode==PUSH_WINDOW_EXIT_BRIDGE;
