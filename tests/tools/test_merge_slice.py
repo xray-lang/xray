@@ -13,13 +13,14 @@ import time
 import unittest
 from unittest import mock
 import xml.etree.ElementTree as ET
+from zipfile import ZipFile
 
 QUEUE = Path(__file__).resolve().parents[2] / "scripts/merge_slice.py"
 sys.path.insert(0, str(QUEUE.parent))
 import merge_slice
 import xray_l1
 from xray_process import RecoveryRequired
-FIXTURE_TESTS = {"actual", "smoke"}
+FIXTURE_TESTS = {"actual"} | merge_slice.CURRENT_CORE
 FULL_TESTS = FIXTURE_TESTS | {"meta_ownership_inventory", "historical_failure"}
 COMPARISON_HOSTS = ("windows-2022", "macos-latest")
 TASK_FILE = "tasks/339-direct-cutover-to-target-architecture-cn.md"
@@ -131,70 +132,164 @@ class QueueTests(unittest.TestCase):
     def write_review(self, path, sha):
         evidence = self.root / (path.stem + "-evidence")
         evidence.mkdir(exist_ok=True)
-        gates = {}
-        release = {}
-        run = {"id": 100, "head_sha": sha, "status": "completed", "conclusion": "success",
+        api = {}
+        run = {"id": 100, "run_attempt": 1, "head_sha": sha, "status": "completed", "conclusion": "success",
+               "repository": {"id": 20, "full_name": merge_slice.CI_REPO},
+               "head_repository": {"full_name": merge_slice.CI_REPO},
                "path": ".github/workflows/native-host-portability.yml"}
-        jobs = [{"name": name, "run_id": run["id"], "head_sha": sha, "status": "completed", "conclusion": "success"}
-                for name in [*merge_slice.HOST_JOBS.values(), merge_slice.SAN_JOB]]
-        for host in merge_slice.HOST_JOBS:
-            host_dir = evidence / host
-            host_dir.mkdir(exist_ok=True)
-            gates[host] = self.current_gate(host_dir, host, sha)
-            if host not in COMPARISON_HOSTS:
-                continue
-            release[host] = {"hostIdentity": host + " fixture"}
-            for side, commit in (("base", self.base), ("candidate", sha)):
-                directory = host_dir / side
-                directory.mkdir(exist_ok=True)
-                log = directory / "ctest.stdout"
-                log.write_text("fixture terminal CTest output", encoding="utf-8")
-                report = directory / "full.xml"
-                results = dict.fromkeys(FULL_TESTS, "run")
-                results["historical_failure"] = "fail"
-                report.write_bytes(junit(results))
-                cache = directory / "CMakeCache.txt"
-                cache.write_text("CMAKE_GENERATOR:INTERNAL=Ninja\nCMAKE_BUILD_TYPE:STRING=Release\n"
-                                 "CMAKE_C_COMPILER:FILEPATH=/fixture/cc\n", encoding="utf-8")
-                release[host][side] = {
-                    "identity": json_file(directory / "identity.json", self.identity(host, commit)),
-                    "registry": json_file(directory / "registry.json", registry(FULL_TESTS)),
-                    "junit": str(report), "cache": str(cache), "log": str(log), "exit": 8,
-                }
-        review = {
+        endpoint = "/runs/100/attempts/1"
+        api[endpoint] = run
+        jobs, gates, release = [], {}, {}
+        hosts = [*merge_slice.HOST_JOBS.items(), ("san", merge_slice.SAN_JOB)]
+        for artifact_id, (host, name) in enumerate(hosts, 50):
+            profile = "Debug" if host == "san" else "Release"
+            directory = evidence / host
+            directory.mkdir(exist_ok=True)
+            artifact_name = "current-sanitizers" if host == "san" else "current-" + host
+            package = directory / "current.zip"
+            base_host = "ubuntu-24.04" if host == "san" else host
+            self.current_gate(package, base_host, sha, profile)
+            api[f"/artifacts/{artifact_id}"] = {
+                "id": artifact_id, "name": artifact_name + "-" + sha, "expired": False,
+                "created_at": "2026-11-20T01:00:01Z", "size_in_bytes": package.stat().st_size,
+                "digest": "sha256:" + self.digest(package.read_bytes()),
+                "workflow_run": {"id": 100, "head_sha": sha, "repository_id": 20, "head_repository_id": 20},
+            }
+            kind = "Windows" if host == "windows-2022" else "Unix"
+            steps = ([f"Configure {kind} Ninja Release", f"Build {kind} all without exclusions",
+                      f"Independently rebuild {kind} CLI", f"Verify {kind} current gates"] if host != "san" else
+                     ["Configure combined sanitizers", "Build current products and kernels", "Verify exact CLI and current gates"])
+            jobs.append({"name": name, "run_id": 100, "run_attempt": 1, "head_sha": sha,
+                         "run_url": merge_slice.CI_API + "/runs/100", "status": "completed", "conclusion": "success",
+                         "steps": [{"name": step, "status": "completed", "conclusion": "success",
+                                    "started_at": "2026-11-20T01:00:00Z", "completed_at": "2026-11-20T01:00:02Z"}
+                                   for step in ["Run actions/checkout@v4", *steps, merge_slice.UPLOAD_STEP]]})
+            gates[host] = {"id": artifact_id, "zip": str(package)}
+            if host in COMPARISON_HOSTS:
+                host_identity = host + " fixture"
+                release[host] = {"hostIdentity": host_identity}
+                for side, commit in (("base", self.base), ("candidate", sha)):
+                    side_dir = directory / side
+                    side_dir.mkdir(exist_ok=True)
+                    release[host][side] = self.release_evidence(side_dir, side, host, host_identity, commit)
+        api[endpoint + "/jobs?per_page=100"] = {"jobs": jobs}
+        json_file(path.with_suffix(".api"), api)
+        json_file(path, {
             "approved": True, "sourceSHA": sha, "reviewedBase": self.base, "comparisonBase": self.base,
             "author": "Core Fixture", "reviewer": "Separate Reviewer",
             "reviewEvidence": str(self.evidence), "l0Log": str(self.l0),
-            "ciRun": json_file(evidence / "run.json", run), "ciJobs": json_file(evidence / "jobs.json", {"jobs": jobs}),
-            "current": gates, "release": release,
-        }
-        json_file(path, review)
+            "ci": {"runId": 100, "runAttempt": 1, "artifacts": gates}, "release": release,
+        })
+
+    @staticmethod
+    def digest(content):
+        return hashlib.sha256(content).hexdigest()
 
     @staticmethod
     def identity(host, sha, profile="Release"):
         return {"commit": sha, "dirty": False, "target": merge_slice.HOST_TARGETS[host][0], "buildProfile": profile}
 
-    def current_gate(self, directory, host, sha, profile="Release"):
+    @staticmethod
+    def source_path(host, side):
+        return "D:/fixture/" + side if host == "windows-2022" else "/fixture/" + side
+
+    @staticmethod
+    def cache(source, profile):
+        common = (f"CMAKE_HOME_DIRECTORY:INTERNAL={source}\nCMAKE_CACHEFILE_DIR:INTERNAL={source}/build\n"
+                  f"CMAKE_GENERATOR:INTERNAL=Ninja\nCMAKE_BUILD_TYPE:STRING={profile}\n"
+                  "CMAKE_C_COMPILER:FILEPATH=/fixture/cc\n")
+        return common + "".join(f"{name}:BOOL=ON\n" for name in ("ENABLE_ASAN", "ENABLE_UBSAN", "XR_XIR_PARANOID")
+                                if profile == "Debug")
+
+    def current_gate(self, path, host, sha, profile):
+        source = self.source_path(host, "hosted")
+        build = source + "/build"
+        exe = "xray.exe" if host == "windows-2022" else "xray"
+        folder = "sanitizer-evidence" if profile == "Debug" else "current-evidence"
         commands = []
-        for name, payload in (
-            ("identity", json.dumps(self.identity(host, sha, profile))),
-            ("ctest-list", json.dumps(registry(FULL_TESTS))),
-            ("current-tests", "fixture terminal CTest output"),
+        with ZipFile(path, "w") as zipfile:
+            zipfile.writestr("build/CMakeCache.txt", self.cache(source, profile))
+            for name, argv, payload in (
+                ("identity", [build + "/" + exe, "--version", "--json"], json.dumps(self.identity(host, sha, profile))),
+                ("ctest-list", ["ctest", "--test-dir", build, "--show-only=json-v1"], json.dumps(registry(FULL_TESTS))),
+                ("current-tests", ["ctest", "--test-dir", build, "--output-on-failure", "--no-tests=error",
+                                   "-j", "2", "-R", "^(" + "|".join(sorted(FIXTURE_TESTS)) + ")$",
+                                   "--output-junit", f"{source}/{folder}/current.xml"], "fixture terminal CTest output"),
+            ):
+                zipfile.writestr(f"{folder}/{name}.stdout", payload)
+                zipfile.writestr(f"{folder}/{name}.stderr", "")
+                commands.append({"name": name, "command": argv, "exit": 0, "seconds": 0.1,
+                                 "stdoutSha256": self.digest(payload.encode()), "stderrSha256": self.digest(b"")})
+            zipfile.writestr(f"{folder}/commands.json", json.dumps(commands))
+            zipfile.writestr(f"{folder}/current.xml", junit(dict.fromkeys(FIXTURE_TESTS, "run")))
+
+    def release_evidence(self, directory, side, host, host_identity, sha):
+        source = self.source_path(host, side)
+        build = source + "/build"
+        exe = "xray.exe" if host == "windows-2022" else "xray"
+        report = source + "/evidence/full.xml"
+        results = dict.fromkeys(FULL_TESTS, "run")
+        results["historical_failure"] = "fail"
+        payloads = {"identity": json.dumps(self.identity(host, sha)).encode(),
+                    "registry": json.dumps(registry(FULL_TESTS)).encode(), "junit": junit(results),
+                    "cache": self.cache(source, "Release").encode(), "log": b"fixture CTest output", "stderr": b""}
+        paths = {}
+        for name, payload in payloads.items():
+            file = directory / name
+            file.write_bytes(payload)
+            paths[name] = str(file)
+        commands = []
+        for name, argv, exit_code, stdout in (
+            ("configure", ["cmake", "--preset", "default", "-B", build], 0, b""),
+            ("all", ["cmake", "--build", build, "--parallel", "4", "--", "-k0"], 0, b""),
+            ("cli-post-all", ["cmake", "--build", build, "--parallel", "4", "--target", "xray"], 0, b""),
+            ("identity", [build + "/" + exe, "--version", "--json"], 0, payloads["identity"]),
+            ("registry", ["ctest", "--test-dir", build, "--show-only=json-v1"], 0, payloads["registry"]),
+            ("ctest", ["ctest", "--test-dir", build, "--output-on-failure", "--no-tests=error",
+                       "-j2", "--output-junit", report], 8, payloads["log"]),
         ):
-            (directory / f"{name}.stdout").write_text(payload, encoding="utf-8")
-            (directory / f"{name}.stderr").write_bytes(b"")
-            commands.append({"name": name, "command": [name], "exit": 0, "seconds": 0.1,
-                             "stdoutSha256": hashlib.sha256(payload.encode()).hexdigest(),
-                             "stderrSha256": hashlib.sha256(b"").hexdigest()})
-        json_file(directory / "commands.json", commands)
-        (directory / "current.xml").write_bytes(junit(dict.fromkeys(FIXTURE_TESTS, "run")))
-        return str(directory)
+            commands.append({"name": "candidate-" + name, "argv": argv, "exit": exit_code, "childrenDrained": True,
+                             "stdoutSHA256": self.digest(stdout), "stderrSHA256": self.digest(b"")})
+        receipt = {
+            "head": sha, "source": source, "build": build, "state": "NEEDS_REVIEW",
+            "hostIdentity": host_identity, "resourcesReleased": True, "commands": commands,
+            "identity": {"head": sha, "status": "", "diffSha256": self.digest(b"")},
+            "finalIdentity": {"head": sha, "status": "", "diffSha256": self.digest(b"")},
+            "trees": {"release": {"build": build, "cache": build + "/CMakeCache.txt", "cli": build + "/" + exe,
+                                  "toolchainIdentity": "fixed fixture compiler and SDK",
+                                  "cacheSHA256": self.digest(payloads["cache"]), "cliSHA256": "f" * 64}},
+            "release": {"output": report, "outputSHA256": self.digest(payloads["junit"]),
+                        "registrySHA256": self.digest(payloads["registry"]), "rawExit": 8},
+        }
+        paths["receipt"] = json_file(directory / "receipt.json", receipt)
+        return paths
+
+    def rewrite_outcomes(self, paths, outcomes, change_inventory=False):
+        receipt_path = Path(paths["receipt"])
+        receipt = json.loads(receipt_path.read_text())
+        payload = junit(outcomes)
+        Path(paths["junit"]).write_bytes(payload)
+        receipt["release"]["outputSHA256"] = self.digest(payload)
+        if change_inventory:
+            payload = json.dumps(registry(outcomes)).encode()
+            Path(paths["registry"]).write_bytes(payload)
+            receipt["commands"][4]["stdoutSHA256"] = receipt["release"]["registrySHA256"] = self.digest(payload)
+        json_file(receipt_path, receipt)
 
     def start(self, branch):
         name, review, _ = branch
-        args = [sys.executable, "-B", str(QUEUE), "--branch", name, "--review", str(review),
-                "--repo", str(self.repo), "--integration", str(self.integration),
-                "--docs", str(self.docs), "--queue", str(self.root / "queue")]
+        # A separate Python process uses the real queue; only public CI access
+        # is injected from recorded-shaped fixtures, never from production flags.
+        program = (
+            "import json,sys; from pathlib import Path; "
+            "sys.path.insert(0, str(Path(sys.argv.pop(1)).parent)); import merge_slice; "
+            "api = json.loads(Path(sys.argv.pop(1)).read_text()); "
+            "merge_slice.official_json = lambda endpoint, *_: api[endpoint]; "
+            "raise SystemExit(merge_slice.main())"
+        )
+        args = [sys.executable, "-B", "-c", program, str(QUEUE), str(review.with_suffix(".api")),
+                "--branch", name, "--review", str(review), "--repo", str(self.repo),
+                "--integration", str(self.integration), "--docs", str(self.docs), "--queue", str(self.root / "queue")]
         child = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.children.append(child)
         return child
@@ -229,11 +324,10 @@ class QueueTests(unittest.TestCase):
 
     def test_failure_keeps_main_and_allows_next_request(self):
         bad = self.branch("a/fail", {"fail": "yes"})
-        evidence = json.loads(bad[1].read_text())
-        jobs = Path(evidence["ciJobs"])
-        rows = json.loads(jobs.read_text())
-        rows["jobs"][0]["conclusion"] = "failure"
-        json_file(jobs, rows)
+        metadata = bad[1].with_suffix(".api")
+        rows = json.loads(metadata.read_text())
+        rows["/runs/100/attempts/1/jobs?per_page=100"]["jobs"][0]["conclusion"] = "failure"
+        json_file(metadata, rows)
         log = self.finish(self.start(bad), 1)
         self.assertIn("Missing or failed CI job", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
@@ -318,10 +412,10 @@ class QueueTests(unittest.TestCase):
     def test_new_full_ctest_failure_never_advances_main(self):
         branch = self.branch("front/compare", {"example": "yes"})
         review = json.loads(branch[1].read_text())
-        report = Path(review["release"]["windows-2022"]["candidate"]["junit"])
+        paths = review["release"]["windows-2022"]["candidate"]
         outcomes = dict.fromkeys(FULL_TESTS, "run")
         outcomes.update(actual="fail", historical_failure="fail")
-        report.write_bytes(junit(outcomes))
+        self.rewrite_outcomes(paths, outcomes)
         log = self.finish(self.start(branch), 1)
         self.assertIn("new failing or unexecuted tests: actual", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
@@ -332,10 +426,9 @@ class QueueTests(unittest.TestCase):
         for side in ("base", "candidate"):
             evidence = review["release"]["windows-2022"][side]
             tests = FULL_TESTS - {"meta_ownership_inventory"}
-            json_file(Path(evidence["registry"]), registry(tests))
             outcomes = dict.fromkeys(tests, "run")
             outcomes["historical_failure"] = "fail"
-            Path(evidence["junit"]).write_bytes(junit(outcomes))
+            self.rewrite_outcomes(evidence, outcomes, change_inventory=True)
         log = self.finish(self.start(branch), 1)
         self.assertIn("misses an applicable safety or smoke test", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
@@ -346,27 +439,85 @@ class QueueTests(unittest.TestCase):
         self.assertIn("Placeholder", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
 
-    def test_changed_current_receipt_is_rejected(self):
+    def test_changed_ci_archive_is_rejected(self):
         branch = self.branch("core/receipt", {"example": "yes"})
         review = json.loads(branch[1].read_text())
-        receipt = Path(review["current"]["ubuntu-24.04"]) / "current-tests.stdout"
-        receipt.write_text("replacement", encoding="utf-8")
+        artifact = Path(review["ci"]["artifacts"]["ubuntu-24.04"]["zip"])
+        with artifact.open("ab") as output:
+            output.write(b"replacement bytes")
         log = self.finish(self.start(branch), 1)
-        self.assertIn("changed current-tests stdout", log["error"])
+        self.assertIn("official artifact digest", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
 
-    def test_affected_fail_closed_without_san_and_accepts_current_coverage(self):
-        branch = self.branch("core/asan", {"src/runtime/native/source.c": "/* fixture */"})
+    def test_artifact_from_another_attempt_is_rejected(self):
+        branch = self.branch("core/other-attempt", {"example": "yes"})
+        metadata = branch[1].with_suffix(".api")
+        api = json.loads(metadata.read_text())
+        api["/artifacts/50"]["created_at"] = "2026-11-20T00:59:59Z"
+        json_file(metadata, api)
+        log = self.finish(self.start(branch), 1)
+        self.assertIn("this run and upload step", log["error"])
+
+    def test_fabricated_current_argv_is_rejected(self):
+        branch = self.branch("core/argv", {"example": "yes"})
+        review = json.loads(branch[1].read_text())
+        artifact = review["ci"]["artifacts"]["ubuntu-24.04"]
+        path = Path(artifact["zip"])
+        with ZipFile(path) as package:
+            files = {name: package.read(name) for name in package.namelist()}
+        cmd = "current-evidence/commands.json"
+        commands = json.loads(files[cmd])
+        commands[-1]["command"] = ["current-tests"]
+        files[cmd] = json.dumps(commands).encode()
+        with ZipFile(path, "w") as package:
+            for name, value in files.items():
+                package.writestr(name, value)
+        metadata = branch[1].with_suffix(".api")
+        api = json.loads(metadata.read_text())
+        api[f"/artifacts/{artifact['id']}"].update(size_in_bytes=path.stat().st_size,
+                                                   digest="sha256:" + self.digest(path.read_bytes()))
+        json_file(metadata, api)
+        log = self.finish(self.start(branch), 1)
+        self.assertIn("unexpected command or build", log["error"])
+
+    def test_full_receipt_rejects_spliced_commands_and_unrelated_junit(self):
+        branch = self.branch("core/full-receipt", {"example": "yes"})
+        review = json.loads(branch[1].read_text())
+        host = "windows-2022"
+        pair = review["release"][host]
+        paths = pair["candidate"]
+        receipt_path = Path(paths["receipt"])
+        raw = receipt_path.read_bytes()
+        receipt = json.loads(raw)
+        receipt["commands"][-1]["argv"][-1] = "D:/different/full.xml"
+        json_file(receipt_path, receipt)
+        with self.assertRaisesRegex(ValueError, "different JUnit"):
+            merge_slice.release_receipt(paths, host, branch[2], pair["hostIdentity"], self.root, {}, "candidate")
+        receipt = json.loads(raw)
+        receipt["finalIdentity"]["status"] = " M unrelated"
+        json_file(receipt_path, receipt)
+        with self.assertRaisesRegex(ValueError, "changed clean source identity"):
+            merge_slice.release_receipt(paths, host, branch[2], pair["hostIdentity"], self.root, {}, "candidate")
+        receipt_path.write_bytes(raw)
+        Path(paths["junit"]).write_bytes(junit(dict.fromkeys(FULL_TESTS, "run")))
+        with self.assertRaisesRegex(ValueError, "unrelated junit bytes"):
+            merge_slice.release_receipt(paths, host, branch[2], pair["hostIdentity"], self.root, {}, "candidate")
+
+    def test_affected_fail_closed_without_exact_san_coverage(self):
+        path = "src/base/xsigned_rc.h"
+        branch = self.branch("core/asan", {path: "/* fixture */"})
         review = json.loads(branch[1].read_text())
         log = self.finish(self.start(branch), 1)
         self.assertIn("affected sanitizer evidence", log["error"])
-        san = branch[1].with_suffix(".san")
-        san.mkdir()
-        cache = san / "CMakeCache.txt"
-        cache.write_text("ENABLE_ASAN:BOOL=ON\nENABLE_UBSAN:BOOL=ON\nXR_XIR_PARANOID:BOOL=ON\n", encoding="utf-8")
-        review["san"] = {"cache": str(cache), "current": self.current_gate(san, "ubuntu-24.04", branch[2], "Debug"),
-                         "tests": sorted(FIXTURE_TESTS)}
+        scope = branch[1].with_suffix(".san")
+        proof = {"approved": True, "reviewer": review["reviewer"], "candidate": branch[2], "base": self.base,
+                 "paths": [path], "tests": ["smoke"], "coverage": "Fixture declares affected coverage"}
+        review["san"] = json_file(scope, proof)
         json_file(branch[1], review)
+        log = self.finish(self.start(branch), 1)
+        self.assertIn("exact scope and combined suite", log["error"])
+        proof["tests"] = sorted(FIXTURE_TESTS)
+        json_file(scope, proof)
         log = self.finish(self.start(branch), 0)
         self.assertEqual(log["gates"]["affectedSan"], "PASS")
 
@@ -388,7 +539,9 @@ class QueueTests(unittest.TestCase):
             original(*arguments)
             self.git("update-ref", "refs/heads/main", alternate[2], self.base)
 
-        with mock.patch.object(merge_slice, "verify_task339", side_effect=race):
+        api = json.loads(branch[1].with_suffix(".api").read_text())
+        with (mock.patch.object(merge_slice, "verify_task339", side_effect=race),
+              mock.patch.object(merge_slice, "official_json", side_effect=lambda endpoint, *_: api[endpoint])):
             with self.assertRaisesRegex(RuntimeError, "update-ref"):
                 merge_slice.integrate(args, json.loads(branch[1].read_text()), {"gates": {}}, self.root)
         self.assertEqual(self.git("rev-parse", "main"), alternate[2])
