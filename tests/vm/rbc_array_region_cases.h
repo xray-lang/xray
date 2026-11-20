@@ -223,6 +223,53 @@ static void rbc_fixed_adjacent_regions(void) {
     region_force_bypass=false;
     xr_rbc_program_destroy(program);
 }
+static void rbc_fixed_array_leaf_locations(void) {
+    enum { ARRAY=1, INDEX, ITEM, RESULT };
+    const uint32_t args[]={ARRAY,INDEX,ITEM};
+    const XrRbcValueLocation locations[]={
+        [INDEX]={XR_RBC_VALUE_SPILL,0}, [ITEM]={XR_RBC_VALUE_REGISTER,0}, [RESULT]={XR_RBC_VALUE_REGISTER,1}
+    };
+    const XrRbcValueAccess accesses[]={
+        {.operation=XR_RBC_VALUE_ARRAY,.result=RESULT,.index=XR_LIR_ARRAY_OP_LEN,.count=1},
+        {.operation=XR_RBC_VALUE_ARRAY,.result=RESULT,.index=XR_LIR_ARRAY_OP_GET,.count=2},
+        {.operation=XR_RBC_VALUE_ARRAY,.index=XR_LIR_ARRAY_OP_SET,.count=3},
+        {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX},
+        {.operation=XR_RBC_VALUE_BINDING_READ}
+    };
+    const XrRbcArrayRegionAccess roles[]={
+        {.region=1,.fixed=true}, {.region=1,.fixed=true}, {.region=1,.fixed=true},
+        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY}, {.region=1,.fixed=true}
+    };
+    const XrRbcValueCode code={.locations=locations,.value_count=RESULT,.arguments=args,.argument_count=3,
+        .accesses=accesses,.access_count=5,.array_region_accesses=roles};
+    XrtManagedHeader owner={0};
+    int64_t elements[]={7,11,13};
+    const RbcArrayRegionState ready={.phase=RBC_ARRAY_REGION_ACTIVE,
+        .cache={.owner=&owner,.elements=(unsigned char *)elements,.length=3}};
+    RbcArrayRegionState state={0};
+    RbcValueActivation activation={.code=&code,.depth=1,.owned_code=true,.array_regions=&state};
+    XrRbcValueRuntime values={.top=&activation};
+    XrRbcFrame frame={.pc=19,.base=1,.spill_base=1};
+    XrRbcRegister slots[3]={{0},{.bits=23},{.bits=99}}, spills[2]={{0},{.bits=1}};
+    XrRbcStack stack={.values=&values,.depth=1,.frames=&frame,.slots=slots,.spills=spills};
+    XrtManagedStatus status=XRT_MANAGED_OK;
+    CHECK(!rbc_value_try_fixed_array_leaf(&stack,0,&status) && slots[2].bits==99);
+    state=ready; activation.active_array_region=1; activation.owned_code=false;
+    CHECK(!rbc_value_try_fixed_array_leaf(&stack,0,&status) && slots[2].bits==99);
+    activation.owned_code=true;
+    CHECK(!rbc_value_try_fixed_array_leaf(&stack,3,&status) && !rbc_value_try_fixed_array_leaf(&stack,4,&status));
+    CHECK(state.phase==RBC_ARRAY_REGION_ACTIVE && activation.active_array_region==1);
+    CHECK(rbc_value_try_fixed_array_leaf(&stack,0,&status) && status==XRT_MANAGED_OK && slots[2].bits==3);
+    CHECK(rbc_value_try_fixed_array_leaf(&stack,1,&status) && status==XRT_MANAGED_OK && slots[2].bits==11);
+    CHECK(rbc_value_try_fixed_array_leaf(&stack,2,&status) && status==XRT_MANAGED_OK && elements[1]==23);
+    CHECK(stack.depth==1 && frame.pc==19 && frame.base==1 && frame.spill_base==1);
+    spills[1].bits=UINT64_MAX;
+    CHECK(!rbc_value_try_fixed_array_leaf(&stack,1,&status) && status==XRT_MANAGED_OK && slots[2].bits==11);
+    CHECK(state.phase==RBC_ARRAY_REGION_BYPASS && !activation.active_array_region && !state.cache.owner);
+    state=ready; activation.active_array_region=1; spills[1].bits=3;
+    CHECK(!rbc_value_try_fixed_array_leaf(&stack,2,&status) && status==XRT_MANAGED_OK && elements[1]==23);
+    CHECK(state.phase==RBC_ARRAY_REGION_BYPASS && !activation.active_array_region && !state.cache.owner);
+}
 static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool bypass,bool observer) {
     XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,trips,loops,failure,observer,RBC_REGION_NORMAL);
     XrRbcProgram *program=NULL; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
@@ -556,6 +603,7 @@ static void rbc_array_region_cases(void) {
     rbc_fixed_region_case(4,0,RBC_REGION_FIXED_FALSE);
     rbc_fixed_region_case(4,1,RBC_REGION_FIXED_FALSE);
     rbc_fixed_adjacent_regions();
+    rbc_fixed_array_leaf_locations();
     RbcArrayRegionState state={.cache={(void *)1,(void *)2,3},.phase=RBC_ARRAY_REGION_ACTIVE};
     RbcValueActivation activation={.array_regions=&state,.active_array_region=1,.frame=(void *)4,.payload=(void *)5};
     rbc_value_array_region_forget(&activation,1,RBC_ARRAY_REGION_BYPASS);

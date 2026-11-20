@@ -1245,6 +1245,28 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
 #include "xrbc_value_array_push.inc.c"
 #include "xrbc_value_cell_execute.inc.c"
 #include "xrbc_value_slice_execute.inc.c"
+
+/* Keep the receiver outside the scalar dispatch loop. The active fixed
+ * window supplies the same trusted role, operands and bounds as normal. */
+static XR_NOINLINE bool rbc_value_run_fixed_array_leaf(XrRbcStack *stack, RbcValueActivation *activation,
+    const XrRbcArrayRegionAccess *role, const XrRbcValueAccess *access, XrtManagedStatus *status) {
+    return rbc_value_fixed_array_before(stack, activation, role, *access, status);
+}
+
+static inline bool rbc_value_try_fixed_array_leaf(XrRbcStack *stack, uint32_t index, XrtManagedStatus *status) {
+    RbcValueActivation *activation = stack->values ? stack->values->top : NULL;
+    if (!activation || !activation->active_array_region || activation->depth != stack->depth ||
+        !activation->owned_code || !activation->array_regions || index >= activation->code->access_count) return false;
+    const XrRbcValueCode *code = activation->code;
+    const XrRbcArrayRegionAccess *role = &code->array_region_accesses[index];
+    if (!role->fixed || role->fixed_edge || role->region != activation->active_array_region) return false;
+    const XrRbcValueAccess *access = &code->accesses[index];
+    if (access->operation != XR_RBC_VALUE_ARRAY ||
+        (access->index != XR_LIR_ARRAY_OP_LEN && access->index != XR_LIR_ARRAY_OP_GET && access->index != XR_LIR_ARRAY_OP_SET))
+        return false;
+    return rbc_value_run_fixed_array_leaf(stack, activation, role, access, status);
+}
+
 static uint32_t rbc_value_source(const XrRbcModule *module, const XrRbcStack *stack, size_t pc) {
     const XrRbcFunction *function = &module->functions[stack->frames[stack->depth - 1].function];
     return function->source_ids ? function->source_ids[pc - 1] : 0;
