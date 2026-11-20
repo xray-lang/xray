@@ -335,7 +335,7 @@ static void array_region_binding_local_fallback(void) {
     OK(xr_lir_ownership_fixed_array_update_at(plan,function.fixed_update_offset,&fixed));
     CHECK(legacy.entry_block==c.entry.id && legacy.header!=c.header.id &&
         legacy.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET &&
-        legacy.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN);
+        legacy.range.kind==XR_LIR_ARRAY_SET_RANGE_NONE);
     CHECK(fixed.header==c.header.id && fixed.entry_block==legacy.exit_block && fixed.exit_block==c.exit.id &&
         fixed.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET &&
         fixed.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN);
@@ -375,8 +375,8 @@ static void array_region_binding_projection(unsigned shape) {
     if (!shape) for (unsigned mask=1;mask<=2;++mask) {
         array_region_binding_mixed(false,mask); array_region_binding_mixed(true,mask);
     }
-    bool large=shape==1,shared=shape==2 || shape==3,reverse=shape==3,single_range=shape==4 || shape==6,range=shape>=4;
-    ArraySetRegionFixture c=single_range ? ars_range_build(NULL,3,shape==6 ? ARRAY_REGION_RANGE_READ_ONLY : ARRAY_REGION_RANGE_UNIT) :
+    bool large=shape==1,shared=shape==2 || shape==3 || shape==5,reverse=shape==3,single_range=shape==4 || shape==6,range=shape>=5;
+    ArraySetRegionFixture c=single_range ? ars_range_build(NULL,3,shape==6 ? ARRAY_REGION_RANGE_READ_ONLY : ARRAY_REGION_RANGE_BOUND) :
         large ? array_set_region_fixture(257,ARRAY_SET_REGION_LOCAL) : array_region_binding_two_loops(shared,reverse,range);
     if (single_range) OK(xr_lir_module_finish(c.module,NULL));
     XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));

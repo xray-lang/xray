@@ -60,7 +60,11 @@ static ArraySetRegionFixture array_region_binding_loops(bool shared,bool reverse
         }
         ars_parameters(&c,c.header,values); c.header_array=values[0];
         XrLirValue length=ars_array_op(&c,c.header,XR_LIR_ARRAY_OP_LEN,values,1);
-        XrLirValue limit=range ? length : ars_number(&c,c.header,shared && loop ? 8 : 4),operands[]={values[1],limit};
+        /* The observer case pairs a constant-bound legacy update with the
+         * independently guarded update on the other side of the call. */
+        XrLirValue limit=observe_second && !loop ? ars_number(&c,c.header,1) :
+            range ? length : ars_number(&c,c.header,shared && loop ? 8 : 4);
+        XrLirValue operands[]={values[1],limit};
         XrLirValue condition=ars_value(&c,c.header,(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
             .predicate=XR_LIR_LT,.operands=operands,.operand_count=2});
         OK(xr_lir_set_terminator(c.module,c.header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,

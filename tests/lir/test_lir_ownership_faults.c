@@ -91,6 +91,8 @@ static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint3
     XrLirOwnershipPlan *saved = output;
     uint32_t regions = xr_lir_ownership_array_region_count(output);
     uint32_t region_steps = xr_lir_ownership_array_region_step_count(output);
+    uint32_t fixed_regions = output->fixed_array_updates.regions.count;
+    uint32_t fixed_steps = output->fixed_array_updates.steps.count;
     attempt = 0; fail_at = 0;
     CHECK(xr_lir_ownership_plan_create(&request, &output, NULL) == XR_LIR_INVALID_ARGUMENT &&
         output == saved && !attempt && live == occupied_count && live_bytes == occupied_bytes);
@@ -101,6 +103,13 @@ static void sweep(XrLirModule *input, const XrLirOwnershipTypeFact *types, uint3
         OK(xr_lir_ownership_array_region_at(output, regions - 1, &region));
         OK(xr_lir_ownership_array_region_step_at(output, region_steps - 1, &step));
         CHECK(region.function && region.step_count && step.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE);
+    }
+    if (fixed_regions) {
+        XrLirArraySetRegion region; XrLirArraySetRegionStep step;
+        OK(xr_lir_ownership_fixed_array_update_at(output, fixed_regions - 1, &region));
+        OK(xr_lir_ownership_fixed_array_update_step_at(output, fixed_steps - 1, &step));
+        CHECK(region.function && region.step_count && step.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE &&
+            step.block == region.header && step.edge == region.exit_edge && step.target == region.exit_value);
     }
     XrLirOwnershipFact fact;
     OK(xr_lir_ownership_fact_at(output, 0, &fact));
@@ -173,8 +182,9 @@ static void array_region_range_tampering(void) {
         OK(xr_lir_module_finish(c.module, NULL));
         XrLirOwnershipPlan *plan = NULL;
         OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
-        CHECK(plan->array_regions.regions.count == 1);
-        XrLirArraySetRegionRange *range = &((XrLirArraySetRegion *)plan->array_regions.regions.data)[0].range;
+        CHECK(plan->array_regions.regions.count == (kind ? 0u : 1u) && plan->fixed_array_updates.regions.count == kind);
+        XrLirArraySetRegion *region = kind ? plan->fixed_array_updates.regions.data : plan->array_regions.regions.data;
+        XrLirArraySetRegionRange *range = &region->range;
         CHECK(range->kind == kind);
         uint32_t *fields[] = {&range->kind,&range->iv,&range->iv_argument,&range->entry_iv,&range->length,
             &range->length_instruction,&range->condition,&range->condition_instruction,&range->increment,
@@ -188,10 +198,9 @@ static void array_region_range_tampering(void) {
             *fields[n] = saved;
             CHECK(ars_range_same(*range, original));
         }
-        XrLirArraySetRegionOwnerHome *home = &((XrLirArraySetRegion *)plan->array_regions.regions.data)[0].owner_home;
-        CHECK(home->kind == kind);
-        uint32_t *home_fields[] = {&home->kind,&home->first_active_step,&home->exit_step,
-            &((XrLirArraySetRegion *)plan->array_regions.regions.data)[0].element_read};
+        XrLirArraySetRegionOwnerHome *home = &region->owner_home;
+        CHECK(ars_owner_home_same(*home,(XrLirArraySetRegionOwnerHome){0}) && !region->element_read);
+        uint32_t *home_fields[] = {&home->kind,&home->first_active_step,&home->exit_step,&region->element_read};
         XrLirArraySetRegionOwnerHome original_home = *home;
         for (size_t n = 0; n < sizeof(home_fields) / sizeof(*home_fields); ++n) {
             uint32_t saved = *home_fields[n]; *home_fields[n] ^= 1;
@@ -266,23 +275,24 @@ static void array_region_input_equal(const XrLirModule *input, const XrLirModule
     }
 }
 static void array_region_verification_faults(unsigned shape) {
-    bool retired = shape == 1, range = shape >= 2, fixed = shape == 4;
+    bool retired = shape == 1, range = shape >= 2, borrowed = shape == 4;
+    bool fixed = shape == 2 || borrowed;
     enum ArrayRegionRangeMode range_mode = shape == 3 ? ARRAY_REGION_RANGE_READ_ONLY : ARRAY_REGION_RANGE_UNIT;
     enum ArraySetRegionMode first = retired ? ARRAY_SET_REGION_RETAIN_SOURCE : ARRAY_SET_REGION_LOCAL;
     enum ArraySetRegionMode second = retired ? ARRAY_SET_REGION_RETAIN_TARGET : ARRAY_SET_REGION_LOCAL;
-    ArraySetRegionFixture input = range ? ars_range_build_seeded(NULL, 3, range_mode, fixed) :
+    ArraySetRegionFixture input = range ? ars_range_build_seeded(NULL, 3, range_mode, borrowed) :
         array_set_region_build(NULL, 3, first);
-    input = range ? ars_range_build_seeded(input.module, 6, range_mode, fixed) : array_set_region_build(input.module, 6, second);
-    ArraySetRegionFixture reference = range ? ars_range_build_seeded(NULL, 3, range_mode, fixed) :
+    input = range ? ars_range_build_seeded(input.module, 6, range_mode, borrowed) : array_set_region_build(input.module, 6, second);
+    ArraySetRegionFixture reference = range ? ars_range_build_seeded(NULL, 3, range_mode, borrowed) :
         array_set_region_build(NULL, 3, first);
-    reference = range ? ars_range_build_seeded(reference.module, 6, range_mode, fixed) :
+    reference = range ? ars_range_build_seeded(reference.module, 6, range_mode, borrowed) :
         array_set_region_build(reference.module, 6, second);
     OK(xr_lir_module_finish(input.module, NULL)); OK(xr_lir_module_finish(reference.module, NULL));
     XrLirOwnershipPlan *plan = NULL, *saved = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module}, &plan, NULL));
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=reference.module}, &saved, NULL));
-    CHECK((fixed ? plan->fixed_array_updates.regions.count : plan->array_regions.regions.count) == 2 &&
-        lir_array_region_plans_equal(plan, saved));
+    CHECK(plan->fixed_array_updates.regions.count == (fixed ? 2u : 0u) &&
+        plan->array_regions.regions.count == (fixed ? 0u : 2u) && lir_array_region_plans_equal(plan, saved));
     size_t baseline = live, bytes = live_bytes;
     attempt = 0; OK(xr_lir_ownership_array_regions_verify(input.module, plan));
     size_t count = attempt; CHECK(count && live == baseline && live_bytes == bytes);
@@ -298,7 +308,8 @@ static void array_region_verification_faults(unsigned shape) {
     xr_lir_ownership_plan_destroy(plan); xr_lir_ownership_plan_destroy(saved);
     xr_lir_module_destroy(input.module); xr_lir_module_destroy(reference.module);
     CHECK(!live && !live_bytes);
-    if (fixed) printf("fixed Array update verification failure points: %zu\n", count);
+    if (borrowed) printf("fixed Array update verification failure points: %zu\n", count);
+    else if (fixed) printf("promoted Array update verification failure points: %zu\n", count);
     else if (range) printf("unit-forward range verification failure points: %zu\n", count);
     else if (retired) printf("retired copy region verification failure points: %zu\n", count);
     else printf("array region verification failure points: %zu\n", count);
