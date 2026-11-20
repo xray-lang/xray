@@ -211,17 +211,17 @@ static void c_fixed_array_push_clone(LirC *c, uint32_t label, const XrLirArraySe
     /* Entry proved a nonnegative IV below the original limit. Cap the span
      * by actual spare capacity, so neither the count nor the final IV wraps. */
     c_format(c, "    {\n"
-        "        XrtArrayBacking *xrl_array = (XrtArrayBacking *)xrl_fixed_cache_%" PRIu32 ".owner;\n"
-        "        size_t xrl_room = xrl_array->capacity - xrl_fixed_cache_%" PRIu32 ".length;\n"
-        "        uint64_t xrl_remaining = (uint64_t)(", label, label);
+        "        XrtArrayBacking *xrl_array = (XrtArrayBacking *)xrl_fixed_cache_%" PRIu32 ".owner;\n", label);
+    c_format(c, "        size_t xrl_room = xrl_array->capacity - xrl_fixed_cache_%" PRIu32 ".length;\n", label);
+    c_text(c, "        uint64_t xrl_remaining = (uint64_t)(");
     c_fixed_array_limit(c, region, label);
     c_format(c, ") - (uint64_t)v%" PRIu32 ";\n"
         "        size_t xrl_count = xrl_remaining < xrl_room ? (size_t)xrl_remaining : xrl_room;\n", iv);
     if (region->push_counted) {
-        c_format(c, "        for (size_t xrl_offset = 0; xrl_offset < xrl_count; ++xrl_offset) {\n"
-            "            int64_t xrl_item = v%" PRIu32 " + (int64_t)xrl_offset;\n"
-            "            XRT_ARRAY_I64_REGION_COPY(xrl_fixed_cache_%" PRIu32 ".elements + "
-            "(xrl_fixed_cache_%" PRIu32 ".length + xrl_offset) * sizeof(xrl_item), &xrl_item);\n", iv, label, label);
+        c_text(c, "        for (size_t xrl_offset = 0; xrl_offset < xrl_count; ++xrl_offset) {\n");
+        c_format(c, "            int64_t xrl_item = v%" PRIu32 " + (int64_t)xrl_offset;\n", iv);
+        c_format(c, "            XRT_ARRAY_I64_REGION_COPY(xrl_fixed_cache_%" PRIu32 ".elements + "
+            "(xrl_fixed_cache_%" PRIu32 ".length + xrl_offset) * sizeof(xrl_item), &xrl_item);\n", label, label);
         c_format(c, "        }\n"
             "        v%" PRIu32 " += (int64_t)xrl_count;\n"
             "        xrl_fixed_cache_%" PRIu32 ".length += xrl_count;\n", iv, label);
