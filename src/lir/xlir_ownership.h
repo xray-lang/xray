@@ -256,11 +256,28 @@ typedef struct XrLirArraySetRegion {
     XrLirArrayPushCapacity push_capacity;
 } XrLirArraySetRegion;
 
+/* Local fact suitable for linking by function identity. The borrowed Array
+ * formal has just one use, an owning retain in the non-reentered entry.
+ * The parameter ordinal is zero-based. A zero instruction means absent. */
+typedef struct XrLirArrayEntryRetain {
+    uint32_t parameter, block, instruction, result;
+} XrLirArrayEntryRetain;
+
+/* The original owner and its staged retain have no remaining direct uses.
+ * Positions in the call block are one-based. This is a logical candidate:
+ * no slot, alias permission, runtime uniqueness, or take ABI is granted here. */
+typedef struct XrLirArrayCallMove {
+    uint32_t block, instruction, callee;
+    uint32_t owner, temporary, retain, owner_drop, temporary_drop;
+} XrLirArrayCallMove;
+
 typedef struct XrLirOwnershipFunction {
     uint32_t fact_offset, fact_count, unmodeled;
     uint32_t region_offset, region_count;
     uint32_t push_window_offset, push_window_count;
     uint32_t fixed_update_offset, fixed_update_count;
+    uint32_t array_call_offset, array_call_count;
+    XrLirArrayEntryRetain array_entry_retain;
     bool external;
 } XrLirOwnershipFunction;
 
@@ -305,6 +322,8 @@ XR_FUNC XrLirStatus xr_lir_ownership_function_at(const XrLirOwnershipPlan *,
     uint32_t function, XrLirOwnershipFunction *);
 XR_FUNC XrLirStatus xr_lir_ownership_fact_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirOwnershipFact *);
+XR_FUNC XrLirStatus xr_lir_ownership_array_call_move_at(const XrLirOwnershipPlan *,
+    uint32_t ordinal, XrLirArrayCallMove *);
 XR_FUNC uint32_t xr_lir_ownership_array_region_count(const XrLirOwnershipPlan *);
 XR_FUNC uint32_t xr_lir_ownership_array_region_step_count(const XrLirOwnershipPlan *);
 /* Invalid row queries preserve the output; successful rows are owned copies. */
