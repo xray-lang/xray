@@ -1,0 +1,20 @@
+fn bump(input: Array<i64>, start: i64) -> Array<i64> {
+    var values = input
+    var i = start
+    var step = 2
+    while (!(i >= len(values))) {
+        const element = values[i]
+        values[i] = element * 3 + step
+        step += 2
+        i += 1
+    }
+    return values
+}
+
+const empty: Array<i64> = []
+const values: Array<i64> = [1, 2, 3, 4]
+print(bump(empty, 0))
+print(bump(values, 3))
+print(bump(values, 0))
+print(bump(values, 1))
+print(values)
