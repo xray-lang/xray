@@ -425,7 +425,7 @@ static void boxed_lifetimes(void) {
 
 static void boxed_selected_edges(void) {
     XrLirModule *m=NULL; OK(xr_lir_module_create(NULL,&m));
-    XrLirType type; XrLirRecordField field={"value",5,XR_LIR_STRING, 0};
+    XrLirType type; XrLirRecordField field={"value",5,XR_LIR_STRING, 0, 0};
     OK(xr_lir_record_type(m,
         &(XrLirRecordIdentity){.module="tests.lir.ownership", .module_length=sizeof("tests.lir.ownership")-1,
             .name="SelectedRecord", .name_length=sizeof("SelectedRecord")-1},
@@ -545,7 +545,7 @@ static void pod_function(XrLirModule *m,XrLirType type,const char *name) {
 
 static void pod_facts(void) {
     XrLirModule *m=NULL; OK(xr_lir_module_create(NULL,&m));
-    XrLirType record,optional,integer_optional; XrLirRecordField field={"score",5,XR_LIR_I64, 0};
+    XrLirType record,optional,integer_optional; XrLirRecordField field={"score",5,XR_LIR_I64, 0, 0};
     OK(xr_lir_record_type(m,
         &(XrLirRecordIdentity){.module="tests.lir.ownership", .module_length=sizeof("tests.lir.ownership")-1,
             .name="PodRecord", .name_length=sizeof("PodRecord")-1},

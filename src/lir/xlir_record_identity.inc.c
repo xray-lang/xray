@@ -66,7 +66,7 @@ static bool lir_record_schema_equal(const XrLirRecordField *a, const XrLirRecord
                                     uint32_t count, bool actual) {
     for (uint32_t f = 0; f < count; ++f)
         if (a[f].name_length != b[f].name_length || a[f].flags != b[f].flags ||
-            (actual && a[f].type != b[f].type) || memcmp(a[f].name, b[f].name, a[f].name_length)) return false;
+            (actual && (a[f].type != b[f].type || a[f].array_element != b[f].array_element)) || memcmp(a[f].name, b[f].name, a[f].name_length)) return false;
     return true;
 }
 

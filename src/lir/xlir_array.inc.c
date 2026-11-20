@@ -345,6 +345,15 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
     if (input && (v->op == XR_LIR_STATE_READ ||
         (v->op == XR_LIR_ARRAY_BORROW && input->type == XR_LIR_STATE_REF)))
         return input->state_reference.array_element;
+    if (input && (v->op == XR_LIR_RECORD_FIELD || v->op == XR_LIR_CLASS_FIELD)) {
+        XrLirType row = input->type;
+        const XrLirRecordField *fields = NULL;
+        uint32_t count = 0;
+        if (v->op == XR_LIR_CLASS_FIELD && !xr_lir_class_payload(m, row, &row)) return XR_LIR_TYPE_INVALID;
+        if (xr_lir_aggregate_fields(m, row, &fields, &count) != XR_LIR_OK || v->bits >= count)
+            return XR_LIR_TYPE_INVALID;
+        return fields[v->bits].array_element;
+    }
     if (v->op == XR_LIR_CALL && v->callee && v->callee <= m->function_count)
         return m->functions[v->callee - 1].array_result;
     if (v->op == XR_LIR_CALL_INDIRECT && input) {

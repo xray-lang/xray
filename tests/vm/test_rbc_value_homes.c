@@ -187,7 +187,7 @@ static void state_snapshots_and_ref_boundaries(void) {
 }
 static XrLirModule *selected_edge_fixture(XrLirFunction *output) {
     XrLirModule *module = NULL; OK(xr_lir_module_create(NULL, &module));
-    XrLirType type; XrLirRecordField field = {"name", 4, XR_LIR_STRING, 0};
+    XrLirType type; XrLirRecordField field = {"name", 4, XR_LIR_STRING, 0, 0};
     OK(xr_lir_record_type(module,
         &(XrLirRecordIdentity){.module="tests.vm.rbc_value_homes", .module_length=sizeof("tests.vm.rbc_value_homes")-1,
             .name="SelectedRecord", .name_length=sizeof("SelectedRecord")-1},
@@ -295,7 +295,7 @@ static void common_home_allocation_failures(void) {
 }
 static void pod_needs_no_owner_frame(void) {
     XrLirModule *module = NULL; OK(xr_lir_module_create(NULL, &module));
-    XrLirType type; XrLirRecordField field = {"score", 5, XR_LIR_I64, 0}; OK(xr_lir_record_type(module,
+    XrLirType type; XrLirRecordField field = {"score", 5, XR_LIR_I64, 0, 0}; OK(xr_lir_record_type(module,
         &(XrLirRecordIdentity){.module="tests.vm.rbc_value_homes", .module_length=sizeof("tests.vm.rbc_value_homes")-1,
             .name="PodRecord", .name_length=sizeof("PodRecord")-1},
         &field, 1, &type));
@@ -356,7 +356,7 @@ static void return_publish(void *context) {
 static XrRbcProgram *multi_return_fixture(void) {
     XrLirModule *module = NULL; OK(xr_lir_module_create(NULL, &module));
     XrLirType optional, record; OK(xr_lir_nullable_type(module, XR_LIR_STRING, &optional));
-    XrLirRecordField fields[] = {{"first",5,optional, 0}, {"score",5,XR_LIR_I64, 0}, {"second",6,optional, 0}};
+    XrLirRecordField fields[] = {{"first",5,optional, 0, 0}, {"score",5,XR_LIR_I64, 0, 0}, {"second",6,optional, 0, 0}};
     OK(xr_lir_record_type(module,
         &(XrLirRecordIdentity){.module="tests.vm.rbc_value_homes", .module_length=sizeof("tests.vm.rbc_value_homes")-1,
             .name="ReturnRecord", .name_length=sizeof("ReturnRecord")-1},

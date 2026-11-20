@@ -12,6 +12,7 @@
  */
 #include "xnative_value_plan.h"
 #include "xnative_managed_root.h"
+#include "xnative_backing_types.h"
 #include "xray_native_array_slice.h"
 #include "xray_native_function.h"
 #include "base/xchecks.h"
@@ -94,7 +95,7 @@ static bool managed_nullable(const XrtValuePlan *plan) {
 static bool record_field(const XrtValuePlan *plan) {
     XrtValueKind kind = plan->view.kind;
     return kind == XRT_VALUE_I64 || kind == XRT_VALUE_BOOL || kind == XRT_VALUE_F64 ||
-        kind == XRT_VALUE_STRING || xrt_value_kind_has_fields(kind) ||
+        kind == XRT_VALUE_STRING || kind == XRT_VALUE_ARRAY_I64 || xrt_value_kind_has_fields(kind) ||
         (kind == XRT_VALUE_NULLABLE && managed_nullable(plan));
 }
 static bool capture_type(const XrtValuePlan *plan) {
@@ -380,7 +381,9 @@ XR_FUNCDEF XrtManagedStatus xrt_class_create(XrtManagedFrame *frame, size_t slot
     if (!row || (uintptr_t)row % payload->view.alignment) return XRT_MANAGED_ARGUMENT;
     for (size_t i = 0; i < payload->view.field_count; ++i) {
         const XrtValueSlotSpec *field = &payload->view.fields[i];
-        if (field->type->view.kind == XRT_VALUE_STRING && !payload_child(row, field->offset))
+        XrtValueKind kind = field->type->view.kind;
+        if ((kind == XRT_VALUE_STRING && !payload_child(row, field->offset)) ||
+            (kind == XRT_VALUE_ARRAY_I64 && !xrt_backing_array_matches(payload_child(row, field->offset), XRT_BACKING_ARRAY_I64)))
             return XRT_MANAGED_ARGUMENT;
     }
     ClassConstruction context = {payload,row};

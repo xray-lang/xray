@@ -59,9 +59,11 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
         XrXirFieldDescription member = {0};
         good = lower_record_member(c, description, n, &member);
         XrLirType field = good ? lower_type(c, member.type) : XR_LIR_TYPE_INVALID;
+        XrLirType element = good && field == XR_LIR_ARRAY ? lower_array_element(c, member.type) : XR_LIR_TYPE_INVALID;
         if (good && !(field == XR_LIR_STRING || field == XR_LIR_I64 || field == XR_LIR_I1 || field == XR_LIR_F64 ||
+            (class_type && field == XR_LIR_ARRAY && element == XR_LIR_I64) ||
             xr_lir_inline_aggregate_type(c->module, field))) good = lower_unsupported(c, "record field has no canonical physical carrier");
-        fields[n] = (XrLirRecordField){member.name.bytes, member.name.length, field, member.flags};
+        fields[n] = (XrLirRecordField){member.name.bytes, member.name.length, field, member.flags, element};
     }
     for (uint32_t a = 0; a < argument_count && good; ++a) {
         XrXirType actual = description->instance->arguments[a];
@@ -86,13 +88,15 @@ static bool lower_tuple_finish(Lower *c, XrXirType type, const XrXirTypeNode *no
     XrLirRecordField *fields = lower_alloc(c, count, sizeof(*fields));
     if (!fields) return false;
     for (uint32_t f = 0; f < count; ++f) {
-        XrLirType field = lower_type(c, node->parameters[f].type);
+        XrXirType field_type = node->parameters[f].type;
+        XrLirType field = lower_type(c, field_type);
+        XrLirType element = field == XR_LIR_ARRAY ? lower_array_element(c, field_type) : XR_LIR_TYPE_INVALID;
         if (field != XR_LIR_I64 && field != XR_LIR_I1 && field != XR_LIR_F64 && field != XR_LIR_STRING &&
-            !xr_lir_inline_aggregate_type(c->module, field)) {
+            !(field == XR_LIR_ARRAY && element == XR_LIR_I64) && !xr_lir_inline_aggregate_type(c->module, field)) {
             xr_free(fields);
             return lower_unsupported(c, "Tuple field has no canonical inline value carrier");
         }
-        fields[f] = (XrLirRecordField){.type=field};
+        fields[f] = (XrLirRecordField){.type=field,.array_element=element};
     }
     bool good = lower_build(c, xr_lir_tuple_type(c->module, fields, count,
         &c->constructed_types[(uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE]));
