@@ -127,6 +127,12 @@ static ArraySetRegionFixture ars_range_build(XrLirModule *module, uint32_t count
         if ((n + 1 == count && mode != ARRAY_REGION_RANGE_NEXT_COPIES) || (!n && mode == ARRAY_REGION_RANGE_NEXT_COPIES)) {
             XrLirValue one = mode == ARRAY_REGION_RANGE_STEP_DYNAMIC ? start :
                 ars_number(&c,c.body[n],mode == ARRAY_REGION_RANGE_STEP_TWO || mode == ARRAY_REGION_RANGE_READ_STEP ? 2 : 1);
+            if (mode == ARRAY_REGION_RANGE_STEP_TWO) {
+                /* An unused unit addition cannot replace the actual step of two. */
+                XrLirValue unit[] = {next,ars_number(&c,c.body[n],1)};
+                (void)ars_value(&c,c.body[n],(XrLirInstruction){.op=XR_LIR_ADD,
+                    .type=XR_LIR_I64,.operands=unit,.operand_count=2});
+            }
             XrLirValue add[] = {next,one};
             if (mode == ARRAY_REGION_RANGE_COMMUTED) { add[0] = one; add[1] = next; }
             next = ars_value(&c,c.body[n],(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});

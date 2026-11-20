@@ -18,11 +18,12 @@ typedef struct LirArrayRegionProof {
     const XrLirOwnershipPlan *plan;
     uint32_t function_id;
     LirGraph graph;
+    LirLinearLoop loop;
     LirArrayRegionUse *uses;
     uint32_t *pairs, *moves, *blocks;
     uint64_t *marks;
     XrLirArraySetRegionStep *steps;
-    uint32_t step_count, step_capacity, block_count;
+    uint32_t step_count, step_capacity;
     uint32_t get_count, get_block, get_instruction;
     uint32_t push_item, array_accesses;
     uint32_t retain_head, retain_block, retain_drop;
@@ -226,8 +227,8 @@ static bool lir_array_region_retains_before_entry(const LirArrayRegionProof *p, 
 static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
     XrLirArraySetRegion *region) {
     const LirGraph *g = &p->graph;
-    LirLinearLoop loop;
-    if (!lir_loop_linear_edges(p->function, g, header, body_edge, &loop)) return false;
+    LirLinearLoop *loop = &p->loop;
+    if (!lir_loop_linear_edges(p->function, g, header, body_edge, loop)) return false;
     /* Every retain has an exact same-block endpoint death, and all retain
      * blocks lie on one dominator chain. If the original exit reaches the
      * latest retain through the precomputed empty-bridge corridor and the
@@ -235,13 +236,12 @@ static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint
      * header. The instruction walk still rejects header/body retains. Only a
      * proven PUSH may use this exception; its real exit move and all ordinary
      * bridge instructions remain before the ordinary retain instructions. */
-    if (!lir_array_region_retains_before_entry(p, header, loop.entry) &&
-        (!p->retain_block || !g->stack[loop.exit] || !lir_loop_dominates(g,header,p->retain_block-1))) return false;
-    if (!lir_loop_linear_body(p->function, g, header, body_edge, p->blocks, p->marks, &loop)) return false;
-    p->block_count = loop.body_count;
-    *region = (XrLirArraySetRegion){.function=p->function_id,.header=header + 1,.entry_block=loop.entry + 1,
-        .entry_edge=loop.entry_edge + 1,.latch=loop.latch + 1,.exit_edge=2 - body_edge,.exit_block=loop.exit + 1,
-        .body_block_count=loop.body_count};
+    if (!lir_array_region_retains_before_entry(p, header, loop->entry) &&
+        (!p->retain_block || !g->stack[loop->exit] || !lir_loop_dominates(g,header,p->retain_block-1))) return false;
+    if (!lir_loop_linear_body(p->function, g, p->blocks, p->marks, loop)) return false;
+    *region = (XrLirArraySetRegion){.function=p->function_id,.header=header + 1,.entry_block=loop->entry + 1,
+        .entry_edge=loop->entry_edge + 1,.latch=loop->latch + 1,.exit_edge=2 - body_edge,.exit_block=loop->exit + 1,
+        .body_block_count=loop->body_count};
     return true;
 }
 
@@ -263,7 +263,7 @@ static bool lir_array_region_move(const LirArrayRegionProof *p, uint32_t block, 
     }
     return false;
 }
-enum { LIR_ARRAY_RANGE_CURRENT = 1, LIR_ARRAY_RANGE_NEXT };
+enum { LIR_ARRAY_RANGE_CURRENT = 1 };
 static uint32_t lir_array_region_lane(const LirArrayRegionProof *p, uint32_t value) {
     return p->uses[value].range_stamp == p->range_stamp ? p->uses[value].lane : 0;
 }
@@ -298,12 +298,17 @@ static void lir_array_region_range_begin(LirArrayRegionProof *p, const XrLirArra
     uint32_t argument = 0;
     while (argument < header->parameter_count && header->parameters[argument] != iv) ++argument;
     if (argument == header->parameter_count) return;
+    LirLoopUnitStep step;
+    if (!lir_loop_unit_step(f, &p->graph, &p->loop, p->marks, iv, &step)) return;
+    const XrLirValueData *update = &f->values[step.update - 1];
     const XrLirInstructionView *entry = lir_terminator(f, region->entry_block - 1);
     p->range = (XrLirArraySetRegionRange){.kind=same ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN :
             XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT,
         .iv=iv,.iv_argument=argument,.entry_iv=entry->edges[region->entry_edge - 1].arguments[argument],
         .length=length,.length_instruction=bound ? end->instruction + 1 : 0,
-        .condition=condition,.condition_instruction=f->values[condition - 1].instruction + 1};
+        .condition=condition,.condition_instruction=f->values[condition - 1].instruction + 1,
+        .increment=step.update,.increment_block=update->block,.increment_instruction=update->instruction + 1,
+        .one=step.one,.latch_iv=step.backedge_argument};
     p->range_stamp = (uint64_t)(region->header - 1) * 2 + body_edge + 1;
     p->uses[iv].range_stamp = p->range_stamp; p->uses[iv].lane = LIR_ARRAY_RANGE_CURRENT;
 }
@@ -318,30 +323,9 @@ static void lir_array_region_range_edge(LirArrayRegionProof *p, const XrLirEdgeV
         p->uses[target->parameters[a]].edge_lane = lir_array_region_lane(p, edge->arguments[a]);
     for (uint32_t a = 0; a < edge->argument_count; ++a) {
         LirArrayRegionUse *use = &p->uses[target->parameters[a]];
-        XR_DCHECK(use->edge_lane <= LIR_ARRAY_RANGE_NEXT, "range lane came from the old edge environment");
+        XR_DCHECK(use->edge_lane <= LIR_ARRAY_RANGE_CURRENT, "range lane came from the old edge environment");
         use->range_stamp = p->range_stamp; use->lane = use->edge_lane;
     }
-    if (p->function->values[p->range.iv - 1].block == edge->target) {
-        if (!p->range.increment || lir_array_region_lane(p, p->range.iv) != LIR_ARRAY_RANGE_NEXT)
-            p->range = (XrLirArraySetRegionRange){0};
-        else p->range.latch_iv = edge->arguments[p->range.iv_argument];
-    }
-}
-static void lir_array_region_range_instruction(LirArrayRegionProof *p, const XrLirInstructionView *op,
-    uint32_t block, uint32_t instruction) {
-    if (!p->range.kind || op->op != XR_LIR_ADD || op->type != XR_LIR_I64 || op->operand_count != 2) return;
-    uint32_t varying = 0;
-    if (lir_array_region_lane(p, op->operands[0]) != LIR_ARRAY_RANGE_CURRENT) {
-        if (lir_array_region_lane(p, op->operands[1]) != LIR_ARRAY_RANGE_CURRENT) return;
-        varying = 1;
-    }
-    uint32_t constant = op->operands[1 - varying];
-    const XrLirInstructionView *one = xr_lir_internal_value_definition(p->function, constant);
-    if (!one || one->op != XR_LIR_CONST || one->type != XR_LIR_I64 || one->bits != 1) return;
-    if (p->range.increment) { p->range = (XrLirArraySetRegionRange){0}; return; }
-    p->range.increment = op->result; p->range.increment_block = block + 1;
-    p->range.increment_instruction = instruction; p->range.one = constant;
-    p->uses[op->result].range_stamp = p->range_stamp; p->uses[op->result].lane = LIR_ARRAY_RANGE_NEXT;
 }
 static bool lir_array_region_edge(LirArrayRegionProof *p, uint32_t block, uint32_t edge,
     XrLirArraySetRegionStepKind kind, uint32_t *current) {
@@ -415,10 +399,7 @@ static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32
     const XrLirBlockData *body = &p->function->blocks[block];
     for (uint32_t i = 0; i + 1 < body->instruction_count; ++i) {
         const XrLirInstructionView *op = &body->instructions[i].view;
-        if (lir_array_region_pure(p->function, op)) {
-            if (!header) lir_array_region_range_instruction(p, op, block, i + 1);
-            continue;
-        }
+        if (lir_array_region_pure(p->function, op)) continue;
         if (!header && (op->op == XR_LIR_CELL_NEW || op->op == XR_LIR_CELL_READ)) {
             if (!lir_array_region_pair(p, block, i + 1, current, op->op == XR_LIR_CELL_READ)) return false;
             ++i; continue;
@@ -510,10 +491,10 @@ static bool lir_array_region_scalar_passthrough(LirArrayRegionProof *p, const Xr
         p->uses[value].range_stamp = stamp; p->uses[value].lane = value;
     }
     uint32_t block = region->header - 1;
-    for (uint32_t n = 0; n <= p->block_count; ++n) {
+    for (uint32_t n = 0; n <= p->loop.body_count; ++n) {
         const XrLirEdgeView *edge = &lir_terminator(f,block)->edges[0];
         const XrLirBlockData *target = &f->blocks[edge->target - 1];
-        bool latch = n == p->block_count;
+        bool latch = n == p->loop.body_count;
         XR_DCHECK(latch == (edge->target == region->header), "scalar proof follows the closed region route");
         for (uint32_t a = 0; a < target->parameter_count; ++a) {
             uint32_t source = edge->arguments[a], parameter = target->parameters[a];
@@ -618,7 +599,7 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint
     lir_array_region_range_begin(p, region, body_edge);
     if (!lir_array_region_body(p, header, &current, region, true) ||
         !lir_array_region_edge(p, header, body_edge, XR_LIR_ARRAY_SET_REGION_EDGE_MOVE, &current)) return false;
-    for (uint32_t n = 0; n < p->block_count; ++n)
+    for (uint32_t n = 0; n < p->loop.body_count; ++n)
         if (!lir_array_region_body(p, p->blocks[n], &current, region, false) ||
             !lir_array_region_edge(p, p->blocks[n], 0, XR_LIR_ARRAY_SET_REGION_EDGE_MOVE, &current)) return false;
     if (current != region->canonical_value) return false;
