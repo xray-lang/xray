@@ -449,6 +449,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
+        v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
         goto invalid;
