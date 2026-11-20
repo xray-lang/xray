@@ -66,12 +66,11 @@ static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target) {
     const XrLirFixedArrayUpdateHome *row = &c->homes->fixed_array_updates[n - 1];
     const size_t *offsets = c->homes->frame.owned_offsets;
     c_format(c, "    if (xrl_fixed_phase_%" PRIu32 " == 1) {\n"
-        "        static const XrtArrayI64RegionSlot xrl_fixed_slots[] = {{%zu, %zu}, {%zu, %zu}};\n"
-        "        const XrtArrayI64RegionSpec xrl_fixed_spec = {xrl_fixed_slots, 2, 0};\n"
+        "        static const XrtArrayI64RegionSlot xrl_fixed_slots[] = {{%zu, %zu}, {%zu, %zu}};\n",
+        n, row->owner_slot, offsets[row->owner_slot], row->workspace_slot, offsets[row->workspace_slot]);
+    c_format(c, "        const XrtArrayI64RegionSpec xrl_fixed_spec = {xrl_fixed_slots, 2, 0};\n"
         "        const XrtArrayI64RegionContext xrl_fixed_context = {xrl_frame, xrl_payload,"
-        " &xrl_frame_locations, &xrl_frame_%" PRIu32 "};\n"
-        "        if (", n, row->owner_slot, offsets[row->owner_slot], row->workspace_slot,
-        offsets[row->workspace_slot], c->function.id);
+        " &xrl_frame_locations, &xrl_frame_%" PRIu32 "};\n        if (", c->function.id);
     c_value(c, row->region.range.iv);
     c_format(c, " >= INT64_C(0) && xrt_array_i64_region_try_begin(&xrl_fixed_context, &xrl_fixed_spec, true,"
         " &xrl_fixed_cache_%" PRIu32 ") && (uint64_t)", n);
