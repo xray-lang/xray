@@ -1,7 +1,9 @@
 class Holder {
+    marker: i64
     items: Array<i64>
 
     init(items: Array<i64>) {
+        this.marker = 37
         this.items = items
     }
 }
@@ -53,3 +55,4 @@ alias.items.push(replaceBeforePush(holder))
 print(len(holder.items))
 print(holder.items[0])
 print(holder.items[1])
+print(holder.marker)
