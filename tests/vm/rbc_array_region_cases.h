@@ -646,6 +646,86 @@ static void rbc_push_region_case(enum ArrayPushWindowMode mode,uint64_t bound,si
     CHECK(!tracked_live);
 }
 
+static XrLirModule *rbc_affine_push_input(XrLirFunction *root, bool dependent) {
+    CArrayFixture c={.element=XR_LIR_I64};
+    OK(xr_lir_array_module_create(NULL,&c.module));
+    XrLirType scalar=XR_LIR_I64;
+    *root=test_function(c.module,"affine_push",&scalar,1,XR_LIR_I64);
+    XrLirValue bound={0};
+    OK(xr_lir_function_parameter(c.module,*root,0,&bound));
+    XrLirBlock entry=test_block(c.module,*root,NULL,0),header=rbc_region_block(&c,*root);
+    XrLirBlock body=rbc_region_block(&c,*root),exit_block=rbc_region_block(&c,*root);
+    OK(xr_lir_set_entry(c.module,*root,entry));
+    XrLirValue seed=ca_constant(&c,entry,42);
+    XrLirValue initial[]={ca_intrinsic(&c,entry,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,&seed,1),
+        ca_constant(&c,entry,0),ca_constant(&c,entry,INT64_MAX),ca_constant(&c,entry,0)};
+    OK(xr_lir_set_terminator(c.module,entry,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+        .edge_count=1,.edges={{header,initial,4}}}));
+    XrLirValue head[4],next[4],done[4],condition={0};
+    rbc_region_parameters(&c,header,head);
+    XrLirValue compare[]={head[1],bound};
+    OK(xr_lir_emit_value(c.module,header,&(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
+        .predicate=XR_LIR_LT,.operands=compare,.operand_count=2},&condition));
+    OK(xr_lir_set_terminator(c.module,header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+        .operands=&condition,.operand_count=1,.edge_count=2,.edges={{body,head,4},{exit_block,head,4}}}));
+    rbc_region_parameters(&c,body,next);
+    XrLirValue scaled=ca_binary(&c,body,XR_LIR_MUL,next[1],ca_constant(&c,body,-3));
+    XrLirValue payload=ca_binary(&c,body,XR_LIR_SUB,scaled,ca_constant(&c,body,7));
+    XrLirValue cell=ca_value(&c,body,XR_LIR_CELL_NEW,XR_LIR_ARRAY_CELL,next,1);
+    ca_effect(&c,body,XR_LIR_ARRAY_DROP,next[0]);
+    XrLirValue append[]={cell,payload};
+    (void)ca_intrinsic(&c,body,XR_LIR_ARRAY_OP_PUSH,XR_LIR_UNIT,append,2);
+    next[0]=ca_value(&c,body,XR_LIR_CELL_READ,XR_LIR_ARRAY,&cell,1);
+    ca_effect(&c,body,XR_LIR_ARRAY_CELL_DROP,cell);
+    next[2]=ca_binary(&c,body,XR_LIR_ADD,next[2],dependent ? next[1] : ca_constant(&c,body,5));
+    next[3]=ca_binary(&c,body,XR_LIR_SUB,next[3],ca_constant(&c,body,3));
+    next[1]=ca_binary(&c,body,XR_LIR_ADD,next[1],ca_constant(&c,body,1));
+    OK(xr_lir_set_terminator(c.module,body,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+        .edge_count=1,.edges={{header,next,4}}}));
+    rbc_region_parameters(&c,exit_block,done);
+    XrLirValue last[]={done[0],done[1]};
+    XrLirValue result=ca_intrinsic(&c,exit_block,XR_LIR_ARRAY_OP_GET,XR_LIR_I64,last,2);
+    ca_effect(&c,exit_block,XR_LIR_ARRAY_DROP,done[0]);
+    result=ca_binary(&c,exit_block,XR_LIR_ADD,result,done[2]);
+    ca_return(&c,exit_block,ca_binary(&c,exit_block,XR_LIR_ADD,result,done[3]));
+    OK(xr_lir_module_finish(c.module,NULL));
+    return c.module;
+}
+
+static void rbc_affine_push_case(bool dependent) {
+    XrLirFunction root={0};
+    XrLirModule *input=rbc_affine_push_input(&root,dependent);
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(input);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
+    CHECK(code && code->homes->fixed_array_update_count==1);
+    const XrLirArrayPushSpan *span=&code->homes->fixed_array_updates[0].region.push_span;
+    CHECK(span->available==!dependent && (code->array_counted_push!=NULL)==!dependent);
+    if (!dependent) {
+        CHECK(span->factor==UINT64_MAX-2 && span->bias==UINT64_MAX-6 && span->update_count==2);
+        const XrLirArrayPushUpdate *updates=code->homes->array_push_updates+span->first_update;
+        CHECK(updates[0].delta==5 && updates[1].delta==UINT64_MAX-2 && updates[0].value!=updates[1].value);
+    }
+    const uint64_t limits[]={0,9};
+    const uint64_t results[]={(uint64_t)INT64_MAX+42,(uint64_t)INT64_MAX-(dependent ? 22u : 13u)};
+    for (size_t n=0;n<sizeof(limits)/sizeof(*limits);++n) {
+        array_pushes=array_push_transactions=0;
+        region_force_bypass=false;
+        RbcRegionResult actual=rbc_region_run_with_args(module,program->locations,&limits[n],1);
+        CHECK(actual.status==XR_RBC_OK && actual.bits==results[n]);
+        CHECK(array_pushes==(n ? 3u : 0u));
+        array_pushes=array_push_transactions=0;
+        region_force_bypass=true;
+        RbcRegionResult ordinary=rbc_region_run_with_args(module,program->locations,&limits[n],1);
+        CHECK(ordinary.status==actual.status && ordinary.bits==actual.bits && array_pushes==limits[n]);
+    }
+    region_force_bypass=false;
+    xr_rbc_program_destroy(program);
+    CHECK(!tracked_live);
+}
+
 static void rbc_fixed_push_cases(void) {
     ArraySetRegionFixture fixture=array_push_window_build(PUSH_WINDOW_NEXT_ITEM);
     XrRbcProgram *program=NULL;
@@ -653,9 +733,10 @@ static void rbc_fixed_push_cases(void) {
     xr_lir_module_destroy(fixture.module);
     const XrRbcModule *module=xr_rbc_program_view(program);
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
-    CHECK(code && code->array_region_runtime && !code->array_counted_push && code->homes->fixed_array_update_count==1);
+    CHECK(code && code->array_region_runtime && code->array_counted_push && code->homes->fixed_array_update_count==1);
     const XrLirFixedArrayUpdateHome *row=&code->homes->fixed_array_updates[0];
     CHECK(row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH && row->workspace_slot!=SIZE_MAX);
+    CHECK(row->region.push_span.available && row->region.push_span.factor==1 && row->region.push_span.bias==1);
 
     const uint64_t ignored=0;
     region_begin_attempts=region_begin_successes=array_pushes=array_push_transactions=0;
@@ -701,6 +782,8 @@ static void rbc_array_region_cases(void) {
     rbc_push_region_case(PUSH_WINDOW_LIVE_SNAPSHOT,0,9,9,0,false);
     rbc_push_region_case(PUSH_WINDOW_OBSERVER,0,9,9,0,false);
     rbc_fixed_push_cases();
+    rbc_affine_push_case(false);
+    rbc_affine_push_case(true);
     rbc_fixed_read_cases(true,RBC_READ_FOLD_FORMAL,false);
     rbc_fixed_read_cases(false,RBC_READ_FOLD_FORMAL,false);
     rbc_fixed_read_cases(true,RBC_READ_FOLD_IMMEDIATE,false);
