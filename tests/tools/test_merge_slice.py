@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Exercise real Git, Ninja and CTest transitions in isolated temporary repositories."""
+"""Exercise real queue transitions using isolated Git and recorded CTest fixtures."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,43 +17,32 @@ import xml.etree.ElementTree as ET
 QUEUE = Path(__file__).resolve().parents[2] / "scripts/merge_slice.py"
 sys.path.insert(0, str(QUEUE.parent))
 import merge_slice
+import xray_l1
 from xray_process import RecoveryRequired
-GATE = '''import os, pathlib, subprocess, sys, time
-root = pathlib.Path(__file__).parent
-mode, build = sys.argv[1:]
-if mode == 'l1':
-    time.sleep(0.15)
-    if (root / 'oracle.out').exists():
-        assert (root / 'oracle.out').read_bytes() == b'42\\n'
-    if (root / 'fail').exists(): raise SystemExit(3)
-    if (root / 'race').exists():
-        old, new = (root / 'race').read_text().split()
-        subprocess.run(['git','-C',str(root),'update-ref','refs/heads/main',new,old],check=True)
-if mode == 'metadata' and (root / 'metadata-fail').exists(): raise SystemExit(4)
-if mode == 'l2' and (root / 'capability-fail').exists(): raise SystemExit(7)
-if mode == 'asan':
-    assert os.environ['XR_ASAN_PROFILE'] == 'full'
-    assert os.environ['XR_ASAN_JOBS'] == '4'
-    assert pathlib.Path(os.environ['XR_ASAN_BUILD_DIR']).is_absolute()
-    (pathlib.Path(build) / 'asan-ran').write_text('PASS')
-print(mode + ': PASS')
-'''
-# Keep all fixture projects on the interpreter that runs this suite.
-FIXTURE_PYTHON = Path(sys.executable).as_posix()
-FIXTURE_PYTHON = FIXTURE_PYTHON.replace("\\", "\\\\")
-FIXTURE_PYTHON = FIXTURE_PYTHON.replace('"', '\\"').replace("$", "\\$")
-CMAKE = '''cmake_minimum_required(VERSION 3.25)
-project(QueueFixture NONE)
-enable_testing()
-set(Python3_EXECUTABLE "@FIXTURE_PYTHON@")
-execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-                OUTPUT_VARIABLE identity OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
-file(WRITE "${CMAKE_BINARY_DIR}/identity.json" "{\\\"commit\\\":\\\"${identity}\\\",\\\"dirty\\\":false}")
-add_custom_target(xray COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" build "${CMAKE_BINARY_DIR}")
-add_test(NAME actual COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" l1 "${CMAKE_BINARY_DIR}")
-add_test(NAME meta_ownership_inventory COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" metadata "${CMAKE_BINARY_DIR}")
-add_test(NAME asan_focused COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" asan "${CMAKE_BINARY_DIR}")
-'''.replace("@FIXTURE_PYTHON@", FIXTURE_PYTHON)
+FIXTURE_TESTS = {"actual", "smoke"}
+FULL_TESTS = FIXTURE_TESTS | {"meta_ownership_inventory", "historical_failure"}
+COMPARISON_HOSTS = ("windows-2022", "macos-latest")
+TASK_FILE = "tasks/339-direct-cutover-to-target-architecture-cn.md"
+
+
+def junit(results):
+    suite = ET.Element("testsuite")
+    for name, state in sorted(results.items()):
+        test = ET.SubElement(suite, "testcase", name=name, status=state)
+        if state == "fail":
+            ET.SubElement(test, "failure")
+        elif state == "notrun":
+            ET.SubElement(test, "skipped")
+    return ET.tostring(suite, encoding="utf-8")
+
+
+def registry(tests):
+    return {"tests": [{"name": test} for test in sorted(tests)]}
+
+
+def json_file(path, data):
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
 
 
 class QueueTests(unittest.TestCase):
@@ -67,12 +57,13 @@ class QueueTests(unittest.TestCase):
                           ("config", "core.autocrlf", "false")]:
             subprocess.run(["git", "-C", str(cls.template), *arguments], check=True,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        plan = {"schema": 1, "targets": ["xray"], "tests": ["actual"],
-                "versionCommand": [sys.executable, "{source}/version.py", "{build}/identity.json"],
-                "smokeStatus": "fixture only"}
-        files = {"gate.py": GATE, "CMakeLists.txt": CMAKE,
-                 "version.py": "from pathlib import Path\nimport sys\nprint(Path(sys.argv[1]).read_text())\n",
-                 "scripts/l1-v0.json": json.dumps(plan)}
+        smoke = {"cases": [{"id": "seed", "expect": "pass"}]}
+        files = {
+            "version.py": "fixture root",
+            "scripts/verify_current_build.py": "REQUIRED = " + repr(tuple(sorted(FIXTURE_TESTS))) + "\n",
+            "tests/smoke/cases.json": json.dumps(smoke),
+            "tests/smoke/original-baseline.json": "{}",
+        }
         for path, content in files.items():
             file = cls.template / path
             file.parent.mkdir(parents=True, exist_ok=True)
@@ -100,8 +91,9 @@ class QueueTests(unittest.TestCase):
         self.evidence.write_text("Synthetic review for isolated queue tests only.\n")
         self.l0 = self.root / "l0.log"
         self.l0.write_text("fixture L0 passed\n")
-        self.asan_log = self.root / "slice-asan.log"
-        self.asan_log.write_text("Synthetic slice ASan result for isolated queue tests only.\n")
+        self.docs = self.root / "docs"
+        (self.docs / "tasks").mkdir(parents=True)
+        (self.docs / TASK_FILE).write_text("fixture Task339", encoding="utf-8")
 
     def tearDown(self):
         for child in self.children:
@@ -133,19 +125,76 @@ class QueueTests(unittest.TestCase):
         sha = self.git("rev-parse", "HEAD")
         self.git("switch", "--detach")
         review = self.root / (name.replace("/", "-") + ".json")
-        review.write_text(json.dumps({"approved": True, "sourceSHA": sha, "reviewedBase": self.base,
-                                     "authorRole": "a", "reviewerRole": "b",
-                                     "reviewEvidence": str(self.evidence), "l0Log": str(self.l0),
-                                     "sliceAsanLog": str(self.asan_log), "sliceAsanResult": "PASS"}))
+        self.write_review(review, sha)
         return name, review, sha
 
-    def start(self, branch, extra=()):
+    def write_review(self, path, sha):
+        evidence = self.root / (path.stem + "-evidence")
+        evidence.mkdir(exist_ok=True)
+        gates = {}
+        release = {}
+        run = {"id": 100, "head_sha": sha, "status": "completed", "conclusion": "success",
+               "path": ".github/workflows/native-host-portability.yml"}
+        jobs = [{"name": name, "run_id": run["id"], "head_sha": sha, "status": "completed", "conclusion": "success"}
+                for name in [*merge_slice.HOST_JOBS.values(), merge_slice.SAN_JOB]]
+        for host in merge_slice.HOST_JOBS:
+            host_dir = evidence / host
+            host_dir.mkdir(exist_ok=True)
+            gates[host] = self.current_gate(host_dir, host, sha)
+            if host not in COMPARISON_HOSTS:
+                continue
+            release[host] = {"hostIdentity": host + " fixture"}
+            for side, commit in (("base", self.base), ("candidate", sha)):
+                directory = host_dir / side
+                directory.mkdir(exist_ok=True)
+                log = directory / "ctest.stdout"
+                log.write_text("fixture terminal CTest output", encoding="utf-8")
+                report = directory / "full.xml"
+                results = dict.fromkeys(FULL_TESTS, "run")
+                results["historical_failure"] = "fail"
+                report.write_bytes(junit(results))
+                cache = directory / "CMakeCache.txt"
+                cache.write_text("CMAKE_GENERATOR:INTERNAL=Ninja\nCMAKE_BUILD_TYPE:STRING=Release\n"
+                                 "CMAKE_C_COMPILER:FILEPATH=/fixture/cc\n", encoding="utf-8")
+                release[host][side] = {
+                    "identity": json_file(directory / "identity.json", self.identity(host, commit)),
+                    "registry": json_file(directory / "registry.json", registry(FULL_TESTS)),
+                    "junit": str(report), "cache": str(cache), "log": str(log), "exit": 8,
+                }
+        review = {
+            "approved": True, "sourceSHA": sha, "reviewedBase": self.base, "comparisonBase": self.base,
+            "author": "Core Fixture", "reviewer": "Separate Reviewer",
+            "reviewEvidence": str(self.evidence), "l0Log": str(self.l0),
+            "ciRun": json_file(evidence / "run.json", run), "ciJobs": json_file(evidence / "jobs.json", {"jobs": jobs}),
+            "current": gates, "release": release,
+        }
+        json_file(path, review)
+
+    @staticmethod
+    def identity(host, sha, profile="Release"):
+        return {"commit": sha, "dirty": False, "target": merge_slice.HOST_TARGETS[host][0], "buildProfile": profile}
+
+    def current_gate(self, directory, host, sha, profile="Release"):
+        commands = []
+        for name, payload in (
+            ("identity", json.dumps(self.identity(host, sha, profile))),
+            ("ctest-list", json.dumps(registry(FULL_TESTS))),
+            ("current-tests", "fixture terminal CTest output"),
+        ):
+            (directory / f"{name}.stdout").write_text(payload, encoding="utf-8")
+            (directory / f"{name}.stderr").write_bytes(b"")
+            commands.append({"name": name, "command": [name], "exit": 0, "seconds": 0.1,
+                             "stdoutSha256": hashlib.sha256(payload.encode()).hexdigest(),
+                             "stderrSha256": hashlib.sha256(b"").hexdigest()})
+        json_file(directory / "commands.json", commands)
+        (directory / "current.xml").write_bytes(junit(dict.fromkeys(FIXTURE_TESTS, "run")))
+        return str(directory)
+
+    def start(self, branch):
         name, review, _ = branch
-        args = [sys.executable, str(QUEUE), "--branch", name, "--review", str(review),
+        args = [sys.executable, "-B", str(QUEUE), "--branch", name, "--review", str(review),
                 "--repo", str(self.repo), "--integration", str(self.integration),
-                "--build", str(self.root / "build"),
-                "--temporary", str(self.root / "tmp"), "--slots", str(self.root / "slots"),
-                "--queue", str(self.root / "queue"), *extra]
+                "--docs", str(self.docs), "--queue", str(self.root / "queue")]
         child = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.children.append(child)
         return child
@@ -158,7 +207,7 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(child.wait(timeout=60), code, self.logs())
         return self.logs()[-1]
 
-    def test_pass_fast_forwards_and_runs_exact_test(self):
+    def test_pass_fast_forwards_after_exact_evidence(self):
         branch = self.branch("a/pass", {"pass": "yes"})
         log = self.finish(self.start(branch), 0)
         self.assertEqual(log["state"], "MERGED")
@@ -168,11 +217,11 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(len(self.logs()), 1)
 
     def test_repository_copy_keeps_template_files_and_refs_independent(self):
-        original = (self.template / "gate.py").read_bytes()
-        self.write("gate.py", "changed independently\n")
+        original = (self.template / "version.py").read_bytes()
+        self.write("version.py", "changed independently\n")
         self.git("config", "user.name", "Independent Fixture")
         self.git("update-ref", "refs/heads/private", self.base)
-        self.assertEqual((self.template / "gate.py").read_bytes(), original)
+        self.assertEqual((self.template / "version.py").read_bytes(), original)
         self.assertEqual(self.git("config", "user.name", root=self.template), "Queue Fixture")
         self.assertEqual(self.git("for-each-ref", "refs/heads/private", root=self.template), "")
         self.assertNotEqual(self.git("rev-parse", "--path-format=absolute", "--git-common-dir"),
@@ -180,7 +229,13 @@ class QueueTests(unittest.TestCase):
 
     def test_failure_keeps_main_and_allows_next_request(self):
         bad = self.branch("a/fail", {"fail": "yes"})
-        self.finish(self.start(bad), 1)
+        evidence = json.loads(bad[1].read_text())
+        jobs = Path(evidence["ciJobs"])
+        rows = json.loads(jobs.read_text())
+        rows["jobs"][0]["conclusion"] = "failure"
+        json_file(jobs, rows)
+        log = self.finish(self.start(bad), 1)
+        self.assertIn("Missing or failed CI job", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
         good = self.branch("a/next", {"next": "yes"})
         self.finish(self.start(good), 0)
@@ -201,9 +256,7 @@ class QueueTests(unittest.TestCase):
         self.git("commit", "-m", "Pin the output witness checkout bytes")
         final = self.git("rev-parse", "HEAD")
         self.git("switch", "--detach")
-        data = json.loads(review.read_text())
-        data["sourceSHA"] = final
-        review.write_text(json.dumps(data))
+        self.write_review(review, final)
         log = self.finish(self.start((name, review, final)), 0)
         self.assertEqual(log["state"], "MERGED")
         self.assertEqual(oracle.read_bytes(), b"42\n")
@@ -231,7 +284,7 @@ class QueueTests(unittest.TestCase):
             merge_slice.materialize_checkout(self.repo, ["first.out", "second"])
         self.assertEqual([(path.read_bytes(), path.stat().st_mtime_ns) for path in (first, second)], before)
 
-    def test_concurrent_requests_are_fifo_and_rebuild_on_new_main(self):
+    def test_concurrent_requests_are_fifo_and_stale_evidence_is_rejected(self):
         first = self.branch("a/first", {"first": "yes"})
         second = self.branch("a/second", {"second": "yes"})
         child1 = self.start(first)
@@ -241,133 +294,51 @@ class QueueTests(unittest.TestCase):
             time.sleep(0.01)
         child2 = self.start(second)
         self.finish(child1, 0)
-        self.finish(child2, 0)
+        self.finish(child2, 1)
         one, two = self.logs()
         self.assertLess(one["sequence"], two["sequence"])
         self.assertGreaterEqual(two["processingStarted"], one["finished"])
         self.assertEqual(two["oldMain"], one["newMain"])
-        self.assertNotEqual(two["candidate"], second[2])
+        self.assertIn("current main", two["error"])
+        self.assertEqual(self.git("rev-parse", "main"), first[2])
 
-    def test_compiler_change_uses_reviewed_slice_asan_while_full_lane_is_red(self):
-        branch = self.branch("a/xir", {"src/xir/change.c": "/* fixture */"})
+    def test_old_r3_qualification_does_not_control_stdlib_admission(self):
+        branch = self.branch("front/stdlib", {"stdlib/example/example.xr": "// synthetic fixture"})
         log = self.finish(self.start(branch), 0)
-        self.assertEqual(log["gates"]["meta_ownership_inventory"], "PASS")
-        self.assertEqual(log["gates"]["slice_asan"], "PASS")
-        self.assertIn("NOT_RUN: redlist-2026-10-21", log["gates"]["asan_focused"])
-        self.assertFalse((self.root / "build/asan-ran").exists())
-        saved = self.root / "queue/logs" / f"{log['sequence']:020d}" / "slice-asan.log"
-        self.assertEqual(saved.read_bytes(), self.asan_log.read_bytes())
-        slots = [json.loads(p.read_text()) for p in (self.root / "slots/requests").glob("*.json")]
-        self.assertEqual([r["kind"] for r in slots], ["build"])
-        folder = saved.parent
-        self.assertEqual(len(list(ET.parse(folder / "l1.xml").getroot().iter("testcase"))), 1)
-        self.assertEqual(len(list(ET.parse(folder / "metadata.xml").getroot().iter("testcase"))), 1)
-        self.assertEqual(len(list(ET.parse(folder / "l1-combined.xml").getroot().iter("testcase"))), 2)
-        self.assertEqual((folder / "l1.log").read_text().count('$ ["ctest"'), 1)
+        self.assertEqual(log["gates"]["fullCTest"], "PASS")
+        self.assertEqual(log["gates"]["affectedSan"], "NOT_APPLICABLE")
 
-    def test_legacy_addition_is_rejected_before_build(self):
-        branch = self.branch("a/legacy", {"src/aot/change.c": "/* fixture */"})
+    def test_passing_smoke_cannot_be_demoted(self):
+        path = "tests/smoke/cases.json"
+        branch = self.branch("front/smoke", {path: json.dumps({"cases": [{"id": "seed", "expect": "gap"}]})})
         log = self.finish(self.start(branch), 1)
-        self.assertEqual(log["gates"]["legacy_deletions"], "FAIL")
-        self.assertIn("deletions only", log["error"])
+        self.assertIn("passing case demoted", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
-        self.assertFalse((self.root / "build").exists())
 
-    def test_alternate_manifest_cannot_bypass_candidate_usability_policy(self):
-        original = json.loads((self.repo / "scripts/l1-v0.json").read_text())
-        policy = dict(original, progressPolicy="original-smoke-and-deletion-only-legacy",
-                      tests=["smoke", "smoke_runner", "test_cli_usability", "usability_progress_runner"])
-        branch = self.branch("a/policy", {"scripts/l1-v0.json": json.dumps(policy),
-                                           "scripts/alternate.json": json.dumps(original)})
-        log = self.finish(self.start(branch, ["--manifest", "scripts/alternate.json"]), 1)
-        self.assertIn("alternate manifest cannot bypass", log["error"])
-        self.assertEqual(self.git("rev-parse", "main"), self.base)
-        self.assertFalse((self.root / "build").exists())
-
-    def test_requested_l2_failure_never_advances_main(self):
-        self.check_failed_capability(False)
-
-    def test_embedded_stdlib_cannot_skip_failed_source_sdk_without_l2_flags(self):
-        self.check_failed_capability(True)
-
-    def test_moving_embedded_stdlib_out_cannot_skip_failed_source_sdk(self):
-        self.check_failed_capability("rename")
-
-    def check_failed_capability(self, embedded_source):
-        if embedded_source == "rename":
-            self.git("switch", "main")
-            self.write("stdlib/xml/xml.xr", "export fn parse() {}\n")
-            self.git("add", "stdlib/xml/xml.xr")
-            self.git("commit", "-m", "Add embedded source fixture")
-            self.base = self.git("rev-parse", "HEAD")
-            self.git("switch", "--detach")
-        plan = json.loads((self.repo / "scripts/l1-v0.json").read_text())
-        plan["validationTiers"] = "scripts/validation-tiers.json"
-        registry = {"schema": 1,
-                    "levels": {"L0": "scripts/l0-related.json", "L1": "scripts/l1-v0.json",
-                               "L2": "scripts/l2-capability.json", "L3": "scripts/l3-nightly.json"}}
-        def tier(level, name, test):
-            return {"schema": 1, "tier": level, "groups": {
-                name: {"tests": [test], "targets": ["xray"], "match": ["*"]}}}
-        l2 = tier("L2", "source-sdk" if embedded_source else "checked-sdk", "capability_actual")
-        l2.update(requiredOn={"owner": {"tests": ["capability_actual"], "targets": ["xray"]}}, interfaceMatches={})
-        night = tier("L3", "nightly", "nightly_actual")
-        branch = self.branch("a/capability-fails", {
-            "scripts/l1-v0.json": json.dumps(plan), "scripts/validation-tiers.json": json.dumps(registry),
-            "scripts/l0-related.json": json.dumps(tier("L0", "tooling", "tooling_actual")),
-            "scripts/l2-capability.json": json.dumps(l2),
-            "scripts/l3-nightly.json": json.dumps(night),
-            "CMakeLists.txt": CMAKE + '\nadd_test(NAME capability_actual COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/gate.py" l2 "${CMAKE_BINARY_DIR}")\n',
-            "capability-fail": "yes"})
-        if embedded_source:
-            self.git("switch", branch[0])
-            if embedded_source == "rename":
-                (self.repo / "tests/fixtures").mkdir(parents=True)
-                self.git("mv", "stdlib/xml/xml.xr", "tests/fixtures/xml.xr")
-                renamed = self.git("diff", "--find-renames", "--name-status", "--cached")
-                self.assertIn("R100\tstdlib/xml/xml.xr\ttests/fixtures/xml.xr", renamed)
-            else:
-                self.write("stdlib/xml/xml.xr", "export fn parse() {}\n")
-                self.git("add", "stdlib/xml/xml.xr")
-            self.git("commit", "-m", "Change embedded library input")
-            review = json.loads(branch[1].read_text())
-            review["sourceSHA"] = self.git("rev-parse", "HEAD")
-            branch[1].write_text(json.dumps(review))
-        arguments = [] if embedded_source else ["--l2-capability", "checked-sdk", "--l2-sensitive", "owner"]
-        log = self.finish(self.start(branch, arguments), 1)
-        self.assertEqual(log["gates"]["L1"], "PASS")
-        self.assertEqual(log["gates"]["L2"], "FAIL")
-        self.assertEqual(self.git("rev-parse", "main"), self.base)
-        self.assertEqual(log["L2Plan"]["tests"], ["capability_actual"])
-
-    def test_metadata_failure_never_advances_main(self):
-        branch = self.branch("a/meta-fail", {"src/vm/register/change.c": "/* fixture */",
-                                             "metadata-fail": "yes"})
+    def test_new_full_ctest_failure_never_advances_main(self):
+        branch = self.branch("front/compare", {"example": "yes"})
+        review = json.loads(branch[1].read_text())
+        report = Path(review["release"]["windows-2022"]["candidate"]["junit"])
+        outcomes = dict.fromkeys(FULL_TESTS, "run")
+        outcomes.update(actual="fail", historical_failure="fail")
+        report.write_bytes(junit(outcomes))
         log = self.finish(self.start(branch), 1)
-        self.assertEqual(log["gates"]["L1"], "PASS")
-        self.assertEqual(log["gates"]["meta_ownership_inventory"], "FAIL")
+        self.assertIn("new failing or unexecuted tests: actual", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
 
-    def test_missing_metadata_never_advances_main(self):
-        line = next(line for line in CMAKE.splitlines() if line.startswith("add_test(NAME meta_"))
-        branch = self.branch("a/meta-missing", {"src/lir/change.c": "/* fixture */",
-                                                "CMakeLists.txt": CMAKE.replace(line, "")})
+    def test_missing_safety_inventory_never_advances_main(self):
+        branch = self.branch("core/metadata", {"src/lir/xlir_test.c": "/* fixture */"})
+        review = json.loads(branch[1].read_text())
+        for side in ("base", "candidate"):
+            evidence = review["release"]["windows-2022"][side]
+            tests = FULL_TESTS - {"meta_ownership_inventory"}
+            json_file(Path(evidence["registry"]), registry(tests))
+            outcomes = dict.fromkeys(tests, "run")
+            outcomes["historical_failure"] = "fail"
+            Path(evidence["junit"]).write_bytes(junit(outcomes))
         log = self.finish(self.start(branch), 1)
-        self.assertIn("requested tests differ", log["error"])
+        self.assertIn("misses an applicable safety or smoke test", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
-
-    def test_overlapping_metadata_runs_once(self):
-        plan = json.loads((self.repo / "scripts/l1-v0.json").read_text())
-        plan["tests"].append("meta_ownership_inventory")
-        branch = self.branch("a/meta-overlap", {"src/lir/change.c": "/* fixture */",
-                                                "scripts/l1-v0.json": json.dumps(plan)})
-        log = self.finish(self.start(branch), 0)
-        folder = self.root / "queue/logs" / f"{log['sequence']:020d}"
-        combined = list(ET.parse(folder / "l1-combined.xml").getroot().iter("testcase"))
-        self.assertEqual([case.get("name") for case in combined].count("meta_ownership_inventory"), 1)
-        self.assertEqual(len(list(ET.parse(folder / "l1.xml").getroot().iter("testcase"))), 2)
-        self.assertEqual(len(list(ET.parse(folder / "metadata.xml").getroot().iter("testcase"))), 1)
-        self.assertEqual(log["gates"]["meta_ownership_inventory"], "PASS")
 
     def test_placeholder_identity_is_rejected(self):
         branch = self.branch("a/invalid", {"invalid": "yes"}, invalid=True)
@@ -375,50 +346,51 @@ class QueueTests(unittest.TestCase):
         self.assertIn("Placeholder", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
 
-    def test_missing_test_and_external_manifest_cannot_pass(self):
-        plan = json.loads((self.repo / "scripts/l1-v0.json").read_text())
-        plan["tests"].append("missing-test")
-        branch = self.branch("a/missing", {"scripts/l1-v0.json": json.dumps(plan),
-                                            "src/lir/change.c": "/* fixture */"})
+    def test_changed_current_receipt_is_rejected(self):
+        branch = self.branch("core/receipt", {"example": "yes"})
+        review = json.loads(branch[1].read_text())
+        receipt = Path(review["current"]["ubuntu-24.04"]) / "current-tests.stdout"
+        receipt.write_text("replacement", encoding="utf-8")
         log = self.finish(self.start(branch), 1)
-        self.assertIn("requested tests differ", log["error"])
-        log = self.finish(self.start(branch, ("--manifest", str(self.repo / "scripts/l1-v0.json"))), 1)
-        self.assertIn("tracked path", log["error"])
+        self.assertIn("changed current-tests stdout", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
 
-    def test_failed_or_unrun_slice_asan_never_advances_main(self):
-        branch = self.branch("a/asan-failed", {"src/lir/change.c": "/* fixture */"})
+    def test_affected_fail_closed_without_san_and_accepts_current_coverage(self):
+        branch = self.branch("core/asan", {"src/runtime/native/source.c": "/* fixture */"})
         review = json.loads(branch[1].read_text())
-        for result in ("FAIL", "NOT_RUN", "NOT_APPLICABLE"):
-            review.update(sliceAsanResult=result, sliceAsanReason="fixture reason")
-            branch[1].write_text(json.dumps(review))
-            log = self.finish(self.start(branch), 1)
-            self.assertEqual(log["gates"]["slice_asan"], "FAIL")
-            self.assertEqual(self.git("rev-parse", "main"), self.base)
-
-    def test_non_native_slice_requires_a_reason_for_asan_exemption(self):
-        branch = self.branch("a/docs", {"spec/source/entry.md": "fixture"})
-        review = json.loads(branch[1].read_text())
-        review.update(sliceAsanResult="NOT_APPLICABLE")
-        branch[1].write_text(json.dumps(review))
-        self.finish(self.start(branch), 1)
-        review["sliceAsanReason"] = "Only specification prose changed."
-        branch[1].write_text(json.dumps(review))
+        log = self.finish(self.start(branch), 1)
+        self.assertIn("affected sanitizer evidence", log["error"])
+        san = branch[1].with_suffix(".san")
+        san.mkdir()
+        cache = san / "CMakeCache.txt"
+        cache.write_text("ENABLE_ASAN:BOOL=ON\nENABLE_UBSAN:BOOL=ON\nXR_XIR_PARANOID:BOOL=ON\n", encoding="utf-8")
+        review["san"] = {"cache": str(cache), "current": self.current_gate(san, "ubuntu-24.04", branch[2], "Debug"),
+                         "tests": sorted(FIXTURE_TESTS)}
+        json_file(branch[1], review)
         log = self.finish(self.start(branch), 0)
-        self.assertTrue(log["gates"]["slice_asan"].startswith("NOT_APPLICABLE:"))
+        self.assertEqual(log["gates"]["affectedSan"], "PASS")
 
-    def test_missing_slice_log_is_rejected_before_queueing(self):
-        branch = self.branch("a/no-log", {"src/hir/change.c": "/* fixture */"})
-        self.asan_log.unlink()
-        self.assertEqual(self.start(branch).wait(timeout=60), 1)
-        self.assertEqual(self.logs(), [])
-        self.assertEqual(self.git("rev-parse", "main"), self.base)
+    def test_shared_changes_require_distinct_review(self):
+        branch = self.branch("core/shared", {"src/shared/file.c": "/* fixture */"})
+        review = json.loads(branch[1].read_text())
+        review["reviewer"] = review["author"].upper()
+        json_file(branch[1], review)
+        log = self.finish(self.start(branch), 1)
+        self.assertIn("Independent review required", log["error"])
 
     def test_main_compare_and_swap_does_not_overwrite_a_race(self):
         alternate = self.branch("b/alternate", {"alternate": "yes"})
-        branch = self.branch("a/race", {"race": self.base + " " + alternate[2]})
-        log = self.finish(self.start(branch), 1)
-        self.assertIn("update-ref", log["error"])
+        branch = self.branch("a/race", {"race": "yes"})
+        args = type("Args", (), {"repo": self.repo, "integration": self.integration, "branch": branch[0]})()
+        original = merge_slice.verify_task339
+
+        def race(*arguments):
+            original(*arguments)
+            self.git("update-ref", "refs/heads/main", alternate[2], self.base)
+
+        with mock.patch.object(merge_slice, "verify_task339", side_effect=race):
+            with self.assertRaisesRegex(RuntimeError, "update-ref"):
+                merge_slice.integrate(args, json.loads(branch[1].read_text()), {"gates": {}}, self.root)
         self.assertEqual(self.git("rev-parse", "main"), alternate[2])
 
     def test_moved_branch_invalidates_review(self):
@@ -429,20 +401,22 @@ class QueueTests(unittest.TestCase):
         self.assertIn("moved after", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
 
-    def test_rebase_rejects_a_new_placeholder_committer(self):
+    def test_nonlinear_candidate_is_rejected(self):
         first = self.branch("a/first", {"first": "yes"})
         second = self.branch("a/second", {"second": "yes"})
-        merged = self.finish(self.start(first), 0)["newMain"]
-        self.git("config", "extensions.worktreeConfig", "true")
-        self.git("config", "--worktree", "user.email", "unset@xray.invalid", root=self.integration)
-        log = self.finish(self.start(second), 1)
-        self.assertIn("Rebased candidate", log["error"])
-        self.assertEqual(self.git("rev-parse", "main"), merged)
+        self.git("switch", second[0])
+        self.git("merge", "--no-ff", "-m", "Merge fixtures", first[0])
+        head = self.git("rev-parse", "HEAD")
+        self.git("switch", "--detach")
+        self.write_review(second[1], head)
+        log = self.finish(self.start((second[0], second[1], head)), 1)
+        self.assertIn("nonempty, linear slice", log["error"])
+        self.assertEqual(self.git("rev-parse", "main"), self.base)
 
     def test_recovery_exception_blocks_the_queue_itself(self):
         branch = self.branch("a/recovery", {"recovery": "yes"})
         arguments = [str(QUEUE), "--branch", branch[0], "--review", str(branch[1]),
-                     "--repo", str(self.repo), "--queue", str(self.root / "queue")]
+                     "--repo", str(self.repo), "--docs", str(self.docs), "--queue", str(self.root / "queue")]
         with mock.patch.object(sys, "argv", arguments), mock.patch.object(
                 merge_slice, "integrate", side_effect=RecoveryRequired("process tree unknown")):
             with self.assertRaises(RecoveryRequired):
@@ -472,8 +446,8 @@ class GroupedReportTests(unittest.TestCase):
                 if failed_command:
                     raise subprocess.CalledProcessError(8, arguments)
 
-            with mock.patch.object(merge_slice.xray_l1, "command", side_effect=produce):
-                result = merge_slice.xray_l1.test_groups(
+            with mock.patch.object(xray_l1, "command", side_effect=produce):
+                result = xray_l1.test_groups(
                     {"l1": ["actual"], "metadata": ["meta_ownership_inventory"]},
                     logs, logs, {})
             self.assertEqual(len(calls), 1)
@@ -508,9 +482,9 @@ class GroupedReportTests(unittest.TestCase):
                             failed_command=True)
 
     def test_duplicate_requested_group_rejects_before_execution(self):
-        with mock.patch.object(merge_slice.xray_l1, "command") as command:
+        with mock.patch.object(xray_l1, "command") as command:
             with self.assertRaises(ValueError):
-                merge_slice.xray_l1.test_groups({"l1": ["actual", "actual"]}, Path(), Path(), {})
+                xray_l1.test_groups({"l1": ["actual", "actual"]}, Path(), Path(), {})
             command.assert_not_called()
 
 

@@ -1,20 +1,45 @@
 #!/usr/bin/env python3
-"""Integrate one reviewed local commit through a detached worktree and L1."""
+"""Publish an exact reviewed linear candidate after Task339 verification.
+
+The approved review names absolute raw evidence files. ciRun/ciJobs are the
+GitHub Actions run and jobs responses. current maps the four runner labels to
+their uploaded current-evidence directories. release maps windows-2022 and
+macos-latest to hostIdentity and base/candidate records with identity,
+registry, junit, cache, log paths and actual CTest exit codes. comparisonBase
+pins the approved full-test baseline. san selects the combined CI suite
+(current, cache and affected tests) where required. Records compare complete
+JUnit outcomes; separately replayed timeouts need explicit qualification.
+"""
 
 import argparse
+import ast
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 
-import xray_l1
 import xray_progress
 from xray_slot import Lease, save_json
 from xray_process import RecoveryRequired
+
+
+HOST_JOBS = {
+    "windows-2022": "Native Windows (MSVC x64)",
+    "macos-latest": "Native macOS (Ninja Release)",
+    "ubuntu-24.04": "Native Linux (ubuntu-24.04)",
+    "ubuntu-24.04-arm": "Native Linux (ubuntu-24.04-arm)",
+}
+HOST_TARGETS = {
+    "windows-2022": ("windows-x86_64",),
+    "macos-latest": ("macos-arm64", "macos-aarch64", "macos-x86_64"),
+    "ubuntu-24.04": ("linux-x86_64",),
+    "ubuntu-24.04-arm": ("linux-arm64", "linux-aarch64"),
+}
+SAN_JOB = "Current gates (ASan + UBSan + paranoid)"
 
 
 def git(root: Path, *arguments: str) -> str:
@@ -97,69 +122,232 @@ def materialize_checkout(root: Path, changed: list[str]) -> list[dict]:
     return pending
 
 
+def evidence_path(value, *, allow_empty: bool = False) -> Path:
+    if not isinstance(value, str):
+        raise ValueError("Evidence requires an absolute file path")
+    path = Path(value)
+    if not path.is_absolute() or not path.is_file() or (not allow_empty and not path.stat().st_size):
+        raise ValueError(f"Evidence requires an existing, nonempty absolute file: {path}")
+    return path
+
+
 def review_request(args) -> dict:
     review = json.loads(args.review.read_text(encoding="utf-8-sig"))
     if review.get("approved") is not True:
         raise ValueError("Review has not approved this slice")
-    for key in ("sourceSHA", "reviewedBase"):
+    for key in ("sourceSHA", "reviewedBase", "comparisonBase"):
         if not re.fullmatch(r"[0-9a-f]{40}", review.get(key, "")):
             raise ValueError(f"Review requires an exact {key}")
-    roles = {"lead", "a", "b", "c", "d"}
-    if review.get("authorRole") not in roles or review.get("reviewerRole") not in roles:
-        raise ValueError("Review requires the author and reviewer roles")
-    for key in ("reviewEvidence", "l0Log", "sliceAsanLog"):
-        path = Path(review.get(key, ""))
-        if not path.is_absolute() or not path.is_file() or path.stat().st_size == 0:
-            raise ValueError(f"Review requires an existing, nonempty {key}")
+    for key in ("author", "reviewer"):
+        if not isinstance(review.get(key), str) or not review[key].strip():
+            raise ValueError(f"Review requires a named {key}")
+    for key in ("reviewEvidence", "l0Log", "ciRun", "ciJobs"):
+        evidence_path(review.get(key))
     return review
 
 
 def review_scope(root: Path, base: str, candidate: str, review: dict) -> dict:
-    """Require independent review for interfaces, owner crossings and deletions."""
-    changes = git(root, "diff", "--no-renames", "--name-status", base, candidate).splitlines()
-    reasons, owners = [], set()
-    for line in changes:
-        status, path = line.split("\t", 1)
-        if status == "D" and (path.startswith(("src/", "include/", "tests/", "scripts/", "tools/", "cmake/"))
-                              or Path(path).suffix.lower() in {".c", ".h", ".py", ".sh", ".cmake"}):
-            reasons.append(path)
-        if path.startswith(("src/", "include/")):
-            owners.add("/".join(path.split("/")[:2]))
-            if Path(path).suffix.lower() in {".h", ".hpp"}:
-                reasons.append(path)
-        if path.startswith("cmake/XraySourceSdk") or path in {
-                "scripts/merge_slice.py", "scripts/xray_progress.py", "scripts/l1-v0.json",
-                "scripts/xray_l1.py", "scripts/l0-related.json", "scripts/l2-capability.json",
-                "scripts/l3-nightly.json", "scripts/validation-tiers.json",
-                "tests/smoke/original-baseline.json"}:
-            reasons.append(path)
-    if len(owners) > 1:
-        reasons.append("multiple production owners")
-    independent = review["authorRole"] != review["reviewerRole"]
+    changes = git_paths(root, "diff", "--no-renames", "--name-status", base, candidate)
+    core, front, shared, deletions, safety = set(), set(), set(), set(), set()
+    for status, path in zip(changes[::2], changes[1::2]):
+        if path.startswith(("src/lir/xlir_lower", "src/frontend/", "src/hir/", "src/xir/", "src/module/",
+                            "src/os/", "src/io/", "src/app/", "src/toolchain/", "src/api/", "src/stdlib/", "stdlib/")):
+            front.add(path)
+        elif path.startswith(("src/lir/", "src/vm/", "src/runtime/", "include/xray_native")):
+            core.add(path)
+        elif path.startswith(("src/base/", "src/shared/", "src/core/", "include/", ".github/workflows/")) or path in (
+            "AGENTS.md", "CMakeLists.txt", "scripts/merge_slice.py", "scripts/merge-slice.ps1",
+            "scripts/verify_current_build.py", "tests/smoke/run_smoke.py", "tests/smoke/smoke.cmake",
+        ):
+            shared.add(path)
+        if status == "D":
+            deletions.add(path)
+        if path.startswith(("src/runtime/", "src/vm/", "src/lir/xlir_c", "src/lir/xlir_ownership",
+                            "src/lir/xlir_value_", "include/xray_native")):
+            safety.add(path)
+    reasons = sorted(shared | deletions | safety)
+    if core and front:
+        reasons.append("cross-lane source")
+    independent = review["author"].strip().casefold() != review["reviewer"].strip().casefold()
     if reasons and not independent:
         raise ValueError("Independent review required: " + ", ".join(reasons))
-    return {"independent": independent, "required_by": reasons}
+    return {"independent": independent, "required_by": reasons, "affected_san": bool(safety)}
 
 
-def slice_asan_gate(review: dict, changed: list[str], log: dict, logs: Path) -> None:
-    """Archive the author's gate and enforce the independent review's verdict."""
-    content = Path(review["sliceAsanLog"]).read_bytes()
-    (logs / "slice-asan.log").write_bytes(content)
-    result = review.get("sliceAsanResult")
-    log["sliceAsanEvidence"] = {"path": review["sliceAsanLog"],
-                                "sha256": hashlib.sha256(content).hexdigest(),
-                                "result": result}
-    log["gates"]["slice_asan"] = "FAIL"
-    if result == "PASS":
-        log["gates"]["slice_asan"] = "PASS"
-        return
-    native = any(p.startswith(("src/", "include/")) or
-                 Path(p).suffix.lower() in {".c", ".h", ".cc", ".cpp", ".hpp"} for p in changed)
-    reason = review.get("sliceAsanReason")
-    if result == "NOT_APPLICABLE" and not native and isinstance(reason, str) and reason.strip():
-        log["gates"]["slice_asan"] = "NOT_APPLICABLE: " + reason.strip()
-        return
-    raise RuntimeError("Slice ASan gate must pass; non-native slices require a reviewed reason")
+def archive(value, name: str, logs: Path, log: dict, *, allow_empty: bool = False) -> bytes:
+    path = evidence_path(value, allow_empty=allow_empty)
+    content = path.read_bytes()
+    (logs / name).write_bytes(content)
+    log.setdefault("evidence", {})[name] = {
+        "source": str(path), "sha256": hashlib.sha256(content).hexdigest(),
+    }
+    return content
+
+
+def registry_names(content: bytes) -> set[str]:
+    names = [test["name"] for test in json.loads(content)["tests"]]
+    if not names or len(set(names)) != len(names):
+        raise ValueError("CTest inventory is empty or contains duplicate names")
+    return set(names)
+
+
+def junit_outcomes(content: bytes) -> dict[str, str]:
+    results = {}
+    states = {"run": (), "notrun": ("skipped",), "fail": ("failure",)}
+    document = ET.fromstring(content)
+    for case in document.iter("testcase"):
+        name, status = case.get("name"), case.get("status")
+        tags = tuple(child.tag for child in case if child.tag in {"failure", "error", "skipped"})
+        if not name or name in results or status not in states or states[status] != tags:
+            raise ValueError("CTest JUnit contains duplicate, incomplete or invalid outcomes")
+        results[name] = status
+    if not results:
+        raise ValueError("CTest JUnit contains no outcomes")
+    return results
+
+
+def current_gate_tests(root: Path, candidate: str) -> set[str]:
+    source = git(root, "show", f"{candidate}:scripts/verify_current_build.py")
+    for item in ast.parse(source).body:
+        if isinstance(item, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "REQUIRED"
+                                               for target in item.targets):
+            tests = ast.literal_eval(item.value)
+            if (isinstance(tests, tuple) and "smoke" in tests and all(isinstance(name, str) for name in tests)
+                    and len(set(tests)) == len(tests)):
+                return set(tests)
+    raise ValueError("Candidate has no canonical list of current tests")
+
+
+def verify_identity(content: bytes, candidate: str, host: str, profile: str) -> None:
+    identity = json.loads(content)
+    if (identity.get("commit") != candidate or identity.get("dirty") is not False or
+            identity.get("target") not in HOST_TARGETS[host] or identity.get("buildProfile") != profile):
+        raise ValueError(f"{host}: build identity does not match {candidate} ({profile})")
+
+
+def verify_current(directory: str, host: str, candidate: str, tests: set[str], logs: Path, log: dict,
+                   profile: str = "Release") -> None:
+    root = Path(directory)
+    prefix = host if profile == "Release" else "san"
+    commands = json.loads(archive(str(root / "commands.json"), prefix + "-commands.json", logs, log))
+    expected = {"identity", "ctest-list", "current-tests"}
+    if len(commands) != len(expected) or {row["name"] for row in commands} != expected:
+        raise ValueError(f"{prefix}: incomplete current gate commands")
+    for row in commands:
+        name = row["name"]
+        if row.get("exit") != 0 or not isinstance(row.get("command"), list) or not row["command"]:
+            raise ValueError(f"{prefix}: {name} did not complete successfully")
+        for stream in ("stdout", "stderr"):
+            source = root / f"{name}.{stream}"
+            content = archive(str(source), prefix + "-" + source.name, logs, log, allow_empty=stream == "stderr")
+            if hashlib.sha256(content).hexdigest() != row.get(stream + "Sha256"):
+                raise ValueError(f"{prefix}: changed {name} {stream}")
+            if name == "identity" and stream == "stdout":
+                verify_identity(content, candidate, host, profile)
+            if name == "ctest-list" and stream == "stdout":
+                if not 0 <= row.get("seconds", -1) <= 5 or not tests <= registry_names(content):
+                    raise ValueError(f"{prefix}: incomplete or slow CTest registration")
+    junit = archive(str(root / "current.xml"), prefix + "-current.xml", logs, log)
+    if junit_outcomes(junit) != dict.fromkeys(tests, "run"):
+        raise ValueError(f"{prefix}: current gates did not execute and pass the exact test list")
+
+
+def cache_options(content: bytes) -> dict[str, str]:
+    options = {}
+    for line in content.decode("utf-8").splitlines():
+        key, marker, value = line.partition("=")
+        if marker and re.fullmatch(r"(?:CMAKE_(?:BUILD_TYPE|GENERATOR|C_COMPILER|CXX_COMPILER|C_FLAGS.*|CXX_FLAGS.*)|ENABLE_\w+|XR_\w+):\w+", key):
+            options[key.split(":", 1)[0]] = value
+    return options
+
+
+def verify_release_pair(pair: dict, host: str, candidate: str, baseline: str, tests: set[str],
+                        logs: Path, log: dict) -> None:
+    # The review identifies the common physical host for these artifacts.
+    if not isinstance(pair.get("hostIdentity"), str) or not pair["hostIdentity"].strip():
+        raise ValueError(f"{host}: full comparison must identify its host")
+    outcomes, configs = [], []
+    for side, sha in (("base", baseline), ("candidate", candidate)):
+        paths = pair[side]
+        if type(paths.get("exit")) is not int or paths["exit"] not in (0, 8):
+            raise ValueError(f"{host}: full CTest did not finish")
+        files = {key: archive(paths[key], f"{host}-{side}-{key}", logs, log)
+                 for key in ("identity", "registry", "junit", "cache", "log")}
+        verify_identity(files["identity"], sha, host, "Release")
+        config = cache_options(files["cache"])
+        if config.get("CMAKE_GENERATOR") != "Ninja" or config.get("CMAKE_BUILD_TYPE") != "Release" or not config.get("CMAKE_C_COMPILER"):
+            raise ValueError(f"{host}: expected a Release Ninja build with compiler identity")
+        configs.append(config)
+        result = junit_outcomes(files["junit"])
+        if set(result) != registry_names(files["registry"]):
+            raise ValueError(f"{host}: CTest output does not cover complete inventory")
+        if paths["exit"] != (8 if "fail" in result.values() else 0):
+            raise ValueError(f"{host}: CTest exit disagrees with JUnit")
+        outcomes.append(result)
+    if configs[0] != configs[1]:
+        raise ValueError(f"{host}: full comparison changes the build configuration")
+    before, after = outcomes
+    regressions = sorted(name for name, outcome in after.items()
+                         if outcome != "run" and before.get(name) != outcome)
+    retired = set(before) - set(after)
+    approved = pair.get("retired", {})
+    if set(approved) != retired or any(not isinstance(reason, str) or not reason.strip() for reason in approved.values()):
+        raise ValueError(f"{host}: full comparison changed test registration without reviewed retirement")
+    if regressions:
+        raise ValueError(f"{host}: new failing or unexecuted tests: " + ", ".join(regressions))
+    if not tests <= {name for name, state in after.items() if state == "run"}:
+        raise ValueError(f"{host}: complete candidate result misses an applicable safety or smoke test")
+    log.setdefault("releaseComparison", {})[host] = {
+        "host": pair["hostIdentity"], "base": baseline, "candidate": candidate,
+        "registered": len(after), "retired": approved,
+    }
+
+
+def verify_task339(root: Path, candidate: str, changed: list[str], review: dict, logs: Path, log: dict) -> None:
+    for key in ("reviewEvidence", "l0Log"):
+        archive(review[key], key + ".log", logs, log)
+    run = json.loads(archive(review["ciRun"], "ci-run.json", logs, log))
+    jobs = json.loads(archive(review["ciJobs"], "ci-jobs.json", logs, log))["jobs"]
+    if (run.get("head_sha") != candidate or run.get("status") != "completed" or run.get("conclusion") != "success" or
+            run.get("path") != ".github/workflows/native-host-portability.yml"):
+        raise ValueError("CI run does not bind a successful portability run to the candidate")
+    required = current_gate_tests(root, candidate)
+    needed_jobs = list(HOST_JOBS.values())
+    if log["reviewScope"]["affected_san"] or "san" in review:
+        needed_jobs.append(SAN_JOB)
+    for name in needed_jobs:
+        matches = [job for job in jobs if job.get("name") == name and job.get("run_id") == run.get("id")
+                   and job.get("head_sha") == candidate]
+        if len(matches) != 1 or matches[0].get("status") != "completed" or matches[0].get("conclusion") != "success":
+            raise ValueError("Missing or failed CI job: " + name)
+    for host in HOST_JOBS:
+        verify_current(review["current"][host], host, candidate, required, logs, log)
+    log["gates"]["L1"] = "PASS"
+
+    baseline = review["comparisonBase"]
+    if not ancestor(root, baseline, candidate):
+        raise ValueError("The approved comparison baseline is not in candidate history")
+    win_tests = required.copy()
+    if any(re.match(r"src/(lir|hir|xir|module|vm/register)/", path) for path in changed):
+        win_tests.add("meta_ownership_inventory")
+    for host, tests in (("windows-2022", win_tests), ("macos-latest", required)):
+        verify_release_pair(review["release"][host], host, candidate, baseline, tests, logs, log)
+    log["gates"]["fullCTest"] = "PASS"
+
+    if SAN_JOB in needed_jobs:
+        san = review.get("san")
+        if not isinstance(san, dict):
+            raise ValueError("Missing affected sanitizer evidence")
+        affected = san.get("tests")
+        if not isinstance(affected, list) or not affected or not set(affected) <= required:
+            raise ValueError("Affected sanitizer tests require exact evidence in the current combined suite")
+        config = cache_options(archive(san["cache"], "san-cache", logs, log))
+        if any(config.get(option) != "ON" for option in ("ENABLE_ASAN", "ENABLE_UBSAN", "XR_XIR_PARANOID")):
+            raise ValueError("Affected sanitizer evidence lacks ASan, UBSan or paranoid mode")
+        verify_current(san["current"], "ubuntu-24.04", candidate, required, logs, log, "Debug")
+        log["gates"]["affectedSan"] = "PASS"
+    else:
+        log["gates"]["affectedSan"] = "NOT_APPLICABLE"
 
 
 def integrate(args, review: dict, log: dict, logs: Path) -> None:
@@ -170,14 +358,12 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
     if source != review["sourceSHA"]:
         raise RuntimeError("Branch moved after the recorded review")
     base = review["reviewedBase"]
-    if not ancestor(root, base, main) or not ancestor(root, base, source):
-        raise RuntimeError("Reviewed base must be an ancestor of main and the reviewed commit")
+    if base != main or not ancestor(root, base, source):
+        raise RuntimeError("Freeze and review the candidate on the current main before intake")
     log["reviewScope"] = review_scope(root, base, source, review)
-    log["gates"]["legacy_deletions"] = "FAIL"
-    xray_progress.legacy_deletions(root, base, source)
     commits = git(root, "rev-list", "--reverse", base + ".." + source).splitlines()
     if not commits or git(root, "rev-list", "--merges", base + ".." + source):
-        raise RuntimeError("The initial queue requires a nonempty, linear slice")
+        raise RuntimeError("The queue requires a nonempty, linear slice")
     authors = []
     for commit in commits:
         author, committer = git(root, "show", "-s", "--format=%ae%n%ce", commit).splitlines()
@@ -213,80 +399,11 @@ def integrate(args, review: dict, log: dict, logs: Path) -> None:
     log["committers"] = sorted(set(final_committers))
     changed = git_paths(integration, "diff", "--no-renames", "--name-only", main, candidate)
     log["changed"] = changed
-    log["reviewScope"] = review_scope(integration, main, candidate, review)
-    log["legacy"] = xray_progress.legacy_deletions(integration, main, candidate)
-    log["gates"]["legacy_deletions"] = "PASS"
+    if candidate != source:
+        raise RuntimeError("Rebase changed the reviewed candidate; fresh exact evidence is required")
     log["checkoutMaterialization"] = materialize_checkout(integration, changed)
-    slice_asan_gate(review, changed, log, logs)
-    relative = Path(args.manifest)
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError("L1 manifest must be a tracked path inside the candidate")
-    plan_blob = git(integration, "rev-parse", candidate + ":" + relative.as_posix())
-    content = subprocess.check_output(["git", "-C", str(integration), "cat-file", "blob", plan_blob])
-    plan = xray_l1.manifest(content)
-    canonical = "scripts/l1-v0.json"
-    old_plan = json.loads(git(integration, "show", main + ":" + canonical))
-    current_plan = json.loads(git(integration, "show", candidate + ":" + canonical))
-    if old_plan.get("progressPolicy") and current_plan.get("progressPolicy") != old_plan["progressPolicy"]:
-        raise ValueError("The L1 progress policy cannot be removed or changed by a slice")
-    policy = old_plan.get("progressPolicy") or current_plan.get("progressPolicy")
-    if policy and plan.get("progressPolicy") != policy:
-        raise ValueError("An alternate manifest cannot bypass the current L1 usability policy")
-    if current_plan.get("validationTiers"):
-        xray_l1.tier_catalog(integration)
-        if (not set(current_plan["tests"]) <= set(plan["tests"]) or
-                not set(current_plan["targets"]) <= set(plan["targets"])):
-            raise ValueError("An alternate manifest cannot drop the canonical L1 core or its build targets")
-    if plan.get("progressPolicy"):
-        xray_progress.smoke_ratchet(integration, main, candidate)
-        log["gates"]["usability_document_state"] = "FAIL"
-        if args.docs is None:
-            raise ValueError("L1 usability state requires --docs pointing to the current task repository")
-        log["documentState"] = xray_progress.document_state(integration, args.docs.resolve())
-        log["gates"]["usability_document_state"] = "PASS"
-    log["manifestBlob"] = plan_blob
-    log["manifestSHA256"] = hashlib.sha256(content).hexdigest()
-    log["smoke"] = plan.get("smokeStatus", "NOT_RUN: no smoke status supplied")
-    l2 = None
-    capabilities = list(getattr(args, "l2_capability", []))
-    # Standard-library inputs are embedded in the public Source SDK archives.
-    if any(path.startswith("stdlib/") and Path(path).suffix in {".xr", ".def", ".c", ".h"}
-           for path in changed):
-        capabilities.append("source-sdk")
-    if capabilities:
-        sensitive = list(getattr(args, "l2_sensitive", []))
-        if "multiple production owners" in log["reviewScope"]["required_by"]:
-            sensitive.append("owner")
-        l2 = xray_l1.tier_plan(integration, "L2", capabilities, changed, sensitive)
-        log["L2Plan"] = l2
-    else:
-        if getattr(args, "l2_sensitive", []):
-            raise ValueError("L2 sensitivity requires an explicit completed capability batch")
-        log["gates"]["L2"] = "NOT_RUN: no completed capability batch requested"
-    targets = list(dict.fromkeys(plan["targets"] + (l2["targets"] if l2 else [])))
-    environment = xray_l1.msvc_environment(args.temporary.resolve())
-    with Lease(args.slots, "build", priority=0, payload={"candidate": candidate}):
-        xray_l1.configure(integration, args.build, logs, environment)
-        clean(integration)
-        xray_l1.build_targets(args.build, targets, logs, environment)
-        if clean(integration):
-            xray_l1.build_targets(args.build, targets, logs, environment)
-            clean(integration)
-        log["identity"] = xray_l1.identity(plan, integration, args.build, candidate, logs, environment)
-        groups = {"l1": plan["tests"]}
-        if l2:
-            groups["l2"] = l2["tests"]
-        if any(re.match(r"src/(ir|aot|analysis|lir|hir|xir|plan|program|module|vm/register)/", p) for p in changed):
-            log["gates"]["meta_ownership_inventory"] = "FAIL"
-            groups["metadata"] = ["meta_ownership_inventory"]
-        results = xray_l1.test_groups(groups, args.build, logs, environment)
-        log["gates"]["L1"] = "PASS" if results["l1"] else "FAIL"
-        if l2:
-            log["gates"]["L2"] = "PASS" if results["l2"] else "FAIL"
-        if "metadata" in results:
-            log["gates"]["meta_ownership_inventory"] = "PASS" if results["metadata"] else "FAIL"
-        if not all(results.values()):
-            raise RuntimeError("L1, requested L2 or metadata: failed, skipped or unexecuted test")
+    xray_progress.smoke_ratchet(integration, main, candidate)
+    verify_task339(integration, candidate, changed, review, logs, log)
     if git(integration, "rev-parse", "HEAD") != candidate or git(root, "rev-parse", args.branch) != source:
         raise RuntimeError("Candidate or reviewed branch moved while gates were running")
     clean(integration)
@@ -305,19 +422,13 @@ def main() -> int:
     parser.add_argument("--review", type=Path, required=True)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--integration", type=Path, default=Path(r"E:\xray\wt\int"))
-    parser.add_argument("--build", type=Path, default=Path(r"D:\xray-build\int-rel"))
-    parser.add_argument("--temporary", type=Path, default=Path(r"D:\xray-build\int-tmp"))
     parser.add_argument("--queue", type=Path, default=Path(r"D:\xray-build\queue"))
-    parser.add_argument("--slots", type=Path, default=Path(r"D:\xray-build\slots"))
-    parser.add_argument("--manifest", default="scripts/l1-v0.json")
-    parser.add_argument("--docs", type=Path, help="Current task-document checkout for L1 source/checklist alignment")
-    parser.add_argument("--l2-capability", action="append", default=[],
-                        help="Completed capability batch group; build and execute its affected L2 before merge")
-    parser.add_argument("--l2-sensitive", choices=("api", "owner"), action="append", default=[],
-                        help="Require the API/owner consumers for a completed capability batch")
+    parser.add_argument("--docs", type=Path, required=True, help="Current Task339 documentation checkout")
     args = parser.parse_args()
-    for name in ("repo", "integration", "build", "temporary", "queue", "slots", "review"):
+    for name in ("repo", "integration", "queue", "review", "docs"):
         setattr(args, name, getattr(args, name).resolve())
+    if not (args.docs / "tasks" / "339-direct-cutover-to-target-architecture-cn.md").is_file():
+        parser.error("--docs must identify the current Task339 documentation checkout")
     review = review_request(args)
     started = time.time()
     with Lease(args.queue, "queue", capacity=1, payload={"branch": args.branch, "review": review}) as lease:
@@ -325,8 +436,7 @@ def main() -> int:
         logs.mkdir(parents=True)
         log = {"schema": 1, "sequence": lease.record["sequence"], "branch": args.branch,
                "review": review, "started": started, "processingStarted": time.time(),
-               "state": "RUNNING", "gates": {"L1": "FAIL", "slice_asan": "FAIL",
-                    "asan_focused": "NOT_RUN: redlist-2026-10-21; restore when the full lane can build"}}
+               "state": "RUNNING", "gates": {"L1": "NOT_RUN", "fullCTest": "NOT_RUN", "affectedSan": "NOT_RUN"}}
         save_json(logs / "result.json", log)
         try:
             integrate(args, review, log, logs)
