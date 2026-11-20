@@ -78,6 +78,10 @@ static inline XrtArrayI64RegionSpec xr_lir_fixed_array_guard_spec(const XrLirVal
     const XrLirFixedArrayUpdateHome *row, XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT]) {
     const size_t *offsets = homes->frame.owned_offsets;
     slots[0] = (XrtArrayI64RegionSlot){row->owner_slot, offsets[row->owner_slot]};
+    if (row->workspace_slot == SIZE_MAX) {
+        slots[1] = (XrtArrayI64RegionSlot){0};
+        return (XrtArrayI64RegionSpec){slots, 1, 0};
+    }
     slots[1] = (XrtArrayI64RegionSlot){row->workspace_slot, offsets[row->workspace_slot]};
     return (XrtArrayI64RegionSpec){slots, XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT, 0};
 }

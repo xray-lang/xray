@@ -43,18 +43,26 @@ static bool lir_fixed_array_project(LirHomeBuilder *b, const XrLirOwnershipPlan 
     const XrLirValueHomes *homes = b->homes;
     const XrLirValueHome *owner = &homes->values[region->canonical_value];
     if (!owner->type || !owner->stationary_owner || owner->owner_count != 1 || owner->parameter || owner->byte_count ||
-        owner->size != sizeof(XrtManagedHeader *) || !lir_home_header_slot(&homes->frame, owner->first_owner, owner->offset) ||
-        workspace->instruction != region->primary_instruction || workspace->type != owner->type || workspace->value ||
-        workspace->first_owner == owner->first_owner ||
-        !lir_home_header_slot(&homes->frame, workspace->first_owner, workspace->offset)) return false;
+        owner->size != sizeof(XrtManagedHeader *) || !lir_home_header_slot(&homes->frame, owner->first_owner, owner->offset))
+        return false;
     XrtValuePlanSpec spec;
     if (!lir_home_binding_spec(b, owner->type, &spec) || spec.kind != XRT_VALUE_ARRAY_I64) return false;
     const XrLirFunctionData *function = &b->compiler.input->functions[b->compiler.function.id - 1];
     const XrLirBlockData *body = &function->blocks[region->primary_block - 1];
     if (!region->primary_instruction || region->primary_instruction > body->instruction_count) return false;
-    const XrLirInstructionView *set = &body->instructions[region->primary_instruction - 1].view;
-    if (!set->operand_count || !set->operands[0] || set->operands[0] > homes->value_count ||
-        !lir_fixed_array_binding(homes, set->operands[0], owner)) return false;
+    const XrLirInstructionView *operation = &body->instructions[region->primary_instruction - 1].view;
+    if (!operation->operand_count || !operation->operands[0] || operation->operands[0] > homes->value_count) return false;
+    uint32_t receiver = operation->operands[0];
+    size_t workspace_slot = SIZE_MAX;
+    if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET) {
+        if (!lir_fixed_array_value(&homes->values[receiver], owner)) return false;
+    } else if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET) {
+        if (!lir_fixed_array_binding(homes, receiver, owner) || !workspace ||
+            workspace->instruction != region->primary_instruction || workspace->type != owner->type || workspace->value ||
+            workspace->first_owner == owner->first_owner ||
+            !lir_home_header_slot(&homes->frame, workspace->first_owner, workspace->offset)) return false;
+        workspace_slot = workspace->first_owner;
+    } else return false;
     uint32_t body_edge = 0;
     for (uint32_t n = 0; n < region->step_count; ++n) {
         XrLirArraySetRegionStep step;
@@ -63,7 +71,7 @@ static bool lir_fixed_array_project(LirHomeBuilder *b, const XrLirOwnershipPlan 
         if (step.kind == XR_LIR_ARRAY_SET_REGION_EDGE_MOVE && step.block == region->header) body_edge = step.edge;
     }
     if (!body_edge || body_edge > 2 || body_edge == region->exit_edge) return false;
-    *row = (XrLirFixedArrayUpdateHome){*region, body_edge, owner->first_owner, workspace->first_owner};
+    *row = (XrLirFixedArrayUpdateHome){*region, body_edge, owner->first_owner, workspace_slot};
     return true;
 }
 
@@ -72,11 +80,14 @@ static bool lir_home_fixed_array_updates(LirHomeBuilder *b, const XrLirOwnership
     XrLirOwnershipFunction function;
     if (xr_lir_ownership_function_at(plan, c->function.id, &function) != XR_LIR_OK)
         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "fixed Array function is unavailable");
-    if (!function.fixed_update_count || !b->homes->workspace_count) return true;
+    if (!function.fixed_update_count) return true;
     /* Each proved primary block contains one SET and no other operation that
      * reserves a VALUE workspace. Ambiguous geometry stays on ordinary LIR. */
-    size_t *by_block = xr_calloc(c->view.block_count, sizeof(*by_block));
-    if (!by_block) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot index fixed Array workspaces");
+    size_t *by_block = NULL;
+    if (b->homes->workspace_count) {
+        by_block = xr_calloc(c->view.block_count, sizeof(*by_block));
+        if (!by_block) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot index fixed Array workspaces");
+    }
     for (size_t n = 0; n < b->homes->workspace_count; ++n) {
         const XrLirHomeWorkspace *workspace = &b->homes->workspaces[n];
         if (workspace->kind != XR_LIR_HOME_WORKSPACE_VALUE || !workspace->block ||
@@ -97,10 +108,10 @@ static bool lir_home_fixed_array_updates(LirHomeBuilder *b, const XrLirOwnership
             lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "fixed Array route lost its representation");
             break;
         }
-        size_t workspace = by_block[region.primary_block - 1];
+        size_t index = by_block ? by_block[region.primary_block - 1] : 0;
+        const XrLirHomeWorkspace *workspace = index && index != SIZE_MAX ? &b->homes->workspaces[index - 1] : NULL;
         XrLirFixedArrayUpdateHome row;
-        if (!workspace || workspace == SIZE_MAX) continue;
-        if (!lir_fixed_array_project(b, plan, &region, &b->homes->workspaces[workspace - 1], &row)) {
+        if (!lir_fixed_array_project(b, plan, &region, workspace, &row)) {
             if (c->status != XR_LIR_VALUE_LAYOUT_OK) break;
             continue;
         }

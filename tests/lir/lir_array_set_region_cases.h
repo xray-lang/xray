@@ -60,8 +60,15 @@ static void ars_retirement(ArraySetRegionFixture c, XrLirOwnershipPlan *plan, bo
     const uint32_t *count = fixed ? &homes->fixed_array_update_step_count : &homes->array_region_step_count;
     CHECK(region->canonical_value == c.header_array.id && region->first_step == 0 && region->step_count == *count);
     if (fixed) {
-        CHECK(bound->body_edge == 1 && bound->owner_slot == homes->values[region->canonical_value].first_owner &&
-            bound->workspace_slot < homes->frame.slot_count && bound->workspace_slot != bound->owner_slot);
+        CHECK(bound->body_edge == 3 - region->exit_edge &&
+            bound->owner_slot == homes->values[region->canonical_value].first_owner);
+        XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
+        XrtArrayI64RegionSpec guard = xr_lir_fixed_array_guard_spec(homes,bound,slots);
+        CHECK(guard.slots == slots && guard.canonical == 0 && slots[0].slot == bound->owner_slot);
+        if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET)
+            CHECK(bound->workspace_slot == SIZE_MAX && guard.slot_count == 1);
+        else CHECK(bound->workspace_slot < homes->frame.slot_count && bound->workspace_slot != bound->owner_slot &&
+            guard.slot_count == 2 && slots[1].slot == bound->workspace_slot);
     }
     ars_home_geometry(homes, steps, *count, bound);
     uint32_t step_count = *count;
@@ -221,6 +228,8 @@ static void ars_readonly_preparations(void) {
         XrLirOwnershipPlan *plan=NULL; XrLirOwnershipRequest request={.module=c.module};
         OK(xr_lir_ownership_plan_create(&request,&plan,NULL)); compare_internal(&request,plan);
         CHECK(xr_lir_ownership_array_region_count(plan)==(mode==ARRAY_REGION_RANGE_READ_ONLY ? 1u : 0u));
+        XrLirOwnershipFunction function;
+        OK(xr_lir_ownership_function_at(plan,c.function.id,&function)); CHECK(!function.fixed_update_count);
         if (mode!=ARRAY_REGION_RANGE_READ_ONLY) {
             xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module); continue;
         }
@@ -235,6 +244,25 @@ static void ars_readonly_preparations(void) {
         uint32_t *index=(uint32_t *)&get->operands[1], saved=*index; *index=region->range.one;
         CHECK(xr_lir_ownership_array_regions_verify(c.module,plan)==XR_LIR_VERIFY_ERROR); *index=saved;
         OK(xr_lir_ownership_array_regions_verify(c.module,plan)); ars_retirement(c,plan,false);
+    }
+    for (unsigned mode=ARRAY_REGION_RANGE_READ_FIXED;mode<=ARRAY_REGION_RANGE_READ_FIXED_BOUND;++mode) {
+        ArraySetRegionFixture c=ars_range_build(NULL,3,(enum ArrayRegionRangeMode)mode);
+        OK(xr_lir_module_finish(c.module,NULL));
+        XrLirOwnershipPlan *plan=NULL; XrLirOwnershipRequest request={.module=c.module};
+        OK(xr_lir_ownership_plan_create(&request,&plan,NULL)); compare_internal(&request,plan);
+        XrLirOwnershipFunction function; OK(xr_lir_ownership_function_at(plan,c.function.id,&function));
+        CHECK(!function.region_count && !function.push_window_count && function.fixed_update_count==1);
+        XrLirArraySetRegion region;
+        OK(xr_lir_ownership_fixed_array_update_at(plan,function.fixed_update_offset,&region));
+        CHECK(region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && region.primary_block==c.body[0].id &&
+            region.exit_edge==1 && region.entry_block==c.entry.id && region.latch==c.body[2].id &&
+            region.range.kind==(mode==ARRAY_REGION_RANGE_READ_FIXED ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN :
+                XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT));
+        XrLirArraySetRegionStep body;
+        OK(xr_lir_ownership_fixed_array_update_step_at(plan,region.first_step+1,&body));
+        CHECK(body.kind==XR_LIR_ARRAY_SET_REGION_EDGE_MOVE && body.edge==2 && body.block==c.header.id);
+        OK(xr_lir_ownership_array_regions_verify(c.module,plan));
+        ars_retirement(c,plan,true);
     }
 }
 static void ars_push_preparations(void) {

@@ -74,7 +74,7 @@ static void rbc_value_array_region_begin(RbcValueActivation *activation, uint32_
     RbcArrayRegionState *state, const XrtArrayI64RegionSpec *spec) {
     const XrtArrayI64RegionContext context={activation->frame,activation->payload,
         &activation->frame_locations,&activation->code->homes->frame};
-    if (xrt_array_i64_region_try_begin(&context,spec,state->completed_set,&state->cache)) {
+    if (xrt_array_i64_region_try_begin(&context,spec,state->phase==RBC_ARRAY_REGION_ELIGIBLE,&state->cache)) {
         state->phase=RBC_ARRAY_REGION_ACTIVE;
         activation->active_array_region=region;
     } else rbc_value_array_region_forget(activation,region,RBC_ARRAY_REGION_BYPASS);
@@ -84,18 +84,22 @@ static bool rbc_value_fixed_array_before(XrRbcStack *stack, RbcValueActivation *
     const XrRbcArrayRegionAccess *role, XrRbcValueAccess access, XrtManagedStatus *status) {
     RbcArrayRegionState *state = &activation->array_regions[role->region - 1];
     if (role->fixed_edge) {
-        if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_ENTRY)
-            rbc_value_array_region_forget(activation, role->region, RBC_ARRAY_REGION_COLD);
-        else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_EXIT)
+        const XrRbcValueCode *code = activation->code;
+        const XrLirValueHomes *homes = code->homes;
+        const XrLirFixedArrayUpdateHome *row =
+            &homes->fixed_array_updates[role->region - 1 - rbc_value_legacy_array_region_count(code)];
+        if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_ENTRY) {
+            /* The selected BODY follows publication of the initial owner.
+             * Reads can borrow it immediately; writes keep the first transaction. */
+            RbcArrayRegionPhase phase = row->region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET ?
+                RBC_ARRAY_REGION_ELIGIBLE : RBC_ARRAY_REGION_COLD;
+            rbc_value_array_region_forget(activation, role->region, phase);
+        } else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_EXIT)
             rbc_value_array_region_forget(activation, role->region, RBC_ARRAY_REGION_BYPASS);
         else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_LATCH &&
                 state->phase == RBC_ARRAY_REGION_COLD && state->completed_set)
             state->phase = RBC_ARRAY_REGION_ELIGIBLE;
         else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_BODY && state->phase == RBC_ARRAY_REGION_ELIGIBLE) {
-            const XrRbcValueCode *code = activation->code;
-            const XrLirValueHomes *homes = code->homes;
-            const XrLirFixedArrayUpdateHome *row =
-                &homes->fixed_array_updates[role->region - 1 - rbc_value_legacy_array_region_count(code)];
             XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
             const XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(homes, row, slots);
             rbc_value_array_region_begin(activation, role->region, state, &spec);

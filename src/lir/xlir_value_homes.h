@@ -183,7 +183,8 @@ typedef struct XrLirFixedArrayUpdateHome {
     XrLirArraySetRegion region;
     /* The actual selected BODY edge and registered frame slots. The ordinary
      * entry/exit still publish their original arguments. A common slot alone
-     * proves neither uniqueness nor permission to use the element pointer. */
+     * proves neither uniqueness nor permission to use the element pointer.
+     * A read-only GET has no replacement workspace (SIZE_MAX). */
     uint32_t body_edge;
     size_t owner_slot, workspace_slot;
 } XrLirFixedArrayUpdateHome;

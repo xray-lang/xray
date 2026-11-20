@@ -61,22 +61,53 @@ static void c_fixed_array_declarations(LirC *c) {
     }
 }
 
+static void c_fixed_array_limit(LirC *c, const XrLirArraySetRegion *region, uint32_t number) {
+    if (region->range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) {
+        c_format(c, "(int64_t)xrl_fixed_cache_%" PRIu32 ".length", number);
+        return;
+    }
+    /* A constant defined at the header has not executed at the entry edge. */
+    const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
+    const XrLirInstructionView *value = xr_lir_internal_value_definition(function, region->range.length);
+    if (!value || value->op != XR_LIR_CONST)
+        c_value(c, region->range.length);
+    else if (value->bits <= INT64_MAX)
+        c_format(c, "INT64_C(%" PRIu64 ")", value->bits);
+    else
+        c_format(c, "(-INT64_C(1) - INT64_C(%" PRIu64 "))", ~value->bits);
+}
+
 static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target, bool after_write) {
     const XrLirFixedArrayUpdateHome *row = &c->homes->fixed_array_updates[n - 1];
     XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
     XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(c->homes, row, slots);
     if (after_write) c_format(c, "    if (!xrl_fixed_tried_%" PRIu32 ") {\n", n);
     else c_text(c, "    {\n");
-    c_format(c, "        static const XrtArrayI64RegionSlot xrl_fixed_slots[] = {{%zu, %zu}, {%zu, %zu}};\n",
-        slots[0].slot, slots[0].offset, slots[1].slot, slots[1].offset);
+    c_text(c, "        static const XrtArrayI64RegionSlot xrl_fixed_slots[] = {");
+    for (size_t slot = 0; slot < spec.slot_count; ++slot) {
+        if (slot) c_text(c, ", ");
+        c_format(c, "{%zu, %zu}", slots[slot].slot, slots[slot].offset);
+    }
+    c_text(c, "};\n");
     c_format(c, "        const XrtArrayI64RegionSpec xrl_fixed_spec = {xrl_fixed_slots, %zu, %zu};\n"
         "        const XrtArrayI64RegionContext xrl_fixed_context = {xrl_frame, xrl_payload,"
         " &xrl_frame_locations, &xrl_frame_%" PRIu32 "};\n        if (", spec.slot_count, spec.canonical, c->function.id);
     c_value(c, row->region.range.iv);
     c_format(c, " >= INT64_C(0) && xrt_array_i64_region_try_begin(&xrl_fixed_context, &xrl_fixed_spec, true,"
-        " &xrl_fixed_cache_%" PRIu32 ") && (uint64_t)", n);
-    c_value(c, row->region.range.iv);
-    c_format(c, " < xrl_fixed_cache_%" PRIu32 ".length) {\n", n);
+        " &xrl_fixed_cache_%" PRIu32 ")", n);
+    if (row->region.range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT) {
+        c_text(c, " && (uint64_t)(");
+        c_fixed_array_limit(c, &row->region, n);
+        c_format(c, ") <= xrl_fixed_cache_%" PRIu32 ".length && ", n);
+        c_value(c, row->region.range.iv);
+        c_text(c, " < ");
+        c_fixed_array_limit(c, &row->region, n);
+        c_text(c, ") {\n");
+    } else {
+        c_text(c, " && (uint64_t)");
+        c_value(c, row->region.range.iv);
+        c_format(c, " < xrl_fixed_cache_%" PRIu32 ".length) {\n", n);
+    }
     c_array_held_clear(c);
     c_format(c, "            goto xrl_fixed_%" PRIu32 "_bb%" PRIu32 ";\n"
         "        }\n"
@@ -168,28 +199,31 @@ static void c_fixed_array_clones(LirC *c) {
         const XrLirArraySetRegion *region = &row->region;
         const XrLirArraySetRegionStep *steps = c->homes->fixed_array_update_steps + region->first_step;
         uint32_t iv = region->range.iv, label = n + 1;
-        /* Admission bounds the IV and the unchanged length. Run the same
-         * iterations and phi copies in order inside each known-size span.
-         * A host compiler can then optimize the count without a tail inside
-         * that span. It still decides which operations can be vectorized. */
-        c_format(c, "xrl_fixed_%" PRIu32 "_bb%" PRIu32 ": ;\n"
-            "    {\n"
-            "        enum { xrl_fixed_span = 64 };\n"
-            "        const size_t xrl_fixed_end = xrl_fixed_cache_%" PRIu32 ".length;\n",
-            label, region->header, label);
-        c_format(c,
-            "        while (xrl_fixed_end - (size_t)v%" PRIu32 " >= xrl_fixed_span) {\n"
-            "            const size_t xrl_fixed_start = (size_t)v%" PRIu32 ";\n", iv, iv);
-        c_format(c,
-            "            for (size_t xrl_fixed_offset = 0; xrl_fixed_offset < xrl_fixed_span; ++xrl_fixed_offset) {\n"
-            "                v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_offset);\n", iv);
-        c_fixed_array_iteration(c, label, region, steps);
-        c_format(c, "            }\n"
-            "            v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_span);\n"
-            "        }\n"
-            "    }\n"
-            "    for (; v%" PRIu32 " < (int64_t)xrl_fixed_cache_%" PRIu32 ".length; ++v%" PRIu32 ") {\n",
-            iv, iv, label, iv);
+        c_format(c, "xrl_fixed_%" PRIu32 "_bb%" PRIu32 ": ;\n", label, region->header);
+        if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET) {
+            /* Admission bounds the IV and the unchanged length. Run the same
+             * iterations and phi copies in order inside each known-size span.
+             * A host compiler can then optimize the count without a tail inside
+             * that span. It still decides which operations can be vectorized. */
+            c_format(c, "    {\n"
+                "        enum { xrl_fixed_span = 64 };\n"
+                "        const size_t xrl_fixed_end = xrl_fixed_cache_%" PRIu32 ".length;\n",
+                label);
+            c_format(c,
+                "        while (xrl_fixed_end - (size_t)v%" PRIu32 " >= xrl_fixed_span) {\n"
+                "            const size_t xrl_fixed_start = (size_t)v%" PRIu32 ";\n", iv, iv);
+            c_format(c,
+                "            for (size_t xrl_fixed_offset = 0; xrl_fixed_offset < xrl_fixed_span; ++xrl_fixed_offset) {\n"
+                "                v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_offset);\n", iv);
+            c_fixed_array_iteration(c, label, region, steps);
+            c_format(c, "            }\n"
+                "            v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_span);\n"
+                "        }\n"
+                "    }\n", iv);
+        }
+        c_format(c, "    for (; v%" PRIu32 " < ", iv);
+        c_fixed_array_limit(c, region, label);
+        c_format(c, "; ++v%" PRIu32 ") {\n", iv);
         c_fixed_array_iteration(c, label, region, steps);
         c_text(c, "    }\n");
         /* The exit may read values computed by the original final header. */

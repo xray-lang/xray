@@ -75,8 +75,8 @@ static bool lir_array_region_needed(const XrLirOwnershipPlan *plan, uint32_t fun
         edge |= fact->kind == XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER && fact->type == XR_LIR_ARRAY &&
             fact->array_element == XR_LIR_I64 && fact->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE;
     }
-    *fixed_possible = set && create && read;
-    return *fixed_possible || (get && edge) || (push && create && read && edge);
+    *fixed_possible = (set && create && read) || (get && edge);
+    return *fixed_possible || (push && create && read && edge);
 }
 static bool lir_array_region_array_role(const XrLirModule *m, const XrLirInstructionView *op, uint32_t argument) {
     if (argument) return false;
@@ -596,8 +596,6 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, const XrLirArraySetRe
             !lir_array_region_edge(p, p->blocks[n], 0, XR_LIR_ARRAY_SET_REGION_EDGE_MOVE, &current)) return false;
     if (current != region->canonical_value) return false;
     if (p->range.latch_iv && p->range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) region->range = p->range;
-    if (p->fixed && (region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_SET ||
-        region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN)) return false;
     if (!region->primary_kind) {
         if (p->get_count != 1 || !p->range.latch_iv) return false;
         const XrLirValueData *limit = &p->function->values[p->range.length - 1];
@@ -607,6 +605,15 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, const XrLirArraySetRe
         region->range = p->range;
         region->primary_kind = XR_LIR_ARRAY_REGION_PRIMARY_GET;
         region->primary_block = p->get_block; region->primary_instruction = p->get_instruction;
+    }
+    if (p->fixed) {
+        if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET) {
+            /* A read route keeps the original Array owner throughout. It has
+             * no Cell handoff, replacement workspace, or skipped release. */
+            for (uint32_t n = 1; n < p->step_count; ++n)
+                if (p->steps[n].kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) return false;
+        } else if (region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_SET ||
+            region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) return false;
     }
     if (!p->fixed && region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_PUSH &&
         !lir_array_region_retains_before_entry(p, header, region->entry_block - 1)) return false;

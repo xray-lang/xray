@@ -20,7 +20,7 @@ enum ArrayRegionRangeMode {
     ARRAY_REGION_RANGE_NEXT_COPIES, ARRAY_REGION_RANGE_C_HEADER_LIVEOUT, ARRAY_REGION_RANGE_FAILING_RHS,
     ARRAY_REGION_RANGE_READ_ONLY, ARRAY_REGION_RANGE_READ_EXTRA, ARRAY_REGION_RANGE_READ_INDEX,
     ARRAY_REGION_RANGE_READ_STEP, ARRAY_REGION_RANGE_READ_EFFECT, ARRAY_REGION_RANGE_DIRECT_RETURN,
-    ARRAY_REGION_RANGE_AFTER_RETAIN
+    ARRAY_REGION_RANGE_AFTER_RETAIN, ARRAY_REGION_RANGE_READ_FIXED, ARRAY_REGION_RANGE_READ_FIXED_BOUND
 };
 #define ARS_RANGE_FIELDS(r) (r).kind,(r).iv,(r).iv_argument,(r).entry_iv,(r).length,(r).length_instruction, \
     (r).condition,(r).condition_instruction,(r).increment,(r).increment_block,(r).increment_instruction,(r).one,(r).latch_iv
@@ -56,7 +56,8 @@ static XrLirValue ars_range_mutate(ArraySetRegionFixture *c, XrLirValue values[4
         args[1] = ars_value(c, block, (XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=add,.operand_count=2});
     }
     XrLirValue item = ars_array_op(c, block, XR_LIR_ARRAY_OP_GET, args, 2);
-    if (mode >= ARRAY_REGION_RANGE_READ_ONLY && mode <= ARRAY_REGION_RANGE_READ_EFFECT) {
+    if ((mode >= ARRAY_REGION_RANGE_READ_ONLY && mode <= ARRAY_REGION_RANGE_READ_EFFECT) ||
+        mode == ARRAY_REGION_RANGE_READ_FIXED || mode == ARRAY_REGION_RANGE_READ_FIXED_BOUND) {
         if (mode == ARRAY_REGION_RANGE_READ_EXTRA) (void)ars_array_op(c,block,XR_LIR_ARRAY_OP_GET,args,2);
         if (mode == ARRAY_REGION_RANGE_READ_EFFECT) {
             XrLirValue operands[]={item,ars_number(c,block,1)};
@@ -123,11 +124,14 @@ static ArraySetRegionFixture ars_range_build_seeded(XrLirModule *module, uint32_
     ars_range_edge(&c,c.entry,c.header,incoming);
     XrLirValue header[4]; ars_range_parameters(&c,c.header,header); c.header_array = header[0];
     XrLirValue bound = ars_array_op(&c,c.header,XR_LIR_ARRAY_OP_LEN,header,1);
-    if (mode == ARRAY_REGION_RANGE_BOUND) bound = ars_number(&c,c.header,4);
-    bool reverse = mode == ARRAY_REGION_RANGE_FALSE_BODY;
+    if (mode == ARRAY_REGION_RANGE_BOUND || mode == ARRAY_REGION_RANGE_READ_FIXED_BOUND)
+        bound = ars_number(&c,c.header,4);
+    bool fixed_read = mode == ARRAY_REGION_RANGE_READ_FIXED || mode == ARRAY_REGION_RANGE_READ_FIXED_BOUND;
+    bool reverse = mode == ARRAY_REGION_RANGE_FALSE_BODY || fixed_read;
     XrLirValue compared[] = {header[3],bound};
     XrLirValue condition = ars_value(&c,c.header,(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
-        .predicate=borrowed && reverse ? XR_LIR_GE : mode == ARRAY_REGION_RANGE_PREDICATE ? XR_LIR_LE : XR_LIR_LT,.operands=compared,.operand_count=2});
+        .predicate=(borrowed && reverse) || fixed_read ? XR_LIR_GE : mode == ARRAY_REGION_RANGE_PREDICATE ? XR_LIR_LE : XR_LIR_LT,
+        .operands=compared,.operand_count=2});
     XrLirValue routed[] = {header[0],header[3],header[3],header[1]};
     OK(xr_lir_set_terminator(c.module,c.header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
         .operands=&condition,.operand_count=1,.edge_count=2,

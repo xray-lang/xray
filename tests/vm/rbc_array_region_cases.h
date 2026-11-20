@@ -455,7 +455,7 @@ typedef enum RbcReadFoldBound {
     RBC_READ_FOLD_FORMAL, RBC_READ_FOLD_IMMEDIATE, RBC_READ_FOLD_LARGE_LITERAL, RBC_READ_FOLD_PAST_END_LITERAL
 } RbcReadFoldBound;
 
-static XrLirModule *rbc_read_fold_input(XrLirFunction *root,bool additive,RbcReadFoldBound mode) {
+static XrLirModule *rbc_read_fold_input(XrLirFunction *root,bool additive,RbcReadFoldBound mode,bool reverse) {
     CArrayFixture c={.element=XR_LIR_I64};
     OK(xr_lir_array_module_create(NULL,&c.module));
     XrLirType argument=XR_LIR_I64;
@@ -485,9 +485,10 @@ static XrLirModule *rbc_read_fold_input(XrLirFunction *root,bool additive,RbcRea
     if (large) bound=ca_constant(&c,header,32768);
     XrLirValue compare[]={head[1],bound},condition={0};
     OK(xr_lir_emit_value(c.module,header,&(XrLirInstruction){.op=XR_LIR_ICMP,
-        .type=XR_LIR_I1,.predicate=XR_LIR_LT,.operands=compare,.operand_count=2},&condition));
+        .type=XR_LIR_I1,.predicate=reverse ? XR_LIR_GE : XR_LIR_LT,.operands=compare,.operand_count=2},&condition));
     OK(xr_lir_set_terminator(c.module,header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
-        .operands=&condition,.operand_count=1,.edge_count=2,.edges={{body,head,3},{exit_block,head,3}}}));
+        .operands=&condition,.operand_count=1,.edge_count=2,
+        .edges={{reverse ? exit_block : body,head,3},{reverse ? body : exit_block,head,3}}}));
     XrLirValue item={0};
     uint32_t get=0;
     OK(xr_lir_array_operation(c.module,XR_LIR_I64,XR_LIR_ARRAY_OP_GET,&get));
@@ -507,7 +508,7 @@ static XrLirModule *rbc_read_fold_input(XrLirFunction *root,bool additive,RbcRea
 }
 
 static void rbc_read_fold_cases(bool additive,RbcReadFoldBound mode) {
-    XrLirFunction root={0}; XrLirModule *input=rbc_read_fold_input(&root,additive,mode);
+    XrLirFunction root={0}; XrLirModule *input=rbc_read_fold_input(&root,additive,mode,false);
     XrRbcProgram *program=NULL;
     CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
     xr_lir_module_destroy(input);
@@ -554,6 +555,40 @@ static void rbc_read_fold_cases(bool additive,RbcReadFoldBound mode) {
         else CHECK(actual.status==XR_RBC_OK);
         if (bound==3) CHECK(actual.bits==(additive ? 4u : 8u));
         if (mode==RBC_READ_FOLD_LARGE_LITERAL) CHECK(actual.bits==(uint64_t)INT64_MAX+21);
+    }
+    region_force_bypass=false;
+    xr_rbc_program_destroy(program);
+    CHECK(!tracked_live);
+}
+
+static void rbc_fixed_read_cases(bool additive) {
+    XrLirFunction root={0}; XrLirModule *input=rbc_read_fold_input(&root,additive,RBC_READ_FOLD_FORMAL,true);
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(input);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
+    CHECK(code && code->array_region_runtime && !code->array_regions && !code->array_read_folds &&
+        code->homes->fixed_array_update_count==1);
+    const XrLirFixedArrayUpdateHome *row=&code->homes->fixed_array_updates[0];
+    CHECK(row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && row->body_edge==2 &&
+        row->workspace_slot==SIZE_MAX);
+
+    const uint64_t bounds[]={UINT64_MAX,0,1,2,3,4};
+    const uint64_t sum[]={INT64_MAX,INT64_MAX,UINT64_MAX-1,UINT64_MAX-2,4};
+    const uint64_t difference[]={INT64_MAX,INT64_MAX,0,UINT64_MAX,8};
+    for (size_t n=0;n<sizeof(bounds)/sizeof(*bounds);++n) {
+        size_t expected=n>=2;
+        region_begin_attempts=region_begin_successes=0; region_force_bypass=false;
+        RbcRegionResult actual=rbc_region_run_with_args(module,program->locations,&bounds[n],1);
+        CHECK(region_begin_attempts==expected && region_begin_successes==expected);
+        region_begin_attempts=region_begin_successes=0; region_force_bypass=true;
+        RbcRegionResult ordinary=rbc_region_run_with_args(module,program->locations,&bounds[n],1);
+        CHECK(region_begin_attempts==expected && !region_begin_successes && actual.status==ordinary.status &&
+            actual.bits==ordinary.bits && actual.failure==ordinary.failure && actual.source==ordinary.source);
+        if (n==sizeof(bounds)/sizeof(*bounds)-1)
+            CHECK(actual.status==XR_RBC_VALUE_FAILURE && actual.failure==XR_XIR_VALUE_BOUNDS && actual.source);
+        else CHECK(actual.status==XR_RBC_OK && actual.bits==(additive ? sum[n] : difference[n]));
     }
     region_force_bypass=false;
     xr_rbc_program_destroy(program);
@@ -629,6 +664,8 @@ static void rbc_array_region_cases(void) {
     rbc_read_fold_cases(true,RBC_READ_FOLD_IMMEDIATE);
     rbc_read_fold_cases(true,RBC_READ_FOLD_LARGE_LITERAL);
     rbc_read_fold_cases(true,RBC_READ_FOLD_PAST_END_LITERAL);
+    rbc_fixed_read_cases(true);
+    rbc_fixed_read_cases(false);
     {
         XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,0,1,0,false,RBC_REGION_READ_ONLY);
         XrRbcProgram *program=NULL; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
