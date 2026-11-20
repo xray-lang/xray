@@ -15,6 +15,41 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.artifacts import complete_native_artifacts
 
 
+def assert_fixed_update_loop(name: str, generated: str) -> None:
+    loop = re.search(
+        r"^(?P<label>xrl_fixed_(?P<region>\d+)_bb\d+): ;\n"
+        r"    for \(; (?P<iv>v\d+) < \(int64_t\)xrl_fixed_cache_(?P=region)\.length; \+\+(?P=iv)\) \{\n",
+        generated, re.MULTILINE,
+    )
+    assert loop, (name, "fixed Array loop missing")
+    label, region, iv = loop.group("label", "region", "iv")
+    cache = f"xrl_fixed_cache_{region}"
+    guard = re.search(
+        rf"\b{iv} >= INT64_C\(0\) && xrt_array_i64_region_try_begin\([^\n;]+, true, &{cache}\)"
+        rf" && \(uint64_t\){iv} < {cache}\.length\) \{{[^{{}}]*\bgoto {label};",
+        generated[:loop.start()],
+    )
+    assert guard, (name, "fixed Array loop has no matching entry guard")
+
+    # The numeric loop may contain nested blocks for scalar edge copies.
+    depth = 1
+    tail = generated[loop.end():]
+    for brace in re.finditer(r"[{}]", tail):
+        depth += 1 if brace[0] == "{" else -1
+        if depth == 0:
+            break
+    else:
+        raise AssertionError((name, "fixed Array loop has no closing brace"))
+    body = tail[:brace.start()]
+
+    # Match the two access directions on the proven backing rather than
+    # counting unrelated scalar bit copies or ordinary fallback calls.
+    element = rf"{cache}\.elements\s*\+\s*[^,\n]+"
+    assert re.search(rf"\bXRT_ARRAY_I64_REGION_COPY\(&v\d+,\s*{element}\);", body), (name, "fixed Array read missing")
+    assert re.search(rf"\bXRT_ARRAY_I64_REGION_COPY\({element},\s*&v\d+\);", body), (name, "fixed Array write missing")
+    assert not re.search(r"\b(?:xrt_\w+|xrl_edge_\w+)\s*\(", body), (name, "runtime work in fixed Array loop")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
@@ -169,11 +204,8 @@ def main() -> None:
         elif name in ("array_call_staging", "panic_array_call_staging"):
             assert "xrt_managed_slot_try_stage_unique(xrl_frame," in generated_text, name
             assert "xrt_managed_slot_move(xrl_frame," in generated_text and "xrl_array_argument.frame" in generated_text, name
-        elif name == "fixed_update_carried":
-            # The ordinary first write preserves the caller's snapshot. The
-            # warm loop uses the proven IV and keeps the other scalar recurrence.
-            loop = re.search(r"for \(; (v\d+) < \(int64_t\)xrl_fixed_cache_\d+\.length; \+\+\1\)", generated_text)
-            assert loop and "xrt_array_i64_region_try_begin(" in generated_text, name
+        elif name in ("element_update", "element_update_carried", "fixed_update_carried"):
+            assert_fixed_update_loop(name, generated_text)
         elif "xrt_native_array_push_local_i64(" in generated_text:
             # Growth in place follows only a capacity window or a failed held
             # local edit, whose acquisitions were cleared before the call.
@@ -190,9 +222,6 @@ def main() -> None:
             if name == "region_set":
                 assert "XRT_ARRAY_I64_REGION_COPY(" not in generated_text
                 assert "XRT_ARRAY_I64_REGION_RECONSTRUCT(" not in generated_text
-        if name in ("element_update", "element_update_carried"):
-            assert "XRT_ARRAY_I64_REGION_RECONSTRUCT(" in generated_text
-            assert ("xrt_array_i64_pair_store(" in generated_text) == (name == "element_update"), name
         if name == "string_append_assignment":
             assert generated_text.count("xrt_native_string_append_owned(") == 4
             assert generated_text.count("xrt_native_string_concat_create(") == 1
