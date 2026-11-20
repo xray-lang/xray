@@ -11,6 +11,10 @@ on:
         description: Capture the two frozen Task339 Release receipts on one macOS host
         type: boolean
         default: false
+      core_owned_process_probe:
+        description: Replay the owned process control on one macOS host
+        type: boolean
+        default: false
       scalar_performance:
         description: Run macOS scalar performance across three declared alignments
         type: boolean
@@ -30,7 +34,7 @@ on:
 
 jobs:
   current:
-    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair && !inputs.core_owned_process_probe)
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -144,7 +148,7 @@ jobs:
             build/lir-cli-array-native/**/*.stderr
 
   scalar-performance:
-    if: github.event_name == 'workflow_dispatch' && inputs.scalar_performance && !inputs.core_release_pair
+    if: github.event_name == 'workflow_dispatch' && inputs.scalar_performance && !inputs.core_release_pair && !inputs.core_owned_process_probe
     name: Scalar macOS (alignment ${{ matrix.alignment }})
     runs-on: macos-latest
     timeout-minutes: 30
@@ -265,7 +269,7 @@ jobs:
 
   # The pushed or proposed commits must explain themselves; see the script.
   commit-messages:
-    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair && !inputs.core_owned_process_probe)
     name: Commit messages
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -290,7 +294,7 @@ jobs:
           python3 scripts/check_commit_messages.py "$range"
 
   msvc-generated-c:
-    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair && !inputs.core_owned_process_probe)
     name: MSVC generated C11
     runs-on: windows-2022
     steps:
@@ -309,7 +313,7 @@ jobs:
       run: ctest --test-dir build/tests/unit/shared/bits_wide --output-on-failure
 
   arch-lint:
-    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair && !inputs.core_owned_process_probe)
     runs-on: ubuntu-latest
     name: Frontend Architecture Lint
     steps:
@@ -321,7 +325,7 @@ jobs:
 
 
   xraytest-floor:
-    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair && !inputs.core_owned_process_probe)
     runs-on: ubuntu-latest
     name: Shared Test Runtime (Python floor)
     steps:
@@ -347,7 +351,7 @@ jobs:
         python3 -m unittest discover -s . -p 'test_*.py' -v
 
   sanitizers:
-    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair && !inputs.core_owned_process_probe)
     name: Current gates (ASan + UBSan + paranoid)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -394,7 +398,7 @@ jobs:
             build/src/base/libxray_compile_resources.a
 
   thread-sanitizer:
-    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair && !inputs.core_owned_process_probe)
     name: Thread kernels (TSan)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -429,7 +433,7 @@ jobs:
             build-tsan/Testing/Temporary
 
   core-macos-release-pair:
-    if: github.event_name == 'workflow_dispatch' && inputs.core_release_pair
+    if: github.event_name == 'workflow_dispatch' && inputs.core_release_pair && !inputs.core_owned_process_probe
     name: Exact macOS Release comparison
     runs-on: macos-latest
     timeout-minutes: 100
@@ -458,4 +462,32 @@ jobs:
         with:
           name: task339-macos-release-pair-2b6e92dd3
           path: ${{ runner.temp }}/task339-macos-release-pair/
+          if-no-files-found: error
+
+  core-macos-owned-process-probe:
+    if: github.event_name == 'workflow_dispatch' && inputs.core_owned_process_probe
+    name: Exact macOS owned process control
+    runs-on: macos-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      NO_COLOR: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.9'
+      - name: Replay the original control and collect process state
+        run: python scripts/macos_owned_process_probe.py --output "$RUNNER_TEMP/task339-owned-process-probe"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: task339-macos-owned-process-probe-2b6e92dd3
+          path: ${{ runner.temp }}/task339-owned-process-probe/
           if-no-files-found: error
