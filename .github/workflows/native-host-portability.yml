@@ -7,6 +7,10 @@ on:
     branches: [main, agent/host-arch-portability, agent/direct-cutover, agent/type-value-arrows]
   workflow_dispatch:
     inputs:
+      core_release_pair:
+        description: Capture the two frozen Task339 Release receipts on one macOS host
+        type: boolean
+        default: false
       scalar_performance:
         description: Run macOS scalar performance across three declared alignments
         type: boolean
@@ -26,7 +30,7 @@ on:
 
 jobs:
   current:
-    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -140,7 +144,7 @@ jobs:
             build/lir-cli-array-native/**/*.stderr
 
   scalar-performance:
-    if: github.event_name == 'workflow_dispatch' && inputs.scalar_performance
+    if: github.event_name == 'workflow_dispatch' && inputs.scalar_performance && !inputs.core_release_pair
     name: Scalar macOS (alignment ${{ matrix.alignment }})
     runs-on: macos-latest
     timeout-minutes: 30
@@ -261,7 +265,7 @@ jobs:
 
   # The pushed or proposed commits must explain themselves; see the script.
   commit-messages:
-    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
     name: Commit messages
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -286,7 +290,7 @@ jobs:
           python3 scripts/check_commit_messages.py "$range"
 
   msvc-generated-c:
-    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
     name: MSVC generated C11
     runs-on: windows-2022
     steps:
@@ -305,7 +309,7 @@ jobs:
       run: ctest --test-dir build/tests/unit/shared/bits_wide --output-on-failure
 
   arch-lint:
-    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
     runs-on: ubuntu-latest
     name: Frontend Architecture Lint
     steps:
@@ -317,7 +321,7 @@ jobs:
 
 
   xraytest-floor:
-    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
     runs-on: ubuntu-latest
     name: Shared Test Runtime (Python floor)
     steps:
@@ -343,7 +347,7 @@ jobs:
         python3 -m unittest discover -s . -p 'test_*.py' -v
 
   sanitizers:
-    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
     name: Current gates (ASan + UBSan + paranoid)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -390,7 +394,7 @@ jobs:
             build/src/base/libxray_compile_resources.a
 
   thread-sanitizer:
-    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    if: github.event_name != 'workflow_dispatch' || (!inputs.scalar_performance && !inputs.core_release_pair)
     name: Thread kernels (TSan)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -423,3 +427,35 @@ jobs:
             build-tsan/CMakeCache.txt
             build-tsan/compile_commands.json
             build-tsan/Testing/Temporary
+
+  core-macos-release-pair:
+    if: github.event_name == 'workflow_dispatch' && inputs.core_release_pair
+    name: Exact macOS Release comparison
+    runs-on: macos-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      NO_COLOR: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build and compare both exact commits
+        run: >-
+          python scripts/macos_release_pair.py
+          --base 00cbb4924eca495a7f934a78dc2d7e16d66ca2b2
+          --candidate 7941c01931f86de9c11dd3b6b5f7d064f223e9d3
+          --output "$RUNNER_TEMP/task339-macos-release-pair"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: task339-macos-release-pair-7941c0193
+          path: ${{ runner.temp }}/task339-macos-release-pair/
+          if-no-files-found: error
