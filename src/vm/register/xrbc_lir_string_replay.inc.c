@@ -10,9 +10,10 @@
 static bool rbc_lir_string_replay_prepare(RbcLirCompiler *c) {
     const XrLirValueHomes *homes = c->homes;
     if (!c->value_code || !homes || !homes->string_replay_block_count) return true;
-    if ((size_t)c->view.block_count >= SIZE_MAX / sizeof(*c->string_replay_sources))
+    size_t count = (size_t)c->view.block_count + 1;
+    if (!count || count > SIZE_MAX / sizeof(*c->string_replay_sources))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "String replay source index exceeds address space");
-    c->string_replay_sources = xr_calloc((size_t)c->view.block_count + 1, sizeof(*c->string_replay_sources));
+    c->string_replay_sources = xr_calloc(count, sizeof(*c->string_replay_sources));
     if (!c->string_replay_sources)
         return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot index String replay source blocks");
     for (size_t n = 0; n < homes->string_replay_block_count; ++n) {
