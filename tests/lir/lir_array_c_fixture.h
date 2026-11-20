@@ -425,16 +425,35 @@ static void array_c_fixture(const char *name, XrLirModule **output, XrLirFunctio
     call=(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_ARRAY,.callee=copy,
         .operands=&array,.operand_count=1,.source=ca_source()};
     OK(xr_lir_emit_value(c.module,entry,&call,&copied));ca_effect(&c,entry,XR_LIR_ARRAY_DROP,array);array=copied;
-    if(!strncmp(name,"phi-",4)) {
-        XrLirBlock join={0};XrLirType type=XR_LIR_ARRAY;XrLirValue selected={0},condition={0};
-        OK(xr_lir_add_block(c.module,*root,&type,1,&join));
-        OK(xr_lir_block_parameter(c.module,join,0,&selected));
-        XrLirArrayShape shape={c.element};OK(xr_lir_set_array_shape(c.module,selected,&shape));
-        XrLirInstruction op={.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=1};
-        OK(xr_lir_emit_value(c.module,entry,&op,&condition));
-        op=(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&condition,.operand_count=1,
-            .edge_count=2,.edges={{join,&array,1},{join,&array,1}}};
-        OK(xr_lir_set_terminator(c.module,entry,&op));entry=join;array=selected;
+    if (!strncmp(name, "phi-", 4)) {
+        XrLirBlock join = {0}, other = {0};
+        XrLirType type = XR_LIR_ARRAY;
+        XrLirValue selected = {0}, original = {0}, condition = {0};
+        OK(xr_lir_add_block(c.module, *root, &type, 1, &join));
+        OK(xr_lir_add_block(c.module, *root, &type, 1, &other));
+        OK(xr_lir_block_parameter(c.module, join, 0, &selected));
+        OK(xr_lir_block_parameter(c.module, other, 0, &original));
+        XrLirArrayShape shape = {c.element};
+        OK(xr_lir_set_array_shape(c.module, selected, &shape));
+        OK(xr_lir_set_array_shape(c.module, original, &shape));
+
+        XrLirValue length = ca_intrinsic(&c, entry, XR_LIR_ARRAY_OP_LEN, XR_LIR_I64, &array, 1);
+        XrLirValue comparison[] = {length, ca_constant(&c, entry, 0)};
+        XrLirInstruction op = {.op=XR_LIR_ICMP, .type=XR_LIR_I1, .predicate=XR_LIR_GT,
+            .operands=comparison, .operand_count=2};
+        OK(xr_lir_emit_value(c.module, entry, &op, &condition));
+        op = (XrLirInstruction){.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT, .operands=&condition,
+            .operand_count=1, .edge_count=2, .edges={{join, &array, 1}, {other, &array, 1}}};
+        OK(xr_lir_set_terminator(c.module, entry, &op));
+
+        /* Two possible owner origins keep the Header MOVE observable. */
+        XrLirValue alternative = ca_call_array(&c, other, copy, original);
+        ca_effect(&c, other, XR_LIR_ARRAY_DROP, original);
+        op = (XrLirInstruction){.op=XR_LIR_BR, .type=XR_LIR_UNIT, .edge_count=1,
+            .edges={{join, &alternative, 1}}};
+        OK(xr_lir_set_terminator(c.module, other, &op));
+        entry = join;
+        array = selected;
     }
     if (returned) {
         ca_return(&c, entry, array);
