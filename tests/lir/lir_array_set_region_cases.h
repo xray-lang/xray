@@ -326,18 +326,18 @@ static void ars_fixed_update_preparations(void) {
         ARRAY_REGION_RANGE_FAILING_RHS, ARRAY_REGION_RANGE_DIRECT_RETURN, ARRAY_REGION_RANGE_AFTER_RETAIN};
     for (size_t n = 0; n < sizeof(modes) / sizeof(*modes); ++n) {
         bool local_after_retain = modes[n] == ARRAY_REGION_RANGE_AFTER_RETAIN;
-        bool physical = n < 2 || local_after_retain;
-        bool logical = physical || modes[n] == ARRAY_REGION_RANGE_DIRECT_RETURN;
+        bool direct_return = modes[n] == ARRAY_REGION_RANGE_DIRECT_RETURN;
+        bool fixed = n < 2 || local_after_retain || direct_return;
         ArraySetRegionFixture c = ars_range_build_seeded(NULL, 3, modes[n], !local_after_retain);
         OK(xr_lir_module_finish(c.module, NULL));
         XrLirOwnershipPlan *plan = NULL;
         OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
         XrLirOwnershipFunction row;
         OK(xr_lir_ownership_function_at(plan, c.function.id, &row));
-        if (row.fixed_update_count != (uint32_t)logical)
+        if (row.fixed_update_count != (uint32_t)fixed)
             fprintf(stderr, "fixed update fixture %u: found %u logical routes, expected %u\n",
-                (unsigned)modes[n], row.fixed_update_count, (unsigned)logical);
-        CHECK(!row.region_count && !row.push_window_count && row.fixed_update_count == (uint32_t)logical);
+                (unsigned)modes[n], row.fixed_update_count, (unsigned)fixed);
+        CHECK(!row.region_count && !row.push_window_count && row.fixed_update_count == (uint32_t)fixed);
         OK(xr_lir_ownership_array_regions_verify(c.module, plan));
         XrtBillingOwner *billing = NULL;
         CHECK(xrt_billing_owner_new(NULL, SIZE_MAX, &billing) == XRT_MANAGED_OK);
@@ -348,9 +348,9 @@ static void ars_fixed_update_preparations(void) {
         CHECK(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,c.function,layouts,plan}, &homes) ==
             XR_LIR_VALUE_LAYOUT_OK);
         xr_lir_module_destroy(c.module); xr_lir_value_layouts_destroy(layouts);
-        CHECK(homes && homes->fixed_array_update_count == (uint32_t)physical);
+        CHECK(homes && homes->fixed_array_update_count == (uint32_t)fixed);
         XrLirArraySetRegion update = {0};
-        if (logical) {
+        if (fixed) {
             OK(xr_lir_ownership_fixed_array_update_at(plan, row.fixed_update_offset, &update));
             CHECK(update.header == c.header.id && update.latch == c.body[2].id &&
                 update.exit_block == c.exit.id && update.exit_edge == (modes[n] == ARRAY_REGION_RANGE_FALSE_BODY ? 1u : 2u) &&
@@ -363,7 +363,7 @@ static void ars_fixed_update_preparations(void) {
                 departure.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE && departure.edge == update.exit_edge);
         }
         xr_lir_ownership_plan_destroy(plan);
-        if (physical) {
+        if (fixed) {
             const XrLirFixedArrayUpdateHome *bound = &homes->fixed_array_updates[0];
             CHECK(bound->body_edge == (modes[n] == ARRAY_REGION_RANGE_FALSE_BODY ? 2u : 1u) &&
                 bound->owner_slot == homes->values[update.canonical_value].first_owner &&
@@ -377,6 +377,34 @@ static void ars_fixed_update_preparations(void) {
                 slots[0].offset == homes->values[update.canonical_value].offset);
             CHECK(slots[1].slot == bound->workspace_slot &&
                 slots[1].offset == homes->frame.owned_offsets[bound->workspace_slot]);
+            if (direct_return) {
+                /* The region's local owner must still move into the ordinary
+                 * exit parameter, which the original return then consumes. */
+                CHECK(update.exit_value == c.result.id &&
+                    homes->values[update.exit_value].owner_count == 1 &&
+                    homes->values[update.exit_value].first_owner != bound->owner_slot);
+                size_t moves = 0, returns = 0;
+                for (size_t i = 0; i < homes->edge_count; ++i) {
+                    const XrLirHomeEdge *edge = &homes->edges[i];
+                    if (edge->block != update.header || edge->edge != update.exit_edge) continue;
+                    CHECK(edge->target_block == update.exit_block);
+                    for (size_t j = 0; j < edge->count; ++j) {
+                        const XrLirHomeTransfer *transfer = &homes->transfers[edge->first + j];
+                        if (transfer->target != update.exit_value) continue;
+                        CHECK(transfer->source == update.canonical_value &&
+                            transfer->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE);
+                        ++moves;
+                    }
+                }
+                for (size_t i = 0; i < homes->event_count; ++i) {
+                    const XrLirHomeEvent *event = &homes->events[i];
+                    if (event->kind != XR_LIR_OWNERSHIP_RETURN_TRANSFER) continue;
+                    CHECK(event->block == update.exit_block && event->source == update.exit_value &&
+                        event->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE);
+                    ++returns;
+                }
+                CHECK(moves == 1 && returns == 1);
+            }
         }
         xr_lir_value_homes_destroy(homes);
         xrt_billing_owner_drop(billing);
