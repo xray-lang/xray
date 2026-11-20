@@ -497,6 +497,44 @@ static bool lir_array_region_preserves_bound(const LirArrayRegionProof *p) {
         lir_array_region_scalar_passthrough(p, 0, p->range.length);
 }
 
+static XrLirArrayReadSum lir_array_region_read_sum(const LirArrayRegionProof *p,
+    const XrLirArraySetRegion *region) {
+    XrLirArrayReadSum sum = {0};
+    if (region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_GET) return sum;
+    /* A reduction does not perform ownership or binding work. Every original
+     * body operation is already proved pure, except the one checked read. */
+    for (uint32_t n = 1; n + 1 < p->step_count; ++n)
+        if (p->steps[n].kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) return (XrLirArrayReadSum){0};
+    const XrLirFunctionData *f = p->function;
+    const XrLirBlockData *header = &f->blocks[p->loop.header];
+    const XrLirBlockData *body = &f->blocks[region->primary_block - 1];
+    uint32_t item = body->instructions[region->primary_instruction - 1].view.result;
+    const XrLirEdgeView *latch = &lir_terminator(f, p->loop.latch)->edges[0];
+    for (uint32_t a = 0; a < header->parameter_count; ++a) {
+        uint32_t parameter = header->parameters[a];
+        if (parameter == region->range.iv || parameter == region->canonical_value) continue;
+        uint32_t incoming = latch->arguments[a];
+        uint32_t origin = lir_loop_body_origin(f, &p->graph, &p->loop, p->marks, incoming);
+        if (origin == parameter) continue;
+        const XrLirInstructionView *add = xr_lir_internal_value_definition(f, origin);
+        if (sum.accumulator || !add || add->op != XR_LIR_ADD || add->type != XR_LIR_I64 ||
+            add->operand_count != 2 || f->values[parameter - 1].type != XR_LIR_I64)
+            return (XrLirArrayReadSum){0};
+        uint32_t left = lir_loop_body_origin(f, &p->graph, &p->loop, p->marks, add->operands[0]);
+        uint32_t right = lir_loop_body_origin(f, &p->graph, &p->loop, p->marks, add->operands[1]);
+        if (!((left == item && right == parameter) || (left == parameter && right == item)))
+            return (XrLirArrayReadSum){0};
+        sum.accumulator = parameter;
+        sum.next_accumulator = incoming;
+    }
+    if (sum.accumulator && region->range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT) {
+        const XrLirInstructionView *limit = xr_lir_internal_value_definition(f, region->range.length);
+        if (limit && limit->op == XR_LIR_CONST) sum.limit_bits = limit->bits;
+        else sum.limit = region->range.length;
+    }
+    return sum;
+}
+
 static bool lir_array_region_prove(LirArrayRegionProof *p, const XrLirArraySetRegion *shape, XrLirArraySetRegion *region) {
     const LirLinearLoop *loop = &p->loop;
     uint32_t header = loop->header, body_edge = loop->body_edge;
@@ -592,6 +630,7 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
                 if (!lir_array_region_prove(p, &shape, &region)) continue;
                 receiver = fixed_updates;
             }
+            region.read_sum = lir_array_region_read_sum(p, &region);
             region.first_step = receiver->steps.count;
             for (uint32_t n = 0; n < p->step_count; ++n)
                 if (!lir_plan_array_append(&receiver->steps, &p->steps[n], sizeof(p->steps[n]))) return XR_LIR_OUT_OF_MEMORY;
@@ -697,7 +736,10 @@ static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b)
         a.range.increment_block == b.range.increment_block && a.range.increment_instruction == b.range.increment_instruction &&
         a.range.one == b.range.one && a.range.latch_iv == b.range.latch_iv &&
         a.owner_home.kind == b.owner_home.kind && a.owner_home.first_active_step == b.owner_home.first_active_step &&
-        a.owner_home.exit_step == b.owner_home.exit_step && a.push_counted == b.push_counted;
+        a.owner_home.exit_step == b.owner_home.exit_step &&
+        a.read_sum.accumulator == b.read_sum.accumulator && a.read_sum.next_accumulator == b.read_sum.next_accumulator &&
+        a.read_sum.limit == b.read_sum.limit && a.read_sum.limit_bits == b.read_sum.limit_bits &&
+        a.push_counted == b.push_counted;
 }
 static bool lir_array_region_step_equal(XrLirArraySetRegionStep a, XrLirArraySetRegionStep b) {
     return a.kind == b.kind && a.block == b.block && a.instruction == b.instruction && a.edge == b.edge &&

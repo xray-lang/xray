@@ -221,6 +221,14 @@ enum {
     XR_LIR_ARRAY_REGION_PRIMARY_GET,
     XR_LIR_ARRAY_REGION_PRIMARY_PUSH
 };
+/* A closed read loop may replace a published header state with the result
+ * of its ordered wrapping sum. Zero accumulator means no reduction. A
+ * zero limit uses the exact constant for a guarded range, or the unchanged
+ * backing length for a same-length range. */
+typedef struct XrLirArrayReadSum {
+    uint32_t accumulator, next_accumulator, limit;
+    uint64_t limit_bits;
+} XrLirArrayReadSum;
 /* The primary access is an original element operation, not CELL_READ/death.
  * GET names the sole element read in a closed loop with an unchanged length
  * or guarded bound. PUSH uses the original item and scalar assignments. */
@@ -230,6 +238,7 @@ typedef struct XrLirArraySetRegion {
     uint32_t body_block_count, primary_kind, primary_block, primary_instruction, first_step, step_count;
     XrLirArraySetRegionRange range;
     XrLirArraySetRegionOwnerHome owner_home;
+    XrLirArrayReadSum read_sum;
     /* PUSH only: item is the current IV and all other carried scalars are unchanged.
      * Both modes still use the same selected edges, owner home and capacity guard. */
     bool push_counted;
