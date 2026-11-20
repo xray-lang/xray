@@ -50,7 +50,7 @@ typedef struct LirCArrayRegionHelper {
     size_t first, count, inputs, outputs;
 } LirCArrayRegionHelper;
 typedef struct LirCFixedArrayEdge {
-    uint32_t entry, body, latch, exit;
+    uint32_t entry, latch, exit;
 } LirCFixedArrayEdge;
 typedef struct LirCArrayRegions {
     XrLirArrayRegionBindings *bindings;
@@ -114,6 +114,7 @@ typedef struct LirC {
     LirCArrayRegions *array_regions;
     const LirCArrayRegions *array_region;
     uint32_t array_helper_kind;
+    bool fixed_array_loop;
 } LirC;
 static void c_values_emit_types(LirC *);
 static void c_values_function(LirC *);
@@ -817,6 +818,10 @@ static void c_declarations(LirC *c) {
         c_format(c, "    (void)p%" PRIu32 ";\n", p);
 }
 static void c_reconstruct(LirC *c, XrLirType type, uint32_t result) {
+    if (type == XR_LIR_I64 && c->fixed_array_loop) {
+        c_format(c, "    XRT_ARRAY_I64_REGION_COPY(&v%" PRIu32 ", &v%" PRIu32 ");\n", result, c->scratch);
+        return;
+    }
     if (type == XR_LIR_I64 && c->array_helper_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET) {
         /* Exact-width int64_t has a two's-complement representation. Copying
          * the modulo result to its scalar home exposes that operation to loop
@@ -905,7 +910,7 @@ static void c_float_conversion(LirC *c, const XrLirInstructionView *v) {
         c_format(c, " = xrt_f64_to_i64(xrl_bits, UINT32_C(%" PRIu32 "));\n    }\n", source);
     }
 }
-static void c_scalar_edge_values(LirC *c, const XrLirEdgeView *edge) {
+static void c_scalar_edge_values(LirC *c, const XrLirEdgeView *edge, uint32_t skipped) {
     XrLirBlock target = {c->request->module, c->function.id, edge->target};
     XrLirBlockView block;
     xr_lir_block_view(c->request->module, target, &block);
@@ -918,7 +923,8 @@ static void c_scalar_edge_values(LirC *c, const XrLirEdgeView *edge) {
         }
     c_text(c, "    {\n");
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
-        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
+        if (block.parameters[a] == skipped ||
+            xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
         uint64_t temp = (uint64_t) c->scratch + 1 + a;
         if (temp >= UINT32_C(8388608)) {
             c_error(c, XR_LIR_C_UNSUPPORTED, "C edge temporary index exceeds the W4 limit");
@@ -932,7 +938,8 @@ static void c_scalar_edge_values(LirC *c, const XrLirEdgeView *edge) {
                 " = xrl_access%" PRIu32 ";\n", a, edge->arguments[a]);
     }
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
-        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
+        if (block.parameters[a] == skipped ||
+            xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
         c_format(c, "        v%" PRIu32 " = v%" PRIu32 ";\n", block.parameters[a],
                  c->scratch + 1 + a);
         if (c_value_type(c, edge->arguments[a]) == XR_LIR_STATE_REF)
@@ -945,18 +952,14 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
     const LirCFixedArrayEdge *fixed = c->array_region && c->array_region->fixed_edges ?
         &c->array_region->fixed_edges[(size_t)c->block * 2 + selected - 1] : NULL;
     if (fixed && fixed->exit) c_format(c, "xrl_fixed_exit_%" PRIu32 ": ;\n", fixed->exit);
-    if (fixed && fixed->entry) c_format(c, "    xrl_fixed_phase_%" PRIu32 " = 0;\n", fixed->entry);
+    if (fixed && fixed->entry) c_format(c, "    xrl_fixed_tried_%" PRIu32 " = 0;\n", fixed->entry);
     if (c_values_edge(c, edge, selected)) {
-        if (fixed && (fixed->body || fixed->latch))
-            c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array body and latch require stationary owner slots");
+        if (fixed && fixed->latch)
+            c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array latch requires stationary owner slots");
         return;
     }
-    c_scalar_edge_values(c, edge);
-    if (fixed && fixed->latch) {
-        c_format(c, "        if (xrl_fixed_phase_%" PRIu32 " == 0) xrl_fixed_phase_%" PRIu32 " = 1;\n",
-            fixed->latch, fixed->latch);
-    }
-    if (fixed && fixed->body) c_fixed_array_guard(c, fixed->body, edge->target);
+    c_scalar_edge_values(c, edge, 0);
+    if (fixed && fixed->latch) c_fixed_array_guard(c, fixed->latch, edge->target);
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);
 }
 static void c_division(LirC *c, const XrLirInstructionView *v) {
