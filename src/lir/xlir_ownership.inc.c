@@ -22,6 +22,7 @@ struct XrLirOwnershipPlan {
     LirArrayRegionTables array_regions;
     LirArrayRegionTables array_push_windows;
     LirArrayRegionTables fixed_array_updates;
+    LirArrayRegionVector array_calls;
 };
 
 static XrLirStatus lir_verify(const XrLirModule *, XrLirDiagnostic *, XrLirCallableFacts **,
@@ -350,6 +351,7 @@ static bool lir_plan_slice_boundary(XrLirOwnershipPlan *plan, const XrLirModule 
 }
 #include "xlir_binding_forwarding.inc.c"
 #include "xlir_array_set_region.inc.c"
+#include "xlir_array_call_ownership.inc.c"
 static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *plan,
     const XrLirCallableFacts *callables, const XrLirBlockConstructionFacts *fresh, XrLirDiagnostic *d) {
     for (uint32_t function = 1; function <= m->function_count; ++function) {
@@ -491,7 +493,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
         XrLirStatus region_status=lir_plan_array_set_regions(plan,m,f,function);
         if (region_status!=XR_LIR_OK) return region_status;
     }
-    return XR_LIR_OK;
+    return lir_plan_array_calls(m, plan);
 }
 
 XR_FUNC void xr_lir_ownership_plan_destroy(XrLirOwnershipPlan *plan) {
@@ -500,6 +502,7 @@ XR_FUNC void xr_lir_ownership_plan_destroy(XrLirOwnershipPlan *plan) {
     lir_array_regions_free(&plan->array_regions);
     lir_array_regions_free(&plan->array_push_windows);
     lir_array_regions_free(&plan->fixed_array_updates);
+    xr_free(plan->array_calls.data);
     xr_free(plan->types);
     xr_free(plan->functions);
     xr_free(plan);
@@ -579,6 +582,12 @@ XR_FUNC uint32_t xr_lir_ownership_function_count(const XrLirOwnershipPlan *plan)
 }
 XR_FUNC uint32_t xr_lir_ownership_fact_count(const XrLirOwnershipPlan *plan) {
     return plan ? plan->fact_count : 0;
+}
+XR_FUNC XrLirStatus xr_lir_ownership_array_call_move_at(const XrLirOwnershipPlan *plan,
+    uint32_t ordinal, XrLirArrayCallMove *output) {
+    if (!plan || !output || ordinal >= plan->array_calls.count) return XR_LIR_INVALID_ARGUMENT;
+    *output = ((const XrLirArrayCallMove *)plan->array_calls.data)[ordinal];
+    return XR_LIR_OK;
 }
 XR_FUNC XrLirStatus xr_lir_ownership_function_at(const XrLirOwnershipPlan *plan,
     uint32_t function, XrLirOwnershipFunction *out) {

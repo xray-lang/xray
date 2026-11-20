@@ -36,7 +36,7 @@ static void lir_array_regions_free(LirArrayRegionTables *tables) {
     xr_free(tables->regions.data); xr_free(tables->steps.data);
     *tables = (LirArrayRegionTables){0};
 }
-static bool lir_array_region_append(LirArrayRegionVector *vector, const void *item, size_t stride) {
+static bool lir_plan_array_append(LirArrayRegionVector *vector, const void *item, size_t stride) {
     if (vector->count == UINT32_MAX) return false;
     if (vector->count == vector->capacity) {
         uint32_t capacity = vector->capacity ? vector->capacity : 8;
@@ -666,8 +666,8 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
             } else if (region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH) receiver = push_windows;
             region.first_step = receiver->steps.count;
             for (uint32_t n = 0; n < p->step_count; ++n)
-                if (!lir_array_region_append(&receiver->steps, &p->steps[n], sizeof(p->steps[n]))) return XR_LIR_OUT_OF_MEMORY;
-            if (!lir_array_region_append(&receiver->regions, &region, sizeof(region))) return XR_LIR_OUT_OF_MEMORY;
+                if (!lir_plan_array_append(&receiver->steps, &p->steps[n], sizeof(p->steps[n]))) return XR_LIR_OUT_OF_MEMORY;
+            if (!lir_plan_array_append(&receiver->regions, &region, sizeof(region))) return XR_LIR_OUT_OF_MEMORY;
         }
     return XR_LIR_OK;
 }

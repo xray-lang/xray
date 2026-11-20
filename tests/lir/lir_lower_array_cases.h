@@ -10,6 +10,50 @@
 #include "lir/xlir_rebuild.h"
 #include "lir/xlir_ownership.h"
 
+static void array_call_last_use_source(void) {
+    static const char text[] =
+        "fn bump(input:Array<i64>, delta:i64)->Array<i64> {\n"
+        "  var edited=input\n  edited[0]=edited[0]+delta\n  return edited\n}\n"
+        "fn arg()->i64 {print(30)\nreturn 2}\n"
+        "fn last_use() {var a=[1,2]\na=bump(a,2+1)\nprint(a[0])}\n"
+        "fn used_later() {var a=[1,2]\nconst b=bump(a,2)\nprint(a[0])\nprint(b[0])}\n"
+        "fn later_argument() {var a=[1,2]\na=bump(a,arg())\nprint(a[0])}\n"
+        "last_use()\nused_later()\nlater_argument()\n";
+    XrLirLowered output = lower_text(text);
+    XrLirOwnershipPlan *plan = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=output.module}, &plan, NULL));
+    uint32_t receivers = 0, calls = 0;
+    XrLirArrayCallMove move = {0};
+    for (uint32_t f = 1; f <= xr_lir_ownership_function_count(plan); ++f) {
+        XrLirOwnershipFunction row;
+        OK(xr_lir_ownership_function_at(plan, f, &row));
+        receivers += row.array_entry_retain.instruction != 0;
+        calls += row.array_call_count;
+        if (!row.array_call_count) continue;
+        OK(xr_lir_ownership_array_call_move_at(plan, row.array_call_offset, &move));
+        XrLirFunction caller = {output.module,f};
+        XrLirBlock block;
+        XrLirInstructionView call, retain, owner_drop, temporary_drop;
+        OK(xr_lir_block_at(output.module, caller, move.block - 1, &block));
+        OK(xr_lir_instruction_view(output.module, block, move.instruction - 1, &call));
+        OK(xr_lir_instruction_view(output.module, block, move.retain - 1, &retain));
+        OK(xr_lir_instruction_view(output.module, block, move.owner_drop - 1, &owner_drop));
+        OK(xr_lir_instruction_view(output.module, block, move.temporary_drop - 1, &temporary_drop));
+        CHECK(call.op == XR_LIR_CALL && call.callee == move.callee && call.operands[0] == move.temporary &&
+            retain.op == XR_LIR_ARRAY_RETAIN && retain.result == move.temporary && retain.operands[0] == move.owner &&
+            owner_drop.op == XR_LIR_ARRAY_DROP && owner_drop.operands[0] == move.owner &&
+            temporary_drop.op == XR_LIR_ARRAY_DROP && temporary_drop.operands[0] == move.temporary);
+        CHECK(move.retain < move.instruction && move.owner_drop > move.instruction && move.temporary_drop > move.instruction);
+    }
+    CHECK(receivers == 1 && calls == 1);
+    xr_lir_lowered_free(&output);
+    XrLirArrayCallMove saved;
+    OK(xr_lir_ownership_array_call_move_at(plan, 0, &saved));
+    CHECK(saved.owner == move.owner && saved.temporary == move.temporary && saved.callee == move.callee);
+    CHECK(xr_lir_ownership_array_call_move_at(plan, 1, &saved) == XR_LIR_INVALID_ARGUMENT && saved.owner == move.owner);
+    xr_lir_ownership_plan_destroy(plan);
+}
+
 static void array_readonly_original_source(void) {
     /* Original complete push-plus-sum workload; only compilation is observed.
      * No loop bound or index is rewritten to manufacture a candidate. */
@@ -155,6 +199,7 @@ static void array_reference_mutator_transport(void) {
 
 static void array_sources(void) {
     array_reference_mutator_transport();
+    array_call_last_use_source();
     array_readonly_original_source();
     array_readonly_invariant_bound_source();
     array_push_exit_retained_source();
