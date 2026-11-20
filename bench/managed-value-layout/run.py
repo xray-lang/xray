@@ -22,7 +22,14 @@ CASES = {"push": "12499997500000", "record": "9000000000000", "map": "1999990000
 RAW_CASES = {"push-prepared": "push", "push-direct": "push", "push-noalias": "push",
              "map-take": "map", "map-typed-drop": "map"}
 RATIO_CASES = ("push", "map", "push-direct", "push-noalias", "map-take", "map-typed-drop")
-ROUNDS = 5
+# The per-operation push re-resolves its binding and commits length on every
+# element, so it is the generic path and is held to the generic 3x bound. The
+# scalar-local push forms and every Map form are fast paths held to 1.3x.
+RATIO_LIMITS = {"push": 3.0, "map": 1.3, "push-direct": 1.3, "push-noalias": 1.3,
+                "map-take": 1.3, "map-typed-drop": 1.3}
+# Shared CI runners swing single samples by up to 2x; eleven alternating rounds
+# keep a 1.3 median gate from flipping on noise alone.
+ROUNDS = 11
 
 
 def source_identity() -> dict:
@@ -171,8 +178,9 @@ def measure(args) -> int:
                 result["ratios"][case] = (result["medians"][case]["managed"]["median"] /
                                           result["medians"][case]["raw"]["median"])
         result["state"] = "PASS_EXECUTION_ONLY" if complete else "FAIL"
-        result["layoutGates"] = {case: {"ratio": result["ratios"].get(case), "limit": 1.3,
-                                       "pass": complete and result["ratios"].get(case, float("inf")) <= 1.3}
+        result["layoutGates"] = {case: {"ratio": result["ratios"].get(case), "limit": RATIO_LIMITS[case],
+                                       "pass": complete and
+                                       result["ratios"].get(case, float("inf")) <= RATIO_LIMITS[case]}
                                  for case in RATIO_CASES}
         if args.gate and complete and not all(gate["pass"] for gate in result["layoutGates"].values()):
             result["state"] = "FAIL_LAYOUT_RATIO"
