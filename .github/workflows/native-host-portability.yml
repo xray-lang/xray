@@ -201,6 +201,7 @@ jobs:
             build/lir-cli-assertions/**/*.stdout
             build/lir-cli-assertions/**/*.stderr
             build/lir-cli-array-native/**/result.json
+            build/lir-cli-array-native/**/result.jsonl
             build/lir-cli-array-native/**/*.stdout
             build/lir-cli-array-native/**/*.stderr
 
@@ -509,6 +510,10 @@ jobs:
             build/compile_commands.json
             build/Testing/Temporary
             build/sanitizer-array-diagnostic
+            build/lir-cli-array-native/**/result.json
+            build/lir-cli-array-native/**/result.jsonl
+            build/lir-cli-array-native/**/*.stdout
+            build/lir-cli-array-native/**/*.stderr
             build/xray
             build/generated/xray_native_link_paths.h
             build/src/runtime/native/libxray_native_runtime.a
