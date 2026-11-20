@@ -17,6 +17,9 @@ static inline bool rbc_value_binding_forward(RbcValueActivation *activation, XrR
     if (homes->events[access.index - 1].forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE) return false;
     const XrLirHomeBinding *binding = &homes->bindings[create ? access.result : access.source];
     const XrLirValueHome *home = &homes->values[create ? access.source : access.result];
+    /* Admission verified the shared owner field. The logical COPY retains into
+     * that same field and the paired DROP releases it: the pair is the identity. */
+    if (binding->first_owner == home->first_owner) return true;
     return xrt_managed_frame_try_forward(activation->frame,activation->payload,&activation->frame_locations,
         (XrtManagedFrameForward){create ? home->first_owner : binding->first_owner,
             create ? home->offset : binding->offset,create ? binding->first_owner : home->first_owner,

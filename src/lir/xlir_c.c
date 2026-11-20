@@ -102,6 +102,7 @@ typedef struct LirC {
     uint32_t array_frame_block;
     size_t binding_forward_cursor;
     const XrLirHomeEvent *binding_forward_pending;
+    bool binding_forward_elided;
     size_t array_local_event_cursor;
     LirCArrayRegions *array_regions;
     const LirCArrayRegions *array_region;
@@ -125,8 +126,12 @@ static void c_cell_scope_release(LirC *, uint32_t);
 static void c_cell_events_prepare(LirC *);
 static void c_cell_instruction(LirC *, const XrLirInstructionView *, uint32_t);
 static void c_hash_binding_stage_copy(LirC *, uint32_t, uint32_t, uint32_t);
-static bool c_binding_forward_begin(LirC *, const XrLirInstructionView *);
-static bool c_binding_forward_drop(LirC *, const XrLirInstructionView *);
+/* How an adjacent logical COPY/DROP pair reaches the generated C: not paired,
+ * guarded by a runtime forward with its original fallback, or elided because
+ * both names already share one physical owner slot. */
+typedef enum LirCForward { LIR_C_FORWARD_NONE, LIR_C_FORWARD_GUARDED, LIR_C_FORWARD_ELIDED } LirCForward;
+static LirCForward c_binding_forward_begin(LirC *, const XrLirInstructionView *);
+static LirCForward c_binding_forward_drop(LirC *, const XrLirInstructionView *);
 static bool c_array_local_begin(LirC *, const XrLirInstructionView *, const XrLirArrayIntrinsic *, const XrLirHomeWorkspace *);
 static void c_array_local_ready(LirC *);
 static void c_array_local_invalidate(LirC *, const XrLirInstructionView *);

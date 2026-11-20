@@ -275,7 +275,9 @@ static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t s
         c_text(c,"    xrt_native_cell_map_write("); c_value(c,binding->source); c_text(c,", ");
         c_value(c,v->operands[1]); c_format(c,", UINT32_C(%" PRIu32 "));\n",source); return;
     }
-    bool forwarded_drop=(v->op==XR_LIR_MAP_DROP || v->op==XR_LIR_MAP_CELL_DROP) && c_binding_forward_drop(c,v);
+    LirCForward forwarded_drop=v->op==XR_LIR_MAP_DROP || v->op==XR_LIR_MAP_CELL_DROP ?
+        c_binding_forward_drop(c,v) : LIR_C_FORWARD_NONE;
+    if (forwarded_drop==LIR_C_FORWARD_ELIDED) return;
     if (!forwarded_drop && v->op!=XR_LIR_MAP_BORROW) c_values_ensure(c, source);
     if (v->op == XR_LIR_MAP_BORROW) {
         const XrLirHomeBinding *binding = &c->homes->bindings[v->result];
@@ -293,7 +295,8 @@ static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t s
         bool read = v->op == XR_LIR_CELL_READ || v->op == XR_LIR_MAP_REF_READ;
         const XrLirValueHome *home = &c->homes->values[read ? v->result : v->operands[v->operand_count - 1]];
         if (!read && (!home->owner_count || home->parameter)) { c_error(c, XR_LIR_C_UNSUPPORTED, "Map assignment requires its final owned source home"); return; }
-        bool forwarded_copy=c_binding_forward_begin(c,v);
+        LirCForward forwarded_copy=c_binding_forward_begin(c,v);
+        if (forwarded_copy==LIR_C_FORWARD_ELIDED) return;
         c_text(c, "    { XrtManagedStatus status = xrt_place_copy_replace(");
         if (read) c_format(c, "(XrtPlace){.frame=xrl_frame, .slot=%zu, .nulls=XRT_PLACE_NULLABLE}", home->first_owner);
         else c_value(c, v->op == XR_LIR_CELL_NEW ? v->result : v->operands[0]);

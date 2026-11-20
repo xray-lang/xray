@@ -24,6 +24,9 @@ typedef struct LirHomeBuilder {
     const XrLirValueLayouts *layouts;
     XrLirValueHomes *homes;
     LirHomeVector owners, bytes, events, edges, transfers, calls, arguments, workspaces;
+    /* Value id -> stationary producer for a private Array Cell whose MOVE
+     * round trip begins and ends in that producer's chain. Builder-owned. */
+    uint32_t *stationary_cells;
 } LirHomeBuilder;
 
 XR_FUNCDEF void xr_lir_value_homes_destroy(XrLirValueHomes *homes) {
@@ -248,7 +251,16 @@ static bool lir_home_binding_fact(LirHomeBuilder *b, XrLirOwnershipFact fact) {
         if (row->kind || !fact.target_value || b->homes->values[fact.target_value].type != row->type)
             return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding constructor lost its initializer");
         XrtValuePlanSpec spec;
-        if (!lir_home_binding_spec(b,row->type,&spec) || !lir_home_reserve(b,&spec,&row->offset,&row->first_owner)) return false;
+        if (!lir_home_binding_spec(b,row->type,&spec)) return false;
+        uint32_t producer = b->stationary_cells ? b->stationary_cells[fact.value] : 0;
+        if (producer) {
+            const XrLirValueHome *owner = &b->homes->values[producer];
+            if (owner->type != row->type || owner->owner_count != 1 || owner->first_owner == SIZE_MAX ||
+                owner->offset == SIZE_MAX)
+                return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"stationary Cell lost its owner home");
+            row->offset = owner->offset;
+            row->first_owner = owner->first_owner;
+        } else if (!lir_home_reserve(b,&spec,&row->offset,&row->first_owner)) return false;
         row->kind = XR_LIR_HOME_BINDING_LOCAL;
     } else if (fact.kind == XR_LIR_OWNERSHIP_BINDING_BORROW) {
         if (row->kind || !fact.target_value)
@@ -393,7 +405,7 @@ typedef struct LirHomeChain {
     uint32_t parent, producer, last_block;
     uint32_t binding_input, binding_output, handoff_source;
     uint8_t rank;
-    bool rejected, array_region;
+    bool rejected, array_region, array_cell;
 } LirHomeChain;
 
 static uint32_t lir_home_chain_root(LirHomeChain *chains, uint32_t value) {
@@ -441,6 +453,7 @@ static bool lir_home_chain_bindings(LirHomeCompiler *c, const XrLirOwnershipPlan
         if (*endpoint)
             return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary binding has conflicting handoffs");
         *endpoint = fact.target_value;
+        cell->array_cell = array;
     }
     for (uint32_t v = 1; v <= c->view.value_count; ++v) {
         const LirHomeChain *cell = &chains[v];
@@ -588,6 +601,24 @@ static bool lir_home_stationary_owners(LirHomeBuilder *builder, const XrLirOwner
         const LirHomeChain *root = &chains[lir_home_chain_root(chains, v)];
         if (root->rank && root->producer && !root->rejected)
             values[v].stationary_owner = root->producer;
+    }
+    /* A mutation Cell between two names of one stationary owner holds that
+     * same owner for its whole life: the MOVE in empties the source and the
+     * MOVE out refills it. Giving the Cell the owner's slot turns both
+     * handoffs into no-ops while the mutation edits the owner in place. */
+    for (uint32_t v = 1; v <= f->value_count; ++v) {
+        const LirHomeChain *cell = &chains[v];
+        if (!cell->array_cell || cell->array_region || !cell->binding_input || !cell->binding_output) continue;
+        uint32_t producer = values[cell->binding_input].stationary_owner;
+        if (!producer || producer != values[cell->binding_output].stationary_owner) continue;
+        if (!builder->stationary_cells) {
+            builder->stationary_cells = xr_calloc(count, sizeof(*builder->stationary_cells));
+            if (!builder->stationary_cells) {
+                xr_free(chains);
+                return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot record stationary mutation Cells");
+            }
+        }
+        builder->stationary_cells[v] = producer;
     }
     xr_free(chains);
     return true;
@@ -1048,6 +1079,8 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHome
     b.homes->value_count = b.compiler.view.value_count;
     bool success = lir_home_array_regions(&b, request->ownership,false) &&
         lir_home_array_regions(&b, request->ownership,true) && lir_home_function(&b, request->ownership);
+    xr_free(b.stationary_cells);
+    b.stationary_cells = NULL;
     b.homes->frame.slot_count = b.owners.count; b.homes->frame.owned_offsets = b.owners.data;
     b.homes->owned_frame_needed = b.owners.count != 0;
     b.homes->bytes = b.bytes.data; b.homes->byte_count = b.bytes.count;

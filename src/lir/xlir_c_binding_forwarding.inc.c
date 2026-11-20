@@ -61,13 +61,15 @@ static bool c_binding_forward_geometry(LirC *c, const XrLirHomeEvent *event,
         if (slots[n]>=homes->frame.slot_count || offsets[n]>homes->frame.payload_size ||
             sizeof(XrtManagedHeader *)>homes->frame.payload_size-offsets[n] ||
             offsets[n]%_Alignof(XrtManagedHeader *) || homes->frame.owned_offsets[slots[n]]!=offsets[n]) return false;
-    if (slots[0]==slots[1] || offsets[0]==offsets[1]) return false;
+    /* Equal slots must also be the equal owner field; a stationary Cell shares
+     * both with its owner's chain, while any partial overlap is malformed. */
+    if ((slots[0]==slots[1]) != (offsets[0]==offsets[1])) return false;
     *output=create ? (LirCBindingForward){slots[1],offsets[1],slots[0],offsets[0]} :
         (LirCBindingForward){slots[0],offsets[0],slots[1],offsets[1]};
     return true;
 }
-static bool c_binding_forward_begin(LirC *c, const XrLirInstructionView *op) {
-    if (!c->binding_forwarding || (op->op!=XR_LIR_CELL_NEW && op->op!=XR_LIR_CELL_READ)) return false;
+static LirCForward c_binding_forward_begin(LirC *c, const XrLirInstructionView *op) {
+    if (!c->binding_forwarding || (op->op!=XR_LIR_CELL_NEW && op->op!=XR_LIR_CELL_READ)) return LIR_C_FORWARD_NONE;
     while (c->binding_forward_cursor<c->homes->event_count) {
         const XrLirHomeEvent *event=&c->homes->events[c->binding_forward_cursor];
         /* Only this producer's flagged substream is position ordered. Ignore
@@ -77,27 +79,34 @@ static bool c_binding_forward_begin(LirC *c, const XrLirInstructionView *op) {
         ++c->binding_forward_cursor;
         if (event->block!=c->block || event->instruction!=c->instruction) continue;
         LirCBindingForward transfer={0};
-        if (!c_binding_forward_geometry(c,event,op,&transfer)) return false;
+        if (!c_binding_forward_geometry(c,event,op,&transfer)) return LIR_C_FORWARD_NONE;
+        c->binding_forward_pending=event;
+        /* The logical COPY retains into the owner's own field and the paired
+         * DROP releases it again; with one shared field the pair is the identity. */
+        c->binding_forward_elided=transfer.source==transfer.destination;
+        if (c->binding_forward_elided) return LIR_C_FORWARD_ELIDED;
         c_format(c,"    xrl_binding_forwarded = xrt_managed_frame_try_forward(xrl_frame, xrl_payload, &xrl_frame_locations, (XrtManagedFrameForward){%zu, %zu, %zu, %zu});\n",
             transfer.source,transfer.source_offset,transfer.destination,transfer.destination_offset);
         c_text(c,"    if (!xrl_binding_forwarded) {\n");
-        c->binding_forward_pending=event;
-        return true;
+        return LIR_C_FORWARD_GUARDED;
     }
-    return false;
+    return LIR_C_FORWARD_NONE;
 }
-static bool c_binding_forward_drop(LirC *c, const XrLirInstructionView *op) {
+static LirCForward c_binding_forward_drop(LirC *c, const XrLirInstructionView *op) {
     const XrLirHomeEvent *event=c->binding_forward_pending;
-    if (!event) return false;
+    if (!event) return LIR_C_FORWARD_NONE;
+    bool elided=c->binding_forward_elided;
     c->binding_forward_pending=NULL;
+    c->binding_forward_elided=false;
     bool create=event->kind==XR_LIR_OWNERSHIP_BINDING_NEW;
     if (event->block!=c->block || event->forwarding_drop!=c->instruction || op->operand_count!=1 ||
         op->op!=c_binding_forward_release(c,event) ||
         op->operands[0]!=(create?event->target:event->source)) {
-        c_error(c,XR_LIR_C_INVALID_LIR,"binding forwarding lost its adjacent logical release"); return false;
+        c_error(c,XR_LIR_C_INVALID_LIR,"binding forwarding lost its adjacent logical release"); return LIR_C_FORWARD_NONE;
     }
+    if (elided) return LIR_C_FORWARD_ELIDED;
     /* The preceding complete COPY or successful forwarding already established
      * the Frame. Do not insert a lazy constructor between the paired events. */
     c_text(c,"    if (!xrl_binding_forwarded) {\n");
-    return true;
+    return LIR_C_FORWARD_GUARDED;
 }

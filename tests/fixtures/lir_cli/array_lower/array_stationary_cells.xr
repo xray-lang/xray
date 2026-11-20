@@ -1,0 +1,63 @@
+fn derived_push(n: i64) -> i64 {
+    var values: Array<i64> = []
+    var i = 0
+    var seen = 0
+    while (i < n) {
+        values.push(i * 2 - i)
+        seen = seen + values[i]
+        i = i + 1
+    }
+    return seen * 1000 + len(values)
+}
+
+fn push_then_update(n: i64) -> i64 {
+    var values: Array<i64> = []
+    var i = 0
+    while (i < n) {
+        values.push(i)
+        i += 1
+    }
+    i = 0
+    while (i < len(values)) {
+        values[i] = values[i] * 3 + 1
+        i += 1
+    }
+    return values[0] + values[n - 1]
+}
+
+fn snapshot_during_growth(n: i64) {
+    var values: Array<i64> = [5, 6]
+    const before = values
+    var i = 0
+    while (i < n) {
+        values.push(i + 10)
+        if (i == 1) { values[0] = 99 }
+        i = i + 1
+    }
+    print(len(before))
+    print(before[0])
+    print(len(values))
+    print(values[0])
+    print(values[len(values) - 1])
+}
+
+fn branch_push(n: i64) -> i64 {
+    var values: Array<i64> = [1]
+    var i = 0
+    while (i < n) {
+        if (i % 3 == 0) {
+            values.push(i)
+        } else {
+            values[0] = values[0] + 1
+        }
+        i = i + 1
+    }
+    return values[0] * 1000 + len(values)
+}
+
+print(derived_push(0))
+print(derived_push(7))
+print(push_then_update(1))
+print(push_then_update(40))
+snapshot_during_growth(4)
+print(branch_push(10))

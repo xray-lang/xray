@@ -35,6 +35,7 @@ def main() -> None:
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
+             "array_stationary_cells", "panic_stationary_cell",
              "element_update", "element_update_carried",
              "panic_region_get", "panic_region_set",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
@@ -131,6 +132,14 @@ def main() -> None:
             append, read = pointwise.split("xrl_ar_0_cache = (", 1)
             assert "xrt_native_array_update_place(" in append and "xrl_edge_" not in append
             assert "xrl_ar_loop_" in read and "xrl_edge_" in read
+        elif name == "array_stationary_cells":
+            # Each mutation Cell shares its stationary owner's slot: no runtime
+            # forwarding remains, and every slow update edits a local view's binding.
+            assert "xrt_managed_frame_try_forward(" not in generated_text
+            bindings = set(re.findall(r"\(XrtArrayI64LocalGeometry\)\{(\d+), ", generated_text))
+            updates = set(re.findall(r"xrt_native_array_update_place\(\(XrtPlace\)\{\.frame=xrl_frame, \.slot=(\d+),",
+                                     generated_text))
+            assert updates and updates <= bindings, (updates, bindings)
         elif "xrt_native_array_push_local_i64(" in generated_text:
             assert re.search(r"if \(xrl_ap_\d+_ready\) \{\s+xrt_native_array_push_local_i64\(", generated_text)
         if name.startswith("region_") or name.startswith("panic_region_"):

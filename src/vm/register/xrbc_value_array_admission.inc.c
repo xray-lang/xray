@@ -145,7 +145,8 @@ static const XrLirHomeEvent *rbc_value_binding_forwarding_event(const XrRbcModul
         if (slots[n]>=homes->frame.slot_count || offsets[n]%_Alignof(XrtManagedHeader *) ||
             offsets[n]>homes->frame.payload_size || sizeof(XrtManagedHeader *)>homes->frame.payload_size-offsets[n] ||
             homes->frame.owned_offsets[slots[n]]!=offsets[n]) return NULL;
-    if (slots[0]==slots[1] || offsets[0]==offsets[1]) return NULL;
+    /* A stationary mutation Cell shares both the slot and the owner field. */
+    if ((slots[0]==slots[1]) != (offsets[0]==offsets[1])) return NULL;
     const XrLirHomeEvent *event=&homes->events[access.index-1];
     if (event->kind!=(uint32_t)(create ? XR_LIR_OWNERSHIP_BINDING_NEW : XR_LIR_OWNERSHIP_BINDING_READ) ||
         event->source!=receiver || event->target!=value || !event->block || !event->instruction ||
