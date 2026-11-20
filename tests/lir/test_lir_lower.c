@@ -8,6 +8,7 @@
  */
 #include "lir_source_fixture.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_type_description.h"
 #include "base/xmalloc.h"
 #include "lir/xlir_lower.h"
 #include "lir/xlir_source.h"
@@ -401,6 +402,70 @@ static void class_layout_sources(void) {
     }
     xrt_value_image_drop(&bound);
     xrt_billing_owner_drop(billing);
+}
+static void inherited_class_layout_sources(void) {
+    const char *text =
+        "class Animal{name:string;init(name:string){this.name=name}}\n"
+        "class Dog extends Animal{age:i64;init(name:string,age:i64){super(name);this.age=age}}\n"
+        "var animal=Animal(\"Cat\")\nvar dog=Dog(\"Rex\",7)\n"
+        "print(animal.name)\nprint(dog.name)\nprint(dog.age)\n";
+    SourceFixture fixture = source_fixture(text);
+    const XrXirModule *closed = xr_xir_compile_artifact_module(fixture.closed);
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(fixture.closed);
+    uint32_t creates = 0, derived = 0;
+    for (uint32_t f = 0; f < closed->function_count; ++f) {
+        const XrXirFunction *function = &closed->functions[f];
+        for (uint32_t i = 0; i < function->instruction_count; ++i) {
+            const XrXirInstruction *op = &function->instructions[i];
+            if (op->op != XR_XIR_CLASS_NEW) continue;
+            XrXirTypeDescription type;
+            CHECK(xr_xir_compile_type_description(context, closed->types, op->type, &type) == XR_XIR_OK);
+            uint32_t parent = type.definition ? type.definition->parent : type.identity->parent;
+            CHECK(op->args[1] == (parent ? 2u : 1u));
+            XrXirFieldDescription name;
+            CHECK(xr_xir_compile_description_field(context, &type, 0, &name) == XR_XIR_OK);
+            CHECK(name.type == XR_XIR_STRING && name.name.length == 4 && !memcmp(name.name.bytes, "name", 4));
+            if (parent) {
+                XrXirFieldDescription age;
+                CHECK(xr_xir_compile_description_field(context, &type, 1, &age) == XR_XIR_OK);
+                CHECK(age.type == XR_XIR_I64 && age.name.length == 3 && !memcmp(age.name.bytes, "age", 3));
+                ++derived;
+            }
+            ++creates;
+        }
+    }
+    CHECK(creates == 2 && derived == 1);
+    XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+    XrLirLowered output = {0};
+    OK(xr_lir_lower_program_checked(&request, &output, NULL));
+    source_fixture_free(&fixture);
+    XrLirStateLayout state = {0};
+    OK(xr_lir_state_layout_view(output.module, &state));
+    CHECK(state.slot_count == 2);
+    XrLirType root = state.slots[0].payload, child = state.slots[1].payload;
+    CHECK(root != child && !xr_lir_class_parent(output.module, root) && xr_lir_class_parent(output.module, child) == root);
+    XrtBillingOwner *billing = NULL;
+    CHECK(xrt_billing_owner_new(NULL, SIZE_MAX, &billing) == XRT_MANAGED_OK);
+    XrLirValueLayouts *layouts = NULL;
+    XrLirValueLayoutKey key = {.type=child};
+    CHECK(xr_lir_value_layouts_create(output.module, &key, 1, billing, &layouts) == XR_LIR_VALUE_LAYOUT_OK);
+    const XrtValuePlan *plan = NULL; uint32_t child_id = 0;
+    CHECK(xr_lir_value_layouts_lookup(layouts, key, &plan, &child_id) == XR_LIR_VALUE_LAYOUT_OK);
+    XrLirValueImage *image = NULL;
+    CHECK(xr_lir_value_image_create(layouts, billing, &image) == XR_LIR_VALUE_LAYOUT_OK);
+    xr_lir_value_layouts_destroy(layouts); xr_lir_lowered_free(&output);
+    XrtValueImagePlans *bound = NULL;
+    const XrtValueImage *raw = xr_lir_value_image_view(image);
+    uint32_t parent_id = raw->types[child_id - 1].class_parent;
+    CHECK(parent_id && parent_id < child_id);
+    CHECK(xrt_value_image_bind(billing, raw, (XrtManagedLease){0}, &bound) == XRT_MANAGED_OK);
+    xr_lir_value_image_destroy(image);
+    XrtBoundClass parent_type = {0}, child_type = {0};
+    CHECK(xrt_value_image_class(bound, parent_id, &parent_type) == XRT_MANAGED_OK);
+    CHECK(xrt_value_image_class(bound, child_id, &child_type) == XRT_MANAGED_OK);
+    XrtValuePlanSpec spec;
+    CHECK(xrt_value_plan_view(child_type.plan, &spec) == XRT_MANAGED_OK && spec.class_parent == parent_type.plan);
+    xrt_value_image_drop(&bound); xrt_billing_owner_drop(billing);
 }
 static void fixed_division_source(const char *text, bool slot_frontier) {
     SourceFixture fixture = source_fixture(text);
@@ -1192,6 +1257,7 @@ int main(int argc, char **argv) {
     callable_source();
     assertion_declaration_and_scope_sources(argv[1]);
     class_layout_sources();
+    inherited_class_layout_sources();
     module_i64_groups();
     view_cold_checked_sources(argv[1]);
     fixed_sources();

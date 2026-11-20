@@ -104,6 +104,8 @@ XR_FUNC XrLirStatus xr_lir_record_identity(const XrLirModule *, XrLirType, XrLir
 /* A class owns one Header and uses a fixed nominal Field payload plan. The
  * payload type describes the allocation's fields, not the class value ABI. */
 XR_FUNC bool xr_lir_class_payload(const XrLirModule *, XrLirType, XrLirType *);
+/* Zero means a root class. This fact grants no implicit upcast or dispatch. */
+XR_FUNC XrLirType xr_lir_class_parent(const XrLirModule *, XrLirType);
 XR_FUNC bool xr_lir_boxed_type(const XrLirModule *, XrLirType);
 /* Selects the common inline plan for named and positional aggregate values,
  * including Nullable over an inline aggregate. It does not imply ownership. */
