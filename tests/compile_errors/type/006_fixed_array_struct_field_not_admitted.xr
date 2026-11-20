@@ -1,0 +1,13 @@
+// A fixed array as a struct field is refused, and must stay refused until the
+// declaration carries its layout.
+//
+// `[T; N]` is a fixed-layout value type, so a struct field of that type is a
+// legal inline member once the compiler can describe its size and alignment to
+// every backend. Today the declaration is rejected outright, which is the safe
+// side of the gap: no backend can build a layout for it yet. This case pins the
+// rejection so the surface cannot open by accident; accepting it requires the
+// field layout work and a positive test in the same change.
+struct Lanes {
+    lanes: [u8; 16]
+}
+print(1)
