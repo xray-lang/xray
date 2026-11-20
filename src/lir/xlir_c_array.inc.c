@@ -195,12 +195,21 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
             c_error(c,XR_LIR_C_INVALID_LIR,"Array mutation workspace lost its exact binding type"); return;
         }
         bool local=c_array_local_begin(c,v,shape,workspace);
+        if (!local) c_array_held_clear(c);
         size_t window = local && shape->operation == XR_LIR_ARRAY_OP_PUSH ? c_array_push_window_at(c) : 0;
         if (window) {
             c_format(c,"    if (xrl_ap_%zu_ready) {\n    xrt_native_array_push_local_i64(",window-1);
             c_value(c,v->operands[0]);
             c_format(c,", %zu, xrl_array_update.item.value.i64, UINT32_C(%" PRIu32 "));\n    } else {\n",
                 workspace->first_owner,source);
+        } else if (local && shape->operation == XR_LIR_ARRAY_OP_PUSH) {
+            /* A full local backing grows in place when it has one owner; the
+             * held acquisitions were cleared above and no raw borrow remains. */
+            c_text(c,"    xrt_native_array_push_local_i64("); c_value(c,v->operands[0]);
+            c_format(c,", %zu, xrl_array_item, UINT32_C(%" PRIu32 "));\n",workspace->first_owner,source);
+            c_array_local_ready(c);
+            c_text(c,"    }\n    }\n");
+            return;
         }
         c_text(c,"    xrt_native_array_update_place("); c_value(c,v->operands[0]);
         if (local) c_format(c,", %s, xrl_frame, %zu, &xrl_array_update, UINT32_C(%" PRIu32 "));\n",kind,workspace->first_owner,source);

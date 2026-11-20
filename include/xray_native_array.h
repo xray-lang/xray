@@ -84,9 +84,11 @@ XRAY_API void xrt_native_array_display(XrtManagedFrame *, size_t slot,
  * The workspace is distinct and true-empty; no source retain forces COW. */
 XRAY_API void xrt_native_array_update_place(XrtPlace, XrtBackingArrayKind binding_kind,
     XrtManagedFrame *, size_t workspace, const XrtArrayUpdate *, uint32_t source_id);
-/* Only generated code with an admitted local capacity window can call this
- * receiver. It may move the backing when growing. All old backing borrows have
- * ended, and the binding and empty workspace belong to the same live Frame. */
+/* Only generated code editing an admitted local I64 binding can call this
+ * receiver. It may move the backing when growing, so the caller holds no raw
+ * backing borrow across the call: held acquisitions and region caches are
+ * cleared first. The binding and empty workspace belong to the same live
+ * Frame. A shared or flagged backing is copied instead of resized. */
 XRAY_API void xrt_native_array_push_local_i64(XrtPlace, size_t workspace, int64_t item, uint32_t source_id);
 #ifdef __cplusplus
 }

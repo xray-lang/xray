@@ -223,21 +223,25 @@ XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_local_prepare(XrtManagedFrame *frame, 
 }
 
 /* A prepared view confers no mutation authority. The caller still supplies an
- * admitted LOCAL I64 operation after real backing initialization. Every try
- * reads current busy, pending, actual owners, RC and backing bounds in order.
- * Only the uninterrupted success window edits bytes; false changes nothing
- * and requires the ordinary kernel with fresh reads. */
-XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_try_update_local(const XrtArrayI64LocalView *view,
-    XrtArrayI64LocalUpdate update) {
+ * admitted LOCAL I64 operation after real backing initialization. Acquisition
+ * reads current busy, pending, actual owners and RC in order and returns the
+ * binding's backing only when this activation holds its sole reference. NULL
+ * changes nothing and requires the ordinary kernel with fresh reads. */
+XRT_ARRAY_LOCAL_INLINE XrtArrayBacking *xrt_array_i64_local_acquire(const XrtArrayI64LocalView *view) {
     if (!view || !view->busy || !view->binding_pending || !view->workspace_pending ||
-        !view->binding_owner || !view->workspace_owner) return false;
-    if (*view->busy) return false;
+        !view->binding_owner || !view->workspace_owner) return NULL;
+    if (*view->busy) return NULL;
     if (view->binding_pending->value || view->binding_pending->allocation_bytes ||
-        view->workspace_pending->value || view->workspace_pending->allocation_bytes) return false;
+        view->workspace_pending->value || view->workspace_pending->allocation_bytes) return NULL;
     XrtManagedHeader *owner=*view->binding_owner;
     if (!owner || *view->workspace_owner ||
-        atomic_load_explicit(&owner->references,memory_order_relaxed)!=1) return false;
-    XrtArrayBacking *array=(XrtArrayBacking *)owner;
+        atomic_load_explicit(&owner->references,memory_order_relaxed)!=1) return NULL;
+    return (XrtArrayBacking *)owner;
+}
+
+/* Edit an acquired sole-owner backing within its current bounds and capacity.
+ * False changes nothing; growth and out-of-bounds writes need the kernel. */
+XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_local_apply(XrtArrayBacking *array, XrtArrayI64LocalUpdate update) {
     size_t maximum=(SIZE_MAX-sizeof(*array))/sizeof(int64_t), index=0;
     if (array->length>array->capacity || array->capacity>maximum) return false;
     if (update.operation==XRT_ARRAY_UPDATE_SET) {
@@ -248,9 +252,33 @@ XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_try_update_local(const XrtArrayI64Loca
             return false;
         index=array->length;
     } else return false;
-    memcpy(array->elements+index*sizeof(int64_t),&update.value,sizeof(update.value));
+    /* The element bytes follow two size_t fields of an aligned header, so an
+     * I64 lvalue is aligned. A typed store tells the C compiler it cannot
+     * change Frame owner pointers, unlike a byte copy that may alias them. */
+    ((int64_t *)(void *)array->elements)[index]=update.value;
     if (update.operation==XRT_ARRAY_UPDATE_PUSH) array->length=index+1;
     return true;
+}
+_Static_assert(offsetof(XrtArrayBacking, elements) % _Alignof(int64_t) == 0,
+    "I64 elements start at an aligned offset of the Array backing");
+
+/* Every try reads the actual Frame state; false requires the ordinary kernel. */
+XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_try_update_local(const XrtArrayI64LocalView *view,
+    XrtArrayI64LocalUpdate update) {
+    XrtArrayBacking *array=xrt_array_i64_local_acquire(view);
+    return array && xrt_array_i64_local_apply(array,update);
+}
+
+/* Generated code keeps one acquisition per binding in *held while it executes
+ * only operations that cannot run guest code, retain or release the binding,
+ * move its owner or replace its backing; every other operation clears *held
+ * first. A held backing therefore still has the binding's sole reference and
+ * skips the Frame reads. A miss leaves *held for the caller to clear before
+ * the ordinary kernel, which may replace or grow the backing. */
+XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_update_held(XrtArrayBacking **held, const XrtArrayI64LocalView *view,
+    XrtArrayI64LocalUpdate update) {
+    if (!*held) *held=xrt_array_i64_local_acquire(view);
+    return *held && xrt_array_i64_local_apply(*held,update);
 }
 #undef XRT_ARRAY_LOCAL_INLINE
 #endif

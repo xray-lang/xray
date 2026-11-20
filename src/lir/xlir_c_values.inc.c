@@ -241,8 +241,10 @@ static void c_values_function(LirC *c) {
     c->array_frame_block = 0;
     c->array_local_event_cursor = 0;
     c->array_local = c_array_local_function(c,c->homes);
+    c_array_held_prepare(c);
     c->binding_forward_cursor = 0;
     c->binding_forward_pending = NULL;
+    c->binding_forward_elided = false;
     c->binding_forwarding = false;
     for (size_t n=0;c->homes && n<c->homes->event_count;++n)
         c->binding_forwarding |= c->homes->events[n].forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_NONE;
@@ -264,6 +266,7 @@ static void c_values_declarations(LirC *c) {
     if (c->array_local) {
         c_text(c,"    bool xrl_array_ready = false;\n    (void)xrl_array_ready;\n");
         c_format(c,"    XrlArrayLocals_%" PRIu32 " xrl_array_locals = {0};\n",c->function.id);
+        c_array_held_declarations(c);
     }
     c_array_region_declarations(c);
 }

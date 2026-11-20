@@ -1,0 +1,73 @@
+fn snapshot_inside(n: i64) {
+    var values: Array<i64> = []
+    var kept: Array<i64> = []
+    var i = 0
+    while (i < n) {
+        values.push(i * 2 - i)
+        if (i == 2) { kept = values }
+        values[0] = values[0] + 1
+        i = i + 1
+    }
+    print(len(kept))
+    print(kept[0])
+    print(kept[len(kept) - 1])
+    print(len(values))
+    print(values[0])
+}
+
+fn total(values: Array<i64>) -> i64 {
+    var sum = 0
+    var i = 0
+    while (i < len(values)) {
+        sum = sum + values[i]
+        i = i + 1
+    }
+    return sum
+}
+
+fn call_inside(n: i64) -> i64 {
+    var values: Array<i64> = [1, 2]
+    var seen = 0
+    var i = 0
+    while (i < n) {
+        values[i % 2] = values[i % 2] + i
+        seen = seen + total(values)
+        values.push(i)
+        i = i + 1
+    }
+    return seen * 1000 + len(values)
+}
+
+fn alternate(n: i64) -> i64 {
+    var left: Array<i64> = []
+    var right: Array<i64> = [100]
+    var i = 0
+    while (i < n) {
+        left.push(i)
+        right[0] = right[0] - 1
+        right.push(left[i] * 3)
+        i = i + 1
+    }
+    return left[n - 1] * 1000000 + right[0] * 1000 + len(right)
+}
+
+fn branchy(n: i64) -> i64 {
+    var values: Array<i64> = [0, 0, 0]
+    var i = 0
+    while (i < n) {
+        if (i % 4 == 0) {
+            values.push(i)
+        } else if (i % 4 == 1) {
+            values[1] = values[1] + values[len(values) - 1]
+        } else {
+            values[2] = values[2] * 2 - values[2] + 1
+        }
+        i = i + 1
+    }
+    return values[1] * 1000 + values[2] * 10 + len(values)
+}
+
+snapshot_inside(6)
+print(call_inside(5))
+print(alternate(7))
+print(branchy(13))

@@ -35,7 +35,7 @@ def main() -> None:
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
-             "array_stationary_cells", "panic_stationary_cell",
+             "array_stationary_cells", "panic_stationary_cell", "array_held_edits",
              "element_update", "element_update_carried",
              "panic_region_get", "panic_region_set",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
@@ -121,16 +121,18 @@ def main() -> None:
             assert generated_text.count("static const XrtArrayI64RegionSpec xrl_ap_spec_") == 4
             assert "xrl_ap_0_ready = true;" in generated_text
             assert "xrt_native_array_update_place(" in generated_text
-            assert generated_text.count("xrt_native_array_push_local_i64(") == 4
+            assert len(re.findall(r"if \(xrl_ap_\d+_ready\) \{\s+xrt_native_array_push_local_i64\(",
+                                  generated_text)) == 4
         elif name == "array_stationary_edges":
             # A changing bound keeps pointwise updates. Its selected edges can
             # be scalar-only while the later read window keeps real owner moves.
             assert "xrl_ap_spec_" not in generated_text
             bodies = re.findall(r"^static int64_t xrl_f\d+\([^\n]*\) \{\n(.*?)^}",
                                 generated_text, re.MULTILINE | re.DOTALL)
-            pointwise, = (body for body in bodies if "xrt_array_i64_try_update_local(" in body)
+            pointwise, = (body for body in bodies if "xrt_array_i64_update_held(" in body)
             append, read = pointwise.split("xrl_ar_0_cache = (", 1)
-            assert "xrt_native_array_update_place(" in append and "xrl_edge_" not in append
+            assert ("xrt_native_array_push_local_i64(" in append or
+                    "xrt_native_array_update_place(" in append) and "xrl_edge_" not in append
             assert "xrl_ar_loop_" in read and "xrl_edge_" in read
         elif name == "array_stationary_cells":
             # Each mutation Cell shares its stationary owner's slot: no runtime
@@ -140,8 +142,26 @@ def main() -> None:
             updates = set(re.findall(r"xrt_native_array_update_place\(\(XrtPlace\)\{\.frame=xrl_frame, \.slot=(\d+),",
                                      generated_text))
             assert updates and updates <= bindings, (updates, bindings)
+        elif name == "array_held_edits":
+            # Held acquisitions never survive an ordinary call: the last held
+            # reference before each direct call is a clear, not a use.
+            assert "xrt_array_i64_update_held(" in generated_text
+            bodies = re.findall(r"^static [^\n]*\bxrl_f\d+\([^\n]*\) \{\n(.*?)^}", generated_text,
+                                re.MULTILINE | re.DOTALL)
+            calls = 0
+            for body in (body for body in bodies if "XrtArrayBacking *xrl_held" in body):
+                for call in re.finditer(r"\bxrl_f\d+\(", body):
+                    last = list(re.finditer(r"xrl_held\d+( = NULL;|,)", body[:call.start()]))
+                    assert last and last[-1][1] == " = NULL;", name
+                    calls += 1
+            assert calls, name
         elif "xrt_native_array_push_local_i64(" in generated_text:
-            assert re.search(r"if \(xrl_ap_\d+_ready\) \{\s+xrt_native_array_push_local_i64\(", generated_text)
+            # Growth in place follows only a capacity window or a failed held
+            # local edit, whose acquisitions were cleared before the call.
+            for match in re.finditer(r"xrt_native_array_push_local_i64\(", generated_text):
+                prefix = generated_text[max(0, match.start() - 600):match.start()]
+                assert (re.search(r"if \(xrl_ap_\d+_ready\) \{\s+$", prefix) or
+                        re.search(r"xrt_array_i64_update_held\([^;]*\{\n(?:.*\n)*?\s+xrl_held\d+ = NULL;", prefix)), name
         if name.startswith("region_") or name.startswith("panic_region_"):
             specs = re.findall(r"static const XrtArrayI64RegionSpec xrl_ar_spec_", generated_text)
             clones = re.findall(r"^xrl_ar_\d+_bb\d+: ;\n(.*?)(?=^xrl_ar_\d+_bb\d+: ;|^}\n)",

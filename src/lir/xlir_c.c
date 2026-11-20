@@ -79,6 +79,9 @@ typedef struct LirC {
     bool runtime, runtime_header, f64, state, arrays, views, displays, tuple_displays, maps, sets, i64_refs;
     bool string_values, inline_values, callables, cells, header_edges, binding_forwarding;
     bool array_local, array_local_runtime;
+    /* Distinct local binding slots of this function's candidate Array edits;
+     * generated code holds one sole-owner acquisition per slot. */
+    size_t *array_held_slots, array_held_count;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;
@@ -135,6 +138,9 @@ static LirCForward c_binding_forward_drop(LirC *, const XrLirInstructionView *);
 static bool c_array_local_begin(LirC *, const XrLirInstructionView *, const XrLirArrayIntrinsic *, const XrLirHomeWorkspace *);
 static void c_array_local_ready(LirC *);
 static void c_array_local_invalidate(LirC *, const XrLirInstructionView *);
+static void c_array_held_prepare(LirC *);
+static void c_array_held_declarations(LirC *);
+static void c_array_held_clear(LirC *);
 static void c_array_regions_admit(LirC *);
 static void c_array_regions_destroy(LirC *);
 static void c_array_region_specs(LirC *);
@@ -1417,6 +1423,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     xr_compile_resources_free(c.closure);
     xr_compile_resources_free(c.seen);
     xr_compile_resources_free(c.fixed_divisors);
+    xr_compile_resources_free(c.array_held_slots);
     xr_compile_resources_free(c.used_literals);
     xr_compile_resources_free(c.used_map_literals);
     xr_compile_resources_free(c.callable_used);

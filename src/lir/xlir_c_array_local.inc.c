@@ -109,6 +109,116 @@ static void c_array_local_ready(LirC *c) {
      * this execution-initialization fact. */
     if (c->array_local) c_text(c,"    xrl_array_ready = true;\n");
 }
+/* Generated code keeps one held sole-owner acquisition per local binding slot
+ * (xrt_array_i64_update_held). The slot list is rebuilt for each function. */
+static void c_array_held_prepare(LirC *c) {
+    xr_compile_resources_free(c->array_held_slots);
+    c->array_held_slots=NULL; c->array_held_count=0;
+    if (!c->array_local) return;
+    size_t capacity=0;
+    for (size_t n=0;n<c->homes->event_count && c->status==XR_LIR_C_OK;++n) {
+        const XrLirHomeEvent *event=&c->homes->events[n];
+        if (!c_array_local_candidate(c,c->homes,event)) continue;
+        size_t slot=c->homes->bindings[event->source].first_owner, k=0;
+        while (k<c->array_held_count && c->array_held_slots[k]!=slot) ++k;
+        if (k<c->array_held_count) continue;
+        if (c->array_held_count==capacity) {
+            size_t next=capacity ? capacity*2 : 4;
+            if (next<=capacity || next>SIZE_MAX/sizeof(*c->array_held_slots)) {
+                c_error(c,XR_LIR_C_OVERFLOW,"held Array slot inventory overflows"); return;
+            }
+            void *memory=c->array_held_slots;
+            if (!c_resource(c,xr_compile_resources_resize(c->request->resources,&memory,next*sizeof(*c->array_held_slots))))
+                return;
+            c->array_held_slots=memory; capacity=next;
+        }
+        c->array_held_slots[c->array_held_count++]=slot;
+    }
+}
+static size_t c_array_held_index(const LirC *c, size_t slot) {
+    for (size_t k=0;k<c->array_held_count;++k)
+        if (c->array_held_slots[k]==slot) return k;
+    return SIZE_MAX;
+}
+static void c_array_held_declarations(LirC *c) {
+    for (size_t k=0;k<c->array_held_count;++k)
+        c_format(c,"    XrtArrayBacking *xrl_held%zu = NULL;\n    (void)xrl_held%zu;\n",k,k);
+}
+static void c_array_held_clear(LirC *c) {
+    /* Region helper functions own no held acquisitions; their callers clear
+     * before entering because region blocks never keep them. */
+    if (!c->array_held_count || c->array_helper_kind != XR_LIR_ARRAY_REGION_PRIMARY_NONE) return;
+    c_text(c,"   ");
+    for (size_t k=0;k<c->array_held_count;++k) c_format(c," xrl_held%zu = NULL;",k);
+    c_text(c,"\n");
+}
+/* Region and push-window code moves real owners between its own slots. */
+static bool c_array_held_region_block(const LirC *c, uint32_t block) {
+    if (!c->array_region) return false;
+    const XrLirArrayRegionBindings *sets[]={c->array_region->bindings,c->array_region->push_windows};
+    for (size_t n=0;n<2;++n)
+        if (sets[n] && block<sets[n]->block_index_count && sets[n]->block_index[block].region) return true;
+    return false;
+}
+/* An edge keeps held acquisitions when it only assigns C locals: scalar
+ * arguments and stationary owners whose shared slot does not change. */
+static bool c_array_held_edge(LirC *c, const XrLirEdgeView *edge) {
+    if (c_array_held_region_block(c,edge->target)) return false;
+    XrLirBlock target={c->request->module,c->function.id,edge->target};
+    XrLirBlockView view;
+    if (xr_lir_block_view(c->request->module,target,&view)!=XR_LIR_OK || view.parameter_count!=edge->argument_count)
+        return false;
+    for (uint32_t a=0;a<edge->argument_count;++a) {
+        XrLirType type=c_value_type(c,edge->arguments[a]);
+        if (type>=XR_LIR_TYPE_COUNT) return false;
+        if (c_managed_leaf(type) && !xr_lir_home_stationary_edge(c->homes,edge->arguments[a],view.parameters[a]))
+            return false;
+    }
+    return true;
+}
+/* A Cell handoff whose binding and value share one owner field emits nothing. */
+static bool c_array_held_shared_handoff(LirC *c, const XrLirInstructionView *op) {
+    if (!c->homes->bindings || op->operand_count!=1) return false;
+    uint32_t cell=op->op==XR_LIR_CELL_NEW ? op->result : op->operands[0];
+    uint32_t value=op->op==XR_LIR_CELL_NEW ? op->operands[0] : op->result;
+    if (!cell || !value || c_value_type(c,cell)!=XR_LIR_ARRAY_CELL) return false;
+    const XrLirHomeBinding *binding=&c->homes->bindings[cell];
+    const XrLirValueHome *home=&c->homes->values[value];
+    return binding->kind==XR_LIR_HOME_BINDING_LOCAL && binding->first_owner!=SIZE_MAX &&
+        binding->first_owner==home->first_owner && binding->offset==home->offset;
+}
+/* Held acquisitions survive only operations that cannot run guest code,
+ * retain or release a binding, move an owner or replace a backing. Scalar
+ * operations may panic, which never returns to the held state. Array edits
+ * through local views maintain their own acquisition; other edits clear it. */
+static bool c_array_held_keeps(LirC *c, const XrLirInstructionView *op) {
+    if (c_array_held_region_block(c,c->block)) return false;
+    switch (op->op) {
+    case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG:
+    case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL:
+    case XR_LIR_FDIV: case XR_LIR_FNEG: case XR_LIR_ICMP: case XR_LIR_FCMP: case XR_LIR_INTCAST:
+    case XR_LIR_ITOF: case XR_LIR_FCAST: case XR_LIR_FTOI:
+        return true;
+    case XR_LIR_BR:
+        return c_array_held_edge(c,&op->edges[0]);
+    case XR_LIR_CONDBR:
+        return c_array_held_edge(c,&op->edges[0]) && c_array_held_edge(c,&op->edges[1]);
+    case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ:
+        return c_array_held_shared_handoff(c,op);
+    case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
+        /* The adjacent release of a forwarding pair: an elided pair emits
+         * nothing, and a guarded COPY already cleared before itself. */
+        return c->binding_forward_pending != NULL;
+    case XR_LIR_CALL_INTRINSIC: {
+        XrLirArrayIntrinsic shape={0};
+        return c_array_intrinsic(c,op,&shape) && (shape.operation==XR_LIR_ARRAY_OP_GET ||
+            shape.operation==XR_LIR_ARRAY_OP_LEN || shape.operation==XR_LIR_ARRAY_OP_SET ||
+            shape.operation==XR_LIR_ARRAY_OP_PUSH);
+    }
+    default:
+        return false;
+    }
+}
 static void c_array_local_invalidate(LirC *c, const XrLirInstructionView *op) {
     if (!c->array_local) return;
     bool unknown=op->op==XR_LIR_CALL || op->op==XR_LIR_CALL_INDIRECT;
@@ -119,6 +229,7 @@ static void c_array_local_invalidate(LirC *c, const XrLirInstructionView *op) {
     /* Clearing before the boundary also covers exceptional return edges.
      * No source pointer, uniqueness result or capacity is cached with it. */
     if (unknown) c_text(c,"    xrl_array_ready = false;\n");
+    if (c->array_held_count && !c_array_held_keeps(c,op)) c_array_held_clear(c);
 }
 static bool c_array_local_begin(LirC *c, const XrLirInstructionView *op,
     const XrLirArrayIntrinsic *shape, const XrLirHomeWorkspace *workspace) {
@@ -142,11 +253,19 @@ static bool c_array_local_begin(LirC *c, const XrLirInstructionView *op,
     c_text(c,"    {\n    const int64_t xrl_array_index = ");
     if (shape->operation==XR_LIR_ARRAY_OP_SET) c_value(c,op->operands[1]); else c_text(c,"0");
     c_text(c,";\n    const int64_t xrl_array_item = "); c_value(c,op->operands[op->operand_count-1]);
-    c_format(c,";\n    const XrtArrayUpdate xrl_array_update = {%s, xrl_array_index, {XRT_BACKING_ARRAY_I64, {.i64=xrl_array_item}}};\n",
-        shape->operation==XR_LIR_ARRAY_OP_SET?"XRT_ARRAY_UPDATE_SET":"XRT_ARRAY_UPDATE_PUSH");
-    c_format(c,"    if (!(xrl_array_ready && xrt_array_i64_try_update_local(&xrl_array_locals.e%zu,\n",ordinal);
-    c_format(c,"        (XrtArrayI64LocalUpdate){%s, ",
-        shape->operation==XR_LIR_ARRAY_OP_SET?"XRT_ARRAY_UPDATE_SET":"XRT_ARRAY_UPDATE_PUSH");
-    c_text(c,"xrl_array_update.index, xrl_array_update.item.value.i64}))) {\n");
+    c_text(c,";\n");
+    size_t held=c_array_held_index(c,c->homes->bindings[event->source].first_owner);
+    if (held==SIZE_MAX) {
+        c_error(c,XR_LIR_C_INVALID_LIR,"local Array edit lost its held binding slot"); return false;
+    }
+    const char *kind=shape->operation==XR_LIR_ARRAY_OP_SET ? "XRT_ARRAY_UPDATE_SET" : "XRT_ARRAY_UPDATE_PUSH";
+    c_format(c,"    if (!(xrl_array_ready && xrt_array_i64_update_held(&xrl_held%zu, &xrl_array_locals.e%zu,\n",held,ordinal);
+    c_format(c,"        (XrtArrayI64LocalUpdate){%s, xrl_array_index, xrl_array_item}))) {\n",kind);
+    /* Only the kernel takes the request by address; building it here keeps
+     * its stores off the held path. */
+    c_format(c,"    const XrtArrayUpdate xrl_array_update = {%s, xrl_array_index, {XRT_BACKING_ARRAY_I64, {.i64=xrl_array_item}}};\n"
+        "    (void)xrl_array_update;\n",kind);
+    /* The kernel below may grow, copy or replace a backing. */
+    c_array_held_clear(c);
     return true;
 }

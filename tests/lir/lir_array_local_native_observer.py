@@ -12,20 +12,26 @@ def array_local_observer_source(generated):
     selected = {}
     prefix = re.compile(r"    \{\n    const int64_t xrl_array_index = ([^;\n]+);\n"
                         r"    const int64_t xrl_array_item = ([^;\n]+);\n"
-                        r"    const XrtArrayUpdate xrl_array_update = \{(XRT_ARRAY_UPDATE_(?:SET|PUSH)),[^\n]+\n")
+                        r"    if \(!\(xrl_array_ready && xrt_array_i64_update_held\(")
     for match in prefix.finditer(text):
         fragment = text[match.start():_block_end(text, match.start()+4)]
-        kernel = re.search(r"xrt_array_i64_try_update_local\(&xrl_array_locals.e(\d+),\s*"
+        kernel = re.search(r"xrt_array_i64_update_held\(&xrl_held(\d+), &xrl_array_locals.e(\d+),\s*"
                            r"\(XrtArrayI64LocalUpdate\)\{(XRT_ARRAY_UPDATE_(?:SET|PUSH)), "
-                           r"xrl_array_update.index, xrl_array_update.item.value.i64\}\)\)\) \{", fragment)
-        full = re.search(r"xrt_native_array_update_place\(\(XrtPlace\)\{.frame=xrl_frame, .slot=(\d+), .nulls=XRT_PLACE_NONNULL\}, "
+                           r"xrl_array_index, xrl_array_item\}\)\)\) \{\n"
+                           r"    const XrtArrayUpdate xrl_array_update = \{(XRT_ARRAY_UPDATE_(?:SET|PUSH)),[^\n]+\n"
+                           r"    \(void\)xrl_array_update;\n    (?:xrl_held\d+ = NULL; ?)+\n", fragment)
+        push = kernel is not None and kernel[3] == "XRT_ARRAY_UPDATE_PUSH"
+        full = re.search(r"xrt_native_array_push_local_i64\(\(XrtPlace\)\{.frame=xrl_frame, .slot=(\d+), .nulls=XRT_PLACE_NONNULL\}, "
+                         r"(\d+), xrl_array_item, UINT32_C\((\d+)\)\);" if push else
+                         r"xrt_native_array_update_place\(\(XrtPlace\)\{.frame=xrl_frame, .slot=(\d+), .nulls=XRT_PLACE_NONNULL\}, "
                          r"XRT_BACKING_ARRAY_I64, xrl_frame, (\d+), &xrl_array_update, UINT32_C\((\d+)\)\);", fragment)
-        if not kernel or not full or kernel[2] != match[3] or not re.search(r"if \(!\(xrl_array_ready && xrt_array_i64_try_update_local", fragment):
-            raise ValueError("local fragment lost its ready short-circuit or original full native call")
+        if not kernel or not full or kernel[3] != kernel[4]:
+            raise ValueError("local fragment lost its ready short-circuit, cleared acquisitions or original full native call")
+        operation, held = kernel[3], int(kernel[1])
         functions = list(re.finditer(r"^static [^\n]*\bxrl_f(\d+)\([^\n]*\) \{\n", text[:match.start()], re.MULTILINE))
         if not functions:
             raise ValueError("local update has no actual owning function")
-        function, field = int(functions[-1][1]), int(kernel[1])
+        function, field = int(functions[-1][1]), int(kernel[2])
         prepare_start = re.search(rf"^static void xrl_array_local_prepare_{function}\([^{{]+\{{", text, re.MULTILINE)
         if not prepare_start:
             raise ValueError("local update has no cold geometry helper")
@@ -39,6 +45,8 @@ def array_local_observer_source(generated):
         owner_body = text[owner_start:_block_end(text, text.index("{", owner_start))]
         if f"XrlArrayLocals_{function} xrl_array_locals = {{0}};" not in owner_body:
             raise ValueError("prepared view lacks its true automatic function lifetime")
+        if f"XrtArrayBacking *xrl_held{held} = NULL;" not in owner_body:
+            raise ValueError("held acquisition lacks its true automatic function lifetime")
         constructors = list(re.finditer(r"if \(!xrl_frame\) \{", owner_body))
         prepare_call = f"xrl_array_local_prepare_{function}(xrl_frame, xrl_payload, &xrl_frame_locations, &xrl_array_locals);"
         if not constructors or owner_body.count(prepare_call) != len(constructors):
@@ -57,7 +65,8 @@ def array_local_observer_source(generated):
                 raise ValueError("index/item is not materialized exactly once from its scalar SSA")
         if match[1] == match[2] or not re.fullmatch(r"[vp]\d+", match[2]):
             raise ValueError("observer needs separate actual scalar operands")
-        if fragment.count("xrt_native_array_update_place(") != 1 or fragment.count("xrl_array_ready = true;") != 1:
+        kernel_calls = fragment.count("xrt_native_array_update_place(") + fragment.count("xrt_native_array_push_local_i64(")
+        if kernel_calls != 1 or fragment.count("xrl_array_ready = true;") != 1:
             raise ValueError("only complete original update return may establish readiness")
         owners = re.search(rf"xrl_owners_{function}\[\] = \{{(.*?)\}};", text, re.DOTALL)
         if not owners:
@@ -70,8 +79,8 @@ def array_local_observer_source(generated):
             fields.append(int(atom[1]) if atom else None)
         if fields[binding] != offset or fields[workspace] != workspace_offset:
             raise ValueError("candidate does not match actual Frame owner fields")
-        selected.setdefault(match[3], (fragment, function, (binding, offset, workspace, workspace_offset),
-                                      int(full[3]), match[1], match[2]))
+        selected.setdefault(operation, (fragment, function, (binding, offset, workspace, workspace_offset),
+                                        int(full[3]), match[1], match[2], held))
     if len(selected) != 2:
         raise ValueError("real generated input must contain both local SET and PUSH")
     direct_calls = 0
@@ -124,9 +133,11 @@ static int64_t element_at(const XrtArrayBacking *array, size_t index) {
     int64_t value=0; REQUIRE(index<array->length);
     memcpy(&value,array->elements+index*sizeof(value),sizeof(value)); return value;
 }
-static bool observed_local(const XrtArrayI64LocalView *view, XrtArrayI64LocalUpdate update) {
+static bool observed_held(XrtArrayBacking **held, const XrtArrayI64LocalView *view, XrtArrayI64LocalUpdate update) {
     XrtArrayUpdateKind expected=observation.operation?XRT_ARRAY_UPDATE_PUSH:XRT_ARRAY_UPDATE_SET;
     const size_t *g=geometry[observation.operation];
+    /* Each fragment starts in a fresh function, so nothing is held yet. */
+    REQUIRE(held && !*held);
     REQUIRE(view && view->busy==observation.view.busy &&
         view->binding_pending==&observation.view.slots[g[0]].pending &&
         view->workspace_pending==&observation.view.slots[g[2]].pending &&
@@ -134,10 +145,18 @@ static bool observed_local(const XrtArrayI64LocalView *view, XrtArrayI64LocalUpd
         view->workspace_owner==(XrtManagedHeader **)((unsigned char *)observation.view.payload+g[3]) && update.operation==expected &&
         update.index==(observation.operation?0:observation.index) && update.value==observation.item);
     XrtBillingStats before=xrt_billing_owner_stats(observation.billing);
-    observation.fast=xrt_array_i64_try_update_local(view,update); ++observation.kernels;
+    observation.fast=xrt_array_i64_update_held(held,view,update); ++observation.kernels;
     XrtBillingStats after=xrt_billing_owner_stats(observation.billing);
     REQUIRE(before.bytes==after.bytes && before.blocks==after.blocks && before.allocations==after.allocations);
+    /* A success keeps the sole-owner acquisition for later held edits. */
+    REQUIRE(!observation.fast || *held==(XrtArrayBacking *)binding_owner());
     return observation.fast;
+}
+static void observed_push(XrtPlace binding, size_t workspace, int64_t item, uint32_t source) {
+    REQUIRE(observation.operation && binding.frame==observation.view.frame && !binding.external &&
+        binding.slot==geometry[1][0] && workspace==geometry[1][2] && source==sources[1] && item==observation.item);
+    ++observation.full_calls;
+    xrt_native_array_push_local_i64(binding,workspace,item,source);
 }
 static void observed_full(XrtPlace binding, XrtBackingArrayKind kind, XrtManagedFrame *frame,
     size_t workspace, const XrtArrayUpdate *update, uint32_t source) {
@@ -151,18 +170,22 @@ static void observed_full(XrtPlace binding, XrtBackingArrayKind kind, XrtManaged
 }
 '''
     for number, row in enumerate(rows):
-        fragment, function, _, _, index, item = row
+        fragment, function, _, _, index, item, held = row
+        helds = "".join(f"    XrtArrayBacking *xrl_held{slot}=NULL;\n    (void)xrl_held{slot};\n"
+                        for slot in sorted({int(n) for n in re.findall(r"xrl_held(\d+)", fragment)} | {held}))
         code += f'''static void emitted_update_{number}(XrtManagedFrame *xrl_frame, void *xrl_payload,
     const XrtManagedFrameLocations *factory, bool ready) {{
     XrtManagedFrameLocations xrl_frame_locations=*factory;
     bool xrl_array_ready=ready;
-    XrlArrayLocals_{function} xrl_array_locals={{0}};
+{helds}    XrlArrayLocals_{function} xrl_array_locals={{0}};
     xrl_array_local_prepare_{function}(xrl_frame,xrl_payload,&xrl_frame_locations,&xrl_array_locals);
 '''
         if index != "0":
             code += f"    const int64_t {index}=observation.index;\n"
         code += f"    const int64_t {item}=observation.item;\n"
-        code += fragment.replace("xrt_array_i64_try_update_local(", "observed_local(").replace("xrt_native_array_update_place(", "observed_full(")
+        code += (fragment.replace("xrt_array_i64_update_held(", "observed_held(")
+                 .replace("xrt_native_array_update_place(", "observed_full(")
+                 .replace("xrt_native_array_push_local_i64(", "observed_push("))
         code += "\n    observation.ready_after=xrl_array_ready;\n}\n"
     code += r'''
 static void execute_update(void *unused) {
