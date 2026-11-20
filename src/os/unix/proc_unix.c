@@ -170,10 +170,12 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
             if (grandchild > 0) { (void)proc_write_i64(detached_pipe[1], grandchild); _exit(0); }
             close(detached_pipe[1]);
         }
-        /* The parent also calls setpgid(pid, pid). When both race, Darwin can
-         * fail the child's call with EPERM after the parent already made it
-         * the group leader; leading its own group is the only requirement. */
-        if (o->new_process_group && setpgid(0, 0) != 0 && getpgrp() != getpid()) goto child_failed;
+        /* Only the child moves itself into a new group. A concurrent parent
+         * setpgid(pid, pid) makes Darwin fail this call with EPERM while the
+         * parent's change is still unpublished, so getpgrp() cannot tell the
+         * race from a real failure. The parent instead waits on the report
+         * pipe, which closes only at exec, after this call has succeeded. */
+        if (o->new_process_group && setpgid(0, 0) != 0) goto child_failed;
         if (proc_dup_stdio(o) != 0 || (o->cwd && *o->cwd && chdir(o->cwd) != 0)) goto child_failed;
         if (o->complete_environment) execve(prog, (char *const *)argv, environment);
         else {
@@ -184,7 +186,6 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
         (void)proc_write_i64(report[1], errno); _exit(127);
     }
     close(report[1]); report[1] = -1;
-    if (o->new_process_group) (void)setpgid(pid, pid);
     int64_t failure = 0; ssize_t received;
     do { received = read(report[0], &failure, sizeof(failure)); } while (received < 0 && errno == EINTR);
     if (received != 0) {
