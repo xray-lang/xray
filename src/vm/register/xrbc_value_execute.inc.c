@@ -49,7 +49,7 @@ typedef enum RbcArrayRegionPhase {
 typedef struct RbcArrayRegionState {
     XrtArrayI64RegionCache cache;
     RbcArrayRegionPhase phase;
-    bool completed_set;
+    bool completed_write;
 } RbcArrayRegionState;
 struct RbcValueActivation {
     RbcValueActivation *previous;
@@ -1287,7 +1287,8 @@ static inline uint32_t rbc_value_try_fixed_array_leaf(XrRbcStack *stack, uint32_
     if (role->binding_identity) return 2; /* The next word is the admitted paired release. */
     const XrRbcValueAccess *access = &code->accesses[index];
     if (access->operation != XR_RBC_VALUE_ARRAY ||
-        (access->index != XR_LIR_ARRAY_OP_LEN && access->index != XR_LIR_ARRAY_OP_GET && access->index != XR_LIR_ARRAY_OP_SET))
+        (access->index != XR_LIR_ARRAY_OP_LEN && access->index != XR_LIR_ARRAY_OP_GET &&
+         access->index != XR_LIR_ARRAY_OP_SET && access->index != XR_LIR_ARRAY_OP_PUSH))
         return false;
     return rbc_value_run_fixed_array_leaf(stack, activation, role, access, status);
 }

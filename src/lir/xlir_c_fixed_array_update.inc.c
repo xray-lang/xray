@@ -81,6 +81,7 @@ static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target, bool after
     const XrLirFixedArrayUpdateHome *row = &c->homes->fixed_array_updates[n - 1];
     XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
     XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(c->homes, row, slots);
+    bool push = row->region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH;
     if (after_write) c_format(c, "    if (!xrl_fixed_tried_%" PRIu32 ") {\n", n);
     else c_text(c, "    {\n");
     c_text(c, "        static const XrtArrayI64RegionSlot xrl_fixed_slots[] = {");
@@ -96,9 +97,14 @@ static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target, bool after
     c_format(c, " >= INT64_C(0) && xrt_array_i64_region_try_begin(&xrl_fixed_context, &xrl_fixed_spec, true,"
         " &xrl_fixed_cache_%" PRIu32 ")", n);
     if (row->region.range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT) {
-        c_text(c, " && (uint64_t)(");
-        c_fixed_array_limit(c, &row->region, n);
-        c_format(c, ") <= xrl_fixed_cache_%" PRIu32 ".length && ", n);
+        if (push) {
+            c_format(c, " && xrl_fixed_cache_%" PRIu32 ".length < "
+                "((const XrtArrayBacking *)xrl_fixed_cache_%" PRIu32 ".owner)->capacity && ", n, n);
+        } else {
+            c_text(c, " && (uint64_t)(");
+            c_fixed_array_limit(c, &row->region, n);
+            c_format(c, ") <= xrl_fixed_cache_%" PRIu32 ".length && ", n);
+        }
         c_value(c, row->region.range.iv);
         c_text(c, " < ");
         c_fixed_array_limit(c, &row->region, n);
@@ -112,8 +118,8 @@ static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target, bool after
     c_format(c, "            goto xrl_fixed_%" PRIu32 "_bb%" PRIu32 ";\n"
         "        }\n"
         "        xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n", n, target, n);
-    /* A declined entry can become unique after the first ordinary write. */
-    if (after_write) c_format(c, "        xrl_fixed_tried_%" PRIu32 " = 1;\n", n);
+    /* Each successful ordinary push can establish fresh spare capacity. */
+    if (after_write && !push) c_format(c, "        xrl_fixed_tried_%" PRIu32 " = 1;\n", n);
     c_text(c, "    }\n");
 }
 
@@ -125,6 +131,13 @@ static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView
     }
     if (shape.operation == XR_LIR_ARRAY_OP_LEN) {
         c_format(c, "    v%" PRIu32 " = (int64_t)xrl_fixed_cache_%" PRIu32 ".length;\n", v->result, n);
+        return;
+    }
+    if (shape.operation == XR_LIR_ARRAY_OP_PUSH) {
+        c_format(c, "    XRT_ARRAY_I64_REGION_COPY(xrl_fixed_cache_%" PRIu32 ".elements + "
+            "xrl_fixed_cache_%" PRIu32 ".length * sizeof(int64_t), &", n, n);
+        c_value(c, v->operands[1]);
+        c_format(c, ");\n    ++xrl_fixed_cache_%" PRIu32 ".length;\n", n);
         return;
     }
     if (shape.operation != XR_LIR_ARRAY_OP_GET && shape.operation != XR_LIR_ARRAY_OP_SET) {
@@ -191,6 +204,26 @@ static void c_fixed_array_iteration(LirC *c, uint32_t label, const XrLirArraySet
     }
 }
 
+static void c_fixed_array_push_clone(LirC *c, uint32_t label, const XrLirArraySetRegion *region,
+    const XrLirArraySetRegionStep *steps) {
+    uint32_t iv = region->range.iv;
+    /* Entry proved a nonnegative IV below the original limit. Cap the span
+     * by actual spare capacity, so neither the count nor the final IV wraps. */
+    c_format(c, "    {\n"
+        "        XrtArrayBacking *xrl_array = (XrtArrayBacking *)xrl_fixed_cache_%" PRIu32 ".owner;\n"
+        "        size_t xrl_room = xrl_array->capacity - xrl_fixed_cache_%" PRIu32 ".length;\n"
+        "        uint64_t xrl_remaining = (uint64_t)(", label, label);
+    c_fixed_array_limit(c, region, label);
+    c_format(c, ") - (uint64_t)v%" PRIu32 ";\n"
+        "        int64_t xrl_stop = v%" PRIu32 " + "
+        "(int64_t)(xrl_remaining < xrl_room ? xrl_remaining : xrl_room);\n"
+        "        for (; v%" PRIu32 " < xrl_stop; ++v%" PRIu32 ") {\n", iv, iv, iv, iv);
+    c_fixed_array_iteration(c, label, region, steps);
+    c_format(c, "        }\n        xrl_array->length = xrl_fixed_cache_%" PRIu32 ".length;\n    }\n"
+        "    xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
+        "    goto bb%" PRIu32 ";\n", label, label, region->header);
+}
+
 static void c_fixed_array_clones(LirC *c) {
     if (!c->array_region || !c->array_region->fixed_edges) return;
     c->fixed_array_loop = true;
@@ -200,6 +233,10 @@ static void c_fixed_array_clones(LirC *c) {
         const XrLirArraySetRegionStep *steps = c->homes->fixed_array_update_steps + region->first_step;
         uint32_t iv = region->range.iv, label = n + 1;
         c_format(c, "xrl_fixed_%" PRIu32 "_bb%" PRIu32 ": ;\n", label, region->header);
+        if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH) {
+            c_fixed_array_push_clone(c, label, region, steps);
+            continue;
+        }
         if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET) {
             /* Admission bounds the IV and the unchanged length. Run the same
              * iterations and phi copies in order inside each known-size span.

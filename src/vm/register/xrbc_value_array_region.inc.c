@@ -80,6 +80,25 @@ static void rbc_value_array_region_begin(RbcValueActivation *activation, uint32_
     } else rbc_value_array_region_forget(activation,region,RBC_ARRAY_REGION_BYPASS);
 }
 
+static bool rbc_value_fixed_array_push(XrRbcStack *stack, RbcValueActivation *activation,
+    uint32_t region, XrRbcValueAccess access, XrtManagedStatus *status) {
+    RbcArrayRegionState *state = &activation->array_regions[region - 1];
+    XrtArrayBacking *array = (XrtArrayBacking *)state->cache.owner;
+    size_t length = state->cache.length;
+    if (length == array->capacity || (uint64_t)length == (uint64_t)INT64_MAX) {
+        /* Resume this PUSH with its evaluated RHS and real Cell. A successful
+         * ordinary growth can install a different backing for the next latch. */
+        rbc_value_array_region_forget(activation, region, RBC_ARRAY_REGION_COLD);
+        return false;
+    }
+    const uint32_t *arguments = activation->code->arguments + access.first;
+    const XrRbcRegister *item = rbc_value_register(stack, activation, arguments[1]);
+    if (!item) { *status = XRT_MANAGED_ARGUMENT; return true; }
+    memcpy(state->cache.elements + length * sizeof(item->bits), &item->bits, sizeof(item->bits));
+    array->length = state->cache.length = length + 1;
+    return true;
+}
+
 static bool rbc_value_fixed_array_before(XrRbcStack *stack, RbcValueActivation *activation,
     const XrRbcArrayRegionAccess *role, XrRbcValueAccess access, XrtManagedStatus *status) {
     RbcArrayRegionState *state = &activation->array_regions[role->region - 1];
@@ -97,7 +116,7 @@ static bool rbc_value_fixed_array_before(XrRbcStack *stack, RbcValueActivation *
         } else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_EXIT)
             rbc_value_array_region_forget(activation, role->region, RBC_ARRAY_REGION_BYPASS);
         else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_LATCH &&
-                state->phase == RBC_ARRAY_REGION_COLD && state->completed_set)
+                state->phase == RBC_ARRAY_REGION_COLD && state->completed_write)
             state->phase = RBC_ARRAY_REGION_ELIGIBLE;
         else if (role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_BODY && state->phase == RBC_ARRAY_REGION_ELIGIBLE) {
             XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
@@ -107,6 +126,8 @@ static bool rbc_value_fixed_array_before(XrRbcStack *stack, RbcValueActivation *
         return true; /* The actual scalar copies and ownership publication are separate words. */
     }
     if (state->phase != RBC_ARRAY_REGION_ACTIVE || access.operation != XR_RBC_VALUE_ARRAY) return false;
+    if (access.index == XR_LIR_ARRAY_OP_PUSH)
+        return rbc_value_fixed_array_push(stack, activation, role->region, access, status);
     if (access.index == XR_LIR_ARRAY_OP_LEN || access.index == XR_LIR_ARRAY_OP_GET || access.index == XR_LIR_ARRAY_OP_SET) {
         const uint32_t *arguments = activation->code->arguments + access.first;
         XrLirArrayRegionAccess operation = {.operation=(XrLirArrayOperation)access.index, .result=access.result,
@@ -169,17 +190,18 @@ static void rbc_value_array_region_after(RbcValueActivation *activation,uint32_t
     XrRbcValueAccess access=activation->code->accesses[index];
     RbcArrayRegionState *state=&activation->array_regions[role->region-1];
     if (role->fixed) {
-        if (access.operation==XR_RBC_VALUE_ARRAY && access.index==XR_LIR_ARRAY_OP_SET && state->phase==RBC_ARRAY_REGION_COLD)
-            state->completed_set=true;
+        if (access.operation==XR_RBC_VALUE_ARRAY && state->phase==RBC_ARRAY_REGION_COLD &&
+            (access.index==XR_LIR_ARRAY_OP_SET || access.index==XR_LIR_ARRAY_OP_PUSH))
+            state->completed_write=true;
         return;
     }
     const XrLirArrayRegionBindings *bindings=activation->code->array_regions;
     if (access.operation==XR_RBC_VALUE_EDGE) {
         XrLirArrayRegionEdgeKind kind=bindings->edges[access.index].kind;
-        if (kind==XR_LIR_ARRAY_REGION_EDGE_LATCH && state->phase==RBC_ARRAY_REGION_COLD && state->completed_set)
+        if (kind==XR_LIR_ARRAY_REGION_EDGE_LATCH && state->phase==RBC_ARRAY_REGION_COLD && state->completed_write)
             state->phase=RBC_ARRAY_REGION_ELIGIBLE;
         if (kind==XR_LIR_ARRAY_REGION_EDGE_EXIT)
             rbc_value_array_region_forget(activation,role->region,RBC_ARRAY_REGION_BYPASS);
     } else if (role->operation.access && state->phase==RBC_ARRAY_REGION_COLD &&
-        bindings->accesses[role->operation.access-1].operation==XR_LIR_ARRAY_OP_SET) state->completed_set=true;
+        bindings->accesses[role->operation.access-1].operation==XR_LIR_ARRAY_OP_SET) state->completed_write=true;
 }

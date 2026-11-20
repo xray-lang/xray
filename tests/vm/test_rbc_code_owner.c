@@ -21,6 +21,7 @@ static size_t region_begin_attempts,region_begin_successes;
 static bool region_force_bypass;
 static size_t array_pushes,array_push_transactions,array_push_fault;
 static size_t failed_array_length;
+static int64_t array_push_item_bias;
 static bool counted_region_begin(const XrtArrayI64RegionContext *context,const XrtArrayI64RegionSpec *spec,
     bool ready,XrtArrayI64RegionCache *cache) {
     ++region_begin_attempts;
@@ -103,7 +104,7 @@ static XrtManagedStatus counted_array_update(XrtPlace binding,XrtBackingArrayKin
     for (size_t n=0;n<8;++n) {
         int64_t item;
         memcpy(&item,original+n*sizeof(item),sizeof(item));
-        CHECK(item==(n ? (int64_t)n-1 : 7));
+        CHECK(item==(n ? (int64_t)n-1+array_push_item_bias : 7));
     }
     XrtBillingOwner *billing=owner->ops->billing;
     XrtBillingStats before=xrt_billing_owner_stats(billing);

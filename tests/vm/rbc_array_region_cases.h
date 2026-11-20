@@ -309,7 +309,7 @@ static void rbc_fixed_array_leaf_locations(void) {
         !rbc_value_try_fixed_array_leaf(&stack,7,&status) && !rbc_value_try_fixed_array_leaf(&stack,8,&status));
     CHECK(rbc_value_try_fixed_array_leaf(&stack,9,&status)==2);
     CHECK(state.phase==RBC_ARRAY_REGION_ACTIVE && activation.active_array_region==1 &&
-        state.cache.owner==&owner && !state.completed_set && frame.pc==19 && status==XRT_MANAGED_OK);
+        state.cache.owner==&owner && !state.completed_write && frame.pc==19 && status==XRT_MANAGED_OK);
     CHECK(rbc_value_try_fixed_array_leaf(&stack,0,&status) && status==XRT_MANAGED_OK && slots[2].bits==3);
     CHECK(rbc_value_try_fixed_array_leaf(&stack,1,&status) && status==XRT_MANAGED_OK && slots[2].bits==11);
     CHECK(rbc_value_try_fixed_array_leaf(&stack,2,&status) && status==XRT_MANAGED_OK && elements[1]==23);
@@ -647,6 +647,49 @@ static void rbc_push_region_case(enum ArrayPushWindowMode mode,uint64_t bound,si
     CHECK(!tracked_live);
 }
 
+static void rbc_fixed_push_cases(void) {
+    ArraySetRegionFixture fixture=array_push_window_build(PUSH_WINDOW_NEXT_ITEM);
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(fixture.module,fixture.function,&program,NULL)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(fixture.module);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
+    CHECK(code && code->array_region_runtime && !code->array_push_limits && code->homes->fixed_array_update_count==1);
+    const XrLirFixedArrayUpdateHome *row=&code->homes->fixed_array_updates[0];
+    CHECK(row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_PUSH && row->workspace_slot!=SIZE_MAX);
+
+    const uint64_t ignored=0;
+    region_begin_attempts=region_begin_successes=array_pushes=array_push_transactions=0;
+    region_force_bypass=false;
+    RbcRegionResult actual=rbc_region_run_with_args(module,program->locations,&ignored,1);
+    CHECK(actual.status==XR_RBC_OK && actual.bits==10 && array_pushes==3 && array_push_transactions==3 &&
+        region_begin_attempts==3 && region_begin_successes==3);
+    region_begin_attempts=region_begin_successes=array_pushes=array_push_transactions=0;
+    region_force_bypass=true;
+    RbcRegionResult ordinary=rbc_region_run_with_args(module,program->locations,&ignored,1);
+    CHECK(ordinary.status==actual.status && ordinary.bits==actual.bits && array_pushes==9 &&
+        region_begin_attempts==1 && !region_begin_successes);
+
+    /* The third grow fails at capacity 8. The original prefix includes RHS
+     * values computed before each PUSH, including writes made in the window. */
+    array_push_item_bias=1;
+    RbcRegionResult failure[2];
+    for (unsigned bypass=0;bypass<2;++bypass) {
+        array_push_fault=3;
+        region_begin_attempts=region_begin_successes=array_pushes=array_push_transactions=failed_array_length=0;
+        region_force_bypass=bypass!=0;
+        size_t live=tracked_live;
+        failure[bypass]=rbc_region_run_with_args(module,program->locations,&ignored,1);
+        CHECK(tracked_live==live && failed_array_length==8 && array_push_transactions==3 &&
+            array_pushes==(bypass ? 8u : 3u) && region_begin_successes==(bypass ? 0u : 2u));
+        CHECK(failure[bypass].status==XR_RBC_VALUE_FAILURE && failure[bypass].failure==XR_XIR_VALUE_OOM);
+    }
+    CHECK(failure[0].source && failure[0].source==failure[1].source);
+    array_push_item_bias=0; array_push_fault=0; region_force_bypass=false;
+    xr_rbc_program_destroy(program);
+    CHECK(!tracked_live);
+}
+
 static void rbc_array_region_cases(void) {
     rbc_push_region_case(PUSH_WINDOW_PARAMETER_END,0,0,0,0,true);
     rbc_push_region_case(PUSH_WINDOW_PARAMETER_END,1,1,1,0,true);
@@ -657,8 +700,8 @@ static void rbc_array_region_cases(void) {
     rbc_push_region_case(PUSH_WINDOW_LARGE_END,0,9,3,3,true);
     rbc_push_region_case(PUSH_WINDOW_PRECOMPUTED_END,7,9,3,3,true);
     rbc_push_region_case(PUSH_WINDOW_LIVE_SNAPSHOT,0,9,9,0,false);
-    rbc_push_region_case(PUSH_WINDOW_NEXT_ITEM,0,9,9,0,false);
     rbc_push_region_case(PUSH_WINDOW_OBSERVER,0,9,9,0,false);
+    rbc_fixed_push_cases();
     rbc_read_fold_cases(true,RBC_READ_FOLD_FORMAL);
     rbc_read_fold_cases(false,RBC_READ_FOLD_FORMAL);
     rbc_read_fold_cases(true,RBC_READ_FOLD_IMMEDIATE);

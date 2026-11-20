@@ -241,8 +241,9 @@ typedef struct XrLirArrayPushCapacity {
     uint32_t one, latch_iv, item, first_active_step, checkpoint_step;
 } XrLirArrayPushCapacity;
 /* The primary access is an original element operation, not CELL_READ/death.
- * SET retains its existing body contract. GET names the sole element read in
- * a closed unit/same-length read-only loop; no mutation permission follows. */
+ * GET names the sole element read in a closed loop with an unchanged length
+ * or guarded bound. A fixed PUSH uses its actual original item and scalar
+ * edge assignments, without the legacy push_capacity shortcut. */
 typedef struct XrLirArraySetRegion {
     uint32_t function, header, entry_block, entry_edge, latch;
     uint32_t exit_edge, exit_block, entry_value, canonical_value, exit_value;

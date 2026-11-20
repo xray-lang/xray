@@ -228,8 +228,8 @@ static void ars_readonly_preparations(void) {
         XrLirOwnershipPlan *plan=NULL; XrLirOwnershipRequest request={.module=c.module};
         OK(xr_lir_ownership_plan_create(&request,&plan,NULL)); compare_internal(&request,plan);
         CHECK(xr_lir_ownership_array_region_count(plan)==(mode==ARRAY_REGION_RANGE_READ_ONLY ? 1u : 0u));
-        XrLirOwnershipFunction function;
-        OK(xr_lir_ownership_function_at(plan,c.function.id,&function)); CHECK(!function.fixed_update_count);
+        XrLirOwnershipFunction row;
+        OK(xr_lir_ownership_function_at(plan,c.function.id,&row)); CHECK(!row.fixed_update_count);
         if (mode!=ARRAY_REGION_RANGE_READ_ONLY) {
             xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module); continue;
         }
@@ -261,6 +261,36 @@ static void ars_readonly_preparations(void) {
         XrLirArraySetRegionStep body;
         OK(xr_lir_ownership_fixed_array_update_step_at(plan,region.first_step+1,&body));
         CHECK(body.kind==XR_LIR_ARRAY_SET_REGION_EDGE_MOVE && body.edge==2 && body.block==c.header.id);
+        OK(xr_lir_ownership_array_regions_verify(c.module,plan));
+        ars_retirement(c,plan,true);
+    }
+}
+static void ars_fixed_push_preparations(void) {
+    const enum ArrayPushWindowMode modes[] = {PUSH_WINDOW_NEXT_ITEM, PUSH_WINDOW_EXTRA_STATE,
+        PUSH_WINDOW_OBSERVER, PUSH_WINDOW_TWO_PUSHES, PUSH_WINDOW_CHANGING_END, PUSH_WINDOW_LENGTH_END};
+    for (size_t n = 0; n < sizeof(modes) / sizeof(*modes); ++n) {
+        ArraySetRegionFixture c = array_push_window_build(modes[n]);
+        XrLirOwnershipPlan *plan = NULL;
+        XrLirOwnershipRequest request = {.module=c.module};
+        OK(xr_lir_ownership_plan_create(&request,&plan,NULL)); compare_internal(&request,plan);
+        XrLirOwnershipFunction function;
+        OK(xr_lir_ownership_function_at(plan,c.function.id,&function));
+        bool admitted = n < 2;
+        CHECK(!function.region_count && !function.push_window_count && function.fixed_update_count == (uint32_t)admitted);
+        if (!admitted) {
+            xr_lir_ownership_plan_destroy(plan);
+            xr_lir_module_destroy(c.module);
+            continue;
+        }
+        XrLirArraySetRegion region;
+        OK(xr_lir_ownership_fixed_array_update_at(plan,function.fixed_update_offset,&region));
+        CHECK(region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH && region.primary_block == c.body[1].id &&
+            region.range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT && !region.push_capacity.kind);
+        const XrLirFunctionData *f = &c.module->functions[c.function.id - 1];
+        const XrLirInstructionView *push = &f->blocks[region.primary_block - 1].instructions[region.primary_instruction - 1].view;
+        const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(c.module,push->intrinsic);
+        CHECK(shape && shape->operation == XR_LIR_ARRAY_OP_PUSH && push->operand_count == 2);
+        if (modes[n] == PUSH_WINDOW_NEXT_ITEM) CHECK(push->operands[1] == region.range.increment);
         OK(xr_lir_ownership_array_regions_verify(c.module,plan));
         ars_retirement(c,plan,true);
     }
@@ -479,6 +509,7 @@ static void array_set_region_preparations(void) {
     ars_fixed_update_preparations();
     ars_range_preparations();
     ars_readonly_preparations();
+    ars_fixed_push_preparations();
     ars_push_preparations();
     const uint32_t blocks[] = {1,3,6,ARRAY_SET_REGION_BODY_CAPACITY};
     for (size_t n = 0; n < sizeof(blocks) / sizeof(*blocks); ++n) ars_preparation(blocks[n], ARRAY_SET_REGION_LOCAL);

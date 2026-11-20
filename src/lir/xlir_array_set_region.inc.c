@@ -59,7 +59,7 @@ static bool lir_array_region_array(const XrLirFunctionData *f, uint32_t value) {
     return value && value <= f->value_count && f->values[value - 1].type == XR_LIR_ARRAY &&
         f->values[value - 1].array_element == XR_LIR_I64;
 }
-static bool lir_array_region_needed(const XrLirOwnershipPlan *plan, uint32_t function, bool *fixed_possible) {
+static bool lir_array_region_needed(const XrLirOwnershipPlan *plan, uint32_t function) {
     XrLirOwnershipFunction row = plan->functions[function - 1];
     bool set = false, push = false, create = false, read = false, get = false, edge = false;
     for (uint32_t n = 0; n < row.fact_count; ++n) {
@@ -75,8 +75,7 @@ static bool lir_array_region_needed(const XrLirOwnershipPlan *plan, uint32_t fun
         edge |= fact->kind == XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER && fact->type == XR_LIR_ARRAY &&
             fact->array_element == XR_LIR_I64 && fact->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE;
     }
-    *fixed_possible = (set && create && read) || (get && edge);
-    return *fixed_possible || (push && create && read && edge);
+    return (set && create && read) || (get && edge) || (push && create && read && edge);
 }
 static bool lir_array_region_array_role(const XrLirModule *m, const XrLirInstructionView *op, uint32_t argument) {
     if (argument) return false;
@@ -388,7 +387,7 @@ static bool lir_array_region_operation(LirArrayRegionProof *p, const XrLirInstru
         ((shape->operation == XR_LIR_ARRAY_OP_SET && op->operand_count == 3 &&
           p->function->values[op->operands[1] - 1].type == XR_LIR_I64 &&
           p->function->values[op->operands[2] - 1].type == XR_LIR_I64) ||
-         (!p->fixed && shape->operation == XR_LIR_ARRAY_OP_PUSH && op->operand_count == 2 &&
+         (shape->operation == XR_LIR_ARRAY_OP_PUSH && op->operand_count == 2 &&
           p->function->values[op->operands[1] - 1].type == XR_LIR_I64));
 }
 static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32_t *current,
@@ -413,7 +412,7 @@ static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32
                 XR_LIR_ARRAY_REGION_PRIMARY_SET : XR_LIR_ARRAY_REGION_PRIMARY_PUSH;
             region->primary_block = block + 1; region->primary_instruction = i + 1;
             if (shape->operation == XR_LIR_ARRAY_OP_PUSH) {
-                if (lir_array_region_lane(p,op->operands[1]) != LIR_ARRAY_RANGE_CURRENT) return false;
+                if (!p->fixed && lir_array_region_lane(p,op->operands[1]) != LIR_ARRAY_RANGE_CURRENT) return false;
                 p->push_item = op->operands[1];
             }
         } else if (shape->operation == XR_LIR_ARRAY_OP_GET) {
@@ -491,6 +490,12 @@ static bool lir_array_region_scalar_passthrough(const LirArrayRegionProof *p,
         if (origin != parameter) return false;
     }
     return true;
+}
+
+static bool lir_array_region_preserves_bound(const LirArrayRegionProof *p) {
+    const XrLirValueData *limit = &p->function->values[p->range.length - 1];
+    return !limit->parameter || limit->block != p->loop.header + 1 ||
+        lir_array_region_scalar_passthrough(p, 0, p->range.length);
 }
 
 static bool lir_array_region_push_capacity(LirArrayRegionProof *p, XrLirArraySetRegion *region) {
@@ -573,9 +578,9 @@ static bool lir_array_element_update(LirArrayRegionProof *p, const XrLirArraySet
 static bool lir_array_region_prove(LirArrayRegionProof *p, const XrLirArraySetRegion *shape, XrLirArraySetRegion *region) {
     const LirLinearLoop *loop = &p->loop;
     uint32_t header = loop->header, body_edge = loop->body_edge;
-    /* Only the existing PUSH schedule may cross the precomputed empty
-     * corridor to a later retain. The frame-guarded SET proof observes its
-     * own route and keeps retains outside it on the ordinary path. */
+    /* The legacy PUSH schedule can cross its precomputed empty corridor to
+     * a later retain. A fixed route checks its own closed span and preserves
+     * retains outside that span on the original path. */
     if (!p->fixed && !lir_array_region_retains_before_entry(p, header, loop->entry) &&
         (!p->retain_block || !p->graph.stack[loop->exit] ||
             !lir_loop_dominates(&p->graph, header, p->retain_block - 1))) return false;
@@ -598,10 +603,8 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, const XrLirArraySetRe
     if (p->range.latch_iv && p->range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) region->range = p->range;
     if (!region->primary_kind) {
         if (p->get_count != 1 || !p->range.latch_iv) return false;
-        const XrLirValueData *limit = &p->function->values[p->range.length - 1];
         if (p->range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
-            limit->parameter && limit->block == region->header &&
-            !lir_array_region_scalar_passthrough(p, 0, p->range.length)) return false;
+            !lir_array_region_preserves_bound(p)) return false;
         region->range = p->range;
         region->primary_kind = XR_LIR_ARRAY_REGION_PRIMARY_GET;
         region->primary_block = p->get_block; region->primary_instruction = p->get_instruction;
@@ -612,6 +615,14 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, const XrLirArraySetRe
              * no Cell handoff, replacement workspace, or skipped release. */
             for (uint32_t n = 1; n < p->step_count; ++n)
                 if (p->steps[n].kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) return false;
+        } else if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH) {
+            /* The consumer executes the proved original PUSH and scalar
+             * body. Unlike the old segment, it does not synthesize the item
+             * from the IV or skip any other carried state. */
+            if (p->array_accesses != 1 || !p->push_item || !p->range.latch_iv ||
+                p->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT ||
+                !lir_array_region_preserves_bound(p)) return false;
+            region->range = p->range;
         } else if (region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_SET ||
             region->range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) return false;
     }
@@ -641,8 +652,7 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
     LirArrayRegionTables *push_windows, LirArrayRegionTables *fixed_updates) {
     const XrLirFunctionData *f = p->function;
     if (f->kind == XR_LIR_FUNCTION_EXTERNAL) return XR_LIR_OK;
-    bool fixed_possible;
-    if (!lir_array_region_needed(p->plan, p->function_id, &fixed_possible)) return XR_LIR_OK;
+    if (!lir_array_region_needed(p->plan, p->function_id)) return XR_LIR_OK;
     XrLirStatus status = lir_graph_create(f, &p->graph);
     if (status != XR_LIR_OK) return status;
     if (!lir_graph_order(f, &p->graph)) return XR_LIR_VERIFY_ERROR;
@@ -659,7 +669,6 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
     if (!p->uses || !p->pairs || !p->moves || !p->blocks || !p->marks || !p->steps) return XR_LIR_OUT_OF_MEMORY;
     if (!lir_array_region_index_transfers(p)) return XR_LIR_OK;
     bool legacy_possible = lir_array_region_inventory(p) && lir_array_region_retains(p);
-    if (!legacy_possible && !fixed_possible) return XR_LIR_OK;
     for (uint32_t b = 0; b < f->block_count; ++b)
         for (uint32_t e = 0; e < 2; ++e) {
             XrLirArraySetRegion shape, region;
@@ -668,7 +677,7 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
             p->fixed = false;
             if (!legacy_possible || !lir_array_region_prove(p, &shape, &region)) {
                 p->fixed = true;
-                if (!fixed_possible || !lir_array_region_prove(p, &shape, &region)) continue;
+                if (!lir_array_region_prove(p, &shape, &region)) continue;
                 receiver = fixed_updates;
             } else if (region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH) receiver = push_windows;
             region.first_step = receiver->steps.count;

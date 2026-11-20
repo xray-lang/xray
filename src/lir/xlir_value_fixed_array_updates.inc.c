@@ -56,7 +56,8 @@ static bool lir_fixed_array_project(LirHomeBuilder *b, const XrLirOwnershipPlan 
     size_t workspace_slot = SIZE_MAX;
     if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET) {
         if (!lir_fixed_array_value(&homes->values[receiver], owner)) return false;
-    } else if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET) {
+    } else if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET ||
+        region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH) {
         if (!lir_fixed_array_binding(homes, receiver, owner) || !workspace ||
             workspace->instruction != region->primary_instruction || workspace->type != owner->type || workspace->value ||
             workspace->first_owner == owner->first_owner ||
@@ -81,7 +82,7 @@ static bool lir_home_fixed_array_updates(LirHomeBuilder *b, const XrLirOwnership
     if (xr_lir_ownership_function_at(plan, c->function.id, &function) != XR_LIR_OK)
         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "fixed Array function is unavailable");
     if (!function.fixed_update_count) return true;
-    /* Each proved primary block contains one SET and no other operation that
+    /* Each proved write block contains one mutation and no other operation that
      * reserves a VALUE workspace. Ambiguous geometry stays on ordinary LIR. */
     size_t *by_block = NULL;
     if (b->homes->workspace_count) {
