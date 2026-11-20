@@ -137,7 +137,7 @@ def assert_pointwise_update_loops(name: str, generated: str) -> None:
         label, region, body = clone.group("label", "region", "body")
         cache = f"xrl_fixed_cache_{region}"
         guard = re.search(
-            rf"xrt_array_i64_region_try_begin\([^\n;]+, true, &{cache}\) \{{[^{{}}]*\bgoto {label};",
+            rf"xrt_array_i64_region_try_begin\([^\n;]+, true, &{cache}\)\) \{{[^{{}}]*\bgoto {label};",
             generated[:clone.start()],
         )
         assert guard, (name, "missing checked pointwise admission")

@@ -191,3 +191,5 @@ static void array_region_binding_projection(unsigned shape) {
     CHECK(!live && !home_live_bytes() && xrt_billing_owner_stats(billing).blocks==1);
     xrt_billing_owner_drop(billing);
 }
+
+#endif // LIR_ARRAY_REGION_BINDING_CASES_H
