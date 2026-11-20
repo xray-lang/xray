@@ -81,6 +81,13 @@ typedef struct XrLirHomeEdge {
     size_t first, count;
 } XrLirHomeEdge;
 
+/* Exact selected edges for one original iteration, starting at the header.
+ * Block and edge ordinals are one-based. The owner parameter is the target
+ * SSA value transferred separately by the backing window. */
+typedef struct XrLirStringReplayBlock {
+    uint32_t block, edge, owner_parameter;
+} XrLirStringReplayBlock;
+
 typedef struct XrLirStringWindow {
     uint32_t header, index, next_index, latch_index, limit;
     uint32_t comparison; /* Zero-based position after any in-header constant. */
@@ -90,6 +97,8 @@ typedef struct XrLirStringWindow {
     /* Guard the same route at either boundary. The slot holding the live
      * String differs between the header and latch. */
     size_t header_empty_first, latch_empty_first, empty_count;
+    size_t replay_first, replay_count; /* Extra scalar state needs explicit replay. */
+    uint32_t replay_body, replay_literal, replay_append, replay_drop; /* One-based; zero if absent. */
 } XrLirStringWindow;
 typedef struct XrLirHomeCall {
     uint32_t block, instruction, callee, result;
@@ -183,6 +192,8 @@ typedef struct XrLirValueHomes {
     const XrLirHomeEdge *edges;
     size_t transfer_count, edge_count;
     const XrLirStringWindow *string_windows; /* Sorted by header block. */
+    const XrLirStringReplayBlock *string_replay_blocks;
+    size_t string_replay_block_count;
     size_t string_window_count;
     const size_t *string_window_slots;
     size_t string_window_slot_count;

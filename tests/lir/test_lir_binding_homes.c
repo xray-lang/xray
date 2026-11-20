@@ -1023,12 +1023,99 @@ static void string_forwarding_window(uint32_t blocks, bool side_entry) {
     CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
 }
 
+typedef enum StringReplayShape {
+    STRING_REPLAY_SCALAR_STATE,
+    STRING_REPLAY_CHANGING_BOUND,
+    STRING_REPLAY_PARTIAL_ARITHMETIC,
+    STRING_REPLAY_STRING_OBSERVER,
+} StringReplayShape;
+
+static void string_replay_branch(CArrayFixture *c, XrLirBlock block, XrLirBlock target, const XrLirValue values[3]) {
+    OK(xr_lir_set_terminator(c->module,block,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+        .edge_count=1,.edges={{target,values,3}}}));
+}
+
+static void string_replay_parameters(CArrayFixture *c, XrLirBlock block, XrLirValue values[3]) {
+    for (uint32_t n=0;n<3;++n) OK(xr_lir_block_parameter(c->module,block,n,&values[n]));
+}
+
+static void string_scalar_replay(StringReplayShape shape) {
+    CArrayFixture c={0}; OK(xr_lir_module_create(NULL,&c.module));
+    OK(xr_lir_string_catalog_install(c.module,false,false,false));
+    XrLirType count=XR_LIR_I64, carries[]={XR_LIR_STRING,XR_LIR_I64,XR_LIR_I64};
+    XrLirFunction f={0};
+    OK(xr_lir_declare_function(c.module,&(XrLirFunctionSpec){.name="string_replay",.name_length=13,
+        .parameters=&count,.parameter_count=1,.result=XR_LIR_I64},&f));
+    OK(xr_lir_define_function(c.module,f));
+    XrLirBlock entry={0}, header={0}, body={0}, relay={0}, exit={0};
+    OK(xr_lir_add_block(c.module,f,NULL,0,&entry)); OK(xr_lir_set_entry(c.module,f,entry));
+    OK(xr_lir_add_block(c.module,f,carries,3,&header)); OK(xr_lir_add_block(c.module,f,carries,3,&body));
+    OK(xr_lir_add_block(c.module,f,carries,3,&relay)); OK(xr_lir_add_block(c.module,f,carries,3,&exit));
+    XrLirValue limit={0}; OK(xr_lir_function_parameter(c.module,f,0,&limit));
+    XrLirValue initial[]={ca_text(&c,entry,"",0),limit,ca_constant(&c,entry,0)};
+    string_replay_branch(&c,entry,header,initial);
+    XrLirValue h[3]={{0}}, b[3]={{0}}, r[3]={{0}}, e[3]={{0}}, selected={0};
+    string_replay_parameters(&c,header,h); string_replay_parameters(&c,body,b);
+    string_replay_parameters(&c,relay,r); string_replay_parameters(&c,exit,e);
+    XrLirValue compare[]={h[2],shape==STRING_REPLAY_CHANGING_BOUND ? h[1] : limit};
+    OK(xr_lir_emit_value(c.module,header,&(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
+        .predicate=XR_LIR_LT,.operands=compare,.operand_count=2},&selected));
+    OK(xr_lir_set_terminator(c.module,header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+        .operands=&selected,.operand_count=1,.edge_count=2,.edges={{body,h,3},{exit,h,3}}}));
+    XrLirValue suffix=ca_text(&c,body,"x",1), append_args[]={b[0],suffix};
+    XrLirValue appended=string_role(&c,body,XR_LIR_STRING_OP_APPEND_OWNED,XR_LIR_STRING,append_args,2);
+    ca_effect(&c,body,XR_LIR_STRING_DROP,suffix);
+    XrLirValue observed=b[1];
+    if (shape==STRING_REPLAY_PARTIAL_ARITHMETIC) observed=ca_binary(&c,body,XR_LIR_DIV,b[1],b[2]);
+    if (shape==STRING_REPLAY_STRING_OBSERVER) observed=ca_value(&c,body,XR_LIR_STRING_LEN,XR_LIR_I64,&appended,1);
+    XrLirValue body_edge[]={appended,observed,b[2]}; string_replay_branch(&c,body,relay,body_edge);
+    XrLirValue step=ca_constant(&c,relay,1), next=ca_binary(&c,relay,XR_LIR_ADD,step,r[2]);
+    /* Forward the old IV in parallel with the advanced IV, and keep both observable. */
+    XrLirValue relay_edge[]={r[0],shape==STRING_REPLAY_SCALAR_STATE || shape==STRING_REPLAY_CHANGING_BOUND ? r[2] : r[1],next};
+    string_replay_branch(&c,relay,header,relay_edge);
+    ca_effect(&c,exit,XR_LIR_STRING_DROP,e[0]); ca_return(&c,exit,ca_binary(&c,exit,XR_LIR_ADD,e[1],e[2]));
+    OK(xr_lir_module_finish(c.module,NULL));
+
+    XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+    XrLirValueLayoutKey roots[]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_STRING,0,0}};
+    XrLirValueLayouts *layouts=NULL; HOME(xr_lir_value_layouts_create(c.module,roots,4,billing,&layouts));
+    XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
+    size_t baseline=live, bytes=home_live_bytes();
+    XrLirValueHomes *homes=NULL; HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,f,layouts,plan},&homes));
+    CHECK(!xr_lir_value_homes_string_window(homes,header.id));
+    if (shape==STRING_REPLAY_SCALAR_STATE) {
+        CHECK(homes->string_window_count==1 && homes->string_replay_block_count==3);
+        const XrLirStringWindow *window=homes->string_windows;
+        CHECK(window->header==header.id && window->index==h[2].id && window->next_index==next.id && window->limit==limit.id);
+        CHECK(window->replay_first==0 && window->replay_count==3 && window->replay_body==body.id);
+        CHECK(window->replay_literal==1 && window->replay_append==2 && window->replay_drop==3);
+        CHECK(window->latch_owner==homes->values[appended.id].first_owner &&
+            window->latch_target_owner==homes->values[r[0].id].first_owner);
+        const XrLirStringReplayBlock *rows=homes->string_replay_blocks;
+        CHECK(rows[0].block==header.id && rows[0].edge==1 && rows[0].owner_parameter==b[0].id);
+        CHECK(rows[1].block==body.id && rows[1].edge==1 && rows[1].owner_parameter==r[0].id);
+        CHECK(rows[2].block==relay.id && rows[2].edge==1 && rows[2].owner_parameter==h[0].id);
+        for (size_t n=0;n<homes->edge_count;++n) CHECK(!homes->edges[n].string_window);
+        xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts); xr_lir_module_destroy(c.module);
+        CHECK(rows[2].owner_parameter==h[0].id && window->replay_body==body.id);
+        xr_lir_value_homes_destroy(homes);
+    } else {
+        CHECK(!homes->string_window_count && !homes->string_replay_block_count && !homes->string_replay_blocks);
+        xr_lir_value_homes_destroy(homes);
+        CHECK(live==baseline && home_live_bytes()==bytes);
+        xr_lir_ownership_plan_destroy(plan); xr_lir_value_layouts_destroy(layouts); xr_lir_module_destroy(c.module);
+    }
+    CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
+}
+
 int main(void) {
     for (unsigned shape=0;shape<7;++shape) array_region_binding_projection(shape);
     array_set_region_receiving(false); array_set_region_receiving(true);
     borrowed_map_stages();
     string_projections();
     string_forwarding_window(0,false); string_forwarding_window(16,false); string_forwarding_window(16,true);
+    string_scalar_replay(STRING_REPLAY_SCALAR_STATE); string_scalar_replay(STRING_REPLAY_CHANGING_BOUND);
+    string_scalar_replay(STRING_REPLAY_PARTIAL_ARITHMETIC); string_scalar_replay(STRING_REPLAY_STRING_OBSERVER);
     scoped_cells();
     slice_homes();
     set_homes();

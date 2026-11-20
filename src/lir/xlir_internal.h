@@ -183,6 +183,28 @@ static inline uint32_t xr_lir_internal_known_edge(const XrLirFunctionData *f,
     return test->bits ? 0 : 1;
 }
 
+/* These scalar operations can be replayed without observing or failing on
+ * any managed state. An optimizer must still preserve their dataflow. */
+static inline bool xr_lir_internal_loop_scalar_operation(const XrLirFunctionData *f,
+    const XrLirInstructionView *op) {
+    if (op->type != XR_LIR_I1 && op->type != XR_LIR_I64) return false;
+    switch (op->op) {
+    case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
+    case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST: break;
+    default: return false;
+    }
+    for (uint32_t n = 0; n < op->operand_count; ++n) {
+        XrLirType type = f->values[op->operands[n] - 1].type;
+        if (type != XR_LIR_I1 && type != XR_LIR_I64) return false;
+    }
+    return true;
+}
+
+static inline bool xr_lir_internal_i64_one(const XrLirFunctionData *f, uint32_t value) {
+    const XrLirInstructionView *op = xr_lir_internal_value_definition(f, value);
+    return op && op->op == XR_LIR_CONST && op->type == XR_LIR_I64 && op->bits == 1;
+}
+
 /* A forwarding block may define scalar constants, but does no work whose
  * result or observable behavior can change between iterations. The caller
  * must separately prove the behavior of every argument on its selected edge. */
