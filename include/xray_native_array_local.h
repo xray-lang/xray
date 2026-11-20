@@ -90,6 +90,19 @@ typedef struct XrtArrayI64RegionCache {
         -INT64_C(1) - (int64_t)((~(bits)) & UINT64_MAX))
 #endif
 
+/* Keep one guarded route and let the C provider compile its scalar loop.
+ * MSVC benefits from the original dynamic bound and ordinary multiply/add.
+ * Fixed spans and nonoverlapping bias bits expose packing to GCC and Clang.
+ * The caller proves both unsigned expressions equal and supplies a scalar. */
+#if defined(_MSC_VER) && !defined(__clang__)
+#define XRT_ARRAY_I64_AFFINE(value, factor, bias, high, low) \
+    ((uint64_t)(value) * (factor) + (bias))
+#else
+#define XRT_ARRAY_I64_FIXED_SPANS 1
+#define XRT_ARRAY_I64_AFFINE(value, factor, bias, high, low) \
+    (((((uint64_t)(value)) << (high)) | (bias)) + (((uint64_t)(value)) << (low)))
+#endif
+
 /* This is the only full dynamic check for a producer-described call-free
  * region. Ready means an original SET/READ/drop/latch completed, or the fixed
  * route's selected entry has published its owner and scalar parameters and

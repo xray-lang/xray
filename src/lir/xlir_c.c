@@ -854,11 +854,10 @@ static bool c_array_shifted_add(LirC *c, const XrLirInstructionView *v) {
             if (!high || (high & (high - 1)) || bias->bits >= high) continue;
             /* The multiply's same-block operands retain their scalar values. */
             uint32_t value = multiply->operands[1 - factor];
-            c_format(c, "    v%" PRIu32 " = (((uint64_t)", c->scratch);
+            c_format(c, "    v%" PRIu32 " = XRT_ARRAY_I64_AFFINE(", c->scratch);
             c_value(c, value);
-            c_format(c, " << %d) | UINT64_C(%" PRIu64 ")) + ((uint64_t)", __builtin_ctzll(high), bias->bits);
-            c_value(c, value);
-            c_format(c, " << %d);\n", __builtin_ctzll(low));
+            c_format(c, ", UINT64_C(%" PRIu64 "), UINT64_C(%" PRIu64 "), %d, %d);\n",
+                constant->bits, bias->bits, __builtin_ctzll(high), __builtin_ctzll(low));
             return true;
         }
     }

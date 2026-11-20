@@ -79,7 +79,7 @@ def select_cases(
 def assert_fixed_update_loop(name: str, generated: str) -> None:
     loop = re.search(
         r"^(?P<label>xrl_fixed_(?P<region>\d+)_bb\d+): ;\n"
-        r"    \{\n        enum \{ xrl_fixed_span = 64 \};\n"
+        r"#if defined\(XRT_ARRAY_I64_FIXED_SPANS\)\n    \{\n        enum \{ xrl_fixed_span = 64 \};\n"
         r"        const size_t xrl_fixed_end = xrl_fixed_cache_(?P=region)\.length;\n"
         r"        while \(xrl_fixed_end - \(size_t\)(?P<iv>v\d+) >= xrl_fixed_span\) \{\n"
         r"            const size_t xrl_fixed_start = \(size_t\)(?P=iv);\n"
@@ -111,7 +111,7 @@ def assert_fixed_update_loop(name: str, generated: str) -> None:
     span, end = body_at(loop.end())
     residue = re.match(
         rf"\n            {iv} = \(int64_t\)\(xrl_fixed_start \+ xrl_fixed_span\);\n"
-        rf"        \}}\n    \}}\n    for \(; {iv} < \(int64_t\){cache}\.length; \+\+{iv}\) \{{\n",
+        rf"        \}}\n    \}}\n#endif\n    for \(; {iv} < \(int64_t\){cache}\.length; \+\+{iv}\) \{{\n",
         generated[end:],
     )
     assert residue, (name, "fixed Array loop did not publish the span IV before its remainder")
@@ -242,7 +242,8 @@ def main() -> None:
             assert "xrl_fixed_spec = {xrl_fixed_slots, 1, 0}" in generated_text, name
             assert re.search(r"\(uint64_t\)\(p0\) <= xrl_fixed_cache_\d+\.length", generated_text), name
             if name == "array_loop_modes":
-                assert "<< 3) | UINT64_C(3))" in generated_text, name
+                assert re.search(r"XRT_ARRAY_I64_AFFINE\(v\d+, UINT64_C\(10\), UINT64_C\(3\), 3, 1\)",
+                                 generated_text), name
                 assert generated_text.count("size_t xrl_room = xrl_array->capacity - xrl_fixed_cache_") == 1
                 assert re.search(r"xrl_array->length = xrl_fixed_cache_\d+\.length;", generated_text), name
         if name == "push_capacity":

@@ -254,7 +254,7 @@ static void c_fixed_array_clones(LirC *c) {
              * iterations and phi copies in order inside each known-size span.
              * A host compiler can then optimize the count without a tail inside
              * that span. It still decides which operations can be vectorized. */
-            c_format(c, "    {\n"
+            c_format(c, "#if defined(XRT_ARRAY_I64_FIXED_SPANS)\n    {\n"
                 "        enum { xrl_fixed_span = 64 };\n"
                 "        const size_t xrl_fixed_end = xrl_fixed_cache_%" PRIu32 ".length;\n",
                 label);
@@ -268,7 +268,7 @@ static void c_fixed_array_clones(LirC *c) {
             c_format(c, "            }\n"
                 "            v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_span);\n"
                 "        }\n"
-                "    }\n", iv);
+                "    }\n#endif\n", iv);
         }
         c_format(c, "    for (; v%" PRIu32 " < ", iv);
         c_fixed_array_limit(c, region, label);
