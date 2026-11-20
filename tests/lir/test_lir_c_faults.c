@@ -629,7 +629,7 @@ static void array_helper_boundaries(void) {
     for (size_t n = 0; n <= mode_count + 1; ++n) {
         bool dual = n >= mode_count, mixed = n == mode_count + 1;
         bool readonly = !dual && modes[n] == ARRAY_REGION_RANGE_READ_ONLY;
-        ArraySetRegionFixture input = mixed ? array_region_binding_loops(false,false,true,2) :
+        ArraySetRegionFixture input = mixed ? array_region_binding_loops(false,false,true,2,false) :
             dual ? array_region_binding_two_loops(false,false,true) :
             ars_range_build(NULL,n == 0 ? 8 : 3,modes[n]);
         XrLirFunction root = dual ? input.function : array_helper_root(&input);
