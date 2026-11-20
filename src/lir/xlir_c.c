@@ -49,9 +49,13 @@ typedef struct LirCArrayRegionScalar {
 typedef struct LirCArrayRegionHelper {
     size_t first, count, inputs, outputs;
 } LirCArrayRegionHelper;
+typedef struct LirCFixedArrayEdge {
+    uint32_t entry, body, latch, exit;
+} LirCFixedArrayEdge;
 typedef struct LirCArrayRegions {
     XrLirArrayRegionBindings *bindings;
     XrLirArrayRegionBindings *push_windows;
+    LirCFixedArrayEdge *fixed_edges;
     size_t bound_count;
     LirCArrayRegionHelper *helpers;
     LirCArrayRegionScalar *scalars;
@@ -159,6 +163,10 @@ static bool c_array_helper_enabled(const LirC *, size_t);
 static void c_array_helpers(LirC *);
 static void c_array_helper_guard(LirC *, size_t);
 static void c_array_helper_return(LirC *, size_t);
+static void c_fixed_array_prepare(LirC *, uint32_t, LirCArrayRegions *);
+static void c_fixed_array_declarations(LirC *);
+static void c_fixed_array_guard(LirC *, uint32_t, uint32_t);
+static void c_fixed_array_clones(LirC *);
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
     if (c->status != XR_LIR_C_OK)
@@ -897,8 +905,7 @@ static void c_float_conversion(LirC *c, const XrLirInstructionView *v) {
         c_format(c, " = xrt_f64_to_i64(xrl_bits, UINT32_C(%" PRIu32 "));\n    }\n", source);
     }
 }
-static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
-    if (c_values_edge(c, edge, selected)) return;
+static void c_scalar_edge_values(LirC *c, const XrLirEdgeView *edge) {
     XrLirBlock target = {c->request->module, c->function.id, edge->target};
     XrLirBlockView block;
     xr_lir_block_view(c->request->module, target, &block);
@@ -932,6 +939,24 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
             c_format(c, "        xrl_access%" PRIu32 " = xrl_edge_access%" PRIu32 ";\n",
                 block.parameters[a], a);
     }
+}
+
+static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
+    const LirCFixedArrayEdge *fixed = c->array_region && c->array_region->fixed_edges ?
+        &c->array_region->fixed_edges[(size_t)c->block * 2 + selected - 1] : NULL;
+    if (fixed && fixed->exit) c_format(c, "xrl_fixed_exit_%" PRIu32 ": ;\n", fixed->exit);
+    if (fixed && fixed->entry) c_format(c, "    xrl_fixed_phase_%" PRIu32 " = 0;\n", fixed->entry);
+    if (c_values_edge(c, edge, selected)) {
+        if (fixed && (fixed->body || fixed->latch))
+            c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array body and latch require stationary owner slots");
+        return;
+    }
+    c_scalar_edge_values(c, edge);
+    if (fixed && fixed->latch) {
+        c_format(c, "        if (xrl_fixed_phase_%" PRIu32 " == 0) xrl_fixed_phase_%" PRIu32 " = 1;\n",
+            fixed->latch, fixed->latch);
+    }
+    if (fixed && fixed->body) c_fixed_array_guard(c, fixed->body, edge->target);
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);
 }
 static void c_division(LirC *c, const XrLirInstructionView *v) {
@@ -1278,6 +1303,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
             }
         }
         c_array_region_clones(c);
+        c_fixed_array_clones(c);
         c_text(c, "}\n\n");
     }
     if (c->runtime && c->status == XR_LIR_C_OK)
@@ -1317,6 +1343,7 @@ static void c_verify_text(LirC *c) {
 #include "xlir_c_values.inc.c"
 #include "xlir_c_array_region.inc.c"
 #include "xlir_c_array_region_helper.inc.c"
+#include "xlir_c_fixed_array_update.inc.c"
 static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {
     XrLirTypeView shape = {0};
     return type == XR_LIR_SLICE_I64 || (type >= XR_LIR_TYPE_COUNT &&
