@@ -250,8 +250,10 @@ def main() -> None:
             # ordinary owner and growth transactions available as a fallback.
             assert generated_text.count("size_t xrl_room = xrl_array->capacity - ") == 4
             assert generated_text.count("for (size_t xrl_offset = 0; xrl_offset < xrl_count; ++xrl_offset)") == 4
-            assert "xrt_native_array_update_place(" in generated_text
-            assert "xrt_native_array_push_local_i64(" in generated_text
+            # All six functions keep the checked pointwise update and its
+            # original growth/COW path, including the two that have no clone.
+            assert generated_text.count("xrt_array_i64_update_held(") == 6
+            assert generated_text.count("xrt_native_array_push_local_i64(") == 6
         elif name == "array_stationary_edges":
             # A changing bound keeps pointwise updates. Its selected edges can
             # be scalar-only while the later read window keeps real owner moves.
