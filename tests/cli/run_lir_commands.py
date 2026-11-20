@@ -340,6 +340,20 @@ def main() -> None:
     run("relocated-build", [relocated, "build", fixtures / "hello.xr", "-o", executable], 0)
     native = run("relocated-run", [executable], 0)
     assert native.stdout == b"42\n" and not native.stderr
+
+    for name, header in (("set_values", "xray_native_set.h"),
+                         ("push_capacity", "xray_native_array_local.h")):
+        source = fixtures / "array_lower" / (name + ".xr")
+        generated = work / ("relocated-" + name + ".c")
+        run("relocated-" + name + "-emit", [relocated, "build", "-c", source, "-o", generated], 0)
+        assert ('#include "' + header + '"').encode("ascii") in generated.read_bytes(), name
+        product = work / ("relocated-" + name + executable.suffix)
+        run("relocated-" + name + "-build", [relocated, "build", source, "-o", product], 0)
+        executed = run("relocated-" + name + "-run", [product], 0)
+        vm = run("relocated-" + name + "-vm", [relocated, "run", source], 0)
+        assert executed.stdout == vm.stdout == source.with_suffix(".out").read_bytes(), name
+        assert not executed.stderr and not vm.stderr, name
+
     complete_native_artifacts(work)
     print(f"{len(records)} public LIR command checks passed")
 
