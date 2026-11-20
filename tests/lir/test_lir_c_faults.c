@@ -588,7 +588,7 @@ static void array_clone_cancellation(void) {
             XR_COMPILE_RESOURCE_OK);
         compiler.array_regions = memory;
         compiler.array_region = &compiler.array_regions[input.function.id - 1];
-        c_fixed_array_prepare(&compiler,input.function.id,compiler.array_region);
+        c_fixed_array_prepare(&compiler,input.function.id,&compiler.array_regions[input.function.id - 1]);
         CHECK(compiler.status == XR_LIR_C_OK && compiler.array_region->fixed_edges);
         ArrayCloneCancelPoint point = {.compiler=&compiler,.after_read=n != 0};
         XrCompileRequestControl control = {0};
