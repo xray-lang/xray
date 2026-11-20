@@ -64,6 +64,24 @@ typedef struct XrLirArrayRegionBindings {
     size_t block_index_count, operation_count, edge_count;
 } XrLirArrayRegionBindings;
 
+/* Form the runtime description of already bound slots. The runtime still
+ * decides whether the live frame permits the borrow. */
+static inline XrtArrayI64RegionSpec xr_lir_array_region_guard_spec(
+    const XrLirArrayRegionBindings *bindings, const XrLirArrayRegionBinding *row) {
+    return (XrtArrayI64RegionSpec){bindings->slots + row->first_slot, row->slot_count,
+        row->canonical_slot - row->first_slot};
+}
+
+enum { XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT = 2 };
+
+static inline XrtArrayI64RegionSpec xr_lir_fixed_array_guard_spec(const XrLirValueHomes *homes,
+    const XrLirFixedArrayUpdateHome *row, XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT]) {
+    const size_t *offsets = homes->frame.owned_offsets;
+    slots[0] = (XrtArrayI64RegionSlot){row->owner_slot, offsets[row->owner_slot]};
+    slots[1] = (XrtArrayI64RegionSlot){row->workspace_slot, offsets[row->workspace_slot]};
+    return (XrtArrayI64RegionSpec){slots, XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT, 0};
+}
+
 /* Project sealed same-process Homes and their exact layouts without another
  * body, CFG or ownership analysis. Output owns only numeric copies and remains
  * valid after every creator retires. No row grants runtime access. Unsupported

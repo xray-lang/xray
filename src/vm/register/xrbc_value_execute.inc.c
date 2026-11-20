@@ -705,7 +705,7 @@ static XR_NOINLINE void rbc_value_array_read_fold(XrRbcStack *stack,
         return;
     const XrtArrayI64RegionContext context={activation->frame,activation->payload,
         &activation->frame_locations,&code->homes->frame};
-    const XrtArrayI64RegionSpec spec={bindings->slots+row->first_slot,row->slot_count,row->canonical_slot-row->first_slot};
+    const XrtArrayI64RegionSpec spec=xr_lir_array_region_guard_spec(bindings,row);
     XrtArrayI64RegionCache cache={0};
     if (!xrt_array_i64_region_try_begin(&context,&spec,true,&cache)) return;
     if (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) limit=cache.length;

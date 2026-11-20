@@ -63,13 +63,14 @@ static void c_fixed_array_declarations(LirC *c) {
 
 static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target) {
     const XrLirFixedArrayUpdateHome *row = &c->homes->fixed_array_updates[n - 1];
-    const size_t *offsets = c->homes->frame.owned_offsets;
+    XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
+    XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(c->homes, row, slots);
     c_format(c, "    if (!xrl_fixed_tried_%" PRIu32 ") {\n"
         "        static const XrtArrayI64RegionSlot xrl_fixed_slots[] = {{%zu, %zu}, {%zu, %zu}};\n",
-        n, row->owner_slot, offsets[row->owner_slot], row->workspace_slot, offsets[row->workspace_slot]);
-    c_format(c, "        const XrtArrayI64RegionSpec xrl_fixed_spec = {xrl_fixed_slots, 2, 0};\n"
+        n, slots[0].slot, slots[0].offset, slots[1].slot, slots[1].offset);
+    c_format(c, "        const XrtArrayI64RegionSpec xrl_fixed_spec = {xrl_fixed_slots, %zu, %zu};\n"
         "        const XrtArrayI64RegionContext xrl_fixed_context = {xrl_frame, xrl_payload,"
-        " &xrl_frame_locations, &xrl_frame_%" PRIu32 "};\n        if (", c->function.id);
+        " &xrl_frame_locations, &xrl_frame_%" PRIu32 "};\n        if (", spec.slot_count, spec.canonical, c->function.id);
     c_value(c, row->region.range.iv);
     c_format(c, " >= INT64_C(0) && xrt_array_i64_region_try_begin(&xrl_fixed_context, &xrl_fixed_spec, true,"
         " &xrl_fixed_cache_%" PRIu32 ") && (uint64_t)", n);

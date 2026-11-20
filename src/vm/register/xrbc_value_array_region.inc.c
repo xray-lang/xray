@@ -96,9 +96,8 @@ static bool rbc_value_fixed_array_before(XrRbcStack *stack, RbcValueActivation *
             const XrLirValueHomes *homes = code->homes;
             const XrLirFixedArrayUpdateHome *row =
                 &homes->fixed_array_updates[role->region - 1 - rbc_value_legacy_array_region_count(code)];
-            const XrtArrayI64RegionSlot slots[] = {{row->owner_slot,homes->frame.owned_offsets[row->owner_slot]},
-                {row->workspace_slot,homes->frame.owned_offsets[row->workspace_slot]}};
-            const XrtArrayI64RegionSpec spec = {slots, 2, 0};
+            XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
+            const XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(homes, row, slots);
             rbc_value_array_region_begin(activation, role->region, state, &spec);
         }
         return true; /* The actual scalar copies and ownership publication are separate words. */
@@ -137,8 +136,7 @@ static bool rbc_value_array_region_before(const XrRbcModule *module,XrRbcStack *
         }
         if (state->phase==RBC_ARRAY_REGION_ELIGIBLE && move->step.block==region->region.header &&
             edge->kind==XR_LIR_ARRAY_REGION_EDGE_BODY) {
-            const XrtArrayI64RegionSpec spec={bindings->slots+region->first_slot,region->slot_count,
-                region->canonical_slot-region->first_slot};
+            const XrtArrayI64RegionSpec spec=xr_lir_array_region_guard_spec(bindings,region);
             rbc_value_array_region_begin(activation,role->region,state,&spec);
         }
         if (state->phase!=RBC_ARRAY_REGION_ACTIVE) return false;

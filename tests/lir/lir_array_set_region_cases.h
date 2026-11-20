@@ -9,7 +9,7 @@
 #include "lir_array_set_region_fixture.h"
 #include "lir_array_region_range_fixture.h"
 #include "lir_array_push_window_fixture.h"
-#include "lir/xlir_value_homes.h"
+#include "lir/xlir_array_region_binding.h"
 
 static uint64_t ars_steps_digest(const XrLirArraySetRegionStep *steps, uint32_t count) {
     uint64_t hash = 0;
@@ -368,6 +368,13 @@ static void ars_fixed_update_preparations(void) {
                 bound->workspace_slot < homes->frame.slot_count && bound->workspace_slot != bound->owner_slot &&
                 homes->fixed_array_update_step_count == update.step_count &&
                 homes->fixed_array_update_steps[bound->region.first_step + 1].edge == bound->body_edge);
+            XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
+            XrtArrayI64RegionSpec guard = xr_lir_fixed_array_guard_spec(homes, bound, slots);
+            CHECK(guard.slots == slots && guard.slot_count == 2 && guard.canonical == 0);
+            CHECK(slots[0].slot == bound->owner_slot &&
+                slots[0].offset == homes->values[update.canonical_value].offset);
+            CHECK(slots[1].slot == bound->workspace_slot &&
+                slots[1].offset == homes->frame.owned_offsets[bound->workspace_slot]);
         }
         xr_lir_value_homes_destroy(homes);
         xrt_billing_owner_drop(billing);
