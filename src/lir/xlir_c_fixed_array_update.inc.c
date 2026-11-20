@@ -49,7 +49,8 @@ static void c_fixed_array_prepare(LirC *c, uint32_t function, LirCArrayRegions *
             c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array updates overlap a selected edge");
             return;
         }
-        entry->entry = latch->latch = exit->exit = n + 1;
+        entry->entry = latch->latch = n + 1;
+        if (r->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_PUSH) exit->exit = n + 1;
     }
 }
 
