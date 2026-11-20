@@ -98,7 +98,7 @@ typedef struct {
     bool known, pooled, materialize;
 } RbcLirImmediate;
 typedef struct {
-    uint32_t region;
+    uint32_t region, entry_region;
     XrLirArrayRegionEdgeKind kind;
 } RbcLirFixedArrayEdge;
 typedef struct {

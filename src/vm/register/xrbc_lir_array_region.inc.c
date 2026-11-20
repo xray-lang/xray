@@ -25,9 +25,13 @@ static bool rbc_lir_fixed_array_region(RbcLirCompiler *c, const XrLirFixedArrayU
         if (!step->edge) continue;
         if (!step->block || step->block > c->view.block_count || step->edge > 2) return false;
         RbcLirFixedArrayBlock *block = &c->fixed_array_blocks[step->block - 1];
+        RbcLirFixedArrayEdge *edge = &block->edges[step->edge - 1];
         XrLirArrayRegionEdgeKind kind;
         switch (step->kind) {
-        case XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE: kind = XR_LIR_ARRAY_REGION_EDGE_ENTRY; break;
+        case XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE:
+            if (edge->entry_region || (edge->region && edge->kind != XR_LIR_ARRAY_REGION_EDGE_EXIT)) return false;
+            edge->entry_region = id;
+            continue;
         case XR_LIR_ARRAY_SET_REGION_EXIT_MOVE: kind = XR_LIR_ARRAY_REGION_EDGE_EXIT; break;
         case XR_LIR_ARRAY_SET_REGION_EDGE_MOVE:
             if (block->region && block->region != id) return false;
@@ -38,9 +42,9 @@ static bool rbc_lir_fixed_array_region(RbcLirCompiler *c, const XrLirFixedArrayU
             break;
         default: return false;
         }
-        RbcLirFixedArrayEdge *edge = &block->edges[step->edge - 1];
-        if (edge->region) return false;
-        *edge = (RbcLirFixedArrayEdge){id, kind};
+        if (edge->region || (edge->entry_region && kind != XR_LIR_ARRAY_REGION_EDGE_EXIT)) return false;
+        edge->region = id;
+        edge->kind = kind;
     }
     return true;
 }

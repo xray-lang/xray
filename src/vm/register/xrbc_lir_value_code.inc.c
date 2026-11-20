@@ -179,16 +179,23 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     }
     return true;
 }
-static bool rbc_lir_fixed_array_edge(RbcLirCompiler *c, uint32_t ordinal, bool after_copies) {
-    if (!c->fixed_array_blocks) return true;
-    RbcLirFixedArrayEdge edge = c->fixed_array_blocks[c->diagnostic->block - 1].edges[ordinal - 1];
-    if (!edge.region || (edge.kind == XR_LIR_ARRAY_REGION_EDGE_LATCH) != after_copies) return true;
+static bool rbc_lir_fixed_array_mark(RbcLirCompiler *c, uint32_t region, XrLirArrayRegionEdgeKind kind) {
     /* The marker only changes the trusted executor's borrow state. Raw code
      * sees the empty ordinary Edge, and the actual selected copies stay intact. */
-    c->fixed_array_marker = edge;
+    c->fixed_array_marker = (RbcLirFixedArrayEdge){.region=region,.kind=kind};
     bool emitted = rbc_lir_value_append(c, (XrRbcValueAccess){.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX});
     c->fixed_array_marker = (RbcLirFixedArrayEdge){0};
     return emitted;
+}
+static bool rbc_lir_fixed_array_edge(RbcLirCompiler *c, uint32_t ordinal, bool after_copies) {
+    if (!c->fixed_array_blocks) return true;
+    RbcLirFixedArrayEdge edge = c->fixed_array_blocks[c->diagnostic->block - 1].edges[ordinal - 1];
+    if (edge.region && (edge.kind == XR_LIR_ARRAY_REGION_EDGE_LATCH) == after_copies &&
+        !rbc_lir_fixed_array_mark(c, edge.region, edge.kind)) return false;
+    /* A header can exit directly to the next header. Close the old borrow
+     * before cooling the new window and leave their shared transfer intact. */
+    return after_copies || !edge.entry_region ||
+        rbc_lir_fixed_array_mark(c, edge.entry_region, XR_LIR_ARRAY_REGION_EDGE_ENTRY);
 }
 static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
     XrRbcValueAccess access = {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX};
