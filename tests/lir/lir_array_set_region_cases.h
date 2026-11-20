@@ -333,6 +333,9 @@ static void ars_fixed_update_preparations(void) {
         OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
         XrLirOwnershipFunction row;
         OK(xr_lir_ownership_function_at(plan, c.function.id, &row));
+        if (row.fixed_update_count != (uint32_t)logical)
+            fprintf(stderr, "fixed update fixture %u: found %u logical routes, expected %u\n",
+                (unsigned)modes[n], row.fixed_update_count, (unsigned)logical);
         CHECK(!row.region_count && !row.push_window_count && row.fixed_update_count == (uint32_t)logical);
         OK(xr_lir_ownership_array_regions_verify(c.module, plan));
         XrtBillingOwner *billing = NULL;
