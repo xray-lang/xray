@@ -60,7 +60,8 @@ class NativeDeclarations(unittest.TestCase):
         header, members = schema.parse_source(source, self.prelude)
         self.assertEqual(header[:3], (12, 'i64', ()))
         executable = [m for m in members if m.operation != 'NONE']
-        self.assertEqual(len(executable), 25)
+        self.assertEqual(len(executable), 26)
+        self.assertEqual(next(m for m in members if m.name == 'tryParse').operation, 'I64_TRY_PARSE')
         self.assertEqual(next(m for m in members if m.name == 'sqrt').operation, 'INTEGER_SQRT')
         self.assertEqual(next(m for m in members if m.name == 'toBigInt').operation, 'NONE')
         for changed in [source.replace('wrappingAdd(other: i64)', 'wrappingAdd(other: f64)'),
