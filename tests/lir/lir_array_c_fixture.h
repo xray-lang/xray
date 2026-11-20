@@ -256,47 +256,52 @@ static void ca_unsigned(CArrayFixture *c, XrLirBlock entry, const char *name, Xr
     ca_return(c, entry, total);
 }
 
-/* A real owner forces selected-edge transactions while primitive phi values
- * exchange in parallel. Pointer and POD controls keep legacy publication. */
+/* Two independent Array owners swap across the back edge and require a
+ * transaction. Primitive phi values exchange in parallel; Pointer and POD
+ * controls still publish through the transaction. */
 static void ca_scalar_edges(CArrayFixture *c, XrLirFunction root, XrLirBlock entry, unsigned mode) {
     bool mixed=mode!=0; XrLirType extra=XR_LIR_PTR;
     if (mode==2) OK(xr_lir_tuple_i64_type(c->module,1,&extra));
-    XrLirType types[] = {XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,XR_LIR_I64,extra};
+    XrLirType types[] = {XR_LIR_ARRAY,XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,XR_LIR_I64,extra};
     XrLirBlock loop={0},done={0};
-    OK(xr_lir_add_block(c->module,root,types,mixed ? 5 : 4,&loop));
-    XrLirType outputs[] = {XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,extra};
-    OK(xr_lir_add_block(c->module,root,outputs,mixed ? 4 : 3,&done));
-    XrLirValue values[5]={{0}},result[4]={{0}};
-    for (uint32_t p=0;p<(mixed ? 5u : 4u);++p) OK(xr_lir_block_parameter(c->module,loop,p,&values[p]));
-    for (uint32_t p=0;p<(mixed ? 4u : 3u);++p) OK(xr_lir_block_parameter(c->module,done,p,&result[p]));
+    OK(xr_lir_add_block(c->module,root,types,mixed ? 6 : 5,&loop));
+    XrLirType outputs[] = {XR_LIR_ARRAY,XR_LIR_ARRAY,XR_LIR_I64,XR_LIR_I64,extra};
+    OK(xr_lir_add_block(c->module,root,outputs,mixed ? 5 : 4,&done));
+    XrLirValue values[6]={{0}},result[5]={{0}};
+    for (uint32_t p=0;p<(mixed ? 6u : 5u);++p) OK(xr_lir_block_parameter(c->module,loop,p,&values[p]));
+    for (uint32_t p=0;p<(mixed ? 5u : 4u);++p) OK(xr_lir_block_parameter(c->module,done,p,&result[p]));
     XrLirArrayShape shape={XR_LIR_I64};
-    OK(xr_lir_set_array_shape(c->module,values[0],&shape));
-    OK(xr_lir_set_array_shape(c->module,result[0],&shape));
+    for (uint32_t p=0;p<2;++p) {
+        OK(xr_lir_set_array_shape(c->module,values[p],&shape));
+        OK(xr_lir_set_array_shape(c->module,result[p],&shape));
+    }
     XrLirValue seven=ca_constant(c,entry,7);
-    /* A call result needs a real edge move even when its payload is fixed I64. */
-    XrLirValue array=ca_call_array(c,entry,ca_helper(c,1),seven);
-    XrLirValue initial[]={array,ca_constant(c,entry,10),ca_constant(c,entry,20),ca_constant(c,entry,0),{0}};
+    XrLirFunction make=ca_helper(c,1);
+    XrLirValue left=ca_call_array(c,entry,make,seven);
+    XrLirValue right=ca_call_array(c,entry,make,ca_constant(c,entry,8));
+    XrLirValue initial[]={left,right,ca_constant(c,entry,10),ca_constant(c,entry,20),ca_constant(c,entry,0),{0}};
     if (mode==2) {
-        initial[4]=ca_value(c,entry,XR_LIR_RECORD_NEW,extra,&seven,1);
+        initial[5]=ca_value(c,entry,XR_LIR_RECORD_NEW,extra,&seven,1);
     } else if (mixed) {
         XrLirInstruction null_pointer={.op=XR_LIR_CONST,.type=XR_LIR_PTR};
-        OK(xr_lir_emit_value(c->module,entry,&null_pointer,&initial[4]));
+        OK(xr_lir_emit_value(c->module,entry,&null_pointer,&initial[5]));
     }
     OK(xr_lir_set_terminator(c->module,entry,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
-        .edge_count=1,.edges={{loop,initial,mixed ? 5u : 4u}}}));
-    XrLirValue count=ca_binary(c,loop,XR_LIR_ADD,values[3],ca_constant(c,loop,1));
+        .edge_count=1,.edges={{loop,initial,mixed ? 6u : 5u}}}));
+    XrLirValue count=ca_binary(c,loop,XR_LIR_ADD,values[4],ca_constant(c,loop,1));
     XrLirValue compared[]={count,ca_constant(c,loop,4)},condition={0};
     OK(xr_lir_emit_value(c->module,loop,&(XrLirInstruction){.op=XR_LIR_ICMP,.type=XR_LIR_I1,
         .predicate=XR_LIR_LT,.operands=compared,.operand_count=2},&condition));
-    XrLirValue back[]={values[0],values[2],values[1],count,values[4]};
-    XrLirValue done_arguments[]={values[0],values[1],values[2],values[4]};
+    XrLirValue back[]={values[1],values[0],values[3],values[2],count,values[5]};
+    XrLirValue done_arguments[]={values[0],values[1],values[2],values[3],values[5]};
     OK(xr_lir_set_terminator(c->module,loop,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
         .operands=&condition,.operand_count=1,.edge_count=2,
-        .edges={{loop,back,mixed ? 5u : 4u},{done,done_arguments,mixed ? 4u : 3u}}}));
-    XrLirValue total=ca_binary(c,done,XR_LIR_MUL,result[1],ca_constant(c,done,100));
-    total=ca_binary(c,done,XR_LIR_ADD,total,result[2]);
+        .edges={{loop,back,mixed ? 6u : 5u},{done,done_arguments,mixed ? 5u : 4u}}}));
+    XrLirValue total=ca_binary(c,done,XR_LIR_MUL,result[2],ca_constant(c,done,100));
+    total=ca_binary(c,done,XR_LIR_ADD,total,result[3]);
     total=ca_binary(c,done,XR_LIR_ADD,total,ca_intrinsic(c,done,XR_LIR_ARRAY_OP_LEN,XR_LIR_I64,result,1));
-    if (mode==2) total=ca_binary(c,done,XR_LIR_ADD,total,ca_value(c,done,XR_LIR_RECORD_FIELD,XR_LIR_I64,&result[3],1));
+    if (mode==2) total=ca_binary(c,done,XR_LIR_ADD,total,ca_value(c,done,XR_LIR_RECORD_FIELD,XR_LIR_I64,&result[4],1));
+    ca_effect(c,done,XR_LIR_ARRAY_DROP,result[1]);
     ca_effect(c,done,XR_LIR_ARRAY_DROP,result[0]);
     ca_return(c,done,total);
 }

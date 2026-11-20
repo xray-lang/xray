@@ -1,0 +1,46 @@
+import "./call_result_home_library" as library
+
+fn sumFresh(seed: i64) -> i64 {
+    const values = library.make(seed)
+    var sum = 0
+    var i = 0
+    while (i < len(values)) {
+        sum += values[i]
+        i += 1
+    }
+    return sum
+}
+
+fn sumBorrowed(input: Array<i64>) -> i64 {
+    const values = library.relay(input)
+    var sum = 0
+    var i = 0
+    while (i < len(values)) {
+        sum += values[i]
+        i += 1
+    }
+    return sum
+}
+
+fn main() {
+    var actual = [21, 22]
+    const alias = actual
+    print(sumBorrowed(alias))
+    print(sumFresh(31))
+    const snapshot = library.snapshot()
+    library.change()
+    actual[0] = 89
+    print(sumBorrowed(actual))
+    print(sumBorrowed(alias))
+    print(sumBorrowed(snapshot))
+    print(sumBorrowed(library.snapshot()))
+    var returned = library.relay(alias)
+    var index = 0
+    while (index < len(returned)) {
+        returned[index] = returned[index] + 2
+        index += 1
+    }
+    print(sumBorrowed(returned))
+    print(sumBorrowed(alias))
+}
+main()

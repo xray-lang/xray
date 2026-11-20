@@ -35,7 +35,7 @@ def main() -> None:
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
-             "array_stationary_cells", "panic_stationary_cell", "array_held_edits",
+             "array_stationary_cells", "panic_stationary_cell", "array_held_edits", "call_result_homes",
              "element_update", "element_update_carried",
              "panic_region_get", "panic_region_set",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
@@ -155,6 +155,16 @@ def main() -> None:
                     assert last and last[-1][1] == " = NULL;", name
                     calls += 1
             assert calls, name
+        elif name == "call_result_homes":
+            # Each reader keeps the direct call's owning result in its landing
+            # home across the loop, including when another binding shares it.
+            bodies = re.findall(r"^static int64_t xrl_f\d+\([^\n]*\) \{\n(.*?)^}",
+                                generated_text, re.MULTILINE | re.DOTALL)
+            readers = [body for body in bodies if "xrt_native_array_get(" in body]
+            assert len(readers) == 2, name
+            for body in readers:
+                assert re.search(r"xrl_f\d+\(\(XrlLanding_\d+\)", body), name
+                assert "xrl_edge_" not in body and "xrt_place_edge_transfer(" not in body, name
         elif "xrt_native_array_push_local_i64(" in generated_text:
             # Growth in place follows only a capacity window or a failed held
             # local edit, whose acquisitions were cleared before the call.
