@@ -18,7 +18,13 @@ from xraytest.artifacts import complete_native_artifacts
 def assert_fixed_update_loop(name: str, generated: str) -> None:
     loop = re.search(
         r"^(?P<label>xrl_fixed_(?P<region>\d+)_bb\d+): ;\n"
-        r"    for \(; (?P<iv>v\d+) < \(int64_t\)xrl_fixed_cache_(?P=region)\.length; \+\+(?P=iv)\) \{\n",
+        r"    \{\n        enum \{ xrl_fixed_span = 64 \};\n"
+        r"        const size_t xrl_fixed_end = xrl_fixed_cache_(?P=region)\.length;\n"
+        r"        while \(xrl_fixed_end - \(size_t\)(?P<iv>v\d+) >= xrl_fixed_span\) \{\n"
+        r"            const size_t xrl_fixed_start = \(size_t\)(?P=iv);\n"
+        r"            for \(size_t xrl_fixed_offset = 0; xrl_fixed_offset < xrl_fixed_span;"
+        r" \+\+xrl_fixed_offset\) \{\n"
+        r"                (?P=iv) = \(int64_t\)\(xrl_fixed_start \+ xrl_fixed_offset\);\n",
         generated, re.MULTILINE,
     )
     assert loop, (name, "fixed Array loop missing")
@@ -31,16 +37,25 @@ def assert_fixed_update_loop(name: str, generated: str) -> None:
     )
     assert guard, (name, "fixed Array loop has no matching entry guard")
 
-    # The numeric loop may contain nested blocks for scalar edge copies.
-    depth = 1
-    tail = generated[loop.end():]
-    for brace in re.finditer(r"[{}]", tail):
-        depth += 1 if brace[0] == "{" else -1
-        if depth == 0:
-            break
-    else:
+    # The numeric loops may contain nested blocks for scalar edge copies.
+    def body_at(start: int) -> tuple[str, int]:
+        depth = 1
+        for brace in re.finditer(r"[{}]", generated[start:]):
+            depth += 1 if brace[0] == "{" else -1
+            if depth == 0:
+                end = start + brace.start()
+                return generated[start:end], end + 1
         raise AssertionError((name, "fixed Array loop has no closing brace"))
-    body = tail[:brace.start()]
+
+    span, end = body_at(loop.end())
+    residue = re.match(
+        rf"\n            {iv} = \(int64_t\)\(xrl_fixed_start \+ xrl_fixed_span\);\n"
+        rf"        \}}\n    \}}\n    for \(; {iv} < \(int64_t\){cache}\.length; \+\+{iv}\) \{{\n",
+        generated[end:],
+    )
+    assert residue, (name, "fixed Array loop did not publish the span IV before its remainder")
+    body, _ = body_at(end + residue.end())
+    assert body.rstrip() == span.rstrip(), (name, "fixed Array loop bodies differ")
 
     # Match the two access directions on the proven backing rather than
     # counting unrelated scalar bit copies or ordinary fallback calls.

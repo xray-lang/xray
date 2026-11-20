@@ -145,33 +145,55 @@ static const XrLirInstructionView *c_fixed_array_block(LirC *c, uint32_t n,
     return &block->instructions[block->instruction_count - 1].view;
 }
 
+static void c_fixed_array_iteration(LirC *c, uint32_t label, const XrLirArraySetRegion *region,
+    const XrLirArraySetRegionStep *steps) {
+    const XrLirArraySetRegionStep *first = steps + 1;
+    for (uint32_t s = 1; s < region->step_count - 1 && c_request_poll(c); ++s) {
+        const XrLirArraySetRegionStep *step = &steps[s];
+        if (step->kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) continue;
+        const XrLirInstructionView *term = c_fixed_array_block(c, label, first, step);
+        if (!term) return;
+        uint32_t skipped = step->block == region->latch ? region->range.iv : 0;
+        c_scalar_edge_values(c, &term->edges[step->edge - 1], skipped);
+        c_text(c, "    }\n");
+        first = step + 1;
+    }
+}
+
 static void c_fixed_array_clones(LirC *c) {
     if (!c->array_region || !c->array_region->fixed_edges) return;
     c->fixed_array_loop = true;
     for (uint32_t n = 0; n < c->homes->fixed_array_update_count && c_request_poll(c); ++n) {
         const XrLirFixedArrayUpdateHome *row = &c->homes->fixed_array_updates[n];
-        const XrLirArraySetRegionStep *steps = c->homes->fixed_array_update_steps + row->region.first_step;
-        const XrLirArraySetRegionStep *header = steps + 1, *first = header;
-        uint32_t iv = row->region.range.iv, label = n + 1;
-        /* Admission checks a nonnegative IV against an I64-representable
-         * unchanged length. The exact latch is IV+1, including through phi
-         * copies. Let the host optimizer see that induction directly. */
+        const XrLirArraySetRegion *region = &row->region;
+        const XrLirArraySetRegionStep *steps = c->homes->fixed_array_update_steps + region->first_step;
+        uint32_t iv = region->range.iv, label = n + 1;
+        /* Admission bounds the IV and the unchanged length. Run the same
+         * iterations and phi copies in order inside each known-size span.
+         * A host compiler can then optimize the count without a tail inside
+         * that span. It still decides which operations can be vectorized. */
         c_format(c, "xrl_fixed_%" PRIu32 "_bb%" PRIu32 ": ;\n"
+            "    {\n"
+            "        enum { xrl_fixed_span = 64 };\n"
+            "        const size_t xrl_fixed_end = xrl_fixed_cache_%" PRIu32 ".length;\n",
+            label, region->header, label);
+        c_format(c,
+            "        while (xrl_fixed_end - (size_t)v%" PRIu32 " >= xrl_fixed_span) {\n"
+            "            const size_t xrl_fixed_start = (size_t)v%" PRIu32 ";\n", iv, iv);
+        c_format(c,
+            "            for (size_t xrl_fixed_offset = 0; xrl_fixed_offset < xrl_fixed_span; ++xrl_fixed_offset) {\n"
+            "                v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_offset);\n", iv);
+        c_fixed_array_iteration(c, label, region, steps);
+        c_format(c, "            }\n"
+            "            v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_span);\n"
+            "        }\n"
+            "    }\n"
             "    for (; v%" PRIu32 " < (int64_t)xrl_fixed_cache_%" PRIu32 ".length; ++v%" PRIu32 ") {\n",
-            label, row->region.header, iv, label, iv);
-        for (uint32_t s = 1; s < row->region.step_count - 1 && c_request_poll(c); ++s) {
-            const XrLirArraySetRegionStep *step = &steps[s];
-            if (step->kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) continue;
-            const XrLirInstructionView *term = c_fixed_array_block(c, label, first, step);
-            if (!term) break;
-            uint32_t skipped = step->block == row->region.latch ? iv : 0;
-            c_scalar_edge_values(c, &term->edges[step->edge - 1], skipped);
-            c_text(c, "    }\n");
-            first = step + 1;
-        }
+            iv, iv, label, iv);
+        c_fixed_array_iteration(c, label, region, steps);
         c_text(c, "    }\n");
         /* The exit may read values computed by the original final header. */
-        (void)c_fixed_array_block(c, label, header, header);
+        (void)c_fixed_array_block(c, label, steps + 1, steps + 1);
         c_format(c, "    xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
             "    goto xrl_fixed_exit_%" PRIu32 ";\n", label, label);
     }
