@@ -9,6 +9,7 @@
 #include "lir/xlir_builder.h"
 #include "lir/xlir_value_image.h"
 #include "runtime/native/xnative_value_image.h"
+#include "runtime/native/xnative_array_backing.h"
 #include "runtime/native/xnative_string_backing.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
@@ -68,7 +69,7 @@ static Fixture fixture_new(void) {
     XrLirType optional, fixed, tuple, optional_fixed, optional_tuple, optional_unit, optional_empty, pod, optional_pod;
     LIR(xr_lir_nullable_type(module, XR_LIR_STRING, &optional));
     char name[] = "label";
-    XrLirRecordField fields[] = {{"active",6,XR_LIR_I1, 0}, {name,5,XR_LIR_STRING, 0}, {"maybe",5,optional, 0}};
+    XrLirRecordField fields[] = {{"active",6,XR_LIR_I1, 0, 0}, {name,5,XR_LIR_STRING, 0, 0}, {"maybe",5,optional, 0, 0}};
     LIR(xr_lir_record_type(module,
         &(XrLirRecordIdentity){.module="tests.lir.value_image", .module_length=sizeof("tests.lir.value_image")-1,
             .name="ImageRecord", .name_length=sizeof("ImageRecord")-1},
@@ -78,7 +79,7 @@ static Fixture fixture_new(void) {
         &(XrLirRecordIdentity){.module="tests.lir.value_image", .module_length=sizeof("tests.lir.value_image")-1,
             .name="EmptyRecord", .name_length=sizeof("EmptyRecord")-1},
         NULL, 0, &f.empty)); LIR(xr_lir_nullable_type(module, f.empty, &optional_empty));
-    XrLirRecordField field = {"score",5,XR_LIR_I64, 0}; LIR(xr_lir_record_type(module,
+    XrLirRecordField field = {"score",5,XR_LIR_I64, 0, 0}; LIR(xr_lir_record_type(module,
         &(XrLirRecordIdentity){.module="tests.lir.value_image", .module_length=sizeof("tests.lir.value_image")-1,
             .name="PodRecord", .name_length=sizeof("PodRecord")-1},
         &field, 1, &pod));
@@ -296,7 +297,55 @@ static void class_values_follow_their_exact_owner(void) {
     CHECK(live->length == 5 && !memcmp(live->bytes,"alive",5));
     xrt_managed_drop(kept); CHECK(owner.audit.final == 1);
 }
+static void class_arrays_keep_their_exact_backing(void) {
+    const size_t offset = 0;
+    const XrtValueImageSlot field = {1,0,0,5};
+    const XrtValueImageType types[] = {
+        {.kind=XRT_VALUE_ARRAY_I64,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
+        {.kind=XRT_VALUE_RECORD,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.field_count=1},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=2}
+    };
+    const XrtValueImage image = {.types=types,.type_count=3,.slots=&field,.slot_count=1,
+        .owned_offsets=&offset,.owned_count=1,.names="items",.name_bytes=5};
+    Owner owner; owner_new(&owner,SIZE_MAX);
+    XrtValueImagePlans *bound=NULL, *different_program=NULL;
+    MANAGED(xrt_value_image_bind(owner.billing,&image,(XrtManagedLease){0},&bound));
+    MANAGED(xrt_value_image_bind(owner.billing,&image,(XrtManagedLease){0},&different_program));
+    XrtBoundClass holder={0}, other={0};
+    MANAGED(xrt_value_image_class(bound,3,&holder)); MANAGED(xrt_value_image_class(different_program,3,&other));
+    XrtBackingTypes backings={0}; XrtManagedRoot *root=NULL; XrtManagedFrame *frame=NULL;
+    MANAGED(xrt_backing_types_init(owner.billing,&backings));
+    MANAGED(xrt_managed_root_new(owner.billing,&root)); MANAGED(xrt_managed_frame_enter(root,3,&frame));
+    const int64_t data[2]={3,7}; const uint64_t unrelated[2]={3,7};
+    MANAGED(xrt_array_backing_i64_create(frame,0,&backings,data,2,2));
+    MANAGED(xrt_array_backing_u64_create(frame,1,&backings,unrelated,2,2));
+    XrtManagedHeader *array=NULL, *wrong=NULL, *instance=NULL;
+    MANAGED(xrt_managed_slot_borrow(frame,0,&array)); MANAGED(xrt_managed_slot_borrow(frame,1,&wrong));
+    XrtBillingStats before=xrt_billing_owner_stats(owner.billing);
+    CHECK(xrt_class_create(frame,2,holder.ops,&wrong)==XRT_MANAGED_ARGUMENT);
+    xrt_billing_owner_fail_after(owner.billing,0);
+    CHECK(xrt_class_create(frame,2,holder.ops,&array)==XRT_MANAGED_OOM);
+    xrt_billing_owner_fail_after(owner.billing,SIZE_MAX);
+    XrtBillingStats after=xrt_billing_owner_stats(owner.billing);
+    CHECK(after.bytes==before.bytes && after.blocks==before.blocks && xr_signed_rc_read(&array->references)==1);
+    MANAGED(xrt_managed_slot_borrow(frame,2,&instance)); CHECK(!instance);
+    MANAGED(xrt_class_create(frame,2,holder.ops,&array));
+    MANAGED(xrt_managed_slot_borrow(frame,2,&instance));
+    const XrtValuePlan *plan=NULL;
+    const void *payload=NULL;
+    CHECK(xrt_class_field_borrow(instance,other.plan,0,&plan,&payload)==XRT_MANAGED_ARGUMENT);
+    MANAGED(xrt_class_field_borrow(instance,holder.plan,0,&plan,&payload));
+    XrtManagedHeader *kept=NULL;
+    MANAGED(xrt_value_copy_empty(plan,payload,&kept)); CHECK(kept==array);
+    MANAGED(xrt_managed_root_destroy(&root)); xrt_backing_types_drop(&backings);
+    xrt_value_image_drop(&bound); xrt_value_image_drop(&different_program); owner_drop(&owner);
+    CHECK(!owner.audit.final);
+    CHECK(((const XrtArrayBacking *)kept)->length==2);
+    CHECK(!memcmp(((const XrtArrayBacking *)kept)->elements,data,sizeof(data)));
+    xrt_managed_drop(kept); CHECK(owner.audit.final==1);
+}
 int main(void) {
+    class_arrays_keep_their_exact_backing();
     copied_names_and_real_values(); failures_and_empty(); deep_single_inventory(); rejects_forged_display_closure();
     class_values_follow_their_exact_owner();
     puts("raw value images: billed ownership, copied names, exact ids, creator retirement and real inline values passed");

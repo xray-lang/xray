@@ -356,7 +356,23 @@ static void failures_and_admission(void) {
     audit.reject=false;
     XrtValueSlotSpec fields[]={{array,0,"array",5}}; size_t zero=0;
     XrtValuePlanSpec record={.kind=XRT_VALUE_RECORD,.size=8,.alignment=8,.fields=fields,.field_count=1,.owned_offsets=&zero,.owned_count=1};
+    OK(xrt_value_plan_new(f.billing,&record,&empty));
+    XrtValuePlanSpec received;
+    OK(xrt_value_plan_view(empty,&received));
+    CHECK(received.fields[0].type==array && received.owned_count==1 && received.owned_offsets[0]==0);
+    xrt_value_plan_drop(empty); empty=NULL;
+    XrtValuePlan *unadmitted=reference(&f,XRT_VALUE_ARRAY_U64);
+    fields[0].type=unadmitted;
     STATUS(xrt_value_plan_new(f.billing,&record,&empty),XRT_MANAGED_ARGUMENT); CHECK(!empty);
+    XrtValuePlanSpec tuple=record; tuple.kind=XRT_VALUE_TUPLE;
+    XrtValueSlotSpec positional={unadmitted,0,NULL,0}; tuple.fields=&positional;
+    STATUS(xrt_value_plan_new(f.billing,&tuple,&empty),XRT_MANAGED_ARGUMENT); CHECK(!empty);
+    xrt_value_plan_drop(unadmitted); fields[0].type=array; positional.type=array;
+    OK(xrt_value_plan_new(f.billing,&tuple,&empty));
+    OK(xrt_value_plan_view(empty,&received));
+    CHECK(received.fields[0].type==array && received.owned_count==1 && received.owned_offsets[0]==0);
+    xrt_value_plan_drop(empty); empty=NULL;
+    same_bill(&f,before);
     XrtValuePlanSpec nullable={.kind=XRT_VALUE_NULLABLE,.size=16,.alignment=8,.owned_offsets=&zero,.owned_count=1,
         .nullable={0,8,array}};
     STATUS(xrt_value_plan_new(f.billing,&nullable,&empty),XRT_MANAGED_ARGUMENT);

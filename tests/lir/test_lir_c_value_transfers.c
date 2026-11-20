@@ -28,8 +28,8 @@ static Fixture fixture(bool pod) {
     OK(xr_lir_module_create(NULL, &m));
     XrLirType optional = 0, record = 0;
     if (!pod) OK(xr_lir_nullable_type(m, XR_LIR_STRING, &optional));
-    XrLirRecordField fields[] = {{"first", 5, optional, 0}, {"score", 5, XR_LIR_I64, 0}, {"second", 6, optional, 0}};
-    if (pod) fields[0] = (XrLirRecordField){"score", 5, XR_LIR_I64, 0};
+    XrLirRecordField fields[] = {{"first", 5, optional, 0, 0}, {"score", 5, XR_LIR_I64, 0, 0}, {"second", 6, optional, 0, 0}};
+    if (pod) fields[0] = (XrLirRecordField){"score", 5, XR_LIR_I64, 0, 0};
     OK(xr_lir_record_type(m,
         &(XrLirRecordIdentity){.module="tests.lir.c_value_transfers",
             .module_length=sizeof("tests.lir.c_value_transfers")-1,
@@ -40,7 +40,7 @@ static Fixture fixture(bool pod) {
     if (!pod) OK(xr_lir_record_type(m,
         &(XrLirRecordIdentity){.module="tests.lir.c_value_transfers", .module_length=sizeof("tests.lir.c_value_transfers")-1,
             .name="PlainScore", .name_length=sizeof("PlainScore")-1},
-        &(XrLirRecordField){"score", 5, XR_LIR_I64, 0}, 1, &plain));
+        &(XrLirRecordField){"score", 5, XR_LIR_I64, 0, 0}, 1, &plain));
     XrLirType params[] = {record, record, XR_LIR_I1, XR_LIR_I64, XR_LIR_I64, plain};
     XrLirFunction fn = {0};
     XrLirFunctionSpec spec = {.name="transport", .name_length=9, .parameters=params, .parameter_count=pod ? 5 : 6, .result=record};

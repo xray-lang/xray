@@ -41,7 +41,7 @@ def main() -> None:
         return result
 
     for name in ("module_state_mixed", "module_state_branch", "module_state_initializers",
-                 "module_state_acyclic_class",
+                 "module_state_acyclic_class", "module_state_class_array",
                  "module_state_unpublished", "module_state_unpublished_cycle",
                  "module_state_unpublished_const"):
         source = fixtures / (name + ".xr")

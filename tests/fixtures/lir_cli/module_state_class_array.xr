@@ -1,0 +1,36 @@
+class Holder {
+    items: Array<i64>
+
+    init(items: Array<i64>) {
+        this.items = items
+    }
+}
+
+class Stack<T> {
+    private items: Array<T>
+
+    init() {
+        this.items = []
+    }
+
+    size() -> i64 {
+        return len(this.items)
+    }
+}
+
+fn readItems(holder: Holder) -> Array<i64> {
+    return holder.items
+}
+
+var input = [3, 7]
+const holder = Holder(input)
+input[0] = 30
+var snapshot = readItems(holder)
+snapshot.push(11)
+const stack = Stack<i64>()
+print(input[0])
+print(holder.items[0])
+print(len(holder.items))
+print(len(snapshot))
+print(snapshot[2])
+print(stack.size())

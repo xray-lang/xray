@@ -9,7 +9,7 @@ static void record_identity_cases(void) {
     XrLirModule *m = NULL, *copy = NULL;
     OK(xr_lir_module_create(NULL, &m)); OK(xr_lir_module_create(NULL, &copy));
     char module[] = "alpha", name[] = "Value", last[] = "z", first[] = "a";
-    XrLirRecordField fields[] = {{last,1,XR_LIR_I64,XR_LIR_RECORD_MUTABLE}, {first,1,XR_LIR_STRING,XR_LIR_RECORD_PRIVATE}};
+    XrLirRecordField fields[] = {{last,1,XR_LIR_I64,XR_LIR_RECORD_MUTABLE, 0}, {first,1,XR_LIR_STRING,XR_LIR_RECORD_PRIVATE, 0}};
     XrLirRecordArgument actual = {XR_LIR_ARRAY,XR_LIR_I64};
     XrLirRecordIdentity identity = {.module=module,.module_length=5,.name=name,.name_length=5,
         .arguments=&actual,.argument_count=1,.exported=1,.flags=XR_LIR_RECORD_MODULE_LITERAL};
@@ -40,7 +40,7 @@ static void record_identity_cases(void) {
     OK(xr_lir_module_finish(copy,NULL)); OK(xr_lir_verify(copy,NULL)); xr_lir_module_destroy(copy);
     for (unsigned conflict=0;conflict<9;++conflict) {
         OK(xr_lir_module_create(NULL,&m));
-        XrLirRecordField field={"value",5,XR_LIR_I64,0};
+        XrLirRecordField field={"value",5,XR_LIR_I64,0, 0};
         identity=(XrLirRecordIdentity){.module="test",.module_length=4,.name="Value",.name_length=5};
         OK(xr_lir_record_type(m,&identity,&field,1,&a));
         if(conflict==0) field.type=XR_LIR_STRING;
@@ -57,7 +57,7 @@ static void record_identity_cases(void) {
         xr_lir_module_destroy(m); m=NULL;
     }
     OK(xr_lir_module_create(NULL,&m));
-    XrLirRecordField duplicate[]={{"x",1,XR_LIR_I64,0},{"x",1,XR_LIR_I64,0}};
+    XrLirRecordField duplicate[]={{"x",1,XR_LIR_I64,0, 0},{"x",1,XR_LIR_I64,0, 0}};
     identity=(XrLirRecordIdentity){.module="test",.module_length=4,.name="Bad",.name_length=3};
     CHECK(xr_lir_record_type(m,&identity,duplicate,2,&a)==XR_LIR_INVALID_ARGUMENT);
     xr_lir_module_destroy(m);

@@ -15,6 +15,22 @@
 #include "base/xchecks.h"
 #include <stdalign.h>
 
+/* Builtin Array producer identities live for the process. These callbacks
+ * certify the immutable family separately from its shared physical stride. */
+static const XrtBackingArrayKind array_plan_families[] = {
+    XRT_BACKING_ARRAY_I64, XRT_BACKING_ARRAY_STRING, XRT_BACKING_ARRAY_U8, XRT_BACKING_ARRAY_U64
+};
+_Static_assert(sizeof(array_plan_families) / sizeof(*array_plan_families) == XRT_BACKING_ARRAY_COUNT,
+    "every scalar Array producer has an identity");
+static bool array_family_retain(void *family) { return family != NULL; }
+static void array_family_drop(void *family) { (void)family; }
+XR_FUNCDEF bool xrt_backing_array_matches(const XrtManagedHeader *owner, XrtBackingArrayKind family) {
+    const XrtRuntimeTypeSpec *spec = NULL;
+    return (unsigned)family < XRT_BACKING_ARRAY_COUNT &&
+        xrt_managed_producer_borrow(owner, array_family_retain, array_family_drop, &spec) == XRT_MANAGED_OK &&
+        spec->code.context == &array_plan_families[family];
+}
+
 static bool backing_types_empty(const XrtBackingTypes *types) {
     if (!types || types->string || types->map || types->set) return false;
     for (size_t i = 0; i < XRT_BACKING_ARRAY_COUNT; ++i)
@@ -49,7 +65,8 @@ XR_FUNCDEF XrtManagedStatus xrt_backing_types_init(XrtBillingOwner *billing, Xrt
         spec = (XrtRuntimeTypeSpec){.fixed_size=sizeof(XrtArrayBacking), .alignment=alignof(XrtArrayBacking),
             .capacity_offset=offsetof(XrtArrayBacking, capacity), .stride=xrt_backing_array_stride((XrtBackingArrayKind)i),
             .tail_child_offsets=i == XRT_BACKING_ARRAY_STRING ? &tail : NULL,
-            .tail_child_count=i == XRT_BACKING_ARRAY_STRING ? 1 : 0};
+            .tail_child_count=i == XRT_BACKING_ARRAY_STRING ? 1 : 0,
+            .code={(void *)&array_plan_families[i],array_family_retain,array_family_drop}};
         status = backing_bind(billing, spec, &types.arrays[i]);
     }
     if (status == XRT_MANAGED_OK) {
