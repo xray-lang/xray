@@ -266,19 +266,23 @@ static void array_region_input_equal(const XrLirModule *input, const XrLirModule
     }
 }
 static void array_region_verification_faults(unsigned shape) {
-    bool retired = shape == 1, range = shape >= 2;
+    bool retired = shape == 1, range = shape >= 2, fixed = shape == 4;
     enum ArrayRegionRangeMode range_mode = shape == 3 ? ARRAY_REGION_RANGE_READ_ONLY : ARRAY_REGION_RANGE_UNIT;
     enum ArraySetRegionMode first = retired ? ARRAY_SET_REGION_RETAIN_SOURCE : ARRAY_SET_REGION_LOCAL;
     enum ArraySetRegionMode second = retired ? ARRAY_SET_REGION_RETAIN_TARGET : ARRAY_SET_REGION_LOCAL;
-    ArraySetRegionFixture input = range ? ars_range_build(NULL, 3, range_mode) : array_set_region_build(NULL, 3, first);
-    input = range ? ars_range_build(input.module, 6, range_mode) : array_set_region_build(input.module, 6, second);
-    ArraySetRegionFixture reference = range ? ars_range_build(NULL, 3, range_mode) : array_set_region_build(NULL, 3, first);
-    reference = range ? ars_range_build(reference.module, 6, range_mode) : array_set_region_build(reference.module, 6, second);
+    ArraySetRegionFixture input = range ? ars_range_build_seeded(NULL, 3, range_mode, fixed) :
+        array_set_region_build(NULL, 3, first);
+    input = range ? ars_range_build_seeded(input.module, 6, range_mode, fixed) : array_set_region_build(input.module, 6, second);
+    ArraySetRegionFixture reference = range ? ars_range_build_seeded(NULL, 3, range_mode, fixed) :
+        array_set_region_build(NULL, 3, first);
+    reference = range ? ars_range_build_seeded(reference.module, 6, range_mode, fixed) :
+        array_set_region_build(reference.module, 6, second);
     OK(xr_lir_module_finish(input.module, NULL)); OK(xr_lir_module_finish(reference.module, NULL));
     XrLirOwnershipPlan *plan = NULL, *saved = NULL;
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=input.module}, &plan, NULL));
     OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=reference.module}, &saved, NULL));
-    CHECK(plan->array_regions.regions.count == 2 && lir_array_region_plans_equal(plan, saved));
+    CHECK((fixed ? plan->fixed_array_updates.regions.count : plan->array_regions.regions.count) == 2 &&
+        lir_array_region_plans_equal(plan, saved));
     size_t baseline = live, bytes = live_bytes;
     attempt = 0; OK(xr_lir_ownership_array_regions_verify(input.module, plan));
     size_t count = attempt; CHECK(count && live == baseline && live_bytes == bytes);
@@ -294,7 +298,8 @@ static void array_region_verification_faults(unsigned shape) {
     xr_lir_ownership_plan_destroy(plan); xr_lir_ownership_plan_destroy(saved);
     xr_lir_module_destroy(input.module); xr_lir_module_destroy(reference.module);
     CHECK(!live && !live_bytes);
-    if (range) printf("unit-forward range verification failure points: %zu\n", count);
+    if (fixed) printf("fixed Array update verification failure points: %zu\n", count);
+    else if (range) printf("unit-forward range verification failure points: %zu\n", count);
     else if (retired) printf("retired copy region verification failure points: %zu\n", count);
     else printf("array region verification failure points: %zu\n", count);
 }
@@ -334,6 +339,7 @@ int main(void) {
     array_region_verification_faults(true);
     array_region_verification_faults(2);
     array_region_verification_faults(3);
+    array_region_verification_faults(4);
     ArraySetRegionFixture ranged = ars_range_build(NULL,3,ARRAY_REGION_RANGE_UNIT);
     OK(xr_lir_module_finish(ranged.module,NULL)); sweep(ranged.module,NULL,0);
     XrLirModule *grown = NULL;
