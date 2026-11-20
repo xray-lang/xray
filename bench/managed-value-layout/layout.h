@@ -54,14 +54,29 @@ _Static_assert(offsetof(XrMvlHeader, refs) == 0 && offsetof(XrMvlHeader, flags) 
 
 typedef struct {
     XrMvlHeader header;
-    size_t length;
+    /* Preserve the measured backing size and capacity/data offsets. */
+    size_t reserved;
     size_t capacity;
     int64_t data[];
+} XrMvlArrayBacking;
+
+_Static_assert(sizeof(XrMvlArrayBacking) == 32 && offsetof(XrMvlArrayBacking, reserved) == 16 &&
+    offsetof(XrMvlArrayBacking, capacity) == 24 && offsetof(XrMvlArrayBacking, data) == 32,
+    "the inline I64 Array backing keeps its allocation extent");
+
+/* Each binding owns one backing reference and its initialized prefix length.
+ * A snapshot copies the length and retains the same backing. */
+typedef struct {
+    XrMvlArrayBacking *owner;
+    size_t length;
 } XrMvlArray;
 
-_Static_assert(sizeof(XrMvlArray) == 32 && offsetof(XrMvlArray, length) == 16 &&
-    offsetof(XrMvlArray, capacity) == 24 && offsetof(XrMvlArray, data) == 32,
-    "inline I64 Array storage matches the native backing prefix and tail offsets");
+typedef struct {
+    XrMvlStatus status;
+    XrMvlArrayBacking *owner;
+    /* COW alone leaves a previous reference for the caller to retire. */
+    XrMvlArrayBacking *previous;
+} XrMvlArrayMutation;
 
 typedef struct {
     XrMvlHeader header;
@@ -132,9 +147,12 @@ static inline void xr_mvl_string_drop(XrMvlString *string) {
         xr_mvl_string_dispose_last(string);
 }
 
-XR_FUNC XrMvlArray *xr_mvl_array_new(XrMvlDomain *domain);
-XR_FUNC XrMvlStatus xr_mvl_array_push_slow(XrMvlArray **binding, int64_t value);
-XR_FUNC XrMvlStatus xr_mvl_array_set_slow(XrMvlArray **binding, size_t index, int64_t value);
+XR_FUNC XrMvlArray xr_mvl_array_new(XrMvlDomain *domain);
+/* The caller owns the binding. Success returns the current backing, which
+ * may consume the original through resize. The caller publishes owner and
+ * length together before dropping any separate COW predecessor. */
+XR_FUNC XrMvlArrayMutation xr_mvl_array_mutate(XrMvlArrayBacking *owner, size_t length,
+    size_t index, int64_t item, bool append, bool writable);
 XR_FUNC XrMvlString *xr_mvl_string_new(XrMvlDomain *domain, const char *bytes, size_t length);
 XR_FUNC XrMvlMap *xr_mvl_map_new(XrMvlDomain *domain);
 XR_FUNC XrMvlStatus xr_mvl_map_set_slow(XrMvlMap **binding, XrMvlString *key, int64_t value);
@@ -145,21 +163,37 @@ XR_FUNC XrMvlPairObject *xr_mvl_pair_escaped(void);
 XR_FUNC void xr_mvl_pair_escape_clear(void);
 XR_FUNC bool xr_mvl_verify(void);
 
-static inline XrMvlStatus xr_mvl_array_push(XrMvlArray **binding, int64_t value) {
-    XrMvlArray *array = *binding;
-    if (xr_signed_rc_unique(&array->header.refs) && array->length < array->capacity) {
-        array->data[array->length++] = value;
-        return XR_MVL_OK;
+static inline XrMvlStatus xr_mvl_array_commit(XrMvlArray *binding, XrMvlArrayMutation mutation,
+    size_t length) {
+    if (mutation.status == XR_MVL_OK) {
+        *binding = (XrMvlArray){mutation.owner, length};
+        if (mutation.previous)
+            xr_mvl_drop(&mutation.previous->header);
     }
-    return xr_mvl_array_push_slow(binding, value);
+    return mutation.status;
 }
 
-static inline XrMvlStatus xr_mvl_array_set(XrMvlArray **binding, size_t index, int64_t value) {
-    XrMvlArray *array = *binding;
-    if (index >= array->length)
+static inline XrMvlStatus xr_mvl_array_push(XrMvlArray *binding, int64_t value) {
+    XrMvlArrayBacking *array = binding->owner;
+    size_t length = binding->length;
+    if (xr_signed_rc_unique(&array->header.refs) && length < array->capacity) {
+        array->data[length] = value;
+        binding->length = length + 1;
+        return XR_MVL_OK;
+    }
+    XrMvlArrayMutation mutation = xr_mvl_array_mutate(array, length, 0, value, true, false);
+    return xr_mvl_array_commit(binding, mutation, length + 1);
+}
+
+static inline XrMvlStatus xr_mvl_array_set(XrMvlArray *binding, size_t index, int64_t value) {
+    XrMvlArrayBacking *array = binding->owner;
+    size_t length = binding->length;
+    if (index >= length)
         return XR_MVL_BOUNDS;
-    if (!xr_signed_rc_unique(&array->header.refs))
-        return xr_mvl_array_set_slow(binding, index, value);
+    if (!xr_signed_rc_unique(&array->header.refs)) {
+        XrMvlArrayMutation mutation = xr_mvl_array_mutate(array, length, index, value, false, false);
+        return xr_mvl_array_commit(binding, mutation, length);
+    }
     array->data[index] = value;
     return XR_MVL_OK;
 }

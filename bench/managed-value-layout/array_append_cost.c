@@ -9,21 +9,21 @@
 #include "access.h"
 
 static bool append_cost(XrMvlDomain *domain, int64_t *sum) {
-    XrMvlArray *owner = xr_mvl_array_new(domain);
-    if (!owner)
+    XrMvlArray array = xr_mvl_array_new(domain);
+    if (!array.owner)
         return false;
     int64_t next = 0;
     while (next < XR_MVL_PUSH_COUNT) {
         // The only call in the loop owns real growth and sees the published length.
-        XrMvlArrayWrite write = xr_mvl_array_access_write(xr_mvl_array_access_start(owner), 0, next, true);
+        XrMvlArrayWrite write = xr_mvl_array_access_write(xr_mvl_array_access_start(array), 0, next, true);
         if (write.status != XR_MVL_OK) {
-            xr_mvl_drop(&owner->header);
+            xr_mvl_drop(&array.owner->header);
             return false;
         }
-        owner = write.access.owner;
+        array = write.access.value;
         if (write.previous)
             xr_mvl_drop(&write.previous->header);
-        size_t length = write.access.length;
+        size_t length = array.length;
         size_t room = write.access.capacity - length;
         int64_t *data = write.access.data;
         ++next;
@@ -32,21 +32,21 @@ static bool append_cost(XrMvlDomain *domain, int64_t *sum) {
         // No reads of the Array from outside this loop are possible during a segment.
         for (size_t i = 0; i < count; ++i) {
 #if ARRAY_COST_CHECK_UNIQUE
-            if (!xr_signed_rc_unique(&owner->header.refs))
+            if (!xr_signed_rc_unique(&array.owner->header.refs))
                 abort();
 #endif
             data[length + i] = next + (int64_t)i;
 #if ARRAY_COST_PUBLISH_LENGTH
-            owner->length = length + i + 1;
+            array.length = length + i + 1;
 #endif
         }
-        owner->length = length + count;
+        array.length = length + count;
         next += (int64_t)count;
     }
     *sum = 0;
-    for (size_t i = 0; i < owner->length; ++i)
-        *sum += owner->data[i];
-    xr_mvl_drop(&owner->header);
+    for (size_t i = 0; i < array.length; ++i)
+        *sum += array.owner->data[i];
+    xr_mvl_drop(&array.owner->header);
     return true;
 }
 

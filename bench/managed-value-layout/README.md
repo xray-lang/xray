@@ -56,6 +56,12 @@ returns descriptor values. It never receives or caches the caller's binding
 address. Ordinary and prepared Array writes use the same COW/growth kernel and
 the same 16-byte-header object; the descriptor owns no reference or second payload.
 
+The Array value contains its backing reference and the initialized prefix
+length. Ordinary push still checks physical uniqueness and capacity for
+each element, then advances the value's length after the store. The cold
+kernel takes owner and old length by value so the caller's length can stay in
+a register. A snapshot retains the backing and copies the value's length.
+
 This is a trusted caller-owned, alias-free window, not permission inferred from
 RC==1. Retain, alias observation, rebinding and observing calls close the window
 before executing. Close by discarding the descriptor, evaluate RHS effects, read
@@ -90,12 +96,12 @@ is used, and this introduces no product access authority or new runtime carrier.
 capacity-bounded hot segment. Its safety argument is limited to the existing
 canonical i64 layout and the same trusted owned, nonobserving window:
 
-* Each Array occupies one allocation. Its fixed length field and the bounded
-  scalar tail are disjoint subobjects. First-write preparation supplies a live
-  tail with sufficient capacity before a hot block.
+* Each backing occupies one allocation. The caller's value length and the
+  backing's bounded scalar tail are disjoint objects. First-write preparation
+  supplies a live tail with sufficient capacity before a hot block.
 * Within that block, element storage is accessed only through `block_data` and
-  canonical length only through `block_owner`. Conditions and indices use scalar
-  locals. No original-owner, descriptor, alias, callback or RC access occurs there.
+  value length only through `length`. No original-owner, descriptor, alias,
+  callback or RC access occurs there.
 * Each successful store is followed by the canonical length assignment in source.
   There is no valid observer inside this exclusive window. Compiler coalescing
   under the as-if rule does not add a permission to observe intermediate states.
@@ -137,7 +143,9 @@ tagged value, VM frame, or per-element admission traversal.
 These static descriptors do not implement dynamic allocator or Instance lifetime
 leases; a static billing Domain must outlive every object that refers to it.
 
-* Array<i64>: header, `size_t length`, `size_t capacity`, trailing `i64` elements.
+* Array<i64> value: backing pointer and `size_t length`. Backing: header,
+  reserved word, `size_t capacity`, trailing `i64` elements. The reserved word
+  preserves the control's allocation size and data offset.
 * String: header, byte length, cached byte hash, trailing UTF-8 bytes and NUL.
   The stored length, rather than the NUL, defines equality.
 * Record: inline `{i64 x,y}` payload; escaping storage adds a header around that
