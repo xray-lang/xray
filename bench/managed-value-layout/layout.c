@@ -37,16 +37,13 @@ static void mvl_deallocate(XrMvlDomain *domain, void *memory, size_t bytes) {
 }
 
 static void *mvl_resize(XrMvlDomain *domain, void *memory, size_t old_bytes, size_t bytes) {
-    assert(bytes && old_bytes <= domain->live_bytes);
+    assert(memory && bytes && old_bytes <= domain->live_bytes);
     if (domain->fail_after == 0 || bytes > SIZE_MAX - (domain->live_bytes - old_bytes))
         return NULL;
     if (domain->fail_after != SIZE_MAX)
         --domain->fail_after;
-    bool had_memory = memory != NULL;
     void *replacement = xr_realloc(memory, bytes);
     if (replacement) {
-        if (!had_memory)
-            ++domain->live_blocks;
         domain->live_bytes = domain->live_bytes - old_bytes + bytes;
         ++domain->allocations;
     }
@@ -72,10 +69,16 @@ XR_FUNCDEF void xr_mvl_string_dispose_last(XrMvlString *string) {
     mvl_string_destroy(&string->header);
 }
 
+static const size_t mvl_array_maximum = (SIZE_MAX - sizeof(XrMvlArrayBacking)) / sizeof(int64_t);
+
+static size_t mvl_array_extent(size_t capacity) {
+    assert(capacity <= mvl_array_maximum);
+    return sizeof(XrMvlArrayBacking) + capacity * sizeof(int64_t);
+}
+
 static void mvl_array_destroy(XrMvlHeader *header) {
-    XrMvlArray *array = (XrMvlArray *) header;
-    mvl_deallocate(header->ops->domain, array->data, array->capacity * sizeof(*array->data));
-    mvl_header_free(header, sizeof(*array));
+    XrMvlArrayBacking *array = (XrMvlArrayBacking *) header;
+    mvl_header_free(header, mvl_array_extent(array->capacity));
 }
 
 static void mvl_map_destroy(XrMvlHeader *header) {
@@ -99,90 +102,77 @@ XR_FUNCDEF void xr_mvl_domain_init(XrMvlDomain *domain) {
         .pair_ops={mvl_pair_destroy, "{x:i64,y:i64}", domain}};
 }
 
-XR_FUNCDEF XrMvlArray *xr_mvl_array_new(XrMvlDomain *domain) {
-    XrMvlArray *array = mvl_allocate(domain, sizeof(*array));
+static XrMvlArrayBacking *mvl_array_create(XrMvlDomain *domain, size_t capacity) {
+    assert(capacity <= mvl_array_maximum);
+    XrMvlArrayBacking *array = mvl_allocate(domain, mvl_array_extent(capacity));
     if (!array)
         return NULL;
     mvl_header_init(&array->header, &domain->array_ops);
-    array->data = NULL;
-    array->length = array->capacity = 0;
+    array->reserved = 0;
+    array->capacity = capacity;
     return array;
 }
 
-static XrMvlArray *mvl_array_copy(const XrMvlArray *source, size_t capacity) {
-    assert(capacity >= source->length && capacity <= SIZE_MAX / sizeof(int64_t));
-    XrMvlArray *copy = xr_mvl_array_new(source->header.ops->domain);
+XR_FUNCDEF XrMvlArray xr_mvl_array_new(XrMvlDomain *domain) {
+    return (XrMvlArray){mvl_array_create(domain, 0), 0};
+}
+
+static XrMvlArrayBacking *mvl_array_copy(const XrMvlArrayBacking *source, size_t length,
+    size_t capacity) {
+    assert(capacity >= length && capacity <= mvl_array_maximum);
+    XrMvlArrayBacking *copy = mvl_array_create(source->header.ops->domain, capacity);
     if (!copy)
         return NULL;
-    if (capacity) {
-        copy->data = mvl_allocate(copy->header.ops->domain, capacity * sizeof(*copy->data));
-        if (!copy->data) {
-            xr_mvl_drop(&copy->header);
-            return NULL;
-        }
-        copy->capacity = capacity;
-    }
-    if (source->length)
-        memcpy(copy->data, source->data, source->length * sizeof(*copy->data));
-    copy->length = source->length;
+    if (length)
+        memcpy(copy->data, source->data, length * sizeof(*copy->data));
     return copy;
+}
+
+XR_FUNCDEF XrMvlArrayMutation xr_mvl_array_mutate(XrMvlArrayBacking *array, size_t length,
+    size_t index, int64_t value, bool append, bool writable) {
+    if (!array || length > array->capacity)
+        return (XrMvlArrayMutation){XR_MVL_INVALID_OWNER, NULL, NULL};
+    if (!append && index >= length)
+        return (XrMvlArrayMutation){XR_MVL_BOUNDS, NULL, NULL};
+    size_t capacity = array->capacity;
+    const XrMvlArrayMutation oom = {XR_MVL_OOM, NULL, NULL};
+    if (append && (length >= mvl_array_maximum ||
+        !xr_mvl_capacity(capacity, length + 1, sizeof(int64_t), &capacity) || capacity > mvl_array_maximum))
+        return oom;
+    bool grows = capacity != array->capacity;
+    bool unique = (writable && !grows) || xr_signed_rc_unique(&array->header.refs);
+    XrMvlArrayBacking *target = array, *previous = NULL;
+    if (!unique || (grows && array->header.flags)) {
+        target = mvl_array_copy(array, length, capacity);
+        if (!target)
+            return oom;
+        previous = array;
+    } else if (grows) {
+        /* The caller supplies an exclusive window. The built-in resize may
+         * consume the old allocation, including its header and cached data. */
+        XrMvlDomain *domain = array->header.ops->domain;
+        size_t old_bytes = mvl_array_extent(array->capacity);
+        target = mvl_resize(domain, array, old_bytes, mvl_array_extent(capacity));
+        if (!target)
+            return oom;
+        target->capacity = capacity;
+    }
+    if (append)
+        index = length;
+    target->data[index] = value;
+    return (XrMvlArrayMutation){XR_MVL_OK, target, previous};
 }
 
 XR_FUNCDEF XrMvlArrayWrite xr_mvl_array_access_write(XrMvlArrayAccess access,
     size_t index, int64_t value, bool append) {
-    XrMvlArray *array = access.owner;
-    XrMvlArrayWrite result = {XR_MVL_INVALID_OWNER, xr_mvl_array_access_start(array), NULL};
-    if (!array)
-        return result;
-    if (!append && index >= array->length) {
-        result.status = XR_MVL_BOUNDS;
-        return result;
-    }
-    size_t capacity = array->capacity;
-    result.status = XR_MVL_OOM;
-    if (append && (array->length == SIZE_MAX ||
-        !xr_mvl_capacity(capacity, array->length + 1, sizeof(int64_t), &capacity)))
-        return result;
-    XrMvlArray *target = array;
-    if (!access.writable && !xr_signed_rc_unique(&array->header.refs)) {
-        target = mvl_array_copy(array, capacity);
-        if (!target)
-            return result;
-        result.previous = array;
-    } else if (capacity != array->capacity) {
-        int64_t *data = mvl_resize(array->header.ops->domain, array->data,
-                                  array->capacity * sizeof(*data), capacity * sizeof(*data));
-        if (!data)
-            return result;
-        array->data = data;
-        array->capacity = capacity;
-    }
-    if (append)
-        index = target->length;
-    target->data[index] = value;
-    if (append)
-        ++target->length;
-    result.access = (XrMvlArrayAccess) {target, target->data, target->length, target->capacity, true};
-    result.status = XR_MVL_OK;
-    return result;
-}
-
-XR_FUNCDEF XrMvlStatus xr_mvl_array_push_slow(XrMvlArray **binding, int64_t value) {
-    XrMvlArrayWrite result = xr_mvl_array_access_write(xr_mvl_array_access_start(*binding), 0, value, true);
-    if (result.status == XR_MVL_OK) {
-        *binding = result.access.owner;
-        if (result.previous) xr_mvl_drop(&result.previous->header);
-    }
-    return result.status;
-}
-
-XR_FUNCDEF XrMvlStatus xr_mvl_array_set_slow(XrMvlArray **binding, size_t index, int64_t value) {
-    XrMvlArrayWrite result = xr_mvl_array_access_write(xr_mvl_array_access_start(*binding), index, value, false);
-    if (result.status == XR_MVL_OK) {
-        *binding = result.access.owner;
-        if (result.previous) xr_mvl_drop(&result.previous->header);
-    }
-    return result.status;
+    size_t length = access.value.length;
+    XrMvlArrayMutation mutation = xr_mvl_array_mutate(access.value.owner, length, index, value,
+        append, access.writable);
+    if (mutation.status != XR_MVL_OK)
+        return (XrMvlArrayWrite){mutation.status, xr_mvl_array_access_start(access.value), NULL};
+    XrMvlArrayBacking *owner = mutation.owner;
+    XrMvlArrayAccess updated = {{owner, length + append}, owner->data, owner->capacity, true};
+    return (XrMvlArrayWrite){XR_MVL_OK, updated, mutation.previous};
 }
 
 XR_FUNCDEF XrMvlString *xr_mvl_string_new(XrMvlDomain *domain, const char *bytes, size_t length) {

@@ -22,51 +22,101 @@
     } \
 } while (0)
 
-static bool mvl_verify_array(void) {
+static bool mvl_verify_array_unique(void) {
     static XrMvlDomain domain;
     xr_mvl_domain_init(&domain);
-    XrMvlArray *array = xr_mvl_array_new(&domain), *snapshot = NULL;
+    XrMvlArray array = xr_mvl_array_new(&domain);
     bool ok = true;
-    MVL_REQUIRE(array);
-    for (int64_t i = 0; i < 4; ++i)
+    MVL_REQUIRE(array.owner);
+    for (int64_t i = 0; i < 3; ++i) {
         MVL_REQUIRE(xr_mvl_array_push(&array, i) == XR_MVL_OK);
-    XrMvlArray *before = array;
+        MVL_REQUIRE(array.length == (size_t)i + 1 && array.owner->data[i] == i);
+    }
+    XrMvlArrayBacking *before = array.owner;
     size_t bytes = domain.live_bytes, blocks = domain.live_blocks;
+    MVL_REQUIRE(bytes == sizeof(*array.owner) + 4 * sizeof(int64_t) && blocks == 1);
     domain.fail_after = 0;
-    MVL_REQUIRE(xr_mvl_array_push(&array, 4) == XR_MVL_OOM);
-    MVL_REQUIRE(array == before && array->length == 4 && array->capacity == 4);
+    atomic_store_explicit(&array.owner->header.refs, -1, memory_order_release);
+    MVL_REQUIRE(xr_mvl_array_push(&array, 3) == XR_MVL_OK);
+    MVL_REQUIRE(array.owner == before && array.length == 4 && array.owner->data[3] == 3 &&
+        xr_signed_rc_read(&array.owner->header.refs) == 1);
     MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
-    MVL_REQUIRE(xr_mvl_array_set(&array, 4, 99) == XR_MVL_BOUNDS);
-    MVL_REQUIRE(xr_mvl_retain(&array->header));
-    snapshot = array;
-    for (size_t budget = 0; budget < 2; ++budget) {
-        domain.fail_after = budget;
+    for (unsigned negative = 0; negative < 2; ++negative) {
+        if (negative)
+            atomic_store_explicit(&array.owner->header.refs, -1, memory_order_release);
         MVL_REQUIRE(xr_mvl_array_push(&array, 4) == XR_MVL_OOM);
-        MVL_REQUIRE(array == before && xr_signed_rc_read(&snapshot->header.refs) == 2);
+        MVL_REQUIRE(array.owner == before && array.length == 4 && array.owner->capacity == 4 &&
+            xr_signed_rc_read(&array.owner->header.refs) == 1);
+        for (int64_t i = 0; i < 4; ++i)
+            MVL_REQUIRE(array.owner->data[i] == i);
         MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
     }
+    MVL_REQUIRE(xr_mvl_array_set(&array, 4, 99) == XR_MVL_BOUNDS);
     domain.fail_after = SIZE_MAX;
     MVL_REQUIRE(xr_mvl_array_push(&array, 4) == XR_MVL_OK);
-    MVL_REQUIRE(array != snapshot && array->length == 5 && snapshot->length == 4);
-    MVL_REQUIRE(array->data[4] == 4 && snapshot->data[3] == 3 &&
-        xr_signed_rc_read(&snapshot->header.refs) == 1);
-    xr_mvl_drop(&snapshot->header);
-    snapshot = NULL;
-    MVL_REQUIRE(xr_mvl_retain(&array->header));
-    snapshot = array;
-    bytes = domain.live_bytes;
-    domain.fail_after = 1;
-    MVL_REQUIRE(xr_mvl_array_set(&array, 0, 99) == XR_MVL_OOM);
-    MVL_REQUIRE(array == snapshot && array->data[0] == 0 && domain.live_bytes == bytes);
-    domain.fail_after = SIZE_MAX;
-    MVL_REQUIRE(xr_mvl_array_set(&array, 0, 99) == XR_MVL_OK);
-    MVL_REQUIRE(array != snapshot && array->data[0] == 99 && snapshot->data[0] == 0);
+    MVL_REQUIRE(array.length == 5 && array.owner->capacity == 8 && array.owner->data[4] == 4);
+    MVL_REQUIRE(domain.live_bytes == bytes + 4 * sizeof(int64_t) && domain.live_blocks == blocks);
 cleanup:
-    if (array)
-        xr_mvl_drop(&array->header);
-    if (snapshot)
-        xr_mvl_drop(&snapshot->header);
+    if (array.owner)
+        xr_mvl_drop(&array.owner->header);
     return ok && domain.live_blocks == 0 && domain.live_bytes == 0;
+}
+
+static bool mvl_verify_array_cow(size_t budget, bool negative, bool append, size_t *sites) {
+    static XrMvlDomain domain;
+    xr_mvl_domain_init(&domain);
+    XrMvlArray array = xr_mvl_array_new(&domain), snapshot = {0};
+    bool ok = true;
+    MVL_REQUIRE(array.owner);
+    for (int64_t i = 0; i < 4; ++i)
+        MVL_REQUIRE(xr_mvl_array_push(&array, i) == XR_MVL_OK);
+    MVL_REQUIRE(xr_mvl_retain(&array.owner->header));
+    snapshot = array;
+    if (negative)
+        atomic_store_explicit(&array.owner->header.refs, -2, memory_order_release);
+    size_t bytes = domain.live_bytes, blocks = domain.live_blocks, allocations = domain.allocations;
+    domain.fail_after = budget;
+    XrMvlStatus status = append ? xr_mvl_array_push(&array, 4) : xr_mvl_array_set(&array, 0, 99);
+    if (budget == SIZE_MAX) {
+        MVL_REQUIRE(status == XR_MVL_OK);
+        *sites = domain.allocations - allocations;
+        MVL_REQUIRE(*sites == 1 && array.owner != snapshot.owner && xr_signed_rc_read(&array.owner->header.refs) == 1);
+        MVL_REQUIRE(xr_signed_rc_read(&snapshot.owner->header.refs) == (negative ? -1 : 1));
+        MVL_REQUIRE(array.length == (append ? 5u : 4u) && array.owner->capacity == (append ? 8u : 4u));
+        MVL_REQUIRE(array.owner->data[append ? 4 : 0] == (append ? 4 : 99));
+        MVL_REQUIRE(domain.live_bytes == bytes + sizeof(*array.owner) + array.owner->capacity * sizeof(int64_t) &&
+            domain.live_blocks == blocks + 1);
+    } else {
+        MVL_REQUIRE(status == XR_MVL_OOM && array.owner == snapshot.owner && array.length == snapshot.length);
+        MVL_REQUIRE(xr_signed_rc_read(&snapshot.owner->header.refs) == (negative ? -2 : 2));
+        MVL_REQUIRE(domain.live_bytes == bytes && domain.live_blocks == blocks);
+    }
+    MVL_REQUIRE(snapshot.length == 4 && snapshot.owner->capacity == 4);
+    for (int64_t i = 0; i < 4; ++i)
+        MVL_REQUIRE(snapshot.owner->data[i] == i && array.owner->data[i] ==
+            (budget == SIZE_MAX && !append && i == 0 ? 99 : i));
+cleanup:
+    if (array.owner)
+        xr_mvl_drop(&array.owner->header);
+    if (snapshot.owner)
+        xr_mvl_drop(&snapshot.owner->header);
+    return ok && domain.live_blocks == 0 && domain.live_bytes == 0;
+}
+
+static bool mvl_verify_array(void) {
+    if (!mvl_verify_array_unique())
+        return false;
+    for (unsigned negative = 0; negative < 2; ++negative) {
+        for (unsigned append = 0; append < 2; ++append) {
+            size_t sites = 0;
+            if (!mvl_verify_array_cow(SIZE_MAX, negative != 0, append != 0, &sites))
+                return false;
+            for (size_t budget = 0; budget < sites; ++budget)
+                if (!mvl_verify_array_cow(budget, negative != 0, append != 0, &sites))
+                    return false;
+        }
+    }
+    return true;
 }
 
 static bool mvl_verify_map(void) {
