@@ -13,6 +13,7 @@
 #include "xnative_value_plan.h"
 #include "xnative_managed_root.h"
 #include "xnative_backing_types.h"
+#include "xnative_class_array.h"
 #include "xray_native_array_slice.h"
 #include "xray_native_function.h"
 #include "base/xchecks.h"
@@ -117,6 +118,8 @@ static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *s
         if (!field.type || (record ? !record_field(field.type) || named != (field.name_length != 0) :
             !capture_type(field.type))) return false;
         const XrtValuePlanSpec *type = &field.type->view;
+        if (field.flags && (!named || field.flags != XRT_VALUE_FIELD_MUTABLE || type->kind != XRT_VALUE_ARRAY_I64))
+            return false;
         if (type->alignment > alignment) alignment = type->alignment;
         if (end > SIZE_MAX - (type->alignment - 1)) return false;
         size_t offset = (end + type->alignment - 1) & ~(type->alignment - 1);
@@ -166,7 +169,7 @@ static bool class_payload_valid(const XrtValuePlanSpec *spec) {
     if (base->field_count > payload->field_count) return false;
     for (size_t i = 0; i < base->field_count; ++i) {
         XrtValueSlotSpec inherited = base->fields[i], concrete = payload->fields[i];
-        if (inherited.type != concrete.type || inherited.offset != concrete.offset ||
+        if (inherited.type != concrete.type || inherited.offset != concrete.offset || inherited.flags != concrete.flags ||
             inherited.name_length != concrete.name_length ||
             memcmp(inherited.name, concrete.name, inherited.name_length)) return false;
     }
@@ -333,17 +336,18 @@ static void plan_lease_drop(void *plan) { xrt_value_plan_drop(plan); }
 XR_FUNCDEF XrtManagedLease xrt_value_plan_lease(XrtValuePlan *plan) {
     return plan ? (XrtManagedLease){plan, plan_lease_retain, plan_lease_drop} : (XrtManagedLease){0};
 }
-XR_FUNCDEF XrtManagedStatus xrt_inline_payload_backing_bind(XrtBillingOwner *billing,
-    const XrtValuePlanSpec *payload, size_t *shifted_offsets, XrtManagedLease code, XrtManagedOps **empty) {
+static XrtManagedStatus inline_payload_backing_bind(XrtBillingOwner *billing,
+    const XrtValuePlanSpec *payload, size_t trailing, size_t *shifted_offsets, XrtManagedLease code, XrtManagedOps **empty) {
     if (!billing || !payload || !empty || *empty || !payload->alignment ||
         sizeof(XrtManagedHeader) % payload->alignment ||
         (payload->owned_count && (!payload->owned_offsets || !shifted_offsets)))
         return XRT_MANAGED_ARGUMENT;
-    if (payload->size > SIZE_MAX - sizeof(XrtManagedHeader)) return XRT_MANAGED_OVERFLOW;
+    size_t bytes = sizeof(XrtManagedHeader);
+    if (!extent_add(&bytes, payload->size, 1) || !extent_add(&bytes, trailing, 1)) return XRT_MANAGED_OVERFLOW;
     for (size_t i = 0; i < payload->owned_count; ++i)
         shifted_offsets[i] = sizeof(XrtManagedHeader) + payload->owned_offsets[i];
     size_t alignment = payload->alignment > alignof(XrtManagedHeader) ? payload->alignment : alignof(XrtManagedHeader);
-    XrtRuntimeTypeSpec physical = {.fixed_size=sizeof(XrtManagedHeader) + payload->size, .alignment=alignment,
+    XrtRuntimeTypeSpec physical = {.fixed_size=bytes, .alignment=alignment,
         .capacity_offset=SIZE_MAX, .child_offsets=payload->owned_count ? shifted_offsets : NULL,
         .child_count=payload->owned_count, .code=code};
     XrtRuntimeTypePlan *received = NULL;
@@ -352,12 +356,21 @@ XR_FUNCDEF XrtManagedStatus xrt_inline_payload_backing_bind(XrtBillingOwner *bil
     xrt_runtime_type_plan_drop(received);
     return status;
 }
+XR_FUNCDEF XrtManagedStatus xrt_inline_payload_backing_bind(XrtBillingOwner *billing,
+    const XrtValuePlanSpec *payload, size_t *shifted_offsets, XrtManagedLease code, XrtManagedOps **empty) {
+    return inline_payload_backing_bind(billing, payload, 0, shifted_offsets, code, empty);
+}
 static XrtManagedHeader *payload_child(const void *payload, size_t offset);
 
 static bool class_plan_retain(void *plan) {
     return plan && ((XrtValuePlan *)plan)->view.kind == XRT_VALUE_CLASS && xrt_value_plan_retain(plan);
 }
 static void class_plan_drop(void *plan) { xrt_value_plan_drop(plan); }
+static bool class_has_guards(const XrtValuePlanSpec *payload) {
+    for (size_t i = 0; i < payload->field_count; ++i)
+        if (payload->fields[i].flags & XRT_VALUE_FIELD_MUTABLE) return true;
+    return false;
+}
 XR_FUNCDEF XrtManagedStatus xrt_class_backing_bind(XrtBillingOwner *billing,
     const XrtValuePlan *class_plan, XrtManagedOps **empty) {
     if (!class_plan || class_plan->view.kind != XRT_VALUE_CLASS) return XRT_MANAGED_ARGUMENT;
@@ -372,7 +385,10 @@ XR_FUNCDEF XrtManagedStatus xrt_class_backing_bind(XrtBillingOwner *billing,
         if (status != XRT_MANAGED_OK) return status;
         offsets = memory;
     }
-    status = xrt_inline_payload_backing_bind(billing, payload, offsets,
+    size_t guards = 0;
+    if (class_has_guards(payload) && !extent_add(&guards, payload->field_count, sizeof(bool)))
+        status = XRT_MANAGED_OVERFLOW;
+    if (status == XRT_MANAGED_OK) status = inline_payload_backing_bind(billing, payload, guards, offsets,
         (XrtManagedLease){(void *)class_plan, class_plan_retain, class_plan_drop}, empty);
     if (bytes) xrt_managed_metadata_free(billing, offsets, bytes);
     return status;
@@ -383,6 +399,11 @@ typedef struct ClassConstruction {
 } ClassConstruction;
 static XrtManagedStatus class_initialize(XrtManagedHeader *pending, void *context) {
     const ClassConstruction *construction = context;
+    const XrtValuePlanSpec *payload = &construction->payload->view;
+    if (class_has_guards(payload)) {
+        bool *guards = (bool *)((unsigned char *)(pending + 1) + payload->size);
+        for (size_t i = 0; i < payload->field_count; ++i) guards[i] = false;
+    }
     return xrt_value_copy_empty(construction->payload, construction->row, pending + 1);
 }
 static void class_finish(void *context) {
@@ -468,8 +489,29 @@ XR_FUNCDEF XrtManagedStatus xrt_class_field_borrow(const XrtManagedHeader *owner
         !xrt_class_backing_matches(owner, expected)) return XRT_MANAGED_ARGUMENT;
     const XrtValuePlanSpec *row = &expected->view.element->view;
     if (index >= row->field_count) return XRT_MANAGED_BOUNDS;
+    if (row->fields[index].flags & XRT_VALUE_FIELD_MUTABLE) return XRT_MANAGED_ARGUMENT;
     *empty_type = row->fields[index].type;
     *empty_payload = (const unsigned char *)(owner + 1) + row->fields[index].offset;
+    return XRT_MANAGED_OK;
+}
+static XrtManagedStatus class_array_preflight(void *context, XrtPlaceAction action) {
+    (void)action;
+    XrtManagedHeader *const *field = context;
+    return xrt_backing_array_matches(*field, XRT_BACKING_ARRAY_I64) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+}
+/* The admitted writable class is executor-confined. Its live receiver owns
+ * both the field and its guard, including when another binding shares it. */
+XR_FUNCDEF XrtManagedStatus xrt_class_array_binding(const XrtClassFieldAccess *access, XrtExternalOwner *output) {
+    if (!access || !output || !xrt_class_backing_matches(access->instance,access->plan)) return XRT_MANAGED_ARGUMENT;
+    const XrtValuePlanSpec *row = &access->plan->view.element->view;
+    if (access->index >= row->field_count) return XRT_MANAGED_BOUNDS;
+    const XrtValueSlotSpec *field = &row->fields[access->index];
+    if (!(field->flags & XRT_VALUE_FIELD_MUTABLE)) return XRT_MANAGED_ARGUMENT;
+    unsigned char *payload = (unsigned char *)(access->instance + 1);
+    XrtManagedHeader **slot = (XrtManagedHeader **)(payload + field->offset);
+    bool *guards = (bool *)(payload + row->size);
+    *output = (XrtExternalOwner){.owner=slot, .busy=&guards[access->index],
+        .preflight=class_array_preflight, .context=slot};
     return XRT_MANAGED_OK;
 }
 static bool payload_valid(const XrtValuePlan *plan, const void *payload) {

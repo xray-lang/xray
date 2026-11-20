@@ -94,6 +94,8 @@ XR_LIR_OP(RECORD_NEW, "record_new", -1)
 XR_LIR_OP(RECORD_FIELD, "record_field", 1)
 XR_LIR_OP(CLASS_NEW, "class_new", -1)
 XR_LIR_OP(CLASS_FIELD, "class_field", 1)
+XR_LIR_OP(CLASS_ARRAY_WRITE, "class_array_write", 2)
+XR_LIR_OP(CLASS_ARRAY_PUSH, "class_array_push", 2)
 
 /* Exact Set<i64> roles, independent of Map intrinsic identity. */
 XR_LIR_OP(SET_NEW, "set_new", 0)

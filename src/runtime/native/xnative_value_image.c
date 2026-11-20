@@ -70,7 +70,7 @@ static bool image_shape(const XrtValueImage *image, bool *has_backings) {
         return false;
     for (uint32_t i = 0; i < image->slot_count; ++i) {
         const XrtValueImageSlot *slot = &image->slots[i];
-        if (!slot->type || slot->type > image->type_count ||
+        if (!slot->type || slot->type > image->type_count || (slot->flags & ~(uint32_t)XRT_VALUE_FIELD_MUTABLE) ||
             !image_name(image, slot->name_offset, slot->name_length)) return false;
     }
     for (uint32_t i = 0; i < image->parameter_count; ++i) {
@@ -94,7 +94,7 @@ static bool image_shape(const XrtValueImage *image, bool *has_backings) {
         for (uint32_t n = 0; n < type->field_count; ++n)
             if (image->slots[type->first_field + n].type > i) return false;
         for (uint32_t n = 0; n < type->capture_count; ++n)
-            if (image->slots[type->first_capture + n].type > i) return false;
+            if (image->slots[type->first_capture + n].type > i || image->slots[type->first_capture + n].flags) return false;
         for (uint32_t n = 0; n < type->parameter_count; ++n)
             if (image->parameters[type->first_parameter + n].type > i) return false;
         if ((type->flags & XRT_VALUE_INLINE_DISPLAY) && !xrt_value_image_inline_display_shape(image, i))
@@ -130,7 +130,7 @@ static void image_slots(XrtValueImagePlans *set, const XrtValueImage *image,
     for (uint32_t i = 0; i < count; ++i) {
         const XrtValueImageSlot *slot = &image->slots[first + i];
         output[i] = (XrtValueSlotSpec){image_dependency(set, slot->type), slot->offset,
-            image_name_bytes(image, slot->name_offset, slot->name_length), slot->name_length};
+            image_name_bytes(image, slot->name_offset, slot->name_length), slot->name_length, slot->flags};
     }
 }
 static XrtValuePlanSpec image_plan(XrtValueImagePlans *set, const XrtValueImage *image,

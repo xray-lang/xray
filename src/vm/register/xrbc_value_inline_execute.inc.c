@@ -32,25 +32,49 @@ static XrtManagedStatus rbc_value_inline_extract(const XrRbcModule *module,XrRbc
 static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     bool class_new=access.operation==XR_RBC_VALUE_CLASS_NEW, class_field=access.operation==XR_RBC_VALUE_CLASS_FIELD;
+    bool class_push=access.operation==XR_RBC_VALUE_CLASS_ARRAY_PUSH, class_write=access.operation==XR_RBC_VALUE_CLASS_ARRAY_WRITE;
     bool create=class_new || access.operation==XR_RBC_VALUE_RECORD_NEW ||
         access.operation==XR_RBC_VALUE_NULLABLE_NONE || access.operation==XR_RBC_VALUE_NULLABLE_SOME;
     const XrLirValueHome *home=rbc_value_home(activation->code,create ? access.result : access.source);
     const XrtValueImageType *type=&activation->image->types[home->type-1];
     XrtBoundClass binding={0};
-    if (class_new || class_field) {
+    if (class_new || class_field || class_push || class_write) {
         XrtManagedStatus status=rbc_value_plan_set(module,stack);
         if (status==XRT_MANAGED_OK) status=stack->layout ? xrt_module_layout_class(stack->layout,home->type,&binding) :
             xrt_value_image_class(stack->values->plans,home->type,&binding);
         if (status!=XRT_MANAGED_OK) return status;
         type=&activation->image->types[type->element-1];
-        if (class_field) {
+        if (!class_new) {
             const XrtManagedHeader *instance=NULL;
             status=rbc_value_borrow_header(rbc_value_origin(activation,access.source),home,&instance);
-            const XrtValuePlan *field_plan=NULL; const void *field=NULL;
-            if (status==XRT_MANAGED_OK) status=xrt_class_field_borrow(instance,binding.plan,access.index,&field_plan,&field);
             if (status!=XRT_MANAGED_OK) return status;
-            uint32_t field_type=activation->image->slots[type->first_field+access.index].type;
-            return rbc_value_inline_extract(module,stack,activation,access.result,field_type,field);
+            const XrtClassFieldAccess field_access={(XrtManagedHeader *)instance,binding.plan,access.index};
+            if (class_push) {
+                const XrtBackingTypes *types=NULL;
+                XrRbcRegister *item=rbc_value_register(stack,activation,access.other);
+                if (!item) return XRT_MANAGED_ARGUMENT;
+                status=xrt_native_values_backings(xrt_value_root_current(source),&types);
+                const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window-1];
+                const XrtArrayUpdate update={XRT_ARRAY_UPDATE_PUSH,0,{XRT_BACKING_ARRAY_I64,{.i64=(int64_t)item->bits}}};
+                return status==XRT_MANAGED_OK ? xrt_class_array_field_update(&field_access,
+                    activation->frame,workspace->first_owner,types,&update) : status;
+            }
+            if (class_write) {
+                const XrLirValueHome *incoming_home=rbc_value_home(activation->code,access.other);
+                const XrtManagedHeader *incoming=NULL;
+                status=rbc_value_borrow_header(rbc_value_origin(activation,access.other),incoming_home,&incoming);
+                return status==XRT_MANAGED_OK ? xrt_class_array_field_replace(&field_access,incoming) : status;
+            }
+            XrtValueImageSlot slot=activation->image->slots[type->first_field+access.index];
+            if (slot.flags & XRT_VALUE_FIELD_MUTABLE) {
+                const XrLirValueHome *destination=rbc_value_home(activation->code,access.result);
+                status=xrt_class_array_field_copy(&field_access,activation->frame,destination->temporary_first_owner);
+                return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
+            }
+            const XrtValuePlan *field_plan=NULL; const void *field=NULL;
+            status=xrt_class_field_borrow(instance,binding.plan,access.index,&field_plan,&field);
+            if (status!=XRT_MANAGED_OK) return status;
+            return rbc_value_inline_extract(module,stack,activation,access.result,slot.type,field);
         }
     }
     if (access.operation==XR_RBC_VALUE_NULLABLE_NONE)

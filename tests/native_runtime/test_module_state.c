@@ -30,7 +30,7 @@ typedef struct MaybeString { uint8_t tag; XrtManagedHeader *value; } MaybeString
 typedef struct Pair { XrtManagedHeader *left; MaybeString right; int64_t score; } Pair;
 _Static_assert(sizeof(Pair) == 32 && offsetof(Pair, right.value) == 16, "typed C uses the shared inline layout");
 static const size_t owned[] = {0,0,0,0,0,0,8,0,16,8,24};
-static const XrtValueImageSlot fields[] = {{1,0,0,4},{10,8,4,5},{2,24,9,5},{2,0,0,0},{2,8,0,0}};
+static const XrtValueImageSlot fields[] = {{1,0,0,0,4},{10,0,8,4,5},{2,0,24,9,5},{2,0,0,0,0},{2,0,8,0,0}};
 static const XrtValueImageType types[] = {
     {.kind=XRT_VALUE_STRING,.size=8,.alignment=8,.owned_count=1},
     {.kind=XRT_VALUE_I64,.size=8,.alignment=8},
@@ -348,7 +348,7 @@ static void array_state_guards(void) {
 static void inline_array_state(void) {
     Audit audit = {0};
     XrtBillingOwner *billing = billing_new(&audit, SIZE_MAX);
-    const XrtValueImageSlot row_fields[] = {{1,0,0,0},{2,0,0,0}};
+    const XrtValueImageSlot row_fields[] = {{.type=1},{.type=2}};
     XrtValueImageType rows[] = {
         {.kind=XRT_VALUE_I64,.size=8,.alignment=8},
         {.kind=XRT_VALUE_F64,.size=8,.alignment=8},
@@ -542,7 +542,7 @@ static void function_state(void) {
     *code = (FunctionCode){.references=1,.retirements=&code_retirements,.entries={{7},{8}},.literal="literal"};
     XrtManagedLease lease = {code,function_code_retain,function_code_drop};
     const size_t leaves[] = {offsetof(XrtFunction,owner),offsetof(XrtFunction,owner),0};
-    const XrtValueImageSlot capture = {1,0,0,4};
+    const XrtValueImageSlot capture = {.type=1,.name_length=4};
     const XrtValueImageType rows[] = {
         {.kind=XRT_VALUE_I64,.size=8,.alignment=8},
         {.kind=XRT_VALUE_FUNCTION,.size=sizeof(XrtFunction),.alignment=alignof(XrtFunction),.owned_count=1,.result=1},

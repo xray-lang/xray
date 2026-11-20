@@ -106,7 +106,7 @@ static bool image_slots(ImageBuilder *builder, const XrtValueSlotSpec *slots, si
     for (size_t i = 0; i < count; ++i) {
         uint32_t id;
         if (!image_child(builder, slots[i].type, parent, &id)) return false;
-        builder->slots[builder->used.slots++] = (XrtValueImageSlot){id, slots[i].offset,
+        builder->slots[builder->used.slots++] = (XrtValueImageSlot){id, slots[i].flags, slots[i].offset,
             image_name(builder, slots[i].name, slots[i].name_length), slots[i].name_length};
     }
     return true;

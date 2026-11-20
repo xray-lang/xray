@@ -273,6 +273,15 @@ static bool lir_home_binding_fact(LirHomeBuilder *b, XrLirOwnershipFact fact) {
     return true;
 }
 static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
+    if (fact.kind == XR_LIR_OWNERSHIP_CLASS_ARRAY_PUSH) {
+        XrtValuePlanSpec spec;
+        uint32_t ordinal;
+        if (!lir_home_spec(b,(XrLirValueLayoutKey){fact.type,fact.array_element,0},&spec,&ordinal)) return false;
+        XrLirHomeWorkspace workspace = {.block=fact.block,.instruction=fact.instruction,.type=ordinal+1,
+            .kind=XR_LIR_HOME_WORKSPACE_CLASS_ARRAY_PUSH,.value=fact.value};
+        return lir_home_reserve(b,&spec,&workspace.offset,&workspace.first_owner) &&
+            lir_home_append(b,&b->workspaces,&workspace);
+    }
     bool array = fact.kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION &&
         (fact.array_operation == XR_LIR_ARRAY_OP_SET || fact.array_operation == XR_LIR_ARRAY_OP_PUSH);
     bool map = fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION &&

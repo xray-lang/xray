@@ -22,6 +22,7 @@ typedef struct XrtValueSlotSpec {
     size_t offset;
     const char *name;
     size_t name_length;
+    uint32_t flags;
 } XrtValueSlotSpec;
 typedef struct XrtValueParameterSpec {
     const XrtValuePlan *type;

@@ -13,9 +13,32 @@
 static bool c_record_point(const XrLirInstructionView *v) {
     return v->op == XR_LIR_RECORD_NEW || v->op == XR_LIR_RECORD_FIELD ||
         v->op == XR_LIR_CLASS_NEW || v->op == XR_LIR_CLASS_FIELD ||
+        v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
 }
+static void c_class_array_field(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    bool read = v->op == XR_LIR_CLASS_FIELD;
+    bool push = v->op == XR_LIR_CLASS_ARRAY_PUSH;
+    const XrLirValueHome *object = &c->homes->values[v->operands[0]];
+    const XrLirHomeWorkspace *workspace = push ? c_array_workspace(c) : NULL;
+    if (push && !workspace) return;
+    XR_CHECK(!push || (workspace->kind == XR_LIR_HOME_WORKSPACE_CLASS_ARRAY_PUSH && workspace->value == v->operands[0]),
+        "verified Class Array push has its own concrete replacement slot");
+    if (read || push) c_values_ensure(c,source);
+    c_format(c,"    xrt_native_class_array_field_%s(&(XrtNativeClassField){",read ? "copy" : push ? "push" : "replace");
+    c_value(c,v->operands[0]);
+    c_format(c,", &xrl_value_image, UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu64 ")}", object->type, v->bits);
+    if (read) c_format(c,", xrl_frame, %zu", c->homes->values[v->result].temporary_first_owner);
+    if (push) c_format(c,", xrl_frame, %zu", workspace->first_owner);
+    if (!read) { c_text(c,", "); c_value(c,v->operands[1]); }
+    c_format(c,", UINT32_C(%" PRIu32 "));\n",source);
+    if (read) c_values_publish_leaf(c,v->result,source);
+}
 static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH) {
+        c_class_array_field(c,v,source);
+        return;
+    }
     uint32_t destination = v->op == XR_LIR_VALUE_DROP ? v->operands[0] : v->result;
     bool owned = c->homes && c->homes->values[destination].owner_count;
     if (v->op == XR_LIR_VALUE_DROP) {
@@ -46,8 +69,15 @@ static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_text(c, "    }\n"); return;
     }
     if (v->op == XR_LIR_CLASS_FIELD) {
-        if (owned) c_values_ensure(c, source);
         const XrLirValueHome *object = &c->homes->values[v->operands[0]];
+        const XrtValueImage *image = xr_lir_value_image_view(c->value_image);
+        const XrtValueImageType *class_type = &image->types[object->type-1];
+        const XrtValueImageType *row = &image->types[class_type->element-1];
+        if (image->slots[row->first_field+v->bits].flags & XRT_VALUE_FIELD_MUTABLE) {
+            c_class_array_field(c,v,source);
+            return;
+        }
+        if (owned) c_values_ensure(c, source);
         c_text(c, "    { const void *field = xrt_native_class_field("); c_value(c, v->operands[0]);
         c_format(c, ", &xrl_value_image, UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu64 "), UINT32_C(%" PRIu32 "));\n",
             object->type, v->bits, source);

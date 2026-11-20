@@ -43,6 +43,17 @@ XRAY_API void xrt_native_class_create(XrtManagedFrame *, size_t slot,
     const XrtValueImage *, uint32_t type, const void *row, uint32_t source_id);
 XRAY_API const void *xrt_native_class_field(const XrtManagedHeader *, const XrtValueImage *,
     uint32_t type, uint32_t field, uint32_t source_id);
+typedef struct XrtNativeClassField {
+    XrtManagedHeader *instance;
+    const XrtValueImage *image;
+    uint32_t type, field;
+} XrtNativeClassField;
+XRAY_API void xrt_native_class_array_field_copy(const XrtNativeClassField *,
+    XrtManagedFrame *, size_t destination, uint32_t source_id);
+XRAY_API void xrt_native_class_array_field_replace(const XrtNativeClassField *,
+    const XrtManagedHeader *, uint32_t source_id);
+XRAY_API void xrt_native_class_array_field_push(const XrtNativeClassField *,
+    XrtManagedFrame *, size_t workspace, int64_t item, uint32_t source_id);
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

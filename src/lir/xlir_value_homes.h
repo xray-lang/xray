@@ -120,7 +120,8 @@ typedef enum XrLirHomeWorkspaceKind {
     XR_LIR_HOME_WORKSPACE_VIEW_BORROW_STAGE,
     /* A READ Set formal has natural Header bytes and no owning Place. Its
      * selected-edge COPY pins one Header here before the complete edge MOVE. */
-    XR_LIR_HOME_WORKSPACE_HEADER_BORROW_STAGE
+    XR_LIR_HOME_WORKSPACE_HEADER_BORROW_STAGE,
+    XR_LIR_HOME_WORKSPACE_CLASS_ARRAY_PUSH
 } XrLirHomeWorkspaceKind;
 typedef struct XrLirHomeWorkspace {
     uint32_t block, instruction, type;
@@ -136,7 +137,8 @@ typedef struct XrLirHomeWorkspace {
      * a borrowed String/Map/Set formal copied into this true-empty stage. Its
      * registered owner is distinct from the actual destination; a single
      * replacement MOVEs it after retain/adopt without fabricating a formal
-     * source Place. Selected-edge temporary storage keeps its separate role. */
+     * source Place. CLASS_ARRAY_PUSH names the actual Class receiver here.
+     * Selected-edge temporary storage keeps its separate role. */
     uint32_t value;
     size_t temporary_offset, temporary_first_owner;
 } XrLirHomeWorkspace;
