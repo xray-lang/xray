@@ -342,11 +342,11 @@ static void ars_fixed_update_preparations(void) {
                 update.exit_block == c.exit.id && update.exit_edge == (n ? 1u : 2u) &&
                 update.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET && update.primary_block == c.body[0].id &&
                 update.range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN && !update.owner_home.kind);
-            XrLirArraySetRegionStep entry, exit;
+            XrLirArraySetRegionStep entry, departure;
             OK(xr_lir_ownership_fixed_array_update_step_at(plan, update.first_step, &entry));
-            OK(xr_lir_ownership_fixed_array_update_step_at(plan, update.first_step + update.step_count - 1, &exit));
+            OK(xr_lir_ownership_fixed_array_update_step_at(plan, update.first_step + update.step_count - 1, &departure));
             CHECK(entry.kind == XR_LIR_ARRAY_SET_REGION_ENTRY_MOVE && entry.target == update.canonical_value &&
-                exit.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE && exit.edge == update.exit_edge);
+                departure.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE && departure.edge == update.exit_edge);
         }
         xr_lir_ownership_plan_destroy(plan);
     }
