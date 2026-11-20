@@ -252,8 +252,8 @@ class ProductionBuildPreflightTest(unittest.TestCase):
                 self.write_cache(overrides)
                 self.assertTrue(runner.production_build_identity_errors(self.build))
 
-    def test_t2_and_t3_refuse_before_manifest_build_or_ctest(self):
-        for tier in ("t2", "t3"):
+    def test_production_profiles_refuse_before_manifest_build_or_ctest(self):
+        for tier in ("array-loop", "t2", "t3"):
             with self.subTest(tier=tier), ExitStack() as stack:
                 stack.enter_context(mock.patch.dict(
                     runner.os.environ, {"XR_BUILD_DIR": str(self.build)}, clear=True))
@@ -274,7 +274,7 @@ class ProductionBuildPreflightTest(unittest.TestCase):
                 execute.assert_not_called()
 
     def test_canonical_and_product_tiers_reject_fast_configuration(self):
-        for tier in ("canonical", "t2", "t3"):
+        for tier in ("array-loop", "canonical", "t2", "t3"):
             with self.subTest(tier=tier), ExitStack() as stack:
                 stack.enter_context(mock.patch.dict(
                     runner.os.environ, {"XR_FAST": "1"}, clear=True))
@@ -299,6 +299,26 @@ class AutoRoutingTest(unittest.TestCase):
     def test_owned_test_infrastructure_uses_script_only_profile(self):
         self.assert_route("infra", "scripts/t.py",
                           "tests/lib/tests/test_t_runner.py")
+
+    def test_fixed_array_loop_paths_use_the_exact_profile(self):
+        self.assert_route("array-loop", r"src\lir\xlir_array_set_region.inc.c",
+                          "src/lir/xlir_c_fixed_array_update.inc.c",
+                          "tests/fixtures/lir_cli/array_lower/fixed_update_carried.out",
+                          "README.md")
+
+    def test_fixed_array_loop_mixed_changes_keep_the_broad_profile(self):
+        for path in ("src/lir/xlir_c.c", "include/xray_native_array_local.h",
+                     "tests/cli/run_lir_array_native.py", "CMakeLists.txt",
+                     "tests/fixtures/lir_cli/array_lower/values.out", "unknown.py"):
+            with self.subTest(path=path):
+                self.assert_route("t2", "src/lir/xlir_array_set_region.inc.c", path)
+
+    def test_failed_git_query_does_not_fall_back_to_a_clean_tree(self):
+        error = SimpleNamespace(ok=False, combined_text=lambda: "Git failed")
+        with mock.patch.object(runner.proc, "run", return_value=error), \
+                mock.patch.object(runner.sanitizer, "activate_windows_msvc_environment") as setup:
+            self.assertEqual(runner._run_main(["t.py", "auto"]), 1)
+            setup.assert_not_called()
 
     def test_pure_h2_program_vm_aot_verifier_and_source_paths_use_aggregate(self):
         paths = (
