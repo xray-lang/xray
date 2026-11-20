@@ -1,4 +1,4 @@
-"""Test portable wrap arithmetic in one archived fixed-span Array loop."""
+"""Measure fixed-span boundary control with the same packed Array update."""
 
 import hashlib
 import json
@@ -15,12 +15,14 @@ RESULTS = Path('probe-results')
 EXPECTED = b'-742713184288245760\n'
 SPAN_HEADER = b'xrl_fixed_1_bb7: ;\n'
 SPAN_TAIL = b'    for (; v11 < (int64_t)xrl_fixed_cache_1.length; ++v11) {'
-FORMULAS = {
-    'unsigned-mul': ('bits * UINT64_C(3) + UINT64_C(1)', '226fd3fe00dc486589428d4ec2a19fbe65f20b998380ce34c4178e7090927d97'),
-    'shift-add': ('(bits << 1) + bits + UINT64_C(1)', 'a35939267babb33284320522a718108d4e66ccced4f7d153c31af90a12ac5490'),
-    'odd-add': ('((bits << 1) | UINT64_C(1)) + bits', 'a70fc044bc4d5e21ebcff020beeda63447ae0d0d6062688ff669d24cbec9d52d'),
-    'odd-sub': ('((bits << 2) | UINT64_C(1)) - bits', 'ee0f1a458a465bfa203a71ab368334714f6fc8c2e4b226a3f54e31098eb07b2d'),
+FORMULA = '((bits << 1) | UINT64_C(1)) + bits'
+ORIGINAL_SPAN = b'enum { xrl_fixed_span = 64 };'
+WIDE_SPAN = b'enum { xrl_fixed_span = 512 };'
+SPAN_HASHES = {
+    'odd-add': 'a70fc044bc4d5e21ebcff020beeda63447ae0d0d6062688ff669d24cbec9d52d',
+    'odd-add-span-512': 'acf67011e5371a193aeca1d460087f989c3ebdd381c3b68d9f00f2dd6eb7be11',
 }
+
 
 
 def digest(data):
@@ -78,6 +80,28 @@ def vector_report(command, data, name, source):
     return focused
 
 
+def span_variants(original):
+    fixed = replace_span_arithmetic(original, FORMULA)
+    if fixed.count(ORIGINAL_SPAN) != 1:
+        raise ValueError('Missing the known fixed span')
+    variants = {'odd-add': fixed, 'odd-add-span-512': fixed.replace(ORIGINAL_SPAN, WIDE_SPAN)}
+    for name, data in variants.items():
+        if digest(data) != SPAN_HASHES[name]:
+            raise ValueError(f'Span source differs from the reviewed variant: {name}')
+    return variants
+
+
+def packed_loop(assembly):
+    lines = assembly.splitlines()
+    for index, line in enumerate(lines):
+        if line.split()[:2] == ['psllq', '$1,']:
+            core = [item.strip() for item in lines[index - 3:index + 6]]
+            operators = [item.split()[0] for item in core if item]
+            if 'por' in operators and 'paddq' in operators:
+                return {'instructions': core, 'operators': operators}
+    return None
+
+
 def compile_case(name, data, library):
     source = RESULTS / f'{name}.c'
     executable = RESULTS / name
@@ -93,8 +117,10 @@ def compile_case(name, data, library):
         subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=90)
     assembly = subprocess.check_output(['objdump', '-d', str(executable)], timeout=20)
     (RESULTS / f'{name}.asm').write_bytes(assembly)
+    report_assembly = (RESULTS / f'{name}.report.s').read_text(encoding='utf-8')
     return {'command': command, 'sourceSha256': digest(data),
-            'binarySha256': digest(executable.read_bytes()), 'focusedVectorReport': focused}
+            'binarySha256': digest(executable.read_bytes()), 'focusedVectorReport': focused,
+            'packedLoop': packed_loop(report_assembly)}
 
 
 def child_usage():
@@ -134,7 +160,7 @@ def measure(names):
         for metric in ('wallSeconds', 'cpuSeconds'):
             samples = [row[name][metric] for row in rounds]
             summary = {'median': statistics.median(samples)}
-            for control in ('base', 'unsigned-mul', 'reference'):
+            for control in ('odd-add', 'reference'):
                 ratios = [row[name][metric] / row[control][metric] for row in rounds]
                 summary[control] = {'median': statistics.median(ratios),
                                     'min': min(ratios), 'max': max(ratios)}
@@ -149,12 +175,7 @@ def main():
     library_sha = '981ec28dd48ecb12ebbff1a0deac0a5bb659634d11802075bd58365f80ff7f48'
     library = ARCHIVE / 'libraries/libxray_native_runtime.a'
     archived('libraries/libxray_native_runtime.a', library_sha)
-    variants = {'base': original}
-    for name, (formula, expected) in FORMULAS.items():
-        data = replace_span_arithmetic(original, formula)
-        if digest(data) != expected:
-            raise ValueError(f'Archived source rewrite differs from the reviewed variant: {name}')
-        variants[name] = data
+    variants = span_variants(original)
     variants['reference'] = reference
     identities = {name: compile_case(name, data, library) for name, data in variants.items()}
     allowed_cpus = sorted(os.sched_getaffinity(0))
@@ -163,14 +184,22 @@ def main():
               'archiveRun': 44726072579, 'librarySha256': library_sha,
               'compiler': subprocess.check_output(['cc', '--version'], text=True, timeout=10),
               'binaries': identities, 'availableCpus': allowed_cpus, 'pinnedCpu': pinned_cpu,
-              'diagnosticCommit': os.environ['GITHUB_SHA'], 'formulas': FORMULAS}
+              'diagnosticCommit': os.environ['GITHUB_SHA']}
+    narrow = identities['odd-add']['packedLoop']
+    wide = identities['odd-add-span-512']['packedLoop']
+    record['samePackedOpcodes'] = bool(narrow and wide and narrow['operators'] == wide['operators'])
+    record['modeledBoundaryCounts'] = {
+        'elements': 4096, 'outerRepetitions': 20000, 'packedIterations': 40960000,
+        'odd-add': 1280000, 'odd-add-span-512': 160000,
+    }
     (RESULTS / 'cpuinfo.txt').write_bytes(Path('/proc/cpuinfo').read_bytes())
     record['unpinned'] = measure(list(variants))
     os.sched_setaffinity(0, {pinned_cpu})
     record['pinned'] = measure(list(variants))
     (RESULTS / 'result.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({
-        'focusedVectorReport': {name: info['focusedVectorReport'] for name, info in identities.items()},
+        'samePackedOpcodes': record['samePackedOpcodes'],
+        'packedLoops': {name: info['packedLoop'] for name, info in identities.items()},
         'statistics': {key: record[key]['statistics'] for key in ('unpinned', 'pinned')},
     }, indent=2))
 
