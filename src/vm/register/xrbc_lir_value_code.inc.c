@@ -179,6 +179,17 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     }
     return true;
 }
+static bool rbc_lir_fixed_array_edge(RbcLirCompiler *c, uint32_t ordinal, bool after_copies) {
+    if (!c->fixed_array_blocks) return true;
+    RbcLirFixedArrayEdge edge = c->fixed_array_blocks[c->diagnostic->block - 1].edges[ordinal - 1];
+    if (!edge.region || (edge.kind == XR_LIR_ARRAY_REGION_EDGE_LATCH) != after_copies) return true;
+    /* The marker only changes the trusted executor's borrow state. Raw code
+     * sees the empty ordinary Edge, and the actual selected copies stay intact. */
+    c->fixed_array_marker = edge;
+    bool emitted = rbc_lir_value_append(c, (XrRbcValueAccess){.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX});
+    c->fixed_array_marker = (RbcLirFixedArrayEdge){0};
+    return emitted;
+}
 static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
     XrRbcValueAccess access = {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX};
     if (c->value_edges) access.index = c->value_edges[((size_t)c->diagnostic->block - 1) * 2 + ordinal - 1];

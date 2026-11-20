@@ -237,7 +237,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     /* A borrowed raw description can still use the ordinary typed receiver.
      * Only the exact immutable executable owner supplies the closed window. */
     size_t regions=xr_rbc_module_code_owner(module) && code->array_region_runtime ?
-        code->array_regions->region_count : 0;
+        rbc_value_legacy_array_region_count(code) + code->homes->fixed_array_update_count : 0;
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     if (!rbc_value_capacities(code,image,&leaves,&rows,&snapshots) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
@@ -1294,6 +1294,11 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         stack->frames[stack->depth-1].pc=pc+1;
         return XR_RBC_OK;
     }
+    /* A fixed region keeps its borrow only through the admitted identity
+     * pair. If ordinary binding work remains, close the window first. */
+    if (activation->active_array_region &&
+        (access.operation==XR_RBC_VALUE_BINDING_NEW || access.operation==XR_RBC_VALUE_BINDING_READ))
+        rbc_value_array_region_forget(activation,activation->active_array_region,RBC_ARRAY_REGION_BYPASS);
     if (access.operation==XR_RBC_VALUE_CALL || access.operation==XR_RBC_VALUE_FUNCTION_CALL)
         return rbc_value_call(module,stack,activation,access,pc,source);
     if (access.operation==XR_RBC_VALUE_RETURN) return rbc_value_return(module,stack,activation,access,source);

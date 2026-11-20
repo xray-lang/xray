@@ -17,8 +17,11 @@ static XrLirBlock rbc_region_block(CArrayFixture *c,XrLirFunction function) {
 static void rbc_region_parameters(CArrayFixture *c,XrLirBlock block,XrLirValue values[4]) {
     for (uint32_t n=0;n<4;++n) OK(xr_lir_block_parameter(c->module,block,n,&values[n]));
 }
-static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned loops,unsigned failure,bool observer,bool readonly) {
+typedef enum RbcRegionMode { RBC_REGION_NORMAL, RBC_REGION_READ_ONLY, RBC_REGION_FIXED, RBC_REGION_FIXED_FALSE } RbcRegionMode;
+static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned loops,unsigned failure,bool observer,RbcRegionMode mode) {
     CArrayFixture c={.element=XR_LIR_I64}; OK(xr_lir_array_module_create(NULL,&c.module));
+    bool readonly=mode==RBC_REGION_READ_ONLY, fixed=mode==RBC_REGION_FIXED || mode==RBC_REGION_FIXED_FALSE;
+    bool reverse=mode==RBC_REGION_FIXED_FALSE;
     XrLirFunction helper={0};
     if (observer) {
         helper=test_function(c.module,"observer",NULL,0,XR_LIR_UNIT);
@@ -30,20 +33,28 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
     XrLirValue result={0};
     for (unsigned loop=0;loop<loops;++loop) {
         XrLirBlock header=rbc_region_block(&c,*root),body=rbc_region_block(&c,*root),exit_block=rbc_region_block(&c,*root);
-        XrLirValue seed=ca_constant(&c,current,7),seeds[]={seed,seed,seed},values[]={
-            ca_intrinsic(&c,current,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,seeds,readonly ? 3 : 1),ca_constant(&c,current,0),
+        XrLirValue seed=ca_constant(&c,current,7),seeds[]={seed,seed,seed,seed};
+        CHECK(!fixed || trips<=sizeof(seeds)/sizeof(*seeds));
+        XrLirValue values[]={
+            ca_intrinsic(&c,current,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,seeds,fixed ? trips : readonly ? 3 : 1),
+            ca_constant(&c,current,fixed && failure ? -1 : 0),
             ca_constant(&c,current,11),ca_constant(&c,current,22)};
+        /* A live snapshot requires the first ordinary update to detach the
+         * owner. Later iterations may borrow the newly unique backing. */
+        XrLirValue snapshot={0};
+        if (fixed) snapshot=ca_value(&c,current,XR_LIR_ARRAY_RETAIN,XR_LIR_ARRAY,values,1);
         OK(xr_lir_set_terminator(c.module,current,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
             .edge_count=1,.edges={{header,values,4}}}));
         rbc_region_parameters(&c,header,values);
         XrLirValue length=ca_intrinsic(&c,header,XR_LIR_ARRAY_OP_LEN,XR_LIR_I64,values,1);
-        XrLirValue limit=readonly ? length : ca_constant(&c,header,(int64_t)trips),compare[]={values[1],limit};
+        XrLirValue limit=readonly || fixed ? length : ca_constant(&c,header,(int64_t)trips),compare[]={values[1],limit};
         XrLirValue condition={0}; OK(xr_lir_emit_value(c.module,header,&(XrLirInstruction){.op=XR_LIR_ICMP,
-            .type=XR_LIR_I1,.predicate=XR_LIR_LT,.operands=compare,.operand_count=2},&condition));
+            .type=XR_LIR_I1,.predicate=reverse ? XR_LIR_GE : XR_LIR_LT,.operands=compare,.operand_count=2},&condition));
         OK(xr_lir_set_terminator(c.module,header,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
-            .operands=&condition,.operand_count=1,.edge_count=2,.edges={{body,values,4},{exit_block,values,4}}}));
+            .operands=&condition,.operand_count=1,.edge_count=2,
+            .edges={{reverse ? exit_block : body,values,4},{reverse ? body : exit_block,values,4}}}));
         rbc_region_parameters(&c,body,values);
-        XrLirValue zero=ca_constant(&c,body,0),get[]={values[0],failure==1 || readonly ? values[1] : zero};
+        XrLirValue zero=ca_constant(&c,body,0),get[]={values[0],failure==1 || readonly || fixed ? values[1] : zero};
         XrLirValue item=ca_intrinsic(&c,body,XR_LIR_ARRAY_OP_GET,XR_LIR_I64,get,2);
         item=ca_binary(&c,body,XR_LIR_ADD,item,ca_constant(&c,body,1));
         if (!readonly) {
@@ -51,7 +62,7 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
         ca_effect(&c,body,XR_LIR_ARRAY_DROP,values[0]);
         if (observer) OK(xr_lir_emit_effect(c.module,body,&(XrLirInstruction){.op=XR_LIR_CALL,
             .type=XR_LIR_UNIT,.callee=helper}));
-        XrLirValue set[]={cell,failure==2 ? values[1] : zero,item};
+        XrLirValue set[]={cell,failure==2 || fixed ? values[1] : zero,item};
         (void)ca_intrinsic(&c,body,XR_LIR_ARRAY_OP_SET,XR_LIR_UNIT,set,3);
         values[0]=ca_value(&c,body,XR_LIR_CELL_READ,XR_LIR_ARRAY,&cell,1); ca_effect(&c,body,XR_LIR_ARRAY_CELL_DROP,cell);
         }
@@ -60,7 +71,16 @@ static XrLirModule *rbc_region_input(XrLirFunction *root,unsigned trips,unsigned
         OK(xr_lir_set_terminator(c.module,body,&(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
             .edge_count=1,.edges={{header,swap,4}}}));
         rbc_region_parameters(&c,exit_block,values); XrLirValue at[]={values[0],ca_constant(&c,exit_block,0)};
-        result=ca_intrinsic(&c,exit_block,XR_LIR_ARRAY_OP_GET,XR_LIR_I64,at,2); ca_effect(&c,exit_block,XR_LIR_ARRAY_DROP,values[0]);
+        result=ca_intrinsic(&c,exit_block,fixed && !trips ? XR_LIR_ARRAY_OP_LEN : XR_LIR_ARRAY_OP_GET,
+            XR_LIR_I64,at,fixed && !trips ? 1 : 2);
+        ca_effect(&c,exit_block,XR_LIR_ARRAY_DROP,values[0]);
+        if (fixed) {
+            at[0]=snapshot;
+            XrLirValue original=ca_intrinsic(&c,exit_block,trips ? XR_LIR_ARRAY_OP_GET : XR_LIR_ARRAY_OP_LEN,
+                XR_LIR_I64,at,trips ? 2 : 1);
+            result=ca_binary(&c,exit_block,XR_LIR_ADD,result,original);
+            ca_effect(&c,exit_block,XR_LIR_ARRAY_DROP,snapshot);
+        }
         result=ca_binary(&c,exit_block,XR_LIR_ADD,result,ca_binary(&c,exit_block,XR_LIR_MUL,values[2],ca_constant(&c,exit_block,100)));
         result=ca_binary(&c,exit_block,XR_LIR_ADD,result,values[3]); current=exit_block;
     }
@@ -122,8 +142,46 @@ static RbcRegionResult rbc_region_run_with_args(const XrRbcModule *module,XrtLoc
 static RbcRegionResult rbc_region_run(const XrRbcModule *module,XrtLocationOwner *locations) {
     return rbc_region_run_with_args(module,locations,NULL,0);
 }
+static void rbc_fixed_region_case(unsigned trips, unsigned failure, RbcRegionMode mode) {
+    XrLirFunction root={0};
+    XrLirModule *input=rbc_region_input(&root,trips,1,failure,false,mode);
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(input);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
+    CHECK(code && !code->array_regions && code->array_region_runtime && code->homes->fixed_array_update_count==1);
+    CHECK(code->homes->fixed_array_updates[0].body_edge==(mode==RBC_REGION_FIXED_FALSE ? 2u : 1u));
+    uint32_t markers[XR_LIR_ARRAY_REGION_EDGE_EXIT+1]={0};
+    for (size_t n=0;n<code->access_count;++n) {
+        const XrRbcArrayRegionAccess *role=&code->array_region_accesses[n];
+        if (!role->fixed_edge) continue;
+        CHECK(role->fixed && role->region==1 && role->fixed_edge<=XR_LIR_ARRAY_REGION_EDGE_EXIT);
+        const XrRbcValueAccess *access=&code->accesses[n];
+        CHECK(access->operation==XR_RBC_VALUE_EDGE && access->index==UINT32_MAX && !access->count);
+        ++markers[role->fixed_edge];
+    }
+    for (size_t n=1;n<sizeof(markers)/sizeof(*markers);++n) CHECK(markers[n]==1);
+    size_t expected=!failure && trips>1;
+    region_begin_attempts=region_begin_successes=0; region_force_bypass=false;
+    RbcRegionResult actual=rbc_region_run(module,program->locations);
+    CHECK(region_begin_attempts==expected && region_begin_successes==expected);
+    region_begin_attempts=region_begin_successes=0; region_force_bypass=true;
+    RbcRegionResult ordinary=rbc_region_run(module,program->locations);
+    CHECK(region_begin_attempts==expected && !region_begin_successes && actual.status==ordinary.status &&
+        actual.bits==ordinary.bits && actual.failure==ordinary.failure && actual.source==ordinary.source);
+    if (failure) CHECK(actual.status==XR_RBC_VALUE_FAILURE && actual.failure==XR_XIR_VALUE_BOUNDS);
+    else CHECK(actual.status==XR_RBC_OK && actual.bits==(trips%2 ? 2211u : 1122u)+(trips ? 15u : 0u));
+    XrRbcFunction physical=module->functions[0];
+    XrRbcModule raw=*module; raw.functions=&physical;
+    CHECK(!xr_rbc_module_code_owner(&raw));
+    region_begin_attempts=region_begin_successes=0; region_force_bypass=false;
+    CHECK(rbc_region_run(&raw,program->locations).status==XR_RBC_INVALID);
+    CHECK(!region_begin_attempts && !region_begin_successes);
+    xr_rbc_program_destroy(program);
+}
 static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool bypass,bool observer) {
-    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,trips,loops,failure,observer,false);
+    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,trips,loops,failure,observer,RBC_REGION_NORMAL);
     XrRbcProgram *program=NULL; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
     XrRbcModule module=*xr_rbc_program_view(program); const XrRbcValueCode *code=xr_rbc_module_value_code(&module,0);
     CHECK(code && (observer ? !code->array_regions : code->array_regions && code->array_regions->region_count==loops));
@@ -181,7 +239,7 @@ static void rbc_region_case(unsigned trips,unsigned loops,unsigned failure,bool 
     CHECK(!tracked_live);
 }
 static void rbc_region_role_fallbacks(void) {
-    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,2,0,false,false); XrRbcProgram *program=NULL;
+    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,2,0,false,RBC_REGION_NORMAL); XrRbcProgram *program=NULL;
     CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
     const XrRbcModule *module=xr_rbc_program_view(program);
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,0); const XrLirValueHomes *homes=code->homes;
@@ -225,7 +283,7 @@ static void rbc_region_role_fallbacks(void) {
     xr_lir_module_destroy(input); xr_rbc_program_destroy(program); CHECK(!tracked_live);
 }
 static void rbc_region_failures(unsigned loops) {
-    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,loops,0,false,false); XrRbcProgram *program=NULL;
+    XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,4,loops,0,false,RBC_REGION_NORMAL); XrRbcProgram *program=NULL;
     attempts=0; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK); size_t sites=attempts;
     const XrRbcValueCode *code=xr_rbc_module_value_code(xr_rbc_program_view(program),0);
     CHECK(code && code->array_region_accesses && (loops==1 || code->access_count>16));
@@ -431,7 +489,7 @@ static void rbc_array_region_cases(void) {
     rbc_read_fold_cases(true,RBC_READ_FOLD_LARGE_LITERAL);
     rbc_read_fold_cases(true,RBC_READ_FOLD_PAST_END_LITERAL);
     {
-        XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,0,1,0,false,true);
+        XrLirFunction root={0}; XrLirModule *input=rbc_region_input(&root,0,1,0,false,RBC_REGION_READ_ONLY);
         XrRbcProgram *program=NULL; CHECK(xr_rbc_compile(input,root,&program,NULL)==XR_RBC_COMPILE_OK);
         const XrRbcModule *module=xr_rbc_program_view(program); const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
         CHECK(code && code->array_regions && code->array_regions->region_count==1 &&
@@ -449,6 +507,11 @@ static void rbc_array_region_cases(void) {
     rbc_region_case(4,1,1,false,false); rbc_region_case(4,1,2,false,false);
     rbc_region_case(4,1,0,false,true); rbc_region_role_fallbacks();
     rbc_region_failures(1); rbc_region_failures(2);
+    rbc_fixed_region_case(0,0,RBC_REGION_FIXED);
+    rbc_fixed_region_case(1,0,RBC_REGION_FIXED);
+    rbc_fixed_region_case(4,0,RBC_REGION_FIXED);
+    rbc_fixed_region_case(4,0,RBC_REGION_FIXED_FALSE);
+    rbc_fixed_region_case(4,1,RBC_REGION_FIXED_FALSE);
     RbcArrayRegionState state={.cache={(void *)1,(void *)2,3},.phase=RBC_ARRAY_REGION_ACTIVE};
     RbcValueActivation activation={.array_regions=&state,.active_array_region=1,.frame=(void *)4,.payload=(void *)5};
     rbc_value_array_region_forget(&activation,1,RBC_ARRAY_REGION_BYPASS);
