@@ -256,7 +256,7 @@ static void ars_readonly_preparations(void) {
         OK(xr_lir_ownership_fixed_array_update_at(plan,function.fixed_update_offset,&region));
         CHECK(region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET && region.primary_block==c.body[0].id &&
             region.exit_edge==1 && region.entry_block==c.entry.id && region.latch==c.body[2].id &&
-            region.range.kind==(mode==ARRAY_REGION_RANGE_READ_FIXED ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN :
+            region.range.kind==(uint32_t)(mode==ARRAY_REGION_RANGE_READ_FIXED ? XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN :
                 XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT));
         XrLirArraySetRegionStep body;
         OK(xr_lir_ownership_fixed_array_update_step_at(plan,region.first_step+1,&body));
