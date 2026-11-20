@@ -1270,7 +1270,8 @@ static XR_NOINLINE bool rbc_value_run_fixed_array_leaf(XrRbcStack *stack, RbcVal
     return rbc_value_fixed_array_before(stack, activation, role, *access, status);
 }
 
-static inline bool rbc_value_try_fixed_array_leaf(XrRbcStack *stack, uint32_t index, XrtManagedStatus *status) {
+/* Count the words handled without refreshing dispatch state. */
+static inline uint32_t rbc_value_try_fixed_array_leaf(XrRbcStack *stack, uint32_t index, XrtManagedStatus *status) {
     RbcValueActivation *activation = stack->values ? stack->values->top : NULL;
     if (!activation || !activation->active_array_region || activation->depth != stack->depth ||
         !activation->owned_code || !activation->array_regions || index >= activation->code->access_count) return false;
@@ -1283,6 +1284,7 @@ static inline bool rbc_value_try_fixed_array_leaf(XrRbcStack *stack, uint32_t in
     if (role->fixed_edge)
         return role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_BODY ||
             role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_LATCH;
+    if (role->binding_identity) return 2; /* The next word is the admitted paired release. */
     const XrRbcValueAccess *access = &code->accesses[index];
     if (access->operation != XR_RBC_VALUE_ARRAY ||
         (access->index != XR_LIR_ARRAY_OP_LEN && access->index != XR_LIR_ARRAY_OP_GET && access->index != XR_LIR_ARRAY_OP_SET))

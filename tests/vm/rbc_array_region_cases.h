@@ -155,6 +155,37 @@ static RbcRegionResult rbc_region_run_with_args(const XrRbcModule *module,XrtLoc
 static RbcRegionResult rbc_region_run(const XrRbcModule *module,XrtLocationOwner *locations) {
     return rbc_region_run_with_args(module,locations,NULL,0);
 }
+static void rbc_fixed_identity_words(const XrRbcModule *module, const XrRbcValueCode *code) {
+    const XrRbcFunction *function = &module->functions[0];
+    uint32_t *words = (uint32_t *)function->code;
+    size_t pairs = 0;
+    for (size_t pc = 0; pc < function->code_count; ++pc) {
+        uint32_t word = words[pc];
+        if ((word & 255u) != XR_RBC_VALUE_ACCESS) continue;
+        size_t ordinal = word >> 16;
+        XrRbcArrayRegionAccess *role = (XrRbcArrayRegionAccess *)&code->array_region_accesses[ordinal];
+        if (!role->binding_identity) continue;
+        CHECK(xr_rbc_value_instruction_valid(module,function,pc));
+        const XrRbcValueAccess *access = &code->accesses[ordinal];
+        XrLirHomeEvent *event = (XrLirHomeEvent *)&code->homes->events[access->index - 1];
+        CHECK(event->forwarding_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE);
+        event->forwarding_mode = XR_LIR_OWNERSHIP_TRANSFER_NONE;
+        CHECK(!xr_rbc_value_instruction_valid(module,function,pc));
+        event->forwarding_mode = XR_LIR_OWNERSHIP_TRANSFER_MOVE;
+
+        uint32_t drop = words[pc + 1];
+        words[pc + 1] = XR_RBC_LOADI;
+        CHECK(!xr_rbc_value_instruction_valid(module,function,pc));
+        words[pc + 1] = drop;
+        role->fixed = false;
+        CHECK(!xr_rbc_value_instruction_valid(module,function,pc));
+        role->fixed = true;
+        CHECK(xr_rbc_value_instruction_valid(module,function,pc));
+        ++pairs;
+    }
+    CHECK(pairs == 2);
+}
+
 static void rbc_fixed_region_case(unsigned trips, unsigned failure, RbcRegionMode mode) {
     XrLirFunction root={0};
     XrLirModule *input=rbc_region_input(&root,trips,1,failure,false,mode);
@@ -175,6 +206,7 @@ static void rbc_fixed_region_case(unsigned trips, unsigned failure, RbcRegionMod
         ++markers[role->fixed_edge];
     }
     for (size_t n=1;n<sizeof(markers)/sizeof(*markers);++n) CHECK(markers[n]==1);
+    if (trips == 4 && !failure && mode == RBC_REGION_FIXED) rbc_fixed_identity_words(module,code);
     size_t expected=!failure && trips>1;
     region_begin_attempts=region_begin_successes=0; region_force_bypass=false;
     RbcRegionResult actual=rbc_region_run(module,program->locations);
@@ -238,7 +270,9 @@ static void rbc_fixed_array_leaf_locations(void) {
         {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX},
         {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX},
         {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX},
-        {.operation=XR_RBC_VALUE_BINDING_READ}
+        {.operation=XR_RBC_VALUE_BINDING_READ},
+        {.operation=XR_RBC_VALUE_BINDING_NEW},
+        {.operation=XR_RBC_VALUE_DROP}
     };
     const XrRbcArrayRegionAccess roles[]={
         {.region=1,.fixed=true}, {.region=1,.fixed=true}, {.region=1,.fixed=true},
@@ -246,7 +280,8 @@ static void rbc_fixed_array_leaf_locations(void) {
         {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_LATCH},
         {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_ENTRY},
         {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_EXIT},
-        {.region=2,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY}, {.region=1,.fixed=true}
+        {.region=2,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY}, {.region=1,.fixed=true},
+        {.region=1,.fixed=true,.binding_identity=true}, {0}
     };
     const XrRbcValueCode code={.locations=locations,.value_count=RESULT,.arguments=args,.argument_count=3,
         .accesses=accesses,.access_count=sizeof(accesses)/sizeof(accesses[0]),.array_region_accesses=roles};
@@ -263,13 +298,16 @@ static void rbc_fixed_array_leaf_locations(void) {
     XrtManagedStatus status=XRT_MANAGED_OK;
     CHECK(!rbc_value_try_fixed_array_leaf(&stack,0,&status) && slots[2].bits==99);
     CHECK(!rbc_value_try_fixed_array_leaf(&stack,3,&status) && !rbc_value_try_fixed_array_leaf(&stack,4,&status));
+    CHECK(rbc_value_try_fixed_array_leaf(&stack,9,&status)==0);
     state=ready; activation.active_array_region=1; activation.owned_code=false;
     CHECK(!rbc_value_try_fixed_array_leaf(&stack,0,&status) && slots[2].bits==99);
     CHECK(!rbc_value_try_fixed_array_leaf(&stack,3,&status) && !rbc_value_try_fixed_array_leaf(&stack,4,&status));
+    CHECK(rbc_value_try_fixed_array_leaf(&stack,9,&status)==0);
     activation.owned_code=true;
     CHECK(rbc_value_try_fixed_array_leaf(&stack,3,&status) && rbc_value_try_fixed_array_leaf(&stack,4,&status));
     CHECK(!rbc_value_try_fixed_array_leaf(&stack,5,&status) && !rbc_value_try_fixed_array_leaf(&stack,6,&status) &&
         !rbc_value_try_fixed_array_leaf(&stack,7,&status) && !rbc_value_try_fixed_array_leaf(&stack,8,&status));
+    CHECK(rbc_value_try_fixed_array_leaf(&stack,9,&status)==2);
     CHECK(state.phase==RBC_ARRAY_REGION_ACTIVE && activation.active_array_region==1 &&
         state.cache.owner==&owner && !state.completed_set && frame.pc==19 && status==XRT_MANAGED_OK);
     CHECK(rbc_value_try_fixed_array_leaf(&stack,0,&status) && status==XRT_MANAGED_OK && slots[2].bits==3);
