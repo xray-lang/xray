@@ -1365,6 +1365,10 @@ def render_path_getcwd(declarations):
 
 
 def render_path_host_facts(declarations):
+    """Project the Path host facts the module's exported constants call.
+    The flavour and the textual absolute form are read only by the real
+    standard Path module, so each row carries the same exact namespace and
+    signature authority as the current-directory query above it."""
     lines, rows = [], []
     contracts = (
         ('__isWindows', 2, 'PATH_IS_WINDOWS', '(): bool', '0', '', 'no_heap', 'bool'),
