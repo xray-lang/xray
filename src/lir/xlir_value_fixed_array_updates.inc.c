@@ -7,12 +7,6 @@
  * Bind the common loop route to homes already chosen by the ordinary frame.
  */
 
-static bool lir_fixed_array_slot(const XrtManagedFrameSpec *f, size_t slot, size_t offset) {
-    return slot < f->slot_count && f->owned_offsets[slot] == offset &&
-        offset % _Alignof(XrtManagedHeader *) == 0 && offset <= f->payload_size &&
-        sizeof(XrtManagedHeader *) <= f->payload_size - offset;
-}
-
 static bool lir_fixed_array_value(const XrLirValueHome *home, const XrLirValueHome *owner) {
     return home->type == owner->type && home->stationary_owner == owner->stationary_owner &&
         home->owner_count == 1 && !home->parameter && home->offset == owner->offset &&
@@ -49,10 +43,10 @@ static bool lir_fixed_array_project(LirHomeBuilder *b, const XrLirOwnershipPlan 
     const XrLirValueHomes *homes = b->homes;
     const XrLirValueHome *owner = &homes->values[region->canonical_value];
     if (!owner->type || !owner->stationary_owner || owner->owner_count != 1 || owner->parameter || owner->byte_count ||
-        owner->size != sizeof(XrtManagedHeader *) || !lir_fixed_array_slot(&homes->frame, owner->first_owner, owner->offset) ||
+        owner->size != sizeof(XrtManagedHeader *) || !lir_home_header_slot(&homes->frame, owner->first_owner, owner->offset) ||
         workspace->instruction != region->primary_instruction || workspace->type != owner->type || workspace->value ||
         workspace->first_owner == owner->first_owner ||
-        !lir_fixed_array_slot(&homes->frame, workspace->first_owner, workspace->offset)) return false;
+        !lir_home_header_slot(&homes->frame, workspace->first_owner, workspace->offset)) return false;
     XrtValuePlanSpec spec;
     if (!lir_home_binding_spec(b, owner->type, &spec) || spec.kind != XRT_VALUE_ARRAY_I64) return false;
     const XrLirFunctionData *function = &b->compiler.input->functions[b->compiler.function.id - 1];
