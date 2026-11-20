@@ -66,6 +66,7 @@ tests/fixtures/public_source_program/root.out text eol=lf
 tests/fixtures/lir_cli/module_state_mixed.out text eol=lf
 tests/fixtures/lir_cli/module_state_branch.out text eol=lf
 tests/fixtures/lir_cli/module_state_initializers.out text eol=lf
+tests/fixtures/lir_cli/module_state_acyclic_class.out text eol=lf
 tests/diff/cases/semantics/stdlib/compress_*_direct.xr.expected text eol=lf
 
 # Consumer fixtures and generated censuses are compared with exact original
