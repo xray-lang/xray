@@ -28,8 +28,10 @@ static uint32_t lir_type_hash(XrLirTypeView shape, const XrLirCallableType *call
     uint32_t fields[] = {(uint32_t)shape.kind, shape.element, shape.count};
     uint32_t hash = xr_hash_bytes(fields, sizeof(fields));
     if (shape.kind == XR_LIR_TYPE_TUPLE) {
-        for (uint32_t f = 0; f < shape.count; ++f)
+        for (uint32_t f = 0; f < shape.count; ++f) {
             hash = (hash ^ record[f].type) * UINT32_C(16777619);
+            hash = (hash ^ record[f].array_element) * UINT32_C(16777619);
+        }
     }
     if (shape.kind == XR_LIR_TYPE_RECORD) return lir_record_identity_hash(identity);
     if (shape.kind == XR_LIR_TYPE_CELL) hash ^= xr_hash_bytes(&cell_element, sizeof(cell_element));
@@ -39,7 +41,7 @@ static uint32_t lir_type_hash(XrLirTypeView shape, const XrLirCallableType *call
 static bool lir_tuple_fields_equal(const XrLirRecordField *left,
     const XrLirRecordField *right, uint32_t count) {
     for (uint32_t f = 0; f < count; ++f)
-        if (left[f].type != right[f].type) return false;
+        if (left[f].type != right[f].type || left[f].array_element != right[f].array_element) return false;
     return true;
 }
 
@@ -100,9 +102,10 @@ static bool lir_tuple_shape(const XrLirModule *m, XrLirTypeView shape, const XrL
         XrLirRecordField field = fields[f];
         if (field.name || field.name_length || field.flags || field.type >= XR_LIR_TYPE_COUNT + ordinal)
             return false;
-        if (field.type != XR_LIR_I64 && field.type != XR_LIR_I1 && field.type != XR_LIR_F64 &&
-            field.type != XR_LIR_STRING && !xr_lir_inline_aggregate_type(m, field.type)) return false;
-        managed |= field.type == XR_LIR_STRING || xr_lir_boxed_type(m, field.type);
+        if (field.type == XR_LIR_ARRAY ? field.array_element != XR_LIR_I64 :
+            field.array_element || !(field.type == XR_LIR_I64 || field.type == XR_LIR_I1 || field.type == XR_LIR_F64 ||
+                field.type == XR_LIR_STRING || xr_lir_inline_aggregate_type(m, field.type))) return false;
+        managed |= field.type == XR_LIR_STRING || field.type == XR_LIR_ARRAY || xr_lir_boxed_type(m, field.type);
     }
     /* Offsets and extent belong to the common inline plan. Ownership is also
      * needed before that plan exists to construct valid LIR edges. */
@@ -179,8 +182,10 @@ static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField
             (field.flags & ~(XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED|XR_LIR_RECORD_MUTABLE)) ||
             ((field.flags & (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) == (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) ||
             field.type >= XR_LIR_TYPE_COUNT + earlier ||
-            !(field.type == XR_LIR_STRING || field.type == XR_LIR_I64 || field.type == XR_LIR_I1 ||
-              field.type == XR_LIR_F64 || xr_lir_inline_aggregate_type(m, field.type))) return false;
+            (field.type == XR_LIR_ARRAY ? field.array_element != XR_LIR_I64 :
+                field.array_element || !(field.type == XR_LIR_STRING || field.type == XR_LIR_I64 ||
+                    field.type == XR_LIR_I1 || field.type == XR_LIR_F64 ||
+                    xr_lir_inline_aggregate_type(m, field.type)))) return false;
     }
     return true;
 }

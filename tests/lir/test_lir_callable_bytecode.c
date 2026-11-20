@@ -806,7 +806,7 @@ static void class_owners_outlive_programs(void) {
     CArrayFixture c={0};
     OK(xr_lir_module_create(NULL,&c.module));
     XrLirType row=0, instance_type=0;
-    XrLirRecordField field={"value",5,XR_LIR_I64,0};
+    XrLirRecordField field={"value",5,XR_LIR_I64,0, 0};
     XrLirRecordIdentity identity={.module="tests.lir.class",.module_length=15,.name="Box",.name_length=3};
     OK(xr_lir_record_type(c.module,&identity,&field,1,&row));
     OK(xr_lir_internal_class_type(c.module,row,&instance_type));

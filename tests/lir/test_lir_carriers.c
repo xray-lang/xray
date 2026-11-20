@@ -415,12 +415,12 @@ static void record_metadata(void) {
     XrLirRecordArgument argument = {0};
     XrLirRecordIdentity chain = {.module="test", .module_length=4, .name="Chain", .name_length=5, .arguments=&argument, .argument_count=1};
     char name[] = "name";
-    XrLirRecordField field = {name, 4, XR_LIR_STRING, 0};
+    XrLirRecordField field = {name, 4, XR_LIR_STRING, 0, 0};
     XrLirType type, unused, received;
     OK(xr_lir_record_type(source, &leaf, &field, 1, &type));
     memset(name, 'x', sizeof(name));
     for (unsigned n = 0; n < 512; ++n) {
-        field = (XrLirRecordField){"child", 5, type, 0};
+        field = (XrLirRecordField){"child", 5, type, 0, 0};
         argument.type = type;
         OK(xr_lir_record_type(source, &chain, &field, 1, &type));
     }
@@ -446,7 +446,7 @@ static void record_metadata(void) {
 }
 static void boxed_entry_frontier(void) {
     XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
-    XrLirRecordField field = {"score", 5, XR_LIR_I64, 0};
+    XrLirRecordField field = {"score", 5, XR_LIR_I64, 0, 0};
     XrLirType type; OK(xr_lir_record_type(m, &(XrLirRecordIdentity){.module="test", .module_length=4, .name="Score", .name_length=5}, &field, 1, &type));
     XrLirFunction root = function(m, "boxed", NULL, 0, type);
     XrLirBlock b = block(m, root, NULL, 0); OK(xr_lir_set_entry(m, root, b));
@@ -476,13 +476,13 @@ static void record_field_frontier(void) {
         } else if (n == sizeof(rejected) / sizeof(*rejected) + 1)
             OK(xr_lir_cell_type(m, (XrLirCellType){XR_LIR_I64,0}, &field));
         else OK(xr_lir_nullable_type(m, XR_LIR_I64, &field));
-        XrLirRecordField member = {"value",5,field,0};
+        XrLirRecordField member = {"value",5,field,0, 0};
         CHECK(xr_lir_record_type(m, &(XrLirRecordIdentity){.module="test", .module_length=4, .name="Value", .name_length=5}, &member, 1, &output) == XR_LIR_INVALID_ARGUMENT && output == XR_LIR_I64);
         xr_lir_module_destroy(m);
     }
     for (unsigned n = 0; n < 4; ++n) {
         XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
-        XrLirRecordField member = {"value",5,XR_LIR_I64,0};
+        XrLirRecordField member = {"value",5,XR_LIR_I64,0, 0};
         XrLirType type; OK(xr_lir_record_type(m, &(XrLirRecordIdentity){.module="test", .module_length=4, .name="Value", .name_length=5}, &member, 1, &type));
         XrLirFunction root = function(m, "empty", NULL, 0, XR_LIR_UNIT);
         XrLirBlock b = block(m, root, NULL, 0); OK(xr_lir_set_entry(m, root, b));

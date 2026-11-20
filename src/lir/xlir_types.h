@@ -48,6 +48,7 @@ typedef struct XrLirRecordField {
     uint32_t name_length;
     XrLirType type;
     uint32_t flags;
+    XrLirType array_element;
 } XrLirRecordField;
 
 enum {

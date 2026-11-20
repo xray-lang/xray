@@ -22,7 +22,7 @@ static XrLirModule *record_fixture(XrLirFunction *root) {
     CHECK(xr_lir_module_create(NULL, &m) == XR_LIR_OK);
     XrLirType optional, record;
     CHECK(xr_lir_nullable_type(m, XR_LIR_STRING, &optional) == XR_LIR_OK);
-    XrLirRecordField fields[] = {{"name",4,optional,0}, {"score",5,XR_LIR_I64,0}};
+    XrLirRecordField fields[] = {{"name",4,optional,0, 0}, {"score",5,XR_LIR_I64,0, 0}};
     CHECK(xr_lir_record_type(m, &(XrLirRecordIdentity){.module="test", .module_length=4, .name="Entry", .name_length=5}, fields, 2, &record) == XR_LIR_OK);
     XrLirFunction helper = {0};
     XrLirFunctionSpec spec = {.name="record_root", .name_length=11, .result=XR_LIR_I64};

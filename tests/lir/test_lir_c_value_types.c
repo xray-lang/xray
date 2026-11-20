@@ -38,7 +38,7 @@ static Fixture fixture(void) {
     Fixture f = {0}; XrLirModule *m = NULL;
     LIR(xr_lir_module_create(NULL, &m));
     char key[] = "name";
-    XrLirRecordField fields[] = {{"flag", 4, XR_LIR_I1, 0}, {key, 4, XR_LIR_STRING, 0}, {"value", 5, XR_LIR_I64, 0}};
+    XrLirRecordField fields[] = {{"flag", 4, XR_LIR_I1, 0, 0}, {key, 4, XR_LIR_STRING, 0, 0}, {"value", 5, XR_LIR_I64, 0, 0}};
     LIR(xr_lir_record_type(m,
         &(XrLirRecordIdentity){.module="tests.lir.c_value_types", .module_length=sizeof("tests.lir.c_value_types")-1,
             .name="Record", .name_length=sizeof("Record")-1},
@@ -48,7 +48,7 @@ static Fixture fixture(void) {
     LIR(xr_lir_nullable_type(m, f.nullable, &f.nested));
     XrLirType optional_string;
     LIR(xr_lir_nullable_type(m, XR_LIR_STRING, &optional_string));
-    XrLirRecordField pod[] = {{"a", 1, XR_LIR_I1, 0}, {"b", 1, XR_LIR_F64, 0}, {"c", 1, XR_LIR_I64, 0}};
+    XrLirRecordField pod[] = {{"a", 1, XR_LIR_I1, 0, 0}, {"b", 1, XR_LIR_F64, 0, 0}, {"c", 1, XR_LIR_I64, 0, 0}};
     LIR(xr_lir_record_type(m,
         &(XrLirRecordIdentity){.module="tests.lir.c_value_types", .module_length=sizeof("tests.lir.c_value_types")-1,
             .name="Pod", .name_length=sizeof("Pod")-1},

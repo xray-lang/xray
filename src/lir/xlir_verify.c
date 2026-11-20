@@ -190,8 +190,10 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             const XrLirRecordField *fields;
             uint32_t count;
             if (xr_lir_aggregate_fields(m, target, &fields, &count) != XR_LIR_OK || count != v->operand_count) return false;
-            for (uint32_t n = 0; n < count; ++n)
-                if (f->values[v->operands[n] - 1].type != fields[n].type) return false;
+            for (uint32_t n = 0; n < count; ++n) {
+                const XrLirValueData *input = &f->values[v->operands[n] - 1];
+                if (input->type != fields[n].type || input->array_element != fields[n].array_element) return false;
+            }
             return true;
         }
         case XR_LIR_RECORD_FIELD: case XR_LIR_CLASS_FIELD: {
