@@ -765,6 +765,14 @@ static void call_argument_staging(void) {
     Fixture fixture;
     fixture_init(&fixture);
     XrtManagedHeader *value = make(&fixture, 0, 9);
+    const int32_t counts[] = {1, INT32_MAX - 1, INT32_MAX, -1, -INT32_MAX + 1, -INT32_MAX};
+    for (size_t n = 0; n < sizeof(counts) / sizeof(*counts); ++n) {
+        int32_t count = counts[n];
+        atomic_store(&value->references, count);
+        CHECK(xrt_managed_identity_retain(value) == (count != INT32_MAX && count != -INT32_MAX));
+        CHECK(atomic_load(&value->references) == count && *owner_field(&fixture, 0) == value);
+    }
+    atomic_store(&value->references, 1);
     OK(xrt_place_copy_replace(slot(&fixture, 2), slot(&fixture, 0), NULL));
     CHECK(!xrt_managed_slot_try_stage_unique(fixture.frame, 1, 0));
     CHECK(*owner_field(&fixture, 0) == value && !*owner_field(&fixture, 1) &&

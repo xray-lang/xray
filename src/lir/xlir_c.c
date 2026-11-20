@@ -139,7 +139,7 @@ static void c_hash_binding_stage_copy(LirC *, uint32_t, uint32_t, uint32_t);
  * guarded by a runtime forward with its original fallback, or elided because
  * both names already share one physical owner slot. */
 typedef enum LirCForward { LIR_C_FORWARD_NONE, LIR_C_FORWARD_GUARDED, LIR_C_FORWARD_ELIDED } LirCForward;
-static LirCForward c_binding_forward_begin(LirC *, const XrLirInstructionView *);
+static LirCForward c_binding_forward_begin(LirC *, const XrLirInstructionView *, uint32_t source);
 static LirCForward c_binding_forward_drop(LirC *, const XrLirInstructionView *);
 static bool c_array_local_begin(LirC *, const XrLirInstructionView *, const XrLirArrayIntrinsic *, const XrLirHomeWorkspace *);
 static void c_array_local_ready(LirC *);

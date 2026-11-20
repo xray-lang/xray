@@ -149,6 +149,18 @@ XRAY_API bool xrt_managed_retain(XrtManagedHeader *);
  * Callbacks may drop independently owned values, but may not inspect or retain
  * dead ancestors. Arbitrary callback recursion is not made stack-independent. */
 XRAY_API void xrt_managed_drop(XrtManagedHeader *);
+#ifndef __cplusplus
+/* A verified same-slot retain/release leaves the owner where it is. Keep the
+ * original retain failure and use the real atomic pair for published counts. */
+static inline bool xrt_managed_identity_retain(XrtManagedHeader *owner) {
+    if (!owner) return false;
+    int32_t count = atomic_load_explicit(&owner->references, memory_order_relaxed);
+    if (count > 0) return count < INT32_MAX;
+    if (!xrt_managed_retain(owner)) return false;
+    xrt_managed_drop(owner);
+    return true;
+}
+#endif
 #ifdef __cplusplus
 }
 #endif

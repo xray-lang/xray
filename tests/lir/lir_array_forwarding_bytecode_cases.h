@@ -273,7 +273,9 @@ static void array_forwarding_probe_root(void *context) {
         CHECK(xr_rbc_values_step(module,stack,probe->index,probe->pc+1,0)==XR_RBC_OK &&
             stack->frames[0].pc==probe->pc+2 && !*from.owner && *to.owner==incoming && atomic_load(&incoming->references)==references);
     } else {
-        CHECK(!rbc_value_binding_forward(activation,access) && *from.owner==old_source && *to.owner==old_target);
+        XrtManagedStatus forward_status = XRT_MANAGED_OK;
+        CHECK(!rbc_value_binding_forward(activation,access,&forward_status) &&
+            forward_status == XRT_MANAGED_OK && *from.owner==old_source && *to.owner==old_target);
         if (probe->mode==2 || probe->mode==4) {
             CHECK(xr_rbc_values_step(module,stack,probe->index,probe->pc+1,0)==XR_RBC_OK && stack->frames[0].pc==probe->pc+1 &&
                 *from.owner==incoming && *to.owner==incoming && atomic_load(&incoming->references)==references+(references<0 ? -1 : 1));
