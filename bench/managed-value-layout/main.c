@@ -24,10 +24,14 @@ static void mvl_layout(void) {
     MVL_FIELD(XrMvlHeader, ops);
     puts("");
     MVL_TYPE(XrMvlArray);
-    MVL_FIELD(XrMvlArray, header);
-    MVL_FIELD(XrMvlArray, data);
+    MVL_FIELD(XrMvlArray, owner);
     MVL_FIELD(XrMvlArray, length);
-    MVL_FIELD(XrMvlArray, capacity);
+    puts("");
+    MVL_TYPE(XrMvlArrayBacking);
+    MVL_FIELD(XrMvlArrayBacking, header);
+    MVL_FIELD(XrMvlArrayBacking, reserved);
+    MVL_FIELD(XrMvlArrayBacking, capacity);
+    MVL_FIELD(XrMvlArrayBacking, data);
     puts("");
     MVL_TYPE(XrMvlString);
     MVL_FIELD(XrMvlString, header);
@@ -70,9 +74,8 @@ static void mvl_layout(void) {
     MVL_FIELD(XrMvlDomain, pair_ops);
     puts("");
     MVL_TYPE(XrMvlArrayAccess);
-    MVL_FIELD(XrMvlArrayAccess, owner);
+    MVL_FIELD(XrMvlArrayAccess, value);
     MVL_FIELD(XrMvlArrayAccess, data);
-    MVL_FIELD(XrMvlArrayAccess, length);
     MVL_FIELD(XrMvlArrayAccess, capacity);
     MVL_FIELD(XrMvlArrayAccess, writable);
     puts("");
@@ -86,8 +89,8 @@ static void mvl_layout(void) {
 }
 
 static bool mvl_push(XrMvlDomain *domain, int64_t *result) {
-    XrMvlArray *array = xr_mvl_array_new(domain);
-    if (!array)
+    XrMvlArray array = xr_mvl_array_new(domain);
+    if (!array.owner)
         return false;
     bool ok = true;
     for (int64_t i = 0; i < XR_MVL_PUSH_COUNT; ++i) {
@@ -98,26 +101,26 @@ static bool mvl_push(XrMvlDomain *domain, int64_t *result) {
     }
     int64_t total = 0;
     if (ok)
-        for (size_t i = 0; i < array->length; ++i)
-            total += array->data[i];
-    xr_mvl_drop(&array->header);
+        for (size_t i = 0; i < array.length; ++i)
+            total += array.owner->data[i];
+    xr_mvl_drop(&array.owner->header);
     *result = total;
     return ok;
 }
 
 static bool mvl_push_prepared(XrMvlDomain *domain, int64_t *result) {
-    XrMvlArray *array = xr_mvl_array_new(domain);
-    if (!array)
+    XrMvlArray array = xr_mvl_array_new(domain);
+    if (!array.owner)
         return false;
     bool ok = true;
-    XrMvlArrayAccess access = xr_mvl_array_access_start(NULL);
+    XrMvlArrayAccess access = xr_mvl_array_access_start((XrMvlArray){0});
     int64_t count = XR_MVL_PUSH_COUNT;
     if (count > 0) {
         int64_t value = 0;
         XrMvlArrayWrite write = xr_mvl_array_access_write(xr_mvl_array_access_start(array), 0, value, true);
         ok = write.status == XR_MVL_OK;
         if (ok) {
-            array = write.access.owner;
+            array = write.access.value;
             access = write.access;
             if (write.previous) xr_mvl_drop(&write.previous->header);
         }
@@ -128,46 +131,46 @@ static bool mvl_push_prepared(XrMvlDomain *domain, int64_t *result) {
             ok = false;
             break;
         }
-        array = write.access.owner;
+        array = write.access.value;
         access = write.access;
         if (write.previous) xr_mvl_drop(&write.previous->header);
     }
-    access = xr_mvl_array_access_start(NULL);
+    access = xr_mvl_array_access_start((XrMvlArray){0});
     int64_t total = 0;
     if (ok)
-        for (size_t i = 0; i < array->length; ++i)
-            total += array->data[i];
-    xr_mvl_drop(&array->header);
+        for (size_t i = 0; i < array.length; ++i)
+            total += array.owner->data[i];
+    xr_mvl_drop(&array.owner->header);
     *result = total;
     return ok;
 }
 
 static bool mvl_push_direct(XrMvlDomain *domain, int64_t *result) {
-    XrMvlArray *array = xr_mvl_array_new(domain);
-    if (!array)
+    XrMvlArray array = xr_mvl_array_new(domain);
+    if (!array.owner)
         return false;
     XrMvlArrayWrite write = mvl_array_push_direct_range(array, XR_MVL_PUSH_COUNT);
-    array = write.access.owner;
+    array = write.access.value;
     int64_t total = 0;
     if (write.status == XR_MVL_OK)
-        for (size_t i = 0; i < array->length; ++i)
-            total += array->data[i];
-    xr_mvl_drop(&array->header);
+        for (size_t i = 0; i < array.length; ++i)
+            total += array.owner->data[i];
+    xr_mvl_drop(&array.owner->header);
     *result = total;
     return write.status == XR_MVL_OK;
 }
 
 static bool mvl_push_noalias(XrMvlDomain *domain, int64_t *result) {
-    XrMvlArray *array = xr_mvl_array_new(domain);
-    if (!array)
+    XrMvlArray array = xr_mvl_array_new(domain);
+    if (!array.owner)
         return false;
     XrMvlArrayWrite write = mvl_array_push_noalias_range(array, XR_MVL_PUSH_COUNT);
-    array = write.access.owner;
+    array = write.access.value;
     int64_t total = 0;
     if (write.status == XR_MVL_OK)
-        for (size_t i = 0; i < array->length; ++i)
-            total += array->data[i];
-    xr_mvl_drop(&array->header);
+        for (size_t i = 0; i < array.length; ++i)
+            total += array.owner->data[i];
+    xr_mvl_drop(&array.owner->header);
     *result = total;
     return write.status == XR_MVL_OK;
 }
