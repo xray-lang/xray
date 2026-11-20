@@ -16,9 +16,9 @@ static bool rbc_lir_array_push_prepare(RbcLirCompiler *c) {
     XrLirValueLayoutStatus status=xr_lir_array_push_window_bindings_create(c->homes,c->literals->layouts,
         &code->array_push_windows);
     if (status!=XR_LIR_VALUE_LAYOUT_OK) {
-        XrRbcCompileStatus failure=status==XR_LIR_VALUE_LAYOUT_OOM ? XR_RBC_COMPILE_OUT_OF_MEMORY :
+        XrRbcCompileStatus compile_status=status==XR_LIR_VALUE_LAYOUT_OOM ? XR_RBC_COMPILE_OUT_OF_MEMORY :
             status==XR_LIR_VALUE_LAYOUT_OVERFLOW ? XR_RBC_COMPILE_LIMIT : XR_RBC_COMPILE_INVALID;
-        return rbc_lir_fail(c,failure,"cannot project common Array capacity coordinates");
+        return rbc_lir_fail(c,compile_status,"cannot project common Array capacity coordinates");
     }
     const XrLirArrayRegionBindings *bindings=code->array_push_windows;
     XrRbcArrayPushLimit *limits=NULL;
