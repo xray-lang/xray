@@ -409,6 +409,44 @@ class QueueTests(unittest.TestCase):
         self.assertIn("passing case demoted", log["error"])
         self.assertEqual(self.git("rev-parse", "main"), self.base)
 
+    def test_identical_candidate_cannot_supply_its_own_baseline(self):
+        branch = self.branch("core/self-comparison", {"example": "yes"})
+        review = json.loads(branch[1].read_text())
+        review["comparisonBase"] = branch[2]
+        for pair in review["release"].values():
+            outcomes = dict.fromkeys(FULL_TESTS, "run")
+            outcomes.update(meta_ownership_inventory="fail", historical_failure="fail")
+            self.rewrite_outcomes(pair["candidate"], outcomes)
+            pair["base"] = pair["candidate"]
+        json_file(branch[1], review)
+        log = self.finish(self.start(branch), 1)
+        self.assertIn("comparison baseline equals the candidate commit", log["error"])
+        self.assertEqual(self.git("rev-parse", "main"), self.base)
+
+    def test_ancestor_with_identical_tree_cannot_supply_comparison_baseline(self):
+        name, review_path, baseline = self.branch("core/same-tree", {"example": "yes"})
+        self.git("switch", name)
+        self.git("commit", "--allow-empty", "-m", "Keep the same tree under a new commit")
+        candidate = self.git("rev-parse", "HEAD")
+        self.git("switch", "--detach")
+        self.assertNotEqual(baseline, candidate)
+        self.assertEqual(self.git("rev-parse", baseline + "^{tree}"),
+                         self.git("rev-parse", candidate + "^{tree}"))
+        self.write_review(review_path, candidate)
+        review = json.loads(review_path.read_text())
+        review["comparisonBase"] = baseline
+        for host, pair in review["release"].items():
+            baseline_dir = Path(pair["base"]["receipt"]).parent
+            pair["base"] = self.release_evidence(baseline_dir, "base", host, pair["hostIdentity"], baseline)
+            outcomes = dict.fromkeys(FULL_TESTS, "run")
+            outcomes.update(meta_ownership_inventory="fail", historical_failure="fail")
+            for side in ("base", "candidate"):
+                self.rewrite_outcomes(pair[side], outcomes)
+        json_file(review_path, review)
+        log = self.finish(self.start((name, review_path, candidate)), 1)
+        self.assertIn("baseline has the same Git tree", log["error"])
+        self.assertEqual(self.git("rev-parse", "main"), self.base)
+
     def test_new_full_ctest_failure_never_advances_main(self):
         branch = self.branch("front/compare", {"example": "yes"})
         review = json.loads(branch[1].read_text())

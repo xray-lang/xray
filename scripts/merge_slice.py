@@ -478,6 +478,13 @@ def parse_time(value: str) -> datetime:
 
 
 def verify_task339(root: Path, candidate: str, changed: list[str], review: dict, logs: Path, log: dict) -> None:
+    baseline = review["comparisonBase"]
+    if baseline == candidate:
+        raise ValueError("The approved comparison baseline equals the candidate commit")
+    if not ancestor(root, baseline, candidate):
+        raise ValueError("The approved comparison baseline is not in candidate history")
+    if git(root, "rev-parse", f"{baseline}^{{tree}}") == git(root, "rev-parse", f"{candidate}^{{tree}}"):
+        raise ValueError("The approved comparison baseline has the same Git tree as the candidate")
     for key in ("reviewEvidence", "l0Log"):
         archive(review[key], key + ".log", logs, log)
     ci = review["ci"]
@@ -511,9 +518,6 @@ def verify_task339(root: Path, candidate: str, changed: list[str], review: dict,
             verify_current(package, host, candidate, required, logs, log)
     log["gates"]["L1"] = "PASS"
 
-    baseline = review["comparisonBase"]
-    if not ancestor(root, baseline, candidate):
-        raise ValueError("The approved comparison baseline is not in candidate history")
     win_tests = required.copy()
     if any(re.match(r"src/(lir|hir|xir|module|vm/register)/", path) for path in changed):
         win_tests.add("meta_ownership_inventory")
