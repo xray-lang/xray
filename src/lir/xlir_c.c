@@ -126,7 +126,7 @@ static void c_values_helpers(LirC *);
 static void c_values_landing_types(LirC *);
 static bool c_values_signature(LirC *, bool);
 static void c_values_root(LirC *);
-static bool c_values_edge(LirC *, const XrLirEdgeView *, uint32_t);
+static bool c_values_edge(LirC *, const XrLirEdgeView *, uint32_t, uint32_t);
 static void c_values_ensure(LirC *, uint32_t);
 static void c_values_replace_begin(LirC *, uint32_t, uint32_t);
 static void c_values_replace_end(LirC *, uint32_t);
@@ -167,7 +167,7 @@ static void c_array_helper_guard(LirC *, size_t);
 static void c_array_helper_return(LirC *, size_t);
 static void c_fixed_array_prepare(LirC *, uint32_t, LirCArrayRegions *);
 static void c_fixed_array_declarations(LirC *);
-static void c_fixed_array_guard(LirC *, uint32_t, uint32_t);
+static void c_fixed_array_guard(LirC *, uint32_t, uint32_t, bool);
 static void c_fixed_array_clones(LirC *);
 
 static void c_error(LirC *c, XrLirCStatus status, const char *message) {
@@ -954,13 +954,14 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
         &c->array_region->fixed_edges[(size_t)c->block * 2 + selected - 1] : NULL;
     if (fixed && fixed->exit) c_format(c, "xrl_fixed_exit_%" PRIu32 ": ;\n", fixed->exit);
     if (fixed && fixed->entry) c_format(c, "    xrl_fixed_tried_%" PRIu32 " = 0;\n", fixed->entry);
-    if (c_values_edge(c, edge, selected)) {
+    if (c_values_edge(c, edge, selected, fixed ? fixed->entry : 0)) {
         if (fixed && fixed->latch)
             c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array latch requires stationary owner slots");
         return;
     }
     c_scalar_edge_values(c, edge, 0);
-    if (fixed && fixed->latch) c_fixed_array_guard(c, fixed->latch, edge->target);
+    if (fixed && fixed->entry) c_fixed_array_guard(c, fixed->entry, edge->target, false);
+    if (fixed && fixed->latch) c_fixed_array_guard(c, fixed->latch, edge->target, true);
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);
 }
 static void c_division(LirC *c, const XrLirInstructionView *v) {

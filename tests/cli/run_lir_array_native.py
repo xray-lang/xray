@@ -73,7 +73,7 @@ def main() -> None:
              "array_stationary_cells", "panic_stationary_cell", "array_held_edits", "call_result_homes",
              "array_call_staging", "panic_array_call_staging",
              "element_update", "element_update_carried", "fixed_update_carried",
-             "panic_region_get", "panic_region_set",
+             "panic_region_get", "panic_region_set", "panic_fixed_update_first_get",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
              "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
              "panic_bounds", "panic_get_i64_negative", "panic_get_u8_length", "panic_get_u64_huge", "panic_get_inline_length",
@@ -149,6 +149,9 @@ def main() -> None:
             if reference is not None and reference != result:
                 failures.append((name, "VM repeat", reference, result))
             reference = result
+        if name == "panic_fixed_update_first_get":
+            assert reference is not None and b"(status 6)" in reference[2]
+            assert reference[2].rstrip().endswith(source.name.encode() + b":5:15-5:18")
         generated = work / (name + ".c")
         status, _, _ = run(name + "-c", [binary, "build", "-c", source, "-o", generated], 0)
         if status:
@@ -207,7 +210,8 @@ def main() -> None:
         elif name in ("array_call_staging", "panic_array_call_staging"):
             assert "xrt_managed_slot_try_stage_unique(xrl_frame," in generated_text, name
             assert "xrt_managed_slot_move(xrl_frame," in generated_text and "xrl_array_argument.frame" in generated_text, name
-        elif name in ("element_update", "element_update_carried", "fixed_update_carried"):
+        elif name in ("element_update", "element_update_carried", "fixed_update_carried",
+                      "panic_fixed_update_first_get"):
             assert_fixed_update_loop(name, generated_text)
         elif "xrt_native_array_push_local_i64(" in generated_text:
             # Growth in place follows only a capacity window or a failed held

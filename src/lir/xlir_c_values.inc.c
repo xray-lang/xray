@@ -425,7 +425,7 @@ static void c_values_helpers(LirC *c) {
     }
     c->homes = NULL;
 }
-static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
+static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected, uint32_t fixed_entry) {
     if (!c->homes) return false;
     const XrLirHomeEdge *home = NULL;
     while (c->home_edge_cursor < c->homes->edge_count) {
@@ -493,6 +493,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
     }
     c_array_region_edge_end(c,region_edge);
     c_array_push_edge_end(c,region_edge);
+    if (fixed_entry) c_fixed_array_guard(c, fixed_entry, edge->target, false);
     c_format(c, "    goto bb%" PRIu32 ";\n    }\n", edge->target);
     return true;
 }

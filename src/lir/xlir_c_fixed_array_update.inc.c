@@ -7,8 +7,8 @@
  * xlir_c_fixed_array_update.inc.c - Checked projection of a fixed Array update loop
  *
  * KEY CONCEPT:
- *   The original first iteration and exit still execute through ordinary C.
- *   A successful guard borrows the stable owner only for the remaining loop.
+ *   The entry guard may borrow a private owner immediately.
+ *   A shared or otherwise unavailable owner still takes the ordinary path.
  */
 
 static LirCFixedArrayEdge *c_fixed_array_edge(LirCFixedArrayEdge *index, uint32_t block, uint32_t edge) {
@@ -61,13 +61,14 @@ static void c_fixed_array_declarations(LirC *c) {
     }
 }
 
-static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target) {
+static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target, bool after_write) {
     const XrLirFixedArrayUpdateHome *row = &c->homes->fixed_array_updates[n - 1];
     XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
     XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(c->homes, row, slots);
-    c_format(c, "    if (!xrl_fixed_tried_%" PRIu32 ") {\n"
-        "        static const XrtArrayI64RegionSlot xrl_fixed_slots[] = {{%zu, %zu}, {%zu, %zu}};\n",
-        n, slots[0].slot, slots[0].offset, slots[1].slot, slots[1].offset);
+    if (after_write) c_format(c, "    if (!xrl_fixed_tried_%" PRIu32 ") {\n", n);
+    else c_text(c, "    {\n");
+    c_format(c, "        static const XrtArrayI64RegionSlot xrl_fixed_slots[] = {{%zu, %zu}, {%zu, %zu}};\n",
+        slots[0].slot, slots[0].offset, slots[1].slot, slots[1].offset);
     c_format(c, "        const XrtArrayI64RegionSpec xrl_fixed_spec = {xrl_fixed_slots, %zu, %zu};\n"
         "        const XrtArrayI64RegionContext xrl_fixed_context = {xrl_frame, xrl_payload,"
         " &xrl_frame_locations, &xrl_frame_%" PRIu32 "};\n        if (", spec.slot_count, spec.canonical, c->function.id);
@@ -79,8 +80,10 @@ static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target) {
     c_array_held_clear(c);
     c_format(c, "            goto xrl_fixed_%" PRIu32 "_bb%" PRIu32 ";\n"
         "        }\n"
-        "        xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
-        "        xrl_fixed_tried_%" PRIu32 " = 1;\n    }\n", n, target, n, n);
+        "        xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n", n, target, n);
+    /* A declined entry can become unique after the first ordinary write. */
+    if (after_write) c_format(c, "        xrl_fixed_tried_%" PRIu32 " = 1;\n", n);
+    c_text(c, "    }\n");
 }
 
 static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView *v) {
