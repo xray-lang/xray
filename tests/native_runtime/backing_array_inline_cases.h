@@ -25,8 +25,8 @@ static XrtValuePlan *inline_array_leaf(XrtBillingOwner *billing, XrtValueKind ki
 static XrtValuePlan *inline_array_element(XrtBillingOwner *billing, XrtValuePlan *text, XrtValuePlan *number) {
     const size_t owners[] = {offsetof(InlineArrayRow, left), offsetof(InlineArrayRow, right)};
     const XrtValueSlotSpec fields[] = {
-        {text, owners[0], NULL, 0}, {number, offsetof(InlineArrayRow, number), NULL, 0},
-        {text, owners[1], NULL, 0}
+        {.type = text, .offset = owners[0]}, {.type = number, .offset = offsetof(InlineArrayRow, number)},
+        {.type = text, .offset = owners[1]}
     };
     XrtValuePlanSpec shape = {.kind = XRT_VALUE_TUPLE, .size = sizeof(InlineArrayRow),
         .alignment = _Alignof(InlineArrayRow), .owned_offsets = owners, .owned_count = 2,
