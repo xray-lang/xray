@@ -232,19 +232,9 @@ static bool lir_array_region_retains_before_entry(const LirArrayRegionProof *p, 
 }
 static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
     XrLirArraySetRegion *region) {
-    const LirGraph *g = &p->graph;
     LirLinearLoop *loop = &p->loop;
-    if (!lir_loop_linear_edges(p->function, g, header, body_edge, loop)) return false;
-    /* Every retain has an exact same-block endpoint death, and all retain
-     * blocks lie on one dominator chain. If the original exit reaches the
-     * latest retain through the precomputed empty-bridge corridor and the
-     * header dominates that retain, the other retain blocks dominate the
-     * header. The instruction walk still rejects header/body retains. Only a
-     * proven PUSH may use this exception; its real exit move and all ordinary
-     * bridge instructions remain before the ordinary retain instructions. */
-    if (!p->fixed && !lir_array_region_retains_before_entry(p, header, loop->entry) &&
-        (!p->retain_block || !g->stack[loop->exit] || !lir_loop_dominates(g,header,p->retain_block-1))) return false;
-    if (!lir_loop_linear_body(p->function, g, p->blocks, p->marks, loop)) return false;
+    if (!lir_loop_linear_edges(p->function, &p->graph, header, body_edge, loop) ||
+        !lir_loop_linear_body(p->function, &p->graph, p->blocks, p->marks, loop)) return false;
     *region = (XrLirArraySetRegion){.function=p->function_id,.header=header + 1,.entry_block=loop->entry + 1,
         .entry_edge=loop->entry_edge + 1,.latch=loop->latch + 1,.exit_edge=2 - body_edge,.exit_block=loop->exit + 1,
         .body_block_count=loop->body_count};
@@ -315,7 +305,6 @@ static void lir_array_region_range_begin(LirArrayRegionProof *p, const XrLirArra
         .condition=condition,.condition_instruction=f->values[condition - 1].instruction + 1,
         .increment=step.update,.increment_block=update->block,.increment_instruction=update->instruction + 1,
         .one=step.one,.latch_iv=step.backedge_argument};
-    p->range_stamp = (uint64_t)(region->header - 1) * 2 + body_edge + 1;
     p->uses[iv].range_stamp = p->range_stamp; p->uses[iv].lane = LIR_ARRAY_RANGE_CURRENT;
 }
 /* A selected edge assigns parameters simultaneously. Scratch belongs to the
@@ -581,9 +570,19 @@ static bool lir_array_element_update(LirArrayRegionProof *p, const XrLirArraySet
         lir_array_region_scalar_passthrough(p, region->range.iv, 0);
 }
 
-static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
-    XrLirArraySetRegion *region) {
-    if (!lir_array_region_shape(p, header, body_edge, region)) return false;
+static bool lir_array_region_prove(LirArrayRegionProof *p, const XrLirArraySetRegion *shape, XrLirArraySetRegion *region) {
+    const LirLinearLoop *loop = &p->loop;
+    uint32_t header = loop->header, body_edge = loop->body_edge;
+    /* Only the existing PUSH schedule may cross the precomputed empty
+     * corridor to a later retain. The frame-guarded SET proof observes its
+     * own route and keeps retains outside it on the ordinary path. */
+    if (!p->fixed && !lir_array_region_retains_before_entry(p, header, loop->entry) &&
+        (!p->retain_block || !p->graph.stack[loop->exit] ||
+            !lir_loop_dominates(&p->graph, header, p->retain_block - 1))) return false;
+    *region = *shape;
+    /* A second proof over the same topology must not read its previous
+     * attempt's lane values. The bounded number of routes fits in uint64_t. */
+    ++p->range_stamp;
     p->step_count = p->get_count = p->push_item = p->array_accesses = 0;
     p->range = (XrLirArraySetRegionRange){0}; uint32_t current = 0;
     if (!lir_array_region_edge(p, region->entry_block - 1, region->entry_edge - 1,
@@ -652,15 +651,19 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
     p->steps = lir_plan_allocate((size_t)steps, sizeof(*p->steps)); p->step_capacity = (uint32_t)steps;
     if (!p->uses || !p->pairs || !p->moves || !p->blocks || !p->marks || !p->steps) return XR_LIR_OUT_OF_MEMORY;
     if (!lir_array_region_index_transfers(p)) return XR_LIR_OK;
-    p->fixed = !lir_array_region_inventory(p) || !lir_array_region_retains(p);
-    if (p->fixed && !fixed_possible) return XR_LIR_OK;
+    bool legacy_possible = lir_array_region_inventory(p) && lir_array_region_retains(p);
+    if (!legacy_possible && !fixed_possible) return XR_LIR_OK;
     for (uint32_t b = 0; b < f->block_count; ++b)
         for (uint32_t e = 0; e < 2; ++e) {
-            XrLirArraySetRegion region;
-            if (!lir_array_region_prove(p, b, e, &region)) continue;
+            XrLirArraySetRegion shape, region;
+            if (!lir_array_region_shape(p, b, e, &shape)) continue;
             LirArrayRegionTables *receiver = tables;
-            if (p->fixed) receiver = fixed_updates;
-            else if (region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH) receiver = push_windows;
+            p->fixed = false;
+            if (!legacy_possible || !lir_array_region_prove(p, &shape, &region)) {
+                p->fixed = true;
+                if (!fixed_possible || !lir_array_region_prove(p, &shape, &region)) continue;
+                receiver = fixed_updates;
+            } else if (region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH) receiver = push_windows;
             region.first_step = receiver->steps.count;
             for (uint32_t n = 0; n < p->step_count; ++n)
                 if (!lir_array_region_append(&receiver->steps, &p->steps[n], sizeof(p->steps[n]))) return XR_LIR_OUT_OF_MEMORY;

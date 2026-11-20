@@ -19,7 +19,8 @@ enum ArrayRegionRangeMode {
     ARRAY_REGION_RANGE_COMMUTED, ARRAY_REGION_RANGE_DOUBLE_STEP, ARRAY_REGION_RANGE_LATCH_CURRENT,
     ARRAY_REGION_RANGE_NEXT_COPIES, ARRAY_REGION_RANGE_C_HEADER_LIVEOUT, ARRAY_REGION_RANGE_FAILING_RHS,
     ARRAY_REGION_RANGE_READ_ONLY, ARRAY_REGION_RANGE_READ_EXTRA, ARRAY_REGION_RANGE_READ_INDEX,
-    ARRAY_REGION_RANGE_READ_STEP, ARRAY_REGION_RANGE_READ_EFFECT, ARRAY_REGION_RANGE_DIRECT_RETURN
+    ARRAY_REGION_RANGE_READ_STEP, ARRAY_REGION_RANGE_READ_EFFECT, ARRAY_REGION_RANGE_DIRECT_RETURN,
+    ARRAY_REGION_RANGE_AFTER_RETAIN
 };
 #define ARS_RANGE_FIELDS(r) (r).kind,(r).iv,(r).iv_argument,(r).entry_iv,(r).length,(r).length_instruction, \
     (r).condition,(r).condition_instruction,(r).increment,(r).increment_block,(r).increment_instruction,(r).one,(r).latch_iv
@@ -166,6 +167,10 @@ static ArraySetRegionFixture ars_range_build_seeded(XrLirModule *module, uint32_
     if (direct_return) c.result = exited[0];
     else {
         c.result = ars_array_op(&c,c.exit,XR_LIR_ARRAY_OP_LEN,exited,1);
+        if (mode == ARRAY_REGION_RANGE_AFTER_RETAIN) {
+            XrLirValue snapshot = ars_retained(&c, c.exit, exited[0]);
+            ars_effect(&c, c.exit, XR_LIR_ARRAY_DROP, snapshot);
+        }
         if (mode == ARRAY_REGION_RANGE_C_HEADER_LIVEOUT) {
             XrLirValue sum[] = {bound,exited[1]};
             c.result = ars_value(&c,c.exit,(XrLirInstruction){.op=XR_LIR_ADD,.type=XR_LIR_I64,.operands=sum,.operand_count=2});

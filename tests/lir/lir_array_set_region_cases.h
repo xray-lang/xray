@@ -323,11 +323,12 @@ static void ars_current_retained(void) {
 static void ars_fixed_update_preparations(void) {
     const enum ArrayRegionRangeMode modes[] = {ARRAY_REGION_RANGE_UNIT, ARRAY_REGION_RANGE_FALSE_BODY,
         ARRAY_REGION_RANGE_BOUND, ARRAY_REGION_RANGE_STEP_TWO, ARRAY_REGION_RANGE_COMPUTED_GET,
-        ARRAY_REGION_RANGE_FAILING_RHS, ARRAY_REGION_RANGE_DIRECT_RETURN};
+        ARRAY_REGION_RANGE_FAILING_RHS, ARRAY_REGION_RANGE_DIRECT_RETURN, ARRAY_REGION_RANGE_AFTER_RETAIN};
     for (size_t n = 0; n < sizeof(modes) / sizeof(*modes); ++n) {
-        bool logical = n < 2 || modes[n] == ARRAY_REGION_RANGE_DIRECT_RETURN;
-        bool physical = n < 2;
-        ArraySetRegionFixture c = ars_range_build_seeded(NULL, 3, modes[n], true);
+        bool local_after_retain = modes[n] == ARRAY_REGION_RANGE_AFTER_RETAIN;
+        bool physical = n < 2 || local_after_retain;
+        bool logical = physical || modes[n] == ARRAY_REGION_RANGE_DIRECT_RETURN;
+        ArraySetRegionFixture c = ars_range_build_seeded(NULL, 3, modes[n], !local_after_retain);
         OK(xr_lir_module_finish(c.module, NULL));
         XrLirOwnershipPlan *plan = NULL;
         OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
@@ -364,7 +365,8 @@ static void ars_fixed_update_preparations(void) {
         xr_lir_ownership_plan_destroy(plan);
         if (physical) {
             const XrLirFixedArrayUpdateHome *bound = &homes->fixed_array_updates[0];
-            CHECK(bound->body_edge == (n ? 2u : 1u) && bound->owner_slot == homes->values[update.canonical_value].first_owner &&
+            CHECK(bound->body_edge == (modes[n] == ARRAY_REGION_RANGE_FALSE_BODY ? 2u : 1u) &&
+                bound->owner_slot == homes->values[update.canonical_value].first_owner &&
                 bound->workspace_slot < homes->frame.slot_count && bound->workspace_slot != bound->owner_slot &&
                 homes->fixed_array_update_step_count == update.step_count &&
                 homes->fixed_array_update_steps[bound->region.first_step + 1].edge == bound->body_edge);
