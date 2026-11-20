@@ -221,10 +221,10 @@ static void c_fixed_array_push_clone(LirC *c, uint32_t label, const XrLirArraySe
         c_format(c, "        for (size_t xrl_offset = 0; xrl_offset < xrl_count; ++xrl_offset) {\n"
             "            int64_t xrl_item = v%" PRIu32 " + (int64_t)xrl_offset;\n"
             "            XRT_ARRAY_I64_REGION_COPY(xrl_fixed_cache_%" PRIu32 ".elements + "
-            "(xrl_fixed_cache_%" PRIu32 ".length + xrl_offset) * sizeof(xrl_item), &xrl_item);\n"
-            "        }\n"
+            "(xrl_fixed_cache_%" PRIu32 ".length + xrl_offset) * sizeof(xrl_item), &xrl_item);\n", iv, label, label);
+        c_format(c, "        }\n"
             "        v%" PRIu32 " += (int64_t)xrl_count;\n"
-            "        xrl_fixed_cache_%" PRIu32 ".length += xrl_count;\n", iv, label, label, iv, label);
+            "        xrl_fixed_cache_%" PRIu32 ".length += xrl_count;\n", iv, label);
     } else {
         c_format(c, "        int64_t xrl_stop = v%" PRIu32 " + (int64_t)xrl_count;\n"
             "        for (; v%" PRIu32 " < xrl_stop; ++v%" PRIu32 ") {\n", iv, iv, iv);
