@@ -113,6 +113,8 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
     while (depth && good) {
         LowerRecordFrame *frame = &frames[depth - 1];
         const XrXirTypeNode *node = xr_xir_type_node(c->source->types, frame->type);
+        if (node && node->kind == XR_XIR_TYPE_NULLABLE && xr_xir_type_is_class(c->source->types, node->element))
+            return lower_unsupported(c, "Nullable class requires a receiving optional owner layout");
         XrXirTypeDescription description = {0};
         bool class_type = node && node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_class(c->source->types, frame->type);
         bool record = node && node->kind == XR_XIR_TYPE_NOMINAL &&

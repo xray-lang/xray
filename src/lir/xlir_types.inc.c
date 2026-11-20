@@ -146,6 +146,7 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape, const Xr
         shape.element >= XR_LIR_TYPE_COUNT + ordinal) return false;
     if (shape.element >= XR_LIR_TYPE_COUNT) {
         XrLirTypeData child = m->types[shape.element - XR_LIR_TYPE_COUNT];
+        if (child.shape.kind == XR_LIR_TYPE_CLASS) return false;
         if (!child.layout.size && xr_lir_inline_aggregate_type(m, shape.element)) {
             *output = child.layout;
             return true;
