@@ -156,13 +156,22 @@ static void array_region_binding_projection(unsigned shape) {
         if (row->region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_GET)
             CHECK(guard.slot_count==1 && row->workspace_slot==SIZE_MAX);
         else CHECK(guard.slot_count==2 && slots[1].slot==row->workspace_slot && row->owner_slot!=row->workspace_slot);
+        const XrLirHomeWorkspace *workspace=NULL;
+        for (size_t i=0;i<homes->workspace_count;++i) {
+            const XrLirHomeWorkspace *candidate=&homes->workspaces[i];
+            if (candidate->kind==XR_LIR_HOME_WORKSPACE_VALUE && candidate->block==published.primary_block &&
+                candidate->instruction==published.primary_instruction) workspace=candidate;
+        }
+        LirHomeBuilder builder={.homes=homes,.layouts=layouts,.compiler={.input=c.module,.function=c.function}};
+        XrLirFixedArrayUpdateHome projected={0};
+        CHECK(lir_fixed_array_project(&builder,plan,&published,workspace,&projected) &&
+            projected.owner_slot==row->owner_slot && projected.workspace_slot==row->workspace_slot);
         XrLirValueHome *values=(XrLirValueHome *)homes->values;
         XrLirValueHome *canonical=&values[row->region.canonical_value];
         uint32_t parameter=canonical->parameter;
         canonical->parameter=1;
-        LirHomeBuilder builder={.homes=homes,.layouts=layouts,.compiler={.input=c.module,.function=c.function}};
-        XrLirFixedArrayUpdateHome projected={.body_edge=733};
-        CHECK(!lir_fixed_array_project(&builder,plan,&published,NULL,&projected) && projected.body_edge==733);
+        projected.body_edge=733;
+        CHECK(!lir_fixed_array_project(&builder,plan,&published,workspace,&projected) && projected.body_edge==733);
         canonical->parameter=parameter;
     }
     if (shared) {
