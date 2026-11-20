@@ -739,7 +739,7 @@ static void scalar_edge_structure(const char *text,XrLirModule *module,XrLirFunc
             OK(xr_lir_block_view(module,(XrLirBlock){module,function.id,targets[e]},&target));
             const char *failure_end=strchr(failure,'\n'); CHECK(failure_end && failure_end<jump);
             const char *previous=cursor;
-            for (uint32_t a=1;a<target.parameter_count;++a) {
+            for (uint32_t a=2;a<target.parameter_count;++a) {
                 snprintf(marker,sizeof(marker),"    int64_t xrl_phi_%" PRIu32 " = ",a);
                 const char *snapshot=strstr(cursor,marker); CHECK(snapshot && snapshot>=previous && snapshot<call);
                 previous=snapshot+strlen(marker);

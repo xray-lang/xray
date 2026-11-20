@@ -1,0 +1,11 @@
+var data: Array<i64> = [11, 12]
+
+export fn make(seed: i64) -> Array<i64> {
+    var values: Array<i64> = []
+    values.push(seed)
+    values.push(seed + 1)
+    return values
+}
+export fn relay(input: Array<i64>) -> Array<i64> { return input }
+export fn snapshot() -> Array<i64> { return data }
+export fn change() { data[0] = 99 }

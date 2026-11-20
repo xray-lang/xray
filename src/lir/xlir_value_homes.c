@@ -405,7 +405,7 @@ typedef struct LirHomeChain {
     uint32_t parent, producer, last_block;
     uint32_t binding_input, binding_output, handoff_source;
     uint8_t rank;
-    bool rejected, array_region, array_cell;
+    bool rejected, array_region, array_cell, owning_call;
 } LirHomeChain;
 
 static uint32_t lir_home_chain_root(LirHomeChain *chains, uint32_t value) {
@@ -429,15 +429,24 @@ static void lir_home_chain_join(LirHomeChain *chains, uint32_t source, uint32_t 
     part->parent = to;
 }
 
-/* Pair the producer's existing last-use handoffs around a private Cell.
+/* Collect owning calls and pair existing last-use handoffs around a private Cell.
  * The Cell keeps its distinct physical slot through mutation. Its source home
  * is empty by the time the adjacent read and release return ownership. */
-static bool lir_home_chain_bindings(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
+static bool lir_home_chain_origins(LirHomeCompiler *c, const XrLirOwnershipPlan *plan,
     XrLirOwnershipFunction function, LirHomeChain *chains) {
+    const XrLirFunctionData *f = &c->input->functions[c->function.id - 1];
     for (uint32_t n = 0; n < function.fact_count; ++n) {
         XrLirOwnershipFact fact;
         if (xr_lir_ownership_fact_at(plan, function.fact_offset + n, &fact) != XR_LIR_OK)
             return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary binding fact disappeared");
+        if (fact.kind == XR_LIR_OWNERSHIP_RESULT_OWNER && fact.type == XR_LIR_ARRAY &&
+            fact.array_element == XR_LIR_I64) {
+            if (!fact.value || fact.value > c->view.value_count)
+                return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Array result lost its owner");
+            const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, fact.value);
+            if (definition && definition->op == XR_LIR_CALL)
+                chains[fact.value].owning_call = true;
+        }
         bool array = fact.type == XR_LIR_ARRAY_CELL && fact.array_element == XR_LIR_I64;
         if ((!array && fact.type != XR_LIR_MAP_STRING_I64_CELL) ||
             fact.forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)
@@ -565,14 +574,16 @@ static bool lir_home_stationary_owners(LirHomeBuilder *builder, const XrLirOwner
     if (!chains) return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_OOM, "cannot classify owner forwarding chains");
     lir_home_chain_array_regions(chains, builder->homes->array_region_steps, builder->homes->array_region_step_count);
     lir_home_chain_array_regions(chains, builder->homes->array_push_steps, builder->homes->array_push_step_count);
-    if (!lir_home_chain_bindings(c, plan, function, chains)) { xr_free(chains); return false; }
+    if (!lir_home_chain_origins(c, plan, function, chains)) { xr_free(chains); return false; }
     for (uint32_t v = 1; v <= f->value_count; ++v) {
         const XrLirValueData *value = &f->values[v - 1];
         if (!lir_home_chain_type(value) || !value->block || chains[v].array_region) continue;
         chains[v].parent = v;
         if (!value->parameter && !chains[v].handoff_source) {
             chains[v].producer = v;
-            chains[v].rejected = !lir_home_chain_producer(f, v) &&
+            /* The successful direct call publishes an owner in this activation.
+             * Its backing may still be shared with the callee or another binding. */
+            chains[v].rejected = !chains[v].owning_call && !lir_home_chain_producer(f, v) &&
                 !lir_home_container_chain_start(c->input, f, v);
         }
     }
