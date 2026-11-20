@@ -434,10 +434,10 @@ static void raw_image_fixture(RawImageFixture *raw) {
     *raw=(RawImageFixture){0};
     memcpy(raw->names,"leftrightnumbervalue",20);
     raw->owned[0]=0; raw->owned[1]=8; raw->owned[2]=8; raw->owned[3]=16; raw->owned[4]=offsetof(XrtFunction,owner);
-    raw->slots[0]=(XrtValueImageSlot){2,0,0,4};
-    raw->slots[1]=(XrtValueImageSlot){2,8,4,5};
-    raw->slots[2]=(XrtValueImageSlot){1,16,9,6};
-    raw->slots[3]=(XrtValueImageSlot){1,0,0,0};
+    raw->slots[0]=(XrtValueImageSlot){2,0,0,0,4};
+    raw->slots[1]=(XrtValueImageSlot){2,0,8,4,5};
+    raw->slots[2]=(XrtValueImageSlot){1,0,16,9,6};
+    raw->slots[3]=(XrtValueImageSlot){1,0,0,0,0};
     raw->parameter=(XrtValueImageParameter){1,XR_PARAM_READ,0,15,5};
     raw->types[0]=(XrtValueImageType){.kind=XRT_VALUE_I64,.size=8,.alignment=8};
     raw->types[1]=(XrtValueImageType){.kind=XRT_VALUE_STRING,.size=8,.alignment=8,.owned_count=1};

@@ -24,6 +24,7 @@ static bool rbc_value_inline_operand(const XrRbcModule *module,const XrRbcValueC
 static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
     bool class_new=a.operation==XR_RBC_VALUE_CLASS_NEW, class_field=a.operation==XR_RBC_VALUE_CLASS_FIELD;
+    bool class_push=a.operation==XR_RBC_VALUE_CLASS_ARRAY_PUSH, class_write=a.operation==XR_RBC_VALUE_CLASS_ARRAY_WRITE;
     bool create=class_new || a.operation==XR_RBC_VALUE_RECORD_NEW ||
         a.operation==XR_RBC_VALUE_NULLABLE_NONE || a.operation==XR_RBC_VALUE_NULLABLE_SOME;
     uint32_t value=create ? a.result : a.source;
@@ -31,11 +32,27 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
     const XrLirValueHome *home=rbc_value_home(code,value);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     const XrtValueImageType *type=&image->types[home->type-1];
-    if (class_new || class_field) {
+    if (class_new || class_field || class_push || class_write) {
         if (!xr_rbc_module_code_owner(module) || type->kind!=XRT_VALUE_CLASS ||
             !type->element || type->element>=home->type) return false;
         type=&image->types[type->element-1];
         if (type->kind!=XRT_VALUE_RECORD) return false;
+    }
+    if (class_push || class_write) {
+        if (a.result || a.first || a.count || a.index>=type->field_count || !image->slots ||
+            type->first_field>image->slot_count || type->field_count>image->slot_count-type->first_field) return false;
+        const XrtValueImageSlot *field=&image->slots[type->first_field+a.index];
+        if (field->flags!=XRT_VALUE_FIELD_MUTABLE || !field->type || field->type>image->type_count ||
+            image->types[field->type-1].kind!=XRT_VALUE_ARRAY_I64) return false;
+        if (class_write) return !a.window && rbc_value_inline_operand(module,code,function,a.other,field->type,false);
+        if (!a.window || a.window>code->homes->workspace_count || !code->homes->workspaces ||
+            !rbc_value_scalar(code,function,a.other,XR_RBC_BITS)) return false;
+        const XrLirHomeWorkspace *workspace=&code->homes->workspaces[a.window-1];
+        const XrtManagedFrameSpec *frame=&code->homes->frame;
+        return workspace->kind==XR_LIR_HOME_WORKSPACE_CLASS_ARRAY_PUSH && workspace->type==field->type &&
+            workspace->value==a.source && workspace->block && workspace->instruction &&
+            frame->owned_offsets && workspace->first_owner<frame->slot_count &&
+            frame->owned_offsets[workspace->first_owner]==workspace->offset;
     }
     if (class_new || a.operation==XR_RBC_VALUE_RECORD_NEW) {
         if (a.source || a.other || a.window || !xrt_value_kind_has_fields(type->kind) || a.count!=type->field_count ||

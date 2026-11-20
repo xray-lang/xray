@@ -317,6 +317,8 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     case XR_RBC_VALUE_NULLABLE_IS_SOME: case XR_RBC_VALUE_NULLABLE_UNWRAP:
         return rbc_value_flow_read(state,code,access.source,&incoming) &&
             rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
+    case XR_RBC_VALUE_CLASS_ARRAY_WRITE: case XR_RBC_VALUE_CLASS_ARRAY_PUSH:
+        return rbc_value_flow_read(state,code,access.source,&incoming) && rbc_value_flow_read(state,code,access.other,&incoming);
     case XR_RBC_VALUE_NULLABLE_NONE:
         return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
     case XR_RBC_VALUE_ARRAY: return rbc_value_array_transfer(state,code,access);

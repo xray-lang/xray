@@ -122,6 +122,7 @@ static bool lower_array_flow_values(LowerFunction *f) {
                 XrXirType type = parameter ? source->parameters[value] : definition->type;
                 if (!lower_managed_type(f->owner, lower_type(c, type)) || (definition &&
                     (definition->op == XR_XIR_CELL_PLACE || definition->op == XR_XIR_SLOT_PLACE ||
+                     definition->op == XR_XIR_OBJECT_PLACE || definition->op == XR_XIR_FIELD_PLACE ||
                      definition->op == XR_XIR_LOCAL_NEW || definition->op == XR_XIR_LOCAL_UNINIT))) continue;
                 XR_DCHECK(f->cell_count < f->value_count, "each managed state has a distinct source value");
                 uint32_t cell = f->cell_count++;
@@ -146,6 +147,10 @@ static void lower_array_flow_liveness(LowerFunction *f, uint32_t b, uint32_t i) 
     for (uint32_t a = op->op == XR_XIR_PHI ? 1u : 0u; a < count;
          a += op->op == XR_XIR_PHI ? 2u : 1u) {
         uint32_t value = lower_operand_at(source, op, a);
+        if (!a && (op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE || op->op == XR_XIR_ARRAY_PUSH)) {
+            const XrXirInstruction *root = lower_class_place_root(source,value);
+            if (root) value = root->args[0];
+        }
         uint32_t block = op->op == XR_XIR_PHI ? source->operands[op->args[0] + a - 1] : b;
         uint32_t cell = f->array_values[value];
         if (cell != UINT32_MAX && f->value_blocks[value] != block)

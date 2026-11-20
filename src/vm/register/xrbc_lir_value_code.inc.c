@@ -537,6 +537,20 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_RECORD_FIELD: case XR_LIR_CLASS_FIELD:
         access.operation=i->op==XR_LIR_CLASS_FIELD ? XR_RBC_VALUE_CLASS_FIELD : XR_RBC_VALUE_RECORD_FIELD;
         access.index=(uint32_t)i->bits; break;
+    case XR_LIR_CLASS_ARRAY_WRITE: case XR_LIR_CLASS_ARRAY_PUSH:
+        access.operation=i->op==XR_LIR_CLASS_ARRAY_WRITE ? XR_RBC_VALUE_CLASS_ARRAY_WRITE : XR_RBC_VALUE_CLASS_ARRAY_PUSH;
+        access.index=(uint32_t)i->bits;
+        if (i->op==XR_LIR_CLASS_ARRAY_PUSH) {
+            for (size_t w=0;w<c->homes->workspace_count;++w) {
+                const XrLirHomeWorkspace *workspace=&c->homes->workspaces[w];
+                if (workspace->block==c->diagnostic->block && workspace->instruction==c->diagnostic->instruction) {
+                    if (w>=UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"Class Array workspace index is too large");
+                    access.window=(uint32_t)w+1; break;
+                }
+            }
+            if (!access.window) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Class Array push lost its pending workspace");
+        }
+        break;
     case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
     case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP: {
         XrLirType type=(i->op==XR_LIR_NULLABLE_NONE || i->op==XR_LIR_NULLABLE_SOME) ? i->type : rbc_lir_value_type(c,access.source);

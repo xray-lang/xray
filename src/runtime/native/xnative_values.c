@@ -16,6 +16,7 @@
 #include "xnative_string_backing.h"
 #include "xnative_string_backing_ops.h"
 #include "xnative_array_ops.h"
+#include "xnative_class_array.h"
 #include "xnative_map_backing.h"
 #include "xnative_set_backing.h"
 #include "xnative_status.h"
@@ -231,6 +232,33 @@ XRAY_API const void *xrt_native_class_field(const XrtManagedHeader *owner, const
     XrtManagedStatus status = xrt_class_field_borrow(owner,binding.plan,field,&field_type,&bytes);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
     return bytes;
+}
+static XrtClassFieldAccess native_class_array_field(const XrtNativeClassField *field, uint32_t source) {
+    if (!field) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT,source);
+    XrtBoundClass binding=native_class(field->image,field->type,source);
+    return (XrtClassFieldAccess){field->instance,binding.plan,field->field};
+}
+XRAY_API void xrt_native_class_array_field_copy(const XrtNativeClassField *field,
+    XrtManagedFrame *frame, size_t destination, uint32_t source) {
+    XrtClassFieldAccess access=native_class_array_field(field,source);
+    XrtManagedStatus status=xrt_class_array_field_copy(&access,frame,destination);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+}
+XRAY_API void xrt_native_class_array_field_replace(const XrtNativeClassField *field,
+    const XrtManagedHeader *incoming, uint32_t source) {
+    XrtClassFieldAccess access=native_class_array_field(field,source);
+    XrtManagedStatus status=xrt_class_array_field_replace(&access,incoming);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+}
+XRAY_API void xrt_native_class_array_field_push(const XrtNativeClassField *field,
+    XrtManagedFrame *frame, size_t workspace, int64_t item, uint32_t source) {
+    XrtClassFieldAccess access=native_class_array_field(field,source);
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source),&types);
+    const XrtArrayUpdate update = {XRT_ARRAY_UPDATE_PUSH,0,{XRT_BACKING_ARRAY_I64,{.i64=item}}};
+    if (status == XRT_MANAGED_OK)
+        status = xrt_class_array_field_update(&access,frame,workspace,types,&update);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
 }
 static XrtManagedStatus native_environment_type(struct XrtNativeValues *values,
     const XrtValuePlan *plan, const XrtCaptureType **output) {

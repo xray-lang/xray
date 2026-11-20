@@ -22,6 +22,11 @@ fn readItems(holder: Holder) -> Array<i64> {
     return holder.items
 }
 
+fn replaceBeforePush(holder: Holder) -> i64 {
+    holder.items = [5]
+    return 23
+}
+
 var input = [3, 7]
 const holder = Holder(input)
 input[0] = 30
@@ -34,3 +39,17 @@ print(len(holder.items))
 print(len(snapshot))
 print(snapshot[2])
 print(stack.size())
+
+const alias = holder
+alias.items.push(13)
+print(len(holder.items))
+print(holder.items[2])
+print(snapshot[2])
+holder.items = [19]
+print(len(alias.items))
+print(alias.items[0])
+print(snapshot[0])
+alias.items.push(replaceBeforePush(holder))
+print(len(holder.items))
+print(holder.items[0])
+print(holder.items[1])
