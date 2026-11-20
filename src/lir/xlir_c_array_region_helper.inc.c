@@ -149,85 +149,6 @@ static void c_array_helper_return(LirC *c, size_t region) {
     }
     c_format(c,"        .cache = xrl_ar_%zu_cache, .phase = xrl_ar_%zu_phase\n    };\n",region,region);
 }
-static void c_array_pair_operand(LirC *c, const XrLirFunctionData *f, uint32_t value) {
-    const XrLirInstructionView *def = xr_lir_internal_value_definition(f,value);
-    if (def && def->op == XR_LIR_CONST)
-        c_format(c,"xrt_array_i64_pair_splat(UINT64_C(%" PRIu64 "))",def->bits);
-    else c_format(c,"xrl_pair_v%" PRIu32,value);
-}
-
-/* The common proof bounds a factor to two set bits. Emitting explicit lane
- * shifts also avoids provider-specific scalarization of I64 vector multiply. */
-static void c_array_pair_term(LirC *c, const XrLirFunctionData *f, uint32_t value, uint64_t bit) {
-    XR_DCHECK(bit && !(bit & (bit - 1)), "a paired multiply term is one power of two");
-    int amount = __builtin_ctzll(bit);
-    if (amount) c_text(c,"xrt_array_i64_pair_shl(");
-    c_array_pair_operand(c,f,value);
-    if (amount) c_format(c,", %d)",amount);
-}
-
-static void c_array_pair_multiply(LirC *c, const XrLirFunctionData *f, const XrLirInstructionView *op) {
-    const XrLirInstructionView *left = xr_lir_internal_value_definition(f,op->operands[0]);
-    bool left_const = left && left->op == XR_LIR_CONST;
-    const XrLirInstructionView *factor = left_const ? left : xr_lir_internal_value_definition(f,op->operands[1]);
-    XR_DCHECK(factor && factor->op == XR_LIR_CONST, "paired multiplication has a proved constant factor");
-    uint64_t bits = factor->bits;
-    if (!bits) {
-        c_text(c,"xrt_array_i64_pair_splat(UINT64_C(0))");
-        return;
-    }
-    uint64_t rest = bits & (bits - 1);
-    uint32_t value = op->operands[left_const ? 1 : 0];
-    if (rest) c_text(c,"xrt_array_i64_pair_add(");
-    c_array_pair_term(c,f,value,bits ^ rest);
-    if (rest) {
-        c_text(c,", ");
-        c_array_pair_term(c,f,value,rest);
-        c_text(c,")");
-    }
-}
-
-static void c_array_pair_prefix(LirC *c, const XrLirFunctionData *f, const XrLirArraySetRegion *row, size_t region) {
-    if (!row->element_read) return;
-    const XrLirBlockData *body = &f->blocks[row->primary_block - 1];
-    const XrLirInstructionView *get = &body->instructions[row->element_read - 1].view;
-    const XrLirInstructionView *set = &body->instructions[row->primary_instruction - 1].view;
-    XR_DCHECK(get->result && set->operand_count == 3, "paired prefix consumes the original GET and SET");
-    /* The caller admitted a nonempty span. Leave at least the final iteration
-     * to reconstruct every original live-out, then use the original exit. */
-    c_format(c,"#if defined(XRT_ARRAY_I64_PAIR_AVAILABLE)\n"
-        "    const size_t xrl_pair_start = (size_t)v%" PRIu32 ";\n"
-        "    const size_t xrl_pair_count = (xrl_ar_%zu_cache.length - xrl_pair_start - 1) & ~(size_t)1;\n",
-        row->range.iv,region);
-    c_text(c,"    unsigned char *xrl_pair_next = xrl_ar_elements + xrl_pair_start * sizeof(uint64_t);\n"
-        "    const unsigned char *xrl_pair_end = xrl_pair_next + xrl_pair_count * sizeof(uint64_t);\n"
-        "    while (xrl_pair_next != xrl_pair_end) {\n");
-    c_format(c,"        const XrtArrayI64Pair xrl_pair_v%" PRIu32 " = xrt_array_i64_pair_load(xrl_pair_next);\n"
-        "        (void)xrl_pair_v%" PRIu32 ";\n",get->result,get->result);
-    for (uint32_t i = row->element_read; i + 1 < row->primary_instruction && c_request_poll(c); ++i) {
-        const XrLirInstructionView *op = &body->instructions[i].view;
-        if (op->op == XR_LIR_CELL_NEW) { ++i; continue; }
-        if (op->op == XR_LIR_CONST) continue;
-        c_format(c,"        const XrtArrayI64Pair xrl_pair_v%" PRIu32 " = ",op->result);
-        if (op->op == XR_LIR_MUL) c_array_pair_multiply(c,f,op);
-        else {
-            XR_DCHECK(op->op == XR_LIR_ADD || op->op == XR_LIR_SUB || op->op == XR_LIR_NEG,
-                "paired expression contains only proved wrapping operations");
-            c_text(c,op->op == XR_LIR_ADD ? "xrt_array_i64_pair_add(" : "xrt_array_i64_pair_sub(");
-            if (op->op == XR_LIR_NEG) c_text(c,"xrt_array_i64_pair_splat(UINT64_C(0))");
-            else c_array_pair_operand(c,f,op->operands[0]);
-            c_text(c,", ");
-            c_array_pair_operand(c,f,op->operands[op->op == XR_LIR_NEG ? 0 : 1]);
-            c_text(c,")");
-        }
-        c_format(c,";\n        (void)xrl_pair_v%" PRIu32 ";\n",op->result);
-    }
-    c_text(c,"        xrt_array_i64_pair_store(xrl_pair_next, ");
-    c_array_pair_operand(c,f,set->operands[2]);
-    c_format(c,");\n        xrl_pair_next += 2 * sizeof(uint64_t);\n    }\n"
-        "    v%" PRIu32 " = (int64_t)(xrl_pair_start + xrl_pair_count);\n#endif\n",row->range.iv);
-}
-
 static void c_array_helper_emit(LirC *c, size_t region) {
     const LirCArrayRegionHelper helper = c->array_region->helpers[region];
     const XrLirArrayRegionBindings *bindings = c->array_region->bindings;
@@ -252,8 +173,6 @@ static void c_array_helper_emit(LirC *c, size_t region) {
     c_format(c,"    uint64_t v%" PRIu32 ";\n    (void)&v%" PRIu32 ";\n",c->scratch,c->scratch);
     c_format(c,"    xrl_ar_%zu_phase = 2;\n",region);
     const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
-    if (bindings->regions[region].owner_home.kind == XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW)
-        c_array_pair_prefix(c,function,&row,region);
     const XrLirBlockData *header = &function->blocks[row.header - 1];
     const XrLirInstructionView *term = &header->instructions[header->instruction_count - 1].view;
     size_t edge = bindings->block_index[row.header].edges[0];

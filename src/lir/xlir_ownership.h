@@ -230,10 +230,6 @@ typedef struct XrLirArraySetRegion {
     uint32_t body_block_count, primary_kind, primary_block, primary_instruction, first_step, step_count;
     XrLirArraySetRegionRange range;
     XrLirArraySetRegionOwnerHome owner_home;
-    /* One-based GET in primary_block for a current-element I64 expression
-     * ending at the primary SET. No changed scalar recurrence except the IV.
-     * Consumers must still run the original final iteration and owner exit. */
-    uint32_t element_read;
     /* PUSH only: item is the current IV and all other carried scalars are unchanged.
      * Both modes still use the same selected edges, owner home and capacity guard. */
     bool push_counted;

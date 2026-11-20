@@ -144,10 +144,6 @@ static XrLirValueLayoutStatus region_binding_prepare(RegionBindingBuilder *b) {
             r.push_counted ||
             (r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_SET && r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_GET))
             return XR_LIR_VALUE_LAYOUT_ARGUMENT;
-        if (r.element_read && (r.primary_kind!=XR_LIR_ARRAY_REGION_PRIMARY_SET ||
-            r.element_read>=r.primary_instruction || r.range.kind!=XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN ||
-            r.owner_home.kind!=XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW))
-            return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         uint32_t blocks[]={r.header,r.entry_block,r.latch,r.exit_block};
         for (size_t p=0;p<4;++p) if (blocks[p]>maximum) maximum=blocks[p];
     }
@@ -308,20 +304,17 @@ static XrLirValueLayoutStatus region_binding_primary(const RegionBindingBuilder 
     const XrLirArrayRegionBinding *row) {
     XrLirArraySetRegion region=row->region;
     size_t gets=0,sets=0,matches=0;
-    bool element_read=false;
     const XrLirArrayRegionAccess *accesses=b->accesses.data;
     for (size_t n=0;n<row->access_count;++n) {
         XrLirArrayRegionAccess access=accesses[row->first_access+n];
         gets+=access.operation==XR_LIR_ARRAY_OP_GET; sets+=access.operation==XR_LIR_ARRAY_OP_SET;
-        element_read|=access.block==region.primary_block && access.instruction==region.element_read &&
-            access.operation==XR_LIR_ARRAY_OP_GET;
         if (access.block==region.primary_block && access.instruction==region.primary_instruction) {
             if (access.operation!=(region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET ? XR_LIR_ARRAY_OP_SET : XR_LIR_ARRAY_OP_GET))
                 return XR_LIR_VALUE_LAYOUT_ARGUMENT;
             ++matches;
         }
     }
-    if (matches!=1 || (region.element_read && (gets!=1 || !element_read))) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+    if (matches!=1) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     if (region.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET) return sets==1 ? XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_ARGUMENT;
     bool guarded=region.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT &&
         region.range.length && region.range.length<=b->homes->value_count;

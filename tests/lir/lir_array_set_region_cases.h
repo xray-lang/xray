@@ -152,7 +152,7 @@ static void ars_range_preparations(void) {
                 range.increment && range.increment_block == c.body[mode == ARRAY_REGION_RANGE_NEXT_COPIES ? 0 : 2].id &&
                 range.increment_instruction && range.one && range.latch_iv);
             CHECK(ars_owner_home_same(region.owner_home,(XrLirArraySetRegionOwnerHome){0}) &&
-                !region.element_read && region.step_count >= 3);
+                region.step_count >= 3);
             XrLirArraySetRegionStep entry, body, departure;
             OK(xr_lir_ownership_fixed_array_update_step_at(plan, region.first_step, &entry));
             OK(xr_lir_ownership_fixed_array_update_step_at(plan, region.first_step + 1, &body));
