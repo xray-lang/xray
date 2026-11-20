@@ -659,6 +659,136 @@ static XR_NOINLINE uint64_t rbc_value_append_window(XrRbcStack *stack, RbcValueA
         window->suffix_owner, count, homes->string_window_slots + window->latch_empty_first, window->empty_count);
 }
 
+/* Replay executes only the scalar words sealed for this visit to the block.
+ * Register scheduling, scalar comparisons, and spills match ordinary code. */
+static void rbc_value_replay_words(XrRbcStack *stack, const XrRbcFrame *frame,
+    const XrRbcFunction *function, const uint32_t *code, size_t pc, size_t end) {
+    XrRbcRegister *registers = stack->slots + frame->base;
+    const uint64_t *constants = function->constants;
+    while (pc < end) {
+        uint32_t instruction = code[pc++], op = instruction & 255u;
+#define XR_RBC_A() ((instruction >> 8) & 255u)
+#define XR_RBC_B() ((instruction >> 16) & 255u)
+#define XR_RBC_C() (instruction >> 24)
+#define XR_RBC_SLOT(index) registers[index]
+#define XR_RBC_REG(index) XR_RBC_SLOT(index).bits
+#define XR_RBC_BINARY(expression) (XR_RBC_REG(XR_RBC_A()) = (expression))
+#define XR_RBC_CASE(name) case XR_RBC_##name:
+#define XR_RBC_NEXT() break
+        switch (op) {
+        XR_RBC_CASE(MOV) {
+            XR_RBC_SLOT(XR_RBC_A()) = XR_RBC_SLOT(XR_RBC_B());
+            XR_RBC_NEXT();
+        }
+#define XR_RBC_SCALAR_TRANSFER
+#include "xrbc_scalar_dispatch.inc.c"
+#undef XR_RBC_SCALAR_TRANSFER
+#define XR_RBC_SCALAR_ARITHMETIC
+#include "xrbc_scalar_dispatch.inc.c"
+#undef XR_RBC_SCALAR_ARITHMETIC
+#define XR_RBC_SCALAR_BRANCH
+#include "xrbc_scalar_dispatch.inc.c"
+#undef XR_RBC_SCALAR_BRANCH
+        default:
+            XR_CHECK(false, "sealed String replay contains only scalar operations");
+        }
+#undef XR_RBC_NEXT
+#undef XR_RBC_CASE
+#undef XR_RBC_BINARY
+#undef XR_RBC_REG
+#undef XR_RBC_SLOT
+#undef XR_RBC_C
+#undef XR_RBC_B
+#undef XR_RBC_A
+    }
+    XR_DCHECK(pc == end, "sealed replay branches stay within the scalar slice");
+}
+
+static XrRbcRegister *rbc_value_replay_slot(XrRbcStack *stack, const XrRbcFrame *frame,
+    XrRbcValueLocation location) {
+    XR_DCHECK(location.kind == XR_RBC_VALUE_REGISTER || location.kind == XR_RBC_VALUE_SPILL,
+        "sealed String replay moves only register or scalar spill bits");
+    return location.kind == XR_RBC_VALUE_REGISTER ? &stack->slots[frame->base + location.index] :
+        &stack->spills[frame->spill_base + location.index];
+}
+
+static inline void rbc_value_publish_scalar_edge(RbcValueActivation *activation, size_t count) {
+    for (size_t n = 0; n < count; ++n)
+        memcpy(activation->publications[n].destination.address,
+            activation->snapshots + n * sizeof(uint64_t), sizeof(uint64_t));
+}
+
+static void rbc_value_replay_edge(XrRbcStack *stack, const XrRbcFrame *frame,
+    RbcValueActivation *activation, const XrRbcStringReplayStep *step) {
+    const XrRbcValueCode *code = activation->code;
+    for (size_t n = 0; n < step->copy_count; ++n) {
+        const XrRbcStringReplayCopy *copy = &code->string_replay_copies[step->first_copy + n];
+        XrRbcRegister *from = rbc_value_replay_slot(stack, frame, copy->source);
+        XrRbcRegister *to = rbc_value_replay_slot(stack, frame, copy->target);
+        activation->publications[n].destination.address = (uint8_t *)&to->bits;
+        memcpy(activation->snapshots + n * sizeof(uint64_t), &from->bits, sizeof(uint64_t));
+    }
+    rbc_value_publish_scalar_edge(activation, step->copy_count);
+}
+
+/* The ordinary edge has already published the real header owner and scalar
+ * phi values. Filling spare capacity performs no allocation or callbacks.
+ * After a nonzero fill, scalar replay has no failure or ordinary fallback. */
+static XR_NOINLINE void rbc_value_string_replay(const XrRbcModule *module, XrRbcStack *stack,
+    RbcValueActivation *activation, uint32_t access) {
+    const XrRbcValueCode *code = activation->code;
+    uint32_t ordinal = code->string_replay_accesses[access];
+    if (!ordinal) return;
+    const XrLirValueHomes *homes = code->homes;
+    XR_DCHECK(ordinal <= homes->string_window_count, "bound replay belongs to a common String window");
+    const XrRbcStringReplay *replay = &code->string_replays[ordinal - 1];
+    const XrLirStringWindow *window = &homes->string_windows[ordinal - 1];
+    XR_DCHECK(replay->latch_access == access + 1 && replay->step_count &&
+        replay->first_step <= code->string_replay_step_count &&
+        replay->step_count <= code->string_replay_step_count - replay->first_step &&
+        window->header_empty_first <= homes->string_window_slot_count &&
+        window->empty_count <= homes->string_window_slot_count - window->header_empty_first,
+        "sealed replay begins at the actual published header and has complete steps");
+    XrRbcRegister *iv = rbc_value_register(stack, activation, window->index);
+    if (!iv) return;
+    uint64_t start = iv->bits, limit = window->limit_bits;
+    if (!window->constant_limit) {
+        XrRbcRegister *bound = rbc_value_register(stack, activation, window->limit);
+        if (!bound) return;
+        limit = bound->bits;
+    }
+    if (limit > INT64_MAX || start >= limit) return;
+    const XrRbcStringReplayStep *steps = code->string_replay_steps + replay->first_step;
+    for (size_t n = 0; n < replay->step_count; ++n) {
+        const XrRbcStringReplayStep *step = &steps[n];
+        XR_DCHECK(step->first_word <= code->string_replay_word_count &&
+            step->word_count <= code->string_replay_word_count - step->first_word &&
+            step->first_copy <= code->string_replay_copy_count &&
+            step->copy_count <= code->string_replay_copy_count - step->first_copy,
+            "sealed String replay slices belong to the function's scalar projection");
+        if (step->copy_count > activation->publication_capacity ||
+            step->copy_count > activation->snapshot_capacity / sizeof(uint64_t)) return;
+    }
+    uint64_t remaining = limit - start;
+    size_t count = remaining > SIZE_MAX ? SIZE_MAX : (size_t)remaining;
+    size_t done = xrt_native_string_append_window(activation->frame, window->header_owner, window->suffix_owner,
+        count, homes->string_window_slots + window->header_empty_first, window->empty_count);
+    if (!done) return;
+
+    const XrRbcFrame *frame = &stack->frames[activation->depth - 1];
+    const XrRbcFunction *function = &module->functions[frame->function];
+    for (size_t iteration = 0; iteration < done; ++iteration) {
+        for (size_t n = 0; n < replay->step_count; ++n) {
+            const XrRbcStringReplayStep *step = &steps[n];
+            if (step->word_count)
+                rbc_value_replay_words(stack, frame, function, code->string_replay_words,
+                    step->first_word, step->first_word + step->word_count);
+            if (step->copy_count) rbc_value_replay_edge(stack, frame, activation, step);
+        }
+    }
+    XR_DCHECK(iv->bits == start + done, "replay publishes exactly the completed append iterations");
+}
+
 /* This edge moves one complete Header and otherwise transports raw scalar
  * bits. Snapshot all changed destinations before publishing any of them. */
 static XR_NOINLINE bool rbc_value_snapshot_edge_scalars(XrRbcStack *stack, RbcValueActivation *activation,
@@ -767,9 +897,7 @@ static bool rbc_value_edge_move_header(XrRbcStack *stack, RbcValueActivation *ac
     *destination = *source;
     *source = NULL;
     if (scalar) scalar->bits = bits;
-    for (size_t n = 0; n < moves; ++n)
-        memcpy(activation->publications[n].destination.address,
-            activation->snapshots + n * sizeof(uint64_t), sizeof(uint64_t));
+    rbc_value_publish_scalar_edge(activation, moves);
     return true;
 }
 static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *stack,
@@ -1337,6 +1465,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation==XR_RBC_VALUE_EDGE) {
         status=rbc_value_edge(module,stack,activation,access);
         if (status==XRT_MANAGED_OK && access.window) rbc_value_array_push_after_edge(stack,activation,access);
+        if (status==XRT_MANAGED_OK && activation->owned_code && activation->code->string_replay_accesses)
+            rbc_value_string_replay(module,stack,activation,index);
     }
     else if (access.operation>=XR_RBC_VALUE_ARRAY && access.operation<=XR_RBC_VALUE_BINDING_DROP)
         status=rbc_value_array_step(module,stack,activation,access,source);

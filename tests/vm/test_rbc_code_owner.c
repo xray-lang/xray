@@ -14,6 +14,7 @@
 #include "base/xmalloc.h"
 #include "vm/register/xrbc_lir.h"
 #include "xray_native_string_value.h"
+#include "xray_native_values.h"
 #include "xray_native_array_local.h"
 #include "runtime/native/xnative_array_ops.h"
 
@@ -33,6 +34,18 @@ static bool counted_region_begin(const XrtArrayI64RegionContext *context,const X
 static bool counted_array_local_update(const XrtArrayI64LocalView *view,XrtArrayI64LocalUpdate update) {
     if (update.operation==XRT_ARRAY_UPDATE_PUSH) ++array_pushes;
     return xrt_array_i64_try_update_local(view,update);
+}
+
+static size_t string_window_attempts, string_window_completed;
+static bool string_window_force_bypass;
+
+static size_t counted_string_window(XrtManagedFrame *frame, size_t owner, size_t suffix, size_t count,
+    const size_t *empty_slots, size_t empty_count) {
+    ++string_window_attempts;
+    if (string_window_force_bypass) return 0;
+    size_t done = xrt_native_string_append_window(frame, owner, suffix, count, empty_slots, empty_count);
+    string_window_completed += done;
+    return done;
 }
 
 static size_t attempts, fail_at = SIZE_MAX, tracked_live;
@@ -124,7 +137,9 @@ static XrtManagedStatus counted_array_update(XrtPlace binding,XrtBackingArrayKin
 #define xrt_array_i64_region_try_begin counted_region_begin
 #define xrt_array_i64_try_update_local counted_array_local_update
 #define xrt_array_update_place counted_array_update
+#define xrt_native_string_append_window counted_string_window
 #include "vm/register/xrbc.c"
+#undef xrt_native_string_append_window
 #undef xrt_array_update_place
 #undef xrt_array_i64_try_update_local
 #undef xrt_array_i64_region_try_begin
@@ -748,8 +763,10 @@ static void failure_sweep(unsigned kind) {
 }
 #include "rbc_header_edge_cases.h"
 #include "rbc_array_region_cases.h"
+#include "rbc_string_replay_cases.h"
 int main(void) {
     rbc_array_region_cases();
+    rbc_string_replay_case();
     for (unsigned kind = 0; kind < 4; ++kind) { prepared_after_program(kind); failure_sweep(kind); }
     code_lease_is_leaf(); raw_borrow_and_refusal();
     prepared_after_program(4); prepared_after_program(5); owned_receiving_failures(); owned_outcome_take();
