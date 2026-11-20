@@ -409,6 +409,9 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                     return XR_LIR_OUT_OF_MEMORY;
                 if (v->result && lir_managed_value(m,v->type) && !lir_plan_value(plan,f,
                     XR_LIR_OWNERSHIP_RESULT_OWNER,function,b + 1,i + 1,v->result,0)) return XR_LIR_OUT_OF_MEMORY;
+                if (v->op == XR_LIR_CLASS_ARRAY_PUSH && !lir_plan_add(plan,(XrLirOwnershipFact){
+                    .kind=XR_LIR_OWNERSHIP_CLASS_ARRAY_PUSH,.function=function,.block=b+1,.instruction=i+1,
+                    .value=v->operands[0],.type=XR_LIR_ARRAY,.array_element=XR_LIR_I64})) return XR_LIR_OUT_OF_MEMORY;
                 if (v->op >= XR_LIR_SET_NEW && v->op <= XR_LIR_SET_CLEAR) {
                     uint32_t receiver = v->op == XR_LIR_SET_NEW ? 0 : v->operands[0];
                     if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SET_OPERATION,

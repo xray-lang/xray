@@ -41,7 +41,8 @@ typedef enum XrLirOwnershipFactKind {
     XR_LIR_OWNERSHIP_CELL_OPERATION,
     XR_LIR_OWNERSHIP_CELL_SCOPE_EXIT,
     XR_LIR_OWNERSHIP_STRING_OPERATION,
-    XR_LIR_OWNERSHIP_SET_OPERATION
+    XR_LIR_OWNERSHIP_SET_OPERATION,
+    XR_LIR_OWNERSHIP_CLASS_ARRAY_PUSH
 } XrLirOwnershipFactKind;
 
 /* Transfer semantics belong to the verified event, not to a type's possible
@@ -68,6 +69,8 @@ typedef enum XrLirSliceCleanupMode {
  * describes that edge only, not simultaneous transfers along both branches.
  * ARRAY_OPERATION records a verified catalog operation and exact element.
  * NEW and REPEAT have no receiver; their value/type fields are zero.
+ * CLASS_ARRAY_PUSH names the live Class receiver and the exact Array type
+ * for its stable pending replacement slot.
  * MAP_OPERATION uses map_operation instead of array_operation. BINDING facts
  * name the actual Cell/Ref in value. target_value is the initializer, snapshot,
  * replacement, or BORROW source; RELEASE has no target. These are positions

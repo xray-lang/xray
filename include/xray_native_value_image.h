@@ -28,6 +28,9 @@ typedef enum XrtValueKind {
     XRT_VALUE_ARRAY_INLINE,
     XRT_VALUE_CLASS
 } XrtValueKind;
+/* Mutability received from the Checked field for the admitted Class Array
+ * path. A flag describes the field and leaves access to the checked operation. */
+enum { XRT_VALUE_FIELD_MUTABLE = 1u };
 static inline int xrt_value_kind_has_fields(XrtValueKind kind) {
     return kind == XRT_VALUE_RECORD || kind == XRT_VALUE_TUPLE;
 }
@@ -48,7 +51,7 @@ static inline int xrt_value_kind_is_display_leaf(XrtValueKind kind) {
  * are byte spans, without an implied trailing NUL. These native C descriptors
  * are not a wire format or permission to invoke an entry ordinal. */
 typedef struct XrtValueImageSlot {
-    uint32_t type;
+    uint32_t type, flags;
     size_t offset, name_offset, name_length;
 } XrtValueImageSlot;
 typedef struct XrtValueImageParameter {

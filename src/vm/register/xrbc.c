@@ -22,6 +22,7 @@
 #include "runtime/native/xnative_values.h"
 #include "runtime/native/xnative_capture_backing.h"
 #include "runtime/native/xnative_array_slice.h"
+#include "runtime/native/xnative_class_array.h"
 #include "lir/xlir_view.h"
 #include "runtime/native/xnative_module_state.h"
 #include "runtime/native/xnative_value_image.h"

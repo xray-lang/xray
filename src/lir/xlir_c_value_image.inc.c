@@ -33,8 +33,9 @@ static void c_value_image(LirC *c, const XrtValueImage *image) {
     if (image->slot_count) c_text(c, "static const XrtValueImageSlot xrl_value_slots[] = {\n");
     for (uint32_t i = 0; i < image->slot_count && c_request_poll(c); ++i) {
         XrtValueImageSlot row = image->slots[i];
-        c_format(c, "    {UINT32_C(%" PRIu32 "), UINT64_C(%" PRIu64 "), UINT64_C(%" PRIu64 "), UINT64_C(%" PRIu64 ")},\n",
-            row.type, (uint64_t)row.offset, (uint64_t)row.name_offset, (uint64_t)row.name_length);
+        c_format(c, "    {UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "), UINT64_C(%" PRIu64
+            "), UINT64_C(%" PRIu64 "), UINT64_C(%" PRIu64 ")},\n", row.type, row.flags,
+            (uint64_t)row.offset, (uint64_t)row.name_offset, (uint64_t)row.name_length);
     }
     if (image->slot_count) c_text(c, "};\n");
     if (image->parameter_count) c_text(c, "static const XrtValueImageParameter xrl_value_parameters[] = {\n");

@@ -9,6 +9,7 @@
 #include "lir/xlir_builder.h"
 #include "lir/xlir_value_image.h"
 #include "runtime/native/xnative_value_image.h"
+#include "runtime/native/xnative_class_array.h"
 #include "runtime/native/xnative_array_backing.h"
 #include "runtime/native/xnative_string_backing.h"
 #include "base/xmalloc.h"
@@ -236,7 +237,7 @@ static void class_values_follow_their_exact_owner(void) {
     static const char names[] = "idname";
     const size_t offsets[] = {0,offsetof(ClassRow,name)};
     const XrtValueImageSlot fields[] = {
-        {1,offsetof(ClassRow,id),0,2}, {2,offsetof(ClassRow,name),2,4}
+        {1,0,offsetof(ClassRow,id),0,2}, {2,0,offsetof(ClassRow,name),2,4}
     };
     const XrtValueImageType types[] = {
         {.kind=XRT_VALUE_I64,.size=sizeof(int64_t),.alignment=_Alignof(int64_t)},
@@ -299,7 +300,7 @@ static void class_values_follow_their_exact_owner(void) {
 }
 static void class_arrays_keep_their_exact_backing(void) {
     const size_t offset = 0;
-    const XrtValueImageSlot field = {1,0,0,5};
+    const XrtValueImageSlot field = {.type=1,.name_length=5};
     const XrtValueImageType types[] = {
         {.kind=XRT_VALUE_ARRAY_I64,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
         {.kind=XRT_VALUE_RECORD,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.field_count=1},
@@ -344,6 +345,53 @@ static void class_arrays_keep_their_exact_backing(void) {
     CHECK(!memcmp(((const XrtArrayBacking *)kept)->elements,data,sizeof(data)));
     xrt_managed_drop(kept); CHECK(owner.audit.final==1);
 }
+static void class_array_update_failure_preserves_the_field(void) {
+    const size_t offset=0;
+    const XrtValueImageSlot field={.type=1,.flags=XRT_VALUE_FIELD_MUTABLE,.name_length=5};
+    const XrtValueImageType types[]={
+        {.kind=XRT_VALUE_ARRAY_I64,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
+        {.kind=XRT_VALUE_RECORD,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.field_count=1},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=2}
+    };
+    const XrtValueImage image={.types=types,.type_count=3,.slots=&field,.slot_count=1,
+        .owned_offsets=&offset,.owned_count=1,.names="items",.name_bytes=5};
+    Owner owner; owner_new(&owner,SIZE_MAX);
+    XrtValueImagePlans *bound=NULL;
+    MANAGED(xrt_value_image_bind(owner.billing,&image,(XrtManagedLease){0},&bound));
+    XrtBoundClass holder={0}; MANAGED(xrt_value_image_class(bound,3,&holder));
+    XrtBackingTypes backings={0}; XrtManagedRoot *root=NULL; XrtManagedFrame *frame=NULL;
+    MANAGED(xrt_backing_types_init(owner.billing,&backings));
+    MANAGED(xrt_managed_root_new(owner.billing,&root)); MANAGED(xrt_managed_frame_enter(root,5,&frame));
+    const int64_t item=3;
+    MANAGED(xrt_array_backing_i64_create(frame,0,&backings,&item,1,1));
+    XrtManagedHeader *old=NULL,*instance=NULL,*read=NULL,*work=NULL;
+    MANAGED(xrt_managed_slot_borrow(frame,0,&old));
+    MANAGED(xrt_class_create(frame,1,holder.ops,&old));
+    MANAGED(xrt_managed_slot_borrow(frame,1,&instance));
+    const XrtClassFieldAccess access={instance,holder.plan,0};
+    MANAGED(xrt_class_array_field_copy(&access,frame,2));
+    const XrtArrayUpdate update={XRT_ARRAY_UPDATE_PUSH,0,{XRT_BACKING_ARRAY_I64,{.i64=7}}};
+    XrtBillingStats before=xrt_billing_owner_stats(owner.billing);
+    xrt_billing_owner_fail_after(owner.billing,0);
+    CHECK(xrt_class_array_field_update(&access,frame,3,&backings,&update)==XRT_MANAGED_OOM);
+    xrt_billing_owner_fail_after(owner.billing,SIZE_MAX);
+    XrtBillingStats after=xrt_billing_owner_stats(owner.billing);
+    CHECK(after.bytes==before.bytes && after.blocks==before.blocks);
+    MANAGED(xrt_managed_slot_borrow(frame,3,&work)); CHECK(!work);
+    MANAGED(xrt_class_array_field_copy(&access,frame,4));
+    MANAGED(xrt_managed_slot_borrow(frame,4,&read)); CHECK(read==old);
+    MANAGED(xrt_class_array_field_update(&access,frame,3,&backings,&update));
+    MANAGED(xrt_class_array_field_copy(&access,frame,4));
+    read=NULL;
+    MANAGED(xrt_managed_slot_borrow(frame,4,&read)); CHECK(read!=old);
+    CHECK(((const XrtArrayBacking *)old)->length==1 && ((const XrtArrayBacking *)read)->length==2);
+    MANAGED(xrt_class_array_field_replace(&access,old));
+    MANAGED(xrt_class_array_field_copy(&access,frame,4));
+    read=NULL;
+    MANAGED(xrt_managed_slot_borrow(frame,4,&read)); CHECK(read==old);
+    MANAGED(xrt_managed_root_destroy(&root)); xrt_backing_types_drop(&backings);
+    xrt_value_image_drop(&bound); owner_drop(&owner); CHECK(owner.audit.final==1);
+}
 static void derived_classes_keep_concrete_identity(void) {
     const size_t offset = 0;
     XrtValueImageType types[] = {
@@ -353,7 +401,7 @@ static void derived_classes_keep_concrete_identity(void) {
         {.kind=XRT_VALUE_RECORD,.size=16,.alignment=8,.first_field=1,.field_count=2},
         {.kind=XRT_VALUE_CLASS,.size=8,.alignment=8,.owned_count=1,.element=4,.class_parent=3}
     };
-    XrtValueImageSlot fields[] = {{1,0,0,2},{1,0,0,2},{1,8,2,3}};
+    XrtValueImageSlot fields[] = {{1,0,0,0,2},{1,0,0,0,2},{1,0,8,2,3}};
     const XrtValueImage image = {.types=types,.type_count=5,.slots=fields,.slot_count=3,
         .owned_offsets=&offset,.owned_count=1,.names="idage",.name_bytes=5};
     Owner owner; owner_new(&owner,SIZE_MAX);
@@ -361,7 +409,7 @@ static void derived_classes_keep_concrete_identity(void) {
     XrtBillingStats before=xrt_billing_owner_stats(owner.billing);
     fields[0].name_offset=2; fields[0].name_length=3;
     CHECK(xrt_value_image_bind(owner.billing,&image,(XrtManagedLease){0},&bound)==XRT_MANAGED_ARGUMENT && !bound);
-    fields[0]=(XrtValueImageSlot){1,0,0,2};
+    fields[0]=(XrtValueImageSlot){.type=1,.name_length=2};
     types[4].class_parent=2;
     CHECK(xrt_value_image_bind(owner.billing,&image,(XrtManagedLease){0},&bound)==XRT_MANAGED_ARGUMENT && !bound);
     types[4].class_parent=3;
@@ -393,9 +441,9 @@ static void nested_class_owners_are_checked_before_publication(void) {
     const size_t offsets[] = {0,offsetof(Pair,text),
         offsetof(OptionalPair,payload)+offsetof(Pair,text),offsetof(Row,required)};
     const XrtValueImageSlot fields[] = {
-        {1,0,0,0},{2,offsetof(Pair,text),0,0},
-        {4,0,0,0},{2,offsetof(Row,required),0,0},
-        {5,0,0,3}
+        {.type=1},{.type=2,.offset=offsetof(Pair,text)},
+        {.type=4},{.type=2,.offset=offsetof(Row,required)},
+        {.type=5,.name_length=3}
     };
     const XrtValueImageType types[] = {
         {.kind=XRT_VALUE_ARRAY_I64,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
@@ -457,6 +505,7 @@ static void nested_class_owners_are_checked_before_publication(void) {
 }
 int main(void) {
     class_arrays_keep_their_exact_backing();
+    class_array_update_failure_preserves_the_field();
     derived_classes_keep_concrete_identity();
     nested_class_owners_are_checked_before_publication();
     copied_names_and_real_values(); failures_and_empty(); deep_single_inventory(); rejects_forged_display_closure();

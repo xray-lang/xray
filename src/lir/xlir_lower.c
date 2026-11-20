@@ -390,6 +390,7 @@ static bool lower_known(XrXirOp op) {
     switch (op) {
         case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET:
         case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET:
+        case XR_XIR_OBJECT_PLACE: case XR_XIR_FIELD_PLACE: case XR_XIR_CLASS_SET:
         case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN: case XR_XIR_CALL_INDIRECT:
         case XR_XIR_RANGE_CHECK:
         case XR_XIR_ASSERT_CONDITION:
@@ -913,6 +914,30 @@ static bool lower_literal_valid(Lower *c, const XrXirFunction *f, uint32_t index
     return true;
 }
 
+static const XrXirInstruction *lower_place_definition(const XrXirFunction *f, uint32_t value) {
+    if (value < f->parameter_count || value - f->parameter_count >= f->instruction_count) return NULL;
+    return &f->instructions[value - f->parameter_count];
+}
+
+/* Preserve the Checked root value and declaration ordinal through the
+ * mutation point. No interior address or Array snapshot is a place. */
+static const XrXirInstruction *lower_class_place_root(const XrXirFunction *f, uint32_t value) {
+    const XrXirInstruction *field = lower_place_definition(f,value);
+    if (!field || field->op != XR_XIR_FIELD_PLACE) return NULL;
+    const XrXirInstruction *root = lower_place_definition(f,field->args[0]);
+    return root && root->op == XR_XIR_OBJECT_PLACE ? root : NULL;
+}
+
+static bool lower_class_array_field(Lower *c, XrXirType type, uint64_t index) {
+    XrLirType payload;
+    const XrLirRecordField *fields;
+    uint32_t count;
+    return xr_lir_class_payload(c->module,lower_type(c,type),&payload) &&
+        xr_lir_aggregate_fields(c->module,payload,&fields,&count) == XR_LIR_OK && index < count &&
+        fields[index].type == XR_LIR_ARRAY && fields[index].array_element == XR_LIR_I64 &&
+        (fields[index].flags & XR_LIR_RECORD_MUTABLE);
+}
+
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
     if (!lower_known(op->op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
@@ -942,6 +967,15 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     if (lower_array_element(c, op->type) || lower_type(c, op->type) == XR_LIR_ARRAY_CELL)
         c->arrays = true;
     c->maps |= lower_map_type(c, payload);
+    if (op->op == XR_XIR_OBJECT_PLACE)
+        return xr_xir_type_is_class(c->source->types,op->type) || lower_unsupported(c,"OBJECT_PLACE");
+    if (op->op == XR_XIR_FIELD_PLACE || op->op == XR_XIR_CLASS_SET) {
+        const XrXirInstruction *root = op->op == XR_XIR_FIELD_PLACE ?
+            lower_class_place_root(f,f->parameter_count+(uint32_t)(op-f->instructions)) : NULL;
+        XrXirType type = root ? root->type : op->op == XR_XIR_CLASS_SET ?
+            xr_xir_operand_type(f,op->args[0]) : XR_XIR_UNIT;
+        return lower_class_array_field(c,type,(uint64_t)op->immediate) || lower_unsupported(c,xr_xir_op_name(op->op));
+    }
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
         XrXirType type = op->op == XR_XIR_PLACE_WRITE ? xr_xir_operand_type(f, op->args[0]) : op->type;
         if (!lower_array_element(c, type) && !lower_map_type(c, type) && !lower_set_type(c,type)) return lower_unsupported(c, "non-container place");
@@ -2246,6 +2280,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         if (!handled && !lower_view_instruction(f, b, i, &handled)) return false;
         if (!handled && !lower_module_operation(f, b, i, &handled)) return false;
         if (!handled && !lower_set_instruction(f,b,i,&handled))return false;
+        if (!handled && !lower_class_array_instruction(f,b,i,&handled)) return false;
         if (!handled && !lower_map_instruction(f, b, i, &handled)) return false;
         if (!handled && !lower_array_instruction(f, b, i, &handled)) return false;
         if (!handled && lower_binding_storage(f, op)) {

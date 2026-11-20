@@ -203,6 +203,16 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return xr_lir_aggregate_fields(m, a, &fields, &count) == XR_LIR_OK &&
                 v->bits < count && fields[v->bits].type == v->type;
         }
+        case XR_LIR_CLASS_ARRAY_WRITE: case XR_LIR_CLASS_ARRAY_PUSH: {
+            const XrLirRecordField *fields;
+            uint32_t count;
+            if (!xr_lir_class_payload(m,a,&a) || xr_lir_aggregate_fields(m,a,&fields,&count) != XR_LIR_OK ||
+                v->bits >= count || v->type != XR_LIR_UNIT) return false;
+            const XrLirRecordField *field = &fields[v->bits];
+            return field->type == XR_LIR_ARRAY && field->array_element == XR_LIR_I64 &&
+                (field->flags & XR_LIR_RECORD_MUTABLE) && (v->op == XR_LIR_CLASS_ARRAY_PUSH ? b == XR_LIR_I64 :
+                    b == XR_LIR_ARRAY && f->values[v->operands[1]-1].array_element == XR_LIR_I64);
+        }
         case XR_LIR_FUNCTION_SCOPE_ENTER:
             return v->type == XR_LIR_FUNCTION_SCOPE && v->operand_count <= 1 &&
                 (!v->operand_count || a == XR_LIR_FUNCTION_SCOPE);
