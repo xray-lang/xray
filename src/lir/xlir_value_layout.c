@@ -242,7 +242,7 @@ static void fill_environment(const XrLirModule *module, const XrLirValueLayouts 
         const XrtValuePlan *plan = dependency(set,target->parameter_types[p]); XrtValuePlanSpec child;
         XR_CHECK(xrt_value_plan_view(plan,&child) == XRT_MANAGED_OK && align_size(&offset,child.alignment),
             "environment offsets were checked before receiving scratch allocation");
-        captures[p] = (XrtValueSlotSpec){plan,offset,NULL,0};
+        captures[p] = (XrtValueSlotSpec){.type = plan, .offset = offset};
         for (size_t n = 0; n < child.owned_count; ++n) owned[leaves++] = offset + child.owned_offsets[n];
         offset += child.size;
     }
