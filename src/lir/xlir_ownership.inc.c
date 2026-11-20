@@ -11,7 +11,7 @@ typedef struct LirArrayRegionVector {
     uint32_t count, capacity;
 } LirArrayRegionVector;
 typedef struct LirArrayRegionTables {
-    LirArrayRegionVector regions, steps;
+    LirArrayRegionVector regions, steps, push_updates;
 } LirArrayRegionTables;
 struct XrLirOwnershipPlan {
     XrLirOwnershipFunction *functions;

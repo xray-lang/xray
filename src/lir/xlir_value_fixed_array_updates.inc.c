@@ -98,8 +98,9 @@ static bool lir_home_fixed_array_updates(LirHomeBuilder *b, const XrLirOwnership
     }
     XrLirFixedArrayUpdateHome *rows = NULL;
     XrLirArraySetRegionStep *steps = NULL;
-    size_t row_capacity = 0, step_capacity = 0;
-    uint32_t row_count = 0, step_count = 0;
+    XrLirArrayPushUpdate *updates = NULL;
+    size_t row_capacity = 0, step_capacity = 0, update_capacity = 0;
+    uint32_t row_count = 0, step_count = 0, update_count = 0;
     for (uint32_t n = 0; n < function.fixed_update_count; ++n) {
         XrLirArraySetRegion region;
         if (xr_lir_ownership_fixed_array_update_at(plan, function.fixed_update_offset + n, &region) != XR_LIR_OK ||
@@ -126,11 +127,33 @@ static bool lir_home_fixed_array_updates(LirHomeBuilder *b, const XrLirOwnership
             }
         }
         if (c->status != XR_LIR_VALUE_LAYOUT_OK) break;
+        uint32_t count = region.push_span.update_count;
+        if (count) {
+            uint32_t first = region.push_span.first_update;
+            if (!region.push_span.available || first > UINT32_MAX - count || count > UINT32_MAX - update_count) {
+                lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "fixed Array route lost its scalar updates");
+                break;
+            }
+            if (!lir_home_grow(c, (void **)&updates, &update_capacity, (size_t)update_count + count,
+                sizeof(*updates))) break;
+            for (uint32_t s = 0; s < count; ++s) {
+                XrLirArrayPushUpdate *update = &updates[update_count + s];
+                if (xr_lir_ownership_array_push_update_at(plan, first + s, update) != XR_LIR_OK ||
+                    !update->value || update->value > b->homes->value_count || !update->delta) {
+                    lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "fixed Array append lost its scalar update");
+                    break;
+                }
+            }
+        }
+        if (c->status != XR_LIR_VALUE_LAYOUT_OK) break;
+        row.region.push_span.first_update = count ? update_count : 0;
+        update_count += count;
         rows[row_count++] = row;
         step_count += region.step_count;
     }
     xr_free(by_block);
     b->homes->fixed_array_updates = rows; b->homes->fixed_array_update_count = row_count;
     b->homes->fixed_array_update_steps = steps; b->homes->fixed_array_update_step_count = step_count;
+    b->homes->array_push_updates = updates; b->homes->array_push_update_count = update_count;
     return c->status == XR_LIR_VALUE_LAYOUT_OK;
 }

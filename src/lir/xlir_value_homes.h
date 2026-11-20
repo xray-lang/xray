@@ -234,6 +234,8 @@ typedef struct XrLirValueHomes {
     const XrLirFixedArrayUpdateHome *fixed_array_updates;
     const XrLirArraySetRegionStep *fixed_array_update_steps;
     uint32_t fixed_array_update_count, fixed_array_update_step_count;
+    const XrLirArrayPushUpdate *array_push_updates;
+    uint32_t array_push_update_count;
 } XrLirValueHomes;
 
 /* Only for consumers of common homes and the exact LIR edge. Raw execution

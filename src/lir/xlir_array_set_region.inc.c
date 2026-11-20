@@ -10,6 +10,11 @@ typedef struct LirArrayRegionUse {
     uint64_t range_stamp;
     uint32_t lane, edge_lane;
 } LirArrayRegionUse;
+typedef struct LirArrayAffine {
+    uint64_t factor, bias, stamp;
+    uint32_t root;
+    bool valid;
+} LirArrayAffine;
 typedef struct LirArrayRegionProof {
     const XrLirModule *module;
     const XrLirFunctionData *function;
@@ -18,6 +23,7 @@ typedef struct LirArrayRegionProof {
     LirGraph graph;
     LirLinearLoop loop;
     LirArrayRegionUse *uses;
+    LirArrayAffine *affine;
     uint32_t *pairs, *moves, *blocks;
     uint64_t *marks;
     XrLirArraySetRegionStep *steps;
@@ -31,6 +37,7 @@ typedef struct LirArrayRegionProof {
 
 static void lir_array_regions_free(LirArrayRegionTables *tables) {
     xr_free(tables->regions.data); xr_free(tables->steps.data);
+    xr_free(tables->push_updates.data);
     *tables = (LirArrayRegionTables){0};
 }
 static bool lir_plan_array_append(LirArrayRegionVector *vector, const void *item, size_t stride) {
@@ -356,6 +363,96 @@ static XrLirArrayReadSum lir_array_region_read_sum(const LirArrayRegionProof *p,
     return sum;
 }
 
+static LirArrayAffine lir_array_affine_source(const LirArrayRegionProof *p, uint32_t value) {
+    const XrLirFunctionData *f = p->function;
+    value = lir_loop_body_origin(f, &p->graph, &p->loop, p->marks, value);
+    const XrLirValueData *data = &f->values[value - 1];
+    if (data->type != XR_LIR_I64) return (LirArrayAffine){0};
+    if (p->affine[value].stamp == p->range_stamp) return p->affine[value];
+    const XrLirInstructionView *def = xr_lir_internal_value_definition(f, value);
+    if (def && def->op == XR_LIR_CONST) return (LirArrayAffine){.valid=true,.bias=def->bits};
+    return (LirArrayAffine){.valid=true,.root=value,.factor=1};
+}
+
+static LirArrayAffine lir_array_affine_instruction(const LirArrayRegionProof *p, const XrLirInstructionView *op) {
+    if (op->op == XR_LIR_CONST) return (LirArrayAffine){.valid=true,.bias=op->bits};
+    if (op->op != XR_LIR_ADD && op->op != XR_LIR_SUB && op->op != XR_LIR_MUL && op->op != XR_LIR_NEG)
+        return (LirArrayAffine){0};
+    LirArrayAffine left = lir_array_affine_source(p, op->operands[0]);
+    if (op->op == XR_LIR_NEG) {
+        left.bias = UINT64_C(0) - left.bias;
+        left.factor = UINT64_C(0) - left.factor;
+        return left;
+    }
+    LirArrayAffine right = lir_array_affine_source(p, op->operands[1]);
+    if (!left.valid || !right.valid) return (LirArrayAffine){0};
+    if (op->op == XR_LIR_MUL) {
+        if (left.root && right.root) return (LirArrayAffine){0};
+        if (!right.root) { LirArrayAffine swap = left; left = right; right = swap; }
+        right.bias *= left.bias;
+        right.factor *= left.bias;
+        if (!right.factor) right.root = 0;
+        return right;
+    }
+    if (left.root && right.root && left.root != right.root) return (LirArrayAffine){0};
+    uint64_t factor = op->op == XR_LIR_ADD ? left.factor + right.factor : left.factor - right.factor;
+    uint64_t bias = op->op == XR_LIR_ADD ? left.bias + right.bias : left.bias - right.bias;
+    uint32_t root = factor ? (left.root ? left.root : right.root) : 0;
+    return (LirArrayAffine){.valid=true,.root=root,.factor=factor,.bias=bias};
+}
+
+static XrLirStatus lir_array_region_push_span(LirArrayRegionProof *p, XrLirArraySetRegion *region,
+    LirArrayRegionVector *updates) {
+    if (region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_PUSH) return XR_LIR_OK;
+    if (region->push_counted) {
+        region->push_span = (XrLirArrayPushSpan){.available=true,.factor=1};
+        return XR_LIR_OK;
+    }
+    const XrLirFunctionData *f = p->function;
+    if (!p->affine) {
+        p->affine = lir_plan_allocate((size_t)f->value_count + 1, sizeof(*p->affine));
+        if (!p->affine) return XR_LIR_OUT_OF_MEMORY;
+    }
+    /* Visit only the exact selected route. Unknown or multiple symbolic
+     * roots stay ordinary unless all carried values can be reproduced. */
+    for (uint32_t n = 1; n + 1 < p->step_count; ++n) {
+        const XrLirArraySetRegionStep *step = &p->steps[n];
+        if (step->kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) continue;
+        const XrLirBlockData *block = &f->blocks[step->block - 1];
+        for (uint32_t i = 0; i + 1 < block->instruction_count; ++i) {
+            const XrLirInstructionView *op = &block->instructions[i].view;
+            if (op->type != XR_LIR_I64 || !op->result) continue;
+            LirArrayAffine value = lir_array_affine_instruction(p, op);
+            value.stamp = p->range_stamp;
+            p->affine[op->result] = value;
+        }
+    }
+    const XrLirBlockData *body = &f->blocks[region->primary_block - 1];
+    const XrLirInstructionView *push = &body->instructions[region->primary_instruction - 1].view;
+    LirArrayAffine item = lir_array_affine_source(p, push->operands[1]);
+    if (!item.valid || (item.root && item.root != region->range.iv)) return XR_LIR_OK;
+    const XrLirBlockData *header = &f->blocks[p->loop.header];
+    const XrLirEdgeView *latch = &lir_terminator(f, p->loop.latch)->edges[0];
+    uint32_t start = updates->count;
+    for (uint32_t a = 0; a < header->parameter_count; ++a) {
+        uint32_t parameter = header->parameters[a];
+        if (parameter == region->range.iv || parameter == region->canonical_value) continue;
+        uint32_t origin = lir_loop_body_origin(f, &p->graph, &p->loop, p->marks, latch->arguments[a]);
+        if (origin == parameter) continue;
+        LirArrayAffine next = lir_array_affine_source(p, origin);
+        if (!next.valid || next.root != parameter || next.factor != 1) {
+            updates->count = start;
+            return XR_LIR_OK;
+        }
+        if (next.bias && !lir_plan_array_append(updates,
+            &(XrLirArrayPushUpdate){.value=parameter,.delta=next.bias},sizeof(XrLirArrayPushUpdate)))
+            return XR_LIR_OUT_OF_MEMORY;
+    }
+    region->push_span = (XrLirArrayPushSpan){.available=true,.factor=item.factor,.bias=item.bias,
+        .first_update=start,.update_count=updates->count - start};
+    return XR_LIR_OK;
+}
+
 static bool lir_array_region_prove(LirArrayRegionProof *p, const XrLirArraySetRegion *shape, XrLirArraySetRegion *region) {
     const LirLinearLoop *loop = &p->loop;
     uint32_t header = loop->header, body_edge = loop->body_edge;
@@ -406,6 +503,7 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, const XrLirArraySetRe
 }
 static void lir_array_region_proof_free(LirArrayRegionProof *p) {
     xr_free(p->graph.memory); xr_free(p->uses); xr_free(p->pairs); xr_free(p->moves);
+    xr_free(p->affine);
     xr_free(p->blocks); xr_free(p->marks); xr_free(p->steps);
 }
 static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRegionTables *tables) {
@@ -433,6 +531,8 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
             if (!lir_array_region_shape(p, b, e, &shape)) continue;
             if (!lir_array_region_prove(p, &shape, &region)) continue;
             region.read_sum = lir_array_region_read_sum(p, &region);
+            XrLirStatus span = lir_array_region_push_span(p, &region, &tables->push_updates);
+            if (span != XR_LIR_OK) return span;
             region.first_step = tables->steps.count;
             for (uint32_t n = 0; n < p->step_count; ++n)
                 if (!lir_plan_array_append(&tables->steps, &p->steps[n], sizeof(p->steps[n]))) return XR_LIR_OUT_OF_MEMORY;
@@ -466,6 +566,9 @@ static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b)
         a.range.one == b.range.one && a.range.latch_iv == b.range.latch_iv &&
         a.read_sum.accumulator == b.read_sum.accumulator && a.read_sum.next_accumulator == b.read_sum.next_accumulator &&
         a.read_sum.limit == b.read_sum.limit && a.read_sum.limit_bits == b.read_sum.limit_bits &&
+        a.push_span.available == b.push_span.available && a.push_span.factor == b.push_span.factor &&
+        a.push_span.bias == b.push_span.bias && a.push_span.first_update == b.push_span.first_update &&
+        a.push_span.update_count == b.push_span.update_count &&
         a.push_counted == b.push_counted;
 }
 static bool lir_array_region_step_equal(XrLirArraySetRegionStep a, XrLirArraySetRegionStep b) {
@@ -503,13 +606,17 @@ static bool lir_array_region_inputs_equal(const XrLirOwnershipPlan *a, const XrL
     }
 }
 static bool lir_array_region_tables_equal(const LirArrayRegionTables *a, const LirArrayRegionTables *b) {
-    if (a->regions.count!=b->regions.count || a->steps.count!=b->steps.count) return false;
+    if (a->regions.count!=b->regions.count || a->steps.count!=b->steps.count ||
+        a->push_updates.count!=b->push_updates.count) return false;
     const XrLirArraySetRegion *x = a->regions.data, *y = b->regions.data;
     for (uint32_t n = 0; n < a->regions.count; ++n)
         if (!lir_array_region_equal(x[n], y[n])) return false;
     const XrLirArraySetRegionStep *u = a->steps.data, *v = b->steps.data;
     for (uint32_t n = 0; n < a->steps.count; ++n)
         if (!lir_array_region_step_equal(u[n], v[n])) return false;
+    const XrLirArrayPushUpdate *first = a->push_updates.data, *second = b->push_updates.data;
+    for (uint32_t n = 0; n < a->push_updates.count; ++n)
+        if (first[n].value != second[n].value || first[n].delta != second[n].delta) return false;
     return true;
 }
 static bool lir_array_region_plans_equal(const XrLirOwnershipPlan *a, const XrLirOwnershipPlan *b) {
@@ -543,5 +650,11 @@ XR_FUNC XrLirStatus xr_lir_ownership_fixed_array_update_step_at(const XrLirOwner
     uint32_t ordinal, XrLirArraySetRegionStep *out) {
     if (!plan || !out || ordinal >= plan->fixed_array_updates.steps.count) return XR_LIR_INVALID_ARGUMENT;
     *out = ((const XrLirArraySetRegionStep *)plan->fixed_array_updates.steps.data)[ordinal];
+    return XR_LIR_OK;
+}
+XR_FUNC XrLirStatus xr_lir_ownership_array_push_update_at(const XrLirOwnershipPlan *plan,
+    uint32_t ordinal, XrLirArrayPushUpdate *out) {
+    if (!plan || !out || ordinal >= plan->fixed_array_updates.push_updates.count) return XR_LIR_INVALID_ARGUMENT;
+    *out = ((const XrLirArrayPushUpdate *)plan->fixed_array_updates.push_updates.data)[ordinal];
     return XR_LIR_OK;
 }

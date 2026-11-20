@@ -45,40 +45,89 @@ static bool rbc_lir_array_scalar_location(XrRbcValueLocation location) {
     return location.kind==XR_RBC_VALUE_REGISTER || location.kind==XR_RBC_VALUE_SPILL;
 }
 
+static bool rbc_lir_push_span_claim(const RbcLirCompiler *c, uint32_t value, uint8_t *used) {
+    if (!value || value > c->value_code->value_count) return false;
+    XrRbcValueLocation location = c->value_code->locations[value];
+    size_t index;
+    if (location.kind == XR_RBC_VALUE_REGISTER && location.index < c->register_count)
+        index = location.index;
+    else if (location.kind == XR_RBC_VALUE_SPILL && location.index < c->spill_count &&
+        location.index >= c->reference_spill_count)
+        index = (size_t)c->register_count + location.index;
+    else return false;
+    if (used[index]) return false;
+    used[index] = 1;
+    return true;
+}
+
+static bool rbc_lir_push_span_placements(RbcLirCompiler *c, const XrLirArraySetRegion *region,
+    uint32_t limit, uint8_t *used, size_t capacity) {
+    const XrLirArrayPushSpan *span = &region->push_span;
+    if (!span->update_count) return true;
+    if (!c->homes->array_push_updates || span->first_update > c->homes->array_push_update_count ||
+        span->update_count > c->homes->array_push_update_count - span->first_update) return false;
+    memset(used, 0, capacity);
+    if (!rbc_lir_push_span_claim(c, region->range.iv, used) ||
+        (limit && !rbc_lir_push_span_claim(c, limit, used))) return false;
+    const XrLirArrayPushUpdate *updates = c->homes->array_push_updates + span->first_update;
+    for (uint32_t n = 0; n < span->update_count; ++n)
+        if (!rbc_lir_push_span_claim(c, updates[n].value, used)) return false;
+    return true;
+}
+
 /* The single common route determines whether this lowering can skip scalar
- * replay. Project only its bound and physical header IV at the real latch. */
+ * replay. Establish distinct physical locations for its live header state. */
 static bool rbc_lir_counted_push_prepare(RbcLirCompiler *c) {
     if (!c->homes || !c->homes->fixed_array_update_count) return true;
     XrRbcValueCode *code = c->value_code;
     XrRbcArrayCountedPush *counted = NULL;
+    size_t capacity = (size_t)c->register_count + c->spill_count;
+    uint8_t *used = NULL;
+    bool success = true;
     for (uint32_t n = 0; n < c->homes->fixed_array_update_count; ++n) {
         const XrLirArraySetRegion *region = &c->homes->fixed_array_updates[n].region;
-        if (!region->push_counted) continue;
+        if (!region->push_span.available) continue;
         XrLirArraySetRegionRange range = region->range;
         if (region->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_PUSH ||
             range.kind != XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT ||
-            !range.iv || range.iv > code->value_count || !range.length || range.length > code->value_count)
-            return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "counted append lost common Array facts");
+            !range.iv || range.iv > code->value_count || !range.length || range.length > code->value_count) {
+            success = rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "counted append lost common Array facts");
+            break;
+        }
         if (!rbc_lir_array_scalar_location(code->locations[range.iv])) continue;
         /* An invariant header parameter has already been republished; a
          * pre-loop definition is live here by ordinary CFG liveness. Read
          * constant bits directly, even if the emitter used an immediate. */
         const XrLirFunctionData *function = &c->input->functions[c->function.id - 1];
         const XrLirInstructionView *end = xr_lir_internal_value_definition(function, range.length);
-        if (end && end->type != XR_LIR_I64)
-            return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "counted append bound is not an i64");
+        if (end && end->type != XR_LIR_I64) {
+            success = rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "counted append bound is not an i64");
+            break;
+        }
         bool constant = end && end->op == XR_LIR_CONST;
         if (!constant && !rbc_lir_array_scalar_location(code->locations[range.length])) continue;
+        uint32_t limit = constant ? 0 : range.length;
+        if (region->push_span.update_count && !used) {
+            used = xr_calloc(capacity, 1);
+            if (!used) {
+                success = rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot index append scalar locations");
+                break;
+            }
+        }
+        if (!rbc_lir_push_span_placements(c, region, limit, used, capacity)) continue;
         if (!counted) {
             counted = xr_calloc(c->homes->fixed_array_update_count, sizeof(*counted));
-            if (!counted)
-                return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own counted append bounds");
+            if (!counted) {
+                success = rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own counted append bounds");
+                break;
+            }
             code->array_counted_push = counted;
         }
-        counted[n] = (XrRbcArrayCountedPush){.iv=range.iv, .limit=constant ? 0 : range.length,
+        counted[n] = (XrRbcArrayCountedPush){.iv=range.iv, .limit=limit,
             .bits=constant ? end->bits : 0};
     }
-    return true;
+    xr_free(used);
+    return success;
 }
 
 static bool rbc_lir_array_region_prepare(RbcLirCompiler *c) {

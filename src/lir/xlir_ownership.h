@@ -208,6 +208,17 @@ typedef struct XrLirArrayReadSum {
     uint32_t accumulator, next_accumulator, limit;
     uint64_t limit_bits;
 } XrLirArrayReadSum;
+/* An affine append writes factor * IV + bias in wrapping i64 arithmetic.
+ * Its independent header updates add one constant delta per committed trip. */
+typedef struct XrLirArrayPushUpdate {
+    uint64_t delta;
+    uint32_t value;
+} XrLirArrayPushUpdate;
+typedef struct XrLirArrayPushSpan {
+    uint64_t factor, bias;
+    uint32_t first_update, update_count;
+    bool available;
+} XrLirArrayPushSpan;
 /* The primary access is an original element operation, not CELL_READ/death.
  * GET names the sole element read in a closed loop with an unchanged length
  * or guarded bound. PUSH uses the original item and scalar assignments. */
@@ -217,6 +228,7 @@ typedef struct XrLirArraySetRegion {
     uint32_t body_block_count, primary_kind, primary_block, primary_instruction, first_step, step_count;
     XrLirArraySetRegionRange range;
     XrLirArrayReadSum read_sum;
+    XrLirArrayPushSpan push_span;
     /* PUSH only: item is the current IV and all other carried scalars are unchanged.
      * Both modes still use the same selected edges, owner home and capacity guard. */
     bool push_counted;
@@ -297,6 +309,8 @@ XR_FUNC XrLirStatus xr_lir_ownership_fixed_array_update_at(const XrLirOwnershipP
     uint32_t ordinal, XrLirArraySetRegion *);
 XR_FUNC XrLirStatus xr_lir_ownership_fixed_array_update_step_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirArraySetRegionStep *);
+XR_FUNC XrLirStatus xr_lir_ownership_array_push_update_at(const XrLirOwnershipPlan *,
+    uint32_t ordinal, XrLirArrayPushUpdate *);
 /* Explicit independent current-IR verification for mutable/external inspection
  * and PARANOID tests. It validates the module once and rederives every function
  * once. Normal same-process Plan to Homes reception only copies

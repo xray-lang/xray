@@ -66,7 +66,7 @@ static bool rbc_value_fixed_array_push(XrRbcStack *stack, RbcValueActivation *ac
 }
 
 /* At the real latch, ordinary owner and scalar copies have already
- * published the header values. Only the verified IV needs advancement. */
+ * published the header values. The remaining recurrence is wrapping i64. */
 static XR_NOINLINE void rbc_value_fixed_array_counted_push(XrRbcStack *stack, RbcValueActivation *activation,
     const XrLirFixedArrayUpdateHome *row, const XrRbcArrayCountedPush *counted, uint32_t region) {
     if (!activation->backings_ready) return;
@@ -75,7 +75,7 @@ static XR_NOINLINE void rbc_value_fixed_array_counted_push(XrRbcStack *stack, Rb
     uint64_t start = iv->bits, end = counted->bits;
     if (counted->limit) {
         const XrRbcRegister *limit = rbc_value_register(stack, activation, counted->limit);
-        if (!limit) return;
+        if (!limit || limit == iv) return;
         end = limit->bits;
     }
     if (start > INT64_MAX || end > INT64_MAX || start >= end) return;
@@ -94,12 +94,24 @@ static XR_NOINLINE void rbc_value_fixed_array_counted_push(XrRbcStack *stack, Rb
     uint64_t length_room = (uint64_t)INT64_MAX - cache.length, remaining = end - start;
     if (length_room < room) room = (size_t)length_room;
     size_t count = remaining < room ? (size_t)remaining : room;
+    const XrLirArrayPushSpan *span = &row->region.push_span;
+    const XrLirArrayPushUpdate *updates = NULL;
+    if (span->update_count) {
+        updates = activation->code->homes->array_push_updates + span->first_update;
+        for (uint32_t n = 0; n < span->update_count; ++n)
+            if (!rbc_value_register(stack, activation, updates[n].value)) return;
+    }
+    uint64_t item = span->factor * start + span->bias;
     for (size_t n = 0; n < count; ++n) {
-        uint64_t item = start + n;
         memcpy(cache.elements + (cache.length + n) * sizeof(item), &item, sizeof(item));
+        item += span->factor;
     }
     array->length = cache.length + count;
     iv->bits = start + count;
+    for (uint32_t n = 0; n < span->update_count; ++n) {
+        XrRbcRegister *value = rbc_value_register(stack, activation, updates[n].value);
+        value->bits += (uint64_t)count * updates[n].delta;
+    }
     rbc_value_array_region_forget(activation, region, RBC_ARRAY_REGION_COLD);
 }
 
