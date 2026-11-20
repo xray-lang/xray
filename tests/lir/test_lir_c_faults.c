@@ -635,11 +635,15 @@ static const char *array_fixed_c_marker(const char *text, const char *pattern, u
 }
 
 static const char *array_fixed_update(const char *text, uint32_t loop) {
+    const char *reset = array_fixed_c_marker(text,"\n    xrl_fixed_tried_%" PRIu32 " = 0;",loop);
+    const char *entry = strstr(reset,"xrt_array_i64_region_try_begin(&xrl_fixed_context, &xrl_fixed_spec, true,");
+    const char *entry_target = array_fixed_c_marker(reset,"goto xrl_fixed_%" PRIu32 "_bb",loop);
     const char *guard = array_fixed_c_marker(text,"if (!xrl_fixed_tried_%" PRIu32 ") {",loop);
     const char *begin = strstr(guard,"xrt_array_i64_region_try_begin(&xrl_fixed_context, &xrl_fixed_spec, true,");
     const char *enter = array_fixed_c_marker(guard,"goto xrl_fixed_%" PRIu32 "_bb",loop);
     const char *clone = array_fixed_c_marker(enter,"\nxrl_fixed_%" PRIu32 "_bb",loop);
     const char *leave = array_fixed_c_marker(clone,"goto xrl_fixed_exit_%" PRIu32 ";",loop);
+    CHECK(entry && entry < entry_target && entry_target < guard);
     CHECK(begin && begin < enter && enter < clone && clone < leave);
     CHECK(!strstr(guard + 1,"if (!xrl_fixed_tried_1) {") || loop != 1);
     const char *read = strstr(clone,"XRT_ARRAY_I64_REGION_COPY(&v");

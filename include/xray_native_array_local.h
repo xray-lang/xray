@@ -151,10 +151,12 @@ XRT_ARRAY_LOCAL_INLINE XrtArrayI64Pair xrt_array_i64_pair_shl(XrtArrayI64Pair va
 #endif
 
 /* This is the only full dynamic check for a producer-described call-free
- * region. Ready means its original complete SET/READ/drop/latch has returned,
- * not a metadata permission. Inputs are actual live private factory objects
- * and a numeric projection of exact I64 homes. Typed setup supplies the real
- * allocation extent; this is not validation of arbitrary or expired pointers.
+ * region. Ready means an original SET/READ/drop/latch completed, or the fixed
+ * route's selected entry has published its owner and scalar parameters and
+ * the route proves the first access as well. Inputs are actual live private
+ * factory objects and a numeric projection of exact I64 homes. Typed setup
+ * supplies the real allocation extent for these objects. External pointers
+ * require independent validation.
  * Success borrows bytes without retaining or changing busy/pending state.
  * The caller preserves real owner moves and either original per-access bounds
  * checks or its exact conditional arithmetic proof in the uninterrupted scalar
