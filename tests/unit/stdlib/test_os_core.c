@@ -14,10 +14,15 @@
 #include "os/os_thread.h"
 #include "shared/xr_os_core.h"
 
+#include <errno.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#ifndef XR_OS_WINDOWS
+#include <sys/types.h>
+#include <unistd.h>
+#endif
 
 TEST(os_core_platform_matches_target) {
 #ifdef XR_OS_WINDOWS
@@ -174,6 +179,89 @@ TEST(os_proc_try_wait_reaps_finished_child) {
     ASSERT_EQ_INT(code, 7);
 }
 
+#ifndef XR_OS_WINDOWS
+/* Each worker spawns group leaders one at a time, so at most one child per
+ * worker is alive. Contention between workers widens the window in which a
+ * second setpgid on the same child made Darwin report a spurious EPERM.
+ * Under sustained fork load from several processes Darwin also refuses fork
+ * or exec with EAGAIN or ENOMEM for a while and may kill fresh children. That
+ * is host throttling, not a spawn defect: those attempts back off and retry
+ * within a bounded budget, and a child's exit status is not asserted. */
+enum { GROUP_SPAWN_WORKERS = 4, GROUP_SPAWN_ROUNDS = 200, GROUP_SPAWN_RETRIES = 200 };
+typedef struct GroupSpawnCtx {
+    int spawn_failures;
+    int not_leader;
+    int bad_reap;
+    int throttled;
+    int first_reap_errno;
+    XrOsProcStatus first_status;
+    uint32_t first_os_error;
+} GroupSpawnCtx;
+
+static bool group_spawn_throttled(XrOsProcStatus status, uint32_t os_error) {
+    return status == XR_PROC_OUT_OF_MEMORY || (status == XR_PROC_IO && os_error == EAGAIN);
+}
+
+static void *group_spawn_worker(void *arg) {
+    GroupSpawnCtx *ctx = (GroupSpawnCtx *) arg;
+    const char *argv[] = {"true", NULL};
+    for (int round = 0; round < GROUP_SPAWN_ROUNDS; ++round) {
+        XrProcSpawnOptions options = {0};
+        options.memory = xr_proc_system_memory();
+        options.new_process_group = true;
+        uint32_t os_error = 0;
+        options.os_error = &os_error;
+        XrProcId pid = XR_PROC_INVALID;
+        XrOsProcStatus status = xr_proc_spawn("true", argv, &options, &pid);
+        for (int retry = 0; retry < GROUP_SPAWN_RETRIES && group_spawn_throttled(status, os_error); ++retry) {
+            ctx->throttled++;
+            xr_thread_sleep_ms(5);
+            status = xr_proc_spawn("true", argv, &options, &pid);
+        }
+        if (status != XR_PROC_OK) {
+            if (!ctx->spawn_failures++) {
+                ctx->first_status = status;
+                ctx->first_os_error = os_error;
+            }
+            continue;
+        }
+        /* Spawn returns only after exec, so the child already leads its
+         * group; an exited, unreaped leader may no longer be queryable. */
+        errno = 0;
+        pid_t group = getpgid((pid_t) pid);
+        if (group != (pid_t) pid && !(group < 0 && errno == ESRCH))
+            ctx->not_leader++;
+        int code = -1;
+        if (xr_proc_wait(pid, &code) != 0 && !ctx->bad_reap++)
+            ctx->first_reap_errno = errno;
+        if (xr_proc_close(pid) != 0 && !ctx->bad_reap++)
+            ctx->first_reap_errno = errno;
+    }
+    return NULL;
+}
+
+TEST(os_proc_new_group_spawn_survives_contention) {
+    GroupSpawnCtx ctx[GROUP_SPAWN_WORKERS];
+    xr_thread_t threads[GROUP_SPAWN_WORKERS];
+    memset(ctx, 0, sizeof(ctx));
+    for (int i = 0; i < GROUP_SPAWN_WORKERS; ++i)
+        ASSERT_TRUE(xr_thread_create(&threads[i], group_spawn_worker, &ctx[i]));
+    for (int i = 0; i < GROUP_SPAWN_WORKERS; ++i)
+        ASSERT_EQ_INT(xr_thread_join(threads[i], NULL), 0);
+    for (int i = 0; i < GROUP_SPAWN_WORKERS; ++i) {
+        if (ctx[i].spawn_failures || ctx[i].throttled || ctx[i].bad_reap)
+            printf("    worker %d: %d spawn failures (first status=%d os_error=%u), %d throttled retries, "
+                   "%d failed reaps (first errno=%d)\n",
+                   i, ctx[i].spawn_failures, (int) ctx[i].first_status,
+                   (unsigned) ctx[i].first_os_error, ctx[i].throttled, ctx[i].bad_reap,
+                   ctx[i].first_reap_errno);
+        ASSERT_EQ_INT(ctx[i].spawn_failures, 0);
+        ASSERT_EQ_INT(ctx[i].not_leader, 0);
+        ASSERT_EQ_INT(ctx[i].bad_reap, 0);
+    }
+}
+#endif
+
 TEST(os_thread_local_key_is_per_thread) {
     xr_thread_local_key_t key;
     ASSERT_TRUE(xr_thread_local_key_create(&key));
@@ -227,6 +315,9 @@ RUN_TEST(os_core_loadavg_helpers_normalize_values);
 RUN_TEST_SUITE("OS Proc");
 RUN_TEST(os_proc_try_wait_reports_running_then_killed);
 RUN_TEST(os_proc_try_wait_reaps_finished_child);
+#ifndef XR_OS_WINDOWS
+RUN_TEST(os_proc_new_group_spawn_survives_contention);
+#endif
 
 RUN_TEST_SUITE("OS Thread Local");
 RUN_TEST(os_thread_local_key_is_per_thread);
