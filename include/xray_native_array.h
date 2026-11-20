@@ -77,6 +77,10 @@ XRAY_API void xrt_native_array_repeat(XrtManagedFrame *, size_t slot,
 /* String GET returns a synchronous borrow, not a new owner. */
 XRAY_API void xrt_native_array_get(const XrtManagedHeader *, XrtBackingArrayKind,
     int64_t index, XrtArrayItem *output, uint32_t source_id);
+/* Keep the Array live while its String is borrowed and retained. Publish the
+ * new owner in the caller's temporary slot, preserving the slot on failure. */
+XRAY_API void xrt_native_array_string_read_copy(XrtManagedFrame *, size_t slot,
+    const XrtManagedHeader *, int64_t index, uint32_t source_id);
 XRAY_API void xrt_native_array_display(XrtManagedFrame *, size_t slot,
     const XrtManagedHeader *, XrtBackingArrayKind, uint32_t source_id);
 /* binding_kind is supplied independently by the binding's exact descriptor.

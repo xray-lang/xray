@@ -182,12 +182,12 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         return;
     case XR_LIR_ARRAY_OP_GET:
         if (element != XR_LIR_STRING) { c_array_scalar_get(c,v,source); return; }
-        c_text(c,"    { XrtArrayItem item = {0};\n    xrt_native_array_get("); c_value(c,v->operands[0]);
-        c_format(c,", %s, ",kind); c_value(c,v->operands[1]);
-        c_format(c,", &item, UINT32_C(%" PRIu32 "));\n",source);
-        if (element==XR_LIR_STRING) { c_text(c,"    { XrtManagedHeader *owner = &item.value.string->managed"); c_array_copy_end(c,v->result,source); }
-        else c_format(c,"    v%" PRIu32 " = item.value.%s;\n",v->result,c_array_member(element));
-        c_text(c,"    }\n"); return;
+        c_format(c,"    xrt_native_array_string_read_copy(xrl_frame, %zu, ",
+            c->homes->values[v->result].temporary_first_owner);
+        c_value(c,v->operands[0]); c_text(c,", "); c_value(c,v->operands[1]);
+        c_format(c,", UINT32_C(%" PRIu32 "));\n",source);
+        c_values_publish_leaf(c,v->result,source);
+        return;
     case XR_LIR_ARRAY_OP_SET: case XR_LIR_ARRAY_OP_PUSH: {
         const XrLirHomeWorkspace *workspace=c_array_workspace(c); if (!workspace) return;
         const XrLirHomeBinding *binding=&c->homes->bindings[v->operands[0]];

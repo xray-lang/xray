@@ -213,7 +213,10 @@ def main():
                                r'\(uint64_t\)index < array->length\) \{(.*?)\n    \} else \{', text, re.DOTALL)
             assert reads and all('xrt_' not in body for body in reads), name
         if name in ('string', 'phi-string'):
-            assert 'xrt_native_array_get(' in text, name
+            assert 'xrt_native_array_string_read_copy(' in text, name
+        if name == 'array-spills-string':
+            assert text.count('xrt_native_array_string_read_copy(') == 300
+            assert 'XrtArrayItem item' not in text
         if name in ('string', 'scalar-edge-swap'):
             assert 'xray_native_array_local.h' not in text and 'xrl_array_ready' not in text, name
             assert 'XrlArrayLocals_' not in text and 'xrl_array_local_prepare_' not in text, name
