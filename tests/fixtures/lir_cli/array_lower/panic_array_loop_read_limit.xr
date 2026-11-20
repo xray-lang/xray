@@ -1,0 +1,11 @@
+fn ordered_read(end: i64) -> i64 {
+    const values: Array<i64> = [7, 2, 5]
+    var i = 0
+    var total = 0
+    while (!(end <= i)) {
+        total = 2 * total - values[i]
+        i += 1
+    }
+    return total
+}
+print(ordered_read(4))

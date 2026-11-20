@@ -840,6 +840,37 @@ static void c_reconstruct(LirC *c, XrLirType type, uint32_t result) {
         c_format(c, "(%s)v%" PRIu32 ";\n", c_type(c, type), c->scratch);
     }
 }
+/* Bias bits fitting below a left shift are disjoint from the shifted
+ * operand. Express their exact sum as OR so the host sees ordinary shifts
+ * and adds instead of a multiply that may lack a packed instruction. */
+static bool c_array_shifted_add(LirC *c, const XrLirInstructionView *v) {
+    if (!c->fixed_array_loop || v->type != XR_LIR_I64 || v->op != XR_LIR_ADD) return false;
+    const XrLirFunctionData *f = &c->request->module->functions[c->function.id - 1];
+    for (uint32_t side = 0; side < 2; ++side) {
+        uint32_t product = v->operands[side];
+        const XrLirInstructionView *multiply = xr_lir_internal_value_definition(f, product);
+        const XrLirInstructionView *bias = xr_lir_internal_value_definition(f, v->operands[1 - side]);
+        if (!multiply || multiply->op != XR_LIR_MUL || f->values[product - 1].block != c->block ||
+            !bias || bias->op != XR_LIR_CONST || !bias->bits) continue;
+        for (uint32_t factor = 0; factor < 2; ++factor) {
+            const XrLirInstructionView *constant = xr_lir_internal_value_definition(f, multiply->operands[factor]);
+            if (!constant || constant->op != XR_LIR_CONST || !constant->bits) continue;
+            uint64_t low = constant->bits & (UINT64_C(0) - constant->bits);
+            uint64_t high = constant->bits ^ low;
+            if (!high || (high & (high - 1)) || bias->bits >= high) continue;
+            /* The multiply's same-block operands retain their scalar values. */
+            uint32_t value = multiply->operands[1 - factor];
+            c_format(c, "    v%" PRIu32 " = (((uint64_t)", c->scratch);
+            c_value(c, value);
+            c_format(c, " << %d) | UINT64_C(%" PRIu64 ")) + ((uint64_t)", __builtin_ctzll(high), bias->bits);
+            c_value(c, value);
+            c_format(c, " << %d);\n", __builtin_ctzll(low));
+            return true;
+        }
+    }
+    return false;
+}
+
 static void c_integer(LirC *c, const XrLirInstructionView *v) {
     if (v->type == XR_LIR_I1) {
         c_format(c, "    v%" PRIu32 " = %u;\n", v->result, (unsigned) v->bits);
@@ -856,6 +887,10 @@ static void c_integer(LirC *c, const XrLirInstructionView *v) {
             c_format(c, "    v%" PRIu32 " = (%s)UINT64_C(%" PRIu64 ");\n",
                      v->result, c_type(c, v->type), bits);
         }
+        return;
+    }
+    if (c_array_shifted_add(c, v)) {
+        c_reconstruct(c, v->type, v->result);
         return;
     }
     c_format(c, "    v%" PRIu32 " = (", c->scratch);

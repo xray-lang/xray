@@ -149,6 +149,7 @@ def main() -> None:
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
+             "array_loop_modes", "panic_array_loop_read_limit",
              "array_stationary_cells", "panic_stationary_cell", "array_held_edits", "call_result_homes",
              "array_call_staging", "panic_array_call_staging",
              "element_update", "element_update_carried", "fixed_update_carried",
@@ -235,6 +236,15 @@ def main() -> None:
             continue
         generated_text = generated.read_text(encoding="utf-8")
         assert "({" not in generated_text
+        if name in ("array_loop_modes", "panic_array_loop_read_limit"):
+            # The clone must use the original invariant bound instead of scanning
+            # the whole backing. The out-of-range variant still fails normally.
+            assert "xrl_fixed_spec = {xrl_fixed_slots, 1, 0}" in generated_text, name
+            assert re.search(r"\(uint64_t\)\(p0\) <= xrl_fixed_cache_\d+\.length", generated_text), name
+            if name == "array_loop_modes":
+                assert "<< 3) | UINT64_C(3))" in generated_text, name
+                assert generated_text.count("size_t xrl_room = xrl_array->capacity - xrl_fixed_cache_") == 1
+                assert re.search(r"xrl_array->length = xrl_fixed_cache_\d+\.length;", generated_text), name
         if name == "push_capacity":
             # The dependent bound and live snapshot must keep ordinary updates.
             assert generated_text.count("static const XrtArrayI64RegionSpec xrl_ap_spec_") == 4

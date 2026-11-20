@@ -1,0 +1,40 @@
+fn show_computed(end: i64) {
+    var values: Array<i64> = [7]
+    var i = 0
+    var sum = 0
+    while (i < end) {
+        values.push(i + 1)
+        sum += i
+        i += 1
+    }
+    print(values)
+    print(sum)
+}
+
+fn ordered_read(end: i64) -> i64 {
+    const values: Array<i64> = [7, 2, 5]
+    var i = 0
+    var total = 0
+    while (!(end <= i)) {
+        total = 2 * total - values[i]
+        i += 1
+    }
+    return total
+}
+
+fn show_shifted_bias() {
+    var values: Array<i64> = [-1, 9223372036854775807, 0]
+    var i = 0
+    while (i < len(values)) {
+        values[i] = 3 + 10 * values[i]
+        i += 1
+    }
+    print(values)
+}
+
+show_computed(0)
+show_computed(10)
+print(ordered_read(0))
+print(ordered_read(2))
+print(ordered_read(3))
+show_shifted_bias()
