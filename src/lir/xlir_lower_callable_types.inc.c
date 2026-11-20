@@ -18,6 +18,8 @@ static bool lower_receive_callable(Lower *c, XrXirType type, const XrXirTypeNode
     const XrXirTypeNode *result = xr_xir_type_node(c->source->types, node->result);
     if (result && result->kind == XR_XIR_TYPE_CALLABLE)
         return lower_unsupported(c, "owned callable result transport");
+    if (xr_xir_type_is_class(c->source->types, node->result))
+        return lower_unsupported(c, "class callable result transport");
     if (!lower_receive_type(c, node->result)) return false;
     XrLirCallableParameter *parameters = lower_alloc(c, node->parameter_count, sizeof(*parameters));
     if (node->parameter_count && !parameters) return false;
@@ -27,6 +29,10 @@ static bool lower_receive_callable(Lower *c, XrXirType type, const XrXirTypeNode
         const XrXirTypeNode *parameter = xr_xir_type_node(c->source->types, source.type);
         if (source.mode == XR_PARAM_REF || (parameter && parameter->kind == XR_XIR_TYPE_CALLABLE)) {
             good = lower_unsupported(c, "nested or reference callable parameter transport");
+            break;
+        }
+        if (xr_xir_type_is_class(c->source->types, source.type)) {
+            good = lower_unsupported(c, "class callable parameter transport");
             break;
         }
         good = lower_receive_type(c, source.type);
