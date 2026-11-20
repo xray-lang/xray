@@ -1,0 +1,25 @@
+struct PacketData {
+    entry: (Array<i64>, string)?
+    label: string
+}
+
+class Packet {
+    data: PacketData
+
+    init(data: PacketData) {
+        this.data = data
+    }
+}
+
+const some: (Array<i64>, string)? = ([3, 7], "ready")
+const none: (Array<i64>, string)? = null
+const filled = Packet(PacketData{entry: some, label: "filled"})
+const empty = Packet(PacketData{entry: none, label: "empty"})
+const found = filled.data.entry ?? ([0], "fallback")
+const missing = empty.data.entry ?? ([11, 12, 13], "fallback")
+print(filled.data.label)
+print(found.0[1])
+print(found.1)
+print(empty.data.label)
+print(len(missing.0))
+print(missing.1)
