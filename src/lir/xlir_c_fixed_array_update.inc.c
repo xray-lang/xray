@@ -341,13 +341,13 @@ static void c_fixed_array_set_remainder(LirC *c, uint32_t label, const XrLirArra
     uint32_t iv = region->range.iv;
     XR_DCHECK(region->range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN,
         "Array cursor requires the common same-length proof");
-    c_format(c, "    {\n"
-        "        unsigned char *xrl_fixed_cursor = xrl_fixed_cache_%" PRIu32 ".elements + (size_t)v%" PRIu32
-        " * sizeof(int64_t);\n"
-        "        const unsigned char *xrl_fixed_stop = xrl_fixed_cache_%" PRIu32 ".elements + xrl_fixed_cache_%" PRIu32
-        ".length * sizeof(int64_t);\n"
-        "        for (; xrl_fixed_cursor < xrl_fixed_stop; xrl_fixed_cursor += sizeof(int64_t), ++v%" PRIu32 ") {\n",
-        label, iv, label, label, iv);
+    c_text(c, "    {\n");
+    c_format(c, "        unsigned char *xrl_fixed_cursor = xrl_fixed_cache_%" PRIu32
+        ".elements + (size_t)v%" PRIu32 " * sizeof(int64_t);\n", label, iv);
+    c_format(c, "        const unsigned char *xrl_fixed_stop = xrl_fixed_cache_%" PRIu32
+        ".elements + xrl_fixed_cache_%" PRIu32 ".length * sizeof(int64_t);\n", label, label);
+    c_format(c, "        for (; xrl_fixed_cursor < xrl_fixed_stop; xrl_fixed_cursor += sizeof(int64_t), ++v%" PRIu32
+        ") {\n", iv);
     c_fixed_array_iteration(c, label, region, steps, 1, LIR_C_ARRAY_CURSOR);
     c_text(c, "        }\n    }\n");
 }
