@@ -155,7 +155,7 @@ static XrtValuePlan *mixed_plan(Fixture *f,XrtManagedLease code) {
     XrtValuePlan *integer=integer_plan(f),*map=map_plan(f);
     XrtValuePlan *integer_cell=cell_plan(f,integer),*map_cell=cell_plan(f,map),*signature=signature_plan(f,integer);
     char names[][6]={"seed","map","count","cache"};
-    XrtValueSlotSpec captures[]={{integer,0,names[0],4},{map,8,names[1],3},{integer_cell,16,names[2],5},{map_cell,24,names[3],5}};
+    XrtValueSlotSpec captures[]={{integer,0,names[0],4,0},{map,8,names[1],3,0},{integer_cell,16,names[2],5,0},{map_cell,24,names[3],5,0}};
     size_t offsets[]={8,16,24};
     XrtValuePlan *plan=plan_new(f,(XrtValuePlanSpec){.kind=XRT_VALUE_ENVIRONMENT,.size=sizeof(Mixed),.alignment=alignof(Mixed),
         .owned_offsets=offsets,.owned_count=3,.captures=captures,.capture_count=4,.entry={3,signature},.code=code});
@@ -364,7 +364,7 @@ static void creator_retirement(void) {
 static void owned_environment_context(void) {
     Fixture f; fixture_init(&f,SIZE_MAX,true);
     XrtValuePlan *integer=integer_plan(&f),*signature=signature_plan(&f,integer),*cell=cell_plan(&f,integer);
-    XrtValueSlotSpec capture={integer,0,"seed",4};
+    XrtValueSlotSpec capture={integer,0,"seed",4,0};
     XrtValuePlan *plan=plan_new(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_ENVIRONMENT,.size=8,.alignment=8,
         .captures=&capture,.capture_count=1,.entry={7,signature}});
     XrtCaptureType *type=type_new(&f,plan),*cell_type=type_new(&f,cell);
@@ -474,7 +474,7 @@ static void actual_payload_quota(void) {
     XrtValuePlan *integer=integer_plan(&metadata),*signature=signature_plan(&metadata,integer);
     XrtValueSlotSpec *captures=xr_malloc(CAPTURES*sizeof(*captures)); CHECK(captures);
     int64_t *values=xr_malloc(CAPTURES*sizeof(*values)); CHECK(values);
-    for (size_t i=0;i<CAPTURES;++i) { captures[i]=(XrtValueSlotSpec){integer,i*8,NULL,0}; values[i]=(int64_t)i; }
+    for (size_t i=0;i<CAPTURES;++i) { captures[i]=(XrtValueSlotSpec){.type = integer, .offset = i * 8}; values[i]=(int64_t)i; }
     XrtValuePlan *plan=plan_new(&metadata,(XrtValuePlanSpec){.kind=XRT_VALUE_ENVIRONMENT,.size=CAPTURES*8,.alignment=8,
         .captures=captures,.capture_count=CAPTURES,.entry={0,signature}});
     xr_free(captures); xrt_value_plan_drop(signature); xrt_value_plan_drop(integer);
@@ -495,7 +495,7 @@ static void empty_and_deep_environments(void) {
     XrtEnvironmentBorrow view={0}; OK(xrt_environment_borrow(empty_type,borrow(&f,1),&view));
     const XrtValuePlan *payload_type=NULL; const void *payload=NULL;
     STATUS(xrt_environment_capture_borrow(&view,0,&payload_type,&payload),XRT_MANAGED_BOUNDS);
-    XrtValueSlotSpec capture={signature,0,"previous",8}; size_t owned=offsetof(FnBits,owner);
+    XrtValueSlotSpec capture={signature,0,"previous",8,0}; size_t owned=offsetof(FnBits,owner);
     XrtValuePlan *chain=plan_new(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_ENVIRONMENT,.size=sizeof(FnBits),.alignment=alignof(FnBits),
         .owned_offsets=&owned,.owned_count=1,.captures=&capture,.capture_count=1,.entry={0,signature}});
     XrtCaptureType *chain_type=type_new(&f,chain);

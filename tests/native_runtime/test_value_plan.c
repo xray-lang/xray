@@ -131,7 +131,7 @@ typedef struct Record { XrtManagedHeader *left, *right; int64_t number; } Record
 static XrtValuePlan *record_plan(Fixture *f) {
     XrtValuePlan *text = reference(f, XRT_VALUE_STRING), *integer = scalar(f, XRT_VALUE_I64, 8, 8);
     char names[][7] = {"left", "right", "number"};
-    XrtValueSlotSpec fields[] = {{text,0,names[0],4},{text,8,names[1],5},{integer,16,names[2],6}};
+    XrtValueSlotSpec fields[] = {{text,0,names[0],4,0},{text,8,names[1],5,0},{integer,16,names[2],6,0}};
     size_t offsets[] = {0,8};
     XrtValuePlan *plan = new_plan(f, (XrtValuePlanSpec){.kind=XRT_VALUE_RECORD, .size=sizeof(Record), .alignment=alignof(Record),
         .owned_offsets=offsets, .owned_count=2, .fields=fields, .field_count=3});
@@ -258,7 +258,7 @@ static void typed_metadata_and_code(void) {
     XrtValuePlan *signature = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_FUNCTION,.size=sizeof(XrtFunction),.alignment=alignof(XrtFunction),
         .owned_offsets=&function_owner,.owned_count=1,.signature={&parameter,1,integer,XRT_VALUE_NO_SUSPEND,false}});
     CodeAudit audit={0}; CodeOwner *code=code_new(&audit);
-    XrtValueSlotSpec captures[]={{integer,0,NULL,0},{cell,8,capture,5},{signature,16,NULL,0}};
+    XrtValueSlotSpec captures[]={{.type = integer},{cell,8,capture,5,0},{.type = signature, .offset = 16}};
     size_t owned[]={8,32};
     XrtValuePlan *env = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_ENVIRONMENT,.size=40,.alignment=8,
         .owned_offsets=owned,.owned_count=2,.captures=captures,.capture_count=3,.entry={7,signature},
@@ -354,7 +354,7 @@ static void failures_and_admission(void) {
     audit.reject=true;
     STATUS(xrt_value_plan_new(f.billing,&plain,&empty),XRT_MANAGED_REFCOUNT); CHECK(!empty); same_bill(&f,before);
     audit.reject=false;
-    XrtValueSlotSpec fields[]={{array,0,"array",5}}; size_t zero=0;
+    XrtValueSlotSpec fields[]={{array,0,"array",5,0}}; size_t zero=0;
     XrtValuePlanSpec record={.kind=XRT_VALUE_RECORD,.size=8,.alignment=8,.fields=fields,.field_count=1,.owned_offsets=&zero,.owned_count=1};
     OK(xrt_value_plan_new(f.billing,&record,&empty));
     XrtValuePlanSpec received;
@@ -365,7 +365,7 @@ static void failures_and_admission(void) {
     fields[0].type=unadmitted;
     STATUS(xrt_value_plan_new(f.billing,&record,&empty),XRT_MANAGED_ARGUMENT); CHECK(!empty);
     XrtValuePlanSpec tuple=record; tuple.kind=XRT_VALUE_TUPLE;
-    XrtValueSlotSpec positional={unadmitted,0,NULL,0}; tuple.fields=&positional;
+    XrtValueSlotSpec positional={.type = unadmitted}; tuple.fields=&positional;
     STATUS(xrt_value_plan_new(f.billing,&tuple,&empty),XRT_MANAGED_ARGUMENT); CHECK(!empty);
     xrt_value_plan_drop(unadmitted); fields[0].type=array; positional.type=array;
     OK(xrt_value_plan_new(f.billing,&tuple,&empty));
@@ -395,7 +395,7 @@ static void failures_and_admission(void) {
     plain=(XrtValuePlanSpec){.kind=XRT_VALUE_FIXED_U8,.size=16000,.alignment=1,.count=16000,.code={code,code_retain,code_drop}};
     /* Names consume actual metadata bytes; the inline payload itself is not allocated. */
     char *large_name=xr_malloc(16000); CHECK(large_name); memset(large_name,'a',16000);
-    fields[0]=(XrtValueSlotSpec){text,0,large_name,16000}; record.code=(XrtManagedLease){code,code_retain,code_drop};
+    fields[0]=(XrtValueSlotSpec){text,0,large_name,16000,0}; record.code=(XrtManagedLease){code,code_retain,code_drop};
     STATUS(xrt_value_plan_new(f.billing,&record,&empty),XRT_MANAGED_LIMIT); CHECK(!empty); xr_free(large_name); same_bill(&f,before);
     void *memory=NULL; STATUS(xrt_managed_metadata_allocate(f.billing,0,&memory),XRT_MANAGED_ARGUMENT);
     OK(xrt_managed_metadata_allocate(f.billing,31,&memory)); CHECK(memory);
