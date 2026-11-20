@@ -51,7 +51,7 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import buildlock, platform, proc, sanitizer, workspace  # noqa: E402
+from xraytest import buildlock, platform, proc, sanitizer  # noqa: E402
 import canonical_program_test_profile as canonical_profile  # noqa: E402
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -397,34 +397,26 @@ def _run_main(argv: list[str]) -> int:
                 log(f"unexpected {profile} preflight test: {name}", error=True)
             return 1
 
+    reports = Path(tempfile.mkdtemp(prefix="asan-ctest-", dir=build_dir))
+    log(f"CTest reports: {reports}")
+    unit_report = reports / "unit.xml"
     log(f"running unit tests (regex: {ctest_regex}, exclude: {ctest_exclude})")
-    if exact_profile is not None:
-        with workspace.Workspace("xray_asan_ctest_evidence") as evidence:
-            report = evidence.path("ctest.xml")
-            result = sanitizer.ctest(
-                build_dir, include=ctest_regex, exclude=ctest_exclude,
-                jobs=jobs, timeout_each=300, timeout=timeout, junit=report
-            )
-            if not result.ok:
-                sanitizer.write_console(sys.stdout, result.combined_text())
-                return 1
-            if not verify_exact_execution(report, exact_tests, profile, log):
-                return 1
-    else:
-        result = sanitizer.ctest(build_dir, include=ctest_regex, exclude=ctest_exclude,
-                                 jobs=jobs, timeout_each=300, timeout=timeout)
-        if not result.ok:
-            sanitizer.write_console(sys.stdout, result.combined_text())
-            return 1
+    result = sanitizer.ctest(build_dir, include=ctest_regex, exclude=ctest_exclude,
+                             jobs=jobs, timeout_each=300, timeout=timeout, junit=unit_report)
+    if not result.ok:
+        sanitizer.write_console(sys.stdout, result.combined_text())
+        return 1
 
     if exact_profile is not None:
+        if not verify_exact_execution(unit_report, exact_tests, profile, log):
+            return 1
         log(f"PASS ({len(exact_tests)} exact preflight tests; full lane not run)")
         return 0
 
     log(f"running subprocess-sensitive unit tests serially (regex: {serial_regex})")
     if sanitizer.ctest_has_match(build_dir, serial_regex):
         result = sanitizer.ctest(build_dir, include=serial_regex, jobs=1,
-                                 timeout_each=300, timeout=timeout)
+                                 timeout_each=300, timeout=timeout, junit=reports / "serial.xml")
         if not result.ok:
             sanitizer.write_console(sys.stdout, result.combined_text())
             return 1
@@ -434,7 +426,7 @@ def _run_main(argv: list[str]) -> int:
     log(f"running fast backend-diff subset (regex: {diff_regex})")
     if sanitizer.ctest_has_match(build_dir, diff_regex):
         result = sanitizer.ctest(build_dir, include=diff_regex, jobs=jobs,
-                                 timeout_each=600, timeout=timeout)
+                                 timeout_each=600, timeout=timeout, junit=reports / "backend-diff.xml")
         if not result.ok:
             sanitizer.write_console(sys.stdout, result.combined_text())
             return 1
