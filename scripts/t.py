@@ -33,6 +33,7 @@ build's correctness without a full build's ~195 links.
 USAGE                                          measured, warm tree, 18 cores
     scripts/t.py t0      after an edit         exact bounded smoke inventory
     scripts/t.py infra   test-runner-only edit exact Python self-tests
+    scripts/t.py array-loop  fixed Array loop kernels and real VM/native cases
     scripts/t.py t0 -R <re>  one test          ~3s   (builds only that test)
     scripts/t.py canonical  canonical Program edit preflight; exact inventory
     scripts/t.py h2        shared H2 semantics; exact deduplicated aggregate
@@ -214,7 +215,33 @@ class ExactProfile:
     allow_no_build_targets: bool = False
 
 
+ARRAY_LOOP_CASES = (
+    "element_update",
+    "element_update_carried",
+    "fixed_update_carried",
+    "panic_fixed_update_first_get",
+)
+ARRAY_LOOP_EDIT_PATHS = frozenset((
+    "src/lir/xlir_array_set_region.inc.c",
+    "src/lir/xlir_c_fixed_array_update.inc.c",
+    "src/lir/xlir_value_fixed_array_updates.inc.c",
+)) | frozenset(
+    f"tests/fixtures/lir_cli/array_lower/{case}.{extension}"
+    for case in ARRAY_LOOP_CASES
+    for extension in ("xr", "out")
+)
+
 EXACT_PROFILES = {
+    "array-loop": ExactProfile(
+        tests=("test_lir_array", "test_lir_array_faults", "test_lir_c_faults",
+               "lir_binding_homes", "lir_bytecode_alloc", "test_lir_ownership",
+               "test_lir_ownership_faults", "native_backing"),
+        targets=("test_lir_binding_homes", "test_lir_bytecode_alloc", "test_native_backing",
+                 "xray_native_runtime"),
+        include_xray=True,
+        not_covered=("remaining Array and CLI cases, other CTest and corpora, "
+                     "sanitizers, other platforms, and performance measurements"),
+    ),
     "canonical": ExactProfile(
         tests=canonical_profile.CTEST_NAMES,
         targets=canonical_profile.BUILD_TARGETS,
@@ -320,12 +347,11 @@ def default_ctest_jobs(build_jobs: int) -> int:
     return min(build_jobs, 8) if platform.IS_WINDOWS else build_jobs
 
 
-def git_lines(args: Sequence[str]) -> List[str]:
+def git_paths(args: Sequence[str]) -> List[str]:
     result = proc.run(["git", *args], cwd=REPO_ROOT)
     if not result.ok:
-        return []
-    return [line for line in result.stdout.decode("utf-8", "replace").splitlines()
-            if line.strip()]
+        raise RuntimeError(result.combined_text().strip() or "Git path enumeration failed")
+    return [os.fsdecode(path) for path in result.stdout.split(b"\0") if path]
 
 
 def choose_run_for_paths(changed: Sequence[str]) -> Tuple[str, str]:
@@ -346,6 +372,12 @@ def choose_run_for_paths(changed: Sequence[str]) -> Tuple[str, str]:
     if all(INFRA_EDIT_PATH.search(path) for path in substantive):
         return "infra", "test-runner infrastructure is fully owned by the infra profile"
 
+    array_loop_owned = [path in ARRAY_LOOP_EDIT_PATHS for path in substantive]
+    if all(array_loop_owned):
+        return "array-loop", "fixed Array loop implementation or fixture change"
+    if any(array_loop_owned):
+        return "t2", "fixed Array loop paths are mixed with a change outside the profile"
+
     h2_owned = [bool(H2_EDIT_PATH.search(path)) for path in substantive]
     if all(h2_owned):
         return "h2", "H2 Program and private-backend paths have an exact aggregate profile"
@@ -365,8 +397,8 @@ def choose_run_for_paths(changed: Sequence[str]) -> Tuple[str, str]:
 
 def choose_run_from_diff() -> str:
     """Choose a bounded profile/tier and explain the complete path decision."""
-    changed = sorted(set(git_lines(["diff", "--name-only", "HEAD"])
-                         + git_lines(["ls-files", "--others", "--exclude-standard"])))
+    changed = sorted(set(git_paths(["diff", "--no-renames", "--name-only", "-z", "HEAD", "--"])
+                         + git_paths(["ls-files", "--others", "--exclude-standard", "-z"])))
     run, reason = choose_run_for_paths(changed)
     print(f"auto rule: {reason}; running {run}")
 
@@ -488,7 +520,7 @@ def cache_contains_all(build_dir: Path, entries: Sequence[str]) -> bool:
 
 
 def production_build_identity_errors(build_dir: Path) -> Tuple[str, ...]:
-    """Return every reason a tree cannot provide production t2/t3 evidence."""
+    """Return every reason a tree is not the required production configuration."""
     cache = build_dir / "CMakeCache.txt"
     try:
         lines = cache.read_text(encoding="utf-8", errors="strict").splitlines()
@@ -536,7 +568,7 @@ def production_build_identity_errors(build_dir: Path) -> Tuple[str, ...]:
 
 
 def validate_production_build(build_dir: Path) -> bool:
-    """Fail closed unless a t2/t3 tree is the exact production configuration."""
+    """Fail closed unless the tree has the production configuration."""
     errors = production_build_identity_errors(build_dir)
     if not errors:
         print(f"{BLUE}==>{NC} production build identity verified")
@@ -604,6 +636,9 @@ def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
         if not targets and allow_no_targets:
             print(f"{BLUE}==>{NC} building 0 targets (script-only exact profile)")
             return True
+    elif required_targets:
+        print(f"{RED}BUILD PROFILE INVALID{NC}: Ninja target inventory unavailable")
+        return False
     else:
         # No target list available: fall back to a full build rather than
         # silently under-building and testing stale binaries.
@@ -660,7 +695,11 @@ def _run_main(argv: List[str]) -> int:
         return usage(0)
 
     if tier == "auto":
-        tier = choose_run_from_diff()
+        try:
+            tier = choose_run_from_diff()
+        except RuntimeError as error:
+            print(f"{RED}TEST SELECTION FAILED{NC}: {error}")
+            return 1
     exact_profile = EXACT_PROFILES.get(tier)
     if tier not in TIERS and exact_profile is None:
         print(f"Unknown tier '{tier}'")
@@ -684,10 +723,9 @@ def _run_main(argv: List[str]) -> int:
     # XR_FAST removes the embedded-bytecode generation edge from the edit
     # cycle. Source loading preserves the language/compiler checks while
     # avoiding a bytecode rebuild during compiler bootstrap work.
-    # canonical/t2/t3 explicitly gate production configuration edges and reject
-    # the flag. Narrow exact profiles identify themselves as partial preflights.
+    # Profiles that require a production toolchain build reject this flag.
     if platform.env_flag("XR_FAST"):
-        if tier in ("canonical", "t2", "t3"):
+        if tier in ("array-loop", "canonical", "t2", "t3"):
             print(f"{RED}Error{NC}: XR_FAST=1 is not accepted by {tier}.")
             print(f"       {tier} gates production stdlib bootstrap edges; a tree built")
             print("       without them would report a pass that tier never established.")
@@ -739,7 +777,11 @@ def _run_main(argv: List[str]) -> int:
               "(Ninja + Release in build/)")
         return 1
 
-    if tier in ("t2", "t3") and not validate_production_build(build_dir):
+    if tier == "array-loop" and platform.env_flag("XR_NO_BUILD"):
+        print(f"{RED}Error{NC}: array-loop requires freshly built targets")
+        return 1
+
+    if tier in ("array-loop", "t2", "t3") and not validate_production_build(build_dir):
         return 1
 
     kind = "profile" if exact_profile is not None else "tier"
@@ -848,6 +890,20 @@ def _run_main(argv: List[str]) -> int:
 
     with timed_phase("ctest"):
         code = run_ctest(build_dir, [*ctest_args, *extra], env, exact_expected)
+
+    if tier == "array-loop" and code == 0:
+        print(f"{BLUE}==>{NC} Array loop VM/native cases: {', '.join(ARRAY_LOOP_CASES)}")
+        command = [sys.executable, "-X", "utf8",
+                   REPO_ROOT / "tests" / "cli" / "run_lir_array_native.py",
+                   "--binary", build_dir / platform.exe_name("xray"),
+                   "--root", REPO_ROOT, "--output", build_dir / "lir-cli-array-native"]
+        for case in ARRAY_LOOP_CASES:
+            command.extend(("--case", case))
+        with timed_phase("Array loop VM/native cases"):
+            result = proc.run(command, env=env)
+        sys.stdout.write(result.combined_text())
+        if not result.ok:
+            code = 1
 
     if not focused_selection:
         if tier == "t1" and not run_regression_corpus(build_dir, True):
