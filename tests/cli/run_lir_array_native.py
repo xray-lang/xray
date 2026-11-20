@@ -104,6 +104,7 @@ def main() -> None:
     environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
     if os.name == "nt":
         environment["PATH"] = str(binary.parent) + os.pathsep + environment.get("PATH", "")
+    journal = work / "result.jsonl"
     records = []
     failures = []
 
@@ -117,8 +118,10 @@ def main() -> None:
                "state": "TERMINAL_DRAINED"}
         for stream, path in paths.items():
             row[stream] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        # Keep the completed command available even if the suite times out.
+        with journal.open("a", encoding="utf-8", newline="\n") as output:
+            output.write(json.dumps(row, separators=(",", ":")) + "\n")
         records.append(row)
-        (work / "result.json").write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
         if status != expected_exit:
             failures.append((name, status, paths["stderr"].read_text(encoding="utf-8", errors="replace")))
         return status, paths["stdout"].read_bytes(), paths["stderr"].read_bytes()
@@ -335,6 +338,9 @@ def main() -> None:
             _, actual_out, actual_err = run(name + "-" + stage, command, 1)
             if actual_out != out or actual_err != err:
                 failures.append((name, "Source refusal byte comparison", stage, (out, err), (actual_out, actual_err)))
+    report = work / "result.json.tmp"
+    report.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
+    report.replace(work / "result.json")
     assert not failures, failures
     complete_native_artifacts(work)
     print(f"{len(records)} Array Source/VM/native commands passed")
