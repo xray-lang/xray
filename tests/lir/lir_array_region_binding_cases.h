@@ -288,8 +288,43 @@ static void array_push_binding_projection(void) {
         CHECK(xrt_billing_owner_stats(billing).blocks==1); xrt_billing_owner_drop(billing);
     }
 }
+static void fixed_array_home_allocation_faults(void) {
+    ArraySetRegionFixture c = ars_range_build_seeded(NULL, 3, ARRAY_REGION_RANGE_UNIT, true);
+    OK(xr_lir_module_finish(c.module, NULL));
+    XrtBillingOwner *billing = NULL;
+    MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
+    XrLirValueLayoutKey roots[] = {{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
+    XrLirValueLayouts *layouts = NULL;
+    HOME(xr_lir_value_layouts_create(c.module, roots, 4, billing, &layouts));
+    XrLirOwnershipPlan *plan = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
+    XrLirValueHomesRequest request = {c.module,c.function,layouts,plan};
+    XrLirValueHomes *homes = NULL;
+    size_t baseline = live, bytes = home_live_bytes();
+    attempts = 0;
+    HOME(xr_lir_value_homes_create(&request, &homes));
+    size_t sites = attempts;
+    CHECK(sites && homes->fixed_array_update_count == 1 && homes->fixed_array_update_step_count);
+    xr_lir_value_homes_destroy(homes); homes = NULL;
+    for (size_t point = 1; point <= sites; ++point) {
+        attempts = 0; fail_at = point;
+        CHECK(xr_lir_value_homes_create(&request, &homes) == XR_LIR_VALUE_LAYOUT_OOM && !homes &&
+            attempts >= point && live == baseline && home_live_bytes() == bytes);
+    }
+    fail_at = SIZE_MAX;
+    HOME(xr_lir_value_homes_create(&request, &homes));
+    CHECK(homes->fixed_array_update_count == 1);
+    xr_lir_value_homes_destroy(homes); xr_lir_ownership_plan_destroy(plan);
+    xr_lir_value_layouts_destroy(layouts); xr_lir_module_destroy(c.module);
+    CHECK(!live && !home_live_bytes() && xrt_billing_owner_stats(billing).blocks == 1);
+    xrt_billing_owner_drop(billing);
+}
+
 static void array_region_binding_projection(unsigned shape) {
-    if (!shape) array_push_binding_projection();
+    if (!shape) {
+        array_push_binding_projection();
+        fixed_array_home_allocation_faults();
+    }
     if (!shape) for (unsigned mask=1;mask<=2;++mask) {
         array_region_binding_mixed(false,mask); array_region_binding_mixed(true,mask);
     }
