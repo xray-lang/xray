@@ -315,6 +315,16 @@ static void unsupported(void) {
              "const root=Loop()\n", false, "proven acyclic allocation layout");
     rejected("class Box{value:i64; init(value:i64){this.value=value}}\n"
              "var value=Box(42)\nvalue.value=7\n", false, "CLASS_SET");
+    rejected("class Box{value:i64; init(value:i64){this.value=value}}\n"
+             "var value: Box? = null\nprint(1)\n", false, "Nullable class requires a receiving optional owner layout");
+    rejected("class Box{value:i64; init(value:i64){this.value=value}}\n"
+             "fn get(b:Box)->i64{return b.value}\n"
+             "fn apply(f:fn(Box)->i64, b:Box)->i64{return f(b)}\nprint(apply(get, Box(42)))\n",
+             false, "class callable parameter transport");
+    rejected("class Box{value:i64; init(value:i64){this.value=value}}\n"
+             "fn make()->Box{return Box(42)}\n"
+             "fn apply(f:fn()->Box)->Box{return f()}\nprint(apply(make).value)\n",
+             false, "class callable result transport");
     rejected("print(1)\n", true, "overflow-checks");
 }
 
