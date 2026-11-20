@@ -1,10 +1,11 @@
 """Tests for focused selection in the tiered test runner."""
 
+import argparse
 import io
 import sys
 import tempfile
 import unittest
-from contextlib import ExitStack, redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -16,6 +17,37 @@ bootstrap_xraytest()
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 runner = load_module("tiered_test_runner_under_test", ROOT / "scripts" / "t.py")
+
+
+class ArrayCaseSelectionTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.suite = load_module("array_native_runner_under_test",
+                                ROOT / "tests" / "cli" / "run_lir_array_native.py")
+
+    def test_default_and_legacy_selection_keep_all_fixed_controls(self):
+        parser = argparse.ArgumentParser()
+        examples = ("element_update", "element_update_carried")
+        self.assertEqual(self.suite.select_cases(parser, examples, None, None), (None, None))
+        self.assertEqual(self.suite.select_cases(parser, examples, ["element_update"], None),
+                         ({"element_update"}, None))
+
+    def test_focus_uses_the_same_inventory_for_examples_and_controls(self):
+        parser = argparse.ArgumentParser()
+        examples = ("element_update", "element_update_carried", "fixed_update_carried",
+                    "panic_fixed_update_first_get")
+        expected = set(runner.ARRAY_LOOP_CASES)
+        self.assertEqual(self.suite.select_cases(parser, examples, None, list(runner.ARRAY_LOOP_CASES)),
+                         (expected, expected))
+        self.assertEqual(expected - set(examples), {"reject_view_live_write", "reject_view_copy_live_write"})
+        self.assertTrue((expected - set(examples)) <= self.suite.SOURCE_REJECTIONS.keys())
+
+    def test_focus_rejects_empty_unknown_or_repeated_cases(self):
+        parser = argparse.ArgumentParser()
+        for cases in ([], ["missing_case"], ["element_update", "element_update"]):
+            with self.subTest(cases=cases), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+                self.suite.select_cases(parser, ("element_update",), None, cases)
+            self.assertEqual(raised.exception.code, 2)
 
 
 class FocusedSelectionTest(unittest.TestCase):

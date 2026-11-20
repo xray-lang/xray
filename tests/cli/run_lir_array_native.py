@@ -15,6 +15,67 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.artifacts import complete_native_artifacts
 
 
+NATIVE_REJECTIONS = (
+    "reject_bool", "reject_nested", "reject_function_reassign", "reject_function_alias",
+    "reject_function_ref", "reject_tuple_unit",
+)
+SOURCE_CONTROLS = (
+    "check_view_state_indirect_callback_read", "check_view_callback_declaration", "check_view_callback_derived",
+)
+SOURCE_REJECTIONS = {
+    "reject_i64_try_parse_type": b"expression cannot satisfy its declared type",
+    "reject_i64_try_parse_shadow": b"'i64' is a keyword and cannot be used as an identifier",
+    "reject_callable_inline_array_mismatch": b"callback argument requires exact shape and an admitted advertised bound",
+    "ref_global_alias": b"E0382: ref of module binding `shared` conflicts with access by `update` via `inspect`",
+    "string_append_ref": b"E0382: ref of module binding `published` conflicts with access by `actual` via `actual`",
+    "reject_display_nullable_fixed": b"value has no admitted builtin display",
+    "reject_fixed_empty": b"this fixed byte length",
+    "reject_fixed_length_mismatch": b"expression cannot satisfy its declared type",
+    "reject_repeat_string_default": b"type has no admitted default initializer",
+    "reject_unsigned_family": b"expression cannot satisfy its declared type",
+    "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",
+    "reject_ref_alias": b"ref arguments of one call must not alias",
+    "reject_scalar_ref_callback_write": b"E0382: ref of module binding `shared` conflicts with",
+    "reject_local_scalar_ref_callback_write": b"ref argument conflicts with a callable capture of the same mutable root",
+    "reject_view_live_write": b"during view lifetime normalization",
+    "reject_view_copy_live_write": b"during view lifetime normalization",
+    "reject_view_module_alias": b"during view lifetime normalization",
+    "reject_view_module_write": b"E0382: Slice of module binding `values` conflicts with write by `first` via `grow`",
+    "reject_view_capture_module_write": b"during view lifetime normalization",
+    # These are capability boundaries, not proof of captured local Array
+    # write conflict checking. Their original inputs remain unchanged.
+    "reject_view_indirect_callback_write": b"borrowing captured Array storage is not implemented yet",
+    "reject_view_local_byte_capture": b"borrowing captured Array storage is not implemented yet",
+    "reject_callable_local_array_transport": b"callable transport of captured Array storage is not implemented yet",
+    "reject_callable_local_byte_transport": b"callable transport of captured Array storage is not implemented yet",
+    "reject_callable_unknown_before_array_transport": b"constructed XIR failed checking",
+    "reject_view_state_indirect_callback_write": b"E0382: Slice of module binding `values` conflicts with write",
+    "reject_view_callback_relay_write": b"E0382: Slice of module binding `values` conflicts with write",
+    "reject_view_callback_opaque": b"callback arguments require a completed readonly Slice borrowing contract",
+    "reject_view_local_return": b"constructed XIR failed checking",
+}
+
+
+def select_cases(
+    parser: argparse.ArgumentParser, main_cases: tuple[str, ...],
+    legacy: list[str] | None, focused: list[str] | None,
+) -> tuple[frozenset[str] | None, frozenset[str] | None]:
+    """Return the main and fixed-control filters in ordinary inventory order."""
+    known = set(main_cases)
+    if focused is not None:
+        known.update(NATIVE_REJECTIONS, SOURCE_CONTROLS, SOURCE_REJECTIONS)
+        requested = frozenset(focused)
+        if not requested or len(requested) != len(focused):
+            parser.error("--focused-cases requires at least one case and no duplicate names")
+    else:
+        requested = frozenset(legacy) if legacy else None
+    if requested is not None:
+        unknown = sorted(requested - known)
+        if unknown:
+            parser.error("unknown cases: " + ", ".join(unknown))
+    return requested, requested if focused is not None else None
+
+
 def assert_fixed_update_loop(name: str, generated: str) -> None:
     loop = re.search(
         r"^(?P<label>xrl_fixed_(?P<region>\d+)_bb\d+): ;\n"
@@ -71,7 +132,10 @@ def main() -> None:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compiler", action="append", default=[])
-    parser.add_argument("--case", action="append", default=[])
+    selector = parser.add_mutually_exclusive_group()
+    selector.add_argument("--case", action="append", help="select main cases and keep all fixed controls")
+    selector.add_argument("--focused-cases", action="extend", nargs="+", metavar="CASE",
+                          help="run only the named main cases or controls")
     args = parser.parse_args()
     cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose", "callable_compose_weaken",
              "callable_inline_array_parameter", "callable_inline_array_result",
@@ -106,9 +170,7 @@ def main() -> None:
              "map_stationary_reads", "map_mixed_scalar_cycle", "map_local_forwarding", "map_edit_lifetime",
              "map_key_mutation", "map_borrowed_literal_key",
              "set_values")
-    unknown = sorted(set(args.case) - set(cases))
-    if unknown:
-        parser.error("unknown cases: " + ", ".join(unknown))
+    selected, selected_controls = select_cases(parser, cases, args.case, args.focused_cases)
     root, binary = args.root.resolve(), args.binary.resolve()
     sys.path.insert(0, str(root / "scripts"))
     from xray_process import run_child
@@ -142,9 +204,9 @@ def main() -> None:
         return status, paths["stdout"].read_bytes(), paths["stderr"].read_bytes()
 
     for name in cases:
-        if args.case and name not in args.case:
+        if selected is not None and name not in selected:
             continue
-        if name in ("ref_global_alias", "string_append_ref"):
+        if name in SOURCE_REJECTIONS:
             continue
         source = fixtures / (name + ".xr")
         panic = name.startswith("panic_")
@@ -291,8 +353,9 @@ def main() -> None:
                     failures.append((name, "output", out, err))
                 if result != reference:
                     failures.append((name, "VM/native byte comparison", reference, result))
-    for name in ("reject_bool", "reject_nested", "reject_function_reassign",
-                 "reject_function_alias", "reject_function_ref", "reject_tuple_unit"):
+    for name in NATIVE_REJECTIONS:
+        if selected_controls is not None and name not in selected_controls:
+            continue
         source = fixtures / (name + ".xr")
         run(name + "-check", [binary, "check", source], 0)
         _, out, err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
@@ -308,43 +371,15 @@ def main() -> None:
             failures.append((name, "VM/native refusal byte comparison", (out, err), (vm_out, vm_err)))
     # This paired State control tests semantic admission. The indirect higher-
     # order callable ABI still has its separate Lower implementation frontier.
-    for name in ("check_view_state_indirect_callback_read", "check_view_callback_declaration", "check_view_callback_derived"):
+    for name in SOURCE_CONTROLS:
+        if selected_controls is not None and name not in selected_controls:
+            continue
         status, out, err = run(name + "-check", [binary, "check", fixtures / (name + ".xr")], 0)
         if status or out or err:
             failures.append((name, "Source callback borrowing control", out, err))
-    rejected_sources = {
-        "reject_i64_try_parse_type": b"expression cannot satisfy its declared type",
-        "reject_i64_try_parse_shadow": b"'i64' is a keyword and cannot be used as an identifier",
-        "reject_callable_inline_array_mismatch": b"callback argument requires exact shape and an admitted advertised bound",
-        "ref_global_alias": b"E0382: ref of module binding `shared` conflicts with access by `update` via `inspect`",
-        "string_append_ref": b"E0382: ref of module binding `published` conflicts with access by `actual` via `actual`",
-        "reject_display_nullable_fixed": b"value has no admitted builtin display",
-        "reject_fixed_empty": b"this fixed byte length",
-        "reject_fixed_length_mismatch": b"expression cannot satisfy its declared type",
-        "reject_repeat_string_default": b"type has no admitted default initializer",
-        "reject_unsigned_family": b"expression cannot satisfy its declared type",
-        "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",
-        "reject_ref_alias": b"ref arguments of one call must not alias",
-        "reject_scalar_ref_callback_write": b"E0382: ref of module binding `shared` conflicts with",
-        "reject_local_scalar_ref_callback_write": b"ref argument conflicts with a callable capture of the same mutable root",
-        "reject_view_live_write": b"during view lifetime normalization",
-        "reject_view_copy_live_write": b"during view lifetime normalization",
-        "reject_view_module_alias": b"during view lifetime normalization",
-        "reject_view_module_write": b"E0382: Slice of module binding `values` conflicts with write by `first` via `grow`",
-        "reject_view_capture_module_write": b"during view lifetime normalization",
-        # These are capability boundaries, not proof of captured local Array
-        # write conflict checking. Their original inputs remain unchanged.
-        "reject_view_indirect_callback_write": b"borrowing captured Array storage is not implemented yet",
-        "reject_view_local_byte_capture": b"borrowing captured Array storage is not implemented yet",
-        "reject_callable_local_array_transport": b"callable transport of captured Array storage is not implemented yet",
-        "reject_callable_local_byte_transport": b"callable transport of captured Array storage is not implemented yet",
-        "reject_callable_unknown_before_array_transport": b"constructed XIR failed checking",
-        "reject_view_state_indirect_callback_write": b"E0382: Slice of module binding `values` conflicts with write",
-        "reject_view_callback_relay_write": b"E0382: Slice of module binding `values` conflicts with write",
-        "reject_view_callback_opaque": b"callback arguments require a completed readonly Slice borrowing contract",
-        "reject_view_local_return": b"constructed XIR failed checking",
-    }
-    for name, diagnostic in rejected_sources.items():
+    for name, diagnostic in SOURCE_REJECTIONS.items():
+        if selected_controls is not None and name not in selected_controls:
+            continue
         source = fixtures / (name + ".xr")
         _, out, err = run(name + "-check", [binary, "check", source], 1)
         if out or diagnostic not in err:

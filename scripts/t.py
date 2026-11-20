@@ -220,6 +220,8 @@ ARRAY_LOOP_CASES = (
     "element_update_carried",
     "fixed_update_carried",
     "panic_fixed_update_first_get",
+    "reject_view_live_write",
+    "reject_view_copy_live_write",
 )
 ARRAY_LOOP_EDIT_PATHS = frozenset((
     "src/lir/xlir_array_set_region.inc.c",
@@ -896,9 +898,8 @@ def _run_main(argv: List[str]) -> int:
         command = [sys.executable, "-X", "utf8",
                    REPO_ROOT / "tests" / "cli" / "run_lir_array_native.py",
                    "--binary", build_dir / platform.exe_name("xray"),
-                   "--root", REPO_ROOT, "--output", build_dir / "lir-cli-array-native"]
-        for case in ARRAY_LOOP_CASES:
-            command.extend(("--case", case))
+                   "--root", REPO_ROOT, "--output", build_dir / "lir-cli-array-native",
+                   "--focused-cases", *ARRAY_LOOP_CASES]
         with timed_phase("Array loop VM/native cases"):
             result = proc.run(command, env=env)
         sys.stdout.write(result.combined_text())
