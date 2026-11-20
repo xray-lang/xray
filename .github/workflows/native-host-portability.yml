@@ -390,6 +390,14 @@ jobs:
           subprocess.run([sys.executable, 'scripts/new_path_baseline.py', '--root', '.',
                           '--build', 'build', '--work', 'build/string-performance',
                           '--cc', os.environ['NATIVE_CC'], '--samples', '6', '--gate-string'], check=True)
+      - name: Report equivalent-spelling performance families
+        if: ${{ !cancelled() && steps.native-cc.outcome == 'success' }}
+        shell: python
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable, 'scripts/perf_family_benchmark.py', 'run', '--root', '.',
+                          '--build', 'build', '--work', 'build/perf-families',
+                          '--cc', os.environ['NATIVE_CC']], check=True)
       - name: Save verified macOS compiler objects
         if: runner.os == 'macOS' && steps.macos-cache-profile.outcome == 'success' && steps.macos-cache-restore.outputs.cache-hit != 'true'
         continue-on-error: true
@@ -404,6 +412,10 @@ jobs:
           path: |
             build/array-performance-prepare/
             build/array-performance-measured/
+            build/perf-families/result.json
+            build/perf-families/summary.md
+            build/perf-families/*.stdout
+            build/perf-families/*.stderr
             build/string-performance/**/*.json
             build/string-performance/**/*.jsonl
             build/string-performance/**/*.stdout

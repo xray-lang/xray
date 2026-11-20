@@ -1,0 +1,12 @@
+fn main() {
+    const table = {"x": 2, "y": 3}
+    const key = "x"
+    var sum = 0
+    var i = 0
+    while (i < @N@) {
+        sum = sum + table[key]
+        i = i + 1
+    }
+    print(sum)
+}
+main()

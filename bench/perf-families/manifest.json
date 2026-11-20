@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "origin": {
+    "families": "Equivalent spellings of the same work. Every member of a family prints the same output at each scale, so outputs are checked exactly and timings compare like with like.",
+    "rules": "R1 constants with different bit patterns; R2 value expressions and temporaries; R3 an unrelated statement; R4 independent statement order; R5 extracted functions; R6 data from parameters or results; R7 compound and expanded assignment; R8 loop step spellings.",
+    "scales": "Templates replace each @NAME@ placeholder. Native scales match the hand-written C reference; VM scales are smaller and are only compared within the family.",
+    "seeds": "The push and inplace seeds expand to the exact bytes of the fixed Array gate programs."
+  },
+  "limits": {
+    "familySpread": 1.5,
+    "genericOverC": 3.0,
+    "source": "Task345 decisions: slowest / fastest member <= 1.5 for native and VM; every native member <= 3x the hand-written C; the fastest member meets the family's own C limit."
+  },
+  "families": {
+    "push": {
+      "c": "../../array-access/push.c",
+      "seedOrigin": "../../array-access/push.xr",
+      "nativeOverC": 1.3,
+      "limitSource": "Task339 M2 managed values: native <= 1.3 C.",
+      "scales": {"native": {"@N@": "5000000"}, "vm": {"@N@": "500000"}},
+      "stdout": {"native": "12499997500000\n", "vm": "124999750000\n"},
+      "members": {
+        "seed": "seed",
+        "r2_value_expression": "R2",
+        "r2_temporary": "R2",
+        "r3_extra_statement": "R3",
+        "r5_helper_fill": "R5",
+        "r6_parameter_array": "R6",
+        "r8_compound_step": "R8",
+        "r8_commuted_step": "R8"
+      }
+    },
+    "inplace": {
+      "c": "../../array-access/inplace.c",
+      "seedOrigin": "../../array-access/inplace.xr",
+      "nativeOverC": 1.1,
+      "limitSource": "Exclusive-access decision section 5.4: in-place updates <= 1.1 raw C.",
+      "scales": {"native": {"@R@": "20000"}, "vm": {"@R@": "2000"}},
+      "stdout": {"native": "-742713184288245760\n", "vm": "6395938566148454400\n"},
+      "members": {
+        "seed": "seed",
+        "r1_constant_bits": "R1",
+        "r2_temporary": "R2",
+        "r2_operand_order": "R2",
+        "r5_helper_fill": "R5",
+        "r5_extracted_update": "R5",
+        "r6_parameter_array": "R6",
+        "r8_compound_step": "R8"
+      }
+    },
+    "append": {
+      "c": "append.c",
+      "nativeOverC": 1.3,
+      "limitSource": "Task328 P3 managed-value target: native <= 1.3 C.",
+      "scales": {"native": {"@N@": "2000000"}, "vm": {"@N@": "200000"}},
+      "stdout": {"native": "4000000\n", "vm": "400000\n"},
+      "members": {
+        "seed": "seed",
+        "r2_local_suffix": "R2",
+        "r3_extra_statement": "R3",
+        "r4_step_first": "R4",
+        "r5_helper": "R5",
+        "r6_parameter_suffix": "R6",
+        "r7_expanded": "R7",
+        "r7_parenthesized": "R7",
+        "r8_compound_step": "R8"
+      }
+    },
+    "map": {
+      "c": "map.c",
+      "nativeOverC": 1.3,
+      "limitSource": "Task328 P3 managed-value target: native <= 1.3 C.",
+      "scales": {"native": {"@N@": "5000000"}, "vm": {"@N@": "500000"}},
+      "stdout": {"native": "10000000\n", "vm": "1000000\n"},
+      "members": {
+        "seed": "seed",
+        "r2_literal_key": "R2",
+        "r2_runtime_key": "R2",
+        "r3_extra_statement": "R3",
+        "r5_extracted_loop": "R5",
+        "r6_helper_table": "R6",
+        "r8_compound": "R8"
+      }
+    }
+  }
+}

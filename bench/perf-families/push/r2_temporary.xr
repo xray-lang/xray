@@ -1,0 +1,17 @@
+fn main() {
+    var a: Array<i64> = []
+    var i = 0
+    while (i < @N@) {
+        const x = i
+        a.push(x)
+        i = i + 1
+    }
+    var total = 0
+    i = 0
+    while (i < len(a)) {
+        total = total + a[i]
+        i = i + 1
+    }
+    print(total)
+}
+main()

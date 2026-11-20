@@ -1,0 +1,10 @@
+fn main() {
+    var text = ""
+    var i = 0
+    while (i < @N@) {
+        text += "ab"
+        i += 1
+    }
+    print(len(text))
+}
+main()

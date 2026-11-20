@@ -2034,6 +2034,18 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME perf_family_manifest
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/perf_family_benchmark.py
+                check --root ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(perf_family_manifest PROPERTIES
+        LABELS "performance;metadata"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME stdlib_self_hosting_consistency
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/report_stdlib_self_hosting.py
