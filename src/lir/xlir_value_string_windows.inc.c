@@ -347,7 +347,6 @@ XR_FUNCDEF const XrLirStringWindow *xr_lir_value_homes_string_window(const XrLir
         if (homes->string_windows[at].header < header) first = at + 1;
         else end = at;
     }
-    return first < homes->string_window_count && homes->string_windows[first].header == header &&
-        !homes->string_windows[first].replay_count ?
+    return first < homes->string_window_count && homes->string_windows[first].header == header ?
         &homes->string_windows[first] : NULL;
 }

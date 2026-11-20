@@ -1082,10 +1082,11 @@ static void string_scalar_replay(StringReplayShape shape) {
     XrLirOwnershipPlan *plan=NULL; OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
     size_t baseline=live, bytes=home_live_bytes();
     XrLirValueHomes *homes=NULL; HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,f,layouts,plan},&homes));
-    CHECK(!xr_lir_value_homes_string_window(homes,header.id));
+    const XrLirStringWindow *found=xr_lir_value_homes_string_window(homes,header.id);
     if (shape==STRING_REPLAY_SCALAR_STATE) {
         CHECK(homes->string_window_count==1 && homes->string_replay_block_count==3);
         const XrLirStringWindow *window=homes->string_windows;
+        CHECK(found==window);
         CHECK(window->header==header.id && window->index==h[2].id && window->next_index==next.id && window->limit==limit.id);
         CHECK(window->replay_first==0 && window->replay_count==3 && window->replay_body==body.id);
         CHECK(window->replay_literal==1 && window->replay_append==2 && window->replay_drop==3);
@@ -1100,6 +1101,7 @@ static void string_scalar_replay(StringReplayShape shape) {
         CHECK(rows[2].owner_parameter==h[0].id && window->replay_body==body.id);
         xr_lir_value_homes_destroy(homes);
     } else {
+        CHECK(!found);
         CHECK(!homes->string_window_count && !homes->string_replay_block_count && !homes->string_replay_blocks);
         xr_lir_value_homes_destroy(homes);
         CHECK(live==baseline && home_live_bytes()==bytes);

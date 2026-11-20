@@ -1,0 +1,19 @@
+fn accumulate(first: i64, last: i64, seed: i64) -> i64 {
+    var text = ""
+    var index = first
+    var total = seed
+    var previous = 11
+    while (index < last) {
+        text += "é"
+        const saved = total
+        total = total + previous + index
+        previous = saved
+        index += 1
+    }
+    print(len(text))
+    return total + previous
+}
+
+print(accumulate(0, 200, 9223372036854775803))
+print(accumulate(-3, 5, 9223372036854775803))
+print(accumulate(5, 5, 7))

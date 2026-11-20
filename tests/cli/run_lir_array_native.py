@@ -50,7 +50,8 @@ def main() -> None:
              "view_return_module_unrelated", "view_recursive_module_unrelated", "view_multiple_module_unrelated",
              "view_copy_unused_parameter", "view_call_module_write", "panic_nullable_view", "string_append_values", "string_append_ref",
              "string_join", "string_append_loop", "string_append_assignment", "string_append_grouping",
-             "string_append_invariant", "string_parameter_loop", "panic_nullable_string_append", "map_snapshots", "map_display",
+             "string_append_invariant", "string_append_side_state", "string_parameter_loop",
+             "panic_nullable_string_append", "map_snapshots", "map_display",
              "map_stationary_reads", "map_mixed_scalar_cycle", "map_local_forwarding", "map_edit_lifetime",
              "map_key_mutation", "map_borrowed_literal_key",
              "set_values")
@@ -155,6 +156,9 @@ def main() -> None:
         if name == "string_append_invariant":
             assert generated_text.count("xrt_native_string_append_window(") == 9
             assert generated_text.count("xrt_native_string_append_owned(") == 12
+        if name == "string_append_side_state":
+            assert "const size_t xrl_string_done = xrt_native_string_append_window(" in generated_text
+            assert "xrl_string_step < xrl_string_done;" in generated_text
         if name in ("map_local_forwarding", "panic_map_stationary_cleanup", "map_edit_lifetime"):
             assert "xrt_managed_frame_try_forward(" not in generated_text
             assert "xrt_place_copy_replace(" in generated_text

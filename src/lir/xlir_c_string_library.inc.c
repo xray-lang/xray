@@ -251,6 +251,40 @@ static void c_string_library(LirC *c, const XrLirInstructionView *v, uint32_t so
     c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
 }
 
+static void c_string_window_replay(LirC *c, const XrLirStringWindow *window) {
+    const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
+    const XrLirStringReplayBlock *route = c->homes->string_replay_blocks + window->replay_first;
+    const uint32_t original_block = c->block, original_instruction = c->instruction;
+    const uint32_t original_location = c->location_cursor;
+    const XrLirSource original_source = c->source;
+
+    c_text(c, "        for (size_t xrl_string_step = 0; xrl_string_step < xrl_string_done; ++xrl_string_step) {\n");
+    for (size_t n = 0; n < window->replay_count && c_request_poll(c); ++n) {
+        const XrLirStringReplayBlock *step = &route[n];
+        const XrLirBlockData *block = &function->blocks[step->block - 1];
+        c->block = step->block;
+        for (uint32_t i = 1; i < block->instruction_count && c->status == XR_LIR_C_OK; ++i) {
+            /* The window already performed these String operations and kept
+             * the backing in the header owner slot across the entire route. */
+            if (step->block == window->replay_body &&
+                (i == window->replay_literal || i == window->replay_append || i == window->replay_drop)) continue;
+            const XrLirInstructionView *v = &block->instructions[i - 1].view;
+            c->instruction = i;
+            c->source = v->source;
+            c_instruction(c, v);
+        }
+        const XrLirInstructionView *term = &block->instructions[block->instruction_count - 1].view;
+        c_scalar_edge_values(c, &term->edges[step->edge - 1], step->owner_parameter);
+        c_text(c, "    }\n");
+    }
+    c_text(c, "        }\n");
+    if (c->location_cursor != original_location)
+        c_error(c, XR_LIR_C_INVALID_LIR, "String window replay emitted a runtime failure location");
+    c->block = original_block;
+    c->instruction = original_instruction;
+    c->source = original_source;
+}
+
 static void c_string_window(LirC *c, const XrLirStringWindow *window) {
     uint32_t index = window->index;
     const size_t *empty_slots = c->homes->string_window_slots + window->header_empty_first;
@@ -259,8 +293,13 @@ static void c_string_window(LirC *c, const XrLirStringWindow *window) {
     c_text(c, ") {\n        static const size_t xrl_string_empty[] = {");
     for (size_t n = 0; n < window->empty_count; ++n)
         c_format(c, "%s%zu", n ? ", " : "", empty_slots[n]);
-    c_format(c, "};\n        v%" PRIu32 " += (int64_t)xrt_native_string_append_window(xrl_frame, %zu, %zu, (size_t)(",
-        index,window->header_owner,window->suffix_owner);
+    c_text(c, "};\n        ");
+    if (window->replay_count) c_text(c, "const size_t xrl_string_done = ");
+    else c_format(c, "v%" PRIu32 " += (int64_t)", index);
+    c_format(c, "xrt_native_string_append_window(xrl_frame, %zu, %zu, (size_t)(",
+        window->header_owner,window->suffix_owner);
     c_value(c, window->limit);
-    c_format(c, " - v%" PRIu32 "), xrl_string_empty, %zu);\n    }\n", index,window->empty_count);
+    c_format(c, " - v%" PRIu32 "), xrl_string_empty, %zu);\n", index,window->empty_count);
+    if (window->replay_count) c_string_window_replay(c, window);
+    c_text(c, "    }\n");
 }

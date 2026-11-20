@@ -365,6 +365,8 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     return view.kind == XR_LIR_FUNCTION_EXTERNAL;
 }
 static bool c_display_point(LirC *, const XrLirInstructionView *);
+static void c_instruction(LirC *, const XrLirInstructionView *);
+static void c_scalar_edge_values(LirC *, const XrLirEdgeView *, uint32_t skipped);
 static bool c_string_binding_point(LirC *c, const XrLirInstructionView *v) {
     uint32_t role = xr_lir_string_role(c->request->module, v);
     if (role > XR_LIR_STRING_OP_APPEND_OWNED && role < XR_LIR_STRING_OP_END) return true;
@@ -885,21 +887,21 @@ static void c_float_conversion(LirC *c, const XrLirInstructionView *v) {
         c_format(c, " = xrt_f64_to_i64(xrl_bits, UINT32_C(%" PRIu32 "));\n    }\n", source);
     }
 }
-static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
-    if (c_values_edge(c, edge, selected)) return;
+static void c_scalar_edge_values(LirC *c, const XrLirEdgeView *edge, uint32_t skipped) {
     XrLirBlock target = {c->request->module, c->function.id, edge->target};
     XrLirBlockView block;
     xr_lir_block_view(c->request->module, target, &block);
     XR_DCHECK(block.parameter_count == edge->argument_count, "validated edge matches its target");
     for (uint32_t a = 0; a < edge->argument_count; ++a)
-        if (c_managed_leaf(c_value_type(c, edge->arguments[a])) &&
+        if (block.parameters[a] != skipped && c_managed_leaf(c_value_type(c, edge->arguments[a])) &&
             !xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) {
             c_error(c, XR_LIR_C_INVALID_LIR, "owned edge lost its common transfer");
             return;
         }
     c_text(c, "    {\n");
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
-        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
+        if (block.parameters[a] == skipped ||
+            xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
         uint64_t temp = (uint64_t) c->scratch + 1 + a;
         if (temp >= UINT32_C(8388608)) {
             c_error(c, XR_LIR_C_UNSUPPORTED, "C edge temporary index exceeds the W4 limit");
@@ -913,13 +915,19 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
                 " = xrl_access%" PRIu32 ";\n", a, edge->arguments[a]);
     }
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
-        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
+        if (block.parameters[a] == skipped ||
+            xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
         c_format(c, "        v%" PRIu32 " = v%" PRIu32 ";\n", block.parameters[a],
                  c->scratch + 1 + a);
         if (c_value_type(c, edge->arguments[a]) == XR_LIR_STATE_REF)
             c_format(c, "        xrl_access%" PRIu32 " = xrl_edge_access%" PRIu32 ";\n",
                 block.parameters[a], a);
     }
+}
+
+static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
+    if (c_values_edge(c, edge, selected)) return;
+    c_scalar_edge_values(c, edge, 0);
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);
 }
 static void c_division(LirC *c, const XrLirInstructionView *v) {
