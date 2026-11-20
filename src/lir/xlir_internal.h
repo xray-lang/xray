@@ -88,7 +88,7 @@ typedef struct XrLirTypeData {
     XrLirTypeView shape;
     XrLirTypeLayout layout;
     XrLirCallableType callable;
-    XrLirType cell_element;
+    XrLirType cell_element, class_parent;
     const XrLirRecordField *fields;
     XrLirRecordIdentity record;
     uint32_t *record_names, record_name_capacity;
@@ -256,7 +256,7 @@ XR_FUNC bool xr_lir_internal_array_element(const XrLirModule *, XrLirType);
 XR_FUNC uint32_t xr_lir_array_layout_family(const XrLirModule *, XrLirType);
 XR_FUNC XrLirStatus xr_lir_require_inline_array_element(XrLirModule *, XrLirType);
 /* The caller consumes Checked's allocation-cycle result before admitting this shape. */
-XR_FUNC XrLirStatus xr_lir_internal_class_type(XrLirModule *, XrLirType payload, XrLirType *);
+XR_FUNC XrLirStatus xr_lir_internal_class_type(XrLirModule *, XrLirType payload, XrLirType parent, XrLirType *);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {
     return type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;

@@ -42,6 +42,7 @@ typedef struct Lower {
     XrLirType *constructed_types;
     LowerRecordFrame *constructed_frames;
     XrXirClassCycles *class_cycles;
+    XrXirType *class_types;
     XrLirType *closure_types;
     uint8_t **owned_bindings;
     XrLirType owned_i64_cell, owned_map_cell;
@@ -576,6 +577,7 @@ static uint32_t lower_module_cell(const Lower *c, uint32_t function, uint32_t va
 
 static void lower_modules_free(Lower *c) {
     xr_xir_class_cycles_free(c->class_cycles);
+    xr_free(c->class_types);
     xr_free(c->constructed_types);
     xr_free(c->constructed_frames);
     if (c->module_cells)

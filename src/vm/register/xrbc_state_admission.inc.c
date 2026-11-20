@@ -52,7 +52,9 @@ static bool rbc_state_image_shape(const XrtValueImage *image) {
             !rbc_state_span(type->first_field,type->field_count,image->slot_count) ||
             !rbc_state_span(type->first_capture,type->capture_count,image->slot_count) ||
             !rbc_state_span(type->first_parameter,type->parameter_count,image->parameter_count) ||
-            type->nullable_element > i || type->result > i || type->entry_signature > i || type->element > i)
+            type->nullable_element > i || type->result > i || type->entry_signature > i || type->element > i ||
+            type->class_parent > i || (type->class_parent && (type->kind != XRT_VALUE_CLASS ||
+                image->types[type->class_parent - 1].kind != XRT_VALUE_CLASS)))
             return false;
         if (type->kind == XRT_VALUE_ARRAY_INLINE &&
             (!type->element || !xrt_value_kind_has_fields(image->types[type->element - 1].kind))) return false;
