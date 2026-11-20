@@ -111,6 +111,9 @@ XRAY_API XrtManagedStatus xrt_managed_slot_borrow(XrtManagedFrame *, size_t,
     XrtManagedHeader **borrowed);
 XRAY_API XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, size_t,
     XrtManagedFrame *source, size_t);
+/* For a proved last use, stage one private, sole owner in an empty slot of the
+ * same Frame. False leaves both slots unchanged for the ordinary retain. */
+XRAY_API bool xrt_managed_slot_try_stage_unique(XrtManagedFrame *, size_t destination, size_t source);
 XRAY_API XrtManagedStatus xrt_managed_slot_drop(XrtManagedFrame *, size_t);
 
 /* Prepare installs the token in stable storage before exposing its payload.

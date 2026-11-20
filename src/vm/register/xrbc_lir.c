@@ -1605,7 +1605,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         if (!xr_rbc_jump(&c->code[patch.pc], patch.pc, c->blocks[patch.block], c->code_count))
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "branch exceeds jump encoding");
     }
-    if (!rbc_lir_thread_jumps(c) || !rbc_lir_compact_jumps(c) || !rbc_lir_cells_compact(c)) return false;
+    if (!rbc_lir_array_call_accesses_complete(c) || !rbc_lir_thread_jumps(c) ||
+        !rbc_lir_compact_jumps(c) || !rbc_lir_cells_compact(c)) return false;
     XrLirArrayShape array_result={0};
     if(c->view.result==XR_LIR_ARRAY && xr_lir_array_result_view(c->input,c->function,&array_result)!=XR_LIR_OK)
         return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"cannot read owned Array result shape");

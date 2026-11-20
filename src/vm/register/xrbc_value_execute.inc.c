@@ -71,6 +71,7 @@ struct RbcValueActivation {
     bool backings_ready; /* Set only after this execution's complete backing setup succeeds. */
     bool receiving_call;
     const XrLirHomeCall *receiving_slice_call;
+    uint32_t staged_array_move, receiving_array_move;
     RbcArrayRegionState *array_regions;
     uint32_t active_array_region;
     uint32_t pending_array_read_fold; /* Reset by the exact entry edge and consumed at its first latch. */
@@ -1005,6 +1006,8 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
     size_t parent=stack->depth-1;
     XrRbcFrame *frame=&stack->frames[parent];
     bool indirect=access.operation==XR_RBC_VALUE_FUNCTION_CALL;
+    uint32_t staged_move = caller->staged_array_move;
+    if (staged_move && (indirect || staged_move != access.source || !caller->owned_code)) return XR_RBC_INVALID;
     /* Keep setup evidence across known guest calls, but do not carry it
      * through a callable boundary whose external lifetime is not assumed. */
     if (indirect) for (RbcValueActivation *a=caller;a;a=a->previous) a->backings_ready=false;
@@ -1139,10 +1142,24 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
             memcpy(&stack->slots[base+p].bits,caller->publications[p].snapshot,8);
         }
     }
-    return xr_rbc_callable_arguments_valid(module,callee,stack->slots+base) ? XR_RBC_OK : XR_RBC_INVALID;
+    if (!xr_rbc_callable_arguments_valid(module,callee,stack->slots+base)) return XR_RBC_INVALID;
+    if (staged_move) {
+        const XrLirHomeArrayCall *row = rbc_value_array_call_move(caller->code,staged_move);
+        if (!row || !child || !child->owned_code || !child->frame || child->previous != caller ||
+            child->depth != caller->depth+1 || !receiving->array_entry_access || child->receiving_array_move ||
+            row->parameter >= receiving->parameter_count ||
+            child->parameters[row->parameter].activation != caller ||
+            child->parameters[row->parameter].value != row->logical.temporary)
+            return XR_RBC_INVALID;
+        /* The parent still owns the staged value until this child's exact entry COPY. */
+        child->receiving_array_move = staged_move;
+        caller->staged_array_move = 0;
+    }
+    return XR_RBC_OK;
 }
 static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
+    if (activation->staged_array_move || activation->receiving_array_move) return XR_RBC_INVALID;
     size_t depth=stack->depth;
     XrRbcFrame frame=stack->frames[depth-1];
     XrRbcStatus result=xr_rbc_closure_scope_return(module,stack,NULL,0,source);
@@ -1294,6 +1311,30 @@ static XrtManagedStatus rbc_value_display(const XrRbcModule *module,XrRbcStack *
     }
     return status==XRT_MANAGED_OK ? rbc_value_array_publish(activation,access.result) : status;
 }
+static XrRbcStatus rbc_value_array_receive(RbcValueActivation *child, XrRbcValueAccess access,
+    XrtManagedStatus *status) {
+    RbcValueActivation *caller = child->previous;
+    if (!caller || !caller->owned_code || !child->owned_code || !child->receiving_call ||
+        !caller->frame || !child->frame || caller->depth+1 != child->depth || !child->code->homes)
+        return XR_RBC_INVALID;
+    const XrLirHomeArrayCall *row = rbc_value_array_call_move(caller->code,child->receiving_array_move);
+    const XrLirArrayEntryRetain *entry = &child->code->homes->array_entry_retain;
+    if (!row || row->logical.callee != child->code->homes->source_function ||
+        row->parameter != entry->parameter || entry->parameter >= child->code->parameter_count ||
+        access.other || access.result != entry->result ||
+        access.source != child->code->parameters[entry->parameter] ||
+        child->borrowed_parameters[entry->parameter]) return XR_RBC_INVALID;
+    RbcValueOrigin origin = rbc_value_origin(child,access.source);
+    if (origin.activation != caller || origin.value != row->logical.temporary) return XR_RBC_INVALID;
+    *status = xrt_managed_slot_move(child->frame,child->code->homes->array_entry_owner,
+        caller->frame,row->staged_slot);
+    if (*status == XRT_MANAGED_OK) {
+        child->receiving_array_move = 0;
+        child->parameters[entry->parameter] = (RbcValueOrigin){0};
+    }
+    return XR_RBC_OK;
+}
+
 static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc, uint32_t source) {
     RbcValueActivation *activation=stack->values ? stack->values->top : NULL;
@@ -1334,9 +1375,25 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation==XR_RBC_VALUE_FUNCTION_ALIAS || access.operation==XR_RBC_VALUE_FUNCTION_SCOPE_EXIT)
         status=rbc_value_function_alias(module,stack,activation,access,source);
     else if (access.operation<=XR_RBC_VALUE_STRING_CONCAT) status=rbc_value_factory(module,stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_COPY || access.operation==XR_RBC_VALUE_MOVE)
-        status=rbc_value_replace(module,stack,activation,(RbcValueOrigin){activation,access.result},
-            rbc_value_origin(activation,access.source),access.operation==XR_RBC_VALUE_COPY);
+    else if (access.operation==XR_RBC_VALUE_COPY && activation->receiving_array_move &&
+        index+1==activation->code->array_entry_access) {
+        XrRbcStatus received = rbc_value_array_receive(activation,access,&status);
+        if (received!=XR_RBC_OK) return received;
+    } else if (access.operation==XR_RBC_VALUE_COPY || access.operation==XR_RBC_VALUE_MOVE) {
+        bool staged = false;
+        if (access.other) {
+            if (access.operation != XR_RBC_VALUE_COPY || !activation->owned_code) return XR_RBC_INVALID;
+            const XrLirHomeArrayCall *row = rbc_value_array_call_move(activation->code,access.other);
+            if (activation->staged_array_move || !row || !activation->frame ||
+                row->logical.owner != access.source || row->logical.temporary != access.result)
+                return XR_RBC_INVALID;
+            staged = xrt_managed_slot_try_stage_unique(activation->frame,row->staged_slot,row->source_slot);
+            if (staged) activation->staged_array_move = access.other;
+        }
+        if (!staged)
+            status=rbc_value_replace(module,stack,activation,(RbcValueOrigin){activation,access.result},
+                rbc_value_origin(activation,access.source),access.operation==XR_RBC_VALUE_COPY);
+    }
     else if (access.operation==XR_RBC_VALUE_DROP) {
         const XrLirValueHome *home=rbc_value_home(activation->code,access.source);
         status=rbc_value_inline(module,activation->code,access.source,false) ?

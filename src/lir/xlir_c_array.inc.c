@@ -78,6 +78,37 @@ static void c_array_copy_end(LirC *c, uint32_t value, uint32_t source) {
     c_text(c, "    if (status != XRT_MANAGED_OK) { xrt_managed_drop(owner);\n"); c_array_require(c,source);
     c_text(c, "    } }\n"); c_values_publish_leaf(c,value,source);
 }
+static const XrLirValueHomes *c_array_call_receiver(const LirC *c, uint32_t function) {
+    if (!c->value_homes) return NULL;
+    const XrLirValueHomes *homes = c->value_homes[function - 1];
+    return homes && homes->array_entry_owner != SIZE_MAX ? homes : NULL;
+}
+static const XrLirHomeArrayCall *c_array_call_next(const LirC *c) {
+    if (!c->homes || c->array_call_cursor >= c->homes->array_call_move_count) return NULL;
+    return &c->homes->array_call_moves[c->array_call_cursor];
+}
+static void c_array_retain(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    const XrLirHomeArrayCall *call = c_array_call_next(c);
+    bool stage = call && call->logical.block == c->block && call->logical.retain == c->instruction &&
+        c_array_call_receiver(c, call->logical.callee);
+    const XrLirArrayEntryRetain *entry = &c->homes->array_entry_retain;
+    bool take = entry->block == c->block && entry->instruction == c->instruction;
+    if (stage) {
+        c_format(c,"    xrl_array_argument_staged = xrt_managed_slot_try_stage_unique(xrl_frame, %zu, %zu);\n",
+            call->staged_slot,call->source_slot);
+        c_text(c,"    if (!xrl_array_argument_staged) {\n");
+    } else if (take) {
+        c_format(c,"    if (xrl_array_argument.frame) {\n"
+            "    XrtManagedStatus status = xrt_managed_slot_move(xrl_frame, %zu, xrl_array_argument.frame, xrl_array_argument.slot);\n",
+            c->homes->array_entry_owner);
+        c_array_require(c,source);
+        c_text(c,"    } else {\n");
+    }
+    c_text(c,"    { XrtManagedHeader *owner = ");
+    c_value(c,v->operands[0]);
+    c_array_copy_end(c,v->result,source);
+    if (stage || take) c_text(c,"    }\n");
+}
 static const XrLirHomeWorkspace *c_array_workspace(LirC *c) {
     for (size_t i=0;i<c->homes->workspace_count;++i) {
         const XrLirHomeWorkspace *workspace=&c->homes->workspaces[i];
@@ -250,7 +281,7 @@ static void c_array_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
             c_format(c,"    v%" PRIu32 " = (XrtPlace){.external=&xrl_array_binding%" PRIu32 ", .nulls=XRT_PLACE_NONNULL};\n",v->result,v->result);
         } else { c_format(c,"    v%" PRIu32 " = ",v->result); c_value(c,binding->source); c_text(c,";\n"); }
     } else if (v->op==XR_LIR_ARRAY_RETAIN) {
-        c_text(c,"    { XrtManagedHeader *owner = "); c_value(c,v->operands[0]); c_array_copy_end(c,v->result,source);
+        c_array_retain(c,v,source);
     } else if (v->op==XR_LIR_ARRAY_DROP || v->op==XR_LIR_ARRAY_CELL_DROP) {
         size_t slot=v->op==XR_LIR_ARRAY_DROP ? c->homes->values[v->operands[0]].first_owner : c->homes->bindings[v->operands[0]].first_owner;
         c_format(c,"    { XrtManagedStatus status=xrt_managed_slot_drop(xrl_frame, %zu);\n",slot); c_array_require(c,source); c_text(c,"    }\n");

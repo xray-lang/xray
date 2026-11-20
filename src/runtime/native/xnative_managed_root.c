@@ -344,18 +344,31 @@ XRAY_API XrtManagedStatus xrt_managed_slot_take(XrtManagedFrame *frame, size_t i
     frame->root->busy = false;
     return status;
 }
-XRAY_API XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, size_t to,
-    XrtManagedFrame *source, size_t from) {
+static XrtManagedStatus slot_move(XrtManagedFrame *destination, size_t to,
+    XrtManagedFrame *source, size_t from, bool sole_private_owner) {
     if (!source || !destination || !source->root || source->root != destination->root ||
         from >= source->slot_count || to >= destination->slot_count) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *target = slot_begin(destination, to);
     if (!target) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlot *input = &frame_slots(source)[from];
-    XrtManagedStatus status = !slot_empty(destination, target) || !*frame_owner(source, input) || input->pending.value ||
-        input->pending.allocation_bytes ? XRT_MANAGED_ARGUMENT : XRT_MANAGED_OK;
-    if (status == XRT_MANAGED_OK) { *frame_owner(destination, target) = *frame_owner(source, input); *frame_owner(source, input) = NULL; }
+    XrtManagedHeader **owner = frame_owner(source, input);
+    XrtManagedStatus status = !slot_empty(destination, target) || !*owner || input->pending.value ||
+        input->pending.allocation_bytes || (sole_private_owner &&
+            atomic_load_explicit(&(*owner)->references, memory_order_relaxed) != 1) ?
+        XRT_MANAGED_ARGUMENT : XRT_MANAGED_OK;
+    if (status == XRT_MANAGED_OK) {
+        *frame_owner(destination, target) = *owner;
+        *owner = NULL;
+    }
     destination->root->busy = false;
     return status;
+}
+XRAY_API XrtManagedStatus xrt_managed_slot_move(XrtManagedFrame *destination, size_t to,
+    XrtManagedFrame *source, size_t from) {
+    return slot_move(destination, to, source, from, false);
+}
+XRAY_API bool xrt_managed_slot_try_stage_unique(XrtManagedFrame *frame, size_t to, size_t from) {
+    return slot_move(frame, to, frame, from, true) == XRT_MANAGED_OK;
 }
 XR_FUNCDEF bool xrt_managed_slot_try_edit_move(XrtManagedFrame *frame, size_t source,
     size_t result, size_t workspace, XrtManagedTryEdit edit, const void *context) {

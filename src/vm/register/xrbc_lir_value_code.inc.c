@@ -11,6 +11,7 @@ static void rbc_lir_value_code_free(XrRbcValueCode *code) {
     xr_free((void *)code->locations);
     xr_free((void *)code->parameters);
     xr_free((void *)code->accesses);
+    xr_free((void *)code->array_calls);
     xr_free((void *)code->arguments);
     xr_free((void *)code->displays);
     xr_free((void *)code->scope_values);
@@ -103,6 +104,11 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
     if (!code) return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own typed bytecode description");
     c->value_code = code;
     code->homes = c->homes; code->value_count = c->view.value_count;
+    if (c->homes && c->homes->array_call_move_count) {
+        code->array_calls = xr_calloc(c->homes->array_call_move_count, sizeof(*code->array_calls));
+        if (!code->array_calls)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own Array call access projection");
+    }
     if (!rbc_lir_array_region_prepare(c)) return false;
     if (c->view.scope_count) {
         uint32_t *scopes=xr_calloc(c->view.scope_count,sizeof(*scopes));
@@ -164,6 +170,17 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     if (!code) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"typed operation has no receiving code description");
     if (code->access_count > UINT16_MAX)
         return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"typed operation table exceeds bytecode encoding");
+    uint32_t array_move = access.operation == XR_RBC_VALUE_COPY ? access.other :
+        access.operation == XR_RBC_VALUE_CALL ? access.source : 0;
+    if (array_move) {
+        if (!code->homes || array_move > code->homes->array_call_move_count || !code->array_calls)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array call lost its projected move");
+        XrRbcArrayCallAccess *row = &((XrRbcArrayCallAccess *)code->array_calls)[array_move-1];
+        uint32_t *ordinal = access.operation == XR_RBC_VALUE_COPY ? &row->retain : &row->call;
+        if (*ordinal || (access.operation == XR_RBC_VALUE_CALL && !row->retain))
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array call projection is not an ordered pair");
+        *ordinal = (uint32_t)code->access_count+1;
+    }
     if (!rbc_lir_array_region_append(c,&access)) return false;
     void *storage = (void *)code->accesses;
     if (!rbc_lir_grow(c,&storage,&c->value_access_capacity,code->access_count + 1,sizeof(*code->accesses))) return false;
@@ -387,6 +404,43 @@ static bool rbc_lir_binding_metadata(RbcLirCompiler *c,XrRbcValueAccess *access)
     }
     return rbc_lir_binding_forwarding_metadata(c,access);
 }
+static bool rbc_lir_array_retain_access(RbcLirCompiler *c, XrRbcValueAccess *access) {
+    const XrLirValueHomes *homes = c->homes;
+    if (!homes) return true;
+    uint32_t block = c->diagnostic->block, position = c->diagnostic->instruction;
+    XrLirArrayEntryRetain entry = homes->array_entry_retain;
+    if (entry.block == block && entry.instruction == position) {
+        if (c->value_code->array_entry_access || c->value_code->access_count > UINT16_MAX ||
+            entry.parameter >= c->view.parameter_count || c->view.parameters[entry.parameter] != access->source ||
+            entry.result != access->result)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array entry retain lost its exact access");
+        c->value_code->array_entry_access = (uint32_t)c->value_code->access_count+1;
+    }
+    if (c->value_call_cursor >= homes->call_count) return true;
+    const XrLirHomeCall *call = &homes->calls[c->value_call_cursor];
+    if (!call->array_move || call->block != block) return true;
+    if (call->array_move > homes->array_call_move_count || !homes->array_call_moves)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array retain lost its call proof");
+    const XrLirArrayCallMove *move = &homes->array_call_moves[call->array_move-1].logical;
+    if (move->retain != position) return true;
+    if (move->owner != access->source || move->temporary != access->result || move->instruction != call->instruction)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array call retain disagrees with its operands");
+    access->other = call->array_move;
+    return true;
+}
+
+static bool rbc_lir_array_call_accesses_complete(RbcLirCompiler *c) {
+    if (!c->value_code || !c->homes) return true;
+    if (!!c->homes->array_entry_retain.instruction != !!c->value_code->array_entry_access)
+        return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array call entry has no emitted retain access");
+    for (uint32_t n = 0; n < c->homes->array_call_move_count; ++n) {
+        XrRbcArrayCallAccess pair = c->value_code->array_calls[n];
+        if (!pair.retain || pair.retain >= pair.call)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Array call move has no complete emitted pair");
+    }
+    return true;
+}
+
 static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionView *i, bool *handled) {
     *handled = false;
     if (!c->typed_values) return true;
@@ -465,8 +519,12 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_STRING_I64: access.operation = XR_RBC_VALUE_STRING_I64; break;
     case XR_LIR_STRING_F64: access.operation = XR_RBC_VALUE_STRING_F64; break;
     case XR_LIR_STRING_CONCAT: access.operation = XR_RBC_VALUE_STRING_CONCAT; break;
+    case XR_LIR_ARRAY_RETAIN:
+        access.operation = XR_RBC_VALUE_COPY;
+        if (!rbc_lir_array_retain_access(c,&access)) return false;
+        break;
     case XR_LIR_VALUE_RETAIN:
-    case XR_LIR_SET_RETAIN: case XR_LIR_MAP_RETAIN: case XR_LIR_ARRAY_RETAIN:
+    case XR_LIR_SET_RETAIN: case XR_LIR_MAP_RETAIN:
     case XR_LIR_STRING_RETAIN: access.operation = XR_RBC_VALUE_COPY; break;
     case XR_LIR_STRING_DROP:
         if (c->homes && c->homes->values[access.source].literal_cache_borrow) {
@@ -591,7 +649,8 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
             }
         }
         if (!rbc_lir_value_call(c,i)) return true;
-        access.operation = XR_RBC_VALUE_CALL; access.source = access.other = 0;
+        access.operation = XR_RBC_VALUE_CALL; access.other = 0;
+        access.source = c->homes->calls[c->value_call_cursor-1].array_move;
         if (rbc_lir_slice_type(c->input,i->type)) {
             if (c->value_call_cursor>UINT32_MAX)
                 return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"Slice call ordinal exceeds typed code");

@@ -36,6 +36,7 @@ def main() -> None:
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
              "array_stationary_cells", "panic_stationary_cell", "array_held_edits", "call_result_homes",
+             "array_call_staging", "panic_array_call_staging",
              "element_update", "element_update_carried", "fixed_update_carried",
              "panic_region_get", "panic_region_set",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
@@ -165,6 +166,9 @@ def main() -> None:
             for body in readers:
                 assert re.search(r"xrl_f\d+\(\(XrlLanding_\d+\)", body), name
                 assert "xrl_edge_" not in body and "xrt_place_edge_transfer(" not in body, name
+        elif name in ("array_call_staging", "panic_array_call_staging"):
+            assert "xrt_managed_slot_try_stage_unique(xrl_frame," in generated_text, name
+            assert "xrt_managed_slot_move(xrl_frame," in generated_text and "xrl_array_argument.frame" in generated_text, name
         elif name == "fixed_update_carried":
             # The ordinary first write preserves the caller's snapshot. The
             # warm loop uses the proven IV and keeps the other scalar recurrence.

@@ -57,7 +57,9 @@ typedef struct XrRbcValueAccess {
      * CALL arguments are SSA ids in the immutable arguments span; window is
      * its ordinary physical call window. A Slice result also uses other for
      * its one-based common HomeCall, including the proven actual origin and
-     * caller landing. RETURN source names its SSA result and Slice index its
+     * caller landing. A last-use Array CALL uses source and its original COPY
+     * uses other for the same one-based common Array call move. Neither field
+     * grants ownership on raw code. RETURN source names its SSA result and Slice index its
      * one-based common RETURN_TRANSFER event.
      * EDGE uses first/count source/target SSA pairs, count measuring pairs,
      * for type-zero transport absent from common typed homes. Its index is
@@ -111,6 +113,10 @@ typedef struct XrRbcArrayPushLimit {
     bool available;
 } XrRbcArrayPushLimit;
 
+typedef struct XrRbcArrayCallAccess {
+    uint32_t retain, call; /* One-based access ordinals; independent of compacted branches. */
+} XrRbcArrayCallAccess;
+
 typedef struct XrRbcValueCode {
     const XrLirValueHomes *homes;
     const XrRbcValueLocation *locations; /* SSA indexed, including unused zero. */
@@ -124,6 +130,8 @@ typedef struct XrRbcValueCode {
     bool map_formal_reads; /* Prepare borrowed Map addresses only for keyed formal reads. */
     const XrRbcValueAccess *accesses;
     size_t access_count;
+    uint32_t array_entry_access; /* Exact entry COPY, zero if unavailable. */
+    const XrRbcArrayCallAccess *array_calls; /* Indexed like homes->array_call_moves. */
     const uint32_t *arguments;
     size_t argument_count;
     const struct XrtPodDisplay *displays;
