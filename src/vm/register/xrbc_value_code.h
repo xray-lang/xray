@@ -109,6 +109,19 @@ typedef struct XrRbcArrayPushLimit {
     bool available;
 } XrRbcArrayPushLimit;
 
+typedef struct XrRbcStringReplay {
+    size_t first_step, step_count;
+    uint32_t latch_access; /* One-based original bytecode access ordinal. */
+} XrRbcStringReplay;
+
+typedef struct XrRbcStringReplayStep {
+    size_t first_word, word_count, first_copy, copy_count;
+} XrRbcStringReplayStep;
+
+typedef struct XrRbcStringReplayCopy {
+    XrRbcValueLocation source, target;
+} XrRbcStringReplayCopy;
+
 typedef struct XrRbcValueCode {
     const XrLirValueHomes *homes;
     const XrRbcValueLocation *locations; /* SSA indexed, including unused zero. */
@@ -134,6 +147,14 @@ typedef struct XrRbcValueCode {
     const XrRbcArrayReadFold *array_read_folds; /* Indexed like array_regions->regions, or absent. */
     XrLirArrayRegionBindings *array_push_windows;
     const XrRbcArrayPushLimit *array_push_limits; /* Indexed like array_push_windows->regions. */
+    /* Replay starts immediately after the ordinary latch and returns to that
+     * latch. Each step runs the existing scalar words, then its parallel copies. */
+    const uint32_t *string_replay_accesses; /* Access ordinal to one-based window, or zero. */
+    const XrRbcStringReplay *string_replays; /* Indexed like homes->string_windows. */
+    const XrRbcStringReplayStep *string_replay_steps;
+    const uint32_t *string_replay_words;
+    const XrRbcStringReplayCopy *string_replay_copies;
+    size_t string_replay_step_count, string_replay_word_count, string_replay_copy_count;
 } XrRbcValueCode;
 
 /* A leaf needs no call, return or owning destination. Both emission and

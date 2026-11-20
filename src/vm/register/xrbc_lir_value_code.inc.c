@@ -18,6 +18,11 @@ static void rbc_lir_value_code_free(XrRbcValueCode *code) {
     xr_free((void *)code->array_read_folds);
     xr_lir_array_region_bindings_destroy(code->array_push_windows);
     xr_free((void *)code->array_push_limits);
+    xr_free((void *)code->string_replay_accesses);
+    xr_free((void *)code->string_replays);
+    xr_free((void *)code->string_replay_steps);
+    xr_free((void *)code->string_replay_words);
+    xr_free((void *)code->string_replay_copies);
     xr_lir_array_region_bindings_destroy(code->array_regions);
     xr_free(code);
 }
@@ -197,7 +202,12 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
     }
     access.other=rbc_lir_array_read_edge(c->value_code,access.index);
     access.window=rbc_lir_array_push_edge(c->value_code,access.index);
-    return rbc_lir_value_append(c,access);
+    if (!rbc_lir_value_append(c,access)) return false;
+    if (c->string_replay_sources && c->string_replay_sources[c->diagnostic->block].selected) {
+        RbcLirStringReplaySource *source = &c->string_replay_sources[c->diagnostic->block];
+        source->edge_accesses[ordinal - 1] = (uint32_t)c->value_code->access_count;
+    }
+    return true;
 }
 static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *i,XrRbcValueAccess *access) {
     XrLirType type=rbc_lir_value_type(c,i->operands[0]);

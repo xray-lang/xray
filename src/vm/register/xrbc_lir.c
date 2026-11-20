@@ -97,6 +97,17 @@ typedef struct {
     uint16_t constant;
     bool known, pooled, materialize;
 } RbcLirImmediate;
+typedef struct RbcLirStringReplaySpan {
+    size_t first, end;
+} RbcLirStringReplaySpan;
+
+typedef struct RbcLirStringReplaySource {
+    bool selected;
+    uint32_t effect_at[3], effects_seen, edge_accesses[2];
+    size_t body_end;
+    RbcLirStringReplaySpan effects[3];
+} RbcLirStringReplaySource;
+
 typedef struct {
     const XrLirModule *input;
     XrLirFunction function;
@@ -107,6 +118,7 @@ typedef struct {
     const XrLirValueHomes *homes;
     XrRbcValueCode *value_code;
     uint32_t *value_edges;
+    RbcLirStringReplaySource *string_replay_sources;
     size_t value_access_capacity, value_argument_capacity, value_display_capacity, value_call_cursor;
     size_t value_region_access_capacity;
     size_t binding_event_cursor, binding_workspace_cursor, binding_forwarding_cursor, array_local_cursor;
@@ -1136,6 +1148,7 @@ static bool rbc_lir_literal(RbcLirCompiler *c, uint32_t origin, uint32_t *ordina
 }
 
 #include "xrbc_lir_value_code.inc.c"
+#include "xrbc_lir_string_replay.inc.c"
 #include "xrbc_lir_state.inc.c"
 #include "xrbc_lir_aggregate_call.inc.c"
 #include "xrbc_lir_callable_emit.inc.c"
@@ -1548,7 +1561,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
                 (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, lir_pod_scalar(c->view.parameter_types[p])};
     }
     if (!rbc_lir_aggregate_homes(c) || !rbc_lir_callable_scope_homes(c) ||
-        !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c) || !rbc_lir_value_code_prepare(c)) return false;
+        !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c) || !rbc_lir_value_code_prepare(c) ||
+        !rbc_lir_string_replay_prepare(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;
     if (count > SIZE_MAX / sizeof(*c->blocks))
         return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "block table exceeds address space");
@@ -1584,7 +1598,10 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
             c->diagnostic->block = block.id;
             c->diagnostic->instruction = n + 1;
             rbc_lir_error(c->diagnostic, XR_RBC_COMPILE_OK, "", i.source);
+            size_t first_word = c->code_count;
             if (!rbc_lir_spilled_instruction(c, &i)) return false;
+            if (c->string_replay_sources && c->string_replay_sources[block.id].selected)
+                rbc_lir_string_replay_record(c, block.id, n + 1, n + 1 == bv.instruction_count, first_word);
         }
     }
     for (size_t i = 0; i < c->patch_count; ++i) {
@@ -1592,7 +1609,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         if (!xr_rbc_jump(&c->code[patch.pc], patch.pc, c->blocks[patch.block], c->code_count))
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "branch exceeds jump encoding");
     }
-    if (!rbc_lir_thread_jumps(c) || !rbc_lir_compact_jumps(c) || !rbc_lir_cells_compact(c)) return false;
+    if (!rbc_lir_string_replay_project(c) || !rbc_lir_thread_jumps(c) ||
+        !rbc_lir_compact_jumps(c) || !rbc_lir_cells_compact(c)) return false;
     XrLirArrayShape array_result={0};
     if(c->view.result==XR_LIR_ARRAY && xr_lir_array_result_view(c->input,c->function,&array_result)!=XR_LIR_OK)
         return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"cannot read owned Array result shape");
@@ -1850,6 +1868,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         xr_free(c.aggregate_scratch);
         xr_free(c.immediates);
         xr_free(c.value_edges);
+        xr_free(c.string_replay_sources);
         if (!success) {
             rbc_lir_value_code_free(c.value_code);
             xr_free(c.code);
