@@ -17,7 +17,6 @@ static void rbc_lir_value_code_free(XrRbcValueCode *code) {
     xr_free((void *)code->scope_values);
     xr_free((void *)code->array_region_accesses);
     xr_free((void *)code->array_counted_push);
-    xr_lir_array_region_bindings_destroy(code->array_regions);
     xr_free(code);
 }
 static void rbc_lir_value_codes_free(XrRbcValueCode **codes, size_t count) {
@@ -88,7 +87,6 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
     }
     return false;
 }
-#include "xrbc_lir_array_read.inc.c"
 #include "xrbc_lir_array_region.inc.c"
 static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
     if (!c->typed_values) return true;
@@ -227,7 +225,6 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
         if (!rbc_lir_value_arguments(c,pair,2,&first)) return false;
         ++access.count;
     }
-    access.other=rbc_lir_array_read_edge(c->value_code,access.index);
     return rbc_lir_value_append(c,access);
 }
 static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *i,XrRbcValueAccess *access) {

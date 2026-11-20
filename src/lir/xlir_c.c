@@ -23,7 +23,7 @@
 #include "xlir_pod.h"
 #include "xlir_value_layout.h"
 #include "xlir_value_homes.h"
-#include "xlir_array_region_binding.h"
+#include "xlir_fixed_array_guard.h"
 #include "xlir_value_image.h"
 #include "xray_native_array_slice.h"
 #include "xi_cgen_verify_output.h"
@@ -41,25 +41,12 @@ typedef struct LirCConstructedType {
 } LirCConstructedType;
 
 enum { LIR_C_FUNCTION_VISITED = 1u, LIR_C_FUNCTION_STRING_BINDING = 2u };
-typedef struct LirCArrayRegionScalar {
-    uint32_t value;
-    XrLirType type;
-    size_t input, output;
-} LirCArrayRegionScalar;
-typedef struct LirCArrayRegionHelper {
-    size_t first, count, inputs, outputs;
-} LirCArrayRegionHelper;
 typedef struct LirCFixedArrayEdge {
     uint32_t entry, latch, exit;
 } LirCFixedArrayEdge;
 typedef struct LirCArrayRegions {
-    XrLirArrayRegionBindings *bindings;
     LirCFixedArrayEdge *fixed_edges;
-    size_t bound_count;
-    LirCArrayRegionHelper *helpers;
-    LirCArrayRegionScalar *scalars;
-    size_t scalar_count, scalar_capacity;
-    bool has_set_helper;
+    bool *pointwise_blocks;
 } LirCArrayRegions;
 
 typedef struct LirC {
@@ -112,7 +99,6 @@ typedef struct LirC {
     size_t array_local_event_cursor;
     LirCArrayRegions *array_regions;
     const LirCArrayRegions *array_region;
-    uint32_t array_helper_kind;
     bool fixed_array_loop;
 } LirC;
 static void c_values_emit_types(LirC *);
@@ -147,20 +133,9 @@ static void c_array_held_declarations(LirC *);
 static void c_array_held_clear(LirC *);
 static void c_array_regions_admit(LirC *);
 static void c_array_regions_destroy(LirC *);
-static void c_array_region_specs(LirC *);
-static void c_array_region_declarations(LirC *);
-static void c_array_region_slow(LirC *);
-static void c_array_region_edge_begin(LirC *, size_t, const XrLirEdgeView *);
-static void c_array_region_edge_end(LirC *, size_t);
-static void c_array_region_clones(LirC *);
-static bool c_array_region_present(const LirC *);
-static void c_array_helpers_prepare(LirC *, uint32_t, LirCArrayRegions *);
-static bool c_array_helper_enabled(const LirC *, size_t);
-static void c_array_helpers(LirC *);
-static void c_array_helper_guard(LirC *, size_t);
-static void c_array_helper_return(LirC *, size_t);
 static void c_fixed_array_prepare(LirC *, uint32_t, LirCArrayRegions *);
 static void c_fixed_array_declarations(LirC *);
+static void c_fixed_array_slow(LirC *, const XrLirInstructionView *);
 static void c_fixed_array_guard(LirC *, uint32_t, uint32_t, bool);
 static void c_fixed_array_clones(LirC *);
 
@@ -277,10 +252,6 @@ static void c_function_name(LirC *c, uint32_t id) {
 }
 static void c_value(LirC *c, uint32_t id) {
     XR_DCHECK(id && id <= c->view.value_count, "operand belongs to this function");
-    if (c->array_helper_kind) {
-        c_format(c, "v%" PRIu32, id);
-        return;
-    }
     for (uint32_t p = 0; p < c->view.parameter_count; ++p) {
         if (c->view.parameters[p] == id) {
             c_format(c, "p%" PRIu32, p);
@@ -817,13 +788,6 @@ static void c_reconstruct(LirC *c, XrLirType type, uint32_t result) {
         c_format(c, "    XRT_ARRAY_I64_REGION_COPY(&v%" PRIu32 ", &v%" PRIu32 ");\n", result, c->scratch);
         return;
     }
-    if (type == XR_LIR_I64 && c->array_helper_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET) {
-        /* Exact-width int64_t has a two's-complement representation. Copying
-         * the modulo result to its scalar home exposes that operation to loop
-         * optimization before the provider simplifies signed expressions. */
-        c_format(c, "    XRT_ARRAY_I64_REGION_RECONSTRUCT(v%" PRIu32 ", v%" PRIu32 ");\n", result, c->scratch);
-        return;
-    }
     c_format(c, "    v%" PRIu32 " = ", result);
     if (type >= XR_LIR_I8 && type <= XR_LIR_I64) {
         uint64_t maximum = c_mask(type) >> 1;
@@ -1058,7 +1022,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     }
     if (c_array_point(c, v) || v->op == XR_LIR_ARRAY_DROP || v->op == XR_LIR_ARRAY_CELL_DROP) {
         uint32_t source = c_array_point(c, v) && c_located(&v->source) ? ++c->location_cursor : 0;
-        c_array_region_slow(c);
+        c_fixed_array_slow(c, v);
         c_array_instruction(c, v, source);
         return;
     }
@@ -1298,7 +1262,6 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_signature(c, false);
     }
     c_callable_entries(c);
-    c_array_helpers(c);
     for (uint32_t n = 0; n < c->closure_count && c->status == XR_LIR_C_OK; ++n) {
         c->function = (XrLirFunction) {c->request->module, c->closure[n]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
@@ -1334,7 +1297,6 @@ static void c_emit(LirC *c, XrLirType root_result) {
                 c_instruction(c, &v);
             }
         }
-        c_array_region_clones(c);
         c_fixed_array_clones(c);
         c_text(c, "}\n\n");
     }
@@ -1373,8 +1335,6 @@ static void c_verify_text(LirC *c) {
 #include "xlir_c_binding_forwarding.inc.c"
 #include "xlir_c_array_local.inc.c"
 #include "xlir_c_values.inc.c"
-#include "xlir_c_array_region.inc.c"
-#include "xlir_c_array_region_helper.inc.c"
 #include "xlir_c_fixed_array_update.inc.c"
 static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {
     XrLirTypeView shape = {0};

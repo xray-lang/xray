@@ -15,7 +15,7 @@
 #include "base/xchecks.h"
 #include "xrbc_value_homes.h"
 #include "xray_native_pod.h"
-#include "lir/xlir_array_region_binding.h"
+#include "lir/xlir_fixed_array_guard.h"
 #include "lir/xlir_map.h"
 
 /* Check a typed word after its module and home directories are available. */
@@ -96,10 +96,8 @@ XR_STATIC_ASSERT(sizeof(XrRbcValueAccess)==32,"ordinary typed access rows occupy
 typedef struct XrRbcArrayRegionAccess {
     uint32_t region;
     uint8_t fixed_edge; /* Selected physical edge marker, independent of HomeEdge. */
-    bool fixed;
     bool binding_identity; /* Admitted forwarding pair shares a single Frame slot. */
     bool sum_checkpoint; /* After the ordinary latch copies published the header state. */
-    XrLirArrayRegionOperation operation;
 } XrRbcArrayRegionAccess;
 
 typedef struct XrRbcArrayCountedPush {
@@ -133,15 +131,10 @@ typedef struct XrRbcValueCode {
     size_t display_count;
     const uint32_t *scope_values; /* Physical scope ordinal -> original SSA capability. */
     uint32_t scope_count;
-    XrLirArrayRegionBindings *array_regions; /* Owned numeric projection, no live addresses. */
     bool array_region_runtime; /* Compile-time SET-window consumption. */
     const XrRbcArrayRegionAccess *array_region_accesses; /* Same ordinal/count as accesses, or absent. */
     const XrRbcArrayCountedPush *array_counted_push; /* Optional lowering indexed like homes->fixed_array_updates. */
 } XrRbcValueCode;
-
-static inline size_t rbc_value_legacy_array_region_count(const XrRbcValueCode *code) {
-    return code->array_regions ? code->array_regions->region_count : 0;
-}
 
 static inline bool rbc_value_binding_forwarding_places(const XrRbcValueCode *code,
     XrRbcValueAccess access, XrtManagedFrameForward *places) {

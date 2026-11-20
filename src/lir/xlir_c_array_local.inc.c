@@ -145,22 +145,14 @@ static void c_array_held_declarations(LirC *c) {
         c_format(c,"    XrtArrayBacking *xrl_held%zu = NULL;\n    (void)xrl_held%zu;\n",k,k);
 }
 static void c_array_held_clear(LirC *c) {
-    /* Region helper functions own no held acquisitions; their callers clear
-     * before entering because region blocks never keep them. */
-    if (!c->array_held_count || c->array_helper_kind != XR_LIR_ARRAY_REGION_PRIMARY_NONE) return;
+    if (!c->array_held_count) return;
     c_text(c,"   ");
     for (size_t k=0;k<c->array_held_count;++k) c_format(c," xrl_held%zu = NULL;",k);
     c_text(c,"\n");
 }
-/* Legacy region code moves owners between different Frame slots. */
-static bool c_array_held_region_block(const LirC *c, uint32_t block) {
-    const XrLirArrayRegionBindings *bindings=c->array_region ? c->array_region->bindings : NULL;
-    return bindings && block<bindings->block_index_count && bindings->block_index[block].region;
-}
 /* An edge keeps held acquisitions when it only assigns C locals: scalar
  * arguments and stationary owners whose shared slot does not change. */
 static bool c_array_held_edge(LirC *c, const XrLirEdgeView *edge) {
-    if (c_array_held_region_block(c,edge->target)) return false;
     XrLirBlock target={c->request->module,c->function.id,edge->target};
     XrLirBlockView view;
     if (xr_lir_block_view(c->request->module,target,&view)!=XR_LIR_OK || view.parameter_count!=edge->argument_count)

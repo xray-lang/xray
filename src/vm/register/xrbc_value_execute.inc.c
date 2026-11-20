@@ -75,7 +75,6 @@ struct RbcValueActivation {
     uint32_t staged_array_move, receiving_array_move;
     RbcArrayRegionState *array_regions;
     uint32_t active_array_region;
-    uint32_t pending_array_read_fold; /* Reset by the exact entry edge and consumed at its first latch. */
 };
 struct XrRbcValueRuntime {
     XrtBillingOwner *billing;
@@ -238,7 +237,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     /* A borrowed raw description can still use the ordinary typed receiver.
      * Only the exact immutable executable owner supplies the closed window. */
     size_t regions=xr_rbc_module_code_owner(module) && code->array_region_runtime ?
-        rbc_value_legacy_array_region_count(code) + code->homes->fixed_array_update_count : 0;
+        code->homes->fixed_array_update_count : 0;
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     if (!rbc_value_capacities(code,image,&leaves,&rows,&snapshots) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
@@ -687,7 +686,7 @@ static XR_NOINLINE bool rbc_value_snapshot_edge_scalars(XrRbcStack *stack, RbcVa
  * Its complete latch publication put the owner and scalars in their header homes. */
 static XR_NOINLINE void rbc_value_array_read_fold(XrRbcStack *stack,
     RbcValueActivation *activation, const XrLirArraySetRegion *region,
-    const XrtArrayI64RegionSpec *spec, const XrtArrayI64RegionCache *borrow) {
+    const XrtArrayI64RegionCache *borrow) {
     const XrLirArraySetRegionRange *range=&region->range;
     const XrLirArrayReadSum *fold=&region->read_sum;
     XrRbcRegister *iv=rbc_value_register(stack,activation,range->iv);
@@ -702,13 +701,6 @@ static XR_NOINLINE void rbc_value_array_read_fold(XrRbcStack *stack,
     if (start>INT64_MAX || limit>INT64_MAX ||
         (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT && start>=limit))
         return;
-    XrtArrayI64RegionCache cache={0};
-    if (!borrow) {
-        const XrtArrayI64RegionContext context={activation->frame,activation->payload,
-            &activation->frame_locations,&activation->code->homes->frame};
-        if (!xrt_array_i64_region_try_begin(&context,spec,true,&cache)) return;
-        borrow=&cache;
-    }
     if (range->kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN) limit=borrow->length;
     if (start>=limit || limit>borrow->length) return;
     uint64_t sum=accumulator->bits;
@@ -782,25 +774,8 @@ static XrtManagedStatus rbc_value_edge(const XrRbcModule *module, XrRbcStack *st
     XrtManagedStatus status=XRT_MANAGED_OK;
     if (access.index!=UINT32_MAX) {
         selected=&code->homes->edges[access.index];
-        bool fold_array=false;
-        if (access.other) {
-            if (code->array_regions->edges[access.index].kind==XR_LIR_ARRAY_REGION_EDGE_ENTRY)
-                activation->pending_array_read_fold=access.other;
-            else if (activation->pending_array_read_fold==access.other) {
-                activation->pending_array_read_fold=0;
-                fold_array=true;
-            }
-        }
         if (activation->owned_code && selected->direct_header_move &&
-            rbc_value_edge_move_header(stack, activation, access, selected)) {
-            if (fold_array) {
-                const XrLirArrayRegionBindings *bindings=code->array_regions;
-                const XrLirArrayRegionBinding *row=&bindings->regions[access.other-1];
-                const XrtArrayI64RegionSpec spec=xr_lir_array_region_guard_spec(bindings,row);
-                rbc_value_array_read_fold(stack,activation,&row->region,&spec,NULL);
-            }
-            return XRT_MANAGED_OK;
-        }
+            rbc_value_edge_move_header(stack, activation, access, selected)) return XRT_MANAGED_OK;
         status=rbc_value_edge_stage(module,stack,activation,selected,&prepared);
         for (size_t p=0;status==XRT_MANAGED_OK && p<selected->count;++p) {
             XrLirHomeTransfer transfer=code->homes->transfers[selected->first+p];
@@ -1281,7 +1256,7 @@ static inline uint32_t rbc_value_try_fixed_array_leaf(XrRbcStack *stack, uint32_
         !activation->owned_code || !activation->array_regions || index >= activation->code->access_count) return false;
     const XrRbcValueCode *code = activation->code;
     const XrRbcArrayRegionAccess *role = &code->array_region_accesses[index];
-    if (!role->fixed || role->region != activation->active_array_region) return false;
+    if (role->region != activation->active_array_region) return false;
     /* These sealed markers carry no transfers. BODY tries the guard only
      * while eligible, and LATCH advances only a cold window. Neither acts
      * once this exact window is active. ENTRY and EXIT still change state. */
@@ -1362,7 +1337,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     if (!activation || activation->depth!=stack->depth || index>=activation->code->access_count) return XR_RBC_INVALID;
     XrRbcValueAccess access=activation->code->accesses[index];
     XrtManagedStatus region_status=XRT_MANAGED_OK;
-    if (rbc_value_array_region_before(module,stack,activation,index,&region_status)) {
+    if (rbc_value_array_region_before(stack,activation,index,&region_status)) {
         if (region_status!=XRT_MANAGED_OK) xrt_native_managed_failure(region_status,source);
         stack->frames[stack->depth-1].pc=pc;
         return XR_RBC_OK;

@@ -11,6 +11,33 @@
  *   A shared or otherwise unavailable owner still takes the ordinary path.
  */
 
+static void c_array_regions_destroy(LirC *c) {
+    if (!c->array_regions) return;
+    for (uint32_t f = 0; f < xr_lir_function_count(c->request->module); ++f) {
+        xr_compile_resources_free(c->array_regions[f].fixed_edges);
+        xr_compile_resources_free(c->array_regions[f].pointwise_blocks);
+    }
+    xr_compile_resources_free(c->array_regions);
+}
+
+static void c_array_regions_admit(LirC *c) {
+    bool needed = false;
+    for (uint32_t n = 0; n < c->closure_count; ++n) {
+        const XrLirValueHomes *homes = c->value_homes[c->closure[n] - 1];
+        needed |= homes && homes->fixed_array_update_count;
+    }
+    if (!needed || !c_request_poll(c)) return;
+    void *memory = NULL;
+    if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, xr_lir_function_count(c->request->module),
+        sizeof(*c->array_regions), &memory))) return;
+    c->array_regions = memory;
+    for (uint32_t n = 0; n < c->closure_count && c_request_poll(c); ++n) {
+        uint32_t f = c->closure[n];
+        const XrLirValueHomes *homes = c->value_homes[f - 1];
+        if (homes && homes->fixed_array_update_count) c_fixed_array_prepare(c, f, &c->array_regions[f - 1]);
+    }
+}
+
 static LirCFixedArrayEdge *c_fixed_array_edge(LirCFixedArrayEdge *index, uint32_t block, uint32_t edge) {
     return &index[(size_t)block * 2 + edge - 1];
 }
@@ -51,7 +78,26 @@ static void c_fixed_array_prepare(LirC *c, uint32_t function, LirCArrayRegions *
         }
         entry->entry = latch->latch = n + 1;
         if (r->primary_kind != XR_LIR_ARRAY_REGION_PRIMARY_PUSH) exit->exit = n + 1;
+        if (r->range.kind != XR_LIR_ARRAY_SET_RANGE_NONE) continue;
+        if (!receiver->pointwise_blocks) {
+            void *blocks = NULL;
+            if (!c_resource(c, xr_compile_resources_calloc(c->request->resources,
+                (size_t)view.block_count + 1, sizeof(*receiver->pointwise_blocks), &blocks))) return;
+            receiver->pointwise_blocks = blocks;
+        }
+        const XrLirArraySetRegionStep *steps = homes->fixed_array_update_steps + r->first_step;
+        for (uint32_t p = 1; p + 1 < r->step_count; ++p)
+            if (steps[p].kind == XR_LIR_ARRAY_SET_REGION_EDGE_MOVE)
+                receiver->pointwise_blocks[steps[p].block] = true;
     }
+}
+
+static void c_fixed_array_slow(LirC *c, const XrLirInstructionView *v) {
+    if (!c->array_region || !c->array_region->pointwise_blocks ||
+        !c->array_region->pointwise_blocks[c->block]) return;
+    XrLirArrayIntrinsic shape;
+    if (c_array_intrinsic(c, v, &shape) && (shape.operation == XR_LIR_ARRAY_OP_GET || shape.operation == XR_LIR_ARRAY_OP_SET))
+        c_format(c, "xrl_fixed_slow_%" PRIu32 "_%" PRIu32 ": ;\n", c->block, c->instruction);
 }
 
 static void c_fixed_array_declarations(LirC *c) {
@@ -80,6 +126,10 @@ static void c_fixed_array_limit(LirC *c, const XrLirArraySetRegion *region, uint
 
 static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target, bool after_write) {
     const XrLirFixedArrayUpdateHome *row = &c->homes->fixed_array_updates[n - 1];
+    bool pointwise = row->region.range.kind == XR_LIR_ARRAY_SET_RANGE_NONE;
+    /* After one successful write, ordinary COW has had its chance to
+     * establish a private backing. Exact bounds checks remain in the clone. */
+    if (pointwise && !after_write) return;
     XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
     XrtArrayI64RegionSpec spec = xr_lir_fixed_array_guard_spec(c->homes, row, slots);
     bool push = row->region.primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH;
@@ -94,10 +144,14 @@ static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target, bool after
     c_format(c, "        const XrtArrayI64RegionSpec xrl_fixed_spec = {xrl_fixed_slots, %zu, %zu};\n"
         "        const XrtArrayI64RegionContext xrl_fixed_context = {xrl_frame, xrl_payload,"
         " &xrl_frame_locations, &xrl_frame_%" PRIu32 "};\n        if (", spec.slot_count, spec.canonical, c->function.id);
-    c_value(c, row->region.range.iv);
-    c_format(c, " >= INT64_C(0) && xrt_array_i64_region_try_begin(&xrl_fixed_context, &xrl_fixed_spec, true,"
+    if (!pointwise) {
+        c_value(c, row->region.range.iv);
+        c_text(c, " >= INT64_C(0) && ");
+    }
+    c_format(c, "xrt_array_i64_region_try_begin(&xrl_fixed_context, &xrl_fixed_spec, true,"
         " &xrl_fixed_cache_%" PRIu32 ")", n);
-    if (row->region.range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT) {
+    if (pointwise) c_text(c, ") {\n");
+    else if (row->region.range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_GUARDED_LIMIT) {
         if (push) {
             c_format(c, " && xrl_fixed_cache_%" PRIu32 ".length < "
                 "((const XrtArrayBacking *)xrl_fixed_cache_%" PRIu32 ".owner)->capacity && ", n, n);
@@ -124,7 +178,7 @@ static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target, bool after
     c_text(c, "    }\n");
 }
 
-static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView *v) {
+static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView *v, bool pointwise) {
     XrLirArrayIntrinsic shape = {0};
     if (!c_array_intrinsic(c, v, &shape)) {
         c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array update lost its original operation");
@@ -145,6 +199,15 @@ static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView
         c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array update cannot change its backing size");
         return;
     }
+    if (pointwise) {
+        c_text(c, "    if (");
+        c_value(c, v->operands[1]);
+        c_text(c, " < INT64_C(0) || (uint64_t)");
+        c_value(c, v->operands[1]);
+        c_format(c, " >= xrl_fixed_cache_%" PRIu32 ".length) {\n"
+            "        xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n", n, n);
+        c_format(c, "        goto xrl_fixed_slow_%" PRIu32 "_%" PRIu32 ";\n    }\n", c->block, c->instruction);
+    }
     bool read = shape.operation == XR_LIR_ARRAY_OP_GET;
     c_text(c, "    XRT_ARRAY_I64_REGION_COPY(");
     if (read) c_format(c, "&v%" PRIu32 ", ", v->result);
@@ -159,7 +222,7 @@ static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView
 }
 
 static const XrLirInstructionView *c_fixed_array_block(LirC *c, uint32_t n,
-    const XrLirArraySetRegionStep *first, const XrLirArraySetRegionStep *edge) {
+    const XrLirArraySetRegionStep *first, const XrLirArraySetRegionStep *edge, bool pointwise) {
     const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
     const XrLirBlockData *block = &function->blocks[edge->block - 1];
     c->block = edge->block;
@@ -172,7 +235,7 @@ static const XrLirInstructionView *c_fixed_array_block(LirC *c, uint32_t n,
             continue;
         }
         const XrLirInstructionView *v = &block->instructions[i].view;
-        if (v->op == XR_LIR_CALL_INTRINSIC) c_fixed_array_access(c, n, v);
+        if (v->op == XR_LIR_CALL_INTRINSIC) c_fixed_array_access(c, n, v, pointwise);
         else {
             uint32_t source = c->location_cursor;
             c->source = v->source;
@@ -191,12 +254,12 @@ static const XrLirInstructionView *c_fixed_array_block(LirC *c, uint32_t n,
 }
 
 static void c_fixed_array_iteration(LirC *c, uint32_t label, const XrLirArraySetRegion *region,
-    const XrLirArraySetRegionStep *steps) {
-    const XrLirArraySetRegionStep *first = steps + 1;
-    for (uint32_t s = 1; s < region->step_count - 1 && c_request_poll(c); ++s) {
+    const XrLirArraySetRegionStep *steps, uint32_t start) {
+    const XrLirArraySetRegionStep *first = steps + start;
+    for (uint32_t s = start; s < region->step_count - 1 && c_request_poll(c); ++s) {
         const XrLirArraySetRegionStep *step = &steps[s];
         if (step->kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) continue;
-        const XrLirInstructionView *term = c_fixed_array_block(c, label, first, step);
+        const XrLirInstructionView *term = c_fixed_array_block(c, label, first, step, !region->range.kind);
         if (!term) return;
         uint32_t skipped = step->block == region->latch ? region->range.iv : 0;
         c_scalar_edge_values(c, &term->edges[step->edge - 1], skipped);
@@ -228,12 +291,31 @@ static void c_fixed_array_push_clone(LirC *c, uint32_t label, const XrLirArraySe
     } else {
         c_format(c, "        int64_t xrl_stop = v%" PRIu32 " + (int64_t)xrl_count;\n"
             "        for (; v%" PRIu32 " < xrl_stop; ++v%" PRIu32 ") {\n", iv, iv, iv);
-        c_fixed_array_iteration(c, label, region, steps);
+        c_fixed_array_iteration(c, label, region, steps, 1);
         c_text(c, "        }\n");
     }
     c_format(c, "        xrl_array->length = xrl_fixed_cache_%" PRIu32 ".length;\n    }\n"
         "    xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
         "    goto bb%" PRIu32 ";\n", label, label, region->header);
+}
+
+/* Retain the actual header condition, selected copies, and failing access
+ * position when there is no proof covering every original index. */
+static void c_fixed_array_pointwise(LirC *c, uint32_t label, const XrLirFixedArrayUpdateHome *row,
+    const XrLirArraySetRegionStep *steps) {
+    const XrLirArraySetRegion *region = &row->region;
+    const XrLirInstructionView *term = c_fixed_array_block(c, label, steps + 1, steps + 1, true);
+    if (!term) return;
+    XR_DCHECK(term->op == XR_LIR_CONDBR && term->operand_count == 1, "pointwise header keeps its original condition");
+    c_text(c, row->body_edge == 1 ? "    if (" : "    if (!");
+    c_value(c, term->operands[0]);
+    c_text(c, ") {\n");
+    c_scalar_edge_values(c, &term->edges[row->body_edge - 1], 0);
+    c_text(c, "    }\n");
+    c_fixed_array_iteration(c, label, region, steps, 2);
+    c_format(c, "    goto xrl_fixed_%" PRIu32 "_bb%" PRIu32 ";\n    }\n", label, region->header);
+    c_format(c, "    xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
+        "    goto xrl_fixed_exit_%" PRIu32 ";\n", label, label);
 }
 
 static void c_fixed_array_clones(LirC *c) {
@@ -245,6 +327,10 @@ static void c_fixed_array_clones(LirC *c) {
         const XrLirArraySetRegionStep *steps = c->homes->fixed_array_update_steps + region->first_step;
         uint32_t iv = region->range.iv, label = n + 1;
         c_format(c, "xrl_fixed_%" PRIu32 "_bb%" PRIu32 ": ;\n", label, region->header);
+        if (region->range.kind == XR_LIR_ARRAY_SET_RANGE_NONE) {
+            c_fixed_array_pointwise(c, label, row, steps);
+            continue;
+        }
         if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_PUSH) {
             c_fixed_array_push_clone(c, label, region, steps);
             continue;
@@ -264,7 +350,7 @@ static void c_fixed_array_clones(LirC *c) {
             c_format(c,
                 "            for (size_t xrl_fixed_offset = 0; xrl_fixed_offset < xrl_fixed_span; ++xrl_fixed_offset) {\n"
                 "                v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_offset);\n", iv);
-            c_fixed_array_iteration(c, label, region, steps);
+            c_fixed_array_iteration(c, label, region, steps, 1);
             c_format(c, "            }\n"
                 "            v%" PRIu32 " = (int64_t)(xrl_fixed_start + xrl_fixed_span);\n"
                 "        }\n"
@@ -273,10 +359,10 @@ static void c_fixed_array_clones(LirC *c) {
         c_format(c, "    for (; v%" PRIu32 " < ", iv);
         c_fixed_array_limit(c, region, label);
         c_format(c, "; ++v%" PRIu32 ") {\n", iv);
-        c_fixed_array_iteration(c, label, region, steps);
+        c_fixed_array_iteration(c, label, region, steps, 1);
         c_text(c, "    }\n");
         /* The exit may read values computed by the original final header. */
-        (void)c_fixed_array_block(c, label, steps + 1, steps + 1);
+        (void)c_fixed_array_block(c, label, steps + 1, steps + 1, false);
         c_format(c, "    xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
             "    goto xrl_fixed_exit_%" PRIu32 ";\n", label, label);
     }

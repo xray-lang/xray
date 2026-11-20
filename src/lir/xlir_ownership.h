@@ -196,26 +196,6 @@ typedef struct XrLirArraySetRegionRange {
 } XrLirArraySetRegionRange;
 
 enum {
-    XR_LIR_ARRAY_SET_OWNER_HOME_NONE,
-    XR_LIR_ARRAY_SET_OWNER_HOME_CANONICAL_WINDOW,
-    XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW
-};
-/* An optional physical equivalence for an uninterrupted admitted window, not
- * a change to ordinary homes, COPY/death events or access permissions. Ordinals
- * are one-based within this region's step slice. NONE has both ordinals zero.
- * The producer discharges every step in [first_active_step,exit_step) as one
- * live token at the real canonical home. ENTRY remains ordinary; exit_step is
- * the exact original EXIT_MOVE. Full first-trip/runtime/range admission still
- * precedes activation. Before any exit or observation, transfer the real
- * canonical owner to its original empty exit home and clear canonical. A cache
- * only borrows that owner. The READ_ONLY kind has the same storage discipline
- * with one proven element GET and no mutation; it does not reinterpret a
- * CELL_READ/death pair as an element read. Consumers may ignore either kind. */
-typedef struct XrLirArraySetRegionOwnerHome {
-    uint32_t kind, first_active_step, exit_step;
-} XrLirArraySetRegionOwnerHome;
-
-enum {
     XR_LIR_ARRAY_REGION_PRIMARY_NONE,
     XR_LIR_ARRAY_REGION_PRIMARY_SET,
     XR_LIR_ARRAY_REGION_PRIMARY_GET,
@@ -237,7 +217,6 @@ typedef struct XrLirArraySetRegion {
     uint32_t exit_edge, exit_block, entry_value, canonical_value, exit_value;
     uint32_t body_block_count, primary_kind, primary_block, primary_instruction, first_step, step_count;
     XrLirArraySetRegionRange range;
-    XrLirArraySetRegionOwnerHome owner_home;
     XrLirArrayReadSum read_sum;
     /* PUSH only: item is the current IV and all other carried scalars are unchanged.
      * Both modes still use the same selected edges, owner home and capacity guard. */
@@ -261,7 +240,6 @@ typedef struct XrLirArrayCallMove {
 
 typedef struct XrLirOwnershipFunction {
     uint32_t fact_offset, fact_count, unmodeled;
-    uint32_t region_offset, region_count;
     uint32_t fixed_update_offset, fixed_update_count;
     uint32_t array_call_offset, array_call_count;
     XrLirArrayEntryRetain array_entry_retain;
@@ -311,13 +289,6 @@ XR_FUNC XrLirStatus xr_lir_ownership_fact_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirOwnershipFact *);
 XR_FUNC XrLirStatus xr_lir_ownership_array_call_move_at(const XrLirOwnershipPlan *,
     uint32_t ordinal, XrLirArrayCallMove *);
-XR_FUNC uint32_t xr_lir_ownership_array_region_count(const XrLirOwnershipPlan *);
-XR_FUNC uint32_t xr_lir_ownership_array_region_step_count(const XrLirOwnershipPlan *);
-/* Invalid row queries preserve the output; successful rows are owned copies. */
-XR_FUNC XrLirStatus xr_lir_ownership_array_region_at(const XrLirOwnershipPlan *,
-    uint32_t ordinal, XrLirArraySetRegion *);
-XR_FUNC XrLirStatus xr_lir_ownership_array_region_step_at(const XrLirOwnershipPlan *,
-    uint32_t ordinal, XrLirArraySetRegionStep *);
 /* A conditional update over the same logical Array owner. The route uses
  * exact MOVE and private Cell handoffs, a signed induction range over that
  * Array's length, and no alias publication. This preparation changes no

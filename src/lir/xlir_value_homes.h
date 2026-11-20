@@ -230,11 +230,6 @@ typedef struct XrLirValueHomes {
     size_t workspace_count;
     /* Unique same-typed input origin of a Slice result, UINT32_MAX absent. */
     uint32_t view_result_parameter;
-    /* Owned structural preparations only. These do not merge any homes or
-     * remove original events, and carry no physical execution permission. */
-    const XrLirArraySetRegion *array_regions;
-    const XrLirArraySetRegionStep *array_region_steps;
-    uint32_t array_region_count, array_region_step_count;
     /* Fixed-home routes own their proof and refer only to registered slots. */
     const XrLirFixedArrayUpdateHome *fixed_array_updates;
     const XrLirArraySetRegionStep *fixed_array_update_steps;
