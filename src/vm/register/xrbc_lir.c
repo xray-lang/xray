@@ -98,6 +98,14 @@ typedef struct {
     bool known, pooled, materialize;
 } RbcLirImmediate;
 typedef struct {
+    uint32_t region;
+    XrLirArrayRegionEdgeKind kind;
+} RbcLirFixedArrayEdge;
+typedef struct {
+    uint32_t region;
+    RbcLirFixedArrayEdge edges[2];
+} RbcLirFixedArrayBlock;
+typedef struct {
     const XrLirModule *input;
     XrLirFunction function;
     XrLirFunctionView view;
@@ -107,6 +115,8 @@ typedef struct {
     const XrLirValueHomes *homes;
     XrRbcValueCode *value_code;
     uint32_t *value_edges;
+    RbcLirFixedArrayBlock *fixed_array_blocks;
+    RbcLirFixedArrayEdge fixed_array_marker;
     size_t value_access_capacity, value_argument_capacity, value_display_capacity, value_call_cursor;
     size_t value_region_access_capacity;
     size_t binding_event_cursor, binding_workspace_cursor, binding_forwarding_cursor, array_local_cursor;
@@ -845,6 +855,7 @@ static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind
 }
 
 static bool rbc_lir_value_edge(RbcLirCompiler *, XrLirEdgeView, uint32_t);
+static bool rbc_lir_fixed_array_edge(RbcLirCompiler *, uint32_t, bool);
 #include "xrbc_lir_registers.inc.c"
 
 static bool rbc_lir_layout(RbcLirCompiler *c) {
@@ -1080,7 +1091,9 @@ static bool rbc_lir_comparison(RbcLirCompiler *c, const XrLirInstructionView *i)
 
 static bool rbc_lir_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
     bool scratch = false;
-    return rbc_lir_copies(c, edge, ordinal, true, &scratch) &&
+    return rbc_lir_fixed_array_edge(c, ordinal, false) &&
+        rbc_lir_copies(c, edge, ordinal, true, &scratch) &&
+        rbc_lir_fixed_array_edge(c, ordinal, true) &&
         rbc_lir_jump(c, edge.target);
 }
 
@@ -1850,6 +1863,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         xr_free(c.aggregate_scratch);
         xr_free(c.immediates);
         xr_free(c.value_edges);
+        xr_free(c.fixed_array_blocks);
         if (!success) {
             rbc_lir_value_code_free(c.value_code);
             xr_free(c.code);

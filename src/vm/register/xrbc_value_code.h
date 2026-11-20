@@ -94,6 +94,8 @@ XR_STATIC_ASSERT(sizeof(XrRbcValueAccess)==32,"ordinary typed access rows occupy
  * ordinals survive compaction; ordinary operation rows keep their own ABI. */
 typedef struct XrRbcArrayRegionAccess {
     uint32_t region;
+    uint8_t fixed_edge; /* Selected physical edge marker, independent of HomeEdge. */
+    bool fixed;
     XrLirArrayRegionOperation operation;
 } XrRbcArrayRegionAccess;
 
@@ -135,6 +137,10 @@ typedef struct XrRbcValueCode {
     XrLirArrayRegionBindings *array_push_windows;
     const XrRbcArrayPushLimit *array_push_limits; /* Indexed like array_push_windows->regions. */
 } XrRbcValueCode;
+
+static inline size_t rbc_value_legacy_array_region_count(const XrRbcValueCode *code) {
+    return code->array_regions ? code->array_regions->region_count : 0;
+}
 
 /* A leaf needs no call, return or owning destination. Both emission and
  * admission select the word from the same admitted access description. */
