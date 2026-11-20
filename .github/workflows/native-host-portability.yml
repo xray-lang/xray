@@ -1,4 +1,4 @@
-name: macOS native Array append comparison
+name: macOS native Array tail comparison
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   compare-layout:
-    name: macOS arm64 native Array append (${{ matrix.replica }})
+    name: macOS arm64 native Array tail (${{ matrix.replica }})
     runs-on: macos-latest
     timeout-minutes: 10
     strategy:
@@ -19,8 +19,8 @@ jobs:
       PYTHONUTF8: '1'
       PYTHONDONTWRITEBYTECODE: '1'
       NO_COLOR: '1'
-      XR_ARRAY_PARENT: f946163a5724606906b2324d27fe3900e6e2b48a
-      XR_ARRAY_CANDIDATE: 915e731ca6ecd90e6099f4a033b37613207082b1
+      XR_ARRAY_PARENT: 5229d31c4aeb0b99d09fd2e8e761cd2842da89dd
+      XR_ARRAY_CANDIDATE: 5f3304be7a393581bc050a941bd3d1d8b7540e4d
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,7 +32,10 @@ jobs:
       - name: Prepare both exact sources with the same Apple Clang
         run: |
           test "$(uname -m)" = arm64
-          test "$(git diff --name-only "$XR_ARRAY_PARENT" "$XR_ARRAY_CANDIDATE")" = bench/managed-value-layout/layout.h
+          git diff --exit-code "$XR_ARRAY_PARENT" "$XR_ARRAY_CANDIDATE" -- src/base/xsigned_rc.h \
+            bench/managed-value-layout/main.c bench/managed-value-layout/raw.c \
+            bench/managed-value-layout/raw_keys.c bench/managed-value-layout/algorithms.h \
+            bench/managed-value-layout/run.py
           mkdir "$RUNNER_TEMP/code-receipts"
           uname -a > "$RUNNER_TEMP/code-receipts/host.txt"
           clang="$(command -v clang)"
@@ -48,7 +51,12 @@ jobs:
               file "$binary" >> "$RUNNER_TEMP/code-receipts/architectures.txt"
               otool -tvV "$binary" > "$RUNNER_TEMP/code-receipts/$variant-$product-disassembly.txt"
             done
+            raw="$RUNNER_TEMP/code-receipts/$variant-raw-text"
+            otool -s __TEXT __text "$RUNNER_TEMP/$variant-build/raw" > "$raw.txt"
+            awk 'NR > 2 {for (i = 2; i <= NF; ++i) printf "%s", $i}' "$raw.txt" > "$raw.hex"
+            test -s "$raw.hex"
           done
+          cmp "$RUNNER_TEMP/code-receipts/parent-raw-text.hex" "$RUNNER_TEMP/code-receipts/candidate-raw-text.hex"
       - name: Alternate the original native Array append workload on this host
         run: |
           python scripts/diagnostics/compare_macos_array_layout.py \
@@ -58,7 +66,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: array-native-append-macos-${{ matrix.replica }}
+          name: array-native-inline-tail-macos-${{ matrix.replica }}
           path: |
             ${{ runner.temp }}/parent-build/
             ${{ runner.temp }}/candidate-build/
