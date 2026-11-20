@@ -995,7 +995,7 @@ static bool lir_loop_dominates(const LirGraph *g, uint32_t header, uint32_t bloc
     return g->order[header] <= g->order[block] && g->rank[block] <= g->rank[header];
 }
 typedef struct LirLinearLoop {
-    uint32_t entry, entry_edge, latch, exit, body_count;
+    uint32_t header, body_edge, entry, entry_edge, latch, exit, body_count;
 } LirLinearLoop;
 
 /* The header has exactly one outside entry and one dominated latch. */
@@ -1026,7 +1026,8 @@ static bool lir_loop_linear_edges(const XrLirFunctionData *f, const LirGraph *g,
             entry_edge = e;
         }
     if (entry_edge == UINT32_MAX) return false;
-    *loop = (LirLinearLoop){.entry=entry,.entry_edge=entry_edge,.latch=latch,.exit=exit};
+    *loop = (LirLinearLoop){.header=header,.body_edge=body_edge,.entry=entry,.entry_edge=entry_edge,
+        .latch=latch,.exit=exit};
     return true;
 }
 
@@ -1034,7 +1035,8 @@ static bool lir_loop_linear_edges(const XrLirFunctionData *f, const LirGraph *g,
  * Blocks and initially zero marks each have one entry per CFG block.
  * Walk each header and selected edge once per scratch table. */
 static bool lir_loop_linear_body(const XrLirFunctionData *f, const LirGraph *g,
-    uint32_t header, uint32_t body_edge, uint32_t *blocks, uint64_t *marks, LirLinearLoop *loop) {
+    uint32_t *blocks, uint64_t *marks, LirLinearLoop *loop) {
+    uint32_t header = loop->header, body_edge = loop->body_edge;
     uint32_t count = 0;
     uint32_t block = lir_terminator(f, header)->edges[body_edge].target - 1;
     uint64_t stamp = (uint64_t)header * 2 + body_edge + 1;
@@ -1051,6 +1053,52 @@ static bool lir_loop_linear_body(const XrLirFunctionData *f, const LirGraph *g,
     if (!count || blocks[count - 1] != loop->latch || loop->exit == header || marks[loop->exit] == stamp)
         return false;
     loop->body_count = count;
+    return true;
+}
+
+typedef struct LirLoopUnitStep {
+    uint32_t update, one, backedge_argument;
+} LirLoopUnitStep;
+
+/* Trace only the unique selected predecessor of each body parameter.
+ * Stop at header phis and values defined outside the proven route. */
+static uint32_t lir_loop_body_origin(const XrLirFunctionData *f, const LirGraph *g,
+    const LirLinearLoop *loop, const uint64_t *marks, uint32_t value) {
+    uint64_t stamp = (uint64_t)loop->header * 2 + loop->body_edge + 1;
+    for (;;) {
+        const XrLirValueData *row = &f->values[value - 1];
+        if (!row->parameter || !row->block || marks[row->block - 1] != stamp) return value;
+        uint32_t predecessor = g->predecessors[g->offsets[row->block - 1]];
+        uint32_t selected = predecessor == loop->header ? loop->body_edge : 0;
+        const XrLirEdgeView *edge = &lir_terminator(f, predecessor)->edges[selected];
+        XR_DCHECK(edge->target == row->block && row->instruction < edge->argument_count,
+            "a proved body parameter has its selected source");
+        value = edge->arguments[row->instruction];
+    }
+}
+
+/* Only the value published to the induction parameter determines the step.
+ * An unused arithmetic result never participates in the loop recurrence. */
+static bool lir_loop_unit_step(const XrLirFunctionData *f, const LirGraph *g, const LirLinearLoop *loop,
+    const uint64_t *marks, uint32_t induction, LirLoopUnitStep *result) {
+    const XrLirValueData *iv = &f->values[induction - 1];
+    if (!iv->parameter || iv->type != XR_LIR_I64 || iv->block != loop->header + 1) return false;
+    const XrLirEdgeView *edge = &lir_terminator(f, loop->latch)->edges[0];
+    uint32_t backedge = edge->arguments[iv->instruction];
+    uint32_t update = lir_loop_body_origin(f, g, loop, marks, backedge);
+    const XrLirInstructionView *add = xr_lir_internal_value_definition(f, update);
+    if (!add || add->op != XR_LIR_ADD || add->type != XR_LIR_I64 || add->operand_count != 2) return false;
+    uint64_t stamp = (uint64_t)loop->header * 2 + loop->body_edge + 1;
+    if (marks[f->values[update - 1].block - 1] != stamp) return false;
+
+    uint32_t left = lir_loop_body_origin(f, g, loop, marks, add->operands[0]);
+    uint32_t right = lir_loop_body_origin(f, g, loop, marks, add->operands[1]);
+    if (left != induction && right != induction) return false;
+    uint32_t one = add->operands[left == induction ? 1 : 0];
+    const XrLirInstructionView *constant = xr_lir_internal_value_definition(f, one);
+    if (!constant || constant->op != XR_LIR_CONST || constant->type != XR_LIR_I64 || constant->bits != 1)
+        return false;
+    *result = (LirLoopUnitStep){.update=update,.one=one,.backedge_argument=backedge};
     return true;
 }
 
