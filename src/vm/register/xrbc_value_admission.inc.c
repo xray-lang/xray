@@ -431,6 +431,32 @@ static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCo
     }
     return false;
 }
+static bool rbc_value_i64_try_parse_valid(const XrRbcModule *module, const XrRbcValueCode *code,
+    const XrRbcFunction *function, XrRbcValueAccess access) {
+    if (!xr_rbc_module_code_owner(module) || access.other || access.index ||
+        !rbc_value_string_borrow_operand(module, code, access.source)) return false;
+    const XrLirValueHome *home = rbc_value_home(code, access.result);
+    const XrtValueImage *image = xr_rbc_module_value_image(module);
+    if (!home || !home->type || home->parameter || home->owner_count ||
+        !image || !image->types || home->type > image->type_count) return false;
+    XrRbcValueLocation location = code->locations[access.result];
+    if (location.kind != XR_RBC_VALUE_AGGREGATE || !rbc_value_location_valid(function, location) ||
+        !function->aggregate_values || !module->aggregate_types) return false;
+    const XrtValueImageType *result = &image->types[home->type - 1];
+    if (result->kind != XRT_VALUE_NULLABLE || result->owned_count ||
+        !result->nullable_element || result->nullable_element >= home->type || result->nullable_tag) return false;
+    const XrtValueImageType *element = &image->types[result->nullable_element - 1];
+    uint32_t ordinal = function->aggregate_values[location.index].type;
+    if (ordinal >= module->aggregate_type_count || element->kind != XRT_VALUE_I64) return false;
+    XrPodType packed = module->aggregate_types[ordinal];
+    XrPodLayout scalar, expected;
+    return xr_pod_scalar_layout(XR_POD_I64, &scalar) && xr_pod_nullable_layout(scalar, &expected) &&
+        packed.kind == XR_POD_NULLABLE && packed.element == XR_POD_I64 &&
+        packed.physical.size == expected.size && packed.physical.alignment == expected.alignment &&
+        packed.physical.scalar_count == expected.scalar_count && home->size == expected.size &&
+        result->size == expected.size && result->alignment == expected.alignment &&
+        result->nullable_payload == scalar.alignment;
+}
 #include "xrbc_value_inline_admission.inc.c"
 #include "xrbc_value_callable_admission.inc.c"
 #include "xrbc_value_cell_admission.inc.c"
@@ -527,6 +553,8 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             rbc_value_string(module,code,a.other,false);
     case XR_RBC_VALUE_STRING_LENGTH:
         return !a.other && rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    case XR_RBC_VALUE_I64_TRY_PARSE:
+        return rbc_value_i64_try_parse_valid(module,code,function,a);
     case XR_RBC_VALUE_STATE_READ:
         return !a.other && rbc_value_scalar(code,function,a.source,XR_RBC_STATE_REF) &&
             rbc_value_owner(module,code,a.result,true);

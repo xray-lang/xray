@@ -406,7 +406,8 @@ def parse_source(source, prelude):
             raise ValueError('scalar declaration omits an admitted recipe')
         return header, members
     if header[0] == 12:
-        contracts = {'INTEGER_ABS': ('abs', '() -> i64'),
+        contracts = {'I64_TRY_PARSE': ('tryParse', '(text: string) -> i64?'),
+                     'INTEGER_ABS': ('abs', '() -> i64'),
                      'INTEGER_WRAPPING_ADD': ('wrappingAdd', '(other: i64) -> i64'),
                      'INTEGER_WRAPPING_SUB': ('wrappingSub', '(other: i64) -> i64'),
                      'INTEGER_WRAPPING_MUL': ('wrappingMul', '(other: i64) -> i64'),
@@ -432,10 +433,14 @@ def parse_source(source, prelude):
             if member.operation == 'NONE':
                 continue
             expected = contracts.get(member.operation)
+            static_parse = member.operation == 'I64_TRY_PARSE'
+            may_heap = (static_parse or member.operation in ('INTEGER_TO_STRING', 'INTEGER_TO_HEX') or
+                        member.operation.startswith('INTEGER_CHECKED_'))
             if (expected != (member.name, member.signature) or member.receiver != 'READ' or
-                    member.static or not member.method or member.lowered or
-                    member.allocation != ('may_heap' if (member.operation in ('INTEGER_TO_STRING', 'INTEGER_TO_HEX') or member.operation.startswith('INTEGER_CHECKED_')) else 'no_heap') or
-                    member.failures != ('allocation,retain,limit' if (member.operation in ('INTEGER_TO_STRING', 'INTEGER_TO_HEX') or member.operation.startswith('INTEGER_CHECKED_')) else 'none') or member.ownership != 'owned'):
+                    member.static != static_parse or not member.method or member.lowered != static_parse or
+                    member.allocation != ('may_heap' if may_heap else 'no_heap') or
+                    member.failures != ('allocation,retain,limit' if may_heap else 'none') or
+                    member.ownership != 'owned' or member.operation in used):
                 raise ValueError('integer operation disagrees with its complete declaration contract')
             used.add(member.operation)
         if used != set(contracts):

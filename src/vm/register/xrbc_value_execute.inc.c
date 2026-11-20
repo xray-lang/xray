@@ -1321,6 +1321,21 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         XrRbcRegister *condition=rbc_value_register(stack,activation,access.source);
         if (status==XRT_MANAGED_OK && (!condition || condition->bits>1)) status=XRT_MANAGED_ARGUMENT;
         if (status==XRT_MANAGED_OK) xrt_assert_condition((uint8_t)condition->bits,message,source);
+    } else if (access.operation==XR_RBC_VALUE_I64_TRY_PARSE) {
+        const XrtStringBacking *string = NULL;
+        RbcValuePayload destination;
+        status = rbc_value_string_borrow(activation, access.source, &string);
+        if (status == XRT_MANAGED_OK)
+            status = rbc_value_payload(module, stack, (RbcValueOrigin){activation, access.result}, &destination);
+        if (status == XRT_MANAGED_OK) {
+            int64_t parsed;
+            bool some = xrt_native_string_try_parse_i64(string, &parsed);
+            memset(destination.address, 0, destination.size);
+            if (some) {
+                memcpy(destination.address + destination.packed.physical.alignment, &parsed, sizeof(parsed));
+                destination.address[0] = 1;
+            }
+        }
     } else if (access.operation==XR_RBC_VALUE_STRING_PRINT || access.operation==XR_RBC_VALUE_STRING_LENGTH) {
         const XrtStringBacking *string=NULL;
         status=rbc_value_string_borrow(activation,access.source,&string);

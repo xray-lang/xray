@@ -275,6 +275,43 @@ static void literal_output_source_facts(void) {
     xr_xir_compile_artifact_free(closed);
 }
 
+static void integer_parse_checked_roundtrip(void) {
+    XrXirSourceResult source = compile_text(
+        "fn parse(text:string)->i64? { return i64.tryParse(text) }\n"
+        "fn magnitude(value:i64)->i64 { return value.abs() }\n"
+        "print(magnitude(parse(\"42\")!))\n");
+    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(source.snapshot);
+    unsigned integer_types = 0;
+    for (uint32_t i = 0; i < view->declaration_count; ++i) {
+        const XrXirSourceDeclaration *declaration = &view->declarations[i];
+        integer_types += declaration->kind == XR_XIR_SOURCE_TYPE && declaration->type.type == XR_XIR_I64 &&
+            declaration->native_identity != 0 && !strcmp(declaration->name,"i64");
+    }
+    CHECK(integer_types == 1);
+    XrXirCheckedPacket packet = {0};
+    XrXirArtifact *loaded = NULL, *closed = NULL;
+    XIR_OK(xr_xir_compile_checked_write(source.checked, &packet, NULL));
+    XIR_OK(xr_xir_compile_checked_read(&source.checked->context, packet.bytes, packet.length, &loaded, NULL));
+    xr_xir_compile_checked_packet_free(&packet);
+    xr_xir_compile_source_result_free(&source);
+    XIR_OK(xr_xir_compile_specialize(loaded, &closed, NULL, NULL));
+    const XrXirModule *module = xr_xir_compile_artifact_module(closed);
+    unsigned parses = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *fn = &module->functions[f];
+        for (uint32_t i = 0; i < fn->instruction_count; ++i) {
+            const XrXirInstruction *op = &fn->instructions[i];
+            if (op->op != XR_XIR_I64_TRY_PARSE) continue;
+            CHECK(xr_xir_operand_type(fn, op->args[0]) == XR_XIR_STRING);
+            CHECK(xr_xir_nullable_element(module->types, op->type) == XR_XIR_I64);
+            ++parses;
+        }
+    }
+    CHECK(parses == 1);
+    xr_xir_compile_artifact_free(closed);
+    xr_xir_compile_artifact_free(loaded);
+}
+
 static void builtin_loader_identity(void) {
     XrXirSourceResult source=compile_text("assert(true)\nassertEqual(1,1)\n");
     const XrXirModule *checked=xr_xir_compile_artifact_module(source.checked);
@@ -318,6 +355,7 @@ int main(void) {
     scalar_input_facts();
     literal_output_source_facts();
     builtin_loader_identity();
+    integer_parse_checked_roundtrip();
     specialization_origins();
     lowered_origin_rejected();
     evaluation_origin_rejected();

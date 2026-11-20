@@ -631,6 +631,14 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
         return true;
     }
+    if (v->op == XR_LIR_I64_TRY_PARSE) {
+        c_format(c, "    v%" PRIu32 " = (%s){0};\n", v->result, c_type(c, v->type));
+        c_format(c, "    v%" PRIu32 ".tag = xrt_native_string_try_parse_i64((const XrtStringBacking *)",
+            v->result);
+        c_value(c, v->operands[0]);
+        c_format(c, ", &v%" PRIu32 ".payload);\n", v->result);
+        return true;
+    }
     if (v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN) {
         c_text(c, "    { const XrtStringBacking *value = (const XrtStringBacking *)");
         c_value(c, v->operands[0]); c_text(c, ";\n");

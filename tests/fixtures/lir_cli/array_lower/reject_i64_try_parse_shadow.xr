@@ -1,0 +1,2 @@
+fn read(i64: i64) -> i64? { return i64.tryParse("1") }
+print(read(0) ?? 0)

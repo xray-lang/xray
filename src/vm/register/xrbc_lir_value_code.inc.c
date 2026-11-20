@@ -462,6 +462,7 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         access.operation=XR_RBC_VALUE_DROP; break;
     case XR_LIR_STRING_PRINT: access.operation = XR_RBC_VALUE_STRING_PRINT; break;
     case XR_LIR_STRING_LEN: access.operation = XR_RBC_VALUE_STRING_LENGTH; break;
+    case XR_LIR_I64_TRY_PARSE: access.operation = XR_RBC_VALUE_I64_TRY_PARSE; break;
     case XR_LIR_SET_BORROW: case XR_LIR_MAP_BORROW: case XR_LIR_ARRAY_BORROW: *handled=true; return true;
     case XR_LIR_SET_CELL_DROP: case XR_LIR_MAP_CELL_DROP: case XR_LIR_ARRAY_CELL_DROP: case XR_LIR_STRING_CELL_DROP:
         access.operation=XR_RBC_VALUE_BINDING_DROP; break;

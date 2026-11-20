@@ -49,6 +49,9 @@ XRAY_API void xrt_native_string_i64_create(XrtManagedFrame *, size_t slot,
  * kernel. No floating-point arithmetic or host formatting is performed. */
 XRAY_API void xrt_native_string_f64_create(XrtManagedFrame *, size_t slot,
     uint64_t bits, uint32_t source_id);
+/* Parse the complete UTF-8 byte span of a live admitted String borrow.
+ * Success writes the scalar. Invalid syntax or range leaves output unchanged. */
+XRAY_API bool xrt_native_string_try_parse_i64(const XrtStringBacking *, int64_t *output);
 /* Inputs are live admitted String borrows, including aliases. The destination
  * slot is empty. Publication preserves both input objects and their owners. */
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
