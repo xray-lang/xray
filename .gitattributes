@@ -129,6 +129,7 @@ tests/fixtures/xir_class_inheritance/classes.expected.txt text eol=lf
 tests/fixtures/lir_cli/array_lower/* text eol=lf
 tests/fixtures/lir_cli/module_state_class_array.out text eol=lf
 tests/fixtures/lir_cli/module_state_inherited_class.out text eol=lf
+tests/fixtures/lir_cli/module_state_class_nested_owners.out text eol=lf
 
 # Named-call source and independent stdout witnesses use the same authored bytes.
 tests/fixtures/named_arguments/*.xr text eol=lf
