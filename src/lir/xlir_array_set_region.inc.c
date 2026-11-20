@@ -671,15 +671,90 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
         }
     return XR_LIR_OK;
 }
+
+static bool lir_array_region_can_use_fixed(const XrLirArraySetRegion *region) {
+    return region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET &&
+        region->range.kind == XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN;
+}
+
+static size_t lir_array_region_edge_index(const XrLirArraySetRegionStep *step) {
+    return (size_t)(step->block - 1) * 2 + step->edge - 1;
+}
+
+static void lir_array_region_count_edges(uint8_t *uses, const LirArrayRegionTables *tables, uint32_t first) {
+    const XrLirArraySetRegionStep *steps = tables->steps.data;
+    for (uint32_t n = first; n < tables->steps.count; ++n) {
+        if (!steps[n].edge) continue;
+        uint8_t *use = &uses[lir_array_region_edge_index(&steps[n])];
+        if (*use < 2) ++*use;
+    }
+}
+
+/* The existing SET proof is stronger than the fixed proof for the same
+ * length and selected edges. Move that one proof to its new consumer.
+ * A shared edge still belongs to its existing schedules: an old fast exit
+ * can bypass the ordinary edge on which a fixed entry resets its guard. */
+static XrLirStatus lir_array_regions_select_fixed(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
+    const XrLirOwnershipFunction *function, uint32_t first_step, uint32_t push_first_step) {
+    LirArrayRegionTables *legacy = &plan->array_regions;
+    LirArrayRegionTables *fixed = &plan->fixed_array_updates;
+    XrLirArraySetRegion *rows = legacy->regions.data;
+    XrLirArraySetRegionStep *steps = legacy->steps.data;
+    uint32_t start = function->region_offset;
+    bool select = false;
+    for (uint32_t n = start; n < legacy->regions.count && !select; ++n)
+        select = lir_array_region_can_use_fixed(&rows[n]);
+    if (!select) return XR_LIR_OK;
+
+    uint8_t *uses = lir_plan_allocate(f->block_count, 2 * sizeof(*uses));
+    if (!uses) return XR_LIR_OUT_OF_MEMORY;
+    lir_array_region_count_edges(uses, legacy, first_step);
+    lir_array_region_count_edges(uses, &plan->array_push_windows, push_first_step);
+
+    XrLirStatus status = XR_LIR_OK;
+    uint32_t next_row = start, next_step = first_step;
+    for (uint32_t n = start; n < legacy->regions.count; ++n) {
+        XrLirArraySetRegion region = rows[n];
+        XrLirArraySetRegionStep *route = steps + region.first_step;
+        bool promote = lir_array_region_can_use_fixed(&region);
+        for (uint32_t s = 0; s < region.step_count && promote; ++s)
+            if (route[s].edge && uses[lir_array_region_edge_index(&route[s])] != 1) promote = false;
+        if (promote) {
+            region.first_step = fixed->steps.count;
+            region.owner_home = (XrLirArraySetRegionOwnerHome){0};
+            region.element_read = 0;
+            for (uint32_t s = 0; s < region.step_count && status == XR_LIR_OK; ++s)
+                if (!lir_plan_array_append(&fixed->steps, &route[s], sizeof(*route))) status = XR_LIR_OUT_OF_MEMORY;
+            if (status != XR_LIR_OK || !lir_plan_array_append(&fixed->regions, &region, sizeof(region))) {
+                status = XR_LIR_OUT_OF_MEMORY;
+                break;
+            }
+        } else {
+            if (next_step != region.first_step)
+                memmove(steps + next_step, route, (size_t)region.step_count * sizeof(*route));
+            region.first_step = next_step;
+            rows[next_row++] = region;
+            next_step += region.step_count;
+        }
+    }
+    xr_free(uses);
+    legacy->regions.count = next_row;
+    legacy->steps.count = next_step;
+    return status;
+}
+
 static XrLirStatus lir_plan_array_set_regions(XrLirOwnershipPlan *plan,
     const XrLirModule *module, const XrLirFunctionData *f, uint32_t function) {
     XrLirOwnershipFunction *row = &plan->functions[function - 1];
     row->region_offset = plan->array_regions.regions.count;
     row->push_window_offset = plan->array_push_windows.regions.count;
     row->fixed_update_offset = plan->fixed_array_updates.regions.count;
+    uint32_t first_step = plan->array_regions.steps.count;
+    uint32_t push_first_step = plan->array_push_windows.steps.count;
     LirArrayRegionProof proof = {.module=module,.function=f,.plan=plan,.function_id=function};
     XrLirStatus status = lir_array_regions_function(&proof, &plan->array_regions, &plan->array_push_windows,
         &plan->fixed_array_updates);
+    if (status == XR_LIR_OK) status = lir_array_regions_select_fixed(plan, f, row, first_step, push_first_step);
     row->region_count = plan->array_regions.regions.count - row->region_offset;
     row->push_window_count = plan->array_push_windows.regions.count - row->push_window_offset;
     row->fixed_update_count = plan->fixed_array_updates.regions.count - row->fixed_update_offset;
