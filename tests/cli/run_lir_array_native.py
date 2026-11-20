@@ -296,8 +296,8 @@ def main() -> None:
             assert generated_text.count("xrt_array_i64_update_held(") == 6
             assert generated_text.count("xrt_native_array_push_local_i64(") == 6
         elif name == "array_stationary_edges":
-            # A changing bound keeps pointwise updates. Its selected edges can
-            # be scalar-only while the later read window keeps real owner moves.
+            # A changing bound keeps pointwise updates. The later read window
+            # keeps the backing in the same Frame slot through its scalar exit.
             assert "size_t xrl_room = xrl_array->capacity - " not in generated_text
             bodies = re.findall(r"^static int64_t xrl_f\d+\([^\n]*\) \{\n(.*?)^}",
                                 generated_text, re.MULTILINE | re.DOTALL)
@@ -308,8 +308,12 @@ def main() -> None:
             assert "xrl_edge_" not in pointwise[:append.start()], name
             exit_edge = re.search(rf"^xrl_fixed_exit_{read['region']}: ;\n(?P<body>.*?)(?=^\w+: ;)",
                                   pointwise, re.MULTILINE | re.DOTALL)
-            assert exit_edge and "xrl_edge_" in exit_edge["body"], name
-            assert re.search(rf"XRT_ARRAY_I64_REGION_COPY\(&v\d+, xrl_fixed_cache_{read['region']}\.elements",
+            assert exit_edge and re.search(r"\bgoto bb\d+;", exit_edge["body"]), name
+            assert not re.search(r"\b(?:xrl_edge_\w+|xrt_\w+)\s*\(", exit_edge["body"]), name
+            assert pointwise.count("xrt_managed_frame_leave(") == 1, name
+            cache = f"xrl_fixed_cache_{read['region']}"
+            assert re.search(rf"XRT_ARRAY_I64_REGION_COPY\(&v\d+, {cache}\.elements", pointwise[read.start():]), name
+            assert re.search(rf"{cache} = \(XrtArrayI64RegionCache\)\{{0\}};\s+goto xrl_fixed_exit_{read['region']};",
                              pointwise[read.start():]), name
         elif name == "array_stationary_cells":
             # Each mutation Cell shares its stationary owner's slot: no runtime
