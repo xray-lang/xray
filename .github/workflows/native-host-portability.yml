@@ -451,11 +451,11 @@ jobs:
         run: >-
           python scripts/macos_release_pair.py
           --base 00cbb4924eca495a7f934a78dc2d7e16d66ca2b2
-          --candidate 7941c01931f86de9c11dd3b6b5f7d064f223e9d3
+          --candidate 2b6e92dd345f6506de90d26316817b86f6e85cc4
           --output "$RUNNER_TEMP/task339-macos-release-pair"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: task339-macos-release-pair-7941c0193
+          name: task339-macos-release-pair-2b6e92dd3
           path: ${{ runner.temp }}/task339-macos-release-pair/
           if-no-files-found: error
