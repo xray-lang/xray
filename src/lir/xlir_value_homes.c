@@ -34,6 +34,7 @@ XR_FUNCDEF void xr_lir_value_homes_destroy(XrLirValueHomes *homes) {
     xr_free((void *)homes->values); xr_free((void *)homes->events);
     xr_free((void *)homes->bytes); xr_free((void *)homes->transfers);
     xr_free((void *)homes->edges); xr_free((void *)homes->calls);
+    xr_free((void *)homes->array_call_moves);
     xr_free((void *)homes->arguments); xr_free((void *)homes->frame.owned_offsets);
     xr_free((void *)homes->bindings); xr_free((void *)homes->workspaces);
     xr_free((void *)homes->array_regions); xr_free((void *)homes->array_region_steps);
@@ -1068,8 +1069,15 @@ static bool lir_home_direct_header_move(const LirHomeBuilder *b, const XrLirHome
     return true;
 }
 
+static bool lir_home_header_slot(const XrtManagedFrameSpec *f, size_t slot, size_t offset) {
+    return slot < f->slot_count && f->owned_offsets[slot] == offset &&
+        offset % _Alignof(XrtManagedHeader *) == 0 && offset <= f->payload_size &&
+        sizeof(XrtManagedHeader *) <= f->payload_size - offset;
+}
+
 #include "xlir_value_string_windows.inc.c"
 #include "xlir_value_fixed_array_updates.inc.c"
+#include "xlir_value_array_calls.inc.c"
 
 XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHomesRequest *request,
     XrLirValueHomes **output) {
@@ -1107,7 +1115,8 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_homes_create(const XrLirValueHome
     XrLirHomeEdge *edges = b.edges.data;
     for (size_t n = 0; n < b.edges.count; ++n)
         edges[n].direct_header_move = lir_home_direct_header_move(&b, &edges[n]);
-    if (!lir_home_string_windows(&b) || !lir_home_fixed_array_updates(&b, request->ownership)) {
+    if (!lir_home_string_windows(&b) || !lir_home_fixed_array_updates(&b, request->ownership) ||
+        !lir_home_array_calls(&b, request->ownership)) {
         xr_lir_value_homes_destroy(b.homes); return b.compiler.status;
     }
     bool typed = b.homes->event_count || b.homes->unmodeled || b.homes->frame.payload_size ||

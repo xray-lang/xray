@@ -98,7 +98,14 @@ typedef struct XrLirHomeCall {
      * source_argument is the actual borrowed-origin SSA, not an argument
      * index. result_parameter is the exact callee physical formal ordinal. */
     uint32_t view_result_workspace, view_result_source_argument, view_result_parameter;
+    uint32_t array_move; /* One-based bound candidate, or zero. */
 } XrLirHomeCall;
+
+typedef struct XrLirHomeArrayCall {
+    XrLirArrayCallMove logical;
+    uint32_t parameter;
+    size_t source_slot, staged_slot, result_slot, landing_slot;
+} XrLirHomeArrayCall;
 
 typedef enum XrLirHomeBindingKind {
     XR_LIR_HOME_BINDING_NONE, XR_LIR_HOME_BINDING_LOCAL, XR_LIR_HOME_BINDING_PARAMETER,
@@ -198,6 +205,12 @@ typedef struct XrLirValueHomes {
     const XrLirHomeCall *calls;
     const uint32_t *arguments;
     size_t call_count, argument_count;
+    /* Private Array frames still use the ordinary borrow ABI. These numeric
+     * rows bind real slots only. They authorize no elision or publication. */
+    const XrLirHomeArrayCall *array_call_moves;
+    uint32_t array_call_move_count;
+    XrLirArrayEntryRetain array_entry_retain;
+    size_t array_entry_owner;
     XrtManagedFrameSpec frame;
     bool owned_frame_needed;
     /* SSA indexed, including zero. type names the exact payload image row,

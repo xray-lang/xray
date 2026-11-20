@@ -917,6 +917,91 @@ static void array_set_region_receiving(bool range) {
     CHECK(xrt_billing_owner_stats(billing).blocks == 1); xrt_billing_owner_drop(billing);
 }
 #include "lir_array_region_binding_cases.h"
+static void array_call_receiving(void) {
+    CArrayFixture c = {.element=XR_LIR_I64};
+    OK(array_fixture_registry(c.element, &c.module));
+    XrLirType array = XR_LIR_ARRAY;
+    XrLirArrayShape shape = {XR_LIR_I64};
+    XrLirFunction callee = {0}, caller = {0};
+    OK(xr_lir_declare_function(c.module, &(XrLirFunctionSpec){.name="take_array",.name_length=10,
+        .parameters=&array,.parameter_count=1,.result=XR_LIR_ARRAY}, &callee));
+    OK(xr_lir_set_array_result(c.module, callee, &shape));
+    XrLirValue formal = {0};
+    OK(xr_lir_function_parameter(c.module, callee, 0, &formal));
+    OK(xr_lir_set_array_shape(c.module, formal, &shape));
+    OK(array_fixture_copy(c.module, callee));
+
+    OK(xr_lir_declare_function(c.module, &(XrLirFunctionSpec){.name="call_array",.name_length=10,
+        .result=XR_LIR_I64}, &caller));
+    OK(xr_lir_define_function(c.module, caller));
+    XrLirBlock entry = {0};
+    OK(xr_lir_add_block(c.module, caller, NULL, 0, &entry));
+    OK(xr_lir_set_entry(c.module, caller, entry));
+    XrLirValue item = ca_constant(&c, entry, 9), original = {0}, result = {0};
+    OK(xr_lir_emit_value(c.module, entry, &(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,
+        .type=XR_LIR_ARRAY,.intrinsic=11,.operands=&item,.operand_count=1}, &original));
+    XrLirValue staged = ca_value(&c, entry, XR_LIR_ARRAY_RETAIN, XR_LIR_ARRAY, &original, 1);
+    OK(xr_lir_emit_value(c.module, entry, &(XrLirInstruction){.op=XR_LIR_CALL,
+        .type=XR_LIR_ARRAY,.callee=callee,.operands=&staged,.operand_count=1}, &result));
+    ca_effect(&c, entry, XR_LIR_ARRAY_DROP, staged);
+    ca_effect(&c, entry, XR_LIR_ARRAY_DROP, original);
+    ca_effect(&c, entry, XR_LIR_ARRAY_DROP, result);
+    ca_return(&c, entry, item);
+    OK(xr_lir_module_finish(c.module, NULL));
+
+    XrtBillingOwner *billing = NULL;
+    MANAGED(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
+    XrLirValueLayoutKey roots[] = {{XR_LIR_UNIT,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
+    XrLirValueLayouts *layouts = NULL;
+    HOME(xr_lir_value_layouts_create(c.module, roots, 3, billing, &layouts));
+    XrLirOwnershipPlan *plan = NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module}, &plan, NULL));
+    XrLirValueHomes *receiving = NULL, *homes = NULL;
+    HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,callee,layouts,plan}, &receiving));
+    CHECK(receiving->array_entry_retain.instruction == 1 && receiving->array_entry_retain.parameter == 0 &&
+        receiving->array_entry_owner == receiving->values[receiving->array_entry_retain.result].first_owner &&
+        receiving->array_entry_owner < receiving->frame.slot_count);
+
+    XrLirValueHomesRequest request = {c.module,caller,layouts,plan};
+    size_t baseline = live, bytes = home_live_bytes();
+    attempts = 0;
+    HOME(xr_lir_value_homes_create(&request, &homes));
+    size_t sites = attempts;
+    xr_lir_value_homes_destroy(homes);
+    homes = NULL;
+    CHECK(live == baseline && home_live_bytes() == bytes);
+    for (size_t n = 1; n <= sites; ++n) {
+        attempts = 0;
+        fail_at = n;
+        CHECK(xr_lir_value_homes_create(&request, &homes) == XR_LIR_VALUE_LAYOUT_OOM && !homes);
+        CHECK(live == baseline && home_live_bytes() == bytes);
+    }
+    fail_at = SIZE_MAX;
+    HOME(xr_lir_value_homes_create(&request, &homes));
+    xr_lir_ownership_plan_destroy(plan);
+    xr_lir_value_layouts_destroy(layouts);
+    xr_lir_module_destroy(c.module);
+
+    CHECK(homes->array_entry_owner == SIZE_MAX && homes->call_count == 1);
+    CHECK(homes->array_call_move_count == 1 && homes->calls[0].array_move == 1);
+    const XrLirHomeArrayCall *move = &homes->array_call_moves[0];
+    CHECK(move->logical.owner == original.id && move->logical.temporary == staged.id &&
+        move->parameter == 0 && move->logical.callee == callee.id);
+    CHECK(move->source_slot == homes->values[original.id].first_owner &&
+        move->staged_slot == homes->values[staged.id].first_owner &&
+        move->result_slot == homes->values[result.id].first_owner &&
+        move->landing_slot == homes->values[result.id].temporary_first_owner);
+    size_t slots[] = {move->source_slot, move->staged_slot, move->result_slot, move->landing_slot};
+    for (size_t n = 0; n < 4; ++n) {
+        CHECK(slots[n] < homes->frame.slot_count);
+        for (size_t earlier = 0; earlier < n; ++earlier) CHECK(slots[n] != slots[earlier]);
+    }
+    xr_lir_value_homes_destroy(homes);
+    xr_lir_value_homes_destroy(receiving);
+    CHECK(xrt_billing_owner_stats(billing).blocks == 1);
+    xrt_billing_owner_drop(billing);
+}
+
 static void string_forward_parameters(CArrayFixture *c, XrLirBlock block, XrLirValue values[2]) {
     for (uint32_t n = 0; n < 2; ++n) OK(xr_lir_block_parameter(c->module, block, n, &values[n]));
 }
@@ -1024,6 +1109,7 @@ static void string_forwarding_window(uint32_t blocks, bool side_entry) {
 }
 
 int main(void) {
+    array_call_receiving();
     for (unsigned shape=0;shape<7;++shape) array_region_binding_projection(shape);
     array_set_region_receiving(false); array_set_region_receiving(true);
     borrowed_map_stages();
