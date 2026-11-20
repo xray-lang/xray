@@ -169,33 +169,6 @@ static bool lir_array_region_inventory(LirArrayRegionProof *p) {
     }
     return true;
 }
-/* This private graph has finished RPO and dominator construction. Subsequent
- * region readers use only entry, predecessors, offsets and dominance queries.
- * Reuse order/rank for tree intervals, next/cursor for child lists and stack
- * for iterative traversal. One cold linear pass makes every query constant. */
-static void lir_array_region_dominance_index(LirGraph *g) {
-    memset(g->next, 0, (size_t)g->count * sizeof(*g->next));
-    for (uint32_t b = 0; b < g->count; ++b) if (b != g->entry) {
-        uint32_t parent = g->idom[b];
-        XR_DCHECK(parent < g->count, "reachable block has a dominator");
-        g->cursor[b] = g->next[parent]; g->next[parent] = b + 1;
-    }
-    uint32_t depth = 1, ordinal = 0;
-    g->stack[0] = g->entry; g->order[g->entry] = ordinal++;
-    while (depth) {
-        uint32_t block = g->stack[depth - 1], child = g->next[block];
-        if (child) {
-            --child; g->next[block] = g->cursor[child];
-            g->order[child] = ordinal++; g->stack[depth++] = child;
-        } else {
-            g->rank[block] = ordinal; --depth;
-        }
-    }
-    XR_DCHECK(ordinal == g->count, "dominator intervals cover every reachable block");
-}
-static bool lir_array_region_dominates(const LirGraph *g, uint32_t header, uint32_t block) {
-    return g->order[header] <= g->order[block] && g->rank[block] <= g->rank[header];
-}
 static uint32_t lir_array_region_retain_death(const LirArrayRegionProof *p, uint32_t value,
     uint32_t block, uint32_t instruction, uint32_t saving_uses) {
     const LirArrayRegionUse *use = &p->uses[value];
@@ -217,11 +190,11 @@ static bool lir_array_region_retains(LirArrayRegionProof *p) {
         uint32_t death = lir_array_region_retain_death(p, retain->operands[0], block, instruction, 1);
         if (!death) death = lir_array_region_retain_death(p, value, block, instruction, 0);
         if (!death) return false;
-        if (!p->retain_block || lir_array_region_dominates(&p->graph, p->retain_block - 1, block - 1)) {
+        if (!p->retain_block || lir_loop_dominates(&p->graph, p->retain_block - 1, block - 1)) {
             if (p->retain_block != block) p->retain_drop = 0;
             p->retain_block = block;
             if (death > p->retain_drop) p->retain_drop = death;
-        } else if (!lir_array_region_dominates(&p->graph, block - 1, p->retain_block - 1)) return false;
+        } else if (!lir_loop_dominates(&p->graph, block - 1, p->retain_block - 1)) return false;
     }
     if (p->retain_block) {
         /* Dominance indexing has finished with stack. Reuse its owned storage
@@ -246,32 +219,15 @@ static bool lir_array_region_retains(LirArrayRegionProof *p) {
 static bool lir_array_region_retains_before_entry(const LirArrayRegionProof *p, uint32_t header,
     uint32_t entry) {
     return !p->retain_block || (p->retain_block != header + 1 &&
-        lir_array_region_dominates(&p->graph, p->retain_block - 1, header) &&
-        lir_array_region_dominates(&p->graph, p->retain_block - 1, entry) &&
+        lir_loop_dominates(&p->graph, p->retain_block - 1, header) &&
+        lir_loop_dominates(&p->graph, p->retain_block - 1, entry) &&
         (p->retain_block != entry + 1 || p->retain_drop < p->function->blocks[entry].instruction_count));
 }
-/* The body may have any number of blocks, but only one straight-line route.
- * Predecessor cardinality rules out side entries and other hidden backedges. */
 static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
     XrLirArraySetRegion *region) {
     const LirGraph *g = &p->graph;
-    const XrLirFunctionData *f = p->function;
-    const XrLirInstructionView *term = lir_terminator(f, header);
-    if (term->op != XR_LIR_CONDBR || term->edge_count != 2 ||
-        g->offsets[header + 1] - g->offsets[header] != 2) return false;
-    uint32_t latch = UINT32_MAX, entry = UINT32_MAX;
-    for (uint32_t n = g->offsets[header]; n < g->offsets[header + 1]; ++n) {
-        uint32_t predecessor = g->predecessors[n];
-        if (lir_array_region_dominates(g, header, predecessor)) {
-            if (latch != UINT32_MAX) return false;
-            latch = predecessor;
-        } else {
-            if (entry != UINT32_MAX) return false;
-            entry = predecessor;
-        }
-    }
-    if (entry == UINT32_MAX || latch == UINT32_MAX) return false;
-    uint32_t exit = term->edges[1 - body_edge].target - 1;
+    LirLinearLoop loop;
+    if (!lir_loop_linear_edges(p->function, g, header, body_edge, &loop)) return false;
     /* Every retain has an exact same-block endpoint death, and all retain
      * blocks lie on one dominator chain. If the original exit reaches the
      * latest retain through the precomputed empty-bridge corridor and the
@@ -279,36 +235,16 @@ static bool lir_array_region_shape(LirArrayRegionProof *p, uint32_t header, uint
      * header. The instruction walk still rejects header/body retains. Only a
      * proven PUSH may use this exception; its real exit move and all ordinary
      * bridge instructions remain before the ordinary retain instructions. */
-    if (!lir_array_region_retains_before_entry(p, header, entry) &&
-        (!p->retain_block || !g->stack[exit] || !lir_array_region_dominates(g,header,p->retain_block-1))) return false;
-    p->block_count = 0;
-    uint32_t block = term->edges[body_edge].target - 1;
-    uint64_t stamp = (uint64_t)header * 2 + body_edge + 1;
-    while (block != header) {
-        /* This route starts at the header and every visited block has its
-         * sole actual incoming edge on that route. Its dominance follows
-         * without walking each block's increasingly long dominator chain. */
-        if (p->marks[block] == stamp || g->offsets[block + 1] - g->offsets[block] != 1) return false;
-        p->marks[block] = stamp; p->blocks[p->block_count++] = block;
-        const XrLirInstructionView *next = lir_terminator(f, block);
-        if (next->op != XR_LIR_BR || next->edge_count != 1) return false;
-        block = next->edges[0].target - 1;
-    }
-    if (!p->block_count || p->blocks[p->block_count - 1] != latch || exit == header || p->marks[exit] == stamp)
-        return false;
-    uint32_t entry_edge = UINT32_MAX;
-    const XrLirInstructionView *incoming = lir_terminator(f, entry);
-    for (uint32_t e = 0; e < incoming->edge_count; ++e)
-        if (incoming->edges[e].target == header + 1) {
-            if (entry_edge != UINT32_MAX) return false;
-            entry_edge = e;
-        }
-    if (entry_edge == UINT32_MAX) return false;
-    *region = (XrLirArraySetRegion){.function=p->function_id,.header=header + 1,.entry_block=entry + 1,
-        .entry_edge=entry_edge + 1,.latch=latch + 1,.exit_edge=2 - body_edge,.exit_block=exit + 1,
-        .body_block_count=p->block_count};
+    if (!lir_array_region_retains_before_entry(p, header, loop.entry) &&
+        (!p->retain_block || !g->stack[loop.exit] || !lir_loop_dominates(g,header,p->retain_block-1))) return false;
+    if (!lir_loop_linear_body(p->function, g, header, body_edge, p->blocks, p->marks, &loop)) return false;
+    p->block_count = loop.body_count;
+    *region = (XrLirArraySetRegion){.function=p->function_id,.header=header + 1,.entry_block=loop.entry + 1,
+        .entry_edge=loop.entry_edge + 1,.latch=loop.latch + 1,.exit_edge=2 - body_edge,.exit_block=loop.exit + 1,
+        .body_block_count=loop.body_count};
     return true;
 }
+
 static bool lir_array_region_step(LirArrayRegionProof *p, XrLirArraySetRegionStep step) {
     if (p->step_count == p->step_capacity) return false;
     p->steps[p->step_count++] = step;
@@ -353,7 +289,7 @@ static void lir_array_region_range_begin(LirArrayRegionProof *p, const XrLirArra
     // parameters of blocks reached through different pre-loop paths.
     bool independent = end->type == XR_LIR_I64 &&
         ((!end->block && end->parameter) ||
-         (end->block && lir_array_region_dominates(&p->graph, end->block - 1, region->entry_block - 1)) ||
+         (end->block && lir_loop_dominates(&p->graph, end->block - 1, region->entry_block - 1)) ||
          (bound && bound->op == XR_LIR_CONST));
     // A header parameter also qualifies if the latch forwards it unchanged.
     bool carried = end->type == XR_LIR_I64 && end->parameter && end->block == region->header;
@@ -727,7 +663,7 @@ static XrLirStatus lir_array_regions_function(LirArrayRegionProof *p, LirArrayRe
     if (status != XR_LIR_OK) return status;
     if (!lir_graph_order(f, &p->graph)) return XR_LIR_VERIFY_ERROR;
     lir_graph_dominators(&p->graph);
-    lir_array_region_dominance_index(&p->graph);
+    lir_loop_dominance_index(&p->graph);
     uint64_t values = (uint64_t)f->value_count + 1, steps = values + f->block_count + 2;
     if (steps > UINT32_MAX) return XR_LIR_OUT_OF_MEMORY;
     p->uses = lir_plan_allocate((size_t)values, sizeof(*p->uses));

@@ -967,6 +967,93 @@ static XrLirStatus lir_frame_cells(const XrLirModule *m, const XrLirFunctionData
     }
     return XR_LIR_OK;
 }
+/* This private graph has finished RPO and dominator construction. Subsequent
+ * loop readers use only entry, predecessors, offsets and dominance queries.
+ * Reuse order/rank for tree intervals, next/cursor for child lists and stack
+ * for iterative traversal. One cold linear pass makes every query constant. */
+static void lir_loop_dominance_index(LirGraph *g) {
+    memset(g->next, 0, (size_t)g->count * sizeof(*g->next));
+    for (uint32_t b = 0; b < g->count; ++b) if (b != g->entry) {
+        uint32_t parent = g->idom[b];
+        XR_DCHECK(parent < g->count, "reachable block has a dominator");
+        g->cursor[b] = g->next[parent]; g->next[parent] = b + 1;
+    }
+    uint32_t depth = 1, ordinal = 0;
+    g->stack[0] = g->entry; g->order[g->entry] = ordinal++;
+    while (depth) {
+        uint32_t block = g->stack[depth - 1], child = g->next[block];
+        if (child) {
+            --child; g->next[block] = g->cursor[child];
+            g->order[child] = ordinal++; g->stack[depth++] = child;
+        } else {
+            g->rank[block] = ordinal; --depth;
+        }
+    }
+    XR_DCHECK(ordinal == g->count, "dominator intervals cover every reachable block");
+}
+static bool lir_loop_dominates(const LirGraph *g, uint32_t header, uint32_t block) {
+    return g->order[header] <= g->order[block] && g->rank[block] <= g->rank[header];
+}
+typedef struct LirLinearLoop {
+    uint32_t entry, entry_edge, latch, exit, body_count;
+} LirLinearLoop;
+
+/* The header has exactly one outside entry and one dominated latch. */
+static bool lir_loop_linear_edges(const XrLirFunctionData *f, const LirGraph *g,
+    uint32_t header, uint32_t body_edge, LirLinearLoop *loop) {
+    XR_DCHECK(body_edge < 2, "selected edge belongs to a conditional branch");
+    const XrLirInstructionView *term = lir_terminator(f, header);
+    if (term->op != XR_LIR_CONDBR || term->edge_count != 2 ||
+        g->offsets[header + 1] - g->offsets[header] != 2) return false;
+    uint32_t latch = UINT32_MAX, entry = UINT32_MAX;
+    for (uint32_t n = g->offsets[header]; n < g->offsets[header + 1]; ++n) {
+        uint32_t predecessor = g->predecessors[n];
+        if (lir_loop_dominates(g, header, predecessor)) {
+            if (latch != UINT32_MAX) return false;
+            latch = predecessor;
+        } else {
+            if (entry != UINT32_MAX) return false;
+            entry = predecessor;
+        }
+    }
+    if (entry == UINT32_MAX || latch == UINT32_MAX) return false;
+    uint32_t exit = term->edges[1 - body_edge].target - 1;
+    uint32_t entry_edge = UINT32_MAX;
+    const XrLirInstructionView *incoming = lir_terminator(f, entry);
+    for (uint32_t e = 0; e < incoming->edge_count; ++e)
+        if (incoming->edges[e].target == header + 1) {
+            if (entry_edge != UINT32_MAX) return false;
+            entry_edge = e;
+        }
+    if (entry_edge == UINT32_MAX) return false;
+    *loop = (LirLinearLoop){.entry=entry,.entry_edge=entry_edge,.latch=latch,.exit=exit};
+    return true;
+}
+
+/* Predecessor counts rule out side entries along the linear body route.
+ * Blocks and initially zero marks each have one entry per CFG block.
+ * Walk each header and selected edge once per scratch table. */
+static bool lir_loop_linear_body(const XrLirFunctionData *f, const LirGraph *g,
+    uint32_t header, uint32_t body_edge, uint32_t *blocks, uint64_t *marks, LirLinearLoop *loop) {
+    uint32_t count = 0;
+    uint32_t block = lir_terminator(f, header)->edges[body_edge].target - 1;
+    uint64_t stamp = (uint64_t)header * 2 + body_edge + 1;
+    while (block != header) {
+        /* This route starts at the header and every visited block has its
+         * sole actual incoming edge on that route. Its dominance follows
+         * without walking each block's increasingly long dominator chain. */
+        if (marks[block] == stamp || g->offsets[block + 1] - g->offsets[block] != 1) return false;
+        marks[block] = stamp; blocks[count++] = block;
+        const XrLirInstructionView *next = lir_terminator(f, block);
+        if (next->op != XR_LIR_BR || next->edge_count != 1) return false;
+        block = next->edges[0].target - 1;
+    }
+    if (!count || blocks[count - 1] != loop->latch || loop->exit == header || marks[loop->exit] == stamp)
+        return false;
+    loop->body_count = count;
+    return true;
+}
+
 #include "xlir_array_cell_flow.inc.c"
 #include "xlir_string_verify.inc.c"
 #include "xlir_ownership.inc.c"
