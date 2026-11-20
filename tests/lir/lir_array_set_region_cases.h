@@ -334,9 +334,18 @@ static void ars_fixed_update_preparations(void) {
         OK(xr_lir_ownership_function_at(plan, c.function.id, &row));
         CHECK(!row.region_count && !row.push_window_count && row.fixed_update_count == (uint32_t)expected);
         OK(xr_lir_ownership_array_regions_verify(c.module, plan));
-        xr_lir_module_destroy(c.module);
+        XrtBillingOwner *billing = NULL;
+        CHECK(xrt_billing_owner_new(NULL, SIZE_MAX, &billing) == XRT_MANAGED_OK);
+        XrLirValueLayoutKey roots[] = {{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
+        XrLirValueLayouts *layouts = NULL;
+        CHECK(xr_lir_value_layouts_create(c.module, roots, 4, billing, &layouts) == XR_LIR_VALUE_LAYOUT_OK);
+        XrLirValueHomes *homes = NULL;
+        CHECK(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,c.function,layouts,plan}, &homes) ==
+            XR_LIR_VALUE_LAYOUT_OK);
+        xr_lir_module_destroy(c.module); xr_lir_value_layouts_destroy(layouts);
+        CHECK(homes && homes->fixed_array_update_count == (uint32_t)expected);
+        XrLirArraySetRegion update = {0};
         if (expected) {
-            XrLirArraySetRegion update;
             OK(xr_lir_ownership_fixed_array_update_at(plan, row.fixed_update_offset, &update));
             CHECK(update.header == c.header.id && update.latch == c.body[2].id &&
                 update.exit_block == c.exit.id && update.exit_edge == (n ? 1u : 2u) &&
@@ -349,6 +358,15 @@ static void ars_fixed_update_preparations(void) {
                 departure.kind == XR_LIR_ARRAY_SET_REGION_EXIT_MOVE && departure.edge == update.exit_edge);
         }
         xr_lir_ownership_plan_destroy(plan);
+        if (expected) {
+            const XrLirFixedArrayUpdateHome *bound = &homes->fixed_array_updates[0];
+            CHECK(bound->body_edge == (n ? 2u : 1u) && bound->owner_slot == homes->values[update.canonical_value].first_owner &&
+                bound->workspace_slot < homes->frame.slot_count && bound->workspace_slot != bound->owner_slot &&
+                homes->fixed_array_update_step_count == update.step_count &&
+                homes->fixed_array_update_steps[bound->region.first_step + 1].edge == bound->body_edge);
+        }
+        xr_lir_value_homes_destroy(homes);
+        xrt_billing_owner_drop(billing);
     }
 }
 static void array_set_region_preparations(void) {

@@ -172,6 +172,15 @@ typedef struct XrLirHomeEvent {
     uint32_t array_result, array_index, array_item;
 } XrLirHomeEvent;
 
+typedef struct XrLirFixedArrayUpdateHome {
+    XrLirArraySetRegion region;
+    /* The actual selected BODY edge and registered frame slots. The ordinary
+     * entry/exit still publish their original arguments. A common slot alone
+     * proves neither uniqueness nor permission to use the element pointer. */
+    uint32_t body_edge;
+    size_t owner_slot, workspace_slot;
+} XrLirFixedArrayUpdateHome;
+
 typedef struct XrLirValueHomes {
     uint32_t source_function, value_count, result_type, unmodeled;
     const XrLirValueHome *values; /* Indexed by SSA ID, including unused zero. */
@@ -217,6 +226,9 @@ typedef struct XrLirValueHomes {
     const XrLirArraySetRegion *array_push_windows;
     const XrLirArraySetRegionStep *array_push_steps;
     uint32_t array_push_window_count, array_push_step_count;
+    const XrLirFixedArrayUpdateHome *fixed_array_updates;
+    const XrLirArraySetRegionStep *fixed_array_update_steps;
+    uint32_t fixed_array_update_count, fixed_array_update_step_count;
 } XrLirValueHomes;
 
 /* Only for consumers of common homes and the exact LIR edge. Raw execution
