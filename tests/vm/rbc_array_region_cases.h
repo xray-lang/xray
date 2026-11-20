@@ -234,14 +234,22 @@ static void rbc_fixed_array_leaf_locations(void) {
         {.operation=XR_RBC_VALUE_ARRAY,.result=RESULT,.index=XR_LIR_ARRAY_OP_GET,.count=2},
         {.operation=XR_RBC_VALUE_ARRAY,.index=XR_LIR_ARRAY_OP_SET,.count=3},
         {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX},
+        {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX},
+        {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX},
+        {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX},
+        {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX},
         {.operation=XR_RBC_VALUE_BINDING_READ}
     };
     const XrRbcArrayRegionAccess roles[]={
         {.region=1,.fixed=true}, {.region=1,.fixed=true}, {.region=1,.fixed=true},
-        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY}, {.region=1,.fixed=true}
+        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY},
+        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_LATCH},
+        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_ENTRY},
+        {.region=1,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_EXIT},
+        {.region=2,.fixed=true,.fixed_edge=XR_LIR_ARRAY_REGION_EDGE_BODY}, {.region=1,.fixed=true}
     };
     const XrRbcValueCode code={.locations=locations,.value_count=RESULT,.arguments=args,.argument_count=3,
-        .accesses=accesses,.access_count=5,.array_region_accesses=roles};
+        .accesses=accesses,.access_count=sizeof(accesses)/sizeof(accesses[0]),.array_region_accesses=roles};
     XrtManagedHeader owner={0};
     int64_t elements[]={7,11,13};
     const RbcArrayRegionState ready={.phase=RBC_ARRAY_REGION_ACTIVE,
@@ -254,11 +262,16 @@ static void rbc_fixed_array_leaf_locations(void) {
     XrRbcStack stack={.values=&values,.depth=1,.frames=&frame,.slots=slots,.spills=spills};
     XrtManagedStatus status=XRT_MANAGED_OK;
     CHECK(!rbc_value_try_fixed_array_leaf(&stack,0,&status) && slots[2].bits==99);
+    CHECK(!rbc_value_try_fixed_array_leaf(&stack,3,&status) && !rbc_value_try_fixed_array_leaf(&stack,4,&status));
     state=ready; activation.active_array_region=1; activation.owned_code=false;
     CHECK(!rbc_value_try_fixed_array_leaf(&stack,0,&status) && slots[2].bits==99);
-    activation.owned_code=true;
     CHECK(!rbc_value_try_fixed_array_leaf(&stack,3,&status) && !rbc_value_try_fixed_array_leaf(&stack,4,&status));
-    CHECK(state.phase==RBC_ARRAY_REGION_ACTIVE && activation.active_array_region==1);
+    activation.owned_code=true;
+    CHECK(rbc_value_try_fixed_array_leaf(&stack,3,&status) && rbc_value_try_fixed_array_leaf(&stack,4,&status));
+    CHECK(!rbc_value_try_fixed_array_leaf(&stack,5,&status) && !rbc_value_try_fixed_array_leaf(&stack,6,&status) &&
+        !rbc_value_try_fixed_array_leaf(&stack,7,&status) && !rbc_value_try_fixed_array_leaf(&stack,8,&status));
+    CHECK(state.phase==RBC_ARRAY_REGION_ACTIVE && activation.active_array_region==1 &&
+        state.cache.owner==&owner && !state.completed_set && frame.pc==19 && status==XRT_MANAGED_OK);
     CHECK(rbc_value_try_fixed_array_leaf(&stack,0,&status) && status==XRT_MANAGED_OK && slots[2].bits==3);
     CHECK(rbc_value_try_fixed_array_leaf(&stack,1,&status) && status==XRT_MANAGED_OK && slots[2].bits==11);
     CHECK(rbc_value_try_fixed_array_leaf(&stack,2,&status) && status==XRT_MANAGED_OK && elements[1]==23);

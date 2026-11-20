@@ -1276,7 +1276,13 @@ static inline bool rbc_value_try_fixed_array_leaf(XrRbcStack *stack, uint32_t in
         !activation->owned_code || !activation->array_regions || index >= activation->code->access_count) return false;
     const XrRbcValueCode *code = activation->code;
     const XrRbcArrayRegionAccess *role = &code->array_region_accesses[index];
-    if (!role->fixed || role->fixed_edge || role->region != activation->active_array_region) return false;
+    if (!role->fixed || role->region != activation->active_array_region) return false;
+    /* These sealed markers carry no transfers. BODY tries the guard only
+     * while eligible, and LATCH advances only a cold window. Neither acts
+     * once this exact window is active. ENTRY and EXIT still change state. */
+    if (role->fixed_edge)
+        return role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_BODY ||
+            role->fixed_edge == XR_LIR_ARRAY_REGION_EDGE_LATCH;
     const XrRbcValueAccess *access = &code->accesses[index];
     if (access->operation != XR_RBC_VALUE_ARRAY ||
         (access->index != XR_LIR_ARRAY_OP_LEN && access->index != XR_LIR_ARRAY_OP_GET && access->index != XR_LIR_ARRAY_OP_SET))
