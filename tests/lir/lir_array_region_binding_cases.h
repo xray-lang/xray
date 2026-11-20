@@ -161,7 +161,7 @@ static void array_region_binding_shared_check(const XrLirArrayRegionBindings *bi
     xr_lir_array_region_bindings_destroy(alone);
 }
 static void array_region_binding_mixed(bool reverse,unsigned read_mask) {
-    ArraySetRegionFixture c=array_region_binding_loops(true,reverse,true,read_mask);
+    ArraySetRegionFixture c=array_region_binding_loops(true,reverse,true,read_mask,false);
     XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
     XrLirValueLayoutKey roots[]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
     XrLirValueLayouts *set=NULL; HOME(xr_lir_value_layouts_create(c.module,roots,4,billing,&set));
@@ -320,10 +320,57 @@ static void fixed_array_home_allocation_faults(void) {
     xrt_billing_owner_drop(billing);
 }
 
+static void array_region_binding_local_fallback(void) {
+    /* Borrow the second Array before its loop. Only its entry owner fails the
+     * closed-region proof. The stationary update starts after that call. */
+    ArraySetRegionFixture c=array_region_binding_loops(false,false,true,0,true);
+    XrLirOwnershipPlan *plan=NULL;
+    OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=c.module},&plan,NULL));
+    OK(xr_lir_ownership_array_regions_verify(c.module,plan));
+    XrLirOwnershipFunction function;
+    OK(xr_lir_ownership_function_at(plan,c.function.id,&function));
+    CHECK(function.region_count==1 && function.fixed_update_count==1 && !function.push_window_count);
+    XrLirArraySetRegion legacy,fixed;
+    OK(xr_lir_ownership_array_region_at(plan,function.region_offset,&legacy));
+    OK(xr_lir_ownership_fixed_array_update_at(plan,function.fixed_update_offset,&fixed));
+    CHECK(legacy.entry_block==c.entry.id && legacy.header!=c.header.id &&
+        legacy.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET &&
+        legacy.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN);
+    CHECK(fixed.header==c.header.id && fixed.entry_block==legacy.exit_block && fixed.exit_block==c.exit.id &&
+        fixed.primary_kind==XR_LIR_ARRAY_REGION_PRIMARY_SET &&
+        fixed.range.kind==XR_LIR_ARRAY_SET_RANGE_UNIT_FORWARD_LT_SAME_LEN);
+
+    XrtBillingOwner *billing=NULL; MANAGED(xrt_billing_owner_new(NULL,SIZE_MAX,&billing));
+    XrLirValueLayoutKey roots[]={{XR_LIR_UNIT,0,0},{XR_LIR_I1,0,0},{XR_LIR_I64,0,0},{XR_LIR_ARRAY,XR_LIR_I64,0}};
+    XrLirValueLayouts *set=NULL; HOME(xr_lir_value_layouts_create(c.module,roots,4,billing,&set));
+    XrLirValueHomes *homes=NULL;
+    HOME(xr_lir_value_homes_create(&(XrLirValueHomesRequest){c.module,c.function,set,plan},&homes));
+    CHECK(homes->array_region_count==1 && homes->fixed_array_update_count==1);
+    XrLirArrayRegionBindings *bindings=NULL;
+    HOME(xr_lir_array_region_bindings_create(homes,set,&bindings));
+    array_region_binding_check(bindings,homes,c.module,c.function);
+    CHECK(bindings->regions[0].region.header==legacy.header);
+    const XrLirFixedArrayUpdateHome *home=&homes->fixed_array_updates[0];
+    CHECK(home->region.header==fixed.header && home->body_edge==1 && home->region.exit_edge==2);
+    XrtArrayI64RegionSlot slots[XR_LIR_FIXED_ARRAY_GUARD_SLOT_COUNT];
+    XrtArrayI64RegionSpec guard=xr_lir_fixed_array_guard_spec(homes,home,slots);
+    CHECK(guard.slots==slots && guard.slot_count==2 && guard.canonical==0);
+    CHECK(slots[0].slot==homes->values[fixed.canonical_value].first_owner &&
+        slots[0].offset==homes->values[fixed.canonical_value].offset);
+    CHECK(slots[1].slot==home->workspace_slot && slots[1].slot!=slots[0].slot &&
+        slots[1].offset==homes->frame.owned_offsets[home->workspace_slot]);
+
+    xr_lir_array_region_bindings_destroy(bindings); xr_lir_value_homes_destroy(homes);
+    xr_lir_value_layouts_destroy(set); xr_lir_ownership_plan_destroy(plan); xr_lir_module_destroy(c.module);
+    CHECK(!live && !home_live_bytes() && xrt_billing_owner_stats(billing).blocks==1);
+    xrt_billing_owner_drop(billing);
+}
+
 static void array_region_binding_projection(unsigned shape) {
     if (!shape) {
         array_push_binding_projection();
         fixed_array_home_allocation_faults();
+        array_region_binding_local_fallback();
     }
     if (!shape) for (unsigned mask=1;mask<=2;++mask) {
         array_region_binding_mixed(false,mask); array_region_binding_mixed(true,mask);
