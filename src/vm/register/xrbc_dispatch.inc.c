@@ -49,8 +49,10 @@
 #define XR_RBC_VALUE_EXECUTE() do { \
     uint32_t value_index = instruction >> 16; \
     XrtManagedStatus leaf_status = XRT_MANAGED_OK; \
-    if (rbc_value_try_fixed_array_leaf(stack, value_index, &leaf_status)) { \
+    uint32_t leaf_words = rbc_value_try_fixed_array_leaf(stack, value_index, &leaf_status); \
+    if (leaf_words) { \
         if (leaf_status != XRT_MANAGED_OK) xrt_native_managed_failure(leaf_status, XR_RBC_SOURCE()); \
+        pc += leaf_words - 1; \
         break; \
     } \
     XrRbcStatus status = xr_rbc_values_step(module, stack, value_index, pc, XR_RBC_SOURCE()); \

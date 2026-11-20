@@ -92,6 +92,7 @@ static bool rbc_lir_array_region_role(RbcLirCompiler *c,const XrRbcValueAccess *
                 access->operation == XR_RBC_VALUE_BINDING_NEW || access->operation == XR_RBC_VALUE_BINDING_READ)) {
             role->region = region;
             role->fixed = true;
+            role->binding_identity = rbc_value_binding_identity(c->value_code, *access);
             return true;
         }
     }

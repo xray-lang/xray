@@ -583,6 +583,10 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     } else if (op != access_op) return false;
     if (op != XR_RBC_VALUE_ACCESS && (!xr_rbc_module_code_owner(module) ||
         (code->array_region_accesses && code->array_region_accesses[index].region))) return false;
+    const XrRbcArrayRegionAccess *region = code->array_region_accesses ? &code->array_region_accesses[index] : NULL;
+    if (region && region->binding_identity &&
+        (!xr_rbc_module_code_owner(module) || !region->fixed || !region->region || region->fixed_edge ||
+         (a.operation != XR_RBC_VALUE_BINDING_NEW && a.operation != XR_RBC_VALUE_BINDING_READ))) return false;
     if (a.operation!=XR_RBC_VALUE_CALL && a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY &&
         a.operation!=XR_RBC_VALUE_MAP && a.operation!=XR_RBC_VALUE_SET && a.operation!=XR_RBC_VALUE_MAP_LITERAL && a.operation!=XR_RBC_VALUE_RECORD_NEW &&
         a.operation!=XR_RBC_VALUE_BINDING_NEW && a.operation!=XR_RBC_VALUE_BINDING_WRITE &&
@@ -734,6 +738,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_BINDING_NEW: case XR_RBC_VALUE_BINDING_READ:
     case XR_RBC_VALUE_BINDING_WRITE: case XR_RBC_VALUE_BINDING_DROP:
         return rbc_value_binding_access_valid(module,code,function,a) &&
+            (!region || !region->binding_identity || rbc_value_binding_identity(code,a)) &&
             (!a.index || !code->homes->events[a.index-1].forwarding_mode ||
              rbc_value_binding_forwarding_words(function,code,(uint32_t)index,pc));
     case XR_RBC_VALUE_EDGE:

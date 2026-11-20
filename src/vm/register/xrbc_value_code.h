@@ -98,6 +98,7 @@ typedef struct XrRbcArrayRegionAccess {
     uint32_t region;
     uint8_t fixed_edge; /* Selected physical edge marker, independent of HomeEdge. */
     bool fixed;
+    bool binding_identity; /* Admitted forwarding pair shares a single Frame slot. */
     XrLirArrayRegionOperation operation;
 } XrRbcArrayRegionAccess;
 
@@ -148,6 +149,27 @@ typedef struct XrRbcValueCode {
 
 static inline size_t rbc_value_legacy_array_region_count(const XrRbcValueCode *code) {
     return code->array_regions ? code->array_regions->region_count : 0;
+}
+
+static inline bool rbc_value_binding_forwarding_places(const XrRbcValueCode *code,
+    XrRbcValueAccess access, XrtManagedFrameForward *places) {
+    bool create = access.operation == XR_RBC_VALUE_BINDING_NEW;
+    if ((!create && access.operation != XR_RBC_VALUE_BINDING_READ) || !access.index) return false;
+    const XrLirValueHomes *homes = code->homes;
+    XR_DCHECK(homes && access.index <= homes->event_count, "binding events have their common homes");
+    if (homes->events[access.index - 1].forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE) return false;
+    const XrLirHomeBinding *binding = &homes->bindings[create ? access.result : access.source];
+    const XrLirValueHome *value = &homes->values[create ? access.source : access.result];
+    *places = (XrtManagedFrameForward){create ? value->first_owner : binding->first_owner,
+        create ? value->offset : binding->offset, create ? binding->first_owner : value->first_owner,
+        create ? binding->offset : value->offset};
+    return true;
+}
+
+static inline bool rbc_value_binding_identity(const XrRbcValueCode *code, XrRbcValueAccess access) {
+    XrtManagedFrameForward places;
+    return rbc_value_binding_forwarding_places(code, access, &places) &&
+        places.source_slot == places.destination_slot && places.source_offset == places.destination_offset;
 }
 
 /* A leaf needs no call, return or owning destination. Both emission and

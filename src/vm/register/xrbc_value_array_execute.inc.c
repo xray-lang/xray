@@ -7,23 +7,13 @@
  * xrbc_value_array_execute.inc.c - Fixed Array owners and actual binding transactions
  */
 static inline bool rbc_value_binding_forward(RbcValueActivation *activation, XrRbcValueAccess access) {
-    bool create = access.operation == XR_RBC_VALUE_BINDING_NEW;
-    if ((!create && access.operation != XR_RBC_VALUE_BINDING_READ) ||
-        !activation->owned_code || !access.index) return false;
-    const XrLirValueHomes *homes = activation->code->homes;
-    XR_DCHECK(homes && access.index <= homes->event_count, "owned binding events were admitted");
+    XrtManagedFrameForward places;
+    if (!activation->owned_code || !rbc_value_binding_forwarding_places(activation->code, access, &places))
+        return false;
     /* Admission paired this immutable instruction with its release word.
      * Only the current Frame's eligibility to move can vary at execution. */
-    if (homes->events[access.index - 1].forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE) return false;
-    const XrLirHomeBinding *binding = &homes->bindings[create ? access.result : access.source];
-    const XrLirValueHome *home = &homes->values[create ? access.source : access.result];
-    /* Admission verified the shared owner field. The logical COPY retains into
-     * that same field and the paired DROP releases it: the pair is the identity. */
-    if (binding->first_owner == home->first_owner) return true;
-    return xrt_managed_frame_try_forward(activation->frame,activation->payload,&activation->frame_locations,
-        (XrtManagedFrameForward){create ? home->first_owner : binding->first_owner,
-            create ? home->offset : binding->offset,create ? binding->first_owner : home->first_owner,
-            create ? binding->offset : home->offset});
+    return places.source_slot == places.destination_slot ||
+        xrt_managed_frame_try_forward(activation->frame, activation->payload, &activation->frame_locations, places);
 }
 static XrtManagedStatus rbc_value_binding_place(const XrRbcModule *module,XrRbcStack *stack,RbcValueOrigin origin,
     XrtExternalOwner *external,XrtPlace *place) {
