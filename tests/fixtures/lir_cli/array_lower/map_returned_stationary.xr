@@ -1,0 +1,36 @@
+fn one() -> Map<string, i64> {
+    return {"x": 7, "y": 9}
+}
+
+fn two() -> Map<string, i64> {
+    return {"x": 11, "y": 13}
+}
+
+fn readOne(n: i64) -> i64 {
+    const table = one()
+    const key = "x"
+    var sum = 0
+    var i = 0
+    while (i < n) {
+        sum += table[key]
+        i += 1
+    }
+    return sum
+}
+
+fn readEither(first: bool, n: i64) -> i64 {
+    const table = first ? one() : two()
+    const key = "x"
+    var sum = 0
+    var i = 0
+    while (i < n) {
+        sum += table[key]
+        i += 1
+    }
+    return sum
+}
+
+print(readOne(0))
+print(readOne(3))
+print(readEither(true, 3))
+print(readEither(false, 3))

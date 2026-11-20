@@ -512,6 +512,10 @@ static bool lir_home_container_chain_start(const XrLirModule *module, const XrLi
     }
     if (definition->type != XR_LIR_MAP_STRING_I64) return false;
     if (definition->op == XR_LIR_MAP_LITERAL_NEW || definition->op == XR_LIR_MAP_RETAIN) return true;
+    /* The verified internal call publishes a caller-owned Map. Its ordinary
+     * landing and pending slot stay in use even if later MOVEs share a home. */
+    if (definition->op == XR_LIR_CALL)
+        return module->functions[definition->callee - 1].kind == XR_LIR_FUNCTION_DEFINITION;
     /* Reading a local Map Cell creates an independent owning snapshot. */
     if (definition->op == XR_LIR_CELL_READ)
         return definition->operand_count == 1 &&

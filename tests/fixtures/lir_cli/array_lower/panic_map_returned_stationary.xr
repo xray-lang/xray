@@ -1,0 +1,17 @@
+fn makeTable() -> Map<string, i64> {
+    return {"x": 7, "y": 9}
+}
+
+fn readMissing(n: i64) -> i64 {
+    const table = makeTable()
+    const key = "absent"
+    var sum = 0
+    var i = 0
+    while (i < n) {
+        sum += table[key]
+        i += 1
+    }
+    return sum
+}
+
+print(readMissing(3))

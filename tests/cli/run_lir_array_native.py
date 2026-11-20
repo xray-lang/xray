@@ -30,7 +30,8 @@ def main() -> None:
              "tuple_values", "tuple_flow", "tuple_mixed_fields", "tuple_mixed_owned", "tuple_array_state", "tuple_array_return",
              "scalar_ref_call", "scalar_ref_array_callable",
              "map_values", "map_bindings", "map_pod_calls", "map_fixed_operations", "record_values", "record_nullable", "record_lifetimes", "record_multileaf", "record_nullable_pod", "record_state_first_read", "record_generic_branch", "record_generic_owned_branch", "nullable_managed",
-             "panic_map_index_missing", "panic_map_direct_missing", "panic_map_formal_missing", "panic_map_stationary_cleanup", "panic_nullable_managed", "callable_map_capture", "callable_map_value", "callable_unit_owned", "reject_owned_binding",
+             "panic_map_index_missing", "panic_map_direct_missing", "panic_map_formal_missing", "panic_map_stationary_cleanup",
+             "panic_map_returned_stationary", "panic_nullable_managed", "callable_map_capture", "callable_map_value", "callable_unit_owned", "reject_owned_binding",
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "large", "large_string",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
@@ -52,7 +53,7 @@ def main() -> None:
              "string_join", "string_append_loop", "string_append_assignment", "string_append_grouping",
              "string_append_invariant", "string_append_side_state", "string_parameter_loop",
              "panic_nullable_string_append", "map_snapshots", "map_display",
-             "map_stationary_reads", "map_mixed_scalar_cycle", "map_local_forwarding", "map_edit_lifetime",
+             "map_stationary_reads", "map_returned_stationary", "map_mixed_scalar_cycle", "map_local_forwarding", "map_edit_lifetime",
              "map_key_mutation", "map_borrowed_literal_key",
              "set_values")
     unknown = sorted(set(args.case) - set(cases))
@@ -166,15 +167,23 @@ def main() -> None:
             updates = re.findall(r"xrt_native_map_update_place\(\(XrtPlace\)\{\.frame=xrl_frame, \.slot=(\d+),",
                                  generated_text)
             assert len(updates) == (2 if name == "map_edit_lifetime" else 1) and len(set(updates)) == 1
-        if name == "map_stationary_reads":
-            readers = {function for function, body in re.findall(
+        if name in ("map_stationary_reads", "map_returned_stationary", "panic_map_returned_stationary"):
+            readers = {function: body for function, body in re.findall(
                 r"^static int64_t xrl_f(\d+)\([^\n]*\) \{\n(.*?)^}", generated_text, re.MULTILINE | re.DOTALL
             ) if "xrt_native_map_index(" in body}
             moving = {function for function, body in re.findall(
                 r"^static XrtManagedStatus xrl_edge_(\d+)_\d+_\d+\([^\n]*\) \{\n(.*?)^}",
                 generated_text, re.MULTILINE | re.DOTALL
             ) if "xrt_place_edge_transfer(owners," in body}
-            assert len(readers) == 4 and len(readers & moving) == 2
+            if name == "map_stationary_reads":
+                assert len(readers) == 4 and len(readers.keys() & moving) == 2
+            else:
+                # One returned owner can stay in its caller landing. A join
+                # with independent producers keeps the original edge moves.
+                landings = sorted((len(re.findall(r"\bxrl_f\d+\(\(XrlLanding_\d+\)\{", body)), function in moving)
+                                  for function, body in readers.items())
+                expected = [(1, False), (2, True)] if name == "map_returned_stationary" else [(1, False)]
+                assert landings == expected, (name, landings)
         # The original large-case oracles check both length and element 299.
         # Keep that executed span check independent of C literal spelling.
         for ordinal, compiler in enumerate(args.compiler or [None]):
