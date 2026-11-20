@@ -1,0 +1,175 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xlir_c_fixed_array_update.inc.c - Checked projection of a fixed Array update loop
+ *
+ * KEY CONCEPT:
+ *   The original first iteration and exit still execute through ordinary C.
+ *   A successful guard borrows the stable owner only for the remaining loop.
+ */
+
+static LirCFixedArrayEdge *c_fixed_array_edge(LirCFixedArrayEdge *index, uint32_t block, uint32_t edge) {
+    return &index[(size_t)block * 2 + edge - 1];
+}
+
+static void c_fixed_array_prepare(LirC *c, uint32_t function, LirCArrayRegions *receiver) {
+    const XrLirValueHomes *homes = c->value_homes[function - 1];
+    XrLirFunctionView view;
+    if (xr_lir_function_view(c->request->module, (XrLirFunction){c->request->module, function}, &view) != XR_LIR_OK) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array update lost its function");
+        return;
+    }
+    if ((uint64_t)view.block_count + 1 > SIZE_MAX / 2 / sizeof(*receiver->fixed_edges)) {
+        c_error(c, XR_LIR_C_OVERFLOW, "fixed Array edge index exceeds address space");
+        return;
+    }
+    void *memory = NULL;
+    if (!c_resource(c, xr_compile_resources_calloc(c->request->resources,
+        ((size_t)view.block_count + 1) * 2, sizeof(*receiver->fixed_edges), &memory))) return;
+    receiver->fixed_edges = memory;
+    c->array_local_runtime = true;
+    for (uint32_t n = 0; n < homes->fixed_array_update_count && c_request_poll(c); ++n) {
+        const XrLirFixedArrayUpdateHome *row = &homes->fixed_array_updates[n];
+        const XrLirArraySetRegion *r = &row->region;
+        if (!r->entry_block || r->entry_block > view.block_count || !r->entry_edge || r->entry_edge > 2 ||
+            !r->header || r->header > view.block_count || !r->latch || r->latch > view.block_count ||
+            !row->body_edge || row->body_edge > 2 || !r->exit_edge || r->exit_edge > 2 ||
+            r->first_step > homes->fixed_array_update_step_count || r->step_count < 3 ||
+            r->step_count > homes->fixed_array_update_step_count - r->first_step) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array update lost its selected edges");
+            return;
+        }
+        LirCFixedArrayEdge *entry = c_fixed_array_edge(receiver->fixed_edges, r->entry_block, r->entry_edge);
+        LirCFixedArrayEdge *body = c_fixed_array_edge(receiver->fixed_edges, r->header, row->body_edge);
+        LirCFixedArrayEdge *latch = c_fixed_array_edge(receiver->fixed_edges, r->latch, 1);
+        LirCFixedArrayEdge *exit = c_fixed_array_edge(receiver->fixed_edges, r->header, r->exit_edge);
+        if (entry->entry || body->body || latch->latch || exit->exit) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array updates overlap a selected edge");
+            return;
+        }
+        entry->entry = body->body = latch->latch = exit->exit = n + 1;
+    }
+}
+
+static void c_fixed_array_declarations(LirC *c) {
+    if (!c->array_region || !c->array_region->fixed_edges) return;
+    for (uint32_t n = 0; n < c->homes->fixed_array_update_count && c_request_poll(c); ++n) {
+        c_format(c, "    unsigned xrl_fixed_phase_%" PRIu32 " = 0;\n"
+            "    XrtArrayI64RegionCache xrl_fixed_cache_%" PRIu32 " = {0};\n", n + 1, n + 1);
+    }
+}
+
+static void c_fixed_array_guard(LirC *c, uint32_t n, uint32_t target) {
+    const XrLirFixedArrayUpdateHome *row = &c->homes->fixed_array_updates[n - 1];
+    const size_t *offsets = c->homes->frame.owned_offsets;
+    c_format(c, "    if (xrl_fixed_phase_%" PRIu32 " == 1) {\n"
+        "        static const XrtArrayI64RegionSlot xrl_fixed_slots[] = {{%zu, %zu}, {%zu, %zu}};\n"
+        "        const XrtArrayI64RegionSpec xrl_fixed_spec = {xrl_fixed_slots, 2, 0};\n"
+        "        const XrtArrayI64RegionContext xrl_fixed_context = {xrl_frame, xrl_payload,"
+        " &xrl_frame_locations, &xrl_frame_%" PRIu32 "};\n"
+        "        if (", n, row->owner_slot, offsets[row->owner_slot], row->workspace_slot,
+        offsets[row->workspace_slot], c->function.id);
+    c_value(c, row->region.range.iv);
+    c_format(c, " >= INT64_C(0) && xrt_array_i64_region_try_begin(&xrl_fixed_context, &xrl_fixed_spec, true,"
+        " &xrl_fixed_cache_%" PRIu32 ") && (uint64_t)", n);
+    c_value(c, row->region.range.iv);
+    c_format(c, " < xrl_fixed_cache_%" PRIu32 ".length) {\n", n);
+    c_array_held_clear(c);
+    c_format(c, "            goto xrl_fixed_%" PRIu32 "_bb%" PRIu32 ";\n"
+        "        }\n"
+        "        xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
+        "        xrl_fixed_phase_%" PRIu32 " = 2;\n    }\n", n, target, n, n);
+}
+
+static void c_fixed_array_access(LirC *c, uint32_t n, const XrLirInstructionView *v) {
+    XrLirArrayIntrinsic shape = {0};
+    if (!c_array_intrinsic(c, v, &shape)) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array update lost its original operation");
+        return;
+    }
+    if (shape.operation == XR_LIR_ARRAY_OP_LEN) {
+        c_format(c, "    v%" PRIu32 " = (int64_t)xrl_fixed_cache_%" PRIu32 ".length;\n", v->result, n);
+        return;
+    }
+    if (shape.operation != XR_LIR_ARRAY_OP_GET && shape.operation != XR_LIR_ARRAY_OP_SET) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array update cannot change its backing size");
+        return;
+    }
+    bool read = shape.operation == XR_LIR_ARRAY_OP_GET;
+    c_text(c, "    XRT_ARRAY_I64_REGION_COPY(");
+    if (read) c_format(c, "&v%" PRIu32 ", ", v->result);
+    c_format(c, "xrl_fixed_cache_%" PRIu32 ".elements + (size_t)", n);
+    c_value(c, v->operands[1]);
+    c_text(c, " * sizeof(int64_t)");
+    if (!read) {
+        c_text(c, ", &");
+        c_value(c, v->operands[2]);
+    }
+    c_text(c, ");\n");
+}
+
+static void c_fixed_array_edge_to_body(LirC *c, uint32_t n, const XrLirEdgeView *edge) {
+    c_scalar_edge_values(c, edge);
+    c_format(c, "        goto xrl_fixed_%" PRIu32 "_bb%" PRIu32 ";\n    }\n", n, edge->target);
+}
+
+static void c_fixed_array_block(LirC *c, uint32_t n, const XrLirFixedArrayUpdateHome *row,
+    const XrLirArraySetRegionStep *first, const XrLirArraySetRegionStep *edge) {
+    const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
+    const XrLirBlockData *block = &function->blocks[edge->block - 1];
+    c->block = edge->block;
+    c_format(c, "xrl_fixed_%" PRIu32 "_bb%" PRIu32 ": ;\n", n, c->block);
+    for (uint32_t i = 0; i + 1 < block->instruction_count && c_request_poll(c); ++i) {
+        c->instruction = i + 1;
+        if (first != edge && c->instruction == first->instruction) {
+            /* The common home made both halves of this Cell transfer implicit. */
+            i = first->drop - 1;
+            ++first;
+            continue;
+        }
+        const XrLirInstructionView *v = &block->instructions[i].view;
+        if (v->op == XR_LIR_CALL_INTRINSIC) c_fixed_array_access(c, n, v);
+        else {
+            uint32_t source = c->location_cursor;
+            c->source = v->source;
+            c_instruction(c, v);
+            if (source != c->location_cursor) {
+                c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array scalar changed its original source location");
+                return;
+            }
+        }
+    }
+    if (first != edge) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "fixed Array update lost a Cell transfer");
+        return;
+    }
+    const XrLirInstructionView *term = &block->instructions[block->instruction_count - 1].view;
+    if (c->block == row->region.header) {
+        c_text(c, "    if (");
+        if (row->body_edge == 2) c_text(c, "!");
+        c_value(c, term->operands[0]);
+        c_text(c, ") {\n");
+        c_fixed_array_edge_to_body(c, n, &term->edges[row->body_edge - 1]);
+        c_format(c, "    }\n    xrl_fixed_cache_%" PRIu32 " = (XrtArrayI64RegionCache){0};\n"
+            "    goto xrl_fixed_exit_%" PRIu32 ";\n", n, n);
+    } else c_fixed_array_edge_to_body(c, n, &term->edges[0]);
+}
+
+static void c_fixed_array_clones(LirC *c) {
+    if (!c->array_region || !c->array_region->fixed_edges) return;
+    for (uint32_t n = 0; n < c->homes->fixed_array_update_count && c_request_poll(c); ++n) {
+        const XrLirFixedArrayUpdateHome *row = &c->homes->fixed_array_updates[n];
+        const XrLirArraySetRegionStep *steps = c->homes->fixed_array_update_steps + row->region.first_step;
+        const XrLirArraySetRegionStep *first = steps + 1;
+        /* The original entry and exit are outside this clone. */
+        for (uint32_t s = 1; s < row->region.step_count - 1 && c_request_poll(c); ++s) {
+            const XrLirArraySetRegionStep *step = &steps[s];
+            if (step->kind != XR_LIR_ARRAY_SET_REGION_EDGE_MOVE) continue;
+            c_fixed_array_block(c, n + 1, row, first, step);
+            first = step + 1;
+        }
+    }
+}

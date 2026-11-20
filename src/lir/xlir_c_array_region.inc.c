@@ -22,6 +22,7 @@ static void c_array_regions_destroy(LirC *c) {
     for (uint32_t f = 0; f < xr_lir_function_count(c->request->module); ++f) {
         xr_lir_array_region_bindings_destroy(c->array_regions[f].bindings);
         xr_lir_array_region_bindings_destroy(c->array_regions[f].push_windows);
+        xr_compile_resources_free(c->array_regions[f].fixed_edges);
         xr_compile_resources_free(c->array_regions[f].helpers);
         xr_compile_resources_free(c->array_regions[f].scalars);
     }
@@ -31,7 +32,7 @@ static void c_array_regions_admit(LirC *c) {
     bool needed = false;
     for (uint32_t n = 0; n < c->closure_count; ++n) {
         const XrLirValueHomes *homes = c->value_homes[c->closure[n] - 1];
-        needed |= homes && (homes->array_region_count || homes->array_push_window_count);
+        needed |= homes && (homes->array_region_count || homes->array_push_window_count || homes->fixed_array_update_count);
     }
     if (!needed || !c_request_poll(c)) return;
     void *memory = NULL;
@@ -43,6 +44,8 @@ static void c_array_regions_admit(LirC *c) {
         const XrLirValueHomes *homes = c->value_homes[function - 1];
         if (!homes) continue;
         LirCArrayRegions *receiver = &c->array_regions[function - 1];
+        if (homes->fixed_array_update_count) c_fixed_array_prepare(c, function, receiver);
+        if (c->status != XR_LIR_C_OK) return;
         if (homes->array_push_window_count) {
             if (!c_value_layout_status(c,xr_lir_array_push_window_bindings_create(homes,c->value_layouts,
                 &receiver->push_windows))) return;
