@@ -69,12 +69,35 @@ class Symbol:
 
     @property
     def spelling(self) -> str:
-        """How the symbol is written in the specification registry table."""
+        """How the symbol is written in the specification registry table.
+
+        One parameter is always written T. A symbol with more parameters must
+        name them in _PARAMETER_NAMES, because no single convention fits both
+        keyed containers (K, V) and results with an error channel (T, E).
+        """
+        if self.arity == 0:
+            return self.name
         if self.arity == 1:
             return f"{self.name}<T>"
-        if self.arity == 2:
-            return f"{self.name}<K, V>"
-        return self.name
+        names = _PARAMETER_NAMES.get(self.name)
+        if names is None or len(names) != self.arity:
+            raise ValueError(
+                f"{DEF_RELPATH}: {self.name} takes {self.arity} type parameters; "
+                f"name them in _PARAMETER_NAMES in {Path(__file__).name}"
+            )
+        return f"{self.name}<{', '.join(names)}>"
+
+
+# Parameter names for symbols with more than one type parameter, as the
+# specification spells them. Iterator and Task carry an error channel after
+# their value type; Map and Indexable are keyed.
+_PARAMETER_NAMES: dict[str, tuple[str, ...]] = {
+    "Indexable": ("K", "V"),
+    "Iterator": ("T", "E"),
+    "Map": ("K", "V"),
+    "Task": ("T", "E"),
+    "TaskResult": ("T", "E"),
+}
 
 
 @dataclass

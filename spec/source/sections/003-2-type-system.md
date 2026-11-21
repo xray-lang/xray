@@ -67,7 +67,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `EnumPayloads<T>` | 解析器内建 |
 | `EnumVariant<T>` | 解析器内建 |
 | `EnumVariants<T>` | 解析器内建 |
-| `Iterator<T>` | prelude |
+| `Iterator<T, E>` | prelude |
 | `JSON.Decodable` | 解析器内建 |
 | `JSON.Encodable` | 解析器内建 |
 | `JSON.Object` | 解析器内建 |
@@ -89,8 +89,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Range` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
-| `StringBuilder` | prelude |
-| `Task<T>` | 解析器内建 |
+| `Task<T, E>` | 解析器内建 |
 | `Thread<T>` | prelude |
 
 **内置 enum**
@@ -100,10 +99,13 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Ordering` | `Relaxed` \| `Acquire` \| `Release` \| `AcquireRelease` \| `SeqCst` |
 | `Endian` | `Native` \| `LE` \| `BE` |
 | `Utf8Error` | `InvalidUtf8` |
+| `Cancelled` | `Cancelled` |
+| `Timeout` | `Timeout` |
 | `NumberParseError` | `InvalidSyntax` \| `OutOfRange` |
 | `StringSliceError` | `InvalidByteRange` |
 | `CompressionError` | `InvalidData` |
 | `CryptoError` | `InvalidLength` |
+| `StringPatternError` | `EmptyPattern` |
 | `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
 | `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
 | `TaskResult<T, E>` | `Success` \| `Error` \| `Panic` \| `Cancelled` |
@@ -127,6 +129,9 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 | 符号 |
 |--|
+| `AtomicBoolean` |
+| `AtomicNumber` |
+| `AtomicValue` |
 | `Equal` |
 
 **故意不提供的名字**
@@ -1202,7 +1207,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `EnumPayloads<T>` | resolver built-in |
 | `EnumVariant<T>` | resolver built-in |
 | `EnumVariants<T>` | resolver built-in |
-| `Iterator<T>` | prelude |
+| `Iterator<T, E>` | prelude |
 | `JSON.Decodable` | resolver built-in |
 | `JSON.Encodable` | resolver built-in |
 | `JSON.Object` | resolver built-in |
@@ -1224,8 +1229,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Range` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
-| `StringBuilder` | prelude |
-| `Task<T>` | resolver built-in |
+| `Task<T, E>` | resolver built-in |
 | `Thread<T>` | prelude |
 
 **Built-in enums**
@@ -1235,10 +1239,13 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Ordering` | `Relaxed` \| `Acquire` \| `Release` \| `AcquireRelease` \| `SeqCst` |
 | `Endian` | `Native` \| `LE` \| `BE` |
 | `Utf8Error` | `InvalidUtf8` |
+| `Cancelled` | `Cancelled` |
+| `Timeout` | `Timeout` |
 | `NumberParseError` | `InvalidSyntax` \| `OutOfRange` |
 | `StringSliceError` | `InvalidByteRange` |
 | `CompressionError` | `InvalidData` |
 | `CryptoError` | `InvalidLength` |
+| `StringPatternError` | `EmptyPattern` |
 | `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
 | `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
 | `TaskResult<T, E>` | `Success` \| `Error` \| `Panic` \| `Cancelled` |
@@ -1262,6 +1269,9 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 
 | Symbol |
 |--|
+| `AtomicBoolean` |
+| `AtomicNumber` |
+| `AtomicValue` |
 | `Equal` |
 
 **Deliberately absent names**

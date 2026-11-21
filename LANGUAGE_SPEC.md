@@ -781,7 +781,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `EnumPayloads<T>` | resolver built-in |
 | `EnumVariant<T>` | resolver built-in |
 | `EnumVariants<T>` | resolver built-in |
-| `Iterator<T>` | prelude |
+| `Iterator<T, E>` | prelude |
 | `JSON.Decodable` | resolver built-in |
 | `JSON.Encodable` | resolver built-in |
 | `JSON.Object` | resolver built-in |
@@ -803,8 +803,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Range` | prelude |
 | `Set<T>` | prelude |
 | `Slice<T>` | prelude |
-| `StringBuilder` | prelude |
-| `Task<T>` | resolver built-in |
+| `Task<T, E>` | resolver built-in |
 | `Thread<T>` | prelude |
 
 **Built-in enums**
@@ -814,10 +813,13 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Ordering` | `Relaxed` \| `Acquire` \| `Release` \| `AcquireRelease` \| `SeqCst` |
 | `Endian` | `Native` \| `LE` \| `BE` |
 | `Utf8Error` | `InvalidUtf8` |
+| `Cancelled` | `Cancelled` |
+| `Timeout` | `Timeout` |
 | `NumberParseError` | `InvalidSyntax` \| `OutOfRange` |
 | `StringSliceError` | `InvalidByteRange` |
 | `CompressionError` | `InvalidData` |
 | `CryptoError` | `InvalidLength` |
+| `StringPatternError` | `EmptyPattern` |
 | `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
 | `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
 | `TaskResult<T, E>` | `Success` \| `Error` \| `Panic` \| `Cancelled` |
@@ -841,6 +843,9 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 
 | Symbol |
 |--|
+| `AtomicBoolean` |
+| `AtomicNumber` |
+| `AtomicValue` |
 | `Equal` |
 
 **Deliberately absent names**
