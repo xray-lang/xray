@@ -29,6 +29,7 @@ typedef struct XrCliTestTally {
 
 typedef struct XrCliTestDiscoverOpts {
     const char *filter; /* NULL keeps every discovered test */
+    FILE *report;
     bool verbose;
 } XrCliTestDiscoverOpts;
 
@@ -75,10 +76,10 @@ static bool test_discover(const XrXirModule *module, const XrCliTestDiscoverOpts
         else if (identity->test_role == XR_XIR_TEST_ROLE_SKIP) ++tally->skipped;
         else ++tally->tests;
         if (!opts->verbose) continue;
-        fprintf(stdout, "  %-11s %s", test_role_name(identity->test_role), name);
+        fprintf(opts->report, "  %-11s %s", test_role_name(identity->test_role), name);
         if (identity->test_timeout_seconds)
-            fprintf(stdout, " timeout=%u", identity->test_timeout_seconds);
-        fprintf(stdout, "\n");
+            fprintf(opts->report, " timeout=%u", identity->test_timeout_seconds);
+        fprintf(opts->report, "\n");
     }
     return true;
 }
@@ -110,8 +111,10 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     }
     if (!test_refuse_execution_options(inv)) return XR_CLI_EXIT_USAGE;
     XrCliTestDiscoverOpts discover = {
-        xr_cli_opt_string(&inv->options, "filter", NULL),
-        xr_cli_opt_present(&inv->options, "verbose") && !quiet,
+        .filter = xr_cli_opt_string(&inv->options, "filter", NULL),
+        /* Nothing runs yet, so stdout stays empty and the report goes to stderr. */
+        .report = stderr,
+        .verbose = xr_cli_opt_present(&inv->options, "verbose") && !quiet,
     };
     XrCliFileList files;
     XrCliWalkOpts walk = xr_cli_walk_defaults();
@@ -167,8 +170,8 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
                 total_tests += tally.tests;
                 total_skipped += tally.skipped;
                 total_hooks += tally.hooks;
-                if (!quiet)
-                    fprintf(stdout, "xray test: %s: %u test(s), %u skipped, %u hook(s)\n",
+                if (!quiet && discover.verbose)
+                    fprintf(discover.report, "xray test: %s: %u test(s), %u skipped, %u hook(s)\n",
                         files.paths[f], tally.tests, tally.skipped, tally.hooks);
             } else {
                 ++failures;
@@ -181,20 +184,20 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
         xr_source_paths_free(&paths);
         xr_source_paths_diagnostic_free(&path_diagnostic);
         if (failures && fail_fast) {
-            if (!quiet) fprintf(stdout, "xray test: stopping after the first failure\n");
+            if (!quiet) fprintf(discover.report, "xray test: stopping after the first failure\n");
             break;
         }
     }
     xr_cli_filelist_free(&files);
     xr_compile_resources_release(resources);
-    if (!quiet)
-        fprintf(stdout, "xray test: discovered %u test(s), %u skipped, %u hook(s)\n",
+    if (!quiet) {
+        if (failures) fprintf(discover.report, "xray test: %d checked file(s) failed\n", failures);
+        /* No test has run, so the results stream stays empty: the discovery
+         * report and the reason it cannot become an outcome both go to stderr. */
+        fprintf(discover.report, "xray test: running tests needs backend test-role startup; "
+            "discovery only\n");
+        fprintf(discover.report, "xray test: discovered %u test(s), %u skipped, %u hook(s)\n",
             total_tests, total_skipped, total_hooks);
-    if (failures) {
-        if (!quiet) fprintf(stdout, "xray test: %d checked file(s) failed\n", failures);
-        return XR_CLI_EXIT_FAIL;
     }
-    if (!quiet)
-        xr_cli_error("test", "running tests needs backend test-role startup; discovery only");
     return XR_CLI_EXIT_FAIL;
 }
