@@ -6,6 +6,7 @@ from ctypes import wintypes
 import os
 import signal
 import subprocess
+import sys
 import time
 
 
@@ -16,25 +17,46 @@ class RecoveryRequired(RuntimeError):
 GROUP_EXIT_SECONDS = 5.0
 
 
-def _kill_group(group: int) -> None:
+def _kill_group(group: int, deadline: float | None = None) -> bool:
     """Kill every remaining member of a command's POSIX process group.
 
     Darwin answers EPERM rather than ESRCH while the group holds only exiting
     processes that have not been reaped yet. Those are retried until the group
     disappears; a group that still refuses after the deadline is reported
     instead of being treated as gone.
+
+    Return True if the signal was accepted, or False if the group was gone.
     """
-    deadline = time.monotonic() + GROUP_EXIT_SECONDS
+    if deadline is None:
+        deadline = time.monotonic() + GROUP_EXIT_SECONDS
     while True:
         try:
             os.killpg(group, signal.SIGKILL)
-            return
+            return True
         except ProcessLookupError:
-            return
+            return False
         except PermissionError:
             if time.monotonic() >= deadline:
                 raise RecoveryRequired("Command process group refused termination") from None
             time.sleep(0.01)
+
+
+def _wait_darwin_group(group: int, deadline: float) -> None:
+    """Prove that an asynchronously signalled group has disappeared."""
+    while True:
+        try:
+            os.killpg(group, 0)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            # Darwin can report EPERM while the original group still exists.
+            pass
+        except OSError as error:
+            raise RecoveryRequired("Cannot verify command process group termination") from error
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RecoveryRequired("Command process group did not disappear")
+        time.sleep(min(0.01, remaining))
 
 
 def run_child(command: list[str], *, timeout: float | None = None, spawn_guard=nullcontext, **kwargs) -> int:
@@ -51,8 +73,11 @@ def run_child(command: list[str], *, timeout: float | None = None, spawn_guard=n
             return child.wait(timeout=timeout)
         finally:
             if child is not None:
-                _kill_group(child.pid)
+                deadline = time.monotonic() + GROUP_EXIT_SECONDS
+                signalled = _kill_group(child.pid, deadline)
                 child.wait()
+                if signalled and sys.platform == "darwin":
+                    _wait_darwin_group(child.pid, deadline)
     return _run_windows(command, timeout=timeout, spawn_guard=spawn_guard, **kwargs)
 
 
