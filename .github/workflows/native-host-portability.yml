@@ -454,13 +454,13 @@ jobs:
       - name: Build and compare both exact commits
         run: >-
           python scripts/macos_release_pair.py
-          --base 00cbb4924eca495a7f934a78dc2d7e16d66ca2b2
-          --candidate 2b6e92dd345f6506de90d26316817b86f6e85cc4
+          --base 2b6e92dd345f6506de90d26316817b86f6e85cc4
+          --candidate ad862a26c9ef7cd6a54919ebb4ee0aaf9862244a
           --output "$RUNNER_TEMP/task339-macos-release-pair"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: task339-macos-release-pair-2b6e92dd3
+          name: task339-macos-release-pair-ad862a26c
           path: ${{ runner.temp }}/task339-macos-release-pair/
           if-no-files-found: error
 
