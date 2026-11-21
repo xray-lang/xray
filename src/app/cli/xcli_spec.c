@@ -138,7 +138,9 @@ static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
     {"run", "Run one exact .xr source entry", NULL, run_options, 1, 1, true, false, NULL, NULL, 0},
     {"repl", "Temporarily unavailable", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
-    {"test", "Temporarily unavailable", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
+    {"test", "Discover the tests of each entry module",
+     "FILE|DIR... [-v] [-q] [-f PATTERN] [-F] [-j N]",
+     test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
 #ifdef XR_HAS_DAP
