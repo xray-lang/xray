@@ -34,7 +34,7 @@ static void source_fixture_rejected(const char *text, const char *message) {
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "lir-lowering", NULL};
     XrXirSourceRequest request = {.session = session, .authority = &authority, .context = &context,
-        .linkage_kind = XR_XIR_PROGRAM};
+        .linkage_kind = XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input = {NULL, text, strlen(text)};
     XrXirSourceResult result = {0};
     XrXirSourceDiagnostic diagnostic = {0};
@@ -741,7 +741,7 @@ static void argument_validation(void) {
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats before, after;
     CHECK(xr_compile_resources_stats(resources, &before) == XR_COMPILE_RESOURCE_OK);
-    XrLirSourceRequest input = {resources, "unopened.xr", NULL, false, NULL, NULL};
+    XrLirSourceRequest input = {resources, "unopened.xr", NULL, false, NULL, NULL, XR_XIR_HOST_TARGET};
     XrLirSourceFailure source_failure = {0};
     output.entry.id = 1;
     CHECK(xr_lir_compile_source(&input, &output, &source_failure) == XR_LIR_SOURCE_BAD_ARGUMENT);

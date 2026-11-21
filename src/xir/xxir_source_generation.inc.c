@@ -252,7 +252,7 @@ static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,record->namespace_id,NULL};
     XrXirSourceRequest request={session,rooted?repl->absolute_path:NULL,rooted?repl->authority:&authority,
         &owner->config.context,owner->config.stdlib_path,rooted?repl->lockfile:owner->config.lockfile,
-        XR_XIR_PROGRAM,owner->config.libraries};
+        XR_XIR_PROGRAM,owner->config.libraries, xr_xir_target_host()};
     SourceInput source={.supplied=text!=NULL || (ast && ast->input.source.text),
         .text={rooted?repl->logical_path:NULL,ast?ast->input.source.text:record->source,ast?ast->input.source.length:(text?text->length:0)},
         .ast=ast?ast->input.program:NULL,.ast_input=ast!=NULL,.ast_owner=ast?&record->ast_owner:NULL,

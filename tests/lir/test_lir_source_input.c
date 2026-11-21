@@ -9,6 +9,7 @@
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_source.h"
+#include "base/xsha256.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_class_cycles.h"
 #include "xir/xxir_type_description.h"
@@ -44,7 +45,7 @@ static XrXirSourceResult compile_text(const char *text) {
     XrXirSourceRequest request = {.session = session,
                                   .authority = &authority,
                                   .context = &context,
-                                  .linkage_kind = XR_XIR_PROGRAM};
+                                  .linkage_kind = XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0};
     XrXirSourceDiagnostic diagnostic = {0};
     XrXirSourceText input = {NULL, text, strlen(text)};
@@ -54,6 +55,17 @@ static XrXirSourceResult compile_text(const char *text) {
         fprintf(stderr, "source %u:%d:%d: %s\n", (unsigned) status, diagnostic.line,
                 diagnostic.column, diagnostic.message);
     CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
+    CHECK(xr_xir_target_is_host(xr_xir_compile_artifact_target(result.checked)));
+    const XrXirTarget host = request.target;
+    bool match = false;
+    CHECK(xr_target_fact_matches(&host, (XrTargetFact){XR_TARGET_QUERY_OPERATING_SYSTEM,
+        (uint16_t)host.os}, &match) && match);
+    const uint16_t foreign_os = host.os == XR_TARGET_QUERY_VALUE_OS_WINDOWS ?
+        XR_TARGET_QUERY_VALUE_OS_LINUX : XR_TARGET_QUERY_VALUE_OS_WINDOWS;
+    CHECK(xr_target_fact_matches(&host, (XrTargetFact){XR_TARGET_QUERY_OPERATING_SYSTEM,
+        foreign_os}, &match) && !match);
+    match = true;
+    CHECK(!xr_target_fact_matches(&host, (XrTargetFact){UINT16_MAX, foreign_os}, &match) && match);
     CHECK(result.checked->checked_effects);
 #if !XR_XIR_PARANOID
     CHECK(!result.checked->source_facts&&!result.checked->checked_packet.bytes);
@@ -67,6 +79,39 @@ static XrXirSourceResult compile_text(const char *text) {
     xr_compile_session_free(session);
     xr_compile_resources_release(context.resources);
     return result;
+}
+
+static void source_target_admission(void) {
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrXirCompileContext context = {0};
+    CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
+    context.limits = xr_xir_compile_default_limits();
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
+    const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "lir-source-target", NULL};
+    const XrXirSourceText invalid = {NULL, ":", 1};
+    const XrXirTarget host = xr_xir_target_host();
+    const uint32_t foreign_os = host.os == XR_TARGET_QUERY_VALUE_OS_WINDOWS ?
+        XR_TARGET_QUERY_VALUE_OS_LINUX : XR_TARGET_QUERY_VALUE_OS_WINDOWS;
+    const uint32_t foreign_machine = host.architecture == XR_TARGET_QUERY_VALUE_ARCH_X86_64 ?
+        XR_TARGET_QUERY_VALUE_ARCH_AARCH64 : XR_TARGET_QUERY_VALUE_ARCH_X86_64;
+    const XrXirTarget invalid_targets[] = {{0},
+        {foreign_os, host.architecture, host.abi_version},
+        {host.os, foreign_machine, host.abi_version},
+        {host.os, host.architecture, host.abi_version + 1}};
+    XrXirSourceRequest request = {.session = session, .authority = &authority,
+        .context = &context, .linkage_kind = XR_XIR_PROGRAM};
+    for (size_t i = 0; i < sizeof(invalid_targets) / sizeof(invalid_targets[0]); ++i) {
+        request.target = invalid_targets[i];
+        XrXirSourceResult result = {0};
+        XrXirSourceDiagnostic diagnostic = {0};
+        CHECK(xr_xir_compile_source_check_text(&request, &invalid, &result,
+            &diagnostic, NULL) == XR_XIR_UNSUPPORTED);
+        CHECK(!result.checked && !result.snapshot &&
+            !strcmp(diagnostic.message, "unsupported source compilation target"));
+    }
+    xr_compile_session_free(session);
+    xr_compile_resources_release(context.resources);
 }
 
 static unsigned count_op(const XrXirFunction *function, XrXirOp op) {
@@ -86,6 +131,7 @@ static void scalar_input_facts(void) {
     XrXirArtifact *closed = NULL;
     XrXirDiagnostic diagnostic = {0};
     XIR_OK(xr_xir_compile_specialize(result.checked, &closed, &diagnostic, NULL));
+    CHECK(xr_xir_target_is_host(xr_xir_compile_artifact_target(closed)));
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
     const XrXirDeclarations *declarations = module->declarations;
     CHECK(declarations && declarations->root_module < declarations->module_count);
@@ -170,7 +216,7 @@ static void rejected_origin_stage(const XrXirArtifact *artifact) {
 static void lowered_origin_rejected(void) {
     XrXirSourceResult result = compile_text("fn scalar()->i64{return 42}\nprint(scalar())\n");
     XrXirArtifact *closed = NULL, *lowered = NULL;
-    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = XR_XIR_HOST_TARGET;
     XIR_OK(xr_xir_compile_specialize(result.checked, &closed, NULL, NULL));
     XIR_OK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL));
     xr_xir_compile_artifact_free(closed);
@@ -193,7 +239,7 @@ static void evaluation_origin_rejected(void) {
     XrXirSourceRequest source_request = {.session = session,
                                          .authority = &authority,
                                          .context = &context,
-                                         .linkage_kind = XR_XIR_PROGRAM};
+                                         .linkage_kind = XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     const char *text = "fn make<T>()->i64{return comptime {const v:Array<T>=[];len(v)+42}}\n"
                        "export fn run()->i64{return make<i8>()+make<string>()-42}\n";
     XrXirSourceText input = {NULL, text, strlen(text)};
@@ -202,7 +248,7 @@ static void evaluation_origin_rejected(void) {
         &input,
         NULL,
         0,
-        {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION},
+        XR_XIR_HOST_TARGET,
         {XR_XIR_CTFE_MAX_STEPS, XR_XIR_CTFE_MAX_FRAME_BYTES, XR_XIR_CTFE_MAX_OUTPUT_BYTES},
         XR_XIR_CTFE_MAX_CALL_DEPTH};
     XirSourceComptimeInstances instances = {0};
@@ -252,6 +298,23 @@ static void evaluation_origin_rejected(void) {
     CHECK(evaluation->module.stage == XR_XIR_CHECKED && evaluation->evaluation_only == 1 &&
           evaluation->module.provenance->kind == XR_XIR_EVIDENCE_EVALUATION);
     rejected_origin_stage(evaluation);
+    XrXirCheckedPacket packet = {0};
+    XIR_OK(xir_evaluation_write(evaluation, &packet, NULL, NULL));
+    XrXirArtifact *decoded = NULL;
+    XIR_OK(xir_evaluation_read(&evaluation->context, packet.bytes, packet.length, &decoded, NULL, NULL));
+    CHECK(xr_xir_target_is_host(xr_xir_compile_artifact_target(decoded)));
+    CHECK(xr_xir_target_is_host(xr_xir_compile_artifact_target(decoded->module.provenance->source)));
+    xr_xir_compile_artifact_free(decoded);
+    decoded = NULL;
+    memset(packet.bytes + 20, 0, 4);
+    XrSHA256Context hash;
+    xr_sha256_init(&hash);
+    xr_sha256_update(&hash, packet.bytes, 32);
+    xr_sha256_update(&hash, packet.bytes + 64, packet.length - 64);
+    xr_sha256_final(&hash, packet.bytes + 32);
+    CHECK(xir_evaluation_read(&evaluation->context, packet.bytes, packet.length, &decoded,
+        NULL, NULL) == XR_XIR_BAD_LAYOUT && !decoded);
+    xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(evaluation);
     puts("source origins reject genuine compiler-only evaluation input without changing output");
 }
@@ -430,6 +493,7 @@ static void class_cycle_facts(void) {
 }
 
 int main(void) {
+    source_target_admission();
     scalar_input_facts();
     literal_output_source_facts();
     builtin_loader_identity();

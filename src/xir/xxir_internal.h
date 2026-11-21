@@ -175,6 +175,12 @@ struct XrXirArtifact {
     uint32_t evaluation_only;
 };
 
+/* Raw XIR has no target facts. A bound owner cannot be consumed on a different target. */
+static inline bool xir_artifact_accepts_target(const XrXirArtifact *artifact, const XrXirTarget *target) {
+    return artifact && xr_xir_target_is_host(target) &&
+        (xr_xir_target_unbound(&artifact->target) || xr_xir_target_equal(&artifact->target, target));
+}
+
 /* Purpose is a grammar fence, never a proof. Current full correspondence and
  * the unique evaluation root are independently verified on every operation. */
 static inline bool xir_artifact_is_evaluation(const XrXirArtifact *artifact) {
@@ -292,8 +298,8 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_analyzed_effects_v2(const XrXirCompile
     const XrXirModule *module, const XrXirConstruction *construction,
     XrXirEffects **output, XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
-    const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
-    XrCompileRequestControl *control, XrXirEffects **prepared, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+    const XrXirModule *built, const XrXirTarget *target, const XrXirConstruction *construction,
+    const XrXirRootRefiner *refiner, XrCompileRequestControl *control, XrXirEffects **prepared, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 /* A derived complete-outcome fact grants no call or source permissions.
  * Checked import and specialization rebuild it from authentic declarations. */
 XR_FUNC XrXirStatus xir_compile_worker_error_verify(const XrXirCompileContext *context,
@@ -313,8 +319,9 @@ XR_FUNC XrXirStatus xr_xir_compile_layout_build(XrXirArtifact *artifact, XrCompi
 XR_FUNC XrXirStatus xir_artifact_clone_checked(const XrXirArtifact *source,
     XrXirArtifact **output,XrXirDiagnostic *diagnostic,XrCompileRequestControl *control);
 /* Copy a compiler-produced immutable Checked module. Raw inputs require
- * complete admission before this private ownership operation. */
-XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
+ * complete admission before this private ownership operation. Pass the owning
+ * target for bound inputs, or NULL only for raw, target-neutral IR. */
+XR_FUNC XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context, const XrXirModule *checked, const XrXirTarget *target, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
 /* Retain a published semantic result on its existing allocation ledger. */
 XR_FUNC XrXirStatus xir_effects_retain(const XrXirCompileContext *context,
     XrXirEffects *effects,XrXirEffects **output,XrCompileRequestControl *control);

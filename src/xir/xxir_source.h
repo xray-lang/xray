@@ -28,6 +28,7 @@ typedef struct XrXirSourceRequest {
     struct XrLockfile *lockfile;
     XrXirLinkageKind linkage_kind;
     const struct XrXirLibraryCatalog *libraries;
+    XrXirTarget target;
 } XrXirSourceRequest;
 /* Failure preserves result output. Optional failure must be empty. A located
  * parser or semantic failure transfers its owned UTF-8 path without allocation

@@ -74,7 +74,7 @@ int main(void) {
     CHECK(!memcmp(digest,expected_digest,sizeof(digest)));
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"global-callable",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
     XrXirSourceText text={NULL,source,sizeof(source)-1};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

@@ -64,7 +64,7 @@ static void return_controls(const XrXirCompileContext *context,const XrXirModule
             xr_xir_compile_construction_slots(construction),&received,NULL);
         if (status==XR_XIR_OK) {
             XrXirArtifact *output=NULL;
-            CHECK(xr_xir_compile_recheck_v2(context,module,received,&output,NULL,NULL)!=XR_XIR_OK && !output);
+            CHECK(xr_xir_compile_recheck_v2(context,module,NULL,received,&output,NULL,NULL)!=XR_XIR_OK && !output);
         } else CHECK(!received);
         xr_xir_compile_construction_free(received);CHECK(held(context->resources)==baseline);
     }
@@ -140,7 +140,7 @@ static void caller_controls(const XrXirCompileContext *context,const char *stdli
         Cancel state={0,UINT32_MAX};XrCompileRequestControl control=request_control(&state);
         CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,cases[i].name,NULL};
-        XrXirSourceRequest request={session,NULL,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,NULL,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
         source_control(&request,cases[i].source,cases[i].accepted,cases[i].name);
         CHECK(state.polls);
         xr_compile_session_free(session);
@@ -155,7 +155,7 @@ int main(int argc,char **argv) {
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};uint64_t frame=held(resources);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"mem-borrow-source",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,stdlib,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
     static const char input[]="import mem\nprint(1)\n";
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,
@@ -188,7 +188,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_construction_new_v6(&context,module->types,&specification,
         xr_xir_compile_construction_slots(construction),&missing,NULL)==XR_XIR_OK);
     XrXirArtifact *rejected=NULL;
-    CHECK(xr_xir_compile_recheck_v2(&context,module,missing,&rejected,NULL,NULL)!=XR_XIR_OK && !rejected);
+    CHECK(xr_xir_compile_recheck_v2(&context,module,NULL,missing,&rejected,NULL,NULL)!=XR_XIR_OK && !rejected);
     return_controls(&context,module,construction,&specification);
     mem_direct_built_rejections(&context,module,construction);
     xr_xir_compile_construction_free(missing);xr_compile_resources_free(rows);xr_compile_resources_free(materializations);

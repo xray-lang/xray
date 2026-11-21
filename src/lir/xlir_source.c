@@ -61,7 +61,7 @@ XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *reques
     XrXirSourceRequest input = {.session = session, .entry_path = request->entry_path,
         .authority = request->authority ? request->authority : &authority,
         .context = &context, .stdlib_path = request->stdlib_path, .lockfile = request->lockfile,
-        .linkage_kind = XR_XIR_PROGRAM};
+        .linkage_kind = XR_XIR_PROGRAM, .target = request->target};
     status = XR_LIR_SOURCE_CHECK_FAILED;
     if (xr_xir_compile_source_check(&input, &source, &failure->source,
             &failure->source_failure) != XR_XIR_OK)

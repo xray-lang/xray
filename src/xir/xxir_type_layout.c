@@ -14,14 +14,13 @@
 #include "xxir_storage.h"
 #include "../base/xmalloc.h"
 static XrXirStatus nullable_storage_layout(const XrXirCompileContext *compile_context,
-    const XrXirTypes *types, XrXirType type, const XrXirTarget *target, XrXirLayout *layout);
+    const XrXirTypes *types, XrXirType type, XrXirLayout *layout);
 
-XrXirStatus xr_xir_builtin_layout(XrXirType type, const XrXirTarget *target,
+XR_FUNC XrXirStatus xir_builtin_value_layout(XrXirType type,
     XrXirLayoutContext context, XrXirLayout *layout) {
     bool carrier = type == XR_XIR_STRING || type == XR_XIR_BUFFER_STORAGE ||
         type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
-    if (!layout || !target || target->architecture != XR_XIR_ARCH_LE64 ||
-        target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
+    if (!layout ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
         (type != XR_XIR_UNIT && type != XR_XIR_BOOL && type != XR_XIR_RUNE && !xr_xir_type_is_number(type) && !carrier) ||
         (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER)) return XR_XIR_BAD_LAYOUT;
@@ -38,16 +37,15 @@ XrXirStatus xr_xir_builtin_layout(XrXirType type, const XrXirTarget *target,
     else result = (XrXirLayout){8, 8};
     *layout = result; return XR_XIR_OK;
 }
-XrXirStatus xr_xir_compile_layout(const XrXirCompileContext *compile_context,
-    const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
+static XrXirStatus value_layout(const XrXirCompileContext *compile_context,
+    const XrXirTypes *types, XrXirType type,
     XrXirLayoutContext context, XrXirLayout *layout) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
-    if (!layout || !target || target->architecture != XR_XIR_ARCH_LE64 ||
-        target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
+    if (!layout ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME) return XR_XIR_BAD_LAYOUT;
 
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    if (!node) return xr_xir_builtin_layout(type, target, context, layout);
+    if (!node) return xir_builtin_value_layout(type, context, layout);
     if (node->kind == XR_XIR_TYPE_UNION || node->kind == XR_XIR_TYPE_DATA_UNION) return XR_XIR_BAD_LAYOUT;
     if(node->kind==XR_XIR_TYPE_FIXED_ARRAY && context==XR_XIR_LAYOUT_STORAGE) {
         if(node->element!=XR_XIR_U8 || !node->parameter_count ||
@@ -59,22 +57,34 @@ XrXirStatus xr_xir_compile_layout(const XrXirCompileContext *compile_context,
         (xr_xir_type_is_nominal(types, type) && !xr_xir_type_is_class(types, type) &&
          context == XR_XIR_LAYOUT_STORAGE)) return XR_XIR_BAD_LAYOUT;
     if (context == XR_XIR_LAYOUT_STORAGE && xr_xir_type_is_nullable(types, type))
-        return nullable_storage_layout(compile_context, types, type, target, layout);
+        return nullable_storage_layout(compile_context, types, type, layout);
     *layout = (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
         context == XR_XIR_LAYOUT_BOXED) ? (XrXirLayout){16, 8} : (XrXirLayout){8, 8};
     return XR_XIR_OK;
 }
 
+XrXirStatus xr_xir_builtin_layout(XrXirType type, const XrXirTarget *target,
+    XrXirLayoutContext context, XrXirLayout *layout) {
+    if (!xr_xir_target_valid(target)) return XR_XIR_BAD_LAYOUT;
+    return xir_builtin_value_layout(type, context, layout);
+}
+
+XrXirStatus xr_xir_compile_layout(const XrXirCompileContext *compile_context,
+    const XrXirTypes *types, XrXirType type, const XrXirTarget *target,
+    XrXirLayoutContext context, XrXirLayout *layout) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    if (!xr_xir_target_valid(target)) return XR_XIR_BAD_LAYOUT;
+    return value_layout(compile_context, types, type, context, layout);
+}
+
 #include "xxir_nominal_storage.inc.c"
 
-static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_context, const XrXirTypes *types, const XrXirTarget *target, XrXirStorageLayout *layouts, uint32_t count) {
+static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirStorageLayout *layouts, uint32_t count) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
-    if (!remaining || !target || target->architecture != XR_XIR_ARCH_LE64 ||
-        target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
-        count != (types ? types->count : 0) || (count != 0) != (layouts != NULL)) return XR_XIR_BAD_LAYOUT;
+    if (count != (types ? types->count : 0) || (count != 0) != (layouts != NULL)) return XR_XIR_BAD_LAYOUT;
     XrXirCompileContext budget = *remaining;
 
 
@@ -89,8 +99,8 @@ static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_conte
         }
         if (node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE) nominal = true;
         else {
-            XrXirStatus status = xr_xir_compile_layout(compile_context, types, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i),
-                target, XR_XIR_LAYOUT_STORAGE, &layouts[i].value);
+            XrXirStatus status = value_layout(compile_context, types, (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i),
+                 XR_XIR_LAYOUT_STORAGE, &layouts[i].value);
             if (status != XR_XIR_OK) return status;
         }
     }
@@ -104,7 +114,7 @@ static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_conte
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t i = 0; i < count && status == XR_XIR_OK; ++i) {
         if (types->nodes[i].kind != XR_XIR_TYPE_NOMINAL && types->nodes[i].kind != XR_XIR_TYPE_NULLABLE) continue;
-        if (!nodes[i].state) status = nominal_storage_walk(types, target, &budget, nodes, stack, i);
+        if (!nodes[i].state) status = nominal_storage_walk(types, &budget, nodes, stack, i);
         if (status == XR_XIR_OK) {
             layouts[i].value = nodes[i].layout;
             layouts[i].depth = nodes[i].depth;
@@ -121,11 +131,11 @@ static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_conte
     return status;
 }
 
-XrXirStatus xr_xir_compile_storage_layouts(const XrXirCompileContext *context,
-    const XrXirTypes *types, const XrXirTarget *target, XrXirStorageLayout *layouts, uint32_t count) {
+XR_FUNC XrXirStatus xir_value_storage_layouts(const XrXirCompileContext *context,
+    const XrXirTypes *types, XrXirStorageLayout *layouts, uint32_t count) {
     if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     if (count != (types ? types->count : 0) || (!!count != !!layouts)) return XR_XIR_BAD_LAYOUT;
-    if (!count) return storage_layouts_into(context, types, target, layouts, count);
+    if (!count) return storage_layouts_into(context, types, layouts, count);
     uint64_t fields = 0;
     for (uint32_t i = 0; i < count; ++i) {
 
@@ -143,7 +153,7 @@ XrXirStatus xr_xir_compile_storage_layouts(const XrXirCompileContext *context,
             result[i].field_offsets = layouts[i].field_count ? offsets + offset : NULL;
             offset += layouts[i].field_count;
         }
-        status = storage_layouts_into(context, types, target, result, count);
+        status = storage_layouts_into(context, types, result, count);
 
         if (status == XR_XIR_OK) for (uint32_t i = 0; i < count; ++i) {
             uint32_t *destination = (uint32_t *)layouts[i].field_offsets;
@@ -154,4 +164,11 @@ XrXirStatus xr_xir_compile_storage_layouts(const XrXirCompileContext *context,
         }
     }
     xr_compile_resources_free(offsets); xr_compile_resources_free(result); return status;
+}
+
+XrXirStatus xr_xir_compile_storage_layouts(const XrXirCompileContext *context,
+    const XrXirTypes *types, const XrXirTarget *target, XrXirStorageLayout *layouts, uint32_t count) {
+    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    if (!xr_xir_target_valid(target)) return XR_XIR_BAD_LAYOUT;
+    return xir_value_storage_layouts(context, types, layouts, count);
 }

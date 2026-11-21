@@ -91,7 +91,7 @@ static XrXirArtifact *root_source_expect(const char *file,XrXirStatus expected,c
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_ROOT_EFFECT_FIXTURES,file)>0);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(effect_context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ROOT_EFFECT_FIXTURES};
-    XrXirSourceRequest request={session,path,&authority,&effect_context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,&effect_context,NULL,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure_path={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,&failure_path);
     if(status!=expected)fprintf(stderr,"root source %s status%u %d:%d %s\n",

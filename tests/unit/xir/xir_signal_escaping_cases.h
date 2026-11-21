@@ -18,7 +18,7 @@ static XrXirStatus signal_contract_source(const char *input, XrXirSourceResult *
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(effect_context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request = {session, path, &authority, &effect_context,
-        stdlib, NULL, XR_XIR_PROGRAM, NULL};
+        stdlib, NULL, XR_XIR_PROGRAM, NULL, XR_XIR_HOST_TARGET};
     XrXirStatus status = xir_genuine_sys_path_check(&request, input, strlen(input), output, diagnostic);
     xr_compile_session_free(session);
     return status;

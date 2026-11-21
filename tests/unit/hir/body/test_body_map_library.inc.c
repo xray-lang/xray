@@ -8,7 +8,7 @@ static XrXirStatus map_library_check(const XrXirCompileContext *compile,const ch
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_MAP_LIBRARY_ROOT};
     char path[1024];int size=snprintf(path,sizeof(path),"%s/%s",XR_MAP_LIBRARY_ROOT,logical);
     CHECK(size>0 && (size_t)size<sizeof(path));
-    XrXirSourceRequest request={session,path,&authority,compile,NULL,NULL,kind,catalog};
+    XrXirSourceRequest request={session,path,&authority,compile,NULL,NULL,kind,catalog, XR_XIR_HOST_TARGET};
     XrXirSourceText text={logical,source,strlen(source)};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,result,diagnostic,NULL);
     xr_compile_session_free(session);return status;

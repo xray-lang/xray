@@ -46,7 +46,7 @@ static XrXirStatus namespace_source(const XrXirCompileContext *compile,const cha
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,NAMESPACE_LIBRARY_ROOT};
     char path[1024];int size=snprintf(path,sizeof(path),"%s/%s",NAMESPACE_LIBRARY_ROOT,logical);
     CHECK(size>0 && (size_t)size<sizeof(path));
-    XrXirSourceRequest request={session,path,&authority,compile,NULL,NULL,kind,catalog};
+    XrXirSourceRequest request={session,path,&authority,compile,NULL,NULL,kind,catalog, XR_XIR_HOST_TARGET};
     XrXirSourceText source={logical,text,strlen(text)};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&source,result,diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"namespace source %s: %u %s\n",logical,(unsigned)status,diagnostic->message);
@@ -109,7 +109,7 @@ static XrXirStatus map_key_source_failure(const XrXirCompileContext *compile,con
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,NAMESPACE_LIBRARY_ROOT};
     char path[1024];int size=snprintf(path,sizeof(path),"%s/bare-key.xr",NAMESPACE_LIBRARY_ROOT);
     CHECK(size>0 && (size_t)size<sizeof(path));
-    XrXirSourceRequest request={session,path,&authority,compile,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,compile,NULL,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
     XrXirSourceText source={"bare-key.xr",text,strlen(text)};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&source,&result,&diagnostic,failure);

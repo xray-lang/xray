@@ -70,10 +70,17 @@ static XrXirStatus literal_receive(const XirLiteralRequest *request,const XrXirC
     uint32_t progress=0;
     status=literal_site_verify(&views[0],site);
     if (status!=XR_XIR_OK) goto done;
+    ctx.target=views[0].lowered->target;
+    if (!xir_artifact_accepts_target(original,&ctx.target)) {
+        status=XR_XIR_BAD_LAYOUT;goto done;
+    }
     for (uint32_t i=0;i<request->count;++i) {
         status=xir_receive_step(request->control,&progress);if (status!=XR_XIR_OK) goto done;
         if (views[i].definition!=original || views[i].definition->context.resources!=context->resources) {
             status=XR_XIR_BAD_STRUCTURE;goto done;
+        }
+        if (!xr_xir_target_equal(&views[i].lowered->target,&ctx.target)) {
+            status=XR_XIR_BAD_LAYOUT;goto done;
         }
     }
     result.bindings=xir_type_copy_zero(context,request->count,sizeof(*result.bindings),&status,request->control);

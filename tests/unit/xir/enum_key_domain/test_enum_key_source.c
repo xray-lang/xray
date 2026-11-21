@@ -19,7 +19,7 @@ static XrXirStatus enum_key_source(const XrXirCompileContext *compile,const char
     if(control)resource=xr_compile_session_bind_request(session,control);
     if(resource!=XR_COMPILE_RESOURCE_OK){xr_compile_session_free(session);return xir_compile_resource_status(resource);}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"enum-key-domain",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,compile,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,compile,NULL,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
     XrXirSourceText source={NULL,text,strlen(text)};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&source,result,NULL,&failure);
     xr_xir_compile_source_failure_free(&failure);xr_compile_session_free(session);return status;

@@ -26,7 +26,7 @@ static XrXirStatus check_text(const char *text,size_t length,XrCompileRequestCon
     XrXirStatus status=xir_compile_resource_status(made);
     if(status==XR_XIR_OK) {
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"finite-data-union",NULL};
-        XrXirSourceRequest request={.session=session,.authority=&authority,.context=&context,.linkage_kind=XR_XIR_PROGRAM};
+        XrXirSourceRequest request={.session=session,.authority=&authority,.context=&context,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
         XrXirSourceDiagnostic diagnostic={0};
         status=xr_xir_compile_source_check_text(&request,&(XrXirSourceText){NULL,text,length},output,&diagnostic,NULL);
         CHECK(diagnostic.status==status);
@@ -102,7 +102,7 @@ static void owned_receiving(void) {
     XrXirArtifact *received=NULL;CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&received,&diagnostic)==XR_XIR_OK);
     xr_compile_resources_release(context.resources);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);facts(received);
-    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};XrXirArtifact *lowered=NULL;
+    XrXirTarget target=XR_XIR_HOST_TARGET;XrXirArtifact *lowered=NULL;
     CHECK(xr_xir_compile_lower(received,&target,NULL,&lowered,&diagnostic)!=XR_XIR_OK && !lowered);
     xr_xir_compile_artifact_free(received);zero();
 }

@@ -53,14 +53,15 @@ static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,
     XrXirCompileContext limits = *budget;
     if (!bytes || length < 64) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
 
-    CheckedCursor c = {bytes, NULL, 8, length, limits.limits, limits, XR_XIR_OK, true, NULL, 0};
+    CheckedCursor c = {bytes, NULL, 8, length, limits.limits, limits, XR_XIR_OK, true, NULL, 0, {0}};
     XrXirArtifact *artifact = NULL;
     if (memcmp(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
     uint32_t schema = checked_u32(&c,0), contract = checked_u32(&c,0);
-    uint32_t stage = checked_u32(&c,0), reserved = checked_u32(&c,0);
+    uint32_t stage = checked_u32(&c,0), target_word = checked_u32(&c,0);
     uint64_t payload = checked_integer(&c,0,8);
     if (c.status != XR_XIR_OK) goto decode_failure;
-    if (schema != (evaluation?1u:XR_XIR_CHECKED_SCHEMA) || contract != XR_XIR_CHECKED_CONTRACT || reserved || payload != length-64) {
+    if (schema != (evaluation ? XR_XIR_EVALUATION_SCHEMA : XR_XIR_CHECKED_SCHEMA) ||
+        contract != XR_XIR_CHECKED_CONTRACT || payload != length - 64) {
         c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure;
     }
     if (stage != XR_XIR_CHECKED) { c.status=XR_XIR_BAD_STAGE; goto decode_failure; }
@@ -71,9 +72,12 @@ static XrXirStatus checked_read_mode(const XrXirCompileContext *compile_context,
     uint8_t digest[32];c.status=checked_digest(bytes,length,digest,control);
     if (c.status!=XR_XIR_OK) goto decode_failure;
     if (memcmp(digest,(const uint8_t *)bytes+32,32)) { c.status=XR_XIR_BAD_STRUCTURE; goto decode_failure; }
+    c.target = (XrXirTarget){target_word & 255u, (target_word >> 8) & 255u, target_word >> 16};
+    if (!xr_xir_target_is_host(&c.target)) { c.status=XR_XIR_BAD_LAYOUT; goto decode_failure; }
     artifact=xir_type_copy_zero(compile_context,1,sizeof(*artifact),&allocation_status,control);
     if (!artifact) { c.status=allocation_status; goto decode_failure; }
     artifact->module.stage=XR_XIR_CHECKED; artifact->context=limits;artifact->evaluation_only=evaluation?1u:0u;
+    artifact->target=c.target;
     c.position=64;
     XirEvaluationRoot root={0};
     if (evaluation) { root.caller=checked_u32(&c,0);root.instruction=checked_u32(&c,0);root.callee=checked_u32(&c,0); }

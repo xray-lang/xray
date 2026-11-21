@@ -69,6 +69,7 @@ typedef struct SourceContext {
     XrFrontendReport *report; /* Sole transferred child failure, before this context retires. */
     XrXirLinkageKind linkage_kind;
     XrXirCompileContext compile;
+    XrXirTarget target;
     /* Borrowed only by this synchronous construction, never semantic history. */
     XrCompileRequestControl *request;
     uint32_t remaining_blocks, remaining_instructions;

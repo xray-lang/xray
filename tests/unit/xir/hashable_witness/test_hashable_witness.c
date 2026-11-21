@@ -30,7 +30,7 @@ static XrXirStatus source(const XrXirCompileContext *compile,const char *logical
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,HASHABLE_LIBRARY_ROOT};
     char path[1024];int n=snprintf(path,sizeof(path),"%s/%s",HASHABLE_LIBRARY_ROOT,logical);
     CHECK(n>0 && (size_t)n<sizeof(path));
-    XrXirSourceRequest request={session,path,&authority,compile,NULL,NULL,kind,catalog};
+    XrXirSourceRequest request={session,path,&authority,compile,NULL,NULL,kind,catalog, XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,
         &(XrXirSourceText){logical,text,strlen(text)},result,&diagnostic,NULL);

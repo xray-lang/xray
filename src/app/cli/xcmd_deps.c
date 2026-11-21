@@ -52,7 +52,7 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
         &paths, &path_diagnostic);
     if (status == XR_SOURCE_COMPILE_OK) {
         XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
-            xr_source_compile_default_manifest_limits(), NULL};
+            xr_source_compile_default_manifest_limits(), NULL, xr_xir_target_host()};
         status = xr_source_compile_check(&request, &source, &diagnostic);
     }
     if (status != XR_SOURCE_COMPILE_OK) {

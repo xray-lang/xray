@@ -115,7 +115,7 @@ XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *contex
             if(same||i==j)included[included_count++]=j;
         }
         XrXirSourceRequest request={session,entry,xr_source_authority_entry(authorities[i]),context,
-            stdlib.path,xr_source_authority_lockfile(authorities[i]),XR_XIR_PROGRAM,NULL};
+            stdlib.path,xr_source_authority_lockfile(authorities[i]),XR_XIR_PROGRAM,NULL, xr_xir_target_host()};
         XrXirSourceCorpusRequest corpus={&request,overlays,count,included,included_count};
         XrXirSourceResult result={0};status=xr_xir_compile_source_check_corpus(&corpus,&result,NULL,NULL);
         xr_compile_resources_free(program_path);program_path=NULL;

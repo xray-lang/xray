@@ -8,7 +8,7 @@ static XrXirStatus collection_source_receive(const XrXirCompileContext *compile,
     if(control)resource=xr_compile_session_bind_request(session,control);
     if(resource!=XR_COMPILE_RESOURCE_OK){xr_compile_session_free(session);return XR_XIR_BAD_STRUCTURE;}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"collection-construction",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,compile,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,compile,NULL,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
     XrXirSourceText text={NULL,source,strlen(source)};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,result,NULL,&failure);
     xr_xir_compile_source_failure_free(&failure);xr_compile_session_free(session);return status;

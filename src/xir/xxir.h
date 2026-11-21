@@ -17,6 +17,7 @@
 
 #include "xxir_scalar.h"
 #include "xxir_compile_context.h"
+#include "xxir_target.h"
 #include "xxir_declarations.h"
 #include "../base/xcompile_request.h"
 
@@ -53,11 +54,6 @@ typedef enum XrXirStatus {
     XR_XIR_DEADLINE,
     XR_XIR_CLOCK_FAILURE
 } XrXirStatus;
-
-typedef struct XrXirTarget {
-    uint32_t architecture;
-    uint32_t abi_version;
-} XrXirTarget;
 
 /* SSA value transport within one function. The receiving analysis owns the
  * array; synchronous consumers retain only ordinal dependencies. */

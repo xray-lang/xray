@@ -41,7 +41,7 @@ static SourceFixture source_fixture_stdlib(const char *text, const char *stdlib)
     XrXirSourceRequest request = {.session = session,
                                   .authority = &authority,
                                   .context = &context,
-                                  .linkage_kind = XR_XIR_PROGRAM, .stdlib_path = stdlib};
+                                  .linkage_kind = XR_XIR_PROGRAM, .stdlib_path = stdlib, .target = XR_XIR_HOST_TARGET};
     SourceFixture fixture = {0};
     XrXirSourceDiagnostic diagnostic = {0};
     XrXirSourceText input = {NULL, text, strlen(text)};

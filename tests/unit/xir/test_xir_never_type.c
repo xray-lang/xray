@@ -81,7 +81,7 @@ static void check_no_value(const XrXirCompileContext *work,const XrXirTypes *typ
     XrXirModule module={.types=types};
     XrXirProofContext closed={&module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     CHECK(xr_xir_compile_type_storage_prove(work,&closed,XR_XIR_NEVER)==XR_XIR_BAD_TYPE);
-    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target=XR_XIR_HOST_TARGET;
     for (uint32_t kind=XR_XIR_LAYOUT_STORAGE;kind<=XR_XIR_LAYOUT_FRAME;++kind) {
         XrXirLayout layout={123,8};
         CHECK(xr_xir_compile_layout(work,types,XR_XIR_NEVER,&target,(XrXirLayoutContext)kind,&layout)==XR_XIR_BAD_LAYOUT);
@@ -308,7 +308,7 @@ static void check_lowered_error_remap(const XrXirCompileContext *work) {
     for (uint32_t f=0;f<before->function_count;++f)
         before_remap|=before->functions[f].error_type==(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
     CHECK(before_remap && before->types->nodes[0].parameter_span==1);
-    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target=XR_XIR_HOST_TARGET;
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *after=xr_xir_compile_artifact_module(lowered);
@@ -572,7 +572,7 @@ static void check_imported_default(const XrXirCompileContext *work,bool wide) {
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,library,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,library,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL, XR_XIR_HOST_TARGET};
     char producer[]="export fn raw()->i64{return 7}\n";
     XrXirSourceText input={"lib.xr",producer,sizeof(producer)-1};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
@@ -640,7 +640,7 @@ static void check_source_transport(const XrXirCompileContext *work) {
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,library,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,library,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL, XR_XIR_HOST_TARGET};
     size_t text_length=0;char *text=source_transport_text(&text_length);
     XrXirSourceText input={"lib.xr",text,text_length};
     XrXirSourceResult source={0};
@@ -725,7 +725,7 @@ static void check_catch_binding_names(const XrXirCompileContext *work) {
         CHECK(length>0 && (size_t)length<sizeof(text));
         XrCompilerSession *session=NULL;
         CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
-        XrXirSourceRequest request={session,root,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL};
+        XrXirSourceRequest request={session,root,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL, XR_XIR_HOST_TARGET};
         XrXirSourceText input={"root.xr",text,(size_t)length};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);

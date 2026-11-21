@@ -12,7 +12,7 @@ static void native_file_stat_discovery(const XrXirCompileContext *compile) {
         {{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/io.xr",entry,io_text,sizeof(io_text)-1},
         {{XR_MODULE_IDENTITY_STDLIB,"path",root},"path/path.xr",path,path_text,sizeof(path_text)-1}};
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile->resources,&session)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,entry,&authority,compile,root,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,entry,&authority,compile,root,NULL,XR_XIR_LIBRARY,NULL, XR_XIR_HOST_TARGET};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,overlays,2,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Hashable native FileStat source status%u %d:%d %s\n",

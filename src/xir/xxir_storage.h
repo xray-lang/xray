@@ -26,4 +26,8 @@ typedef struct XrXirStorageLayout {
  * Allocations and work share the caller ledger; temporary storage is physically
  * released on every return, while cumulative allocation and work remain charged. */
 XR_FUNC XrXirStatus xr_xir_compile_storage_layouts(const XrXirCompileContext *compile_context, const XrXirTypes *types, const XrXirTarget *target, XrXirStorageLayout *layouts, uint32_t count);
+/* A closed value owner uses the one admitted XIR layout after target selection. */
+XR_FUNC XrXirStatus xir_value_storage_layouts(const XrXirCompileContext *, const XrXirTypes *,
+    XrXirStorageLayout *, uint32_t count);
+XR_FUNC XrXirStatus xir_builtin_value_layout(XrXirType, XrXirLayoutContext, XrXirLayout *);
 #endif // XXIR_STORAGE_H

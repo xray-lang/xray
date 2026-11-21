@@ -91,7 +91,7 @@ static void path_array_checked_cases(void) {
             XrXirCheckedPacket closed_packet={0};
             CHECK(xr_xir_compile_checked_write(closed,&closed_packet,NULL)==XR_XIR_OK);
             XrXirArtifact *lowered = NULL;
-            XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+            XrXirTarget target = XR_XIR_HOST_TARGET;
             CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK && lowered);
             path_layout_cases(lowered,&closed_packet);
             xr_xir_compile_checked_packet_free(&closed_packet);
@@ -175,7 +175,7 @@ static void path_ancestor_checked_cases(void) {
             CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
             CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
             CHECK(xr_xir_compile_specialize(decoded, &closed, NULL, NULL) == XR_XIR_OK);
-            const XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+            const XrXirTarget target = XR_XIR_HOST_TARGET;
             CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
             xr_xir_compile_artifact_free(lowered);lowered=NULL; xr_xir_compile_artifact_free(closed);closed=NULL; xr_xir_compile_artifact_free(decoded);decoded=NULL;
             xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(checked);checked=NULL;

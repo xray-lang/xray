@@ -295,7 +295,7 @@ static void callable_error_program(const XrXirCompileContext *work,XrXirType err
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     uint8_t identity[32];xr_sha256(packet.bytes,packet.length,identity);
     xr_xir_compile_checked_packet_free(&packet);
-    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target=XR_XIR_HOST_TARGET;
     CHECK(xr_xir_compile_lower(closed,&target, NULL,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
@@ -371,7 +371,7 @@ static void callable_error_library(const XrXirCompileContext *work,bool nested) 
     XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(work,&library_input,1,&catalog)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,root,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,root,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog, XR_XIR_HOST_TARGET};
     char text[128];CHECK(snprintf(text,sizeof(text),"import {entry} from \"./lib\"\nvar f=entry<%s>()\ntry f()\n",nested?"i64":"Error")>0);
     XrXirSourceText input={"root.xr",text,strlen(text)};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};

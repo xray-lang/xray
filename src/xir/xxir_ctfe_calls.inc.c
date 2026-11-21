@@ -183,8 +183,7 @@ static XrXirCtfeStatus ctfe_call_prepare_received(const XrXirCtfeCallRequest *re
     const XrXirCompileContext *context=&artifact->context;
 
     const XrXirTarget *target=xr_xir_compile_artifact_target(artifact);
-    if (!target || target->architecture!=XR_XIR_ARCH_LE64 || target->abi_version!=XR_XIR_VALUE_ABI_VERSION ||
-        input->target.architecture!=target->architecture || input->target.abi_version!=target->abi_version)
+    if (!xr_xir_target_is_host(target) || !xr_xir_target_equal(&input->target, target))
         return XR_XIR_CTFE_PROFILE;
     if (XR_XIR_PARANOID)
         for (uint32_t b=0;b<32;++b)

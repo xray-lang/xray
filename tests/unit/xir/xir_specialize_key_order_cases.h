@@ -107,7 +107,7 @@ static void spec_key_source_controls(void) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(owner.context.resources,&session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY,"specialize-key-order",NULL};
-    XrXirSourceRequest request = {session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request = {session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
     char text[8192]; spec_key_source_text(text,sizeof(text));
     XrXirSourceText input = {NULL,text,strlen(text)};
     XrXirSourceResult source = {0}; XrXirSourceDiagnostic source_diagnostic = {0};
@@ -130,7 +130,7 @@ static void spec_key_source_controls(void) {
     // Physical lowering derives its own instance facts only when requested.
     CHECK(!instance->checked_effects && !instance->program_final);
     uint32_t run = spec_index_source_function(&instance->module,"run");
-    const XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = XR_XIR_HOST_TARGET;
     XrXirArtifact *borrowed = NULL, *consumed = NULL;
     CHECK(xr_xir_compile_lower(instance,&target,NULL,&borrowed,&diagnostic) == XR_XIR_OK);
     CHECK(instance && borrowed->program_final);

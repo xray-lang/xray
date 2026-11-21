@@ -69,5 +69,7 @@ static XrXirStatus literal_check(SourceContext *ctx,const XrXirArtifact *origina
     built.functions=ctx->functions;built.function_count=ctx->function_count;built.declarations=&declarations;
     built.generics=ctx->generics;
     built.types=ctx->types.count || ctx->types.nominals || ctx->types.interfaces?&ctx->types:NULL;
-    return xir_check(&ctx->compile,&built,ctx->construction,output,diagnostic,ctx->request);
+    status=xir_check(&ctx->compile,&built,ctx->construction,output,diagnostic,ctx->request);
+    if (status==XR_XIR_OK) (*output)->target=ctx->target;
+    return status;
 }

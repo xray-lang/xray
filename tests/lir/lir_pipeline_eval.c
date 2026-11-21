@@ -380,7 +380,7 @@ static XrLirLowered source_lower(Eval *e, const char *path, XrCompileResources *
         &authority, &authority_root) == XR_MODULE_OK);
     XrXirCompileContext context = {.resources = resources, .limits = xr_xir_compile_default_limits()};
     XrXirSourceRequest request = {.session = session, .entry_path = path, .authority = &authority,
-        .context = &context, .linkage_kind = XR_XIR_PROGRAM, .stdlib_path = stdlib};
+        .context = &context, .linkage_kind = XR_XIR_PROGRAM, .stdlib_path = stdlib, .target = XR_XIR_HOST_TARGET};
     uint64_t start = clock_ticks();
     XrXirStatus status = xr_xir_compile_source_check(&request, &source, &diagnostic, &failure);
     if (status != XR_XIR_OK) fprintf(stderr, "source: %s\n", diagnostic.message);
