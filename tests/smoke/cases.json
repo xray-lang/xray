@@ -487,7 +487,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
       }
     },
     {
@@ -539,7 +539,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 120 block 4294967295 instruction 16"
       }
     },
     {
@@ -559,7 +559,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/path/path.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {
@@ -615,7 +615,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 91 block 4294967295 instruction 16"
       }
     },
     {
@@ -667,7 +667,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/toml/toml.xr:882:42: error: projected Class ref requires its own object borrow owner"
       }
     },
     {
@@ -707,7 +707,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/xml/xml.xr:964:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
       }
     },
     {
@@ -719,7 +719,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/yaml/yaml.xr:1219:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
       }
     },
     {
@@ -1008,7 +1008,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 120 block 4294967295 instruction 16"
       }
     },
     {
@@ -1020,7 +1020,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 91 block 4294967295 instruction 16"
       }
     },
     {
@@ -1032,7 +1032,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/path/path.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {
@@ -1116,7 +1116,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
       }
     },
     {
@@ -1188,7 +1188,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/toml/toml.xr:882:42: error: projected Class ref requires its own object borrow owner"
       }
     },
     {
@@ -1212,7 +1212,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/xml/xml.xr:964:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
       }
     },
     {
@@ -1224,7 +1224,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/yaml/yaml.xr:1219:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
       }
     },
     {
@@ -1236,7 +1236,7 @@
       "exit_code": 1,
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 202 block 4294967295 instruction 16"
       }
     },
     {
@@ -1248,7 +1248,7 @@
       "exit_code": 1,
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:5:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 202 block 4294967295 instruction 16"
       }
     },
     {

@@ -1716,11 +1716,18 @@ static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
     }
     if (op->op == XR_XIR_FIXED_ARRAY_SET) {
         /* The receiver is an actual fixed byte place, so the store writes into
-         * that storage instead of producing a new value. */
+         * that storage instead of producing a new value. Its three operands
+         * live in the shared operand table, not in the two inline slots. */
+        if (op->args[1] != 3 || op->args[0] > f->source->operand_count ||
+            3 > f->source->operand_count - op->args[0]) {
+            lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked fixed byte store operands");
+            return false;
+        }
+        const uint32_t *ids = f->source->operands + op->args[0];
         XrLirValue store[3] = {{0}};
-        if (!lower_value(f, op->args[0], &store[0]) ||
-            !lower_value(f, op->args[1], &store[1]) ||
-            !lower_value(f, op->args[2], &store[2])) return false;
+        if (!lower_value(f, ids[0], &store[0]) ||
+            !lower_value(f, ids[1], &store[1]) ||
+            !lower_value(f, ids[2], &store[2])) return false;
         XrLirInstruction set = {.op=XR_LIR_FIXED_ARRAY_SET, .type=XR_LIR_UNIT,
             .operands=store, .operand_count=3, .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &set));
