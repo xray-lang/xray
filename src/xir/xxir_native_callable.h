@@ -19,6 +19,7 @@
 #include "xxir_sys_native.h"
 #include "xxir_os_native.h"
 #include "xxir_io_native.h"
+#include "xxir_runtime_native.h"
 #include "xxir_path_native.h"
 #include "../shared/xnative_declaration.h"
 
@@ -44,6 +45,7 @@ static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types
     if(xir_math_native_id(id))return xir_math_native_signature(id,parameters,count,result,error);
     if(xir_task_aggregate_native(id))return xir_task_aggregate_signature(id,types,parameters,count,result,error);
     if (xir_mem_native_id(id)) return xir_mem_native_signature(id,types,parameters,count,result,error);
+    if (xir_runtime_native_id(id)) return xir_runtime_native_signature(id,types,parameters,count,result,error);
     if (id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM || id==XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL) {
         bool fill=id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM;uint32_t required=fill?1u:2u;
         if (!canonical || canonical->owner || canonical->error_e_type || canonical->ctfe ||
