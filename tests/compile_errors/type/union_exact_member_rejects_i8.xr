@@ -1,0 +1,6 @@
+// Auto-wrap requires the value's static type to be exactly a member. An i8
+// value is neither i16 nor i32, and no implicit numeric conversion exists, so
+// this hand-off must be rejected even though `3` fits both member widths.
+var narrow: i8 = 3
+var value: i16 | i32 = narrow
+print(value is i16)

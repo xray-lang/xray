@@ -16,6 +16,22 @@ fn floatKind(v: f32 | f64) -> string {
     }
 }
 
+// A union variant payload is the same tagged-sum carrier a named enum uses.
+// There is no union payload read yet, so the payload VALUE is observed through
+// an enum with an f32 field: it shares CONST F32 emission, SUM_NEW/SUM_GET and
+// the transport carrier with the `f32 | f64` variants above.
+enum Reading {
+    Missing,
+    Value { v: f32 },
+}
+
+fn readingValue(r: Reading) -> f32 {
+    return match (r) {
+        Reading.Missing => 0.0,
+        Reading.Value { v } => v,
+    }
+}
+
 fn main() {
     var small: i16 = 5
     var large: i32 = 70000
@@ -25,5 +41,11 @@ fn main() {
     print(intKind(large))
     print(floatKind(narrow))
     print(floatKind(wide))
+    // f32 constants and payload values must survive the carrier exactly.
+    print(narrow)
+    print(readingValue(Reading.Value { v: 1.5 }))
+    print(readingValue(Reading.Value { v: 2.5 }))
+    var empty: Reading = Reading.Missing
+    print(readingValue(empty))
 }
 main()

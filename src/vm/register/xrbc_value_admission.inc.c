@@ -401,7 +401,8 @@ static bool rbc_value_display_valid(const XrRbcModule *module,const XrRbcValueCo
     XrPodLayout expected={0};
     if (!xr_pod_scalar_layout(display->scalar,&expected)) return false;
     if (!display->nullable_depth)
-        return (display->scalar==XR_POD_BOOL || display->scalar==XR_POD_U8 || display->scalar==XR_POD_U64) &&
+        return (display->scalar==XR_POD_BOOL || display->scalar==XR_POD_U8 || display->scalar==XR_POD_U64 ||
+                display->scalar==XR_POD_F32) &&
             rbc_value_scalar(code,function,access.source,XR_RBC_BITS) &&
             display->physical.size==expected.size && display->physical.alignment==expected.alignment &&
             display->physical.scalar_count==expected.scalar_count;

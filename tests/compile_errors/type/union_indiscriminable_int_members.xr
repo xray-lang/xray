@@ -1,0 +1,5 @@
+// `i16 | i32` is legal, but `i8` is not exactly a member: no implicit numeric
+// conversion exists, so this value hand-off stays rejected.
+var s: i8 = 3
+var a: i16 | i32 = s
+print("${a}")

@@ -195,7 +195,8 @@ static bool rbc_lir_display_emit(RbcLirCompiler *c, const XrLirInstructionView *
         access.slot = XR_POD_SCALAR_COUNT + rbc_lir_aggregate_ordinal(c, type);
     } else {
         access.slot = type == XR_LIR_I1 ? XR_POD_BOOL : type == XR_LIR_U8 ? XR_POD_U8 :
-            type == XR_LIR_U64 ? XR_POD_U64 : type == XR_LIR_F64 ? XR_POD_F64 : XR_POD_I64;
+            type == XR_LIR_U64 ? XR_POD_U64 : type == XR_LIR_F64 ? XR_POD_F64 :
+            type == XR_LIR_F32 ? XR_POD_F32 : XR_POD_I64;
         access.count = 1;
         if (c->aggregate_operand_count == UINT32_MAX)
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "display operands exceed bytecode indices");

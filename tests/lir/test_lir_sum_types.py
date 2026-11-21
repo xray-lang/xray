@@ -25,6 +25,12 @@ def run_case(args, source, expected, tag):
     generated = folder / "generated.c"
     emitted = run("emit", [args.source_driver, source, generated])
     assert emitted.returncode == 0, (folder, emitted.stderr)
+    if getattr(args, "c_contains", None) or getattr(args, "c_absent", None):
+        text = generated.read_text(encoding="utf-8", errors="replace")
+        for needle in filter(None, (getattr(args, "c_contains", None) or "").split(",")):
+            assert needle in text, (folder, "emitted C lost " + needle)
+        for needle in filter(None, (getattr(args, "c_absent", None) or "").split(",")):
+            assert needle not in text, (folder, "emitted C still has " + needle)
     main_source = folder / "main.c"
     main_source.write_text(
         "#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n"
@@ -81,6 +87,8 @@ def main():
     parser.add_argument("--program", required=True)
     parser.add_argument("--expect", help="expected stdout lines, comma separated")
     parser.add_argument("--refuse", help="expected lowering message; the program must be refused")
+    parser.add_argument("--c-contains", help="comma-separated substrings the emitted C must keep")
+    parser.add_argument("--c-absent", help="comma-separated substrings the emitted C must not contain")
     parser.add_argument("--library", type=Path, nargs="+", required=True)
     parser.add_argument("--kind", choices=("msvc", "gnu"), required=True)
     parser.add_argument("--msvc-runtime", default="MultiThreaded")

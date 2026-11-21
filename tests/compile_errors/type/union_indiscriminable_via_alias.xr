@@ -1,0 +1,6 @@
+// The alias expands to i16, so the literal still sees two integer-family
+// candidates: the union type is legal, the auto-wrap is ambiguous.
+type Small = i16
+
+var a: Small | i32 = 3
+print("${a}")

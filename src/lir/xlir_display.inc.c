@@ -7,7 +7,9 @@
  * xlir_display.inc.c - Shared qualification and physical catalog projection
  */
 XR_FUNC bool xr_lir_display_type(const XrLirModule *m, XrLirType type) {
-    if (type == XR_LIR_I1 || type == XR_LIR_U8 || type == XR_LIR_U64) return true;
+    /* f32 carries its exact 4-byte bits through the same POD display path as
+     * the other transport scalars; its decimal text comes from the runtime. */
+    if (type == XR_LIR_I1 || type == XR_LIR_U8 || type == XR_LIR_U64 || type == XR_LIR_F32) return true;
     if (xr_lir_tuple_display_type(m, type)) return true;
     bool nullable = false;
     while (type >= XR_LIR_TYPE_COUNT) {

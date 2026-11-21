@@ -266,7 +266,8 @@ add_test(NAME lir_union_same_family COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOUR
     --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
     --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
-    --program tests/lir/programs/union-same-family.xr --expect "i16,i32,f32,f64"
+    --program tests/lir/programs/union-same-family.xr --expect "i16,i32,f32,f64,1.5,1.5,2.5,0.0"
+    --c-contains "UINT64_C(1069547520),UINT64_C(1075838976)" --c-absent "(float)UINT64_C(0)"
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/union-same-family" ${lir_c_native_options})
 set_tests_properties(lir_union_same_family PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)

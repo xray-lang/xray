@@ -1045,7 +1045,9 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_CONST:
             if (v->type == XR_LIR_PTR)
                 c_format(c, "    v%" PRIu32 " = 0;\n", v->result);
-            else if (v->type == XR_LIR_F64) {
+            else if (v->type == XR_LIR_F64 || v->type == XR_LIR_F32) {
+                /* Floats reconstruct from their exact bits. Never route them
+                 * through the integer mask: f32 is not an integer width. */
                 c_format(c, "    v%" PRIu32 " = UINT64_C(%" PRIu64 ");\n", c->scratch, v->bits);
                 c_format(c, "    memcpy(&v%" PRIu32 ", &v%" PRIu32 ", sizeof(v%" PRIu32 "));\n",
                          v->result, c->scratch, v->result);

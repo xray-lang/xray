@@ -1,0 +1,4 @@
+// `i8 | i64` is legal, but an integer literal has two integer-family
+// candidates, so the auto-wrap is ambiguous rather than guessed.
+var v: i8 | i64 = 1
+print("${v}")
