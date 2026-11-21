@@ -1,0 +1,2 @@
+--> 8:7
+'Box' is not a built-in type; indirect recursive data through a class node or a container slot such as Array<T>
