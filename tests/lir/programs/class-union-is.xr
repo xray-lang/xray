@@ -11,12 +11,31 @@ fn isConn(handle: Conn | Listener) -> bool {
     return handle is Conn
 }
 
+fn isListener(handle: Conn | Listener) -> bool {
+    return handle is Listener
+}
+
 fn pick(handle: Conn | Listener) -> i64 {
     if (handle is Conn) { return 1 }
     return 2
 }
 
+fn makeConn(fd: i64) -> Conn {
+    return Conn(fd)
+}
+
+// Module storage is the first member's Class row. A function result whose
+// static type is that first member must be accepted; a sibling member is
+// rejected at compile time (see tests/compile_errors/type).
+var stored: Conn | Listener = makeConn(5)
+print(stored is Conn)
+print(stored is Listener)
+stored = makeConn(6)
+print(stored is Conn)
+
 print(isConn(Conn(3)))
 print(isConn(Listener(4)))
+print(isListener(Conn(3)))
+print(isListener(Listener(4)))
 print(pick(Conn(3)))
 print(pick(Listener(4)))

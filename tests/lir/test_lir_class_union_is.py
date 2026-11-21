@@ -8,7 +8,7 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments, native_c11_options  # noqa: E402
 
-EXPECTED = b"true\nfalse\n1\n2\n"
+EXPECTED = b"true\nfalse\ntrue\ntrue\nfalse\nfalse\ntrue\n1\n2\n"
 
 
 def main():

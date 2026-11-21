@@ -65,6 +65,21 @@ endif()
 add_test(NAME native_value_plan COMMAND test_native_value_plan)
 set_tests_properties(native_value_plan PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 30)
 
+add_executable(test_native_class_identity test_class_identity.c)
+target_link_libraries(test_native_class_identity PRIVATE xray_native_runtime)
+target_include_directories(test_native_class_identity PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
+set_target_properties(test_native_class_identity PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(test_native_class_identity PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(test_native_class_identity PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(test_native_class_identity PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME native_class_identity COMMAND test_native_class_identity)
+set_tests_properties(native_class_identity PROPERTIES LABELS "unit;native-runtime;ownership" TIMEOUT 30)
+
 add_executable(test_native_managed_status test_managed_status.c
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed.c"
     "${PROJECT_SOURCE_DIR}/src/runtime/native/xnative_managed_root.c"
