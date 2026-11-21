@@ -1503,6 +1503,7 @@ static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *bi
 #include "xxir_source_task_call.inc.c"
 #include "xxir_source_iterator_call.inc.c"
 #include "xxir_source_from_utf8.inc.c"
+#include "xxir_source_from_utf8_lossy.inc.c"
 #include "xxir_source_task_aggregate.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
@@ -1570,6 +1571,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (source_pointer_namespace(ctx,member->object)) return source_pointer_null_call(ctx,node,value);
         if (source_from_utf8_receiver(ctx,callee))
             return source_from_utf8_call(ctx,node,value);
+        if (source_from_utf8_lossy_receiver(ctx,callee))
+            return source_from_utf8_lossy_call(ctx,node,value);
         if (source_task_aggregate_receiver(ctx,callee))
             return source_task_aggregate_call(ctx,node,value);
         XrXirType decimal = source_decimal_static_receiver(ctx, member);
