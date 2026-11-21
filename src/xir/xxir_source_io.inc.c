@@ -28,6 +28,34 @@ static bool source_io_types(SourceContext *ctx) {
     }
     ctx->module=saved;return true;
 }
+/* Exactly the carrier types each descriptor leaf declares. The wrapper module
+ * converts nothing: an Array<u8> argument is the same array the caller built. */
+static bool source_io_file_types(SourceContext *ctx,uint32_t id,XrXirType *parameters,XrXirType *result) {
+    if(!parameters || !result)return false;
+    XrXirType path=XR_XIR_UNIT,array=XR_XIR_UNIT,nullable=XR_XIR_UNIT;
+    if(!source_path_prelude_type(ctx,&path))return false;
+    if(id==XR_NATIVE_CALLABLE_IO_FILE_READ || id==XR_NATIVE_CALLABLE_IO_FILE_WRITE) {
+        if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8},&array))return false;
+    }
+    if(id==XR_NATIVE_CALLABLE_IO_FILE_READ &&
+        !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=array},&nullable))return false;
+    switch(id) {
+    case XR_NATIVE_CALLABLE_IO_FILE_OPEN:
+        parameters[0]=path;*result=XR_XIR_I64;return true;
+    case XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE:
+        parameters[0]=path;parameters[1]=XR_XIR_BOOL;*result=XR_XIR_I64;return true;
+    case XR_NATIVE_CALLABLE_IO_FILE_READ:
+        parameters[0]=XR_XIR_I64;parameters[1]=XR_XIR_I64;*result=nullable;return true;
+    case XR_NATIVE_CALLABLE_IO_FILE_WRITE:
+        parameters[0]=XR_XIR_I64;parameters[1]=array;parameters[2]=XR_XIR_I64;*result=XR_XIR_I64;return true;
+    case XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR:
+        parameters[0]=XR_XIR_I64;parameters[1]=XR_XIR_STRING;parameters[2]=XR_XIR_I64;*result=XR_XIR_I64;return true;
+    case XR_NATIVE_CALLABLE_IO_FILE_FLUSH:
+    case XR_NATIVE_CALLABLE_IO_FILE_CLOSE:
+        parameters[0]=XR_XIR_I64;*result=XR_XIR_BOOL;return true;
+    default:return false;
+    }
+}
 static bool source_io_declare(SourceContext *ctx) {
     uint32_t saved_module=ctx->module,saved_function=ctx->function;
     static const uint32_t ids[]={XR_NATIVE_CALLABLE_IO_CHMOD,XR_NATIVE_CALLABLE_IO_CHDIR,XR_NATIVE_CALLABLE_IO_STAT,
@@ -35,7 +63,10 @@ static bool source_io_declare(SourceContext *ctx) {
         XR_NATIVE_CALLABLE_IO_RENAME,XR_NATIVE_CALLABLE_IO_UTIME_NOW,XR_NATIVE_CALLABLE_IO_SYMLINK,
         XR_NATIVE_CALLABLE_IO_READLINK,XR_NATIVE_CALLABLE_IO_REALPATH,
         XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR,XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE,
-        XR_NATIVE_CALLABLE_IO_DIR_OPEN,XR_NATIVE_CALLABLE_IO_DIR_NEXT,XR_NATIVE_CALLABLE_IO_DIR_CLOSE};
+        XR_NATIVE_CALLABLE_IO_DIR_OPEN,XR_NATIVE_CALLABLE_IO_DIR_NEXT,XR_NATIVE_CALLABLE_IO_DIR_CLOSE,
+        XR_NATIVE_CALLABLE_IO_FILE_OPEN,XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE,XR_NATIVE_CALLABLE_IO_FILE_READ,
+        XR_NATIVE_CALLABLE_IO_FILE_WRITE,XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR,XR_NATIVE_CALLABLE_IO_FILE_FLUSH,
+        XR_NATIVE_CALLABLE_IO_FILE_CLOSE};
     for(uint32_t m=0;m<ctx->module_count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
@@ -54,13 +85,18 @@ static bool source_io_declare(SourceContext *ctx) {
             if(find_name(ctx,ctx->names[m],native->member->name))continue;
             if(ctx->function_count>=ctx->function_capacity)
                 return source_fail(ctx,NULL,XR_XIR_BUDGET,"io native callable inventory exhausted");
-            XrXirType path=XR_XIR_UNIT;
-            if(!source_path_prelude_type(ctx,&path))return false;
             XrXirType *parameters=source_alloc(ctx,count,sizeof(*parameters));if(!parameters)return false;
-            bool temporary=id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR || id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE;
-            for(uint32_t p=0;p<count;++p)parameters[p]=p<contract->paths?path:temporary?XR_XIR_STRING:XR_XIR_I64;
-            bool text=temporary || id==XR_NATIVE_CALLABLE_IO_READLINK || id==XR_NATIVE_CALLABLE_IO_REALPATH || id==XR_NATIVE_CALLABLE_IO_DIR_NEXT;
-            XrXirType result=id==XR_NATIVE_CALLABLE_IO_STAT?file_stat:text?optional_string:id==XR_NATIVE_CALLABLE_IO_DIR_OPEN?XR_XIR_I64:XR_XIR_BOOL;
+            XrXirType result=XR_XIR_UNIT;
+            if(xir_io_file_terms_of(id)) {
+                if(!source_io_file_types(ctx,id,parameters,&result))return false;
+            } else {
+                XrXirType path=XR_XIR_UNIT;
+                if(!source_path_prelude_type(ctx,&path))return false;
+                bool temporary=id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR || id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE;
+                for(uint32_t p=0;p<count;++p)parameters[p]=p<contract->paths?path:temporary?XR_XIR_STRING:XR_XIR_I64;
+                bool text=temporary || id==XR_NATIVE_CALLABLE_IO_READLINK || id==XR_NATIVE_CALLABLE_IO_REALPATH || id==XR_NATIVE_CALLABLE_IO_DIR_NEXT;
+                result=id==XR_NATIVE_CALLABLE_IO_STAT?file_stat:text?optional_string:id==XR_NATIVE_CALLABLE_IO_DIR_OPEN?XR_XIR_I64:XR_XIR_BOOL;
+            }
             if(!xir_io_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))
                 return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io callable differs from its governed signature");
             const char *name=source_owned_text(ctx,native->member->name);
