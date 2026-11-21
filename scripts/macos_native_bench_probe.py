@@ -1,16 +1,21 @@
 """Replay the unchanged native benchmark runner and observe its Darwin children."""
 
 import argparse
+from contextlib import closing
+import ctypes
+import errno
 import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
 import platform
+import select
 import shutil
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 from xml.etree import ElementTree
 
 from macos_owned_process_probe import json_line, recorded, sample
@@ -28,11 +33,128 @@ INPUTS = (
 )
 
 
-def diagnose(test_args, output):
+class BsdProcessInfo(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_uint32) for name in ("pid", "ppid", "pgid", "status")] + [
+        ("command", ctypes.c_char * 16)
+    ] + [(name, ctypes.c_uint32) for name in ("flags", "uid", "gid", "ruid", "rgid", "svuid", "svgid", "reserved")]
+
+
+def probe_process_state():
+    # The public short BSD record includes zombies when proc_pidinfo's arg is 1.
+    library = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+    info = library.proc_pidinfo
+    info.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int)
+    info.restype = ctypes.c_int
+
+    def snapshot(pid):
+        data = BsdProcessInfo()
+        ctypes.set_errno(0)
+        length = info(pid, 13, 1, ctypes.byref(data), ctypes.sizeof(data))
+        valid = length == ctypes.sizeof(data) and data.pid == pid
+        return {"pid": pid, "bytes": length, "errno": errno.errorcode.get(ctypes.get_errno()),
+                "process": None if not valid else {
+                    "status": data.status, "pid": data.pid, "ppid": data.ppid, "pgid": data.pgid}}
+
+    return snapshot
+
+
+def watch_exit(queue, pid):
+    event = select.kevent(pid, filter=select.KQ_FILTER_PROC, fflags=select.KQ_NOTE_EXIT,
+                          flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT)
+    queue.control([event], 0, 0)
+
+
+def exit_events(queue, count, wait):
+    return [{"pid": event.ident, "flags": event.flags, "fflags": event.fflags, "data": event.data}
+            for event in queue.control(None, count, wait)]
+
+
+def is_exit(event):
+    return not event["flags"] & select.KQ_EV_ERROR and bool(event["fflags"] & select.KQ_NOTE_EXIT)
+
+
+def calibrate_exit_probe(snapshot, output):
+    here = snapshot(os.getpid())["process"]
+    assert (here["pid"], here["ppid"], here["pgid"]) == (os.getpid(), os.getppid(), os.getpgrp())
+    assert here["status"] != 5
+    with closing(select.kqueue()) as queue:
+        child = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.buffer.read(1)"],
+                                 stdin=subprocess.PIPE)
+        try:
+            watch_exit(queue, child.pid)
+            assert not exit_events(queue, 1, 0)
+            child.stdin.close()
+            event, = exit_events(queue, 1, 1)
+            zombie = snapshot(child.pid)
+            os.kill(child.pid, 0)
+            assert is_exit(event) and event["pid"] == child.pid and zombie["process"]["status"] == 5
+            assert zombie["process"]["ppid"] == os.getpid()
+        finally:
+            if not child.stdin.closed:
+                child.stdin.close()
+            child.wait(timeout=3)
+    json_line(output, {"event": "calibration", "living": here, "unreaped": zombie, "exit": event})
+
+
+def observe_exits(original, output):
+    snapshot = probe_process_state()
+    calibrate_exit_probe(snapshot, output)
+    with closing(select.kqueue()) as queue:
+        pids = []
+        original_observe = original.observe_process
+        run_path = original.runpy.run_path
+
+        def observe(pid):
+            watch_exit(queue, pid)
+            pids.append(pid)
+            return original_observe(pid)
+
+        def wrap_run_path(*args, **kwargs):
+            runner = run_path(*args, **kwargs)
+            original_sample = runner["run_sample"]
+
+            def run_sample(argv, *args, **kwargs):
+                result = original_sample(argv, *args, **kwargs)
+                if not pids:
+                    return result
+                finished = time.monotonic_ns()
+                initial = exit_events(queue, len(pids), 0)
+                zero_duration = time.monotonic_ns() - finished
+                states = [snapshot(pid) for pid in pids]
+                pending = set(pids) - {item["pid"] for item in initial if is_exit(item)}
+                following = []
+                wait_limit = finished + 100_000_000
+                while pending and (remaining := wait_limit - time.monotonic_ns()) > 0:
+                    for item in exit_events(queue, len(pending), remaining / 1e9):
+                        item["elapsedNs"] = time.monotonic_ns() - finished
+                        following.append(item)
+                        if is_exit(item):
+                            pending.discard(item["pid"])
+                json_line(output, {"event": "fixture-exits", "mode": argv[2], "sampleStatus": result["status"],
+                                   "pids": pids, "zeroTimeEvents": initial, "zeroDurationNs": zero_duration,
+                                   "initialStates": states,
+                                   "followingEvents": following, "pending": sorted(pending),
+                                   "lateStates": [snapshot(pid) for pid in sorted(pending)]})
+                pids.clear()
+                return result
+
+            runner["run_sample"] = run_sample
+            return runner
+
+        original.observe_process = observe
+        original.runpy = SimpleNamespace(run_path=wrap_run_path)
+        original.main()
+
+
+def diagnose(test_args, output, direct_events):
     test, reference, products = test_args
     spec = importlib.util.spec_from_file_location("native_bench_runner_control", test)
     original = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(original)
+    sys.argv = [test, "--reference", reference, "--output", products]
+    if direct_events:
+        observe_exits(original, output)
+        return 0
     observer = original.process_exited
     started = time.monotonic()
 
@@ -46,12 +168,11 @@ def diagnose(test_args, output):
         return result
 
     original.process_exited = observed_exited
-    sys.argv = [test, "--reference", reference, "--output", products]
     original.main()
     return 0
 
 
-def replay(output):
+def replay(output, direct_events):
     output.mkdir()
     workspace = output.with_name(output.name + "-workspace")
     workspace.mkdir()
@@ -96,7 +217,7 @@ def replay(output):
     json_line(output / "summary.jsonl", {"exactInputsSha256": hashes})
 
     formal = []
-    for index, side in enumerate(("base", "candidate") * 4, 1):
+    for index, side in enumerate(() if direct_events else ("base", "candidate") * 4, 1):
         build, _ = registrations[side]
         name = f"formal-{index:02d}-{side}"
         junit = output / f"{name}.xml"
@@ -109,11 +230,14 @@ def replay(output):
         formal.append({"side": side, "exit": status, "seconds": float(case.get("time"))})
 
     diagnosis = []
-    for index, side in enumerate(("candidate", "base") * 2, 1):
+    for index, side in enumerate(("candidate", "base") * (4 if direct_events else 2), 1):
         build, command = registrations[side]
         name = f"diagnostic-{index:02d}-{side}"
-        status = recorded(output, name, [PYTHON, "-B", __file__, "--output", output / f"{name}.jsonl", "--observe",
-                                         command[1], command[3], build / f"{name}-products"], cwd=build, timeout=30)
+        witness = [PYTHON, "-B", __file__, "--output", output / f"{name}.jsonl",
+                   "--observe", command[1], command[3], build / f"{name}-products"]
+        if direct_events:
+            witness.append("--direct-exit-events")
+        status = recorded(output, name, witness, cwd=build, timeout=30)
         diagnosis.append({"side": side, "exit": status})
     json_line(output / "summary.jsonl", {"state": "COMPLETE_DIAGNOSTIC_ONLY", "formal": formal,
                                          "diagnostic": diagnosis})
@@ -124,12 +248,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--observe", nargs=3)
+    parser.add_argument("--direct-exit-events", action="store_true")
     args = parser.parse_args()
     if sys.platform != "darwin":
         parser.error("This replay requires Darwin")
     if args.observe:
-        return diagnose(args.observe, args.output)
-    return replay(args.output.resolve())
+        return diagnose(args.observe, args.output, args.direct_exit_events)
+    return replay(args.output.resolve(), args.direct_exit_events)
 
 
 if __name__ == "__main__":

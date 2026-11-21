@@ -484,10 +484,12 @@ jobs:
         with:
           python-version: '3.11.9'
       - name: Replay the native benchmark control and collect process state
-        run: python scripts/macos_native_bench_probe.py --output "$RUNNER_TEMP/task339-native-bench-probe"
+        run: >-
+          python scripts/macos_native_bench_probe.py --direct-exit-events
+          --output "$RUNNER_TEMP/task339-native-bench-probe"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: task339-macos-native-bench-probe-79368992b
+          name: task339-macos-native-bench-exit-events-79368992b
           path: ${{ runner.temp }}/task339-native-bench-probe/
           if-no-files-found: error
