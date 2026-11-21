@@ -258,7 +258,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             if (identity->module != actual->module || (is_default ? identity->exported : 0) != actual->exported ||
                 identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access ||
                 identity->promises != actual->promises || identity->method_kind != actual->method_kind ||
-                identity->test_role != actual->test_role || identity->test_timeout_seconds != actual->test_timeout_seconds ||
+                identity->test_role != actual->test_role || identity->test_timeout_milliseconds != actual->test_timeout_milliseconds ||
                 identity->native_callable != actual->native_callable || identity->capture_count != actual->capture_count)
                 return XR_XIR_BAD_STRUCTURE;
             uint32_t declared_owners[] = {identity->cleanup_owner, identity->capture_owner};

@@ -91,7 +91,7 @@ static inline bool xir_stringable_body(const XrXirModule *m,uint32_t index,XrXir
     const XrXirFunction *f=&m->functions[index];
     const XrXirFunctionIdentity *identity=&m->declarations->functions[index];
     if (identity->exported!=1 || identity->nominal_owner || identity->method_kind || identity->member_access ||
-        identity->cleanup_owner || identity->native_callable || identity->test_role || identity->test_timeout_seconds ||
+        identity->cleanup_owner || identity->native_callable || identity->test_role || identity->test_timeout_milliseconds ||
         (identity->promises&~XR_XIR_FUNCTION_NO_SUSPEND) ||
         (m->generics && (m->generics[index].parameter_count || m->generics[index].argument_count)) ||
         f->parameter_count!=1 || !f->parameters || f->consume_parameter_count || f->consume_parameters ||

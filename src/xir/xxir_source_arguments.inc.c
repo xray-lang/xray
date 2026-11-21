@@ -98,7 +98,7 @@ static bool source_owner_argument_functions(SourceContext *ctx,uint32_t f,XrPara
             ctx->generics[helper] = ctx->generics[f];
             ctx->identities[helper] = ctx->identities[f];
             ctx->identities[helper].test_role = XR_XIR_TEST_ROLE_NONE;
-            ctx->identities[helper].test_timeout_seconds = 0;
+            ctx->identities[helper].test_timeout_milliseconds = 0;
             ctx->identities[helper].exported = false;
             ctx->identities[helper].promises = 0;
             ctx->identities[helper].capture_owner = ctx->identities[helper].capture_count = 0;

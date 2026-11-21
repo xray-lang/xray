@@ -268,7 +268,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         id.promises = checked_u32(c, id.promises);
         id.method_kind = checked_u32(c, id.method_kind);
         id.test_role = checked_u32(c, id.test_role);
-        id.test_timeout_seconds = checked_u32(c, id.test_timeout_seconds);
+        id.test_timeout_milliseconds = checked_u32(c, id.test_timeout_milliseconds);
         id.native_callable = checked_u32(c, id.native_callable);
         id.capture_owner = checked_u32(c, id.capture_owner);
         id.capture_count = checked_u32(c, id.capture_count);

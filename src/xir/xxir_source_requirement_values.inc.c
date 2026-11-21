@@ -87,7 +87,7 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     ctx->generics[index].constraints = constraints;
     ctx->identities[index] = ctx->identities[outer];
     ctx->identities[index].test_role = XR_XIR_TEST_ROLE_NONE;
-    ctx->identities[index].test_timeout_seconds = 0;
+    ctx->identities[index].test_timeout_milliseconds = 0;
     ctx->identities[index].exported = 0; ctx->identities[index].cleanup_owner = 0;
     ctx->identities[index].capture_owner = outer + 1; ctx->identities[index].capture_count = 1;
     ctx->identities[index].method_kind = ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;

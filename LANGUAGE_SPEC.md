@@ -6608,7 +6608,7 @@ Public Xray attributes come from one registry, exposed by `xray language attribu
 
 | Attribute | Description |
 |---|---|
-| `@test` / `@test(skip)` / `@test(timeout: N)` | test, skipped test, or per-test timeout in seconds |
+| `@test` / `@test(skip)` / `@test(timeout: N)` | test, skipped test, or per-test timeout in milliseconds |
 | `@before_all` / `@after_all` | run once before/after the file's suite |
 | `@before_each` / `@after_each` | run before/after every non-skipped test |
 
