@@ -3059,6 +3059,12 @@ if(BUILD_TESTS)
     set_tests_properties(test_map_literal_semantics PROPERTIES
         LABELS "frontend;hir;syntax;vm;native" TIMEOUT 120)
 
+    add_test(NAME range_members_vm_native
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_range_members.py
+            --binary $<TARGET_FILE:xray>)
+    set_tests_properties(range_members_vm_native PROPERTIES
+        LABELS "stdlib;prelude;range;vm;native" TIMEOUT 180)
+
     add_test(NAME test_named_arguments
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/test_named_arguments.py
             --binary $<TARGET_FILE:xray>)
