@@ -566,13 +566,9 @@
       "id": "stdlib/runtime/runtime.xr",
       "path": "stdlib/runtime/runtime.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/runtime/runtime.xr:32:17: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/simd/simd.xr",
@@ -1139,13 +1135,9 @@
       "id": "native:stdlib/runtime/runtime.xr",
       "path": "stdlib/runtime/runtime.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "F13",
-        "first_diagnostic": "stdlib/runtime/runtime.xr:32:17: error: name is not an initialized value"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/simd/simd.xr",
