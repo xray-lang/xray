@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       core_owned_process_probe:
-        description: Replay the owned process control on one macOS host
+        description: Replay the native bench process control on one macOS host
         type: boolean
         default: false
       scalar_performance:
@@ -466,7 +466,7 @@ jobs:
 
   core-macos-owned-process-probe:
     if: github.event_name == 'workflow_dispatch' && inputs.core_owned_process_probe
-    name: Exact macOS owned process control
+    name: Exact macOS native benchmark process control
     runs-on: macos-latest
     timeout-minutes: 12
     permissions:
@@ -483,11 +483,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11.9'
-      - name: Replay the original control and collect process state
-        run: python scripts/macos_owned_process_probe.py --output "$RUNNER_TEMP/task339-owned-process-probe"
+      - name: Replay the native benchmark control and collect process state
+        run: python scripts/macos_native_bench_probe.py --output "$RUNNER_TEMP/task339-native-bench-probe"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: task339-macos-owned-process-probe-2b6e92dd3
-          path: ${{ runner.temp }}/task339-owned-process-probe/
+          name: task339-macos-native-bench-probe-79368992b
+          path: ${{ runner.temp }}/task339-native-bench-probe/
           if-no-files-found: error
