@@ -521,10 +521,17 @@ static void source_effect_explain(void *context, const XrXirModule *module,
 #include "xxir_source_escape.inc.c"
 static void source_check_failure(SourceContext *ctx, XrXirDiagnostic location, XrXirStatus status) {
     char message[128] = {0};
+    /* A whole-missing set of coordinates told a reader nothing, so name it
+     * plainly and keep the status, which still identifies the check family. */
+    bool located = location.function != UINT32_MAX || location.instruction != UINT32_MAX ||
+        location.block != UINT32_MAX;
     if (status != XR_XIR_BUDGET && status != XR_XIR_OUT_OF_MEMORY &&
-        source_format(ctx, message, sizeof(message),
-            "constructed XIR failed checking at function %u block %u instruction %u",
-            location.function, location.block, location.instruction) != XR_DIAG_OK)
+        (located ? source_format(ctx, message, sizeof(message),
+            "constructed XIR failed checking at function %u block %u instruction %u (status %u)",
+            location.function, location.block, location.instruction, (uint32_t) status) :
+            source_format(ctx, message, sizeof(message),
+                "constructed XIR failed checking without a recorded position (status %u)",
+                (uint32_t) status)) != XR_DIAG_OK)
         status = XR_XIR_BUDGET;
     AstNode *site = NULL;
     if (location.function < ctx->function_count) {
