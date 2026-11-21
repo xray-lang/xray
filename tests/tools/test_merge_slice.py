@@ -139,7 +139,7 @@ class QueueTests(unittest.TestCase):
                "path": ".github/workflows/native-host-portability.yml"}
         endpoint = "/runs/100/attempts/1"
         api[endpoint] = run
-        jobs, gates = [], {}
+        jobs, gates, artifacts = [], {}, []
         hosts = [*merge_slice.HOST_JOBS.items(), ("san", merge_slice.SAN_JOB)]
         for artifact_id, (host, name) in enumerate(hosts, 50):
             profile = "Debug" if host == "san" else "Release"
@@ -155,6 +155,7 @@ class QueueTests(unittest.TestCase):
                 "digest": "sha256:" + self.digest(package.read_bytes()),
                 "workflow_run": {"id": 100, "head_sha": sha, "repository_id": 20, "head_repository_id": 20},
             }
+            artifacts.append(api[f"/artifacts/{artifact_id}"])
             kind = "Windows" if host == "windows-2022" else "Unix"
             steps = ([f"Configure {kind} Ninja Release", f"Build {kind} all without exclusions",
                       f"Independently rebuild {kind} CLI", f"Verify {kind} current gates"] if host != "san" else
@@ -166,6 +167,7 @@ class QueueTests(unittest.TestCase):
                                    for step in ["Run actions/checkout@v4", *steps, merge_slice.UPLOAD_STEP]]})
             gates[host] = {"id": artifact_id, "zip": str(package)}
         api[endpoint + "/jobs?per_page=100"] = {"jobs": jobs}
+        api["/runs/100/artifacts?per_page=100&page=1"] = {"total_count": len(artifacts), "artifacts": artifacts}
         json_file(path.with_suffix(".api"), api)
         json_file(path, {
             "approved": True, "sourceSHA": sha, "reviewedBase": self.base,
@@ -485,6 +487,82 @@ class QueueTests(unittest.TestCase):
         json_file(metadata, api)
         log = self.finish(self.start(branch), 1)
         self.assertIn("this run and upload step", log["error"])
+
+    def test_upload_window_accepts_only_a_unique_artifact_in_its_attempt(self):
+        branch = self.branch("core/upload-window", {"example": "yes"})
+        review = json.loads(branch[1].read_bytes())
+        requested = review["ci"]["artifacts"]["macos-latest"]
+        detail = f"/artifacts/{requested['id']}"
+        endpoint = "/runs/100/artifacts?per_page=100&page=1"
+        fixture = branch[1].with_suffix(".api").read_bytes()
+        for case, created, sibling_time, sibling_expired, listed_id, error in (
+            ("exact-start", "01:00:00", None, False, requested["id"], None),
+            ("plus-five", "01:00:07", None, False, requested["id"], None),
+            ("plus-six", "01:00:08", None, False, requested["id"], "this run and upload step"),
+            ("before-start", "00:59:59", None, False, requested["id"], "this run and upload step"),
+            ("previous-attempt", "01:00:01", "00:59:55", False, requested["id"], None),
+            ("different-listed-id", "01:00:01", None, False, 200, "exactly the requested artifact"),
+            ("live-duplicate", "01:00:01", "01:00:07", False, requested["id"], "exactly the requested artifact"),
+            ("expired-duplicate", "01:00:01", "01:00:07", True, requested["id"], "exactly the requested artifact"),
+            ("duplicate-on-next-page", "01:00:01", "01:00:07", False, requested["id"], "exactly the requested artifact"),
+            ("inconsistent-listed-time", "01:00:01", None, False, requested["id"], "exactly the requested artifact"),
+        ):
+            with self.subTest(case=case):
+                api = json.loads(fixture)
+                meta = api[detail]
+                meta["created_at"] = f"2026-11-20T{created}Z"
+                rows = api[endpoint]["artifacts"]
+                row = next(item for item in rows if item["id"] == requested["id"])
+                row.update(id=listed_id, created_at=meta["created_at"])
+                if case == "inconsistent-listed-time":
+                    row["created_at"] = "2026-11-20T01:00:02Z"
+                if sibling_time is not None:
+                    rows.append({**row, "id": 200, "created_at": f"2026-11-20T{sibling_time}Z", "expired": sibling_expired})
+                total_count = len(rows)
+                if case == "duplicate-on-next-page":
+                    duplicate = rows.pop()
+                    size = merge_slice.ARTIFACT_PAGE_SIZE
+                    rows.extend({**row, "id": 300 + i, "name": f"unrelated-{i}"} for i in range(size - len(rows)))
+                    total_count = size + 1
+                    api["/runs/100/artifacts?per_page=100&page=2"] = {"total_count": total_count, "artifacts": [duplicate]}
+                api[endpoint]["total_count"] = total_count
+                run = api["/runs/100/attempts/1"]
+                job = next(job for job in api["/runs/100/attempts/1/jobs?per_page=100"]["jobs"]
+                           if job["name"] == merge_slice.HOST_JOBS["macos-latest"])
+                logs = self.root / case
+                logs.mkdir()
+                with mock.patch.object(merge_slice, "official_json", side_effect=lambda endpoint, *_: api[endpoint]):
+                    catalog = merge_slice.official_run_artifacts(run["id"], logs, {})
+                    args = (run, job, requested, "current-macos-latest", [], catalog, logs, {})
+                    if error is None:
+                        with merge_slice.verified_ci_package(*args) as package:
+                            self.assertIn("build/CMakeCache.txt", package.namelist())
+                    else:
+                        with self.assertRaisesRegex(ValueError, error):
+                            merge_slice.verified_ci_package(*args)
+
+    def test_official_artifact_listing_requires_all_pages(self):
+        size = merge_slice.ARTIFACT_PAGE_SIZE
+        first = [{"id": i + 1, "name": f"artifact-{i + 1}", "created_at": "2026-11-20T01:00:01Z"}
+                 for i in range(size)]
+        last = {**first[0], "id": size + 1}
+        for case, count, rows, error in (
+            ("complete", size + 1, [last], None),
+            ("short-page", size + 1, [], "Incomplete or inconsistent"),
+            ("changed-total", size, [], "Incomplete or inconsistent"),
+            ("overlapping-page", size + 1, [first[0]], "Invalid or duplicate"),
+        ):
+            with self.subTest(case=case):
+                pages = [{"total_count": size + 1, "artifacts": first}, {"total_count": count, "artifacts": rows}]
+                with mock.patch.object(merge_slice, "official_json", side_effect=pages) as fetch:
+                    if error is None:
+                        catalog = merge_slice.official_run_artifacts(100, self.root, {})
+                        self.assertEqual(set(catalog), set(range(1, size + 2)))
+                    else:
+                        with self.assertRaisesRegex(ValueError, error):
+                            merge_slice.official_run_artifacts(100, self.root, {})
+                self.assertEqual([call.args[0] for call in fetch.call_args_list],
+                                 [f"/runs/100/artifacts?per_page={size}&page={page}" for page in (1, 2)])
 
     def test_fabricated_current_argv_is_rejected(self):
         branch = self.branch("core/argv", {"example": "yes"})

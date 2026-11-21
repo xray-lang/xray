@@ -7,7 +7,7 @@ refers to closed runner receipts. SAN approval covers the exact patch.
 
 import argparse
 import ast
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 import json
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -40,6 +40,8 @@ SAN_JOB = "Current gates (ASan + UBSan + paranoid)"
 CI_REPO = "xray-lang/xray"
 CI_API = f"https://api.github.com/repos/{CI_REPO}/actions"
 UPLOAD_STEP = "Run actions/upload-artifact@v4"
+UPLOAD_REGISTRATION_DELAY = timedelta(seconds=5)
+ARTIFACT_PAGE_SIZE = 100
 METADATA_OWNERSHIP_FILES = {"scripts/check_meta_ownership.py", "scripts/meta_ownership_baseline.json"}
 CURRENT_CORE = {"smoke", "test_cgen_verify_output", "test_lir_core", "register_vm", "lir_bytecode"}
 
@@ -447,7 +449,36 @@ def verify_release_pair(pair: dict, host: str, candidate: str, baseline: str, te
     }
 
 
+def official_run_artifacts(run_id: int, logs: Path, log: dict) -> dict[int, tuple[str, datetime]]:
+    """Read every page so earlier attempts and name collisions stay visible."""
+    artifacts = {}
+    total = None
+    page = 1
+    while True:
+        endpoint = f"/runs/{run_id}/artifacts?per_page={ARTIFACT_PAGE_SIZE}&page={page}"
+        listing = official_json(endpoint, f"ci-artifacts-page-{page}.json", logs, log)
+        if not isinstance(listing, dict):
+            raise ValueError("Invalid official run artifact listing")
+        count, rows = listing.get("total_count"), listing.get("artifacts")
+        if (type(count) is not int or count < 0 or (total is not None and count != total) or
+                not isinstance(rows, list) or len(rows) != min(ARTIFACT_PAGE_SIZE, count - len(artifacts))):
+            raise ValueError("Incomplete or inconsistent official run artifact listing")
+        total = count
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError("Invalid official run artifact record")
+            artifact_id, name = row.get("id"), row.get("name")
+            if (type(artifact_id) is not int or artifact_id <= 0 or artifact_id in artifacts or
+                    not isinstance(name, str) or not name):
+                raise ValueError("Invalid or duplicate official run artifact record")
+            artifacts[artifact_id] = (name, parse_time(row.get("created_at")))
+        if len(artifacts) == total:
+            return artifacts
+        page += 1
+
+
 def verified_ci_package(run: dict, job: dict, artifact: dict, name: str, required_steps: list[str],
+                        run_artifacts: dict[int, tuple[str, datetime]],
                         logs: Path, log: dict) -> ZipFile:
     steps = job["steps"]
     for step_name in ["Run actions/checkout@v4", *required_steps, UPLOAD_STEP]:
@@ -461,12 +492,18 @@ def verified_ci_package(run: dict, job: dict, artifact: dict, name: str, require
     meta = official_json(f"/artifacts/{artifact_id}", name + "-artifact.json", logs, log)
     owner = meta.get("workflow_run") or {}
     repo_id = run["repository"]["id"]
+    expected_name = name + "-" + run["head_sha"]
     created = parse_time(meta["created_at"])
     start, end = parse_time(upload["started_at"]), parse_time(upload["completed_at"])
-    if (meta.get("id") != artifact_id or meta.get("name") != name + "-" + run["head_sha"] or meta.get("expired") is not False or
+    upper = end + UPLOAD_REGISTRATION_DELAY
+    if (meta.get("id") != artifact_id or meta.get("name") != expected_name or meta.get("expired") is not False or
             owner.get("id") != run["id"] or owner.get("head_sha") != run["head_sha"] or owner.get("repository_id") != repo_id or
-            owner.get("head_repository_id") != repo_id or not start <= created <= end):
+            owner.get("head_repository_id") != repo_id or end < start or not start <= created <= upper):
         raise ValueError(f"{job['name']}: artifact does not belong to this run and upload step")
+    matches = [item_id for item_id, (item_name, date) in run_artifacts.items()
+               if item_name == expected_name and start <= date <= upper]
+    if matches != [artifact_id] or run_artifacts[artifact_id][1] != created:
+        raise ValueError(f"{job['name']}: upload window must contain exactly the requested artifact")
     # Read only the archived bytes whose digest was checked.
     content = archive(artifact["zip"], name + ".zip", logs, log)
     digest = log["evidence"][name + ".zip"]["sha256"]
@@ -476,7 +513,12 @@ def verified_ci_package(run: dict, job: dict, artifact: dict, name: str, require
 
 
 def parse_time(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if not isinstance(value, str):
+        raise ValueError("Official timestamp must be a string")
+    timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if timestamp.utcoffset() is None:
+        raise ValueError("Official timestamp must include a time zone")
+    return timestamp
 
 
 def verify_metadata_ownership(root: Path, changed: list[str], logs: Path, log: dict) -> None:
@@ -521,19 +563,20 @@ def verify_task339(root: Path, candidate: str, review: dict, logs: Path, log: di
             raise ValueError("Missing or failed CI job: " + name)
         return matches[0]
 
+    run_artifacts = official_run_artifacts(run_id, logs, log)
     required = current_gate_tests(root, candidate)
     for host, title in HOST_JOBS.items():
         kind = "Windows" if host == "windows-2022" else "Unix"
         steps = [f"Configure {kind} Ninja Release", f"Build {kind} all without exclusions",
                  f"Independently rebuild {kind} CLI", f"Verify {kind} current gates"]
         with verified_ci_package(run, official_job(title), ci["artifacts"][host], "current-" + host,
-                                 steps, logs, log) as package:
+                                 steps, run_artifacts, logs, log) as package:
             verify_current(package, host, candidate, required, logs, log)
     log["gates"]["L1"] = "PASS"
 
     steps = ["Configure combined sanitizers", "Build current products and kernels", "Verify exact CLI and current gates"]
     with verified_ci_package(run, official_job(SAN_JOB), ci["artifacts"]["san"], "current-sanitizers",
-                             steps, logs, log) as package:
+                             steps, run_artifacts, logs, log) as package:
         verify_current(package, "ubuntu-24.04", candidate, required, logs, log, "Debug")
     log["gates"]["combinedSan"] = "PASS"
 
