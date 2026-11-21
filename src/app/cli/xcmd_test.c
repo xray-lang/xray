@@ -77,8 +77,8 @@ static bool test_discover(const XrXirModule *module, const XrCliTestDiscoverOpts
         else ++tally->tests;
         if (!opts->verbose) continue;
         fprintf(opts->report, "  %-11s %s", test_role_name(identity->test_role), name);
-        if (identity->test_timeout_seconds)
-            fprintf(opts->report, " timeout=%u", identity->test_timeout_seconds);
+        if (identity->test_timeout_milliseconds)
+            fprintf(opts->report, " timeout=%u", identity->test_timeout_milliseconds);
         fprintf(opts->report, "\n");
     }
     return true;
@@ -151,18 +151,23 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
             &path_diagnostic);
         if (status == XR_SOURCE_COMPILE_OK) {
             XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
-                xr_source_compile_default_manifest_limits(), NULL};
+                xr_source_compile_default_manifest_limits(), NULL, xr_xir_target_host()};
             status = xr_source_compile_check(&request, &source, &diagnostic);
         }
         if (status != XR_SOURCE_COMPILE_OK) {
             ++failures;
             if (!quiet) {
-                char *report = NULL;
-                if (diagnostic.status != XR_SOURCE_COMPILE_OK)
-                    xr_source_compile_diagnostic_render(&diagnostic, resources, &report);
-                xr_cli_error("test", "%s: %s", files.paths[f],
-                    report ? report : xr_source_compile_status_name(diagnostic.status));
-                xr_compile_resources_free(report);
+                if (diagnostic.status != XR_SOURCE_COMPILE_OK) {
+                    char *report = NULL;
+                    (void)xr_source_compile_diagnostic_render(&diagnostic, resources, &report);
+                    xr_cli_error("test", "%s: %s", files.paths[f],
+                        report ? report : xr_source_compile_status_name(diagnostic.status));
+                    xr_compile_resources_free(report);
+                } else {
+                    char text[4096];
+                    xr_source_paths_diagnostic_format(&path_diagnostic, text, sizeof(text));
+                    xr_cli_error("test", "%s: %s", files.paths[f], text);
+                }
             }
         } else {
             XrCliTestTally tally = {0};
