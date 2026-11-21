@@ -2557,6 +2557,7 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
 #include "xxir_source_path_native.inc.c"
 #include "xxir_source_os.inc.c"
 #include "xxir_source_io.inc.c"
+#include "xxir_source_runtime.inc.c"
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
     uint32_t readers = ctx->repl_tail ? 1u : 0u, function_values=0;
@@ -2809,7 +2810,8 @@ static bool collect_declarations(SourceContext *ctx) {
             if (p->kind == SOURCE_IMPORT && !source_import_selectors(ctx,p)) return false;
     }
     return source_unicode_declare(ctx) && source_crypto_declare(ctx) && source_mem_declare(ctx) &&
-        source_math_declare(ctx) && source_sys_declare(ctx) && source_os_declare(ctx) && source_io_declare(ctx) && source_path_native_declare(ctx);
+        source_math_declare(ctx) && source_sys_declare(ctx) && source_os_declare(ctx) && source_io_declare(ctx) &&
+        source_runtime_declare(ctx) && source_path_native_declare(ctx);
 }
 static bool source_parameter_promise(SourceContext *ctx, uint32_t function, uint32_t parameter) {
     SourceFunction *body = &ctx->bodies[function];

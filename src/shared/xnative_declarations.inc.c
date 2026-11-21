@@ -1484,6 +1484,31 @@ static const XrNativeMemberDeclaration xr_native_io_dir_close = {
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
     "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_io_dir_close_parameters, 1, XR_NATIVE_TERM_BOOL
 };
+static const XrNativeMemberDeclaration xr_native_runtime_live_bytes = {
+    1, "__liveBytes", "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64
+};
+static const XrNativeMemberDeclaration xr_native_runtime_live_objects = {
+    2, "__liveObjects", "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64
+};
+static const XrNativeMemberDeclaration xr_native_runtime_finalizer_count = {
+    3, "__finalizerCount", "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64
+};
+static const XrNativeMemberDeclaration xr_native_runtime_shared_live_bytes = {
+    4, "__sharedLiveBytes", "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64
+};
+static const XrNativeMemberDeclaration xr_native_runtime_static_alloc_bytes = {
+    5, "__staticAllocBytes", "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,
+    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,
+    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64
+};
 static const XrNativeMemberDeclaration xr_native_path_getcwd = {
     1, "__getcwd", "(): string", "string", 0, 0, XR_NATIVE_RECEIVER_READ,
     false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,
@@ -1646,6 +1671,11 @@ static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_IO_DIR_OPEN, NULL, &xr_native_io_dir_open, NULL, false, "io", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
     {XR_NATIVE_CALLABLE_IO_DIR_NEXT, NULL, &xr_native_io_dir_next, NULL, false, "io", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
     {XR_NATIVE_CALLABLE_IO_DIR_CLOSE, NULL, &xr_native_io_dir_close, NULL, false, "io", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
+    {XR_NATIVE_CALLABLE_RUNTIME_LIVE_BYTES, NULL, &xr_native_runtime_live_bytes, NULL, false, "runtime", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
+    {XR_NATIVE_CALLABLE_RUNTIME_LIVE_OBJECTS, NULL, &xr_native_runtime_live_objects, NULL, false, "runtime", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
+    {XR_NATIVE_CALLABLE_RUNTIME_FINALIZER_COUNT, NULL, &xr_native_runtime_finalizer_count, NULL, false, "runtime", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
+    {XR_NATIVE_CALLABLE_RUNTIME_SHARED_LIVE_BYTES, NULL, &xr_native_runtime_shared_live_bytes, NULL, false, "runtime", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
+    {XR_NATIVE_CALLABLE_RUNTIME_STATIC_ALLOC_BYTES, NULL, &xr_native_runtime_static_alloc_bytes, NULL, false, "runtime", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
     {XR_NATIVE_CALLABLE_PATH_GETCWD, NULL, &xr_native_path_getcwd, NULL, false, "path", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
     {XR_NATIVE_CALLABLE_PATH_IS_WINDOWS, NULL, &xr_native_path_is_windows, NULL, false, "path", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
     {XR_NATIVE_CALLABLE_PATH_FULLPATH, NULL, &xr_native_path_fullpath, NULL, false, "path", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},

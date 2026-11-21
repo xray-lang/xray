@@ -1684,6 +1684,36 @@ def render_os_callables(declarations):
 
 
 
+def render_runtime_counters(declarations):
+    contracts = (
+        ('__liveBytes', 'runtime_live_bytes', 'xr_aot_runtime_live_bytes', 'RUNTIME_LIVE_BYTES'),
+        ('__liveObjects', 'runtime_live_objects', 'xr_aot_runtime_live_objects', 'RUNTIME_LIVE_OBJECTS'),
+        ('__finalizerCount', 'runtime_finalizer_count', 'xr_aot_runtime_finalizer_count', 'RUNTIME_FINALIZER_COUNT'),
+        ('__sharedLiveBytes', 'runtime_shared_bytes', 'xr_aot_runtime_shared_bytes', 'RUNTIME_SHARED_LIVE_BYTES'),
+        ('__staticAllocBytes', 'runtime_static_bytes', 'xr_aot_runtime_static_bytes', 'RUNTIME_STATIC_ALLOC_BYTES'),
+    )
+    lines, rows = [], []
+    for ordinal, (name, vm, aot, identity) in enumerate(contracts, 1):
+        candidates = [row for row in declarations if row.module == 'runtime' and row.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Runtime counter requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
+                '(): i64', '0', '', 'internal', '', '', '', 'runtime', vm, aot, False,
+                '', '', 'normal', '', '', 'value', False, None, (), ''):
+            raise ValueError('Runtime counter differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal) + ', ' + c_string(name) + ', "(): i64", "i64", 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_I64', '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "runtime", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
 def render_unicode_callable(root, decoder):
     import sys
     sys.path.insert(0, str(root / 'tools' / 'stdlibgen'))
@@ -1824,6 +1854,9 @@ def render_unicode_callable(root, decoder):
     io_lines, io_rows = render_io_callables(declarations)
     buffer_lines += io_lines
     buffer_rows += io_rows
+    runtime_lines, runtime_rows = render_runtime_counters(declarations)
+    buffer_lines += runtime_lines
+    buffer_rows += runtime_rows
     path_lines, path_rows = render_path_getcwd(declarations)
     buffer_lines += path_lines
     buffer_rows += path_rows
