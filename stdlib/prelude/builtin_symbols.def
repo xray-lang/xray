@@ -258,7 +258,7 @@ XR_BUILTIN_IFACE("Stringable", 0)
  * declaration of the same name resolves normally and never reaches the hint. */
 XR_BUILTIN_UNDEFINED_HINT("Self",
                           "Xray has no 'Self' type; write the declaring type's own name, "
-                          "e.g. operator==(other: Token) -> bool")
+                          "e.g. equals(other: Token) -> bool")
 XR_BUILTIN_UNDEFINED_HINT("Box",
                           "'Box' is not a built-in type; indirect recursive data through a "
                           "class node or a container slot such as Array<T>")

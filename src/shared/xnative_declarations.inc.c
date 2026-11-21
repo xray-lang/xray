@@ -406,7 +406,7 @@ static const XrNativeMemberDeclaration xr_native_ordering_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_ordering = {
     4, XR_NATIVE_DECLARATION_VALUE, "Ordering", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{169, 91, 150, 110, 92, 79, 240, 75, 82, 246, 93, 196, 40, 147, 167, 82, 11, 172, 156, 233, 43, 59, 53, 3, 151, 243, 91, 171, 43, 98, 68, 68}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{13, 230, 134, 186, 230, 214, 146, 186, 216, 82, 0, 183, 245, 183, 1, 92, 110, 162, 202, 226, 183, 141, 74, 196, 98, 248, 18, 15, 44, 31, 152, 209}},
     179, 18, xr_native_ordering_members, 5
 };
 static const XrNativeParameter xr_native_task_parameters_3[] = {
@@ -480,7 +480,7 @@ static const XrNativeMemberDeclaration xr_native_utf8_error_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_utf8_error = {
     17, XR_NATIVE_DECLARATION_VALUE, "Utf8Error", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Utf8Error", {{169, 91, 150, 110, 92, 79, 240, 75, 82, 246, 93, 196, 40, 147, 167, 82, 11, 172, 156, 233, 43, 59, 53, 3, 151, 243, 91, 171, 43, 98, 68, 68}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Utf8Error", {{13, 230, 134, 186, 230, 214, 146, 186, 216, 82, 0, 183, 245, 183, 1, 92, 110, 162, 202, 226, 183, 141, 74, 196, 98, 248, 18, 15, 44, 31, 152, 209}},
     191, 18, xr_native_utf8_error_members, 1
 };
 static const XrNativeParameter xr_native_recv_value_parameters[] = {
@@ -495,7 +495,7 @@ static const XrNativeMemberDeclaration xr_native_recv_members[] = {
 static const char *const xr_native_recv_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_recv = {
     7, XR_NATIVE_DECLARATION_VALUE, "Recv", xr_native_recv_type_parameters, 1,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Recv", {{169, 91, 150, 110, 92, 79, 240, 75, 82, 246, 93, 196, 40, 147, 167, 82, 11, 172, 156, 233, 43, 59, 53, 3, 151, 243, 91, 171, 43, 98, 68, 68}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Recv", {{13, 230, 134, 186, 230, 214, 146, 186, 216, 82, 0, 183, 245, 183, 1, 92, 110, 162, 202, 226, 183, 141, 74, 196, 98, 248, 18, 15, 44, 31, 152, 209}},
     216, 18, xr_native_recv_members, 4
 };
 static const XrNativeMemberDeclaration xr_native_send_result_members[] = {
@@ -506,7 +506,7 @@ static const XrNativeMemberDeclaration xr_native_send_result_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_send_result = {
     8, XR_NATIVE_DECLARATION_VALUE, "SendResult", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/SendResult", {{169, 91, 150, 110, 92, 79, 240, 75, 82, 246, 93, 196, 40, 147, 167, 82, 11, 172, 156, 233, 43, 59, 53, 3, 151, 243, 91, 171, 43, 98, 68, 68}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/SendResult", {{13, 230, 134, 186, 230, 214, 146, 186, 216, 82, 0, 183, 245, 183, 1, 92, 110, 162, 202, 226, 183, 141, 74, 196, 98, 248, 18, 15, 44, 31, 152, 209}},
     222, 18, xr_native_send_result_members, 4
 };
 static const XrNativeMemberDeclaration xr_native_cancelled_members[] = {
@@ -514,7 +514,7 @@ static const XrNativeMemberDeclaration xr_native_cancelled_members[] = {
 };
 static const XrNativeTypeDeclaration xr_native_cancelled = {
     18, XR_NATIVE_DECLARATION_VALUE, "Cancelled", NULL, 0,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Cancelled", {{169, 91, 150, 110, 92, 79, 240, 75, 82, 246, 93, 196, 40, 147, 167, 82, 11, 172, 156, 233, 43, 59, 53, 3, 151, 243, 91, 171, 43, 98, 68, 68}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Cancelled", {{13, 230, 134, 186, 230, 214, 146, 186, 216, 82, 0, 183, 245, 183, 1, 92, 110, 162, 202, 226, 183, 141, 74, 196, 98, 248, 18, 15, 44, 31, 152, 209}},
     194, 18, xr_native_cancelled_members, 1
 };
 static const XrNativeParameter xr_native_task_result_parameters_0[] = {
@@ -535,7 +535,7 @@ static const XrNativeMemberDeclaration xr_native_task_result_members[] = {
 static const char *const xr_native_task_result_type_parameters[] = {"T", "E"};
 static const XrNativeTypeDeclaration xr_native_task_result = {
     19, XR_NATIVE_DECLARATION_VALUE, "TaskResult", xr_native_task_result_type_parameters, 2,
-    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/TaskResult", {{169, 91, 150, 110, 92, 79, 240, 75, 82, 246, 93, 196, 40, 147, 167, 82, 11, 172, 156, 233, 43, 59, 53, 3, 151, 243, 91, 171, 43, 98, 68, 68}},
+    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/TaskResult", {{13, 230, 134, 186, 230, 214, 146, 186, 216, 82, 0, 183, 245, 183, 1, 92, 110, 162, 202, 226, 183, 141, 74, 196, 98, 248, 18, 15, 44, 31, 152, 209}},
     228, 18, xr_native_task_result_members, 4
 };
 static const XrNativeParameter xr_native_iterator_parameters_2[] = {

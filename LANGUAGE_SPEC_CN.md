@@ -853,7 +853,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 | 符号 | 诊断提示（编译器原文） |
 |--|--|
-| `Self` | Xray has no 'Self' type; write the declaring type's own name, e.g. operator==(other: Token) -> bool |
+| `Self` | Xray has no 'Self' type; write the declaring type's own name, e.g. equals(other: Token) -> bool |
 | `Box` | 'Box' is not a built-in type; indirect recursive data through a class node or a container slot such as Array<T> |
 
 <!-- xr-builtin-registry:end -->

@@ -852,7 +852,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 
 | Symbol | Diagnostic hint |
 |--|--|
-| `Self` | Xray has no 'Self' type; write the declaring type's own name, e.g. operator==(other: Token) -> bool |
+| `Self` | Xray has no 'Self' type; write the declaring type's own name, e.g. equals(other: Token) -> bool |
 | `Box` | 'Box' is not a built-in type; indirect recursive data through a class node or a container slot such as Array<T> |
 
 <!-- xr-builtin-registry:end -->
