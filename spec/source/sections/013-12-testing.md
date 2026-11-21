@@ -92,7 +92,7 @@ xray 的公开注解来自唯一 attribute registry；可用 `xray language attr
 
 | 注解 | 说明 |
 |---|---|
-| `@test` / `@test(skip)` / `@test(timeout: N)` | 测试、跳过测试、单测试超时秒数 |
+| `@test` / `@test(skip)` / `@test(timeout: N)` | 测试、跳过测试、单测试超时毫秒数 |
 | `@before_all` / `@after_all` | 单文件 suite 前后各执行一次 |
 | `@before_each` / `@after_each` | 每个未跳过测试前后执行 |
 
@@ -238,7 +238,7 @@ Public Xray attributes come from one registry, exposed by `xray language attribu
 
 | Attribute | Description |
 |---|---|
-| `@test` / `@test(skip)` / `@test(timeout: N)` | test, skipped test, or per-test timeout in seconds |
+| `@test` / `@test(skip)` / `@test(timeout: N)` | test, skipped test, or per-test timeout in milliseconds |
 | `@before_all` / `@after_all` | run once before/after the file's suite |
 | `@before_each` / `@after_each` | run before/after every non-skipped test |
 

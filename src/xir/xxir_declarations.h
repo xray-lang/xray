@@ -65,7 +65,7 @@ typedef struct XrXirFunctionIdentity {
     uint32_t cleanup_owner;
     uint32_t promises;
     uint32_t method_kind;
-    uint32_t test_role, test_timeout_seconds;
+    uint32_t test_role, test_timeout_milliseconds;
     /* Zero is ordinary code; otherwise the canonical callable selects the body. */
     uint32_t native_callable;
     /* Lexical environments are declaration-owned physical parameter prefixes.

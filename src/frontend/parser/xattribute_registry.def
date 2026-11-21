@@ -7,7 +7,7 @@
  * This is the sole registry for parser acceptance, formatter spelling, LSP
  * completion, CLI inventory, generated reference documentation, and tests.
  */
-XR_PUBLIC_ATTRIBUTE(TEST, "test", "function", "none | skip | timeout:seconds", "test", "test-selection",
+XR_PUBLIC_ATTRIBUTE(TEST, "test", "function", "none | skip | timeout:milliseconds", "test", "test-selection",
                     false, "test-only; no production ABI/effect/codegen impact", "stable")
 XR_PUBLIC_ATTRIBUTE(BEFORE_EACH, "before_each", "function", "none", "test", "test-selection", false,
                     "test-only; no production ABI/effect/codegen impact", "stable")

@@ -2451,7 +2451,7 @@ static bool source_test_role(SourceContext *ctx, AstNode *node, XrXirFunctionIde
         }
         if (attribute->timeout < 0 || (attribute->kind != ATTR_TEST_TIMEOUT && attribute->timeout))
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid test timeout");
-        identity->test_timeout_seconds = (uint32_t)attribute->timeout;
+        identity->test_timeout_milliseconds = (uint32_t)attribute->timeout;
     }
     if (identity->test_role && (decl->param_count || decl->type_param_count))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "test functions and hooks require no parameters or type parameters");

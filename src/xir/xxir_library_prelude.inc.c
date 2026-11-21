@@ -187,7 +187,7 @@ static XrXirStatus library_range_function(const XrXirModule *module,
         identity->exported!=1 || identity->member_access ||
         identity->method_kind!=(uint32_t)(init?XR_XIR_CONSTRUCTOR:XR_XIR_READ_METHOD) ||
         identity->promises!=(init?XR_XIR_FUNCTION_NO_SUSPEND:0u) || identity->cleanup_owner ||
-        identity->test_role || identity->test_timeout_seconds || body->error_type!=XR_XIR_NEVER ||
+        identity->test_role || identity->test_timeout_milliseconds || body->error_type!=XR_XIR_NEVER ||
         body->parameter_count!=(init?3u:1u)) return XR_XIR_BAD_STRUCTURE;
     XrXirType owner_type=init?body->result:body->parameters[0];
     const XrXirTypeNode *owner=xr_xir_type_node(module->types,owner_type);

@@ -244,8 +244,8 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
             d->functions[i].method_kind > XR_XIR_CONSTRUCTOR_FIELDS ||
             (d->functions[i].native_callable && !xr_native_callable_by_id(d->functions[i].native_callable)) ||
             d->functions[i].test_role > XR_XIR_TEST_ROLE_AFTER_EACH ||
-            (d->functions[i].test_role != XR_XIR_TEST_ROLE_TEST && d->functions[i].test_timeout_seconds) ||
-            d->functions[i].test_timeout_seconds > INT_MAX ||
+            (d->functions[i].test_role != XR_XIR_TEST_ROLE_TEST && d->functions[i].test_timeout_milliseconds) ||
+            d->functions[i].test_timeout_milliseconds > INT_MAX ||
             (d->functions[i].test_role && (d->functions[i].nominal_owner || d->functions[i].cleanup_owner)) ||
             (!!d->functions[i].nominal_owner != (d->functions[i].method_kind != XR_XIR_NON_MEMBER)) ||
             (d->functions[i].promises & ~(XR_XIR_FUNCTION_NO_SUSPEND | XR_XIR_FUNCTION_GENERATOR | XR_XIR_FUNCTION_REST | XR_XIR_FUNCTION_OVERRIDE)) ||
