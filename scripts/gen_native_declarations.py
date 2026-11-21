@@ -1541,6 +1541,47 @@ def render_file_stat_identity(root):
         '    xr_native_file_stat_members, 10', '};']
 
 
+def render_net_storage_identities(root):
+    """The three fieldless storage classes the network module owns."""
+    import sys
+    sys.path.insert(0, str(root / 'tools/stdlibgen'))
+    from stdlibgen import parse_native_classes
+    entries = [entry for entry in parse_native_classes(root)
+               if entry.module == 'net' and entry.name in
+               ('__NetConnStorage', '__NetListenerStorage', '__TlsContextStorage')]
+    if len(entries) != 3:
+        raise ValueError('Network storage requires its three governed native classes')
+    expected = {
+        '__NetConnStorage': ('netConnClass', 'xr_netconn_body_desc()',
+                             'XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY',
+                             'XR_BK_NET_CONN_STORAGE', 'NetConn', '_storage'),
+        '__NetListenerStorage': ('netListenerClass', 'xr_netlistener_body_desc()',
+                                 'XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY',
+                                 'XR_BK_NET_LISTENER_STORAGE', 'NetListener', '_storage'),
+        '__TlsContextStorage': ('tlsContextStorageClass', 'xr_tls_context_storage_body_desc()',
+                                'XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY', '', '', ''),
+    }
+    digest = hashlib.sha256((root / 'stdlib/defs/core.def').read_text(encoding='utf-8').encode('utf-8')).digest()
+    fingerprint = '{{' + ','.join(str(byte) for byte in digest) + '}}'
+    lines = []
+    for name, identity in (('__NetConnStorage', 'NET_CONN_STORAGE'),
+                           ('__NetListenerStorage', 'NET_LISTENER_STORAGE'),
+                           ('__TlsContextStorage', 'TLS_CONTEXT_STORAGE')):
+        entry = next(item for item in entries if item.name == name)
+        slot, body, flags, builtin, wrapper, storage = expected[name]
+        if (entry.core_slot, entry.native_body_expr, entry.flags, entry.builtin_kind,
+                entry.source_wrapper, entry.source_storage_field, entry.visibility) != (
+                slot, body, flags, builtin, wrapper, storage, 'internal'):
+            raise ValueError('Network storage differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        lines += ['static const XrNativeTypeDeclaration ' + symbol + ' = {',
+                  '    XR_NATIVE_DECLARATION_' + identity +
+                  ', XR_NATIVE_DECLARATION_STORAGE, ' + c_string(name) + ', NULL, 0,',
+                  '    "stdlib/defs/core.def", "xray.native-type.v1/net/' + name + '", ' +
+                  fingerprint + ', 0, 0, NULL, 0', '};']
+    return lines
+
+
 def render_io_callables(declarations):
     contracts = (
         ('__chmod', '(path: Path, mode: i64): bool', 'pv', 'io_chmod', 'xrt_io_chmod_value', 'IO_CHMOD'),
@@ -1904,6 +1945,7 @@ def render(root):
         scalar_lines += generated
     lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root) + render_channel_identity(root) + render_channel_result_identities(root) + render_iterator_identity(root) + render_type(root, 'map')[0] + render_type(root, 'set')[0]
     lines += render_file_stat_identity(root)
+    lines += render_net_storage_identities(root)
     lines += render_intrinsics(root)
     _, _, string_members = render_type(root, 'string')
     decoder = next(i for i, m in enumerate(string_members) if m.operation == 'STRING_FROM_UTF8')

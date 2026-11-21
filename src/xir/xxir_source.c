@@ -2558,6 +2558,7 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
 #include "xxir_source_os.inc.c"
 #include "xxir_source_io.inc.c"
 #include "xxir_source_runtime.inc.c"
+#include "xxir_source_net_storage.inc.c"
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
     uint32_t readers = ctx->repl_tail ? 1u : 0u, function_values=0;
@@ -2752,7 +2753,7 @@ static bool collect_declarations(SourceContext *ctx) {
         }
     }
     if (!source_library_metadata(ctx) || !source_history_bindings(ctx,true)) return false;
-    if (!source_io_types(ctx) || !source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
+    if (!source_io_types(ctx) || !source_net_storage_declare(ctx) || !source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
         !source_interface_signatures(ctx) || !source_struct_fields(ctx) || !source_enum_fields(ctx) ||
         !source_class_field_capabilities(ctx)) return false;
     if (!source_struct_defaultability(ctx)) return false;

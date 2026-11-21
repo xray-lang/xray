@@ -1,3 +1,4 @@
+#include "xxir_native_opaque.h"
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Source emits only the nominal action received by its real construction body. */
 static bool source_hir_nominal_imports(SourceContext *,XrHirNominalImport *,uint32_t);
@@ -75,6 +76,9 @@ static bool source_hir_nominal_construct(SourceContext *ctx,AstNode *node,const 
     if(native && native->kind==XR_XIR_TYPE_NOMINAL &&
         ctx->nominals.declarations[native->nominal.declaration].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"file metadata can only be produced by its native query");
+    if(native && native->kind==XR_XIR_TYPE_NOMINAL &&
+        xir_native_opaque_storage(ctx->nominals.declarations[native->nominal.declaration].native.native_id))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"opaque native storage can only be returned by its native query");
     XrHirNominalShape shape={0};XrHirBodyScope scope={0};
     if(!source_hir_nominal_shape(ctx,node,type,&shape,NULL)||!source_hir_current_scope(ctx,&scope))return false;
     XrHirNominalValue *fields=count?source_recipe_storage(ctx,count,sizeof(*fields)):NULL;if(count&&!fields)return false;

@@ -1,3 +1,4 @@
+#include "xxir_native_opaque.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -114,6 +115,9 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native,d->parent};
     status = nominal_native_verify( &native_identity);
     if (status != XR_XIR_OK) return status;
+    if(xir_native_opaque_storage(d->native.native_id) &&
+        (d->constraints || d->fields || d->field_count || d->variants || d->variant_count))
+        return XR_XIR_BAD_STRUCTURE;
     if(d->native.native_id==XR_NATIVE_DECLARATION_FILE_STAT) {
         const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(d->native.native_id);
         if(d->constraints)return XR_XIR_BAD_STRUCTURE;

@@ -250,7 +250,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/http/http.xr:666:7: error: class field carrier is not implemented"
       }
     },
     {
@@ -395,7 +395,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/cluster/cluster.xr:247:13: error: class field carrier is not implemented"
       }
     },
     {
@@ -455,7 +455,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/http/http.xr:666:7: error: class field carrier is not implemented"
       }
     },
     {
@@ -467,7 +467,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:346:25: error: E0390: data union requires distinguishable closed scalar or string members"
       }
     },
     {
@@ -519,7 +519,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:346:25: error: E0390: data union requires distinguishable closed scalar or string members"
       }
     },
     {
@@ -683,7 +683,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:346:25: error: E0390: data union requires distinguishable closed scalar or string members"
       }
     },
     {
@@ -1056,7 +1056,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/http/http.xr:666:7: error: class field carrier is not implemented"
       }
     },
     {
@@ -1068,7 +1068,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/cluster/cluster.xr:247:13: error: class field carrier is not implemented"
       }
     },
     {
@@ -1080,7 +1080,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/http/http.xr:666:7: error: class field carrier is not implemented"
       }
     },
     {
@@ -1092,7 +1092,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:346:25: error: E0390: data union requires distinguishable closed scalar or string members"
       }
     },
     {
@@ -1128,7 +1128,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:346:25: error: E0390: data union requires distinguishable closed scalar or string members"
       }
     },
     {
@@ -1184,7 +1184,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/net/net.xr:258:20: error: name does not resolve to an admitted nominal type"
+        "first_diagnostic": "stdlib/net/net.xr:346:25: error: E0390: data union requires distinguishable closed scalar or string members"
       }
     },
     {

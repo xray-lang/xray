@@ -102,6 +102,7 @@
 #define TYPE_NAME_RANGE "Range"
 #define TYPE_NAME_NET_CONN_STORAGE "__NetConnStorage"
 #define TYPE_NAME_NET_LISTENER_STORAGE "__NetListenerStorage"
+#define TYPE_NAME_TLS_CONTEXT_STORAGE "__TlsContextStorage"
 
 /* ========== Language Keywords ========== */
 

@@ -1,3 +1,4 @@
+#include "xxir_native_opaque.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -167,7 +168,7 @@ static bool source_nominal_constraints(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library || ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT) continue;
+        if (owner->checked_library || xir_native_opaque_nominal(ctx->nominals.declarations[d].native.native_id)) continue;
         SourceNominalDeclaration syntax;
         if (!source_nominal_declaration(ctx,owner->node,&syntax)) { ok=false; break; }
         XrGenericParam **parameters = syntax.parameters;
@@ -254,7 +255,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
         for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (symbol->kind != SOURCE_NOMINAL || symbol->checked_library ||
-                ctx->nominals.declarations[symbol->index].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
+                xir_native_opaque_nominal(ctx->nominals.declarations[symbol->index].native.native_id) || !symbol->node || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
             ClassDeclNode *decl = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
             const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];
             uint32_t prefix=nominal->parent?ctx->nominals.declarations[nominal->parent-1].field_count:0;

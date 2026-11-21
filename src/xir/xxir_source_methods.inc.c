@@ -26,6 +26,7 @@ static SourceName *source_method_find(SourceContext *ctx, XrXirType type, const 
     return NULL;
 }
 #include "xxir_source_method_generics.inc.c"
+#include "xxir_native_opaque.h"
 typedef struct SourceStaticMethod {
     SourceName *method;
     SourceSubstitution substitution;
@@ -300,7 +301,7 @@ static bool source_enum_method_name(SourceContext *ctx, SourceName *owner, AstNo
 static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
     for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library || ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT) continue;
+        if (owner->checked_library || xir_native_opaque_nominal(ctx->nominals.declarations[d].native.native_id)) continue;
         bool enumeration = owner->node->type == AST_ENUM_DECL;
         SourceNominalDeclaration declaration;
         if (!source_nominal_declaration(ctx,owner->node,&declaration)) return false;

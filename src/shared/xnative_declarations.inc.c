@@ -686,6 +686,18 @@ static const XrNativeTypeDeclaration xr_native_file_stat = {
     "stdlib/defs/core.def", "xray.native-type.v1/io/__FileStat", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}, 0, 0,
     xr_native_file_stat_members, 10
 };
+static const XrNativeTypeDeclaration xr_native_net_conn_storage = {
+    XR_NATIVE_DECLARATION_NET_CONN_STORAGE, XR_NATIVE_DECLARATION_STORAGE, "__NetConnStorage", NULL, 0,
+    "stdlib/defs/core.def", "xray.native-type.v1/net/__NetConnStorage", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}, 0, 0, NULL, 0
+};
+static const XrNativeTypeDeclaration xr_native_net_listener_storage = {
+    XR_NATIVE_DECLARATION_NET_LISTENER_STORAGE, XR_NATIVE_DECLARATION_STORAGE, "__NetListenerStorage", NULL, 0,
+    "stdlib/defs/core.def", "xray.native-type.v1/net/__NetListenerStorage", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}, 0, 0, NULL, 0
+};
+static const XrNativeTypeDeclaration xr_native_tls_context_storage = {
+    XR_NATIVE_DECLARATION_TLS_CONTEXT_STORAGE, XR_NATIVE_DECLARATION_STORAGE, "__TlsContextStorage", NULL, 0,
+    "stdlib/defs/core.def", "xray.native-type.v1/net/__TlsContextStorage", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}, 0, 0, NULL, 0
+};
 static const XrNativeIntrinsicDeclaration xr_native_intrinsics[] = {
     {UINT32_C(1), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[4], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS, "xr_xir_string_contains"},
     {UINT32_C(2), XR_NATIVE_INTRINSIC_READ, &xr_native_string, &xr_native_string_members[14], true, XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH, "xr_xir_string_starts_with"},
