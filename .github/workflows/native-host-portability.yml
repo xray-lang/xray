@@ -483,13 +483,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11.9'
-      - name: Replay the native benchmark control and collect process state
+      - name: Compare the Darwin group cleanup prototype
         run: >-
-          python scripts/macos_native_bench_probe.py --direct-exit-events
-          --output "$RUNNER_TEMP/task339-native-bench-probe"
+          python scripts/macos_group_drain_prototype.py
+          --output "$RUNNER_TEMP/task339-group-drain-prototype"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: task339-macos-native-bench-exit-events-79368992b
-          path: ${{ runner.temp }}/task339-native-bench-probe/
+          name: task339-macos-group-drain-prototype-79368992b
+          path: ${{ runner.temp }}/task339-group-drain-prototype/
           if-no-files-found: error
