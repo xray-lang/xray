@@ -77,7 +77,7 @@ XR_FUNC int xr_cli_lir_compile(const char *input, XrCompileResources **output_re
         goto cleanup;
     }
     XrLirSourceRequest request = {resources, paths.entry, paths.stdlib, false,
-        xr_source_authority_entry(authority), xr_source_authority_lockfile(authority)};
+        xr_source_authority_entry(authority), xr_source_authority_lockfile(authority), xr_xir_target_host()};
     if (xr_lir_compile_source(&request, output, &failure) != XR_LIR_SOURCE_OK) {
         report_lowering(&failure, paths.entry);
         goto cleanup;

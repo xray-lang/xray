@@ -37,7 +37,7 @@ static XrXirStatus pending_definition_receive(XirComptimePending *owner,const Sp
     /* The receiving definition owns the complete expanded type pool. */
     XrXirModule module=owner->definition->module;module.types=point->types;
     XrXirArtifact *received=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=xr_xir_compile_recheck_v2(&owner->context,&module,owner->definition->construction,&received,diagnostic,control);
+    XrXirStatus status=xr_xir_compile_recheck_v2(&owner->context,&module,&owner->definition->target,owner->definition->construction,&received,diagnostic,control);
     if (status==XR_XIR_OK && XR_XIR_PARANOID) status=xir_checked_write(received,&packet,diagnostic,control);
     if (status==XR_XIR_OK) status=xir_receive_poll(control);
     if (status==XR_XIR_OK) {

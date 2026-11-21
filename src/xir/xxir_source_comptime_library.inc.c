@@ -64,7 +64,7 @@ static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtif
     if(XR_XIR_PARANOID)status=xir_artifact_verify(checked,NULL,ctx->request);
     if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"library CTFE input failed current checking");
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-    SourceContext program={0};program.request=ctx->request;program.compile=ctx->compile;program.graph=ctx->graph;program.linkage_kind=XR_XIR_PROGRAM;
+    SourceContext program={0};program.request=ctx->request;program.compile=ctx->compile;program.target=ctx->target;program.graph=ctx->graph;program.linkage_kind=XR_XIR_PROGRAM;
     program.call_observations=ctx->call_observations;
     program.manifests=ctx->manifests;program.prelude_module=ctx->prelude_module;program.core_factory=ctx->core_factory;
     program.remaining_blocks=ctx->remaining_blocks;program.remaining_instructions=ctx->remaining_instructions;

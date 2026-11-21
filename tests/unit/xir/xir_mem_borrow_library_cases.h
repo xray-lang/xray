@@ -55,7 +55,7 @@ static void mem_library_case(const XrXirCompileContext *context,const char *stdl
     XrModuleIdentityAuthority authority=assertions?(XrModuleIdentityAuthority){XR_MODULE_IDENTITY_SCRIPT,NULL,root}:
         (XrModuleIdentityAuthority){XR_MODULE_IDENTITY_STDLIB,"mem",stdlib};
     char entry[2048];CHECK(snprintf(entry,sizeof(entry),"%s/assertions.xr",root)>0);
-    XrXirSourceRequest request={session,assertions?entry:path,&authority,context,stdlib,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,assertions?entry:path,&authority,context,stdlib,NULL,XR_XIR_LIBRARY,NULL, XR_XIR_HOST_TARGET};
     XrXirSourceResult producer={0};XrXirSourceDiagnostic diagnostic={0};
     static const char assertion[]="export fn run()->i64{assert(true);return 42}\n";
     XrXirStatus status=assertions?xr_xir_compile_source_check_text(&request,
@@ -106,7 +106,7 @@ static void mem_library_case(const XrXirCompileContext *context,const char *stdl
     if (!assertions) {
         XrXirArtifact *closed=NULL,*lowered=NULL;CHECK(xr_xir_compile_artifact_verify(result.checked,NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL,NULL)==XR_XIR_OK);
-        XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+        XrXirTarget target=XR_XIR_HOST_TARGET;
         CHECK(xr_xir_compile_lower(closed,&target,NULL,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_source_result_free(&result);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(lowered);
     }
@@ -116,7 +116,7 @@ static void mem_library_root_rejection(const XrXirCompileContext *context) {
     uint64_t baseline=held(context->resources);XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"standalone-library",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL, XR_XIR_HOST_TARGET};
     static const char text[]="export fn run()->i64{return 42}\n";XrXirSourceResult result={0};
     CHECK(xr_xir_compile_source_check_text(&request,&(XrXirSourceText){NULL,text,sizeof(text)-1},&result,NULL,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_module(result.checked)->declarations->module_count==1);
@@ -209,7 +209,7 @@ static void mem_direct_source_rejections(const XrXirCompileContext *context,cons
         memcpy(candidate+first+strlen(replacement[k]),match+strlen(old[k]),tail+1);
         XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-        XrXirSourceRequest request={session,entry,&authority,context,stdroot,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,entry,&authority,context,stdroot,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
         XrModuleOverlayInput overlays[]={{authority,"direct-body.xr",entry,main_text[k],strlen(main_text[k])},
             {{XR_MODULE_IDENTITY_STDLIB,"mem",stdroot},"mem/mem.xr",path,candidate,length}};
         XrXirSourceResult result={0};CHECK(xr_xir_compile_source_check_overlay(&request,overlays,2,&result,NULL,NULL)!=XR_XIR_OK&&!result.checked&&!result.snapshot);

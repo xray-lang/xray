@@ -43,7 +43,7 @@ static XrXirStatus atomic_source_control(const XrXirCompileContext *context,void
     XrCompileResourceStatus cs=xr_compile_session_new(context->resources,&session);
     if(cs!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(cs);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
-    XrXirSourceRequest request={session,root_path,&authority,context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,root_path,&authority,context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirCheckedPacket packet={0};
     XrXirArtifact *read=NULL,*specialized=NULL,*lowered=NULL;
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);
@@ -58,7 +58,7 @@ static XrXirStatus atomic_source_control(const XrXirCompileContext *context,void
     xr_xir_compile_checked_packet_free(&packet);
     if(status==XR_XIR_OK){status=xr_xir_compile_specialize(read,&specialized,NULL, NULL);if(status!=XR_XIR_OK)CHECK(!specialized);}
     xr_xir_compile_artifact_free(read);
-    if(status==XR_XIR_OK){status=xr_xir_compile_lower(specialized,&(XrXirTarget){XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}, NULL,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
+    if(status==XR_XIR_OK){status=xr_xir_compile_lower(specialized,&(XrXirTarget)XR_XIR_HOST_TARGET, NULL,&lowered,NULL);if(status!=XR_XIR_OK)CHECK(!lowered);}
     xr_xir_compile_artifact_free(specialized);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(lowered,NULL);
     xr_xir_compile_artifact_free(lowered);

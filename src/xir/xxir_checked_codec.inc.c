@@ -32,6 +32,7 @@ typedef struct CheckedCursor {
     bool reading;
     XrCompileRequestControl *control;
     size_t next_poll;
+    XrXirTarget target;
 } CheckedCursor;
 
 static bool checked_room(CheckedCursor *c, size_t size) {
@@ -810,9 +811,14 @@ static void checked_provenance(CheckedCursor *c, XrXirModule *m, uint32_t eviden
     XrXirArtifact *source = checked_array(c, p->source, 1, sizeof(*source), 8);
     if (c->reading) {
         p->source = source;
-        if (source) { source->module.stage = XR_XIR_CHECKED; source->context = c->remaining; }
+        if (source) {
+            source->module.stage = XR_XIR_CHECKED;
+            source->context = c->remaining;
+            source->target = c->target;
+        }
     }
     if (!source) return;
+    if (!xr_xir_target_equal(&source->target, &c->target)) { c->status = XR_XIR_BAD_LAYOUT; return; }
     XrXirModule original = source->module;
     checked_module(c, &original, &source->construction, XR_XIR_EVIDENCE_TEMPLATE);
     if (c->reading) source->module = original;
@@ -891,7 +897,12 @@ static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirChecke
         xir_artifact_is_evaluation(artifact)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
     XrXirCompileContext limits = *budget;
     size_t capacity = SIZE_MAX;
-    CheckedCursor c = {NULL, NULL, evaluation?76u:64u, capacity, limits.limits, limits, XR_XIR_OK, false, control, 0};
+    const XrXirTarget source_target = artifact->target;
+    const XrXirTarget target = xr_xir_target_unbound(&source_target) ? xr_xir_target_host() : source_target;
+    if (!xr_xir_target_is_host(&target))
+        return checked_error(XR_XIR_BAD_LAYOUT, diagnostic);
+    CheckedCursor c = {NULL, NULL, evaluation?76u:64u, capacity, limits.limits, limits,
+        XR_XIR_OK, false, control, 0, source_target};
     XrXirModule module = artifact->module;
     XrXirConstruction *construction = artifact->construction;
     checked_module(&c,&module,&construction,evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE);
@@ -901,9 +912,11 @@ static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirChecke
     if (!bytes) return checked_error(allocation_status, diagnostic);
 
     memcpy(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8);
-    c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false, control, 0};
-    checked_u32(&c,evaluation?1u:XR_XIR_CHECKED_SCHEMA); checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
-    checked_u32(&c, XR_XIR_CHECKED); checked_u32(&c, 0);
+    c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false, control, 0, source_target};
+    checked_u32(&c, evaluation ? XR_XIR_EVALUATION_SCHEMA : XR_XIR_CHECKED_SCHEMA);
+    checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
+    checked_u32(&c, XR_XIR_CHECKED);
+    checked_u32(&c, target.os | (target.architecture << 8) | (target.abi_version << 16));
     checked_integer(&c, size - 64, 8);
     c.position = 64; module = artifact->module;
     if (evaluation) {

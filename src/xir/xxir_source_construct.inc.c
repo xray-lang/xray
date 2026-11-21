@@ -636,7 +636,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};
         XrXirRootRefiner refiner=source_semantic_refiner(ctx);
-        XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, ctx->request, &ctx->semantic_prepare, &output->checked, &location);
+        XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, &ctx->target, ctx->construction, &refiner, ctx->request, &ctx->semantic_prepare, &output->checked, &location);
 #if XR_XIR_PARANOID
         for (uint32_t f=0;status==XR_XIR_OK && f<ctx->function_count;++f) {
             if (!ctx->bodies[f].initialization_regions) continue;

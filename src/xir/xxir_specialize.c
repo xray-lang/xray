@@ -775,6 +775,8 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
 
     if (!c.source || c.source->stage != XR_XIR_CHECKED || c.source->linkage_kind != XR_XIR_PROGRAM ||
         xir_artifact_is_evaluation(checked)) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
+    if (!xr_xir_target_unbound(&checked->target) && !xr_xir_target_is_host(&checked->target))
+        { c.diagnostic.status = XR_XIR_BAD_LAYOUT; goto done; }
     c.diagnostic.status=xir_receive_poll(control);
     if (c.diagnostic.status!=XR_XIR_OK) goto done;
     bool templated=c.source->provenance && c.source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
@@ -796,7 +798,7 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     }
 #endif
     if (xir_effect_evidence_is_instance(c.source)) {
-        c.diagnostic.status=xr_xir_compile_recheck_v2(&limits, c.source, checked->construction, &built, &c.diagnostic, control); goto done;
+        c.diagnostic.status=xr_xir_compile_recheck_v2(&limits, c.source, &checked->target, checked->construction, &built, &c.diagnostic, control); goto done;
     }
     if (pending && c.source->types) {
         c.diagnostic.status=spec_pending_seed(&c);
@@ -813,7 +815,7 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
         if (c.diagnostic.status != XR_XIR_OK) goto done;
         XrXirModule specialized = *c.source;
         if (c.types.nominals) specialized.types = &c.types;
-        c.diagnostic.status = xr_xir_compile_recheck_v2(&limits, &specialized, checked->construction, &built, &c.diagnostic, control);
+        c.diagnostic.status = xr_xir_compile_recheck_v2(&limits, &specialized, &checked->target, checked->construction, &built, &c.diagnostic, control);
         goto done;
     }
     if (c.source->types && !c.types.nominals && !pending) {

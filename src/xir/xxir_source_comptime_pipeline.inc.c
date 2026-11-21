@@ -154,7 +154,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
     XrXirStatus status=xr_xir_compile_specialize(checked,&closed,NULL,ctx->request);
     /* The supported target profile is explicit. Family admission and canonical
      * receiving use authentic type owners, never host sizeof or pointers. */
-    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = ctx->target;
     /* Specialization returned this sole owner.
      * Lowering consumes it on success or failure; no later step reads closed. */
     if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&closed,&target, ctx->request,&lowered,NULL);
@@ -198,7 +198,7 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     }
     if (!source_comptime_evaluate(ctx,output->checked,ctx->linkage_kind==XR_XIR_LIBRARY)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
-    SourceContext received={0};received.request=ctx->request;received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+    SourceContext received={0};received.request=ctx->request;received.compile=ctx->compile;received.target=ctx->target;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
     received.call_observations=ctx->call_observations;
     received.semantic_output=ctx->semantic_output;
     received.binding_readers=ctx->binding_readers;

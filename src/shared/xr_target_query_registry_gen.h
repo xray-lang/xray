@@ -57,10 +57,10 @@ static const XrTargetQueryEnumMemberDesc xr_target_query_endianness_members[] = 
 };
 
 static const XrTargetQueryEnumDesc xr_target_query_enum_rows[] = {
-    {2u, 7u, "os", "TargetOs", xr_target_query_operating_system_members, sizeof(xr_target_query_operating_system_members) / sizeof(xr_target_query_operating_system_members[0])},
-    {3u, 8u, "arch", "TargetArch", xr_target_query_architecture_members, sizeof(xr_target_query_architecture_members) / sizeof(xr_target_query_architecture_members[0])},
-    {4u, 9u, "abi", "TargetAbi", xr_target_query_native_abi_members, sizeof(xr_target_query_native_abi_members) / sizeof(xr_target_query_native_abi_members[0])},
-    {5u, 10u, "endian", "TargetEndian", xr_target_query_endianness_members, sizeof(xr_target_query_endianness_members) / sizeof(xr_target_query_endianness_members[0])},
+    {XR_TARGET_QUERY_OPERATING_SYSTEM, 7u, "os", "TargetOs", xr_target_query_operating_system_members, sizeof(xr_target_query_operating_system_members) / sizeof(xr_target_query_operating_system_members[0])},
+    {XR_TARGET_QUERY_ARCHITECTURE, 8u, "arch", "TargetArch", xr_target_query_architecture_members, sizeof(xr_target_query_architecture_members) / sizeof(xr_target_query_architecture_members[0])},
+    {XR_TARGET_QUERY_NATIVE_ABI, 9u, "abi", "TargetAbi", xr_target_query_native_abi_members, sizeof(xr_target_query_native_abi_members) / sizeof(xr_target_query_native_abi_members[0])},
+    {XR_TARGET_QUERY_ENDIANNESS, 10u, "endian", "TargetEndian", xr_target_query_endianness_members, sizeof(xr_target_query_endianness_members) / sizeof(xr_target_query_endianness_members[0])},
 };
 
 static inline const XrTargetQueryEnumDesc *xr_target_query_enum_by_query_id(uint16_t id) {

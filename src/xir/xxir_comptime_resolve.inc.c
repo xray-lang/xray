@@ -42,7 +42,7 @@ static XrXirStatus resolution_bind(const XirLiteralDefinitions *literal,const Xr
     const XrXirComptimeBinding *binding=NULL;
     XrXirStatus status=xir_comptime_select(&definition->context,definition->construction,&selection,&binding,control);
     if (status==XR_XIR_OK && (!binding || binding->provider!=provider->provider)) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK) status=xr_xir_compile_recheck_v2(&definition->context,&definition->module,
+    if (status==XR_XIR_OK) status=xr_xir_compile_recheck_v2(&definition->context,&definition->module,&definition->target,
         definition->construction,output,diagnostic,control);
     return status;
 }
@@ -85,7 +85,7 @@ static XrXirStatus source_comptime_resolve(const XirComptimeResolveRequest *requ
     if (input->module.stage!=XR_XIR_CHECKED || input->module.linkage_kind!=XR_XIR_PROGRAM ||
         xir_effect_evidence_is_closed(&input->module) || xir_artifact_is_evaluation(input))
         return resolution_status(diagnostic,XR_XIR_BAD_STAGE);
-    if (request->target.architecture!=XR_XIR_ARCH_LE64 || request->target.abi_version!=XR_XIR_VALUE_ABI_VERSION)
+    if (!xir_artifact_accepts_target(input, &request->target))
         return resolution_status(diagnostic,XR_XIR_BAD_LAYOUT);
     XrXirArtifact *current=NULL;
     XrXirStatus status=XR_XIR_OK;
@@ -95,6 +95,7 @@ static XrXirStatus source_comptime_resolve(const XirComptimeResolveRequest *requ
         if (status==XR_XIR_OK) status=xir_checked_read(&input->context,packet.bytes,packet.length,&current,diagnostic,request->control);
         xr_xir_compile_checked_packet_free(&packet);
     }else status=xir_artifact_clone_checked(input,&current,diagnostic,request->control);
+    if (status==XR_XIR_OK) current->target=request->target;
     while (status==XR_XIR_OK) {
         XirComptimePending *pending=NULL;XrXirArtifact *next=NULL;
         status=xr_xir_compile_comptime_pending(current,&pending,diagnostic,request->control);

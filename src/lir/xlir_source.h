@@ -34,6 +34,7 @@ typedef struct XrLirSourceRequest {
     bool optimize;
     const XrModuleIdentityAuthority *authority;
     struct XrLockfile *lockfile;
+    XrXirTarget target;
 } XrLirSourceRequest;
 
 typedef struct XrLirSourceFailure {

@@ -36,7 +36,7 @@ static void fixed_shapes(const XrXirCompileContext *context) {
     XrXirType type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
     const XrXirStorageLayout *storage=xr_xir_compile_type_arena_storage(arena,type);
     CHECK(storage && storage->value.size==4 && storage->value.alignment==1 && !storage->owned_depth);
-    XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};XrXirLayout layout={0};
+    XrXirTarget target=XR_XIR_HOST_TARGET;XrXirLayout layout={0};
     CHECK(xr_xir_compile_layout(context,&types,type,&target,XR_XIR_LAYOUT_FRAME,&layout)==XR_XIR_OK && layout.size==8);
     xr_xir_compile_type_arena_drop(arena);
     const XrXirTypeNode original=nodes[0];

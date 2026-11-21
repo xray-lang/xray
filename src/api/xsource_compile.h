@@ -22,6 +22,7 @@ typedef struct XrSourceCompileRequest {
     const struct XrXirLibraryCatalog *libraries;
     XrTomlParseLimits manifest_limits;
     XrCompilerSession *session; /* NULL creates a temporary parser owner; otherwise borrows this exact ledger. */
+    XrXirTarget target;
 } XrSourceCompileRequest;
 
 typedef enum XrSourceCompileStatus {

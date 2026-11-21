@@ -60,7 +60,7 @@ static bool source_program_seal(SourceContext *ctx,const XrXirArtifact *source,X
     XrXirConstruction *construction=NULL;
     XrXirStatus status=xr_xir_compile_construction_new_v6(&ctx->compile,source->module.types,&input,
         xr_xir_compile_construction_slots(original),&construction,ctx->request);
-    if (status==XR_XIR_OK) status=xr_xir_compile_recheck_v2(&ctx->compile,&source->module,construction,output,NULL,ctx->request);
+    if (status==XR_XIR_OK) status=xr_xir_compile_recheck_v2(&ctx->compile,&source->module,&source->target,construction,output,NULL,ctx->request);
     xr_xir_compile_construction_free(construction);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"comptime canonical receiving failed complete checking");
 }

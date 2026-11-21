@@ -120,7 +120,7 @@ static XrXirArtifact *capture_fixture(const XrXirCompileContext *context, bool t
     CHECK(m->functions[capture].parameters[0] == XR_XIR_STRING && !m->generics);
     const XrXirTypeNode *signature = xr_xir_callable_signature(m->types, m->functions[2].result);
     CHECK(signature && signature->flags == 8u);
-    XrXirTarget target = {XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = XR_XIR_HOST_TARGET;
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL; return lowered;
 }

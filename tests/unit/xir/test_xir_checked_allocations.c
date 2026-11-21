@@ -227,7 +227,7 @@ static void nominal_field_closure_failures(void) {
 }
 static void nominal_lowering_failures(void) {
     XrXirArtifact *checked = nominal_checked_fixture(suite_context, 3), *closed = NULL, *lowered = NULL;
-    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = XR_XIR_HOST_TARGET;
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     size_t baseline = live; packet_allocation_calls = 0; fail_at = SIZE_MAX;
@@ -247,7 +247,7 @@ static void nominal_layout_failures(void) {
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     const XrXirTypes *types = xr_xir_compile_artifact_module(closed)->types;
-    const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target = XR_XIR_HOST_TARGET;
     XrXirCompileContext original = consumer_context_default(), budget = original;
     XrXirLayout layout = {0}; uint32_t offsets[] = {99, 99};
     size_t baseline = live; packet_allocation_calls = 0;
@@ -411,7 +411,7 @@ static void provenance_packet_roundtrip(XrXirArtifact *closed) {
 }
 
 static void provenance_lowering(XrXirArtifact *closed) {
-    XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
+    XrXirTarget target = XR_XIR_HOST_TARGET;
     XrXirArtifact *lowered = NULL;
     size_t baseline = live; packet_allocation_calls = 0;
     CHECK(xr_xir_compile_lower(closed, &target, NULL, &lowered, NULL) == XR_XIR_OK);
@@ -478,13 +478,13 @@ static void provenance_artifact_ownership(void) {
     xr_xir_compile_artifact_free(source);source=NULL;
     CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
     size_t baseline = live; packet_allocation_calls = 0;
-    CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, &closed->target, xr_xir_compile_artifact_construction(closed), &copy, NULL, NULL) == XR_XIR_OK);
     size_t sites = packet_allocation_calls;
     CHECK(copy->module.provenance != proof && copy->module.provenance->source != proof->source);
     xr_xir_compile_artifact_free(copy);copy=NULL; CHECK(live == baseline);
     for (size_t i = 0; i < sites; ++i) {
         packet_allocation_calls = 0; fail_at = i; copy = NULL;
-        CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, xr_xir_compile_artifact_construction(closed), &copy, NULL, NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(xr_xir_compile_recheck_v2(suite_context, &closed->module, &closed->target, xr_xir_compile_artifact_construction(closed), &copy, NULL, NULL) == XR_XIR_OUT_OF_MEMORY);
         CHECK(!copy && live == baseline);
     }
     fail_at = SIZE_MAX;

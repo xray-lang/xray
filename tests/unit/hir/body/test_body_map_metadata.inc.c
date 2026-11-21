@@ -15,7 +15,7 @@ static void map_literal_packet_owners(void) {
     XrXirCompileContext compile={.resources=resources,.limits=xr_xir_compile_default_limits()};
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"map-origin-test",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&compile,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&compile,NULL,NULL,XR_XIR_PROGRAM,NULL, XR_XIR_HOST_TARGET};
     char bytes[]="var base = {\"a\": 1}\nvar merged = {...base, \"b\": 2}\n";
     XrXirSourceText text={NULL,bytes,sizeof(bytes)-1};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,&result,&diagnostic,NULL);

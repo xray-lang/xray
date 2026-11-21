@@ -148,7 +148,7 @@ int main(int argc,char **argv) {
     FILE *file = fopen(path, "wb"); CHECK(file);
     CHECK(fputs("invalid disk source\n", file) >= 0 && fclose(file) == 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {NULL, path, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {NULL, path, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL, XR_XIR_HOST_TARGET};
     char *buffer = malloc(sizeof(entry_text)-1); CHECK(buffer);
     memcpy(buffer, entry_text, sizeof(entry_text)-1);
     XrXirSourceResult result = {0};
@@ -173,7 +173,7 @@ int main(int argc,char **argv) {
     if (argc==1) text_allocations(&request);
     text_rejections(&request);text_null_descriptor(&request);
     XrModuleIdentityAuthority memory = {XR_MODULE_IDENTITY_MEMORY, "entry-query", NULL};
-    XrXirSourceRequest memory_request = {NULL, NULL, &memory, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest memory_request = {NULL, NULL, &memory, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL, XR_XIR_HOST_TARGET};
     CHECK(text_check(&memory_request, NULL, entry_text, sizeof(entry_text)-1, text_limits(), &result) == XR_XIR_OK);
     text_facts(&result, NULL); xr_xir_compile_source_result_free(&result); text_physical_zero();
     CHECK(text_check(&request, "root.xr", "", 0, text_limits(), &result) == XR_XIR_OK);

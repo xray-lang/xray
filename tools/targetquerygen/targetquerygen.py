@@ -86,6 +86,9 @@ def generate_values_header(registry: dict[str, Any]) -> str:
     ]
     queries = registry["queries"]
     for row in queries:
+        lines.append(f"#define XR_TARGET_QUERY_{row['query_name']} UINT16_C({row['query_id']})")
+    lines.append("")
+    for row in queries:
         for member in row["members"]:
             lines.append(f"#define {macro_name(member['runtime_symbol'])} UINT16_C({member['value']})")
         lines.append(
@@ -137,7 +140,7 @@ def generate_registry_header(registry: dict[str, Any]) -> str:
     for row in queries:
         lower = row["query_name"].lower()
         lines.append(
-            f"    {{{row['query_id']}u, {row['core_type_id']}u, \"{row['source_member']}\", "
+            f"    {{XR_TARGET_QUERY_{row['query_name']}, {row['core_type_id']}u, \"{row['source_member']}\", "
             f"\"{row['type_name']}\", xr_target_query_{lower}_members, "
             f"sizeof(xr_target_query_{lower}_members) / sizeof(xr_target_query_{lower}_members[0])}},")
     lines.extend([

@@ -377,7 +377,7 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
  * ordinary checking then qualifies the internally bound executable body. */
 static bool source_core_load(SourceContext *ctx, AstNode *site) {
     SourceContext core={0};
-    core.compile=ctx->compile; core.request=ctx->request; core.linkage_kind=XR_XIR_LIBRARY; core.core_factory=true;
+    core.compile=ctx->compile; core.target=ctx->target; core.request=ctx->request; core.linkage_kind=XR_XIR_LIBRARY; core.core_factory=true;
     core.remaining_blocks=core.compile.limits.blocks;
     core.remaining_instructions=core.compile.limits.instructions;
     XrCompilerSession *session=NULL;

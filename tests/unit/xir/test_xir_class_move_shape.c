@@ -121,7 +121,7 @@ static void class_move_source_owner(ClassMoveFixture *fixture,const char *root) 
     CHECK(xr_compile_session_new(fixture->context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"class-move-shape",NULL};
     XrXirSourceRequest request={.session=session,.authority=&authority,.context=fixture->context,
-        .stdlib_path=stdlib_path,.linkage_kind=XR_XIR_PROGRAM};
+        .stdlib_path=stdlib_path,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText text={.text=class_move_source,.length=sizeof(class_move_source)-1};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,&source,&diagnostic,NULL);
@@ -291,7 +291,7 @@ static void class_move_lowered(const ClassMoveFixture *fixture,const ClassMoveCa
     CHECK(xr_xir_compile_specialization_origin(specialized,selected,&origin)==XR_XIR_OK &&
         origin==test->function);
     CHECK(closed->functions[selected].instruction_count==test->block.count);
-    const XrXirTarget target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION};
+    const XrXirTarget target=XR_XIR_HOST_TARGET;
     status=xr_xir_compile_lower(specialized,&target,NULL,&lowered,&diagnostic);
     class_move_status("raw Lowered positive",status,&diagnostic);
     CHECK(status==XR_XIR_OK && lowered);

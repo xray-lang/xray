@@ -111,6 +111,11 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         !xr_xir_compile_source_failure_empty(failure)) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
+    if (!xr_xir_target_is_host(&request->target)) {
+        source_fail(&ctx, NULL, XR_XIR_UNSUPPORTED, "unsupported source compilation target");
+        goto done;
+    }
+    ctx.target = request->target;
     ctx.compile = *request->context;
     ctx.request = xr_compile_session_request(request->session);
     if (!source_request_poll(&ctx, NULL)) goto done;
@@ -320,6 +325,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_instance_constants(const XirSourceInst
         if (diagnostic) *diagnostic=(XrXirSourceDiagnostic){.status=XR_XIR_BAD_STRUCTURE};
         return XR_XIR_BAD_STRUCTURE;
     }
+    if (!xr_xir_target_is_host(&request->target) ||
+        !xr_xir_target_equal(&request->target,&request->source->target)) {
+        if (diagnostic) *diagnostic=(XrXirSourceDiagnostic){.status=XR_XIR_UNSUPPORTED};
+        return XR_XIR_UNSUPPORTED;
+    }
     XirSourceInstanceConstants result={0};XrXirStatus status=XR_XIR_OK;
     uint64_t bytes=(uint64_t)request->count*sizeof(*result.functions);
     if (bytes>SIZE_MAX) {
@@ -358,7 +368,7 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
         return status;
     }
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,"prelude",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL, xr_xir_target_host()};
     size_t length=0;
     while (true) {
 

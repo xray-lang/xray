@@ -247,6 +247,7 @@ static XrXirArtifact *source_artifact_clone(const XrXirCompileContext *context,
     if(!source||source->module.stage!=XR_XIR_CHECKED){*status=XR_XIR_BAD_STAGE;return NULL;}
     XrXirArtifact *copy=clone_module_receiving(context,&source->module,source->construction,status,NULL,control);
     if(!copy)return NULL;
+    copy->target=source->target;
     if(source->module.provenance&&source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
 #if XR_XIR_PARANOID
         if(!source->source_facts)*status=XR_XIR_BAD_STRUCTURE;

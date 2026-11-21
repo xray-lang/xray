@@ -184,7 +184,7 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_check(
         XrXirSourceRequest input = {.session = session, .entry_path = entry,
             .authority = xr_source_authority_entry(authority), .context = request->context,
             .stdlib_path = stdlib, .lockfile = xr_source_authority_lockfile(authority),
-            .linkage_kind = XR_XIR_PROGRAM, .libraries = request->libraries};
+            .linkage_kind = XR_XIR_PROGRAM, .libraries = request->libraries, .target = request->target};
         detail.source.status = xr_xir_compile_source_check(&input, &source,
             &detail.source.diagnostic, &detail.source.failure);
         status = source_xir_status(detail.source.status);

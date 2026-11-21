@@ -278,7 +278,7 @@ static XrXirStatus layout_match(const XrXirArtifact *artifact,const XrXirCompile
 XR_FUNC XrXirStatus xr_xir_compile_layout_match_verified(const XrXirArtifact *artifact) {
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     if (artifact->module.stage != XR_XIR_LOWERED)
-        return (!artifact->layouts && !artifact->target.architecture && !artifact->target.abi_version) ? XR_XIR_OK : XR_XIR_BAD_LAYOUT;
+        return (!artifact->layouts && (xr_xir_target_unbound(&artifact->target) || xr_xir_target_is_host(&artifact->target))) ? XR_XIR_OK : XR_XIR_BAD_LAYOUT;
     if (!artifact->layouts) return XR_XIR_BAD_LAYOUT;
     XrXirCompileContext budget = artifact->context;
     XrXirStatus status = layout_function_bounds(&artifact->module);
@@ -290,7 +290,7 @@ XrXirStatus xr_xir_compile_layout_verify(const XrXirArtifact *artifact) {
     XrXirCompileContext compile_state = artifact->context;
     XrXirCompileContext *budget = &compile_state;
     if (artifact->module.stage != XR_XIR_LOWERED)
-        return (!artifact->layouts && !artifact->target.architecture && !artifact->target.abi_version)
+        return (!artifact->layouts && (xr_xir_target_unbound(&artifact->target) || xr_xir_target_is_host(&artifact->target)))
             ? XR_XIR_OK : XR_XIR_BAD_LAYOUT;
     if (!artifact->layouts)
         return XR_XIR_BAD_LAYOUT;
