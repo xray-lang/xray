@@ -298,6 +298,9 @@ static SourceExpressionPlan *source_plan_collect(SourceContext *ctx, AstNode *no
 static bool source_plan_complete_finish(SourceContext *ctx,SourceExpressionPlan *plan,
     SourceExpectedType context,bool result,SourceValue *value) {
     AstNode *node=plan->syntax;
+    /* Contextual conversion is emitted below and rewrites the value type. The
+     * expression's own checked type stays available for module-storage checks. */
+    XrXirType static_type=plan->value.type;
     XrHirConversion checked_conversion={0};
     if (result && plan->conversion_ready) {
         checked_conversion=plan->conversion;
@@ -327,7 +330,8 @@ static bool source_plan_complete_finish(SourceContext *ctx,SourceExpressionPlan 
     if (result) {
         SourceFunction *owner=&ctx->bodies[plan->owner];
         plan->exit=owner->block_count ? owner->current_block : plan->entry;
-        plan->state=SOURCE_TERM_GROUND;plan->type_ready=true;plan->ground_type=plan->value.type;*value=plan->value;
+        plan->state=SOURCE_TERM_GROUND;plan->type_ready=true;plan->ground_type=plan->value.type;
+        plan->value.static_type=static_type;*value=plan->value;
     } else plan->state=SOURCE_TERM_FAILED;
     return result;
 }

@@ -8,8 +8,6 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     SourceValue initial;
     XrXirType annotation = XR_XIR_UNIT;
     if (decl->type_annotation && !source_type(ctx, decl->type_annotation, &annotation)) return false;
-    if (top && decl->type_annotation &&
-        !source_module_union_storage(ctx, node, annotation, decl->initializer)) return false;
     if (decl->initializer) {
         AstNode *saved_initializer=ctx->recursive_initializer;
         const char *saved_name=ctx->recursive_name;
@@ -25,6 +23,9 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
         ctx->binding_site=saved_binding;
         if(!built)return false;
     } else if (!source_default_value(ctx, node, annotation, &initial)) return false;
+    if (top && decl->type_annotation &&
+        !source_module_union_storage(ctx, node, annotation,
+            decl->initializer ? initial.static_type : XR_XIR_UNIT)) return false;
     if (top && !decl->type_annotation) {
         XrXirType first=XR_XIR_UNIT;
         if (source_class_union_first_member(ctx, initial.type, &first))

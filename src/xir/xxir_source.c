@@ -131,7 +131,10 @@ typedef struct SourceDecimal { AstNode *node; bool negative; } SourceDecimal;
 
 
 
-typedef struct SourceValue { uint32_t id; XrXirType type; XrHirBodyPlace place; } SourceValue;
+/* `static_type` is the expression's own checked type before any contextual
+ * conversion. A data-union conversion rewrites `type` to the union, which would
+ * otherwise erase the first-member fact module storage must decide on. */
+typedef struct SourceValue { uint32_t id; XrXirType type, static_type; XrHirBodyPlace place; } SourceValue;
 typedef struct SourceBlockReference { uint32_t owner, identity; } SourceBlockReference;
 
 typedef enum SourceTermState { SOURCE_TERM_UNRESOLVED, SOURCE_TERM_CHECKING, SOURCE_TERM_GROUND, SOURCE_TERM_FAILED, SOURCE_TERM_DISCARDED } SourceTermState;
@@ -2034,9 +2037,13 @@ static bool source_is_expression(SourceContext *ctx, AstNode *node, SourceValue 
 /* Module storage is physically the union's first (lowest Checked type id)
  * member Class row, and the module-state validator checks that exact backing.
  * Fail closed here: a module-level Class-union binding may only be initialized
- * or assigned from syntax that statically names that first member. A sibling
- * member, a union-typed value or a function result is rejected at compile time
- * instead of failing at startup. Function-local bindings keep every member. */
+ * or assigned from an initializer whose static type is exactly that first
+ * member. The decision uses the checked static type of the initializer, not its
+ * syntax, so a first-member Class identity reaches the slot through any
+ * expression (a variable, a constructor, or a function result). A sibling
+ * member, a union-typed value or any other static type is rejected at compile
+ * time instead of failing at startup. Function-local bindings keep every
+ * member. */
 static bool source_class_union_first_member(SourceContext *ctx, XrXirType type, XrXirType *first) {
     const XrXirTypeNode *node=xr_xir_type_node(&ctx->types,type);
     if(!node || node->kind!=XR_XIR_TYPE_DATA_UNION || node->parameter_count<2) return false;
@@ -2045,30 +2052,16 @@ static bool source_class_union_first_member(SourceContext *ctx, XrXirType type, 
     *first=node->parameters[0].type;
     return true;
 }
-/* The static Class identity the syntax names, or Unit when it is not provable. */
-static XrXirType source_syntax_class_identity(SourceContext *ctx, AstNode *syntax) {
-    while(syntax && syntax->type==AST_GROUPING) syntax=syntax->as.grouping;
-    if(!syntax) return XR_XIR_UNIT;
-    const char *name=NULL;
-    if(syntax->type==AST_NEW_EXPR) name=syntax->as.new_expr.class_name;
-    else if(syntax->type==AST_CALL_EXPR && syntax->as.call_expr.callee &&
-        syntax->as.call_expr.callee->type==AST_VARIABLE) name=syntax->as.call_expr.callee->as.variable.name;
-    else if(syntax->type==AST_VARIABLE) name=syntax->as.variable.name;
-    if(!name) return XR_XIR_UNIT;
-    SourceName *binding=visible_name(ctx,name);
-    if(!binding) return XR_XIR_UNIT;
-    if(binding->kind==SOURCE_NOMINAL) {
-        XrXirType type=XR_XIR_UNIT;
-        if(!source_nominal_type(ctx,name,&type)) return XR_XIR_UNIT;
-        return xr_xir_type_is_class(&ctx->types,type) ? type : XR_XIR_UNIT;
-    }
-    return xr_xir_type_is_class(&ctx->types,binding->type) ? binding->type : XR_XIR_UNIT;
-}
+/* The static Class identity the initializer is known to have. The caller asks
+ * only after the initializer expression has been checked, so this is the
+ * expression's own Checked type (SourceValue.static_type), not the union type a
+ * contextual data-union conversion later writes into SourceValue.type. A call
+ * keeps its declared result and a variable keeps its binding type. */
 static bool source_module_union_storage(SourceContext *ctx, AstNode *node, XrXirType slot_type,
-    AstNode *syntax) {
+    XrXirType value_type) {
     XrXirType first=XR_XIR_UNIT;
     if(!source_class_union_first_member(ctx,slot_type,&first)) return true;
-    if(source_syntax_class_identity(ctx,syntax)==first) return true;
+    if(value_type==first) return true;
     return source_fail(ctx,node,XR_XIR_BAD_TYPE,
         "E0352: module-level union storage requires its first Class member; bind other members inside a function");
 }
@@ -2198,14 +2191,14 @@ static bool expression_structural_body(SourceContext *ctx, AstNode *node, Source
         SourceName *symbol = visible_name(ctx, node->as.assignment.name);
         SourceValue assigned;
         if(!symbol)return source_fail(ctx,node,XR_XIR_BAD_TYPE,"assignment requires a mutable binding");
-        if(symbol->kind==SOURCE_SLOT &&
-            !source_module_union_storage(ctx,node,symbol->type,node->as.assignment.value)) return false;
         XrHirBindingAction preparation;
         if(!source_hir_binding_use(ctx,node,symbol,XR_HIR_BINDING_ASSIGN,(SourceValue){0},&preparation)||
             !source_hir_binding_emitted(ctx,&preparation,NULL,ctx->bodies[ctx->function].count))return false;
         if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_WRITE)) return false;
         SourceExpressionPlan *incoming=ctx->active_expression->left;
         if (!incoming || !source_plan_complete(ctx,incoming,&assigned)) return false;
+        if(symbol->kind==SOURCE_SLOT &&
+            !source_module_union_storage(ctx,node,symbol->type,assigned.static_type)) return false;
 
         ctx->active_expression->present_prefix=incoming->present_prefix;
         if (symbol->kind == SOURCE_LOCAL && !source_facts_assign(ctx, symbol, incoming->present_prefix)) return false;
