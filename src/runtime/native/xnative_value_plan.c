@@ -205,7 +205,7 @@ static bool sum_valid(const XrtValuePlanSpec *spec) {
     if (payload != ((sum->tag_size + alignment - 1) & ~(alignment - 1))) return false;
     if (spec->alignment != alignment) return false;
     if (extent > SIZE_MAX - (alignment - 1)) return false;
-    if (spec->size != ((extent + alignment - 1) & ~(alignment - 1))) return false;
+    if (spec->size != xrt_value_sum_size(extent, alignment)) return false;
     /* P1 admits only owner-free payloads: the tag selects a field range, and
      * the common zero/copy/drop paths may treat the whole value as bytes. */
     return spec->owned_count == 0;

@@ -212,9 +212,53 @@ add_test(NAME lir_sum_types COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/
     --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
     --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --program tests/lir/programs/sum-types.xr --expect "0,1,2,9,16,0,25,0"
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/sum-types" ${lir_c_native_options})
 set_tests_properties(lir_sum_types PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
+add_test(NAME lir_sum_solo COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sum_types.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --program tests/lir/programs/sum-solo.xr --expect "41,42"
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/sum-solo" ${lir_c_native_options})
+set_tests_properties(lir_sum_solo PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
+add_test(NAME lir_sum_layout COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sum_types.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --program tests/lir/programs/sum-layout.xr --expect "7,8,9,10,23,26,-1"
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/sum-layout" ${lir_c_native_options})
+set_tests_properties(lir_sum_layout PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
+add_test(NAME lir_sum_carrier_gate COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sum_types.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --program tests/lir/programs/sum-carrier-gate.xr
+    --refuse "enum payload field type is not supported by LIR lowering yet"
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/sum-carrier-gate" ${lir_c_native_options})
+set_tests_properties(lir_sum_carrier_gate PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
+add_test(NAME lir_sum_tag_width COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sum_tag_width.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --variants 257
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/sum-tag-width" ${lir_c_native_options})
+set_tests_properties(lir_sum_tag_width PROPERTIES LABELS "unit;lir;native" TIMEOUT 300)
+# The four-byte tag needs more than 65536 variants, which is a slow program in a
+# Debug sanitizer build, so it gets its own lane with a matching command budget.
+add_test(NAME lir_sum_tag_width_wide COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sum_tag_width.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --variants 65537 --command-timeout 1800
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/sum-tag-width-wide" ${lir_c_native_options})
+set_tests_properties(lir_sum_tag_width_wide PROPERTIES LABELS "unit;lir;native" TIMEOUT 3600)
 add_test(NAME test_lir_pipeline_eval COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_pipeline_eval.py"
     --driver $<TARGET_FILE:lir_pipeline_eval>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"

@@ -344,11 +344,14 @@ static bool lower_receive_type(Lower *, XrXirType);
 #include "xlir_lower_record_types.inc.c"
 
 /* Only owner-free scalar payload fields are admitted in this phase. The tag
- * selects a variant field range; no payload leaf owns a reference yet. */
+ * selects a variant field range; no payload leaf owns a reference yet. The
+ * admitted carriers are exactly the ones ordinary scalar instructions already
+ * carry (bool, i64, u8, u64, f64) plus an owner-free nested sum, so a payload
+ * can never be admitted here and then fail on its first constant or read. */
 static bool lower_sum_payload_carrier(Lower *c, XrXirType type, XrLirType *output) {
     if (!lower_receive_type(c, type)) return false;
     XrLirType carrier = lower_type(c, type);
-    if (!carrier) return lower_unsupported(c, "enum payload field has no physical carrier");
+    if (!carrier) return lower_unsupported(c, "enum payload field type");
     if (carrier >= XR_LIR_TYPE_COUNT) {
         XrLirTypeView shape;
         XrLirTypeLayout layout;
@@ -358,11 +361,9 @@ static bool lower_sum_payload_carrier(Lower *c, XrXirType type, XrLirType *outpu
         *output = carrier; return true;
     }
     switch (carrier) {
-    case XR_LIR_I1: case XR_LIR_I8: case XR_LIR_I16: case XR_LIR_I32: case XR_LIR_I64:
-    case XR_LIR_U8: case XR_LIR_U16: case XR_LIR_U32: case XR_LIR_U64:
-    case XR_LIR_F32: case XR_LIR_F64:
+    case XR_LIR_I1: case XR_LIR_I64: case XR_LIR_U8: case XR_LIR_U64: case XR_LIR_F64:
         *output = carrier; return true;
-    default: return lower_unsupported(c, "enum payload field with a managed value");
+    default: return lower_unsupported(c, "enum payload field of a non-scalar type");
     }
 }
 /* A nominal enum becomes one tagged-sum LIR type. Construction, tag reads and

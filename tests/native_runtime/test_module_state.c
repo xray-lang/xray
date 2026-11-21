@@ -51,7 +51,7 @@ static const XrtValueImageType types[] = {
     {.kind=XRT_VALUE_FIXED_U8,.size=3,.alignment=1,.count=3},
     {.kind=XRT_VALUE_TUPLE,.size=16,.alignment=8,.first_field=3,.field_count=2}
 };
-static const XrtValueImage image = {types,16,fields,5,NULL,0,owned,11,"leftrightscore",14};
+static const XrtValueImage image = {types,16,fields,5,NULL,0,owned,11,"leftrightscore",14,NULL,0};
 typedef struct Audit {
     size_t leases, bytes, blocks, calls, observed, fail_at;
     void *watched[2];
@@ -358,7 +358,7 @@ static void inline_array_state(void) {
         {.kind=XRT_VALUE_ARRAY_INLINE,.size=8,.alignment=8,.owned_count=1,.element=4}
     };
     const size_t owners[] = {0};
-    XrtValueImage raw = {rows,6,row_fields,2,NULL,0,owners,1,NULL,0};
+    XrtValueImage raw = {rows,6,row_fields,2,NULL,0,owners,1,NULL,0,NULL,0};
     const XrtModuleSpec module = {0};
     const XrtModuleSlotSpec slot = {0,5,XRT_MODULE_SLOT_MUTABLE,0,8,8};
     const XrtModuleLayoutSpec spec = {&raw,&module,1,NULL,0,&slot,1,8,8};
@@ -551,7 +551,7 @@ static void function_state(void) {
         {.kind=XRT_VALUE_ENVIRONMENT,.alignment=1,.entry_ordinal=7,.entry_signature=3},
         {.kind=XRT_VALUE_CELL,.size=8,.alignment=8,.first_owned=2,.owned_count=1,.element=1},
         {.kind=XRT_VALUE_ENVIRONMENT,.size=8,.alignment=8,.capture_count=1,.entry_ordinal=8,.entry_signature=3}};
-    const XrtValueImage raw = {rows,6,&capture,1,NULL,0,leaves,3,"seed",4};
+    const XrtValueImage raw = {rows,6,&capture,1,NULL,0,leaves,3,"seed",4,NULL,0};
     XrtValueImagePlans *producer = NULL; OK(xrt_value_image_bind(cb,&raw,lease,&producer));
     const XrtValuePlan *source_signature = NULL,*zero_plan = NULL,*captured_plan = NULL,*cell_plan = NULL;
     OK(xrt_value_image_get(producer,3,&source_signature)); OK(xrt_value_image_get(producer,4,&zero_plan));

@@ -1,0 +1,20 @@
+// A single variant stores no tag, so a payload-free enum still needs a real
+// object and a payload-carrying one is its payload alone.
+enum Solo { Only }
+
+enum Leaf { Value { v: i64 } }
+
+fn soloTag(s: Solo) -> i64 {
+    return match (s) {
+        Solo.Only => 41,
+    }
+}
+
+fn leafValue(l: Leaf) -> i64 {
+    return match (l) {
+        Leaf.Value { v } => v,
+    }
+}
+
+print(soloTag(Solo.Only))
+print(leafValue(Leaf.Value { v: 42 }))

@@ -449,7 +449,7 @@ static void raw_image_fixture(RawImageFixture *raw) {
         .first_owned=4,.owned_count=1,.parameter_count=1,.result=1,.flags=XRT_VALUE_NO_SUSPEND};
     raw->types[6]=(XrtValueImageType){.kind=XRT_VALUE_ENVIRONMENT,.size=8,.alignment=8,
         .first_capture=3,.capture_count=1,.entry_ordinal=42,.entry_signature=6};
-    raw->image=(XrtValueImage){raw->types,7,raw->slots,4,&raw->parameter,1,raw->owned,5,raw->names,20};
+    raw->image=(XrtValueImage){raw->types,7,raw->slots,4,&raw->parameter,1,raw->owned,5,raw->names,20,NULL,0};
 }
 static void raw_image_retirement(void) {
     Fixture metadata,data; fixture_init(&metadata,SIZE_MAX,false); fixture_init(&data,SIZE_MAX,true);

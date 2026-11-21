@@ -1,0 +1,15 @@
+// A narrow scalar payload has no admitted LIR carrier, so the enum type itself
+// is refused instead of being admitted and failing later on its first value.
+enum Narrow {
+    Empty,
+    Byte { v: i8 },
+}
+
+fn narrowTag(n: Narrow) -> i64 {
+    return match (n) {
+        Narrow.Empty => 0,
+        Narrow.Byte { v } => 1,
+    }
+}
+
+print(narrowTag(Narrow.Empty))

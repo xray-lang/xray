@@ -1,0 +1,59 @@
+// Variants share one payload area, so each variant starts its own fields at
+// that common offset and the widest field decides the payload alignment.
+enum Inner {
+    Small { v: u8 },
+    Large { v: u64 },
+}
+
+enum Mixed {
+    Byte { b: u8 },
+    Word { w: u64 },
+    Pair { b: u8, w: u64 },
+}
+
+enum Outer {
+    Empty,
+    Wrap { inner: Inner },
+}
+
+fn innerValue(i: Inner) -> i64 {
+    return match (i) {
+        Inner.Small { v } => v as i64,
+        Inner.Large { v } => v as i64,
+    }
+}
+
+fn mixedValue(m: Mixed) -> i64 {
+    return match (m) {
+        Mixed.Byte { b } => b as i64,
+        Mixed.Word { w } => w as i64,
+        Mixed.Pair { b, w } => (b as i64) + (w as i64),
+    }
+}
+
+fn makeOuter(v: i64) -> Outer {
+    if (v == 0) { return Outer.Empty }
+    return Outer.Wrap { inner: Inner.Large { v: v as u64 } }
+}
+
+fn outerValue(o: Outer) -> i64 {
+    return match (o) {
+        Outer.Empty => -1,
+        Outer.Wrap { inner } => innerValue(inner),
+    }
+}
+
+print(innerValue(Inner.Small { v: 7 }))
+print(innerValue(Inner.Large { v: 8 }))
+print(mixedValue(Mixed.Byte { b: 9 }))
+print(mixedValue(Mixed.Word { w: 10 }))
+print(mixedValue(Mixed.Pair { b: 11, w: 12 }))
+
+// A local copy duplicates the whole inline payload, including the nested sum.
+fn copyValue(o: Outer) -> i64 {
+    const local = o
+    return outerValue(local) + outerValue(o)
+}
+
+print(copyValue(makeOuter(13)))
+print(outerValue(makeOuter(0)))

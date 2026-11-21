@@ -1,4 +1,4 @@
-"""Run the tagged-sum source program through the VM and native C paths."""
+"""Run one tagged-sum source program through the VM and the native C path."""
 import argparse
 from pathlib import Path
 import subprocess
@@ -8,31 +8,19 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments, native_c11_options  # noqa: E402
 
-EXPECTED = b"0\n1\n2\n9\n16\n0\n25\n0\n"
 
-
-def main():
-    parser = argparse.ArgumentParser()
-    for name in ("vm-driver", "source-driver", "compiler", "include", "source-root", "work"):
-        parser.add_argument("--" + name, type=Path, required=True)
-    parser.add_argument("--library", type=Path, nargs="+", required=True)
-    parser.add_argument("--kind", choices=("msvc", "gnu"), required=True)
-    parser.add_argument("--msvc-runtime", default="MultiThreaded")
-    parser.add_argument("--asan", action="store_true")
-    args = parser.parse_args()
-    args.work.mkdir(parents=True, exist_ok=True)
-    folder = Path(tempfile.mkdtemp(prefix="sum-types-", dir=args.work)).resolve()
-    source = (args.source_root / "tests/lir/programs/sum-types.xr").resolve()
+def run_case(args, source, expected, tag):
+    folder = Path(tempfile.mkdtemp(prefix="sum-", dir=args.work)).resolve()
 
     def run(label, command, stdout=subprocess.PIPE):
         result = subprocess.run(list(map(str, command)), cwd=folder, stdout=stdout,
-                                stderr=subprocess.PIPE, timeout=120)
+                                stderr=subprocess.PIPE, timeout=args.command_timeout)
         (folder / (label + ".stdout")).write_bytes(result.stdout or b"")
         (folder / (label + ".stderr")).write_bytes(result.stderr)
         return result
 
     vm = run("vm", [args.vm_driver, source])
-    assert (vm.returncode, vm.stdout, vm.stderr) == (0, EXPECTED, b""), (folder, vm.stderr)
+    assert (vm.returncode, vm.stdout, vm.stderr) == (0, expected, b""), (folder, vm.stderr)
 
     generated = folder / "generated.c"
     emitted = run("emit", [args.source_driver, source, generated])
@@ -61,14 +49,54 @@ def main():
         built = run("compile-" + item.stem, command)
         assert built.returncode == 0, (folder, built.stderr)
         objects.append(obj)
-    executable = folder / ("sum-types.exe" if args.kind == "msvc" else "sum-types")
+    executable = folder / ("sum.exe" if args.kind == "msvc" else "sum")
     command = [args.compiler, *flags, *objects, *archive_link_arguments(args.library, driver=args.kind)]
     command += ["/Fe:" + str(executable)] if args.kind == "msvc" else ["-o", executable]
     linked = run("link", command)
     assert linked.returncode == 0, (folder, linked.stderr)
     native = run("native", [executable])
-    assert (native.returncode, native.stdout, native.stderr) == (0, EXPECTED, b""), (folder, native.stderr)
-    print("sum types: VM and native C both computed the expected table")
+    assert (native.returncode, native.stdout, native.stderr) == (0, expected, b""), (folder, native.stderr)
+    print(f"sum types ({tag}): VM and native C both printed the expected table")
+
+
+def run_refusal(args, source, message):
+    """Both LIR drivers must refuse one program and publish no C for it."""
+    folder = Path(tempfile.mkdtemp(prefix="sum-refused-", dir=args.work)).resolve()
+    generated = folder / "refused.c"
+    for label, command in (("vm", [args.vm_driver, source]),
+                           ("source", [args.source_driver, source, generated])):
+        result = subprocess.run(list(map(str, command)), cwd=folder, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=args.command_timeout)
+        (folder / (label + ".stderr")).write_bytes(result.stderr)
+        assert (result.returncode, result.stdout) == (1, b""), (folder, label, result.stderr)
+        assert message in result.stderr, (folder, label, result.stderr)
+    assert not generated.exists(), (folder, "refused program published C")
+    print(f"sum types ({Path(args.program).stem}): both drivers refused the payload carrier")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    for name in ("vm-driver", "source-driver", "compiler", "include", "source-root", "work"):
+        parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--program", required=True)
+    parser.add_argument("--expect", help="expected stdout lines, comma separated")
+    parser.add_argument("--refuse", help="expected lowering message; the program must be refused")
+    parser.add_argument("--library", type=Path, nargs="+", required=True)
+    parser.add_argument("--kind", choices=("msvc", "gnu"), required=True)
+    parser.add_argument("--msvc-runtime", default="MultiThreaded")
+    parser.add_argument("--asan", action="store_true")
+    parser.add_argument("--command-timeout", type=int, default=120,
+                        help="seconds allowed for one compiler, link or run step")
+    args = parser.parse_args()
+    if bool(args.expect) == bool(args.refuse):
+        parser.error("exactly one of --expect and --refuse is required")
+    args.work.mkdir(parents=True, exist_ok=True)
+    source = (args.source_root / args.program).resolve()
+    if args.refuse:
+        run_refusal(args, source, args.refuse.encode())
+        return
+    expected = ("\n".join(args.expect.split(",")) + "\n").encode()
+    run_case(args, source, expected, Path(args.program).stem)
 
 
 if __name__ == "__main__":

@@ -339,9 +339,9 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
             if (end > maximum) maximum = end;
         }
         if (maximum > SIZE_MAX - (alignment - 1)) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
-        size_t size = (maximum + alignment - 1) & ~(alignment - 1);
-        if (!size) size = 1;
-        spec->kind = XRT_VALUE_SUM; spec->size = size; spec->alignment = alignment;
+        spec->kind = XRT_VALUE_SUM;
+        spec->size = xrt_value_sum_size(maximum, alignment);
+        spec->alignment = alignment;
         spec->field_count = field_count;
         spec->sum = (XrtValueSumSpec){0, tag, payload, NULL, variant_count};
         /* The sum's plan variant rows are the copied LIR rows; fill_composite

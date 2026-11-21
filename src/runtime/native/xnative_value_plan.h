@@ -52,6 +52,13 @@ typedef struct XrtValueSumSpec {
     const XrtValueSumVariantSpec *variants;
     size_t variant_count;
 } XrtValueSumSpec;
+/* Portable C has no zero-sized object, so a sum whose only variant carries no
+ * payload still occupies one private padding byte. The LIR value layout and
+ * plan validation share this one rule instead of each rounding on its own. */
+static inline size_t xrt_value_sum_size(size_t extent, size_t alignment) {
+    size_t size = (extent + alignment - 1) & ~(alignment - 1);
+    return size ? size : 1;
+}
 typedef struct XrtValueEntrySpec {
     uint32_t ordinal;
     const XrtValuePlan *signature;
