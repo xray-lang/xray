@@ -1238,6 +1238,13 @@ endif()
 if(XR_BUILD_DAP)
     list(APPEND XRAY_CLI_SOURCES ${XRAY_CLI_ROOT}/xcmd_dap.c)
 endif()
+# The checked standard library producer. It compiles one standard library module
+# in Checked form, verifies the packet round trip and writes it, so the library
+# catalog can be populated without running the semantic pass at load time.
+add_executable(xray_stdlib_checkedgen ${CMAKE_SOURCE_DIR}/src/xir/xxir_stdlib_checkedgen.c)
+target_link_libraries(xray_stdlib_checkedgen PRIVATE xray_source_compile
+    xray_compile_resources xray_toolchain_process)
+
 add_executable(xray ${XRAY_CLI_SOURCES})
 target_link_libraries(xray PRIVATE xray_cli_toolchain_config)
 if(TARGET xray_cli_toolchain_update)
