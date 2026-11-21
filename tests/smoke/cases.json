@@ -311,7 +311,7 @@
       "gap": {
         "feature": "Task339 M2",
         "stage": "suite",
-        "first_diagnostic": "xray test: temporarily unavailable"
+        "first_diagnostic": "xray test: running tests needs backend test-role startup; discovery only"
       }
     },
     {
@@ -788,7 +788,7 @@
       "gap": {
         "feature": "Task339 M2",
         "stage": "suite",
-        "first_diagnostic": "xray test: temporarily unavailable"
+        "first_diagnostic": "xray test: running tests needs backend test-role startup; discovery only"
       }
     },
     {
