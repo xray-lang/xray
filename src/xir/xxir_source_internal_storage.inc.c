@@ -5,21 +5,20 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_source_net_storage.inc.c - Opaque storage nominals of the network module
+ * xxir_source_internal_storage.inc.c - Opaque storage nominals of a standard module
  *
  * KEY CONCEPT:
- *   Only the real standard network module receives these three names. Each one
- *   becomes a final class with no fields, so a source annotation can carry the
- *   type while the host keeps the body.
+ *   The generated table decides which storage class a standard module owns. A
+ *   name resolves only while that module is being declared, and the class it
+ *   becomes is final with no fields: the host keeps the body.
  */
-#include "xxir_net_storage_native.h"
-static bool source_net_storage_module(SourceContext *ctx, uint32_t module) {
+#include "xxir_internal_storage.h"
+static bool source_internal_storage_module(SourceContext *ctx, uint32_t module, const char *name) {
     const XrModuleSpec *spec = &ctx->graph->specs[module];
     return spec->authority.kind == XR_MODULE_IDENTITY_STDLIB && spec->authority.namespace_id &&
-        source_text_same(ctx, NULL, spec->authority.namespace_id, "net") && spec->logical_path &&
-        source_text_same(ctx, NULL, spec->logical_path, "net/net.xr");
+        source_text_same(ctx, NULL, spec->authority.namespace_id, name) && spec->logical_path;
 }
-static bool source_net_storage_nominal(SourceContext *ctx, const XrNativeTypeDeclaration *native) {
+static bool source_internal_storage_nominal(SourceContext *ctx, const XrNativeTypeDeclaration *native) {
     if (!source_nominal_reserve(ctx)) return false;
     uint32_t d = ctx->nominals.count;
     const char *name = source_owned_text(ctx, native->name);
@@ -47,18 +46,22 @@ static bool source_net_storage_nominal(SourceContext *ctx, const XrNativeTypeDec
     query->type = (XrXirSourceType) {owner->type, 0, true};
     return true;
 }
-static bool source_net_storage_declare(SourceContext *ctx) {
-    uint32_t saved = ctx->module;
+static bool source_internal_storage_declare(SourceContext *ctx) {
+    uint32_t saved = ctx->module, count = 0;
+    const XrInternalStorageType *table = xr_internal_storage_table(&count);
     for (uint32_t m = 0; m < ctx->module_count; ++m) {
         if (!source_request_poll(ctx, NULL)) return false;
-        if (!source_net_storage_module(ctx, m) || source_owned_checked(&ctx->graph->specs[m])) continue;
-        ctx->module = m;
-        for (uint32_t i = 0; i < sizeof(xir_net_storage_contracts) / sizeof(*xir_net_storage_contracts); ++i) {
-            const XrNativeTypeDeclaration *native = NULL;
-            if (!xir_net_storage_declaration(xir_net_storage_contracts[i].id, &native))
-                return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "network storage declaration is missing");
+        if (source_owned_checked(&ctx->graph->specs[m])) continue;
+        for (uint32_t i = 0; i < count; ++i) {
+            if (table[i].carrier != XR_INTERNAL_STORAGE_NOMINAL) continue;
+            if (!source_internal_storage_module(ctx, m, table[i].module)) continue;
+            const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(table[i].native_id);
+            if (!native || native->kind != XR_NATIVE_DECLARATION_STORAGE || !native->name ||
+                strcmp(native->name, table[i].name) || !xr_native_declaration_validate(native))
+                return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "internal storage declaration is missing");
+            ctx->module = m;
             if (find_name(ctx, ctx->names[m], native->name)) continue;
-            if (!source_net_storage_nominal(ctx, native)) return false;
+            if (!source_internal_storage_nominal(ctx, native)) return false;
         }
     }
     ctx->module = saved;

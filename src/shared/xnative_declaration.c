@@ -13,6 +13,10 @@
 #include <string.h>
 #include "xnative_declarations.inc.c"
 
+XR_FUNC const XrInternalStorageType *xr_internal_storage_table(uint32_t *count) {
+    if (count) *count = (uint32_t) (sizeof(xr_internal_storage_types) / sizeof(*xr_internal_storage_types));
+    return xr_internal_storage_types;
+}
 XR_FUNC const XrNativeCallableDeclaration *xr_native_callable_by_id(uint32_t id) {
     for (size_t i = 0; i < sizeof(xr_native_callables) / sizeof(*xr_native_callables); ++i)
         if (id && xr_native_callables[i].id == id) return &xr_native_callables[i];

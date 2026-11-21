@@ -1541,6 +1541,33 @@ def render_file_stat_identity(root):
         '    xr_native_file_stat_members, 10', '};']
 
 
+def render_internal_storage_table(root):
+    """Every internal native class, with the module that alone may name it."""
+    import sys
+    sys.path.insert(0, str(root / 'tools/stdlibgen'))
+    from stdlibgen import parse_native_classes
+    entries = {entry.name: entry for entry in parse_native_classes(root)
+               if entry.visibility == 'internal'}
+    expected = {
+        '__BufferStorage': ('mem', '0'),
+        '__NetConnStorage': ('net', 'XR_NATIVE_DECLARATION_NET_CONN_STORAGE'),
+        '__NetListenerStorage': ('net', 'XR_NATIVE_DECLARATION_NET_LISTENER_STORAGE'),
+        '__TlsContextStorage': ('net', 'XR_NATIVE_DECLARATION_TLS_CONTEXT_STORAGE'),
+    }
+    if set(entries) != set(expected):
+        raise ValueError('Internal storage table differs from its governed class set')
+    lines = ['static const XrInternalStorageType xr_internal_storage_types[] = {']
+    for name in ('__BufferStorage', '__NetConnStorage', '__NetListenerStorage', '__TlsContextStorage'):
+        entry = entries[name]
+        module, identity = expected[name]
+        if entry.module != module or entry.source_wrapper is None:
+            raise ValueError('Internal storage class differs from its module: ' + name)
+        carrier = 'XR_INTERNAL_STORAGE_BUFFER' if name == '__BufferStorage' else 'XR_INTERNAL_STORAGE_NOMINAL'
+        lines += ['    {' + c_string(module) + ', ' + c_string(name) + ', ' + identity + ', ' + carrier + '},']
+    lines += ['};']
+    return lines
+
+
 def render_net_storage_identities(root):
     """The three fieldless storage classes the network module owns."""
     import sys
@@ -1946,6 +1973,7 @@ def render(root):
     lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root) + render_channel_identity(root) + render_channel_result_identities(root) + render_iterator_identity(root) + render_type(root, 'map')[0] + render_type(root, 'set')[0]
     lines += render_file_stat_identity(root)
     lines += render_net_storage_identities(root)
+    lines += render_internal_storage_table(root)
     lines += render_intrinsics(root)
     _, _, string_members = render_type(root, 'string')
     decoder = next(i for i, m in enumerate(string_members) if m.operation == 'STRING_FROM_UTF8')

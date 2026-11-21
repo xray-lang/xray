@@ -207,6 +207,19 @@ typedef struct XrNativeMemberDeclaration {
     uint32_t parameter_count;
     XrNativeTypeTerm result;
 } XrNativeMemberDeclaration;
+/* Internal storage classes are named only by the standard module that owns
+ * them. A buffer carrier names the distinguished buffer type; a nominal carrier
+ * names an opaque host-owned class. */
+typedef enum XrInternalStorageCarrier {
+    XR_INTERNAL_STORAGE_BUFFER, XR_INTERNAL_STORAGE_NOMINAL
+} XrInternalStorageCarrier;
+typedef struct XrInternalStorageType {
+    const char *module, *name;
+    uint32_t native_id;
+    XrInternalStorageCarrier carrier;
+} XrInternalStorageType;
+XR_FUNC const XrInternalStorageType *xr_internal_storage_table(uint32_t *count);
+
 typedef struct XrNativeTypeDeclaration {
     uint32_t id;
     XrNativeDeclarationKind kind;
