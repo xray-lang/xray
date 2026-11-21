@@ -15,6 +15,8 @@ import re
 import sys
 from pathlib import Path
 
+from xray_scan_patterns import ScanPattern, literal_alternatives
+
 
 USER_XR_SOURCE_DIRS = ("stdlib", "tests", "demos")
 PUBLIC_TEXT_DIRS = (
@@ -31,29 +33,29 @@ ALLOWED_LEGACY_XR = {
 
 LEGACY_XR_PATTERNS = (
     (
-        re.compile(r"\bparallel\s+(for|range|reduce|collect)\b"),
+        literal_alternatives(("parallel", r"\b", r"\s+(for|range|reduce|collect)\b")),
         "legacy parallel grammar",
     ),
     (
-        re.compile(r"\bparallel\b.*\b(local|final)\b"),
+        literal_alternatives(("parallel", r"\b", r"\b.*\b(local|final)\b")),
         "legacy parallel local/final grammar",
     ),
 )
 
 LEGACY_SOURCE_PATTERNS = (
-    (re.compile(r"\bTK_PARALLEL\b"), "legacy parallel keyword token"),
-    (re.compile(r"\bAST_PARALLEL_[A-Z0-9_]+\b"), "legacy parallel AST node"),
-    (re.compile(r"\bXrParallelLocalBinding\b"), "legacy parallel local/final AST binding"),
-    (re.compile(r"\bxr_parse_parallel_[A-Za-z0-9_]+\b"), "legacy parallel parser entry"),
-    (re.compile(r"\blower_parallel_[A-Za-z0-9_]+_(expr|stmt)\b"), "legacy AST parallel lowering"),
-    (re.compile(r"\bXI_PAR_COLLECT\b"), "legacy collect IR opcode"),
-    (re.compile(r"\bXiParallelCollect(Data)?\b"), "legacy collect IR data"),
+    (literal_alternatives("TK_PARALLEL"), "legacy parallel keyword token"),
+    (literal_alternatives(("AST_PARALLEL_", r"\b", r"[A-Z0-9_]+\b")), "legacy parallel AST node"),
+    (literal_alternatives("XrParallelLocalBinding"), "legacy parallel local/final AST binding"),
+    (literal_alternatives(("xr_parse_parallel_", r"\b", r"[A-Za-z0-9_]+\b")), "legacy parallel parser entry"),
+    (literal_alternatives(("lower_parallel_", r"\b", r"[A-Za-z0-9_]+_(expr|stmt)\b")), "legacy AST parallel lowering"),
+    (literal_alternatives("XI_PAR_COLLECT"), "legacy collect IR opcode"),
+    (literal_alternatives(("XiParallelCollect", r"\b", r"(Data)?\b")), "legacy collect IR data"),
 )
 
 PUBLIC_PARALLEL_RECOMMENDATION_PATTERNS = (
-    (re.compile(r"\bworker[_ -]?id\b", re.IGNORECASE), "worker-id parallel recommendation"),
-    (re.compile(r"\blane arrays?\b", re.IGNORECASE), "manual lane-array recommendation"),
-    (re.compile(r"\blanes\s*\[", re.IGNORECASE), "manual lane indexing recommendation"),
+    (ScanPattern(re.compile(r"\bworker[_ -]?id\b", re.IGNORECASE)), "worker-id parallel recommendation"),
+    (ScanPattern(re.compile(r"\blane arrays?\b", re.IGNORECASE)), "manual lane-array recommendation"),
+    (ScanPattern(re.compile(r"\blanes\s*\[", re.IGNORECASE)), "manual lane indexing recommendation"),
 )
 
 FIRST_PUBLICATION_NOTICE_PATH = Path("spec/source/accepted/331-language-surface-convergence-cn.md")
@@ -88,6 +90,8 @@ def has_active_match(relative: Path, line: str, pattern: re.Pattern[str], label:
     excluded = ()
     if relative == FIRST_PUBLICATION_NOTICE_PATH and label == "worker-id parallel recommendation":
         excluded = tuple(match.span("name") for match in FIRST_PUBLICATION_NOTICE.finditer(line))
+    if not excluded:
+        return pattern.search(line) is not None
     return any(
         not any(start <= match.start() and match.end() <= end for start, end in excluded)
         for match in pattern.finditer(line)
@@ -97,12 +101,15 @@ def has_active_match(relative: Path, line: str, pattern: re.Pattern[str], label:
 def scan_text_file(root: Path, path: Path, patterns) -> list[str]:
     errors: list[str] = []
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        source = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return errors
+    candidates = [(pattern.regex, label) for pattern, label in patterns if pattern.may_match(source)]
+    if not candidates:
+        return errors
     relative = rel(root, path)
-    for lineno, line in enumerate(lines, 1):
-        for pattern, label in patterns:
+    for lineno, line in enumerate(source.splitlines(), 1):
+        for pattern, label in candidates:
             if has_active_match(relative, line, pattern, label):
                 errors.append(f"{relative}:{lineno}: {label}: {line.strip()}")
     return errors

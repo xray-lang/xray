@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from xray_scan_patterns import ScanPattern, literal_alternatives
+
 
 TEXT_SUFFIXES = {
     ".c",
@@ -54,76 +56,80 @@ RETIRED_JSON_NOTICE = re.compile(
 @dataclass(frozen=True)
 class Rule:
     name: str
-    pattern: re.Pattern[str]
+    pattern: ScanPattern
     roots: tuple[str, ...]
 
 
 RULES = (
     Rule(
         "DELETED_STRUCTURAL_OBJECT_IDENTITY",
-        re.compile(r"\b[A-Za-z_][A-Za-z_0-9]*STRUCT_OBJ[A-Za-z_0-9]*\b|"
-                   r"\b(?:AST_OBJECT_LITERAL|AST_OBJECT_PATTERN|AST_SET_LITERAL|"
-                   r"TK_HASH_LBRACE|TK_HASH_LBRACKET|XR_XIR_TYPE_RECORD)\b"),
+        literal_alternatives(
+            ("STRUCT_OBJ", r"\b[A-Za-z_][A-Za-z_0-9]*", r"[A-Za-z_0-9]*\b"),
+            "AST_OBJECT_LITERAL", "AST_OBJECT_PATTERN", "AST_SET_LITERAL",
+            "TK_HASH_LBRACE", "TK_HASH_LBRACKET", "XR_XIR_TYPE_RECORD",
+        ),
         ("src", "include", "xisa"),
     ),
     Rule(
         "PUBLIC_LEGACY_JSON_TYPE",
-        re.compile(r"(?<![A-Za-z0-9_.])(?:JsonValue|Json)(?![A-Za-z0-9_])|@derive\(Json\)"),
+        literal_alternatives(
+            ("Json", r"(?<![A-Za-z0-9_.])", r"(?:Value)?(?![A-Za-z0-9_])"),
+            ("Json", r"@derive\(", r"\)"),
+        ),
         ("spec", "stdlib", "src/app", "demos"),
     ),
     Rule(
         "PUBLIC_LEGACY_JSON_NAMESPACE",
-        re.compile(r"\bJson\.(?:parse|decode|encode|stringify|value|kindOf|isValid)\b"),
+        literal_alternatives(("Json.", r"\b", r"(?:parse|decode|encode|stringify|value|kindOf|isValid)\b")),
         ("spec", "stdlib", "src/app", "demos"),
     ),
     Rule(
         "PUBLIC_RECORD_SURFACE",
-        re.compile(r"\bType\.record\b|\bTYPE_NAME_RECORD\b"),
+        literal_alternatives("Type.record", "TYPE_NAME_RECORD"),
         ("spec", "stdlib", "src/app", "src/frontend/analyzer", "demos", "tools"),
     ),
     Rule(
         "INTERNAL_RECORD_IDENTITY",
-        re.compile(r"\bXR_KIND_RECORD\b|\bXR_BK_RECORD\b|\bXRT_OBJECT_RECORD\b"),
+        literal_alternatives("XR_KIND_RECORD", "XR_BK_RECORD", "XRT_OBJECT_RECORD"),
         ("src", "stdlib", "tests", "xisa"),
     ),
     Rule(
         "LEGACY_RECORD_TYPE_API",
-        re.compile(
-            r"\bXR_TYPE_IS_RECORD\b|\bxr_type_new_record(?:_with_fields)?\b|"
-            r"\bXR_TID_RECORD\b|\bTYPE_NAME_RECORD\b"
+        literal_alternatives(
+            "XR_TYPE_IS_RECORD", ("xr_type_new_record", r"\b", r"(?:_with_fields)?\b"),
+            "XR_TID_RECORD", "TYPE_NAME_RECORD",
         ),
         ("src", "stdlib", "tests", "xisa"),
     ),
     Rule(
         "LEGACY_FIXED_FIELD_OP",
-        re.compile(r"\bXI_JSON_(?:GET|SET|INIT)_F\b"),
+        literal_alternatives(("XI_JSON_", r"\b", r"(?:GET|SET|INIT)_F\b")),
         ("src", "tests", "xisa"),
     ),
     Rule(
         "LEGACY_RECORD_EVIDENCE",
-        re.compile(r"\b(?:Xg|Xaot)Record(?:Shape|Field|Access|Merge|Options)"),
+        literal_alternatives(("Record", r"\b(?:Xg|Xaot)", r"(?:Shape|Field|Access|Merge|Options)")),
         ("src/analysis", "src/aot", "src/ir", "tests", "xisa"),
     ),
     Rule(
         "LEGACY_OBJECT_ROW_METADATA",
-        re.compile(
-            r"\bXrObjectRowMode\b|\bXR_OBJECT_ROW_(?:EXACT|OPEN)\b|"
-            r"\bfield_optional\b|\bobject_row_mode\b"
+        literal_alternatives(
+            "XrObjectRowMode", ("XR_OBJECT_ROW_", r"\b", r"(?:EXACT|OPEN)\b"),
+            "field_optional", "object_row_mode",
         ),
         ("src", "stdlib", "tests", "xisa"),
     ),
     Rule(
         "DYNAMIC_STRUCTURAL_OBJECT_PATH",
-        re.compile(
-            r"\bXG_OBJECT_DOMAIN_JSON\b|\bXG_OBJECT_SHAPE_EXTENSIBLE\b|"
-            r"\bXAOT_OBJECT_ACCESS_DYNAMIC_JSON_LOOKUP\b|"
-            r"\bxrt_object_(?:get|set)_dynamic\b|\bxrt_object_extension_map\b"
+        literal_alternatives(
+            "XG_OBJECT_DOMAIN_JSON", "XG_OBJECT_SHAPE_EXTENSIBLE", "XAOT_OBJECT_ACCESS_DYNAMIC_JSON_LOOKUP",
+            ("xrt_object_", r"\b", r"(?:get|set)_dynamic\b"), "xrt_object_extension_map",
         ),
         ("src", "stdlib", "tests", "xisa"),
     ),
     Rule(
         "SECOND_JSON_OBJECT_STORAGE",
-        re.compile(r"\bXrJsonObject\b|\bxrt_json_object_t\b"),
+        literal_alternatives("XrJsonObject", "xrt_json_object_t"),
         ("src", "stdlib", "tests", "xisa"),
     ),
 )
@@ -157,9 +163,11 @@ def has_active_match(rule: Rule, rel: Path, line: str) -> bool:
     retired_spans = ()
     if rule.name == "PUBLIC_LEGACY_JSON_TYPE" and rel == RETIRED_JSON_NOTICE_PATH:
         retired_spans = tuple(match.span("names") for match in RETIRED_JSON_NOTICE.finditer(line))
+    if not retired_spans:
+        return rule.pattern.regex.search(line) is not None
     return any(
         not any(start <= match.start() and match.end() <= end for start, end in retired_spans)
-        for match in rule.pattern.finditer(line)
+        for match in rule.pattern.regex.finditer(line)
     )
 
 
@@ -170,22 +178,20 @@ def collect(root: Path) -> dict[str, list[dict[str, object]]]:
         if not applicable_rules:
             continue
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            source = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
+        applicable_rules = [rule for rule in applicable_rules if rule.pattern.may_match(source)]
+        if not applicable_rules:
+            continue
+        lines = source.splitlines()
         for rule in applicable_rules:
+            skip_comments = (
+                rule.name in {"PUBLIC_RECORD_SURFACE", "PUBLIC_LEGACY_JSON_TYPE", "PUBLIC_LEGACY_JSON_NAMESPACE"}
+                and path.suffix.lower() in {".c", ".h", ".inc", ".py", ".sh"}
+            )
             for line_number, line in enumerate(lines, 1):
-                stripped = line.lstrip()
-                if (
-                    rule.name
-                    in {
-                        "PUBLIC_RECORD_SURFACE",
-                        "PUBLIC_LEGACY_JSON_TYPE",
-                        "PUBLIC_LEGACY_JSON_NAMESPACE",
-                    }
-                    and path.suffix.lower() in {".c", ".h", ".inc", ".py", ".sh"}
-                    and stripped.startswith(("//", "/*", "*", "#"))
-                ):
+                if skip_comments and line.lstrip().startswith(("//", "/*", "*", "#")):
                     continue
                 if has_active_match(rule, rel, line):
                     hits[rule.name].append(
