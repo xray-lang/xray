@@ -44,7 +44,9 @@ XR_FUNC XrXirStatus xr_hir_body_collection_construct(XrHirBody *body,const XrHir
     const XrXirTypeNode *type=xr_xir_type_node(body->types,input->result);
     bool map=checked.kind==XR_HIR_COLLECTION_MAP;
     uint32_t kind=map?XR_XIR_TYPE_MAP:XR_XIR_TYPE_ARRAY;
-    if(!type || type->kind!=kind ||
+    /* A fixed byte result carries its length in the type and its bytes in the
+     * operand list; every operand is the u8 element the check demanded. */
+    if(!type || (type->kind!=kind && !(!map && type->kind==XR_XIR_TYPE_FIXED_ARRAY)) ||
         type->element!=(map?checked.key:checked.value) || (map && type->result!=checked.value) ||
         input->count!=checked.operands)return XR_XIR_BAD_TYPE;
     if(map && !input->provenance)return XR_XIR_BAD_STRUCTURE;
@@ -107,7 +109,11 @@ static XrXirStatus body_collection_project(const XrHirBody *body,const HirBodyUs
     if(!function->instructions || projection->instruction>=function->instruction_count)return XR_XIR_BAD_STRUCTURE;
     XrXirInstruction actual=function->instructions[projection->instruction];const HirBodyCollection *owned=row->collection;
     bool map=row->action.operation==XR_XIR_MAP_LITERAL;
-    if(actual.op!=row->action.operation || actual.type!=row->action.target || actual.args[1]!=owned->count ||
+    /* A fixed byte array emits its own construction, which carries the same
+     * operand list under the exact fixed type the check produced. */
+    XrXirOp operation=row->action.operation;
+    if(!map && xr_xir_type_is_fixed_array(body->types,row->action.target))operation=XR_XIR_FIXED_ARRAY_NEW;
+    if(actual.op!=operation || actual.type!=row->action.target || actual.args[1]!=owned->count ||
         projection->source_argument_count!=owned->count || actual.args[0]>function->operand_count ||
         actual.args[1]>function->operand_count-actual.args[0] || actual.immediate!=(map?(int64_t)owned->ordinal:0) ||
         actual.targets[0] || actual.targets[1] || actual.type_arguments[0] || actual.type_arguments[1] ||

@@ -39,7 +39,7 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
         good = lower_record_member(c, description, n, &member);
         XrLirType field = good ? lower_type(c, member.type) : XR_LIR_TYPE_INVALID;
         if (good && !(field == XR_LIR_STRING || field == XR_LIR_I64 || field == XR_LIR_I1 || field == XR_LIR_F64 ||
-            xr_lir_inline_aggregate_type(c->module, field))) good = lower_unsupported(c, "record field has no canonical physical carrier");
+            xr_lir_inline_field_type(c->module, field))) good = lower_unsupported(c, "record field has no canonical physical carrier");
         fields[n] = (XrLirRecordField){member.name.bytes, member.name.length, field, member.flags};
     }
     for (uint32_t a = 0; a < argument_count && good; ++a) {
@@ -65,7 +65,7 @@ static bool lower_tuple_finish(Lower *c, XrXirType type, const XrXirTypeNode *no
     for (uint32_t f = 0; f < count; ++f) {
         XrLirType field = lower_type(c, node->parameters[f].type);
         if (field != XR_LIR_I64 && field != XR_LIR_I1 && field != XR_LIR_F64 && field != XR_LIR_STRING &&
-            !xr_lir_inline_aggregate_type(c->module, field)) {
+            !xr_lir_inline_field_type(c->module, field)) {
             xr_free(fields);
             return lower_unsupported(c, "Tuple field has no canonical inline value carrier");
         }

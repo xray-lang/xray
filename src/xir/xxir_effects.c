@@ -278,6 +278,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: case XR_XIR_PANIC_REPLACED_ERROR:
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
     case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
+    case XR_XIR_FIXED_ARRAY_SET:
     case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD:
         return EFFECT_SEED_LOCAL;
     default: return EFFECT_SEED_INVALID;

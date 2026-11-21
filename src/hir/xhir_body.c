@@ -528,8 +528,12 @@ XR_FUNC XrXirStatus xr_hir_body_project(XrHirBody *body,XrHirBodyUse handle,cons
     if(projection->has_instruction&&row->action.operation!=XR_XIR_INVALID&&projection->operation!=row->action.operation) {
         bool invoke=row->is_call&&((row->action.operation==XR_XIR_CALL&&projection->operation==XR_XIR_INVOKE)||
             (row->action.operation==XR_XIR_CALL_INDIRECT&&projection->operation==XR_XIR_INVOKE_INDIRECT));
+        /* A fixed byte collection row emits its own exact construction under
+         * the same operand list the Array-shaped check produced. */
+        bool fixed=row->collection&&row->action.operation==XR_XIR_ARRAY_NEW&&
+            projection->operation==XR_XIR_FIXED_ARRAY_NEW&&xr_xir_type_is_fixed_array(body->types,row->action.target);
         bool helper_invoke=row->nominal_helper&&(projection->operation==XR_XIR_INVOKE||projection->operation==XR_XIR_INVOKE_RESULT);
-        if(!invoke&&!helper_invoke&&(!row->foreign_slot||(projection->operation!=XR_XIR_CALL&&projection->operation!=XR_XIR_INVOKE_RESULT&&
+        if(!invoke&&!fixed&&!helper_invoke&&(!row->foreign_slot||(projection->operation!=XR_XIR_CALL&&projection->operation!=XR_XIR_INVOKE_RESULT&&
             projection->operation!=XR_XIR_INVOKE)))return XR_XIR_BAD_STRUCTURE;
     }
     if(row->is_call) {

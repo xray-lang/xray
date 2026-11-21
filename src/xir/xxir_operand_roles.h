@@ -72,8 +72,7 @@ static inline XrXirPlaceKind xr_xir_place_kind(const XrXirFunction *function, ui
 }
 
 /* Ordinals describe expanded semantic operands, including ARRAY_SET's table. */
-static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal) {
-    if (!ordinal && (op == XR_XIR_MAP_GET || op == XR_XIR_MAP_INDEX || op == XR_XIR_HASH_KEYS ||
+static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal) {    if (!ordinal && (op == XR_XIR_MAP_GET || op == XR_XIR_MAP_INDEX || op == XR_XIR_HASH_KEYS ||
         op == XR_XIR_HASH_VALUES || op == XR_XIR_MAP_ENTRIES || op == XR_XIR_HASH_CONTAINS || op == XR_XIR_HASH_LEN ||
         (op >= XR_XIR_SET_UNION && op <= XR_XIR_MAP_VALUE_AT)))
         return XR_XIR_OPERAND_READ;
@@ -82,7 +81,8 @@ static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal)
     if (!ordinal && (op == XR_XIR_ARRAY_GET || op == XR_XIR_ARRAY_LEN || op == XR_XIR_ARRAY_CAPACITY || op == XR_XIR_PLACE_READ ||
         op == XR_XIR_FIELD_PLACE || op == XR_XIR_INDEX_PLACE)) return XR_XIR_OPERAND_READ;
     if (!ordinal && (op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_STRUCT_SET ||
-        op == XR_XIR_PLACE_WRITE || op == XR_XIR_CELL_PROJECT)) return XR_XIR_OPERAND_WRITE;
+        op == XR_XIR_PLACE_WRITE || op == XR_XIR_CELL_PROJECT ||
+        op == XR_XIR_FIXED_ARRAY_SET)) return XR_XIR_OPERAND_WRITE;
     return XR_XIR_OPERAND_VALUE;
 }
 
@@ -136,7 +136,15 @@ static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
         op==XR_XIR_CHANNEL_SEND_TIMEOUT || op==XR_XIR_CHANNEL_RECV_TIMEOUT ||
         op == XR_XIR_MAP_NEW || op == XR_XIR_MAP_LITERAL || op == XR_XIR_SET_NEW || op == XR_XIR_MAP_SET ||
         op == XR_XIR_VIEW_NEW || op == XR_XIR_VIEW_REBORROW || op == XR_XIR_VIEW_SET || op == XR_XIR_VIEW_CLEANUP ||
+        op == XR_XIR_FIXED_ARRAY_SET ||
         (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
+}
+/* The actual value id behind an ordinal, whether the op stores it inline or in
+ * the shared operand table. Callers still validate the table range first. */
+static inline uint32_t xr_xir_operand_table_id(const XrXirFunction *function,
+    const XrXirInstruction *op, uint32_t ordinal) {
+    return xr_xir_op_uses_operand_table(op->op) ? function->operands[op->args[0] + ordinal] :
+        op->args[ordinal];
 }
 /* These are physical owned-slot identities, not SSA reads or place accesses.
  * Their bounds and types require independent verification. */

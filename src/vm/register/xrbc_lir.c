@@ -264,7 +264,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     switch (i->op) {
     case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
     case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
-    case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
+    case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET: case XR_LIR_FIXED_ARRAY_SET:
     case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE: case XR_LIR_STATE_GROUP_INITIALIZE:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_INITIALIZE:
     case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_CALL_INDIRECT: case XR_LIR_CALL_INTRINSIC:
@@ -640,7 +640,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         return true;
     case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
     case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
-    case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
+    case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET: case XR_LIR_FIXED_ARRAY_SET:
     case XR_LIR_LITERAL_ADDR:
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:

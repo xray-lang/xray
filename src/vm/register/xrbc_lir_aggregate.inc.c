@@ -13,6 +13,7 @@ static bool rbc_lir_inline_type(const XrLirModule *module,XrLirType type) {
 }
 static bool rbc_lir_aggregate_point(const XrLirInstructionView *instruction) {
     return instruction->op == XR_LIR_FIXED_ARRAY_NEW || instruction->op == XR_LIR_FIXED_ARRAY_GET ||
+        instruction->op == XR_LIR_FIXED_ARRAY_SET ||
         (instruction->op >= XR_LIR_NULLABLE_NONE && instruction->op <= XR_LIR_NULLABLE_UNWRAP);
 }
 
@@ -210,6 +211,23 @@ static bool rbc_lir_display_emit(RbcLirCompiler *c, const XrLirInstructionView *
 static bool rbc_lir_aggregate_emit(RbcLirCompiler *c, const XrLirInstructionView *instruction) {
     if (instruction->op >= XR_LIR_NULLABLE_NONE && instruction->op <= XR_LIR_NULLABLE_UNWRAP)
         return rbc_lir_nullable_emit(c, instruction);
+    if (instruction->op == XR_LIR_FIXED_ARRAY_SET) {
+        /* The receiver is an actual fixed byte place, so the byte lands in that
+         * aggregate's own storage; the operand list is position then value. */
+        XrRbcAggregateAccess write = {.operation = XR_RBC_AGGREGATE_SET,
+            .source = c->aggregate_home[instruction->operands[0]], .count = 2};
+        if (write.source == UINT32_MAX || c->aggregate_access_count > UINT16_MAX ||
+            c->aggregate_operand_count > UINT32_MAX - write.count)
+            return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "fixed byte store has no receiving aggregate");
+        void *storage = c->aggregate_operands;
+        if (!rbc_lir_grow(c, &storage, &c->aggregate_operand_capacity,
+            c->aggregate_operand_count + write.count, sizeof(*c->aggregate_operands))) return false;
+        c->aggregate_operands = storage;
+        write.first = (uint32_t)c->aggregate_operand_count;
+        c->aggregate_operands[c->aggregate_operand_count++] = rbc_lir_array_location(c, instruction->operands[1]);
+        c->aggregate_operands[c->aggregate_operand_count++] = rbc_lir_array_location(c, instruction->operands[2]);
+        return rbc_lir_aggregate_append(c, write);
+    }
     bool construct = instruction->op == XR_LIR_FIXED_ARRAY_NEW;
     XrRbcAggregateAccess access = {.operation = construct ? XR_RBC_AGGREGATE_NEW : XR_RBC_AGGREGATE_GET,
         .count = construct ? instruction->operand_count : 1};

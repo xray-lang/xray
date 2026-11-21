@@ -228,6 +228,9 @@ XR_XIR_OP(SCOPE_JOIN,7,UNIT,1,2,1)
 XR_XIR_OP(FIXED_ARRAY_NEW,7,OWNED,0,0,0)
 XR_XIR_OP(FIXED_ARRAY_GET,7,VALUE,2,0,0)
 XR_XIR_OP(FIXED_ARRAY_LEN,7,I64,1,0,0)
+/* In-place byte store: the first operand is the writable fixed byte place, the
+ * second the exact i64 position, the third the exact u8 value. */
+XR_XIR_OP(FIXED_ARRAY_SET,7,UNIT,0,0,0)
 /* Admission waits for the complete typed selection and owned wait bridge. */
 XR_XIR_OP(CHANNEL_SELECT,7,OWNED,0,0,0)
 /* Class method selection requires the complete owned inheritance proof. */

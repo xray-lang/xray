@@ -226,6 +226,13 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return v->type == XR_LIR_U8 && b == XR_LIR_I64 &&
                 xr_lir_type_view(m, a, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_FIXED_ARRAY;
         }
+        case XR_LIR_FIXED_ARRAY_SET: {
+            XrLirTypeView shape;
+            if (v->type != XR_LIR_UNIT || v->operand_count != 3 ||
+                xr_lir_type_view(m, a, &shape) != XR_LIR_OK || shape.kind != XR_LIR_TYPE_FIXED_ARRAY ||
+                b != XR_LIR_I64 || f->values[v->operands[2] - 1].type != XR_LIR_U8) return false;
+            return true;
+        }
         case XR_LIR_CONST:
             return lir_constant_valid(v->type, v->bits);
         case XR_LIR_NULLABLE_NONE: {

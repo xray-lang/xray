@@ -1109,8 +1109,10 @@ static XrXirStatus graph_specialized_uses(const Graph *graph,const XrXirFunction
         if (status!=XR_XIR_OK) return status;
         return XR_XIR_OK;
     }
-    if(op->op>=XR_XIR_FIXED_ARRAY_NEW && op->op<=XR_XIR_FIXED_ARRAY_LEN)
+    if(op->op>=XR_XIR_FIXED_ARRAY_NEW && op->op<=XR_XIR_FIXED_ARRAY_SET) {
+        *handled=true;
         return fixed_array_uses(graph,function,context,i);
+    }
     if ((op->op >= XR_XIR_FIELD_PLACE && op->op <= XR_XIR_PLACE_WRITE) || op->op == XR_XIR_CELL_PROJECT) {
         XrXirStatus status = path_uses(graph, function, context, i);
         if (status != XR_XIR_OK) return status;

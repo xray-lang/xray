@@ -92,8 +92,10 @@ static bool managed_nullable(const XrtValuePlan *plan) {
 }
 static bool record_field(const XrtValuePlan *plan) {
     XrtValueKind kind = plan->view.kind;
+    /* A fixed byte array is inline POD storage with no owning leaf, so a
+     * record holds its bytes in place exactly like a scalar field. */
     return kind == XRT_VALUE_I64 || kind == XRT_VALUE_BOOL || kind == XRT_VALUE_F64 ||
-        kind == XRT_VALUE_STRING || xrt_value_kind_has_fields(kind) ||
+        kind == XRT_VALUE_STRING || kind == XRT_VALUE_FIXED_U8 || xrt_value_kind_has_fields(kind) ||
         (kind == XRT_VALUE_NULLABLE && managed_nullable(plan));
 }
 static bool capture_type(const XrtValuePlan *plan) {

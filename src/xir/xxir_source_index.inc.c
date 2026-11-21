@@ -12,6 +12,31 @@ static bool source_index_map_reference(SourceContext *ctx, AstNode *node, XrXirT
     return native && source_native_hash_declaration(ctx, native, &declaration) &&
         source_query_target_token_reference(ctx, node, declaration, XR_XIR_SOURCE_TYPE_USE);
 }
+/* `place[at] = byte` on a fixed byte array stores in place: the receiver is a
+ * real fixed byte place, the position is an exact i64 and the value an exact
+ * u8. The store's own bounds trap is the emitted bytecode's check. */
+static bool source_fixed_index_set(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    SourceValue receiver = {0}, key = {0}, byte = {0};
+    if (!source_value_place(ctx, node->as.index_set.array, &receiver) ||
+        !xr_xir_type_is_fixed_array(&ctx->types, receiver.type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE,
+            "fixed byte element assignment requires a writable fixed byte place");
+    if (!source_plan_expression(ctx, node->as.index_set.index,
+            (SourceExpectedType){true, XR_XIR_I64, false, false}, &key)) return false;
+    if (key.type != XR_XIR_I64)
+        return source_fail(ctx, node->as.index_set.index, XR_XIR_BAD_TYPE,
+            "fixed byte index requires exact i64");
+    if (!source_plan_expression(ctx, node->as.index_set.value,
+            (SourceExpectedType){true, XR_XIR_U8, false, false}, &byte)) return false;
+    if (byte.type != XR_XIR_U8)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE,
+            "fixed byte element assignment requires an exact u8 value");
+    SourceValue operands[3] = {receiver, key, byte};
+    if (!source_recipe_group(ctx, (XrXirInstruction){.op = XR_XIR_FIXED_ARRAY_SET}, operands, 3, NULL))
+        return false;
+    *value = byte;
+    return true;
+}
 static bool source_index_get(SourceContext *ctx, AstNode *node, SourceValue *value) {
     AstNode *receiver = node->as.index_get.array, *index = node->as.index_get.index;
     SourceValue container = {0}, key = {0};
@@ -70,6 +95,8 @@ static bool source_index_set(SourceContext *ctx, AstNode *node, SourceValue *val
     SourceValue args[3] = {{0}};
     SourceExpectedType receiver={0};
     if (!source_ground_type(ctx,node->as.index_set.array,0,&receiver)) return false;
+    if (receiver.present && xr_xir_type_is_fixed_array(&ctx->types, receiver.type))
+        return source_fixed_index_set(ctx, node, value);
     uint32_t view_kind=0;XrXirType view_element=XR_XIR_UNIT;
     if(receiver.present&&source_view_shape(ctx,receiver.type,&view_kind,&view_element))
         return source_view_index_set(ctx,node,value);

@@ -101,7 +101,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, 
     if (access.operation >= XR_RBC_AGGREGATE_STATE_READ && access.operation <= XR_RBC_AGGREGATE_STATE_INITIALIZE)
         return xr_rbc_aggregate_state_step(module, stack, frame, f, index, source);
     if (access.operation != XR_RBC_AGGREGATE_NEW && access.operation != XR_RBC_AGGREGATE_GET &&
-        access.operation != XR_RBC_AGGREGATE_COPY &&
+        access.operation != XR_RBC_AGGREGATE_SET && access.operation != XR_RBC_AGGREGATE_COPY &&
         !(access.operation >= XR_RBC_NULLABLE_NONE && access.operation <= XR_RBC_NULLABLE_UNWRAP)) return XR_RBC_INVALID;
     if (!xr_rbc_aggregate_reserve(stack, frame, f)) return XR_RBC_OUT_OF_MEMORY;
     if (access.operation >= XR_RBC_NULLABLE_NONE && access.operation <= XR_RBC_NULLABLE_UNWRAP)
@@ -132,6 +132,14 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, 
             memcpy(&bits, bytes + (size_t)offset * sizeof(bits), sizeof(bits));
         else bits = bytes[(size_t)offset];
         xr_rbc_aggregate_scalar(stack, frame, access.result)->bits = bits;
+    } else if (access.operation == XR_RBC_AGGREGATE_SET) {
+        /* The byte lands in the receiver's own aggregate storage. */
+        uint64_t offset = xr_rbc_aggregate_scalar(stack, frame, f->aggregate_operands[access.first])->bits;
+        if (offset >= type.count) xrt_fixed_array_bounds(source);
+        uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, f->aggregate_operands[access.first + 1])->bits;
+        if (layout.scalar_slots)
+            memcpy(bytes + (size_t)offset * sizeof(bits), &bits, sizeof(bits));
+        else bytes[(size_t)offset] = (uint8_t)bits;
     } else {
         uint8_t *original = xr_rbc_aggregate_value(stack, frame, f->aggregate_values[access.source]);
         memmove(bytes, original, layout.size);

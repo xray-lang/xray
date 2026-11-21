@@ -92,9 +92,12 @@ static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t
     if (id >= XR_XIR_TYPE_PARAMETER_BASE && id < XR_XIR_TYPE_PARAMETER_LIMIT)
         return id - XR_XIR_TYPE_PARAMETER_BASE < parameters;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    /* A fixed byte array is inline storage with a compile-time length, so it
+     * parameterizes nothing and is admissible as a field of any nominal. */
     return node && (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CALLABLE ||
         node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
-        node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL) &&
+        node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL ||
+        node->kind == XR_XIR_TYPE_FIXED_ARRAY) &&
         node->parameter_span <= parameters;
 }
 static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,

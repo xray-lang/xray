@@ -395,6 +395,7 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
         case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP:
         case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
+        case XR_XIR_FIXED_ARRAY_SET:
         case XR_XIR_ARRAY_NEW:
         case XR_XIR_SET_NEW: case XR_XIR_SET_ADD:
         case XR_XIR_MAP_NEW: case XR_XIR_MAP_LITERAL: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_MAP_SET:
@@ -934,9 +935,27 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     if (lower_array_element(c, op->type) || lower_type(c, op->type) == XR_LIR_ARRAY_CELL)
         c->arrays = true;
     c->maps |= lower_map_type(c, payload);
+    if (op->op == XR_XIR_FIXED_ARRAY_SET) {
+        /* The receiver is the writable fixed byte place itself, named by the
+         * first operand-table entry. */
+        if (op->args[0] > f->operand_count || !op->args[1] ||
+            f->operands[op->args[0]] >= (uint64_t) f->parameter_count + f->instruction_count)
+            return lower_unsupported(c, "fixed byte store receiver");
+        XrXirType place = xr_xir_operand_type(f, f->operands[op->args[0]]);
+        const XrXirTypeNode *node = xr_xir_type_node(c->source->types, place);
+        if (!node || node->kind != XR_XIR_TYPE_FIXED_ARRAY)
+            return lower_unsupported(c, "fixed byte store receiver is not a fixed byte array");
+        return lower_receive_type(c, place);
+    }
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
         XrXirType type = op->op == XR_XIR_PLACE_WRITE ? xr_xir_operand_type(f, op->args[0]) : op->type;
-        if (!lower_array_element(c, type) && !lower_map_type(c, type) && !lower_set_type(c,type)) return lower_unsupported(c, "non-container place");
+        /* A fixed byte place is ordinary inline storage, so a store through it
+         * needs no container machinery of its own. */
+        /* A fixed byte place is ordinary inline storage, so a store through it
+         * needs no container machinery of its own. */
+        if (!lower_array_element(c, type) && !lower_map_type(c, type) && !lower_set_type(c,type) &&
+            !xr_xir_type_is_fixed_array(c->source->types, type))
+            return lower_unsupported(c, "non-container place");
         return true;
     }
     if (op->op == XR_XIR_CELL_STRING_APPEND) {
@@ -1695,6 +1714,17 @@ static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
             .operands=operands, .operand_count=2, .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &get, result));
     }
+    if (op->op == XR_XIR_FIXED_ARRAY_SET) {
+        /* The receiver is an actual fixed byte place, so the store writes into
+         * that storage instead of producing a new value. */
+        XrLirValue store[3] = {{0}};
+        if (!lower_value(f, op->args[0], &store[0]) ||
+            !lower_value(f, op->args[1], &store[1]) ||
+            !lower_value(f, op->args[2], &store[2])) return false;
+        XrLirInstruction set = {.op=XR_LIR_FIXED_ARRAY_SET, .type=XR_LIR_UNIT,
+            .operands=store, .operand_count=3, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &set));
+    }
     if (op->args[0] > f->source->operand_count ||
         op->args[1] > f->source->operand_count - op->args[0]) {
         lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked fixed byte operand range");
@@ -1795,7 +1825,7 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP)
         return lower_nullable_instruction(f, b, i);
     if (op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_FIXED_ARRAY_GET ||
-        op->op == XR_XIR_FIXED_ARRAY_LEN) return lower_fixed_instruction(f, b, i);
+        op->op == XR_XIR_FIXED_ARRAY_LEN || op->op == XR_XIR_FIXED_ARRAY_SET) return lower_fixed_instruction(f, b, i);
     if (op->op == XR_XIR_CLOCK_NANOS) {
         XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_I64,
             .callee=c->clocks[op->immediate - 1], .source=lower_source(c)};

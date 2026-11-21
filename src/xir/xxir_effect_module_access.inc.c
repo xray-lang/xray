@@ -316,7 +316,7 @@ static const uint8_t effect_module_operand_counts[XR_XIR_OP_COUNT] = {
 static bool effect_module_storage_read_only(XrXirOp op) {
     switch (op) {
     case XR_XIR_CELL_READ: case XR_XIR_PLACE_READ: case XR_XIR_ARRAY_GET: case XR_XIR_ARRAY_LEN:
-    case XR_XIR_ARRAY_CAPACITY: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
+    case XR_XIR_ARRAY_CAPACITY: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN: case XR_XIR_FIXED_ARRAY_SET:
     case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_MAP_ENTRIES: case XR_XIR_HASH_KEYS:
     case XR_XIR_HASH_VALUES: case XR_XIR_HASH_CONTAINS: case XR_XIR_HASH_LEN: case XR_XIR_HASH_KEY_AT:
     case XR_XIR_VIEW_LEN: case XR_XIR_VIEW_GET: case XR_XIR_VIEW_COPY: case XR_XIR_VIEW_END:

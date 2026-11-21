@@ -101,7 +101,7 @@ static bool lir_tuple_shape(const XrLirModule *m, XrLirTypeView shape, const XrL
         if (field.name || field.name_length || field.flags || field.type >= XR_LIR_TYPE_COUNT + ordinal)
             return false;
         if (field.type != XR_LIR_I64 && field.type != XR_LIR_I1 && field.type != XR_LIR_F64 &&
-            field.type != XR_LIR_STRING && !xr_lir_inline_aggregate_type(m, field.type)) return false;
+            field.type != XR_LIR_STRING && !xr_lir_inline_field_type(m, field.type)) return false;
         managed |= field.type == XR_LIR_STRING || xr_lir_boxed_type(m, field.type);
     }
     /* Offsets and extent belong to the common inline plan. Ownership is also
@@ -173,7 +173,7 @@ static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField
             ((field.flags & (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) == (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) ||
             field.type >= XR_LIR_TYPE_COUNT + earlier ||
             !(field.type == XR_LIR_STRING || field.type == XR_LIR_I64 || field.type == XR_LIR_I1 ||
-              field.type == XR_LIR_F64 || xr_lir_inline_aggregate_type(m, field.type))) return false;
+              field.type == XR_LIR_F64 || xr_lir_inline_field_type(m, field.type))) return false;
     }
     return true;
 }
@@ -391,6 +391,15 @@ XR_FUNC bool xr_lir_inline_aggregate_type(const XrLirModule *m, XrLirType type) 
         type = data.shape.element;
     }
     return false;
+}
+
+/* A record or tuple field may hold a fixed byte array in place: its bytes have
+ * no owning leaf, so the enclosing aggregate owns nothing extra. Standalone
+ * fixed arrays keep their separate receiving home and aggregation path. */
+XR_FUNC bool xr_lir_inline_field_type(const XrLirModule *m, XrLirType type) {
+    if (xr_lir_inline_aggregate_type(m, type)) return true;
+    if (!m || type < XR_LIR_TYPE_COUNT || type - XR_LIR_TYPE_COUNT >= m->type_count) return false;
+    return lir_fixed_shape(m->types[type - XR_LIR_TYPE_COUNT].shape);
 }
 
 XR_FUNC XrLirStatus xr_lir_type_view(const XrLirModule *m, XrLirType type,

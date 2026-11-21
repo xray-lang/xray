@@ -554,7 +554,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
         case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
-        case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
+        case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET: case XR_LIR_FIXED_ARRAY_SET:
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST:
         case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
@@ -978,7 +978,8 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         c_record_instruction(c, v, source);
         return;
     }
-    if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET) {
+    if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET ||
+        v->op == XR_LIR_FIXED_ARRAY_SET) {
         c_fixed_instruction(c, v);
         return;
     }

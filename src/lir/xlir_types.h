@@ -103,6 +103,11 @@ XR_FUNC bool xr_lir_boxed_type(const XrLirModule *, XrLirType);
 /* Selects the common inline plan for named and positional aggregate values,
  * including Nullable over an inline aggregate. It does not imply ownership. */
 XR_FUNC bool xr_lir_inline_aggregate_type(const XrLirModule *, XrLirType);
+/* A record or tuple field additionally admits a fixed byte array, whose bytes
+ * live in place in the enclosing aggregate. Standalone fixed arrays keep their
+ * separate receiving home, so this is deliberately narrower than the plan
+ * selector above and grants no aggregation authority. */
+XR_FUNC bool xr_lir_inline_field_type(const XrLirModule *, XrLirType);
 /* The readonly natural family admits exact I64 and U8 Array windows. Its bytes
  * have no owned leaves; loan validity and private keepers are separate facts. */
 XR_FUNC XrLirStatus xr_lir_slice_type(XrLirModule *, XrLirType element, XrLirType *output);

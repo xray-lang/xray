@@ -76,6 +76,14 @@ static void c_fixed_instruction(LirC *c, const XrLirInstructionView *v) {
         "            xrt_fixed_array_bounds(UINT32_C(%" PRIu32 "));\n    }\n",
         fixed->shape.count,
         fixed->shape.count, source);
+    if (v->op == XR_LIR_FIXED_ARRAY_SET) {
+        /* The receiver is a real place, so the byte lands in that storage. */
+        c_value(c, v->operands[0]);
+        c_text(c, ".bytes[xrl_index] = ");
+        c_value(c, v->operands[2]);
+        c_text(c, ";\n    }\n");
+        return;
+    }
     c_format(c, "    v%" PRIu32 " = ", v->result);
     c_value(c, v->operands[0]);
     c_text(c, ".bytes[xrl_index];\n    }\n");

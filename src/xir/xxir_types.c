@@ -348,8 +348,12 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             if (component > span) span = component;
         }
     } else if (node->kind == XR_XIR_TYPE_FIXED_ARRAY) {
+        /* A fixed byte array stores a compile-time length and one u8 element,
+         * so it parameterizes nothing: its length lives in parameter_count and
+         * contributes no parameter span to any enclosing nominal. */
         if(node->element!=XR_XIR_U8 || !node->parameter_count || node->parameter_count>65535 ||
             node->parameters || node->result!=XR_XIR_UNIT || node->flags) return XR_XIR_BAD_TYPE;
+        span = 0;
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->element != XR_XIR_UNIT || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;

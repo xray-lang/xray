@@ -28,6 +28,25 @@ static bool collection_storable(const XrXirTypes *types,XrXirType type) {
     if((uint32_t)type>=XR_XIR_TYPE_PARAMETER_BASE && (uint32_t)type<XR_XIR_TYPE_PARAMETER_LIMIT)return true;
     return xr_xir_type_node(types,type) && !xr_xir_type_is_cell(types,type);
 }
+XR_FUNC bool xr_hir_collection_fixed_expected(const XrXirTypes *types,XrXirType type) {
+    return xr_xir_type_is_fixed_array(types,type);
+}
+XR_FUNC XrXirStatus xr_hir_collection_fixed_update(const XrHirCollectionFixedInput *input,
+    XrCompileRequestControl *control,XrXirType *output) {
+    if(!input || !output)return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=collection_poll(control);if(status!=XR_XIR_OK)return status;
+    const XrXirTypes *types=input->types;
+    uint32_t length=input->length;
+    /* The receiver keeps its exact fixed identity and the new element must be
+     * the u8 the indexed place selected, so the rebuilt bytes stay exact. */
+    if(!types || !xr_xir_type_is_fixed_array(types,input->receiver) ||
+        xr_xir_fixed_array_length(types,input->receiver)!=length ||
+        input->result!=input->receiver ||
+        input->index!=XR_XIR_I64 || input->value!=XR_XIR_U8 ||
+        input->at>=length || (length && !input->bytes))return XR_XIR_BAD_TYPE;
+    *output=input->result;
+    return collection_poll(control);
+}
 static uint64_t collection_key_bits(const XrHirCollectionEntry *entry) {
     uint64_t bits=entry->constant.bits;
     if(entry->key==XR_XIR_F32) {
@@ -89,11 +108,19 @@ XR_FUNC XrXirStatus xr_hir_collection_check(const XrXirCompileContext *compile,c
     bool known=false;uint32_t first_key=UINT32_MAX,first_value=UINT32_MAX,*slots=NULL,capacity=0;
     if(input->has_expected) {
         const XrXirTypeNode *node=xr_xir_type_node(types,input->expected);
+        /* A fixed byte array context admits the same explicit element list with
+         * its compile-time byte length as the exact item count. */
+        if(!map && xr_xir_type_is_fixed_array(types,input->expected)) {
+            if(input->count!=xr_xir_fixed_array_length(types,input->expected))
+                return collection_error(error,XR_HIR_COLLECTION_CONTEXT,XR_XIR_UNIT,input->expected,0,input->count);
+            result.key=XR_XIR_UNIT;result.value=XR_XIR_U8;known=true;
+        } else {
         if(!node || node->kind!=(uint32_t)(map?XR_XIR_TYPE_MAP:XR_XIR_TYPE_ARRAY))
             return collection_error(error,XR_HIR_COLLECTION_CONTEXT,XR_XIR_UNIT,input->expected,0,0);
         result.key=map?node->element:XR_XIR_UNIT;result.value=map?node->result:node->element;known=true;
         if(!collection_storable(types,result.value) || (map && !collection_storable(types,result.key)))
             return collection_error(error,XR_HIR_COLLECTION_NONVALUE,XR_XIR_UNIT,result.value,0,0);
+        }
     }
     if(!input->count && !known)return collection_error(error,XR_HIR_COLLECTION_EMPTY,XR_XIR_UNIT,XR_XIR_UNIT,0,0);
     for(uint32_t n=0;n<input->count;++n) {

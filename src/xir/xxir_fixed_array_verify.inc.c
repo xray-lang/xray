@@ -13,6 +13,21 @@
 static XrXirStatus fixed_array_uses(const Graph *graph,const XrXirFunction *function,
     VerifyContext *context,uint32_t instruction) {
     const XrXirInstruction *op=&function->instructions[instruction];
+    if(op->op==XR_XIR_FIXED_ARRAY_SET) {
+        /* The receiver is the writable fixed byte place itself, so its exact
+         * fixed type comes from the place operand rather than from `type`.
+         * This op reads its three operands through the operand table. */
+        uint32_t receiver=xr_xir_operand_table_id(function,op,0);
+        XrXirType place=xr_xir_operand_type(function,receiver);
+        uint32_t length=xr_xir_fixed_array_length(context->module->types,place);
+        if(!length)return XR_XIR_BAD_TYPE;
+        XrXirStatus status=type_use_context(context,context->location.function,place);
+        if(status!=XR_XIR_OK)return status;
+        status=role_operand(function,graph,context,instruction,0,place);
+        if(status==XR_XIR_OK)status=role_operand(function,graph,context,instruction,1,XR_XIR_I64);
+        if(status==XR_XIR_OK)status=role_operand(function,graph,context,instruction,2,XR_XIR_U8);
+        return status;
+    }
     bool construct=op->op==XR_XIR_FIXED_ARRAY_NEW;
     XrXirType type=construct?op->type:xr_xir_operand_type(function,op->args[0]);
     const XrXirTypes *types=context->module->types;

@@ -166,7 +166,9 @@ typedef enum XrRbcAggregateOperation {
     XR_RBC_BOXED_NEW, XR_RBC_BOXED_RETAIN, XR_RBC_BOXED_DROP,
     XR_RBC_BOXED_FIELD, XR_RBC_BOXED_PRESENT, XR_RBC_BOXED_TAKE,
     XR_RBC_BOXED_STATE_READ, XR_RBC_BOXED_STATE_WRITE,
-    XR_RBC_BOXED_STATE_CONSTRUCT, XR_RBC_BOXED_STATE_INITIALIZE
+    XR_RBC_BOXED_STATE_CONSTRUCT, XR_RBC_BOXED_STATE_INITIALIZE,
+    /* Appended so every existing ordinal keeps its meaning. */
+    XR_RBC_AGGREGATE_SET
 } XrRbcAggregateOperation;
 typedef struct XrRbcAggregateAccess {
     XrRbcAggregateOperation operation;

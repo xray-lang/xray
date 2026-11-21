@@ -184,15 +184,18 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
     if (literal->is_repeat || literal->count < 0 ||
         (literal->count && !literal->elements))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal needs an admitted explicit element list");
-    if (expected.present && !xr_xir_type_is_array(&ctx->types, expected.type))
+    bool fixed = expected.present && xr_hir_collection_fixed_expected(&ctx->types, expected.type);
+    if (expected.present && !fixed && !xr_xir_type_is_array(&ctx->types, expected.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal cannot satisfy a non-Array context");
     for (int i = 0; i < literal->count; ++i) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         if (literal->elements[i] && literal->elements[i]->type == AST_SPREAD_EXPR)
-            return source_array_spread_literal(ctx,node,expected,value);
+            return fixed ? source_fail(ctx, node, XR_XIR_BAD_TYPE, "a fixed byte array literal has no spread") :
+                source_array_spread_literal(ctx,node,expected,value);
     }
     SourceExpectedType element = {expected.present,XR_XIR_UNIT, false, expected.inferred};
-    if (expected.present) element.type = xr_xir_array_element(&ctx->types,expected.type);
+    if (fixed) element.type = XR_XIR_U8;
+    else if (expected.present) element.type = xr_xir_array_element(&ctx->types,expected.type);
     else if(!source_array_class_context(ctx,literal,&element))return false;
     if (!literal->count && !element.present)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "empty Array literal needs an element context");
@@ -217,6 +220,11 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
     if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"Array literal elements require one exact type");
     element.type=checked.value;
     XrXirType array = XR_XIR_UNIT;
+    if (fixed) {
+        /* The fixed context already names the exact byte type: emit its
+         * construction and leave the implied-Array reference alone. */
+        return source_collection_construct(ctx,node,&input,expected.type,elements,(uint32_t)literal->count,0,value);
+    }
     if (!source_array_element_type(ctx, element.type, &array) || !source_native_array_declaration(ctx)) return false;
     if (!source_collection_construct(ctx,node,&input,array,elements,(uint32_t)literal->count,0,value)) return false;
     /* Literal brackets imply Array without spelling a type name. */
