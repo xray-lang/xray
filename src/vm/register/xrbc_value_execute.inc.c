@@ -1426,6 +1426,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation==XR_RBC_VALUE_SET) status=rbc_value_set_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_MAP_LITERAL) status=rbc_value_map_literal(module,stack,activation,access,source);
     else if ((access.operation>=XR_RBC_VALUE_RECORD_NEW && access.operation<=XR_RBC_VALUE_NULLABLE_UNWRAP) ||
+        access.operation==XR_RBC_VALUE_SUM_NEW || access.operation==XR_RBC_VALUE_SUM_TAG ||
+        access.operation==XR_RBC_VALUE_SUM_GET ||
         access.operation==XR_RBC_VALUE_CLASS_ARRAY_WRITE || access.operation==XR_RBC_VALUE_CLASS_ARRAY_PUSH)
         status=rbc_value_inline_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_DISPLAY) status=rbc_value_display(module,stack,activation,access,source);

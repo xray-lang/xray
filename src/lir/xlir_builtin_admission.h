@@ -36,6 +36,10 @@ static inline bool lir_builtin_or_fixed_type(const XrLirModule *module, XrLirTyp
 static inline bool lir_definition_type(const XrLirModule *module, XrLirType type) {
     if (xr_lir_inline_aggregate_type(module, type) || xr_lir_class_payload(module, type, NULL)) return true;
     if (lir_builtin_or_fixed_type(module, type)) return true;
+    XrLirTypeView sum = {0};
+    XrLirTypeLayout sum_layout;
+    if (xr_lir_type_view(module, type, &sum) == XR_LIR_OK && sum.kind == XR_LIR_TYPE_SUM &&
+        xr_lir_type_layout(module, type, &sum_layout) == XR_LIR_OK && !sum_layout.managed) return true;
     XrLirCallableType signature;
     XrLirCellType cell;
     if (xr_lir_cell_type_view(module, type, &cell) == XR_LIR_OK)

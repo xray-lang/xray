@@ -26,7 +26,11 @@ typedef enum XrtValueKind {
     XRT_VALUE_RECORD, XRT_VALUE_NULLABLE, XRT_VALUE_FUNCTION, XRT_VALUE_CELL,
     XRT_VALUE_ENVIRONMENT, XRT_VALUE_SLICE_I64, XRT_VALUE_SLICE_U8, XRT_VALUE_SET_I64,
     XRT_VALUE_ARRAY_INLINE,
-    XRT_VALUE_CLASS
+    XRT_VALUE_CLASS,
+    /* A tagged sum keeps a compiler-assigned tag and one active variant
+     * payload. P1 admits owner-free payloads only, so the plan's owned leaf
+     * list stays empty and the tag selects a field range, never an owner. */
+    XRT_VALUE_SUM
 } XrtValueKind;
 /* Mutability received from the Checked field for the admitted Class Array
  * path. A flag describes the field and leaves access to the checked operation. */
@@ -69,7 +73,14 @@ typedef struct XrtValueImageType {
     size_t nullable_tag, nullable_payload;
     uint32_t entry_ordinal, entry_signature, element;
     uint32_t class_parent; /* Earlier concrete class row, zero for a root. */
+    /* Tagged sum: tag bytes precede one overlapping variant payload. Variant
+     * rows index the same flattened field span as records and tuples. */
+    size_t sum_tag, sum_tag_size, sum_payload;
+    uint32_t first_variant, variant_count;
 } XrtValueImageType;
+typedef struct XrtValueImageVariant {
+    uint32_t first_field, field_count;
+} XrtValueImageVariant;
 typedef struct XrtValueImage {
     const XrtValueImageType *types;
     uint32_t type_count;
@@ -81,6 +92,8 @@ typedef struct XrtValueImage {
     uint32_t owned_count;
     const char *names;
     size_t name_bytes;
+    const XrtValueImageVariant *variants;
+    uint32_t variant_count;
 } XrtValueImage;
 
 /* A direct borrow of one sealed physical description, without an image lookup

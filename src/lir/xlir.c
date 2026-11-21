@@ -197,9 +197,16 @@ XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
         xr_free((void *)m->types[i].record.arguments);
         xr_free(m->types[i].record_names);
         if (m->types[i].fields) {
-            for (uint32_t f = 0; f < m->types[i].shape.count; ++f) xr_free((void *)m->types[i].fields[f].name);
+            uint32_t field_count = m->types[i].shape.count;
+            if (m->types[i].shape.kind == XR_LIR_TYPE_SUM) {
+                field_count = 0;
+                for (uint32_t v = 0; v < m->types[i].variant_count; ++v)
+                    field_count += m->types[i].variants[v].field_count;
+            }
+            for (uint32_t f = 0; f < field_count; ++f) xr_free((void *)m->types[i].fields[f].name);
             xr_free((void *)m->types[i].fields);
         }
+        xr_free((void *)m->types[i].variants);
     }
     xr_free(m->types);
     xr_free(m->type_index);

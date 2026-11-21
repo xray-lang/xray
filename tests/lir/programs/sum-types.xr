@@ -1,0 +1,38 @@
+enum Color { Red, Green, Blue }
+
+enum Shape {
+    Circle { r: i64 },
+    Square { side: i64 },
+    Point,
+}
+
+fn colorTag(c: Color) -> i64 {
+    return match (c) {
+        Color.Red => 0,
+        Color.Green => 1,
+        Color.Blue => 2,
+    }
+}
+
+fn area(s: Shape) -> i64 {
+    return match (s) {
+        Shape.Circle { r } => r * r,
+        Shape.Square { side } => side * side,
+        Shape.Point => 0,
+    }
+}
+
+fn makeShape(kind: i64, v: i64) -> Shape {
+    if (kind == 1) { return Shape.Circle { r: v } }
+    if (kind == 2) { return Shape.Square { side: v } }
+    return Shape.Point
+}
+
+print(colorTag(Color.Red))
+print(colorTag(Color.Green))
+print(colorTag(Color.Blue))
+print(area(Shape.Circle { r: 3 }))
+print(area(Shape.Square { side: 4 }))
+print(area(Shape.Point))
+print(area(makeShape(1, 5)))
+print(area(makeShape(3, 0)))

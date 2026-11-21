@@ -53,6 +53,7 @@ static XrtManagedStatus plan_extent(const XrtValuePlanSpec *spec, size_t *bytes,
     *dependencies = 0;
     if (!extent_add(bytes, spec->owned_count, sizeof(size_t)) ||
         !extent_add(bytes, spec->field_count, sizeof(XrtValueSlotSpec)) ||
+        !extent_add(bytes, spec->sum.variant_count, sizeof(XrtValueSumVariantSpec)) ||
         !extent_add(bytes, spec->capture_count, sizeof(XrtValueSlotSpec)) ||
         !extent_add(bytes, spec->signature.parameter_count, sizeof(XrtValueParameterSpec)) ||
         !extent_add(dependencies, spec->field_count, 1) || !extent_add(dependencies, spec->capture_count, 1) ||
@@ -175,13 +176,49 @@ static bool class_payload_valid(const XrtValuePlanSpec *spec) {
     }
     return true;
 }
+static bool sum_valid(const XrtValuePlanSpec *spec) {
+    const XrtValueSumSpec *sum = &spec->sum;
+    if (!sum->variants || !sum->variant_count || sum->tag_offset) return false;
+    if (sum->tag_size != 0 && sum->tag_size != 1 && sum->tag_size != 2 && sum->tag_size != 4) return false;
+    size_t alignment = sum->tag_size ? sum->tag_size : 1;
+    size_t payload = sum->payload_offset, fields = 0, extent = 0;
+    for (size_t v = 0; v < sum->variant_count; ++v) {
+        XrtValueSumVariantSpec variant = sum->variants[v];
+        if (variant.field_begin != fields || variant.field_count > SIZE_MAX - fields ||
+            fields + variant.field_count > spec->field_count) return false;
+        size_t end = payload;
+        for (size_t f = 0; f < variant.field_count; ++f) {
+            const XrtValueSlotSpec *slot = &spec->fields[fields + f];
+            if (!slot->type || slot->name || slot->name_length || slot->flags) return false;
+            const XrtValuePlanSpec *child = &slot->type->view;
+            if (!child->size || !child->alignment || child->owned_count) return false;
+            if (child->alignment > alignment) alignment = child->alignment;
+            if (end > SIZE_MAX - (child->alignment - 1)) return false;
+            size_t offset = (end + child->alignment - 1) & ~(child->alignment - 1);
+            if (slot->offset != offset || child->size > SIZE_MAX - offset) return false;
+            end = offset + child->size;
+        }
+        fields += variant.field_count;
+        if (end > extent) extent = end;
+    }
+    if (fields != spec->field_count) return false;
+    if (payload != ((sum->tag_size + alignment - 1) & ~(alignment - 1))) return false;
+    if (spec->alignment != alignment) return false;
+    if (extent > SIZE_MAX - (alignment - 1)) return false;
+    if (spec->size != ((extent + alignment - 1) & ~(alignment - 1))) return false;
+    /* P1 admits only owner-free payloads: the tag selects a field range, and
+     * the common zero/copy/drop paths may treat the whole value as bytes. */
+    return spec->owned_count == 0;
+}
 static bool spec_valid(const XrtValuePlanSpec *spec) {
     if (!spec->alignment || spec->alignment > alignof(XrMaxAlignment) || (spec->alignment & (spec->alignment - 1)) ||
         spec->size % spec->alignment || !lease_valid(spec->code) ||
-        (!xrt_value_kind_has_fields(spec->kind) && spec->field_count) ||
+        (!xrt_value_kind_has_fields(spec->kind) && spec->kind != XRT_VALUE_SUM && spec->field_count) ||
         (spec->kind != XRT_VALUE_ENVIRONMENT && (spec->capture_count || spec->entry.signature || spec->entry.ordinal)) ||
         (spec->kind != XRT_VALUE_FUNCTION && !signature_empty(spec->signature)) ||
         (spec->kind != XRT_VALUE_NULLABLE && (spec->nullable.element || spec->nullable.tag_offset || spec->nullable.payload_offset)) ||
+        (spec->kind != XRT_VALUE_SUM && (spec->sum.variants || spec->sum.variant_count ||
+            spec->sum.tag_offset || spec->sum.tag_size || spec->sum.payload_offset)) ||
         (spec->kind != XRT_VALUE_CELL && spec->kind != XRT_VALUE_ARRAY_INLINE &&
             spec->kind != XRT_VALUE_CLASS && spec->element) ||
         (spec->kind != XRT_VALUE_CLASS && spec->class_parent) ||
@@ -196,6 +233,7 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
     if (spec->kind == XRT_VALUE_ARRAY_INLINE && (!spec->element || !spec->element->view.size ||
         !xrt_value_kind_has_fields(spec->element->view.kind))) return false;
     if (spec->kind == XRT_VALUE_CLASS && !class_payload_valid(spec)) return false;
+    if (spec->kind == XRT_VALUE_SUM) return sum_valid(spec);
     if (pointer_kind(spec->kind))
         return spec->size == sizeof(XrtManagedHeader *) && spec->alignment == alignof(XrtManagedHeader *) &&
             spec->owned_count == 1 && !spec->owned_offsets[0] &&
@@ -285,6 +323,10 @@ XR_FUNCDEF XrtManagedStatus xrt_value_plan_new(XrtBillingOwner *billing, const X
     if (spec->field_count) memcpy(next, spec->fields, spec->field_count * sizeof(XrtValueSlotSpec));
     plan->view.fields = spec->field_count ? (XrtValueSlotSpec *)next : NULL;
     next += spec->field_count * sizeof(XrtValueSlotSpec);
+    if (spec->sum.variant_count) memcpy(next, spec->sum.variants,
+        spec->sum.variant_count * sizeof(XrtValueSumVariantSpec));
+    plan->view.sum.variants = spec->sum.variant_count ? (XrtValueSumVariantSpec *)next : NULL;
+    next += spec->sum.variant_count * sizeof(XrtValueSumVariantSpec);
     if (spec->capture_count) memcpy(next, spec->captures, spec->capture_count * sizeof(XrtValueSlotSpec));
     plan->view.captures = spec->capture_count ? (XrtValueSlotSpec *)next : NULL;
     next += spec->capture_count * sizeof(XrtValueSlotSpec);

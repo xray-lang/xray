@@ -121,3 +121,10 @@ XR_LIR_OP(I64_TRY_PARSE, "i64_try_parse", 1)
 XR_LIR_OP(CLASS_ADOPT, "class_adopt", 1)
 /* Tests that runtime nominal identity against bits (one placed class type). */
 XR_LIR_OP(CLASS_IS, "class_is", 1)
+/* A tagged sum keeps one stored tag and one active variant payload. SUM_NEW
+ * names its variant in bits and its complete payload fields as operands;
+ * SUM_TAG reads the declaration-order tag as i64; SUM_GET names one flattened
+ * payload field in bits. Payload fields are owner-free in this phase. */
+XR_LIR_OP(SUM_NEW, "sum_new", -1)
+XR_LIR_OP(SUM_TAG, "sum_tag", 1)
+XR_LIR_OP(SUM_GET, "sum_get", 1)

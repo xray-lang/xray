@@ -391,6 +391,8 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
 #include "xlir_c_map.inc.c"
 #include "xlir_c_set.inc.c"
 #include "xlir_c_record.inc.c"
+static bool c_sum_point(const XrLirInstructionView *);
+static void c_sum_instruction(LirC *, const XrLirInstructionView *);
 #include "xlir_c_view.inc.c"
 #include "xlir_c_display.inc.c"
 #include "xlir_c_string_library.inc.c"
@@ -520,6 +522,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     }
     if (xr_lir_range_point(c->request->module, v)) return;
     if (c_record_point(v)) return;
+    if (c_sum_point(v)) return;
     if (c_map_point(c, v)) {
         c->maps = true;
         if (v->op == XR_LIR_MAP_LITERAL_NEW) (void)c_map_literal_admit(c, v);
@@ -979,6 +982,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         c_record_instruction(c, v, source);
         return;
     }
+    if (c_sum_point(v)) {
+        c_sum_instruction(c, v);
+        return;
+    }
     if (v->op == XR_LIR_FIXED_ARRAY_NEW || v->op == XR_LIR_FIXED_ARRAY_GET) {
         c_fixed_instruction(c, v);
         return;
@@ -1305,6 +1312,7 @@ static void c_verify_text(LirC *c) {
 #include "xlir_c_binding_forwarding.inc.c"
 #include "xlir_c_array_local.inc.c"
 #include "xlir_c_values.inc.c"
+#include "xlir_c_sum.inc.c"
 #include "xlir_c_array_region.inc.c"
 #include "xlir_c_array_region_helper.inc.c"
 static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {

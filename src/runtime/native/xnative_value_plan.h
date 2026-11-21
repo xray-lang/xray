@@ -42,6 +42,16 @@ typedef struct XrtValueNullableSpec {
     size_t tag_offset, payload_offset;
     const XrtValuePlan *element;
 } XrtValueNullableSpec;
+/* One variant owns one contiguous range of the flattened sum field span.
+ * P1 admits owner-free payload fields, so variants carry no owned leaves. */
+typedef struct XrtValueSumVariantSpec {
+    size_t field_begin, field_count;
+} XrtValueSumVariantSpec;
+typedef struct XrtValueSumSpec {
+    size_t tag_offset, tag_size, payload_offset;
+    const XrtValueSumVariantSpec *variants;
+    size_t variant_count;
+} XrtValueSumSpec;
 typedef struct XrtValueEntrySpec {
     uint32_t ordinal;
     const XrtValuePlan *signature;
@@ -54,6 +64,7 @@ typedef struct XrtValuePlanSpec {
     const XrtValueSlotSpec *fields;
     size_t field_count;
     XrtValueNullableSpec nullable;
+    XrtValueSumSpec sum;
     const XrtValueSlotSpec *captures;
     size_t capture_count;
     XrtValueSignatureSpec signature;

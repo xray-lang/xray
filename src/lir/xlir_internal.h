@@ -90,6 +90,8 @@ typedef struct XrLirTypeData {
     XrLirCallableType callable;
     XrLirType cell_element, class_parent;
     const XrLirRecordField *fields;
+    const XrLirSumVariant *variants;
+    uint32_t variant_count;
     XrLirRecordIdentity record;
     uint32_t *record_names, record_name_capacity;
     uint32_t inline_array_ordinal;

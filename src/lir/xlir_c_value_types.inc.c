@@ -119,6 +119,28 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
             c_text(c, "    uint8_t tag;\n");
             if (c->status == XR_LIR_C_OK && types->rows[child].spec.kind != XRT_VALUE_UNIT)
                 c_format(c, "    XrlValue_%zu payload;\n", child + 1);
+        } else if (spec->kind == XRT_VALUE_SUM) {
+            if (spec->sum.tag_size)
+                c_format(c, "    uint%u_t tag;\n", (unsigned)(spec->sum.tag_size * 8));
+            bool payload = false;
+            for (size_t v = 0; v < spec->sum.variant_count; ++v)
+                payload |= spec->sum.variants[v].field_count != 0;
+            if (payload) {
+                c_text(c, "    union {\n");
+                for (size_t v = 0; v < spec->sum.variant_count && c_request_poll(c); ++v) {
+                    XrtValueSumVariantSpec variant = spec->sum.variants[v];
+                    if (!variant.field_count) continue;
+                    c_text(c, "        struct {\n");
+                    for (size_t f = 0; f < variant.field_count && c_request_poll(c); ++f) {
+                        size_t at = variant.field_begin + f;
+                        size_t child = c_value_dependency(c, types, spec->fields[at].type, ordinal);
+                        c_format(c, "            XrlValue_%zu f%zu;\n", child + 1, at);
+                    }
+                    c_format(c, "        } variant%zu;\n", v);
+                }
+                c_text(c, "    } payload;\n");
+            }
+            if (!spec->sum.tag_size && !payload) c_text(c, "    uint8_t padding;\n");
         } else if (spec->kind == XRT_VALUE_ENVIRONMENT) {
             for (size_t i = 0; i < spec->capture_count && c_request_poll(c); ++i) {
                 size_t child = c_value_dependency(c,types,spec->captures[i].type,ordinal);
@@ -136,7 +158,7 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
         type_id, (uint64_t)spec->size);
     c_format(c, "_Static_assert(_Alignof(XrlValue_%zu) == UINT64_C(%" PRIu64 "), \"value alignment\");\n",
         type_id, (uint64_t)spec->alignment);
-    for (size_t f = 0; f < spec->field_count && c_request_poll(c); ++f)
+    for (size_t f = 0; f < spec->field_count && spec->kind != XRT_VALUE_SUM && c_request_poll(c); ++f)
         c_format(c, "_Static_assert(offsetof(XrlValue_%zu, f%zu) == UINT64_C(%" PRIu64 "), \"field offset\");\n",
             type_id, f, (uint64_t)spec->fields[f].offset);
     for (size_t i = 0; i < spec->capture_count && c_request_poll(c); ++i)
@@ -149,6 +171,20 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
         if (c->status == XR_LIR_C_OK && types->rows[child].spec.kind != XRT_VALUE_UNIT)
             c_format(c, "_Static_assert(offsetof(XrlValue_%zu, payload) == UINT64_C(%" PRIu64 "), \"nullable payload\");\n",
                 type_id, (uint64_t)spec->nullable.payload_offset);
+    }
+    if (spec->kind == XRT_VALUE_SUM) {
+        if (spec->sum.tag_size)
+            c_format(c, "_Static_assert(offsetof(XrlValue_%zu, tag) == UINT64_C(%" PRIu64 "), \"sum tag\");\n",
+                type_id, (uint64_t)spec->sum.tag_offset);
+        for (size_t v = 0; v < spec->sum.variant_count && c_request_poll(c); ++v) {
+            XrtValueSumVariantSpec variant = spec->sum.variants[v];
+            if (!variant.field_count) continue;
+            for (size_t f = 0; f < variant.field_count && c_request_poll(c); ++f) {
+                size_t at = variant.field_begin + f;
+                c_format(c, "_Static_assert(offsetof(XrlValue_%zu, payload.variant%zu.f%zu) == UINT64_C(%" PRIu64 "), \"sum field offset\");\n",
+                    type_id, v, at, (uint64_t)spec->fields[at].offset);
+            }
+        }
     }
     if (spec->kind == XRT_VALUE_FUNCTION)
         c_format(c, "_Static_assert(offsetof(XrlValue_%zu, owner) == UINT64_C(%" PRIu64 "), \"function owner\");\n",

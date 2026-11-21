@@ -34,9 +34,74 @@ static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcSta
     bool class_new=access.operation==XR_RBC_VALUE_CLASS_NEW, class_field=access.operation==XR_RBC_VALUE_CLASS_FIELD;
     bool class_push=access.operation==XR_RBC_VALUE_CLASS_ARRAY_PUSH, class_write=access.operation==XR_RBC_VALUE_CLASS_ARRAY_WRITE;
     bool create=class_new || access.operation==XR_RBC_VALUE_RECORD_NEW ||
+        access.operation==XR_RBC_VALUE_SUM_NEW ||
         access.operation==XR_RBC_VALUE_NULLABLE_NONE || access.operation==XR_RBC_VALUE_NULLABLE_SOME;
     const XrLirValueHome *home=rbc_value_home(activation->code,create ? access.result : access.source);
     const XrtValueImageType *type=&activation->image->types[home->type-1];
+    if (access.operation>=XR_RBC_VALUE_SUM_NEW && access.operation<=XR_RBC_VALUE_SUM_GET) {
+        if (type->kind!=XRT_VALUE_SUM || !activation->image->variants ||
+            type->first_variant>activation->image->variant_count ||
+            type->variant_count>activation->image->variant_count-type->first_variant)
+            return XRT_MANAGED_ARGUMENT;
+        if (access.operation==XR_RBC_VALUE_SUM_TAG) {
+            RbcValuePayload input;
+            XrtManagedStatus status=rbc_value_payload(module,stack,
+                rbc_value_origin(activation,access.source),&input);
+            if (status!=XRT_MANAGED_OK) return status;
+            uint32_t tag=0;
+            if (type->sum_tag_size) {
+                if (type->sum_tag>type->size || type->sum_tag_size>type->size-type->sum_tag)
+                    return XRT_MANAGED_ARGUMENT;
+                memcpy(&tag,input.address+type->sum_tag,type->sum_tag_size);
+            }
+            if (tag>=type->variant_count) return XRT_MANAGED_ARGUMENT;
+            XrRbcRegister *output=rbc_value_register(stack,activation,access.result);
+            if (!output) return XRT_MANAGED_ARGUMENT;
+            output->bits=tag;
+            return XRT_MANAGED_OK;
+        }
+        if (access.operation==XR_RBC_VALUE_SUM_GET) {
+            RbcValuePayload input;
+            XrtManagedStatus status=rbc_value_payload(module,stack,
+                rbc_value_origin(activation,access.source),&input);
+            if (status!=XRT_MANAGED_OK) return status;
+            if (access.index>=type->field_count ||
+                type->first_field>activation->image->slot_count ||
+                type->field_count>activation->image->slot_count-type->first_field)
+                return XRT_MANAGED_ARGUMENT;
+            XrtValueImageSlot slot=activation->image->slots[type->first_field+access.index];
+            if (slot.type>activation->image->type_count) return XRT_MANAGED_ARGUMENT;
+            size_t field_size=activation->image->types[slot.type-1].size;
+            if (slot.offset>type->size || field_size>type->size-slot.offset)
+                return XRT_MANAGED_ARGUMENT;
+            return rbc_value_inline_extract(module,stack,activation,access.result,slot.type,
+                input.address+slot.offset);
+        }
+        if (access.index>=type->variant_count) return XRT_MANAGED_ARGUMENT;
+        XrtValueImageVariant variant=activation->image->variants[type->first_variant+access.index];
+        if (variant.field_count!=access.count || type->size>activation->snapshot_capacity)
+            return XRT_MANAGED_ARGUMENT;
+        uint8_t *snapshot=activation->snapshots;
+        memset(snapshot,0,type->size);
+        if (type->sum_tag_size) {
+            uint32_t tag=access.index;
+            if (type->sum_tag>type->size || type->sum_tag_size>type->size-type->sum_tag)
+                return XRT_MANAGED_ARGUMENT;
+            memcpy(snapshot+type->sum_tag,&tag,type->sum_tag_size);
+        }
+        for (uint32_t p=0;p<access.count;++p) {
+            uint32_t at=type->first_field+variant.first_field+p;
+            if (at>=activation->image->slot_count) return XRT_MANAGED_ARGUMENT;
+            XrtValueImageSlot slot=activation->image->slots[at];
+            if (slot.offset>type->size || type->size-slot.offset<activation->image->types[slot.type-1].size)
+                return XRT_MANAGED_ARGUMENT;
+            XrtManagedStatus status=rbc_value_inline_pack(module,stack,activation,
+                activation->code->arguments[access.first+p],slot.type,snapshot+slot.offset);
+            if (status!=XRT_MANAGED_OK) return status;
+        }
+        return rbc_value_inline_replace(module,stack,
+            (RbcValueOrigin){activation,access.result},snapshot);
+    }
     XrtBoundClass binding={0};
     if (class_new || class_field || class_push || class_write) {
         XrtManagedStatus status=rbc_value_plan_set(module,stack);

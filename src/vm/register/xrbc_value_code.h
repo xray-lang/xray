@@ -49,7 +49,11 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_CLASS_ARRAY_WRITE, XR_RBC_VALUE_CLASS_ARRAY_PUSH,
     /* Class-identity union observation: ADOPT retains a handle under another
      * nominal class row; IS tests the live handle's nominal identity. */
-    XR_RBC_VALUE_CLASS_ADOPT, XR_RBC_VALUE_CLASS_IS
+    XR_RBC_VALUE_CLASS_ADOPT, XR_RBC_VALUE_CLASS_IS,
+    /* Tagged sum over one stored tag and one active owner-free variant payload.
+     * SUM_NEW names its variant in index and its fields in the argument span;
+     * SUM_TAG reads the tag; SUM_GET names one flattened payload field. */
+    XR_RBC_VALUE_SUM_NEW, XR_RBC_VALUE_SUM_TAG, XR_RBC_VALUE_SUM_GET
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {

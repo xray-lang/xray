@@ -343,6 +343,66 @@ static bool lower_receive_type(Lower *, XrXirType);
 #include "xlir_lower_callable_types.inc.c"
 #include "xlir_lower_record_types.inc.c"
 
+/* Only owner-free scalar payload fields are admitted in this phase. The tag
+ * selects a variant field range; no payload leaf owns a reference yet. */
+static bool lower_sum_payload_carrier(Lower *c, XrXirType type, XrLirType *output) {
+    if (!lower_receive_type(c, type)) return false;
+    XrLirType carrier = lower_type(c, type);
+    if (!carrier) return lower_unsupported(c, "enum payload field has no physical carrier");
+    if (carrier >= XR_LIR_TYPE_COUNT) {
+        XrLirTypeView shape;
+        XrLirTypeLayout layout;
+        if (xr_lir_type_view(c->module, carrier, &shape) != XR_LIR_OK || shape.kind != XR_LIR_TYPE_SUM ||
+            xr_lir_type_layout(c->module, carrier, &layout) != XR_LIR_OK || layout.managed)
+            return lower_unsupported(c, "enum payload field with a managed value");
+        *output = carrier; return true;
+    }
+    switch (carrier) {
+    case XR_LIR_I1: case XR_LIR_I8: case XR_LIR_I16: case XR_LIR_I32: case XR_LIR_I64:
+    case XR_LIR_U8: case XR_LIR_U16: case XR_LIR_U32: case XR_LIR_U64:
+    case XR_LIR_F32: case XR_LIR_F64:
+        *output = carrier; return true;
+    default: return lower_unsupported(c, "enum payload field with a managed value");
+    }
+}
+/* A nominal enum becomes one tagged-sum LIR type. Construction, tag reads and
+ * payload reads lower to SUM_NEW, SUM_TAG and SUM_GET. */
+static bool lower_receive_enum_sum(Lower *c, XrXirType type) {
+    if (!c->constructed_types) c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
+    if (!c->constructed_types) return false;
+    uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+    if (c->constructed_types[index]) return true;
+    XrXirTypeDescription description = {0};
+    if (xr_xir_compile_type_description(xr_xir_compile_artifact_context(c->request->closed),
+        c->source->types, type, &description) != XR_XIR_OK ||
+        description.kind != XR_XIR_TYPE_NOMINAL || description.nominal_kind != XR_XIR_NOMINAL_ENUM ||
+        !description.variant_count || !description.variants || description.field_count > 65535)
+        return lower_unsupported(c, "enum type has no resolved Checked variants");
+    uint32_t field_count = description.field_count;
+    XrLirRecordField *fields = field_count ? lower_alloc(c, field_count, sizeof(*fields)) : NULL;
+    XrLirSumVariant *variants = lower_alloc(c, description.variant_count, sizeof(*variants));
+    if ((field_count && !fields) || !variants) { xr_free(fields); return false; }
+    bool good = true;
+    for (uint32_t v = 0; v < description.variant_count && good; ++v) {
+        XrXirNominalVariant variant = description.variants[v];
+        if (variant.field_begin > field_count || variant.field_count > field_count - variant.field_begin) {
+            good = lower_unsupported(c, "enum variant payload range is not resolved");
+            break;
+        }
+        variants[v] = (XrLirSumVariant){variant.field_begin, variant.field_count};
+        for (uint32_t f = 0; f < variant.field_count && good; ++f) {
+            XrXirFieldDescription member = {0};
+            if (!lower_record_member(c, &description, variant.field_begin + f, &member)) { good = false; break; }
+            XrLirType carrier = XR_LIR_TYPE_INVALID;
+            if (!lower_sum_payload_carrier(c, member.type, &carrier)) { good = false; break; }
+            fields[variant.field_begin + f] = (XrLirRecordField){.type=carrier};
+        }
+    }
+    if (good) good = lower_build(c, xr_lir_sum_type(c->module, fields, field_count, variants,
+        description.variant_count, &c->constructed_types[index]));
+    xr_free(fields); xr_free(variants);
+    return good;
+}
 /* Only admitted payloads and signatures receive physical type identities.
  * An unused source descriptor cannot change the retained program's frontier. */
 static bool lower_receive_type(Lower *c, XrXirType type) {
@@ -368,6 +428,8 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
         c->constructed_types[index] = physical;
         return true;
     }
+    if (node && node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_enum(c->source->types, type))
+        return lower_receive_enum_sum(c, type);
     if (node && node->kind == XR_XIR_TYPE_ARRAY) {
         const XrXirTypeNode *row = xr_xir_type_node(c->source->types, node->element);
         XrXirTypeDescription record = {0};
@@ -504,6 +566,7 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_LOCAL_WRITE:
         case XR_XIR_DATA_UNION_INJECT:
         case XR_XIR_DATA_UNION_IS:
+        case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG: case XR_XIR_ENUM_GET:
             return true;
         default:
             return lower_terminator_op(op) != XR_LIR_OP_INVALID;
@@ -1858,6 +1921,58 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         c->owned_bindings[c->function][f->source->parameter_count + i])
         return lower_value(f, op->args[0], &f->values[f->source->parameter_count + i]);
     uint32_t result = f->source->parameter_count + i;
+    if (op->op == XR_XIR_ENUM_NEW) {
+        XrXirType enum_type = op->type;
+        if (!lower_receive_type(c, enum_type)) return false;
+        XrLirType sum = lower_type(c, enum_type);
+        if (!sum) return lower_unsupported(c, "enum construction has no tagged-sum carrier");
+        if (op->immediate < 0 || op->args[0] > f->source->operand_count ||
+            op->args[1] > f->source->operand_count - op->args[0]) {
+            lower_error(c, XR_LIR_VERIFY_ERROR, "invalid enum construction operands");
+            return false;
+        }
+        uint32_t count = op->args[1];
+        XrLirValue *arguments = count ? lower_alloc(c, count, sizeof(*arguments)) : NULL;
+        if (count && !arguments) return false;
+        bool good = true;
+        for (uint32_t n = 0; n < count && good; ++n)
+            good = lower_value(f, f->source->operands[op->args[0] + n], &arguments[n]);
+        XrLirInstruction construct = {.op=XR_LIR_SUM_NEW, .type=sum,
+            .bits=(uint64_t)op->immediate, .operands=arguments, .operand_count=count,
+            .source=lower_source(c)};
+        if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &construct, &f->values[result]));
+        xr_free(arguments);
+        return good;
+    }
+    if (op->op == XR_XIR_ENUM_TAG) {
+        XrXirType enum_type = xr_xir_operand_type(f->source, op->args[0]);
+        if (!lower_receive_type(c, enum_type)) return false;
+        XrLirType sum = lower_type(c, enum_type);
+        XrLirValue input = {0};
+        if (!sum || !lower_value(f, op->args[0], &input)) return lower_unsupported(c, "enum tag has no tagged-sum carrier");
+        XrLirInstruction tag = {.op=XR_LIR_SUM_TAG, .type=XR_LIR_I64,
+            .operands=&input, .operand_count=1, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &tag, &f->values[result]));
+    }
+    if (op->op == XR_XIR_ENUM_GET) {
+        XrXirType enum_type = xr_xir_operand_type(f->source, op->args[0]);
+        if (!lower_receive_type(c, enum_type)) return false;
+        XrLirType sum = lower_type(c, enum_type);
+        const XrLirRecordField *fields = NULL; uint32_t field_count = 0;
+        const XrLirSumVariant *variants = NULL; uint32_t variant_count = 0;
+        if (!sum || !xr_lir_sum_variants(c->module, sum, &fields, &field_count, &variants, &variant_count) ||
+            op->immediate < 0 || (uint64_t)op->immediate >= variant_count)
+            return lower_unsupported(c, "enum payload read has no tagged-sum variant");
+        const XrLirSumVariant *variant = &variants[(uint32_t)op->immediate];
+        if (op->args[1] >= variant->field_count)
+            return lower_unsupported(c, "enum payload field is not in its variant");
+        uint64_t at = (uint64_t)variant->field_begin + (uint64_t)op->args[1];
+        XrLirValue input = {0};
+        if (!lower_value(f, op->args[0], &input)) return false;
+        XrLirInstruction get = {.op=XR_LIR_SUM_GET, .type=fields[at].type, .bits=at,
+            .operands=&input, .operand_count=1, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &get, &f->values[result]));
+    }
     if (op->op == XR_XIR_DATA_UNION_INJECT) {
         /* Retaining retag: the member handle keeps its runtime class identity. */
         XrLirValue input = {0};

@@ -23,7 +23,11 @@ typedef enum XrLirTypeKind {
     XR_LIR_TYPE_TUPLE,
     XR_LIR_TYPE_RECORD,
     XR_LIR_TYPE_SLICE,
-    XR_LIR_TYPE_CLASS
+    XR_LIR_TYPE_CLASS,
+    /* Tagged sum: one stored tag plus one active variant payload. Variant
+     * fields are flattened in declaration order and each variant owns one
+     * contiguous range; every variant payload starts at the same offset. */
+    XR_LIR_TYPE_SUM
 } XrLirTypeKind;
 
 typedef struct XrLirTypeView {
@@ -61,6 +65,14 @@ enum {
 typedef struct XrLirRecordArgument {
     XrLirType type, array_element;
 } XrLirRecordArgument;
+typedef struct XrLirSumVariant {
+    uint32_t field_begin, field_count;
+} XrLirSumVariant;
+/* Physical tag width is shared by every producer of a tagged sum. */
+static inline uint32_t xr_lir_sum_tag_size(uint32_t variant_count) {
+    return variant_count <= 1 ? 0 : variant_count <= 256 ? 1 :
+        variant_count <= 65536 ? 2 : 4;
+}
 
 /* Actual nominal arguments remain distinct even when they do not occupy a
  * field. Byte spans and argument arrays are copied into the receiving module. */
@@ -88,6 +100,15 @@ XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *, XrLirType element, XrLir
 /* Tuple identity consists of its ordered field types. Positional fields have
  * no name, visibility or mutation metadata. The module owns the copied fields. */
 XR_FUNC XrLirStatus xr_lir_tuple_type(XrLirModule *, const XrLirRecordField *, uint32_t count, XrLirType *output);
+/* Tagged sum identity consists of its variants and their flattened field
+ * types. Variant ranges are contiguous and cover every field. P1 admits only
+ * owner-free payload fields, so a sum's copied bytes are its complete state. */
+XR_FUNC XrLirStatus xr_lir_sum_type(XrLirModule *, const XrLirRecordField *, uint32_t field_count,
+    const XrLirSumVariant *, uint32_t variant_count, XrLirType *output);
+/* Returns the flattened field span and its variant ranges. */
+XR_FUNC bool xr_lir_sum_variants(const XrLirModule *, XrLirType,
+    const XrLirRecordField **fields, uint32_t *field_count,
+    const XrLirSumVariant **variants, uint32_t *variant_count);
 /* The State preparation pack is a Tuple with one I64 field per target slot. */
 XR_FUNC XrLirStatus xr_lir_tuple_i64_type(XrLirModule *, uint32_t count, XrLirType *output);
 /* Fields retain declaration order. A real nominal identity is mandatory.

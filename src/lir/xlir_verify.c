@@ -255,6 +255,33 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return v->type == XR_LIR_U8 && b == XR_LIR_I64 &&
                 xr_lir_type_view(m, a, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_FIXED_ARRAY;
         }
+        case XR_LIR_SUM_NEW: {
+            const XrLirRecordField *fields = NULL; uint32_t field_count = 0;
+            const XrLirSumVariant *variants = NULL; uint32_t variant_count = 0;
+            if (!xr_lir_sum_variants(m, v->type, &fields, &field_count, &variants, &variant_count) ||
+                v->bits >= variant_count) return false;
+            const XrLirSumVariant *variant = &variants[v->bits];
+            if (v->operand_count != variant->field_count) return false;
+            for (uint32_t n = 0; n < variant->field_count; ++n) {
+                const XrLirValueData *input = &f->values[v->operands[n] - 1];
+                XrLirRecordField field = fields[variant->field_begin + n];
+                if (input->type != field.type || input->array_element != field.array_element) return false;
+            }
+            return true;
+        }
+        case XR_LIR_SUM_TAG: {
+            const XrLirRecordField *fields = NULL; uint32_t field_count = 0;
+            const XrLirSumVariant *variants = NULL; uint32_t variant_count = 0;
+            return v->operand_count == 1 && v->type == XR_LIR_I64 &&
+                xr_lir_sum_variants(m, a, &fields, &field_count, &variants, &variant_count);
+        }
+        case XR_LIR_SUM_GET: {
+            const XrLirRecordField *fields = NULL; uint32_t field_count = 0;
+            const XrLirSumVariant *variants = NULL; uint32_t variant_count = 0;
+            return v->operand_count == 1 &&
+                xr_lir_sum_variants(m, a, &fields, &field_count, &variants, &variant_count) &&
+                v->bits < field_count && fields[v->bits].type == v->type;
+        }
         case XR_LIR_CONST:
             return lir_constant_valid(v->type, v->bits);
         case XR_LIR_NULLABLE_NONE: {
@@ -469,6 +496,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
         v->op != XR_LIR_CLASS_IS &&
+        v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET &&
         v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)

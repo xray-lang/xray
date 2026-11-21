@@ -548,6 +548,18 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         access.source=access.other=0; access.count=i->operand_count;
         if (!rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first)) return false;
         break;
+    case XR_LIR_SUM_NEW:
+        access.operation = XR_RBC_VALUE_SUM_NEW;
+        access.index = (uint32_t)i->bits;
+        access.source = access.other = 0;
+        access.count = i->operand_count;
+        if (!rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first)) return false;
+        break;
+    case XR_LIR_SUM_TAG:
+        access.operation = XR_RBC_VALUE_SUM_TAG; break;
+    case XR_LIR_SUM_GET:
+        access.operation = XR_RBC_VALUE_SUM_GET;
+        access.index = (uint32_t)i->bits; break;
     case XR_LIR_RECORD_FIELD: case XR_LIR_CLASS_FIELD:
         access.operation=i->op==XR_LIR_CLASS_FIELD ? XR_RBC_VALUE_CLASS_FIELD : XR_RBC_VALUE_RECORD_FIELD;
         access.index=(uint32_t)i->bits; break;

@@ -155,6 +155,15 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
                 XrLirValueLayoutStatus status = need_shaped_type(set, fields[f].type, fields[f].array_element, type);
                 if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
             }
+        } else if (shape.kind == XR_LIR_TYPE_SUM) {
+            const XrLirRecordField *fields = NULL; uint32_t field_count = 0;
+            const XrLirSumVariant *variants = NULL; uint32_t variant_count = 0;
+            if (!xr_lir_sum_variants(module, type, &fields, &field_count, &variants, &variant_count) ||
+                (field_count && !fields) || !variant_count) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+            for (uint32_t f = 0; f < field_count; ++f) {
+                XrLirValueLayoutStatus status = need_type(set, fields[f].type, type);
+                if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
+            }
         } else if (shape.kind == XR_LIR_TYPE_CALLABLE) {
             XrLirCallableType signature;
             if (xr_lir_callable_type_view(module, type, &signature) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
@@ -302,6 +311,46 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
             !extent_add(scratch_bytes, child.owned_count, sizeof(size_t))) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
         return XR_LIR_VALUE_LAYOUT_OK;
     }
+    if (shape.kind == XR_LIR_TYPE_SUM) {
+        const XrLirRecordField *fields = NULL; uint32_t field_count = 0;
+        const XrLirSumVariant *variants = NULL; uint32_t variant_count = 0;
+        if (!xr_lir_sum_variants(module, type, &fields, &field_count, &variants, &variant_count) ||
+            (field_count && !fields) || !variant_count) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        uint32_t tag = xr_lir_sum_tag_size(variant_count);
+        size_t alignment = tag ? tag : 1;
+        for (uint32_t f = 0; f < field_count; ++f) {
+            XrtValuePlanSpec child;
+            if (xrt_value_plan_view(dependency(set, fields[f].type), &child) != XRT_MANAGED_OK || !child.size ||
+                child.owned_count) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
+            if (child.alignment > alignment) alignment = child.alignment;
+        }
+        size_t payload = (tag + alignment - 1) & ~(alignment - 1), maximum = 0;
+        for (uint32_t v = 0; v < variant_count; ++v) {
+            size_t end = payload;
+            for (uint32_t f = 0; f < variants[v].field_count; ++f) {
+                XrtValuePlanSpec child;
+                if (xrt_value_plan_view(dependency(set, fields[variants[v].field_begin + f].type), &child) != XRT_MANAGED_OK)
+                    return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+                if (end > SIZE_MAX - (child.alignment - 1)) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+                size_t offset = (end + child.alignment - 1) & ~(child.alignment - 1);
+                if (child.size > SIZE_MAX - offset) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+                end = offset + child.size;
+            }
+            if (end > maximum) maximum = end;
+        }
+        if (maximum > SIZE_MAX - (alignment - 1)) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+        size_t size = (maximum + alignment - 1) & ~(alignment - 1);
+        if (!size) size = 1;
+        spec->kind = XRT_VALUE_SUM; spec->size = size; spec->alignment = alignment;
+        spec->field_count = field_count;
+        spec->sum = (XrtValueSumSpec){0, tag, payload, NULL, variant_count};
+        /* The sum's plan variant rows are the copied LIR rows; fill_composite
+         * replaces them with module-owned copies. */
+        if (!extent_add(scratch_bytes, field_count, sizeof(XrtValueSlotSpec)) ||
+            !extent_add(scratch_bytes, variant_count, sizeof(XrtValueSumVariantSpec)))
+            return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+        return XR_LIR_VALUE_LAYOUT_OK;
+    }
     if (shape.kind != XR_LIR_TYPE_RECORD && shape.kind != XR_LIR_TYPE_TUPLE) return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     const XrLirRecordField *fields = NULL; uint32_t count = 0;
     if (xr_lir_aggregate_fields(module, type, &fields, &count) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
@@ -339,6 +388,34 @@ static void fill_composite(const XrLirModule *module, const XrLirValueLayouts *s
             XrLirCallableParameter parameter = signature.parameters[p];
             parameters[p] = (XrtValueParameterSpec){.type=shaped_dependency(set, parameter.type, parameter.array_element),
                 .mode=parameter.mode, .escaping=parameter.escaping};
+        }
+        return;
+    }
+    if (spec->kind == XRT_VALUE_SUM) {
+        const XrLirRecordField *fields = NULL; uint32_t field_count = 0;
+        const XrLirSumVariant *variants = NULL; uint32_t variant_count = 0;
+        XR_CHECK(xr_lir_sum_variants(module, type, &fields, &field_count, &variants, &variant_count) == true &&
+            field_count == spec->field_count && variant_count == spec->sum.variant_count,
+            "sum variant ranges stay borrowed during projection");
+        XrtValueSlotSpec *slots = scratch;
+        XrtValueSumVariantSpec *sum_variants = (XrtValueSumVariantSpec *)(slots + field_count);
+        spec->fields = field_count ? slots : NULL; spec->sum.variants = variant_count ? sum_variants : NULL;
+        size_t payload = spec->sum.payload_offset;
+        for (uint32_t v = 0; v < variant_count; ++v) {
+            sum_variants[v] = (XrtValueSumVariantSpec){variants[v].field_begin, variants[v].field_count};
+            size_t end = payload;
+            for (uint32_t f = 0; f < variants[v].field_count; ++f) {
+                uint32_t at = (uint32_t)(variants[v].field_begin + f);
+                const XrLirRecordField *field = &fields[at];
+                const XrtValuePlan *plan = dependency(set, field->type);
+                XrtValuePlanSpec child;
+                XR_CHECK(xrt_value_plan_view(plan, &child) == XRT_MANAGED_OK && child.alignment,
+                    "sum field offsets were checked before scratch allocation");
+                XR_CHECK(end <= SIZE_MAX - (child.alignment - 1), "sum field alignment overflow was pre-checked");
+                size_t offset = (end + child.alignment - 1) & ~(child.alignment - 1);
+                slots[at] = (XrtValueSlotSpec){plan, offset, NULL, 0, 0};
+                end = offset + child.size;
+            }
         }
         return;
     }
@@ -464,7 +541,7 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
         XrtValuePlanSpec spec;
         status = memory_status(xrt_value_plan_view(set->values[i].plan, &spec));
         if (status == XR_LIR_VALUE_LAYOUT_OK && (xrt_value_kind_has_fields(spec.kind) || spec.kind == XRT_VALUE_NULLABLE ||
-            spec.kind == XRT_VALUE_CELL || spec.kind == XRT_VALUE_CLASS)) {
+            spec.kind == XRT_VALUE_CELL || spec.kind == XRT_VALUE_CLASS || spec.kind == XRT_VALUE_SUM)) {
             XR_CHECK(set->type_count < set->constructed, "each ownership fact belongs to one generated constructed plan");
             set->types[set->type_count++] = (XrLirOwnershipTypeFact){(XrLirType)i, spec.owned_count != 0};
         }

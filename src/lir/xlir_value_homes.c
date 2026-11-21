@@ -72,6 +72,7 @@ static bool lir_home_key(const XrLirModule *module, XrLirFunction function,
         plain = shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_NULLABLE ||
             shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE ||
             shape.kind == XR_LIR_TYPE_CALLABLE || shape.kind == XR_LIR_TYPE_SLICE || shape.kind == XR_LIR_TYPE_CLASS ||
+            shape.kind == XR_LIR_TYPE_SUM ||
             xr_lir_cell_value_type(module,type,NULL);
     }
     if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64 &&
@@ -622,7 +623,7 @@ static bool lir_home_values(LirHomeBuilder *b, const XrLirOwnershipPlan *ownersh
         XrtValuePlanSpec spec; uint32_t ordinal;
         if (!lir_home_spec(b, key, &spec, &ordinal)) return false;
         if (!spec.owned_count && !xrt_value_kind_has_fields(spec.kind) && spec.kind != XRT_VALUE_NULLABLE &&
-            spec.kind != XRT_VALUE_FIXED_U8 &&
+            spec.kind != XRT_VALUE_FIXED_U8 && spec.kind != XRT_VALUE_SUM &&
             spec.kind != XRT_VALUE_SLICE_I64 && spec.kind != XRT_VALUE_SLICE_U8) continue;
         XrLirValueHome *home = &values[v];
         home->type = ordinal + 1; home->size = spec.size; home->owner_count = spec.owned_count;

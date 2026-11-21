@@ -23,6 +23,8 @@ static void c_value_image(LirC *c, const XrtValueImage *image) {
         C_IMAGE_U32(first_parameter); C_IMAGE_U32(parameter_count);
         C_IMAGE_U32(nullable_element); C_IMAGE_U32(result); C_IMAGE_U32(flags); C_IMAGE_U32(throws);
         C_IMAGE_SIZE(nullable_tag); C_IMAGE_SIZE(nullable_payload);
+        C_IMAGE_SIZE(sum_tag); C_IMAGE_SIZE(sum_tag_size); C_IMAGE_SIZE(sum_payload);
+        C_IMAGE_U32(first_variant); C_IMAGE_U32(variant_count);
         C_IMAGE_U32(entry_ordinal); C_IMAGE_U32(entry_signature); C_IMAGE_U32(element);
         if (row->class_parent) C_IMAGE_U32(class_parent);
 #undef C_IMAGE_U32
@@ -38,6 +40,12 @@ static void c_value_image(LirC *c, const XrtValueImage *image) {
             (uint64_t)row.offset, (uint64_t)row.name_offset, (uint64_t)row.name_length);
     }
     if (image->slot_count) c_text(c, "};\n");
+    if (image->variant_count) c_text(c, "static const XrtValueImageVariant xrl_value_variants[] = {\n");
+    for (uint32_t i = 0; i < image->variant_count && c_request_poll(c); ++i) {
+        XrtValueImageVariant row = image->variants[i];
+        c_format(c, "    {UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 ")},\n", row.first_field, row.field_count);
+    }
+    if (image->variant_count) c_text(c, "};\n");
     if (image->parameter_count) c_text(c, "static const XrtValueImageParameter xrl_value_parameters[] = {\n");
     for (uint32_t i = 0; i < image->parameter_count && c_request_poll(c); ++i) {
         XrtValueImageParameter row = image->parameters[i];
@@ -60,6 +68,8 @@ static void c_value_image(LirC *c, const XrtValueImage *image) {
     c_format(c, "    %s, UINT32_C(%" PRIu32 "), %s, UINT32_C(%" PRIu32 "),\n",
         image->parameter_count ? "xrl_value_parameters" : "NULL", image->parameter_count,
         image->owned_count ? "xrl_value_owned" : "NULL", image->owned_count);
-    c_format(c, "    %s, UINT64_C(%" PRIu64 ")\n};\n",
+    c_format(c, "    %s, UINT64_C(%" PRIu64 "),\n",
         image->name_bytes ? "(const char *)xrl_value_names" : "NULL", (uint64_t)image->name_bytes);
+    c_format(c, "    %s, UINT32_C(%" PRIu32 ")\n};\n",
+        image->variant_count ? "xrl_value_variants" : "NULL", image->variant_count);
 }

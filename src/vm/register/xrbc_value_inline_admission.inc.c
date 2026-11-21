@@ -25,13 +25,38 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
     const XrRbcFunction *function,XrRbcValueAccess a) {
     bool class_new=a.operation==XR_RBC_VALUE_CLASS_NEW, class_field=a.operation==XR_RBC_VALUE_CLASS_FIELD;
     bool class_push=a.operation==XR_RBC_VALUE_CLASS_ARRAY_PUSH, class_write=a.operation==XR_RBC_VALUE_CLASS_ARRAY_WRITE;
-    bool create=class_new || a.operation==XR_RBC_VALUE_RECORD_NEW ||
+    bool sum_new=a.operation==XR_RBC_VALUE_SUM_NEW, sum_tag=a.operation==XR_RBC_VALUE_SUM_TAG;
+    bool sum_get=a.operation==XR_RBC_VALUE_SUM_GET;
+    bool create=class_new || a.operation==XR_RBC_VALUE_RECORD_NEW || sum_new ||
         a.operation==XR_RBC_VALUE_NULLABLE_NONE || a.operation==XR_RBC_VALUE_NULLABLE_SOME;
     uint32_t value=create ? a.result : a.source;
     if (!rbc_value_inline(module,code,value,create)) return false;
     const XrLirValueHome *home=rbc_value_home(code,value);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     const XrtValueImageType *type=&image->types[home->type-1];
+    if (sum_new || sum_tag || sum_get) {
+        if (type->kind!=XRT_VALUE_SUM || !image->variants ||
+            type->first_variant>image->variant_count ||
+            type->variant_count>image->variant_count-type->first_variant) return false;
+        if (sum_new) {
+            if (a.index>=type->variant_count || a.other || a.window) return false;
+            const XrtValueImageVariant *variant=&image->variants[type->first_variant+a.index];
+            if (variant->field_count!=a.count || a.first>code->argument_count ||
+                a.count>code->argument_count-a.first || (a.count && !code->arguments)) return false;
+            for (uint32_t p=0;p<a.count;++p) {
+                uint32_t at=type->first_field+variant->first_field+p;
+                if (at>=image->slot_count) return false;
+                if (!rbc_value_inline_operand(module,code,function,code->arguments[a.first+p],
+                    image->slots[at].type,false)) return false;
+            }
+            return true;
+        }
+        if (sum_tag) return !a.other && !a.index && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+        if (a.other || a.index>=type->field_count || type->first_field>image->slot_count ||
+            type->field_count>image->slot_count-type->first_field) return false;
+        return rbc_value_inline_operand(module,code,function,a.result,
+            image->slots[type->first_field+a.index].type,true);
+    }
     if (class_new || class_field || class_push || class_write) {
         if (!xr_rbc_module_code_owner(module) || type->kind!=XRT_VALUE_CLASS ||
             !type->element || type->element>=home->type) return false;

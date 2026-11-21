@@ -19,13 +19,14 @@
 struct XrLirValueImage { XrtBillingOwner *billing; size_t bytes; XrtValueImage view; };
 typedef struct ImageRow { const XrtValuePlan *plan; XrtValuePlanSpec spec; } ImageRow;
 typedef struct ImageIndex { const XrtValuePlan *plan; uint32_t id; } ImageIndex;
-typedef struct ImageCounts { uint32_t owned, slots, parameters; size_t names; } ImageCounts;
+typedef struct ImageCounts { uint32_t owned, slots, parameters, variants; size_t names; } ImageCounts;
 typedef struct ImageInventory {
     const ImageRow *rows; uint32_t count;
     const ImageIndex *index; size_t capacity; ImageCounts counts;
 } ImageInventory;
 typedef struct ImageBuilder {
     XrtValueImageType *types; XrtValueImageSlot *slots; XrtValueImageParameter *parameters;
+    XrtValueImageVariant *variants;
     size_t *owned; char *names;
     const ImageIndex *index; size_t capacity;
     ImageCounts used;
@@ -33,7 +34,8 @@ typedef struct ImageBuilder {
 _Static_assert(sizeof(XrLirValueImage) % alignof(XrtValueImageType) == 0 &&
     sizeof(XrtValueImageType) % alignof(XrtValueImageSlot) == 0 &&
     sizeof(XrtValueImageSlot) % alignof(XrtValueImageParameter) == 0 &&
-    sizeof(XrtValueImageParameter) % alignof(size_t) == 0 && sizeof(ImageRow) % alignof(ImageIndex) == 0,
+    sizeof(XrtValueImageParameter) % alignof(XrtValueImageVariant) == 0 &&
+    sizeof(XrtValueImageVariant) % alignof(size_t) == 0 && sizeof(ImageRow) % alignof(ImageIndex) == 0,
     "one exact raw block and one temporary index preserve native alignments");
 
 static XrLirValueLayoutStatus image_memory(XrtManagedStatus status) {
@@ -85,7 +87,8 @@ static XrLirValueLayoutStatus image_inventory(const XrLirValueLayouts *set, Imag
             !image_insert(index, capacity, rows[i].plan, (uint32_t)i + 1)) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         const XrtValuePlanSpec *spec = &rows[i].spec;
         if (!image_count(&counts->owned, spec->owned_count) || !image_count(&counts->slots, spec->field_count) ||
-            !image_count(&counts->slots, spec->capture_count) || !image_count(&counts->parameters, spec->signature.parameter_count))
+            !image_count(&counts->slots, spec->capture_count) || !image_count(&counts->parameters, spec->signature.parameter_count) ||
+            !image_count(&counts->variants, spec->sum.variant_count))
             return XR_LIR_VALUE_LAYOUT_OVERFLOW;
         for (size_t field = 0; field < spec->field_count; ++field)
             if (!image_extent(&counts->names, spec->fields[field].name_length, 1)) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
@@ -118,7 +121,13 @@ static bool image_type(ImageBuilder *builder, const XrtValuePlanSpec *spec, uint
         .first_field=spec->field_count ? builder->used.slots : 0, .field_count=(uint32_t)spec->field_count,
         .flags=spec->signature.flags, .throws=spec->signature.throws,
         .nullable_tag=spec->nullable.tag_offset, .nullable_payload=spec->nullable.payload_offset,
+        .sum_tag=spec->sum.tag_offset, .sum_tag_size=spec->sum.tag_size, .sum_payload=spec->sum.payload_offset,
+        .first_variant=spec->sum.variant_count ? builder->used.variants : 0,
+        .variant_count=(uint32_t)spec->sum.variant_count,
         .entry_ordinal=spec->entry.ordinal};
+    for (size_t i = 0; i < spec->sum.variant_count; ++i)
+        builder->variants[builder->used.variants++] = (XrtValueImageVariant){(uint32_t)spec->sum.variants[i].field_begin,
+            (uint32_t)spec->sum.variants[i].field_count};
     if (spec->owned_count) memcpy(builder->owned + builder->used.owned, spec->owned_offsets, spec->owned_count * sizeof(size_t));
     builder->used.owned += row->owned_count;
     if (!image_slots(builder, spec->fields, spec->field_count, id)) return false;
@@ -146,6 +155,7 @@ static XrLirValueLayoutStatus image_build(XrtBillingOwner *billing, ImageInvento
     uint32_t count = inventory.count; ImageCounts counts = inventory.counts;
     size_t bytes = sizeof(XrLirValueImage);
     if (!image_extent(&bytes, count, sizeof(XrtValueImageType)) || !image_extent(&bytes, counts.slots, sizeof(XrtValueImageSlot)) ||
+        !image_extent(&bytes, counts.variants, sizeof(XrtValueImageVariant)) ||
         !image_extent(&bytes, counts.parameters, sizeof(XrtValueImageParameter)) || !image_extent(&bytes, counts.owned, sizeof(size_t)) ||
         !image_extent(&bytes, counts.names, 1)) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
     void *memory = NULL;
@@ -155,18 +165,21 @@ static XrLirValueLayoutStatus image_build(XrtBillingOwner *billing, ImageInvento
     *owner = (XrLirValueImage){.billing=billing, .bytes=bytes};
     ImageBuilder builder = {.types=(XrtValueImageType *)(owner + 1), .index=inventory.index, .capacity=inventory.capacity};
     builder.slots = (XrtValueImageSlot *)(builder.types + count);
-    builder.parameters = (XrtValueImageParameter *)(builder.slots + counts.slots);
+    builder.variants = (XrtValueImageVariant *)(builder.slots + counts.slots);
+    builder.parameters = (XrtValueImageParameter *)(builder.variants + counts.variants);
     builder.owned = (size_t *)(builder.parameters + counts.parameters); builder.names = (char *)(builder.owned + counts.owned);
     owner->view = (XrtValueImage){builder.types, count, counts.slots ? builder.slots : NULL, counts.slots,
         counts.parameters ? builder.parameters : NULL, counts.parameters, counts.owned ? builder.owned : NULL,
-        counts.owned, counts.names ? builder.names : NULL, counts.names};
+        counts.owned, counts.names ? builder.names : NULL, counts.names,
+        counts.variants ? builder.variants : NULL, counts.variants};
     for (uint32_t i = 0; i < count; ++i) {
         if (!image_type(&builder, &inventory.rows[i].spec, i + 1)) {
             xrt_managed_metadata_free(billing, owner, bytes); return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         }
     }
     XR_CHECK(builder.used.owned == counts.owned && builder.used.slots == counts.slots &&
-        builder.used.parameters == counts.parameters && builder.used.names == counts.names,
+        builder.used.parameters == counts.parameters && builder.used.variants == counts.variants &&
+        builder.used.names == counts.names,
         "published raw vectors exactly match their checked receiving inventory");
     *output = owner; return XR_LIR_VALUE_LAYOUT_OK;
 }

@@ -519,7 +519,8 @@ static XrLirStatus lir_plan_receive(const XrLirOwnershipRequest *request,
         XrLirTypeView view;
         if (xr_lir_type_view(m, request->types[i].type, &view) != XR_LIR_OK ||
             (view.kind != XR_LIR_TYPE_RECORD && view.kind != XR_LIR_TYPE_TUPLE && view.kind != XR_LIR_TYPE_NULLABLE &&
-                view.kind != XR_LIR_TYPE_CLASS && !xr_lir_cell_value_type(m,request->types[i].type,NULL)) ||
+                view.kind != XR_LIR_TYPE_CLASS && view.kind != XR_LIR_TYPE_SUM &&
+                !xr_lir_cell_value_type(m,request->types[i].type,NULL)) ||
             ((view.kind == XR_LIR_TYPE_CELL || view.kind == XR_LIR_TYPE_CLASS) && !request->types[i].has_owned) ||
             (i && request->types[i - 1].type >= request->types[i].type))
             return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid constructed ownership facts");

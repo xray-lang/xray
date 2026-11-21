@@ -31,6 +31,7 @@ typedef struct ImageScratch {
     size_t bytes;
     XrtValueSlotSpec *fields, *captures;
     XrtValueParameterSpec *parameters;
+    XrtValueSumVariantSpec *variants;
 } ImageScratch;
 _Static_assert(sizeof(XrtValueImagePlans) % alignof(XrtValuePlan *) == 0,
     "receiving plan references follow the aligned set prefix");
@@ -65,8 +66,10 @@ static bool image_shape(const XrtValueImage *image, bool *has_backings) {
         ((image->slot_count != 0) != (image->slots != NULL)) ||
         ((image->parameter_count != 0) != (image->parameters != NULL)) ||
         ((image->owned_count != 0) != (image->owned_offsets != NULL)) ||
+        ((image->variant_count != 0) != (image->variants != NULL)) ||
         ((image->name_bytes != 0) != (image->names != NULL)) ||
-        (!image->type_count && (image->slot_count || image->parameter_count || image->owned_count || image->name_bytes)))
+        (!image->type_count && (image->slot_count || image->parameter_count || image->owned_count ||
+            image->variant_count || image->name_bytes)))
         return false;
     for (uint32_t i = 0; i < image->slot_count; ++i) {
         const XrtValueImageSlot *slot = &image->slots[i];
@@ -82,15 +85,31 @@ static bool image_shape(const XrtValueImage *image, bool *has_backings) {
     for (uint32_t i = 0; i < image->type_count; ++i) {
         const XrtValueImageType *type = &image->types[i];
         *has_backings |= type->kind == XRT_VALUE_ARRAY_INLINE || type->kind == XRT_VALUE_CLASS;
-        if ((unsigned)type->kind > XRT_VALUE_CLASS || type->throws > 1 ||
+        if ((unsigned)type->kind > XRT_VALUE_SUM || type->throws > 1 ||
             !image_span(type->first_owned, type->owned_count, image->owned_count) ||
             !image_span(type->first_field, type->field_count, image->slot_count) ||
             !image_span(type->first_capture, type->capture_count, image->slot_count) ||
             !image_span(type->first_parameter, type->parameter_count, image->parameter_count) ||
+            !image_span(type->first_variant, type->variant_count, image->variant_count) ||
             type->nullable_element > i || type->result > i || type->entry_signature > i || type->element > i ||
             type->class_parent > i || (type->class_parent && (type->kind != XRT_VALUE_CLASS ||
                 image->types[type->class_parent - 1].kind != XRT_VALUE_CLASS)))
             return false;
+        if (type->kind == XRT_VALUE_SUM) {
+            if (!type->variant_count || type->sum_tag ||
+                (type->sum_tag_size != 0 && type->sum_tag_size != 1 && type->sum_tag_size != 2 &&
+                    type->sum_tag_size != 4) || type->sum_payload > type->size ||
+                type->owned_count || type->nullable_element || type->element) return false;
+            size_t fields = 0;
+            for (uint32_t v = 0; v < type->variant_count; ++v) {
+                const XrtValueImageVariant *variant = &image->variants[type->first_variant + v];
+                if (variant->first_field != fields || variant->field_count > type->field_count - fields)
+                    return false;
+                fields += variant->field_count;
+            }
+            if (fields != type->field_count) return false;
+        } else if (type->variant_count || type->sum_tag_size || type->sum_payload ||
+            type->first_variant) return false;
         for (uint32_t n = 0; n < type->field_count; ++n)
             if (image->slots[type->first_field + n].type > i) return false;
         for (uint32_t n = 0; n < type->capture_count; ++n)
@@ -104,22 +123,25 @@ static bool image_shape(const XrtValueImage *image, bool *has_backings) {
 }
 static XrtManagedStatus image_scratch(XrtBillingOwner *billing, const XrtValueImage *image,
     ImageScratch *scratch) {
-    uint32_t fields = 0, captures = 0, parameters = 0;
+    uint32_t fields = 0, captures = 0, parameters = 0, variants = 0;
     for (uint32_t i = 0; i < image->type_count; ++i) {
         const XrtValueImageType *type = &image->types[i];
         if (type->field_count > fields) fields = type->field_count;
         if (type->capture_count > captures) captures = type->capture_count;
         if (type->parameter_count > parameters) parameters = type->parameter_count;
+        if (type->variant_count > variants) variants = type->variant_count;
     }
     if (!image_extent(&scratch->bytes, fields, sizeof(XrtValueSlotSpec)) ||
         !image_extent(&scratch->bytes, captures, sizeof(XrtValueSlotSpec)) ||
+        !image_extent(&scratch->bytes, variants, sizeof(XrtValueSumVariantSpec)) ||
         !image_extent(&scratch->bytes, parameters, sizeof(XrtValueParameterSpec))) return XRT_MANAGED_OVERFLOW;
     if (!scratch->bytes) return XRT_MANAGED_OK;
     XrtManagedStatus status = xrt_managed_metadata_allocate(billing, scratch->bytes, &scratch->memory);
     if (status != XRT_MANAGED_OK) return status;
     scratch->fields = scratch->memory;
     scratch->captures = scratch->fields + fields;
-    scratch->parameters = (XrtValueParameterSpec *)(scratch->captures + captures);
+    scratch->variants = (XrtValueSumVariantSpec *)(scratch->captures + captures);
+    scratch->parameters = (XrtValueParameterSpec *)(scratch->variants + variants);
     return XRT_MANAGED_OK;
 }
 static const XrtValuePlan *image_dependency(XrtValueImagePlans *set, uint32_t id) {
@@ -144,12 +166,18 @@ static XrtValuePlanSpec image_plan(XrtValueImagePlans *set, const XrtValueImage 
             (XrParamMode)parameter->mode, parameter->escaping != 0,
             image_name_bytes(image, parameter->name_offset, parameter->name_length), parameter->name_length};
     }
+    for (uint32_t i = 0; i < type->variant_count; ++i) {
+        XrtValueImageVariant variant = image->variants[type->first_variant + i];
+        scratch->variants[i] = (XrtValueSumVariantSpec){variant.first_field, variant.field_count};
+    }
     XrtValuePlanSpec spec = {.kind=type->kind, .size=type->size, .alignment=type->alignment, .count=type->count,
         .owned_offsets=type->owned_count ? image->owned_offsets + type->first_owned : NULL,
         .owned_count=type->owned_count, .fields=type->field_count ? scratch->fields : NULL,
         .field_count=type->field_count, .captures=type->capture_count ? scratch->captures : NULL,
         .capture_count=type->capture_count, .nullable={type->nullable_tag, type->nullable_payload,
             image_dependency(set, type->nullable_element)},
+        .sum={type->sum_tag, type->sum_tag_size, type->sum_payload,
+            type->variant_count ? scratch->variants : NULL, type->variant_count},
         .signature={type->parameter_count ? scratch->parameters : NULL, type->parameter_count,
             image_dependency(set, type->result), type->flags & ~(uint32_t)XRT_VALUE_INLINE_DISPLAY, type->throws != 0},
         .entry={type->entry_ordinal, image_dependency(set, type->entry_signature)},

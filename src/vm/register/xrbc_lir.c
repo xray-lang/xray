@@ -32,7 +32,6 @@
 #include "lir/xlir_internal.h"
 #include "base/xmalloc.h"
 #include "base/xchecks.h"
-#include <stdio.h>
 #include <string.h>
 #include <stdatomic.h>
 
@@ -559,7 +558,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     if (i->op == XR_LIR_RECORD_NEW || i->op == XR_LIR_RECORD_FIELD ||
         i->op == XR_LIR_CLASS_NEW || i->op == XR_LIR_CLASS_FIELD || i->op == XR_LIR_CLASS_ARRAY_WRITE ||
         i->op == XR_LIR_CLASS_ARRAY_PUSH || i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP ||
-        i->op == XR_LIR_CLASS_ADOPT || i->op == XR_LIR_CLASS_IS) return true;
+        i->op == XR_LIR_CLASS_ADOPT || i->op == XR_LIR_CLASS_IS ||
+        i->op == XR_LIR_SUM_NEW || i->op == XR_LIR_SUM_TAG || i->op == XR_LIR_SUM_GET) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return true;
     if (i->op==XR_LIR_MAP_BORROW && i->operand_count) {
@@ -642,6 +642,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         return true;
     case XR_LIR_NULLABLE_NONE: case XR_LIR_NULLABLE_SOME:
     case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP:
+    case XR_LIR_SUM_NEW: case XR_LIR_SUM_TAG: case XR_LIR_SUM_GET:
     case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
     case XR_LIR_LITERAL_ADDR:
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
