@@ -1684,6 +1684,60 @@ def render_os_callables(declarations):
 
 
 
+def render_io_file_callables(declarations):
+    """The file descriptor leaves, which the wrapper module calls directly."""
+    contracts = (
+        ('__fileOpen', '(path: Path): i64', 'p', 'io_fileOpen', 'xrt_io_file_open', 'IO_FILE_OPEN',
+         (('path', 'Path', 'PATH'),), 'i64', 'I64', ''),
+        ('__fileOpenWrite', '(path: Path, append: bool): i64', 'pv', 'io_fileOpenWrite',
+         'xrt_io_file_open_write', 'IO_FILE_OPEN_WRITE',
+         (('path', 'Path', 'PATH'), ('append', 'bool', 'BOOL')), 'i64', 'I64', ''),
+        ('__fileRead', '(handle: i64, maxBytes: i64): Array<u8>?', 'ii', 'io_fileRead',
+         'xrt_io_read_handle_chunk', 'IO_FILE_READ',
+         (('handle', 'i64', 'I64'), ('maxBytes', 'i64', 'I64')), 'Array<u8>?', 'NULLABLE_ARRAY_U8', 'fresh'),
+        ('__fileWrite', '(handle: i64, data: Array<u8>, offset: i64): i64', 'ivi', 'io_fileWrite',
+         'xrt_io_write_handle_chunk', 'IO_FILE_WRITE',
+         (('handle', 'i64', 'I64'), ('data', 'Array<u8>', 'ARRAY_U8'), ('offset', 'i64', 'I64')), 'i64', 'I64', ''),
+        ('__fileWriteStr', '(handle: i64, data: string, offset: i64): i64', 'isi', 'io_fileWriteStr',
+         'xrt_io_write_handle_str', 'IO_FILE_WRITE_STR',
+         (('handle', 'i64', 'I64'), ('data', 'string', 'STRING'), ('offset', 'i64', 'I64')), 'i64', 'I64', ''),
+        ('__fileFlush', '(handle: i64): bool', 'i', 'io_fileFlush', 'xrt_io_file_flush', 'IO_FILE_FLUSH',
+         (('handle', 'i64', 'I64'),), 'bool', 'BOOL', ''),
+        ('__fileClose', '(handle: i64): bool', 'i', 'io_fileClose', 'xrt_io_file_close', 'IO_FILE_CLOSE',
+         (('handle', 'i64', 'I64'),), 'bool', 'BOOL', ''),
+    )
+    lines, rows = [], []
+    for ordinal, (name, signature, arguments, vm, aot, identity, parameters, result, term,
+                  ownership) in enumerate(contracts, 1):
+        candidates = [row for row in declarations if row.module == 'io' and row.name == name]
+        if len(candidates) != 1:
+            raise ValueError('Filesystem handle callable requires its sole governed declaration: ' + name)
+        row = candidates[0]
+        yielded = 'yieldable' if identity in ('IO_FILE_WRITE', 'IO_FILE_WRITE_STR') else 'normal'
+        if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
+                row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
+                row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
+                row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps,
+                row.suspension_kind) != (
+                signature, str(len(arguments)), arguments, 'internal', '', '', ownership, 'system', vm, aot,
+                True, 'method', '', yielded, '', '', 'value', False, None, (), ''):
+            raise ValueError('Filesystem handle callable differs from its complete source contract: ' + name)
+        symbol = 'xr_native_' + identity.lower()
+        lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
+        for parameter_name, parameter_type, parameter_term in parameters:
+            lines += ['    {"' + parameter_name + '", "' + parameter_type + '", XR_NATIVE_TERM_' +
+                      parameter_term + ', false, false, false},']
+        lines += ['};']
+        lines += ['static const XrNativeMemberDeclaration ' + symbol + ' = {',
+            '    ' + str(ordinal) + ', ' + c_string(name) + ', ' + c_string(signature) + ', ' +
+            c_string(result) + ', 0, 0, XR_NATIVE_RECEIVER_READ,',
+            '    false, false, false, false, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN,',
+            '    "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, ' + symbol + '_parameters, ' + str(len(parameters)) +
+            ', XR_NATIVE_TERM_' + term, '};']
+        rows += ['    {XR_NATIVE_CALLABLE_' + identity + ', NULL, &' + symbol + ', NULL, false, "io", "stdlib/defs/core.def", FINGERPRINT}']
+    return lines, rows
+
+
 def render_runtime_counters(declarations):
     contracts = (
         ('__liveBytes', 'runtime_live_bytes', 'xr_aot_runtime_live_bytes', 'RUNTIME_LIVE_BYTES'),
@@ -1854,6 +1908,9 @@ def render_unicode_callable(root, decoder):
     io_lines, io_rows = render_io_callables(declarations)
     buffer_lines += io_lines
     buffer_rows += io_rows
+    handle_lines, handle_rows = render_io_file_callables(declarations)
+    buffer_lines += handle_lines
+    buffer_rows += handle_rows
     runtime_lines, runtime_rows = render_runtime_counters(declarations)
     buffer_lines += runtime_lines
     buffer_rows += runtime_rows
