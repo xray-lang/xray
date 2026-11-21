@@ -25,8 +25,12 @@ static bool source_path_native_module(SourceContext *ctx,uint32_t module) {
      * same file through two resolver routes; the logical path is the one fact
      * both carry, so the module is identified by it alone. */
     bool kind_ok=spec->authority.kind==XR_MODULE_IDENTITY_STDLIB||spec->authority.kind==XR_MODULE_IDENTITY_PACKAGE;
-    bool same=spec->logical_path&&source_text_same(ctx,NULL,spec->logical_path,module_path);
-    return kind_ok&&same;
+    if(!spec->logical_path)return false;
+    /* A bare `import path` resolves to the logical path `path/path.xr`, while the
+     * quoted `std/path/path` route carries the bare `path.xr`. Both name the one
+     * real Path module, so either spelling of its own path matches. */
+    return kind_ok&&(source_text_same(ctx,NULL,spec->logical_path,module_path) ||
+        source_text_same(ctx,NULL,spec->logical_path,logical));
 }
 static bool source_path_native_declare(SourceContext *ctx) {
     uint32_t saved_module=ctx->module,saved_function=ctx->function;
