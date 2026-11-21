@@ -220,7 +220,11 @@ static bool rbc_lir_jump(RbcLirCompiler *c, uint32_t target) {
 
 static bool rbc_lir_scalar(XrLirType type) {
     // Slot transport is bit-preserving; operation admission remains separate.
-    return type == XR_LIR_I64 || type == XR_LIR_U8 || type == XR_LIR_U64 || type == XR_LIR_I1 || type == XR_LIR_F64;
+    // Narrow scalars carry their exact widths (sum/Nullable payloads, bindings,
+    // call edges); width-sensitive operations are rejected during lowering.
+    return type == XR_LIR_I64 || type == XR_LIR_U8 || type == XR_LIR_U64 || type == XR_LIR_I1 ||
+        type == XR_LIR_F64 || type == XR_LIR_I8 || type == XR_LIR_I16 || type == XR_LIR_I32 ||
+        type == XR_LIR_F32;
 }
 
 static bool rbc_lir_callable_type(const XrLirModule *module, XrLirType type) {

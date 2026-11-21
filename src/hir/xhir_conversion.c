@@ -97,7 +97,7 @@ XR_FUNC XrXirStatus xr_hir_conversion_check(const XrHirConversionContext *contex
                 node.kind=XR_HIR_CONVERSION_JSON;node.selected_member=input->actual;
             } else if(target && target->kind==XR_XIR_TYPE_DATA_UNION) {
                 status=xr_xir_data_union_select(context->types,input->actual,expected,&node.selected_member);
-                if(status!=XR_XIR_OK)return conversion_failure(reason,status,"expression has no unique admissible data-union member");
+                if(status!=XR_XIR_OK)return conversion_failure(reason,status,"expression type is not exactly an admitted data-union member");
                 node.kind=XR_HIR_CONVERSION_DATA_UNION;
             } else if(xr_xir_class_is_subtype(context->types,input->actual,expected)) {
                 node.kind=XR_HIR_CONVERSION_COPY;node.declared_bound=expected;

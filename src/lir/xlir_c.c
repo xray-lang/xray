@@ -239,7 +239,7 @@ static const char *c_builtin_type(XrLirType type) {
         type == XR_LIR_SET_I64_CELL || type == XR_LIR_SET_I64_REF) return "XrtPlace";
     static const char *const types[] = {NULL, "void", "_Bool", "int8_t", "int16_t",
         "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
-        NULL, "double", "void *", NULL, "XrtManagedHeader *", NULL,
+        "float", "double", "void *", NULL, "XrtManagedHeader *", NULL,
         "XrtModuleState *", "XrtModuleRef *", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL};
     return (unsigned) type < sizeof(types) / sizeof(types[0]) ? types[type] : NULL;

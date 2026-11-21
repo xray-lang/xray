@@ -135,24 +135,45 @@ static void canonical(void) {
     XrXirTypes empty={0};XrXirDataUnion output={0};
     XrXirType members[]={XR_XIR_STRING,XR_XIR_I32,XR_XIR_STRING,XR_XIR_I32};
     CHECK(xr_xir_compile_data_union(&context,&empty,members,4,NULL,&output)==XR_XIR_OK && output.count==2);
+    /* Canonical order is type identity order, independent of spelling order. */
+    CHECK(output.members[0]==XR_XIR_STRING && output.members[1]==XR_XIR_I32);
     XrXirCallableParameter parameters[2]={{output.members[0],0,0},{output.members[1],0,0}};
     XrXirTypeNode node={.kind=XR_XIR_TYPE_DATA_UNION,.parameters=parameters,.parameter_count=2};
     XrXirTypes types={.nodes=&node,.count=1};XrXirType type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
     CHECK(xr_xir_data_union_shape(&types,type));XrXirType selected=XR_XIR_UNIT;
-    CHECK(xr_xir_data_union_select(&types,XR_XIR_I16,type,&selected)==XR_XIR_OK && selected==XR_XIR_I32);
+    /* Auto-wrap requires the exact member: no implicit numeric widening. */
+    CHECK(xr_xir_data_union_select(&types,XR_XIR_I32,type,&selected)==XR_XIR_OK && selected==XR_XIR_I32);
+    CHECK(xr_xir_data_union_select(&types,XR_XIR_STRING,type,&selected)==XR_XIR_OK && selected==XR_XIR_STRING);
+    CHECK(xr_xir_data_union_select(&types,XR_XIR_I16,type,&selected)==XR_XIR_BAD_TYPE);
     CHECK(xr_xir_data_union_select(&types,XR_XIR_I64,type,&selected)==XR_XIR_BAD_TYPE);
     CHECK(xr_xir_data_union_select(&types,XR_XIR_U8,type,&selected)==XR_XIR_BAD_TYPE);
     XrHirLiteral literal={0};const char *reason=NULL;
     CHECK(xr_hir_literal_check(&types,&(XrHirLiteralInput){.magnitude=7,.expected=true,.expected_type=type},NULL,&literal,&reason)==XR_XIR_OK && literal.type==XR_XIR_I32);
     XrHirConversion conversion={0};XrHirConversionContext hir={.compile=&context,.types=&types};
-    CHECK(xr_hir_conversion_check(&hir,&(XrHirConversionInput){.actual=XR_XIR_I16,.has_expected=true,.expected=type},&conversion,&reason)==XR_XIR_OK);
+    CHECK(xr_hir_conversion_check(&hir,&(XrHirConversionInput){.actual=XR_XIR_I32,.has_expected=true,.expected=type},&conversion,&reason)==XR_XIR_OK);
     CHECK(conversion.kind==XR_HIR_CONVERSION_DATA_UNION && conversion.selected_member==XR_XIR_I32);
     CHECK(xr_hir_conversion_instruction(&conversion,3).op==XR_XIR_DATA_UNION_INJECT);
-    XrXirDataUnion unchanged=output;XrXirType invalid[]={XR_XIR_I16,XR_XIR_I32};
+    CHECK(xr_hir_conversion_check(&hir,&(XrHirConversionInput){.actual=XR_XIR_I16,.has_expected=true,.expected=type},&conversion,&reason)==XR_XIR_BAD_TYPE);
+    /* Two members of one numeric family are legal: the tag separates them. */
+    XrXirType same_family[]={XR_XIR_I16,XR_XIR_I32};
+    XrXirDataUnion family={0};
+    CHECK(xr_xir_compile_data_union(&context,&empty,same_family,2,NULL,&family)==XR_XIR_OK && family.count==2);
+    CHECK(family.members[0]==XR_XIR_I16 && family.members[1]==XR_XIR_I32);
+    XrXirCallableParameter family_parameters[2]={{family.members[0],0,0},{family.members[1],0,0}};
+    XrXirTypeNode family_node={.kind=XR_XIR_TYPE_DATA_UNION,.parameters=family_parameters,.parameter_count=2};
+    XrXirTypes family_types={.nodes=&family_node,.count=1};
+    XrHirLiteral ambiguous={0};
+    CHECK(xr_hir_literal_check(&family_types,&(XrHirLiteralInput){.magnitude=7,.expected=true,
+        .expected_type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE},NULL,&ambiguous,&reason)==XR_XIR_BAD_TYPE &&
+        reason && strstr(reason,"ambiguous"));
+    xr_compile_resources_free(family.members);
+    XrXirDataUnion unchanged=output;XrXirType invalid[]={XR_XIR_ERROR,XR_XIR_I32};
     CHECK(xr_xir_compile_data_union(&context,&empty,invalid,2,NULL,&output)==XR_XIR_BAD_TYPE && !memcmp(&output,&unchanged,sizeof(output)));
-    invalid[0]=XR_XIR_ERROR;CHECK(xr_xir_compile_data_union(&context,&empty,invalid,2,NULL,&output)==XR_XIR_BAD_TYPE);
+    invalid[0]=XR_XIR_ERROR;invalid[1]=XR_XIR_I16;
+    CHECK(xr_xir_compile_data_union(&context,&empty,invalid,2,NULL,&output)==XR_XIR_BAD_TYPE);
     parameters[0].mode=XR_PARAM_REF;CHECK(!xr_xir_data_union_shape(&types,type));parameters[0].mode=0;
     node.kind=XR_XIR_TYPE_UNION;CHECK(!xr_xir_data_union_shape(&types,type));
+    xr_compile_resources_free(unchanged.members);
     xr_compile_resources_release(context.resources);zero();
 }
-int main(void) {canonical();owned_receiving();failures();puts("Finite data union static Source/HIR/Checked PASS; runtime remains refused");return 0;}
+int main(void) {canonical();owned_receiving();failures();puts("Finite data union static Source/HIR/Checked PASS; payload carriers beyond the admitted scalars remain refused");return 0;}

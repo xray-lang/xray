@@ -501,13 +501,15 @@ static void record_field_frontier(void) {
     }
 }
 static void test_frontier(void) {
-    const XrLirType native_rejected[] = {XR_LIR_F32};
-    for (size_t i = 0; i < sizeof(native_rejected) / sizeof(*native_rejected); ++i) {
-        XrLirModule *m = transport(native_rejected[i], 0); XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
-        XrCompileResources *resources = resources_new(); XrLirCOutput out = {0}; XrLirCDiagnostic diagnostic;
+    /* F32 now has a native C carrier (`float`) so a tagged sum or a Nullable may
+     * transport it exactly; width-dependent f32 operations stay refused by
+     * lowering, not by C emission. */
+    {
+        XrLirModule *m = transport(XR_LIR_F32, 0); XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
+        XrCompileResources *resources = resources_new(); XrLirCOutput out = {0}; XrLirCDiagnostic diagnostic = {0};
         XrLirCRequest request = {.module = m, .entry = root, .resources = resources, .translation_unit = "frontier.c", .control = NULL};
-        CHECK(xr_lir_emit_c(&request, &out, &diagnostic) == XR_LIR_C_UNSUPPORTED);
-        CHECK(diagnostic.status == XR_LIR_C_UNSUPPORTED && !out.bytes && !out.length);
+        CHECK(xr_lir_emit_c(&request, &out, &diagnostic) == XR_LIR_C_OK && out.bytes && out.length);
+        xr_lir_c_output_free(&out);
         xr_lir_module_destroy(m); xr_compile_resources_release(resources);
     }
     const XrLirType vm_types[] = {XR_LIR_I8, XR_LIR_U16, XR_LIR_U64, XR_LIR_F32, XR_LIR_PTR, XR_LIR_F64};
@@ -519,7 +521,9 @@ static void test_frontier(void) {
             XrLirFunction root; OK(xr_lir_function_at(m, 0, &root));
             XrRbcProgram *program = NULL;
             XrRbcCompileStatus status = xr_rbc_compile(m, root, &program, NULL);
-            if (vm_types[i] == XR_LIR_F64 || vm_types[i] == XR_LIR_U64) {
+            bool transported = vm_types[i] == XR_LIR_F64 || vm_types[i] == XR_LIR_U64 ||
+                vm_types[i] == XR_LIR_I8 || vm_types[i] == XR_LIR_F32;
+            if (transported) {
                 CHECK(status == XR_RBC_COMPILE_OK && program);
                 xr_lir_module_destroy(m);
                 XrRbcExecution *execution = NULL;

@@ -44,14 +44,30 @@ XR_FUNC XrXirStatus xr_hir_literal_check(const XrXirTypes *types,const XrHirLite
     const XrXirTypeNode *data=xr_xir_type_node(types,expected);
     if(data && data->kind==XR_XIR_TYPE_DATA_UNION) {
         if(!xr_xir_data_union_shape(types,expected))return literal_failure(reason,XR_XIR_BAD_TYPE,"invalid data-union literal context");
+        /* A numeric literal has no fixed type: it takes the one member of its
+         * own numeric family. Several members of that family make the literal
+         * ambiguous; an integer literal with no integer member falls back to
+         * the unique float member under the ordinary literal rules. There is no
+         * implicit numeric conversion, so a family with no candidate is an
+         * error rather than a widening attempt. */
         XrXirType integer=XR_XIR_UNIT,floating=XR_XIR_UNIT;
+        uint32_t integers=0,floats=0;
         for(uint32_t p=0;p<data->parameter_count;++p) {
             XrXirType member=data->parameters[p].type;
-            if(xr_xir_type_is_integer(member))integer=member;
-            if(xr_xir_float_bits(member))floating=member;
+            if(xr_xir_type_is_integer(member)) {integer=member;++integers;}
+            if(xr_xir_float_bits(member)) {floating=member;++floats;}
         }
-        expected=input->decimal?floating:integer!=XR_XIR_UNIT?integer:floating;
-        if(expected==XR_XIR_UNIT)return literal_failure(reason,XR_XIR_BAD_TYPE,"numeric literal has no member in its data-union context");
+        if(input->decimal) {
+            if(floats>1)return literal_failure(reason,XR_XIR_BAD_TYPE,"ambiguous: float literal has more than one data-union float member");
+            if(!floats)return literal_failure(reason,XR_XIR_BAD_TYPE,"numeric literal has no member in its data-union context");
+            expected=floating;
+        } else {
+            if(integers>1)return literal_failure(reason,XR_XIR_BAD_TYPE,"ambiguous: integer literal has more than one data-union integer member");
+            if(integers==1)expected=integer;
+            else if(floats>1)return literal_failure(reason,XR_XIR_BAD_TYPE,"ambiguous: integer literal has more than one data-union float member");
+            else if(floats==1)expected=floating;
+            else return literal_failure(reason,XR_XIR_BAD_TYPE,"numeric literal has no member in its data-union context");
+        }
     }
     XrHirLiteral literal={.origin=input->origin,.kind=XR_HIR_LITERAL_INTEGER,.type=XR_XIR_I64};
     if(input->decimal) {

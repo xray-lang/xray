@@ -1,0 +1,29 @@
+// Two members of one numeric family are legal: the synthesized enum's tag
+// distinguishes them, so the old numeric-family exclusivity cap is gone.
+// These unions are built from exact member values; a bare literal cannot pick
+// one of two same-family members (see tests/compile_errors/type).
+fn intKind(v: i16 | i32) -> string {
+    return match (v) {
+        is i16 => "i16",
+        is i32 => "i32",
+    }
+}
+
+fn floatKind(v: f32 | f64) -> string {
+    return match (v) {
+        is f32 => "f32",
+        is f64 => "f64",
+    }
+}
+
+fn main() {
+    var small: i16 = 5
+    var large: i32 = 70000
+    var narrow: f32 = 1.5
+    var wide: f64 = 2.5
+    print(intKind(small))
+    print(intKind(large))
+    print(floatKind(narrow))
+    print(floatKind(wide))
+}
+main()

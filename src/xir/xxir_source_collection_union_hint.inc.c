@@ -54,7 +54,14 @@ static bool source_collection_union_hint(SourceContext *ctx,AstNode *node,
     XrXirStatus status=xr_xir_compile_data_union(&ctx->compile,&ctx->types,values,input->count,ctx->request,&normalized);
     if(status==XR_XIR_BAD_TYPE)return true;
     if(status!=XR_XIR_OK)return source_fail(ctx,node,status,"collection union repair admission failed");
-    if(normalized.count<2)return true;
+    if(normalized.count<2) {
+        xr_compile_resources_free(normalized.members);
+        return true;
+    }
+    XrXirType *canonical=source_alloc(ctx,normalized.count,sizeof(*canonical));
+    if(!canonical) {xr_compile_resources_free(normalized.members);return false;}
+    memcpy(canonical,normalized.members,(size_t)normalized.count*sizeof(*canonical));
+    xr_compile_resources_free(normalized.members);
     if(map) {
         XrXirDeclarations declarations;XrXirModule module=source_module_view(ctx,&declarations);
         XrXirProofContext proof={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
@@ -66,24 +73,12 @@ static bool source_collection_union_hint(SourceContext *ctx,AstNode *node,
     for(uint32_t n=0;n<input->count;++n)if(input->entries[n].spread) {
         const XrXirTypeNode *type=xr_xir_type_node(&ctx->types,values[n]);
         bool exact=type && type->kind==XR_XIR_TYPE_DATA_UNION && type->parameter_count==normalized.count;
-        for(uint32_t p=0;exact && p<normalized.count;++p)exact=type->parameters[p].type==normalized.members[p];
+        for(uint32_t p=0;exact && p<normalized.count;++p)exact=type->parameters[p].type==canonical[p];
         if(!exact && !source_collection_spread_retargetable(ctx,node,map,n))
             return ctx->diagnostic.status==XR_XIR_OK;
     }
     SourceCollectionUnionHint result={.key=key,.present=true};
-    for(uint32_t n=0;n<input->count;++n) {
-        if(!source_request_poll(ctx,node))return false;
-        const XrXirTypeNode *type=xr_xir_type_node(&ctx->types,values[n]);
-        uint32_t count=type?type->parameter_count:1;
-        for(uint32_t p=0;p<count;++p) {
-            XrXirType member=type?type->parameters[p].type:values[n];uint32_t at=0;
-            while(at<result.members.count&&result.members.members[at]!=member)++at;
-            if(at==result.members.count) {
-                if(at>=XR_XIR_DATA_UNION_MAX_MEMBERS)return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"collection repair lost its admitted union");
-                result.members.members[result.members.count++]=member;
-            }
-        }
-    }
+    result.members.members=canonical;result.members.count=normalized.count;
     *out=result;return true;
 }
 static bool source_collection_union_text(SourceContext *ctx,XrValueFormatSink sink,

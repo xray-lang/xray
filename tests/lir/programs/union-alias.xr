@@ -1,0 +1,19 @@
+// A type alias expands to a member; the union's identity is the resolved
+// member set, independent of the alias spelling.
+type Small = i16
+
+fn kind(v: Small | i32) -> string {
+    return match (v) {
+        is i16 => "i16",
+        is i32 => "i32",
+    }
+}
+
+fn main() {
+    var s: Small = 7
+    var value: Small | i32 = s
+    print(kind(value))
+    print(typeName(s))
+    print(typeName(value))
+}
+main()

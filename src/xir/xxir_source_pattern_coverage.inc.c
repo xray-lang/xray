@@ -84,19 +84,22 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
         return source_pattern_coverage(ctx,(SourcePatternMatrix){types+1,next,next_width,rows},depth+1,complete);
     }
     bool enumeration=xr_xir_type_is_enum(&ctx->types,types[0]);
+    bool synthesized=xr_xir_data_union_shape(&ctx->types,types[0]);
     bool boolean=types[0]==XR_XIR_BOOL;
     bool integer=xr_xir_type_is_integer(types[0]);
     bool array=xr_xir_type_is_array(&ctx->types,types[0]);
     bool product=source_pattern_product_kind(ctx,types[0])!=XR_XIR_OP_COUNT;
     uint64_t *cuts=NULL;
     uint32_t constructors=1;
-    if (enumeration) constructors=ctx->nominals.declarations[xr_xir_type_node(&ctx->types,types[0])->nominal.declaration].variant_count;
+    if (synthesized) constructors=xr_xir_type_node(&ctx->types,types[0])->parameter_count;
+    else if (enumeration) constructors=ctx->nominals.declarations[xr_xir_type_node(&ctx->types,types[0])->nominal.declaration].variant_count;
     else if (boolean) constructors=2;
     else if ((integer || array) && !source_pattern_integer_cuts(ctx,input,&cuts,&constructors)) return false;
     for (uint32_t v=0;v<constructors;++v) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
         uint32_t fields=0; XrXirType *field_types=NULL;
-        if (enumeration && !source_pattern_field_types(ctx,types[0],v,&field_types,&fields)) return false;
+        if (enumeration && !synthesized && !source_pattern_field_types(ctx,types[0],v,&field_types,&fields)) return false;
+        /* A member test names its variant only; the payload is not inspected. */
         SourcePatternProduct *description=NULL;
         if (product) {
             if (!source_pattern_product_description(ctx,types[0],&description)) return false;
@@ -117,7 +120,7 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             SourceMatchPattern *head=matrix[(size_t)r*width]; bool any=source_pattern_any(head);
             bool selected=any;
-            if (!any && enumeration) selected=head->selection.variant==v;
+            if (!any && (enumeration || synthesized)) selected=head->selection.variant==v;
             else if (!any && product) selected=head->product!=NULL;
             else if (!any && boolean) selected=head->boolean && head->truth==(v!=0);
             else if (!any && (integer || array)) {

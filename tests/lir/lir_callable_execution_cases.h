@@ -178,7 +178,9 @@ static void callable_entry_signature_frontiers(void) {
         XrLirInstruction reference = {.op=XR_LIR_FUNCTION_REF,.type=callable,.callee=target};
         XrLirValue unused = {0}; OK(xr_lir_emit_value(c.module,block,&reference,&unused));
         ca_return(&c,block,ca_constant(&c,block,42)); OK(xr_lir_module_finish(c.module,NULL));
-        if (!shape) callable_c_supported(c.module,root,false);
+        /* Shape 1 carries an f32 result inside a callable signature: f32 now
+         * has a native C carrier, so the callable itself is C-emitable. */
+        if (!shape || shape == 1) callable_c_supported(c.module,root,false);
         else callable_c_rejected(c.module,root,XR_LIR_C_UNSUPPORTED);
         xr_lir_module_destroy(c.module);
     }

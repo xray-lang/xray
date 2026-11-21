@@ -127,6 +127,15 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
         }
         return true;
     }
+    case XR_XIR_TYPE_DATA_UNION:
+        /* A synthesized enum still displays as its canonical member set. */
+        if (!xr_xir_data_union_shape(&ctx->types, type))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "data-union type name has no canonical members");
+        for (uint32_t p = 0; p < shape->parameter_count; ++p) {
+            if (p) source_type_name_append(name, " | ", 3);
+            if (!source_type_name_collect(ctx, node, shape->parameters[p].type, false, depth + 1, name)) return false;
+        }
+        return true;
     case XR_XIR_TYPE_NULLABLE:
         if (!source_type_name_collect(ctx, node, shape->element, false, depth + 1, name)) return false;
         source_type_name_append(name, "?", 1);

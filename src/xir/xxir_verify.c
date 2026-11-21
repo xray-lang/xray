@@ -1205,16 +1205,11 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
         if(!xr_xir_data_union_contains(context->module->types,op->type,expected))return XR_XIR_BAD_TYPE;
     }
     if(op->op==XR_XIR_DATA_UNION_IS) {
-        /* Only a closed union of Class identities has a runtime identity test;
-         * every member is a nominal handle and the target names one of them. */
+        /* A synthesized enum tests its variant tag; a Class-only union reads the
+         * handle's nominal identity. Both name one exact member. */
         expected=xr_xir_operand_type(function,op->args[0]);
-        const XrXirTypeNode *shape=xr_xir_type_node(context->module->types,expected);
-        bool classes=shape && shape->kind==XR_XIR_TYPE_DATA_UNION && shape->parameter_count>=2;
-        for(uint32_t p=0;classes&&p<shape->parameter_count;++p)
-            classes=xr_xir_type_is_class(context->module->types,shape->parameters[p].type);
         XrXirType target=(XrXirType)op->immediate;
-        if(!classes || !xr_xir_type_is_class(context->module->types,target) ||
-            !xr_xir_data_union_contains(context->module->types,expected,target))return XR_XIR_BAD_TYPE;
+        if(!xr_xir_data_union_contains(context->module->types,expected,target))return XR_XIR_BAD_TYPE;
     }
     if (op->op == XR_XIR_NULLABLE_SOME)
         expected = xr_xir_nullable_element(context->module->types, op->type);

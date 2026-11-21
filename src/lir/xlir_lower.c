@@ -21,6 +21,7 @@
 #include "../shared/xr_core_intrinsic.h"
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_types.h"
+#include "../xir/xxir_data_union.h"
 #include "../xir/xxir_type_description.h"
 #include "../xir/xxir_class_cycles.h"
 #include "../xir/xxir_class_hierarchy_internal.h"
@@ -178,6 +179,17 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
         return XR_LIR_U8;
     if (type == XR_XIR_U64)
         return XR_LIR_U64;
+    /* Narrow scalars are transport-only: constants, bindings, call edges, sum
+     * payloads and Nullable payloads carry their exact widths. Operations whose
+     * result depends on the width stay rejected in lower_admit_instruction. */
+    if (type == XR_XIR_I8)
+        return XR_LIR_I8;
+    if (type == XR_XIR_I16)
+        return XR_LIR_I16;
+    if (type == XR_XIR_I32)
+        return XR_LIR_I32;
+    if (type == XR_XIR_F32)
+        return XR_LIR_F32;
     if (type == XR_XIR_BOOL)
         return XR_LIR_I1;
     if (type == XR_XIR_F64)
@@ -361,10 +373,42 @@ static bool lower_sum_payload_carrier(Lower *c, XrXirType type, XrLirType *outpu
         *output = carrier; return true;
     }
     switch (carrier) {
-    case XR_LIR_I1: case XR_LIR_I64: case XR_LIR_U8: case XR_LIR_U64: case XR_LIR_F64:
+    case XR_LIR_I1: case XR_LIR_I8: case XR_LIR_I16: case XR_LIR_I32: case XR_LIR_I64:
+    case XR_LIR_U8: case XR_LIR_U16: case XR_LIR_U32: case XR_LIR_U64:
+    case XR_LIR_F32: case XR_LIR_F64:
         *output = carrier; return true;
     default: return lower_unsupported(c, "enum payload field of a non-scalar type");
     }
+}
+/* A data union is a compiler-synthesized enum: its canonical member ordinals are
+ * the variant ordinals, and each variant carries exactly its member value. The
+ * tag separates members that share a numeric family, so `A | B` and `B | A`
+ * receive one physical type and `is A` is one tag comparison. Class-only unions
+ * keep the class-handle layout (no stored tag), see lower_receive_type. */
+static bool lower_receive_data_union_sum(Lower *c, XrXirType type) {
+    if (!c->constructed_types) c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
+    if (!c->constructed_types) return false;
+    uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+    if (c->constructed_types[index]) return true;
+    const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
+    if (!node || node->kind != XR_XIR_TYPE_DATA_UNION || node->parameter_count < 2 ||
+        node->parameter_count > 65535 || !node->parameters)
+        return lower_unsupported(c, "data union has no canonical member list");
+    uint32_t count = node->parameter_count;
+    XrLirRecordField *fields = lower_alloc(c, count, sizeof(*fields));
+    XrLirSumVariant *variants = lower_alloc(c, count, sizeof(*variants));
+    if (!fields || !variants) { xr_free(fields); xr_free(variants); return false; }
+    bool good = true;
+    for (uint32_t p = 0; p < count && good; ++p) {
+        XrLirType carrier = XR_LIR_TYPE_INVALID;
+        if (!lower_sum_payload_carrier(c, node->parameters[p].type, &carrier)) { good = false; break; }
+        fields[p] = (XrLirRecordField){.type = carrier};
+        variants[p] = (XrLirSumVariant){p, 1};
+    }
+    if (good) good = lower_build(c, xr_lir_sum_type(c->module, fields, count, variants, count,
+        &c->constructed_types[index]));
+    xr_free(fields); xr_free(variants);
+    return good;
 }
 /* A nominal enum becomes one tagged-sum LIR type. Construction, tag reads and
  * payload reads lower to SUM_NEW, SUM_TAG and SUM_GET. */
@@ -413,21 +457,21 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
          * It therefore reuses the first admitted member's Class physical type;
          * every member is materialized so an `is` target always has a class
          * identity row in the receiving value image. */
-        if (node->parameter_count < 2 || !node->parameters) return lower_unsupported(c, "empty data union");
-        for (uint32_t p = 0; p < node->parameter_count; ++p)
-            if (!xr_xir_type_is_class(c->source->types, node->parameters[p].type))
-                return lower_unsupported(c, "data union member with no class-handle carrier");
-        if (!c->constructed_types)
-            c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
-        if (!c->constructed_types) return false;
-        uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
-        if (c->constructed_types[index]) return true;
-        for (uint32_t p = 0; p < node->parameter_count; ++p)
-            if (!lower_receive_type(c, node->parameters[p].type)) return false;
-        XrLirType physical = lower_type(c, node->parameters[0].type);
-        if (!physical) return lower_unsupported(c, "data union member has no physical class identity");
-        c->constructed_types[index] = physical;
-        return true;
+        if (xr_xir_data_union_all_classes(c->source->types, type)) {
+            if (node->parameter_count < 2 || !node->parameters) return lower_unsupported(c, "empty data union");
+            if (!c->constructed_types)
+                c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
+            if (!c->constructed_types) return false;
+            uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+            if (c->constructed_types[index]) return true;
+            for (uint32_t p = 0; p < node->parameter_count; ++p)
+                if (!lower_receive_type(c, node->parameters[p].type)) return false;
+            XrLirType physical = lower_type(c, node->parameters[0].type);
+            if (!physical) return lower_unsupported(c, "data union member has no physical class identity");
+            c->constructed_types[index] = physical;
+            return true;
+        }
+        return lower_receive_data_union_sum(c, type);
     }
     if (node && node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_enum(c->source->types, type))
         return lower_receive_enum_sum(c, type);
@@ -1047,9 +1091,52 @@ static bool lower_class_array_field(Lower *c, XrXirType type, uint64_t index) {
         (fields[index].flags & XR_LIR_RECORD_MUTABLE);
 }
 
+/* Narrow scalars (i8/i16/i32/u16/u32/f32) are transport-only. Their physical
+ * widths now model exactly, but arithmetic and width-changing conversions are
+ * still a later frontier: admitting them here would silently change wrap and
+ * truncation semantics. */
+static bool lower_narrow_scalar(XrXirType type) {
+    return type == XR_XIR_I8 || type == XR_XIR_I16 || type == XR_XIR_I32 ||
+        type == XR_XIR_U16 || type == XR_XIR_U32 || type == XR_XIR_F32;
+}
+static bool lower_width_arithmetic(XrXirOp op) {
+    switch (op) {
+    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
+    case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
+    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
+    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
+        return true;
+    default:
+        return false;
+    }
+}
+/* f32 reaches a NaN-inclusive comparison only through its exact bits; ordinary
+ * float arithmetic and comparison lower as f64, so they stay refused. */
+static bool lower_float_width_operation(XrXirOp op) {
+    switch (op) {
+    case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT:
+    case XR_XIR_DIV_FLOAT: case XR_XIR_NEG_FLOAT:
+    case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT:
+    case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
+        return true;
+    default:
+        return false;
+    }
+}
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
     if (!lower_known(op->op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
+    if (lower_width_arithmetic(op->op) && lower_narrow_scalar(op->type))
+        return lower_unsupported(c, "arithmetic on a narrow scalar");
+    if (lower_float_width_operation(op->op)) {
+        XrXirType left = xr_xir_operand_type(f, op->args[0]);
+        XrXirType right = op->op == XR_XIR_NEG_FLOAT ? XR_XIR_UNIT : xr_xir_operand_type(f, op->args[1]);
+        if (left == XR_XIR_F32 || right == XR_XIR_F32 || op->type == XR_XIR_F32)
+            return lower_unsupported(c, "float arithmetic on f32");
+    }
+    if (op->op == XR_XIR_CONVERT_NUMBER &&
+        (lower_narrow_scalar(op->type) || lower_narrow_scalar(xr_xir_operand_type(f, op->args[0]))))
+        return lower_unsupported(c, "numeric conversion involving a narrow scalar");
     if (op->op == XR_XIR_COPY) {
         XrXirType input = xr_xir_operand_type(f, op->args[0]);
         if (input != op->type && xr_xir_class_is_subtype(c->source->types, input, op->type))
@@ -1975,19 +2062,53 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &get, &f->values[result]));
     }
     if (op->op == XR_XIR_DATA_UNION_INJECT) {
-        /* Retaining retag: the member handle keeps its runtime class identity. */
+        XrXirType union_type = op->type;
+        XrXirType actual = xr_xir_operand_type(f->source, op->args[0]);
         XrLirValue input = {0};
+        if (!lower_receive_type(c, union_type)) return false;
         if (!lower_value(f, op->args[0], &input)) return false;
-        XrLirInstruction adopt = {.op=XR_LIR_CLASS_ADOPT, .type=lower_type(c, op->type),
-            .operands=&input, .operand_count=1, .source=lower_source(c)};
-        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &adopt, &f->values[result]));
+        XrLirType carrier = lower_type(c, union_type);
+        if (!carrier) return lower_unsupported(c, "data-union injection has no physical carrier");
+        if (xr_xir_data_union_all_classes(c->source->types, union_type)) {
+            /* Retaining retag: the member handle keeps its runtime class identity. */
+            XrLirInstruction adopt = {.op=XR_LIR_CLASS_ADOPT, .type=carrier,
+                .operands=&input, .operand_count=1, .source=lower_source(c)};
+            return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &adopt, &f->values[result]));
+        }
+        uint32_t variant = 0;
+        if (!xr_xir_data_union_member_index(c->source->types, union_type, actual, &variant))
+            return lower_unsupported(c, "data-union injection lost its exact member");
+        XrLirInstruction construct = {.op=XR_LIR_SUM_NEW, .type=carrier,
+            .bits=(uint64_t)variant, .operands=&input, .operand_count=1, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &construct, &f->values[result]));
     }
     if (op->op == XR_XIR_DATA_UNION_IS) {
+        XrXirType union_type = xr_xir_operand_type(f->source, op->args[0]);
+        XrXirType target = (XrXirType)op->immediate;
         XrLirValue input = {0};
+        if (!lower_receive_type(c, union_type)) return false;
         if (!lower_value(f, op->args[0], &input)) return false;
-        XrLirInstruction test = {.op=XR_LIR_CLASS_IS, .type=XR_LIR_I1,
-            .bits=(uint64_t)lower_type(c, (XrXirType)op->immediate),
+        XrLirType carrier = lower_type(c, union_type);
+        if (!carrier) return lower_unsupported(c, "data-union test has no physical carrier");
+        if (xr_xir_data_union_all_classes(c->source->types, union_type)) {
+            XrLirInstruction test = {.op=XR_LIR_CLASS_IS, .type=XR_LIR_I1,
+                .bits=(uint64_t)lower_type(c, target),
+                .operands=&input, .operand_count=1, .source=lower_source(c)};
+            return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &test, &f->values[result]));
+        }
+        uint32_t variant = 0;
+        if (!xr_xir_data_union_member_index(c->source->types, union_type, target, &variant))
+            return lower_unsupported(c, "data-union test target is not a member");
+        XrLirValue tag = {0};
+        XrLirInstruction read = {.op=XR_LIR_SUM_TAG, .type=XR_LIR_I64,
             .operands=&input, .operand_count=1, .source=lower_source(c)};
+        if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &read, &tag))) return false;
+        XrLirValue args[2] = {tag, {0}};
+        XrLirInstruction ordinal = {.op=XR_LIR_CONST, .type=XR_LIR_I64,
+            .bits=(uint64_t)variant, .source=lower_source(c)};
+        if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &ordinal, &args[1]))) return false;
+        XrLirInstruction test = {.op=XR_LIR_ICMP, .type=XR_LIR_I1, .predicate=XR_LIR_EQ,
+            .operands=args, .operand_count=2, .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &test, &f->values[result]));
     }
     bool class_new = op->op == XR_XIR_CLASS_NEW;

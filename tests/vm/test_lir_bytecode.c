@@ -621,10 +621,10 @@ static void test_unused_and_invalid(void) {
     XrLirRegistry registry = {&intrinsic, 1};
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(&registry, &m));
-    XrLirFunction unused = test_function(m, "unused_float", NULL, 0, XR_LIR_F32);
+    XrLirFunction unused = test_function(m, "unused_narrow", NULL, 0, XR_LIR_U16);
     XrLirBlock float_body = test_block(m, unused, NULL, 0);
     OK(xr_lir_set_entry(m, unused, float_body));
-    test_return(m, float_body, test_constant(m, float_body, XR_LIR_F32, 0));
+    test_return(m, float_body, test_constant(m, float_body, XR_LIR_U16, 0));
     XrLirFunction root = test_function(m, "root", NULL, 0, XR_LIR_I64);
     XrLirBlock body = test_block(m, root, NULL, 0);
     OK(xr_lir_set_entry(m, root, body));
@@ -883,11 +883,11 @@ static void test_f64_constants_and_refusals(void) {
     // Unsupported value admission still owns the available defining location.
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(NULL, &m));
-    XrLirFunction f = test_function(m, "f32_value", NULL, 0, XR_LIR_I64);
+    XrLirFunction f = test_function(m, "narrow_value", NULL, 0, XR_LIR_I64);
     XrLirBlock b = test_block(m, f, NULL, 0);
     OK(xr_lir_set_entry(m, f, b));
     XrLirValue unused;
-    XrLirInstruction i = {.op = XR_LIR_CONST, .type = XR_LIR_F32, .bits = 0,
+    XrLirInstruction i = {.op = XR_LIR_CONST, .type = XR_LIR_U16, .bits = 0,
         .source = {"unsupported-value.xr", 20, 7, 11, 7, 14}};
     OK(xr_lir_emit_value(m, b, &i, &unused));
     test_return(m, b, test_constant(m, b, XR_LIR_I64, 0));

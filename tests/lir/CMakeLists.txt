@@ -259,6 +259,41 @@ add_test(NAME lir_sum_tag_width_wide COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOU
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/sum-tag-width-wide" ${lir_c_native_options})
 set_tests_properties(lir_sum_tag_width_wide PROPERTIES LABELS "unit;lir;native" TIMEOUT 3600)
+# A data union is a compiler-synthesized enum: same-member-set identity,
+# same-family members, aliases, and the `is`/`match` variant tests. Every case
+# runs through the register VM and the generated native C program.
+add_test(NAME lir_union_same_family COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sum_types.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --program tests/lir/programs/union-same-family.xr --expect "i16,i32,f32,f64"
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/union-same-family" ${lir_c_native_options})
+set_tests_properties(lir_union_same_family PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
+add_test(NAME lir_union_i8_i64 COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sum_types.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --program tests/lir/programs/union-i8-i64.xr --expect "i8,true,false,i64,false,true"
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/union-i8-i64" ${lir_c_native_options})
+set_tests_properties(lir_union_i8_i64 PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
+add_test(NAME lir_union_identity COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sum_types.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --program tests/lir/programs/union-identity.xr --expect "i16,i16,i16 | i32,i16 | i32"
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/union-identity" ${lir_c_native_options})
+set_tests_properties(lir_union_identity PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
+add_test(NAME lir_union_alias COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_sum_types.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --program tests/lir/programs/union-alias.xr --expect "i16,i16,i16 | i32"
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/union-alias" ${lir_c_native_options})
+set_tests_properties(lir_union_alias PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
 add_test(NAME test_lir_pipeline_eval COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_pipeline_eval.py"
     --driver $<TARGET_FILE:lir_pipeline_eval>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"

@@ -1,3 +1,0 @@
-// Same rule for the float family: f32 and float share one runtime tag.
-var a: f32 | f64 = 1.5
-print("${a}")

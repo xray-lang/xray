@@ -1,0 +1,5 @@
+// A numeric literal has no fixed type: with two integer members of its own
+// family there is no unique member, so the auto-wrap is rejected rather than
+// guessed. Pin the new ambiguity diagnostic here; P3 gives it a code.
+var value: i16 | i32 = 5
+print(value is i16)

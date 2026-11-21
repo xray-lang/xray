@@ -332,7 +332,7 @@ static XrCompileResources *resources(void) {
     CHECK(xr_compile_resources_new(&limits, &r) == XR_COMPILE_RESOURCE_OK);
     return r;
 }
-static void nullable_float_scalar_rejection(void) {
+static void nullable_float_scalar_transport(void) {
     OK(xr_lir_module_create(NULL, &module));
     XrLirType nullable;
     OK(xr_lir_nullable_type(module, XR_LIR_F32, &nullable));
@@ -342,11 +342,15 @@ static void nullable_float_scalar_rejection(void) {
     ret(entry, constant(entry, XR_LIR_I64, 0));
     OK(xr_lir_module_finish(module, NULL));
     XrCompileResources *r = resources();
-    XrLirCRequest request = {module, root, r, "unsupported_float", NULL};
+    XrLirCRequest request = {module, root, r, "nullable_float", NULL};
     XrLirCOutput output = {0};
     XrLirCDiagnostic diagnostic = {0};
-    CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_UNSUPPORTED &&
-        !output.bytes && !output.length && diagnostic.message[0]);
+    /* f32 has a native `float` carrier, so a Nullable may transport it exactly;
+     * f32 arithmetic remains refused by lowering, not by C emission. */
+    CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_OK &&
+        output.bytes && output.length);
+    (void)diagnostic;
+    xr_lir_c_output_free(&output);
     xr_lir_module_destroy(module);
     module = NULL;
     xr_compile_resources_release(r);
@@ -498,7 +502,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     CHECK(argc == 1);
-    nullable_float_scalar_rejection();
+    nullable_float_scalar_transport();
     const char *cases[] = {"divrem", "arithmetic", "extremes", "overflow", "fib", "swap", "self",
         "same-true", "same-false", "unused", "unit", "bool",
         "nullable-f32-none", "fixed-1", "fixed-11", "fixed-16", "fixed-17", "fixed-256", "fixed-return",

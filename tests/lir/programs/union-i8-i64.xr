@@ -1,0 +1,21 @@
+// `i8 | i64` is legal: the two integer members no longer share one erased tag.
+fn kind(v: i8 | i64) -> string {
+    return match (v) {
+        is i8 => "i8",
+        is i64 => "i64",
+    }
+}
+
+fn main() {
+    var tiny: i8 = 3
+    var big: i64 = 9
+    var value: i8 | i64 = tiny
+    print(kind(value))
+    print(value is i8)
+    print(value is i64)
+    value = big
+    print(kind(value))
+    print(value is i8)
+    print(value is i64)
+}
+main()

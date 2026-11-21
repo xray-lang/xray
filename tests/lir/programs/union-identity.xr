@@ -1,0 +1,19 @@
+// Same member set, same type: `A | B` and `B | A` intern to one synthesized
+// enum, so a function accepting one spelling accepts the other's value.
+fn kind(v: i32 | i16) -> string {
+    return match (v) {
+        is i16 => "i16",
+        is i32 => "i32",
+    }
+}
+
+fn main() {
+    var a: i16 = 5
+    var forward: i16 | i32 = a
+    var reverse: i32 | i16 = forward
+    print(kind(forward))
+    print(kind(reverse))
+    print(typeName(forward))
+    print(typeName(reverse))
+}
+main()

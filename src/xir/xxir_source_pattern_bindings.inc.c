@@ -99,5 +99,7 @@ static bool source_match_normalize_arms(SourceContext *ctx, AstNode *node, XrXir
     }
     if (!complete && xr_xir_type_is_enum(&ctx->types,type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum match is not exhaustive");
+    if (!complete && xr_xir_data_union_shape(&ctx->types,type))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"match over a synthesized enum is not exhaustive");
     *output=arms; *exhaustive=complete; return true;
 }

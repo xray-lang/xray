@@ -26,6 +26,7 @@ static bool source_match_prepare(SourceContext *ctx, SourceExpressionPlan *plan)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"match requires arms and a scrutinee");
     XrXirType type=plan->left->ground_type;
     if (source_pattern_product_kind(ctx,type)==XR_XIR_OP_COUNT && !xr_xir_type_is_enum(&ctx->types,type) &&
+        !xr_xir_data_union_shape(&ctx->types,type) &&
         type!=XR_XIR_BOOL && type!=XR_XIR_RUNE && type!=XR_XIR_STRING &&
         !xr_xir_type_is_number(type) && !xr_xir_type_is_array(&ctx->types,type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"match scrutinee family is not admitted");
@@ -141,6 +142,14 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
                 !source_match_payload(ctx,child,value,test,failures,depth+1)) return false;
         }
         return true;
+    }
+    /* A synthesized-enum member test is one tag comparison; a Class-only member
+     * set lowers to one nominal identity read. Both are XR_XIR_DATA_UNION_IS. */
+    if (pattern->node && pattern->node->type==AST_PATTERN_TYPE) {
+        SourceValue condition;
+        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_DATA_UNION_IS,XR_XIR_BOOL,
+            {receiver.id,0},{0},(int64_t)pattern->type,{0}},&condition)) return false;
+        return !test || source_match_test(ctx,condition,true,failures);
     }
     SourceEnumSelection *selected=&pattern->selection;
     if (test) {

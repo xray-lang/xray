@@ -190,7 +190,7 @@ def main():
         run('whole-dynamic-division',
             'print(1)\nfn value(n:i64,d:i64)->i64{return n/d}\nvalue(8,2)\n', stdout=b'1\n')
         run('whole-closure-unavailable',
-            'print(1)\nfn value(x:f32)->f32{return x+1.0}\nvalue(3.0)\n', 1, b'CONST_FLOAT')
+            'print(1)\nfn value(x:f32)->f32{return x+1.0}\nvalue(3.0)\n', 1, b'float arithmetic on f32')
         run('division-fixed', 'fn quotient(n:i64)->i64{return n/2}\nprint(quotient(8))\n', stdout=b'4\n')
         run('remainder-fixed', 'fn remainder(n:i64)->i64{return n%3}\nprint(remainder(-7))\n', stdout=b'-1\n')
         run('division-dynamic', 'fn quotient(n:i64,d:i64)->i64{return n/d}\nquotient(8,2)\n')

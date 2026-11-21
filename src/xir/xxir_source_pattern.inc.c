@@ -88,6 +88,24 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
     if (node->type==AST_PATTERN_ARRAY) return source_pattern_array(ctx,node,type,out,depth);
     if (node->type==AST_PATTERN_TUPLE)
         return source_pattern_product(ctx,node,type,out,depth);
+    /* `is T` over a synthesized enum is one variant test. The canonical member
+     * ordinal is the variant ordinal, so coverage sees the same constructor
+     * space as a named enum. */
+    if (node->type==AST_PATTERN_TYPE) {
+        if (!xr_xir_data_union_shape(&ctx->types,type))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"type pattern requires a data-union scrutinee");
+        if (node->as.pattern_type.binding_name)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,
+                "narrowing binding on a union member pattern is not admitted yet");
+        XrXirType target=XR_XIR_UNIT;
+        if (!source_type(ctx,node->as.pattern_type.type,&target)) return false;
+        uint32_t variant=0;
+        if (!xr_xir_data_union_member_index(&ctx->types,type,target,&variant))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"type pattern is not a member of the union");
+        out->selection=(SourceEnumSelection){NULL,NULL,NULL,type,variant};
+        out->type=target;
+        return true;
+    }
     AstNode *path=NULL; PatternAdtNode *payload=NULL;
     if (node->type==AST_PATTERN_ADT) {payload=&node->as.pattern_adt;path=payload->variant;}
     else if (node->type==AST_PATTERN_LITERAL) path=node->as.pattern_literal.value;

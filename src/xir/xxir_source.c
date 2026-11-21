@@ -859,6 +859,42 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
     case XR_TREF_UNION: {
         if(ref->nchildren<1 || !ref->children || ctx->depth>=128)
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"data union requires bounded members");
+        /* `T | null` normalizes to `T?`: null is not a data-union member, it is
+         * the Optional absence marker. A member with a type parameter still
+         * fails below because it is not a closed atom or Class identity. */
+        int nulls=0;
+        for(int p=0;p<ref->nchildren;++p)
+            if(ref->children[p] && ref->children[p]->kind==XR_TREF_NULL)++nulls;
+        if(nulls) {
+            if(nulls>1 || ref->nchildren-nulls<1)
+                return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"nullable union requires exactly one non-null member");
+            if(ref->nchildren-nulls==1) {
+                int only=0;
+                while(ref->children[only]->kind==XR_TREF_NULL)++only;
+                XrXirType element;
+                ++ctx->depth;
+                bool valid=source_type(ctx,ref->children[only],&element);
+                --ctx->depth;
+                if(!valid)return false;
+                if(xr_xir_type_is_nullable(&ctx->types,element)) {*type=element;return true;}
+                return source_nullable_type(ctx,element,type);
+            }
+            /* Several non-null members: Optional of their synthesized union. */
+            XrXirCallableParameter *rest=source_alloc(ctx,(size_t)(ref->nchildren-nulls),sizeof(*rest));
+            if(!rest)return false;
+            int used=0;bool valid=true;
+            ++ctx->depth;
+            for(int p=0;p<ref->nchildren && valid;++p) {
+                if(ref->children[p]->kind==XR_TREF_NULL)continue;
+                valid=source_type(ctx,ref->children[p],&rest[used++].type);
+            }
+            --ctx->depth;
+            XrXirType element=XR_XIR_UNIT;
+            if(valid)valid=source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_DATA_UNION,
+                .parameters=rest,.parameter_count=(uint32_t)used},&element);
+            source_retire_array(ctx,rest);
+            return valid && source_nullable_type(ctx,element,type);
+        }
         XrXirCallableParameter *members=source_alloc(ctx,(size_t)ref->nchildren,sizeof(*members));
         if(!members)return false;
         ++ctx->depth;
@@ -2006,29 +2042,23 @@ static bool source_block_functions(SourceContext *ctx,AstNode *block);
 #include "xxir_source_view.inc.c"
 #include "xxir_source_copy.inc.c"
 #include "xxir_source_unsafe.inc.c"
-/* `is` over a closed union of Class identities. The union value is one nominal
- * class handle: the test reads the handle's actual class identity at runtime
- * (see xxir_type_layout.c and xlir_lower.c), so there is no stored tag byte.
- * Every member must be a Class identity and the target must be one of them.
- * Narrowing the scrutinee for the true branch is NOT performed; only the
- * Boolean test is produced. */
+/* `is T` over a closed data union is a variant test of the synthesized enum:
+ * one tag comparison for a scalar/string member set, one nominal identity read
+ * when every member is a Class handle (no stored tag there). The target must be
+ * one of the canonical members. Narrowing the scrutinee is NOT performed; only
+ * the Boolean test is produced. */
 static bool source_is_expression(SourceContext *ctx, AstNode *node, SourceValue *value) {
     IsExprNode *check=&node->as.is_expr;
     XrXirType target=XR_XIR_UNIT;
     if (!source_type(ctx,check->type,&target)) return false;
-    if (!xr_xir_type_is_class(&ctx->types,target))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"is requires a Class identity target");
     SourceValue input;
     SourceExpressionPlan *plan=ctx->active_expression;
     if (!plan || !plan->left)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"is expression has no collected operand");
     if (!source_plan_complete(ctx,plan->left,&input)) return false;
     const XrXirTypeNode *shape=xr_xir_type_node(&ctx->types,input.type);
-    bool classes=shape && shape->kind==XR_XIR_TYPE_DATA_UNION && shape->parameter_count>=2;
-    for (uint32_t p=0;classes&&p<shape->parameter_count;++p)
-        classes=xr_xir_type_is_class(&ctx->types,shape->parameters[p].type);
-    if (!classes)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"is requires a union of Class identities");
+    if (!shape || shape->kind!=XR_XIR_TYPE_DATA_UNION || !xr_xir_data_union_shape(&ctx->types,input.type))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"is requires a closed data-union operand");
     if (!xr_xir_data_union_contains(&ctx->types,input.type,target))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"is target is not a member of the union");
     return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_DATA_UNION_IS,XR_XIR_BOOL,

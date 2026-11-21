@@ -143,7 +143,7 @@ def main():
     refused = subprocess.run([str(args.driver), str(refused_source), str(refused_c)], capture_output=True, timeout=30)
     (root / 'refused-f32.stderr').write_bytes(refused.stderr)
     assert refused.returncode == 1 and refused.stdout == b'' and not refused_c.exists()
-    assert b'lowering: CONST_FLOAT is not supported by LIR lowering yet' in refused.stderr
+    assert b'lowering: float arithmetic on f32 is not supported by LIR lowering yet' in refused.stderr
     identity['selectedF32'] = {'exit': refused.returncode, 'stdoutHex': refused.stdout.hex(),
                                 'stderrHex': refused.stderr.hex(), 'publishedC': False}
     original_parameter = Path(__file__).resolve().parents[2] / 'tests/diff/cases/semantics/string_owning_parameter.xr'

@@ -1,14 +1,15 @@
-// A narrow scalar payload has no admitted LIR carrier, so the enum type itself
-// is refused instead of being admitted and failing later on its first value.
+// A narrow scalar payload with no admitted LIR carrier (u16) is refused at the
+// enum type itself instead of being admitted and failing on its first value.
+// i8/i16/i32/f32 are transport carriers since the synthesized-enum change.
 enum Narrow {
     Empty,
-    Byte { v: i8 },
+    Half { v: u16 },
 }
 
 fn narrowTag(n: Narrow) -> i64 {
     return match (n) {
         Narrow.Empty => 0,
-        Narrow.Byte { v } => 1,
+        Narrow.Half { v } => 1,
     }
 }
 
