@@ -1,0 +1,21 @@
+// `Self` is deliberately not provided, and the compiler must say so in the
+// wording the specification's built-in symbol table pins (see
+// stdlib/prelude/builtin_symbols.def). Naming the declaring type is the
+// intended spelling.
+//
+// This case pins the hint text itself: a generic "does not resolve" message
+// leaves the reader with no way to know the name was ever considered.
+class Widget {
+    value: i64
+
+    init(value: i64) {
+        this.value = value
+    }
+
+    combine(other: Self) -> i64 {
+        return this.value + other.value
+    }
+}
+
+var widget = Widget(1)
+print(widget.combine(Widget(2)))

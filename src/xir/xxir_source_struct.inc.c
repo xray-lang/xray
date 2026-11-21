@@ -55,9 +55,26 @@ static SourceName *source_nominal_name(SourceContext *ctx, const char *name) {
     }
     return symbol && symbol->kind == SOURCE_NOMINAL ? symbol : NULL;
 }
+/* The specification prints the hint column of its built-in symbol table as the
+ * compiler's own wording, so the text is read from that same definition file
+ * instead of being repeated here. Only names the language deliberately does not
+ * provide carry a hint; every other unresolved name keeps the generic text. */
+static const char *source_undefined_builtin_hint(SourceContext *ctx, const char *name) {
+    if (!name || !*name) return NULL;
+    const char *hint = NULL;
+#define XR_BUILTIN_UNDEFINED_HINT(spelling, text) \
+    if (!hint && source_text_same(ctx, NULL, name, spelling)) hint = text;
+#include "../../stdlib/prelude/builtin_symbols.def"
+#undef XR_BUILTIN_UNDEFINED_HINT
+    return hint;
+}
 static bool source_nominal_type(SourceContext *ctx, const char *name, XrXirType *type) {
     SourceName *symbol = source_nominal_name(ctx, name);
-    if (!symbol) return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "name does not resolve to an admitted nominal type");
+    if (!symbol) {
+        const char *hint = source_undefined_builtin_hint(ctx, name);
+        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE,
+            hint ? hint : "name does not resolve to an admitted nominal type");
+    }
     if (ctx->nominals.declarations[symbol->index].parameter_count)
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "nominal type requires explicit arguments");
     *type = symbol->type; return true;
@@ -96,7 +113,12 @@ static bool source_nominal_apply(SourceContext *ctx, SourceName *symbol, XrTypeR
 }
 static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTypeRef **arguments,
     uint32_t count, XrXirType *type) {
-    return source_nominal_apply(ctx, source_nominal_name(ctx, name), arguments, count, type);
+    SourceName *symbol = source_nominal_name(ctx, name);
+    if (!symbol) {
+        const char *hint = source_undefined_builtin_hint(ctx, name);
+        if (hint) return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, hint);
+    }
+    return source_nominal_apply(ctx, symbol, arguments, count, type);
 }
 static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char *name,
     XrGenericParam **parameters, uint32_t count, uint32_t kind) {
