@@ -1,0 +1,13 @@
+// Raw case for the test-role startup request (Task346 P6).
+// The checked artifact already records these roles; no backend starts them yet.
+var observed = 0
+
+@before_each fn fresh() { observed = observed + 1 }
+
+@test fn first() { assert(observed == 1) }
+
+@test fn second() { assert(observed == 2) }
+
+@test(skip) fn skipped() { assert(false) }
+
+@test(timeout: 5) fn timed() { assert(observed == 3) }
