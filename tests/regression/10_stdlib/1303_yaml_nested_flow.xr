@@ -5,7 +5,7 @@
 // Typed YamlValue ADT access.
 
 import yaml
-import { YamlValue } from yaml
+import { YamlValue, YamlError } from yaml
 
 fn getV(v: YamlValue, k: string) -> YamlValue { return yaml.get(v, k)! }
 fn getInt(v: YamlValue, k: string) -> i64 { return yaml.asInt(yaml.get(v, k)!) ?? -1 }
@@ -19,9 +19,9 @@ fn atStr(v: YamlValue, i: i64) -> string { return yaml.asString(yaml.at(v, i)!) 
 // ===== Flow mapping nested in flow mapping =====
 
 @test
-fn test_nested_flow_mapping() {
+fn test_nested_flow_mapping() throws(YamlError) {
     var data = "outer: {inner: {a: 1, b: 2}, c: 3}"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var outer = getV(obj, "outer")
     var inner = getV(outer, "inner")
     assertEqual(getInt(inner, "a"), 1)
@@ -32,9 +32,9 @@ fn test_nested_flow_mapping() {
 // ===== Flow sequence nested in flow mapping =====
 
 @test
-fn test_flow_sequence_in_flow_mapping() {
+fn test_flow_sequence_in_flow_mapping() throws(YamlError) {
     var data = "config: {ports: [80, 443, 8080], host: localhost}"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var cfg = getV(obj, "config")
     var ports = getV(cfg, "ports")
     assertEqual(atInt(ports, 0), 80)
@@ -46,9 +46,9 @@ fn test_flow_sequence_in_flow_mapping() {
 // ===== Flow mapping nested in flow sequence =====
 
 @test
-fn test_flow_mapping_in_flow_sequence() {
+fn test_flow_mapping_in_flow_sequence() throws(YamlError) {
     var data = "items: [{name: alice, age: 30}, {name: bob, age: 25}]"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var items = getV(obj, "items")
     var i0 = atV(items, 0)
     var i1 = atV(items, 1)
@@ -61,9 +61,9 @@ fn test_flow_mapping_in_flow_sequence() {
 // ===== Flow sequence nested in flow sequence =====
 
 @test
-fn test_nested_flow_sequence() {
+fn test_nested_flow_sequence() throws(YamlError) {
     var data = "matrix: [[1, 2, 3], [4, 5, 6], [7, 8, 9]]"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var m = getV(obj, "matrix")
     assertEqual(atInt(atV(m, 0), 0), 1)
     assertEqual(atInt(atV(m, 0), 2), 3)
@@ -74,9 +74,9 @@ fn test_nested_flow_sequence() {
 // ===== Multiple flow mappings at same level =====
 
 @test
-fn test_multiple_flow_mappings() {
+fn test_multiple_flow_mappings() throws(YamlError) {
     var data = "a: {x: 1}\nb: {y: 2}\nc: {z: 3}"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     assertEqual(getInt(getV(obj, "a"), "x"), 1)
     assertEqual(getInt(getV(obj, "b"), "y"), 2)
     assertEqual(getInt(getV(obj, "c"), "z"), 3)
@@ -85,9 +85,9 @@ fn test_multiple_flow_mappings() {
 // ===== Flow mapping with various value types =====
 
 @test
-fn test_flow_mapping_mixed_values() {
+fn test_flow_mapping_mixed_values() throws(YamlError) {
     var data = "mix: {num: 42, str: hello, flag: true, nothing: null}"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var mix = getV(obj, "mix")
     assertEqual(getInt(mix, "num"), 42)
     assertEqual(getStr(mix, "str"), "hello")
@@ -98,9 +98,9 @@ fn test_flow_mapping_mixed_values() {
 // ===== Empty flow structures =====
 
 @test
-fn test_empty_flow_structures() {
+fn test_empty_flow_structures() throws(YamlError) {
     var data = "empty_map: {}\nempty_list: []"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     assert(yaml.get(obj, "empty_map") != null)
     assert(yaml.get(obj, "empty_list") != null)
     assertEqual(yaml.length(getV(obj, "empty_map")), 0)
@@ -110,18 +110,18 @@ fn test_empty_flow_structures() {
 // ===== Deeply nested flow =====
 
 @test
-fn test_deep_nested_flow() {
+fn test_deep_nested_flow() throws(YamlError) {
     var data = "deep: {l1: {l2: {l3: 42}}}"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     assertEqual(getInt(getV(getV(getV(obj, "deep"), "l1"), "l2"), "l3"), 42)
 }
 
 // ===== Flow mapping with quoted keys =====
 
 @test
-fn test_flow_mapping_quoted_keys() {
+fn test_flow_mapping_quoted_keys() throws(YamlError) {
     var data = "data: {\"key one\": 1, 'key two': 2}"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var d = getV(obj, "data")
     assertEqual(getInt(d, "key one"), 1)
     assertEqual(getInt(d, "key two"), 2)
@@ -130,9 +130,9 @@ fn test_flow_mapping_quoted_keys() {
 // ===== Complex real-world-like YAML =====
 
 @test
-fn test_complex_yaml_config() {
+fn test_complex_yaml_config() throws(YamlError) {
     var data = "app:\n  name: myapp\n  version: 1\n  database:\n    host: localhost\n    port: 5432\n  features: [auth, logging, cache]\n  limits: {max_conn: 100, timeout: 30}"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var app = getV(obj, "app")
     assertEqual(getStr(app, "name"), "myapp")
     assertEqual(getInt(app, "version"), 1)
@@ -150,9 +150,9 @@ fn test_complex_yaml_config() {
 // ===== Block sequence with flow mapping items =====
 
 @test
-fn test_flow_in_block_sequence() {
+fn test_flow_in_block_sequence() throws(YamlError) {
     var data = "servers:\n  - {host: a.com, port: 80}\n  - {host: b.com, port: 443}"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var servers = getV(obj, "servers")
     var s0 = atV(servers, 0)
     var s1 = atV(servers, 1)
@@ -165,9 +165,9 @@ fn test_flow_in_block_sequence() {
 // ===== Block sequence with nested block mappings =====
 
 @test
-fn test_block_sequence_nested_mappings() {
+fn test_block_sequence_nested_mappings() throws(YamlError) {
     var data = "users:\n  - name: Alice\n    age: 30\n  - name: Bob\n    age: 25"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var users = getV(obj, "users")
     assertEqual(getStr(atV(users, 0), "name"), "Alice")
     assertEqual(getInt(atV(users, 0), "age"), 30)
@@ -178,9 +178,9 @@ fn test_block_sequence_nested_mappings() {
 // ===== Block sequence with 3+ multi-line items =====
 
 @test
-fn test_block_sequence_three_items() {
+fn test_block_sequence_three_items() throws(YamlError) {
     var data = "tasks:\n  - id: 1\n    status: done\n  - id: 2\n    status: pending\n  - id: 3\n    status: active"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var tasks = getV(obj, "tasks")
     assertEqual(yaml.length(tasks), 3)
     assertEqual(getInt(atV(tasks, 0), "id"), 1)
@@ -192,9 +192,9 @@ fn test_block_sequence_three_items() {
 // ===== Block sequence with mixed inline and block items =====
 
 @test
-fn test_block_sequence_mixed_items() {
+fn test_block_sequence_mixed_items() throws(YamlError) {
     var data = "items:\n  - simple\n  - {complex: true}\n  - name: nested\n    value: 42"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var items = getV(obj, "items")
     assertEqual(atStr(items, 0), "simple")
     assertEqual(getBool(atV(items, 1), "complex"), true)
@@ -205,18 +205,18 @@ fn test_block_sequence_mixed_items() {
 // ===== Deeply nested block structure =====
 
 @test
-fn test_deep_block_nesting() {
+fn test_deep_block_nesting() throws(YamlError) {
     var data = "l1:\n  l2:\n    l3:\n      value: deep"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     assertEqual(getStr(getV(getV(getV(obj, "l1"), "l2"), "l3"), "value"), "deep")
 }
 
 // ===== Block sequence inside block sequence (via multiline) =====
 
 @test
-fn test_block_mapping_with_multiple_sequences() {
+fn test_block_mapping_with_multiple_sequences() throws(YamlError) {
     var data = "fruits: [apple, banana]\nvegs: [carrot, pea]"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     assertEqual(atStr(getV(obj, "fruits"), 0), "apple")
     assertEqual(atStr(getV(obj, "fruits"), 1), "banana")
     assertEqual(atStr(getV(obj, "vegs"), 0), "carrot")
@@ -226,9 +226,9 @@ fn test_block_mapping_with_multiple_sequences() {
 // ===== Real-world: docker-compose-like YAML =====
 
 @test
-fn test_docker_compose_like() {
+fn test_docker_compose_like() throws(YamlError) {
     var data = "services:\n  web:\n    image: nginx\n    ports: [80, 443]\n  db:\n    image: postgres\n    ports: [5432]"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var svc = getV(obj, "services")
     var web = getV(svc, "web")
     assertEqual(getStr(web, "image"), "nginx")
@@ -242,9 +242,9 @@ fn test_docker_compose_like() {
 // ===== YAML multiline and special values =====
 
 @test
-fn test_yaml_special_values() {
+fn test_yaml_special_values() throws(YamlError) {
     var data = "t1: true\nt2: false\nn1: null\nn2: ~\ni1: 42\nf1: 3.14"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     assertEqual(getBool(obj, "t1"), true)
     assertEqual(getBool(obj, "t2"), false)
     assert(yaml.isNull(getV(obj, "n1")))

@@ -1,27 +1,27 @@
 // 1308_xml_basic.xr - XML module tests (typed XmlNode ADT)
 
 import xml
-import { XmlNode, XmlName, XmlAttribute } from xml
+import { XmlNode, XmlName, XmlAttribute, XmlError } from xml
 
 // ===== Basic parsing =====
 
 @test
-fn test_parse_basic() {
-    var doc = xml.parse("<root><item>Hello</item></root>")
+fn test_parse_basic() throws(XmlError) {
+    var doc = try xml.parse("<root><item>Hello</item></root>")
     assertEqual(xml.tag(doc) ?? "", "root")
 }
 
 @test
-fn test_parse_children() {
-    var doc = xml.parse("<root><item>Hello</item></root>")
+fn test_parse_children() throws(XmlError) {
+    var doc = try xml.parse("<root><item>Hello</item></root>")
     var children = xml.children(doc)
     assertEqual(len(children), 1)
     assertEqual(xml.tag(children[0]) ?? "", "item")
 }
 
 @test
-fn test_parse_text() {
-    var doc = xml.parse("<root><item>Hello</item></root>")
+fn test_parse_text() throws(XmlError) {
+    var doc = try xml.parse("<root><item>Hello</item></root>")
     var item = xml.children(doc)[0]
     assertEqual(xml.textContent(item), "Hello")
 }
@@ -29,8 +29,8 @@ fn test_parse_text() {
 // ===== Attributes =====
 
 @test
-fn test_parse_attrs() {
-    var doc = xml.parse("<user id=\"123\" name=\"Alice\"/>")
+fn test_parse_attrs() throws(XmlError) {
+    var doc = try xml.parse("<user id=\"123\" name=\"Alice\"/>")
     assertEqual(xml.attr(doc, "id") ?? "", "123")
     assertEqual(xml.attr(doc, "name") ?? "", "Alice")
 }
@@ -38,8 +38,8 @@ fn test_parse_attrs() {
 // ===== Nested elements =====
 
 @test
-fn test_parse_deep_nesting() {
-    var doc = xml.parse("<root><a><b><c>deep</c></b></a></root>")
+fn test_parse_deep_nesting() throws(XmlError) {
+    var doc = try xml.parse("<root><a><b><c>deep</c></b></a></root>")
     var a = xml.children(doc)[0]
     var b = xml.children(a)[0]
     var c = xml.children(b)[0]
@@ -50,8 +50,8 @@ fn test_parse_deep_nesting() {
 // ===== Multiple children =====
 
 @test
-fn test_parse_multiple_children() {
-    var doc = xml.parse("<list><item>1</item><item>2</item><item>3</item></list>")
+fn test_parse_multiple_children() throws(XmlError) {
+    var doc = try xml.parse("<list><item>1</item><item>2</item><item>3</item></list>")
     assertEqual(len(xml.children(doc)), 3)
 }
 
@@ -66,8 +66,8 @@ fn test_create_element() {
 // ===== Empty element =====
 
 @test
-fn test_parse_empty_element() {
-    var doc = xml.parse("<empty/>")
+fn test_parse_empty_element() throws(XmlError) {
+    var doc = try xml.parse("<empty/>")
     assertEqual(xml.tag(doc) ?? "", "empty")
     assertEqual(len(xml.children(doc)), 0)
 }
@@ -75,8 +75,8 @@ fn test_parse_empty_element() {
 // ===== Comments =====
 
 @test
-fn test_parse_preserve_comments() {
-    var doc = xml.parse("<root><!-- comment --><item/></root>",
+fn test_parse_preserve_comments() throws(XmlError) {
+    var doc = try xml.parse("<root><!-- comment --><item/></root>",
         preserveWhitespace: false, preserveComments: true, preserveCData: true, validateEntities: true)
     assertEqual(len(xml.children(doc)), 2)
 }
@@ -84,8 +84,8 @@ fn test_parse_preserve_comments() {
 // ===== Stringify =====
 
 @test
-fn test_stringify_compact() {
-    var doc = xml.parse("<msg>Hi</msg>")
+fn test_stringify_compact() throws(XmlError) {
+    var doc = try xml.parse("<msg>Hi</msg>")
     var str = xml.stringify(doc, indent: 0, declaration: false, encoding: "UTF-8")
     assertEqual(str, "<msg>Hi</msg>")
 }

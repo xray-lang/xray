@@ -17,51 +17,51 @@ fn nodeKind(node: XmlNode) -> string {
 // ===== Entity decoding =====
 
 @test
-fn test_entity_decode_named() {
-    var doc = xml.parse("<root>&lt;hello&gt; &amp; &quot;world&quot; &apos;!</root>")
+fn test_entity_decode_named() throws(XmlError) {
+    var doc = try xml.parse("<root>&lt;hello&gt; &amp; &quot;world&quot; &apos;!</root>")
     assertEqual(xml.textContent(doc), "<hello> & \"world\" '!")
 }
 
 @test
-fn test_entity_decode_numeric_decimal() {
-    var doc = xml.parse("<root>&#65;&#66;&#67;</root>")
+fn test_entity_decode_numeric_decimal() throws(XmlError) {
+    var doc = try xml.parse("<root>&#65;&#66;&#67;</root>")
     assertEqual(xml.textContent(doc), "ABC")
 }
 
 @test
-fn test_entity_decode_numeric_hex() {
-    var doc = xml.parse("<root>&#x41;&#x42;&#x43;</root>")
+fn test_entity_decode_numeric_hex() throws(XmlError) {
+    var doc = try xml.parse("<root>&#x41;&#x42;&#x43;</root>")
     assertEqual(xml.textContent(doc), "ABC")
 }
 
 @test
-fn test_entity_decode_unicode() {
+fn test_entity_decode_unicode() throws(XmlError) {
     // &#x4e2d; = 中, &#x6587; = 文
-    var doc = xml.parse("<root>&#x4e2d;&#x6587;</root>")
+    var doc = try xml.parse("<root>&#x4e2d;&#x6587;</root>")
     assertEqual(xml.textContent(doc), "中文")
 }
 
 // ===== Attribute entity decoding =====
 
 @test
-fn test_attr_entity_decode() {
-    var doc = xml.parse("<a href=\"a&amp;b\"/>")
+fn test_attr_entity_decode() throws(XmlError) {
+    var doc = try xml.parse("<a href=\"a&amp;b\"/>")
     assertEqual(xml.attr(doc, "href") ?? "", "a&b")
 }
 
 // ===== CDATA =====
 
 @test
-fn test_cdata_preserve() {
-    var doc = xml.parse("<root><![CDATA[<not-xml>&]]></root>")
+fn test_cdata_preserve() throws(XmlError) {
+    var doc = try xml.parse("<root><![CDATA[<not-xml>&]]></root>")
     var child = xml.children(doc)[0]
     assertEqual(nodeKind(child), "cdata")
     assertEqual(xml.nodeText(child) ?? "", "<not-xml>&")
 }
 
 @test
-fn test_cdata_as_text() {
-    var doc = xml.parse("<root><![CDATA[content]]></root>",
+fn test_cdata_as_text() throws(XmlError) {
+    var doc = try xml.parse("<root><![CDATA[content]]></root>",
         preserveWhitespace: false, preserveComments: false, preserveCData: false, validateEntities: true)
     var child = xml.children(doc)[0]
     assertEqual(nodeKind(child), "text")
@@ -71,8 +71,8 @@ fn test_cdata_as_text() {
 // ===== Self-closing with attributes =====
 
 @test
-fn test_self_closing_with_attrs() {
-    var doc = xml.parse("<root><img src=\"a.png\" alt=\"pic\"/></root>")
+fn test_self_closing_with_attrs() throws(XmlError) {
+    var doc = try xml.parse("<root><img src=\"a.png\" alt=\"pic\"/></root>")
     var img = xml.children(doc)[0]
     assertEqual(xml.tag(img) ?? "", "img")
     assertEqual(xml.attr(img, "src") ?? "", "a.png")
@@ -83,8 +83,8 @@ fn test_self_closing_with_attrs() {
 // ===== Processing instruction =====
 
 @test
-fn test_skip_processing_instruction() {
-    var doc = xml.parse("<?xml version=\"1.0\"?><root>OK</root>")
+fn test_skip_processing_instruction() throws(XmlError) {
+    var doc = try xml.parse("<?xml version=\"1.0\"?><root>OK</root>")
     assertEqual(xml.tag(doc) ?? "", "root")
 }
 
@@ -137,10 +137,10 @@ fn test_create_document() {
 // ===== Stringify roundtrip =====
 
 @test
-fn test_stringify_roundtrip() {
-    var doc = xml.parse("<root><item id=\"1\">Hello</item><item id=\"2\">World</item></root>")
+fn test_stringify_roundtrip() throws(XmlError) {
+    var doc = try xml.parse("<root><item id=\"1\">Hello</item><item id=\"2\">World</item></root>")
     var str = xml.stringify(doc, indent: 0, declaration: false, encoding: "UTF-8")
-    var doc2 = xml.parse(str)
+    var doc2 = try xml.parse(str)
     assertEqual(xml.tag(doc2) ?? "", "root")
     var kids = xml.children(doc2)
     assertEqual(len(kids), 2)
@@ -169,10 +169,10 @@ fn test_parse_report_unknown_entity() {
 // ===== parse throws on malformed input =====
 
 @test
-fn test_parse_throws_on_no_root() {
+fn test_parse_throws_on_no_root() throws(XmlError) {
     var threw = false
     try {
-        xml.parse("just text, no element")
+        try xml.parse("just text, no element")
     } catch (e: XmlError) {
         threw = true
     }
@@ -182,15 +182,15 @@ fn test_parse_throws_on_no_root() {
 // ===== Whitespace handling =====
 
 @test
-fn test_whitespace_stripped_by_default() {
-    var doc = xml.parse("<root>  \n  <item/>\n  </root>")
+fn test_whitespace_stripped_by_default() throws(XmlError) {
+    var doc = try xml.parse("<root>  \n  <item/>\n  </root>")
     assertEqual(len(xml.children(doc)), 1)
     assertEqual(xml.tag(xml.children(doc)[0]) ?? "", "item")
 }
 
 @test
-fn test_whitespace_preserved() {
-    var doc = xml.parse("<root> text </root>",
+fn test_whitespace_preserved() throws(XmlError) {
+    var doc = try xml.parse("<root> text </root>",
         preserveWhitespace: true, preserveComments: false, preserveCData: true, validateEntities: true)
     // Should preserve whitespace-only text nodes
     assertEqual(len(xml.children(doc)), 1)
@@ -199,14 +199,14 @@ fn test_whitespace_preserved() {
 // ===== DOCTYPE handling =====
 
 @test
-fn test_skip_doctype() {
-    var doc = xml.parse("<!DOCTYPE html><root>OK</root>")
+fn test_skip_doctype() throws(XmlError) {
+    var doc = try xml.parse("<!DOCTYPE html><root>OK</root>")
     assertEqual(xml.tag(doc) ?? "", "root")
 }
 
 @test
-fn test_skip_doctype_with_internal_subset() {
-    var doc = xml.parse("<!DOCTYPE root [ <!ELEMENT root (#PCDATA)> ]><root>OK</root>")
+fn test_skip_doctype_with_internal_subset() throws(XmlError) {
+    var doc = try xml.parse("<!DOCTYPE root [ <!ELEMENT root (#PCDATA)> ]><root>OK</root>")
     assertEqual(xml.tag(doc) ?? "", "root")
     assertEqual(xml.textContent(doc), "OK")
 }
@@ -214,8 +214,8 @@ fn test_skip_doctype_with_internal_subset() {
 // ===== Escape in stringify =====
 
 @test
-fn test_stringify_escapes_text() {
-    var doc = xml.parse("<p>&lt;script&gt;</p>")
+fn test_stringify_escapes_text() throws(XmlError) {
+    var doc = try xml.parse("<p>&lt;script&gt;</p>")
     var str = xml.stringify(doc, indent: 0, declaration: false, encoding: "UTF-8")
     assertEqual(str, "<p>&lt;script&gt;</p>")
 }
@@ -223,8 +223,8 @@ fn test_stringify_escapes_text() {
 // ===== Mixed content =====
 
 @test
-fn test_mixed_content() {
-    var doc = xml.parse("<root>Hello<b>World</b>!</root>")
+fn test_mixed_content() throws(XmlError) {
+    var doc = try xml.parse("<root>Hello<b>World</b>!</root>")
     var kids = xml.children(doc)
     assertEqual(len(kids), 3)
     assertEqual(nodeKind(kids[0]), "text")

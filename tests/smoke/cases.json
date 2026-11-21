@@ -707,7 +707,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/xml/xml.xr:964:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
+        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
       }
     },
     {
@@ -719,7 +719,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/yaml/yaml.xr:1219:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
+        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
       }
     },
     {
@@ -1212,7 +1212,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/xml/xml.xr:964:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
+        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
       }
     },
     {
@@ -1224,7 +1224,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/yaml/yaml.xr:1219:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
+        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
       }
     },
     {

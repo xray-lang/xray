@@ -1,5 +1,5 @@
 import yaml
-import { YamlValue } from yaml
+import { YamlValue, YamlError } from yaml
 
 // Matching an ADT value into a scalar (string) is AOT-safe; returning an
 // unwrapped enum aggregate from a helper is not, so navigation below uses
@@ -19,7 +19,7 @@ fn kindOf(v: YamlValue) -> string {
     }
 }
 
-var doc = yaml.parse("app:\n  name: xray\n  ports: [80, 443]\n  limits: {max: 100, timeout: 30}\nitems:\n  - id: 1\n    status: done\n  - {id: 2, status: pending}\n")
+var doc = try yaml.parse("app:\n  name: xray\n  ports: [80, 443]\n  limits: {max: 100, timeout: 30}\nitems:\n  - id: 1\n    status: done\n  - {id: 2, status: pending}\n")
 var app = yaml.get(doc, "app")!
 print(yaml.asString(yaml.get(app, "name")!) ?? "")
 var ports = yaml.get(app, "ports")!
@@ -36,21 +36,21 @@ print(kindOf(doc))
 print(kindOf(ports))
 print(yaml.keys(app).join(","))
 
-var aliases = yaml.parse("anchor: &val hello\nalias: *val")
+var aliases = try yaml.parse("anchor: &val hello\nalias: *val")
 print(yaml.asString(yaml.get(aliases, "anchor")!) ?? "")
 print(yaml.asString(yaml.get(aliases, "alias")!) ?? "")
 
-var block = yaml.parse("text: |-\n  line one\n  line two")
+var block = try yaml.parse("text: |-\n  line one\n  line two")
 var blockText = yaml.asString(yaml.get(block, "text")!) ?? ""
 if (blockText.contains("line one")) { print("has-line") } else { print("missing-line") }
 if (blockText.endsWith("\n")) { print("has-newline") } else { print("no-newline") }
 
-var docs = yaml.parseAll("---\na: 1\n...\nb: 2")
+var docs = try yaml.parseAll("---\na: 1\n...\nb: 2")
 print(len(docs))
 print(yaml.asInt(yaml.get(docs[0], "a")!) ?? -1)
 print(yaml.asInt(yaml.get(docs[1], "b")!) ?? -1)
 
-var strict = yaml.parseStrict("name: Alice\nage: 30")
+var strict = try yaml.parseStrict("name: Alice\nage: 30")
 print(yaml.asString(yaml.get(strict, "name")!) ?? "")
 
 var report = yaml.parseReport("name: Alice\nage: 30")
@@ -62,7 +62,7 @@ yaml.mappingSet(ref root, "name", yaml.stringValue("xray"))
 yaml.mappingSet(ref root, "version", yaml.intValue(1))
 yaml.mappingSet(ref root, "debug", yaml.boolValue(false))
 var out = yaml.stringify(yaml.mappingValue(root))
-var reparsed = yaml.parse(out)
+var reparsed = try yaml.parse(out)
 print(yaml.asString(yaml.get(reparsed, "name")!) ?? "")
 print(yaml.asInt(yaml.get(reparsed, "version")!) ?? -1)
 if (yaml.asBool(yaml.get(reparsed, "debug")!) ?? true) { print("debug-on") } else { print("debug-off") }

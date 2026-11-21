@@ -1,5 +1,5 @@
 import xml
-import { XmlNode, XmlName, XmlAttribute } from xml
+import { XmlNode, XmlName, XmlAttribute, XmlError } from xml
 
 fn nodeKind(node: XmlNode) -> string {
     return match (node) {
@@ -12,7 +12,7 @@ fn nodeKind(node: XmlNode) -> string {
     }
 }
 
-var doc = xml.parse("<?xml version=\"1.0\"?><root xmlns=\"urn:x\" id=\"7\"><item>A&amp;B</item><![CDATA[<raw>]]></root>")
+var doc = try xml.parse("<?xml version=\"1.0\"?><root xmlns=\"urn:x\" id=\"7\"><item>A&amp;B</item><![CDATA[<raw>]]></root>")
 print(xml.tag(doc) ?? "")
 print(xml.attr(doc, "id") ?? "")
 print(xml.namespace(doc, "") ?? "")
@@ -22,12 +22,12 @@ print(xml.textContent(kids[0]))
 print(nodeKind(kids[1]))
 print(xml.nodeText(kids[1]) ?? "")
 
-var cdataAsText = xml.parse("<root><![CDATA[plain]]></root>",
+var cdataAsText = try xml.parse("<root><![CDATA[plain]]></root>",
     preserveWhitespace: false, preserveComments: false, preserveCData: false, validateEntities: true)
 print(nodeKind(xml.children(cdataAsText)[0]))
 print(xml.textContent(cdataAsText))
 
-var comments = xml.parse("<root><!-- keep --><leaf/></root>",
+var comments = try xml.parse("<root><!-- keep --><leaf/></root>",
     preserveWhitespace: false, preserveComments: true, preserveCData: true, validateEntities: true)
 print(len(xml.children(comments)))
 print(nodeKind(xml.children(comments)[0]))
@@ -48,7 +48,7 @@ var textNode = xml.text("<hello>&")
 print(nodeKind(textNode))
 print(xml.nodeText(textNode) ?? "")
 
-var round = xml.stringify(xml.parse("<msg>Hello&lt;World</msg>"),
+var round = xml.stringify(try xml.parse("<msg>Hello&lt;World</msg>"),
     indent: 0, declaration: false, encoding: "UTF-8")
 print(round)
 print(xml.stringify(made, indent: 0, declaration: false, encoding: "UTF-8"))
