@@ -1,0 +1,22 @@
+final class Conn {
+    fd: i64
+    init(fd: i64) { this.fd = fd }
+}
+final class Listener {
+    fd: i64
+    init(fd: i64) { this.fd = fd }
+}
+
+fn isConn(handle: Conn | Listener) -> bool {
+    return handle is Conn
+}
+
+fn pick(handle: Conn | Listener) -> i64 {
+    if (handle is Conn) { return 1 }
+    return 2
+}
+
+print(isConn(Conn(3)))
+print(isConn(Listener(4)))
+print(pick(Conn(3)))
+print(pick(Listener(4)))

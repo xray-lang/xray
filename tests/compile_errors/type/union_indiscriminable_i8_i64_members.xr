@@ -1,0 +1,4 @@
+// A data union cannot hold two integer members: the erased runtime value keeps
+// one i64 family, so membership would be ambiguous.
+var v: i8 | i64 = 1
+print("${v}")
