@@ -605,7 +605,7 @@ v = "hello"             // OK
 
 约束：
 - 最多 **6 个成员**（编译期检查；超限 → 错误）。
-- 成员互不为彼此的子类型（否则会被规范化）。
+- 成员互不为彼此的子类型。**当前实现按拒绝处理**：两个 Class 成员若存在继承关系（任一方向），声明即报 `E0390`，而不是按本节原目标规范化成祖先类型。理由：Class 身份 union 的运行期表示是单个 nominal 句柄（不存 tag 字节），判别只看对象头里不可变的 per-class `ops`；在声明处静默规范化会同时改变绑定类型、`is` 的成员集合和模块存储布局，而 Class 层级之间的隐式转换尚未在 LIR 打通，被规范化掉的成员会成为不可达分支。**后续计划**：先在类型 intern 阶段按祖先链合并成员，并补齐 `A | B`（`B` 继承 `A`）的声明、布局、`is` 与模块存储测试，再把该拒绝降级为规范化；在此之前保持 fail-closed。
 - **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | f64` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
@@ -1758,7 +1758,7 @@ v = "hello"             // OK
 
 Constraints:
 - Up to **6 members** (checked at compile time; over the limit → error).
-- Members must not be subtypes of each other (otherwise normalized).
+- Members must not be subtypes of each other. **The current implementation rejects instead**: two Class members with an inheritance relation in either direction make the declaration `E0390`; they are not normalized to the ancestor as this section's target design specifies. Rationale: a Class-identity union is one nominal handle with no stored tag byte, so discrimination reads only the object header's immutable per-class `ops`. Silently normalizing at the declaration site would change the binding's type, the set of members `is` can observe, and the module storage layout, while implicit conversion between Class levels is not yet available in LIR, so the normalized-away member would be unreachable. **Follow-up**: merge ancestor-chain members during type interning, add declaration, layout, `is` and module-storage tests for `A | B` where `B` inherits `A`, and only then downgrade this rejection to normalization; until then the compiler stays fail-closed.
 - **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
