@@ -479,7 +479,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
       }
     },
     {
@@ -695,7 +695,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
       }
     },
     {
@@ -707,7 +707,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
       }
     },
     {
@@ -1104,7 +1104,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
       }
     },
     {
@@ -1196,7 +1196,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
       }
     },
     {
@@ -1208,7 +1208,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:59:22: error: name is not an initialized value"
+        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
       }
     },
     {
