@@ -12,6 +12,7 @@
  */
 
 #include "xxir_types.h"
+#include "xxir_native_opaque.h"
 #include "xxir_class_hierarchy_internal.h"
 #include "xxir_class_method_internal.h"
 #include "xxir_class_method_read_internal.h"
@@ -72,7 +73,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!table || owner >= table->count || (!table->declarations && !table->identities))
         return XR_XIR_BAD_STRUCTURE;
     uint32_t native_id=table->declarations?table->declarations[owner].native.native_id:table->identities[owner].native.native_id;
-    if(native_id==XR_NATIVE_DECLARATION_FILE_STAT)return XR_XIR_BAD_TYPE;
+    if(xir_native_opaque_nominal(native_id))return XR_XIR_BAD_TYPE;
     if (identity->native_callable) return xir_native_callable_verify(module,index);
     if(identity->method_kind==XR_XIR_CONSTRUCTOR_FIELDS)return xir_compile_class_stage_signature(module,index,NULL);
     if (identity->method_kind == XR_XIR_MEMBER_HELPER || identity->method_kind==XR_XIR_MATERIALIZER) return XR_XIR_OK;

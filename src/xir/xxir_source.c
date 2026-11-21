@@ -41,6 +41,7 @@
 #include "xxir_source_query_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_internal_storage.h"
 #include "xxir_data_union.h"
 #include "xxir_json_domain.h"
 #include "xxir_class_hierarchy_internal.h"
@@ -932,8 +933,15 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
         if (source_text_same(ctx, NULL, ref->name, "PanicInfo") && !source_nominal_name(ctx, ref->name)) {
             *type = XR_XIR_PANIC_INFO; return true;
         }
-        if (source_text_same(ctx,NULL,ref->name,"__BufferStorage") && source_mem_module(ctx,ctx->module) &&
-            !source_native_type_shadowed(ctx,ref->name)) {*type=XR_XIR_BUFFER_STORAGE;return true;}
+        if (!source_native_type_shadowed(ctx,ref->name)) {
+            const XrModuleSpec *spec_=&ctx->graph->specs[ctx->module];
+            const XrInternalStorageType *storage_=spec_->authority.namespace_id ?
+                xir_internal_storage_lookup(source_owned_text(ctx,spec_->authority.namespace_id),
+                    source_owned_text(ctx,ref->name)) : NULL;
+            if (storage_ && storage_->carrier==XR_INTERNAL_STORAGE_BUFFER) {
+                *type=XR_XIR_BUFFER_STORAGE;return true;
+            }
+        }
         if(source_text_same(ctx,NULL,ref->name,"Path")&&!source_native_type_shadowed(ctx,ref->name))
             return source_path_prelude_type(ctx,type);
         return source_nominal_type(ctx, ref->name, type);
@@ -2653,6 +2661,7 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
 #include "xxir_source_os.inc.c"
 #include "xxir_source_io.inc.c"
 #include "xxir_source_runtime.inc.c"
+#include "xxir_source_internal_storage.inc.c"
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
     uint32_t readers = ctx->repl_tail ? 1u : 0u, function_values=0;
@@ -2847,7 +2856,7 @@ static bool collect_declarations(SourceContext *ctx) {
         }
     }
     if (!source_library_metadata(ctx) || !source_history_bindings(ctx,true)) return false;
-    if (!source_io_types(ctx) || !source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
+    if (!source_io_types(ctx) || !source_internal_storage_declare(ctx) || !source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
         !source_interface_signatures(ctx) || !source_struct_fields(ctx) || !source_enum_fields(ctx) ||
         !source_class_field_capabilities(ctx)) return false;
     if (!source_struct_defaultability(ctx)) return false;

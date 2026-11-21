@@ -1,0 +1,3 @@
+// `__NetConnStorage` is the host-owned body of the standard `net` module.
+// User code must not be able to name the storage class.
+fn probe(x: __NetConnStorage) {}

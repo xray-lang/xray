@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Default declarations are received once; Source installs the scheduled IDs. */
+#include "xxir_native_opaque.h"
 static bool source_hir_nominal_declarations(SourceContext *ctx) {
     XrHirNominalImport *imports=ctx->nominals.count?source_alloc(ctx,ctx->nominals.count,sizeof(*imports)):NULL;
     if(ctx->nominals.count&&!imports)return false;
@@ -43,7 +44,10 @@ static bool source_struct_defaultability(SourceContext *ctx) {
 }
 static bool source_struct_constructors(SourceContext *ctx,uint32_t *next) {
     for(uint32_t d=0;d<ctx->nominals.count;++d) {
-        SourceName *symbol=ctx->nominal_sources[d];if(symbol->checked_library)continue;
+        SourceName *symbol=ctx->nominal_sources[d];
+        /* An opaque host-owned nominal has no source declaration and no
+         * constructor: the native query that produced it owns the body. */
+        if(symbol->checked_library || xir_native_opaque_nominal(ctx->nominals.declarations[d].native.native_id))continue;
         if(!source_request_poll(ctx,symbol->node))return false;
         XrHirNominalDefaults defaults=source_hir_nominal_defaults(ctx,d);if(ctx->diagnostic.status!=XR_XIR_OK)return false;
         if(!defaults.available)continue;

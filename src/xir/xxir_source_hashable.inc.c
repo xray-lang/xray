@@ -1,3 +1,4 @@
+#include "xxir_native_opaque.h"
 /* Builtin contract discovery supplies candidate IDs. Common signature and
  * obligation verification supplies their meaning, including conditional bounds. */
 static bool source_hashable_marker(SourceContext *ctx,const XrTypeRef *ref) {
@@ -31,10 +32,11 @@ static bool source_hashable_prepare(SourceContext *ctx) {
     for(uint32_t d=0;d<ctx->nominals.count;++d) {
         SourceName *owner=ctx->nominal_sources[d];
         if(owner->checked_library)continue;
-        if(ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT) {
-            /* This governed result carrier has no source AST or guest methods.
-             * A matching numeric tag alone does not authorize skipping it. */
-            if(!xir_file_stat_type(&ctx->types,owner->type))
+        if(xir_native_opaque_nominal(ctx->nominals.declarations[d].native.native_id)) {
+            /* These governed carriers have no source AST or guest methods. A
+             * matching numeric tag alone does not authorize skipping either. */
+            if(!xir_native_opaque_storage(ctx->nominals.declarations[d].native.native_id) &&
+                !xir_file_stat_type(&ctx->types,owner->type))
                 return source_fail(ctx,owner->node,XR_XIR_BAD_STRUCTURE,"Hashable native owner identity is malformed");
             continue;
         }

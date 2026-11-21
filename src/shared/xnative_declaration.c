@@ -13,6 +13,10 @@
 #include <string.h>
 #include "xnative_declarations.inc.c"
 
+XR_FUNC const XrInternalStorageType *xr_internal_storage_table(uint32_t *count) {
+    if (count) *count = (uint32_t) (sizeof(xr_internal_storage_types) / sizeof(*xr_internal_storage_types));
+    return xr_internal_storage_types;
+}
 XR_FUNC const XrNativeCallableDeclaration *xr_native_callable_by_id(uint32_t id) {
     for (size_t i = 0; i < sizeof(xr_native_callables) / sizeof(*xr_native_callables); ++i)
         if (id && xr_native_callables[i].id == id) return &xr_native_callables[i];
@@ -52,7 +56,10 @@ const XrNativeTypeDeclaration *xr_native_declaration_by_id(uint32_t id) {
         id == xr_native_utf8_error.id ? &xr_native_utf8_error :
         id == xr_native_cancelled.id ? &xr_native_cancelled :
         id == xr_native_task_result.id ? &xr_native_task_result :
-        id == xr_native_file_stat.id ? &xr_native_file_stat : NULL;
+        id == xr_native_file_stat.id ? &xr_native_file_stat :
+        id == xr_native_net_conn_storage.id ? &xr_native_net_conn_storage :
+        id == xr_native_net_listener_storage.id ? &xr_native_net_listener_storage :
+        id == xr_native_tls_context_storage.id ? &xr_native_tls_context_storage : NULL;
 }
 static bool native_text_equal(const char *left, const char *right) {
     return left && right && strcmp(left, right) == 0;
@@ -64,7 +71,8 @@ XR_FUNC const XrNativeTypeDeclaration *xr_native_declaration_by_name(const char 
         &xr_native_channel, &xr_native_recv, &xr_native_send_result, &xr_native_iterator,
         &xr_native_map, &xr_native_set, &xr_native_i64, &xr_native_f64,
         &xr_native_bool, &xr_native_rune, &xr_native_utf8_error, &xr_native_cancelled,
-        &xr_native_task_result, &xr_native_file_stat};
+        &xr_native_task_result, &xr_native_file_stat, &xr_native_net_conn_storage,
+        &xr_native_net_listener_storage, &xr_native_tls_context_storage};
     for (size_t i = 0; i < sizeof(declarations) / sizeof(*declarations); ++i) {
         if (native_text_equal(name, declarations[i]->name)) return declarations[i];
     }
@@ -84,7 +92,10 @@ XR_FUNC bool xr_native_declaration_validate(const XrNativeTypeDeclaration *decla
     if (!declaration ||
         !declaration->name || !declaration->source_path ||
         (!!declaration->parameter_count != !!declaration->parameter_names) ||
-        !declaration->identity || !declaration->members || !declaration->member_count ||
+        !declaration->identity ||
+        (declaration->kind == XR_NATIVE_DECLARATION_STORAGE
+            ? (declaration->members || declaration->member_count)
+            : (!declaration->members || !declaration->member_count)) ||
         declaration->member_count > 64) return false;
     const XrNativeTypeDeclaration *canonical = xr_native_declaration_by_id(declaration->id);
     if (!canonical || declaration->kind != canonical->kind ||

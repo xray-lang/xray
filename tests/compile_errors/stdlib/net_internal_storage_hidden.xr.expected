@@ -1,0 +1,5 @@
+# An internal storage class resolves only while its own standard module is
+# declared. Naming it from user code must fail, and the diagnostic must say
+# which module owns it so the rejection is actionable rather than generic.
+--> 3:13
+storage class '__NetConnStorage' is internal to the standard module 'net' and cannot be named here

@@ -18,7 +18,10 @@
 
 typedef enum XrNativeDeclarationKind {
     XR_NATIVE_DECLARATION_UNSPECIFIED, XR_NATIVE_DECLARATION_VALUE,
-    XR_NATIVE_DECLARATION_IDENTITY
+    XR_NATIVE_DECLARATION_IDENTITY,
+    /* An opaque storage class carries no fields: the host owns the body and the
+     * source layer only names the type. */
+    XR_NATIVE_DECLARATION_STORAGE
 } XrNativeDeclarationKind;
 typedef enum XrNativeDeclarationId { XR_NATIVE_DECLARATION_ARRAY = 1, XR_NATIVE_DECLARATION_STRING = 2,
     XR_NATIVE_DECLARATION_ATOMIC = 3, XR_NATIVE_DECLARATION_ORDERING = 4,
@@ -33,7 +36,10 @@ typedef enum XrNativeDeclarationId { XR_NATIVE_DECLARATION_ARRAY = 1, XR_NATIVE_
     XR_NATIVE_DECLARATION_UTF8_ERROR = 17,
     XR_NATIVE_DECLARATION_CANCELLED = 18,
     XR_NATIVE_DECLARATION_TASK_RESULT = 19,
-    XR_NATIVE_DECLARATION_FILE_STAT = 20 } XrNativeDeclarationId;
+    XR_NATIVE_DECLARATION_FILE_STAT = 20,
+    XR_NATIVE_DECLARATION_NET_CONN_STORAGE = 21,
+    XR_NATIVE_DECLARATION_NET_LISTENER_STORAGE = 22,
+    XR_NATIVE_DECLARATION_TLS_CONTEXT_STORAGE = 23 } XrNativeDeclarationId;
 typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_UNADMITTED, XR_NATIVE_TERM_UNIT, XR_NATIVE_TERM_I64,
     XR_NATIVE_TERM_ELEMENT, XR_NATIVE_TERM_STRING, XR_NATIVE_TERM_BOOL,
@@ -201,6 +207,19 @@ typedef struct XrNativeMemberDeclaration {
     uint32_t parameter_count;
     XrNativeTypeTerm result;
 } XrNativeMemberDeclaration;
+/* Internal storage classes are named only by the standard module that owns
+ * them. A buffer carrier names the distinguished buffer type; a nominal carrier
+ * names an opaque host-owned class. */
+typedef enum XrInternalStorageCarrier {
+    XR_INTERNAL_STORAGE_BUFFER, XR_INTERNAL_STORAGE_NOMINAL
+} XrInternalStorageCarrier;
+typedef struct XrInternalStorageType {
+    const char *module, *name;
+    uint32_t native_id;
+    XrInternalStorageCarrier carrier;
+} XrInternalStorageType;
+XR_FUNC const XrInternalStorageType *xr_internal_storage_table(uint32_t *count);
+
 typedef struct XrNativeTypeDeclaration {
     uint32_t id;
     XrNativeDeclarationKind kind;

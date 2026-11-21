@@ -1,3 +1,4 @@
+#include "xxir_native_opaque.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -35,6 +36,17 @@ static XrXirStatus nominal_native_verify(
     }
     if(record->native_id==XR_NATIVE_DECLARATION_FILE_STAT)
         return xir_file_stat_header(identity)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    if(xir_native_opaque_storage(record->native_id)) {
+        const XrNativeTypeDeclaration *storage=xr_native_declaration_by_id(record->native_id);
+        if(!storage || storage->kind!=XR_NATIVE_DECLARATION_STORAGE ||
+            !xr_native_declaration_validate(storage)) return XR_XIR_BAD_STRUCTURE;
+        if(identity->kind!=XR_XIR_NOMINAL_CLASS || identity->exported || identity->arity ||
+            identity->fields || identity->field_count || identity->variants || identity->variant_count ||
+            (identity->flags&~XR_XIR_NOMINAL_FINAL) ||
+            memcmp(record->source_fingerprint,storage->source_fingerprint.bytes,
+                sizeof(record->source_fingerprint))) return XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_OK;
+    }
     uint32_t arity=0, fields=0, variants=0;
     if (record->native_id==XR_NATIVE_DECLARATION_ORDERING) variants=5;
     else if (record->native_id==XR_NATIVE_DECLARATION_RECV) { arity=1; fields=1; variants=4; }

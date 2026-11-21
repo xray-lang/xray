@@ -1,3 +1,5 @@
+#include "xxir_native_opaque.h"
+#include "xxir_internal_storage.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -71,6 +73,18 @@ static const char *source_undefined_builtin_hint(SourceContext *ctx, const char 
 static bool source_nominal_type(SourceContext *ctx, const char *name, XrXirType *type) {
     SourceName *symbol = source_nominal_name(ctx, name);
     if (!symbol) {
+        /* An internal storage class is a legitimate type only inside the
+         * standard module the generated table assigns it to. Naming it from
+         * anywhere else fails with the visibility it actually has instead of
+         * the generic unresolved-name text. */
+        const XrInternalStorageType *storage = xir_internal_storage_lookup_name(name);
+        if (storage) {
+            char message[192];
+            snprintf(message, sizeof message,
+                "storage class '%s' is internal to the standard module '%s' and cannot be named here",
+                storage->name, storage->module);
+            return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, message);
+        }
         const char *hint = source_undefined_builtin_hint(ctx, name);
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE,
             hint ? hint : "name does not resolve to an admitted nominal type");
@@ -167,7 +181,7 @@ static bool source_nominal_constraints(SourceContext *ctx) {
     bool ok = true;
     for (uint32_t d = 0; d < ctx->nominals.count && ok; ++d) {
         SourceName *owner = ctx->nominal_sources[d];
-        if (owner->checked_library || ctx->nominals.declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT) continue;
+        if (owner->checked_library || xir_native_opaque_nominal(ctx->nominals.declarations[d].native.native_id)) continue;
         SourceNominalDeclaration syntax;
         if (!source_nominal_declaration(ctx,owner->node,&syntax)) { ok=false; break; }
         XrGenericParam **parameters = syntax.parameters;
@@ -254,7 +268,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
         for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
             if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
             if (symbol->kind != SOURCE_NOMINAL || symbol->checked_library ||
-                ctx->nominals.declarations[symbol->index].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
+                xir_native_opaque_nominal(ctx->nominals.declarations[symbol->index].native.native_id) || !symbol->node || (symbol->node->type != AST_STRUCT_DECL && symbol->node->type != AST_CLASS_DECL)) continue;
             ClassDeclNode *decl = symbol->node->type == AST_CLASS_DECL ? &symbol->node->as.class_decl : &symbol->node->as.struct_decl;
             const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];
             uint32_t prefix=nominal->parent?ctx->nominals.declarations[nominal->parent-1].field_count:0;

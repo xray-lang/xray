@@ -300,8 +300,15 @@ XR_FUNC XrXirStatus xr_hir_body_nominal_schedule(XrHirBody *body,uint32_t functi
             if (status != XR_XIR_OK)
                 break;
             HirBodyNominalDeclaration row=((HirBodyNominalDeclaration *)body->nominal_declarations.items)[d];
+            /* An internal storage class is a host-owned body, not a value the
+             * program may construct: only the native query that produces it
+             * creates one. Scheduling an implicit default constructor would
+             * claim an initializer the source layer cannot declare. */
+            const XrNativeTypeDeclaration *native =
+                xr_native_declaration_by_id(body->types->nominals->declarations[d].native.native_id);
             if(row.imported||row.explicit_initializer||available[d]||
                 body->types->nominals->declarations[d].native.native_id==XR_NATIVE_DECLARATION_FILE_STAT ||
+                (native && native->kind==XR_NATIVE_DECLARATION_STORAGE) ||
                 (row.kind!=XR_XIR_NOMINAL_STRUCT&&row.kind!=XR_XIR_NOMINAL_CLASS))continue;
             bool ready=true;
             for(uint32_t f=0;f<row.count;++f) {
