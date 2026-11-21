@@ -5,7 +5,7 @@ class Token implements Hashable {
         this.value = value
     }
 
-    operator==(other: Token) -> bool {
+    equals(other: Token) -> bool {
         return this.value == other.value
     }
 
