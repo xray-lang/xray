@@ -679,7 +679,10 @@ static bool effect_check_pending(EffectCheckBuild *build, uint32_t function,
     const uint32_t *arguments = &receiver;
     uint32_t argument_count = 1;
     if (kind == EFFECT_CHECK_TUPLE_FIELD) {
-        pending.receiver = roots->function[function].contents + receiver;
+        /* The receiver is already the operand's value node. TUPLE_NEW marks its
+         * own contents node as the tuple, and that node shares no index space
+         * with values, so the walk must start at the value and follow the alias
+         * TUPLE_NEW records to its contents. */
         argument_count = 0;
     } else if (kind != EFFECT_CHECK_CLASS_DISPATCH) {
         if (op->args[0] > body->operand_count || op->args[1] > body->operand_count - op->args[0]) {
@@ -1104,6 +1107,9 @@ static bool effect_check_instruction(EffectCheckBuild *build, uint32_t f, uint32
     case XR_XIR_ARRAY_NEW: case XR_XIR_TUPLE_NEW: {
         uint32_t contents = row.contents + function->parameter_count + i;
         build->roots->node[contents].tuple = op->op == XR_XIR_TUPLE_NEW;
+        /* The aggregate's own value reaches the element edges only through its
+         * contents node, which shares no index space with values. */
+        if (!effect_check_alias(build, value, contents)) return false;
         if (op->args[0] > function->operand_count ||
             op->args[1] > function->operand_count - op->args[0]) return false;
         for (uint32_t p = 0; p < op->args[1]; ++p) {
