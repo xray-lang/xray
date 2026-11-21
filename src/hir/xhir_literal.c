@@ -58,13 +58,13 @@ XR_FUNC XrXirStatus xr_hir_literal_check(const XrXirTypes *types,const XrHirLite
             if(xr_xir_float_bits(member)) {floating=member;++floats;}
         }
         if(input->decimal) {
-            if(floats>1)return literal_failure(reason,XR_XIR_BAD_TYPE,"ambiguous: float literal has more than one data-union float member");
+            if(floats>1)return literal_failure(reason,XR_XIR_BAD_TYPE,"E0328: ambiguous: float literal has more than one data-union float member; annotate the value with one member type");
             if(!floats)return literal_failure(reason,XR_XIR_BAD_TYPE,"numeric literal has no member in its data-union context");
             expected=floating;
         } else {
-            if(integers>1)return literal_failure(reason,XR_XIR_BAD_TYPE,"ambiguous: integer literal has more than one data-union integer member");
+            if(integers>1)return literal_failure(reason,XR_XIR_BAD_TYPE,"E0328: ambiguous: integer literal has more than one data-union integer member; annotate the value with one member type");
             if(integers==1)expected=integer;
-            else if(floats>1)return literal_failure(reason,XR_XIR_BAD_TYPE,"ambiguous: integer literal has more than one data-union float member");
+            else if(floats>1)return literal_failure(reason,XR_XIR_BAD_TYPE,"E0328: ambiguous: integer literal has more than one data-union float member; annotate the value with one member type");
             else if(floats==1)expected=floating;
             else return literal_failure(reason,XR_XIR_BAD_TYPE,"numeric literal has no member in its data-union context");
         }

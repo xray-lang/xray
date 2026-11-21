@@ -109,13 +109,13 @@
   },
   "003-2-type-system-example-017": {
     "fence": "xray",
-    "code": "var a: i64 | f64 = 1        // 精确匹配 i64\nvar b: i64 | f64 = 1.0      // 精确匹配 f64\nvar c: i32 | string = 7       // 唯一整数族成员：i32\nvar d: f32 | string = 1.5     // 唯一浮点族成员：f32",
+    "code": "var a: i64 | f64 = 1        // 整数字面量在整数族中选中 i64\nvar b: i64 | f64 = 1.0      // 浮点字面量在浮点族中选中 f64\nvar c: i32 | string = 7       // 唯一的整数族成员：i32\nvar d: f32 | string = 1.5     // 唯一的浮点族成员：f32",
     "trivia": {
       "en": {
-        "8": "        // exact match: i64\n",
-        "16": "      // exact match: f64\n",
+        "8": "        // integer literal selects i64 within the integer family\n",
+        "16": "      // float literal selects f64 within the float family\n",
         "24": "       // sole integer-family member: i32\n",
-        "32": "     // sole f64-family member: f32"
+        "32": "     // sole float-family member: f32"
       }
     }
   },

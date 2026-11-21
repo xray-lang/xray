@@ -50,7 +50,7 @@ from expected_format import ExpectedFormatError, parse_expected  # noqa: E402
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
 SPEC_FILE = PROJECT_DIR / "spec" / "source" / "sections" / "019-18-error-codes.md"
-HEADER_FILE = PROJECT_DIR / "src" / "runtime" / "xerror_codes.h"
+HEADER_FILE = PROJECT_DIR / "src" / "shared" / "xerror_codes.h"
 
 # Spec tables open every row with the code in backticks: `| `E0101` | ... |`.
 # The chapter carries a Chinese and an English copy of the same tables, so the
@@ -127,12 +127,16 @@ EXEMPT = {
     "E0431": "runtime: src/vm/xvm_dispatch_collection.inc.c:2009, src/aot/xrt_coll.h:2255",
     "E0432": "runtime: src/runtime/object/xiterator.c:626, src/aot/xrt_gen_iter.c:73",
     "E0433": "runtime: String slice panic in src/xir/xxir_vm.c, xxir_emit_c.c and xxir_ctfe_string_owned.inc.c; exercised by test_xir_intrinsic_registry and its generated-C consumer",
+    "E0434": "dead: every statically known duplicate Map key is rejected at compile time as E0325 "
+             "(src/xir/xxir_source_collection_key.inc.c:106); the declared runtime duplicate code has no emission point",
     "E0440": "runtime: src/vm/xvm_dispatch_helpers.h:258",
     "E0441": "runtime: src/vm/xvm_dispatch_collection.inc.c:921",
     "E0442": "runtime: text-spliced by Xi lowering, src/ir/xi_lower_stmt.c:1708",
     "E0443": "runtime: src/shared/xr_error_core.h:76, src/aot/xrt_exception.h:182",
     "E0444": "runtime: src/vm/xvm_dispatch_call.inc.c:192, src/aot/xrt_exception.h:246",
     "E0445": "runtime: assertion panic detail in src/xir/xxir_fault.h and src/xir/xxir_call.c",
+    "E0446": "runtime: a failed `try!` becomes the panic XR_XIR_PANIC_TRY_ASSERT 446u "
+             "(src/xir/xxir_fault.h:36), rendered by src/xir/xxir_panic_value.inc.c:126",
     "E0450": "runtime: src/vm/xvm_dispatch_call.inc.c:304",
     "E0451": "runtime: src/aot/xrt_coll.h:6900, src/aot/xrt_core_freestanding.h:1104",
     "E0452": "dead: reserved invalid argument value code; no macro or numeric diagnostic emitter in src/",

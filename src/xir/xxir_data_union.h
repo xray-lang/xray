@@ -20,9 +20,27 @@ XR_FUNC bool xr_xir_data_union_member_index(const XrXirTypes *,XrXirType,XrXirTy
 /* True when every member is one Class identity, so the value is one nominal
  * handle and the runtime class identity is its discriminant (no stored tag). */
 XR_FUNC bool xr_xir_data_union_all_classes(const XrXirTypes *,XrXirType);
+/* Why a member set was rejected. ACCEPTED also covers failures that are not
+ * about a member (budget, overflow, cancellation). */
+typedef enum XrXirDataUnionRejection {
+    XR_XIR_DATA_UNION_ACCEPTED = 0,
+    XR_XIR_DATA_UNION_MEMBER_NOT_CLOSED,
+    XR_XIR_DATA_UNION_MEMBER_TYPE_PARAMETER,
+    XR_XIR_DATA_UNION_MEMBER_ANCESTOR
+} XrXirDataUnionRejection;
+/* The offending member, and for ANCESTOR the second member of the related
+ * pair. Otherwise `related` is XR_XIR_UNIT. */
+typedef struct XrXirDataUnionRejectionDetail {
+    XrXirDataUnionRejection reason;
+    XrXirType member, related;
+} XrXirDataUnionRejectionDetail;
 /* All facts are returned by value. Failure leaves output unchanged. */
 XR_FUNC XrXirStatus xr_xir_compile_data_union(const XrXirCompileContext *,
     const XrXirTypes *,const XrXirType *,uint32_t,XrCompileRequestControl *,XrXirDataUnion *);
+/* Same admission, with the rejection classified for the diagnostic layer. */
+XR_FUNC XrXirStatus xr_xir_compile_data_union_detailed(const XrXirCompileContext *,
+    const XrXirTypes *,const XrXirType *,uint32_t,XrCompileRequestControl *,XrXirDataUnion *,
+    XrXirDataUnionRejectionDetail *);
 /* Auto-wrap: the value's static type must be exactly one member. There is no
  * implicit numeric conversion and no subclass upcast. Literal member selection
  * happens before this typed-expression relation, in the literal checker. */

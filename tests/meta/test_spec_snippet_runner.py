@@ -75,7 +75,7 @@ class ModeTests(unittest.TestCase):
     def test_error_code_line_primary_and_no_crash(self):
         item = block("@error=E0326", 'var x = [1, "x"] // error')
         for code, line, extra, exit_code, expected in [("E0326", 1, "", 1, "ERROR_PASS"),
-                ("E0390", 1, "", 1, "ERROR_FAIL"), ("E0326", 2, "", 1, "ERROR_FAIL"),
+                ("E0328", 1, "", 1, "ERROR_FAIL"), ("E0326", 2, "", 1, "ERROR_FAIL"),
                 ("E0326", 1, "second", 1, "ERROR_FAIL"), ("E0326", 1, "", -1, "ERROR_FAIL"),
                 ("E0326", 1, "", 0xC0000005, "ERROR_FAIL"),
                 ("E0326", 1, "", 0, "ERROR_FAIL")]:

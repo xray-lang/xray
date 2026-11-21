@@ -1,0 +1,5 @@
+// A union value does not convert to another union implicitly, not even when
+// every source member also belongs to the target. Rebuild it with `match`.
+var narrow: i64 | string = 1
+var wide: i64 | string | bool = narrow
+print(wide is i64)

@@ -1,0 +1,2 @@
+--> 3:14 E0326
+Array literal elements have different types: i64 and string

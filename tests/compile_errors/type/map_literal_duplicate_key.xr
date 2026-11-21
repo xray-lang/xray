@@ -1,0 +1,4 @@
+// A statically determined duplicate key is rejected at compile time; the note
+// names the first occurrence. Runtime duplicates stay E0434.
+var m = { "a": 1, "a": 2 }
+print(m)

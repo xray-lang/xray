@@ -1330,11 +1330,18 @@ v = "hello"             // OK
 ```
 <!-- /xr-source -->
 
-Constraints:
-- Up to **6 members** (checked at compile time; over the limit → error).
-- Members must not be subtypes of each other. **The current implementation rejects instead**: two Class members with an inheritance relation in either direction make the declaration `E0390`; they are not normalized to the ancestor as this section's target design specifies. Rationale: a Class-identity union is one nominal handle with no stored tag byte, so discrimination reads only the object header's immutable per-class `ops`. Silently normalizing at the declaration site would change the binding's type, the set of members `is` can observe, and the module storage layout, while implicit conversion between Class levels is not yet available in LIR, so the normalized-away member would be unreachable. **Follow-up**: merge ancestor-chain members during type interning, add declaration, layout, `is` and module-storage tests for `A | B` where `B` inherits `A`, and only then downgrade this rejection to normalization; until then the compiler stays fail-closed.
-- **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
-- Working with a union value requires `match` or `is`-based narrowing:
+An anonymous union `A | B` is a compiler-synthesized enum: the type itself has no name, each member is a one-field variant, and the representation is the same tagged sum type a named enum uses.
+
+**Type identity and display**
+- Members are ordered canonically by type identity, independent of the order they were written. The same member set is the same type in every module and matches the precompiled standard library. Diagnostics, `typeName`, the IDE and the reference render it as `A | B`, listing members in canonical order.
+- `T | T` normalizes to `T`; `T | null` normalizes to `T?`, and `A | B | null` normalizes to `(A | B)?`. `null` is not a member, and an existing Optional member is neither decomposed nor flattened.
+
+**Members**
+- There is no member-count limit. One numeric family may contribute several members: `i16 | i32` and `f32 | f64` are legal, and the tag distinguishes them.
+- Every member must be a closed scalar, `string`, or a Class identity. A member must not carry a type parameter: writing `T | U` in a generic function, generic field, or generic signature is a compile error, and generic code must use a named enum instead (E0399).
+- Members that are subtypes of each other are rejected, including a Class and an interface it implements; the error asks you to declare the parent type instead (E0352). An Optional used as a member stays one distinct member: `i64? | string` keeps `Optional<i64>` and `string`; it neither decomposes into `i64 | string | null` nor normalizes to `(i64 | string)?`.
+
+Working with a union value requires `match` or `is`-based narrowing:
 
 <!-- xr-source:example 003-2-type-system-example-016 -->
 ```xray @fragment
@@ -1346,26 +1353,28 @@ match (v) {
 ```
 <!-- /xr-source -->
 
-**Member selection**: a union value carries the member selected where it was assigned. The rule is deterministic and independent of the order the members were written:
+**Auto-wrap** happens only where the target type is a union (variable declaration, assignment, argument, return value, field initialization). The rule is deterministic and independent of the order the members were written:
 
-- The source type is **exactly** one member → that member is selected.
-- Otherwise the single member reachable by an implicit conversion from §2.10.1 is selected. Discriminability guarantees at most one member per numeric family, so at most one member qualifies.
-- A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the f64-family member when the union has none (matching "an integer literal types into a unique floating context"); a f64 literal selects the f64-family member. The literal must be exactly representable in the selected member.
+- The value's static type is **exactly** one member → it is wrapped as that member.
+- A numeric literal has no fixed type: an integer literal types into the integer-family members, and is selected when exactly one integer-family member exists; when the union has no integer member, the ordinary literal rule types it into the sole float-family member. A float literal likewise considers only float-family members. More than one candidate in the family is reported as ambiguous (E0328).
+- Anything else is a type mismatch (E0352): there is no implicit numeric conversion and no subclass upcast.
 
 <!-- xr-source:example 003-2-type-system-example-017 -->
 ```xray
-var a: i64 | f64 = 1        // exact match: i64
-var b: i64 | f64 = 1.0      // exact match: f64
+var a: i64 | f64 = 1        // integer literal selects i64 within the integer family
+var b: i64 | f64 = 1.0      // float literal selects f64 within the float family
 var c: i32 | string = 7       // sole integer-family member: i32
-var d: f32 | string = 1.5     // sole f64-family member: f32
+var d: f32 | string = 1.5     // sole float-family member: f32
 ```
 <!-- /xr-source -->
 
-`is T` asks about the runtime value: for a fixed-width numeric type it asks whether the value is exactly representable in `T`, because an erased value does not carry its width and that is the only answerable form. Inside a well-formed union the selected member always passes its own `is` and every other member always fails, so the arms are mutually exclusive.
+**No implicit conversion exists between unions**, not even a subset widening to a superset (E0329); rebuild the value with `match`, one arm per member. A union also does not convert implicitly to one of its members; narrow it first. There is no `as` form for unions yet.
 
-**Special cases**:
-- `i64 | null` normalizes to `i64?`.
-- An Optional inside a union remains one distinct member: `i64? | string` keeps `Optional<i64>` and `string`; it neither decomposes into `i64 | string | null` nor normalizes to `(i64 | string)?`.
+**Narrowing and matching**
+- `v is T` is variant discrimination (a tag comparison) when `T` is a member of `v`; when `T` is not a member it is a compile error.
+- `match (v) { is A => …, is B => … }` dispatches by variant; a missing member is rejected by the exhaustiveness rules of Task334. The narrowed binding has exactly the member's type.
+
+Named enums keep explicit construction; auto-wrap is not extended to named enums.
 
 ### 2.7 Tuple Types
 
@@ -8911,6 +8920,8 @@ Ordinary entries follow the header; the error-signature numbers below are regist
 | `E0325` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY` | Two statically determined explicit Map literal keys are equivalent |
 | `E0326` | `XR_ERR_COLLECTION_LITERAL_TYPES` | A context-free collection literal has incompatible element, key or value types |
 | `E0327` | `XR_ERR_NAMED_ARGUMENT_BINDING` | Invalid named argument binding: unknown, duplicate, order, rest or indirect call |
+| `E0328` | `XR_ERR_ANALYZE_UNION_AMBIGUOUS` | a numeric literal fits several union members of its own numeric family; annotate the value with one member type (see §2.6) |
+| `E0329` | `XR_ERR_ANALYZE_UNION_CONVERSION` | implicit conversion between union types, including subset to superset; rebuild it with `match` (see §2.6) |
 
 #### Error-signature diagnostics (registered numbers, implementation pending)
 
@@ -8970,7 +8981,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | an error can escape a `defer` cleanup block (see §8.3.1) |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |
-| `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (two members of the same numeric family) |
+| `E0390` | — | **Retired**: a synthesized enum stores a tag per member, so two members of one numeric family are no longer rejected; the old rejections use `E0328`/`E0329`/`E0399`, and this number is not reused |
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | reserved legacy analyzer move diagnostic, with the current movement contract in §2.14.5 and entry-point qualification in §17 |
 | `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §4.9 / §8.3.1 |
 | `E0393` | `XR_ERR_ANALYZE_CLOSURE_CYCLE` | Closure and captured object form a reference cycle |
@@ -8979,6 +8990,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | Read of a moved or possibly moved binding |
 | `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | Move capability or constraint violation |
 | `E0398` | `XR_ERR_ANALYZE_FUNCTION_ESCAPE` | A non-escaping function parameter or capturing closure crosses its invocation |
+| `E0399` | `XR_ERR_ANALYZE_UNION_TYPE_PARAMETER` | a union member carries a type parameter; use a named enum in generic code (see §2.6) |
 
 ### 18.3 Runtime
 

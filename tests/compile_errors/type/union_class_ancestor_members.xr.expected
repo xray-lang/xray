@@ -1,1 +1,2 @@
---> 11:8 E0390
+--> 11:8 E0352
+data union members have an inheritance relation; declare their common ancestor type instead

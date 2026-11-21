@@ -56,6 +56,8 @@ order: 019
 | `E0325` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY` | Map 字面量中静态可确定的两个显式键重复 |
 | `E0326` | `XR_ERR_COLLECTION_LITERAL_TYPES` | 无上下文的集合字面量无法取得同一元素、键或值类型 |
 | `E0327` | `XR_ERR_NAMED_ARGUMENT_BINDING` | 命名实参绑定错误：未知、重复、顺序、rest 或间接调用 |
+| `E0328` | `XR_ERR_ANALYZE_UNION_AMBIGUOUS` | 数值字面量在同一数值族中命中多个 union 成员；为值标注一个成员类型（见 §2.6）|
+| `E0329` | `XR_ERR_ANALYZE_UNION_CONVERSION` | union 之间隐式转换（含子集到超集）；用 `match` 重建（见 §2.6）|
 
 #### 错误签名诊断（编号已登记，实现待接通）
 
@@ -115,7 +117,7 @@ order: 019
 | `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | 错误可从 `defer` cleanup 块逃逸（见 §8.3.1） |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | 程序超出单态化实例预算（广度）；每个实例克隆一份完整声明——见 §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | 单态化嵌套超出深度预算；多态递归（`f<T>` 请求 `f<Box<T>>`）没有有限特化，必然触发——见 §9.4 |
-| `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union 成员在运行期无法判别（同一数值族出现多个成员）|
+| `E0390` | — | **已退役**：合成 enum 为每个成员保存 tag，同一数值族出现多个成员不再被拒绝；旧拒绝改用 `E0328`／`E0329`／`E0399`，编号不复用 |
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | 保留的旧分析器移动诊断编号；当前移动合同见 §2.14.5，具体入口准入见 §17|
 | `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | defer 体抵达调度器挂起点或创建任务——见 §4.9 / §8.3.1 |
 | `E0393` | `XR_ERR_ANALYZE_CLOSURE_CYCLE` | 闭包与捕获对象形成引用环 |
@@ -124,6 +126,7 @@ order: 019
 | `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | 读取已移动或可能已移动的绑定 |
 | `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | move 的能力或约束不满足 |
 | `E0398` | `XR_ERR_ANALYZE_FUNCTION_ESCAPE` | 不逃逸函数参数或捕获它的闭包跨调用保存、返回或转交 |
+| `E0399` | `XR_ERR_ANALYZE_UNION_TYPE_PARAMETER` | union 成员含类型参数；泛型代码改用具名 enum（见 §2.6）|
 
 ### 18.3 运行时
 
@@ -264,6 +267,8 @@ Ordinary entries follow the header; the error-signature numbers below are regist
 | `E0325` | `XR_ERR_MAP_LITERAL_DUPLICATE_KEY` | Two statically determined explicit Map literal keys are equivalent |
 | `E0326` | `XR_ERR_COLLECTION_LITERAL_TYPES` | A context-free collection literal has incompatible element, key or value types |
 | `E0327` | `XR_ERR_NAMED_ARGUMENT_BINDING` | Invalid named argument binding: unknown, duplicate, order, rest or indirect call |
+| `E0328` | `XR_ERR_ANALYZE_UNION_AMBIGUOUS` | a numeric literal fits several union members of its own numeric family; annotate the value with one member type (see §2.6) |
+| `E0329` | `XR_ERR_ANALYZE_UNION_CONVERSION` | implicit conversion between union types, including subset to superset; rebuild it with `match` (see §2.6) |
 
 #### Error-signature diagnostics (registered numbers, implementation pending)
 
@@ -323,7 +328,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | an error can escape a `defer` cleanup block (see §8.3.1) |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |
-| `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (two members of the same numeric family) |
+| `E0390` | — | **Retired**: a synthesized enum stores a tag per member, so two members of one numeric family are no longer rejected; the old rejections use `E0328`/`E0329`/`E0399`, and this number is not reused |
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | reserved legacy analyzer move diagnostic, with the current movement contract in §2.14.5 and entry-point qualification in §17 |
 | `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §4.9 / §8.3.1 |
 | `E0393` | `XR_ERR_ANALYZE_CLOSURE_CYCLE` | Closure and captured object form a reference cycle |
@@ -332,6 +337,7 @@ These numbers follow the Task329 §2.9 decision. Header definitions and position
 | `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | Read of a moved or possibly moved binding |
 | `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | Move capability or constraint violation |
 | `E0398` | `XR_ERR_ANALYZE_FUNCTION_ESCAPE` | A non-escaping function parameter or capturing closure crosses its invocation |
+| `E0399` | `XR_ERR_ANALYZE_UNION_TYPE_PARAMETER` | a union member carries a type parameter; use a named enum in generic code (see §2.6) |
 
 ### 18.3 Runtime
 

@@ -1,0 +1,5 @@
+// A non-escaping function parameter may not leave its invocation; returning it
+// is a compile error. Declaring it `escaping` states the ownership transfer.
+fn apply(f: fn() -> i64) -> fn() -> i64 {
+    return f
+}

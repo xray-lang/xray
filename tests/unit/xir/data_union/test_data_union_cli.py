@@ -43,8 +43,11 @@ CASES = [
      "not exactly an admitted data-union member"),
     ("signedness", 'var small: u8 = 7\nvar value: i32 | string = small\n', False,
      "not exactly an admitted data-union member"),
-    ("error_member", 'var value: Error | i64 = 7\n', False, "E0390"),
-    ("nominal_member", 'struct Value { number: i64 }\nvar value: Value | i64 = 7\n', False, "E0390"),
+    ("error_member", 'var value: Error | i64 = 7\n', False, "E0352"),
+    ("nominal_member", 'struct Value { number: i64 }\nvar value: Value | i64 = 7\n', False, "E0352"),
+    ("type_parameter_member", 'fn wrap<T>(x: T | string) {}\n', False, "E0399"),
+    ("union_conversion", 'var narrow: i64 | string = 1\nvar wide: i64 | string | bool = narrow\n', False, "E0329"),
+    ("ambiguous_literal_code", 'var value: i16 | i32 = 5\n', False, "E0328"),
     ("implicit_heterogeneous", 'var values = [1, "hello"]\n', False, "E0326"),
     ("error_union_unchanged", 'enum Left { Fault }\nenum Right { Fault }\nfn fail() throws(Left | Right) { throw Left.Fault }\n', True, ""),
 ]

@@ -57,6 +57,14 @@
 #define XR_ERR_MAP_LITERAL_DUPLICATE_KEY 325
 #define XR_ERR_COLLECTION_LITERAL_TYPES 326
 #define XR_ERR_NAMED_ARGUMENT_BINDING 327
+/* A bare numeric literal fits more than one data-union member of its own
+ * numeric family. The union does not guess a member: annotate the value with
+ * an explicit member type, or write one of the members as a typed value. */
+#define XR_ERR_ANALYZE_UNION_AMBIGUOUS 328
+/* A union value does not convert implicitly to another union type, including
+ * a subset widening to a superset. Rebuild it with `match`, one arm per
+ * member. */
+#define XR_ERR_ANALYZE_UNION_CONVERSION 329
 
 /* ---- Error-signature diagnostics (E03xx, 330-349) ---- */
 #define XR_ERR_ANALYZE_TRY_REQUIRED 330
@@ -122,7 +130,9 @@
  * usually means a generic instantiates itself at an ever-larger type, which
  * has no finite monomorphization. */
 #define XR_ERR_ANALYZE_MONO_DEPTH 389
-#define XR_ERR_ANALYZE_UNION_INDISCRIMINABLE 390
+/* E0390 (XR_ERR_ANALYZE_UNION_INDISCRIMINABLE) is retired: a synthesized enum
+ * tags every member, so two members of one numeric family are legal. Its old
+ * rejections now use E0328, E0329 or E0399. */
 /* An ownership root failed the uniqueness evidence `move` requires: a live
  * local alias, a root published into a heap graph, unknown provenance, or an
  * incomplete storage plan.  The message names which axis failed. */
@@ -158,6 +168,10 @@
 #define XR_ERR_ANALYZE_MOVE_CAPABILITY 397
 /* A function parameter value or a closure retaining it crosses its invocation. */
 #define XR_ERR_ANALYZE_FUNCTION_ESCAPE 398
+/* A data-union member carries a type parameter. Instantiating the union could
+ * merge members and change the layout or the meaning of `is`; generic code
+ * must use a named enum instead. */
+#define XR_ERR_ANALYZE_UNION_TYPE_PARAMETER 399
 
 /* ---- Runtime type errors (E04xx, 400-406) ---- */
 #define XR_ERR_RUNTIME 400

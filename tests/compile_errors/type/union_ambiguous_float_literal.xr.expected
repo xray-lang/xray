@@ -1,2 +1,2 @@
---> 2:24
-ambiguous: float literal has more than one data-union float member
+--> 2:24 E0328
+ambiguous: float literal has more than one data-union float member; annotate the value with one member type

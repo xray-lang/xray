@@ -1,0 +1,2 @@
+--> 3:15 E0399
+a data union member carries a type parameter; declare a named enum in generic code

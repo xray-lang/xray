@@ -166,10 +166,28 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
             members[p]=node.parameters[p].type;
         }
         XrXirDataUnion normalized={0};
-        XrXirStatus status=xr_xir_compile_data_union(&ctx->compile,&ctx->types,members,node.parameter_count,ctx->request,&normalized);
+        XrXirDataUnionRejectionDetail rejection={0};
+        XrXirStatus status=xr_xir_compile_data_union_detailed(&ctx->compile,&ctx->types,members,
+            node.parameter_count,ctx->request,&normalized,&rejection);
         source_retire_array(ctx,members);
-        if(status!=XR_XIR_OK)
-            return source_fail(ctx,NULL,status,"E0390: data union members must be closed scalar, string or unrelated Class identities without type parameters");
+        if(status!=XR_XIR_OK) {
+            const char *message;
+            switch(rejection.reason) {
+            case XR_XIR_DATA_UNION_MEMBER_TYPE_PARAMETER:
+                message="E0399: a data union member carries a type parameter; declare a named enum in generic code";
+                break;
+            case XR_XIR_DATA_UNION_MEMBER_ANCESTOR:
+                message="E0352: data union members have an inheritance relation; declare their common ancestor type instead";
+                break;
+            case XR_XIR_DATA_UNION_MEMBER_NOT_CLOSED:
+                message="E0352: a data union member must be a closed scalar or string type, or a Class identity";
+                break;
+            default:
+                message="data union normalization failed";
+                break;
+            }
+            return source_fail(ctx,NULL,status,message);
+        }
         if(normalized.count==1) {
             XrXirType scalar=normalized.members[0];
             xr_compile_resources_free(normalized.members);

@@ -1,2 +1,2 @@
---> 5:22
-ambiguous: integer literal has more than one data-union integer member
+--> 5:22 E0328
+ambiguous: integer literal has more than one data-union integer member; annotate the value with one member type

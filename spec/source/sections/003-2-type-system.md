@@ -603,11 +603,18 @@ v = "hello"             // OK
 ```
 <!-- /xr-source -->
 
-约束：
-- 最多 **6 个成员**（编译期检查；超限 → 错误）。
-- 成员互不为彼此的子类型。**当前实现按拒绝处理**：两个 Class 成员若存在继承关系（任一方向），声明即报 `E0390`，而不是按本节原目标规范化成祖先类型。理由：Class 身份 union 的运行期表示是单个 nominal 句柄（不存 tag 字节），判别只看对象头里不可变的 per-class `ops`；在声明处静默规范化会同时改变绑定类型、`is` 的成员集合和模块存储布局，而 Class 层级之间的隐式转换尚未在 LIR 打通，被规范化掉的成员会成为不可达分支。**后续计划**：先在类型 intern 阶段按祖先链合并成员，并补齐 `A | B`（`B` 继承 `A`）的声明、布局、`is` 与模块存储测试，再把该拒绝降级为规范化；在此之前保持 fail-closed。
-- **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | f64` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
-- 处理 union 值需用 `match` 或 `is` 窄化：
+匿名 union `A | B` 是编译器生成的 enum：类型本身没有名字，每个成员对应一个单字段变体，底层与具名 enum 共用同一种带 tag 的和类型表示。
+
+**类型身份与显示**
+- 成员按类型身份排成规范顺序，与书写顺序无关；成员集合相同即同一类型，跨模块与预编译标准库一致。诊断、`typeName`、IDE 与文档中显示为 `A | B`，成员按规范顺序列出。
+- `T | T` 规范化为 `T`；`T | null` 规范化为 `T?`，`A | B | null` 规范化为 `(A | B)?`；`null` 不进入成员集合，已有 Optional 成员不被拆开或展平。
+
+**成员**
+- 成员数不设上限；同一数值族可以有多个成员，`i16 | i32`、`f32 | f64` 合法，tag 区分同族成员。
+- 每个成员必须是封闭标量、`string` 或 Class 身份。成员不得含类型参数：泛型函数、泛型类型的字段与签名中写 `T | U` 是编译错误，泛型代码改用具名 enum（E0399）。
+- 互为子类型的成员一律拒绝，包括 Class 与它实现的接口；报错提示改写为父类型（E0352）。Optional 作为成员时保持为一个成员：`i64? | string` 的成员是 `Optional<i64>` 与 `string`，不拆成 `i64 | string | null`，也不规范化为 `(i64 | string)?`。
+
+处理 union 值需用 `match` 或 `is` 窄化：
 
 <!-- xr-source:example 003-2-type-system-example-016 -->
 ```xray @fragment
@@ -619,26 +626,28 @@ match (v) {
 ```
 <!-- /xr-source -->
 
-**成员选择**：union 值携带它被赋值时选定的成员。选择规则是确定的，与成员书写顺序无关：
+**自动包装**只发生在目标类型是 union 的位置（变量声明、赋值、实参、返回值、字段初始化），规则是确定的，与成员书写顺序无关：
 
-- 源类型与某个成员**完全相同** → 选该成员。
-- 否则选唯一一个可经 §2.10.1 隐式转换到达的成员。可判别性规则保证每个数值族至多一个成员，所以这个成员至多有一个。
-- 数值字面量按自己的族选：整数字面量优先选整数族成员，union 没有整数族成员时选浮点族成员（与"整数字面量定型进唯一浮点上下文"一致）；浮点字面量选浮点族成员。字面量必须能被目标精确表示。
+- 值的静态类型与某个成员**完全一致** → 包装为该成员。
+- 数值字面量没有固定类型：整数字面量在整数族成员中定型，恰有一个整数族成员时选中；没有整数族成员时按普通字面量规则定型进唯一的浮点族成员。浮点字面量同理只看浮点族成员。同族候选多于一个时报“不明确”（E0328）。
+- 其余情况报类型不匹配（E0352）：不做隐式数值转换，也不做子类上转。
 
 <!-- xr-source:example 003-2-type-system-example-017 -->
 ```xray
-var a: i64 | f64 = 1        // 精确匹配 i64
-var b: i64 | f64 = 1.0      // 精确匹配 f64
-var c: i32 | string = 7       // 唯一整数族成员：i32
-var d: f32 | string = 1.5     // 唯一浮点族成员：f32
+var a: i64 | f64 = 1        // 整数字面量在整数族中选中 i64
+var b: i64 | f64 = 1.0      // 浮点字面量在浮点族中选中 f64
+var c: i32 | string = 7       // 唯一的整数族成员：i32
+var d: f32 | string = 1.5     // 唯一的浮点族成员：f32
 ```
 <!-- /xr-source -->
 
-`is T` 检查的是运行期值：对定宽数值类型，它问的是"该值能否被 `T` 精确表示"——擦除后的值不保存位宽，这是唯一可回答的形式。在一个合法 union 内，选定成员总能通过它自己的 `is`，其余成员一定失败，因此各分支互斥。
+**union 之间不做隐式转换**，包括子集到超集（E0329）；需要转换时用 `match` 重建，每个成员一个分支。union 也不隐式转换为某个成员类型，须先窄化。当前不为 union 提供 `as` 写法。
 
-**特殊化**：
-- `i64 | null` 规范化为 `i64?`。
-- `T?` 出现在 union 时保留独立 Optional 成员：`i64? | string` 保留 `Optional<i64>` 与 `string`，不拆成 `i64 | string | null`，也不规范化为 `(i64 | string)?`。
+**窄化与匹配**
+- `v is T`：`T` 是 `v` 的成员时为变体判别（比较 tag）；`T` 不是成员时是编译错误。
+- `match (v) { is A => …, is B => … }` 按变体分派；缺少成员时按 Task334 的穷尽规则报错。窄化后的绑定类型就是该成员类型。
+
+具名 enum 保留显式构造；自动包装规则不扩展到具名 enum。
 
 ### 2.7 元组类型
 
@@ -1756,11 +1765,18 @@ v = "hello"             // OK
 ```
 <!-- /xr-source -->
 
-Constraints:
-- Up to **6 members** (checked at compile time; over the limit → error).
-- Members must not be subtypes of each other. **The current implementation rejects instead**: two Class members with an inheritance relation in either direction make the declaration `E0390`; they are not normalized to the ancestor as this section's target design specifies. Rationale: a Class-identity union is one nominal handle with no stored tag byte, so discrimination reads only the object header's immutable per-class `ops`. Silently normalizing at the declaration site would change the binding's type, the set of members `is` can observe, and the module storage layout, while implicit conversion between Class levels is not yet available in LIR, so the normalized-away member would be unreachable. **Follow-up**: merge ancestor-chain members during type interning, add declaration, layout, `is` and module-storage tests for `A | B` where `B` inherits `A`, and only then downgrade this rejection to normalization; until then the compiler stays fail-closed.
-- **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
-- Working with a union value requires `match` or `is`-based narrowing:
+An anonymous union `A | B` is a compiler-synthesized enum: the type itself has no name, each member is a one-field variant, and the representation is the same tagged sum type a named enum uses.
+
+**Type identity and display**
+- Members are ordered canonically by type identity, independent of the order they were written. The same member set is the same type in every module and matches the precompiled standard library. Diagnostics, `typeName`, the IDE and the reference render it as `A | B`, listing members in canonical order.
+- `T | T` normalizes to `T`; `T | null` normalizes to `T?`, and `A | B | null` normalizes to `(A | B)?`. `null` is not a member, and an existing Optional member is neither decomposed nor flattened.
+
+**Members**
+- There is no member-count limit. One numeric family may contribute several members: `i16 | i32` and `f32 | f64` are legal, and the tag distinguishes them.
+- Every member must be a closed scalar, `string`, or a Class identity. A member must not carry a type parameter: writing `T | U` in a generic function, generic field, or generic signature is a compile error, and generic code must use a named enum instead (E0399).
+- Members that are subtypes of each other are rejected, including a Class and an interface it implements; the error asks you to declare the parent type instead (E0352). An Optional used as a member stays one distinct member: `i64? | string` keeps `Optional<i64>` and `string`; it neither decomposes into `i64 | string | null` nor normalizes to `(i64 | string)?`.
+
+Working with a union value requires `match` or `is`-based narrowing:
 
 <!-- xr-source:example 003-2-type-system-example-016 -->
 ```xray @fragment
@@ -1772,26 +1788,28 @@ match (v) {
 ```
 <!-- /xr-source -->
 
-**Member selection**: a union value carries the member selected where it was assigned. The rule is deterministic and independent of the order the members were written:
+**Auto-wrap** happens only where the target type is a union (variable declaration, assignment, argument, return value, field initialization). The rule is deterministic and independent of the order the members were written:
 
-- The source type is **exactly** one member → that member is selected.
-- Otherwise the single member reachable by an implicit conversion from §2.10.1 is selected. Discriminability guarantees at most one member per numeric family, so at most one member qualifies.
-- A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the f64-family member when the union has none (matching "an integer literal types into a unique floating context"); a f64 literal selects the f64-family member. The literal must be exactly representable in the selected member.
+- The value's static type is **exactly** one member → it is wrapped as that member.
+- A numeric literal has no fixed type: an integer literal types into the integer-family members, and is selected when exactly one integer-family member exists; when the union has no integer member, the ordinary literal rule types it into the sole float-family member. A float literal likewise considers only float-family members. More than one candidate in the family is reported as ambiguous (E0328).
+- Anything else is a type mismatch (E0352): there is no implicit numeric conversion and no subclass upcast.
 
 <!-- xr-source:example 003-2-type-system-example-017 -->
 ```xray
-var a: i64 | f64 = 1        // exact match: i64
-var b: i64 | f64 = 1.0      // exact match: f64
+var a: i64 | f64 = 1        // integer literal selects i64 within the integer family
+var b: i64 | f64 = 1.0      // float literal selects f64 within the float family
 var c: i32 | string = 7       // sole integer-family member: i32
-var d: f32 | string = 1.5     // sole f64-family member: f32
+var d: f32 | string = 1.5     // sole float-family member: f32
 ```
 <!-- /xr-source -->
 
-`is T` asks about the runtime value: for a fixed-width numeric type it asks whether the value is exactly representable in `T`, because an erased value does not carry its width and that is the only answerable form. Inside a well-formed union the selected member always passes its own `is` and every other member always fails, so the arms are mutually exclusive.
+**No implicit conversion exists between unions**, not even a subset widening to a superset (E0329); rebuild the value with `match`, one arm per member. A union also does not convert implicitly to one of its members; narrow it first. There is no `as` form for unions yet.
 
-**Special cases**:
-- `i64 | null` normalizes to `i64?`.
-- An Optional inside a union remains one distinct member: `i64? | string` keeps `Optional<i64>` and `string`; it neither decomposes into `i64 | string | null` nor normalizes to `(i64 | string)?`.
+**Narrowing and matching**
+- `v is T` is variant discrimination (a tag comparison) when `T` is a member of `v`; when `T` is not a member it is a compile error.
+- `match (v) { is A => …, is B => … }` dispatches by variant; a missing member is rejected by the exhaustiveness rules of Task334. The narrowed binding has exactly the member's type.
+
+Named enums keep explicit construction; auto-wrap is not extended to named enums.
 
 ### 2.7 Tuple Types
 

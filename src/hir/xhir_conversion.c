@@ -96,8 +96,15 @@ XR_FUNC XrXirStatus xr_hir_conversion_check(const XrHirConversionContext *contex
                     return conversion_failure(reason,XR_XIR_BAD_TYPE,"JSON composite conversion requires explicit JSON.value");
                 node.kind=XR_HIR_CONVERSION_JSON;node.selected_member=input->actual;
             } else if(target && target->kind==XR_XIR_TYPE_DATA_UNION) {
+                /* Two distinct union identities never convert, not even a
+                 * subset into a superset: the hidden copy-and-retag would make
+                 * cost depend on the spelling. `match` states the rebuild. */
+                const XrXirTypeNode *source=xr_xir_type_node(context->types,input->actual);
+                if(source && source->kind==XR_XIR_TYPE_DATA_UNION)
+                    return conversion_failure(reason,XR_XIR_BAD_TYPE,
+                        "E0329: a union value does not convert to another union implicitly; rebuild it with match, one arm per member");
                 status=xr_xir_data_union_select(context->types,input->actual,expected,&node.selected_member);
-                if(status!=XR_XIR_OK)return conversion_failure(reason,status,"expression type is not exactly an admitted data-union member");
+                if(status!=XR_XIR_OK)return conversion_failure(reason,status,"E0352: expression type is not exactly an admitted data-union member");
                 node.kind=XR_HIR_CONVERSION_DATA_UNION;
             } else if(xr_xir_class_is_subtype(context->types,input->actual,expected)) {
                 node.kind=XR_HIR_CONVERSION_COPY;node.declared_bound=expected;

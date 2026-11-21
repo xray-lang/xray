@@ -1,0 +1,2 @@
+--> 4:5 E0398
+parameter 'f' cannot escape through a return. Declare 'f: escaping fn(...)'

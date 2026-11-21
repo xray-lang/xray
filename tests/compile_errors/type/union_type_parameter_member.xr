@@ -1,0 +1,4 @@
+// A data-union member carries a type parameter. Instantiating the union could
+// merge members and change the layout or the meaning of `is`; use a named enum.
+fn wrap<T>(x: T | string) {}
+var y = 1

@@ -57,9 +57,22 @@ static bool data_union_insert(XrXirType *members,uint32_t *count,uint32_t capaci
     members[at]=member;++*count;
     return true;
 }
-XR_FUNC XrXirStatus xr_xir_compile_data_union(const XrXirCompileContext *context,
+/* A binder id is not a type identity: it must be substituted before a union
+ * can be laid out, so a member carrying one is rejected at the declaration. */
+static bool data_union_type_parameter(XrXirType type) {
+    uint32_t id=(uint32_t)type;
+    return id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT;
+}
+static XrXirStatus data_union_reject(XrXirDataUnionRejectionDetail *detail,
+    XrXirDataUnionRejection reason,XrXirType member,XrXirType related) {
+    if(detail)*detail=(XrXirDataUnionRejectionDetail){reason,member,related};
+    return XR_XIR_BAD_TYPE;
+}
+XR_FUNC XrXirStatus xr_xir_compile_data_union_detailed(const XrXirCompileContext *context,
     const XrXirTypes *types,const XrXirType *members,uint32_t count,
-    XrCompileRequestControl *control,XrXirDataUnion *output) {
+    XrCompileRequestControl *control,XrXirDataUnion *output,
+    XrXirDataUnionRejectionDetail *detail) {
+    if(detail)*detail=(XrXirDataUnionRejectionDetail){XR_XIR_DATA_UNION_ACCEPTED,XR_XIR_UNIT,XR_XIR_UNIT};
     if(!xir_compile_context_valid(context) || !types || !output || !count || !members)return XR_XIR_BAD_STRUCTURE;
     if(count>context->limits.parameters)return XR_XIR_BUDGET;
     /* Flattening nested unions bounds the distinct members by the summed member
@@ -70,7 +83,10 @@ XR_FUNC XrXirStatus xr_xir_compile_data_union(const XrXirCompileContext *context
         if(status!=XR_XIR_OK)return status;
         const XrXirTypeNode *node=xr_xir_type_node(types,members[i]);
         bool nested=node && xr_xir_data_union_shape(types,members[i]);
-        if(node && !nested && !data_union_member(types,members[i]))return XR_XIR_BAD_TYPE;
+        if(node && !nested && !data_union_member(types,members[i]))
+            return data_union_reject(detail,data_union_type_parameter(members[i])?
+                XR_XIR_DATA_UNION_MEMBER_TYPE_PARAMETER:XR_XIR_DATA_UNION_MEMBER_NOT_CLOSED,
+                members[i],XR_XIR_UNIT);
         total+=nested?node->parameter_count:1u;
         if(total>UINT32_MAX)return XR_XIR_OVERFLOW;
     }
@@ -85,8 +101,13 @@ XR_FUNC XrXirStatus xr_xir_compile_data_union(const XrXirCompileContext *context
         uint32_t n=nested?node->parameter_count:1u;
         for(uint32_t p=0;p<n;++p) {
             XrXirType member=nested?node->parameters[p].type:members[i];
-            if(!data_union_member(types,member) ||
-                !data_union_insert(vector,&used,(uint32_t)total,member)) {
+            if(!data_union_member(types,member)) {
+                xr_compile_resources_free(vector);
+                return data_union_reject(detail,data_union_type_parameter(member)?
+                    XR_XIR_DATA_UNION_MEMBER_TYPE_PARAMETER:XR_XIR_DATA_UNION_MEMBER_NOT_CLOSED,
+                    member,XR_XIR_UNIT);
+            }
+            if(!data_union_insert(vector,&used,(uint32_t)total,member)) {
                 xr_compile_resources_free(vector);
                 return XR_XIR_BAD_TYPE;
             }
@@ -104,12 +125,18 @@ XR_FUNC XrXirStatus xr_xir_compile_data_union(const XrXirCompileContext *context
             if(!xr_xir_type_is_class(types,vector[b]))continue;
             if(xr_xir_class_is_subtype(types,vector[a],vector[b]) ||
                 xr_xir_class_is_subtype(types,vector[b],vector[a])) {
+                XrXirType member=vector[a],related=vector[b];
                 xr_compile_resources_free(vector);
-                return XR_XIR_BAD_TYPE;
+                return data_union_reject(detail,XR_XIR_DATA_UNION_MEMBER_ANCESTOR,member,related);
             }
         }
     }
     *output=(XrXirDataUnion){vector,used};return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_compile_data_union(const XrXirCompileContext *context,
+    const XrXirTypes *types,const XrXirType *members,uint32_t count,
+    XrCompileRequestControl *control,XrXirDataUnion *output) {
+    return xr_xir_compile_data_union_detailed(context,types,members,count,control,output,NULL);
 }
 XR_FUNC XrXirStatus xr_xir_data_union_select(const XrXirTypes *types,XrXirType actual,
     XrXirType target,XrXirType *output) {

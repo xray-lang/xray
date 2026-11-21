@@ -1,0 +1,2 @@
+--> 4:33 E0329
+a union value does not convert to another union implicitly; rebuild it with match, one arm per member

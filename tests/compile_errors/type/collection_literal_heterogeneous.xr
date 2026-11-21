@@ -1,0 +1,4 @@
+// An undirected collection literal has one element type; mixing types without
+// a declared Array<...> is rejected instead of silently choosing a union.
+var xs = [1, "x"]
+print(xs)
