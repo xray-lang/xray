@@ -558,7 +558,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     if (string_role >= XR_LIR_STRING_OP_END) return false;
     if (i->op == XR_LIR_RECORD_NEW || i->op == XR_LIR_RECORD_FIELD ||
         i->op == XR_LIR_CLASS_NEW || i->op == XR_LIR_CLASS_FIELD || i->op == XR_LIR_CLASS_ARRAY_WRITE ||
-        i->op == XR_LIR_CLASS_ARRAY_PUSH || i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP) return true;
+        i->op == XR_LIR_CLASS_ARRAY_PUSH || i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP ||
+        i->op == XR_LIR_CLASS_ADOPT || i->op == XR_LIR_CLASS_IS) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return true;
     if (i->op==XR_LIR_MAP_BORROW && i->operand_count) {

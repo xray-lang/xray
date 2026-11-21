@@ -51,6 +51,7 @@ static bool effect_default_access_local(const XrXirFunction *function,
     case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG: case XR_XIR_ENUM_GET:
     case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET: case XR_XIR_CLASS_SET:
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME: case XR_XIR_NULLABLE_UNWRAP:
+    case XR_XIR_DATA_UNION_IS:
     case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
     case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD:
     case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN: case XR_XIR_VIEW_GET:

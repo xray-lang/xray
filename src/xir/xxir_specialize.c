@@ -444,7 +444,7 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     to->escaping_parameters=escape_count?escapes:NULL;
     for (uint32_t i = 0; i < source->instruction_count; ++i) {
         ops[i] = source->instructions[i]; ops[i].type = spec_type(c, instance, ops[i].type);
-        if (ops[i].op == XR_XIR_ERROR_IS)
+        if (ops[i].op == XR_XIR_ERROR_IS || ops[i].op == XR_XIR_DATA_UNION_IS)
             ops[i].immediate = spec_type(c, instance, (XrXirType) ops[i].immediate);
     }
     if (c->diagnostic.status != XR_XIR_OK) return UINT32_MAX;

@@ -40,6 +40,7 @@ static inline bool xr_xir_instruction_has_panic_port(XrXirOp op) {
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT:
     case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN:
     case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
+    case XR_XIR_DATA_UNION_IS:
         return false;
     default: return true;
     }

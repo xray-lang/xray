@@ -13,6 +13,7 @@
 static bool c_record_point(const XrLirInstructionView *v) {
     return v->op == XR_LIR_RECORD_NEW || v->op == XR_LIR_RECORD_FIELD ||
         v->op == XR_LIR_CLASS_NEW || v->op == XR_LIR_CLASS_FIELD ||
+        v->op == XR_LIR_CLASS_ADOPT ||
         v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
 }

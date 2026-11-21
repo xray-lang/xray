@@ -347,6 +347,27 @@ static bool lower_receive_type(Lower *, XrXirType);
  * An unused source descriptor cannot change the retained program's frontier. */
 static bool lower_receive_type(Lower *c, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
+    if (node && node->kind == XR_XIR_TYPE_DATA_UNION) {
+        /* A Class-identity data union is physically one nominal class handle.
+         * It therefore reuses the first admitted member's Class physical type;
+         * every member is materialized so an `is` target always has a class
+         * identity row in the receiving value image. */
+        if (node->parameter_count < 2 || !node->parameters) return lower_unsupported(c, "empty data union");
+        for (uint32_t p = 0; p < node->parameter_count; ++p)
+            if (!xr_xir_type_is_class(c->source->types, node->parameters[p].type))
+                return lower_unsupported(c, "data union member with no class-handle carrier");
+        if (!c->constructed_types)
+            c->constructed_types = lower_alloc(c, c->source->types->count, sizeof(*c->constructed_types));
+        if (!c->constructed_types) return false;
+        uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+        if (c->constructed_types[index]) return true;
+        for (uint32_t p = 0; p < node->parameter_count; ++p)
+            if (!lower_receive_type(c, node->parameters[p].type)) return false;
+        XrLirType physical = lower_type(c, node->parameters[0].type);
+        if (!physical) return lower_unsupported(c, "data union member has no physical class identity");
+        c->constructed_types[index] = physical;
+        return true;
+    }
     if (node && node->kind == XR_XIR_TYPE_ARRAY) {
         const XrXirTypeNode *row = xr_xir_type_node(c->source->types, node->element);
         XrXirTypeDescription record = {0};
@@ -481,6 +502,8 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_LOCAL_UNINIT:
         case XR_XIR_LOCAL_READ:
         case XR_XIR_LOCAL_WRITE:
+        case XR_XIR_DATA_UNION_INJECT:
+        case XR_XIR_DATA_UNION_IS:
             return true;
         default:
             return lower_terminator_op(op) != XR_LIR_OP_INVALID;
@@ -1835,6 +1858,22 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         c->owned_bindings[c->function][f->source->parameter_count + i])
         return lower_value(f, op->args[0], &f->values[f->source->parameter_count + i]);
     uint32_t result = f->source->parameter_count + i;
+    if (op->op == XR_XIR_DATA_UNION_INJECT) {
+        /* Retaining retag: the member handle keeps its runtime class identity. */
+        XrLirValue input = {0};
+        if (!lower_value(f, op->args[0], &input)) return false;
+        XrLirInstruction adopt = {.op=XR_LIR_CLASS_ADOPT, .type=lower_type(c, op->type),
+            .operands=&input, .operand_count=1, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &adopt, &f->values[result]));
+    }
+    if (op->op == XR_XIR_DATA_UNION_IS) {
+        XrLirValue input = {0};
+        if (!lower_value(f, op->args[0], &input)) return false;
+        XrLirInstruction test = {.op=XR_LIR_CLASS_IS, .type=XR_LIR_I1,
+            .bits=(uint64_t)lower_type(c, (XrXirType)op->immediate),
+            .operands=&input, .operand_count=1, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &test, &f->values[result]));
+    }
     bool class_new = op->op == XR_XIR_CLASS_NEW;
     bool class_field = op->op == XR_XIR_CLASS_GET;
     bool aggregate_new = class_new || op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_TUPLE_NEW;

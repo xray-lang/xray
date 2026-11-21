@@ -523,6 +523,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         a.operation!=XR_RBC_VALUE_CALL &&
         a.operation!=XR_RBC_VALUE_EDGE && a.operation!=XR_RBC_VALUE_ARRAY && a.operation!=XR_RBC_VALUE_MAP &&
         a.operation!=XR_RBC_VALUE_DISPLAY && a.operation!=XR_RBC_VALUE_RECORD_FIELD && a.operation!=XR_RBC_VALUE_CLASS_FIELD &&
+        a.operation!=XR_RBC_VALUE_CLASS_IS &&
         a.operation!=XR_RBC_VALUE_RETURN &&
         !(a.operation>=XR_RBC_VALUE_BINDING_NEW && a.operation<=XR_RBC_VALUE_BINDING_DROP) &&
         a.operation<XR_RBC_VALUE_FUNCTION_NEW && a.index) return false;
@@ -545,6 +546,22 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return !a.other && !rbc_value_function(module,code,a.result,false) && !rbc_value_cell(module,code,a.result,false) &&
             rbc_value_owner(module,code,a.result,true) && rbc_value_owner(module,code,a.source,false) &&
             rbc_value_home(code,a.result)->type==rbc_value_home(code,a.source)->type && (a.operation == XR_RBC_VALUE_COPY || !rbc_value_home(code,a.source)->parameter);
+    case XR_RBC_VALUE_CLASS_ADOPT: {
+        const XrtValueImage *image=xr_rbc_module_value_image(module);
+        const XrLirValueHome *destination=rbc_value_home(code,a.result),*from=rbc_value_home(code,a.source);
+        return !a.other && !a.index && image && image->types && destination && from &&
+            destination->type && from->type && destination->type<=image->type_count && from->type<=image->type_count &&
+            image->types[destination->type-1].kind==XRT_VALUE_CLASS && image->types[from->type-1].kind==XRT_VALUE_CLASS &&
+            rbc_value_inline(module,code,a.result,true) && rbc_value_inline(module,code,a.source,false);
+    }
+    case XR_RBC_VALUE_CLASS_IS: {
+        const XrtValueImage *image=xr_rbc_module_value_image(module);
+        const XrLirValueHome *from=rbc_value_home(code,a.source);
+        return !a.other && image && image->types && from && from->type && from->type<=image->type_count &&
+            image->types[from->type-1].kind==XRT_VALUE_CLASS && a.index && a.index<=image->type_count &&
+            image->types[a.index-1].kind==XRT_VALUE_CLASS &&
+            rbc_value_inline(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    }
     case XR_RBC_VALUE_DROP:
         return !a.result && !a.other && !rbc_value_cell(module,code,a.source,false) && rbc_value_owner(module,code,a.source,false) &&
             !rbc_value_home(code,a.source)->parameter &&

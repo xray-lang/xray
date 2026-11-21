@@ -325,6 +325,7 @@ static bool effect_module_storage_read_only(XrXirOp op) {
     case XR_XIR_COPY: case XR_XIR_OWNED_RETAIN: case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW:
         return true;
     case XR_XIR_JSON_NULL: case XR_XIR_JSON_VALUE_INJECT:
+    case XR_XIR_DATA_UNION_IS:
     case XR_XIR_I64_TRY_PARSE: return true;
     default:
         return op >= XR_XIR_SET_UNION && op <= XR_XIR_MAP_VALUE_AT;

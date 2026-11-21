@@ -169,6 +169,15 @@ static SourceExpressionPlan *source_plan_collect_structural(SourceContext *ctx,S
         }
         break;
     }
+    case AST_IS_EXPR: {
+        /* `is` observes its scrutinee as a plain value; it never stores it. */
+        if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}
+        ctx->active_expression=plan;++ctx->depth;
+        plan->left=source_plan_collect(ctx,node->as.is_expr.expr,(SourceExpectedType){0});
+        --ctx->depth;ctx->active_expression=parent;
+        if (!plan->left) return NULL;
+        break;
+    }
     case AST_FORCE_UNWRAP:case AST_NULLISH_COALESCE:case AST_UNARY_NOT:
     case AST_BINARY_AND:case AST_BINARY_OR: {
         if (ctx->depth>=128) {source_fail(ctx,node,XR_XIR_BUDGET,"expression collection depth exhausted");return NULL;}

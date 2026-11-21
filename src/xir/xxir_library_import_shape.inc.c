@@ -117,6 +117,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_TUPLE_FIELD:
     case XR_XIR_NULLABLE_NONE:
     case XR_XIR_DATA_UNION_INJECT:
+    case XR_XIR_DATA_UNION_IS:
     case XR_XIR_NULLABLE_SOME:
     case XR_XIR_NULLABLE_IS_SOME:
     case XR_XIR_NULLABLE_UNWRAP:

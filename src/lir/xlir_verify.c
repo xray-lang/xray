@@ -182,6 +182,19 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         }
         case XR_LIR_VALUE_RETAIN:
             return v->type == a && (xr_lir_boxed_type(m, a) || xr_lir_cell_value_type(m,a,NULL));
+        case XR_LIR_CLASS_ADOPT: {
+            XrLirTypeView target;
+            return v->operand_count == 1 && xr_lir_type_view(m, v->type, &target) == XR_LIR_OK &&
+                target.kind == XR_LIR_TYPE_CLASS && xr_lir_type_view(m, a, &target) == XR_LIR_OK &&
+                target.kind == XR_LIR_TYPE_CLASS;
+        }
+        case XR_LIR_CLASS_IS: {
+            XrLirTypeView target;
+            return v->operand_count == 1 && v->type == XR_LIR_I1 &&
+                xr_lir_type_view(m, a, &target) == XR_LIR_OK && target.kind == XR_LIR_TYPE_CLASS &&
+                v->bits && xr_lir_type_view(m, (XrLirType)v->bits, &target) == XR_LIR_OK &&
+                target.kind == XR_LIR_TYPE_CLASS;
+        }
         case XR_LIR_VALUE_DROP:
             return v->type == XR_LIR_UNIT && (xr_lir_boxed_type(m, a) || xr_lir_cell_value_type(m,a,NULL));
         case XR_LIR_RECORD_NEW: case XR_LIR_CLASS_NEW: {
@@ -455,6 +468,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_STATE_INITIALIZE && v->op != XR_LIR_STATE_REFERENCE &&
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
+        v->op != XR_LIR_CLASS_IS &&
         v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)

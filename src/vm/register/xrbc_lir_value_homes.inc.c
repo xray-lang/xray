@@ -92,6 +92,26 @@ static bool rbc_home_roots(RbcLirCompiler *c, const XrLirStateLayout *state, Rbc
             if (index) xr_lir_value_type(input,(XrLirValue){input,function.id,(uint32_t)index},&type);
             if (rbc_home_key(input,function,(uint32_t)index,type,&key)) valid = rbc_home_root_append(c,roots,seen,base,key);
         }
+        /* A Class identity test names its target only through instruction bits,
+         * so that class row is not otherwise a value root of this closure. */
+        for (uint32_t b = 0; valid && b < view.block_count; ++b) {
+            XrLirBlock block_id = {input, function.id, b + 1};
+            XrLirBlockView block;
+            if (xr_lir_block_view(input, block_id, &block) != XR_LIR_OK) {
+                valid = rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "Class test target has no block view");
+                break;
+            }
+            for (uint32_t n = 0; valid && n < block.instruction_count; ++n) {
+                XrLirInstructionView instruction;
+                if (xr_lir_instruction_view(input, block_id, n, &instruction) != XR_LIR_OK) {
+                    valid = rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "Class test target has no instruction view");
+                    break;
+                }
+                if (instruction.op == XR_LIR_CLASS_IS)
+                    valid = rbc_home_root_append(c, roots, seen, base,
+                        (XrLirValueLayoutKey){(XrLirType)instruction.bits, 0, 0});
+            }
+        }
         XrLirClosureTarget declaration={0};
         if (valid && xr_lir_closure_target_view(input,function,&declaration)==XR_LIR_OK && declaration.callable)
             valid=rbc_home_root_append(c,roots,seen,base,(XrLirValueLayoutKey){declaration.callable,0,0});

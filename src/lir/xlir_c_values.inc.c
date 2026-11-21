@@ -556,6 +556,19 @@ static void c_values_string_literal(LirC *c, const XrLirInstructionView *v, uint
     c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
 }
 static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_CLASS_IS) {
+        /* The target class identity is an image row; resolve its one-based id. */
+        const XrtValuePlan *plan = NULL; uint32_t target = 0;
+        if (xr_lir_value_layouts_lookup(c->value_layouts, (XrLirValueLayoutKey){(XrLirType)v->bits, 0, 0},
+            &plan, &target) != XR_LIR_VALUE_LAYOUT_OK) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "Class test target has no receiving class identity");
+            return true;
+        }
+        c_format(c, "    v%" PRIu32 " = xrt_native_class_is(", v->result);
+        c_value(c, v->operands[0]);
+        c_format(c, ", &xrl_value_image, UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "));\n", target, source);
+        return true;
+    }
     if (v->op == XR_LIR_ASSERT_CONDITION) {
         c_text(c, "    xrt_assert_condition("); c_value(c, v->operands[0]);
         c_text(c, ", (const XrtStringBacking *)"); c_value(c, v->operands[1]);

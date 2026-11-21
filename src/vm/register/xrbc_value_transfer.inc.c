@@ -334,6 +334,12 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     case XR_RBC_VALUE_COPY: case XR_RBC_VALUE_MOVE:
         return !rbc_value_function(state->module,code,access.result,false) ||
             (rbc_value_flow_read(state,code,access.source,&incoming) && rbc_value_flow_write(state,code,access.result,incoming));
+    case XR_RBC_VALUE_CLASS_ADOPT:
+        return rbc_value_flow_read(state,code,access.source,&incoming) &&
+            rbc_value_flow_write(state,code,access.result,incoming);
+    case XR_RBC_VALUE_CLASS_IS:
+        return rbc_value_flow_read(state,code,access.source,&incoming) &&
+            rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
     case XR_RBC_VALUE_DROP:
         if (rbc_value_function(state->module,code,access.source,false))
             rbc_function_liveness(state)[access.source]=(RbcFunctionFlow){0};

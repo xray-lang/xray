@@ -43,6 +43,11 @@ XRAY_API void xrt_native_class_create(XrtManagedFrame *, size_t slot,
     const XrtValueImage *, uint32_t type, const void *row, uint32_t source_id);
 XRAY_API const void *xrt_native_class_field(const XrtManagedHeader *, const XrtValueImage *,
     uint32_t type, uint32_t field, uint32_t source_id);
+/* Tests one live class handle against the nominal identity named by `type` and
+ * its Class ancestors. Identity is the header's immutable per-class Ops, not a
+ * compiler type id or a stored tag byte. */
+XRAY_API bool xrt_native_class_is(const XrtManagedHeader *, const XrtValueImage *,
+    uint32_t type, uint32_t source_id);
 typedef struct XrtNativeClassField {
     XrtManagedHeader *instance;
     const XrtValueImage *image;

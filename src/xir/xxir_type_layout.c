@@ -12,9 +12,23 @@
 #include "xxir_types.h"
 #include "xxir_compile_memory.h"
 #include "xxir_storage.h"
+#include "xxir_data_union.h"
 #include "../base/xmalloc.h"
 static XrXirStatus nullable_storage_layout(const XrXirCompileContext *compile_context,
     const XrXirTypes *types, XrXirType type, XrXirLayout *layout);
+/* A data union whose members are all Class identities has no stored tag byte:
+ * the value IS one nominal class handle. The discriminant is derived from the
+ * handle's runtime class identity (its immutable per-class type plan), never
+ * from a compiler type id. Tag width is therefore zero stored bytes; the
+ * payload is the 8-byte class handle. Storage/frame use that handle layout and
+ * parameter/result/boxed follow the Class row exactly. */
+static bool class_handle_union(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    if (!node || node->kind != XR_XIR_TYPE_DATA_UNION || !xr_xir_data_union_shape(types, type)) return false;
+    for (uint32_t p = 0; p < node->parameter_count; ++p)
+        if (!xr_xir_type_is_class(types, node->parameters[p].type)) return false;
+    return true;
+}
 
 XR_FUNC XrXirStatus xir_builtin_value_layout(XrXirType type,
     XrXirLayoutContext context, XrXirLayout *layout) {
@@ -46,6 +60,12 @@ static XrXirStatus value_layout(const XrXirCompileContext *compile_context,
 
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     if (!node) return xir_builtin_value_layout(type, context, layout);
+    if (node->kind == XR_XIR_TYPE_DATA_UNION && class_handle_union(types, type)) {
+        /* One nominal class handle; no stored tag (see class_handle_union). */
+        *layout = (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT ||
+            context == XR_XIR_LAYOUT_BOXED) ? (XrXirLayout){16, 8} : (XrXirLayout){8, 8};
+        return XR_XIR_OK;
+    }
     if (node->kind == XR_XIR_TYPE_UNION || node->kind == XR_XIR_TYPE_DATA_UNION) return XR_XIR_BAD_LAYOUT;
     if(node->kind==XR_XIR_TYPE_FIXED_ARRAY && context==XR_XIR_LAYOUT_STORAGE) {
         if(node->element!=XR_XIR_U8 || !node->parameter_count ||

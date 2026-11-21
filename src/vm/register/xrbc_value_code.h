@@ -46,7 +46,10 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_CELL, XR_RBC_VALUE_MAP_LITERAL, XR_RBC_VALUE_STRING_APPEND_BINDING,
     XR_RBC_VALUE_SET,
     XR_RBC_VALUE_ASSERT_CONDITION, XR_RBC_VALUE_I64_TRY_PARSE,
-    XR_RBC_VALUE_CLASS_ARRAY_WRITE, XR_RBC_VALUE_CLASS_ARRAY_PUSH
+    XR_RBC_VALUE_CLASS_ARRAY_WRITE, XR_RBC_VALUE_CLASS_ARRAY_PUSH,
+    /* Class-identity union observation: ADOPT retains a handle under another
+     * nominal class row; IS tests the live handle's nominal identity. */
+    XR_RBC_VALUE_CLASS_ADOPT, XR_RBC_VALUE_CLASS_IS
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {

@@ -11,6 +11,10 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     if (!node || !((ctx)->diagnostic.status == XR_XIR_OK)) return node==NULL;
     if (depth>=128) return source_fail(ctx,node,XR_XIR_BUDGET,"ground type collection depth exhausted");
     if (node->type==AST_GROUPING) return source_ground_type(ctx,node->as.grouping,depth+1,output);
+    if (node->type==AST_IS_EXPR) {
+        /* A runtime class-identity test always yields Bool. */
+        *output=(SourceExpectedType){true,XR_XIR_BOOL,false,false};return true;
+    }
     if(node->type==AST_FIXED_BYTES_LITERAL) {
         if(!source_fixed_literal_type(ctx,node,&output->type))return false;
         output->present=true;return true;

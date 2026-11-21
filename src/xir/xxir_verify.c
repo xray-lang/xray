@@ -476,7 +476,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&
                op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
                op->op != XR_XIR_CLASS_GET && op->op != XR_XIR_CLASS_SET && op->op != XR_XIR_TUPLE_FIELD &&
-               op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->op != XR_XIR_ERROR_IS && op->immediate) {
+               op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->op != XR_XIR_ERROR_IS &&
+               op->op != XR_XIR_DATA_UNION_IS && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -1202,6 +1203,18 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
     if(op->op==XR_XIR_DATA_UNION_INJECT) {
         expected=xr_xir_operand_type(function,op->args[0]);
         if(!xr_xir_data_union_contains(context->module->types,op->type,expected))return XR_XIR_BAD_TYPE;
+    }
+    if(op->op==XR_XIR_DATA_UNION_IS) {
+        /* Only a closed union of Class identities has a runtime identity test;
+         * every member is a nominal handle and the target names one of them. */
+        expected=xr_xir_operand_type(function,op->args[0]);
+        const XrXirTypeNode *shape=xr_xir_type_node(context->module->types,expected);
+        bool classes=shape && shape->kind==XR_XIR_TYPE_DATA_UNION && shape->parameter_count>=2;
+        for(uint32_t p=0;classes&&p<shape->parameter_count;++p)
+            classes=xr_xir_type_is_class(context->module->types,shape->parameters[p].type);
+        XrXirType target=(XrXirType)op->immediate;
+        if(!classes || !xr_xir_type_is_class(context->module->types,target) ||
+            !xr_xir_data_union_contains(context->module->types,expected,target))return XR_XIR_BAD_TYPE;
     }
     if (op->op == XR_XIR_NULLABLE_SOME)
         expected = xr_xir_nullable_element(context->module->types, op->type);

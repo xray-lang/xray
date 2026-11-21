@@ -2003,8 +2003,37 @@ static bool source_block_functions(SourceContext *ctx,AstNode *block);
 #include "xxir_source_view.inc.c"
 #include "xxir_source_copy.inc.c"
 #include "xxir_source_unsafe.inc.c"
+/* `is` over a closed union of Class identities. The union value is one nominal
+ * class handle: the test reads the handle's actual class identity at runtime
+ * (see xxir_type_layout.c and xlir_lower.c), so there is no stored tag byte.
+ * Every member must be a Class identity and the target must be one of them.
+ * Narrowing the scrutinee for the true branch is NOT performed; only the
+ * Boolean test is produced. */
+static bool source_is_expression(SourceContext *ctx, AstNode *node, SourceValue *value) {
+    IsExprNode *check=&node->as.is_expr;
+    XrXirType target=XR_XIR_UNIT;
+    if (!source_type(ctx,check->type,&target)) return false;
+    if (!xr_xir_type_is_class(&ctx->types,target))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"is requires a Class identity target");
+    SourceValue input;
+    SourceExpressionPlan *plan=ctx->active_expression;
+    if (!plan || !plan->left)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"is expression has no collected operand");
+    if (!source_plan_complete(ctx,plan->left,&input)) return false;
+    const XrXirTypeNode *shape=xr_xir_type_node(&ctx->types,input.type);
+    bool classes=shape && shape->kind==XR_XIR_TYPE_DATA_UNION && shape->parameter_count>=2;
+    for (uint32_t p=0;classes&&p<shape->parameter_count;++p)
+        classes=xr_xir_type_is_class(&ctx->types,shape->parameters[p].type);
+    if (!classes)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"is requires a union of Class identities");
+    if (!xr_xir_data_union_contains(&ctx->types,input.type,target))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"is target is not a member of the union");
+    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_DATA_UNION_IS,XR_XIR_BOOL,
+        {input.id,0},{0},(int64_t)target,{0}},value);
+}
 static bool expression_structural_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     switch (node->type) {
+    case AST_IS_EXPR: return source_is_expression(ctx,node,value);
     case AST_UNSAFE_EXPR: return source_unsafe_expression(ctx,node,context,value);
     case AST_LITERAL_NULL:
         if(context.present && context.type==XR_XIR_JSON_VALUE)return source_json_null(ctx,node,value);

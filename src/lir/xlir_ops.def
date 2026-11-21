@@ -114,3 +114,10 @@ XR_LIR_OP(SET_REF_WRITE, "set_ref_write", 2)
 /* Both operands are evaluated before this effect, including on success. */
 XR_LIR_OP(ASSERT_CONDITION, "assert_condition", 2)
 XR_LIR_OP(I64_TRY_PARSE, "i64_try_parse", 1)
+
+/* A Class-identity union value is one nominal managed handle. ADOPT retains the
+ * existing header and only changes the static class identity; the runtime
+ * discriminant is the header's immutable per-class ops, never a tag byte. */
+XR_LIR_OP(CLASS_ADOPT, "class_adopt", 1)
+/* Tests that runtime nominal identity against bits (one placed class type). */
+XR_LIR_OP(CLASS_IS, "class_is", 1)

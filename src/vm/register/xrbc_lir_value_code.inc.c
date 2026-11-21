@@ -450,6 +450,20 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_VALUE_RETAIN:
     case XR_LIR_SET_RETAIN: case XR_LIR_MAP_RETAIN: case XR_LIR_ARRAY_RETAIN:
     case XR_LIR_STRING_RETAIN: access.operation = XR_RBC_VALUE_COPY; break;
+    case XR_LIR_CLASS_ADOPT:
+        /* Retaining retag into the union's nominal class row. */
+        access.operation = XR_RBC_VALUE_CLASS_ADOPT; break;
+    case XR_LIR_CLASS_IS: {
+        /* Translate the verified target class LIR type to its one-based image id. */
+        const XrtValuePlan *plan = NULL; uint32_t target = 0;
+        if (!c->literals || !c->literals->layouts ||
+            xr_lir_value_layouts_lookup(c->literals->layouts,
+                (XrLirValueLayoutKey){(XrLirType)i->bits, 0, 0}, &plan, &target) != XR_LIR_VALUE_LAYOUT_OK)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"Class test target has no receiving class identity");
+        access.operation = XR_RBC_VALUE_CLASS_IS;
+        access.index = target;
+        break;
+    }
     case XR_LIR_STRING_DROP:
         if (c->homes && c->homes->values[access.source].literal_cache_borrow) {
             *handled=true;

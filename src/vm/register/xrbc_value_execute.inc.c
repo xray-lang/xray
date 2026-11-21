@@ -1325,6 +1325,36 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation==XR_RBC_VALUE_COPY || access.operation==XR_RBC_VALUE_MOVE)
         status=rbc_value_replace(module,stack,activation,(RbcValueOrigin){activation,access.result},
             rbc_value_origin(activation,access.source),access.operation==XR_RBC_VALUE_COPY);
+    else if (access.operation==XR_RBC_VALUE_CLASS_ADOPT) {
+        /* Retaining retag: the destination acquires a new reference to the same
+         * nominal handle, so later DROP on either side stays balanced. */
+        const XrLirValueHome *home=rbc_value_home(activation->code,access.source);
+        const XrtManagedHeader *header=NULL;
+        status=rbc_value_borrow_header(rbc_value_origin(activation,access.source),home,&header);
+        if (status==XRT_MANAGED_OK && !header) status=XRT_MANAGED_ARGUMENT;
+        if (status==XRT_MANAGED_OK)
+            status=rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.result},&header);
+    } else if (access.operation==XR_RBC_VALUE_CLASS_IS) {
+        const XrLirValueHome *home=rbc_value_home(activation->code,access.source);
+        const XrtManagedHeader *header=NULL;
+        status=rbc_value_borrow_header(rbc_value_origin(activation,access.source),home,&header);
+        if (status==XRT_MANAGED_OK) {
+            /* Resolve class identities through the same plan authority that
+             * constructed the instance, then walk the target's class ancestors. */
+            bool matched=false;
+            for (uint32_t id=access.index; id && status==XRT_MANAGED_OK; ) {
+                XrtBoundClass binding={0};
+                status=stack->layout ? xrt_module_layout_class(stack->layout,id,&binding) :
+                    xrt_value_image_class(stack->values->plans,id,&binding);
+                if (status!=XRT_MANAGED_OK) break;
+                if (binding.ops==header->ops) {matched=true;break;}
+                id=id<=activation->image->type_count ? activation->image->types[id-1].class_parent : 0;
+            }
+            XrRbcRegister *output=status==XRT_MANAGED_OK ? rbc_value_register(stack,activation,access.result) : NULL;
+            if (status==XRT_MANAGED_OK && !output) status=XRT_MANAGED_ARGUMENT;
+            if (status==XRT_MANAGED_OK) output->bits=matched ? 1u : 0u;
+        }
+    }
     else if (access.operation==XR_RBC_VALUE_DROP) {
         const XrLirValueHome *home=rbc_value_home(activation->code,access.source);
         status=rbc_value_inline(module,activation->code,access.source,false) ?
