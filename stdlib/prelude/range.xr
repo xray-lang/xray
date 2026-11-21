@@ -12,6 +12,28 @@ export class Range {
         this._inclusive = inclusive
     }
 
+    contains(value: i64) -> bool {
+        if (value < this.start) { return false }
+        if (this._inclusive) { return value <= this.end }
+        return value < this.end
+    }
+
+    toArray() -> Array<i64> {
+        var out: Array<i64> = []
+        var value = this.start
+        while (value < this.end) {
+            out.push(value)
+            value = value + 1
+        }
+        if (this._inclusive && this.start <= this.end) { out.push(this.end) }
+        return out
+    }
+
+    toString() -> string {
+        if (this._inclusive) { return this.start.toString() + "..=" + this.end.toString() }
+        return this.start.toString() + ".." + this.end.toString()
+    }
+
     count() -> i64 {
         if (this.end < this.start) { return 0 }
         const maximum: i64 = 9223372036854775807
