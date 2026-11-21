@@ -1,4 +1,4 @@
-// Test: Hashable requires operator== and hash as a static key contract.
+// Test: Hashable requires equals and hash as a static key contract.
 
 class Token implements Hashable {
     value: i64
@@ -7,7 +7,7 @@ class Token implements Hashable {
         this.value = value
     }
 
-    operator==(other: Token) -> bool {
+    equals(other: Token) -> bool {
         return this.value == other.value
     }
 
@@ -19,7 +19,7 @@ class Token implements Hashable {
 struct Cell implements Hashable {
     value: i64
 
-    operator==(other: Cell) -> bool {
+    equals(other: Cell) -> bool {
         return this.value == other.value
     }
 

@@ -1,0 +1,29 @@
+// A callable read back out of a *mutable* tuple loses its provable storage
+// identity.
+//
+// This is the smallest shape behind `escaping_parameter_stored_into_field.xr`:
+// class construction stages field initial values through mutable local slots and
+// a tuple, so a callable field always takes this path.
+//
+// Task340 §3.1 rule 1 lets an `escaping fn(...)` parameter outlive the call, and
+// rule 3's prohibitions apply only to non-escaping values, so storing a callable
+// in an aggregate is legal. `zero` below is a plain static function reference and
+// carries no loans at all.
+//
+// Expected today (verified on 8862e2576, MSVC Release):
+//   callable_through_mutable_tuple.xr:8:15: error: constructed XIR failed
+//   checking at function 2 block 4294967295 instruction 7 (status 10)
+//
+// Contrast, all passing today:
+//   - `const t = (zero, 1); var f = t.0` (immutable tuple)
+//   - callable through a local variable into `Array.push`
+//   - an escaping parameter pushed into an array element
+fn zero() -> i64 {
+    return 0
+}
+
+fn main() -> i64 {
+    var t = (zero, 1)
+    const f = t.0
+    return f()
+}
