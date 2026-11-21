@@ -23,7 +23,8 @@ static XrXirStatus source_debug_publish(SourceContext *ctx,XrXirSourceResult *ou
             ctx->bodies[f].debug_bindings,ctx->bodies[f].debug_binding_count,
             ctx->bodies[f].debug_throws,ctx->bodies[f].throw_count,
             ctx->bodies[f].debug_handlers,ctx->bodies[f].handler_count,
-            ctx->bodies[f].debug_routes,ctx->bodies[f].route_count};
+            ctx->bodies[f].debug_routes,ctx->bodies[f].route_count,
+            ctx->identities[f].native_callable};
     }
     uint32_t expected=module->function_count;
     for (const SourceGeneratedDebug *row=ctx->generated_debug;row;row=row->next) {

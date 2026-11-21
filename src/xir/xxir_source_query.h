@@ -102,6 +102,11 @@ typedef struct XrXirSourceDebugFunction {
     uint32_t handler_count;
     const XrXirSourceDebugRoute *routes;
     uint32_t route_count;
+    /* The private native leaf this function stands for, or zero for an
+     * ordinary function with a real body. A leaf has no instructions and no
+     * blocks, so a consumer that lowers bodies needs this identity to tell a
+     * genuine host entry point apart from a malformed function. */
+    uint32_t native_callable;
 } XrXirSourceDebugFunction;
 
 /* A producer-selected slot is a display coordinate, never a module grant. */
