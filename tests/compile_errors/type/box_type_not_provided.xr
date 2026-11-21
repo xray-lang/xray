@@ -1,0 +1,18 @@
+// `Box` is deliberately not provided, and the compiler must say so in the
+// wording the specification's built-in symbol table pins (see
+// stdlib/prelude/builtin_symbols.def). A class node or a container slot is the
+// intended way to express indirect recursion.
+//
+// This case pins the hint text itself: a generic "does not resolve" message
+// leaves the reader with no way to know the name was ever considered.
+class Node {
+    next: Box<Node>?
+    value: i64
+
+    init(value: i64) {
+        this.value = value
+    }
+}
+
+var node = Node(1)
+print(node.value)

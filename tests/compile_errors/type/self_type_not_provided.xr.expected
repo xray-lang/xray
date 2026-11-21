@@ -1,0 +1,2 @@
+--> 15:20
+Xray has no 'Self' type; write the declaring type's own name, e.g. equals(other: Token) -> bool
