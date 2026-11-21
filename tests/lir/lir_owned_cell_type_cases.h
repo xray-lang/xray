@@ -69,4 +69,16 @@ static void owned_cell_type_rejections(void) {
         CHECK(output == XR_LIR_F64 && module->type_count == 0);
         xr_lir_module_destroy(module);
     }
+
+    XrLirModule *module = NULL;
+    OK(xr_lir_module_create(NULL, &module));
+    const XrLirRecordIdentity identity = {.module = "test", .module_length = 4,
+        .name = "ClassPayload", .name_length = 12};
+    XrLirType record = 0, klass = 0;
+    OK(xr_lir_record_type(module, &identity, NULL, 0, &record));
+    OK(xr_lir_internal_class_type(module, record, XR_LIR_TYPE_INVALID, &klass));
+    XrLirType output = XR_LIR_F64;
+    CHECK(xr_lir_cell_type(module, (XrLirCellType){klass, 0}, &output) == XR_LIR_INVALID_ARGUMENT);
+    CHECK(output == XR_LIR_F64 && module->type_count == 2);
+    xr_lir_module_destroy(module);
 }

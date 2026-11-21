@@ -1,0 +1,13 @@
+class Parent {
+    value: i64
+    init(value: i64) { this.value = value }
+}
+
+class Child extends Parent {
+    extra: i64
+    init(value: i64) { super(value); this.extra = 2 }
+}
+
+var value: Parent = Parent(0)
+value = Child(42)
+print(value.value)
