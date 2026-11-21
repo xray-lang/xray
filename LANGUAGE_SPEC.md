@@ -1332,7 +1332,7 @@ v = "hello"             // OK
 
 Constraints:
 - Up to **6 members** (checked at compile time; over the limit → error).
-- Members must not be subtypes of each other (otherwise normalized).
+- Members must not be subtypes of each other. **The current implementation rejects instead**: two Class members with an inheritance relation in either direction make the declaration `E0390`; they are not normalized to the ancestor as this section's target design specifies. Rationale: a Class-identity union is one nominal handle with no stored tag byte, so discrimination reads only the object header's immutable per-class `ops`. Silently normalizing at the declaration site would change the binding's type, the set of members `is` can observe, and the module storage layout, while implicit conversion between Class levels is not yet available in LIR, so the normalized-away member would be unreachable. **Follow-up**: merge ancestor-chain members during type interning, add declaration, layout, `is` and module-storage tests for `A | B` where `B` inherits `A`, and only then downgrade this rejection to normalization; until then the compiler stays fail-closed.
 - **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
