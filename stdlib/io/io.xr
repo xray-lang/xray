@@ -306,8 +306,9 @@ export final class BufWriter {
 
     init(path: Path, capacity: i64 = 131072) {
         this._path = path
-        this._buffer = Array<u8>()
-        this._buffer.reserve(capacity)
+        var buffer = Array<u8>()
+        buffer.reserve(capacity)
+        this._buffer = buffer
     }
 
     write(data: Slice<u8>) -> i64 {

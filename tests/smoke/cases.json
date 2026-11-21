@@ -479,7 +479,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
+        "first_diagnostic": "stdlib/io/io.xr:314:5: error: constructed XIR failed checking during view lifetime normalization at function 156 block 2 instruction 11 (ARRAY_PUSH)"
       }
     },
     {
@@ -695,7 +695,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
+        "first_diagnostic": "stdlib/io/io.xr:314:5: error: constructed XIR failed checking during view lifetime normalization at function 235 block 2 instruction 11 (ARRAY_PUSH)"
       }
     },
     {
@@ -707,7 +707,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
+        "first_diagnostic": "stdlib/io/io.xr:314:5: error: constructed XIR failed checking during view lifetime normalization at function 269 block 2 instruction 11 (ARRAY_PUSH)"
       }
     },
     {
@@ -1104,7 +1104,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
+        "first_diagnostic": "stdlib/io/io.xr:314:5: error: constructed XIR failed checking during view lifetime normalization at function 156 block 2 instruction 11 (ARRAY_PUSH)"
       }
     },
     {
@@ -1196,7 +1196,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
+        "first_diagnostic": "stdlib/io/io.xr:314:5: error: constructed XIR failed checking during view lifetime normalization at function 235 block 2 instruction 11 (ARRAY_PUSH)"
       }
     },
     {
@@ -1208,7 +1208,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:310:14: error: typed place has no current owner"
+        "first_diagnostic": "stdlib/io/io.xr:314:5: error: constructed XIR failed checking during view lifetime normalization at function 269 block 2 instruction 11 (ARRAY_PUSH)"
       }
     },
     {
