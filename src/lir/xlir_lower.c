@@ -2479,8 +2479,14 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     const XrXirInstruction *term = lower_term(c, f->source, b);
     if (!term)
         return false;
-    XR_DCHECK(term->op == XR_XIR_RETURN || term->op == XR_XIR_JUMP || term->op == XR_XIR_BRANCH,
-              "admission rejected unsupported terminators");
+    /* Admission is supposed to leave only these three terminators, but the old
+     * guard was an XR_DCHECK, which Release compiles out: any other terminator
+     * then fell through to the branch below and was emitted as a conditional
+     * branch with no operands and no edges, failing later on the verifier's
+     * arity check with a message that named neither the op nor the cause. Keep
+     * the rejection real so an unhandled terminator reports itself. */
+    if (term->op != XR_XIR_RETURN && term->op != XR_XIR_JUMP && term->op != XR_XIR_BRANCH)
+        return lower_unsupported(c, xr_xir_op_name(term->op));
     XrLirValue value = {0};
     XrLirInstruction instruction = {.type = XR_LIR_UNIT, .source = lower_source(c)};
     bool good = true;
