@@ -30,6 +30,14 @@ static XrXirStatus class_field_leaf(XrXirCompileContext *budget,const XrXirTypes
     /* Hash containers own separately admitted dense storage. A class field
      * retains only that handle, so recursive identities stop at this edge. */
     if (node->kind==XR_XIR_TYPE_MAP || node->kind==XR_XIR_TYPE_SET) return XR_XIR_OK;
+    /* A channel is one owned runtime handle; the field keeps the handle and the
+     * scheduler owns the queue and its element storage. */
+    if (node->kind==XR_XIR_TYPE_CHANNEL) {
+        bool element_leaf=false;
+        XrXirStatus element=class_field_leaf(budget,types,node->element,&element_leaf);
+        if (element!=XR_XIR_OK) return element;
+        *leaf=true;return XR_XIR_OK;
+    }
     /* An Array field retains its separately admitted backing store, including
      * owned function handles. This grants no callable invocation authority. */
     if (node->kind==XR_XIR_TYPE_ARRAY) {
@@ -38,7 +46,8 @@ static XrXirStatus class_field_leaf(XrXirCompileContext *budget,const XrXirTypes
         return element && !element->parameter_span && (element->kind==XR_XIR_TYPE_NOMINAL ||
             element->kind==XR_XIR_TYPE_NULLABLE || element->kind==XR_XIR_TYPE_ARRAY ||
             element->kind==XR_XIR_TYPE_TUPLE || element->kind==XR_XIR_TYPE_MAP ||
-            element->kind==XR_XIR_TYPE_SET || element->kind==XR_XIR_TYPE_CALLABLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+            element->kind==XR_XIR_TYPE_SET || element->kind==XR_XIR_TYPE_CALLABLE ||
+            element->kind==XR_XIR_TYPE_CHANNEL) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     }
     if (node->kind!=XR_XIR_TYPE_NOMINAL || !types->nominals ||
         (types->nominals->declarations!=NULL)==(types->nominals->identities!=NULL) ||
