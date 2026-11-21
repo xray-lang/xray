@@ -2,5 +2,5 @@
 // consumption form is gone.
 import xml
 
-var doc = xml.parse("<root/>")
+var doc = try xml.parse("<root/>")
 print(doc["tag"])

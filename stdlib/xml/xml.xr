@@ -953,7 +953,7 @@ fn _serializeNode(node: XmlNode, config: _XmlWriteConfig, level: i64, depth: i64
 export fn parse(data: string, preserveWhitespace: bool = false,
                       preserveComments: bool = false,
                       preserveCData: bool = true,
-                      validateEntities: bool = true) -> XmlNode {
+                      validateEntities: bool = true) throws(XmlError) -> XmlNode {
     var parser = _parse(data, _XmlParseConfig{
         preserveWhitespace: preserveWhitespace,
         preserveComments: preserveComments,
@@ -990,12 +990,12 @@ export fn parseReport(data: string, preserveWhitespace: bool = false,
 export fn parseFile(path: Path, preserveWhitespace: bool = false,
                       preserveComments: bool = false,
                       preserveCData: bool = true,
-                      validateEntities: bool = true) -> XmlNode {
+                      validateEntities: bool = true) throws(XmlError) -> XmlNode {
     var content = io.readFile(path)
     if (content == null) {
         throw XmlError.Io { message: "Failed to read file" }
     }
-    return parse(content!, preserveWhitespace: preserveWhitespace, preserveComments: preserveComments, preserveCData: preserveCData, validateEntities: validateEntities)
+    return try parse(content!, preserveWhitespace: preserveWhitespace, preserveComments: preserveComments, preserveCData: preserveCData, validateEntities: validateEntities)
 }
 
 export fn stringify(node: XmlNode, indent: i64 = 0,

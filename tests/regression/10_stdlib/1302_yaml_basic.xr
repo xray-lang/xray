@@ -1,7 +1,7 @@
 // 1302_yaml_basic.xr - YAML module tests (typed YamlValue ADT)
 
 import yaml
-import { YamlValue } from yaml
+import { YamlValue, YamlError } from yaml
 
 // Typed access helpers (mirror the module-level accessor free functions).
 fn getV(v: YamlValue, k: string) -> YamlValue { return yaml.get(v, k)! }
@@ -13,9 +13,9 @@ fn atInt(v: YamlValue, i: i64) -> i64 { return yaml.asInt(yaml.at(v, i)!) ?? -1 
 // ===== Basic key-value =====
 
 @test
-fn test_parse_basic() {
+fn test_parse_basic() throws(YamlError) {
     var data = "name: Alice\nage: 30\nactive: true"
-    var obj = yaml.parse(data, strict: true)
+    var obj = try yaml.parse(data, strict: true)
     assertEqual(getStr(obj, "name"), "Alice")
     assertEqual(getInt(obj, "age"), 30)
     assertEqual(getBool(obj, "active"), true)
@@ -24,9 +24,9 @@ fn test_parse_basic() {
 // ===== Nested mapping =====
 
 @test
-fn test_parse_nested() {
+fn test_parse_nested() throws(YamlError) {
     var data = "server:\n  host: localhost\n  port: 8080"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var server = getV(obj, "server")
     assertEqual(getStr(server, "host"), "localhost")
     assertEqual(getInt(server, "port"), 8080)
@@ -35,9 +35,9 @@ fn test_parse_nested() {
 // ===== Flow sequence =====
 
 @test
-fn test_parse_flow_sequence() {
+fn test_parse_flow_sequence() throws(YamlError) {
     var data = "list: [1, 2, 3]"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var list = getV(obj, "list")
     assertEqual(atInt(list, 0), 1)
     assertEqual(atInt(list, 2), 3)
@@ -46,9 +46,9 @@ fn test_parse_flow_sequence() {
 // ===== Flow mapping =====
 
 @test
-fn test_parse_flow_mapping() {
+fn test_parse_flow_mapping() throws(YamlError) {
     var data = "map: {a: 1, b: 2}"
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     var map = getV(obj, "map")
     assertEqual(getInt(map, "a"), 1)
     assertEqual(getInt(map, "b"), 2)
@@ -57,9 +57,9 @@ fn test_parse_flow_mapping() {
 // ===== Quoted strings =====
 
 @test
-fn test_parse_quoted_strings() {
+fn test_parse_quoted_strings() throws(YamlError) {
     var data = "single: 'hello'\ndouble: \"world\""
-    var obj = yaml.parse(data)
+    var obj = try yaml.parse(data)
     assertEqual(getStr(obj, "single"), "hello")
     assertEqual(getStr(obj, "double"), "world")
 }
@@ -67,7 +67,7 @@ fn test_parse_quoted_strings() {
 // ===== Stringify =====
 
 @test
-fn test_stringify() {
+fn test_stringify() throws(YamlError) {
     var config = yaml.newMapping()
     yaml.mappingSet(ref config, "name", yaml.stringValue("xray"))
     yaml.mappingSet(ref config, "version", yaml.intValue(1))

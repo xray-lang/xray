@@ -1211,7 +1211,7 @@ fn _emitValue(value: YamlValue, level: i64, indent: i64) -> string {
 // always enter the typed error channel via
 // `throw YamlError.Parse { diagnostic: value }`. With
 // `strict: true` every recorded diagnostic is fatal.
-export fn parse(data: string, strict: bool = false) -> YamlValue {
+export fn parse(data: string, strict: bool = false) throws(YamlError) -> YamlValue {
     var parser = YamlParser(data)
     parser.parseDocument()
     var err = _firstError(parser, strict)
@@ -1222,7 +1222,7 @@ export fn parse(data: string, strict: bool = false) -> YamlValue {
 }
 
 // parseStrict throws on any recorded diagnostic, recoverable or not.
-export fn parseStrict(data: string) -> YamlValue {
+export fn parseStrict(data: string) throws(YamlError) -> YamlValue {
     var parser = YamlParser(data)
     parser.parseDocument()
     if (len(parser.errors) > 0) {
@@ -1239,7 +1239,7 @@ export fn parseReport(data: string) -> YamlParseReport {
     return YamlParseReport(parser.root, parser.errors, parser.anchors.size())
 }
 
-export fn parseAll(data: string) -> Array<YamlValue> {
+export fn parseAll(data: string) throws(YamlError) -> Array<YamlValue> {
     var docs: Array<YamlValue> = []
     var lines = _lines(data)
     var current: Array<string> = []
@@ -1247,12 +1247,12 @@ export fn parseAll(data: string) -> Array<YamlValue> {
         var t = textutil.trim(_lineClean(lines[i]))
         if (t == "---") {
             if (len(current) > 0) {
-                var doc = parse(current.join("\n"))
+                var doc = try parse(current.join("\n"))
                 docs.push(doc)
                 current = []
             }
         } else if (t == "...") {
-            var doc = parse(current.join("\n"))
+            var doc = try parse(current.join("\n"))
             docs.push(doc)
             current = []
         } else {
@@ -1260,18 +1260,18 @@ export fn parseAll(data: string) -> Array<YamlValue> {
         }
     }
     if (len(current) > 0) {
-        var doc = parse(current.join("\n"))
+        var doc = try parse(current.join("\n"))
         docs.push(doc)
     }
     return docs
 }
 
-export fn parseFile(path: Path, strict: bool = false) -> YamlValue {
+export fn parseFile(path: Path, strict: bool = false) throws(YamlError) -> YamlValue {
     var content = io.readFile(path)
     if (content == null) {
         throw YamlError.Io { message: "Failed to read file" }
     }
-    return parse(content!, strict: strict)
+    return try parse(content!, strict: strict)
 }
 
 export fn stringify(value: YamlValue, indent: i64 = 2) -> string {
