@@ -42,10 +42,14 @@ XR_FUNC XrXirStatus xr_xir_compile_data_union(const XrXirCompileContext *context
         XrXirStatus status=control?xir_compile_resource_status(xr_compile_request_control_poll(control)):XR_XIR_OK;
         if(status!=XR_XIR_OK)return status;
         const XrXirTypeNode *node=xr_xir_type_node(types,members[i]);
-        if(node && !xr_xir_data_union_shape(types,members[i]))return XR_XIR_BAD_TYPE;
-        uint32_t n=node?node->parameter_count:1;
+
+        /* A member is either a nested data union or one admitted atom; a Class
+         * identity is an atom here even though it has a type node of its own. */
+        bool nested=node && xr_xir_data_union_shape(types,members[i]);
+        if(node && !nested && !data_union_member(types,members[i]))return XR_XIR_BAD_TYPE;
+        uint32_t n=nested?node->parameter_count:1;
         for(uint32_t p=0;p<n;++p) {
-            XrXirType member=node?node->parameters[p].type:members[i];
+            XrXirType member=nested?node->parameters[p].type:members[i];
             if(!data_union_member(types,member))return XR_XIR_BAD_TYPE;
             uint32_t at=0;while(at<result.count && (uint32_t)result.members[at]<(uint32_t)member)++at;
             if(at<result.count && result.members[at]==member)continue;
