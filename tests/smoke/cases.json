@@ -531,7 +531,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 120 block 4294967295 instruction 16 (status 10)"
+        "first_diagnostic": "stdlib/os/os.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {
@@ -607,7 +607,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 91 block 4294967295 instruction 16 (status 10)"
+        "first_diagnostic": "stdlib/sys/sys.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {
@@ -1000,7 +1000,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 120 block 4294967295 instruction 16 (status 10)"
+        "first_diagnostic": "stdlib/os/os.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {
@@ -1012,7 +1012,7 @@
       "stdout": "tests/smoke/expected/one.txt",
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 91 block 4294967295 instruction 16 (status 10)"
+        "first_diagnostic": "stdlib/sys/sys.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {
@@ -1228,7 +1228,7 @@
       "exit_code": 1,
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 202 block 4294967295 instruction 16 (status 10)"
+        "first_diagnostic": "tests/smoke/inputs/os_path_sys_regex.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {
@@ -1240,7 +1240,7 @@
       "exit_code": 1,
       "gap": {
         "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/sys/sys.xr:361:5: error: constructed XIR failed checking at function 202 block 4294967295 instruction 16 (status 10)"
+        "first_diagnostic": "tests/smoke/inputs/os_path_sys_regex.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {
