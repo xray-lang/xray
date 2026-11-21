@@ -1,0 +1,29 @@
+// 对照：同一个 escaping 参数存进 Array 元素**通过**。
+// 与 escaping_parameter_stored_into_field.xr 唯一的差别是写入目标：
+// 这里是数组元素，那里是 callable 字段，用来把缺陷范围锁在
+// 「写入 callable 字段」这一侧。
+class EventBus {
+    handlers: Array<fn() -> i64>
+
+    init() {
+        this.handlers = []
+    }
+
+    subscribe(handler: escaping fn() -> i64) {
+        this.handlers.push(handler)
+    }
+
+    invoke() -> i64 {
+        return this.handlers[0]()
+    }
+}
+
+fn target() -> i64 {
+    return 42
+}
+
+fn main() -> i64 {
+    var bus = EventBus()
+    bus.subscribe(target)
+    return bus.invoke()
+}

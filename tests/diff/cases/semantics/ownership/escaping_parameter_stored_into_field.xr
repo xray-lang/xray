@@ -1,0 +1,26 @@
+// Task340 §3.1 第 1 条：写 `escaping fn(...)` 的参数可以逃逸。
+// §3.1 第 3 条列举的禁止项只针对不逃逸的值，所以把 escaping 参数
+// 存进 callable 字段是规范允许的用法（见 Task340 §5 的 ThreadLocal.init）。
+//
+// 当前实测：报
+//   constructed XIR failed checking at function 3 block 4294967295 instruction 2
+//   (status 10)
+// 即构造器的 `this.run = h` 处被存储流拒绝。
+class Holder {
+    run: fn() -> i64
+
+    init(h: escaping fn() -> i64) {
+        this.run = h
+    }
+
+    invoke() -> i64 {
+        return this.run()
+    }
+}
+
+fn target() -> i64 {
+    return 42
+}
+
+var holder = Holder(target)
+print(holder.invoke())
