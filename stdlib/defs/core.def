@@ -2,11 +2,11 @@ module path {
   fn __getcwd {
     signature: "(): string"
     doc: "Read the current working directory for relative Path resolution"
-    vm: "path_getcwd"
-    aot: "xrt_path_getcwd"
+    vm: ""
+    aot: ""
     argc: 0
     arg_spec: ""
-    aot_direct: true
+    aot_direct: false
     link_object: false
     layer: "system"
     visibility: "internal"
@@ -15,11 +15,11 @@ module path {
   fn __isWindows {
     signature: "(): bool"
     doc: "Read the execution host path flavour"
-    vm: "path_is_windows"
-    aot: "xrt_path_is_windows"
+    vm: ""
+    aot: ""
     argc: 0
     arg_spec: ""
-    aot_direct: true
+    aot_direct: false
     link_object: false
     layer: "system"
     visibility: "internal"
@@ -28,11 +28,11 @@ module path {
   fn __fullpath {
     signature: "(raw: string): string"
     doc: "Make a Windows locator absolute without requiring an existing file"
-    vm: "path_fullpath"
-    aot: "xrt_path_fullpath"
+    vm: ""
+    aot: ""
     argc: 1
     arg_spec: "s"
-    aot_direct: true
+    aot_direct: false
     link_object: false
     layer: "system"
     visibility: "internal"

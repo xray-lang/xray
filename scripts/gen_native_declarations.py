@@ -1352,7 +1352,7 @@ def render_path_getcwd(declarations):
             row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
             row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
             row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-            '(): string', '0', '', 'internal', '', '', 'fresh', 'system', 'path_getcwd', 'xrt_path_getcwd', True, 'method',
+            '(): string', '0', '', 'internal', '', '', 'fresh', 'system', '', '', False, '',
             '', 'normal', '', '', 'value', False, None, (), ''):
         raise ValueError('Path query differs from its complete source contract')
     return [
@@ -1379,13 +1379,12 @@ def render_path_host_facts(declarations):
         if len(candidates) != 1:
             raise ValueError('Path host fact requires its sole governed declaration: ' + name)
         row = candidates[0]
-        vm = 'path_is_windows' if name == '__isWindows' else 'path_fullpath'
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
                 row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct, row.aot_kind,
                 row.link_object, row.vm_binding, row.vm_ifdef, row.define, row.ret,
                 row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
                 signature, count, arguments, 'internal', '', allocation, 'fresh' if result == 'string' else '',
-                'system', vm, 'xrt_' + vm, True, 'method', '', 'normal', '', '', 'value', False, None, (),
+                'system', '', '', False, '', '', 'normal', '', '', 'value', False, None, (),
                 ''):
             raise ValueError('Path host fact differs from its complete source contract: ' + name)
         symbol = 'xr_native_path_' + ('is_windows' if name == '__isWindows' else 'fullpath')
