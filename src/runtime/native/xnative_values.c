@@ -234,18 +234,28 @@ XRAY_API const void *xrt_native_class_field(const XrtManagedHeader *owner, const
     return bytes;
 }
 /* A Class-identity union has no stored tag. The live instance header keeps its
- * immutable per-class Ops, which is the nominal identity of its class. The test
- * succeeds when that identity is the target class or one of its Class ancestors.
- * Compiler type ids only name rows of this receiving image. */
+ * immutable per-class Ops, which is the nominal identity of its dynamic class.
+ * The test walks UP from that dynamic class: it succeeds when the target class
+ * is the value's exact class or one of its Class ancestors. Walking the target's
+ * own ancestors instead would answer "is an ancestor of the target", which is
+ * the reverse question. Compiler type ids only name rows of this image. */
 XRAY_API bool xrt_native_class_is(const XrtManagedHeader *owner, const XrtValueImage *image,
     uint32_t type, uint32_t source) {
     if (!owner || !image || !image->types || !type || type > image->type_count ||
         image->types[type - 1].kind != XRT_VALUE_CLASS) return false;
-    for (uint32_t id = type; id; ) {
-        XrtBoundClass expected = native_class(image, id, source);
-        if (expected.ops == owner->ops) return true;
-        if (id > image->type_count) break;
-        id = image->types[id - 1].class_parent;
+    XrtBoundClass target = native_class(image, type, source);
+    if (!target.ops) return false;
+    /* Locate the dynamic class row by its immutable Ops identity. */
+    uint32_t current = 0;
+    for (uint32_t id = 1; id <= image->type_count; ++id) {
+        if (image->types[id - 1].kind != XRT_VALUE_CLASS) continue;
+        XrtBoundClass row = native_class(image, id, source);
+        if (row.ops == owner->ops) { current = id; break; }
+    }
+    for (; current; ) {
+        XrtBoundClass row = native_class(image, current, source);
+        if (row.ops == target.ops) return true;
+        current = current <= image->type_count ? image->types[current - 1].class_parent : 0;
     }
     return false;
 }

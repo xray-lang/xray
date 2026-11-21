@@ -1,5 +1,6 @@
 /* Closed data-union normalization and membership, independent of Error sets. */
 #include "xxir_data_union.h"
+#include "xxir_class_hierarchy_internal.h"
 XR_FUNC bool xr_xir_data_union_atom(XrXirType type) {
     return type==XR_XIR_BOOL || type==XR_XIR_RUNE || type==XR_XIR_STRING || xr_xir_type_is_number(type);
 }
@@ -62,6 +63,19 @@ XR_FUNC XrXirStatus xr_xir_compile_data_union(const XrXirCompileContext *context
     for(uint32_t p=0;p<result.count;++p) {
         if(xr_xir_type_is_integer(result.members[p])) {if(integer)return XR_XIR_BAD_TYPE;integer=true;}
         if(xr_xir_float_bits(result.members[p])) {if(floating)return XR_XIR_BAD_TYPE;floating=true;}
+    }
+    /* A union whose Class members are each other's ancestor is rejected rather
+     * than normalized. Keeping only the base would lose the dynamic identity
+     * `is Derived` needs; keeping only the derived would reject base values.
+     * Rejection is the unambiguous, fail-closed reading of the exclusivity
+     * rule: distinct Class identities in one union must be unrelated. */
+    if(types->nominals) for(uint32_t a=0;a<result.count;++a) {
+        if(!xr_xir_type_is_class(types,result.members[a]))continue;
+        for(uint32_t b=a+1;b<result.count;++b) {
+            if(!xr_xir_type_is_class(types,result.members[b]))continue;
+            if(xr_xir_class_is_subtype(types,result.members[a],result.members[b]) ||
+                xr_xir_class_is_subtype(types,result.members[b],result.members[a]))return XR_XIR_BAD_TYPE;
+        }
     }
     *output=result;return XR_XIR_OK;
 }

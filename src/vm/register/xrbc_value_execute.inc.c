@@ -1287,6 +1287,15 @@ static XrtManagedStatus rbc_value_display(const XrRbcModule *module,XrRbcStack *
     }
     return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
 }
+/* Class identity rows must be resolved through the same plan authority that
+ * created the instance: a module-state layout or the program value image. */
+typedef struct XrRbcValueClassResolver { XrRbcStack *stack; } XrRbcValueClassResolver;
+static XrtManagedStatus rbc_value_class_binding(const XrRbcValueClassResolver *resolver,
+    uint32_t id, XrtBoundClass *binding) {
+    return resolver->stack->layout ?
+        xrt_module_layout_class(resolver->stack->layout, id, binding) :
+        xrt_value_image_class(resolver->stack->values->plans, id, binding);
+}
 static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc, uint32_t source) {
     RbcValueActivation *activation=stack->values ? stack->values->top : NULL;
@@ -1339,16 +1348,29 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         const XrtManagedHeader *header=NULL;
         status=rbc_value_borrow_header(rbc_value_origin(activation,access.source),home,&header);
         if (status==XRT_MANAGED_OK) {
-            /* Resolve class identities through the same plan authority that
-             * constructed the instance, then walk the target's class ancestors. */
-            bool matched=false;
-            for (uint32_t id=access.index; id && status==XRT_MANAGED_OK; ) {
-                XrtBoundClass binding={0};
-                status=stack->layout ? xrt_module_layout_class(stack->layout,id,&binding) :
-                    xrt_value_image_class(stack->values->plans,id,&binding);
+            /* Resolve through the same plan authority that constructed the
+             * instance. Find the dynamic class row from the live Ops identity,
+             * then walk UP its ancestor chain: the target matches when it is the
+             * value's class or an ancestor of it. The reverse walk (target's own
+             * ancestors) would invert the predicate. */
+            XrRbcValueClassResolver resolve={stack};
+            XrtBoundClass target_binding={0};
+            status=rbc_value_class_binding(&resolve,access.index,&target_binding);
+            uint32_t current=0;
+            for (uint32_t id=1; status==XRT_MANAGED_OK && id<=activation->image->type_count; ++id) {
+                if (activation->image->types[id-1].kind!=XRT_VALUE_CLASS) continue;
+                XrtBoundClass row={0};
+                status=rbc_value_class_binding(&resolve,id,&row);
                 if (status!=XRT_MANAGED_OK) break;
-                if (binding.ops==header->ops) {matched=true;break;}
-                id=id<=activation->image->type_count ? activation->image->types[id-1].class_parent : 0;
+                if (row.ops==header->ops) {current=id;break;}
+            }
+            bool matched=false;
+            for (; status==XRT_MANAGED_OK && current; ) {
+                XrtBoundClass row={0};
+                status=rbc_value_class_binding(&resolve,current,&row);
+                if (status!=XRT_MANAGED_OK) break;
+                if (row.ops==target_binding.ops) {matched=true;break;}
+                current=current<=activation->image->type_count ? activation->image->types[current-1].class_parent : 0;
             }
             XrRbcRegister *output=status==XRT_MANAGED_OK ? rbc_value_register(stack,activation,access.result) : NULL;
             if (status==XRT_MANAGED_OK && !output) status=XRT_MANAGED_ARGUMENT;

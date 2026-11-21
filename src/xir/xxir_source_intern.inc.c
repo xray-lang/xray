@@ -168,7 +168,7 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
         XrXirDataUnion normalized={0};
         XrXirStatus status=xr_xir_compile_data_union(&ctx->compile,&ctx->types,members,node.parameter_count,ctx->request,&normalized);
         source_retire_array(ctx,members);
-        if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"E0390: data union requires distinguishable closed scalar or string members");
+        if(status!=XR_XIR_OK)return source_fail(ctx,NULL,status,"E0390: data union requires distinguishable closed scalar, string or unrelated Class members");
         if(normalized.count==1) {*type=normalized.members[0];return true;}
         XrXirCallableParameter *owned=source_alloc(ctx,normalized.count,sizeof(*owned));
         if(!owned)return false;
