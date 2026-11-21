@@ -554,6 +554,15 @@ def render_type(root, stem):
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
     header, members = parse_source(source, prelude)
     identity, name, binder, line, column = header
+    if stem == 'string':
+        # Lossy decoding allocates one owned string and cannot fail; the
+        # declaration carries no throws clause, so state the result contract here.
+        for member in members:
+            if member.name == 'fromUtf8Lossy':
+                if member.ownership != 'unknown' or member.allocation != 'unknown':
+                    raise ValueError('Lossy decoding carries an unexpected result contract')
+                member.ownership = 'owned'
+                member.allocation = 'may_heap'
     if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string'),
                                      ('map', 10, 'Map'), ('set', 11, 'Set'),
                                      ('i64', 12, 'i64'), ('f64', 13, 'f64'),
@@ -1714,7 +1723,7 @@ def render_runtime_counters(declarations):
     return lines, rows
 
 
-def render_unicode_callable(root, decoder):
+def render_unicode_callable(root, decoder, lossy):
     import sys
     sys.path.insert(0, str(root / 'tools' / 'stdlibgen'))
     from stdlibgen import parse_defs
@@ -1887,6 +1896,7 @@ def render_unicode_callable(root, decoder):
         '    "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_unicode_has_property_parameters, 2, XR_NATIVE_TERM_BOOL', '};',
         'static const XrNativeCallableDeclaration xr_native_callables[] = {',
         '    {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[' + str(decoder) + '], &xr_native_utf8_error, false, NULL, NULL, {{0}}},',
+        '    {XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY, &xr_native_string, &xr_native_string_members[' + str(lossy) + '], NULL, false, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_TASK_ALL_BEGIN, &xr_native_task, &xr_native_task_members[3], NULL, false, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN, &xr_native_task, &xr_native_task_members[4], NULL, false, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '},',
@@ -1907,7 +1917,8 @@ def render(root):
     lines += render_intrinsics(root)
     _, _, string_members = render_type(root, 'string')
     decoder = next(i for i, m in enumerate(string_members) if m.operation == 'STRING_FROM_UTF8')
-    lines += render_unicode_callable(root, decoder)
+    lossy = next(i for i, m in enumerate(string_members) if m.name == 'fromUtf8Lossy')
+    lines += render_unicode_callable(root, decoder, lossy)
     return {'src/shared/xprelude_source.inc.c': render_prelude_source(root),
             'src/shared/xnative_declarations.inc.c': '\n'.join(lines) + '\n'}
 

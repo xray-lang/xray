@@ -91,6 +91,20 @@ static inline bool xir_native_callable_types(uint32_t id,const XrXirTypes *types
             canonical->member->allocation==XR_NATIVE_ALLOCATION_NO_HEAP &&
             count==1 && parameters && parameters[0]==XR_XIR_STRING && result==XR_XIR_I64 && error==XR_XIR_NEVER;
     }
+    if (id==XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY) {
+        const XrXirTypeNode *bytes=count==1 && parameters ? xr_xir_type_node(types,parameters[0]) : NULL;
+        return canonical && canonical->owner && canonical->owner->id==XR_NATIVE_DECLARATION_STRING &&
+            !canonical->error_e_type && !canonical->ctfe && canonical->member &&
+            canonical->member->name && !strcmp(canonical->member->name,"fromUtf8Lossy") &&
+            canonical->member->operation==XR_NATIVE_OPERATION_NONE &&
+            canonical->member->is_static && canonical->member->is_method &&
+            canonical->member->parameter_count==1 && canonical->member->parameters &&
+            canonical->member->parameters[0].type==XR_NATIVE_TERM_SLICE_U8 &&
+            canonical->member->result==XR_NATIVE_TERM_STRING &&
+            canonical->member->ownership==XR_NATIVE_RESULT_OWNERSHIP_OWNED &&
+            bytes && bytes->kind==XR_XIR_TYPE_SLICE && bytes->element==XR_XIR_U8 &&
+            count==1 && parameters && result==XR_XIR_STRING && error==XR_XIR_NEVER;
+    }
     const XrXirTypeNode *slice=count==1 && parameters ? xr_xir_type_node(types,parameters[0]) : NULL;
     return canonical && canonical->owner && canonical->error_e_type && canonical->owner->id==XR_NATIVE_DECLARATION_STRING &&
         canonical->member->operation==XR_NATIVE_OPERATION_STRING_FROM_UTF8 &&

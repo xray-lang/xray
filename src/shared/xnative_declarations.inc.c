@@ -170,7 +170,7 @@ static const XrNativeParameter xr_native_string_parameters_15[] = {
 };
 static const XrNativeMemberDeclaration xr_native_string_members[] = {
     {1, "fromUtf8", "(bytes: Slice<u8>) throws(Utf8Error) -> string", "string", 11, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_STRING_FROM_UTF8, XR_NATIVE_ALLOCATION_MAY_HEAP, "utf8,allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_0, 1, XR_NATIVE_TERM_STRING},
-    {2, "fromUtf8Lossy", "(bytes: Slice<u8>) -> string", "string", 12, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_1, 1, XR_NATIVE_TERM_STRING},
+    {2, "fromUtf8Lossy", "(bytes: Slice<u8>) -> string", "string", 12, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_MAY_HEAP, "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_1, 1, XR_NATIVE_TERM_STRING},
     {3, "fromRune", "(value: rune) -> string", "string", 13, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_2, 1, XR_NATIVE_TERM_STRING},
     {4, "join", "(parts: Array<string>, separator?: string) -> string", "string", 14, 12, XR_NATIVE_RECEIVER_READ, true, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_string_parameters_3, 2, XR_NATIVE_TERM_STRING},
     {5, "contains", "(search: string) -> bool", "bool", 16, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_CONTAINS, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_string_parameters_4, 1, XR_NATIVE_TERM_BOOL},
@@ -1565,6 +1565,7 @@ static const XrNativeMemberDeclaration xr_native_unicode_has_property = {
 };
 static const XrNativeCallableDeclaration xr_native_callables[] = {
     {XR_NATIVE_CALLABLE_STRING_FROM_UTF8, &xr_native_string, &xr_native_string_members[0], &xr_native_utf8_error, false, NULL, NULL, {{0}}},
+    {XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY, &xr_native_string, &xr_native_string_members[1], NULL, false, NULL, NULL, {{0}}},
     {XR_NATIVE_CALLABLE_TASK_ALL_BEGIN, &xr_native_task, &xr_native_task_members[3], NULL, false, NULL, NULL, {{0}}},
     {XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN, &xr_native_task, &xr_native_task_members[4], NULL, false, NULL, NULL, {{0}}},
     {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", {{139,4,255,93,118,15,222,116,182,52,61,244,141,18,21,4,114,168,111,201,5,41,98,235,90,151,152,220,74,13,17,221}}},
