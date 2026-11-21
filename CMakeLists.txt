@@ -1078,6 +1078,7 @@ set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcli_diag.c
     ${XRAY_CLI_ROOT}/xcli_output.c
     ${XRAY_CLI_ROOT}/xcli_installation.c
+    ${XRAY_CLI_ROOT}/xcli_fs.c
     ${XRAY_CLI_ROOT}/xcmd_repl.c
     ${XRAY_CLI_ROOT}/xcmd_run.c
     ${XRAY_CLI_ROOT}/xcmd_build.c

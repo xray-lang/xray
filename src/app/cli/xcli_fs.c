@@ -1,4 +1,4 @@
-/*
+﻿/*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
  *
@@ -14,6 +14,9 @@
  */
 
 #include "xcli_fs.h"
+#include "../../base/xio_policy.h"
+#include "../../os/os_dir.h"
+#include "../../os/os_fs.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xfileio.h"
@@ -140,14 +143,15 @@ XrCliWalkOpts xr_cli_walk_defaults(void) {
 }
 
 static void walk_recursive(const char *dirpath, const XrCliWalkOpts *opts, XrCliFileList *fl) {
-    XrDirIter *it = xr_dir_open(dirpath);
-    if (!it)
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    XrDirIter *it = NULL;
+    if (xr_os_io_dir_open(&policy, dirpath, &it) != XR_OS_IO_OK)
         return;
 
     char filepath[XR_CLI_PATH_MAX];
     XrDirEntry e;
 
-    while (xr_dir_next(it, &e)) {
+    while (xr_os_io_dir_next(it, &e) == XR_OS_IO_OK) {
         int n = snprintf(filepath, sizeof(filepath), "%s/%s", dirpath, e.name);
         if (n < 0 || (size_t) n >= sizeof(filepath))
             continue;
@@ -164,7 +168,7 @@ static void walk_recursive(const char *dirpath, const XrCliWalkOpts *opts, XrCli
         }
     }
 
-    xr_dir_close(it);
+    xr_os_io_dir_close(it);
 }
 
 int xr_cli_collect_files(const char *path, const XrCliWalkOpts *opts, XrCliFileList *fl) {
@@ -175,12 +179,13 @@ int xr_cli_collect_files(const char *path, const XrCliWalkOpts *opts, XrCliFileL
     if (!opts)
         opts = &defaults;
 
+    XrOsIoPolicy policy = xr_os_io_system_policy();
     XrFsStat st;
-    if (xr_fs_stat(path, &st) != 0)
+    if (xr_os_io_stat(&policy, path, &st) != XR_OS_IO_OK)
         return -1;
 
     if (st.kind == XR_FS_FILE) {
-        /* Single file — add directly (ignore xr_only filter for explicit files) */
+        /* Single file 鈥?add directly (ignore xr_only filter for explicit files) */
         xr_cli_filelist_add(fl, path);
         return 0;
     }
@@ -263,6 +268,12 @@ int xr_cli_write_file(const char *path, const char *content) {
     return written == len ? 0 : -1;
 }
 
+/* Drop a temporary file whose rename never happened; the write already failed. */
+static void discard_temporary_file(const char *path) {
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    (void) xr_os_io_remove(&policy, path);
+}
+
 int xr_cli_write_file_atomic(const char *path, const char *content) {
     XR_DCHECK(path != NULL, "path must not be NULL");
     XR_DCHECK(content != NULL, "content must not be NULL");
@@ -282,7 +293,7 @@ int xr_cli_write_file_atomic(const char *path, const char *content) {
     size_t written = fwrite(content, 1, len, f);
     if (fflush(f) != 0 || written != len) {
         fclose(f);
-        xr_fs_remove(tmp_path);
+        discard_temporary_file(tmp_path);
         return -1;
     }
     fclose(f);
@@ -296,13 +307,13 @@ int xr_cli_write_file_atomic(const char *path, const char *content) {
         int chmod_result = chmod(tmp_path, st.st_mode);
 #endif
         if (chmod_result != 0) {
-            xr_fs_remove(tmp_path);
+            discard_temporary_file(tmp_path);
             return -1;
         }
     }
 
     if (rename(tmp_path, path) != 0) {
-        xr_fs_remove(tmp_path);
+        discard_temporary_file(tmp_path);
         return -1;
     }
 
@@ -312,11 +323,15 @@ int xr_cli_write_file_atomic(const char *path, const char *content) {
 /* ========== Path Queries ========== */
 
 bool xr_cli_file_exists(const char *path) {
-    return xr_fs_exists(path);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    XrFsStat stat;
+    return xr_os_io_stat(&policy, path, &stat) == XR_OS_IO_OK;
 }
 
 bool xr_cli_is_directory(const char *path) {
-    return xr_fs_is_dir(path);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    XrFsStat stat;
+    return xr_os_io_stat(&policy, path, &stat) == XR_OS_IO_OK && stat.kind == XR_FS_DIR;
 }
 
 bool xr_cli_is_xr_file(const char *filename) {
