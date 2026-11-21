@@ -228,27 +228,23 @@ def iter_text_files(scan_roots: list[Path]):
         if not base.exists():
             continue
         for path in sorted(base.rglob("*")):
-            if not path.is_file():
-                continue
-            if not any(str(path).endswith(suffix) for suffix in TEXT_SUFFIXES):
-                continue
-            if is_excluded(path):
+            if not path.name.endswith(TEXT_SUFFIXES) or is_excluded(path) or not path.is_file():
                 continue
             resolved = path.resolve()
             if resolved in seen:
                 continue
             seen.add(resolved)
-            yield path
+            yield path, resolved
 
 
-def scan_file(root: Path, path: Path) -> list[Hit]:
+def scan_file(root: Path, path: Path, resolved: Path) -> list[Hit]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (UnicodeDecodeError, OSError):
         return []
     rel_path = display_path(path, root)
     hits: list[Hit] = []
-    normalized = str(path.resolve()).replace("\\", "/")
+    normalized = str(resolved).replace("\\", "/")
     numeric_public = any(
         marker in normalized
         for marker in (
@@ -273,8 +269,8 @@ def build_inventory(root: Path, scan_roots: list[Path]) -> dict[str, list[Hit]]:
     by_category: dict[str, list[Hit]] = defaultdict(list)
     for category in CATEGORIES:
         by_category[category]
-    for path in iter_text_files(scan_roots):
-        for hit in scan_file(root, path):
+    for path, resolved in iter_text_files(scan_roots):
+        for hit in scan_file(root, path, resolved):
             by_category[hit.category].append(hit)
     return {category: by_category[category] for category in CATEGORIES}
 
