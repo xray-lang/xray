@@ -1,0 +1,13 @@
+// A later module-level assignment has the same first-member storage rule as
+// initialization: a sibling Class member is rejected at compile time.
+final class Conn {
+    fd: i64
+    init(fd: i64) { this.fd = fd }
+}
+final class Listener {
+    fd: i64
+    init(fd: i64) { this.fd = fd }
+}
+var handle: Conn | Listener = Conn(2)
+handle = Listener(3)
+print(handle is Conn)

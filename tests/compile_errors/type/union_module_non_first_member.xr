@@ -1,0 +1,12 @@
+// Module storage is laid out as the union's first Class member row, so a
+// sibling member is rejected at compile time instead of failing at startup.
+final class Conn {
+    fd: i64
+    init(fd: i64) { this.fd = fd }
+}
+final class Listener {
+    fd: i64
+    init(fd: i64) { this.fd = fd }
+}
+var handle: Conn | Listener = Listener(2)
+print(handle is Conn)

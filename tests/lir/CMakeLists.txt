@@ -201,6 +201,13 @@ add_test(NAME test_lir_owned_string COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOUR
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/owned-string" ${lir_c_native_options})
 set_tests_properties(test_lir_owned_string PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 180)
+add_test(NAME lir_class_union_is COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_class_union_is.py"
+    --vm-driver $<TARGET_FILE:lir_vm_run> --source-driver $<TARGET_FILE:lir_c_run>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/class-union-is" ${lir_c_native_options})
+set_tests_properties(lir_class_union_is PROPERTIES LABELS "unit;lir;native" TIMEOUT 180)
 add_test(NAME test_lir_pipeline_eval COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_pipeline_eval.py"
     --driver $<TARGET_FILE:lir_pipeline_eval>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"

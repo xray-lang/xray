@@ -1,0 +1,12 @@
+// Base and Derived are each other's ancestor: one union value could not name
+// which identity it holds, so the union is rejected instead of normalized.
+class Base {
+    x: i64
+    init(x: i64) { this.x = x }
+}
+class Derived extends Base {
+    y: i64
+    init(x: i64, y: i64) { super(x); this.y = y }
+}
+var h: Base | Derived = Base(1)
+print(h is Base)
