@@ -85,7 +85,7 @@ class ProcessGroupCleanupTest(unittest.TestCase):
         answers = [PermissionError(), PermissionError(), ProcessLookupError()]
         with mock.patch.object(xray_process.os, "killpg", side_effect=answers) as kill, \
                 mock.patch.object(xray_process.time, "sleep"):
-            xray_process._kill_group(1234)
+            self.assertFalse(xray_process._kill_group(1234))
         self.assertEqual(kill.call_count, 3)
         kill.assert_called_with(1234, signal.SIGKILL)
 
@@ -99,8 +99,56 @@ class ProcessGroupCleanupTest(unittest.TestCase):
 
     def test_delivered_signal_ends_cleanup(self):
         with mock.patch.object(xray_process.os, "killpg") as kill:
-            xray_process._kill_group(1234)
+            self.assertTrue(xray_process._kill_group(1234))
         kill.assert_called_once_with(1234, signal.SIGKILL)
+
+    def test_darwin_proves_drain_after_reaping_a_signalled_group(self):
+        child = mock.Mock(pid=1234)
+        child.wait.return_value = 3
+
+        def signal_group(group, sig):
+            self.assertEqual(group, child.pid)
+            if sig == signal.SIGKILL:
+                child.wait.assert_called_once_with(timeout=2)
+                return
+            self.assertEqual(sig, 0)
+            self.assertEqual(child.wait.call_args_list, [mock.call(timeout=2), mock.call()])
+            if kill.call_count == 2:
+                raise PermissionError()
+            raise ProcessLookupError()
+
+        with mock.patch.object(xray_process.sys, "platform", "darwin"), \
+                mock.patch.object(xray_process.subprocess, "Popen", return_value=child), \
+                mock.patch.object(xray_process.os, "killpg", side_effect=signal_group) as kill, \
+                mock.patch.object(xray_process.time, "sleep"):
+            self.assertEqual(xray_process.run_child(["fixture"], timeout=2), 3)
+        self.assertEqual(kill.call_args_list, [mock.call(child.pid, signal.SIGKILL),
+                                              mock.call(child.pid, 0), mock.call(child.pid, 0)])
+
+    def test_darwin_already_gone_group_skips_the_probe(self):
+        child = mock.Mock(pid=1234)
+        child.wait.return_value = 3
+        with mock.patch.object(xray_process.sys, "platform", "darwin"), \
+                mock.patch.object(xray_process.subprocess, "Popen", return_value=child), \
+                mock.patch.object(xray_process.os, "killpg", side_effect=ProcessLookupError()) as kill:
+            self.assertEqual(xray_process.run_child(["fixture"]), 3)
+        kill.assert_called_once_with(child.pid, signal.SIGKILL)
+
+    def test_darwin_uncertain_drain_fails_closed_at_the_shared_deadline(self):
+        for response in (None, PermissionError(), OSError("group query failed")):
+            with self.subTest(response=response):
+                child = mock.Mock(pid=1234)
+                child.wait.side_effect = [xray_process.subprocess.TimeoutExpired("fixture", 2), -signal.SIGKILL]
+                with mock.patch.object(xray_process.sys, "platform", "darwin"), \
+                        mock.patch.object(xray_process.subprocess, "Popen", return_value=child), \
+                        mock.patch.object(xray_process.os, "killpg", side_effect=[None, response]) as kill, \
+                        mock.patch.object(xray_process.time, "monotonic",
+                                          side_effect=[0.0, xray_process.GROUP_EXIT_SECONDS]), \
+                        mock.patch.object(xray_process.time, "sleep") as sleep:
+                    with self.assertRaises(xray_process.RecoveryRequired):
+                        xray_process.run_child(["fixture"], timeout=2)
+                self.assertEqual(kill.call_args_list, [mock.call(child.pid, signal.SIGKILL), mock.call(child.pid, 0)])
+                sleep.assert_not_called()
 
     def test_real_command_exit_status_is_returned(self):
         self.assertEqual(xray_process.run_child([sys.executable, "-c", "raise SystemExit(3)"]), 3)
