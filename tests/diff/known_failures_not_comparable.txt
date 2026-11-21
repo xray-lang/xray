@@ -349,7 +349,6 @@ tests/diff/cases/semantics/optional_call.xr  # XR_TARGET_1001 direct-local share
 tests/diff/cases/semantics/ownership/auto_borrow_class_alias_return_downgrade.xr  # XR_TARGET_1001 value representation binding is incomplete, incompatible, or unlocated
 tests/diff/cases/semantics/ownership/auto_borrow_heap_readonly_param.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
 tests/diff/cases/semantics/ownership/auto_borrow_value_struct_return_downgrade.xr  # XR_TARGET_1003 direct-local signature or result storage is incomplete
-tests/diff/cases/semantics/ownership/callable_through_mutable_tuple.xr  # XR_XIR_UNRESOLVED: TUPLE_FIELD receiver never reaches the producer's tuple node
 tests/diff/cases/semantics/ownership/closure_mutable_scalar_direct_call.xr  # XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE
 tests/diff/cases/semantics/ownership/converged_capability_positive.xr  # XR_TARGET_1003 call result or argument partition cannot bind canonical storage
 tests/diff/cases/semantics/ownership/copy_deep_independent.xr  # XR_TARGET_1003 call-shaped operation has no exact target authority
