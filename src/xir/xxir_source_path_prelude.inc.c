@@ -109,6 +109,27 @@ static bool source_path_discover(SourceContext *ctx) {
     return status==XR_MODULE_OK&&index>=0?source_path_owner(ctx,(uint32_t)index,logical):
         source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Path declaration module is missing");
 }
+static bool source_path_host_module(SourceContext *ctx) {
+    char logical[64],canonical[160];
+    if(ctx->module>=ctx->module_count||!xir_path_prelude_coordinates(logical,canonical))return false;
+    const XrModuleSpec *spec=ctx->graph->specs+ctx->module;
+    return spec->authority.kind==XR_MODULE_IDENTITY_STDLIB&&spec->authority.namespace_id&&
+        source_text_same(ctx,NULL,spec->authority.namespace_id,xir_path_prelude_module())&&
+        spec->logical_path&&source_text_same(ctx,NULL,spec->logical_path,logical);
+}
+/* The host path flavour is a property of the target the compiler emits for, not
+ * a runtime observation: a Path value keeps the exact text one host's lexical
+ * rules produced, so the flavour cannot change while the program runs. Folding
+ * it here keeps the query out of every backend and leaves the Path module with
+ * one genuine host leaf, the working-directory read. */
+static bool source_path_host_flavour(SourceContext *ctx,SourceValue *value) {
+#ifdef XR_OS_WINDOWS
+    const int64_t windows=1;
+#else
+    const int64_t windows=0;
+#endif
+    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_BOOL,XR_XIR_BOOL,{0,0},{0,0},windows,{0}},value);
+}
 static bool source_path_prelude_type(SourceContext *ctx,XrXirType *type) {
     char logical[64],canonical[160];if(!xir_path_prelude_coordinates(logical,canonical))return false;
     int module=-1;XrModuleStatus status=xr_compile_module_graph_find(ctx->graph,canonical,&module);

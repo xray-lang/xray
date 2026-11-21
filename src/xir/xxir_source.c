@@ -1514,6 +1514,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_atomic_inferred_construct(ctx,node,result_context,value);
             if (source_text_same(ctx,NULL,name,"Set"))
                 return source_set_construct(ctx,node,result_context,value);
+            if (source_text_same(ctx,NULL,name,"__isWindows") && !call->arg_count &&
+                !call->type_arg_count && source_path_host_module(ctx))
+                return source_path_host_flavour(ctx,value);
             print = source_text_same(ctx, NULL, name, "print"); stream = stream_primitive(ctx, name);
             host_time = host_time_primitive(ctx, name);
         }

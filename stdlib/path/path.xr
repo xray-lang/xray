@@ -55,8 +55,12 @@ export fn resolve(...parts: Path) -> Path {
     const value=lexical.joinAll(_strings(parts),_windows)
     if (lexical.root(value,_windows).absolute) { return Path(lexical.normalize(value,_windows)) }
     if (_windows) {
-        if (len(value)==0) { return Path(__fullpath(".")) }
-        return Path(__fullpath(value))
+        // The Windows locator is lexical: GetFullPathName prefixes the working
+        // directory and collapses the dots without querying the filesystem, so
+        // the same result is one join over the module's own cwd leaf.
+        const base = __getcwd()
+        if (len(value)==0) { return Path(lexical.normalize(base,true)) }
+        return Path(lexical.normalize(lexical.joinAll([base,value],true),true))
     }
     return Path(lexical.normalize(lexical.joinAll([__getcwd(),value],false),false))
 }
