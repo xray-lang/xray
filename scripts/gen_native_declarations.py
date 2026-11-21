@@ -1560,6 +1560,16 @@ def render_io_callables(declarations):
         ('__dirOpen', '(path: Path): i64', 'p', 'io_dirOpen', 'xrt_io_dir_open', 'IO_DIR_OPEN'),
         ('__dirNext', '(handle: i64): string?', 'i', 'io_dirNext', 'xrt_io_dir_next', 'IO_DIR_NEXT'),
         ('__dirClose', '(handle: i64): bool', 'i', 'io_dirClose', 'xrt_io_dir_close', 'IO_DIR_CLOSE'),
+        # File-handle leaves. `handles` is the number of leading i64 descriptor
+        # parameters; the remaining shape (path vs. bytes vs. string) is settled
+        # by the identity below.
+        ('__fileOpen', '(path: Path): i64', 'p', 'io_fileOpen', 'xrt_io_file_open', 'IO_FILE_OPEN'),
+        ('__fileOpenWrite', '(path: Path, append: bool): i64', 'pv', 'io_fileOpenWrite', 'xrt_io_file_open_write', 'IO_FILE_OPEN_WRITE'),
+        ('__fileRead', '(handle: i64, maxBytes: i64): Array<u8>?', 'ii', 'io_fileRead', 'xrt_io_read_handle_chunk', 'IO_FILE_READ'),
+        ('__fileWrite', '(handle: i64, data: Array<u8>, offset: i64): i64', 'ivi', 'io_fileWrite', 'xrt_io_write_handle_chunk', 'IO_FILE_WRITE'),
+        ('__fileWriteStr', '(handle: i64, data: string, offset: i64): i64', 'isi', 'io_fileWriteStr', 'xrt_io_write_handle_str', 'IO_FILE_WRITE_STR'),
+        ('__fileClose', '(handle: i64): bool', 'i', 'io_fileClose', 'xrt_io_file_close', 'IO_FILE_CLOSE'),
+        ('__fileFlush', '(handle: i64): bool', 'i', 'io_fileFlush', 'xrt_io_file_flush', 'IO_FILE_FLUSH'),
     )
     lines, rows = [], []
     for ordinal, (name, signature, arguments, vm, aot, identity) in enumerate(contracts, 1):
@@ -1569,19 +1579,32 @@ def render_io_callables(declarations):
         row = candidates[0]
         stat = identity == 'IO_STAT'
         text_result = identity in ('IO_READLINK', 'IO_REALPATH', 'IO_MAKE_TEMP_DIR', 'IO_MAKE_TEMP_FILE', 'IO_DIR_NEXT')
+        fresh_result = text_result or stat or identity == 'IO_FILE_READ'
         if (row.signature, row.argc, row.arg_spec, row.visibility, row.effect, row.allocation,
                 row.return_ownership, row.layer, row.vm, row.aot, row.aot_direct,
                 row.aot_kind, row.link_object, row.vm_binding, row.vm_ifdef, row.define,
                 row.ret, row.semantic_intrinsic, row.provider_declaration, row.caps, row.suspension_kind) != (
-                signature, str(len(arguments)), arguments, 'internal', '', '', 'fresh' if stat or text_result else '', 'system', vm,
-                aot, not stat, '' if stat else 'method', '', 'normal', '', '', 'value', False, None, (), ''):
-            raise ValueError('Filesystem callable differs from its complete source contract: ' + name)
+                signature, str(len(arguments)), arguments, 'internal', '', '', 'fresh' if fresh_result else '', 'system', vm,
+                aot, not stat, '' if stat else 'method', '',
+                'yieldable' if identity in ('IO_FILE_WRITE', 'IO_FILE_WRITE_STR') else 'normal',
+                '', '', 'value', False, None, (), ''):
+            raise ValueError('Filesystem callable differs from its complete source contract: ' + name +
+                             ' | actual=' + repr((row.signature, row.argc, row.arg_spec, row.visibility,
+                                 row.effect, row.allocation, row.return_ownership, row.layer, row.vm,
+                                 row.aot, row.aot_direct, row.aot_kind, row.link_object, row.vm_binding,
+                                 row.vm_ifdef, row.define, row.ret, row.semantic_intrinsic,
+                                 row.provider_declaration, row.caps, row.suspension_kind)))
         symbol = 'xr_native_' + identity.lower()
         result, term = ('__FileStat?', 'NULLABLE_FILE_STAT') if stat else ('bool', 'BOOL')
         if text_result:
             result, term = 'string?', 'NULLABLE_STRING'
         elif identity == 'IO_DIR_OPEN':
             result, term = 'i64', 'I64'
+        elif identity in ('IO_FILE_OPEN', 'IO_FILE_OPEN_WRITE',
+                          'IO_FILE_WRITE', 'IO_FILE_WRITE_STR'):
+            result, term = 'i64', 'I64'
+        elif identity == 'IO_FILE_READ':
+            result, term = 'Array<u8>?', 'NULLABLE_ARRAY_U8'
         lines += ['static const XrNativeParameter ' + symbol + '_parameters[] = {']
         if identity in ('IO_MAKE_TEMP_DIR', 'IO_MAKE_TEMP_FILE'):
             lines += ['    {"root", "string", XR_NATIVE_TERM_STRING, false, false, false},']
@@ -1593,6 +1616,24 @@ def render_io_callables(declarations):
         elif identity == 'IO_SYMLINK':
             lines += ['    {"source", "Path", XR_NATIVE_TERM_PATH, false, false, false},',
                       '    {"link", "Path", XR_NATIVE_TERM_PATH, false, false, false},']
+        elif identity == 'IO_FILE_OPEN':
+            lines += ['    {"path", "Path", XR_NATIVE_TERM_PATH, false, false, false},']
+        elif identity == 'IO_FILE_OPEN_WRITE':
+            lines += ['    {"path", "Path", XR_NATIVE_TERM_PATH, false, false, false},',
+                      '    {"append", "bool", XR_NATIVE_TERM_BOOL, false, false, false},']
+        elif identity == 'IO_FILE_READ':
+            lines += ['    {"handle", "i64", XR_NATIVE_TERM_I64, false, false, false},',
+                      '    {"maxBytes", "i64", XR_NATIVE_TERM_I64, false, false, false},']
+        elif identity == 'IO_FILE_WRITE':
+            lines += ['    {"handle", "i64", XR_NATIVE_TERM_I64, false, false, false},',
+                      '    {"data", "Array<u8>", XR_NATIVE_TERM_ARRAY_U8, false, false, false},',
+                      '    {"offset", "i64", XR_NATIVE_TERM_I64, false, false, false},']
+        elif identity == 'IO_FILE_WRITE_STR':
+            lines += ['    {"handle", "i64", XR_NATIVE_TERM_I64, false, false, false},',
+                      '    {"data", "string", XR_NATIVE_TERM_STRING, false, false, false},',
+                      '    {"offset", "i64", XR_NATIVE_TERM_I64, false, false, false},']
+        elif identity in ('IO_FILE_CLOSE', 'IO_FILE_FLUSH'):
+            lines += ['    {"handle", "i64", XR_NATIVE_TERM_I64, false, false, false},']
         else:
             lines += ['    {"path", "Path", XR_NATIVE_TERM_PATH, false, false, false},']
             if len(arguments) == 2:

@@ -326,7 +326,16 @@ typedef enum XrNativeCallableId {
     XR_NATIVE_CALLABLE_OS_EXEC_PIPE_CLOSE = 109,
     XR_NATIVE_CALLABLE_OS_EXEC_SHELL_SPAWN = 110,
     XR_NATIVE_CALLABLE_PATH_IS_WINDOWS = 111,
-    XR_NATIVE_CALLABLE_PATH_FULLPATH = 112
+    XR_NATIVE_CALLABLE_PATH_FULLPATH = 112,
+    /* File-handle leaves. Handles are opaque i64 descriptors owned by the
+     * runtime; 0, 1 and 2 are the standard streams and are never closed. */
+    XR_NATIVE_CALLABLE_IO_FILE_OPEN = 113,
+    XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE = 114,
+    XR_NATIVE_CALLABLE_IO_FILE_READ = 115,
+    XR_NATIVE_CALLABLE_IO_FILE_WRITE = 116,
+    XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR = 117,
+    XR_NATIVE_CALLABLE_IO_FILE_CLOSE = 118,
+    XR_NATIVE_CALLABLE_IO_FILE_FLUSH = 119
 } XrNativeCallableId;
 
 /* Callable IDs authenticate ordinary function bodies, independently of inline intrinsics. */

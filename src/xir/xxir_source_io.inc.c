@@ -35,7 +35,11 @@ static bool source_io_declare(SourceContext *ctx) {
         XR_NATIVE_CALLABLE_IO_RENAME,XR_NATIVE_CALLABLE_IO_UTIME_NOW,XR_NATIVE_CALLABLE_IO_SYMLINK,
         XR_NATIVE_CALLABLE_IO_READLINK,XR_NATIVE_CALLABLE_IO_REALPATH,
         XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR,XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE,
-        XR_NATIVE_CALLABLE_IO_DIR_OPEN,XR_NATIVE_CALLABLE_IO_DIR_NEXT,XR_NATIVE_CALLABLE_IO_DIR_CLOSE};
+        XR_NATIVE_CALLABLE_IO_DIR_OPEN,XR_NATIVE_CALLABLE_IO_DIR_NEXT,XR_NATIVE_CALLABLE_IO_DIR_CLOSE,
+        XR_NATIVE_CALLABLE_IO_FILE_OPEN,XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE,
+        XR_NATIVE_CALLABLE_IO_FILE_READ,XR_NATIVE_CALLABLE_IO_FILE_WRITE,
+        XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR,XR_NATIVE_CALLABLE_IO_FILE_CLOSE,
+        XR_NATIVE_CALLABLE_IO_FILE_FLUSH};
     for(uint32_t m=0;m<ctx->module_count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
@@ -58,9 +62,38 @@ static bool source_io_declare(SourceContext *ctx) {
             if(!source_path_prelude_type(ctx,&path))return false;
             XrXirType *parameters=source_alloc(ctx,count,sizeof(*parameters));if(!parameters)return false;
             bool temporary=id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR || id==XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE;
-            for(uint32_t p=0;p<count;++p)parameters[p]=p<contract->paths?path:temporary?XR_XIR_STRING:XR_XIR_I64;
+            bool file_handle=id>=XR_NATIVE_CALLABLE_IO_FILE_OPEN && id<=XR_NATIVE_CALLABLE_IO_FILE_FLUSH;
+            bool file_bytes_operand=id==XR_NATIVE_CALLABLE_IO_FILE_WRITE;
+            bool file_string_operand=id==XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR;
+            XrXirType bytes_array=XR_XIR_UNIT,optional_bytes=XR_XIR_UNIT;
+            if(file_handle && (file_bytes_operand ||
+                id==XR_NATIVE_CALLABLE_IO_FILE_READ)) {
+                if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8},
+                    &bytes_array))return false;
+                if(id==XR_NATIVE_CALLABLE_IO_FILE_READ &&
+                    !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=bytes_array},
+                        &optional_bytes))return false;
+            }
+            for(uint32_t p=0;p<count;++p) {
+                if(file_handle) {
+                    /* (path, append) for the openers; handle first otherwise, and
+                     * the write leaves take a bytes or string payload. */
+                    if(id==XR_NATIVE_CALLABLE_IO_FILE_OPEN) parameters[p]=path;
+                    else if(id==XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE) parameters[p]=p==0?path:XR_XIR_BOOL;
+                    else if(p==0) parameters[p]=XR_XIR_I64;
+                    else if(file_bytes_operand && p==1) parameters[p]=bytes_array;
+                    else if(file_string_operand && p==1) parameters[p]=XR_XIR_STRING;
+                    else parameters[p]=XR_XIR_I64;
+                }
+                else parameters[p]=p<contract->paths?path:temporary?XR_XIR_STRING:XR_XIR_I64;
+            }
             bool text=temporary || id==XR_NATIVE_CALLABLE_IO_READLINK || id==XR_NATIVE_CALLABLE_IO_REALPATH || id==XR_NATIVE_CALLABLE_IO_DIR_NEXT;
-            XrXirType result=id==XR_NATIVE_CALLABLE_IO_STAT?file_stat:text?optional_string:id==XR_NATIVE_CALLABLE_IO_DIR_OPEN?XR_XIR_I64:XR_XIR_BOOL;
+            XrXirType result=file_handle?
+                (id==XR_NATIVE_CALLABLE_IO_FILE_READ?optional_bytes:
+                 id==XR_NATIVE_CALLABLE_IO_FILE_OPEN||id==XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE||
+                 id==XR_NATIVE_CALLABLE_IO_FILE_WRITE||id==XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR?XR_XIR_I64:XR_XIR_BOOL):
+                id==XR_NATIVE_CALLABLE_IO_STAT?file_stat:text?optional_string:
+                id==XR_NATIVE_CALLABLE_IO_DIR_OPEN?XR_XIR_I64:XR_XIR_BOOL;
             if(!xir_io_native_signature(id,&ctx->types,parameters,count,result,XR_XIR_NEVER))
                 return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"io callable differs from its governed signature");
             const char *name=source_owned_text(ctx,native->member->name);

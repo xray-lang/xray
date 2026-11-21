@@ -37,7 +37,15 @@ static const XirIoNativeContract xir_io_native_contracts[]={
     {XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE,1,0,"__makeTempFile","(root: string): string?"},
     {XR_NATIVE_CALLABLE_IO_DIR_OPEN,1,1,"__dirOpen","(path: Path): i64"},
     {XR_NATIVE_CALLABLE_IO_DIR_NEXT,1,0,"__dirNext","(handle: i64): string?"},
-    {XR_NATIVE_CALLABLE_IO_DIR_CLOSE,1,0,"__dirClose","(handle: i64): bool"}
+    {XR_NATIVE_CALLABLE_IO_DIR_CLOSE,1,0,"__dirClose","(handle: i64): bool"},
+    /* File-handle leaves carry no Path operand except the two openers. */
+    {XR_NATIVE_CALLABLE_IO_FILE_OPEN,1,1,"__fileOpen","(path: Path): i64"},
+    {XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE,2,1,"__fileOpenWrite","(path: Path, append: bool): i64"},
+    {XR_NATIVE_CALLABLE_IO_FILE_READ,2,0,"__fileRead","(handle: i64, maxBytes: i64): Array<u8>?"},
+    {XR_NATIVE_CALLABLE_IO_FILE_WRITE,3,0,"__fileWrite","(handle: i64, data: Array<u8>, offset: i64): i64"},
+    {XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR,3,0,"__fileWriteStr","(handle: i64, data: string, offset: i64): i64"},
+    {XR_NATIVE_CALLABLE_IO_FILE_CLOSE,1,0,"__fileClose","(handle: i64): bool"},
+    {XR_NATIVE_CALLABLE_IO_FILE_FLUSH,1,0,"__fileFlush","(handle: i64): bool"}
 };
 static inline const XirIoNativeContract *xir_io_native_contract(uint32_t id) {
     for(uint32_t n=0;n<sizeof(xir_io_native_contracts)/sizeof(*xir_io_native_contracts);++n)
@@ -48,6 +56,12 @@ static inline bool xir_io_native_id(uint32_t id) {return xir_io_native_contract(
 static inline bool xir_io_nullable_string(const XrXirTypes *types,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     return node && node->kind==XR_XIR_TYPE_NULLABLE && node->element==XR_XIR_STRING;
+}
+static inline bool xir_io_nullable_u8_array(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    if(!node || node->kind!=XR_XIR_TYPE_NULLABLE)return false;
+    const XrXirTypeNode *inner=xr_xir_type_node(types,node->element);
+    return inner && inner->kind==XR_XIR_TYPE_ARRAY && inner->element==XR_XIR_U8;
 }
 /* This observes a declaration, not a field-read capability. */
 static inline bool xir_io_path_field(const XrXirTypes *types,XrXirType type,uint32_t *output) {
@@ -86,17 +100,75 @@ static inline bool xir_io_native_signature(uint32_t id,const XrXirTypes *types,
         !native->namespace_id || strcmp(native->namespace_id,"io") || !native->source_path ||
         strcmp(native->source_path,"stdlib/defs/core.def") || !native->member)return false;
     const XrNativeMemberDeclaration *m=native->member;
+    /* File-handle leaves form their own family: they return i64, Array<u8>?,
+     * string or bool depending on the id, and only the two openers carry a
+     * Path operand. Keep them separate so the filesystem shapes above stay
+     * exactly as they were. */
+    bool file_handle=id>=XR_NATIVE_CALLABLE_IO_FILE_OPEN && id<=XR_NATIVE_CALLABLE_IO_FILE_FLUSH;
+    bool file_read=id==XR_NATIVE_CALLABLE_IO_FILE_READ;
+    bool file_text=id==XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR;
+    bool file_returns_i64=id==XR_NATIVE_CALLABLE_IO_FILE_OPEN ||
+        id==XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE || id==XR_NATIVE_CALLABLE_IO_FILE_WRITE ||
+        file_text;
+    const char *expected_result_text=file_handle?(file_read?"Array<u8>?":file_returns_i64?"i64":"bool"):
+        stat?"__FileStat?":text?"string?":directory?"i64":"bool";
+    XrNativeTypeTerm expected_term=file_handle?(file_read?XR_NATIVE_TERM_NULLABLE_ARRAY_U8:
+        file_returns_i64?XR_NATIVE_TERM_I64:XR_NATIVE_TERM_BOOL):
+        stat?XR_NATIVE_TERM_NULLABLE_FILE_STAT:text?XR_NATIVE_TERM_NULLABLE_STRING:
+        directory?XR_NATIVE_TERM_I64:XR_NATIVE_TERM_BOOL;
     if(!m->name || strcmp(m->name,contract->name) || !m->signature ||
         strcmp(m->signature,contract->signature) ||
-        !m->result_text || strcmp(m->result_text,stat?"__FileStat?":text?"string?":directory?"i64":"bool") || m->is_public || m->is_static ||
+        !m->result_text || strcmp(m->result_text,expected_result_text) || m->is_public || m->is_static ||
         m->is_method || m->lowered || m->receiver!=XR_NATIVE_RECEIVER_READ ||
         m->operation!=XR_NATIVE_OPERATION_NONE || m->allocation!=XR_NATIVE_ALLOCATION_UNKNOWN ||
         !m->failures || *m->failures || m->ownership!=XR_NATIVE_RESULT_OWNERSHIP_OWNED ||
         !m->parameters || m->parameter_count!=contract->count || count!=m->parameter_count ||
-        !parameters || (stat?!xir_file_stat_nullable(types,result):text?!xir_io_nullable_string(types,result):result!=(directory?XR_XIR_I64:XR_XIR_BOOL)) ||
-        error!=XR_XIR_NEVER || m->result!=(stat?XR_NATIVE_TERM_NULLABLE_FILE_STAT:text?XR_NATIVE_TERM_NULLABLE_STRING:directory?XR_NATIVE_TERM_I64:XR_NATIVE_TERM_BOOL))return false;
+        !parameters || m->result!=expected_term ||
+        error!=XR_XIR_NEVER) return false;
+    if(file_handle) {
+        if(file_read?!xir_io_nullable_u8_array(types,result):result!=(file_returns_i64?XR_XIR_I64:XR_XIR_BOOL))return false;
+    } else if(stat?!xir_file_stat_nullable(types,result):
+        text?!xir_io_nullable_string(types,result):result!=(directory?XR_XIR_I64:XR_XIR_BOOL))return false;
     for(uint32_t p=0;p<count;++p) {
         bool path=p<contract->paths;const XrNativeParameter *parameter=m->parameters+p;
+        if(file_handle) {
+            /* File-handle parameter names and types are fully determined by
+             * the leaf identity; the generic filesystem mapping above does not
+             * describe them. */
+            const char *want_name;
+            const char *want_text;
+            XrNativeTypeTerm want_term;
+            XrXirType want_type;
+            if(id==XR_NATIVE_CALLABLE_IO_FILE_OPEN) {
+                want_name="path";want_text="Path";want_term=XR_NATIVE_TERM_PATH;want_type=parameters[p];
+            } else if(id==XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE) {
+                if(p==0) {want_name="path";want_text="Path";want_term=XR_NATIVE_TERM_PATH;}
+                else {want_name="append";want_text="bool";want_term=XR_NATIVE_TERM_BOOL;}
+                want_type=parameters[p];
+            } else if(id==XR_NATIVE_CALLABLE_IO_FILE_READ) {
+                want_name=p==0?"handle":"maxBytes";want_text="i64";want_term=XR_NATIVE_TERM_I64;want_type=XR_XIR_I64;
+            } else if(id==XR_NATIVE_CALLABLE_IO_FILE_WRITE) {
+                want_name=p==0?"handle":p==1?"data":"offset";
+                want_text=p==1?"Array<u8>":"i64";
+                want_term=p==1?XR_NATIVE_TERM_ARRAY_U8:XR_NATIVE_TERM_I64;
+                want_type=parameters[p];
+            } else if(id==XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR) {
+                want_name=p==0?"handle":p==1?"data":"offset";
+                want_text=p==1?"string":"i64";
+                want_term=p==1?XR_NATIVE_TERM_STRING:XR_NATIVE_TERM_I64;
+                want_type=parameters[p];
+            } else {
+                want_name="handle";want_text="i64";want_term=XR_NATIVE_TERM_I64;want_type=XR_XIR_I64;
+            }
+            if(!parameter->name || strcmp(parameter->name,want_name) || !parameter->type_text ||
+                strcmp(parameter->type_text,want_text) || parameter->type!=want_term ||
+                parameter->optional || parameter->variadic || parameters[p]!=want_type)return false;
+            if(path) {
+                uint32_t field=0;
+                if(!xir_io_path_field(types,parameters[p],&field))return false;
+            }
+            continue;
+        }
         const char *name=temporary?"root":token?"handle":id==XR_NATIVE_CALLABLE_IO_SYMLINK?(p?"link":"source"):
             contract->paths==2?(p?"new":"old"):p?"mode":"path";
         if(!parameter->name || strcmp(parameter->name,name) || !parameter->type_text ||
