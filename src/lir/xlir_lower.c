@@ -23,6 +23,7 @@
 #include "../xir/xxir_types.h"
 #include "../xir/xxir_type_description.h"
 #include "../xir/xxir_class_cycles.h"
+#include "../xir/xxir_class_hierarchy_internal.h"
 #include "../xir/xxir_map.h"
 #include "../xir/xxir_operand_roles.h"
 #include "../xir/xxir_closure_placement.h"
@@ -386,6 +387,26 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
         lower_type(c, node->element), node->parameter_count, &c->constructed_types[index]));
 }
 
+static XrLirOp lower_terminator_op(XrXirOp op) {
+    switch (op) {
+        case XR_XIR_RETURN: return XR_LIR_RET;
+        case XR_XIR_JUMP: return XR_LIR_BR;
+        case XR_XIR_BRANCH: return XR_LIR_CONDBR;
+        default: return XR_LIR_OP_INVALID;
+    }
+}
+
+static XrLirOp lower_checked_terminator_op(Lower *c, XrXirOp op) {
+    XrLirOp result = lower_terminator_op(op);
+    if (result == XR_LIR_OP_INVALID) {
+        const char *name = xr_xir_op_name(op);
+        char feature[96];
+        snprintf(feature, sizeof(feature), "block terminator %s", name ? name : "with unknown opcode");
+        lower_unsupported(c, feature);
+    }
+    return result;
+}
+
 static bool lower_known(XrXirOp op) {
     switch (op) {
         case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET:
@@ -460,12 +481,9 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_LOCAL_UNINIT:
         case XR_XIR_LOCAL_READ:
         case XR_XIR_LOCAL_WRITE:
-        case XR_XIR_JUMP:
-        case XR_XIR_BRANCH:
-        case XR_XIR_RETURN:
             return true;
         default:
-            return false;
+            return lower_terminator_op(op) != XR_LIR_OP_INVALID;
     }
 }
 
@@ -848,7 +866,11 @@ static const XrXirInstruction *lower_term(Lower *c, const XrXirFunction *f, uint
     return &f->instructions[block->first + block->count - 1];
 }
 static uint32_t lower_edge_count(const XrXirInstruction *term) {
-    return term->op == XR_XIR_JUMP ? 1u : (term->op == XR_XIR_BRANCH ? 2u : 0u);
+    switch (lower_terminator_op(term->op)) {
+        case XR_LIR_BR: return 1;
+        case XR_LIR_CONDBR: return 2;
+        default: return 0;
+    }
 }
 static bool lower_mark(Lower *c, uint32_t function) {
     if (function >= c->source->function_count) {
@@ -941,6 +963,11 @@ static bool lower_class_array_field(Lower *c, XrXirType type, uint64_t index) {
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
     if (!lower_known(op->op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
+    if (op->op == XR_XIR_COPY) {
+        XrXirType input = xr_xir_operand_type(f, op->args[0]);
+        if (input != op->type && xr_xir_class_is_subtype(c->source->types, input, op->type))
+            return lower_unsupported(c, "conversion from a subclass to its parent class");
+    }
     const XrXirTypeNode *view = xr_xir_type_node(c->source->types, op->type);
     if ((view && view->kind == XR_XIR_TYPE_SLICE) || (op->op == XR_XIR_VIEW_CLEANUP && op->args[1])) {
         c->views = true;
@@ -1188,6 +1215,10 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
                 good = false;
                 break;
             }
+        }
+        if (good && lower_checked_terminator_op(c, term->op) == XR_LIR_OP_INVALID) {
+            good = false;
+            break;
         }
         for (uint32_t e = 0; e < lower_edge_count(term) && good; ++e) {
             uint32_t target = term->targets[e];
@@ -2479,13 +2510,12 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     const XrXirInstruction *term = lower_term(c, f->source, b);
     if (!term)
         return false;
-    XR_DCHECK(term->op == XR_XIR_RETURN || term->op == XR_XIR_JUMP || term->op == XR_XIR_BRANCH,
-              "admission rejected unsupported terminators");
+    XrLirOp op = lower_checked_terminator_op(c, term->op);
+    if (op == XR_LIR_OP_INVALID) return false;
     XrLirValue value = {0};
-    XrLirInstruction instruction = {.type = XR_LIR_UNIT, .source = lower_source(c)};
+    XrLirInstruction instruction = {.op = op, .type = XR_LIR_UNIT, .source = lower_source(c)};
     bool good = true;
-    if (term->op == XR_XIR_RETURN) {
-        instruction.op = XR_LIR_RET;
+    if (op == XR_LIR_RET) {
         if (f->source->result != XR_XIR_UNIT) {
             good = lower_value(f, term->args[0], &value);
             if (good && lower_managed_type(f->owner, lower_type(c, f->source->result))) {
@@ -2497,8 +2527,7 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
             instruction.operand_count = 1;
         }
     } else {
-        instruction.op = term->op == XR_XIR_JUMP ? XR_LIR_BR : XR_LIR_CONDBR;
-        if (term->op == XR_XIR_BRANCH) {
+        if (op == XR_LIR_CONDBR) {
             good = lower_value(f, term->args[0], &value);
             instruction.operands = &value;
             instruction.operand_count = 1;
@@ -2510,7 +2539,7 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     if (good) good = lower_selected_edges(f, b, &instruction);
     if (good) good = lower_managed_release_block(f, b, &instruction);
     if (good) good = lower_lexical_terminator(f, b,
-        term->op == XR_XIR_RETURN && lower_callable_type(f, f->source->result) ? &value : NULL);
+        op == XR_LIR_RET && lower_callable_type(f, f->source->result) ? &value : NULL);
     if (good)
         good = lower_build(c, xr_lir_set_terminator(c->module, f->blocks[b], &instruction));
     for (uint32_t e = 0; e < 2; ++e)

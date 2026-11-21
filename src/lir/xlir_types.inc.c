@@ -91,7 +91,9 @@ static bool lir_cell_payload_valid(const XrLirModule *m, XrLirType payload,
     if (xr_lir_internal_slice_type(m, payload)) return false;
     if (payload < XR_LIR_TYPE_COUNT) return lir_pod_scalar(payload) < XR_POD_SCALAR_COUNT ||
         payload == XR_LIR_STRING || payload == XR_LIR_MAP_STRING_I64;
-    return true;
+    /* Class field guards assume a single executor. Cells cannot transport
+     * Class handles across that boundary. */
+    return m->types[payload - XR_LIR_TYPE_COUNT].shape.kind != XR_LIR_TYPE_CLASS;
 }
 
 static bool lir_tuple_shape(const XrLirModule *m, XrLirTypeView shape, const XrLirRecordField *fields,

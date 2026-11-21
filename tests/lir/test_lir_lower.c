@@ -329,6 +329,45 @@ static void unsupported(void) {
     rejected("print(1)\n", true, "overflow-checks");
 }
 
+static void class_parent_boundaries(const char *programs) {
+    const char *names[] = {"class-parent-argument", "class-parent-assignment"};
+    for (size_t n = 0; n < sizeof(names) / sizeof(*names); ++n) {
+        char *text = read_file(programs, names[n], "xr");
+        rejected(text, false, "conversion from a subclass to its parent class");
+        xr_free(text);
+    }
+}
+
+static void unsupported_terminators(const char *programs) {
+    char *text = read_file(programs, "unsupported-cleanup-terminator", "xr");
+    rejected(text, false, "CLEANUP_REGISTER");
+    xr_free(text);
+
+    SourceFixture fixture = source_fixture("fn answer()->i64{return 42}\nprint(answer())\n");
+    const XrXirModule *module = xr_xir_compile_artifact_module(fixture.closed);
+    XrXirInstruction *terminator = NULL;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *body = &module->functions[f];
+        if (body->name_length != 6 || memcmp(body->name, "answer", 6)) continue;
+        CHECK(body->block_count == 1 && body->instruction_count);
+        terminator = (XrXirInstruction *) &body->instructions[body->instruction_count - 1];
+    }
+    CHECK(terminator && terminator->op == XR_XIR_RETURN);
+    XrXirInstruction saved = *terminator;
+    /* A valid body opcode in a block's terminal position must also fail. */
+    *terminator = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 42};
+    XrLirLowered output = {0};
+    XrLirLowerFailure failure = {0};
+    XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+    XrLirStatus status = xr_lir_lower_program_checked(&request, &output, &failure);
+    *terminator = saved;
+    CHECK(status == XR_LIR_UNSUPPORTED && failure.diagnostic.status == status);
+    CHECK(!output.module && !output.entry.id &&
+        strstr(failure.diagnostic.message, "block terminator CONST_INT"));
+    xr_lir_lower_failure_free(&failure);
+    source_fixture_free(&fixture);
+}
+
 static void class_layout_sources(void) {
     XrLirLowered output = lower_text(
         "class Box<T>{value:T; init(value:T){this.value=value}}\n"
@@ -1271,6 +1310,8 @@ int main(int argc, char **argv) {
     swapped_backedge();
     fixed_division(argv[1]);
     unsupported();
+    class_parent_boundaries(argv[1]);
+    unsupported_terminators(argv[1]);
     argument_validation();
     literal_sources();
     module_cells_source(argv[1]);
