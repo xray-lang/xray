@@ -466,7 +466,7 @@ jobs:
 
   core-macos-owned-process-probe:
     if: github.event_name == 'workflow_dispatch' && inputs.core_owned_process_probe
-    name: Exact macOS native benchmark process control
+    name: Exact macOS Darwin group drain controls
     runs-on: macos-latest
     timeout-minutes: 12
     permissions:
@@ -483,13 +483,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11.9'
-      - name: Compare the Darwin group cleanup prototype
+      - name: Verify the Darwin group drain candidate
         run: >-
-          python scripts/macos_group_drain_prototype.py
-          --output "$RUNNER_TEMP/task339-group-drain-prototype"
+          python scripts/macos_group_drain_candidate.py
+          --output "$RUNNER_TEMP/task339-group-drain-candidate"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: task339-macos-group-drain-prototype-79368992b
-          path: ${{ runner.temp }}/task339-group-drain-prototype/
+          name: task339-macos-group-drain-candidate-97246785f
+          path: ${{ runner.temp }}/task339-group-drain-candidate/
           if-no-files-found: error
