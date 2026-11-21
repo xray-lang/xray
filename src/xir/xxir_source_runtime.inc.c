@@ -8,7 +8,7 @@
  * xxir_source_runtime.inc.c - Governed counter declarations in the standard runtime module
  *
  * KEY CONCEPT:
- *   Only the real standard runtime module receives the three execution-domain
+ *   Only the real standard runtime module receives the five execution-domain
  *   counter leaves. Each leaf is an exact zero-argument read returning one
  *   integer, so the source layer never invents a shape for a host object.
  */
@@ -25,8 +25,8 @@ static bool source_runtime_declare(SourceContext *ctx) {
         if (!source_request_poll(ctx, NULL)) return false;
         if (!source_runtime_module(ctx, m) || source_owned_checked(&ctx->graph->specs[m])) continue;
         ctx->module = m;
-        for (uint32_t item = 0; item < sizeof(xir_runtime_native_contracts) / sizeof(*xir_runtime_native_contracts); ++item) {
-            uint32_t id = xir_runtime_native_contracts[item].id;
+        for (uint32_t item = 0; item < XIR_RUNTIME_NATIVE_COUNT; ++item) {
+            uint32_t id = xir_runtime_native_ids[item];
             const XrNativeCallableDeclaration *native = xr_native_callable_by_id(id);
             if (!native || !native->member || !native->member->name)
                 return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "runtime counter declaration is missing");

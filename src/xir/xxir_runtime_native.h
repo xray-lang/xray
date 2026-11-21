@@ -8,10 +8,12 @@
  * xxir_runtime_native.h - Governed execution-domain counters for the runtime module
  *
  * KEY CONCEPT:
- *   The standard runtime module reads counters through three exact scalar
+ *   The standard runtime module reads counters through five exact scalar
  *   leaves. Each leaf is a plain read of the current execution-local
  *   reclamation domain, so no host object shape, no ownership transfer and no
- *   suspension crosses the declaration boundary.
+ *   suspension crosses the declaration boundary. Names, signatures and
+ *   ownership live in the generated declaration table; this file records only
+ *   which identities the runtime module may declare.
  */
 #ifndef XXIR_RUNTIME_NATIVE_H
 #define XXIR_RUNTIME_NATIVE_H
@@ -19,43 +21,37 @@
 #include "xxir_types.h"
 #include "../shared/xnative_declaration.h"
 
-typedef struct XirRuntimeNativeContract {
-    uint32_t id;
-    const char *name;
-} XirRuntimeNativeContract;
-
-static const XirRuntimeNativeContract xir_runtime_native_contracts[] = {
-    {XR_NATIVE_CALLABLE_RUNTIME_LIVE_BYTES, "__liveBytes"},
-    {XR_NATIVE_CALLABLE_RUNTIME_LIVE_OBJECTS, "__liveObjects"},
-    {XR_NATIVE_CALLABLE_RUNTIME_FINALIZER_COUNT, "__finalizerCount"},
-    {XR_NATIVE_CALLABLE_RUNTIME_SHARED_LIVE_BYTES, "__sharedLiveBytes"},
-    {XR_NATIVE_CALLABLE_RUNTIME_STATIC_ALLOC_BYTES, "__staticAllocBytes"}
+static const uint32_t xir_runtime_native_ids[] = {
+    XR_NATIVE_CALLABLE_RUNTIME_LIVE_BYTES,
+    XR_NATIVE_CALLABLE_RUNTIME_LIVE_OBJECTS,
+    XR_NATIVE_CALLABLE_RUNTIME_FINALIZER_COUNT,
+    XR_NATIVE_CALLABLE_RUNTIME_SHARED_LIVE_BYTES,
+    XR_NATIVE_CALLABLE_RUNTIME_STATIC_ALLOC_BYTES
 };
 
-static inline const XirRuntimeNativeContract *xir_runtime_native_contract(uint32_t id) {
-    for (uint32_t n = 0; n < sizeof(xir_runtime_native_contracts) / sizeof(*xir_runtime_native_contracts); ++n)
-        if (xir_runtime_native_contracts[n].id == id) return xir_runtime_native_contracts + n;
-    return NULL;
-}
+#define XIR_RUNTIME_NATIVE_COUNT (sizeof(xir_runtime_native_ids) / sizeof(*xir_runtime_native_ids))
 
 static inline bool xir_runtime_native_id(uint32_t id) {
-    return xir_runtime_native_contract(id) != NULL;
+    for (uint32_t n = 0; n < XIR_RUNTIME_NATIVE_COUNT; ++n)
+        if (xir_runtime_native_ids[n] == id) return true;
+    return false;
 }
 
 /* Every counter has the same shape: an exact zero-argument read that returns
  * one i64 and cannot fail. Anything else is a different contract and is
- * rejected rather than coerced. */
+ * rejected rather than coerced. The name comes from the generated declaration
+ * table, so a renamed leaf is a generator change and not a second copy here. */
 static inline bool xir_runtime_native_signature(uint32_t id, const XrXirTypes *types,
     const XrXirType *parameters, uint32_t count, XrXirType result, XrXirType error) {
     (void) types;
-    const XirRuntimeNativeContract *contract = xir_runtime_native_contract(id);
+    if (!xir_runtime_native_id(id)) return false;
     const XrNativeCallableDeclaration *native = xr_native_callable_by_id(id);
-    if (!contract || !native || native->owner || native->error_e_type || native->ctfe ||
+    if (!native || native->owner || native->error_e_type || native->ctfe ||
         !native->namespace_id || strcmp(native->namespace_id, "runtime") ||
         !native->source_path || strcmp(native->source_path, "stdlib/defs/core.def") ||
         !native->member) return false;
     const XrNativeMemberDeclaration *member = native->member;
-    return member->name && !strcmp(member->name, contract->name) &&
+    return member->name && member->name[0] &&
         member->signature && !strcmp(member->signature, "(): i64") &&
         member->result_text && !strcmp(member->result_text, "i64") &&
         !member->is_public && !member->is_static && !member->is_method && !member->lowered &&
