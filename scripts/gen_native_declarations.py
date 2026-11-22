@@ -1845,14 +1845,37 @@ def render_runtime_counters(declarations):
     return lines, rows
 
 
+def declared_target_queries(root):
+    """Every target fact names one target query and one of that query's members.
+
+    The registry is generated, so reading it keeps this validator in step with a
+    query or member that is added later instead of pinning one accepted tuple.
+    """
+    registry = root / 'src' / 'shared' / 'xr_target_query_registry_gen.h'
+    text = registry.read_text(encoding='utf-8')
+    tables = {}
+    for match in re.finditer(r'xr_target_query_(\w+)_members\[\]\s*=\s*\{(.*?)\};', text, re.S):
+        tables[match.group(1)] = set(re.findall(r'\{"(\w+)"', match.group(2)))
+    queries = {}
+    for match in re.finditer(
+            r'\{XR_TARGET_QUERY_\w+,\s*\d+u,\s*"(\w+)",\s*"\w+",\s*xr_target_query_(\w+)_members', text):
+        queries[match.group(1)] = tables.get(match.group(2), set())
+    if not queries:
+        raise ValueError('Target query registry carries no query descriptors')
+    return queries
+
+
 def render_unicode_callable(root, decoder, lossy):
     import sys
     sys.path.insert(0, str(root / 'tools' / 'stdlibgen'))
     from stdlibgen import parse_defs
     declarations = parse_defs(root)
     target_facts = [(row.module, row.name, row.target_fact) for row in declarations if row.target_fact]
-    if target_facts != [('path', '__isWindows', 'os.Windows')]:
-        raise ValueError('Only the Path host flavour may declare an os target fact')
+    queries = declared_target_queries(root)
+    for _module, _name, fact in target_facts:
+        query, _, member = fact.partition('.')
+        if not member or member not in queries.get(query, ()):
+            raise ValueError('Declared target fact is not a target query value: ' + fact)
     contracts = (
         ('__unicodePropId', '(name: string): i64', '1', 's'),
         ('__unicodeHasProp', '(cp: i64, propId: i64): bool', '2', 'vv'),
