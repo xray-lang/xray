@@ -5,6 +5,8 @@ on:
     branches: [main, master]
   push:
     branches: [main, candidate/**, agent/host-arch-portability, agent/direct-cutover, agent/type-value-arrows]
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       scalar_performance:
@@ -23,6 +25,14 @@ on:
         description: Record layout16 fib CPU phases with current native objects
         type: boolean
         default: false
+      full_comparison:
+        description: Run the paired complete Release comparison on Windows and macOS
+        type: boolean
+        default: false
+      comparison_baseline:
+        description: Comparison point for a manual run; defaults to the previous complete comparison
+        type: string
+        required: false
 
 jobs:
   current:
@@ -552,3 +562,166 @@ jobs:
             build-tsan/CMakeCache.txt
             build-tsan/compile_commands.json
             build-tsan/Testing/Temporary
+
+  comparison-pair:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_comparison) ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/candidate/compare'))
+    name: Comparison pair
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      base: ${{ steps.resolve.outputs.base }}
+      candidate: ${{ steps.resolve.outputs.candidate }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve the previous comparison point and the candidate commit
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REQUESTED_BASELINE: ${{ inputs.comparison_baseline }}
+          CANDIDATE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base="$REQUESTED_BASELINE"
+          if [ -z "$base" ]; then
+            base=$(gh api "repos/$REPOSITORY/actions/artifacts?name=host-release-comparison-point&per_page=1" --jq '.artifacts[0].workflow_run.head_sha // empty')
+          fi
+          if [ -z "$base" ] && [ -f .github/comparison-baseline ]; then
+            base=$(head -n 1 .github/comparison-baseline)
+          fi
+          if ! printf '%s' "$base" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "No comparison point is available; pass comparison_baseline or complete one comparison first." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$base" || true
+          fi
+          git cat-file -e "$base^{commit}"
+          git merge-base --is-ancestor "$base" "$CANDIDATE"
+          if [ "$(git rev-parse "$base^{tree}")" = "$(git rev-parse "$CANDIDATE^{tree}")" ]; then
+            echo "The comparison point and the candidate have the same source tree." >&2
+            exit 1
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "candidate=$CANDIDATE" >> "$GITHUB_OUTPUT"
+
+  comparison-macos:
+    needs: comparison-pair
+    if: needs.comparison-pair.result == 'success'
+    name: Release comparison (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    concurrency:
+      group: release-comparison-macos
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compare both complete Release runs
+        run: >-
+          python scripts/host_release_comparison.py
+          --base "${{ needs.comparison-pair.outputs.base }}"
+          --candidate "${{ needs.comparison-pair.outputs.candidate }}"
+          --host macos-latest
+          --output "$RUNNER_TEMP/release-comparison"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-release-comparison-macos
+          path: ${{ runner.temp }}/release-comparison/
+          if-no-files-found: error
+
+  comparison-windows:
+    needs: comparison-pair
+    if: needs.comparison-pair.result == 'success'
+    name: Release comparison (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    concurrency:
+      group: release-comparison-windows
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Compare both complete Release runs
+        run: >-
+          python scripts/host_release_comparison.py
+          --base "${{ needs.comparison-pair.outputs.base }}"
+          --candidate "${{ needs.comparison-pair.outputs.candidate }}"
+          --host windows-latest
+          --output "${{ runner.temp }}/release-comparison"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-release-comparison-windows
+          path: ${{ runner.temp }}/release-comparison/
+          if-no-files-found: error
+
+  comparison-point:
+    needs: [comparison-pair, comparison-macos, comparison-windows]
+    if: always() && needs.comparison-pair.result == 'success' && needs.comparison-macos.result == 'success' && needs.comparison-windows.result == 'success'
+    name: Comparison point
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: host-release-comparison-macos
+          path: ${{ runner.temp }}/comparison/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: host-release-comparison-windows
+          path: ${{ runner.temp }}/comparison/windows
+      - name: Publish the comparison point
+        env:
+          BASE: ${{ needs.comparison-pair.outputs.base }}
+          CANDIDATE: ${{ needs.comparison-pair.outputs.candidate }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "comparison"
+          hosts = {}
+          for name in ("macos", "windows"):
+              data = json.loads((root / name / "comparison.json").read_text(encoding="utf-8"))
+              if data.get("state") != "PASS":
+                  raise SystemExit(f"{name}: comparison state is {data.get('state')}")
+              hosts[name] = {key: data[key] for key in ("state", "registered", "candidateCounts", "regressions")}
+          point = {"base": os.environ["BASE"], "candidate": os.environ["CANDIDATE"], "hosts": hosts}
+          out = root / "point"
+          out.mkdir()
+          (out / "comparison-point.json").write_text(json.dumps(point, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(json.dumps(point, indent=2, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: host-release-comparison-point
+          path: ${{ runner.temp }}/comparison/point/comparison-point.json
+          if-no-files-found: error

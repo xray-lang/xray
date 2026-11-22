@@ -1,0 +1,203 @@
+"""Capture and compare complete Release CTest receipts on one host.
+
+Both sides are built from exact commits in a detached worktree with the
+canonical Release preset, run through the full registered CTest inventory,
+and compared test by test. The comparison fails only on a changed build
+configuration, a new failure, a missing required gate test, or a failed
+identity check. Timing tests are reported separately because their wall
+time is information, not a correctness gate.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+from collections import Counter
+from pathlib import Path
+
+from merge_slice import (cache_fields, cache_options, current_gate_tests, junit_outcomes,
+                         registry_names, verify_identity)
+from xray_process import run_child
+
+TIMING = re.compile(r"(?:perf|bench|timing)", re.IGNORECASE)
+# The shared identity table keys Windows by its canonical runner name; both
+# Windows images report the same target triple.
+IDENTITY_HOST = {"windows-latest": "windows-2022", "macos-latest": "macos-latest"}
+
+
+def digest(path):
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def write_json(path, data):
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+
+
+def command(*args, cwd=None):
+    return subprocess.check_output([str(arg) for arg in args], cwd=cwd, timeout=60,
+                                   stderr=subprocess.STDOUT).decode("utf-8", "replace").strip()
+
+
+def git(root, *args):
+    return command("git", *args, cwd=root)
+
+
+def clean(source, head):
+    actual = git(source, "rev-parse", "HEAD")
+    status = git(source, "status", "--porcelain=v1")
+    if actual != head or status or git(source, "diff", "HEAD"):
+        raise ValueError(f"The source is not clean at {head}")
+    return {"head": actual, "status": status, "diffSha256": hashlib.sha256(b"").hexdigest()}
+
+
+def capture(source, build, folder, head, host, cmake, ctest, jobs, label):
+    folder.mkdir()
+    git(source, "switch", "--detach", head)
+    record = {"head": head, "source": str(source), "build": str(build), "host": host,
+              "side": label, "state": "RUNNING", "identity": clean(source, head), "commands": []}
+    receipt = folder / "result.json"
+    write_json(receipt, record)
+
+    def run(name, argv, timeout, accepted=(0,)):
+        argv = [str(arg) for arg in argv]
+        stdout, stderr = (folder / f"{label}-{name}.{stream}" for stream in ("stdout", "stderr"))
+        row = {"name": f"{label}-{name}", "argv": argv, "stdout": str(stdout), "stderr": str(stderr),
+               "childrenDrained": False}
+        record["commands"].append(row)
+        write_json(receipt, record)
+        with stdout.open("xb") as out, stderr.open("xb") as err:
+            status = run_child(argv, cwd=source, stdout=out, stderr=err, timeout=timeout)
+        row.update(exit=status, childrenDrained=True, stdoutSHA256=digest(stdout), stderrSHA256=digest(stderr))
+        write_json(receipt, record)
+        if status not in accepted:
+            raise RuntimeError(f"{label} {name} returned {status} at {head}. "
+                               f"Logs: {stdout} and {stderr}")
+        return stdout, status
+
+    run("configure", [cmake, "--preset", "default", "-B", build], 900)
+    run("all", [cmake, "--build", build, "--parallel", jobs, "--target", "all", "--", "-k", "0"], 5400)
+    run("cli", [cmake, "--build", build, "--parallel", jobs, "--target", "xray"], 600)
+    cli = build / ("xray.exe" if os.name == "nt" else "xray")
+    cache = build / "CMakeCache.txt"
+    if not cli.is_file() or not cache.is_file():
+        raise ValueError(f"The Release build at {head} did not produce a CLI and cache")
+    cache_hash, cli_hash = digest(cache), digest(cli)
+    fields = cache_fields(cache.read_bytes())
+    identity, _ = run("identity", [cli, "--version", "--json"], 60)
+    target = verify_identity(identity.read_bytes(), head, IDENTITY_HOST[host], "Release")
+    registry, _ = run("registry", [ctest, "--test-dir", build, "--show-only=json-v1"], 120)
+    junit = folder / "full.xml"
+    _, raw_exit = run("ctest", [ctest, "--test-dir", build, "--output-on-failure", "--no-tests=error",
+                               "-j", jobs, "--output-junit", junit], 5400, (0, 8))
+    outcomes = junit_outcomes(junit.read_bytes())
+    if set(outcomes) != registry_names(registry.read_bytes()):
+        raise ValueError(f"Incomplete or inconsistent CTest results for {head}")
+    if raw_exit != (8 if "fail" in outcomes.values() else 0):
+        raise ValueError(f"CTest exit {raw_exit} disagrees with its JUnit outcomes for {head}")
+    record["finalIdentity"] = clean(source, head)
+    if digest(cache) != cache_hash or digest(cli) != cli_hash:
+        raise ValueError(f"The CMake cache or CLI changed during CTest for {head}")
+    record.update(state="PASS" if raw_exit == 0 else "NEEDS_REVIEW", resourcesReleased=True,
+                  target=target, buildOptions=cache_options(fields),
+                  release={"output": str(junit), "outputSHA256": digest(junit), "rawExit": raw_exit,
+                           "registeredCount": len(outcomes)})
+    write_json(receipt, record)
+    return outcomes, cache_options(fields)
+
+
+def compare(baseline, candidate, before, after, base_config, candidate_config, host, required):
+    regressions = sorted(name for name, state in after.items()
+                         if state != "run" and before.get(name) != state)
+    timing = sorted(name for name in regressions if TIMING.search(name))
+    gating = [name for name in regressions if name not in timing]
+    retired = sorted(before.keys() - after.keys())
+    required_nonpass = sorted(name for name in required if after.get(name) != "run")
+    same_configuration = base_config == candidate_config
+    state = "PASS" if same_configuration and not (gating or required_nonpass) else "NEEDS_REVIEW"
+    result = {
+        "state": state,
+        "host": host,
+        "baseline": baseline,
+        "candidate": candidate,
+        "sameConfiguration": same_configuration,
+        "registered": len(after),
+        "baselineCounts": dict(Counter(before.values())),
+        "candidateCounts": dict(Counter(after.values())),
+        "regressions": gating,
+        "timingReportOnly": timing,
+        "retired": retired,
+        "requiredNonPass": required_nonpass,
+    }
+    lines = [
+        f"host: {host}",
+        f"baseline: {baseline}",
+        f"candidate: {candidate}",
+        f"state: {state}",
+        f"registered: {len(after)}",
+        "baseline: " + ", ".join(f"{key}={value}" for key, value in sorted(result["baselineCounts"].items())),
+        "candidate: " + ", ".join(f"{key}={value}" for key, value in sorted(result["candidateCounts"].items())),
+        "new failures: " + (", ".join(gating) if gating else "(none)"),
+        "timing report only: " + (", ".join(timing) if timing else "(none)"),
+        "retired: " + (", ".join(retired) if retired else "(none)"),
+        "required non-pass: " + (", ".join(required_nonpass) if required_nonpass else "(none)"),
+        f"build configuration identical: {'yes' if same_configuration else 'no'}",
+    ]
+    return result, "\n".join(lines) + "\n"
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--base", required=True)
+    parser.add_argument("--candidate", required=True)
+    parser.add_argument("--host", required=True, choices=("windows-latest", "macos-latest"))
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--jobs", type=int, default=4, choices=range(1, 9))
+    args = parser.parse_args(argv)
+    if not all(re.fullmatch(r"[0-9a-f]{40}", head) for head in (args.base, args.candidate)):
+        parser.error("The run requires two exact commit IDs")
+    if args.host == "windows-latest" and os.name != "nt":
+        parser.error("The Windows comparison requires Windows")
+    if args.host == "macos-latest" and platform.system() != "Darwin":
+        parser.error("The macOS comparison requires macOS")
+    repository = Path(git(Path.cwd(), "rev-parse", "--show-toplevel"))
+    if (git(repository, "merge-base", args.base, args.candidate) != args.base
+            or git(repository, "rev-parse", args.base + "^{tree}") ==
+               git(repository, "rev-parse", args.candidate + "^{tree}")):
+        parser.error("The comparison requires a distinct ancestor and source tree")
+    cmake, ctest = (shutil.which(tool) for tool in ("cmake", "ctest"))
+    if not all((cmake, ctest)):
+        parser.error("CMake and CTest must be available")
+    required = current_gate_tests(repository, args.candidate)
+    output = args.output.resolve()
+    workspace = output.with_name(output.name + "-workspace")
+    output.mkdir()
+    workspace.mkdir()
+    source = workspace / "source"
+    git(repository, "worktree", "add", "--detach", str(source), args.base)
+    try:
+        before, base_config = capture(source, workspace / "base-build", output / "base", args.base,
+                                      args.host, cmake, ctest, str(args.jobs), "base")
+        after, candidate_config = capture(source, workspace / "candidate-build", output / "candidate",
+                                          args.candidate, args.host, cmake, ctest, str(args.jobs),
+                                          "candidate")
+    finally:
+        subprocess.run(["git", "-C", str(repository), "worktree", "remove", "--force", str(source)],
+                       capture_output=True)
+    result, summary = compare(args.base, args.candidate, before, after, base_config, candidate_config,
+                              args.host, required)
+    result["hostIdentity"] = {"host": platform.node(), "platform": platform.platform(),
+                              "machine": platform.machine(), "python": platform.python_version()}
+    write_json(output / "comparison.json", result)
+    (output / "summary.txt").write_text(summary, encoding="utf-8", newline="\n")
+    print(summary, flush=True)
+    return 0 if result["state"] == "PASS" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
