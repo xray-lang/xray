@@ -48,16 +48,17 @@ class ProviderCodegenTests(unittest.TestCase):
                          emit_provider_descriptors(list(reversed(self.entries))))
         self.assertEqual(emit_provider_keys(self.entries),
                          emit_provider_keys(list(reversed(self.entries))))
-        self.assertEqual((ROOT / "src/runtime/abi/xr_stdlib_provider_descriptors_gen.inc.c").read_text(),
-                         emit_provider_descriptors(self.entries))
-        self.assertEqual((ROOT / "src/runtime/abi/xr_stdlib_provider_keys_gen.h").read_text(),
-                         emit_provider_keys(self.entries))
+        # The typed-provider tables were published into the compiler tree by the
+        # retired AOT/execution owners. The generators stay as the single
+        # definition of those tables, but nothing in the tree consumes them any
+        # more, so publishing them again would recreate a dead owner.
+        self.assertFalse((ROOT / "src/runtime/abi/xr_stdlib_provider_descriptors_gen.inc.c").exists())
+        self.assertFalse((ROOT / "src/runtime/abi/xr_stdlib_provider_keys_gen.h").exists())
 
     def test_generated_bindings_use_declared_typed_host_functions(self):
         generated = emit_provider_bindings(self.entries)
         self.assertEqual(generated, emit_provider_bindings(list(reversed(self.entries))))
-        self.assertEqual((ROOT / "src/execution/xr_stdlib_provider_bindings_gen.inc.c").read_text(),
-                         generated)
+        self.assertFalse((ROOT / "src/execution/xr_stdlib_provider_bindings_gen.inc.c").exists())
         self.assertIn("xr_time_utc_offset_at(argument, result_out)", generated)
         self.assertIn("*result_out = xr_os_core_getpid();", generated)
         self.assertNotIn("XrValue", generated)
@@ -79,10 +80,14 @@ class ProviderCodegenTests(unittest.TestCase):
         self.assertIn("XR_AOT_NATIVE_PROVIDER_SOURCE_COUNT 13u", native)
         self.assertEqual(native, emit_provider_aot_sources(list(reversed([*self.entries, entry]))))
 
-    def test_aot_uses_shared_typed_host_bodies(self):
+    def test_aot_provider_sources_are_not_published(self):
+        # The native provider source table belonged to the retired AOT program
+        # owner. The generator still renders the table for its own ordering
+        # tests, but no file in the tree consumes it, so publishing it again
+        # would restore an owner nothing reads.
         generated = emit_provider_aot_sources(self.entries)
         self.assertEqual(generated, emit_provider_aot_sources(list(reversed(self.entries))))
-        self.assertEqual((ROOT / "src/aot/program/xr_provider_aot_sources_gen.inc.c").read_text(), generated)
+        self.assertFalse((ROOT / "src/aot/program/xr_provider_aot_sources_gen.inc.c").exists())
         self.assertIn("xr_time_utc_offset_at(argument, result_out)", generated)
         self.assertIn("*result_out = xr_os_core_getpid();", generated)
         self.assertIn("xr_pipe_create(&pipe, NULL)", generated)
