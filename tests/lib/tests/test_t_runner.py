@@ -579,5 +579,29 @@ class EmptySelectionTest(unittest.TestCase):
         ctest.assert_called_once()
 
 
+class RegressionCorpusCommandTest(unittest.TestCase):
+    """The tier runner must speak the corpus gate's real command line.
+
+    A flag the gate no longer accepts makes the phase fail before the gate reads
+    a single case, which is how every tier stayed red on an argument error.
+    """
+
+    def test_corpus_phase_passes_only_supported_arguments(self):
+        with tempfile.TemporaryDirectory(prefix="xt_t_corpus.") as tmp:
+            build = Path(tmp)
+            (build / "xray").write_bytes(b"")
+            (build / "xray.exe").write_bytes(b"")
+            result = SimpleNamespace(ok=True, combined_text=lambda: "corpus ok\n")
+            with mock.patch.object(runner.proc, "run", return_value=result) as run:
+                with redirect_stdout(io.StringIO()):
+                    self.assertTrue(runner.run_regression_corpus(build))
+        argv = [str(part) for part in run.call_args.args[0]]
+        self.assertIn(str(ROOT / "scripts" / "check_regression_corpus.py"), argv)
+        self.assertIn("--xray", argv)
+        self.assertIn("--json", argv)
+        self.assertNotIn("--build-dir", argv)
+        self.assertNotIn("--with-backend-diff", argv)
+
+
 if __name__ == "__main__":
     unittest.main()

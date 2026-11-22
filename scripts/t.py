@@ -637,15 +637,19 @@ def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
 
 
 @timed_phase("regression corpus")
-def run_regression_corpus(build_dir: Path, skip_diff: bool) -> bool:
-    """Use the same exact report and ratchet as the standalone corpus gate."""
+def run_regression_corpus(build_dir: Path) -> bool:
+    """Use the same exact report and ratchet as the standalone corpus gate.
+
+    The corpus gate owns one public runner (`xray test`) and its own pass
+    ratchet, so this passes only the binary and the report path. The backend
+    differential is a separate ctest lane and no longer runs inside the corpus
+    gate; passing it here would fail the phase on an argument the gate does not
+    accept.
+    """
     print(f"{BLUE}==>{NC} regression corpus")
     command = [sys.executable, REPO_ROOT / "scripts" / "check_regression_corpus.py",
                "--xray", build_dir / platform.exe_name("xray"),
-               "--build-dir", build_dir,
                "--json", build_dir / "regression-report.json"]
-    if not skip_diff:
-        command.append("--with-backend-diff")
     result = proc.run(command, cwd=REPO_ROOT)
     sys.stdout.write(result.combined_text())
     return result.ok
@@ -850,9 +854,7 @@ def _run_main(argv: List[str]) -> int:
         code = run_ctest(build_dir, [*ctest_args, *extra], env, exact_expected)
 
     if not focused_selection:
-        if tier == "t1" and not run_regression_corpus(build_dir, True):
-            code = 1
-        elif tier in ("t2", "t3") and not run_regression_corpus(build_dir, False):
+        if tier in ("t1", "t2", "t3") and not run_regression_corpus(build_dir):
             code = 1
 
     # t0 runs an exact negative smoke inventory. t1 already includes the full
