@@ -1414,6 +1414,19 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             else if (string->runes>INT64_MAX) status=XRT_MANAGED_OVERFLOW;
             else output->bits=(uint64_t)string->runes;
         }
+    } else if (access.operation==XR_RBC_VALUE_STRING_EQUAL || access.operation==XR_RBC_VALUE_STRING_NOT_EQUAL) {
+        const XrtStringBacking *left=NULL,*right=NULL;
+        status=rbc_value_string_borrow(activation,access.source,&left);
+        if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&right);
+        if (status==XRT_MANAGED_OK) {
+            XrRbcRegister *output=rbc_value_register(stack,activation,access.result);
+            if (!output) status=XRT_MANAGED_ARGUMENT;
+            else {
+                bool equal=left->length==right->length &&
+                    (!left->length || !memcmp(left->bytes,right->bytes,left->length));
+                output->bits=access.operation==XR_RBC_VALUE_STRING_NOT_EQUAL ? !equal : equal;
+            }
+        }
     } else if (access.operation>=XR_RBC_VALUE_STATE_READ && access.operation<=XR_RBC_VALUE_STATE_GROUP_INITIALIZE)
         status=rbc_value_state(module,stack,activation,access);
     else if (access.operation==XR_RBC_VALUE_EDGE) {

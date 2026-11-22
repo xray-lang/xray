@@ -574,6 +574,10 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_ASSERT_CONDITION:
         return !a.result && !a.index && rbc_value_scalar(code,function,a.source,XR_RBC_BITS) &&
             rbc_value_string(module,code,a.other,false);
+    case XR_RBC_VALUE_STRING_EQUAL: case XR_RBC_VALUE_STRING_NOT_EQUAL:
+        return !a.index && rbc_value_string(module,code,a.source,false) &&
+            rbc_value_string(module,code,a.other,false) &&
+            rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     case XR_RBC_VALUE_STRING_LENGTH:
         return !a.other && rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     case XR_RBC_VALUE_I64_TRY_PARSE:

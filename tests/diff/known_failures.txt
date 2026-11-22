@@ -11,5 +11,4 @@ tests/diff/cases/limits/json_object_literal_over_254.xr  # VM: instruction tempo
 tests/diff/cases/limits/reg_pressure_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs
 tests/diff/cases/limits/symbol_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs and prints 771
 tests/diff/cases/limits/upval_capture_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs and prints 772
-tests/diff/cases/semantics/collections/array_member_reference_element_refused.xr  # VM half no longer runs: Array.fill on a reference element fails LIR verification with "instruction type or signature mismatch" at 18:5
 tests/diff/cases/semantics/functions/unproven_callee_targets.xr  # VM half no longer runs: MAP_NEW is not supported by LIR lowering yet at 48:9
