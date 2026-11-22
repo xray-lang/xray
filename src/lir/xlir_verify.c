@@ -410,6 +410,13 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                                        (v->predicate == XR_LIR_EQ || v->predicate == XR_LIR_NE)));
         case XR_LIR_FCMP:
             return v->type == XR_LIR_I1 && lir_float(a) && a == b;
+        case XR_LIR_STRING_EQUAL:
+            /* A binding reads as a borrow and a literal is owned, so the two
+             * operand forms mix; both still name one string backing. */
+            return v->type == XR_LIR_I1 &&
+                   (a == XR_LIR_STRING || a == XR_LIR_STRING_REF) &&
+                   (b == XR_LIR_STRING || b == XR_LIR_STRING_REF) &&
+                   (v->predicate == XR_LIR_EQ || v->predicate == XR_LIR_NE);
         case XR_LIR_INTCAST:
             return lir_integer(a) && lir_integer(v->type);
         case XR_LIR_ITOF:

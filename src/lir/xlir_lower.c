@@ -1895,9 +1895,12 @@ static XrLirOp lower_operation(const LowerFunction *f, const XrXirInstruction *o
             return XR_LIR_FCAST;
         }
         default:
-            if (lower_predicate(op))
-                return xr_xir_operand_type(f->source, op->args[0]) == XR_XIR_F64 ? XR_LIR_FCMP
-                                                                                 : XR_LIR_ICMP;
+            if (lower_predicate(op)) {
+                XrXirType operand = xr_xir_operand_type(f->source, op->args[0]);
+                if (operand == XR_XIR_F64) return XR_LIR_FCMP;
+                if (operand == XR_XIR_STRING) return XR_LIR_STRING_EQUAL;
+                return XR_LIR_ICMP;
+            }
             return XR_LIR_OP_INVALID;
     }
 }

@@ -654,6 +654,20 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_format(c, ", &v%" PRIu32 ".payload);\n", v->result);
         return true;
     }
+    if (v->op == XR_LIR_STRING_EQUAL) {
+        c_text(c, "    { const XrtStringBacking *xrl_left = (const XrtStringBacking *)");
+        c_value(c, v->operands[0]);
+        c_text(c, "; const XrtStringBacking *xrl_right = (const XrtStringBacking *)");
+        c_value(c, v->operands[1]);
+        c_text(c, ";\n");
+        c_format(c, "      v%" PRIu32 " = xrl_left->length == xrl_right->length &&\n"
+                    "          (!xrl_left->length || !memcmp(xrl_left->bytes, xrl_right->bytes, xrl_left->length));\n",
+                 v->result);
+        if (v->predicate == XR_LIR_NE)
+            c_format(c, "      v%" PRIu32 " = !v%" PRIu32 ";\n", v->result, v->result);
+        c_text(c, "    }\n");
+        return true;
+    }
     if (v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN) {
         c_text(c, "    { const XrtStringBacking *value = (const XrtStringBacking *)");
         c_value(c, v->operands[0]); c_text(c, ";\n");
