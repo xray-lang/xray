@@ -136,7 +136,7 @@ static const XrCliOptionSpec mcp_options[] = {
 
 static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
-    {"run", "Run one exact .xr source entry", NULL, run_options, 1, 1, true, false, NULL, NULL, 0},
+    {"run", "Run one exact .xr source entry", NULL, run_options, 1, 1, false, false, NULL, NULL, 0},
     {"repl", "Temporarily unavailable", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
     {"test", "Discover the tests of each entry module",
      "FILE|DIR... [-v] [-q] [-f PATTERN] [-F] [-j N]",

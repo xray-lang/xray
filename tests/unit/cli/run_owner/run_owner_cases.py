@@ -77,7 +77,7 @@ def main():
     for name, argument in [('wrong-suffix', 'main.txt'), ('uppercase-suffix', 'main.XR')]:
         run(name, [argument], (1, b'', b"XR_RUN_6013: canonical run accepts only an exact '.xr' source path\n"))
     run('passthrough', [entry, '--', 'argument'],
-        (1, b'', b'XR_RUN_6010: a module initializer does not accept arguments\n'))
+        (2, b'', b"xray run: '--' separator not supported by this command\n"))
     run('missing', [output/'missing.xr'],
         (1, b'', b'XR_RUN_6001: source path lookup failed (stage=1 status=not-found io=2)\n'))
     directory = output/'directory.xr'

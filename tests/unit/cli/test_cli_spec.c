@@ -35,7 +35,7 @@ TEST(spec_find_command_run) {
     ASSERT_NOT_NULL(spec);
     ASSERT_STR_EQ(spec->name, "run");
     ASSERT_NOT_NULL(spec->options);
-    ASSERT_TRUE(spec->allow_passthrough);
+    ASSERT_FALSE(spec->allow_passthrough);
 }
 
 TEST(spec_source_repl_namespace_registered) {
@@ -606,7 +606,12 @@ TEST(parse_cmd_no_positionals) {
 }
 
 TEST(parse_cmd_passthrough) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    /* No product command accepts `--` arguments today, so the separator
+     * contract is exercised on a local spec rather than through one. */
+    static const XrCliCommandSpec passthrough = {
+        .name = "passthrough", .options = NULL, .positional_min = 1,
+        .positional_max = 1, .allow_passthrough = true};
+    const XrCliCommandSpec *spec = &passthrough;
     ASSERT_NOT_NULL(spec);
 
     XrCliContext ctx = {.program = "xray"};

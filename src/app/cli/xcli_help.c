@@ -101,7 +101,7 @@ static void print_options(const XrCliOptionSpec *opts) {
 void xr_cli_print_usage(void) {
     printf("Xray - High-performance scripting language\n");
     printf("\nUsage:\n");
-    printf("  xray <file.xr> [-- args...]       Run script\n");
+    printf("  xray <file.xr>                    Run script\n");
     printf("  xray <command> [options] [args...] Execute command\n");
 
     printf("\nCommands:\n");
