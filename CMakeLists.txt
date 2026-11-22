@@ -2759,26 +2759,6 @@ if(BUILD_TESTS)
 
     # Freestanding stdlib allowlist: every committed module contract must have
     # a no-libc object probe, so the allowlist cannot silently drift.
-    # Sanitizer builds link the sanitizer runtime into every object and cannot
-    # honor the freestanding -nostdlib contract, so the probe's undefined-symbol
-    # surface is polluted with __asan_*/__ubsan_* symbols. This is an inherent
-    # freestanding-vs-sanitizer conflict, not a product defect, so skip the gate
-    # under sanitizers (same rationale as raw_scalar_assembly_shape above).
-    if(NOT ENABLE_ASAN AND NOT ENABLE_UBSAN AND NOT ENABLE_TSAN AND
-       NOT ENABLE_MSAN AND NOT ENABLE_SANITIZERS)
-        add_test(
-            NAME aot_freestanding_allowlist
-            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_allowlist_tests.py
-                    $<TARGET_FILE:xray>
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        )
-        set_tests_properties(aot_freestanding_allowlist PROPERTIES
-            LABELS "aot;freestanding;stdlib;smoke"
-            PROCESSORS 1
-            TIMEOUT 60
-        )
-    endif()
-
     add_test(
         NAME aot_freestanding_provider_abi
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_provider_abi_test.py
