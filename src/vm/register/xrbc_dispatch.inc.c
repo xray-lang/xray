@@ -321,6 +321,16 @@ XR_RBC_CASE(EQ) {
         goto xr_rbc_jump;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(LTU)
+XR_RBC_CASE(LEU) {
+    uint64_t lhs = (uint64_t)xr_rbc_signed(XR_RBC_REG(XR_RBC_A()));
+    uint64_t rhs = (uint64_t)xr_rbc_signed(XR_RBC_REG(XR_RBC_B()));
+    bool take = op == XR_RBC_LTU ? lhs < rhs : lhs <= rhs;
+    instruction = code[pc++];
+    if (take)
+        goto xr_rbc_jump;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(JMP)
 xr_rbc_jump: {
     uint32_t bits = instruction >> 8;

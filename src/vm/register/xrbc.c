@@ -272,8 +272,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     uint32_t a = (word >> 8) & 255, b = (word >> 16) & 255, c = word >> 24;
     uint32_t index = word >> 16, registers = function->register_count;
     size_t remaining = function->code_count - pc;
-    bool immediate_comparison = op >= XR_RBC_LTI && op <= XR_RBC_EQI;
-    bool comparison = immediate_comparison || op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ;
+    bool comparison = xr_rbc_op_is_comparison(op);
     switch (op) {
     case XR_RBC_STRING_LITERAL_MAP_READ:
     case XR_RBC_STRING_LITERAL_BORROW:
@@ -305,6 +304,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     case XR_RBC_MOV: case XR_RBC_NEG: case XR_RBC_FNEG: case XR_RBC_ITOF: case XR_RBC_FTOI:
     case XR_RBC_CELL_READ: case XR_RBC_CELL_WRITE:
     case XR_RBC_LT: case XR_RBC_LE: case XR_RBC_EQ:
+    case XR_RBC_LTU: case XR_RBC_LEU:
         if (a >= registers || b >= registers || c) return false;
         if (comparison && (remaining <= 2 || (function->code[pc + 1] & 255) != XR_RBC_JMP))
             return false;

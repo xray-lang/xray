@@ -273,7 +273,8 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_CALL_INDIRECT: case XR_LIR_CALL_INTRINSIC:
     case XR_LIR_BR: case XR_LIR_RET: return true;
     case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG: return i->type == XR_LIR_U64;
-    case XR_LIR_ICMP: return source == XR_LIR_U8 || i->predicate == XR_LIR_EQ || i->predicate == XR_LIR_NE;
+    case XR_LIR_ICMP: return source == XR_LIR_U8 || source == XR_LIR_U64 ||
+        i->predicate == XR_LIR_EQ || i->predicate == XR_LIR_NE;
     case XR_LIR_INTCAST: return (i->type == XR_LIR_I64 || i->type == XR_LIR_U8 || i->type == XR_LIR_U64) &&
         (source == XR_LIR_I64 || source == XR_LIR_U8 || source == XR_LIR_U64);
     default: return false;
@@ -747,8 +748,14 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                     if (row->constructor_may_repeat) goto frame_rejected;
                 }
                 if (!rbc_lir_operation(input, f, &i, &output)) {
-                    rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
-                        "operation has no admitted bytecode implementation", i.source);
+                    /* Name the operation: "no admitted bytecode" alone cannot
+                     * distinguish a missing lowering from a wrong shape, and the
+                     * first diagnostic is what a caller acts on. */
+                    char message[192];
+                    (void)snprintf(message, sizeof(message),
+                        "operation has no admitted bytecode implementation: %s",
+                        xr_lir_op_name((XrLirOp)i.op));
+                    rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, message, i.source);
                     goto rejected;
                 }
                 if ((i.op == XR_LIR_CALL || i.op == XR_LIR_FUNCTION_REF) && !mapping[i.callee - 1]) {
@@ -1054,6 +1061,10 @@ static bool rbc_lir_constant(RbcLirCompiler *c, uint32_t slot, uint64_t bits) {
 
 static bool rbc_lir_predicate(RbcLirCompiler *c, const XrLirInstructionView *i) {
     XR_DCHECK(i->operand_count == 2, "integer predicates have two verified operands");
+    XrLirType left = XR_LIR_TYPE_INVALID, right = XR_LIR_TYPE_INVALID;
+    (void)xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, i->operands[0]}, &left);
+    (void)xr_lir_value_type(c->input, (XrLirValue){c->input, c->function.id, i->operands[1]}, &right);
+    bool unsigned_compare = left == XR_LIR_U64 || right == XR_LIR_U64;
     uint32_t selected = rbc_lir_immediate_operand(c, i);
     if (selected < 2) {
         XrRbcOp op = XR_RBC_EQI;
@@ -1072,6 +1083,10 @@ static bool rbc_lir_predicate(RbcLirCompiler *c, const XrLirInstructionView *i) 
     }
     if (i->predicate == XR_LIR_LT || i->predicate == XR_LIR_GT) op = XR_RBC_LT;
     if (i->predicate == XR_LIR_LE || i->predicate == XR_LIR_GE) op = XR_RBC_LE;
+    if (unsigned_compare) {
+        if (i->predicate == XR_LIR_LT || i->predicate == XR_LIR_GT) op = XR_RBC_LTU;
+        if (i->predicate == XR_LIR_LE || i->predicate == XR_LIR_GE) op = XR_RBC_LEU;
+    }
     return rbc_lir_emit(c, op, a, b, 0, 0);
 }
 
@@ -1416,8 +1431,7 @@ static bool rbc_lir_thread_jumps(RbcLirCompiler *c) {
 }
 
 static bool rbc_lir_paired_jump(uint32_t op) {
-    return op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ ||
-        (op >= XR_RBC_LTI && op <= XR_RBC_EQI);
+    return xr_rbc_op_is_comparison(op);
 }
 
 static bool rbc_lir_compact_jumps(RbcLirCompiler *c) {

@@ -146,6 +146,74 @@ static void test_u64_arithmetic_and_edges(void) {
     }
 }
 
+static void test_u64_ordered_comparisons(void) {
+    // Every pair distinguishes the ordered meaning from its signed reading.
+    static const struct {
+        XrLirPredicate predicate;
+        uint64_t left, right, expected;
+    } cases[] = {
+        {XR_LIR_LT, UINT64_C(0x8000000000000000), 1, 0},
+        {XR_LIR_GT, UINT64_C(0x8000000000000000), 1, 1},
+        {XR_LIR_LE, 1, UINT64_C(0x8000000000000000), 1},
+        {XR_LIR_GE, 1, UINT64_C(0x8000000000000000), 0},
+        {XR_LIR_LT, 0, UINT64_MAX, 1},
+        {XR_LIR_GE, UINT64_MAX, 0, 1},
+        {XR_LIR_LT, UINT64_MAX, UINT64_MAX, 0},
+    };
+    for (size_t n = 0; n < sizeof(cases) / sizeof(*cases); ++n) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirType types[] = {XR_LIR_U64, XR_LIR_U64};
+        XrLirFunction f = test_function(m, "unsigned_compare", types, 2, XR_LIR_I1);
+        XrLirBlock entry = test_block(m, f, NULL, 0);
+        OK(xr_lir_set_entry(m, f, entry));
+        XrLirValue operands[] = {parameter(m, f, 0), parameter(m, f, 1)}, result;
+        XrLirInstruction compare = {.op = XR_LIR_ICMP, .type = XR_LIR_I1,
+            .operands = operands, .operand_count = 2, .predicate = cases[n].predicate};
+        OK(xr_lir_emit_value(m, entry, &compare, &result));
+        test_return(m, entry, result);
+        OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = compile(m, f);
+        xr_lir_module_destroy(m);
+        uint64_t arguments[] = {cases[n].left, cases[n].right};
+        CHECK(run(program, arguments, 2) == cases[n].expected);
+        // The same ordering must hold against an encoded bound, which the
+        // compiler folds into the immediate comparison form.
+        xr_rbc_program_destroy(program);
+    }
+    // A literal right operand is materialized and compared in registers: only
+    // an i64 constant can be folded into the encoded-bound form, so a u64
+    // ordered comparison must never emit the signed immediate opcode.
+    for (uint64_t bound = 0; bound <= 2; ++bound) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirType types[] = {XR_LIR_U64};
+        XrLirFunction f = test_function(m, "unsigned_compare_literal", types, 1, XR_LIR_I1);
+        XrLirBlock entry = test_block(m, f, NULL, 0);
+        OK(xr_lir_set_entry(m, f, entry));
+        XrLirValue bound_value = test_constant(m, entry, XR_LIR_U64, (int64_t)bound);
+        XrLirValue operands[] = {parameter(m, f, 0), bound_value}, result;
+        XrLirInstruction compare = {.op = XR_LIR_ICMP, .type = XR_LIR_I1,
+            .operands = operands, .operand_count = 2, .predicate = XR_LIR_GT};
+        OK(xr_lir_emit_value(m, entry, &compare, &result));
+        test_return(m, entry, result);
+        OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = compile(m, f);
+        xr_lir_module_destroy(m);
+        const XrRbcFunction *code = &xr_rbc_program_view(program)->functions[0];
+        unsigned unsigned_compares = 0;
+        for (size_t pc = 0; pc < code->code_count; ++pc) {
+            unsigned op = code->code[pc] & 255;
+            CHECK(op != XR_RBC_LT && op != XR_RBC_LE);
+            unsigned_compares += op == XR_RBC_LTU || op == XR_RBC_LEU;
+        }
+        CHECK(unsigned_compares == 1);
+        const uint64_t argument = UINT64_C(0x8000000000000000);
+        CHECK(run(program, &argument, 1) == 1);
+        xr_rbc_program_destroy(program);
+    }
+}
+
 static void test_recursive_and_loop(void) {
     XrLirModule *m = test_fib();
     XrLirFunction root;
@@ -855,8 +923,7 @@ static void test_f64_constants_and_refusals(void) {
         {XR_LIR_INTCAST, XR_LIR_I8, XR_LIR_I64, 1},
         {XR_LIR_INTCAST, XR_LIR_I64, XR_LIR_I8, 1},
         {XR_LIR_DIV, XR_LIR_U64, XR_LIR_U64, 2},
-        {XR_LIR_REM, XR_LIR_U64, XR_LIR_U64, 2},
-        {XR_LIR_ICMP, XR_LIR_U64, XR_LIR_I1, 2}
+        {XR_LIR_REM, XR_LIR_U64, XR_LIR_U64, 2}
     };
     for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n) {
         XrLirModule *m = NULL;
@@ -1536,6 +1603,7 @@ int main(void) {
     test_integer_identity_cast(XR_LIR_U64, XR_LIR_I64);
     test_integer_identity_cast(XR_LIR_I64, XR_LIR_U64);
     test_u64_arithmetic_and_edges();
+    test_u64_ordered_comparisons();
     test_recursive_and_loop();
     test_immediate_selection();
     test_location_ownership();

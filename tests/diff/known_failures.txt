@@ -13,4 +13,3 @@ tests/diff/cases/limits/symbol_over_254.xr  # VM: instruction temporaries and ca
 tests/diff/cases/limits/upval_capture_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs and prints 772
 tests/diff/cases/semantics/collections/array_member_reference_element_refused.xr  # VM half no longer runs: Array.fill on a reference element fails LIR verification with "instruction type or signature mismatch" at 18:5
 tests/diff/cases/semantics/functions/unproven_callee_targets.xr  # VM half no longer runs: MAP_NEW is not supported by LIR lowering yet at 48:9
-tests/diff/cases/semantics/int_wrap/uint64_print_compare.xr  # VM: operation has no admitted bytecode implementation at 43:1; native prints 9223372036854775808|18446744073709551615|9223372036854775808

@@ -521,8 +521,7 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
             size_t target;
             if (!rbc_string_jump(f, pc, &target)) return XR_RBC_INVALID;
             g->indices[target] = 0;
-        } else if (op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ ||
-            (op >= XR_RBC_LTI && op <= XR_RBC_EQI)) {
+        } else if (xr_rbc_op_is_comparison(op)) {
             if (pc + 2 >= f->code_count) return XR_RBC_INVALID;
             g->indices[pc + 1] = g->indices[pc + 2] = 0;
         }
@@ -660,10 +659,10 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
         uint32_t word = f->code[pc];
         XrRbcOperands v = {(XrRbcOp)(word & 255), (word >> 8) & 255,
             (word >> 16) & 255, word >> 24, word >> 16};
-        if (v.op == XR_RBC_LT || v.op == XR_RBC_LE || v.op == XR_RBC_EQ) {
+        if (xr_rbc_op_is_comparison(v.op) && !xr_rbc_op_is_immediate_comparison(v.op)) {
             return g->work.state[v.a] == RBC_BITS && g->work.state[v.b] == RBC_BITS &&
                 rbc_string_propagate(g, pc + 1, false) && rbc_string_propagate(g, pc + 2, false);
-        } else if (v.op >= XR_RBC_LTI && v.op <= XR_RBC_EQI) {
+        } else if (xr_rbc_op_is_immediate_comparison(v.op)) {
             return g->work.state[v.a] == RBC_BITS &&
                 rbc_string_propagate(g, pc + 1, false) && rbc_string_propagate(g, pc + 2, false);
         } else if (v.op == XR_RBC_JMP) {

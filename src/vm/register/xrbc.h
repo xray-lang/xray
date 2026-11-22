@@ -82,6 +82,8 @@
     X(MULI, ABS8)                                                                                  \
     X(REMI, ABS8)                                                                                  \
     X(FLEK, ABK8)                                                                                  \
+    X(LTU, AB)                                                                                     \
+    X(LEU, AB)                                                                                     \
     X(MODULE_BEGIN, ABX)                                                                           \
     X(MODULE_READY, ABX)                                                                           \
     X(STATE_CONSTRUCT, ABX)                                                                        \
@@ -103,6 +105,24 @@ typedef enum {
 #undef XR_RBC_ENUM
     XR_RBC_OP_COUNT
 } XrRbcOp;
+
+/* A comparison owns the branch pair that follows it, so every pass that walks
+ * bytecode must agree on the set. Signed and unsigned ordered compares are
+ * distinct opcodes because the register file holds raw bits: the same bit
+ * pattern is a different ordering depending on the source type. An unsigned
+ * compare always reads two registers; the encoded-bound forms stay signed
+ * because the immediate field is a sign-extended 16-bit value. */
+static inline bool xr_rbc_op_is_comparison(uint32_t op) {
+    return op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ ||
+        op == XR_RBC_LTU || op == XR_RBC_LEU ||
+        (op >= XR_RBC_LTI && op <= XR_RBC_EQI);
+}
+
+/* The immediate comparisons read one register and one encoded bound; the
+ * register comparisons read two registers. Dataflow needs that distinction. */
+static inline bool xr_rbc_op_is_immediate_comparison(uint32_t op) {
+    return op >= XR_RBC_LTI && op <= XR_RBC_EQI;
+}
 
 typedef struct {
     XrRbcOp op;
@@ -387,7 +407,8 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 // value/id at A+1/A+2; clocks read id at A+1 and return I64 bits into A.
 // UTC offset reads timestamp/id at A+1/A+2 and also returns I64 bits into A.
 // Callee locals may overwrite slots beyond the call window. LT/LE/EQ compare
-// A,B and execute the following JMP only when the comparison is true.
+// A,B as signed 64-bit values, LTU/LEU compare the same bits as unsigned, and
+// each executes the following JMP only when the comparison is true.
 // FLEK writes A with the F64 comparison B <= constants[C]. Its eight-bit C
 // field is a constant index, including 255, rather than a register operand.
 // PRINT_LITERAL reserves A as zero and selects immutable bytes by Bx; its

@@ -71,6 +71,7 @@ static void xr_rbc_entry_instruction(const XrRbcModule *module, const XrRbcFunct
         writes = true;
         break;
     case XR_RBC_CELL_WRITE: case XR_RBC_LT: case XR_RBC_LE: case XR_RBC_EQ:
+    case XR_RBC_LTU: case XR_RBC_LEU:
         xr_rbc_entry_read(state, b);
         xr_rbc_entry_read(state, a);
         break;
@@ -120,8 +121,7 @@ static bool xr_rbc_entries(const XrRbcModule *module, XrRbcEntry *entries) {
                 int32_t offset = bits <= XR_RBC_JUMP_MAX ? (int32_t)bits : (int32_t)bits - 16777216;
                 targets[pc + 1 + (size_t)offset] = 1;
             }
-            if (op == XR_RBC_LT || op == XR_RBC_LE || op == XR_RBC_EQ ||
-                (op >= XR_RBC_LTI && op <= XR_RBC_EQI)) targets[pc + 2] = 1;
+            if (xr_rbc_op_is_comparison(op)) targets[pc + 2] = 1;
             if ((op == XR_RBC_JMP || op == XR_RBC_RET || op == XR_RBC_RET0) &&
                 pc + 1 < function->code_count) targets[pc + 1] = 1;
         }

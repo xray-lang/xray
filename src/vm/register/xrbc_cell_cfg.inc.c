@@ -25,8 +25,7 @@ static bool rbc_cell_successors(RbcStringGraph *g, RbcCellBlock *nodes) {
                 if (!rbc_string_jump(f,pc,&target)) return false;
                 node->edges[node->edge_count++]=g->indices[target]; terminal=true; break;
             }
-            if (op==XR_RBC_LT || op==XR_RBC_LE || op==XR_RBC_EQ ||
-                (op>=XR_RBC_LTI && op<=XR_RBC_EQI)) {
+            if (xr_rbc_op_is_comparison(op)) {
                 node->edges[node->edge_count++]=g->indices[pc+1];
                 node->edges[node->edge_count++]=g->indices[pc+2]; terminal=true; break;
             }

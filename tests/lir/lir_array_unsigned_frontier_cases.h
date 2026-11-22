@@ -163,17 +163,49 @@ static void array_unsigned_scalar_boundaries(void) {
         XrLirType types[] = {XR_LIR_U64, XR_LIR_U64};
         XrLirFunction f = {0}; XrLirBlock block = {0}; XrLirValue operands[2], result = {0};
         XrLirFunctionSpec spec = {.name="unsupported_unsigned", .name_length=20, .parameters=types,
-            .parameter_count=2, .result=scenario ? XR_LIR_I1 : XR_LIR_U64};
+            .parameter_count=2, .result=XR_LIR_U64};
         OK(xr_lir_declare_function(m, &spec, &f)); OK(xr_lir_define_function(m, f));
         for (uint32_t p = 0; p < 2; ++p) OK(xr_lir_function_parameter(m, f, p, &operands[p]));
         OK(xr_lir_add_block(m, f, NULL, 0, &block)); OK(xr_lir_set_entry(m, f, block));
-        XrLirInstruction operation = {.op=scenario ? XR_LIR_ICMP : XR_LIR_DIV, .type=spec.result,
-            .operands=operands, .operand_count=2, .predicate=scenario ? XR_LIR_LT : XR_LIR_PREDICATE_NONE};
+        XrLirInstruction operation = {.op=scenario ? XR_LIR_REM : XR_LIR_DIV, .type=XR_LIR_U64,
+            .operands=operands, .operand_count=2};
         OK(xr_lir_emit_value(m, block, &operation, &result));
         XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
         OK(xr_lir_set_terminator(m, block, &ret)); OK(xr_lir_module_finish(m, NULL));
         XrRbcProgram *program = NULL;
         CHECK(xr_rbc_compile(m, f, &program, NULL) == XR_RBC_COMPILE_UNSUPPORTED && !program);
         xr_lir_module_destroy(m);
+    }
+    /* Ordered unsigned comparison is part of the implemented family: the same
+     * bits must order as unsigned values, so the high half is not "negative". */
+    {
+        const uint64_t pairs[][2] = {{0, 1}, {1, 0}, {UINT64_C(0x8000000000000000), 1},
+            {1, UINT64_C(0x8000000000000000)}, {UINT64_MAX, UINT64_C(0x8000000000000000)}};
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirType types[] = {XR_LIR_U64, XR_LIR_U64};
+        XrLirFunction f = {0}; XrLirBlock block = {0}; XrLirValue operands[2], result = {0};
+        XrLirFunctionSpec spec = {.name="unsigned_less", .name_length=13, .parameters=types,
+            .parameter_count=2, .result=XR_LIR_I1};
+        OK(xr_lir_declare_function(m, &spec, &f)); OK(xr_lir_define_function(m, f));
+        for (uint32_t p = 0; p < 2; ++p) OK(xr_lir_function_parameter(m, f, p, &operands[p]));
+        OK(xr_lir_add_block(m, f, NULL, 0, &block)); OK(xr_lir_set_entry(m, f, block));
+        XrLirInstruction compare = {.op=XR_LIR_ICMP, .type=XR_LIR_I1,
+            .operands=operands, .operand_count=2, .predicate=XR_LIR_LT};
+        OK(xr_lir_emit_value(m, block, &compare, &result));
+        XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
+        OK(xr_lir_set_terminator(m, block, &ret)); OK(xr_lir_module_finish(m, NULL));
+        XrRbcProgram *program = NULL;
+        CHECK(xr_rbc_compile(m, f, &program, NULL) == XR_RBC_COMPILE_OK && program);
+        xr_lir_module_destroy(m);
+        for (uint32_t p = 0; p < sizeof(pairs) / sizeof(*pairs); ++p) {
+            XrRbcExecution *execution = NULL;
+            CHECK(xr_rbc_program_prepare(program, pairs[p], 2, &execution) == XR_RBC_OK && execution);
+            XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+            uint64_t bits = 91;
+            CHECK(xr_rbc_outcome_bits(outcome, &bits) && bits == (pairs[p][0] < pairs[p][1]));
+            xr_rbc_outcome_free(&outcome); xr_rbc_execution_free(&execution);
+        }
+        xr_rbc_program_destroy(program);
     }
 }
