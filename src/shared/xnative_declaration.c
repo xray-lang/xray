@@ -22,6 +22,12 @@ XR_FUNC const XrNativeCallableDeclaration *xr_native_callable_by_id(uint32_t id)
         if (id && xr_native_callables[i].id == id) return &xr_native_callables[i];
     return NULL;
 }
+XR_FUNC const XrNativeTargetFact *xr_native_target_fact(uint32_t callable) {
+    if (!callable) return NULL;
+    for (size_t i = 0; i < sizeof(xr_native_target_facts) / sizeof(*xr_native_target_facts); ++i)
+        if (xr_native_target_facts[i].callable == callable) return &xr_native_target_facts[i];
+    return NULL;
+}
 XR_FUNC const XrNativeIntrinsicDeclaration *xr_native_intrinsic_by_id(uint32_t id) {
     if (!id) return NULL;
     for (size_t i = 0; i < sizeof(xr_native_intrinsics) / sizeof(*xr_native_intrinsics); ++i)

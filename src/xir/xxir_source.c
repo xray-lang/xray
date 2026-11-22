@@ -1487,6 +1487,18 @@ static bool source_scalar_text(SourceContext *ctx,AstNode *node,SourceValue inpu
 #include "xxir_source_rune.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value) {
+    /* A governed host fact answers its private callable from the declared
+     * compilation target, so no body or runtime entry exists for the call. */
+    const XrNativeTargetFact *fact = xr_native_target_fact(ctx->identities[target->index].native_callable);
+    if (fact) {
+        bool matches = false;
+        if (!xr_target_fact_matches(&ctx->target, (XrTargetFact){fact->query, fact->value}, &matches))
+            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "host fact has no admitted target query");
+        AstNode *reference=node->type==AST_CALL_EXPR?node->as.call_expr.callee:node;
+        if (!source_query_reference(ctx,reference,binding,target,XR_XIR_SOURCE_CALL)) return false;
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_BOOL,XR_XIR_BOOL,{0},{0},
+            matches ? 1 : 0,{0}},value);
+    }
     SourceDirectRequest direct={target->index,{0},NULL,result_context,false,NULL};
     SourceDirectArguments prepared={0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;

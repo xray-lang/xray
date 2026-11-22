@@ -526,13 +526,9 @@
       "id": "stdlib/os/os.xr",
       "path": "stdlib/os/os.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/os/os.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/parallel/parallel.xr",
@@ -546,13 +542,9 @@
       "id": "stdlib/path/path.xr",
       "path": "stdlib/path/path.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/regex/regex.xr",
@@ -598,13 +590,9 @@
       "id": "stdlib/sys/sys.xr",
       "path": "stdlib/sys/sys.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/sys/sys.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/text/text.xr",
@@ -991,37 +979,25 @@
       "id": "native:stdlib/os/os.xr",
       "path": "stdlib/os/os.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/os/os.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/sys/sys.xr",
       "path": "stdlib/sys/sys.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/sys/sys.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/path/path.xr",
       "path": "stdlib/path/path.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/one.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/path/path.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:demos/02-collections/json_processing.xr",
@@ -1216,24 +1192,16 @@
       "path": "tests/smoke/inputs/os_path_sys_regex.xr",
       "mode": "run",
       "stdout": "tests/smoke/expected/one.txt",
-      "expect": "gap",
-      "exit_code": 1,
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "tests/smoke/inputs/os_path_sys_regex.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0
     },
     {
       "id": "native:tests/smoke/inputs/os_path_sys_regex.xr",
       "path": "tests/smoke/inputs/os_path_sys_regex.xr",
       "mode": "build-run",
       "stdout": "tests/smoke/expected/one.txt",
-      "expect": "gap",
-      "exit_code": 1,
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "tests/smoke/inputs/os_path_sys_regex.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
-      }
+      "expect": "pass",
+      "exit_code": 0
     },
     {
       "id": "tests/smoke/inputs/regex_crypto_compress.xr",

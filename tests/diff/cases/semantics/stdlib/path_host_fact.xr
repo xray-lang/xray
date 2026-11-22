@@ -1,0 +1,5 @@
+// The Path host flavour is a private governed leaf, not the name itself.
+// Both exported constants are folded from the declared compilation target.
+import path
+print(path.sep)
+print(path.delimiter)

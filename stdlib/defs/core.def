@@ -24,6 +24,7 @@ module path {
     layer: "system"
     visibility: "internal"
     allocation: "no_heap"
+    target_fact: "os.Windows"
   }
   fn __fullpath {
     signature: "(raw: string): string"

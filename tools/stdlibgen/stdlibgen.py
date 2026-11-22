@@ -156,6 +156,7 @@ class StdlibEntry:
     caps: tuple[str, ...]
     suspension_kind: str = ""
     provider_declaration: ProviderDeclaration | None = None
+    target_fact: str = ""
 
     @property
     def symbol(self) -> str:
@@ -1359,6 +1360,12 @@ def parse_def_metadata(
                     "must use the internal yieldable void(i64) runtime shape"
                 )
 
+            target_fact = str(props.get("target_fact", ""))
+            if target_fact and not re.fullmatch(r"(?:os|arch)\.[A-Za-z][A-Za-z0-9]*", target_fact):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} target_fact must name "
+                    "<os|arch>.<EnumMember>"
+                )
             entries.append(
                 StdlibEntry(
                     module=current_module,
@@ -1386,6 +1393,7 @@ def parse_def_metadata(
                     caps=caps,
                     provider_declaration=provider_declaration,
                     suspension_kind=suspension_kind,
+                    target_fact=target_fact,
                 )
             )
         elif current_kind == "const":

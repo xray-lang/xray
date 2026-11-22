@@ -1850,6 +1850,9 @@ def render_unicode_callable(root, decoder, lossy):
     sys.path.insert(0, str(root / 'tools' / 'stdlibgen'))
     from stdlibgen import parse_defs
     declarations = parse_defs(root)
+    target_facts = [(row.module, row.name, row.target_fact) for row in declarations if row.target_fact]
+    if target_facts != [('path', '__isWindows', 'os.Windows')]:
+        raise ValueError('Only the Path host flavour may declare an os target fact')
     contracts = (
         ('__unicodePropId', '(name: string): i64', '1', 's'),
         ('__unicodeHasProp', '(cp: i64, propId: i64): bool', '2', 'vv'),
@@ -2025,7 +2028,10 @@ def render_unicode_callable(root, decoder, lossy):
         '    {XR_NATIVE_CALLABLE_TASK_ALL_BEGIN, &xr_native_task, &xr_native_task_members[3], NULL, false, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_TASK_FIRST_BEGIN, &xr_native_task, &xr_native_task_members[4], NULL, false, NULL, NULL, {{0}}},',
         '    {XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID, NULL, &xr_native_unicode_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '},',
-        '    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '},'] + [row.replace('FINGERPRINT', fingerprint) + (',' if i + 1 < len(buffer_rows) else '') for i, row in enumerate(buffer_rows)] + ['};']
+        '    {XR_NATIVE_CALLABLE_UNICODE_HAS_PROPERTY, NULL, &xr_native_unicode_has_property, NULL, true, "regex", "stdlib/defs/core.def", ' + fingerprint + '},'] + [row.replace('FINGERPRINT', fingerprint) + (',' if i + 1 < len(buffer_rows) else '') for i, row in enumerate(buffer_rows)] + ['};',
+        'static const XrNativeTargetFact xr_native_target_facts[] = {',
+        '    {XR_NATIVE_CALLABLE_PATH_IS_WINDOWS, XR_TARGET_QUERY_OPERATING_SYSTEM, XR_TARGET_QUERY_VALUE_OS_WINDOWS},',
+        '};']
 
 
 def render(root):

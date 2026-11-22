@@ -1,0 +1,5 @@
+// A user function with the private leaf's name stays an ordinary function:
+// only the real Path module's declaration answers the host target fact.
+fn __isWindows() -> bool { return false }
+print(__isWindows())
+print(__isWindows() == false)

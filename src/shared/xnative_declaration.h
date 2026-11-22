@@ -13,6 +13,7 @@
 #define XNATIVE_DECLARATION_H
 #include "../base/xdefs.h"
 #include "../base/xstable_id.h"
+#include "xr_target_query_values_gen.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -373,6 +374,14 @@ typedef struct XrNativeCallableDeclaration {
     XrFingerprint source_fingerprint;
 } XrNativeCallableDeclaration;
 XR_FUNC const XrNativeCallableDeclaration *xr_native_callable_by_id(uint32_t id);
+/* A governed host fact answers its private callable from the compilation
+ * target instead of a body. The generated table names the exact query and
+ * expected enum value for every such callable. */
+typedef struct XrNativeTargetFact {
+    uint32_t callable;
+    uint16_t query, value;
+} XrNativeTargetFact;
+XR_FUNC const XrNativeTargetFact *xr_native_target_fact(uint32_t callable);
 typedef enum XrNativeIntrinsicImplementation {
     XR_NATIVE_INTRINSIC_IMPLEMENTATION_NONE,
     XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS,
