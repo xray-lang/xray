@@ -23,6 +23,43 @@ from stdlib_manifest import (
     source_modules,
 )
 
+# Policy checks below are about *surfaces*, not about one file: a rename must
+# move the invariant with the owner. Scanning the owning trees instead of a
+# fixed file list is what keeps a check from silently passing (or crashing) the
+# day its file is retired.
+SCAN_ROOTS = ("src", "include", "stdlib", "scripts")
+SCAN_SUFFIXES = (".c", ".h", ".def", ".xr", ".py", ".cmake", ".txt")
+MAX_SCAN_BYTES = 2 * 1024 * 1024
+
+
+def repository_text(root: Path):
+    """Yield (path, text) for every repository source an invariant may live in."""
+    for directory in SCAN_ROOTS:
+        base = root / directory
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*")):
+            if not path.is_file() or path.suffix not in SCAN_SUFFIXES:
+                continue
+            try:
+                if path.stat().st_size > MAX_SCAN_BYTES:
+                    continue
+                yield path, path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+
+
+def require_files(root: Path, relatives, errors: list[str], reason: str) -> dict[str, str]:
+    """Read the files a policy is stated in, failing loudly when one is gone."""
+    texts: dict[str, str] = {}
+    for relative in relatives:
+        path = root / relative
+        if not path.is_file():
+            errors.append(f"{relative}: {reason}")
+            continue
+        texts[relative] = path.read_text(encoding="utf-8")
+    return texts
+
 
 def check_manifest(root: Path) -> list[str]:
     manifest = load_manifest(root)
@@ -284,8 +321,10 @@ def check_builtin_schema(root: Path) -> list[str]:
     if not declaration.is_file():
         return ["missing built-in Iterator declaration: stdlib/types/iterator.xr"]
     text = declaration.read_text(encoding="utf-8")
-    if not re.search(r"(?m)^class\s+Iterator<T>\s*\{", text):
-        errors.append("stdlib/types/iterator.xr must declare class Iterator<T>")
+    # Iterator carries the error channel as its second parameter with a default,
+    # so the element type stays first and single-parameter uses keep working.
+    if not re.search(r"(?m)^class\s+Iterator<T\s*(?:,\s*E\s*:[^>]*)?>\s*\{", text):
+        errors.append("stdlib/types/iterator.xr must declare class Iterator<T, E: ... = ...>")
     declared = set(re.findall(r"(?m)^\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", text))
     expected = {"hasNext", "next", "nth", "iterator", "toString"}
     if declared != expected:
@@ -295,15 +334,11 @@ def check_builtin_schema(root: Path) -> list[str]:
             + ", ".join(sorted(declared))
         )
 
-    implementation = (root / "src/frontend/analyzer/xanalyzer_builtin_interfaces.c").read_text(
-        encoding="utf-8"
-    )
-    table_match = re.search(
-        r"static\s+XaInterfaceMethod\s+iterator_methods\[\]\s*=\s*\{(?P<body>.*?)\};",
-        implementation,
-        re.S,
-    )
-    if table_match:
+    # The retired analyzer owned an `iterator_methods` interface table. The
+    # surface it duplicated now has one owner, so the invariant is that no file
+    # reintroduces that table; scanning keeps it attached to the current tree.
+    if any(re.search(r"\bXaInterfaceMethod\s+iterator_methods\b", text)
+           for _, text in repository_text(root)):
         errors.append(
             "compiler must not register a second Iterator interface method table; "
             "stdlib/types/iterator.xr owns the sealed native class surface"
@@ -318,11 +353,21 @@ def check_builtin_schema(root: Path) -> list[str]:
     if iterator_items != expected | {"Iterator"}:
         errors.append("API inventory does not expose the complete Iterator schema")
 
-    embedded = (root / "src/frontend/analyzer/xnative_type_defs.inc.c").read_text(
-        encoding="utf-8"
+    declarations = require_files(
+        root,
+        ["src/shared/xnative_declarations.inc.c"],
+        errors,
+        "the generated native declaration table is the compiler's Iterator schema",
     )
-    if 'X("iterator", xr_native_def_iterator)' not in embedded:
-        errors.append("generated native type table does not embed iterator.xr")
+    table = declarations.get("src/shared/xnative_declarations.inc.c", "")
+    if '"Iterator"' not in table:
+        errors.append("generated native declaration table has no Iterator identity row")
+    unregistered = [name for name in sorted(expected) if f'"{name}"' not in table]
+    if unregistered:
+        errors.append(
+            "generated native declaration table is missing Iterator members: "
+            + ", ".join(unregistered)
+        )
     return errors
 
 
@@ -429,7 +474,13 @@ def check_l2_thinning(root: Path) -> list[str]:
     if triggers != expected_triggers:
         errors.append("regex reassessment triggers must match the task-256 terminal decision")
 
-    if re.search(r"\bos\.chdir\b|\bxrt_os_chdir\b", core_def + (root / "src/aot/xrt_os.h").read_text(encoding="utf-8")):
+    # io.chdir is the sole owner of a process-working-directory change. The
+    # check is about the whole tree, not about the header the old runtime used
+    # to keep the alias in: any reintroduction of the retired symbol is a second
+    # authority, wherever it lands.
+    if re.search(r"\bos\.chdir\b", core_def) or any(
+        re.search(r"\bxrt_os_chdir\b", text) for _, text in repository_text(root)
+    ):
         errors.append("duplicate os.chdir boundary must not return; io.chdir is the sole owner")
     return errors
 
@@ -506,15 +557,23 @@ def check_error_model_policy(root: Path) -> list[str]:
         return errors
 
     high_risk_sources = (
-        root / "src/base/xglobal_indices.h",
-        root / "src/base/xbuiltin_enum.h",
-        root / "stdlib/prelude/builtin_symbols.def",
-        root / "src/module/xprelude_runtime.c",
-        root / "src/frontend/analyzer/xanalyzer.c",
-        root / "src/api/xisolate_runtime.c",
-        root / "src/coro/xaot_coro.c",
-        root / "scripts/gen_api_inventory.py",
+        "src/base/xglobal_indices.h",
+        "src/base/xbuiltin_enum.h",
+        "stdlib/prelude/builtin_symbols.def",
+        "src/module/xprelude_runtime.c",
+        "src/api/xisolate_runtime.c",
+        "scripts/gen_api_inventory.py",
     )
+    # The canonical registration surfaces must still exist; if one is renamed
+    # the policy has to move with it instead of the check quietly skipping it.
+    # The scan below is the owning trees, so it already reads every one of them.
+    require_files(
+        root,
+        high_risk_sources,
+        errors,
+        "prelude registration surface named by the error-model policy is missing",
+    )
+    scanned = list(repository_text(root))
     for raw_symbol in forbidden:
         symbol = str(raw_symbol)
         type_decl = root / "stdlib/types" / f"{symbol.lower()}.xr"
@@ -528,8 +587,7 @@ def check_error_model_policy(root: Path) -> list[str]:
             re.compile(rf"\b(?:register|make)_prelude_enum(?:_full)?\s*\([^;]*\"{re.escape(symbol)}\"", re.S),
             re.compile(rf"\bPRELUDE_ENUMS\b[^;]*\(\s*\"{re.escape(symbol)}\"", re.S),
         )
-        for source in high_risk_sources:
-            text = source.read_text(encoding="utf-8")
+        for source, text in scanned:
             if any(pattern.search(text) for pattern in patterns):
                 errors.append(f"forbidden prelude symbol {symbol}: registered by {source}")
     return errors
@@ -573,18 +631,26 @@ def check_hosted_abi(root: Path) -> list[str]:
         ):
             if required_symbol not in hosted_text:
                 errors.append(f"hosted-fragment ABI is missing {required_symbol}")
+    # Two consumers are the ABI's published readers: the runtime header and the
+    # frontend value type. Both must consume the canonical layout, and no file
+    # may restate it -- that is the invariant the old fixed AOT list carried,
+    # and it survives the retirement of those headers as a tree-wide scan.
     value_consumers = (
         "include/runtime.h",
         "src/frontend/types/xvalue.h",
-        "src/aot/xrt_value.h",
-        "src/aot/xrt_core_freestanding.h",
     )
     for relative in value_consumers:
         text = (root / relative).read_text(encoding="utf-8")
         if "xray_value_abi.h" not in text:
             errors.append(f"{relative}: must consume canonical xray_value_abi.h")
-        if "typedef struct XrValue" in text:
-            errors.append(f"{relative}: duplicates the canonical hosted XrValue layout")
+    duplicated = [
+        str(path.relative_to(root))
+        for path, text in repository_text(root)
+        if re.search(r"typedef\s+struct\s+XrValue\s*\{", text)
+        and path != root / "include/xray_value_abi.h"
+    ]
+    for relative in duplicated:
+        errors.append(f"{relative}: duplicates the canonical hosted XrValue layout")
     return errors
 
 
