@@ -3339,36 +3339,26 @@ if(BUILD_TESTS)
         TIMEOUT 900
     )
 
-    # The default `xray build` -- bytecode serialized through the constant pool
-    # into the produced binary -- is a third execution form, and until this lane
-    # existed nothing compared it against anything. Two defects reached the tree
-    # through that gap (a dropped BigInt literal tag, host-heap pointers written
-    # into the container); both were invisible to backend_diff, which runs only
-    # `xray run` and `xray build --native`.
+    # Two execution forms exist: `xray run` and `xray build --native`. The
+    # default `xray build` used to be a third form (bytecode serialized into the
+    # produced binary and deserialized inside it); when the native path became
+    # the default, that form and its separate lane went away. Keeping the lane
+    # would have compared the native build against itself.
     #
-    # The lane is vm/embed rather than three-way on purpose: embed runs the same
-    # VM as the vm lane, so a divergence localizes to the serialize/embed round
-    # trip instead of being confounded with a native-backend difference, and the
-    # vm/aot edge is already gated above. Its own baseline for the same reason.
+    # The driver must invoke exactly what a user types. A driver that passes an
+    # option the CLI no longer accepts turns every case into a refusal and the
+    # lane still exits green, so this lane is paired with the contract check
+    # below.
     add_test(
-        NAME backend_diff_embedded
-        COMMAND ${CMAKE_COMMAND} -E env
-                XRAY_TOOLCHAIN_PROBE_SCALE=4
-                XRAY_DIFF_BACKENDS=vm,embed
-                XRAY_DIFF_BASELINE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/known_failures_embedded.txt
-                XRAY_DIFF_MAX_AUTO_JOBS=${XRAY_CTEST_DIFF_JOBS}
-                XRAY_DIFF_COLD_MAX_AUTO_JOBS=4
-                XRAY_DIFF_HOT_MAX_AUTO_JOBS=8
-                ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.py
+        NAME backend_diff_contract
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/check_diff_cli_contract.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    set_tests_properties(backend_diff_embedded PROPERTIES
-        LABELS "diff;cross;backend;embedded-bytecode"
-        PROCESSORS ${XRAY_CTEST_DIFF_PROCESSORS}
-        COST 200
-        TIMEOUT 900
+    set_tests_properties(backend_diff_contract PROPERTIES
+        LABELS "diff;cross;backend"
+        TIMEOUT 60
     )
 
     foreach(_task190_diff
@@ -3396,38 +3386,13 @@ if(BUILD_TESTS)
         )
     endforeach()
 
-    # Reordering regressions are invisible under the shared light pre-plan
-    # default: LICM, GVN-PRE and the rest of the deep Xi middle end require
-    # XI_OPT_FULL. This lane states the same full policy for both executors;
-    # XRAY_AOT_TEST_OPT separately selects -O2 for the host C compiler.
-    add_test(
-        NAME backend_diff_optimized
-        COMMAND ${CMAKE_COMMAND} -E env
-                XRAY_TOOLCHAIN_PROBE_SCALE=4
-                XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/optimizer_cases.txt
-                XRAY_DIFF_EXTRA_CASES_FILE=
-                XRAY_AOT_TEST_OPT=2
-                XRAY_DIFF_XI_OPT=vm=full,aot=full
-                XRAY_DIFF_MAX_AUTO_JOBS=4
-                ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.py
-                $<TARGET_FILE:xray>
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(backend_diff_optimized PROPERTIES
-        LABELS "diff;cross;backend;optimizer;memory-model"
-        PROCESSORS 2
-        TIMEOUT 600
-    )
-
-    # Memory-model litmus tests (spec §16.9). Same reasoning as above: the VM
-    # does not reorder, so the AOT -O2 lane is the one under test and the VM
-    # lane is the control.
+    # Memory-model litmus tests (spec §16.9). The VM does not reorder, so the
+    # native lane is the one under test and the VM lane is the control. The Xi
+    # optimizer level is no longer a session knob, so this lane carries no
+    # optimization policy: it runs the product's own defaults.
     add_test(
         NAME concurrency_litmus
-        COMMAND ${CMAKE_COMMAND} -E env
-                XRAY_LITMUS_OPT=2
-                ${XRAY_PYTHON}
+        COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/concurrency_litmus/run_litmus.py
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

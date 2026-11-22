@@ -69,6 +69,14 @@ tests/fixtures/lir_cli/module_state_initializers.out text eol=lf
 tests/fixtures/lir_cli/module_state_acyclic_class.out text eol=lf
 tests/diff/cases/semantics/stdlib/compress_*_direct.xr.expected text eol=lf
 
+# Every backend-difference oracle and protocol sidecar is a byte payload, not
+# prose: the runner compares program stdout against these bytes exactly, so a
+# CRLF checkout would turn every oracle case into a false divergence between the
+# VM and the native binary.
+tests/diff/cases/**/*.xr.expected text eol=lf
+tests/diff/cases/**/*.args -text
+tests/diff/cases/**/*.stdin -text
+
 # Consumer fixtures and generated censuses are compared with exact original
 # constructor bytes.  Preserve LF on every host without weakening those checks.
 tests/unit/xir/product_consumers/fixtures/** text eol=lf

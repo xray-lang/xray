@@ -170,44 +170,27 @@ class SidecarTest(unittest.TestCase):
         )
 
 
-class OptimizerPolicyPropagationTest(unittest.TestCase):
-    POLICY = "vm=full,aot=full"
+class RunnerCommandTest(unittest.TestCase):
+    """The runner invokes the product CLI, not a private option set.
+
+    The commands below are the whole contract with the CLI. If either grows an
+    option the product does not accept, the full lane refuses every case and
+    still exits green; `tests/diff/check_diff_cli_contract.py` is the end-to-end
+    guard, and these assertions state the same intent at unit level.
+    """
 
     def _config(self, root: Path) -> rbd.RunnerConfig:
         return rbd.RunnerConfig(
             xray=Path(sys.executable),
             backends=["vm", "aot"],
             jobs=1,
-            aot_opt="2",
-            aot_cache=root / "objects",
             aot_bin_cache=root / "binaries",
-            embed_bin_cache=root / "embedded",
             diff_stderr=False,
-            xi_opt=self.POLICY,
             case_timeout=30,
         )
 
-    def test_diff_environment_becomes_the_single_runner_policy(self):
-        case_result = rbd.CaseResult(order=0, status="pass", output="PASS\n")
-        env = {
-            "XRAY_DIFF_SINGLE_CASE": "case.xr",
-            "XRAY_DIFF_XI_OPT": self.POLICY,
-            # This is the compiler's process-level setting, not the runner's
-            # provenance input. A conflicting value must not win.
-            "XRAY_XI_OPT": "vm=none,aot=none",
-        }
-        with mock.patch.dict(os.environ, env, clear=True):
-            with mock.patch.object(rbd, "diff_stable_cache_dir", return_value=Path("cache")):
-                with mock.patch.object(rbd, "run_case", return_value=case_result) as run_case:
-                    with contextlib.redirect_stdout(io.StringIO()):
-                        status = rbd.main(["run_backend_diff.py", sys.executable])
-
-        self.assertEqual(status, 0)
-        config = run_case.call_args.args[0]
-        self.assertEqual(config.xi_opt, self.POLICY)
-
-    def test_vm_command_receives_the_runner_policy(self):
-        with tempfile.TemporaryDirectory(prefix="xt_backend_diff_policy_vm.") as tmp:
+    def test_vm_command_is_the_plain_run(self):
+        with tempfile.TemporaryDirectory(prefix="xt_backend_diff_command_vm.") as tmp:
             root = Path(tmp)
             case = root / "case.xr"
             case.write_text("print(1)\n", encoding="utf-8")
@@ -218,11 +201,25 @@ class OptimizerPolicyPropagationTest(unittest.TestCase):
         self.assertEqual(backend.rc, 0)
         self.assertEqual(
             run.call_args.args[0],
-            [Path(sys.executable), "run", "--xi-opt", self.POLICY, case],
+            [Path(sys.executable), "run", case],
         )
 
-    def test_aot_build_command_receives_the_same_runner_policy(self):
-        with tempfile.TemporaryDirectory(prefix="xt_backend_diff_policy_aot.") as tmp:
+    def test_vm_command_keeps_program_arguments_after_a_separator(self):
+        with tempfile.TemporaryDirectory(prefix="xt_backend_diff_command_args.") as tmp:
+            root = Path(tmp)
+            case = root / "case.xr"
+            case.write_text("print(1)\n", encoding="utf-8")
+            result = rbd.proc.ProcResult((), 0, b"1\n", b"", False)
+            with mock.patch.object(rbd.proc, "run", return_value=result) as run:
+                rbd.run_backend(self._config(root), "vm", case, ["a", "b"], b"")
+
+        self.assertEqual(
+            run.call_args.args[0],
+            [Path(sys.executable), "run", case, "--", "a", "b"],
+        )
+
+    def test_aot_build_command_is_the_ordinary_build(self):
+        with tempfile.TemporaryDirectory(prefix="xt_backend_diff_command_aot.") as tmp:
             root = Path(tmp)
             case = root / "case.xr"
             case.write_text("print(1)\n", encoding="utf-8")
@@ -244,13 +241,7 @@ class OptimizerPolicyPropagationTest(unittest.TestCase):
             [
                 Path(sys.executable),
                 "build",
-                "--xi-opt",
-                self.POLICY,
                 "--native",
-                "-O",
-                "2",
-                "--cache-dir",
-                config.aot_cache,
                 case,
                 "-o",
                 calls[0][0][-1],

@@ -3,7 +3,8 @@
 // xi.ptr.store as a top-level clobber so LICM cannot hoist the arr[0] load out
 // of the loop; a TBAA group of `none` would answer "provably no alias" and the
 // loop would read the pre-loop value four times.
-// Requires Xi -O2 (LICM is XI_OPT_FULL); the backend_diff_optimized lane.
+// The native pipeline's own optimization level decides whether LICM runs; this
+// case states the answer both sides must agree on either way.
 import mem
 
 fn run() {

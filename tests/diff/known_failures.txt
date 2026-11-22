@@ -1,45 +1,16 @@
-# Backend-differential ratchet baseline
+# Cases where both backends ran and disagreed
 #
-# Every line is a VM/AOT divergence that fails today and is tracked, not
-# forgotten: both backends ran the case and disagreed about the language.
+# Every line needs a written reason: a divergence is a correctness bug in one
+# of the two paths, so this list may only shrink as the bugs are fixed. It is
+# not a place to park a failure without an explanation.
 #
-# A backend that refuses to build a case produces no such disagreement and does
-# not belong here. Those ratchet separately, in known_failures_not_comparable.txt.
-# Until 2026-08-16 they were counted as divergences, and hundreds of them buried
-# the single real one this net had found -- the whole net read as permanently
-# red, so nobody could use it as a gate. Keeping the two questions apart is what
-# makes a line here mean something again.
-#
-# Rules
-#   - The list may only shrink. run_backend_diff.py fails the run when a
-#     case outside this list fails AND when a listed case starts passing, so a
-#     fix must delete its line in the same change.
-#   - Adding a line requires a written reason under one of the groups below.
-#   - Never add a line to make an unrelated change go green. A VM/AOT divergence
-#     means one of the two backends is wrong about the language.
-#
-# Established 2026-07-31, when the differential net was moved out of the CI
-# exclusion list. It had been excluded wholesale because a minority of cases
-# were red -- which left the other 471 ungated as well. The net compares the same
-# .xr through both backends byte for byte and is the only thing that can catch
-# "VM and AOT disagree"; running none of it was strictly worse than running it
-# with a written list of exceptions.
-#
-# One case path per line. `#` starts a comment, blank lines are ignored.
-#
-# --- currently empty --------------------------------------------------------
-#
-# No VM/AOT divergence is baselined. That is not the same as "the two backends
-# agree about the language": on this base only 166 of the 676 discovered cases
-# reach a comparison at all, and the other 510 are refused by the AOT side and
-# ratcheted next door. An empty file here is a statement about what has been
-# compared, not about what has been proven.
-#
-# The four groups this file used to carry (scope_exit arity, computed
-# properties, union overlay literals, and the nested-generator AOT crash) were
-# all cleared on 2026-07-31 and their prose is in the history. A fifth entry,
-# filed 2026-08-16 against semantics/functions/unproven_callee_targets.xr,
-# recorded that the VM had stopped running a case whose contract says it runs.
-# Re-measured 2026-08-28: the VM runs it again and the case passes its
-# rejection contract, so the note described a state that no longer exists and
-# would only send the next reader after a divergence that is not there.
+# Measured on a clean Windows Release build at the first commit that drove the
+# CLI the product actually has; until then every case was refused for an
+# unknown option, so no entry here had ever been validated.
+tests/diff/cases/limits/json_object_literal_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs and prints 771
+tests/diff/cases/limits/reg_pressure_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs
+tests/diff/cases/limits/symbol_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs and prints 771
+tests/diff/cases/limits/upval_capture_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs and prints 772
+tests/diff/cases/semantics/collections/array_member_reference_element_refused.xr  # VM half no longer runs: Array.fill on a reference element fails LIR verification with "instruction type or signature mismatch" at 18:5
+tests/diff/cases/semantics/functions/unproven_callee_targets.xr  # VM half no longer runs: MAP_NEW is not supported by LIR lowering yet at 48:9
+tests/diff/cases/semantics/int_wrap/uint64_print_compare.xr  # VM: operation has no admitted bytecode implementation at 43:1; native prints 9223372036854775808|18446744073709551615|9223372036854775808

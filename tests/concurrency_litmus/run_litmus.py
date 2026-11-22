@@ -7,14 +7,13 @@ violation.
 
 The AOT backend is the one that matters. The VM is an interpreter and does not
 reorder, so a litmus run against it alone proves nothing about the memory
-model; every failure mode these cases exist to catch lives in the Xi optimiser,
-which only runs from -O2 (XI_OPT_FULL). The VM lane is kept as a control: if a
-case fails there too, the bug is in the runtime or the test, not in code motion.
+model; every failure mode these cases exist to catch lives in the native
+pipeline's optimizer. The VM lane is kept as a control: if a case fails there
+too, the bug is in the runtime or the test, not in code motion.
 
 Environment:
     XRAY_BIN                xray binary (default: build/xray)
     XRAY_LITMUS_BACKENDS    comma list subset of vm,aot (default: vm,aot)
-    XRAY_LITMUS_OPT         AOT optimization level (default: 2)
     XRAY_LITMUS_TIMEOUT     per-case seconds (default: 300)
 
 Usage: run_litmus.py [xray_binary]
@@ -47,7 +46,7 @@ def combined(result) -> str:
     return result.combined_text()
 
 
-def run_vm(xray: Path, case: Path, work: Path, opt: str,
+def run_vm(xray: Path, case: Path, work: Path,
            timeout: float | None) -> tuple[bool, str]:
     result = proc.run([xray, "run", case], timeout=timeout)
     if not result.ok:
@@ -56,10 +55,10 @@ def run_vm(xray: Path, case: Path, work: Path, opt: str,
     return True, combined(result)
 
 
-def run_aot(xray: Path, case: Path, work: Path, opt: str,
+def run_aot(xray: Path, case: Path, work: Path,
             timeout: float | None) -> tuple[bool, str]:
     binary = work / (case.stem + ".aot")
-    build = proc.run([xray, "build", "--native", "-O", opt, case, "-o", binary],
+    build = proc.run([xray, "build", "--native", case, "-o", binary],
                      timeout=timeout)
     if not build.ok:
         why = "timed out" if build.timed_out else "build failed"
@@ -91,7 +90,6 @@ def main(argv: list[str]) -> int:
                 else os.environ.get("XRAY_BIN", str(REPO_ROOT / "build" / "xray")))
     enabled = [b for b in os.environ.get("XRAY_LITMUS_BACKENDS", "vm,aot").split(",")
                if b in BACKENDS]
-    opt = os.environ.get("XRAY_LITMUS_OPT", "2")
     timeout = platform.env_timeout("XRAY_LITMUS_TIMEOUT", 300)
 
     if not (xray.is_file() and os.access(xray, os.X_OK)):
@@ -109,7 +107,7 @@ def main(argv: list[str]) -> int:
                 total += 1
                 sys.stdout.write(f"  {case.stem:<32} {backend:<4} ")
                 sys.stdout.flush()
-                ok, output = BACKENDS[backend](xray, case, ws.root, opt, timeout)
+                ok, output = BACKENDS[backend](xray, case, ws.root, timeout)
                 if not ok:
                     print("FAIL")
                     print(f"        {output}")
@@ -123,7 +121,6 @@ def main(argv: list[str]) -> int:
                     print("PASS")
 
     print("")
-    print(f"AOT opt: -O{opt}")
     print(f"=== Litmus: {total - failures} passed, {failures} failed ===")
     return 1 if failures else 0
 

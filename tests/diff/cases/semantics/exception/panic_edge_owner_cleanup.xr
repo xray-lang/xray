@@ -1,5 +1,7 @@
 // anchor: panic-edge-owner-cleanup
-// diff-backends: vm, embed
+// diff-backends: vm
+// The VM is the only form that lowers a panic handler today; the native path
+// refuses the protected body, so a two-form comparison would say nothing.
 // An owner used inside a protected body must have executable dispositions on
 // both the normal path and the implicit panic-handler edge. The handler also
 // reads the owner to pin its entry state to the XI_TRY registration point.

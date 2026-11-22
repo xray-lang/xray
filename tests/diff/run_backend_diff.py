@@ -5,19 +5,17 @@ This is the strongest correctness asset in the repo. A divergence between two
 forms of the same program is a bug in one of them, so the net gates every case
 except a written baseline of known divergences.
 
-Three forms are available, selected with XRAY_DIFF_BACKENDS:
+Two forms are available, selected with XRAY_DIFF_BACKENDS:
 
-  vm     `xray run` -- compile in-process, execute on the VM.
-  aot    `xray build --native` -- the Xi IR native pipeline, then run the binary.
-  embed  `xray build` (no --native) -- the default build: bytecode is serialized
-         through the constant pool into a C byte array, linked against the
-         runtime, and deserialized by the VM inside the produced binary.
+  vm     `xray run` -- compile in-process, execute on the register VM.
+  aot    `xray build --native` -- the LIR native pipeline, then run the binary.
 
-`embed` shares the VM with `vm` and differs from it only by a constant-pool
-serialize/deserialize round trip, so a vm/embed divergence localizes to that
-round trip or to the embedded entry path. That form used to have no differential
-gate at all, and two defects reached the tree through the gap: a dropped BigInt
-literal tag, and host-heap pointers written into the container.
+The build command is the ordinary one: `xray build <case> -o <binary>`. Earlier
+versions of this net passed `-O`, `--cache-dir` and `--xi-opt`, which the
+product CLI no longer accepts; a net that passes a removed option does not
+measure the backends at all, it measures its own command line. Keep the
+invocation identical to what a user types, so a product change that breaks the
+CLI breaks this lane instead of silently turning every case into a refusal.
 
 Observable contract = stdout + exit code, compared byte for byte (normalized
 stderr only when a lane enables that channel). Backend build logs are not
@@ -60,10 +58,10 @@ CASE_DIR = SCRIPT_DIR / "cases"
 
 # Every form this runner knows, in the order a lane evaluates them. The first
 # enabled one is the reference the others are compared against.
-BACKEND_ORDER = ("vm", "aot", "embed")
+BACKEND_ORDER = ("vm", "aot")
 
 # Forms that produce a standalone binary and therefore use the binary cache.
-BINARY_BACKENDS = ("aot", "embed")
+BINARY_BACKENDS = ("aot",)
 
 # A case directory's identity includes the .xr.expected oracle: a changed
 # expected file must change the key, or a stale AOT binary would be diffed
@@ -244,24 +242,8 @@ class RunnerConfig:
     xray: Path
     backends: list[str]
     jobs: int
-    aot_opt: str
-    aot_cache: Path
     aot_bin_cache: Path
-    # The embedded-bytecode form gets its own binary cache: the two forms build
-    # the same case into different binaries, so one cache would answer for both.
-    embed_bin_cache: Path
     diff_stderr: bool
-    # Optimizer policy handed to both lanes, or "" for each pipeline's default.
-    #
-    # The two lanes do not run the same passes by default: the VM pipeline is
-    # pinned to the light level and the native backend to the full level, so an
-    # ordinary run of this net compares two differently optimized programs and a
-    # divergence cannot say which side is wrong. Setting XRAY_DIFF_XI_OPT puts
-    # both lanes under one named policy, which is the only way this net asserts
-    # that the two sides were configured alike -- the same string reaches
-    # `xray run` and `xray build`, and a spec either applies to both or is
-    # refused by both, because the compiler rejects a malformed one.
-    xi_opt: str
     # Per-subprocess wall-clock ceiling. The shell net had none, so one
     # deadlocked case hung the whole lane until the outer 900s ctest timeout.
     # A generous default turns that into a single red case; the whole child
@@ -271,7 +253,14 @@ class RunnerConfig:
 
 
 def binary_cache_dir(config: RunnerConfig, kind: str) -> Path:
-    return config.aot_bin_cache if kind == "aot" else config.embed_bin_cache
+    """The binary cache root for one form.
+
+    Only the native form produces a standalone binary today; the kind stays in
+    the signature because the lock, reuse and log capture built around it remain
+    shared should a second binary-producing form return.
+    """
+    del kind
+    return config.aot_bin_cache
 
 
 def build_case_binary(
@@ -282,10 +271,6 @@ def build_case_binary(
     The lock is the shared DirLock: exactly one racer builds while the rest wait,
     then everyone reuses the finished binary. The tmp-then-rename keeps a partial
     build from ever being seen as a cache hit.
-
-    `aot` and `embed` differ only in the build command and the cache root: the
-    surrounding locking, reuse, and log capture are identical, so they share this
-    body rather than drifting apart in two copies.
     """
     bin_dir = binary_cache_dir(config, kind) / case_cache_name(rel, case_key)
     binary = bin_dir / kind
@@ -307,19 +292,7 @@ def build_case_binary(
         except OSError:
             pass
         env = os.environ.copy()
-        if kind == "aot":
-            cmd = [
-                config.xray, "build", "--native", "-O", config.aot_opt,
-                "--cache-dir", config.aot_cache, case, "-o", tmp,
-            ]
-        else:
-            # The default build. -O reaches only the host C compile of the
-            # generated shim, so it is held at the lane's level for build speed;
-            # what is under test is the serialized bytecode, which -O cannot
-            # reach. No --cache-dir: the bytecode path has no object cache.
-            cmd = [config.xray, "build", "-O", config.aot_opt, case, "-o", tmp]
-        if config.xi_opt:
-            cmd[2:2] = ["--xi-opt", config.xi_opt]
+        cmd = [config.xray, "build", "--native", case, "-o", tmp]
         result = proc.run(cmd, env=env, timeout=config.case_timeout)
         # build stdout+stderr merged into one log, matching the shell runner's
         # STDOUT=STDERR capture used for failure excerpts.
@@ -343,8 +316,6 @@ def run_backend(
 ) -> BackendResult:
     if kind == "vm":
         cmd = [config.xray, "run", case]
-        if config.xi_opt:
-            cmd[2:2] = ["--xi-opt", config.xi_opt]
         if args:
             cmd.extend(["--", *args])
         r = proc.run(cmd, stdin=stdin_bytes, timeout=config.case_timeout)
@@ -389,9 +360,9 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
     prefix = f"  {name:<84} "
     if len(enabled) < 2:
         # The rejection contract is an assertion about the native backend, so it
-        # is only owed by a lane that runs it. A vm/embed lane must not re-assert
-        # it: the AOT lane already does, and doing it here would spend a native
-        # build per case on a lane that has no native side.
+        # is only owed by a lane that runs it. A VM-only lane must not re-assert
+        # it: the native lane already does, and doing it here would spend a
+        # native build per case on a lane that has no native side.
         if enabled == ["vm"] and aot_reject and "aot" in config.backends:
             args = read_args(case)
             stdin_bytes = read_stdin(case)
@@ -598,22 +569,13 @@ def main(argv: list[str]) -> int:
         return 2
     requested_jobs = os.environ.get("XRAY_DIFF_JOBS", os.environ.get("XRAY_TEST_JOBS", "auto"))
     jobs, auto_jobs = configure_jobs(requested_jobs)
-    aot_opt = os.environ.get("XRAY_AOT_TEST_OPT", "0")
-    xi_opt = os.environ.get("XRAY_DIFF_XI_OPT", "").strip()
-    # The policy names which passes ran, so it belongs in the cache path: a
-    # binary built under one policy must never be reused to answer for another.
-    cache_tag = f"O{aot_opt}" if not xi_opt else f"O{aot_opt}-{safe_name(xi_opt)}"
-    aot_cache = Path(
-        os.environ.get("XRAY_DIFF_CACHE_DIR", str(diff_stable_cache_dir("aot-objects", xray) / cache_tag))
-    )
+    # The build has one policy: the product's own defaults. Nothing here may
+    # name an optimization level or an object cache, both of which the CLI
+    # stopped accepting; a stale binary cache from an older policy therefore
+    # cannot be mistaken for a current one because the tag names this policy.
+    cache_tag = "current"
     aot_bin_cache = Path(
         os.environ.get("XRAY_DIFF_BIN_CACHE_DIR", str(diff_stable_cache_dir("backend-diff-bin", xray) / cache_tag))
-    )
-    embed_bin_cache = Path(
-        os.environ.get(
-            "XRAY_DIFF_EMBED_BIN_CACHE_DIR",
-            str(diff_stable_cache_dir("backend-diff-embed-bin", xray) / cache_tag),
-        )
     )
     diff_stderr = os.environ.get("XRAY_DIFF_STDERR", "0") == "1"
     shard_total_raw = os.environ.get("XRAY_DIFF_SHARD_TOTAL", "1")
@@ -633,9 +595,9 @@ def main(argv: list[str]) -> int:
     case_timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 180)
 
     config = RunnerConfig(
-        xray=xray, backends=backends, jobs=jobs, aot_opt=aot_opt,
-        aot_cache=aot_cache, aot_bin_cache=aot_bin_cache, embed_bin_cache=embed_bin_cache,
-        diff_stderr=diff_stderr, case_timeout=case_timeout, xi_opt=xi_opt,
+        xray=xray, backends=backends, jobs=jobs,
+        aot_bin_cache=aot_bin_cache,
+        diff_stderr=diff_stderr, case_timeout=case_timeout,
     )
 
     if single_case:
@@ -700,14 +662,8 @@ def main(argv: list[str]) -> int:
     print(f"Backends: {','.join(backends)}")
     print(f"Jobs:     {jobs}")
     print(f"CacheState: {cache_state}")
-    print(f"AOT opt:  -O{aot_opt}")
-    # -O reaches only the host C compiler. Which Xi passes ran is the line
-    # below. The built-in default is one shared light pre-plan set for both lanes.
-    print(f"Xi opt:   {xi_opt if xi_opt else 'shared light pre-plan default'}")
-    print(f"Cache:    {aot_cache}")
+    print(f"Build:    xray build --native (product defaults)")
     print(f"BinCache: {aot_bin_cache}")
-    if "embed" in backends:
-        print(f"EmbedBinCache: {embed_bin_cache}")
     print("RunCache: disabled")
     if shard_total > 1:
         print(f"Shard:    {shard_index} / {shard_total}")
@@ -813,8 +769,7 @@ def main(argv: list[str]) -> int:
     # states nothing about agreement, and one that starts building must leave
     # the list so it cannot quietly stop again.
     # Derived from the divergence baseline rather than configured separately, so
-    # every lane gets its own coverage list automatically: the embedded lane
-    # compares a different pair of backends and therefore has its own set of
+    # a lane that compares a different pair of backends keeps its own list of
     # cases it can build at all.
     refused_path = baseline_path.with_name(baseline_path.stem + "_not_comparable.txt")
     refused_baseline = ratchet.read_baseline(refused_path)
