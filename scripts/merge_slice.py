@@ -170,6 +170,8 @@ def review_scope(root: Path, base: str, candidate: str, review: dict) -> dict:
             shared.add(path)
         if status == "D":
             deletions.add(path)
+        if path.startswith(("src/", "include/")) and Path(path).suffix.lower() in (".h", ".hpp"):
+            shared.add(path)
         if path.startswith(("src/runtime/", "src/vm/", "src/lir/xlir_c", "src/lir/xlir_ownership",
                             "src/lir/xlir_value_", "include/xray_native")) or path == "src/base/xsigned_rc.h":
             safety.add(path)

@@ -141,7 +141,7 @@ def collection_types(binary: str, root: Path) -> None:
         errors = [line for line in lines if 'error:' in line]
         notes = [line for line in lines if 'note:' in line]
         assert len(errors) == 1 and errors[0].endswith('error: E0326: ' + message), lines
-        union = ('to keep both types in one Map, declare Map<string, string | i64>' if source.startswith('var user=')
+        union = ('to keep both types in one Map, declare Map<string, i64 | string>' if source.startswith('var user=')
                  else 'to keep both types in one Array, declare Array<i64 | string>' if source.startswith('var values=[1,') else None)
         json_hint = source.startswith('var user=')
         assert len(notes) == 2 + bool(union) + json_hint and notes[0].endswith('note: ' + first) and notes[1].endswith('note: ' + repair), lines
@@ -163,7 +163,7 @@ def collection_types(binary: str, root: Path) -> None:
         lines = command([binary, 'check', str(path)], False).stderr.decode('utf-8').splitlines()
         assert sum('error: E0326:' in line for line in lines) == 1 and sum('note:' in line for line in lines) == 3, lines
         assert any(line.endswith('note: for JSON data, declare the type: var user: JSON.Object = {...}') for line in lines), lines
-        assert lines[-1].endswith('note: to keep both types in one Map, declare Map<string, string | i64>'), lines
+        assert lines[-1].endswith('note: to keep both types in one Map, declare Map<string, i64 | string>'), lines
     for source, first, second in [
         ('var values=[...[1],"a"]\n', '...', '"a"'),
         ('var values=[1,...["a"]]\n', '1', '...'),

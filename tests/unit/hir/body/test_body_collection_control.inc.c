@@ -26,7 +26,7 @@ static void collection_control_receivers(void) {
         root.primary.line==1 && !strcmp(root.message,"E0326: Map literal values have different types: string and i64"));
     CHECK(xr_frontend_report_label(failure.report,0,1,&label) && strstr(label.message,"struct User { name: string; age: i64 }"));
     CHECK(xr_frontend_report_label(failure.report,0,3,&label) &&
-        !strcmp(label.message,"to keep both types in one Map, declare Map<string, string | i64>"));
+        !strcmp(label.message,"to keep both types in one Map, declare Map<string, i64 | string>"));
     CHECK(xr_frontend_report_label(failure.report,0,2,&label) &&
         !strcmp(label.message,"for JSON data, declare the type: var user: JSON.Object = {...}"));
     xr_xir_compile_source_failure_free(&failure);size_t live=physical_live,bytes=physical_bytes;

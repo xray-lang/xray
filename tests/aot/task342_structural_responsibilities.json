@@ -409,7 +409,7 @@
       "original_source": "tests/diff/cases/semantics/oop/hashable_contract.xr",
       "preserved_model_input_lf_sha256": "565be502da48d3e7ff398ecc3dc41e38938af86aba7e53a2c882931a12bb9d6a",
       "current_source": "tests/diff/cases/semantics/oop/hashable_contract.xr",
-      "current_source_lf_sha256": "7abaeecf02230af6a2b648fa2ca046eb72bec024bd29e0be33379750684488f7",
+      "current_source_lf_sha256": "7fcc8fc949694e0a97f4ece39aa55618d29ce56585447d13385c57dbe706c7b5",
       "scope": "INDEPENDENT_VALUE_MODEL_ONLY_NOT_PRODUCT_QUALIFICATION"
     },
     {

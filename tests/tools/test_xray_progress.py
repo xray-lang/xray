@@ -287,9 +287,9 @@ class GitTests(unittest.TestCase):
         self.commit()
         self.assertEqual(progress.legacy_deletions(self.root, self.base)["files"], 0)
         with self.assertRaises(ValueError):
-            merge_slice.review_scope(self.root, self.base, "HEAD", {"authorRole": "a", "reviewerRole": "a"})
+            merge_slice.review_scope(self.root, self.base, "HEAD", {"author": "a", "reviewer": "a"})
         self.assertTrue(merge_slice.review_scope(self.root, self.base, "HEAD",
-                                                {"authorRole": "a", "reviewerRole": "b"})["independent"])
+                                                {"author": "a", "reviewer": "b"})["independent"])
 
     def test_test_and_script_deletions_also_require_independent_review(self):
         for path in ("tests/old_driver.c", "scripts/old_gate.py"):
@@ -302,7 +302,7 @@ class GitTests(unittest.TestCase):
             (self.root / path).unlink()
         self.commit()
         with self.assertRaises(ValueError):
-            merge_slice.review_scope(self.root, base, "HEAD", {"authorRole": "a", "reviewerRole": "a"})
+            merge_slice.review_scope(self.root, base, "HEAD", {"author": "a", "reviewer": "a"})
 
     def test_published_passing_suite_cannot_be_removed_from_the_ratchet(self):
         path = self.root / "tests/smoke/cases.json"
@@ -335,7 +335,7 @@ class GitTests(unittest.TestCase):
         (self.root / "src/frontend").mkdir()
         (self.root / "src/frontend/leaf.c").write_text("leaf\n", encoding="utf-8")
         self.commit()
-        review = {"authorRole": "a", "reviewerRole": "a"}
+        review = {"author": "a", "reviewer": "a"}
         self.assertFalse(merge_slice.review_scope(self.root, self.base, "HEAD", review)["independent"])
         base = self.git("rev-parse", "HEAD")
         (self.root / "src/frontend/interface.h").write_text("interface\n", encoding="utf-8")

@@ -301,9 +301,11 @@ def main() -> None:
 
     verify_effects()
 
-    for command in ("repl", "dap", "test"):
+    for command in ("repl", "dap"):
         refused = run("unavailable-" + command, [binary, command], 1)
         assert not refused.stdout and b"temporarily unavailable" in refused.stderr
+    refused = run("test-usage", [binary, "test"], 2)
+    assert not refused.stdout and b"requires at least one file or directory" in refused.stderr
     refused = run("unavailable-sandbox", [binary, "run", "--sandbox", fixtures / "hello.xr"], 1)
     assert not refused.stdout and b"temporarily unavailable" in refused.stderr
     probe = run("probe", [binary, "toolchain", "probe", "--json"], 0)

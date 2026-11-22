@@ -3710,7 +3710,11 @@ if(BUILD_TESTS)
     set_tests_properties(surface_drift_scan PROPERTIES
         LABELS "meta;surface;drift;task-220"
         PROCESSORS 1
-        TIMEOUT 60
+        # The scan walks every source and document file. A cold Windows
+        # filesystem takes about 75 seconds for the current tree, so the old
+        # 60 second cap failed on timing alone; the scan itself reports the
+        # same zero hits on both trees.
+        TIMEOUT 180
     )
 
     # Source-level branch hints were removed. This gate rejects their public

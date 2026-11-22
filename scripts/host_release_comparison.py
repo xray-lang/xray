@@ -196,7 +196,8 @@ def main(argv):
     output.mkdir()
     workspace.mkdir()
     source = workspace / "source"
-    git(repository, "worktree", "add", "--detach", str(source), args.base)
+    git(repository, "worktree", "prune")
+    git(repository, "worktree", "add", "--detach", "--force", str(source), args.base)
     try:
         before, base_config = capture(source, workspace / "base-build", output / "base", args.base,
                                       args.host, cmake, ctest, str(args.jobs), "base")
