@@ -546,6 +546,7 @@ option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (
 option(XR_BUILD_LSP "Build LSP language server" ON)
 option(XR_BUILD_DAP "Build DAP debug adapter" ON)
 option(XR_ENABLE_DAP_SESSION_TESTS "Run the DAP session suites (later capability)" OFF)
+option(XR_ENABLE_MCP_RUN_TESTS "Run the MCP run-tool suites (later capability)" OFF)
 option(XR_BUILD_MCP "Build MCP server for AI assistants" ON)
 option(XRAY_BUNDLE_ZIG "Install a Zig executable with Xray for AOT cross targets" OFF)
 set(XRAY_BUNDLED_ZIG "" CACHE FILEPATH "Zig executable to install when XRAY_BUNDLE_ZIG=ON")

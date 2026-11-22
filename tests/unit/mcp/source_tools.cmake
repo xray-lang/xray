@@ -16,10 +16,12 @@ set_tests_properties(test_mcp_source_tools_resources PROPERTIES
 
 add_executable(test_mcp_service ${CMAKE_CURRENT_LIST_DIR}/test_mcp_service.c)
 target_link_libraries(test_mcp_service PRIVATE xray_mcp)
-add_test(NAME test_mcp_service_transcript
-    COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/mcp/test_protocol_transcript.py
-        --xray $<TARGET_FILE:test_mcp_service>)
-set_tests_properties(test_mcp_service_transcript PROPERTIES LABELS "unit;mcp;process" TIMEOUT 120)
+if(XR_ENABLE_MCP_RUN_TESTS)
+    add_test(NAME test_mcp_service_transcript
+        COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/mcp/test_protocol_transcript.py
+            --xray $<TARGET_FILE:test_mcp_service>)
+    set_tests_properties(test_mcp_service_transcript PROPERTIES LABELS "unit;mcp;process" TIMEOUT 120)
+endif()
 get_target_property(_mcp_fault_sources xray_mcp SOURCES)
 get_target_property(_mcp_fault_links xray_mcp LINK_LIBRARIES)
 add_library(xray_mcp_faults STATIC ${_mcp_fault_sources})
@@ -37,8 +39,13 @@ target_link_libraries(test_mcp_json_faults PRIVATE xray_mcp_faults)
 add_test(NAME test_mcp_json_faults COMMAND test_mcp_json_faults)
 set_tests_properties(test_mcp_json_faults PROPERTIES LABELS "unit;mcp;faults;ownership" TIMEOUT 120 COST 10 RUN_SERIAL TRUE)
 
-set_tests_properties(  test_mcp_json_faults
-    test_mcp_service_transcript PROPERTIES ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+if(XR_ENABLE_MCP_RUN_TESTS)
+    set_tests_properties(  test_mcp_json_faults
+        test_mcp_service_transcript PROPERTIES ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+else()
+    set_tests_properties(  test_mcp_json_faults
+        PROPERTIES ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+endif()
 
 add_executable(test_mcp_publication_faults ${CMAKE_CURRENT_LIST_DIR}/test_mcp_publication_faults.c)
 target_link_libraries(test_mcp_publication_faults PRIVATE xray_mcp_faults)

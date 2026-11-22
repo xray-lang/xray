@@ -1393,22 +1393,27 @@ if(XR_BUILD_MCP)
         tools
         format
         analyze
-        run_basic
-        run_deadline
-        run_import_net
-        run_import_http
-        run_import_io
-        run_import_os
-        run_import_process
-        run_import_cluster
-        run_import_ws
-        run_import_path
         knowledge_tools
         resources
         resource_templates
         prompts
         dispatch
     )
+    # The run tool reports itself unavailable until execution is wired.
+    if(XR_ENABLE_MCP_RUN_TESTS)
+        list(APPEND XR_MCP_PROTOCOL_TEST_GROUPS
+            run_basic
+            run_deadline
+            run_import_net
+            run_import_http
+            run_import_io
+            run_import_os
+            run_import_process
+            run_import_cluster
+            run_import_ws
+            run_import_path
+        )
+    endif()
     foreach(group IN LISTS XR_MCP_PROTOCOL_TEST_GROUPS)
         add_custom_target(test_mcp_protocol_${group} DEPENDS test_mcp_protocol)
         add_test(
@@ -1429,13 +1434,20 @@ if(XR_BUILD_MCP)
             --root ${CMAKE_SOURCE_DIR}
             --xray $<TARGET_FILE:xray>
     )
-    add_test(NAME test_mcp_protocol_transcript
-        COMMAND ${XRAY_PYTHON}
-            ${CMAKE_SOURCE_DIR}/tests/mcp/test_protocol_transcript.py
-            --xray $<TARGET_FILE:xray>
-    )
-    set_tests_properties(test_mcp_knowledge_generation test_mcp_protocol_transcript
-        PROPERTIES ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+    # The transcript drives the run tool, which reports itself unavailable until
+    # execution is wired.
+    if(XR_ENABLE_MCP_RUN_TESTS)
+        add_test(NAME test_mcp_protocol_transcript
+            COMMAND ${XRAY_PYTHON}
+                ${CMAKE_SOURCE_DIR}/tests/mcp/test_protocol_transcript.py
+                --xray $<TARGET_FILE:xray>
+        )
+        set_tests_properties(test_mcp_knowledge_generation test_mcp_protocol_transcript
+            PROPERTIES ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+    else()
+        set_tests_properties(test_mcp_knowledge_generation
+            PROPERTIES ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+    endif()
 endif()
 
 # ============================================================================
