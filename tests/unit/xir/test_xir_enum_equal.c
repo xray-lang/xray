@@ -64,7 +64,7 @@ static XrXirArtifact *compile_case(const char *root,unsigned index,uint8_t ident
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(assert_compile_context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
-    XrXirSourceRequest request={session,path,&authority,assert_compile_context,XR_ENUM_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,assert_compile_context,XR_ENUM_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"case%u Source %u: %s\n",index,status,diagnostic.message);

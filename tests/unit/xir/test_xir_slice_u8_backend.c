@@ -50,7 +50,7 @@ static XrXirStatus source_check(const XrXirCompileContext *context,const char *t
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"readonly-byte-backend",NULL};
-    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=linkage};
+    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=linkage, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={NULL,text,strlen(text)};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,diagnostic,NULL);
     xr_compile_session_free(session);
@@ -207,7 +207,8 @@ static XrXirArtifact *cold_fixture(const XrXirCompileContext *context,uint8_t id
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={.session=session,.entry_path=library,.authority=&authority,
-        .context=context,.linkage_kind=XR_XIR_LIBRARY};
+        .context=context,.linkage_kind=XR_XIR_LIBRARY,
+    .target = XR_XIR_HOST_TARGET};
     char input_text[sizeof(library_text)];
     strcpy(input_text,library_text);
     XrXirSourceResult produced={0};cold_source(&request,"lib.xr",input_text,&produced);
@@ -751,7 +752,8 @@ static XrXirArtifact *imported_default_source(const XrXirCompileContext *context
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={.session=session,.entry_path=root,.authority=&authority,
-        .context=context,.linkage_kind=XR_XIR_PROGRAM};
+        .context=context,.linkage_kind=XR_XIR_PROGRAM,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);
     xr_compile_session_free(session);memset(&request,0xcc,sizeof(request));
@@ -912,7 +914,7 @@ static XrXirStatus local_storage_attempt(const XrXirCompileContext *context,XrXi
         return created==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_MEMORY_LIMIT;
     }
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"local-storage-resource",NULL};
-    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={NULL,local_storage_resource_text,sizeof(local_storage_resource_text)-1};
     XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,&diagnostic,&failure);

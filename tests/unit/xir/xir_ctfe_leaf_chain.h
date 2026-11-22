@@ -64,7 +64,7 @@ static XrXirStatus ctfe_fixture_build(const XrXirCompileContext *context,
     char producer[sizeof(ctfe_source)]; memcpy(producer, ctfe_source, sizeof(producer));
     char memory_name[] = "closed-scalar-leaf";
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, memory_name, NULL};
-    XrXirSourceRequest request = {NULL, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {NULL, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText text = {NULL, producer, sizeof(producer)-1};
     const XrXirTarget target = {XR_XIR_ARCH_LE64, XR_XIR_VALUE_ABI_VERSION};
     ctfe_chain_mark(trace, CTFE_CHAIN_SESSION);
@@ -76,7 +76,7 @@ static XrXirStatus ctfe_fixture_build(const XrXirCompileContext *context,
     status = xr_xir_compile_source_check_text(&request, &text, &source, &diagnostic, NULL);
     xr_compile_session_free(session); session = NULL;
     memset(producer, 0xa5, sizeof(producer)); memset(memory_name, 0xa5, sizeof(memory_name));
-    authority = (XrModuleIdentityAuthority){0}; request = (XrXirSourceRequest){0};
+    authority = (XrModuleIdentityAuthority){0}; request = (XrXirSourceRequest){0, .target = XR_XIR_HOST_TARGET};
     text = (XrXirSourceText){0};
     if (status != XR_XIR_OK) {
         if (status != XR_XIR_BUDGET && status != XR_XIR_OUT_OF_MEMORY)

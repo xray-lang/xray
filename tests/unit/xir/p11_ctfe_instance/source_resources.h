@@ -22,7 +22,7 @@ static XrXirStatus source_receiving_operation(XrXirCompileContext *context,const
     XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
     if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"instance-constant",NULL};
-    XrXirSourceRequest source={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest source={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
     XirSourceInstanceSelection selections[2]={{fixture->definition,fixture->functions[0]},{fixture->definition,fixture->functions[1]}};
     XirSourceInstanceRequest request={.source=&source,.text=&text,.selections=selections,.count=2,

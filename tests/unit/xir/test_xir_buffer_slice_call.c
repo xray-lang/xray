@@ -57,7 +57,7 @@ static XrXirStatus check_source(const XrXirCompileContext *context,const char *s
     XrXirSourceResult *output) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"buffer-slice-call",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,
         &(XrXirSourceText){NULL,text,strlen(text)},output,&diagnostic,NULL);

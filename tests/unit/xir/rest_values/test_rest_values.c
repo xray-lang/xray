@@ -41,7 +41,7 @@ static XrXirStatus source(const XrXirCompileContext *c,const char *text,XrXirSou
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(c->resources,&session)==XR_COMPILE_RESOURCE_OK);
     if(control)CHECK(xr_compile_session_bind_request(session,control)==XR_COMPILE_RESOURCE_OK);
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"rest-values",NULL};
-    const XrXirSourceRequest request={.session=session,.authority=&authority,.context=c,.linkage_kind=XR_XIR_PROGRAM};
+    const XrXirSourceRequest request={.session=session,.authority=&authority,.context=c,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     const XrXirSourceText input={.text=text,.length=strlen(text)};XrXirSourceDiagnostic diag={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,out,&diag,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"rest Source status%u %d:%d %s\n",status,diag.line,diag.column,diag.message);

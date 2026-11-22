@@ -37,7 +37,7 @@ static XrXirStatus path_checked(const XrXirCompileContext *context,const char *t
     const char *stdlib,const XrXirLibraryCatalog *catalog,XrXirSourceResult *result) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"path-shadow",XR_PATH_FIXTURES};
-    XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,stdlib,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,stdlib,NULL,XR_XIR_PROGRAM,catalog, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={"client.xr",text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Path check%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
@@ -59,7 +59,7 @@ static void path_finite_controls(const XrXirCompileContext *context) {
             CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
         } else path_physical_fail=true;
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"path-finite",XR_PATH_FIXTURES};
-        XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,XR_PATH_FIXTURES "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,XR_PATH_FIXTURES "/stdlib",NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
         XrXirSourceText input={"client.xr",source,strlen(source)};XrXirSourceResult result={0};
         CHECK(xr_xir_compile_source_check_text(&request,&input,&result,NULL,NULL)==(mode?XR_XIR_CANCELLED:XR_XIR_OUT_OF_MEMORY));
         CHECK(!result.checked&&!result.snapshot&&!path_physical_fail&&path_physical_failures==1);
@@ -124,7 +124,7 @@ static XrXirLibraryCatalog *path_catalog(const XrXirCompileContext *context) {
     CHECK(xr_realpath_owned(&policy,XR_PATH_FIXTURES "/cold-stdlib",&root)==XR_OS_IO_OK);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,"path",root};
-    XrXirSourceRequest request={session,XR_PATH_FIXTURES "/cold-stdlib/path/path.xr",&authority,context,root,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,XR_PATH_FIXTURES "/cold-stdlib/path/path.xr",&authority,context,root,NULL,XR_XIR_LIBRARY,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic issue={0};
     CHECK(xr_xir_compile_source_check(&request,&source,&issue,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
@@ -194,7 +194,7 @@ static void path_built_controls(const XrXirCompileContext *context,const XrXirAr
 static XrXirArtifact *path_product(const XrXirCompileContext *context,bool explicit_import) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"path-client",XR_PATH_FIXTURES};
-    XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,XR_PATH_FIXTURES "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_PATH_FIXTURES "/client.xr",&authority,context,XR_PATH_FIXTURES "/stdlib",NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     char text[768];snprintf(text,sizeof(text),"%s\n%s",explicit_import?
         "import {Path} from path\nconst value=Path(\"actual\")\nassert(value.raw==\"actual\")":
         "fn keep(value:Path)->Path{return value}",path_container_main);
@@ -233,7 +233,7 @@ int main(int argc,char **argv) {
         CHECK(xr_realpath_owned(&policy,XR_PATH_ROOT "/stdlib",&root)==XR_OS_IO_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,argv[2],root};
         char path[512];CHECK(snprintf(path,sizeof(path),XR_PATH_ROOT "/stdlib/%s/%s.xr",argv[2],argv[2])>0);
-        XrXirSourceRequest request={session,path,&authority,&context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_LIBRARY,NULL};
+        XrXirSourceRequest request={session,path,&authority,&context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_LIBRARY,NULL, .target = XR_XIR_HOST_TARGET};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
         fprintf(stderr,"full %s status%u module%u %d:%d %s\n",argv[2],status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);

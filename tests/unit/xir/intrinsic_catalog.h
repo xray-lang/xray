@@ -72,7 +72,8 @@ static Fixture intrinsic_catalog_fixture(void) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(fixture.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request = {.session = session, .entry_path = library, .authority = &authority,
-        .context = &fixture.context, .linkage_kind = XR_XIR_LIBRARY};
+        .context = &fixture.context, .linkage_kind = XR_XIR_LIBRARY,
+    .target = XR_XIR_HOST_TARGET};
     const char *body = strstr(source_text, "\nprint(");
     CHECK(body);
     size_t declaration_size = (size_t)(body + 1 - source_text);

@@ -192,7 +192,7 @@ static bool lir_sum_shape(const XrLirModule *m, XrLirTypeView shape,
                 if (st != XR_LIR_OK) return false;
             }
             if (end > SIZE_MAX - (child.alignment - 1)) return false;
-            size_t offset = (end + child.alignment - 1) & ~(child.alignment - 1);
+            size_t offset = (end + child.alignment - 1) & ~((size_t)child.alignment - 1);
             if (child.size > SIZE_MAX - offset) return false;
             end = offset + child.size;
         }

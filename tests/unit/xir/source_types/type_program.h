@@ -27,7 +27,8 @@ static XrXirStatus type_program(const char *path,unsigned mode,XrCompileResource
     XrCompileResourceStatus opened=xr_compile_session_new(r,&session);
     if(opened!=XR_COMPILE_RESOURCE_OK){status=xir_compile_resource_status(opened);goto done;}
     XrXirSourceRequest request={session,xr_source_authority_source_path(authority),xr_source_authority_entry(authority),&context,
-        stdlib.path,xr_source_authority_lockfile(authority),XR_XIR_PROGRAM,catalog};
+        stdlib.path,xr_source_authority_lockfile(authority),XR_XIR_PROGRAM,catalog,
+    .target = XR_XIR_HOST_TARGET};
     status=xr_xir_compile_source_check_overlay(&request,xr_source_authority_overlay(authority),1,&result,diagnostic,NULL);
     if(status==XR_XIR_OK){*output=result.snapshot;result.snapshot=NULL;}
 done:

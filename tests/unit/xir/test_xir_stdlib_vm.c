@@ -35,7 +35,7 @@ static XrXirArtifact *stdlib_program(const XrXirCompileContext *context,
     CHECK(xir_stdlib_library_catalog_new(context,root,&catalog) == XR_XIR_OK);
     XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if (status != XR_XIR_OK) fprintf(stderr,"stdlib consumer Source status=%u %s\n",status,diagnostic.message);

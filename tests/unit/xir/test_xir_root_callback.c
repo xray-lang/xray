@@ -70,7 +70,7 @@ static XrXirProgram *compile_program(const XrXirCompileContext *context,
     FILE *out=fopen(file,"wb");CHECK(out && fwrite(callback_source,1,sizeof(callback_source)-1,out)==sizeof(callback_source)-1 && !fclose(out));
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
-    XrXirSourceRequest request={session,file,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,file,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Source %u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

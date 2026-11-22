@@ -45,7 +45,7 @@ static void diagnostic_occupied(const DiagnosticCase *input) {
     CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,input->directory};
-    XrXirSourceRequest request={session,input->root_path,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,input->root_path,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrModuleOverlayInput overlay={authority,"root.xr",input->root_path,root_source,sizeof(root_source)-1};
     for(unsigned field=0;field<5;++field) {
         XrXirSourceFailure failure={0};

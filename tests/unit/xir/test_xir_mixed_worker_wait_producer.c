@@ -31,7 +31,7 @@ static XrXirCheckedPacket worker_wait_packet(const XrXirCompileContext *context,
     CHECK(length > 0 && (size_t)length < sizeof(path)); XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_WORKER_WAIT_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, context, XR_WORKER_WAIT_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, context, XR_WORKER_WAIT_STDLIB, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "worker wait Source case=%s status=%u at%d:%d: %s\n",

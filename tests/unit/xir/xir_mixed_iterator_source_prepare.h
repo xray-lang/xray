@@ -51,7 +51,8 @@ static bool iterator_source_prepare(IteratorSourcePrepare *state) {
     if (!iterator_source_stage(state, 2, status)) { CHECK(!state->session); return false; }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ITERATOR_LIFETIME_FIXTURES};
     XrXirSourceRequest request = {state->session, XR_ITERATOR_LIFETIME_FIXTURES "/root.xr", &authority,
-        state->context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+        state->context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic = {0};
     status = xr_xir_compile_source_check(&request, &state->source, &diagnostic, NULL);
     if (!iterator_source_stage(state, 3, status)) { CHECK(!state->source.checked && !state->source.snapshot); return false; }

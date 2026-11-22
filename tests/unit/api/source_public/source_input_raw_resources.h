@@ -33,7 +33,8 @@ static XrXirStatus raw_input_reject(RawInputOwners *owner,bool rooted) {
         rooted?xr_source_authority_source_path(owner->authority):NULL,
         rooted?xr_source_authority_entry(owner->authority):&memory,
         xr_source_authority_context(owner->authority),XR_PUBLIC_STDLIB,xr_source_authority_lockfile(owner->authority),
-        XR_XIR_PROGRAM,xr_source_authority_catalog(owner->authority)};
+        XR_XIR_PROGRAM,xr_source_authority_catalog(owner->authority),
+    .target = XR_XIR_HOST_TARGET};
     const XrXirSourceText text={rooted?xr_source_authority_logical_path(owner->authority):NULL,bad,sizeof(bad)-1};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,&owner->result,&owner->diagnostic,&owner->failure);
     CHECK(!owner->result.checked && !owner->result.snapshot);

@@ -20,7 +20,7 @@ int main(int argc,char **argv) {
     CHECK(argc==2);const XrXirCompileContext context=*effects_source_owner();
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CYCLE_BATCH_FIXTURE_ROOT};
-    XrXirSourceRequest request={session,XR_CYCLE_BATCH_FIXTURE_ROOT "/xir_p20_cycle_batch/root.xr",&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_CYCLE_BATCH_FIXTURE_ROOT "/xir_p20_cycle_batch/root.xr",&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Cycle batch Source status=%u at=%d:%d message=%s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK);XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);

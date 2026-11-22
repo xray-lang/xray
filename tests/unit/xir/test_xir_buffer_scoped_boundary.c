@@ -45,7 +45,8 @@ static XrXirStatus source_check(const XrXirCompileContext *context,const char *s
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"buffer-scoped-boundary",NULL};
     XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,
-        .stdlib_path=stdlib,.linkage_kind=XR_XIR_PROGRAM};
+        .stdlib_path=stdlib,.linkage_kind=XR_XIR_PROGRAM,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,
         &(XrXirSourceText){.text=text,.length=strlen(text)},output,&diagnostic,NULL);
@@ -88,7 +89,8 @@ static void same_module_refusal(const XrXirCompileContext *context,const char *s
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,"mem",stdlib};
     XrXirSourceRequest request={.session=session,.entry_path=path,.authority=&authority,.context=context,
-        .stdlib_path=stdlib,.linkage_kind=XR_XIR_LIBRARY};
+        .stdlib_path=stdlib,.linkage_kind=XR_XIR_LIBRARY,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,
         &(XrXirSourceText){"mem/mem.xr",text,size+sizeof(suffix)-1},&output,&diagnostic,NULL);

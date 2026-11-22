@@ -61,7 +61,7 @@ static XrXirStatus receiver_compile_operation(const XrXirCompileContext *context
     XrXirStatus status=xir_compile_resource_status(opened);
     if(status!=XR_XIR_OK) {CHECK(!session);return status;}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"receiver-compiler",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,receiver_compile_stdlib,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,receiver_compile_stdlib,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     ++receiver_compile_calls;
     status=xr_xir_compile_source_check_text(&request,
         &(XrXirSourceText){NULL,receiver_compile_source,sizeof(receiver_compile_source)-1},&source,&diagnostic,&failure);

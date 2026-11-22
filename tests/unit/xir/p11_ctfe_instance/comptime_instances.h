@@ -26,7 +26,7 @@ static XrXirStatus comptime_instances_operation(XrXirCompileContext *context,con
     XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
     if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"comptime-instances",NULL};
-    XrXirSourceRequest source={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest source={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={NULL,text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
     XirSourceComptimeRequest request={&source,&input,NULL,0,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},limits,depth};
     XrXirSourceResult unpublished={0};

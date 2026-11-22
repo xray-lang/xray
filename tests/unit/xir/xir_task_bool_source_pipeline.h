@@ -6,7 +6,8 @@ static XrXirArtifact *go_bool_source_lower(const XrXirCompileContext *context, u
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_BOOL_FIXTURES};
     XrXirSourceRequest request = {session, XR_GO_BOOL_FIXTURES "/bool_native.xr", &authority,
-        context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+        context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic source_diagnostic = {0};
     XrXirDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirArtifact *decoded = NULL, *closed = NULL, *lowered = NULL;

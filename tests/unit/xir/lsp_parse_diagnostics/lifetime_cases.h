@@ -11,7 +11,7 @@ static void diagnostic_failure_lifetime(const DiagnosticCase *input) {
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
     XrModuleOverlayInput overlays[2]={{authority,"root.xr",root,root_source,sizeof(root_source)-1},
         {authority,"lib.xr",library,bad_source,sizeof(bad_source)-1}};
-    XrXirSourceRequest request={session,root,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,root,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     CHECK(xr_xir_compile_source_check_overlay(&request,overlays,2,&result,&diagnostic,&failure)==XR_XIR_BAD_STRUCTURE);
     CHECK(!result.checked&&!result.snapshot&&failure.path&&failure.path!=library);

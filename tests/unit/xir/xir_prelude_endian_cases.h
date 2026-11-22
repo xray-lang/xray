@@ -13,7 +13,7 @@ static XrXirSourceResult prelude_endian_check(const XrXirCompileContext *context
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request={session,file,&authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,file,&authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};XrXirStatus status;
     if (text) {
         FILE *input=fopen(file,"rb");CHECK(input && !fseek(input,0,SEEK_END));
@@ -36,7 +36,8 @@ static void prelude_endian_refusal(const XrXirCompileContext *context,const XrXi
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/endian_refuse.xr",&authority,
-        context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog};
+        context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,catalog,
+    .target = XR_XIR_HOST_TARGET};
     char bytes[]="enum Endian { Local }\nexport fn consumerAnswer()->i64 { const order=Endian.LE;return 42; }\n";
     XrXirSourceText text={"endian_refuse.xr",bytes,sizeof(bytes)-1};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

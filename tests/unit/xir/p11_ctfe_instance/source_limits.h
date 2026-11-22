@@ -12,7 +12,7 @@ static void source_receiving_limits(void) {
         XrXirCompileContext context;context_new(&context);XrCompilerSession *session=NULL;
         CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"instance-constant",NULL};
-        XrXirSourceRequest source={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest source={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
         XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
         XirSourceInstanceSelection selection={fixture.definition,fixture.functions[0]};
         XirSourceInstanceRequest original={.source=&source,.text=&text,.selections=&selection,.count=1,
@@ -34,7 +34,7 @@ static void source_receiving_limits(void) {
     XrXirCompileContext context;context_new(&context);XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"instance-constant",NULL};
-    XrXirSourceRequest source={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest source={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
     XirSourceInstanceSelection selection={fixture.definition,fixture.functions[0]};
     XirSourceInstanceRequest original={.source=&source,.text=&text,.selections=&selection,.count=1,

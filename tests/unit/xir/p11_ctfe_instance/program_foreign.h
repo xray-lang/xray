@@ -24,7 +24,7 @@ static XrXirStatus program_foreign_source(XrXirCompileContext *context,XrXirSour
     }
     XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
     if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
-    XrXirSourceRequest request={session,paths[0],&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,paths[0],&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,inputs,4,output,diagnostic,NULL);
     xr_compile_session_free(session);return status;
 }

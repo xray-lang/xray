@@ -58,7 +58,7 @@ static void source_library_case(bool fresh) {
     if (status!=XR_XIR_OK) fprintf(stderr,"Materializer library catalog status=%u\n",(unsigned)status);
     CHECK(status==XR_XIR_OK && catalog);xr_xir_compile_checked_packet_free(&packet);memset(bindings,0xa5,sizeof(bindings));
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,MATERIALIZATION_ROOT "/consumer.xr",&authority,&context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,MATERIALIZATION_ROOT "/consumer.xr",&authority,&context,NULL,NULL,XR_XIR_PROGRAM,catalog, .target = XR_XIR_HOST_TARGET};
     char text[256];
     CHECK(snprintf(text,sizeof(text),"import {run} from \"./root\";import {Outer} from \"./private\";export fn answer()->i64{%s}",
         fresh?"const value=comptime Outer.outer();return value.get()":"return run()")>0);

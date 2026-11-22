@@ -28,7 +28,7 @@ static XrXirStatus atomic_source_pipeline(const XrXirCompileContext *context,voi
     XrCompileResourceStatus cs=xr_compile_session_new(context->resources,&session);
     if(cs!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(cs);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ATOMIC_A2_FIXTURES};
-    XrXirSourceRequest request={session,XR_ATOMIC_A2_FIXTURES "/root.xr",&authority,context,XR_ATOMIC_A2_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_ATOMIC_A2_FIXTURES "/root.xr",&authority,context,XR_ATOMIC_A2_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirCheckedPacket packet={0};
     XrXirArtifact *read=NULL,*specialized=NULL,*lowered=NULL;XrXirCSource c={0};XrXirProgram *program=NULL;
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);

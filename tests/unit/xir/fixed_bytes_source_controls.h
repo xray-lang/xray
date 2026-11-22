@@ -31,7 +31,8 @@ static XrXirStatus fixed_source_text(const XrXirCompileContext *context,const ch
     if(control)CHECK(xr_compile_session_bind_request(session,control)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_FIXED_BYTES_ROOT};
     XrXirSourceRequest request={.session=session,.entry_path=path,.authority=&authority,
-        .context=context,.linkage_kind=linkage,.libraries=catalog};
+        .context=context,.linkage_kind=linkage,.libraries=catalog,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={name,text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"fixed text status%u %d:%d %s\n",status,

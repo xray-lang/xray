@@ -19,7 +19,7 @@
 static XrXirStatus array_materialization_check(const XrXirCompileContext *context,const char *text,size_t count,XrXirSourceResult *result) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"tuple-assignment",NULL};
-    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={.text=text,.length=count};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Array Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

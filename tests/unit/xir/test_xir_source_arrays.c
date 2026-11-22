@@ -25,7 +25,7 @@ static void source_array_original(const char *checked_output, const char *bounds
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ARRAY_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_ARRAY_SOURCE_FIXTURES "/root.xr", &authority, &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, XR_ARRAY_SOURCE_FIXTURES "/root.xr", &authority, &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "array source %u %u:%d:%d %s\n", status,
@@ -103,7 +103,8 @@ static void source_array_reordering(const char *checked_output, bool query_only,
     CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILE_RESOURCE_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ARRAY_REORDER_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, XR_ARRAY_REORDER_SOURCE_FIXTURES "/root.xr", &authority,
-        &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "array reorder source %u %u:%d:%d %s\n", status,

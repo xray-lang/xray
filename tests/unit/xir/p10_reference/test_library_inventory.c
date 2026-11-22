@@ -31,7 +31,7 @@ static XrXirSourceResult compile_source(SourceFixtureOwner *owner,const XrXirLib
     CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_LIBRARY_INVENTORY_WORK,name)>0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_LIBRARY_INVENTORY_WORK};
-    XrXirSourceRequest request={session,path,&authority,&owner->context,NULL,NULL,kind,catalog};
+    XrXirSourceRequest request={session,path,&authority,&owner->context,NULL,NULL,kind,catalog, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=text?xr_xir_compile_source_check_text(&request,
         &(XrXirSourceText){name,text,strlen(text)},&result,&diagnostic,NULL):

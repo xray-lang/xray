@@ -100,7 +100,8 @@ static void source_target_admission(void) {
         {host.os, foreign_machine, host.abi_version},
         {host.os, host.architecture, host.abi_version + 1}};
     XrXirSourceRequest request = {.session = session, .authority = &authority,
-        .context = &context, .linkage_kind = XR_XIR_PROGRAM};
+        .context = &context, .linkage_kind = XR_XIR_PROGRAM,
+    .target = XR_XIR_HOST_TARGET};
     for (size_t i = 0; i < sizeof(invalid_targets) / sizeof(invalid_targets[0]); ++i) {
         request.target = invalid_targets[i];
         XrXirSourceResult result = {0};

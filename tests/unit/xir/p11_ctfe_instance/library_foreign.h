@@ -24,7 +24,7 @@ static XrXirStatus library_comptime_foreign_source(XrXirCompileContext *context,
     }
     XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
     if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
-    XrXirSourceRequest request={session,paths[0],&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,paths[0],&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,overlays,3,output,&diagnostic,NULL);
     xr_compile_session_free(session);

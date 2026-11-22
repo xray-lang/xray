@@ -55,7 +55,7 @@ static bool atomic_source_prepare(AtomicSourcePrepare *s) {
     XrXirStatus status=xir_compile_resource_status(created);
     if(!atomic_source_stage(s,2,status)){CHECK(!s->session);return false;}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_P20_ATOMIC_AUTHORITY};
-    XrXirSourceRequest request={s->session,XR_P20_ATOMIC_RUNTIME_FIXTURES "/root.xr",&authority,s->context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={s->session,XR_P20_ATOMIC_RUNTIME_FIXTURES "/root.xr",&authority,s->context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};
     status=xr_xir_compile_source_check(&request,&s->source,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Atomic Source stage=3 status=%u at=%d:%d message=%s\n",(unsigned)status,diagnostic.line,diagnostic.column,diagnostic.message);

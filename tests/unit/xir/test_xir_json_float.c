@@ -28,7 +28,7 @@ static XrXirStatus json_float_source_check(const XrXirCompileContext *context,co
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_JSON_FLOAT_WORK};char path[1024];
     CHECK(snprintf(path,sizeof(path),"%s/%s",XR_JSON_FLOAT_WORK,source->logical)>0);
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,source->kind,source->catalog};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,source->kind,source->catalog, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={source->logical,source->text,strlen(source->text)};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,diagnostic,NULL);
     xr_compile_session_free(session);return status;

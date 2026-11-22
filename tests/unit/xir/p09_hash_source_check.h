@@ -26,7 +26,8 @@ static XrXirStatus hash_source_check(const XrXirCompileContext *context, const c
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, path, &authority, context, XR_P09_HASH_STDLIB,
-        NULL, XR_XIR_PROGRAM, NULL};
+        NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, result, &diagnostic, NULL);
     xr_compile_session_free(session);

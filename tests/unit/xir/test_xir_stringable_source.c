@@ -35,7 +35,7 @@ static XrXirStatus text_check(const XrXirCompileContext *context,const char *roo
  CHECK(snprintf(stdlib,sizeof(stdlib),"%s/stdlib",root)>0);
  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"stringable",root};
- XrXirSourceRequest request={.session=session,.entry_path=path,.authority=&authority,.context=context,.stdlib_path=stdlib,.linkage_kind=XR_XIR_PROGRAM};
+ XrXirSourceRequest request={.session=session,.entry_path=path,.authority=&authority,.context=context,.stdlib_path=stdlib,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
  XrXirSourceText input={"tests/unit/xir/fixtures/stringable.xr",text,strlen(text)};
  XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
  XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,&diagnostic,&failure);
@@ -133,7 +133,7 @@ int main(int argc,char **argv) {
  char entry[2048],stdlib[2048];CHECK(snprintf(entry,sizeof(entry),"%s/tests/unit/xir/fixtures/stringable.xr",argv[1])>0);
  CHECK(snprintf(stdlib,sizeof(stdlib),"%s/stdlib",argv[1])>0);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"stringable",argv[1]};
- XrXirSourceRequest request={.session=session,.entry_path=entry,.authority=&authority,.context=&context,.stdlib_path=stdlib,.linkage_kind=XR_XIR_PROGRAM};
+ XrXirSourceRequest request={.session=session,.entry_path=entry,.authority=&authority,.context=&context,.stdlib_path=stdlib,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
  XrXirLibraryCatalog *catalog=prelude_catalog(&context,argv[1]);request.libraries=catalog;
  XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
  XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,&failure);

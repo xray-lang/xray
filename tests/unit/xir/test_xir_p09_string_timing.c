@@ -39,7 +39,8 @@ static void timing_prepare(TimingProgram *run, unsigned mode, const char *emit) 
     CHECK(xr_compile_session_new(run->owner.context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TIMING_FIXTURES};
     XrXirSourceRequest request = {session, XR_TIMING_FIXTURES "/string_build/root.xr", &authority,
-        &run->owner.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &run->owner.context, NULL, NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source = {0}; XrXirSourceDiagnostic diagnostic = {0};
     CHECK(xr_xir_compile_source_check(&request, &source, &diagnostic, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};

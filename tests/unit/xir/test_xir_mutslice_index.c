@@ -14,7 +14,7 @@ static XrXirStatus mutslice_check(const XrXirCompileContext *context,const char 
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     if(control)CHECK(xr_compile_session_bind_request(session,control)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"mutslice-index",NULL};
-    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={.text=text,.length=strlen(text)};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,out,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"MutSlice Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

@@ -45,7 +45,7 @@ static void publication_source_path_faults(const XrXirSourceRequest *request) {
     size_t calls[2]={0};
     for(unsigned kind=0;kind<2;++kind){
         for(size_t pass=0;pass==0||pass<=calls[kind]*2;++pass){
-            PublicationScope scope;XrXirSourceRequest copy={0};
+            PublicationScope scope;XrXirSourceRequest copy={0, .target = XR_XIR_HOST_TARGET};
             CHECK(publication_scope_begin(&scope,publication_caps)==XR_XIR_OK);
             CHECK(publication_scope_source(&scope,request,&copy)==XR_XIR_OK);
             bool oom=pass&&((pass-1)%2==0);

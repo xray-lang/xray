@@ -239,7 +239,7 @@ static void library_slot_source_import_controls(void) {
     XrModuleOverlayInput overlays[]={{authority,"slot-source-root.xr",root,root_text,sizeof(root_text)-1},
         {authority,"slot-source-peer.xr",peer,peer_text,sizeof(peer_text)-1}};
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,root,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,root,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,overlays,2,&source,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"Source import slot status%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

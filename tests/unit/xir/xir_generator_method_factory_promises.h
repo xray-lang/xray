@@ -59,7 +59,7 @@ static void generator_method_factory_promises(void) {
         }
         XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-        XrXirSourceRequest request={session,entry,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,entry,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);xr_compile_session_free(session);
         if(status!=(rejected ? XR_XIR_BAD_TYPE : XR_XIR_OK)) fprintf(stderr,"Method promise%u status%u line%d: %s\n",rejected,status,diagnostic.line,diagnostic.message);

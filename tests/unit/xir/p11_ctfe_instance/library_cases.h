@@ -49,7 +49,7 @@ static XrXirStatus library_comptime_named_source(XrXirCompileContext *context,co
     XrModuleOverlayInput overlay={authority,name,path,text,strlen(text)};
     XrCompilerSession *session=NULL;XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
     if (created!=XR_COMPILE_RESOURCE_OK) return p11_resource_status(created);
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,library?XR_XIR_LIBRARY:XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,library?XR_XIR_LIBRARY:XR_XIR_PROGRAM,catalog, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,&overlay,1,output,&diagnostic,NULL);
     xr_compile_session_free(session);

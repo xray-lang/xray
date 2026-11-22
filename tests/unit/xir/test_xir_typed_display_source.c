@@ -30,7 +30,7 @@ static uint64_t held(XrCompileResources *resources) {
 static XrXirStatus source_check(XrXirCompileContext *context,const char *text,XrXirSourceResult *out,XrXirSourceDiagnostic *diagnostic) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"typed-display",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&(XrXirSourceText){NULL,text,strlen(text)},out,diagnostic,NULL);
     xr_compile_session_free(session);return status;
 }

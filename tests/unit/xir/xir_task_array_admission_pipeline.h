@@ -126,7 +126,8 @@ static TaskArrayCompile task_array_build(size_t failure, XrCompileResourceLimits
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_ARRAY_FIXTURES};
     XrXirSourceRequest request = {session, XR_TASK_ARRAY_FIXTURES "/root.xr", &authority,
-        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     task_array_profile_stage(&run, "session-new");
     run.stage = 1; run.status = xr_xir_compile_source_check(&request, &result, &diagnostic, &path);
     if (run.status != XR_XIR_OK) {

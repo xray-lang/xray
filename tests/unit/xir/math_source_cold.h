@@ -19,7 +19,7 @@ static XrXirSourceResult math_cold_source(const XrXirCompileContext *context,con
     char library[32768]={0};size_t length=append_file(library,0,sizeof(library),XR_MATH_ROOT "/stdlib/math/math.xr");
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,"math",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,XR_MATH_ROOT "/stdlib",NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,XR_MATH_ROOT "/stdlib",NULL,XR_XIR_LIBRARY,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText text={"math/math.xr",library,length};XrXirSourceResult producer={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,&producer,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"math cold producer%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
@@ -38,7 +38,8 @@ static XrXirSourceResult math_cold_source(const XrXirCompileContext *context,con
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority project={XR_MODULE_IDENTITY_PROJECT,"math-source",XR_MATH_ROOT};
     request=(XrXirSourceRequest){session,XR_MATH_ROOT "/tests/fixtures/xir_math/driver.xr",&project,
-        context,XR_MATH_EMPTY_STDLIB,NULL,XR_XIR_PROGRAM,catalog};
+        context,XR_MATH_EMPTY_STDLIB,NULL,XR_XIR_PROGRAM,catalog,
+    .target = XR_XIR_HOST_TARGET};
     XrModuleResolver *resolver=NULL;XrModuleResolverConfig config={XR_MATH_EMPTY_STDLIB,NULL,catalog};
     CHECK(xr_compile_module_resolver_new(context->resources,&config,&resolver)==XR_MODULE_OK);
     XrModuleId selected={0};char *error=NULL;

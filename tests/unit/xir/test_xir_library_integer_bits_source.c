@@ -44,7 +44,7 @@ static XrXirStatus bits_check(const XrXirCompileContext *context,const char *tex
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_LIBRARY_INTEGER_BITS_WORK};char path[1024];
     int size=snprintf(path,sizeof(path),"%s/%s",XR_LIBRARY_INTEGER_BITS_WORK,logical);CHECK(size>0 && (size_t)size<sizeof(path));
     FILE *absent=fopen(path,"rb");CHECK(!absent);
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog, .target = XR_XIR_HOST_TARGET};
     size_t length=strlen(text);char *copy=NULL;
     CHECK(xr_compile_resources_alloc(context->resources,length+1,(void **)&copy)==XR_COMPILE_RESOURCE_OK);
     memcpy(copy,text,length+1);XrXirSourceText input={logical,copy,length};XrXirSourceDiagnostic diagnostic={0};

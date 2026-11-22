@@ -67,7 +67,8 @@ static bool task_source_prepare(TaskSourcePrepare *state) {
     if (!task_source_stage(state, 2, status)) { CHECK(!state->session); return false; }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_MIXED_TASK_RESULT_FIXTURES};
     XrXirSourceRequest request = {state->session, XR_MIXED_TASK_RESULT_FIXTURES "/root.xr", &authority,
-        state->context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        state->context, NULL, NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic = {0};
     status = xr_xir_compile_source_check(&request, &state->source, &diagnostic, NULL);
     if (!task_source_stage(state, 3, status)) { CHECK(!state->source.checked && !state->source.snapshot); return false; }

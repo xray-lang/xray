@@ -8,7 +8,8 @@ static XrXirSourceResult rest_cold_source(const XrXirCompileContext *context,
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_REST_WORK,name)>0);
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_REST_WORK};
     const XrXirSourceRequest request={.session=session,.entry_path=path,.authority=&authority,
-        .context=context,.linkage_kind=kind,.libraries=catalog};
+        .context=context,.linkage_kind=kind,.libraries=catalog,
+    .target = XR_XIR_HOST_TARGET};
     const XrXirSourceText input={name,text,strlen(text)};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);

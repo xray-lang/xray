@@ -36,7 +36,7 @@ static XrXirStatus range_check(const XrXirCompileContext *context,const char *te
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_RANGE_VALUE_WORK};char path[1024];
     int length=snprintf(path,sizeof(path),"%s/%s",XR_RANGE_VALUE_WORK,logical);CHECK(length>0 && (size_t)length<sizeof(path));
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};XrXirStatus status;
     if(text) {
         size_t size=strlen(text);char *copy=NULL;

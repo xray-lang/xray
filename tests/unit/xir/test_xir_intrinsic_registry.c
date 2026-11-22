@@ -173,7 +173,8 @@ static void source_rejected(const char *text) {
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "intrinsic-rejection", NULL};
     XrXirSourceRequest request = {.session = session, .authority = &authority,
-        .context = &context, .linkage_kind = XR_XIR_PROGRAM};
+        .context = &context, .linkage_kind = XR_XIR_PROGRAM,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input = {NULL, text, strlen(text)};
     XrXirSourceResult result = {0};
     XrXirSourceDiagnostic diagnostic = {0};

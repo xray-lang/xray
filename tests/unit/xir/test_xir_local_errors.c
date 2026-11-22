@@ -503,7 +503,7 @@ static void local_initialization_location(size_t stop,bool publishing) {
     CHECK(xr_compile_request_control_init(&options,&control)==XR_COMPILE_RESOURCE_OK);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,paths[0],&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,paths[0],&authority,&context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,inputs,2,&result,&diagnostic,&failure);
     printf("Initialization location stop%zu polls%zu status%u module%u line%d path%s: %s\n",stop,cancellation.polls,

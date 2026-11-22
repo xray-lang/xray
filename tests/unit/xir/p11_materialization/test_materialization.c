@@ -131,7 +131,7 @@ static XrXirStatus source_operation(const XrXirCompileContext *context,unsigned 
     CHECK(snprintf(private_path,sizeof(private_path),"%s/private.xr",MATERIALIZATION_ROOT)>0);
     XrModuleOverlayInput inputs[2]={{authority,"root.xr",entry,root,strlen(root)},
         {authority,"private.xr",private_path,library,strlen(library)}};
-    XrXirSourceRequest request={session,entry,&authority,context,NULL,NULL,kind,NULL};
+    XrXirSourceRequest request={session,entry,&authority,context,NULL,NULL,kind,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,inputs,2,result,&diagnostic,NULL);
     if (status!=XR_XIR_OK && status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)

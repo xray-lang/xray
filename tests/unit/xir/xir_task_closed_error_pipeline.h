@@ -25,7 +25,8 @@ static XrXirArtifact *closed_error_lower(const XrXirCompileContext *context,
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_CLOSED_ERROR_FIXTURES};
     XrXirSourceRequest request = {session, XR_TASK_CLOSED_ERROR_FIXTURES "/root.xr", &authority,
-        context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+        context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic source_diagnostic = {0};
     XrXirDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirArtifact *decoded = NULL, *closed = NULL, *lowered = NULL; XrXirCheckedPacket packet = {0};

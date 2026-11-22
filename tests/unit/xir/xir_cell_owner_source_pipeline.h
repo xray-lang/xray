@@ -68,7 +68,7 @@ static XrXirStatus cell_source_lower(const XrXirCompileContext *context, const c
         return xir_compile_resource_status(opened);
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CELL_OWNER_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0};
     XrXirSourceDiagnostic diagnostic = {0};
     XrXirCheckedPacket packet = {0};

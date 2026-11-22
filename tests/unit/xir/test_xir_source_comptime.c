@@ -177,11 +177,11 @@ static XrXirStatus source_comptime_test_build(const XrXirCompileContext *context
         CHECK(!session);return opened==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
             opened==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
     }
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={NULL,bytes,length};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,diagnostic,NULL);
     xr_compile_session_free(session);memset(bytes,0xa5,sizeof(bytes));memset(name,0xa5,sizeof(name));
-    authority=(XrModuleIdentityAuthority){0};request=(XrXirSourceRequest){0};input=(XrXirSourceText){0};
+    authority=(XrModuleIdentityAuthority){0};request=(XrXirSourceRequest){0, .target = XR_XIR_HOST_TARGET};input=(XrXirSourceText){0};
     return status;
 }
 static uint32_t source_comptime_test_function(const XrXirModule *module,const char *name) {

@@ -1310,7 +1310,7 @@ static XrXirArtifact *lower_source(XrCompileResources *resources) {
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"lower-control",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={NULL,text,used};XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"lower Source status%u %d:%d %s\n",(unsigned)status,diagnostic.line,diagnostic.column,diagnostic.message);

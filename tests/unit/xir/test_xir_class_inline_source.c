@@ -31,7 +31,7 @@ static XrXirStatus class_source_owned(const XrXirCompileContext *context,XrXirAr
     XrCompileResourceStatus made=xr_compile_session_new(context->resources,&session);
     XrXirStatus status=xir_compile_resource_status(made);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     if(status==XR_XIR_OK){
         status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
         if(status!=XR_XIR_OK){CHECK(diagnostic.status==status && !result.checked);

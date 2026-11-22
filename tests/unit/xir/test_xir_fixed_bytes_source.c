@@ -30,7 +30,8 @@ int main(int argc,char **argv) {
     const char *root=XR_FIXED_BYTES_ROOT;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request={session,XR_FIXED_BYTES_ROOT "/demos/01-basics/quoted_literals.xr",
-        &authority,&owner.context,XR_FIXED_BYTES_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+        &authority,&owner.context,XR_FIXED_BYTES_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"complete original status%u %u:%d:%d %s\n",status,

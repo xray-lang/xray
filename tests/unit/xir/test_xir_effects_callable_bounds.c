@@ -127,7 +127,7 @@ static void source_fixed_callable_bounds(XrXirSourceRequest *request, SourceTest
 int main(void) {
     SourceTestFiles files = {0}; source_files_open(&files);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, files.root};
-    XrXirSourceRequest request = {NULL, files.entry, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {NULL, files.entry, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     source_original_callable_bounds(&request); source_fixed_callable_bounds(&request, &files);
     return 0;
 }

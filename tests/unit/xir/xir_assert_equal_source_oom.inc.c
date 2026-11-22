@@ -13,7 +13,7 @@ static XrXirStatus assert_source_operation(const XrXirCompileContext *context,vo
     XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
     if(created!=XR_COMPILE_RESOURCE_OK){CHECK(!session);return xir_compile_resource_status(created);}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,input->directory};
-    XrXirSourceRequest request={session,input->path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,input->path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,NULL,NULL);
     CHECK(status==XR_XIR_OK?(result.checked&&result.snapshot):(!result.checked&&!result.snapshot));
     xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);return status;

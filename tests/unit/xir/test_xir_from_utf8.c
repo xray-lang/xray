@@ -262,7 +262,8 @@ static void library_check(const char *emit) {
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={.session=session,.entry_path=library,.authority=&authority,.context=&context,
-        .stdlib_path=XR_PUBLIC_STDLIB,.linkage_kind=XR_XIR_LIBRARY};
+        .stdlib_path=XR_PUBLIC_STDLIB,.linkage_kind=XR_XIR_LIBRARY,
+    .target = XR_XIR_HOST_TARGET};
     char source[]="export fn decode(bytes:Slice<u8>) throws(Utf8Error)->string { return try string.fromUtf8(bytes) }\n";
     XrXirSourceText input={"lib.xr",source,sizeof(source)-1};XrXirSourceResult produced={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&produced,&diagnostic,NULL);

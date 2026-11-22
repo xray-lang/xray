@@ -37,7 +37,7 @@ static XrXirStatus text_check(const XrXirCompileContext *context,const char *roo
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={crypto?XR_MODULE_IDENTITY_STDLIB:XR_MODULE_IDENTITY_PROJECT,
         crypto?"crypto":"crypto-context",crypto?NULL:root};
-    XrXirSourceRequest request={session,crypto?NULL:path,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,crypto?NULL:path,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={crypto?"crypto/crypto.xr":"tests/unit/xir/fixtures/crypto_context_root.xr",text,strlen(text)};
     XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,&diagnostic,&failure);

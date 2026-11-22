@@ -95,7 +95,7 @@ static void mem_library_case(const XrXirCompileContext *context,const char *stdl
     if (!assertions) mem_library_graph_rejections(context,session,root,catalog,foreign);
     xr_xir_compile_artifact_free(foreign);
     XrModuleIdentityAuthority consumer={XR_MODULE_IDENTITY_MEMORY,"library-consumer",NULL};
-    request=(XrXirSourceRequest){session,NULL,&consumer,context,root,NULL,XR_XIR_PROGRAM,catalog};
+    request=(XrXirSourceRequest){session,NULL,&consumer,context,root,NULL,XR_XIR_PROGRAM,catalog, .target = XR_XIR_HOST_TARGET};
     static const char text[]="import mem\nexport fn run()->i64{var b=mem.allocZeroed(4);unsafe{const p=b.borrowPtr();p[0]=42 as u8};const v=b.asBytes();return v[0] as i64}\n";
     XrXirSourceResult result={0};
     if (!assertions) {

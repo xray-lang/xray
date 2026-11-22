@@ -19,7 +19,7 @@ static void instance_source_receiving(const char *kind,unsigned ordinal) {
     xr_xir_compile_artifact_free(original);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"instance-constant",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText text={NULL,instance_source_text(),strlen(instance_source_text())};
     XirSourceInstanceRequest receive={.source=&request,.text=&text,.selections=selections,.count=2,
         .target={XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION},

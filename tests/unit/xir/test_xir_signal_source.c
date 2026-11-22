@@ -23,7 +23,7 @@ static XrXirStatus root_signal_check(const XrXirCompileContext *context,const ch
     XrModuleIdentityAuthority authority=genuine?(XrModuleIdentityAuthority){XR_MODULE_IDENTITY_STDLIB,"sys",root}:
         (XrModuleIdentityAuthority){XR_MODULE_IDENTITY_MEMORY,"untrusted",NULL};
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,genuine?path:NULL,&authority,context,root,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,genuine?path:NULL,&authority,context,root,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText text={genuine?"sys/sys.xr":NULL,input,strlen(input)};
     XrXirStatus status=genuine?xir_genuine_sys_path_check(&request,input,strlen(input),source,diagnostic):
         xr_xir_compile_source_check_text(&request,&text,source,diagnostic,NULL);

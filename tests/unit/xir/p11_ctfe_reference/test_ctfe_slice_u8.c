@@ -40,7 +40,7 @@ static XrXirStatus slice_source(const XrXirCompileContext *context,const char *n
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,identity,NULL};
     const char *stdlib=!strcmp(name,"from_utf8")?XR_CTFE_UTF8_STDLIB:NULL;
-    XrXirSourceRequest request={session,NULL,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={NULL,text,bytes};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,diagnostic,NULL);
     xr_compile_session_free(session);memset(text,0xa5,sizeof(text));memset(identity,0xa5,sizeof(identity));return status;
@@ -190,7 +190,7 @@ static XrXirStatus slice_inline_source(const XrXirCompileContext *context,const 
     char text[4096];size_t length=strlen(source);CHECK(length<sizeof(text));memcpy(text,source,length+1);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"ctfe-slice-boundary",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={NULL,text,length};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"Boundary Source status%u %s\n",(unsigned)status,diagnostic.message);

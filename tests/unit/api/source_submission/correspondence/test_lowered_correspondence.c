@@ -21,7 +21,7 @@ static Artifacts artifacts(const XrXirCompileContext *context,const char *text) 
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CORRESPONDENCE_ROOT};
     char path[1024];int length=snprintf(path,sizeof(path),"%s/control.xr",XR_CORRESPONDENCE_ROOT);
     CHECK(length>0&&(size_t)length<sizeof(path));
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={"control.xr",text,strlen(text)};XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Source%u: %s\n",status,diagnostic.message);

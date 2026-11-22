@@ -20,7 +20,7 @@ static inline XrXirStatus library_source_operation(const XrXirCompileContext *co
     if(fixture->count){status=xr_xir_compile_library_catalog_new_v2(context,fixture->inputs,fixture->count,&catalog);if(status!=XR_XIR_OK){CHECK(!catalog);goto done;}}
     XrCompileResourceStatus created=xr_compile_session_new(context->resources,&session);
     if(created!=XR_COMPILE_RESOURCE_OK){CHECK(!session);status=library_compile_resource_status(created);goto done;}
-    XrXirSourceRequest request={session,fixture->entry,&fixture->authority,context,NULL,NULL,fixture->kind,catalog};
+    XrXirSourceRequest request={session,fixture->entry,&fixture->authority,context,NULL,NULL,fixture->kind,catalog, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};
     status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK && status!=XR_XIR_BUDGET && status!=XR_XIR_OUT_OF_MEMORY)

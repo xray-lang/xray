@@ -88,7 +88,7 @@ static void move_test_refusals(const XrXirCompileContext *context) {
         CHECK(count>0&&(size_t)count<sizeof(text));XrCompilerSession *session=NULL;
         CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"move-refusal",NULL};
-        XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM};
+        XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
         XrXirSourceText input={.text=text,.length=(size_t)count};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);
         fprintf(stderr,"MOVE refusal%zu status%u %d:%d %s\n",i,status,diagnostic.line,diagnostic.column,diagnostic.message);
@@ -120,7 +120,7 @@ static void move_test_requests(const XrXirCompileContext *context,const char *te
             CHECK(xr_compile_session_bind_request(session,&control)==XR_COMPILE_RESOURCE_OK);
         }
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"move-request",NULL};
-        XrXirSourceRequest request={.session=session,.authority=&authority,.context=&local,.linkage_kind=XR_XIR_PROGRAM};
+        XrXirSourceRequest request={.session=session,.authority=&authority,.context=&local,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
         XrXirSourceText input={.text=text,.length=length};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);
         fprintf(stderr,"MOVE request%u status%u polls%u\n",kind,status,state.polls);
@@ -163,7 +163,7 @@ int main(int argc,char **argv) {
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"move-source",NULL};
-    XrXirSourceRequest request={.session=session,.authority=&authority,.context=&context,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirSourceRequest request={.session=session,.authority=&authority,.context=&context,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={.text=text,.length=sizeof(text)-1};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);

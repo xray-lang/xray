@@ -102,7 +102,7 @@ static XrXirArtifact *oll_source(const XrXirCompileContext *context) {
     char entry[2048]; int length = snprintf(entry, sizeof(entry), "%s/root.xr", OLL_FIXTURE_DIRECTORY);
     CHECK(length > 0 && (size_t)length < sizeof(entry));
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, OLL_FIXTURE_DIRECTORY};
-    XrXirSourceRequest request = {session, entry, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, entry, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     if (status != XR_XIR_OK) fprintf(stderr, "ordinary Source status=%u path=%s\n", (unsigned)status, failure.path ? failure.path : "");

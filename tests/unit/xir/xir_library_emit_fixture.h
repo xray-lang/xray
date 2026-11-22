@@ -17,7 +17,7 @@ static void library_emit_fixture(const char *path) {
     conflict_text("root.xr","import {answer} from \"./library\";\nexport fn result()->i64{return answer();}\n");
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
     XrCompilerSession *session=library_session_new(library_context);CHECK(session);
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/library.xr",&authority,library_context,NULL,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/library.xr",&authority,library_context,NULL,NULL,XR_XIR_LIBRARY,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult library={0},program={0};CHECK(xr_xir_compile_source_check(&request,&library,NULL,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(library.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&library);xr_compile_session_free(session);
@@ -25,7 +25,7 @@ static void library_emit_fixture(const char *path) {
     xr_sha256(packet.bytes,packet.length,input.sha256);XrXirLibraryCatalog *catalog=NULL;
     CHECK(xr_xir_compile_library_catalog_new_v2(library_context,&input,1,&catalog)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);session=library_session_new(library_context);CHECK(session);
-    request=(XrXirSourceRequest){session,XR_SOURCE_FIXTURES "/root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    request=(XrXirSourceRequest){session,XR_SOURCE_FIXTURES "/root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog, .target = XR_XIR_HOST_TARGET};
     CHECK(xr_xir_compile_source_check(&request,&program,NULL,NULL)==XR_XIR_OK);
     xr_compile_session_free(session);xr_xir_compile_library_catalog_free(catalog);
     CHECK(xr_xir_compile_checked_write(program.checked,&packet,NULL)==XR_XIR_OK);

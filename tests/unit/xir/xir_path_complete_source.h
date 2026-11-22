@@ -42,7 +42,7 @@ static XrXirStatus path_complete_check(const XrXirCompileContext *context,const 
     bool genuine,XrXirSourceResult *output){
     XrModuleIdentityAuthority authority={genuine?XR_MODULE_IDENTITY_STDLIB:XR_MODULE_IDENTITY_MEMORY,"path",genuine?XR_PATH_ROOT "/stdlib":NULL};
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,genuine?XR_PATH_ROOT "/stdlib/path/path.xr":NULL,&authority,context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,genuine?XR_PATH_ROOT "/stdlib/path/path.xr":NULL,&authority,context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};XrXirSourceText input={genuine?"path/path.xr":NULL,text,length};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"complete Path Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
@@ -72,7 +72,7 @@ static XrXirArtifact *path_complete_raw_os_code(const XrXirCompileContext *conte
     char *text=xr_malloc(sizeof(body));CHECK(text);memcpy(text,body,sizeof(body));
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,"os",XR_PATH_ROOT "/stdlib"};
-    XrXirSourceRequest request={session,XR_PATH_ROOT "/stdlib/os/os.xr",&authority,context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_PATH_ROOT "/stdlib/os/os.xr",&authority,context,XR_PATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={"os/os.xr",text,sizeof(body)-1};XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"raw OS cwd Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

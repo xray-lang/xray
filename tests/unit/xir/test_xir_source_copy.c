@@ -18,7 +18,7 @@
 static XrXirStatus source_copy_check(const XrXirCompileContext *context,const char *text,XrXirSourceResult *result) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-copy",NULL};
-    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirSourceRequest request={.session=session,.authority=&authority,.context=context,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={.text=text,.length=strlen(text)};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,&diagnostic,NULL);
     fprintf(stderr,"copy Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

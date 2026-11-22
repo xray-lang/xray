@@ -68,7 +68,8 @@ static XrXirStatus check(const XrXirCompileContext *context,const char *text,XrX
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"math-source",XR_MATH_ROOT};
     XrXirSourceRequest request={session,XR_MATH_ROOT "/tests/fixtures/xir_math/driver.xr",&authority,
-        context,XR_MATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+        context,XR_MATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={"tests/fixtures/xir_math/driver.xr",text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"math check%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
@@ -92,7 +93,8 @@ static void math_source_resources(const XrXirCompileContext *context,const char 
         } else math_fail_next=true;
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"math-source",XR_MATH_ROOT};
         XrXirSourceRequest request={session,XR_MATH_ROOT "/tests/fixtures/xir_math/driver.xr",&authority,
-            context,XR_MATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+            context,XR_MATH_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL,
+    .target = XR_XIR_HOST_TARGET};
         XrXirSourceText input={"tests/fixtures/xir_math/driver.xr",text,strlen(text)};XrXirSourceResult result={0};
         XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,NULL,NULL);
         CHECK(status==(mode?XR_XIR_CANCELLED:XR_XIR_OUT_OF_MEMORY)&&!result.checked&&!result.snapshot);

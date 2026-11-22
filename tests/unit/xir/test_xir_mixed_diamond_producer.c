@@ -48,7 +48,7 @@ static XrXirCheckedPacket diamond_packet(const XrXirCompileContext *context) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_DIAMOND_FIXTURES};
-    XrXirSourceRequest request = {session, XR_DIAMOND_FIXTURES "/root.xr", &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, XR_DIAMOND_FIXTURES "/root.xr", &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "diamond Source %u at %d:%d: %s\n", status,

@@ -48,7 +48,7 @@ static XrXirStatus source_check(const XrXirCompileContext *context,const XrXirLi
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_NOMINAL_WORK,name)>0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_NOMINAL_WORK};
-    XrXirSourceRequest request={.session=session,.entry_path=path,.authority=&authority,.context=context,.libraries=catalog,.linkage_kind=kind};
+    XrXirSourceRequest request={.session=session,.entry_path=path,.authority=&authority,.context=context,.libraries=catalog,.linkage_kind=kind, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={name,text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"%s Source%u %d:%d %s\n",name,status,diagnostic.line,diagnostic.column,diagnostic.message);

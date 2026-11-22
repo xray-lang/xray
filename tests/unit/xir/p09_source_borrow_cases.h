@@ -18,7 +18,7 @@ static XrXirStatus borrow_source_check(const XrXirCompileContext *context,const 
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-    XrXirSourceRequest request={session,path,&authority,context,XR_P09_HASH_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,context,XR_P09_HASH_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirStatus status=xr_xir_compile_source_check(&request,result,diagnostic,NULL);
     xr_compile_session_free(session);CHECK(!remove(path) && !xr_test_rmdir(directory));return status;
 }

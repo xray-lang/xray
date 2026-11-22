@@ -25,7 +25,7 @@ static int product_packet_public_poll(const void *context) {return product_packe
 static XrXirSourceProductRequest product_packet_request(XrCompileResources *resources,
     XrCompilerSession *session,const XrModuleIdentityAuthority *authority,XrXirCompileContext *context) {
     *context=(XrXirCompileContext){resources,xr_xir_compile_default_limits()};
-    XrXirSourceRequest source={session,NULL,authority,context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest source={session,NULL,authority,context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     return (XrXirSourceProductRequest){source,{XR_XIR_ARCH_LE64,XR_XIR_VALUE_ABI_VERSION}};
 }
 static void product_packet_after_program(XrXirSourceProduct *product) {

@@ -11,7 +11,7 @@ static XrXirStatus closed_hover_snapshot(const char *root,const char *uri,const 
     XrCompilerSession *session=NULL;XrCompileResourceStatus made=xr_compile_session_new(context->resources,&session);
     if(made!=XR_COMPILE_RESOURCE_OK)return xir_compile_resource_status(made);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XlspSourceDocument document={uri,text,strlen(uri),strlen(text),7};
     XrXirStatus status=xlsp_source_snapshot_build(&request,&document,1,0,output,NULL,NULL);
     xr_compile_session_free(session);return status;
@@ -95,7 +95,7 @@ static void closed_hover_versions(const char *root) {
     for(unsigned i=0;i<2;++i) {
         XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-        XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};documents[1].version=(int64_t)i+1;
+        XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};documents[1].version=(int64_t)i+1;
         CHECK(xlsp_source_snapshot_build(&request,documents,2,0,&snapshots[i],NULL,NULL)==XR_XIR_OK);xr_compile_session_free(session);
     }
     bool equal=true;CHECK(xlsp_source_same_symbol(snapshots[0],snapshots[1],uri,strlen(uri),(XrLspPosition){1,16},&equal)==XR_XIR_OK&&!equal);

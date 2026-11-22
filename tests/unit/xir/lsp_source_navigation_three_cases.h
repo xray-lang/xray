@@ -76,7 +76,7 @@ static XrXirStatus lsp_three_prepare(const char *root, XrCompileResourceLimits l
     XrModuleIdentityAuthority authorities[3] = {
         {XR_MODULE_IDENTITY_SCRIPT, NULL, root}, {XR_MODULE_IDENTITY_SCRIPT, NULL, root},
         {XR_MODULE_IDENTITY_SCRIPT, NULL, root}};
-    XrXirSourceRequest request = {session, NULL, &authorities[0], &owner->context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, NULL, &authorities[0], &owner->context, NULL, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     for (size_t i = 0; i < 3 && status == XR_XIR_OK; ++i)
         status = xlsp_source_snapshot_build_authorities(&request, documents, authorities, 3, i,
             &owner->snapshots[i], NULL, NULL);

@@ -50,7 +50,8 @@ static bool cb_source_prepare(CycleSourcePrepare *state) {
     if (!cb_source_stage(state, 2, status)) { CHECK(!state->session); return false; }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CYCLE_BATCH_FIXTURE_ROOT};
     XrXirSourceRequest request = {state->session, XR_CYCLE_BATCH_FIXTURE_ROOT "/xir_p20_cycle_batch/root.xr", &authority,
-        state->context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        state->context, NULL, NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic = {0};
     status = xr_xir_compile_source_check(&request, &state->source, &diagnostic, NULL);
     if (!cb_source_stage(state, 3, status)) { CHECK(!state->source.checked && !state->source.snapshot); return false; }

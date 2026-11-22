@@ -24,7 +24,8 @@ int main(int argc,char **argv) {
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_NATIVE_TASK_FIXTURE_DIR};
     XrXirSourceRequest request={session,XR_NATIVE_TASK_FIXTURE_DIR "/native_task_throw.xr",&authority,
-        context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+        context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,&failure);
     if (status!=XR_XIR_OK) fprintf(stderr,"Source status=%u: %s\n",status,diagnostic.message);

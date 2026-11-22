@@ -70,7 +70,7 @@ static size_t original_source(char *text,size_t capacity) {
 static XrXirArtifact *source_closed(const XrXirCompileContext *context,const char *text,size_t length) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"module-limits",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,XR_PUBLIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={NULL,text,length};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,&failure);
     if(status!=XR_XIR_OK)fprintf(stderr,"Source status%u %s\n",(unsigned)status,diagnostic.message);

@@ -15,7 +15,7 @@ static void crypto_product(const XrXirCompileContext *context,const char *root,c
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"crypto-native",root};
     char stdlib[1024];CHECK(snprintf(stdlib,sizeof(stdlib),"%s/stdlib",root)>0);
-    XrXirSourceRequest request={.session=session,.entry_path=entry,.authority=&authority,.context=context,.stdlib_path=stdlib,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirSourceRequest request={.session=session,.entry_path=entry,.authority=&authority,.context=context,.stdlib_path=stdlib,.linkage_kind=XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,&failure);
     fprintf(stderr,"SOURCE %u %s:%d:%d %s\n",status,failure.path?failure.path:entry,diagnostic.line,diagnostic.column,diagnostic.message);

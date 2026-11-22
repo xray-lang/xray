@@ -28,7 +28,7 @@ static char *pipe_source_text(size_t *length){
 static XrXirStatus pipe_check(const XrXirCompileContext *context,const char *text,size_t length,bool genuine,XrXirSourceResult *output){
  const char *root=XR_PIPE_ROOT "/stdlib";XrModuleIdentityAuthority authority={genuine?XR_MODULE_IDENTITY_STDLIB:XR_MODULE_IDENTITY_MEMORY,"sys",genuine?root:NULL};
  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
- XrXirSourceRequest request={session,genuine?XR_PIPE_ROOT "/stdlib/sys/sys.xr":NULL,&authority,context,root,NULL,XR_XIR_PROGRAM,NULL};
+ XrXirSourceRequest request={session,genuine?XR_PIPE_ROOT "/stdlib/sys/sys.xr":NULL,&authority,context,root,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
  XrXirSourceText source={genuine?"sys/sys.xr":NULL,text,length};XrXirSourceDiagnostic diagnostic={0};
  XrXirStatus status=genuine?xir_genuine_sys_path_check(&request,text,length,output,&diagnostic):
   xr_xir_compile_source_check_text(&request,&source,output,&diagnostic,NULL);

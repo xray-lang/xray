@@ -37,7 +37,7 @@ static char *process_complete_os_text(size_t *length){
 static XrXirStatus process_complete_os_check(const XrXirCompileContext *context,const char *text,size_t length,bool genuine,XrXirSourceResult *output){
     XrModuleIdentityAuthority authority={genuine?XR_MODULE_IDENTITY_STDLIB:XR_MODULE_IDENTITY_MEMORY,"os",genuine?XR_PROCESS_ROOT "/stdlib":NULL};XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
-    XrXirSourceRequest request={session,genuine?XR_PROCESS_ROOT "/stdlib/os/os.xr":NULL,&authority,context,XR_PROCESS_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,genuine?XR_PROCESS_ROOT "/stdlib/os/os.xr":NULL,&authority,context,XR_PROCESS_ROOT "/stdlib",NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText input={genuine?"os/os.xr":NULL,text,length};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"complete os Source%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

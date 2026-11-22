@@ -52,7 +52,8 @@ static XrXirStatus class_inheritance_check_diagnostic(const XrXirCompileContext 
         CHECK(length>0 && (size_t)length<sizeof(path));entry=path;
     }
     XrXirSourceRequest request={session,entry,&authority,context,XR_CLASS_INHERITANCE_ROOT "/stdlib",
-        NULL,fixture->kind,fixture->catalog};
+        NULL,fixture->kind,fixture->catalog,
+    .target = XR_XIR_HOST_TARGET};
     *diagnostic=(XrXirSourceDiagnostic){0};XrXirStatus status;
     if(fixture->text) {
         XrXirSourceText input={fixture->root?fixture->logical:NULL,fixture->text,strlen(fixture->text)};
@@ -160,7 +161,8 @@ static XrXirLibraryCatalog *class_inheritance_hidden_catalog(const XrXirCompileC
     }
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrXirSourceRequest request={session,paths[2],&authority,context,XR_CLASS_INHERITANCE_ROOT "/stdlib",
-        NULL,XR_XIR_LIBRARY,base};
+        NULL,XR_XIR_LIBRARY,base,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,overlays,3,&source,&diagnostic,NULL);
     fprintf(stderr,"inheritance hidden Library status%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

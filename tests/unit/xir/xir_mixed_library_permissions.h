@@ -58,7 +58,8 @@ static bool library_permission_source(LibraryPermissionState *state, const char 
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_COUNTER_LOGICAL_ROOT};
     XrXirSourceRequest request = {session, path, &authority, &state->context, NULL, NULL,
-        state->result.phase ? XR_XIR_PROGRAM : XR_XIR_LIBRARY, state->catalog};
+        state->result.phase ? XR_XIR_PROGRAM : XR_XIR_LIBRARY, state->catalog,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceText text = {name, body, bytes}; XrXirSourceResult result = {0}, empty = {0};
     XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
     status = xr_xir_compile_source_check_text(&request, &text, &result, &diagnostic, &failure);

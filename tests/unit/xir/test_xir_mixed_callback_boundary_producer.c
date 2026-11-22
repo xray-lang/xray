@@ -24,7 +24,8 @@ int main(int argc, char **argv) {
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CALLBACK_BOUNDARY_FIXTURES};
     XrXirSourceRequest request = {session, XR_CALLBACK_BOUNDARY_FIXTURES "/root.xr", &authority,
-        &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &context, NULL, NULL, XR_XIR_PROGRAM, NULL,
+    .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &source, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "Callback boundary Source status=%u at=%d:%d message=%s\n",

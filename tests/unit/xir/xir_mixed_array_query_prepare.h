@@ -57,7 +57,7 @@ static bool array_query_prepare_source(ArrayQueryCompileState *state) {
     if (!array_query_stage(state, 3, array_query_resource_status(allocation))) { CHECK(!state->body); return false; }
     memcpy(state->body, body, state->bytes);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "p20-array-query", NULL};
-    XrXirSourceRequest request = {state->session, NULL, &authority, &state->context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {state->session, NULL, &authority, &state->context, NULL, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceText source = {NULL, state->body, state->bytes}; XrXirSourceDiagnostic diagnostic = {0};
     status = xr_xir_compile_source_check_text(&request, &source, &state->source, &diagnostic, NULL);
     if (!array_query_stage(state, 4, status)) {

@@ -23,7 +23,8 @@ static void evaluation_transport(Fixture *fixture) {
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "predicate-evaluation", NULL};
     XrXirSourceRequest source_request = {.session = session, .authority = &authority,
-        .context = context, .linkage_kind = XR_XIR_PROGRAM};
+        .context = context, .linkage_kind = XR_XIR_PROGRAM,
+    .target = XR_XIR_HOST_TARGET};
     const char text[] =
         "fn zero<T>()->bool{return \"xab\".startsWith(\"x\") && \"xab\".endsWith(\"b\") && \"xab\".contains(\"a\")}\n"
         "fn make<T>()->bool{return comptime zero<T>()}\n"

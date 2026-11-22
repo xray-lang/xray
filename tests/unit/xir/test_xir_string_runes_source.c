@@ -41,7 +41,7 @@ static uint32_t named(const XrXirModule *module,const char *name) {
 static XrXirProgram *compile(XrXirCompileContext *context,uint32_t ids[3]) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"rune-owned",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&(XrXirSourceText){NULL,source_text,sizeof(source_text)-1},&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"Source %u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
@@ -67,7 +67,7 @@ static void rejections(XrXirCompileContext *context) {
         uint64_t frame=stats(context->resources).held_bytes;XrCompilerSession *session=NULL;
         CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"rune-rejected",NULL};
-        XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
         XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check_text(&request,&(XrXirSourceText){NULL,cases[i],strlen(cases[i])},&output,&diagnostic,NULL);
         CHECK(status==XR_XIR_BAD_TYPE&&!output.checked&&diagnostic.line==1&&diagnostic.column==15);

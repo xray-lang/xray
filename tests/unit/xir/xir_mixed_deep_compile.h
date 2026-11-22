@@ -46,7 +46,7 @@ static bool deep_compile_source(DeepCompileState *state) {
     char path[1024]; int length = snprintf(path, sizeof(path), "%s/root.xr", XR_DEEP_FIXTURES);
     CHECK(length > 0 && (size_t)length < sizeof(path));
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_DEEP_FIXTURES};
-    XrXirSourceRequest request = {state->session, path, &authority, &state->context, XR_DEEP_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {state->session, path, &authority, &state->context, XR_DEEP_STDLIB, NULL, XR_XIR_PROGRAM, NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic = {0};
     status = xr_xir_compile_source_check(&request, &state->source, &diagnostic, NULL);
     if (!deep_compile_stage(state, 3, status)) { CHECK(!state->source.checked && !state->source.snapshot); return false; }

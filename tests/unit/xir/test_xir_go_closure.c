@@ -49,7 +49,7 @@ static XrXirStatus check(const XrXirCompileContext *context,const char *text,XrX
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILE_RESOURCE_OK);
     if(control)CHECK(xr_compile_session_bind_request(session,control)==XR_COMPILE_RESOURCE_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_GO_CLOSURE_FIXTURES};
-    XrXirSourceRequest request={session,XR_GO_CLOSURE_FIXTURES "/closure.xr",&authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_GO_CLOSURE_FIXTURES "/closure.xr",&authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL, .target = XR_XIR_HOST_TARGET};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=text?xr_xir_compile_source_check_text(&request,&(XrXirSourceText){"closure.xr",text,strlen(text)},result,&diagnostic,NULL):
         xr_xir_compile_source_check(&request,result,&diagnostic,NULL);
