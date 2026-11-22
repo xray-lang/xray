@@ -44,7 +44,7 @@ def repository_text(root: Path):
             try:
                 if path.stat().st_size > MAX_SCAN_BYTES:
                     continue
-                yield path, path.read_text(encoding="utf-8", errors="ignore")
+                yield path, path.read_text(encoding="utf-8")
             except OSError:
                 continue
 

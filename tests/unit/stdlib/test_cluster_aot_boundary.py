@@ -49,7 +49,7 @@ RETIRED_TRANSPORT_FILES = (
 def repository_sources(*suffixes: str) -> str:
     """Concatenate every C/C++ source the retired surfaces could reappear in."""
     return "\n".join(
-        path.read_text(encoding="utf-8", errors="ignore")
+        path.read_text(encoding="utf-8")
         for directory in ("src", "include", "stdlib")
         for path in sorted((ROOT / directory).rglob("*"))
         if path.is_file() and path.suffix in suffixes

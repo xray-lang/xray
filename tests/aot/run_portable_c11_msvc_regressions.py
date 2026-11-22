@@ -58,7 +58,7 @@ def main() -> int:
     retired = "xrt_array_stack_borrow_span_view_typed"
     for directory in ("include", "src"):
         for path in (ROOT / directory).rglob("*.h"):
-            if retired in path.read_text(encoding="utf-8", errors="ignore"):
+            if retired in path.read_text(encoding="utf-8"):
                 raise AssertionError(f"retired GNU borrowed-span macro remains in {path}")
 
     with tempfile.TemporaryDirectory(prefix=f"xray-portable-c11-{args.family}-") as raw_tmp:
