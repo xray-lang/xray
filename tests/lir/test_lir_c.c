@@ -211,6 +211,18 @@ static void output_call(const char *kind) {
     OK(xr_lir_emit_effect(module, b, &call));
     ret(b, constant(b, XR_LIR_I64, 0));
 }
+static void clock_output(void) {
+    XrLirBlock b = root_block();
+    XrLirFunction clock;
+    XrLirFunctionSpec spec = {.name = "xrt_clock_monotonic_nanos", .name_length = 25,
+        .result = XR_LIR_I64, .kind = XR_LIR_FUNCTION_EXTERNAL,
+        .extern_kind = XR_LIR_EXTERN_CLOCK_MONOTONIC};
+    OK(xr_lir_declare_function(module, &spec, &clock));
+    XrLirInstruction call = {.op = XR_LIR_CALL, .type = XR_LIR_I64, .callee = clock};
+    XrLirValue value;
+    OK(xr_lir_emit_value(module, b, &call, &value));
+    ret(b, value);
+}
 static XrLirType fixture_result(const char *name) {
     if (!strcmp(name, "unit") || !strcmp(name, "typed-unit")) return XR_LIR_UNIT;
     if (!strcmp(name, "bool") || !strcmp(name, "typed-bool")) return XR_LIR_I1;
@@ -321,6 +333,7 @@ static void build(const char *name) {
     else if (!strcmp(name, "unused")) unused_float();
     else if (!strcmp(name, "unit")) small_result(true);
     else if (!strcmp(name, "bool")) small_result(false);
+    else if (!strcmp(name, "clock-output")) clock_output();
     else if (!strncmp(name, "output-", 7)) output_call(name);
     else if (!strncmp(name, "typed-", 6)) typed_output(name);
     else CHECK(false);
@@ -392,6 +405,8 @@ static void emit(const char *name, const char *path) {
         CHECK(strstr(output.bytes, "v1 = (int64_t)UINT64_C(0);"));
         CHECK(strstr(output.bytes, "= (uint64_t)UINT64_C(18446744073709551615);"));
     }
+    if (!strcmp(name, "clock-output"))
+        CHECK(strstr(output.bytes, "v1 = xrt_clock_monotonic_nanos(UINT32_C(0));"));
     if (!strncmp(name, "output-", 7)) {
         CHECK(strstr(output.bytes, "xrt_print_i64(v1, UINT32_C("));
         if (!strcmp(name, "output-unknown"))
@@ -508,6 +523,7 @@ int main(int argc, char **argv) {
         "nullable-f32-none", "fixed-1", "fixed-11", "fixed-16", "fixed-17", "fixed-256", "fixed-return",
         "fixed-state", "fixed-state-return", "fixed-unpublished", "fixed-negative", "fixed-bounds",
         "output-unknown", "output-point", "output-range", "typed-i64-min", "typed-u64",
+        "clock-output",
         "typed-bool", "typed-unit", "typed-root-call", "state-ref-even", "state-ref-odd"};
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
         emit(cases[i], NULL);
