@@ -6,6 +6,10 @@ and compared test by test. The comparison fails only on a changed build
 configuration, a new failure, a missing required gate test, or a failed
 identity check. Timing tests are reported separately because their wall
 time is information, not a correctness gate.
+
+The nested sanitizer lane is excluded: it builds and runs a second complete
+configuration, is owned by the sanitizer job, and recurses into the whole
+inventory instead of reporting one Release result.
 """
 
 import argparse
@@ -25,6 +29,8 @@ from merge_slice import (cache_fields, cache_options, current_gate_tests, junit_
 from xray_process import run_child
 
 TIMING = re.compile(r"(?:perf|bench|timing)", re.IGNORECASE)
+# The sanitizer lane builds and runs a second complete configuration.
+EXCLUDED = {"asan_focused"}
 # The shared identity table keys Windows by its canonical runner name; both
 # Windows images report the same target triple.
 IDENTITY_HOST = {"windows-2022": "windows-2022", "macos-latest": "macos-latest"}
@@ -99,10 +105,13 @@ def capture(source, build, folder, head, host, cmake, ctest, jobs, label):
     target = verify_identity(identity.read_bytes(), head, IDENTITY_HOST[host], "Release")
     registry, _ = run("registry", [ctest, "--test-dir", build, "--show-only=json-v1"], 120)
     junit = folder / "full.xml"
-    _, raw_exit = run("ctest", [ctest, "--test-dir", build, "--output-on-failure", "--no-tests=error",
-                               "-j", jobs, "--output-junit", junit], 5400, (0, 8))
+    raw = [ctest, "--test-dir", build, "--output-on-failure", "--no-tests=error",
+           "-j", jobs, "--timeout", "900", "-E", "^(asan_focused)$",
+           "--output-junit", junit]
+    _, raw_exit = run("ctest", raw, 5400, (0, 8))
     outcomes = junit_outcomes(junit.read_bytes())
-    if set(outcomes) != registry_names(registry.read_bytes()):
+    registered = registry_names(registry.read_bytes()) - EXCLUDED
+    if set(outcomes) != registered:
         raise ValueError(f"Incomplete or inconsistent CTest results for {head}")
     if raw_exit != (8 if "fail" in outcomes.values() else 0):
         raise ValueError(f"CTest exit {raw_exit} disagrees with its JUnit outcomes for {head}")
@@ -138,6 +147,7 @@ def compare(baseline, candidate, before, after, base_config, candidate_config, h
         "regressions": gating,
         "timingReportOnly": timing,
         "retired": retired,
+        "excluded": sorted(EXCLUDED),
         "requiredNonPass": required_nonpass,
     }
     lines = [
@@ -151,6 +161,7 @@ def compare(baseline, candidate, before, after, base_config, candidate_config, h
         "new failures: " + (", ".join(gating) if gating else "(none)"),
         "timing report only: " + (", ".join(timing) if timing else "(none)"),
         "retired: " + (", ".join(retired) if retired else "(none)"),
+        "excluded: " + ", ".join(sorted(EXCLUDED)),
         "required non-pass: " + (", ".join(required_nonpass) if required_nonpass else "(none)"),
         f"build configuration identical: {'yes' if same_configuration else 'no'}",
     ]
