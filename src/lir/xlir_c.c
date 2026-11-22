@@ -364,6 +364,20 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     xr_lir_function_view(c->request->module, callee, &view);
     return view.kind == XR_LIR_FUNCTION_EXTERNAL;
 }
+/* One runtime entry per registered external kind. A kind without an entry
+ * must fail the emission instead of borrowing another entry's name. */
+static const char *c_external_name(XrLirExternKind kind) {
+    switch (kind) {
+    case XR_LIR_EXTERN_PRINT_I64: return "xrt_print_i64";
+    case XR_LIR_EXTERN_PRINT_STRING: return "xrt_print_string";
+    case XR_LIR_EXTERN_CLOCK_REALTIME: return "xrt_clock_realtime_nanos";
+    case XR_LIR_EXTERN_CLOCK_CPU: return "xrt_clock_process_cpu_nanos";
+    case XR_LIR_EXTERN_CLOCK_MONOTONIC: return "xrt_clock_monotonic_nanos";
+    case XR_LIR_EXTERN_UTC_OFFSET_AT: return "xrt_clock_utc_offset_at";
+    case XR_LIR_EXTERN_ASSERT_CONDITION: return "xrt_assert_condition";
+    default: return NULL;
+    }
+}
 static bool c_display_point(LirC *, const XrLirInstructionView *);
 static bool c_string_binding_point(LirC *c, const XrLirInstructionView *v) {
     uint32_t role = xr_lir_string_role(c->request->module, v);
@@ -1089,13 +1103,11 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                 xr_lir_function_view(c->request->module,
                     (XrLirFunction){c->request->module, v->callee}, &external);
                 string_output = external.extern_kind == XR_LIR_EXTERN_PRINT_STRING;
-                const char *name = string_output ? "xrt_print_string" :
-                    external.extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION ? "xrt_assert_condition" :
-                    external.extern_kind == XR_LIR_EXTERN_PRINT_I64 ? "xrt_print_i64" :
-                    external.extern_kind == XR_LIR_EXTERN_CLOCK_REALTIME ? "xrt_clock_realtime_nanos" :
-                    external.extern_kind == XR_LIR_EXTERN_CLOCK_CPU ? "xrt_clock_process_cpu_nanos" :
-                    external.extern_kind == XR_LIR_EXTERN_UTC_OFFSET_AT ? "xrt_clock_utc_offset_at" :
-                    "xrt_clock_monotonic_nanos";
+                const char *name = c_external_name(external.extern_kind);
+                if (!name) {
+                    c_error(c, XR_LIR_C_UNSUPPORTED, "external function kind has no runtime entry");
+                    return;
+                }
                 c_text(c, name);
             } else c_function_name(c, v->callee);
             c_text(c, "(");

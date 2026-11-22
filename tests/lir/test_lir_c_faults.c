@@ -96,6 +96,20 @@ static XiCgenVerifyStatus publication_verify(XrCompileResources *r, const char *
 
 static bool cancel_now(const void *context) { return *(const bool *) context; }
 
+/* The generated C must name exactly one runtime entry per registered external
+ * kind. An unregistered kind has no entry and must not inherit one. */
+static void external_runtime_names(void) {
+    CHECK(!strcmp(c_external_name(XR_LIR_EXTERN_PRINT_I64), "xrt_print_i64"));
+    CHECK(!strcmp(c_external_name(XR_LIR_EXTERN_PRINT_STRING), "xrt_print_string"));
+    CHECK(!strcmp(c_external_name(XR_LIR_EXTERN_CLOCK_REALTIME), "xrt_clock_realtime_nanos"));
+    CHECK(!strcmp(c_external_name(XR_LIR_EXTERN_CLOCK_CPU), "xrt_clock_process_cpu_nanos"));
+    CHECK(!strcmp(c_external_name(XR_LIR_EXTERN_CLOCK_MONOTONIC), "xrt_clock_monotonic_nanos"));
+    CHECK(!strcmp(c_external_name(XR_LIR_EXTERN_UTC_OFFSET_AT), "xrt_clock_utc_offset_at"));
+    CHECK(!strcmp(c_external_name(XR_LIR_EXTERN_ASSERT_CONDITION), "xrt_assert_condition"));
+    CHECK(!c_external_name(XR_LIR_EXTERN_NONE));
+    CHECK(!c_external_name((XrLirExternKind)(XR_LIR_EXTERN_ASSERT_CONDITION + 1)));
+}
+
 static void refusal(XrLirCRequest *request, XrLirCStatus expected) {
     XrLirCOutput output = {0};
     XrLirCDiagnostic diagnostic;
@@ -694,6 +708,7 @@ static void array_helper_boundaries(void) {
     }
 }
 int main(int argc, char **argv) {
+    external_runtime_names();
     if (argc == 2 && !strcmp(argv[1], "--edge-control")) {
         edge_control_boundaries(); return 0;
     }
