@@ -459,6 +459,18 @@ def measure(args) -> None:
         raise RuntimeError("At least one declared sample failed; inspect retained raw files")
 
 
+def lower_quartile(values) -> float:
+    """Robust central timing for a shared runner.
+
+    A hosted host can only ever add delay, and a median still moves when the
+    noise reaches half of the rounds. The lower quartile of the ROUNDS samples
+    stays on the fast rounds, so the ratio it builds reports the engine
+    difference rather than the host's current load.
+    """
+    ordered = sorted(values)
+    return ordered[(len(ordered) - 1) // 4]
+
+
 def assert_result(args) -> int:
     prepared = json.loads(args.prepared.read_text(encoding="utf-8"))
     verify_prepared(prepared)
@@ -472,6 +484,7 @@ def assert_result(args) -> int:
         rows = [r for r in result["samples"] if r["case"] == case]
         valid &= len(rows) == ROUNDS * len(engines) and all(r["ok"] for r in rows)
         actual = {}
+        median = {}
         for engine, command in engines.items():
             samples = [row for row in rows if row["engine"] == engine]
             valid &= len(samples) == ROUNDS and sorted(row["round"] for row in samples) == list(range(ROUNDS))
@@ -486,11 +499,15 @@ def assert_result(args) -> int:
                 valid &= not Path(row["streams"]["stderr"]["path"]).read_bytes()
                 valid &= math.isfinite(row.get("processWallSeconds", 0)) and row.get("processWallSeconds", 0) > 0
             if valid:
-                actual[engine] = statistics.median(row["processWallSeconds"] for row in samples)
+                times = [row["processWallSeconds"] for row in samples]
+                actual[engine] = lower_quartile(times)
+                median[engine] = statistics.median(times)
         if valid:
             ratio = actual["native"] / actual["C"]
             limit = prepared["thresholds"][case]["nativeOverC"]
-            report["gates"][case] = {"ratio": ratio, "limit": limit, "pass": ratio <= limit,
+            report["gates"][case] = {"ratio": ratio,
+                                      "medianRatio": median["native"] / median["C"],
+                                      "limit": limit, "pass": ratio <= limit,
                                       "source": prepared["thresholds"][case]["source"]}
     missing = [kind for kind in ("lua", "python") if kind not in prepared["references"]]
     if missing:
