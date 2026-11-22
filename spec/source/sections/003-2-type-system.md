@@ -611,8 +611,10 @@ v = "hello"             // OK
 
 **成员**
 - 成员数不设上限；同一数值族可以有多个成员，`i16 | i32`、`f32 | f64` 合法，tag 区分同族成员。
-- 每个成员必须是封闭标量、`string` 或 Class 身份。成员不得含类型参数：泛型函数、泛型类型的字段与签名中写 `T | U` 是编译错误，泛型代码改用具名 enum（E0399）。
+- 成员可以是任意值类型；可保存性沿用普通值的规则，借用视图不能作为成员。成员不得含类型参数：泛型函数、泛型类型的字段与签名中写 `T | U` 是编译错误，泛型代码改用具名 enum（E0399）。
 - 互为子类型的成员一律拒绝，包括 Class 与它实现的接口；报错提示改写为父类型（E0352）。Optional 作为成员时保持为一个成员：`i64? | string` 的成员是 `Optional<i64>` 与 `string`，不拆成 `i64 | string | null`，也不规范化为 `(i64 | string)?`。
+
+实现状态（不是语言规则）：当前前端只接纳封闭标量、`string` 与 Class 身份成员；struct、tuple、enum、`Array`、`Map`、Slice 与 Optional 成员仍按 E0352 拒绝，`string` 成员的自动包装在检查阶段通过，但 LIR 还不能执行。
 
 处理 union 值需用 `match` 或 `is` 窄化：
 
@@ -1773,8 +1775,10 @@ An anonymous union `A | B` is a compiler-synthesized enum: the type itself has n
 
 **Members**
 - There is no member-count limit. One numeric family may contribute several members: `i16 | i32` and `f32 | f64` are legal, and the tag distinguishes them.
-- Every member must be a closed scalar, `string`, or a Class identity. A member must not carry a type parameter: writing `T | U` in a generic function, generic field, or generic signature is a compile error, and generic code must use a named enum instead (E0399).
+- A member may be any value type; storability follows the ordinary value rules, so a borrowed view cannot be a member. A member must not carry a type parameter: writing `T | U` in a generic function, generic field, or generic signature is a compile error, and generic code must use a named enum instead (E0399).
 - Members that are subtypes of each other are rejected, including a Class and an interface it implements; the error asks you to declare the parent type instead (E0352). An Optional used as a member stays one distinct member: `i64? | string` keeps `Optional<i64>` and `string`; it neither decomposes into `i64 | string | null` nor normalizes to `(i64 | string)?`.
+
+Implementation status (not a language rule): the current front end admits closed scalars, `string`, and Class identities only. struct, tuple, enum, `Array`, `Map`, Slice and Optional members are still rejected with E0352, and a `string` member passes checking but is not executable through LIR yet.
 
 Working with a union value requires `match` or `is`-based narrowing:
 

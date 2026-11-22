@@ -1338,8 +1338,10 @@ An anonymous union `A | B` is a compiler-synthesized enum: the type itself has n
 
 **Members**
 - There is no member-count limit. One numeric family may contribute several members: `i16 | i32` and `f32 | f64` are legal, and the tag distinguishes them.
-- Every member must be a closed scalar, `string`, or a Class identity. A member must not carry a type parameter: writing `T | U` in a generic function, generic field, or generic signature is a compile error, and generic code must use a named enum instead (E0399).
+- A member may be any value type; storability follows the ordinary value rules, so a borrowed view cannot be a member. A member must not carry a type parameter: writing `T | U` in a generic function, generic field, or generic signature is a compile error, and generic code must use a named enum instead (E0399).
 - Members that are subtypes of each other are rejected, including a Class and an interface it implements; the error asks you to declare the parent type instead (E0352). An Optional used as a member stays one distinct member: `i64? | string` keeps `Optional<i64>` and `string`; it neither decomposes into `i64 | string | null` nor normalizes to `(i64 | string)?`.
+
+Implementation status (not a language rule): the current front end admits closed scalars, `string`, and Class identities only. struct, tuple, enum, `Array`, `Map`, Slice and Optional members are still rejected with E0352, and a `string` member passes checking but is not executable through LIR yet.
 
 Working with a union value requires `match` or `is`-based narrowing:
 
