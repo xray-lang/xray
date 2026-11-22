@@ -45,6 +45,16 @@ RETIRED_TRANSPORT_FILES = (
     "src/io/xnet_transport.h",
 )
 
+
+def repository_sources(*suffixes: str) -> str:
+    """Concatenate every C/C++ source the retired surfaces could reappear in."""
+    return "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for directory in ("src", "include", "stdlib")
+        for path in sorted((ROOT / directory).rglob("*"))
+        if path.is_file() and path.suffix in suffixes
+    )
+
 RETIRED_TRANSPORT_IDENTITIES = (
     "XrIOConn",
     "xr_io_connect",
@@ -66,7 +76,7 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         cluster_entries = [entry.name for entry in parse_defs(ROOT) if entry.module == "cluster"]
         self.assertEqual([], cluster_entries)
 
-        core_def = (ROOT / "stdlib/defs/core.def").read_text()
+        core_def = (ROOT / "stdlib/defs/core.def").read_text(encoding='utf-8')
         self.assertNotIn("module cluster {", core_def)
         for leaf in RETIRED_NATIVE_LEAVES:
             self.assertNotIn(f"fn {leaf} ", core_def, leaf)
@@ -74,7 +84,9 @@ class ClusterAotBoundaryTests(unittest.TestCase):
     def test_native_cluster_runtime_is_absent(self) -> None:
         present = [relative for relative in RETIRED_NATIVE_FILES if (ROOT / relative).exists()]
         self.assertEqual([], present)
-        self.assertNotIn('include "xrt_cluster.h"', (ROOT / "src/aot/xrt.h").read_text())
+        # Retirement guards belong to the whole tree: the header that used to be
+        # checked is gone, so the prohibition is stated where it could reappear.
+        self.assertNotIn("xrt_cluster.h", repository_sources(".c", ".h"))
 
     def test_retired_transport_facade_is_absent(self) -> None:
         present = [relative for relative in RETIRED_TRANSPORT_FILES if (ROOT / relative).exists()]
@@ -93,40 +105,31 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         self.assertIn("xr_socket_set_nonblocking(", provider)
 
     def test_build_has_no_cluster_c_exception(self) -> None:
-        cmake = (ROOT / "CMakeLists.txt").read_text()
+        cmake = (ROOT / "CMakeLists.txt").read_text(encoding='utf-8')
 
         self.assertNotIn("stdlib/cluster/.*\\\\.c", cmake)
 
     def test_cluster_source_uses_the_network_feature_group(self) -> None:
-        cmake = (ROOT / "CMakeLists.txt").read_text()
+        cmake = (ROOT / "CMakeLists.txt").read_text(encoding='utf-8')
 
         self.assertNotIn("XR_STDLIB_CLUSTER", cmake)
         self.assertIn("stdlib/(net|http|http2|cluster)/[^/]+\\\\.xr$", cmake)
 
     def test_retired_cluster_aot_service_slot_is_absent(self) -> None:
-        for relative in (
-            "src/coro/xaot_coro.h",
-            "src/coro/xaot_runtime.c",
-            "src/coro/xaot_runtime_internal.h",
-        ):
-            text = (ROOT / relative).read_text()
-            self.assertNotIn("XR_AOT_SERVICE_SLOT_CLUSTER", text, relative)
-            self.assertNotIn("xr_aot_runtime_service_", text, relative)
+        sources = repository_sources(".c", ".h")
+        self.assertNotIn("XR_AOT_SERVICE_SLOT_CLUSTER", sources)
+        self.assertNotIn("xr_aot_runtime_service_", sources)
 
     def test_cluster_symbols_do_not_claim_an_aot_core_implementation(self) -> None:
-        cli = (ROOT / "src/app/cli/xcmd_build.c").read_text()
+        cli = (ROOT / "src/app/cli/xcmd_build.c").read_text(encoding='utf-8')
 
         self.assertNotIn('strncmp(value, "cluster.", 8)', cli)
 
     def test_generated_aot_tables_have_no_cluster_dispatch(self) -> None:
-        for relative in (
-            "src/aot/xstdlib_aot_methods_generated.inc.c",
-            "src/aot/xaot_stdlib_generated.inc.c",
-        ):
-            self.assertNotIn("xrt_cluster_", (ROOT / relative).read_text(), relative)
+        self.assertNotIn("xrt_cluster_", repository_sources(".c", ".h"))
 
     def test_peer_transport_and_health_are_source_owned(self) -> None:
-        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text(encoding='utf-8')
 
         self.assertIn("var _phiPeerStates: Array<_PhiPeerState>", cluster_xr)
         self.assertIn("var _peerTransports: Array<_PeerTransportState>", cluster_xr)
@@ -143,21 +146,21 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         )
 
     def test_lifecycle_has_no_native_leaf(self) -> None:
-        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text(encoding='utf-8')
 
         referenced = [leaf for leaf in RETIRED_NATIVE_LEAVES if f"{leaf}(" in cluster_xr]
         self.assertEqual([], referenced)
 
     def test_tls_context_policy_is_source_owned(self) -> None:
-        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text(encoding='utf-8')
 
         self.assertIn("var _sourceTlsResources: _ClusterTlsResources?", cluster_xr)
         self.assertIn("context!.upgrade", cluster_xr)
         self.assertIn("context!.accept", cluster_xr)
 
     def test_tls_provider_is_a_general_net_boundary(self) -> None:
-        net_xr = (ROOT / "stdlib/net/net.xr").read_text()
-        tls_provider = (ROOT / "src/io/xtls_provider.c").read_text()
+        net_xr = (ROOT / "stdlib/net/net.xr").read_text(encoding='utf-8')
+        tls_provider = (ROOT / "src/io/xtls_provider.c").read_text(encoding='utf-8')
         tls_conn = tls_provider.split("struct XrTlsConn", 1)[1].split("};", 1)[0]
 
         self.assertIn("export final class TlsClientContext", net_xr)
@@ -167,36 +170,38 @@ class ClusterAotBoundaryTests(unittest.TestCase):
         self.assertIn("SSL_VERIFY_FAIL_IF_NO_PEER_CERT", tls_provider)
 
     def test_multicast_provider_is_a_general_net_boundary(self) -> None:
-        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
-        net_xr = (ROOT / "stdlib/net/net.xr").read_text()
-        core_def = (ROOT / "stdlib/defs/core.def").read_text()
-        net_provider = (ROOT / "src/io/xnet_provider.c").read_text()
-        aot_net = (ROOT / "src/aot/xrt_net.h").read_text()
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text(encoding='utf-8')
+        net_xr = (ROOT / "stdlib/net/net.xr").read_text(encoding='utf-8')
+        core_def = (ROOT / "stdlib/defs/core.def").read_text(encoding='utf-8')
+        net_provider = (ROOT / "src/io/xnet_provider.c").read_text(encoding='utf-8')
 
         self.assertIn("net.udpMulticastBind(", cluster_xr)
         self.assertIn("export fn udpMulticastBind(", net_xr)
         self.assertIn("fn __udpMulticastBind {", core_def)
         self.assertIn('aot: "xrt_net_udp_multicast_bind"', core_def)
-        self.assertIn("static inline XrValue xrt_net_udp_multicast_bind(", aot_net)
-        self.assertIn("IP_ADD_MEMBERSHIP", aot_net)
-        self.assertNotIn("cluster", aot_net)
+        # The multicast owner is the general net provider, and it must stay
+        # general: cluster names have no business in a net transport.
+        self.assertIn("IP_ADD_MEMBERSHIP", net_provider)
+        self.assertNotIn("cluster", net_provider)
         self.assertIn("net_udp_multicast_bind_handle", net_provider)
 
     def test_generation_fences_cover_every_long_lived_source_path(self) -> None:
-        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text(encoding='utf-8')
 
         self.assertIn("fn _closeTopicSubscriptions(runtimeToken: i64)", cluster_xr)
         self.assertIn("fn _dispatchInboundFrame(runtimeToken: i64,", cluster_xr)
         self.assertIn("fn _deliverTopicForRuntime(runtimeToken: i64,", cluster_xr)
         self.assertIn("fn _broadcastPeersForRuntime(runtimeToken: i64,", cluster_xr)
-        self.assertIn("type _DiscoveryGeneration = {", cluster_xr)
+        # The language spells a named record `struct`, not a `type ... = {}`
+        # alias; the fence is about the record's existence, not its spelling.
+        self.assertIn("struct _DiscoveryGeneration {", cluster_xr)
         self.assertIn("socket: NetConn?", cluster_xr)
         self.assertIn("fn _installDiscoverySocket(runtimeToken: i64,", cluster_xr)
         self.assertIn("_stopDiscovery(retiredToken)", cluster_xr)
         self.assertNotIn("const _discoveryActiveToken", cluster_xr)
 
     def test_public_status_surface_contains_only_observable_facts(self) -> None:
-        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text()
+        cluster_xr = (ROOT / "stdlib/cluster/cluster.xr").read_text(encoding='utf-8')
 
         self.assertNotIn("export enum ClusterNodeState", cluster_xr)
         self.assertNotIn("export type ClusterTlsStatus", cluster_xr)
