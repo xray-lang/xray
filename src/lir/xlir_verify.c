@@ -493,8 +493,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             goto invalid;
         }
     bool comparison = v->op == XR_LIR_ICMP || v->op == XR_LIR_FCMP;
+    bool equality = v->op == XR_LIR_STRING_EQUAL;
     if (comparison ? v->predicate < XR_LIR_EQ || v->predicate > XR_LIR_GE
-                   : v->predicate != XR_LIR_PREDICATE_NONE)
+                   : equality ? v->predicate != XR_LIR_EQ && v->predicate != XR_LIR_NE
+                              : v->predicate != XR_LIR_PREDICATE_NONE)
         goto invalid;
     if (v->op != XR_LIR_CONST && v->op != XR_LIR_LITERAL_ADDR &&
         v->op != XR_LIR_STRING_LITERAL && v->op != XR_LIR_MODULE_BEGIN &&
