@@ -7,7 +7,7 @@ assert --prepared NEW/prepared.json --result ANOTHER_NEW/result.json --scope nat
 self-test --work NEW
 
 Preparation performs real CLI C generation and native compilation, but executes
-no workload. Measurement uses five forward/reverse rounds and a fixed 30-second
+no workload. Measurement uses nine forward/reverse rounds and a fixed 30-second
 product timeout. Run it under the caller's exclusive performance resource lease.
 Optional --lua/--python require matching --lua-receipt/--python-receipt paths;
 the Python running this tool is never selected as a reference automatically.
@@ -33,7 +33,7 @@ import xray_process
 
 PRODUCT_TIMEOUT = 30
 TIMING_METHOD = "blocking-native-wait-observer-v1"
-ROUNDS = 5
+ROUNDS = 9
 NATIVE_LIMITS = {"push": 1.3, "inplace": 1.1}
 
 
