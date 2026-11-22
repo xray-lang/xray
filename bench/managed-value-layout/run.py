@@ -200,6 +200,17 @@ def measure(args) -> int:
         if over and args.ratios == "gate":
             result["state"] = "FAIL_LAYOUT_RATIO"
         report_ratios(result, over)
+        # A ratio failure on a shared runner is only actionable with its numbers,
+        # and the evidence lives in an artifact nobody on the outside can open.
+        if result["state"] != "PASS_EXECUTION_ONLY":
+            for case in RATIO_CASES:
+                gate = result["layoutGates"][case]
+                if not gate["pass"] and gate["ratio"] is not None:
+                    print(f"::error title=Layout ratio::{case} managed/raw "
+                          f"{gate['ratio']:.3f} (median {result['medianRatios'].get(case, float('nan')):.3f}) "
+                          f"over the {gate['limit']:.2f} limit")
+            if not complete:
+                print("::error title=Layout ratio::no valid measurement for every case")
         return 0 if result["state"] == "PASS_EXECUTION_ONLY" else 1
     except BaseException as error:
         result.update(state="NEEDS_RECOVERY" if isinstance(error, xray_process.RecoveryRequired)
