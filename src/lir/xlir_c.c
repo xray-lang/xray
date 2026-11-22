@@ -364,8 +364,9 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     xr_lir_function_view(c->request->module, callee, &view);
     return view.kind == XR_LIR_FUNCTION_EXTERNAL;
 }
-/* One runtime entry per registered external kind. A kind without an entry
- * must fail the emission instead of borrowing another entry's name. */
+/* One runtime entry per registered external kind. Every entry also receives
+ * the trailing source-location id the call emitter appends; a kind without an
+ * entry must fail the emission instead of borrowing another entry's name. */
 static const char *c_external_name(XrLirExternKind kind) {
     switch (kind) {
     case XR_LIR_EXTERN_PRINT_I64: return "xrt_print_i64";
