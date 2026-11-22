@@ -653,7 +653,7 @@ jobs:
     needs: comparison-pair
     if: needs.comparison-pair.result == 'success' && needs.comparison-pair.outputs.skip != 'true'
     name: Release comparison (Windows)
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 180
     permissions:
       contents: read
@@ -675,7 +675,7 @@ jobs:
           python scripts/host_release_comparison.py
           --base "${{ needs.comparison-pair.outputs.base }}"
           --candidate "${{ needs.comparison-pair.outputs.candidate }}"
-          --host windows-latest
+          --host windows-2022
           --output "${{ runner.temp }}/release-comparison"
       - uses: actions/upload-artifact@v4
         if: always()

@@ -27,7 +27,7 @@ from xray_process import run_child
 TIMING = re.compile(r"(?:perf|bench|timing)", re.IGNORECASE)
 # The shared identity table keys Windows by its canonical runner name; both
 # Windows images report the same target triple.
-IDENTITY_HOST = {"windows-latest": "windows-2022", "macos-latest": "macos-latest"}
+IDENTITY_HOST = {"windows-2022": "windows-2022", "macos-latest": "macos-latest"}
 
 
 def digest(path):
@@ -76,8 +76,14 @@ def capture(source, build, folder, head, host, cmake, ctest, jobs, label):
         row.update(exit=status, childrenDrained=True, stdoutSHA256=digest(stdout), stderrSHA256=digest(stderr))
         write_json(receipt, record)
         if status not in accepted:
-            raise RuntimeError(f"{label} {name} returned {status} at {head}. "
-                               f"Logs: {stdout} and {stderr}")
+            detail = ""
+            try:
+                detail = " | ".join(stderr.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-12:])
+            except OSError:
+                pass
+            raise RuntimeError(f"{label} {name} returned {status} at {head}"
+                               + (f": {detail}" if detail else "")
+                               + f". Logs: {stdout} and {stderr}")
         return stdout, status
 
     run("configure", [cmake, "--preset", "default", "-B", build], 900)
@@ -155,13 +161,13 @@ def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", required=True)
     parser.add_argument("--candidate", required=True)
-    parser.add_argument("--host", required=True, choices=("windows-latest", "macos-latest"))
+    parser.add_argument("--host", required=True, choices=("windows-2022", "macos-latest"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--jobs", type=int, default=4, choices=range(1, 9))
     args = parser.parse_args(argv)
     if not all(re.fullmatch(r"[0-9a-f]{40}", head) for head in (args.base, args.candidate)):
         parser.error("The run requires two exact commit IDs")
-    if args.host == "windows-latest" and os.name != "nt":
+    if args.host == "windows-2022" and os.name != "nt":
         parser.error("The Windows comparison requires Windows")
     if args.host == "macos-latest" and platform.system() != "Darwin":
         parser.error("The macOS comparison requires macOS")
@@ -186,6 +192,16 @@ def main(argv):
         after, candidate_config = capture(source, workspace / "candidate-build", output / "candidate",
                                           args.candidate, args.host, cmake, ctest, str(args.jobs),
                                           "candidate")
+    except Exception as error:
+        message = " ".join(str(error).split())
+        write_json(output / "comparison.json", {"state": "ERROR", "host": args.host,
+                                                "baseline": args.base, "candidate": args.candidate,
+                                                "error": message})
+        (output / "summary.txt").write_text(f"host: {args.host}\nbaseline: {args.base}\n"
+                                            f"candidate: {args.candidate}\nstate: ERROR\nerror: {message}\n",
+                                            encoding="utf-8", newline="\n")
+        print(f"::error title=Release comparison ({args.host})::{message[:900]}", flush=True)
+        return 1
     finally:
         subprocess.run(["git", "-C", str(repository), "worktree", "remove", "--force", str(source)],
                        capture_output=True)
