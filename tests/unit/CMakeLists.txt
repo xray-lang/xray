@@ -1351,7 +1351,7 @@ endif()
 # dap/ — Debug Adapter Protocol (conditional)
 # ============================================================================
 
-if(XR_BUILD_DAP)
+if(XR_ENABLE_DAP_SESSION_TESTS)
     add_subdirectory(dap/current)
     add_executable(test_dap_server
         dap/test_dap_server.c

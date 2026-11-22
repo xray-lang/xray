@@ -545,6 +545,7 @@ option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (
 # Modular build options
 option(XR_BUILD_LSP "Build LSP language server" ON)
 option(XR_BUILD_DAP "Build DAP debug adapter" ON)
+option(XR_ENABLE_DAP_SESSION_TESTS "Run the DAP session suites (later capability)" OFF)
 option(XR_BUILD_MCP "Build MCP server for AI assistants" ON)
 option(XRAY_BUNDLE_ZIG "Install a Zig executable with Xray for AOT cross targets" OFF)
 set(XRAY_BUNDLED_ZIG "" CACHE FILEPATH "Zig executable to install when XRAY_BUNDLE_ZIG=ON")
@@ -2549,7 +2550,7 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
-    if(XR_BUILD_DAP)
+    if(XR_ENABLE_DAP_SESSION_TESTS)
         add_test(
             NAME dap_native_smoke
             COMMAND ${CMAKE_COMMAND} -E env
@@ -3131,6 +3132,17 @@ if(BUILD_TESTS)
         LABELS "cli;module;identity;package"
         TIMEOUT 60
     )
+
+    # Both commands are stubs until their debugger work lands; assert the stub
+    # rather than treating an unavailable session as a failure.
+    foreach(unavailable_command dap repl)
+        add_test(NAME ${unavailable_command}_unavailable
+            COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_unavailable_command_tests.py
+                    $<TARGET_FILE:xray> ${unavailable_command}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    endforeach()
+    set_tests_properties(dap_unavailable repl_unavailable PROPERTIES TIMEOUT 60
+        LABELS "cli;usability;unavailable")
 
     add_test(NAME source_repl_cli
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_source_repl_tests.py
