@@ -1,4 +1,88 @@
 {
+  "4e2dd03b41ba0d888ae166e867af6c695bee70e8198b652a4cb706153ffe3f1b": {
+    "path": "retired_fixed_inputs/packets/4e2dd03b41ba0d888ae166e867af6c695bee70e8198b652a4cb706153ffe3f1b.bin",
+    "bytes": 594,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "compile_owner/birth_storage76_golden.h",
+        "symbol": "birth76_program"
+      }
+    ]
+  },
+  "54a9f235124e2894ac13792abe145867dd036a06f950f21013859ee197e6a10e": {
+    "path": "retired_fixed_inputs/packets/54a9f235124e2894ac13792abe145867dd036a06f950f21013859ee197e6a10e.bin",
+    "bytes": 594,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "compile_owner/birth_storage76_golden.h",
+        "symbol": "birth76_fresh"
+      }
+    ]
+  },
+  "9b868548c47109f9b09763b06cd62d78b8a6e2d7a31e8c62540c217dc140b89a": {
+    "path": "retired_fixed_inputs/packets/9b868548c47109f9b09763b06cd62d78b8a6e2d7a31e8c62540c217dc140b89a.bin",
+    "bytes": 594,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "compile_owner/birth_storage76_golden.h",
+        "symbol": "birth76_root_rejected"
+      }
+    ]
+  },
+  "1df6736baca081d1d8f1959b224a0a4ab2f062478f9ede64c7f848ad4a01f141": {
+    "path": "retired_fixed_inputs/packets/1df6736baca081d1d8f1959b224a0a4ab2f062478f9ede64c7f848ad4a01f141.bin",
+    "bytes": 594,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "compile_owner/birth_storage76_golden.h",
+        "symbol": "birth76_unknown_rejected"
+      }
+    ]
+  },
+  "3f119addc08f09748c3921a2accd3ba59eec9ebe40c497ee0c60a6129f8b467d": {
+    "path": "retired_fixed_inputs/packets/3f119addc08f09748c3921a2accd3ba59eec9ebe40c497ee0c60a6129f8b467d.bin",
+    "bytes": 594,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "compile_owner/birth_storage76_golden.h",
+        "symbol": "birth76_library_rejected"
+      }
+    ]
+  },
+  "7aecadca84a924befb454ff0589df2d9c14f9e2efdb1f81a2b6a346d0234da24": {
+    "path": "retired_fixed_inputs/packets/7aecadca84a924befb454ff0589df2d9c14f9e2efdb1f81a2b6a346d0234da24.bin",
+    "bytes": 594,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "compile_owner/birth_storage76_golden.h",
+        "symbol": "birth76_library_fresh"
+      }
+    ]
+  },
+  "f656b6d47b2ddacde0760093eb084a395ed8adbd580ca9baa85057211f584166": {
+    "path": "retired_fixed_inputs/packets/f656b6d47b2ddacde0760093eb084a395ed8adbd580ca9baa85057211f584166.bin",
+    "bytes": 574,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "compile_owner/birth_storage76_golden.h",
+        "symbol": "birth75_retired"
+      }
+    ]
+  },
   "4e250f30fadf13fb1a943de2533dd597842d54cc4e01a40d037ff3125e254ef9": {
     "path": "retired_fixed_inputs/packets/4e250f30fadf13fb1a943de2533dd597842d54cc4e01a40d037ff3125e254ef9.bin",
     "bytes": 224,
@@ -179,102 +263,6 @@
       }
     ]
   },
-  "58ed7c0139bd85bebd201a62757f85bf122d2f2d0f2ce6f8bebebad3f417799c": {
-    "path": "retired_fixed_inputs/packets/58ed7c0139bd85bebd201a62757f85bf122d2f2d0f2ce6f8bebebad3f417799c.bin",
-    "bytes": 232,
-    "wire": 29,
-    "semantic": 74,
-    "sources": [
-      {
-        "path": "compile_owner/checked_sizing74_golden.h",
-        "symbol": "sizing74_golden"
-      },
-      {
-        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing74_golden.h",
-        "symbol": "sizing74_golden"
-      }
-    ]
-  },
-  "dea3d404fd89aef886ea3dce67fc1b5c72a47e891fcf9fec04e2a7b85a0b27fb": {
-    "path": "retired_fixed_inputs/packets/dea3d404fd89aef886ea3dce67fc1b5c72a47e891fcf9fec04e2a7b85a0b27fb.bin",
-    "bytes": 232,
-    "wire": 29,
-    "semantic": 74,
-    "sources": [
-      {
-        "path": "compile_owner/checked_sizing74_golden.h",
-        "symbol": "sizing74_embedded_golden"
-      },
-      {
-        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing74_golden.h",
-        "symbol": "sizing74_embedded_golden"
-      }
-    ]
-  },
-  "77511fc9b6d50e9cbc1dc989c5c079434ee88e7db3cd8ba061d35e78b9cb1845": {
-    "path": "retired_fixed_inputs/packets/77511fc9b6d50e9cbc1dc989c5c079434ee88e7db3cd8ba061d35e78b9cb1845.bin",
-    "bytes": 228,
-    "wire": 29,
-    "semantic": 74,
-    "sources": [
-      {
-        "path": "compile_owner/checked_sizing74_golden.h",
-        "symbol": "sizing74_empty_golden"
-      },
-      {
-        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing74_golden.h",
-        "symbol": "sizing74_empty_golden"
-      }
-    ]
-  },
-  "96bb9e8a439d564413e283b953af03a647c898bc3199921167a8ba7b04e3ff89": {
-    "path": "retired_fixed_inputs/packets/96bb9e8a439d564413e283b953af03a647c898bc3199921167a8ba7b04e3ff89.bin",
-    "bytes": 240,
-    "wire": 30,
-    "semantic": 75,
-    "sources": [
-      {
-        "path": "compile_owner/checked_sizing75_golden.h",
-        "symbol": "sizing75_golden"
-      },
-      {
-        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing75_golden.h",
-        "symbol": "sizing75_golden"
-      }
-    ]
-  },
-  "2c4fae60bcf696236f964c3f8e0ebdcd575344c234249a5416a307531448d8c4": {
-    "path": "retired_fixed_inputs/packets/2c4fae60bcf696236f964c3f8e0ebdcd575344c234249a5416a307531448d8c4.bin",
-    "bytes": 240,
-    "wire": 30,
-    "semantic": 75,
-    "sources": [
-      {
-        "path": "compile_owner/checked_sizing75_golden.h",
-        "symbol": "sizing75_embedded_golden"
-      },
-      {
-        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing75_golden.h",
-        "symbol": "sizing75_embedded_golden"
-      }
-    ]
-  },
-  "5f73791b0e981b5c756c29536b0a3faa186379a37803ac4e451b1874399df48a": {
-    "path": "retired_fixed_inputs/packets/5f73791b0e981b5c756c29536b0a3faa186379a37803ac4e451b1874399df48a.bin",
-    "bytes": 236,
-    "wire": 30,
-    "semantic": 75,
-    "sources": [
-      {
-        "path": "compile_owner/checked_sizing75_golden.h",
-        "symbol": "sizing75_empty_golden"
-      },
-      {
-        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing75_golden.h",
-        "symbol": "sizing75_empty_golden"
-      }
-    ]
-  },
   "99a2deb306c166075c7ae4a6776ab0cdd43b6ed448856a7198ed776ef3fc29c1": {
     "path": "retired_fixed_inputs/packets/99a2deb306c166075c7ae4a6776ab0cdd43b6ed448856a7198ed776ef3fc29c1.bin",
     "bytes": 228,
@@ -282,8 +270,12 @@
     "semantic": 74,
     "sources": [
       {
-        "path": "compile_owner/checked_sizing76_golden.h",
-        "symbol": "sizing74_retired_golden"
+        "path": "compile_owner/checked_sizing74_golden.h",
+        "symbol": "sizing74_golden"
+      },
+      {
+        "path": "compile_owner/checked_sizing75_golden.h",
+        "symbol": "retired_sizing74_golden"
       },
       {
         "path": "compile_owner/checked_sizing83_golden.h",
@@ -304,18 +296,10 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/compile_owner/checked_sizing75_golden.h",
         "symbol": "sizing74_retired_golden"
-      }
-    ]
-  },
-  "dca4f942ac449abd75a8944d7cc3336052aff844c245f83e555232c69979fe34": {
-    "path": "retired_fixed_inputs/packets/dca4f942ac449abd75a8944d7cc3336052aff844c245f83e555232c69979fe34.bin",
-    "bytes": 228,
-    "wire": 28,
-    "semantic": 76,
-    "sources": [
+      },
       {
-        "path": "compile_owner/checked_sizing76_golden.h",
-        "symbol": "sizing76_golden"
+        "path": "retired_merge_packets/p16_checked_sizing74_golden.h",
+        "symbol": "sizing74_golden"
       }
     ]
   },
@@ -326,8 +310,12 @@
     "semantic": 74,
     "sources": [
       {
-        "path": "compile_owner/checked_sizing76_golden.h",
-        "symbol": "sizing74_retired_embedded_golden"
+        "path": "compile_owner/checked_sizing74_golden.h",
+        "symbol": "sizing74_embedded_golden"
+      },
+      {
+        "path": "compile_owner/checked_sizing75_golden.h",
+        "symbol": "retired_sizing74_embedded_golden"
       },
       {
         "path": "compile_owner/checked_sizing83_golden.h",
@@ -348,18 +336,10 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/compile_owner/checked_sizing75_golden.h",
         "symbol": "sizing74_retired_embedded_golden"
-      }
-    ]
-  },
-  "349cfdd4b8832f5965eb8a8e578876788b7dc70aea9b99c538e2be9d3ce3465d": {
-    "path": "retired_fixed_inputs/packets/349cfdd4b8832f5965eb8a8e578876788b7dc70aea9b99c538e2be9d3ce3465d.bin",
-    "bytes": 228,
-    "wire": 28,
-    "semantic": 76,
-    "sources": [
+      },
       {
-        "path": "compile_owner/checked_sizing76_golden.h",
-        "symbol": "sizing76_embedded_golden"
+        "path": "retired_merge_packets/p16_checked_sizing74_golden.h",
+        "symbol": "sizing74_embedded_golden"
       }
     ]
   },
@@ -370,8 +350,12 @@
     "semantic": 74,
     "sources": [
       {
-        "path": "compile_owner/checked_sizing76_golden.h",
-        "symbol": "sizing74_retired_empty_golden"
+        "path": "compile_owner/checked_sizing74_golden.h",
+        "symbol": "sizing74_empty_golden"
+      },
+      {
+        "path": "compile_owner/checked_sizing75_golden.h",
+        "symbol": "retired_sizing74_empty_golden"
       },
       {
         "path": "compile_owner/checked_sizing83_golden.h",
@@ -392,13 +376,77 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/compile_owner/checked_sizing75_golden.h",
         "symbol": "sizing74_retired_empty_golden"
+      },
+      {
+        "path": "retired_merge_packets/p16_checked_sizing74_golden.h",
+        "symbol": "sizing74_empty_golden"
       }
     ]
   },
-  "035fef4bd16e63a2a4a0be229ab9b176cac3f0fcc28fe4c846dea1e7367ec16a": {
-    "path": "retired_fixed_inputs/packets/035fef4bd16e63a2a4a0be229ab9b176cac3f0fcc28fe4c846dea1e7367ec16a.bin",
+  "4c99873a49548be07eb83d2ce951b70b22bf993966e607f047aa3e1b58834b5d": {
+    "path": "retired_fixed_inputs/packets/4c99873a49548be07eb83d2ce951b70b22bf993966e607f047aa3e1b58834b5d.bin",
+    "bytes": 228,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "compile_owner/checked_sizing75_golden.h",
+        "symbol": "sizing75_golden"
+      }
+    ]
+  },
+  "8979f12b8b862c80c9ea0e073e7dfb8b1e86787703ca6bc1068a47f3be1d7a10": {
+    "path": "retired_fixed_inputs/packets/8979f12b8b862c80c9ea0e073e7dfb8b1e86787703ca6bc1068a47f3be1d7a10.bin",
+    "bytes": 228,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "compile_owner/checked_sizing75_golden.h",
+        "symbol": "sizing75_embedded_golden"
+      }
+    ]
+  },
+  "061daf2bf4fa0d3a3ee7fda1186d9e51908b1817399cc7f3b75defbdc9ce50eb": {
+    "path": "retired_fixed_inputs/packets/061daf2bf4fa0d3a3ee7fda1186d9e51908b1817399cc7f3b75defbdc9ce50eb.bin",
     "bytes": 224,
-    "wire": 28,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "compile_owner/checked_sizing75_golden.h",
+        "symbol": "sizing75_empty_golden"
+      }
+    ]
+  },
+  "18c95104ec3f5c931d83b75a4af710da757a9508f3ef46f1b37decd385935c78": {
+    "path": "retired_fixed_inputs/packets/18c95104ec3f5c931d83b75a4af710da757a9508f3ef46f1b37decd385935c78.bin",
+    "bytes": 240,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "compile_owner/checked_sizing76_golden.h",
+        "symbol": "sizing76_golden"
+      }
+    ]
+  },
+  "1bbfa7f57b0e6de7d1a4119b044628d340793186059cbd8f3cd5e61e9d6af1a8": {
+    "path": "retired_fixed_inputs/packets/1bbfa7f57b0e6de7d1a4119b044628d340793186059cbd8f3cd5e61e9d6af1a8.bin",
+    "bytes": 240,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "compile_owner/checked_sizing76_golden.h",
+        "symbol": "sizing76_embedded_golden"
+      }
+    ]
+  },
+  "1c9b1e3682981e142dcfe97bc0ffca9be15bd411d03ed0dededbca8d30cb660e": {
+    "path": "retired_fixed_inputs/packets/1c9b1e3682981e142dcfe97bc0ffca9be15bd411d03ed0dededbca8d30cb660e.bin",
+    "bytes": 236,
+    "wire": 31,
     "semantic": 76,
     "sources": [
       {
@@ -407,48 +455,36 @@
       }
     ]
   },
-  "bb2b56c4fc62be0cdc26ce7f70ce823b2512c92d6de0f4af0a7f1f59025733b7": {
-    "path": "retired_fixed_inputs/packets/bb2b56c4fc62be0cdc26ce7f70ce823b2512c92d6de0f4af0a7f1f59025733b7.bin",
-    "bytes": 228,
-    "wire": 28,
+  "ee4a780265cc799074f85d11bc1aeffb1b5819228806e98d4c98576fd35ca965": {
+    "path": "retired_fixed_inputs/packets/ee4a780265cc799074f85d11bc1aeffb1b5819228806e98d4c98576fd35ca965.bin",
+    "bytes": 240,
+    "wire": 30,
     "semantic": 77,
     "sources": [
-      {
-        "path": "compile_owner/checked_sizing77_golden.h",
-        "symbol": "sizing74_retired_golden"
-      },
       {
         "path": "compile_owner/checked_sizing77_golden.h",
         "symbol": "sizing77_golden"
       }
     ]
   },
-  "2c39d0a196f76cf2742323ea4f2b34f5507f9769c6e8f6c215ff9bedf92aeda5": {
-    "path": "retired_fixed_inputs/packets/2c39d0a196f76cf2742323ea4f2b34f5507f9769c6e8f6c215ff9bedf92aeda5.bin",
-    "bytes": 228,
-    "wire": 28,
+  "86bb6d2764f01e4be607e2ddd9db7598a3236ed2c076fe7765479c7b6219c8ec": {
+    "path": "retired_fixed_inputs/packets/86bb6d2764f01e4be607e2ddd9db7598a3236ed2c076fe7765479c7b6219c8ec.bin",
+    "bytes": 240,
+    "wire": 30,
     "semantic": 77,
     "sources": [
-      {
-        "path": "compile_owner/checked_sizing77_golden.h",
-        "symbol": "sizing74_retired_embedded_golden"
-      },
       {
         "path": "compile_owner/checked_sizing77_golden.h",
         "symbol": "sizing77_embedded_golden"
       }
     ]
   },
-  "aaaf656c456546119aaad0a2e991c491b355f60a4321476dc1ec634b6328949b": {
-    "path": "retired_fixed_inputs/packets/aaaf656c456546119aaad0a2e991c491b355f60a4321476dc1ec634b6328949b.bin",
-    "bytes": 224,
-    "wire": 28,
+  "72c93437c4388e48c93d324274808336a19040a8522ab3734824a3e0ffdb9422": {
+    "path": "retired_fixed_inputs/packets/72c93437c4388e48c93d324274808336a19040a8522ab3734824a3e0ffdb9422.bin",
+    "bytes": 236,
+    "wire": 30,
     "semantic": 77,
     "sources": [
-      {
-        "path": "compile_owner/checked_sizing77_golden.h",
-        "symbol": "sizing74_retired_empty_golden"
-      },
       {
         "path": "compile_owner/checked_sizing77_golden.h",
         "symbol": "sizing77_empty_golden"
@@ -815,6 +851,30 @@
       }
     ]
   },
+  "ef14747ac5d4304f7cf878fe1d5b9779cb8479038a32e3e315f0e849298a56ae": {
+    "path": "retired_fixed_inputs/packets/ef14747ac5d4304f7cf878fe1d5b9779cb8479038a32e3e315f0e849298a56ae.bin",
+    "bytes": 1207,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "comptime_binding76_golden.h",
+        "symbol": "comptime_binding76_golden"
+      }
+    ]
+  },
+  "23b9446362461e12c14540565a540d2a408515e13bf5751835576a9552fc6714": {
+    "path": "retired_fixed_inputs/packets/23b9446362461e12c14540565a540d2a408515e13bf5751835576a9552fc6714.bin",
+    "bytes": 1199,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "comptime_binding77_golden.h",
+        "symbol": "comptime_binding77_golden"
+      }
+    ]
+  },
   "ec59ae04024ef983057ab84722ee668a43e3658d17a1ae5258ee9f5d4eaabecb": {
     "path": "retired_fixed_inputs/packets/ec59ae04024ef983057ab84722ee668a43e3658d17a1ae5258ee9f5d4eaabecb.bin",
     "bytes": 1220,
@@ -836,6 +896,102 @@
       {
         "path": "materialization75_golden.h",
         "symbol": "materialization75_golden"
+      }
+    ]
+  },
+  "2f9ae23b75843db28264d18f42657e3c0d5c039df639e730a0246062802cc4ec": {
+    "path": "retired_fixed_inputs/packets/2f9ae23b75843db28264d18f42657e3c0d5c039df639e730a0246062802cc4ec.bin",
+    "bytes": 1236,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "materialization76_golden.h",
+        "symbol": "materialization76_golden"
+      }
+    ]
+  },
+  "f751b813fa0ec0925c0f7ee0c3193d71c7fbbb8a6e14c044965daff07fe1ce51": {
+    "path": "retired_fixed_inputs/packets/f751b813fa0ec0925c0f7ee0c3193d71c7fbbb8a6e14c044965daff07fe1ce51.bin",
+    "bytes": 1228,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "materialization77_golden.h",
+        "symbol": "materialization77_golden"
+      }
+    ]
+  },
+  "58ed7c0139bd85bebd201a62757f85bf122d2f2d0f2ce6f8bebebad3f417799c": {
+    "path": "retired_fixed_inputs/packets/58ed7c0139bd85bebd201a62757f85bf122d2f2d0f2ce6f8bebebad3f417799c.bin",
+    "bytes": 232,
+    "wire": 29,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing74_golden.h",
+        "symbol": "sizing74_golden"
+      }
+    ]
+  },
+  "dea3d404fd89aef886ea3dce67fc1b5c72a47e891fcf9fec04e2a7b85a0b27fb": {
+    "path": "retired_fixed_inputs/packets/dea3d404fd89aef886ea3dce67fc1b5c72a47e891fcf9fec04e2a7b85a0b27fb.bin",
+    "bytes": 232,
+    "wire": 29,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing74_golden.h",
+        "symbol": "sizing74_embedded_golden"
+      }
+    ]
+  },
+  "77511fc9b6d50e9cbc1dc989c5c079434ee88e7db3cd8ba061d35e78b9cb1845": {
+    "path": "retired_fixed_inputs/packets/77511fc9b6d50e9cbc1dc989c5c079434ee88e7db3cd8ba061d35e78b9cb1845.bin",
+    "bytes": 228,
+    "wire": 29,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing74_golden.h",
+        "symbol": "sizing74_empty_golden"
+      }
+    ]
+  },
+  "96bb9e8a439d564413e283b953af03a647c898bc3199921167a8ba7b04e3ff89": {
+    "path": "retired_fixed_inputs/packets/96bb9e8a439d564413e283b953af03a647c898bc3199921167a8ba7b04e3ff89.bin",
+    "bytes": 240,
+    "wire": 30,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing75_golden.h",
+        "symbol": "sizing75_golden"
+      }
+    ]
+  },
+  "2c4fae60bcf696236f964c3f8e0ebdcd575344c234249a5416a307531448d8c4": {
+    "path": "retired_fixed_inputs/packets/2c4fae60bcf696236f964c3f8e0ebdcd575344c234249a5416a307531448d8c4.bin",
+    "bytes": 240,
+    "wire": 30,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing75_golden.h",
+        "symbol": "sizing75_embedded_golden"
+      }
+    ]
+  },
+  "5f73791b0e981b5c756c29536b0a3faa186379a37803ac4e451b1874399df48a": {
+    "path": "retired_fixed_inputs/packets/5f73791b0e981b5c756c29536b0a3faa186379a37803ac4e451b1874399df48a.bin",
+    "bytes": 236,
+    "wire": 30,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "retired_fixed_inputs/base_30_75/compile_owner/checked_sizing75_golden.h",
+        "symbol": "sizing75_empty_golden"
       }
     ]
   },
@@ -906,6 +1062,10 @@
         "symbol": "root_construction71_previous"
       },
       {
+        "path": "root_construction77_goldens.h",
+        "symbol": "root_construction71_previous"
+      },
+      {
         "path": "root_construction86_goldens.h",
         "symbol": "root_construction71_previous"
       }
@@ -952,10 +1112,6 @@
       {
         "path": "retired_fixed_inputs/base_30_75/xir_assert_panics74_golden.h",
         "symbol": "assert_panics74_golden"
-      },
-      {
-        "path": "xir_assert_panics74_golden.h",
-        "symbol": "assert_panics74_golden"
       }
     ]
   },
@@ -970,8 +1126,8 @@
         "symbol": "assert_panics75_golden"
       },
       {
-        "path": "xir_assert_panics75_golden.h",
-        "symbol": "assert_panics75_golden"
+        "path": "xir_assert_panics_ctfe75_golden.h",
+        "symbol": "assert_panics_ctfe75_golden"
       }
     ]
   },
@@ -983,10 +1139,6 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/base_30_75/xir_checked_range74_golden.h",
-        "symbol": "checked_range74_golden"
-      },
-      {
-        "path": "xir_checked_range74_golden.h",
         "symbol": "checked_range74_golden"
       }
     ]
@@ -1000,10 +1152,6 @@
       {
         "path": "retired_fixed_inputs/base_30_75/xir_checked_range75_golden.h",
         "symbol": "checked_range75_golden"
-      },
-      {
-        "path": "xir_checked_range75_golden.h",
-        "symbol": "checked_range75_golden"
       }
     ]
   },
@@ -1016,10 +1164,6 @@
       {
         "path": "retired_fixed_inputs/base_30_75/xir_checked_scalar74_golden.h",
         "symbol": "checked_scalar74_golden"
-      },
-      {
-        "path": "xir_checked_scalar74_golden.h",
-        "symbol": "checked_scalar74_golden"
       }
     ]
   },
@@ -1031,10 +1175,6 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/base_30_75/xir_checked_scalar75_golden.h",
-        "symbol": "checked_scalar75_golden"
-      },
-      {
-        "path": "xir_checked_scalar75_golden.h",
         "symbol": "checked_scalar75_golden"
       },
       {
@@ -1051,10 +1191,6 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/base_30_75/xir_error_marker74_golden.h",
-        "symbol": "error_marker74_golden"
-      },
-      {
-        "path": "xir_error_marker74_golden.h",
         "symbol": "error_marker74_golden"
       }
     ]
@@ -1078,6 +1214,10 @@
         "symbol": "error_marker73_previous"
       },
       {
+        "path": "retired_merge_packets/p16_xir_error_marker74_golden.h",
+        "symbol": "error_marker73_previous"
+      },
+      {
         "path": "xir_error_marker73_golden.h",
         "symbol": "error_marker73_golden"
       },
@@ -1087,6 +1227,14 @@
       },
       {
         "path": "xir_error_marker75_golden.h",
+        "symbol": "error_marker73_previous"
+      },
+      {
+        "path": "xir_error_marker76_golden.h",
+        "symbol": "error_marker73_previous"
+      },
+      {
+        "path": "xir_error_marker77_golden.h",
         "symbol": "error_marker73_previous"
       },
       {
@@ -1104,10 +1252,6 @@
       {
         "path": "retired_fixed_inputs/base_30_75/xir_error_marker75_golden.h",
         "symbol": "error_marker75_golden"
-      },
-      {
-        "path": "xir_error_marker75_golden.h",
-        "symbol": "error_marker75_golden"
       }
     ]
   },
@@ -1119,10 +1263,6 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/base_30_75/xir_generic_method74_golden.h",
-        "symbol": "generic_method74_golden"
-      },
-      {
-        "path": "xir_generic_method74_golden.h",
         "symbol": "generic_method74_golden"
       }
     ]
@@ -1136,10 +1276,6 @@
       {
         "path": "retired_fixed_inputs/base_30_75/xir_generic_method74_golden.h",
         "symbol": "generic_method74_invalid_flags0"
-      },
-      {
-        "path": "xir_generic_method74_golden.h",
-        "symbol": "generic_method74_invalid_flags0"
       }
     ]
   },
@@ -1151,10 +1287,6 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/base_30_75/xir_generic_method74_golden.h",
-        "symbol": "generic_method74_invalid_flags1"
-      },
-      {
-        "path": "xir_generic_method74_golden.h",
         "symbol": "generic_method74_invalid_flags1"
       }
     ]
@@ -1172,10 +1304,6 @@
       {
         "path": "xir_defaults75_golden_bytes.h",
         "symbol": "defaults75_golden_9"
-      },
-      {
-        "path": "xir_generic_method75_golden.h",
-        "symbol": "generic_method75_golden"
       }
     ]
   },
@@ -1187,10 +1315,6 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/base_30_75/xir_generic_method75_golden.h",
-        "symbol": "generic_method75_invalid_flags0"
-      },
-      {
-        "path": "xir_generic_method75_golden.h",
         "symbol": "generic_method75_invalid_flags0"
       }
     ]
@@ -1204,10 +1328,6 @@
       {
         "path": "retired_fixed_inputs/base_30_75/xir_generic_method75_golden.h",
         "symbol": "generic_method75_invalid_flags1"
-      },
-      {
-        "path": "xir_generic_method75_golden.h",
-        "symbol": "generic_method75_invalid_flags1"
       }
     ]
   },
@@ -1220,10 +1340,6 @@
       {
         "path": "retired_fixed_inputs/base_30_75/xir_rune74_golden.h",
         "symbol": "rune74_golden"
-      },
-      {
-        "path": "xir_rune74_golden.h",
-        "symbol": "rune74_golden"
       }
     ]
   },
@@ -1235,10 +1351,6 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/base_30_75/xir_rune75_golden.h",
-        "symbol": "rune75_golden"
-      },
-      {
-        "path": "xir_rune75_golden.h",
         "symbol": "rune75_golden"
       }
     ]
@@ -1291,7 +1403,7 @@
       },
       {
         "path": "root_construction72_goldens.h",
-        "symbol": "root_construction72_checked"
+        "symbol": "root_construction74_previous"
       }
     ]
   },
@@ -1304,10 +1416,6 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/root_construction74_goldens.h",
         "symbol": "root_construction74_instance"
-      },
-      {
-        "path": "root_construction72_goldens.h",
-        "symbol": "root_construction72_instance"
       }
     ]
   },
@@ -1344,6 +1452,14 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/xir_assert_panics74_golden.h",
         "symbol": "assert_panics74_golden"
+      },
+      {
+        "path": "retired_merge_packets/p16_xir_assert_panics74_golden.h",
+        "symbol": "assert_panics74_golden"
+      },
+      {
+        "path": "xir_assert_panics74_golden.h",
+        "symbol": "assert_panics74_golden"
       }
     ]
   },
@@ -1367,6 +1483,14 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/p09_28_85/xir_checked_range74_golden.h",
+        "symbol": "checked_range74_golden"
+      },
+      {
+        "path": "retired_merge_packets/p16_xir_checked_range74_golden.h",
+        "symbol": "checked_range74_golden"
+      },
+      {
+        "path": "xir_checked_range74_golden.h",
         "symbol": "checked_range74_golden"
       }
     ]
@@ -1392,6 +1516,14 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/xir_checked_scalar74_golden.h",
         "symbol": "checked_scalar74_golden"
+      },
+      {
+        "path": "retired_merge_packets/p16_xir_checked_scalar74_golden.h",
+        "symbol": "checked_scalar74_golden"
+      },
+      {
+        "path": "xir_checked_scalar74_golden.h",
+        "symbol": "checked_scalar74_golden"
       }
     ]
   },
@@ -1415,6 +1547,14 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/p09_28_85/xir_error_marker74_golden.h",
+        "symbol": "error_marker74_golden"
+      },
+      {
+        "path": "retired_merge_packets/p16_xir_error_marker74_golden.h",
+        "symbol": "error_marker74_golden"
+      },
+      {
+        "path": "xir_error_marker74_golden.h",
         "symbol": "error_marker74_golden"
       }
     ]
@@ -1440,6 +1580,14 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/xir_generic_method74_golden.h",
         "symbol": "generic_method74_golden"
+      },
+      {
+        "path": "retired_merge_packets/p16_xir_generic_method74_golden.h",
+        "symbol": "generic_method74_golden"
+      },
+      {
+        "path": "xir_generic_method74_golden.h",
+        "symbol": "generic_method74_golden"
       }
     ]
   },
@@ -1452,6 +1600,14 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/xir_generic_method74_golden.h",
         "symbol": "generic_method74_invalid_flags0"
+      },
+      {
+        "path": "retired_merge_packets/p16_xir_generic_method74_golden.h",
+        "symbol": "generic_method74_invalid_flags0"
+      },
+      {
+        "path": "xir_generic_method74_golden.h",
+        "symbol": "generic_method74_invalid_flags0"
       }
     ]
   },
@@ -1463,6 +1619,14 @@
     "sources": [
       {
         "path": "retired_fixed_inputs/p09_28_85/xir_generic_method74_golden.h",
+        "symbol": "generic_method74_invalid_flags1"
+      },
+      {
+        "path": "retired_merge_packets/p16_xir_generic_method74_golden.h",
+        "symbol": "generic_method74_invalid_flags1"
+      },
+      {
+        "path": "xir_generic_method74_golden.h",
         "symbol": "generic_method74_invalid_flags1"
       }
     ]
@@ -1512,6 +1676,14 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/xir_rune74_golden.h",
         "symbol": "rune74_golden"
+      },
+      {
+        "path": "retired_merge_packets/p16_xir_rune74_golden.h",
+        "symbol": "rune74_golden"
+      },
+      {
+        "path": "xir_rune74_golden.h",
+        "symbol": "rune74_golden"
       }
     ]
   },
@@ -1524,6 +1696,54 @@
       {
         "path": "retired_fixed_inputs/p09_28_85/xir_rune75_golden.h",
         "symbol": "rune75_golden"
+      }
+    ]
+  },
+  "370c5a0c1aad847b42d4080e79c8a49624d38d81207b024738d79570bb4b5edb": {
+    "path": "retired_fixed_inputs/packets/370c5a0c1aad847b42d4080e79c8a49624d38d81207b024738d79570bb4b5edb.bin",
+    "bytes": 1371,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "root_construction72_goldens.h",
+        "symbol": "root_construction72_checked"
+      }
+    ]
+  },
+  "667fd42cb1b8ffc2bed27ea78279cfc268b6fa7183ab38ca5386b905831a0161": {
+    "path": "retired_fixed_inputs/packets/667fd42cb1b8ffc2bed27ea78279cfc268b6fa7183ab38ca5386b905831a0161.bin",
+    "bytes": 2650,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "root_construction72_goldens.h",
+        "symbol": "root_construction72_instance"
+      }
+    ]
+  },
+  "2b503b8a44bcf380dde6890e6078e477680e0666a93d1a788ba7266a953b6701": {
+    "path": "retired_fixed_inputs/packets/2b503b8a44bcf380dde6890e6078e477680e0666a93d1a788ba7266a953b6701.bin",
+    "bytes": 1355,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "root_construction75_previous_goldens.h",
+        "symbol": "root_construction75_checked_previous"
+      }
+    ]
+  },
+  "be8fa9299f9a65efd64ba69897b48dc012e48b24e56b4c0eb950b75950809219": {
+    "path": "retired_fixed_inputs/packets/be8fa9299f9a65efd64ba69897b48dc012e48b24e56b4c0eb950b75950809219.bin",
+    "bytes": 2618,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "root_construction75_previous_goldens.h",
+        "symbol": "root_construction75_instance_previous"
       }
     ]
   },
@@ -1551,10 +1771,10 @@
       }
     ]
   },
-  "c977873e7c8730c051db002328ef0a508228acb39a066f2cbac23847b249ef81": {
-    "path": "retired_fixed_inputs/packets/c977873e7c8730c051db002328ef0a508228acb39a066f2cbac23847b249ef81.bin",
-    "bytes": 1351,
-    "wire": 28,
+  "a8f6061acaa34e7894f4a40feda9f07c92307a4699963a9748ea1fdf6417587c": {
+    "path": "retired_fixed_inputs/packets/a8f6061acaa34e7894f4a40feda9f07c92307a4699963a9748ea1fdf6417587c.bin",
+    "bytes": 1363,
+    "wire": 30,
     "semantic": 77,
     "sources": [
       {
@@ -1563,10 +1783,10 @@
       }
     ]
   },
-  "0283ec4ccd39fefdecbdef23838a4d3133c1ae827fefbae17f25d5a684c33f16": {
-    "path": "retired_fixed_inputs/packets/0283ec4ccd39fefdecbdef23838a4d3133c1ae827fefbae17f25d5a684c33f16.bin",
-    "bytes": 2610,
-    "wire": 28,
+  "45fd60c487aa34fdb52d608b8c65ab6532e263c69e649fa0fd6a6c624069bf07": {
+    "path": "retired_fixed_inputs/packets/45fd60c487aa34fdb52d608b8c65ab6532e263c69e649fa0fd6a6c624069bf07.bin",
+    "bytes": 2634,
+    "wire": 30,
     "semantic": 77,
     "sources": [
       {
@@ -1815,6 +2035,30 @@
       }
     ]
   },
+  "b32e0b9567101bc7ce34b267fcc65adb6595fc239f49536765ecf0a3a23f9080": {
+    "path": "retired_fixed_inputs/packets/b32e0b9567101bc7ce34b267fcc65adb6595fc239f49536765ecf0a3a23f9080.bin",
+    "bytes": 804,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "slot_group76_golden.h",
+        "symbol": "slot_group_mixed76_golden"
+      }
+    ]
+  },
+  "124976547c72a13fb04f18e517d9fc9da216ed9a7d478537fbee00ded7a1d13f": {
+    "path": "retired_fixed_inputs/packets/124976547c72a13fb04f18e517d9fc9da216ed9a7d478537fbee00ded7a1d13f.bin",
+    "bytes": 540,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "slot_group76_golden.h",
+        "symbol": "slot_group_unit76_golden"
+      }
+    ]
+  },
   "54156447bae135cfb1c71a690b71868425c0c78ae52cbeb1da964dea7927e574": {
     "path": "retired_fixed_inputs/packets/54156447bae135cfb1c71a690b71868425c0c78ae52cbeb1da964dea7927e574.bin",
     "bytes": 666,
@@ -1971,10 +2215,22 @@
       }
     ]
   },
-  "306cae0cbf81de822989209339c0dcc8a5f4ee5e7594007f92ba3aab0941a41e": {
-    "path": "retired_fixed_inputs/packets/306cae0cbf81de822989209339c0dcc8a5f4ee5e7594007f92ba3aab0941a41e.bin",
-    "bytes": 2187,
+  "dee131c80253eddbde4931f9b30e9bed3db18ef85960d7620cb2838eb961b91a": {
+    "path": "retired_fixed_inputs/packets/dee131c80253eddbde4931f9b30e9bed3db18ef85960d7620cb2838eb961b91a.bin",
+    "bytes": 2191,
     "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_assert_panics75_golden.h",
+        "symbol": "assert_panics75_golden"
+      }
+    ]
+  },
+  "176aeb526cd739a649563739e93748bd214f11730328190380a0cce67cca6ca8": {
+    "path": "retired_fixed_inputs/packets/176aeb526cd739a649563739e93748bd214f11730328190380a0cce67cca6ca8.bin",
+    "bytes": 2207,
+    "wire": 31,
     "semantic": 76,
     "sources": [
       {
@@ -1983,15 +2239,19 @@
       }
     ]
   },
-  "6d912612f6ee774c357231591a72177ad850801894ff3f9d0658bb652d88b59f": {
-    "path": "retired_fixed_inputs/packets/6d912612f6ee774c357231591a72177ad850801894ff3f9d0658bb652d88b59f.bin",
-    "bytes": 2187,
-    "wire": 28,
+  "308357936c9c5637e95416bb8d7add64590a88237bd40917fc505b5b4b60ebc6": {
+    "path": "retired_fixed_inputs/packets/308357936c9c5637e95416bb8d7add64590a88237bd40917fc505b5b4b60ebc6.bin",
+    "bytes": 2199,
+    "wire": 30,
     "semantic": 77,
     "sources": [
       {
         "path": "xir_assert_panics77_golden.h",
         "symbol": "assert_panics77_golden"
+      },
+      {
+        "path": "xir_assert_panics_current_golden.h",
+        "symbol": "assert_panics_current_golden"
       }
     ]
   },
@@ -2091,6 +2351,18 @@
       }
     ]
   },
+  "306cae0cbf81de822989209339c0dcc8a5f4ee5e7594007f92ba3aab0941a41e": {
+    "path": "retired_fixed_inputs/packets/306cae0cbf81de822989209339c0dcc8a5f4ee5e7594007f92ba3aab0941a41e.bin",
+    "bytes": 2187,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_assert_panics_channel76_golden.h",
+        "symbol": "assert_panics_channel76_golden"
+      }
+    ]
+  },
   "af08f02509b9fa2b23e98a7b2d4b7037fb7d3fc0b576ba2e2343ab837cf46242": {
     "path": "retired_fixed_inputs/packets/af08f02509b9fa2b23e98a7b2d4b7037fb7d3fc0b576ba2e2343ab837cf46242.bin",
     "bytes": 233,
@@ -2112,6 +2384,262 @@
       {
         "path": "xir_atomic_types72_golden.h",
         "symbol": "atomic_types72_golden"
+      }
+    ]
+  },
+  "34d96754235c4be35b50885a1a300c8ebd20f74a5ff1ef1e597a39c65ddb861b": {
+    "path": "retired_fixed_inputs/packets/34d96754235c4be35b50885a1a300c8ebd20f74a5ff1ef1e597a39c65ddb861b.bin",
+    "bytes": 910,
+    "wire": 35,
+    "semantic": 95,
+    "sources": [
+      {
+        "path": "xir_callable_old35_golden.h",
+        "symbol": "callable_old35_library"
+      }
+    ]
+  },
+  "9ab61c05c7c0d7da7cc169796584fe0f6bba89f4ccceb6c1f012590fe68e05fc": {
+    "path": "retired_fixed_inputs/packets/9ab61c05c7c0d7da7cc169796584fe0f6bba89f4ccceb6c1f012590fe68e05fc.bin",
+    "bytes": 1789,
+    "wire": 35,
+    "semantic": 95,
+    "sources": [
+      {
+        "path": "xir_callable_old35_golden.h",
+        "symbol": "callable_old35_program"
+      }
+    ]
+  },
+  "70e52b1ee3982acdc3fea0c7b234ed7a73766fd57b764da5a2e4bcca585a1e1d": {
+    "path": "retired_fixed_inputs/packets/70e52b1ee3982acdc3fea0c7b234ed7a73766fd57b764da5a2e4bcca585a1e1d.bin",
+    "bytes": 264,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_channel_blocking75_golden.h",
+        "symbol": "blocking_send_i6475_golden"
+      }
+    ]
+  },
+  "0a509a569647eca05fff2cde9263aaaadd8a64f9b04875e402005bf852837d19": {
+    "path": "retired_fixed_inputs/packets/0a509a569647eca05fff2cde9263aaaadd8a64f9b04875e402005bf852837d19.bin",
+    "bytes": 256,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_channel_blocking75_golden.h",
+        "symbol": "blocking_send_unit75_golden"
+      }
+    ]
+  },
+  "7a8fa2589b46c9989ea96a04470fee240f1a00b0485ba800111d725b1e59c3a2": {
+    "path": "retired_fixed_inputs/packets/7a8fa2589b46c9989ea96a04470fee240f1a00b0485ba800111d725b1e59c3a2.bin",
+    "bytes": 264,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_channel_blocking75_golden.h",
+        "symbol": "blocking_recv_or_i6475_golden"
+      }
+    ]
+  },
+  "ba5408554e36f0951c1cf517e3eef3818d4accfa6292c40b11e68c622fce2f23": {
+    "path": "retired_fixed_inputs/packets/ba5408554e36f0951c1cf517e3eef3818d4accfa6292c40b11e68c622fce2f23.bin",
+    "bytes": 256,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_channel_blocking75_golden.h",
+        "symbol": "blocking_recv_or_unit75_golden"
+      }
+    ]
+  },
+  "e0f292127c37a0656d872303769cece53935c35cf0c6083a1278b3b7ac6a03d8": {
+    "path": "retired_fixed_inputs/packets/e0f292127c37a0656d872303769cece53935c35cf0c6083a1278b3b7ac6a03d8.bin",
+    "bytes": 264,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_blocking76_golden.h",
+        "symbol": "blocking_send_i6476_golden"
+      },
+      {
+        "path": "xir_channel_timed76_golden.h",
+        "symbol": "retained_send_i6476_golden"
+      }
+    ]
+  },
+  "587466ca2e28bd2ac029d9b4e4902d4b5c35b03d1f19275749440d907d0ad67e": {
+    "path": "retired_fixed_inputs/packets/587466ca2e28bd2ac029d9b4e4902d4b5c35b03d1f19275749440d907d0ad67e.bin",
+    "bytes": 256,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_blocking76_golden.h",
+        "symbol": "blocking_send_unit76_golden"
+      },
+      {
+        "path": "xir_channel_timed76_golden.h",
+        "symbol": "retained_send_unit76_golden"
+      }
+    ]
+  },
+  "58d7a7e8bc0176edc681e17a42403c55b17df6d12c63532e189a4e63901f1958": {
+    "path": "retired_fixed_inputs/packets/58d7a7e8bc0176edc681e17a42403c55b17df6d12c63532e189a4e63901f1958.bin",
+    "bytes": 264,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_blocking76_golden.h",
+        "symbol": "blocking_recv_or_i6476_golden"
+      },
+      {
+        "path": "xir_channel_timed76_golden.h",
+        "symbol": "retained_recv_or_i6476_golden"
+      }
+    ]
+  },
+  "03b26cbcfacc4397f30fa53a9ce63e4b137d35e6598f50865a7a7b85d41238c8": {
+    "path": "retired_fixed_inputs/packets/03b26cbcfacc4397f30fa53a9ce63e4b137d35e6598f50865a7a7b85d41238c8.bin",
+    "bytes": 256,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_blocking76_golden.h",
+        "symbol": "blocking_recv_or_unit76_golden"
+      },
+      {
+        "path": "xir_channel_timed76_golden.h",
+        "symbol": "retained_recv_or_unit76_golden"
+      }
+    ]
+  },
+  "cba72c5a7a2181cc1c2ad69f91e91e6bad8e3abb40e44d1b1b33e13c60425448": {
+    "path": "retired_fixed_inputs/packets/cba72c5a7a2181cc1c2ad69f91e91e6bad8e3abb40e44d1b1b33e13c60425448.bin",
+    "bytes": 1047,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_timed76_golden.h",
+        "symbol": "timed_send_i6476_golden"
+      }
+    ]
+  },
+  "8d414469e615b8d75ef02e6c5e23781e857b8a655d94bafa87f458928afb5c29": {
+    "path": "retired_fixed_inputs/packets/8d414469e615b8d75ef02e6c5e23781e857b8a655d94bafa87f458928afb5c29.bin",
+    "bytes": 1039,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_timed76_golden.h",
+        "symbol": "timed_send_unit76_golden"
+      }
+    ]
+  },
+  "be1bdf71a87dd8d6a351979a4f1e2b481ff46fe1192dd1c87551d35c2dd0e906": {
+    "path": "retired_fixed_inputs/packets/be1bdf71a87dd8d6a351979a4f1e2b481ff46fe1192dd1c87551d35c2dd0e906.bin",
+    "bytes": 1039,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_timed76_golden.h",
+        "symbol": "timed_recv_i6476_golden"
+      }
+    ]
+  },
+  "d6d52aadba1e74f2c25821f433a79cc608f40f20e6fee60e7c02ec678036a13c": {
+    "path": "retired_fixed_inputs/packets/d6d52aadba1e74f2c25821f433a79cc608f40f20e6fee60e7c02ec678036a13c.bin",
+    "bytes": 1039,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_timed76_golden.h",
+        "symbol": "timed_recv_unit76_golden"
+      }
+    ]
+  },
+  "b61f29aeec7472df259ae665ab4851ff83b4f020a2b6f13552b1232bf7b660ac": {
+    "path": "retired_fixed_inputs/packets/b61f29aeec7472df259ae665ab4851ff83b4f020a2b6f13552b1232bf7b660ac.bin",
+    "bytes": 228,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_channel_types74_golden.h",
+        "symbol": "channel_types74_golden"
+      }
+    ]
+  },
+  "8097d675f61c3a4c15204ecf982b6bac91e8f2d91c4bc34f91ec4a02a89a2857": {
+    "path": "retired_fixed_inputs/packets/8097d675f61c3a4c15204ecf982b6bac91e8f2d91c4bc34f91ec4a02a89a2857.bin",
+    "bytes": 228,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_channel_types74_golden.h",
+        "symbol": "channel_unit74_golden"
+      }
+    ]
+  },
+  "9572d9932b1124969426951ea82df93a7fc520c611603dec9378ca0a5061c8b4": {
+    "path": "retired_fixed_inputs/packets/9572d9932b1124969426951ea82df93a7fc520c611603dec9378ca0a5061c8b4.bin",
+    "bytes": 228,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_channel_types75_golden.h",
+        "symbol": "channel_types75_golden"
+      }
+    ]
+  },
+  "ad238f021e521e78be13192e6c9414ac2e09d905cfccc237d52c0061f6766b72": {
+    "path": "retired_fixed_inputs/packets/ad238f021e521e78be13192e6c9414ac2e09d905cfccc237d52c0061f6766b72.bin",
+    "bytes": 228,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_channel_types75_golden.h",
+        "symbol": "channel_unit75_golden"
+      }
+    ]
+  },
+  "28c1054ce11e5ce7e60317eb9e071854acb7bab31c430f8c6e2c1e055bbaa4d1": {
+    "path": "retired_fixed_inputs/packets/28c1054ce11e5ce7e60317eb9e071854acb7bab31c430f8c6e2c1e055bbaa4d1.bin",
+    "bytes": 228,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_types76_golden.h",
+        "symbol": "channel_types76_golden"
+      }
+    ]
+  },
+  "5cb31435173b30e2f8b0245cc87752b06f134706b1c8a42c7ea861a3abab79aa": {
+    "path": "retired_fixed_inputs/packets/5cb31435173b30e2f8b0245cc87752b06f134706b1c8a42c7ea861a3abab79aa.bin",
+    "bytes": 228,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_channel_types76_golden.h",
+        "symbol": "channel_unit76_golden"
       }
     ]
   },
@@ -2191,10 +2719,22 @@
       }
     ]
   },
-  "43a2472ee5d11f8eefa4be5868bab89359cc1e2c46f9e528d18e2814e42d2a67": {
-    "path": "retired_fixed_inputs/packets/43a2472ee5d11f8eefa4be5868bab89359cc1e2c46f9e528d18e2814e42d2a67.bin",
+  "f1de698b93771a56646ddf8dc7abbaa56ec5cf7c3bdbf4132e61d2e0b4e80ac5": {
+    "path": "retired_fixed_inputs/packets/f1de698b93771a56646ddf8dc7abbaa56ec5cf7c3bdbf4132e61d2e0b4e80ac5.bin",
     "bytes": 253,
-    "wire": 28,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_checked_range75_golden.h",
+        "symbol": "checked_range75_golden"
+      }
+    ]
+  },
+  "276c296fd0e141a7a26d623f50eeb95e73c04e79f3721950290ad42ea3bee501": {
+    "path": "retired_fixed_inputs/packets/276c296fd0e141a7a26d623f50eeb95e73c04e79f3721950290ad42ea3bee501.bin",
+    "bytes": 265,
+    "wire": 31,
     "semantic": 76,
     "sources": [
       {
@@ -2203,10 +2743,10 @@
       }
     ]
   },
-  "eb2c86bf9e0cd468949a3563a18377dd82d16aa7655da8eb897a9a56fc48cb7b": {
-    "path": "retired_fixed_inputs/packets/eb2c86bf9e0cd468949a3563a18377dd82d16aa7655da8eb897a9a56fc48cb7b.bin",
-    "bytes": 253,
-    "wire": 28,
+  "044a46f31d2b7dda258dc6797c5203e220bbb553c76a97578d1d28a5269b503b": {
+    "path": "retired_fixed_inputs/packets/044a46f31d2b7dda258dc6797c5203e220bbb553c76a97578d1d28a5269b503b.bin",
+    "bytes": 265,
+    "wire": 30,
     "semantic": 77,
     "sources": [
       {
@@ -2463,27 +3003,47 @@
       }
     ]
   },
-  "7a034928e8a08c0dbf2d1b12ee6bd2e51faf3ae7a62db5b6f8bbba56aa186ddc": {
-    "path": "retired_fixed_inputs/packets/7a034928e8a08c0dbf2d1b12ee6bd2e51faf3ae7a62db5b6f8bbba56aa186ddc.bin",
+  "79589e35376a98d9e5852f043f7a3c43bb9aebb33a4625433f20c5c4c06d21b3": {
+    "path": "retired_fixed_inputs/packets/79589e35376a98d9e5852f043f7a3c43bb9aebb33a4625433f20c5c4c06d21b3.bin",
     "bytes": 225,
-    "wire": 28,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_checked_scalar75_golden.h",
+        "symbol": "checked_scalar75_golden"
+      }
+    ]
+  },
+  "5cfd12d8e6848012deb02be45dabc332bba4fe70ecf4506d949009410f5a7d23": {
+    "path": "retired_fixed_inputs/packets/5cfd12d8e6848012deb02be45dabc332bba4fe70ecf4506d949009410f5a7d23.bin",
+    "bytes": 237,
+    "wire": 31,
     "semantic": 76,
     "sources": [
       {
         "path": "xir_checked_scalar76_golden.h",
         "symbol": "checked_scalar76_golden"
+      },
+      {
+        "path": "xir_defaults76_golden_bytes.h",
+        "symbol": "defaults76_golden_8"
       }
     ]
   },
-  "e68e6889b911b0966bc3bad8e94bf8f92d99308dafde900ecde9c8f472e28671": {
-    "path": "retired_fixed_inputs/packets/e68e6889b911b0966bc3bad8e94bf8f92d99308dafde900ecde9c8f472e28671.bin",
-    "bytes": 225,
-    "wire": 28,
+  "c2bfc3bf0219cfe180e9e78c808c44e7be0b6084c2aeaa5be78b9baf72cfed1a": {
+    "path": "retired_fixed_inputs/packets/c2bfc3bf0219cfe180e9e78c808c44e7be0b6084c2aeaa5be78b9baf72cfed1a.bin",
+    "bytes": 237,
+    "wire": 30,
     "semantic": 77,
     "sources": [
       {
         "path": "xir_checked_scalar77_golden.h",
         "symbol": "checked_scalar77_golden"
+      },
+      {
+        "path": "xir_defaults77_golden_bytes.h",
+        "symbol": "defaults77_golden_8"
       }
     ]
   },
@@ -2827,6 +3387,110 @@
       }
     ]
   },
+  "fa59a5e1d27a9a363631ff944d13c53175599ea63f941b7ecf1ce1331c73ef87": {
+    "path": "retired_fixed_inputs/packets/fa59a5e1d27a9a363631ff944d13c53175599ea63f941b7ecf1ce1331c73ef87.bin",
+    "bytes": 590,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_defaults76_golden_bytes.h",
+        "symbol": "defaults76_golden_7"
+      }
+    ]
+  },
+  "a6826d098b2f2dbc166565d265bfd19f28a8acc5d900caeb61954c7bfcb9ed25": {
+    "path": "retired_fixed_inputs/packets/a6826d098b2f2dbc166565d265bfd19f28a8acc5d900caeb61954c7bfcb9ed25.bin",
+    "bytes": 640,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_defaults76_golden_bytes.h",
+        "symbol": "defaults76_golden_9"
+      },
+      {
+        "path": "xir_generic_method76_golden.h",
+        "symbol": "generic_method76_golden"
+      }
+    ]
+  },
+  "2607c4b8441772203e0771e61c861633a809a41c14764a3966d66f4825867930": {
+    "path": "retired_fixed_inputs/packets/2607c4b8441772203e0771e61c861633a809a41c14764a3966d66f4825867930.bin",
+    "bytes": 445,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_defaults76_golden_bytes.h",
+        "symbol": "defaults76_golden_10"
+      }
+    ]
+  },
+  "95969075a3e53fd7be7a97c2d0d23b475204d90e2fd582690817875290f55a11": {
+    "path": "retired_fixed_inputs/packets/95969075a3e53fd7be7a97c2d0d23b475204d90e2fd582690817875290f55a11.bin",
+    "bytes": 945,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_defaults76_golden_bytes.h",
+        "symbol": "defaults76_invoke_golden"
+      }
+    ]
+  },
+  "81f8583a3ff5c12a707dc12bc0a679300cb9edc0c6d884921a8d74cbd46c42fc": {
+    "path": "retired_fixed_inputs/packets/81f8583a3ff5c12a707dc12bc0a679300cb9edc0c6d884921a8d74cbd46c42fc.bin",
+    "bytes": 582,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_defaults77_golden_bytes.h",
+        "symbol": "defaults77_golden_7"
+      }
+    ]
+  },
+  "c2d71a0196cd30cb750284b2e37766204835f37a8266eb3be0bb2d1b57d67ff3": {
+    "path": "retired_fixed_inputs/packets/c2d71a0196cd30cb750284b2e37766204835f37a8266eb3be0bb2d1b57d67ff3.bin",
+    "bytes": 632,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_defaults77_golden_bytes.h",
+        "symbol": "defaults77_golden_9"
+      },
+      {
+        "path": "xir_generic_method77_golden.h",
+        "symbol": "generic_method77_golden"
+      }
+    ]
+  },
+  "518436cfbf469473cec32e2e50c5ae588ad954d66f07af3424aa3f5fdc644589": {
+    "path": "retired_fixed_inputs/packets/518436cfbf469473cec32e2e50c5ae588ad954d66f07af3424aa3f5fdc644589.bin",
+    "bytes": 437,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_defaults77_golden_bytes.h",
+        "symbol": "defaults77_golden_10"
+      }
+    ]
+  },
+  "6e4086207d9e93de252c76d0a6653f71af675a90f4bd847756a72b2aac5e7d94": {
+    "path": "retired_fixed_inputs/packets/6e4086207d9e93de252c76d0a6653f71af675a90f4bd847756a72b2aac5e7d94.bin",
+    "bytes": 937,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_defaults77_golden_bytes.h",
+        "symbol": "defaults77_invoke_golden"
+      }
+    ]
+  },
   "c9a4ac0373a313ac5d4350b73a02123b81a67435b327a8b76283883d01d4f5bd": {
     "path": "retired_fixed_inputs/packets/c9a4ac0373a313ac5d4350b73a02123b81a67435b327a8b76283883d01d4f5bd.bin",
     "bytes": 542,
@@ -2951,18 +3615,6 @@
       }
     ]
   },
-  "6c444ccf5ccc369c853eb9db5b374419d6525ce689b295d8e6caf65c81151c48": {
-    "path": "retired_fixed_inputs/packets/6c444ccf5ccc369c853eb9db5b374419d6525ce689b295d8e6caf65c81151c48.bin",
-    "bytes": 921,
-    "wire": 24,
-    "semantic": 63,
-    "sources": [
-      {
-        "path": "xir_defaults_invoke_golden.h",
-        "symbol": "defaults_invoke_golden"
-      }
-    ]
-  },
   "870766a4be581783f1105550f3f7f7490f90fb140b6ff8c6a002ecd81ec7d558": {
     "path": "retired_fixed_inputs/packets/870766a4be581783f1105550f3f7f7490f90fb140b6ff8c6a002ecd81ec7d558.bin",
     "bytes": 209,
@@ -2975,10 +3627,22 @@
       }
     ]
   },
-  "fd3e39a37bc7ab60bc06e2b6cc49199cef513e2ce471a78621abe5ebf4f1986e": {
-    "path": "retired_fixed_inputs/packets/fd3e39a37bc7ab60bc06e2b6cc49199cef513e2ce471a78621abe5ebf4f1986e.bin",
+  "31009d46765a3c7083a478b29597927be3c962f6a06e29c3adee52a188904cae": {
+    "path": "retired_fixed_inputs/packets/31009d46765a3c7083a478b29597927be3c962f6a06e29c3adee52a188904cae.bin",
     "bytes": 209,
-    "wire": 28,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_error_marker75_golden.h",
+        "symbol": "error_marker75_golden"
+      }
+    ]
+  },
+  "14eee144054854332d24518fdb04adb22f47d2cce73e3590c5d3e850019ceada": {
+    "path": "retired_fixed_inputs/packets/14eee144054854332d24518fdb04adb22f47d2cce73e3590c5d3e850019ceada.bin",
+    "bytes": 221,
+    "wire": 31,
     "semantic": 76,
     "sources": [
       {
@@ -2987,10 +3651,10 @@
       }
     ]
   },
-  "73466bbfaaef208f5512a5a3518077e0204a17dd67c4d5f48cfd697697097f9b": {
-    "path": "retired_fixed_inputs/packets/73466bbfaaef208f5512a5a3518077e0204a17dd67c4d5f48cfd697697097f9b.bin",
-    "bytes": 209,
-    "wire": 28,
+  "d7d164a17ac80437ed595f59625728dc3e07b1f41912cfab7a6b22f4fe1e9bc6": {
+    "path": "retired_fixed_inputs/packets/d7d164a17ac80437ed595f59625728dc3e07b1f41912cfab7a6b22f4fe1e9bc6.bin",
+    "bytes": 221,
+    "wire": 30,
     "semantic": 77,
     "sources": [
       {
@@ -3092,6 +3756,18 @@
       {
         "path": "xir_error_marker85_golden.h",
         "symbol": "error_marker85_golden"
+      }
+    ]
+  },
+  "4dba4bb5705af5a477215cb9351f5201ab3125a1dfc6c69301eb7af6de4aab2e": {
+    "path": "retired_fixed_inputs/packets/4dba4bb5705af5a477215cb9351f5201ab3125a1dfc6c69301eb7af6de4aab2e.bin",
+    "bytes": 221,
+    "wire": 32,
+    "semantic": 91,
+    "sources": [
+      {
+        "path": "xir_error_marker91_golden.h",
+        "symbol": "error_marker91_golden"
       }
     ]
   },
@@ -3227,22 +3903,46 @@
       }
     ]
   },
-  "925c7e826ce46a9dac867971dfda0b538db186b11c16be82281e689831494dde": {
-    "path": "retired_fixed_inputs/packets/925c7e826ce46a9dac867971dfda0b538db186b11c16be82281e689831494dde.bin",
-    "bytes": 620,
-    "wire": 28,
-    "semantic": 76,
+  "5d512f62a96d294bbe687a5d2266946f7658e3b261d8b41cef8bcb0701971bc2": {
+    "path": "retired_fixed_inputs/packets/5d512f62a96d294bbe687a5d2266946f7658e3b261d8b41cef8bcb0701971bc2.bin",
+    "bytes": 624,
+    "wire": 29,
+    "semantic": 75,
     "sources": [
       {
-        "path": "xir_generic_method76_golden.h",
-        "symbol": "generic_method76_golden"
+        "path": "xir_generic_method75_golden.h",
+        "symbol": "generic_method75_golden"
       }
     ]
   },
-  "0ef9d44285944c09afd1f89fc0cb1f267b2e53fc399d17b3a005af5222cc2879": {
-    "path": "retired_fixed_inputs/packets/0ef9d44285944c09afd1f89fc0cb1f267b2e53fc399d17b3a005af5222cc2879.bin",
-    "bytes": 620,
-    "wire": 28,
+  "326fe8bfec62f938bb67907cc57487261f7ab200e32611cb94c1132f02c50b0b": {
+    "path": "retired_fixed_inputs/packets/326fe8bfec62f938bb67907cc57487261f7ab200e32611cb94c1132f02c50b0b.bin",
+    "bytes": 624,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_generic_method75_golden.h",
+        "symbol": "generic_method75_invalid_flags0"
+      }
+    ]
+  },
+  "56faa399fc71c6f5c0a90b717230f2ca15b86680fc093bb36851fe4f38015cf9": {
+    "path": "retired_fixed_inputs/packets/56faa399fc71c6f5c0a90b717230f2ca15b86680fc093bb36851fe4f38015cf9.bin",
+    "bytes": 624,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_generic_method75_golden.h",
+        "symbol": "generic_method75_invalid_flags1"
+      }
+    ]
+  },
+  "bc8c3ac4ac4547e1c785f32a3ef05ac9d5d38454f92f822915944190f219a326": {
+    "path": "retired_fixed_inputs/packets/bc8c3ac4ac4547e1c785f32a3ef05ac9d5d38454f92f822915944190f219a326.bin",
+    "bytes": 640,
+    "wire": 31,
     "semantic": 76,
     "sources": [
       {
@@ -3251,10 +3951,10 @@
       }
     ]
   },
-  "6870a0de107a2b453ab1fd7d321dc7d9b8b35a955aa01e03533f29e4f3e63855": {
-    "path": "retired_fixed_inputs/packets/6870a0de107a2b453ab1fd7d321dc7d9b8b35a955aa01e03533f29e4f3e63855.bin",
-    "bytes": 620,
-    "wire": 28,
+  "4815d4830ea278717a15272c0ab57e2b31b961cddb80729113a08172134901e9": {
+    "path": "retired_fixed_inputs/packets/4815d4830ea278717a15272c0ab57e2b31b961cddb80729113a08172134901e9.bin",
+    "bytes": 640,
+    "wire": 31,
     "semantic": 76,
     "sources": [
       {
@@ -3263,22 +3963,10 @@
       }
     ]
   },
-  "8ba0fd21f9c0708910fbc3ac99283c6f164417089b419c495a5b4f5e2440bcc0": {
-    "path": "retired_fixed_inputs/packets/8ba0fd21f9c0708910fbc3ac99283c6f164417089b419c495a5b4f5e2440bcc0.bin",
-    "bytes": 620,
-    "wire": 28,
-    "semantic": 77,
-    "sources": [
-      {
-        "path": "xir_generic_method77_golden.h",
-        "symbol": "generic_method77_golden"
-      }
-    ]
-  },
-  "f685563ee9796fd2ab6ea04b85921eb6daedb06c7e152d81c97e964dddd7d2f3": {
-    "path": "retired_fixed_inputs/packets/f685563ee9796fd2ab6ea04b85921eb6daedb06c7e152d81c97e964dddd7d2f3.bin",
-    "bytes": 620,
-    "wire": 28,
+  "43afd73aef5af70255ceb75c9ef05363e719a4482c975b2afabbcb56243ed690": {
+    "path": "retired_fixed_inputs/packets/43afd73aef5af70255ceb75c9ef05363e719a4482c975b2afabbcb56243ed690.bin",
+    "bytes": 632,
+    "wire": 30,
     "semantic": 77,
     "sources": [
       {
@@ -3287,10 +3975,10 @@
       }
     ]
   },
-  "3eff383e0377ee6ff67e6c4c8abc0618330c8a82b6d19eb65c84fbe4abe9849a": {
-    "path": "retired_fixed_inputs/packets/3eff383e0377ee6ff67e6c4c8abc0618330c8a82b6d19eb65c84fbe4abe9849a.bin",
-    "bytes": 620,
-    "wire": 28,
+  "ef7fe4d176a846d2cd59d7b687b7bf6b5c69946afd789c59a229976c1785341f": {
+    "path": "retired_fixed_inputs/packets/ef7fe4d176a846d2cd59d7b687b7bf6b5c69946afd789c59a229976c1785341f.bin",
+    "bytes": 632,
+    "wire": 30,
     "semantic": 77,
     "sources": [
       {
@@ -5243,6 +5931,366 @@
       }
     ]
   },
+  "29f6484c64bc7493951ad43c7233f77788648444f515093c2bef979e214edd0f": {
+    "path": "retired_fixed_inputs/packets/29f6484c64bc7493951ad43c7233f77788648444f515093c2bef979e214edd0f.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 89,
+    "sources": [
+      {
+        "path": "xir_iterator_types_golden.h",
+        "symbol": "iterator_types_golden"
+      }
+    ]
+  },
+  "b348125a8496106286b84c9facaeba818cec337b03a5bdbdb5ef7d332c5b586e": {
+    "path": "retired_fixed_inputs/packets/b348125a8496106286b84c9facaeba818cec337b03a5bdbdb5ef7d332c5b586e.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 89,
+    "sources": [
+      {
+        "path": "xir_iterator_types_golden.h",
+        "symbol": "iterator_types_unit"
+      }
+    ]
+  },
+  "679438577cdabb4856a73f87538293e8520456366a110aa81474d9b9bfa010ed": {
+    "path": "retired_fixed_inputs/packets/679438577cdabb4856a73f87538293e8520456366a110aa81474d9b9bfa010ed.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 89,
+    "sources": [
+      {
+        "path": "xir_iterator_types_golden.h",
+        "symbol": "iterator_types_cycle"
+      }
+    ]
+  },
+  "a96f0fa1a91a486a7fcd50b8bcf69f985ed419cf4d266179d9d9f9fb44d38b3f": {
+    "path": "retired_fixed_inputs/packets/a96f0fa1a91a486a7fcd50b8bcf69f985ed419cf4d266179d9d9f9fb44d38b3f.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 89,
+    "sources": [
+      {
+        "path": "xir_iterator_types_golden.h",
+        "symbol": "iterator_types_unknown"
+      }
+    ]
+  },
+  "874b573bb28d6718691ae6006c508978cc5956018bc09ab3c981f876bdd99c1d": {
+    "path": "retired_fixed_inputs/packets/874b573bb28d6718691ae6006c508978cc5956018bc09ab3c981f876bdd99c1d.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 89,
+    "sources": [
+      {
+        "path": "xir_iterator_types_golden.h",
+        "symbol": "iterator_types_duplicate"
+      }
+    ]
+  },
+  "be72f2980ea84bb5322564d80262d59a4774c873bed1fe86e8edbeefac9d557d": {
+    "path": "retired_fixed_inputs/packets/be72f2980ea84bb5322564d80262d59a4774c873bed1fe86e8edbeefac9d557d.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 73,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous73_golden.h",
+        "symbol": "iterator_types_previous73_golden"
+      }
+    ]
+  },
+  "aa9d1a12ce39af89f777239d3b470d0c4c8014a65333403c3f560fbe4344b5ab": {
+    "path": "retired_fixed_inputs/packets/aa9d1a12ce39af89f777239d3b470d0c4c8014a65333403c3f560fbe4344b5ab.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 73,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous73_golden.h",
+        "symbol": "iterator_types_previous73_unit"
+      }
+    ]
+  },
+  "43b604553815055574874cdcfefd9e460b1d063718b2feaf3e9ba76eac84df4e": {
+    "path": "retired_fixed_inputs/packets/43b604553815055574874cdcfefd9e460b1d063718b2feaf3e9ba76eac84df4e.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 73,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous73_golden.h",
+        "symbol": "iterator_types_previous73_cycle"
+      }
+    ]
+  },
+  "e91f69da53ab6b56f510ba7ef4a8025bc8f9cd8ca891fb11773ec3762d0e6331": {
+    "path": "retired_fixed_inputs/packets/e91f69da53ab6b56f510ba7ef4a8025bc8f9cd8ca891fb11773ec3762d0e6331.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 73,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous73_golden.h",
+        "symbol": "iterator_types_previous73_unknown"
+      }
+    ]
+  },
+  "529276f7390f2d9021620d78dfd7d8dcc15bf2a1a9a79d84220820eb9ba6de59": {
+    "path": "retired_fixed_inputs/packets/529276f7390f2d9021620d78dfd7d8dcc15bf2a1a9a79d84220820eb9ba6de59.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 73,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous73_golden.h",
+        "symbol": "iterator_types_previous73_duplicate"
+      }
+    ]
+  },
+  "7bf0053e11c7916c395614f0d1d39c7e7767207ff097e420ef5b818800079d56": {
+    "path": "retired_fixed_inputs/packets/7bf0053e11c7916c395614f0d1d39c7e7767207ff097e420ef5b818800079d56.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous74_golden.h",
+        "symbol": "iterator_types_previous74_golden"
+      }
+    ]
+  },
+  "bd7d05b5670b13c68c127bfd087fd9e5b25a0743203500fad19229a34d3e41b3": {
+    "path": "retired_fixed_inputs/packets/bd7d05b5670b13c68c127bfd087fd9e5b25a0743203500fad19229a34d3e41b3.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous74_golden.h",
+        "symbol": "iterator_types_previous74_unit"
+      }
+    ]
+  },
+  "73cbb1d4762c5e915756e1927eb637b1681c225f7f528fdc6e1d61dafefc17ae": {
+    "path": "retired_fixed_inputs/packets/73cbb1d4762c5e915756e1927eb637b1681c225f7f528fdc6e1d61dafefc17ae.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous74_golden.h",
+        "symbol": "iterator_types_previous74_cycle"
+      }
+    ]
+  },
+  "e774bc76b1496522ab757eb1ffe0ac211fc86a5a6d25c56a805df7617bbf262d": {
+    "path": "retired_fixed_inputs/packets/e774bc76b1496522ab757eb1ffe0ac211fc86a5a6d25c56a805df7617bbf262d.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous74_golden.h",
+        "symbol": "iterator_types_previous74_unknown"
+      }
+    ]
+  },
+  "f761afdd8e44b681f13390faba8a258fc2b6bcff04e51c7ca8d7e8ab1572425c": {
+    "path": "retired_fixed_inputs/packets/f761afdd8e44b681f13390faba8a258fc2b6bcff04e51c7ca8d7e8ab1572425c.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous74_golden.h",
+        "symbol": "iterator_types_previous74_duplicate"
+      }
+    ]
+  },
+  "1ba562fe1b994bd8b2f7fd1027b57b0593223251a30f7dde79f10272f4c73b91": {
+    "path": "retired_fixed_inputs/packets/1ba562fe1b994bd8b2f7fd1027b57b0593223251a30f7dde79f10272f4c73b91.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 86,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous86_golden.h",
+        "symbol": "iterator_types_previous86_golden"
+      }
+    ]
+  },
+  "c8f5819ccbfb554982f0a7096bf9053c54db514c3c04323381668cdf50e268e1": {
+    "path": "retired_fixed_inputs/packets/c8f5819ccbfb554982f0a7096bf9053c54db514c3c04323381668cdf50e268e1.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 86,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous86_golden.h",
+        "symbol": "iterator_types_previous86_unit"
+      }
+    ]
+  },
+  "28c91ac54243e82718202cbaa4ffd8dc4265cfd1bdc3c7b11f0c3e2fe941caa6": {
+    "path": "retired_fixed_inputs/packets/28c91ac54243e82718202cbaa4ffd8dc4265cfd1bdc3c7b11f0c3e2fe941caa6.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 86,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous86_golden.h",
+        "symbol": "iterator_types_previous86_cycle"
+      }
+    ]
+  },
+  "ad3df907cbd3052d608acc4071a6e51030a69e279cd7b055abde1806e63f22a1": {
+    "path": "retired_fixed_inputs/packets/ad3df907cbd3052d608acc4071a6e51030a69e279cd7b055abde1806e63f22a1.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 86,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous86_golden.h",
+        "symbol": "iterator_types_previous86_unknown"
+      }
+    ]
+  },
+  "7678bd941fd2ed3ddedd3f9b2ca6047bf9ae26fb96df76c46980cd196a68cf68": {
+    "path": "retired_fixed_inputs/packets/7678bd941fd2ed3ddedd3f9b2ca6047bf9ae26fb96df76c46980cd196a68cf68.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 86,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous86_golden.h",
+        "symbol": "iterator_types_previous86_duplicate"
+      }
+    ]
+  },
+  "5f6d2d7dadbba0938b94c2b64bdbc32d12d05301d4c39985eb08131daea13598": {
+    "path": "retired_fixed_inputs/packets/5f6d2d7dadbba0938b94c2b64bdbc32d12d05301d4c39985eb08131daea13598.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 87,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous87_golden.h",
+        "symbol": "iterator_types_previous87_golden"
+      }
+    ]
+  },
+  "37d19c7053418e753151cd7fee4cd4891d48c3944547ca2e063d03bf9f8a17d4": {
+    "path": "retired_fixed_inputs/packets/37d19c7053418e753151cd7fee4cd4891d48c3944547ca2e063d03bf9f8a17d4.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 87,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous87_golden.h",
+        "symbol": "iterator_types_previous87_unit"
+      }
+    ]
+  },
+  "f60ecc105275e313dcf6671b1b8c1627596e43e5cce574d247faf1cfb5588872": {
+    "path": "retired_fixed_inputs/packets/f60ecc105275e313dcf6671b1b8c1627596e43e5cce574d247faf1cfb5588872.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 87,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous87_golden.h",
+        "symbol": "iterator_types_previous87_cycle"
+      }
+    ]
+  },
+  "a0d37130472de2c22ce3f7cdf8c3d0548a5d885ae68c8ad75f15aefd03a75c92": {
+    "path": "retired_fixed_inputs/packets/a0d37130472de2c22ce3f7cdf8c3d0548a5d885ae68c8ad75f15aefd03a75c92.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 87,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous87_golden.h",
+        "symbol": "iterator_types_previous87_unknown"
+      }
+    ]
+  },
+  "338bca8f869f6aa9196d22edac67a219ddf0d450f003a0a65f2983696d61e29a": {
+    "path": "retired_fixed_inputs/packets/338bca8f869f6aa9196d22edac67a219ddf0d450f003a0a65f2983696d61e29a.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 87,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous87_golden.h",
+        "symbol": "iterator_types_previous87_duplicate"
+      }
+    ]
+  },
+  "3edefb8408daa361c0bc21c920c341d4b0b8b69e0062aa9c335e96083e764eb0": {
+    "path": "retired_fixed_inputs/packets/3edefb8408daa361c0bc21c920c341d4b0b8b69e0062aa9c335e96083e764eb0.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 88,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous88_golden.h",
+        "symbol": "iterator_types_previous88_golden"
+      }
+    ]
+  },
+  "e070a1b0375528a0b4d83d03dcafbb071ea655b6e79f75288bffa7d3036963d7": {
+    "path": "retired_fixed_inputs/packets/e070a1b0375528a0b4d83d03dcafbb071ea655b6e79f75288bffa7d3036963d7.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 88,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous88_golden.h",
+        "symbol": "iterator_types_previous88_unit"
+      }
+    ]
+  },
+  "2c1eff461c77dccda09756b106c525c73d6fb6412d775996a5a3e8cf5e383be3": {
+    "path": "retired_fixed_inputs/packets/2c1eff461c77dccda09756b106c525c73d6fb6412d775996a5a3e8cf5e383be3.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 88,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous88_golden.h",
+        "symbol": "iterator_types_previous88_cycle"
+      }
+    ]
+  },
+  "91a0a7fcb7d5fd2944358341dd0d3d6a1ab758cd87aab9c2524bd9d77495f922": {
+    "path": "retired_fixed_inputs/packets/91a0a7fcb7d5fd2944358341dd0d3d6a1ab758cd87aab9c2524bd9d77495f922.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 88,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous88_golden.h",
+        "symbol": "iterator_types_previous88_unknown"
+      }
+    ]
+  },
+  "e5c3977a229ee4fa533ea703f9ef70a0197d68c6404b0c5be321d8ddef184e04": {
+    "path": "retired_fixed_inputs/packets/e5c3977a229ee4fa533ea703f9ef70a0197d68c6404b0c5be321d8ddef184e04.bin",
+    "bytes": 229,
+    "wire": 28,
+    "semantic": 88,
+    "sources": [
+      {
+        "path": "xir_iterator_types_previous88_golden.h",
+        "symbol": "iterator_types_previous88_duplicate"
+      }
+    ]
+  },
   "bb8aeb8d28c7b6f22c14043d8a4fa995b7487c6d9c83f42819d10f72837192b1": {
     "path": "retired_fixed_inputs/packets/bb8aeb8d28c7b6f22c14043d8a4fa995b7487c6d9c83f42819d10f72837192b1.bin",
     "bytes": 715,
@@ -5660,6 +6708,174 @@
       {
         "path": "xir_library_string75_goldens.h",
         "symbol": "library_string75_unused"
+      }
+    ]
+  },
+  "4f6b8d2cdafe1da9e436b8261b39717a558bf28bab6d64f0cce1f9b4e4b00dfa": {
+    "path": "retired_fixed_inputs/packets/4f6b8d2cdafe1da9e436b8261b39717a558bf28bab6d64f0cce1f9b4e4b00dfa.bin",
+    "bytes": 739,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_library_string76_goldens.h",
+        "symbol": "library_string76_alpha"
+      }
+    ]
+  },
+  "c5f675d492e5bf4225ee573574f2db5f9f8e79caed35ccefa2f1f2ac91ed3cd8": {
+    "path": "retired_fixed_inputs/packets/c5f675d492e5bf4225ee573574f2db5f9f8e79caed35ccefa2f1f2ac91ed3cd8.bin",
+    "bytes": 737,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_library_string76_goldens.h",
+        "symbol": "library_string76_beta"
+      }
+    ]
+  },
+  "475f5641ef4dc68e8495b2bcc8f20b013be6ac641cfcaafce2ca5afe06cfd3ac": {
+    "path": "retired_fixed_inputs/packets/475f5641ef4dc68e8495b2bcc8f20b013be6ac641cfcaafce2ca5afe06cfd3ac.bin",
+    "bytes": 733,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_library_string76_goldens.h",
+        "symbol": "library_string76_nul"
+      }
+    ]
+  },
+  "63e638a045aa2ebcea43aaf57b668d9b3b76cff7f59f9ff455f28588e7161c9e": {
+    "path": "retired_fixed_inputs/packets/63e638a045aa2ebcea43aaf57b668d9b3b76cff7f59f9ff455f28588e7161c9e.bin",
+    "bytes": 729,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_library_string76_goldens.h",
+        "symbol": "library_string76_empty"
+      }
+    ]
+  },
+  "73e8fbc180164c950c45298ec940d1faaa9e7880ebd0c4a24a64ca0063466be8": {
+    "path": "retired_fixed_inputs/packets/73e8fbc180164c950c45298ec940d1faaa9e7880ebd0c4a24a64ca0063466be8.bin",
+    "bytes": 1434,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_library_string76_goldens.h",
+        "symbol": "library_string76_long"
+      }
+    ]
+  },
+  "deb4905f2d9327492cc31777a7cdfe22218e4858e911065d87060ce382675bdd": {
+    "path": "retired_fixed_inputs/packets/deb4905f2d9327492cc31777a7cdfe22218e4858e911065d87060ce382675bdd.bin",
+    "bytes": 736,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_library_string76_goldens.h",
+        "symbol": "library_string76_equal"
+      }
+    ]
+  },
+  "1fe56e4a2624cdde18abf587ab568b3f6295dedef7652d5fc2f506a6e6b0c92d": {
+    "path": "retired_fixed_inputs/packets/1fe56e4a2624cdde18abf587ab568b3f6295dedef7652d5fc2f506a6e6b0c92d.bin",
+    "bytes": 742,
+    "wire": 31,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_library_string76_goldens.h",
+        "symbol": "library_string76_unused"
+      }
+    ]
+  },
+  "71d5ce68a81118c5b8d99079fc5f6caf01eeaf3d11d3055f9d33fab13109c741": {
+    "path": "retired_fixed_inputs/packets/71d5ce68a81118c5b8d99079fc5f6caf01eeaf3d11d3055f9d33fab13109c741.bin",
+    "bytes": 731,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_library_string77_goldens.h",
+        "symbol": "library_string77_alpha"
+      }
+    ]
+  },
+  "bc22bc39278c005a4d48596061739514ac7d623df1f202cdc401937956c15173": {
+    "path": "retired_fixed_inputs/packets/bc22bc39278c005a4d48596061739514ac7d623df1f202cdc401937956c15173.bin",
+    "bytes": 729,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_library_string77_goldens.h",
+        "symbol": "library_string77_beta"
+      }
+    ]
+  },
+  "222e8cabc26c3faa3c0c9623d58b63e96ff2a33ec0031cffaecc706af8e85a19": {
+    "path": "retired_fixed_inputs/packets/222e8cabc26c3faa3c0c9623d58b63e96ff2a33ec0031cffaecc706af8e85a19.bin",
+    "bytes": 725,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_library_string77_goldens.h",
+        "symbol": "library_string77_nul"
+      }
+    ]
+  },
+  "d75a01e2a39f66cf313663c7e958c62d5ac54c45bfb3fbf8b52e418d28195454": {
+    "path": "retired_fixed_inputs/packets/d75a01e2a39f66cf313663c7e958c62d5ac54c45bfb3fbf8b52e418d28195454.bin",
+    "bytes": 721,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_library_string77_goldens.h",
+        "symbol": "library_string77_empty"
+      }
+    ]
+  },
+  "2950be0581ecb2bf9301719b873c427c13c16250dc222e691b61856da7a0866a": {
+    "path": "retired_fixed_inputs/packets/2950be0581ecb2bf9301719b873c427c13c16250dc222e691b61856da7a0866a.bin",
+    "bytes": 1426,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_library_string77_goldens.h",
+        "symbol": "library_string77_long"
+      }
+    ]
+  },
+  "21a7c6ee667f25718775d949e9933381dd1b9bcce3081eb53f7b7fcbb321fcf7": {
+    "path": "retired_fixed_inputs/packets/21a7c6ee667f25718775d949e9933381dd1b9bcce3081eb53f7b7fcbb321fcf7.bin",
+    "bytes": 728,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_library_string77_goldens.h",
+        "symbol": "library_string77_equal"
+      }
+    ]
+  },
+  "25c04183c6e5e70322989a1752a815f712cfe33772e48ad5ed5aa7e1f207858f": {
+    "path": "retired_fixed_inputs/packets/25c04183c6e5e70322989a1752a815f712cfe33772e48ad5ed5aa7e1f207858f.bin",
+    "bytes": 734,
+    "wire": 30,
+    "semantic": 77,
+    "sources": [
+      {
+        "path": "xir_library_string77_goldens.h",
+        "symbol": "library_string77_unused"
       }
     ]
   },
@@ -7535,10 +8751,22 @@
       }
     ]
   },
-  "7d37c2f5c61e6ea648a2f8b0148a614f5709a8166216f9c2a01646a4d4e45478": {
-    "path": "retired_fixed_inputs/packets/7d37c2f5c61e6ea648a2f8b0148a614f5709a8166216f9c2a01646a4d4e45478.bin",
+  "14579c2f1c0f6f29fe085c18c876ff386f019739bfb4c39feb080b60c02311cc": {
+    "path": "retired_fixed_inputs/packets/14579c2f1c0f6f29fe085c18c876ff386f019739bfb4c39feb080b60c02311cc.bin",
     "bytes": 268,
-    "wire": 28,
+    "wire": 29,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_rune75_golden.h",
+        "symbol": "rune75_golden"
+      }
+    ]
+  },
+  "62beb8b6684e002b1339077cd90bcfa40f6353c2130c64b7b7b3cd4d80716a6e": {
+    "path": "retired_fixed_inputs/packets/62beb8b6684e002b1339077cd90bcfa40f6353c2130c64b7b7b3cd4d80716a6e.bin",
+    "bytes": 280,
+    "wire": 31,
     "semantic": 76,
     "sources": [
       {
@@ -7547,10 +8775,10 @@
       }
     ]
   },
-  "6e3b1f12870dfdb704ed8867d01269e4c17ca493a6a60f657fcdca8fba3942ea": {
-    "path": "retired_fixed_inputs/packets/6e3b1f12870dfdb704ed8867d01269e4c17ca493a6a60f657fcdca8fba3942ea.bin",
-    "bytes": 268,
-    "wire": 28,
+  "987a48e19d9b240fd323b06656c69e1e0f45669a816897a28dc652505f995d90": {
+    "path": "retired_fixed_inputs/packets/987a48e19d9b240fd323b06656c69e1e0f45669a816897a28dc652505f995d90.bin",
+    "bytes": 280,
+    "wire": 30,
     "semantic": 77,
     "sources": [
       {
@@ -8675,6 +9903,18 @@
       }
     ]
   },
+  "12c2c21488ed309b122846813f99a18e2b0ee9a04e5773f210941e410c789306": {
+    "path": "retired_fixed_inputs/packets/12c2c21488ed309b122846813f99a18e2b0ee9a04e5773f210941e410c789306.bin",
+    "bytes": 4750,
+    "wire": 36,
+    "semantic": 96,
+    "sources": [
+      {
+        "path": "xir_slot_previous36_96_golden.h",
+        "symbol": "xir_slot_previous36_96"
+      }
+    ]
+  },
   "ad8acb8e277574d36adf7c2c778543d2aa556fbc67ed7ae698f8170cde597d45": {
     "path": "retired_fixed_inputs/packets/ad8acb8e277574d36adf7c2c778543d2aa556fbc67ed7ae698f8170cde597d45.bin",
     "bytes": 1621,
@@ -9251,6 +10491,306 @@
       }
     ]
   },
+  "6e3258c72b2985f00d13ff294e3c8201f570b207e43a352b2aa187e2fc0fbf2a": {
+    "path": "retired_fixed_inputs/packets/6e3258c72b2985f00d13ff294e3c8201f570b207e43a352b2aa187e2fc0fbf2a.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 73,
+    "sources": [
+      {
+        "path": "xir_task_go73_golden.h",
+        "symbol": "task_go73_golden"
+      }
+    ]
+  },
+  "88d5ce31ea443c573ff9877fa302a71e6f43e324dd027d607b309605690ddfaa": {
+    "path": "retired_fixed_inputs/packets/88d5ce31ea443c573ff9877fa302a71e6f43e324dd027d607b309605690ddfaa.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_go74_golden_part1.h",
+        "symbol": "task_go74_golden"
+      }
+    ]
+  },
+  "c79c5b0f9c8b19eaed476d11414b380f7dfa2165cf2b7bc9ca3e4c355a3200ea": {
+    "path": "retired_fixed_inputs/packets/c79c5b0f9c8b19eaed476d11414b380f7dfa2165cf2b7bc9ca3e4c355a3200ea.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_go74_golden_part1.h",
+        "symbol": "task_go74_scalar_go"
+      }
+    ]
+  },
+  "2f7497f994929615dbf08d1c6f47a9aa74eeaca174ccc4ee5b3fd1b2ce570c95": {
+    "path": "retired_fixed_inputs/packets/2f7497f994929615dbf08d1c6f47a9aa74eeaca174ccc4ee5b3fd1b2ce570c95.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_go74_golden_part1.h",
+        "symbol": "task_go74_initializer_target"
+      }
+    ]
+  },
+  "527bdf0e5b7808de568d72c610e19328b5d1dc08234546dbdb05aeba469ffa06": {
+    "path": "retired_fixed_inputs/packets/527bdf0e5b7808de568d72c610e19328b5d1dc08234546dbdb05aeba469ffa06.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_go74_golden_part1.h",
+        "symbol": "task_go74_await_place"
+      }
+    ]
+  },
+  "1957c5204d97d18688e0363604bc51114dff931c4008175ebb9ecc8da61df688": {
+    "path": "retired_fixed_inputs/packets/1957c5204d97d18688e0363604bc51114dff931c4008175ebb9ecc8da61df688.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_go74_golden_part1.h",
+        "symbol": "task_go74_go_target"
+      }
+    ]
+  },
+  "09bc90005774f15e030f337078a9f84401be38fee3fdf158b37972408e88a6dc": {
+    "path": "retired_fixed_inputs/packets/09bc90005774f15e030f337078a9f84401be38fee3fdf158b37972408e88a6dc.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_go74_golden_part2.h",
+        "symbol": "task_go74_await_binding"
+      }
+    ]
+  },
+  "fc265afd78d8eb0c15edd1a15498a2609e8b828a4f17a1aac3c3b329b37dcdfe": {
+    "path": "retired_fixed_inputs/packets/fc265afd78d8eb0c15edd1a15498a2609e8b828a4f17a1aac3c3b329b37dcdfe.bin",
+    "bytes": 1637,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_go74_golden_part2.h",
+        "symbol": "task_go74_mutable_worker"
+      }
+    ]
+  },
+  "cb96cf79939b3f0dc60aed896b65027151904300d6d1092a36d588e4bd9d413f": {
+    "path": "retired_fixed_inputs/packets/cb96cf79939b3f0dc60aed896b65027151904300d6d1092a36d588e4bd9d413f.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_go74_golden_part2.h",
+        "symbol": "task_go74_cleanup_helper"
+      }
+    ]
+  },
+  "c9d7202c386c820c365bb74306190fe1d77d85fac1ae13f86fa09555dcc3205e": {
+    "path": "retired_fixed_inputs/packets/c9d7202c386c820c365bb74306190fe1d77d85fac1ae13f86fa09555dcc3205e.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_go75_golden_part1.h",
+        "symbol": "task_go75_golden"
+      }
+    ]
+  },
+  "85e5860ce23894e4ebb26cf39beea22ac26a84ab797c32a2053047e8b9fe7a91": {
+    "path": "retired_fixed_inputs/packets/85e5860ce23894e4ebb26cf39beea22ac26a84ab797c32a2053047e8b9fe7a91.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_go75_golden_part1.h",
+        "symbol": "task_go75_scalar_go"
+      }
+    ]
+  },
+  "73df20acdab429d135bb4f347e9262d14e54eaafcca2b49d6fdd654829e41125": {
+    "path": "retired_fixed_inputs/packets/73df20acdab429d135bb4f347e9262d14e54eaafcca2b49d6fdd654829e41125.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_go75_golden_part1.h",
+        "symbol": "task_go75_initializer_target"
+      }
+    ]
+  },
+  "afcca4419696b72f4a4c0592d620065d47dbd905890b8ea0f5fd43a2f3731297": {
+    "path": "retired_fixed_inputs/packets/afcca4419696b72f4a4c0592d620065d47dbd905890b8ea0f5fd43a2f3731297.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_go75_golden_part1.h",
+        "symbol": "task_go75_await_place"
+      }
+    ]
+  },
+  "db22e03cd9969d46c2a844c5ccc83dcd01fbf74769485e70e588966b6ac0652a": {
+    "path": "retired_fixed_inputs/packets/db22e03cd9969d46c2a844c5ccc83dcd01fbf74769485e70e588966b6ac0652a.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_go75_golden_part1.h",
+        "symbol": "task_go75_go_target"
+      }
+    ]
+  },
+  "dab0f3a0031e14fb0183d365bbad55578416618b817f43a5347b9d303dc5de02": {
+    "path": "retired_fixed_inputs/packets/dab0f3a0031e14fb0183d365bbad55578416618b817f43a5347b9d303dc5de02.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_go75_golden_part2.h",
+        "symbol": "task_go75_await_binding"
+      }
+    ]
+  },
+  "d7122f51f695fe8d8da2b00129b2e29498184de7bd3713d20a77b693c59eae30": {
+    "path": "retired_fixed_inputs/packets/d7122f51f695fe8d8da2b00129b2e29498184de7bd3713d20a77b693c59eae30.bin",
+    "bytes": 1637,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_go75_golden_part2.h",
+        "symbol": "task_go75_mutable_worker"
+      }
+    ]
+  },
+  "059ff2c672c0f87355be4b67baf25323489fa6411ff8231385222967315fd3db": {
+    "path": "retired_fixed_inputs/packets/059ff2c672c0f87355be4b67baf25323489fa6411ff8231385222967315fd3db.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_go75_golden_part2.h",
+        "symbol": "task_go75_cleanup_helper"
+      }
+    ]
+  },
+  "7705fed7809ed6113f51534dc40a7eae02675cf3bac1a09c2e400420040dfcbb": {
+    "path": "retired_fixed_inputs/packets/7705fed7809ed6113f51534dc40a7eae02675cf3bac1a09c2e400420040dfcbb.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_go76_golden_part1.h",
+        "symbol": "task_go76_golden"
+      }
+    ]
+  },
+  "d9dd63172abe01a875de66809ffabec7efb90f5f9dd12c849d07a10f9661bac6": {
+    "path": "retired_fixed_inputs/packets/d9dd63172abe01a875de66809ffabec7efb90f5f9dd12c849d07a10f9661bac6.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_go76_golden_part1.h",
+        "symbol": "task_go76_scalar_go"
+      }
+    ]
+  },
+  "3b60ad34bb93e3521a31531366189fb4f0780ca9228f761cba04504bdf53d2d2": {
+    "path": "retired_fixed_inputs/packets/3b60ad34bb93e3521a31531366189fb4f0780ca9228f761cba04504bdf53d2d2.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_go76_golden_part1.h",
+        "symbol": "task_go76_initializer_target"
+      }
+    ]
+  },
+  "b535e0209e4579442c562f03da43a010db55ea2845710323db7f14bd2d03d2a3": {
+    "path": "retired_fixed_inputs/packets/b535e0209e4579442c562f03da43a010db55ea2845710323db7f14bd2d03d2a3.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_go76_golden_part1.h",
+        "symbol": "task_go76_await_place"
+      }
+    ]
+  },
+  "1935eaa8d657f63852077cba8b1b42bce60dd6f3f12b87b9a1ebafbbfe71da96": {
+    "path": "retired_fixed_inputs/packets/1935eaa8d657f63852077cba8b1b42bce60dd6f3f12b87b9a1ebafbbfe71da96.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_go76_golden_part1.h",
+        "symbol": "task_go76_go_target"
+      }
+    ]
+  },
+  "a7a9dbe83e945715b4d142f18ca4f95b0db71f1075ad560dbc233512df9779b8": {
+    "path": "retired_fixed_inputs/packets/a7a9dbe83e945715b4d142f18ca4f95b0db71f1075ad560dbc233512df9779b8.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_go76_golden_part2.h",
+        "symbol": "task_go76_await_binding"
+      }
+    ]
+  },
+  "dae84226849d388cd353f4fbdb684e57e75371d5aa6a92c2859e8d1acf8ecf2f": {
+    "path": "retired_fixed_inputs/packets/dae84226849d388cd353f4fbdb684e57e75371d5aa6a92c2859e8d1acf8ecf2f.bin",
+    "bytes": 1637,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_go76_golden_part2.h",
+        "symbol": "task_go76_mutable_worker"
+      }
+    ]
+  },
+  "8ae1f407d64be91bf0a109e1ed293bbfdd8d56501687e6f5a6bf393323926192": {
+    "path": "retired_fixed_inputs/packets/8ae1f407d64be91bf0a109e1ed293bbfdd8d56501687e6f5a6bf393323926192.bin",
+    "bytes": 1625,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_go76_golden_part2.h",
+        "symbol": "task_go76_cleanup_helper"
+      }
+    ]
+  },
   "e88b2e42da52f0731737fe7b9d36323a9b1f017c2127cd3fde16f3d93c1dfc07": {
     "path": "retired_fixed_inputs/packets/e88b2e42da52f0731737fe7b9d36323a9b1f017c2127cd3fde16f3d93c1dfc07.bin",
     "bytes": 1625,
@@ -9647,6 +11187,42 @@
       }
     ]
   },
+  "24cf11dae6ad9dbc38b026aaee82e1596370d6aa8d9abb919b8f102b14c6cdf0": {
+    "path": "retired_fixed_inputs/packets/24cf11dae6ad9dbc38b026aaee82e1596370d6aa8d9abb919b8f102b14c6cdf0.bin",
+    "bytes": 225,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_types74_golden.h",
+        "symbol": "task_types74_golden"
+      }
+    ]
+  },
+  "75a04910bf19c0b9f0d0ef28a58d17758a6073e447bcdcebf884f3cbd82b4774": {
+    "path": "retired_fixed_inputs/packets/75a04910bf19c0b9f0d0ef28a58d17758a6073e447bcdcebf884f3cbd82b4774.bin",
+    "bytes": 225,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_types75_golden.h",
+        "symbol": "task_types75_golden"
+      }
+    ]
+  },
+  "ff817c01529199b174579d7ac685e55071a534a617945815f6dec2cd6cbe9ed9": {
+    "path": "retired_fixed_inputs/packets/ff817c01529199b174579d7ac685e55071a534a617945815f6dec2cd6cbe9ed9.bin",
+    "bytes": 225,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_types76_golden.h",
+        "symbol": "task_types76_golden"
+      }
+    ]
+  },
   "be6cc589f2b8cf15444c23276e980756423e95c4518bdaab40a298d1032e78fd": {
     "path": "retired_fixed_inputs/packets/be6cc589f2b8cf15444c23276e980756423e95c4518bdaab40a298d1032e78fd.bin",
     "bytes": 225,
@@ -9740,6 +11316,54 @@
       {
         "path": "xir_task_unit72_golden.h",
         "symbol": "task_unit72_golden"
+      }
+    ]
+  },
+  "26f7f3c124cd0fd3dc5354a9d69ba9f8b24f229f0a5703b4f214236de63cdaa8": {
+    "path": "retired_fixed_inputs/packets/26f7f3c124cd0fd3dc5354a9d69ba9f8b24f229f0a5703b4f214236de63cdaa8.bin",
+    "bytes": 225,
+    "wire": 28,
+    "semantic": 73,
+    "sources": [
+      {
+        "path": "xir_task_unit73_golden.h",
+        "symbol": "task_unit73_golden"
+      }
+    ]
+  },
+  "8de5d2ed0ae15e2fa2fe68a8f9fae4c919255fedcaf20ee5c816a16b23c43375": {
+    "path": "retired_fixed_inputs/packets/8de5d2ed0ae15e2fa2fe68a8f9fae4c919255fedcaf20ee5c816a16b23c43375.bin",
+    "bytes": 225,
+    "wire": 28,
+    "semantic": 74,
+    "sources": [
+      {
+        "path": "xir_task_unit74_golden.h",
+        "symbol": "task_unit74_golden"
+      }
+    ]
+  },
+  "cefd22b19636a88f28aacc13991b8de64fe8ab5114b9f72f055c24e3ced7689b": {
+    "path": "retired_fixed_inputs/packets/cefd22b19636a88f28aacc13991b8de64fe8ab5114b9f72f055c24e3ced7689b.bin",
+    "bytes": 225,
+    "wire": 28,
+    "semantic": 75,
+    "sources": [
+      {
+        "path": "xir_task_unit75_golden.h",
+        "symbol": "task_unit75_golden"
+      }
+    ]
+  },
+  "00003c23e2e61f9d6c5f1ecf19c50c12ef9e499da1606ed30c576fc96f92b609": {
+    "path": "retired_fixed_inputs/packets/00003c23e2e61f9d6c5f1ecf19c50c12ef9e499da1606ed30c576fc96f92b609.bin",
+    "bytes": 225,
+    "wire": 28,
+    "semantic": 76,
+    "sources": [
+      {
+        "path": "xir_task_unit76_golden.h",
+        "symbol": "task_unit76_golden"
       }
     ]
   },
