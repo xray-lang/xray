@@ -506,6 +506,17 @@ def assert_result(args) -> int:
         raise FileExistsError("Gate evidence already exists: " + str(output))
     save(output, report)
     print(json.dumps(report, indent=2))
+    # A ratio failure is only actionable with its numbers, and a hosted runner
+    # can be replaced between the run and anyone reading it. Emit the values as
+    # a workflow annotation so the failure carries its own evidence.
+    if report["state"] != "PASS_NATIVE_ARRAY_ONLY":
+        for case, gate in sorted(report["gates"].items()):
+            if not gate["pass"]:
+                print(f"::error title=Native Array ratio::{case} native/C "
+                      f"{gate['ratio']:.3f} over the {gate['limit']:.2f} limit")
+        if not report["gates"]:
+            print("::error title=Native Array ratio::no valid measurement; "
+                  + json.dumps(report["notRun"], sort_keys=True))
     return 0 if report["state"] == "PASS_NATIVE_ARRAY_ONLY" else 1
 
 
