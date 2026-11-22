@@ -175,7 +175,7 @@ static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrL
         }
     } else {
         XrLirType displayed = v->type;
-        if (v->op == XR_LIR_ICMP || v->op == XR_LIR_FCMP) {
+        if (v->op == XR_LIR_ICMP || v->op == XR_LIR_FCMP || v->op == XR_LIR_STRING_EQUAL) {
             lir_print_format(p, " %s", predicates[v->predicate]);
             displayed = f->values[v->operands[0] - 1].type;
         }

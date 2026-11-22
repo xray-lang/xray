@@ -1,0 +1,26 @@
+// anchor: string-equality-by-content
+// Strings compare by content: equal bytes are equal, a different length or a
+// different byte at any position is not, and an embedded NUL is part of the
+// value rather than a terminator.
+fn same(left: string, right: string) -> bool {
+    return left == right
+}
+
+fn different(left: string, right: string) -> bool {
+    return left != right
+}
+
+fn main() {
+    var text = "alpha"
+    print(text == "alpha")
+    print(text == "alphb")
+    print(text != "alpha")
+    print("" == "")
+    print("ab" == "a")
+    print("a\0b" == "a\0b")
+    print("a\0b" == "a\0c")
+    print("a\0b" != "a\0c")
+    print(same(text, "alpha"))
+    print(different(text, "alpha"))
+}
+main()
