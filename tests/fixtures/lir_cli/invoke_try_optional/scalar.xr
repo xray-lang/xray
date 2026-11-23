@@ -1,0 +1,29 @@
+enum Refusal { First { code: i64 } }
+enum Other { Second }
+
+fn part(mark: i64, allow: bool) throws(Refusal) -> i64 {
+    print(mark)
+    if (!allow) { throw Refusal.First { code: mark } }
+    return mark
+}
+
+fn different(allow: bool) throws(Other) -> i64 {
+    print(21)
+    if (!allow) { throw Other.Second }
+    return 21
+}
+
+fn tail() -> i64 {
+    print(23)
+    return 23
+}
+
+fn mixed(first: bool, middle: bool) -> i64? {
+    return try? (part(18, first) + different(middle) + tail())
+}
+
+print((try? part(17, true)) ?? -1)
+print((try? part(19, false)) ?? -1)
+print(mixed(true, true) ?? -2)
+print(mixed(false, true) ?? -3)
+print(mixed(true, false) ?? -4)
