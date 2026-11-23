@@ -347,11 +347,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
 
 // log module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
-    {"debug", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
-    {"warn", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
-    {"error", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
-    {"fatal", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
     {"setLevel", XLSP_SYM_FUNCTION, "fn(level: LogLevel): ()", "", NULL, 0},
     {"setFormat", XLSP_SYM_FUNCTION, "fn(format: LogFormat): ()", "", NULL, 0},
     {"setOutput", XLSP_SYM_FUNCTION, "fn(path: Path): ()", "", NULL, 0},
@@ -359,12 +354,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
     {"enableSource", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"enableAsync", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"flush", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
-    {"child", XLSP_SYM_FUNCTION, "fn(...fields: JSON.Value): Logger", "", NULL, 0},
+    {"child", XLSP_SYM_FUNCTION, "fn(fields: JSON.Object): Logger", "", NULL, 0},
     {"LogLevel", XLSP_SYM_CLASS, "type LogLevel", "Enum type", NULL, 0},
     {"LogFormat", XLSP_SYM_CLASS, "type LogFormat", "Enum type", NULL, 0},
     {"Logger", XLSP_SYM_CLASS, "type Logger", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_LOG_SYMBOL_COUNT 16
+#define GEN_XLSP_STDLIB_LOG_SYMBOL_COUNT 11
 
 // math module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_math_symbols[] = {
@@ -621,7 +616,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
     {"EventCount", XLSP_SYM_CLASS, "type EventCount", "Class type", NULL, 0},
     {"WorkQueue", XLSP_SYM_CLASS, "type WorkQueue", "Class type", NULL, 0},
     {"ResultGroup", XLSP_SYM_CLASS, "type ResultGroup", "Class type", NULL, 0},
-    {"CachePadded", XLSP_SYM_CLASS, "type CachePadded", "cache-line aligned wrapper for counters/flags that should", NULL, 0},
+    {"CachePadded", XLSP_SYM_CLASS, "type CachePadded", "128-byte aligned wrapper: x86 prefetch pairs and aarch64", NULL, 0},
     {"Mutex", XLSP_SYM_CLASS, "type Mutex", "data guarded by a coroutine-aware lock; closure-scoped access", NULL, 0},
     {"RwLock", XLSP_SYM_CLASS, "type RwLock", "many readers XOR one writer. `_entry` serializes reader entry and", NULL, 0},
     {"Once", XLSP_SYM_CLASS, "type Once", "run a body exactly once across repeated calls, even under contention.", NULL, 0},

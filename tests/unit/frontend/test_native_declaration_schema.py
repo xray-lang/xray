@@ -420,6 +420,7 @@ class StringBuilder {
                              'stdlib/prelude/range.xr', 'stdlib/prelude/stringable.xr',
                              'stdlib/prelude/builtin_symbols.def',
                              'stdlib/defs/core.def', 'stdlib/mem/mem.xr', 'stdlib/net/net.xr',
+                             'src/shared/xr_target_query_registry_gen.h',
                              'tools/stdlibgen/stdlibgen.py',
                              'tools/stdlibgen/provider_codegen.py', 'tools/stdlibgen/provider_declarations.py',
                              'tools/stdlibgen/provider_types.py']:

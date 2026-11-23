@@ -22,6 +22,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         inputs = [path for relative in ('stdlib', 'tools/stdlibgen')
                   for path in (ROOT / relative).rglob('*')
                   if path.is_file() and path.suffix in ('.def', '.xr', '.py')]
+        inputs.append(ROOT / 'src/shared/xr_target_query_registry_gen.h')
         with tempfile.TemporaryDirectory(prefix='xray-native-line-endings-') as directory:
             generated = []
             for name, ending in (('lf', b'\n'), ('crlf', b'\r\n')):
