@@ -137,7 +137,11 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
         XrLirType type = (XrLirType)row;
         XrLirTypeView shape;
         if (xr_lir_type_view(module, type, &shape) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
-        if (shape.kind == XR_LIR_TYPE_NULLABLE || shape.kind == XR_LIR_TYPE_CLASS) {
+        if (shape.kind == XR_LIR_TYPE_NULLABLE) {
+            XrLirType element = xr_lir_nullable_array_element(module, type);
+            XrLirValueLayoutStatus status = need_shaped_type(set, shape.element, element, type);
+            if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
+        } else if (shape.kind == XR_LIR_TYPE_CLASS) {
             XrLirValueLayoutStatus status = need_type(set, shape.element, type);
             XrLirType parent = xr_lir_class_parent(module, type);
             if (status == XR_LIR_VALUE_LAYOUT_OK && parent) status = need_type(set, parent, type);
@@ -303,7 +307,7 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
     }
     if (shape.kind == XR_LIR_TYPE_NULLABLE) {
         XrtValuePlanSpec child;
-        const XrtValuePlan *plan = dependency(set, shape.element);
+        const XrtValuePlan *plan = shaped_dependency(set, shape.element, xr_lir_nullable_array_element(module, type));
         if (xrt_value_plan_view(plan, &child) != XRT_MANAGED_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
         spec->kind = XRT_VALUE_NULLABLE; spec->alignment = child.alignment;
         spec->nullable = (XrtValueNullableSpec){0, child.alignment, plan};

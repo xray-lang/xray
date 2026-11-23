@@ -23,6 +23,10 @@ XR_FUNC uint32_t xr_lir_constructed_type_count(const XrLirModule *m) {
     return xr_lir_module_is_readable(m) ? m->type_count : 0;
 }
 
+static bool lir_nullable_array_shape(XrLirTypeView shape) {
+    return shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_ARRAY;
+}
+
 static uint32_t lir_type_hash(XrLirTypeView shape, const XrLirCallableType *callable,
     XrLirType cell_element, const XrLirRecordField *record, const XrLirRecordIdentity *identity,
     const XrLirSumVariant *variants) {
@@ -45,7 +49,8 @@ static uint32_t lir_type_hash(XrLirTypeView shape, const XrLirCallableType *call
         }
     }
     if (shape.kind == XR_LIR_TYPE_RECORD) return lir_record_identity_hash(identity);
-    if (shape.kind == XR_LIR_TYPE_CELL) hash ^= xr_hash_bytes(&cell_element, sizeof(cell_element));
+    if (shape.kind == XR_LIR_TYPE_CELL || lir_nullable_array_shape(shape))
+        hash ^= xr_hash_bytes(&cell_element, sizeof(cell_element));
     return shape.kind == XR_LIR_TYPE_CALLABLE ? lir_callable_hash(hash, callable) : hash;
 }
 
@@ -133,6 +138,12 @@ static bool lir_cell_payload_valid(const XrLirModule *m, XrLirType payload,
         payload = shape.element;
     }
     return true;
+}
+
+static bool lir_type_element_valid(const XrLirModule *m, XrLirTypeView shape, XrLirType element, uint32_t ordinal) {
+    if (shape.kind == XR_LIR_TYPE_CELL) return lir_cell_payload_valid(m, shape.element, element, ordinal);
+    if (lir_nullable_array_shape(shape)) return element == XR_LIR_U8 || element == XR_LIR_I64;
+    return element == XR_LIR_TYPE_INVALID;
 }
 
 static bool lir_tuple_shape(const XrLirModule *m, XrLirTypeView shape, const XrLirRecordField *fields,
@@ -256,7 +267,7 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape, const Xr
             return true;
         }
     }
-    if (shape.element == XR_LIR_STRING || xr_lir_boxed_type(m, shape.element)) {
+    if (shape.element == XR_LIR_STRING || lir_nullable_array_shape(shape) || xr_lir_boxed_type(m, shape.element)) {
         *output = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
         return true;
     }
@@ -336,8 +347,7 @@ XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
             (type.shape.kind == XR_LIR_TYPE_SUM ?
                 (!type.variants || type.variant_count != type.shape.count) :
                 (type.variants || type.variant_count)) ||
-            (type.shape.kind == XR_LIR_TYPE_CELL ? !lir_cell_payload_valid(m, type.shape.element, type.cell_element, n) :
-                type.cell_element != XR_LIR_TYPE_INVALID) ||
+            !lir_type_element_valid(m, type.shape, type.cell_element, n) ||
             m->type_index[lir_type_slot(m, type.shape, &type.callable, type.cell_element, type.fields,
                 &type.record, type.variants)] != n + 1) return false;
     }
@@ -379,7 +389,7 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
     if (!output || !lir_shape_layout(m, shape, fields, variants, m->type_count, &layout) ||
         !lir_class_parent_valid(m, shape, class_parent, m->type_count) ||
         (shape.kind == XR_LIR_TYPE_CALLABLE && !lir_callable_signature_valid(m, callable, m->type_count)) ||
-        (shape.kind == XR_LIR_TYPE_CELL ? !lir_cell_payload_valid(m, shape.element, cell_element, m->type_count) : cell_element != 0))
+        !lir_type_element_valid(m, shape, cell_element, m->type_count))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     if (shape.kind == XR_LIR_TYPE_RECORD) {
         if (!lir_record_fields_valid(m, fields, shape.count, m->type_count) ||
@@ -460,6 +470,14 @@ XR_FUNC XrLirStatus xr_lir_fixed_array_type(XrLirModule *m, XrLirType element,
 
 XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *m, XrLirType element, XrLirType *output) {
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_NULLABLE, element, 0}, NULL, 0, 0, NULL, NULL, NULL, output);
+}
+XR_FUNC XrLirStatus xr_lir_nullable_array_type(XrLirModule *m, XrLirType element, XrLirType *output) {
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_NULLABLE, XR_LIR_ARRAY, 0}, NULL, element, 0, NULL, NULL, NULL, output);
+}
+XR_FUNC XrLirType xr_lir_nullable_array_element(const XrLirModule *m, XrLirType type) {
+    XrLirTypeView shape;
+    if (xr_lir_type_view(m, type, &shape) != XR_LIR_OK || !lir_nullable_array_shape(shape)) return XR_LIR_TYPE_INVALID;
+    return m->types[type - XR_LIR_TYPE_COUNT].cell_element;
 }
 XR_FUNC XrLirStatus xr_lir_tuple_type(XrLirModule *m, const XrLirRecordField *fields,
     uint32_t count, XrLirType *output) {

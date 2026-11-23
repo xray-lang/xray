@@ -95,7 +95,8 @@ typedef struct XrLirTypeData {
     XrLirTypeView shape;
     XrLirTypeLayout layout;
     XrLirCallableType callable;
-    XrLirType cell_element, class_parent;
+    XrLirType cell_element; /* Array element for a shaped Cell or Nullable payload. */
+    XrLirType class_parent;
     const XrLirRecordField *fields;
     const XrLirSumVariant *variants;
     uint32_t variant_count;

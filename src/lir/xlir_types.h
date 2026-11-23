@@ -98,6 +98,9 @@ XR_FUNC XrLirStatus xr_lir_fixed_array_type(XrLirModule *, XrLirType element,
  * plan describes constructed payloads and any owner leaves. Authority
  * capabilities have no nullable physical projection here. */
 XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *, XrLirType element, XrLirType *output);
+/* Array payloads retain their element family beyond the ordinary type view. */
+XR_FUNC XrLirStatus xr_lir_nullable_array_type(XrLirModule *, XrLirType array_element, XrLirType *output);
+XR_FUNC XrLirType xr_lir_nullable_array_element(const XrLirModule *, XrLirType);
 /* Tuple identity consists of its ordered field types. Positional fields have
  * no name, visibility or mutation metadata. The module owns the copied fields. */
 XR_FUNC XrLirStatus xr_lir_tuple_type(XrLirModule *, const XrLirRecordField *, uint32_t count, XrLirType *output);
