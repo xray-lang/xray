@@ -1,0 +1,23 @@
+export enum TextFailure { Refused { code: i64 } }
+
+fn prefix() -> string { return "界\0é" }
+
+export fn render() -> string { return prefix() + "\u{1F642}" }
+
+export fn produce(mark: i64) throws(TextFailure) -> string {
+    print(mark)
+    if (mark < 0) { throw TextFailure.Refused { code: mark } }
+    return render()
+}
+
+export fn forward(mark: i64) throws(TextFailure) -> string {
+    const value = try produce(mark)
+    print("relay")
+    return value
+}
+
+export fn divide(denominator: i64) -> string {
+    print("ordinary")
+    print(9 / denominator)
+    return render()
+}

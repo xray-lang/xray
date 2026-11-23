@@ -1,0 +1,5 @@
+import { forward } from "./modules/text"
+
+print("entered")
+print(try! forward(-23))
+print("finished")

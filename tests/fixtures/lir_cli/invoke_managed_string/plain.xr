@@ -1,0 +1,5 @@
+import { divide, render } from "./modules/text"
+
+print(render())
+print(divide(0))
+print("finished")

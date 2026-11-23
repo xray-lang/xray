@@ -1,0 +1,22 @@
+import { TextFailure, produce } from "./modules/text"
+
+fn alwaysFail() throws(TextFailure) -> string {
+    print("always")
+    throw TextFailure.Refused { code: 71 }
+}
+
+fn fallback() -> string {
+    print("fallback")
+    return "代\0Ω"
+}
+
+fn alternate() {
+    var index = 0
+    while (index < 4) {
+        print((try? produce(1 - 2 * (index % 2))) ?? fallback())
+        index += 1
+    }
+    print((try? alwaysFail()) ?? fallback())
+}
+
+alternate()

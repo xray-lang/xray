@@ -1,0 +1,14 @@
+import { TextFailure, divide } from "./modules/text"
+
+fn fault(allow: bool, denominator: i64) throws(TextFailure) -> string {
+    if (!allow) { throw TextFailure.Refused { code: 29 } }
+    return divide(denominator)
+}
+
+fn fallback() -> string {
+    print("fallback")
+    return "unreachable"
+}
+
+print((try? fault(true, 0)) ?? fallback())
+print("finished")

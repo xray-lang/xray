@@ -1,0 +1,27 @@
+{
+  "success": {
+    "exit": 0,
+    "stdout": "entered\n17\nrelay\n界\u0000é🙂\nfinished\n",
+    "stderr": ""
+  },
+  "propagate_error": {
+    "exit": 1,
+    "stdout": "entered\n-23\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: TextFailure.Refused(-23)\n"
+  },
+  "optional": {
+    "exit": 0,
+    "stdout": "1\n界\u0000é🙂\n-1\nfallback\n代\u0000Ω\n1\n界\u0000é🙂\n-1\nfallback\n代\u0000Ω\nalways\nfallback\n代\u0000Ω\n",
+    "stderr": ""
+  },
+  "panic": {
+    "exit": 1,
+    "stdout": "ordinary\n",
+    "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  },
+  "plain": {
+    "exit": 1,
+    "stdout": "界\u0000é🙂\nordinary\n",
+    "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  }
+}
