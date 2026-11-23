@@ -191,31 +191,47 @@ static bool rbc_value_exact_home(const XrRbcModule *module, const XrRbcValueCode
     return home && home->type == type && (rbc_value_array(module, code, value, destination) ||
         rbc_value_inline(module, code, value, destination));
 }
-static bool rbc_value_file_storage(const XrRbcModule *module, const XrRbcValueCode *code, uint32_t value, bool optional) {
-    if (!rbc_value_inline(module, code, value, optional)) return false;
+static const XrtValueImageType *rbc_value_host_file_result(const XrRbcModule *module,
+    const XrRbcValueCode *code, uint32_t value) {
+    if (!rbc_value_inline(module, code, value, true)) return NULL;
     const XrtValueImage *image = xr_rbc_module_value_image(module);
     const XrLirValueHome *home = rbc_value_home(code, value);
     const XrtValueImageType *type = &image->types[home->type - 1];
-    if (optional) {
-        const XrtManagedFrameSpec *frame = &code->homes->frame;
-        const size_t owner = offsetof(XrtHostFileOptional, owner);
-        if (type->kind != XRT_VALUE_NULLABLE || !type->nullable_element || type->nullable_element >= home->type ||
-            type->size != sizeof(XrtHostFileOptional) || type->alignment != _Alignof(XrtHostFileOptional) ||
-            type->nullable_tag != offsetof(XrtHostFileOptional, present) || type->nullable_payload != owner ||
-            type->owned_count != 1 || !image->owned_offsets || type->first_owned >= image->owned_count ||
-            image->owned_offsets[type->first_owned] != owner || !frame->owned_offsets ||
-            frame->payload_alignment < type->alignment || home->first_owner == home->temporary_first_owner ||
-            home->first_owner >= frame->slot_count || home->temporary_first_owner >= frame->slot_count) return false;
-        size_t offsets[] = {home->offset, home->temporary_offset};
-        size_t slots[] = {home->first_owner, home->temporary_first_owner};
-        for (size_t i = 0; i < 2; ++i) {
-            size_t base = offsets[i];
-            if (base % type->alignment || base > frame->payload_size || type->size > frame->payload_size - base ||
-                frame->owned_offsets[slots[i]] != base + owner) return false;
-        }
-        type = &image->types[type->nullable_element - 1];
+    const XrtManagedFrameSpec *frame = &code->homes->frame;
+    const size_t owner = offsetof(XrtHostFileOptional, owner);
+    if (type->kind != XRT_VALUE_NULLABLE || !type->nullable_element || type->nullable_element >= home->type ||
+        type->size != sizeof(XrtHostFileOptional) || type->alignment != _Alignof(XrtHostFileOptional) ||
+        type->nullable_tag != offsetof(XrtHostFileOptional, present) || type->nullable_payload != owner ||
+        type->owned_count != 1 || !image->owned_offsets || type->first_owned >= image->owned_count ||
+        image->owned_offsets[type->first_owned] != owner || !frame->owned_offsets ||
+        frame->payload_alignment < type->alignment || home->first_owner == home->temporary_first_owner ||
+        home->first_owner >= frame->slot_count || home->temporary_first_owner >= frame->slot_count) return NULL;
+    size_t offsets[] = {home->offset, home->temporary_offset};
+    size_t slots[] = {home->first_owner, home->temporary_first_owner};
+    for (size_t i = 0; i < 2; ++i) {
+        size_t base = offsets[i];
+        if (base % type->alignment || base > frame->payload_size || type->size > frame->payload_size - base ||
+            frame->owned_offsets[slots[i]] != base + owner) return NULL;
     }
-    return type->kind == XRT_VALUE_CLASS && type->class_storage == XR_NATIVE_DECLARATION_FILE_STORAGE;
+    if (offsets[0] < offsets[1] + type->size && offsets[1] < offsets[0] + type->size) return NULL;
+    return &image->types[type->nullable_element - 1];
+}
+static bool rbc_value_file_storage(const XrRbcModule *module, const XrRbcValueCode *code, uint32_t value, bool optional) {
+    const XrtValueImageType *type;
+    if (optional) type = rbc_value_host_file_result(module, code, value);
+    else {
+        if (!rbc_value_inline(module, code, value, false)) return false;
+        const XrtValueImage *image = xr_rbc_module_value_image(module);
+        type = &image->types[rbc_value_home(code, value)->type - 1];
+    }
+    return type && type->kind == XRT_VALUE_CLASS && type->class_storage == XR_NATIVE_DECLARATION_FILE_STORAGE;
+}
+static bool rbc_value_file_read_result(const XrRbcModule *module, const XrRbcValueCode *code, uint32_t value) {
+    const XrtValueImageType *type = rbc_value_host_file_result(module, code, value);
+    const XrtValueImage *image = xr_rbc_module_value_image(module);
+    return type && type->kind == XRT_VALUE_ARRAY_U8 && type->size == sizeof(XrtManagedHeader *) &&
+        type->alignment == _Alignof(XrtManagedHeader *) && type->owned_count == 1 &&
+        type->first_owned < image->owned_count && !image->owned_offsets[type->first_owned];
 }
 /* An owner-free Tuple (possibly wrapped in Nullable) can leave the outer
  * activation as natural bytes and its original image type. */
@@ -623,6 +639,13 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_OPEN_WRITE &&
             rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.other,XR_RBC_BITS) &&
             rbc_value_file_storage(module,code,a.result,true);
+    case XR_RBC_VALUE_HOST_FILE_OPEN_READ:
+        return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_OPEN_READ &&
+            rbc_value_string(module, code, a.source, false) && rbc_value_file_storage(module, code, a.result, true);
+    case XR_RBC_VALUE_HOST_FILE_READ:
+        return xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_READ &&
+            rbc_value_file_storage(module, code, a.source, false) && rbc_value_scalar(code, function, a.other, XR_RBC_BITS) &&
+            rbc_value_file_read_result(module, code, a.result);
     case XR_RBC_VALUE_HOST_FILE_CLOSE:
         return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_CLOSE &&
             rbc_value_file_storage(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);

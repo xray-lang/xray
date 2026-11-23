@@ -565,7 +565,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         i->op == XR_LIR_CLASS_ARRAY_PUSH || i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP ||
         i->op == XR_LIR_CLASS_ADOPT || i->op == XR_LIR_CLASS_IS ||
         i->op == XR_LIR_SUM_NEW || i->op == XR_LIR_SUM_TAG || i->op == XR_LIR_SUM_GET ||
-        i->op == XR_LIR_HOST_FILE_OPEN_WRITE || i->op == XR_LIR_HOST_FILE_CLOSE || i->op == XR_LIR_HOST_FILE_WRITE) return true;
+        i->op == XR_LIR_HOST_FILE_OPEN_WRITE || i->op == XR_LIR_HOST_FILE_CLOSE || i->op == XR_LIR_HOST_FILE_WRITE ||
+        i->op == XR_LIR_HOST_FILE_OPEN_READ || i->op == XR_LIR_HOST_FILE_READ) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return true;
     if (i->op==XR_LIR_MAP_BORROW && i->operand_count) {
