@@ -31,6 +31,7 @@ def main() -> None:
     range_failure = (1, b"before\n", b"[Uncaught Panic] E0433: string slice range is invalid\n")
     cases = {
         "slices": (0, sliced, b""),
+        "path_basename": (0, "中😀.txt\nsolo\n".encode("utf-8"), b""),
         "negative_start": range_failure,
         "reversed_range": range_failure,
         "past_end": range_failure,

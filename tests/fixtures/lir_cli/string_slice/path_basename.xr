@@ -1,0 +1,4 @@
+import path
+
+print(path.basename(path.from("folder/中😀.txt/")))
+print(path.basename(path.from("solo")))
