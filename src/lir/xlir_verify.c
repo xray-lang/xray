@@ -1619,7 +1619,8 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
             return status;
         }
     }
-    return lir_startup_inventory(m,d);
+    XrLirStatus status = lir_startup_inventory(m,d);
+    return status == XR_LIR_OK ? lir_cleanup_call_targets(m,d) : status;
 }
 static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d,XrLirCallableFacts **facts,
     XrLirBlockConstructionFacts *multiplicity) {

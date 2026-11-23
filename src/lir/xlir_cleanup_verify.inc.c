@@ -107,6 +107,14 @@ static uint32_t lir_cleanup_frontier(const XrLirFunctionData *f, uint32_t target
     return block ? block->frontier : 0;
 }
 
+static bool lir_cleanup_invoke_shape(const XrLirModule *m, const XrLirFunctionData *f,
+    const XrLirInstructionView *call) {
+    uint32_t failed = call->edges[1].target - 1;
+    return f->error && f->error == m->functions[call->callee - 1].error &&
+        (call->type == XR_LIR_UNIT || lir_cleanup_scalar(call->type)) &&
+        lir_terminator(f, failed)->op == XR_LIR_RETURN_ERROR;
+}
+
 static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
     uint32_t owner, const LirGraph *g) {
     if (!f->has_cleanups && !f->cleanup_owner) return true;
@@ -125,13 +133,64 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
                 !lir_cleanup_captures(f, g, b, meta, &m->functions[target - 1])) return false;
             remaining = target;
         }
-        if ((from || f->cleanup_owner) && term->op != XR_LIR_BR && term->op != XR_LIR_CONDBR &&
-            !xr_lir_function_exit(term->op))
-            return false;
-        if (term->op == XR_LIR_CONDBR && remaining != from) return false;
+        if (from || f->cleanup_owner) {
+            if (term->op == XR_LIR_INVOKE) {
+                if (!from || !lir_cleanup_invoke_shape(m, f, term)) return false;
+            } else if (term->op != XR_LIR_BR && term->op != XR_LIR_CONDBR && !xr_lir_function_exit(term->op)) {
+                return false;
+            }
+        }
+        if ((term->op == XR_LIR_CONDBR || term->op == XR_LIR_INVOKE) && remaining != from) return false;
         if (!term->edge_count && remaining) return false;
         for (uint32_t e = 0; e < term->edge_count; ++e)
             if (lir_cleanup_frontier(f, term->edges[e].target) != remaining) return false;
     }
     return true;
+}
+
+/* Called after every function's instructions, registrations and whole CFG
+ * have been verified. A direct leaf can call its own proved cleanups and the
+ * scalar output sink. Its entire body, including the prefix before its own
+ * registrations, must exclude every other operation that can panic. */
+static bool lir_cleanup_direct_leaf(const XrLirModule *m, uint32_t function) {
+    const XrLirFunctionData *f = &m->functions[function - 1];
+    if (f->kind != XR_LIR_FUNCTION_DEFINITION || !f->error || f->closure.callable) return false;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirBlockData *body = &f->blocks[b];
+        const XrLirInstructionView *term = lir_terminator(f, b);
+        if (term->op != XR_LIR_BR && term->op != XR_LIR_CONDBR && !xr_lir_function_exit(term->op))
+            return false;
+        for (uint32_t n = 0; n + 1 < body->instruction_count; ++n) {
+            const XrLirInstructionView *op = &body->instructions[n].view;
+            if (op->op == XR_LIR_CALL && m->functions[op->callee - 1].cleanup_owner == function)
+                continue;
+            if (!lir_cleanup_nopanic(m, f, op)) return false;
+        }
+    }
+    return true;
+}
+
+static XrLirStatus lir_cleanup_call_targets(const XrLirModule *m, XrLirDiagnostic *d) {
+    enum { UNKNOWN, SAFE_LEAF, NOT_SAFE };
+    uint8_t *proofs = NULL;
+    XrLirStatus status = XR_LIR_OK;
+    for (uint32_t f = 0; f < m->function_count && status == XR_LIR_OK; ++f) {
+        const XrLirFunctionData *body = &m->functions[f];
+        if (!body->has_cleanups) continue;
+        for (uint32_t b = 0; b < body->block_count; ++b) {
+            const XrLirInstructionView *term = lir_terminator(body, b);
+            if (term->op != XR_LIR_INVOKE || !lir_cleanup_frontier(body, b + 1)) continue;
+            if (!proofs) proofs = xr_calloc(m->function_count, sizeof(*proofs));
+            if (!proofs) return lir_status_error(d, XR_LIR_OUT_OF_MEMORY, "cleanup call proof allocation failed");
+            uint8_t *proof = &proofs[term->callee - 1];
+            if (*proof == UNKNOWN) *proof = lir_cleanup_direct_leaf(m, term->callee) ? SAFE_LEAF : NOT_SAFE;
+            if (*proof != SAFE_LEAF) {
+                status = xr_lir_internal_error(d, "call with active cleanups requires a panic-free leaf", f + 1,
+                    b + 1, body->blocks[b].instruction_count, &term->source);
+                break;
+            }
+        }
+    }
+    xr_free(proofs);
+    return status;
 }
