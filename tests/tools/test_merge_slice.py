@@ -18,6 +18,7 @@ from zipfile import ZipFile
 QUEUE = Path(__file__).resolve().parents[2] / "scripts/merge_slice.py"
 sys.path.insert(0, str(QUEUE.parent))
 import merge_slice
+from host_release_comparison import compare as compare_release
 import xray_l1
 from xray_process import RecoveryRequired
 FIXTURE_TESTS = {"actual"} | merge_slice.CURRENT_CORE
@@ -744,6 +745,48 @@ class GroupedReportTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 xray_l1.test_groups({"l1": ["actual", "actual"]}, Path(), Path(), {})
             command.assert_not_called()
+
+
+class HostReleaseComparisonTests(unittest.TestCase):
+    def test_new_default_off_test_registration_options_are_reported(self):
+        before = {"current": "run", "dap_session": "fail", "mcp_run": "fail"}
+        after = {"current": "run", "dap_unavailable": "run"}
+        base_config = {"CMAKE_BUILD_TYPE": "Release"}
+        current_config = dict(base_config, XR_ENABLE_DAP_SESSION_TESTS="OFF", XR_ENABLE_MCP_RUN_TESTS="OFF")
+        result, summary = compare_release("base", "candidate", before, after, base_config,
+                                          current_config, "macos-latest", {"current"})
+        self.assertEqual(result["state"], "PASS")
+        self.assertTrue(result["sameConfiguration"])
+        self.assertEqual(result["retired"], ["dap_session", "mcp_run"])
+        self.assertEqual(result["configurationChanges"], {})
+        self.assertEqual(result["testRegistrationChanges"], {
+            "XR_ENABLE_DAP_SESSION_TESTS": {"baseline": None, "candidate": "OFF"},
+            "XR_ENABLE_MCP_RUN_TESTS": {"baseline": None, "candidate": "OFF"},
+        })
+        self.assertIn("test registration XR_ENABLE_DAP_SESSION_TESTS: (absent) -> OFF", summary)
+
+    def test_compiler_options_and_explicit_test_toggles_still_fail(self):
+        base_config = {"CMAKE_C_FLAGS": "-g", "XR_ENABLE_DAP_SESSION_TESTS": "OFF"}
+        for option, value in (("CMAKE_C_FLAGS", "-O2"), ("XR_ENABLE_DAP_SESSION_TESTS", "ON"),
+                              ("XR_NEW_BUILD_FLAG", "OFF")):
+            with self.subTest(option=option):
+                current_config = dict(base_config, **{option: value})
+                outcome = {"current": "run"}
+                result, _ = compare_release("base", "candidate", outcome, outcome, base_config,
+                                            current_config, "windows-2022", {"current"})
+                self.assertEqual(result["state"], "NEEDS_REVIEW")
+                self.assertFalse(result["sameConfiguration"])
+                self.assertEqual(result["configurationChanges"], {
+                    option: {"baseline": base_config.get(option), "candidate": value},
+                })
+
+    def test_test_registration_changes_cannot_hide_regressions(self):
+        result, _ = compare_release("base", "candidate", {"current": "run"}, {"current": "fail"},
+                                    {}, {"XR_ENABLE_MCP_RUN_TESTS": "OFF"}, "macos-latest", {"current"})
+        self.assertEqual(result["state"], "NEEDS_REVIEW")
+        self.assertTrue(result["sameConfiguration"])
+        self.assertEqual(result["regressions"], ["current"])
+        self.assertEqual(result["requiredNonPass"], ["current"])
 
 
 if __name__ == "__main__":

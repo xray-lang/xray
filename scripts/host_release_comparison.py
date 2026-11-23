@@ -31,6 +31,10 @@ from xray_process import run_child
 TIMING = re.compile(r"(?:perf|bench|timing)", re.IGNORECASE)
 # The sanitizer lane builds and runs a second complete configuration.
 EXCLUDED = {"asan_focused"}
+# These options only register tests for unavailable capabilities. Older trees
+# had no test-specific switch and registered the suites by default. The full CTest
+# receipts retain the registration change independently of the build options.
+TEST_REGISTRATION_OPTIONS = {"XR_ENABLE_DAP_SESSION_TESTS", "XR_ENABLE_MCP_RUN_TESTS"}
 # The shared identity table keys Windows by its canonical runner name; both
 # Windows images report the same target triple.
 IDENTITY_HOST = {"windows-2022": "windows-2022", "macos-latest": "macos-latest"}
@@ -133,7 +137,18 @@ def compare(baseline, candidate, before, after, base_config, candidate_config, h
     gating = [name for name in regressions if name not in timing]
     retired = sorted(before.keys() - after.keys())
     required_nonpass = sorted(name for name in required if after.get(name) != "run")
-    same_configuration = base_config == candidate_config
+    configuration_changes = {}
+    test_registration_changes = {}
+    for key in sorted(base_config.keys() | candidate_config.keys()):
+        old, new = base_config.get(key), candidate_config.get(key)
+        if old == new:
+            continue
+        change = {"baseline": old, "candidate": new}
+        if key in TEST_REGISTRATION_OPTIONS and {old, new} == {None, "OFF"}:
+            test_registration_changes[key] = change
+        else:
+            configuration_changes[key] = change
+    same_configuration = not configuration_changes
     state = "PASS" if same_configuration and not (gating or required_nonpass) else "NEEDS_REVIEW"
     result = {
         "state": state,
@@ -141,6 +156,8 @@ def compare(baseline, candidate, before, after, base_config, candidate_config, h
         "baseline": baseline,
         "candidate": candidate,
         "sameConfiguration": same_configuration,
+        "configurationChanges": configuration_changes,
+        "testRegistrationChanges": test_registration_changes,
         "registered": len(after),
         "baselineCounts": dict(Counter(before.values())),
         "candidateCounts": dict(Counter(after.values())),
@@ -165,6 +182,11 @@ def compare(baseline, candidate, before, after, base_config, candidate_config, h
         "required non-pass: " + (", ".join(required_nonpass) if required_nonpass else "(none)"),
         f"build configuration identical: {'yes' if same_configuration else 'no'}",
     ]
+    for label, changes in (("build option", configuration_changes), ("test registration", test_registration_changes)):
+        for key, change in changes.items():
+            old = change["baseline"] if change["baseline"] is not None else "(absent)"
+            new = change["candidate"] if change["candidate"] is not None else "(absent)"
+            lines.append(f"{label} {key}: {old} -> {new}")
     return result, "\n".join(lines) + "\n"
 
 
