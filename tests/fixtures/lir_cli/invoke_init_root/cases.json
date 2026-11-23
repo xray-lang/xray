@@ -34,5 +34,12 @@
     "exit": 0,
     "stdout_utf8": "prerequisite:ready\nalpha:enter\nalpha:later\nbeta:enter\nbeta:later\ndependent:ready\nentry\n64\n",
     "stderr_utf8": ""
+  },
+  "slotless": {
+    "source": "slotless.xr",
+    "set_env": {},
+    "exit": 1,
+    "stdout_utf8": "slotless:enter\n",
+    "stderr_utf8": "[Uncaught Error] SlotlessStartupError.Refused(91)\n"
   }
 }

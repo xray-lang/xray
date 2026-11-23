@@ -1,0 +1,5 @@
+enum SlotlessStartupError { Refused { code: i64 } }
+
+print("slotless:enter")
+throw SlotlessStartupError.Refused { code: 91 }
+print("slotless:after")
