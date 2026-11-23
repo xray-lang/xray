@@ -13,17 +13,18 @@ static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram 
         *output = (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, scalar};
         return true;
     }
+    uint32_t family = type == XR_LIR_ARRAY ? rbc_lir_array_family(element) : XR_RBC_ARRAY_FAMILY_COUNT;
+    bool inline_array = type == XR_LIR_ARRAY && family == XR_RBC_ARRAY_FAMILY_COUNT;
+    if (inline_array || (type >= XR_LIR_TYPE_COUNT && xr_lir_nullable_array_element(input, type))) {
+        const XrtValuePlan *plan = NULL;
+        uint32_t id = 0;
+        if ((inline_array && !xr_lir_inline_array_ordinal(input, element)) ||
+            xr_lir_value_layouts_lookup(layouts, (XrLirValueLayoutKey){type, element, 0}, &plan, &id) !=
+                XR_LIR_VALUE_LAYOUT_OK || !id) return false;
+        *output = (XrRbcCallableValue){XR_RBC_CALLABLE_HOME, id};
+        return true;
+    }
     if (type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_SET_I64) {
-        uint32_t family = rbc_lir_array_family(element);
-        if (type == XR_LIR_ARRAY && family == XR_RBC_ARRAY_FAMILY_COUNT) {
-            const XrtValuePlan *plan = NULL;
-            uint32_t id = 0;
-            if (!xr_lir_inline_array_ordinal(input, element) ||
-                xr_lir_value_layouts_lookup(layouts, (XrLirValueLayoutKey){type, element, 0}, &plan, &id) !=
-                    XR_LIR_VALUE_LAYOUT_OK || !id) return false;
-            *output = (XrRbcCallableValue){XR_RBC_CALLABLE_HOME, id};
-            return true;
-        }
         *output = (XrRbcCallableValue){XR_RBC_CALLABLE_REFERENCE,
             type == XR_LIR_SET_I64 ? XR_RBC_SET_I64 :
             type == XR_LIR_MAP_STRING_I64 ? XR_RBC_MAP_STRING_I64 :

@@ -1,0 +1,38 @@
+fn applyBytes(callback: fn(Array<u8>?) -> Array<u8>?, value: Array<u8>?) -> Array<u8>? {
+    return callback(value)
+}
+
+fn applyItems(callback: fn(Array<i64>?) -> Array<i64>?, value: Array<i64>?) -> Array<i64>? {
+    return callback(value)
+}
+
+fn snapshots() {
+    const bytes = fn(value: Array<u8>?) -> Array<u8>? { return value }
+    var source: Array<u8> = [231]
+    const kept = applyBytes(bytes, source)
+    source[0] = 12
+    source.push(13)
+    print(kept![0])
+    print(len(kept!))
+    print(source[0])
+    print(len(source))
+    const empty = applyBytes(bytes, Array<u8>())
+    print(empty == null)
+    print(len(empty!))
+    print(applyBytes(bytes, null) == null)
+
+    const items = fn(value: Array<i64>?) -> Array<i64>? { return value }
+    var values: Array<i64> = [-91, 4]
+    const saved = applyItems(items, values)
+    values[0] = 12
+    values = [7]
+    print(saved![0])
+    print(len(saved!))
+    print(values[0])
+    const noItems = applyItems(items, Array<i64>())
+    print(noItems == null)
+    print(len(noItems!))
+    print(applyItems(items, null) == null)
+}
+
+snapshots()

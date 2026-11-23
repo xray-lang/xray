@@ -1,0 +1,5 @@
+fn wrong(value: Array<i64>) -> Array<u8>? {
+    return value
+}
+
+print(wrong([500]) == null)

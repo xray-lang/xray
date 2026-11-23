@@ -38,7 +38,7 @@ static bool rbc_value_callable_argument(const XrRbcModule *module,const XrRbcVal
     if (expected.kind==XR_RBC_CALLABLE_FUNCTION)
         return rbc_callable_accepts(module,expected.type+1,rbc_value_signature(module,code,value));
     if (expected.kind == XR_RBC_CALLABLE_HOME)
-        return rbc_value_array(module, code, value, false) &&
+        return (rbc_value_array(module, code, value, false) || rbc_value_inline(module, code, value, false)) &&
             rbc_callable_image_value(module, rbc_value_home(code, value)->type, expected);
     if (expected.kind==XR_RBC_CALLABLE_REFERENCE) {
         XrtValueKind kind=rbc_value_kind(module,code,value);

@@ -1,0 +1,5 @@
+fn unwrap(value: Array<u8>?) -> i64 {
+    return len(value!)
+}
+
+print(unwrap(null))

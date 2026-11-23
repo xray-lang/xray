@@ -6,6 +6,15 @@
  *
  * xrbc_callable_admission.inc.c - Owned exact invocation signatures
  */
+static bool rbc_callable_home_type(const XrtValueImage *image, uint32_t type) {
+    if (!image || !image->types || !type || type > image->type_count) return false;
+    const XrtValueImageType *row = &image->types[type - 1];
+    if (row->kind == XRT_VALUE_ARRAY_INLINE) return true;
+    if (row->kind != XRT_VALUE_NULLABLE || !row->nullable_element || row->nullable_element >= type) return false;
+    XrtValueKind payload = image->types[row->nullable_element - 1].kind;
+    return payload == XRT_VALUE_ARRAY_U8 || payload == XRT_VALUE_ARRAY_I64;
+}
+
 static bool rbc_callable_value_valid(const XrRbcModule *m, XrRbcCallableValue value, size_t before) {
     switch (value.kind) {
     case XR_RBC_CALLABLE_SCALAR:
@@ -17,9 +26,7 @@ static bool rbc_callable_value_valid(const XrRbcModule *m, XrRbcCallableValue va
     case XR_RBC_CALLABLE_FUNCTION: return value.type < before;
     case XR_RBC_CALLABLE_HOME: {
         const XrRbcCodeOwner *owner = xr_rbc_module_code_owner(m);
-        const XrtValueImage *image = owner ? owner->values : NULL;
-        return image && image->types && value.type && value.type <= image->type_count &&
-            image->types[value.type - 1].kind == XRT_VALUE_ARRAY_INLINE;
+        return owner && rbc_callable_home_type(owner->values, value.type);
     }
     default: return false;
     }
@@ -65,7 +72,7 @@ static bool rbc_callable_image_value(const XrRbcModule *module, uint32_t id, XrR
         XrtValueKind scalar;
         return xr_pod_value_kind((XrPodScalar)value.type,&scalar) && scalar==kind;
     }
-    if (value.kind == XR_RBC_CALLABLE_HOME) return id == value.type && kind == XRT_VALUE_ARRAY_INLINE;
+    if (value.kind == XR_RBC_CALLABLE_HOME) return id == value.type && rbc_callable_home_type(image, id);
     if (value.kind==XR_RBC_CALLABLE_REFERENCE)
         return value.type==XR_RBC_STRING ? kind==XRT_VALUE_STRING : value.type==XR_RBC_SET_I64 ?
             kind==XRT_VALUE_SET_I64 : value.type==XR_RBC_MAP_STRING_I64 ?
@@ -144,14 +151,18 @@ static bool rbc_callable_signatures_valid(const XrRbcModule *m) {
     }
     return true;
 }
-static bool rbc_callable_home_parameter(const XrRbcValueCode *code, uint32_t parameter, uint32_t type) {
-    if (!code || !code->homes || !code->homes->values || !code->parameters || !code->locations ||
-        parameter >= code->parameter_count) return false;
+static bool rbc_callable_home_parameter(const XrRbcModule *module, const XrRbcValueCode *code,
+    uint32_t parameter, uint32_t type) {
+    const XrtValueImage *image = xr_rbc_module_value_image(module);
+    if (!rbc_callable_home_type(image, type) || !code || !code->homes || !code->homes->values ||
+        !code->parameters || !code->locations || parameter >= code->parameter_count) return false;
     uint32_t id = code->parameters[parameter];
     if (!id || id > code->value_count || id > code->homes->value_count) return false;
     const XrLirValueHome *home = &code->homes->values[id];
+    const XrtValueImageType *row = &image->types[type - 1];
     return home->type == type && home->parameter == parameter + 1 && home->owner_count == 1 &&
-        home->size == sizeof(XrtManagedHeader *) && code->locations[id].kind == XR_RBC_VALUE_NOWHERE;
+        row->owned_count == home->owner_count && home->size == row->size &&
+        code->locations[id].kind == XR_RBC_VALUE_NOWHERE;
 }
 static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     if (!rbc_callable_signatures_valid(m)) return false;
@@ -246,7 +257,7 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
             uint32_t formal = f->capture_count + p;
             if (type.parameters[p].mode!=XR_PARAM_READ || value.kind == XR_RBC_CALLABLE_AGGREGATE ||
                 rbc_callable_value_kind(value) != rbc_register_kind(f, formal) ||
-                (value.kind == XR_RBC_CALLABLE_HOME && !rbc_callable_home_parameter(typed, formal, value.type)) ||
+                (value.kind == XR_RBC_CALLABLE_HOME && !rbc_callable_home_parameter(m, typed, formal, value.type)) ||
                 (value.kind == XR_RBC_CALLABLE_FUNCTION && (f->register_callables[formal] != value.type + 1 ||
                  type.parameters[p].escaping != rbc_callable_parameter_owned(m, f, formal)))) return false;
         }
