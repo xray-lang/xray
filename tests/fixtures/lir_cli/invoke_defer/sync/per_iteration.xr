@@ -1,0 +1,14 @@
+fn work(limit: i64) {
+    var index = 0
+    while (index < limit) {
+        const round = index
+        defer { print(round) }
+        index += 1
+        if (round == 0) { continue }
+        print(index + 10)
+        if (round == 2) { break }
+    }
+    print(index)
+}
+
+work(4)

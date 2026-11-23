@@ -1,0 +1,27 @@
+{
+  "normal_return": {
+    "exit": 0,
+    "stdout": "1\n22\n101\n7\n",
+    "stderr": ""
+  },
+  "eager_immutable": {
+    "exit": 0,
+    "stdout": "41\n17\n41\n",
+    "stderr": ""
+  },
+  "per_iteration": {
+    "exit": 0,
+    "stdout": "0\n12\n1\n13\n2\n3\n",
+    "stderr": ""
+  },
+  "shared_exit": {
+    "exit": 0,
+    "stdout": "1\n402\n2\n401\n7\n402\n401\n-1\n",
+    "stderr": ""
+  },
+  "business_propagation": {
+    "exit": 1,
+    "stdout": "entered\n1\n201\n202\n",
+    "stderr": "[Uncaught Error] Refusal.Failed(23)\n"
+  }
+}

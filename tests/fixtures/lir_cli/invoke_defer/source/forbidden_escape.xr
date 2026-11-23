@@ -1,0 +1,9 @@
+enum Refusal { Failed }
+
+fn stop() throws(Refusal) { throw Refusal.Failed }
+
+fn probe() {
+    defer { try stop() }
+}
+
+probe()

@@ -1,0 +1,18 @@
+enum Refusal { Failed { code: i64 } }
+
+fn leaf(mark: i64) throws(Refusal) -> i64 {
+    defer { print(201) }
+    print(1)
+    throw Refusal.Failed { code: mark }
+}
+
+fn relay(mark: i64) throws(Refusal) -> i64 {
+    defer { print(202) }
+    const value = try leaf(mark)
+    print(99)
+    return value
+}
+
+print("entered")
+print(try relay(23))
+print("finished")

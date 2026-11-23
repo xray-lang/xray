@@ -1,0 +1,17 @@
+enum Refusal { Failed { code: i64 } }
+
+fn leaf() throws(Refusal) -> i64 {
+    defer { print(301) }
+    print(1)
+    throw Refusal.Failed { code: 29 }
+}
+
+fn caller() {
+    defer { print(302) }
+    print(try! leaf())
+    defer { print(303) }
+    print(99)
+}
+
+caller()
+print(98)

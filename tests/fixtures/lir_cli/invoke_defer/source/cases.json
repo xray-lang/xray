@@ -1,0 +1,5 @@
+{
+  "forbidden_escape": {
+    "source_error": ":6:13: error: E0387: defer must handle every business error inside its own body"
+  }
+}

@@ -1,0 +1,10 @@
+fn work(initial: i64, updated: i64) -> i64 {
+    var current = initial
+    const snapshot = current
+    defer { print(snapshot) }
+    current = updated
+    print(current)
+    return current
+}
+
+print(work(17, 41))

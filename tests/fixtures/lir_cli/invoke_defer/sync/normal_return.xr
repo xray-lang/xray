@@ -1,0 +1,10 @@
+fn work(seed: i64) -> i64 {
+    defer { print(101) }
+    var current = seed
+    defer { print(current) }
+    current = 22
+    print(1)
+    return 7
+}
+
+print(work(2))

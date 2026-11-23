@@ -1,0 +1,15 @@
+enum Refusal { Failed { code: i64 } }
+
+fn work(fail: bool) throws(Refusal) -> i64 {
+    defer { print(401) }
+    {
+        defer { print(402) }
+        if (fail) { throw Refusal.Failed { code: 37 } }
+        print(1)
+    }
+    print(2)
+    return 7
+}
+
+print((try? work(false)) ?? -1)
+print((try? work(true)) ?? -1)

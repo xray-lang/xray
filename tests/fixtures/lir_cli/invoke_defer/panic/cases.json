@@ -1,0 +1,7 @@
+{
+  "assertion_panic": {
+    "exit": 1,
+    "stdout": "1\n301\n302\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: Refusal.Failed(29)\n"
+  }
+}
