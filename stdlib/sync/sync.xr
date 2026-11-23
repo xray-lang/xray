@@ -271,9 +271,9 @@ export class ResultGroup {
     }
 }
 
-// CachePadded<T> — cache-line aligned wrapper for counters/flags that should
-// not share a line with adjacent values.
-export struct CachePadded<T> align(64) {
+// CachePadded<T> — 128-byte aligned wrapper: x86 prefetch pairs and aarch64
+// cache lines both pull neighbours, so 64 bytes does not isolate a value.
+export struct CachePadded<T> align(128) {
     value: T
 }
 
@@ -463,5 +463,5 @@ export class Condvar {
 // value maps directly onto the runtime's memory-order ladder.
 import mem
 export fn fence(order: Ordering) {
-    mem.fence(order as i64)
+    mem.fence(order.ordinal)
 }
