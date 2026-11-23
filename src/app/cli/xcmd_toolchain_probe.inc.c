@@ -15,12 +15,6 @@
 #include "base/xfileio.h"
 #include "os/os_fs.h"
 
-static bool probe_workspace_close(XtcXirWorkspace **workspace) {
-    for (unsigned attempt = 0; attempt < 8; ++attempt)
-        if (xtc_xir_workspace_close(workspace, 1024) == XTC_XIR_WORKSPACE_OK) return true;
-    return false;
-}
-
 static int toolchain_probe(XrCompileState *state, const XrCliInvocation *inv) {
     if (inv->positional_count != 1 || inv->passthrough_argc) return XR_CLI_EXIT_USAGE;
     const char *target_name = xr_cli_opt_string(&inv->options, "target", "native");
@@ -87,10 +81,9 @@ cleanup:
     xr_lir_c_output_free(&c);
     xr_lir_lowered_free(&lowered);
     xr_compile_resources_release(compiled);
-    if (!probe_workspace_close(&workspace)) {
-        fputs("native probe workspace cleanup remains pending\n", stderr);
-        fflush(stderr);
-        _Exit(XR_CLI_EXIT_INTERNAL);
+    if (!xr_cli_lir_workspace_close(&workspace, "native probe workspace")) {
+        if (ready) stage = "workspace cleanup";
+        ready = false;
     }
     xr_compile_resources_free(source);
     xr_compile_resources_free(program);

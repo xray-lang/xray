@@ -21,6 +21,7 @@
 #include "base/xfileio.h"
 #include "base/xchecks.h"
 #include "os/os_fs.h"
+#include "os/os_time.h"
 #include "xray_native_link_paths.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -331,19 +332,44 @@ static bool native_link(NativeCommand *command, const XtcHostToolchainView *host
     return native_command_run(command, "link", okay);
 }
 
-static bool native_workspace_close(XtcXirWorkspace **workspace) {
-    bool clean = true;
-    XtcXirWorkspaceStatus status = XTC_XIR_WORKSPACE_OK;
-    for (unsigned attempt = 0; attempt < 8; ++attempt) {
-        status = xtc_xir_workspace_close(workspace, 1024);
-        if (status == XTC_XIR_WORKSPACE_OK) return clean;
-        clean = false;
-    }
-    fputs("native workspace cleanup remains pending\n", stderr);
+XR_FUNC bool xr_cli_lir_workspace_close(XtcXirWorkspace **workspace, const char *subject) {
     const XtcXirWorkspaceDiagnostic *diagnostic = xtc_xir_workspace_diagnostic(*workspace);
+    XtcXirWorkspaceDiagnostic first = diagnostic ? *diagnostic : (XtcXirWorkspaceDiagnostic){0};
+    XtcXirWorkspaceStatus status = XTC_XIR_WORKSPACE_OK;
+#if XR_OS_WINDOWS
+    unsigned sharing_retries = 0;
+#endif
+    for (unsigned attempt = 0; attempt < 8;) {
+        status = xtc_xir_workspace_close(workspace, 1024);
+        if (status == XTC_XIR_WORKSPACE_OK) {
+            if (first.status == XTC_XIR_WORKSPACE_OK) return true;
+            fprintf(stderr, "%s cleanup failed (first status %u, first OS error %" PRIu32 ")\n",
+                subject, (unsigned)first.status, first.os_error);
+            return false;
+        }
+        diagnostic = xtc_xir_workspace_diagnostic(*workspace);
+        if (first.status == XTC_XIR_WORKSPACE_OK && diagnostic) first = *diagnostic;
+#if XR_OS_WINDOWS
+        if (status == XTC_XIR_WORKSPACE_SHARING_RETRY) {
+            if (sharing_retries == 5) {
+                if (first.status == XTC_XIR_WORKSPACE_OK)
+                    first = (XtcXirWorkspaceDiagnostic){status, ERROR_SHARING_VIOLATION};
+                break;
+            }
+            xr_time_sleep_ms(UINT64_C(1) << sharing_retries++);
+            continue;
+        }
+#endif
+        if (status != XTC_XIR_WORKSPACE_PENDING && first.status == XTC_XIR_WORKSPACE_OK)
+            first.status = status;
+        ++attempt;
+    }
+    fprintf(stderr, "%s cleanup remains pending\n", subject);
     const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(*workspace);
     fprintf(stderr, "cleanup status %u, first OS error %" PRIu32 ", workspace %s\n",
-        (unsigned)status, diagnostic ? diagnostic->os_error : 0, paths && paths->root ? paths->root : "unknown");
+        (unsigned)status, first.os_error, paths && paths->root ? paths->root : "unknown");
+    if (first.status != XTC_XIR_WORKSPACE_OK && first.status != status)
+        fprintf(stderr, "first cleanup status %u\n", (unsigned)first.status);
     fflush(stderr);
     _Exit(XR_CLI_EXIT_INTERNAL);
 }
@@ -443,10 +469,10 @@ XR_FUNC int xr_cli_lir_native(XrCompileResources *resources, const XrCliNativeOp
         fputs("cannot read linked native program\n", stderr);
         goto cleanup;
     }
-    if (!native_workspace_close(&workspace)) goto cleanup;
+    if (!xr_cli_lir_workspace_close(&workspace, "native workspace")) goto cleanup;
     result = xr_cli_lir_publish(resources, output, bytes, byte_count, true);
 cleanup:
-    if (!native_workspace_close(&workspace)) result = XR_CLI_EXIT_FAIL;
+    if (!xr_cli_lir_workspace_close(&workspace, "native workspace")) result = XR_CLI_EXIT_FAIL;
     xr_compile_resources_free(bytes);
     xr_compile_resources_free(c_path);
     xr_compile_resources_free(object_path);

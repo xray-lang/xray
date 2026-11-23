@@ -282,6 +282,11 @@ static XtcXirWorkspaceStatus workspace_walk_step(XtcXirWorkspace *owner) {
             parent->restart = true;
             return XTC_XIR_WORKSPACE_PENDING;
         }
+        if ((ULONG)status == 0xc0000043UL && frame->fixed < 0 && !frame->directory) {
+            /* STATUS_SHARING_VIOLATION on a regular child's relative open.
+             * Keep the open parent and the enumerated name and identity. */
+            return XTC_XIR_WORKSPACE_SHARING_RETRY;
+        }
         if (status < 0) return workspace_error(owner, RtlNtStatusToDosError(status));
         frame->state = 1; return XTC_XIR_WORKSPACE_PENDING;
     }

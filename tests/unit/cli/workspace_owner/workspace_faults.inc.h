@@ -60,6 +60,7 @@ static NTSTATUS failure_ntstatus(void) {
     case ERROR_NOT_ENOUGH_MEMORY: return (NTSTATUS)0xc0000017UL;
     case ERROR_FILE_NOT_FOUND: return (NTSTATUS)0xc0000034UL;
     case ERROR_PATH_NOT_FOUND: return (NTSTATUS)0xc000003aUL;
+    case ERROR_SHARING_VIOLATION: return (NTSTATUS)0xc0000043UL;
     default: return (NTSTATUS)0xc0000022UL;
     }
 }

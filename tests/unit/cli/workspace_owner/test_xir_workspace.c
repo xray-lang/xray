@@ -105,6 +105,34 @@ static void basics(const char *parent) {
     CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_OK);
     puts("allocator-denied nested TEMP cleanup, producer death, step=1, disk/heap/handles PASS");
 }
+static void busy_regular_file(const char *parent) {
+    XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
+    XtcXirWorkspace *owner = NULL;
+    XtcXirWorkspaceRequest request = request_for(parent);
+    CHECK(xtc_xir_workspace_new(resources, &request, &owner) == XTC_XIR_WORKSPACE_OK);
+    CHECK(xtc_xir_workspace_create(owner) == XTC_XIR_WORKSPACE_OK);
+    char path[8192];
+    path_join(path, sizeof(path), xtc_xir_workspace_paths(owner)->input, "source.c");
+    write_file(path, "private C source with an outstanding reader\n");
+    HANDLE reader = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    CHECK(reader != INVALID_HANDLE_VALUE);
+    for (unsigned attempt = 0; attempt < 2; ++attempt) {
+        CHECK(xtc_xir_workspace_close(&owner, 1000) == XTC_XIR_WORKSPACE_SHARING_RETRY && owner);
+        CHECK(xtc_xir_workspace_status(owner) == XTC_XIR_WORKSPACE_OK);
+        CHECK(GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES);
+    }
+    CHECK(CloseHandle(reader));
+    drain(&owner, 1);
+    CHECK(GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES);
+    xr_compile_resources_release(resources);
+    CHECK(!runtime_live && !runtime_bytes);
+#ifndef WORKSPACE_PRODUCTION
+    CHECK(!owner_handle_count);
+#endif
+    puts("real Windows reader blocks an enumerated file until its handle closes PASS");
+}
+
 static void compiler_transaction(const char *parent) {
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited); XtcXirWorkspace *owner = NULL;
     XtcXirWorkspaceRequest request = request_for(parent); char path[8192];
@@ -190,6 +218,21 @@ static void release_running_leases(XtcXirWorkspace *owner) {
         xtc_xir_file_lease_free(owner->nodes[i].lease); owner->nodes[i].lease = NULL;
     }
 }
+static WorkspaceFrame *enumerate_output_child(XtcXirWorkspace **owner, const wchar_t *name) {
+    for (unsigned steps = 0;; ++steps) {
+        XtcXirWorkspace *workspace = *owner;
+        CHECK(steps < 1000 && workspace);
+        if (workspace->close_phase == 3 && workspace->frame_count == 3) {
+            WorkspaceFrame *frame = &workspace->frames[2];
+            if (frame->state == 0 && !wcscmp(frame->name, name)) {
+                CHECK(frame->fixed < 0 && !frame->handle);
+                return frame;
+            }
+        }
+        CHECK(xtc_xir_workspace_close(owner, 1) == XTC_XIR_WORKSPACE_PENDING);
+    }
+}
+
 static void enumerated_child_open(const char *parent, bool disappears) {
     XtcXirWorkspaceRequest request = request_for(parent);
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
@@ -204,17 +247,7 @@ static void enumerated_child_open(const char *parent, bool disappears) {
     write_file(vanished, "directory entry will disappear after enumeration\n");
     write_file(survivor, "remaining output must still be cleaned\n");
 
-    for (unsigned steps = 0;; ++steps) {
-        CHECK(steps < 1000 && owner);
-        if (owner->close_phase == 3 && owner->frame_count == 3) {
-            WorkspaceFrame *frame = &owner->frames[2];
-            if (frame->state == 0 && !wcscmp(frame->name, L"vanish.tmp")) {
-                CHECK(frame->fixed < 0 && !frame->handle);
-                break;
-            }
-        }
-        CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_PENDING);
-    }
+    enumerate_output_child(&owner, L"vanish.tmp");
     size_t before = io_count;
     CHECK(GetFileAttributesA(survivor) != INVALID_FILE_ATTRIBUTES);
     if (disappears) {
@@ -243,7 +276,54 @@ static void enumerated_child_open(const char *parent, bool disappears) {
     CHECK(!runtime_live && !owner_handle_count);
 }
 
-static void fixed_missing_is_unresolved(const char *parent) {
+static void enumerated_child_sharing(const char *parent, bool directory) {
+    XtcXirWorkspaceRequest request = request_for(parent);
+    XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
+    XtcXirWorkspace *owner = NULL;
+    CHECK(xtc_xir_workspace_new(resources, &request, &owner) == XTC_XIR_WORKSPACE_OK);
+    CHECK(xtc_xir_workspace_create(owner) == XTC_XIR_WORKSPACE_OK);
+    const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(owner);
+    char path[8192];
+    path_join(path, sizeof(path), paths->output, "busy");
+    if (directory) CHECK(CreateDirectoryA(path, NULL));
+    else write_file(path, "identity must still be checked after reopen\n");
+
+    WorkspaceFrame *frame = enumerate_output_child(&owner, L"busy");
+    CHECK(frame->directory == directory);
+    FILE_ID_INFO identity = frame->identity;
+    HANDLE parent_pin = owner->frames[1].handle;
+    CHECK(parent_pin);
+    size_t before = io_count, handles = owner_handle_count;
+    io_error = ERROR_SHARING_VIOLATION;
+    io_fail_at = before;
+    XtcXirWorkspaceStatus expected = directory ? XTC_XIR_WORKSPACE_IO : XTC_XIR_WORKSPACE_SHARING_RETRY;
+    CHECK(xtc_xir_workspace_close(&owner, 1000) == expected);
+    io_fail_at = SIZE_MAX;
+    CHECK(io_count == before + 1 && owner_handle_count == handles);
+    CHECK(owner->frame_count == 3 && owner->frames[1].handle == parent_pin);
+    CHECK(frame->state == 0 && !frame->handle && !wcscmp(frame->name, L"busy"));
+    CHECK(workspace_identity_equal(&identity, &frame->identity));
+    CHECK(GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES);
+
+    const XtcXirWorkspaceDiagnostic *diagnostic = xtc_xir_workspace_diagnostic(owner);
+    if (directory) {
+        CHECK(diagnostic->status == XTC_XIR_WORKSPACE_IO && diagnostic->os_error == ERROR_SHARING_VIOLATION);
+    } else {
+        CHECK(diagnostic->status == XTC_XIR_WORKSPACE_OK && diagnostic->os_error == 0);
+        CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_PENDING);
+        CHECK(frame->state == 1 && frame->handle && workspace_identity_equal(&identity, &frame->identity));
+        corrupt_identity = true;
+        CHECK(xtc_xir_workspace_close(&owner, 1000) == XTC_XIR_WORKSPACE_IDENTITY_MISMATCH);
+        CHECK(!corrupt_identity && diagnostic->status == XTC_XIR_WORKSPACE_IDENTITY_MISMATCH);
+        CHECK(GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES);
+    }
+    drain(&owner, 1);
+    CHECK(GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES);
+    xr_compile_resources_release(resources);
+    CHECK(!runtime_live && !owner_handle_count);
+}
+
+static void fixed_child_open_failure(const char *parent, DWORD error, XtcXirWorkspaceStatus expected) {
     XtcXirWorkspaceRequest request = request_for(parent);
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
     XtcXirWorkspace *owner = NULL;
@@ -252,12 +332,12 @@ static void fixed_missing_is_unresolved(const char *parent) {
     for (unsigned steps = 0; owner->close_phase != 2 || owner->close_index != 1; ++steps) {
         CHECK(steps < 1000 && xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_PENDING);
     }
-    io_error = ERROR_FILE_NOT_FOUND;
+    io_error = error;
     io_fail_at = io_count;
-    CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_UNRESOLVED);
+    CHECK(xtc_xir_workspace_close(&owner, 1) == expected);
     CHECK(owner->close_index == 1 && !owner->nodes[1].deletion && owner->nodes[1].anchor);
     const XtcXirWorkspaceDiagnostic *diagnostic = xtc_xir_workspace_diagnostic(owner);
-    CHECK(diagnostic->status == XTC_XIR_WORKSPACE_UNRESOLVED && diagnostic->os_error == ERROR_FILE_NOT_FOUND);
+    CHECK(diagnostic->status == expected && diagnostic->os_error == error);
     io_fail_at = SIZE_MAX;
     drain(&owner, 1);
     xr_compile_resources_release(resources);
@@ -558,7 +638,10 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[2], "--anchor-only")) {
             for (unsigned i = 0; i < 3; ++i) replacement(argv[1], i);
             reparse_refusal(argv[1]); root_reparse_refusal(argv[1]); fixed_identity_retry(argv[1]);
-            enumerated_child_open(argv[1], true); enumerated_child_open(argv[1], false); fixed_missing_is_unresolved(argv[1]);
+            enumerated_child_open(argv[1], true); enumerated_child_open(argv[1], false);
+            enumerated_child_sharing(argv[1], false); enumerated_child_sharing(argv[1], true);
+            fixed_child_open_failure(argv[1], ERROR_FILE_NOT_FOUND, XTC_XIR_WORKSPACE_UNRESOLVED);
+            fixed_child_open_failure(argv[1], ERROR_SHARING_VIOLATION, XTC_XIR_WORKSPACE_IO);
             CHECK(handle_count() == before && !runtime_live && !runtime_bytes && !owner_handle_count);
             puts("root pin/child rename/replacement/reparse/close-one-step retry physical zero PASS"); return 0;
         }
@@ -568,6 +651,7 @@ int main(int argc, char **argv) {
     }
     printf("initial handles=%lu\n", before);
     basics(argv[1]); printf("after basics handles=%lu\n", handle_count());
+    busy_regular_file(argv[1]);
     arguments_and_depth(argv[1]); memory_owner_reuse(argv[1]);
     resources_matrix(argv[1]);
     printf("after resources handles=%lu\n", handle_count());
@@ -576,7 +660,10 @@ int main(int argc, char **argv) {
     collision(argv[1]);
     for (unsigned i = 0; i < 3; ++i) replacement(argv[1], i);
     reparse_refusal(argv[1]); root_reparse_refusal(argv[1]); fixed_identity_retry(argv[1]);
-    enumerated_child_open(argv[1], true); enumerated_child_open(argv[1], false); fixed_missing_is_unresolved(argv[1]);
+    enumerated_child_open(argv[1], true); enumerated_child_open(argv[1], false);
+    enumerated_child_sharing(argv[1], false); enumerated_child_sharing(argv[1], true);
+    fixed_child_open_failure(argv[1], ERROR_FILE_NOT_FOUND, XTC_XIR_WORKSPACE_UNRESOLVED);
+    fixed_child_open_failure(argv[1], ERROR_SHARING_VIOLATION, XTC_XIR_WORKSPACE_IO);
     os_matrix(argv[1]); printf("after OS handles=%lu\n", handle_count());
 #endif
     DWORD after = handle_count(); printf("final handles=%lu live=%zu bytes=%zu\n", after, runtime_live, runtime_bytes);
