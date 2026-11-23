@@ -18,6 +18,7 @@ static bool lower_cleanup_cell(const Lower *c, XrXirType type) {
 /* This subset has no guest panic port. In particular, a Never error bound
  * proves nothing about panic. Output here uses the scalar host sink. */
 static bool lower_cleanup_safe(const Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
+    uint32_t function = (uint32_t)(f - c->source->functions);
     switch (op->op) {
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_PHI:
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
@@ -32,20 +33,43 @@ static bool lower_cleanup_safe(const Lower *c, const XrXirFunction *f, const XrX
     case XR_XIR_LT_INT: case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
         return lower_cleanup_scalar(xr_xir_operand_type(f, op->args[0]));
     case XR_XIR_ENUM_NEW:
-        return op->type == lower_error_bound(c, c->function) && lower_is_plain_error_enum(c, op->type);
+        return op->type == lower_error_bound(c, function) && lower_is_plain_error_enum(c, op->type);
     case XR_XIR_PRINT:
         return op->args[1] == 1 && xr_xir_operand_type(f, f->operands[op->args[0]]) == XR_XIR_I64;
     case XR_XIR_RETURN:
         return f->result == XR_XIR_UNIT || lower_cleanup_scalar(f->result);
     case XR_XIR_THROW:
-        return lower_function_error(c, c->function) &&
-            xr_xir_operand_type(f, op->args[0]) == lower_error_bound(c, c->function);
+        return lower_function_error(c, function) &&
+            xr_xir_operand_type(f, op->args[0]) == lower_error_bound(c, function);
     case XR_XIR_JUMP: case XR_XIR_BRANCH:
     case XR_XIR_CLEANUP_REGISTER: case XR_XIR_CLEANUP_LEAVE:
         return true;
     default:
         return false;
     }
+}
+
+/* A direct leaf must also be safe before its own first registration. Each
+ * registered helper is checked over its entire body by cleanup admission when
+ * the owning registration puts it on the lowering queue. */
+static bool lower_cleanup_direct_leaf(Lower *c, uint32_t function) {
+    enum { UNKNOWN, SAFE, UNSAFE };
+    if (!c->cleanup_leaves) {
+        c->cleanup_leaves = lower_alloc(c, c->source->function_count, sizeof(*c->cleanup_leaves));
+        if (!c->cleanup_leaves) return false;
+    }
+    uint8_t *proof = &c->cleanup_leaves[function];
+    if (*proof != UNKNOWN) return *proof == SAFE;
+    const XrXirFunction *f = &c->source->functions[function];
+    *proof = UNSAFE;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrXirBlock *block = &f->blocks[b];
+        if (block->panic) return false;
+        for (uint32_t i = block->first; i < block->first + block->count; ++i)
+            if (!lower_cleanup_safe(c, f, &f->instructions[i])) return false;
+    }
+    *proof = SAFE;
+    return true;
 }
 
 static bool lower_cleanup_admit(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
@@ -87,11 +111,15 @@ static XrLirFunction lower_cleanup_target(const LowerFunction *f, const XrXirIns
     return f->owner->functions[registration->immediate];
 }
 
+static uint32_t lower_cleanup_role(const LowerFunction *f, uint32_t frontier) {
+    return frontier ? lower_cleanup_target(f, &f->source->instructions[frontier - 1]).id : 0;
+}
+
 static bool lower_cleanup_block(LowerFunction *f, uint32_t block, const XrXirInstruction *term) {
     Lower *c = f->owner;
     const XrXirFunction *source = f->source;
     uint32_t frontier = source->blocks[block].frontier;
-    uint32_t role = frontier ? lower_cleanup_target(f, &source->instructions[frontier - 1]).id : 0;
+    uint32_t role = lower_cleanup_role(f, frontier);
     if (term->op != XR_XIR_CLEANUP_REGISTER)
         return !frontier || lower_build(c,
             xr_lir_internal_cleanup_block(c->module, f->blocks[block], role, 0, NULL, 0));

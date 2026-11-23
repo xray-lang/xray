@@ -73,6 +73,7 @@ typedef struct Lower {
     LowerByteLength **byte_lengths;
     LowerOptionalErrorBlock **optional_errors;
     LowerCatchPlan *catch_errors;
+    uint8_t *cleanup_leaves;
     XrLirType owned_i64_cell, owned_map_cell;
     XrLirFunction *functions, print, print_string, clocks[4];
     uint8_t *active;
@@ -1263,13 +1264,18 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
             (first->op == XR_XIR_INVOKE_DISCARD && first->type == XR_XIR_UNIT)))) return false;
     const XrXirInstruction *marker = &f->instructions[failure->first];
     const XrXirInstruction *exit=lower_invoke_landing_exit(f,failure);
-    if (!exit || failure->panic || failure->frontier || marker->op!=XR_XIR_INVOKE_ERROR ||
+    if (!exit || failure->panic || marker->op!=XR_XIR_INVOKE_ERROR ||
         marker->type!=XR_XIR_ERROR || marker->immediate!=origin) return false;
+    bool propagated = exit->op == XR_XIR_THROW && exit->args[0] == f->parameter_count + failure->first &&
+        !lower_empty_error(callee->error_type) && callee->error_type == lower_error_bound(c,(uint32_t)(f-c->source->functions));
+    if (failure->frontier || normal->frontier) {
+        return failure->frontier == normal->frontier && !normal->panic && propagated &&
+            (call->type == XR_XIR_UNIT || lower_cleanup_scalar(call->type)) &&
+            lower_is_plain_error_enum(c, callee->error_type) && lower_cleanup_direct_leaf(c, (uint32_t)call->immediate);
+    }
     if (exit->op==XR_XIR_JUMP)
         return lower_invoke_failure_predecessor(c,f,call->targets[1]) != 0;
-    return exit->args[0]==f->parameter_count+failure->first && (exit->op==XR_XIR_PANIC_ERROR ||
-        (exit->op==XR_XIR_THROW && !lower_empty_error(callee->error_type) &&
-         callee->error_type==lower_error_bound(c,(uint32_t)(f-c->source->functions))));
+    return propagated || (exit->op==XR_XIR_PANIC_ERROR && exit->args[0]==f->parameter_count+failure->first);
 }
 
 static const XrXirInstruction *lower_invoke_origin(Lower *c, const XrXirFunction *f, uint32_t block,
@@ -1278,6 +1284,26 @@ static const XrXirInstruction *lower_invoke_origin(Lower *c, const XrXirFunction
     const XrXirInstruction *call = &f->instructions[marker->immediate];
     return call->op == XR_XIR_INVOKE && call->targets[error ? 1 : 0] == block &&
         marker == &f->instructions[f->blocks[block].first] && lower_invoke_contract(c,f,call) ? call : NULL;
+}
+
+static bool lower_cleanup_instruction(Lower *c, const XrXirFunction *f, uint32_t block,
+    const XrXirInstruction *op, bool cleanup_body) {
+    if (lower_cleanup_safe(c, f, op)) return true;
+    if (cleanup_body) return false;
+    switch (op->op) {
+    case XR_XIR_INVOKE:
+        return lower_invoke_contract(c, f, op);
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_INVOKE_DISCARD:
+        return lower_invoke_origin(c, f, block, op, false) != NULL;
+    case XR_XIR_INVOKE_ERROR:
+        return lower_invoke_origin(c, f, block, op, true) != NULL;
+    case XR_XIR_THROW: {
+        const XrXirInstruction *marker = &f->instructions[f->blocks[block].first];
+        return marker->op == XR_XIR_INVOKE_ERROR && lower_invoke_origin(c, f, block, marker, true) != NULL;
+    }
+    default:
+        return false;
+    }
 }
 
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
@@ -1643,7 +1669,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             c->instruction = i;
             const XrXirInstruction *instruction = &f->instructions[i];
-            if ((block->frontier || cleanup_body) && !lower_cleanup_safe(c, f, instruction)) {
+            if ((block->frontier || cleanup_body) && !lower_cleanup_instruction(c, f, b, instruction, cleanup_body)) {
                 good = lower_unsupported(c, "operation needs a panic landing with active cleanup");
                 break;
             }
@@ -3186,6 +3212,9 @@ static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstr
             XrLirArrayShape shape = {lower_array_element(c, term->type)};
             good=lower_build(c,xr_lir_set_array_shape(c->module,produced,&shape));
         }
+        uint32_t role = lower_cleanup_role(f, f->source->blocks[b].frontier);
+        if (good && role)
+            good = lower_build(c, xr_lir_internal_cleanup_block(c->module, normal, role, 0, NULL, 0));
     } else if (good) {
         good=lower_build(c,result==XR_LIR_UNIT ? xr_lir_emit_effect(c->module,normal,&call) :
             xr_lir_emit_value(c->module,normal,&call,&produced));
@@ -3770,6 +3799,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         xr_free(c.byte_lengths);
     }
     lower_free_error_plans(&c);
+    xr_free(c.cleanup_leaves);
     if (c.owned_bindings) {
         for (uint32_t f = 0; f < source->function_count; ++f) xr_free(c.owned_bindings[f]);
         xr_free(c.owned_bindings);

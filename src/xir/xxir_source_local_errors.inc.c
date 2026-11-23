@@ -301,7 +301,7 @@ static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op,bool
         ctx->active_expression->owner!=ctx->function || ctx->active_expression->syntax->type!=AST_CALL_EXPR)
         return true;
     const SourceFunction *caller=&ctx->bodies[ctx->function],*callee=&ctx->bodies[target];
-    if (caller->error_context || caller->local_handler || caller->frontier || caller->infer_errors ||
+    if (caller->error_context || caller->local_handler || caller->infer_errors ||
         caller->infer_initializer || (ctx->task_scope && ctx->task_scope->function==ctx->function) ||
         ((ctx->identities[ctx->function].promises | ctx->identities[target].promises) & XR_XIR_FUNCTION_GENERATOR))
         return true;
@@ -313,9 +313,10 @@ static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op,bool
     bool initializer=caller->module<ctx->module_count && ctx->modules[caller->module].initializer==ctx->function;
     bool declaration=caller->node && caller->node->type==AST_FUNCTION_DECL &&
         error==ctx->functions[ctx->function].error_type;
-    /* Module initializers keep their Checked Error bound. The dedicated
-     * landing still carries the declaration's real error provenance. */
-    *propagates=(initializer || declaration) && xr_xir_type_is_enum(&ctx->types,error);
+    /* The landing inherits the current frontier. An ordinary caller can
+     * forward its exact declared error there. Module initializers keep
+     * their Checked Error bound and only use this form outside cleanup. */
+    *propagates=(declaration || (initializer && !caller->frontier)) && xr_xir_type_is_enum(&ctx->types,error);
     return true;
 }
 typedef struct SourceInitializationFrame {
