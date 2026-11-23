@@ -20,6 +20,7 @@
 #include "../xir/xxir_source_builtin.h"
 #include "../shared/xr_core_intrinsic.h"
 #include "../xir/xxir_generic.h"
+#include "../xir/xxir_intrinsic.h"
 #include "../xir/xxir_types.h"
 #include "../xir/xxir_data_union.h"
 #include "../xir/xxir_type_description.h"
@@ -546,8 +547,15 @@ static XrLirOp lower_checked_terminator_op(Lower *c, XrXirOp op) {
     return result;
 }
 
-static bool lower_known(XrXirOp op) {
-    switch (op) {
+static XrLirOp lower_string_intrinsic_operation(const XrXirInstruction *instruction) {
+    const XrNativeIntrinsicDeclaration *call = xr_xir_intrinsic(instruction->immediate);
+    return call && call->implementation == XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE &&
+        instruction->type == XR_XIR_STRING && instruction->args[1] == 3 ? XR_LIR_STRING_SLICE : XR_LIR_OP_INVALID;
+}
+
+static bool lower_known(const XrXirInstruction *instruction) {
+    switch (instruction->op) {
+        case XR_XIR_CALL_INTRINSIC: return lower_string_intrinsic_operation(instruction) != XR_LIR_OP_INVALID;
         case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET:
         case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET:
         case XR_XIR_OBJECT_PLACE: case XR_XIR_FIELD_PLACE: case XR_XIR_CLASS_SET:
@@ -625,7 +633,7 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG: case XR_XIR_ENUM_GET:
             return true;
         default:
-            return lower_terminator_op(op) != XR_LIR_OP_INVALID;
+            return lower_terminator_op(instruction->op) != XR_LIR_OP_INVALID;
     }
 }
 
@@ -942,7 +950,7 @@ static bool lower_local_pure(Lower *c, uint32_t selected) {
                 c->instruction = i;
                 const XrXirInstruction *op = &f->instructions[i];
                 if (op->op == XR_XIR_PRINT || op->op == XR_XIR_ASSERT_CONDITION || op->op == XR_XIR_CLOCK_NANOS ||
-                    op->op == XR_XIR_UTC_OFFSET_AT || !lower_known(op->op))
+                    op->op == XR_XIR_UTC_OFFSET_AT || !lower_known(op))
                     return lower_unsupported(c, "effect in local function closure");
                 if (op->op != XR_XIR_CALL)
                     continue;
@@ -1045,8 +1053,8 @@ static uint8_t *lower_literal_uses(Lower *c, const XrXirFunction *f) {
     };
     for (uint32_t i = 0; i < f->instruction_count; ++i) {
         const XrXirInstruction *op = &f->instructions[i];
-        if (!lower_known(op->op)) continue;
-        if (op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI ||
+        if (!lower_known(op)) continue;
+        if (op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INTRINSIC || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI ||
             op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET ||
             op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT) {
@@ -1140,7 +1148,7 @@ static bool lower_float_width_operation(XrXirOp op) {
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
     const LowerByteLength *byte_lengths = lower_byte_length_plan(c);
     if (byte_lengths && (byte_lengths[c->instruction].omit || byte_lengths[c->instruction].consumer)) return true;
-    if (!lower_known(op->op))
+    if (!lower_known(op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
     if (lower_width_arithmetic(op->op) && lower_narrow_scalar(op->type))
         return lower_unsupported(c, "arithmetic on a narrow scalar");
@@ -2259,6 +2267,18 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         if (good) good = lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &reference, &f->values[result]));
         xr_free(captures);
         return good;
+    }
+    if (op->op == XR_XIR_CALL_INTRINSIC) {
+        XrLirOp operation = lower_string_intrinsic_operation(op);
+        if (operation == XR_LIR_OP_INVALID || op->args[0] > f->source->operand_count ||
+            op->args[1] > f->source->operand_count - op->args[0])
+            return lower_unsupported(c, xr_xir_op_name(op->op));
+        XrLirValue args[3] = {{0}};
+        for (uint32_t a = 0; a < 3; ++a)
+            if (!lower_value(f, f->source->operands[op->args[0] + a], &args[a])) return false;
+        XrLirInstruction slice = {.op=operation, .type=XR_LIR_STRING,
+            .operands=args, .operand_count=3, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &slice, &f->values[result]));
     }
     if (op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_I64_TRY_PARSE) {
         XrLirValue input = {0};

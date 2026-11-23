@@ -26,6 +26,7 @@ REQUIRED = (
     "test_lir_cli_string_byte_length",
     "test_lir_cli_host_path", "test_lir_cli_host_file_write", "test_lir_cli_target_platform",
     "test_lir_cli_host_environment",
+    "test_lir_cli_string_slice",
     # Cross-module ownership and capability transport need real native execution.
     "test_lir_state", "native_module_state_owner", "test_lir_cli_module_state",
     # Exercise Array ownership, failure cleanup and complete Source/native parity.

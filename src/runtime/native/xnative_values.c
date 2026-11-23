@@ -20,6 +20,7 @@
 #include "xnative_host_environment.h"
 #include "xnative_host_file.h"
 #include "xnative_host_io.h"
+#include "shared/xerror_codes.h"
 #include "shared/xnative_host_leaf.h"
 #include "xnative_map_backing.h"
 #include "xnative_set_backing.h"
@@ -517,6 +518,16 @@ XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *frame, size_t slo
     if (status == XRT_MANAGED_OK)
         status = xrt_string_backing_concat_create(frame, slot, types,
             (const XrtStringBacking *)left, (const XrtStringBacking *)right, 0);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+XRAY_API void xrt_native_string_slice_create(XrtManagedFrame *frame, size_t slot,
+    const XrtManagedHeader *receiver, int64_t start, int64_t end, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    if (status == XRT_MANAGED_OK) {
+        status = xrt_string_backing_slice_create(frame, slot, types, (const XrtStringBacking *)receiver, start, end);
+        if (status == XRT_MANAGED_BOUNDS) xrt_typed_panic(XR_ERR_STRING_SLICE_RANGE, source_id);
+    }
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
 XRAY_API void xrt_native_string_append_owned(XrtManagedFrame *frame,

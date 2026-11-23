@@ -140,6 +140,9 @@ XRAY_API bool xrt_native_string_try_parse_i64(const XrtStringBacking *, int64_t 
  * slot is empty. Publication preserves both input objects and their owners. */
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
     const XrtManagedHeader *left, const XrtManagedHeader *right, uint32_t source_id);
+/* Copies the admitted half-open rune range into its own String backing. */
+XRAY_API void xrt_native_string_slice_create(XrtManagedFrame *, size_t slot,
+    const XrtManagedHeader *receiver, int64_t start, int64_t end, uint32_t source_id);
 /* The generated image and all its vectors are immutable static storage. The
  * exact admitted Tuple bytes and their backing owners are live until return. */
 XRAY_API void xrt_native_tuple_display_create(XrtManagedFrame *, size_t slot,

@@ -447,6 +447,10 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_STRING_I64: access.operation = XR_RBC_VALUE_STRING_I64; break;
     case XR_LIR_STRING_F64: access.operation = XR_RBC_VALUE_STRING_F64; break;
     case XR_LIR_STRING_CONCAT: access.operation = XR_RBC_VALUE_STRING_CONCAT; break;
+    case XR_LIR_STRING_SLICE:
+        access.operation = XR_RBC_VALUE_STRING_SLICE;
+        access.index = i->operands[2];
+        break;
     case XR_LIR_VALUE_RETAIN:
     case XR_LIR_SET_RETAIN: case XR_LIR_MAP_RETAIN: case XR_LIR_ARRAY_RETAIN:
     case XR_LIR_STRING_RETAIN: access.operation = XR_RBC_VALUE_COPY; break;

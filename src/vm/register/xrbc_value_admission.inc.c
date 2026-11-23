@@ -594,6 +594,10 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_STRING_CONCAT:
         return rbc_value_string(module,code,a.result,true) && rbc_value_string(module,code,a.source,false) &&
             rbc_value_string(module,code,a.other,false);
+    case XR_RBC_VALUE_STRING_SLICE:
+        return !a.first && !a.count && !a.window && rbc_value_string(module,code,a.result,true) &&
+            rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.other,XR_RBC_BITS) &&
+            rbc_value_scalar(code,function,a.index,XR_RBC_BITS);
     case XR_RBC_VALUE_COPY: case XR_RBC_VALUE_MOVE:
         return !a.other && !rbc_value_function(module,code,a.result,false) && !rbc_value_cell(module,code,a.result,false) &&
             rbc_value_owner(module,code,a.result,true) && rbc_value_owner(module,code,a.source,false) &&

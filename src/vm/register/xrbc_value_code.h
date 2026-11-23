@@ -58,7 +58,8 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_CLASS_SCALAR_WRITE, XR_RBC_VALUE_HOST_PATH_BOOL,
     XR_RBC_VALUE_HOST_FILE_OPEN_WRITE, XR_RBC_VALUE_HOST_FILE_CLOSE, XR_RBC_VALUE_HOST_FILE_WRITE,
     XR_RBC_VALUE_STRING_BYTE_LENGTH,
-    XR_RBC_VALUE_HOST_FILE_OPEN_READ, XR_RBC_VALUE_HOST_FILE_READ, XR_RBC_VALUE_HOST_ENV_GET
+    XR_RBC_VALUE_HOST_FILE_OPEN_READ, XR_RBC_VALUE_HOST_FILE_READ, XR_RBC_VALUE_HOST_ENV_GET,
+    XR_RBC_VALUE_STRING_SLICE
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -93,6 +94,7 @@ typedef struct XrRbcValueAccess {
      * readers and materialization. Natural bytes never carry a keeper owner. */
     /* STRING_APPEND_OWNED index is its one-based APPEND_TRANSFER event.
      * source moves, other borrows, and result has its own real staging slot. */
+    /* STRING_SLICE borrows source, with the start and end SSA ids in other and index. */
     /* String BINDING accesses and STRING_APPEND_BINDING index their exact
      * common event. A writing access uses window=UINT32_MAX without a stage,
      * otherwise the zero-based independent VALUE workspace ordinal. Append

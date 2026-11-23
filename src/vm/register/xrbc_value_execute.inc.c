@@ -1318,6 +1318,22 @@ static XrtManagedStatus rbc_value_host_file_read(XrRbcStack *stack, RbcValueActi
     return read.managed;
 }
 
+static XrtManagedStatus rbc_value_string_slice(XrRbcStack *stack, RbcValueActivation *activation,
+    XrRbcValueAccess access, uint32_t source) {
+    XrRbcRegister *first = rbc_value_register(stack, activation, access.other);
+    XrRbcRegister *last = rbc_value_register(stack, activation, access.index);
+    if (!first || !last) return XRT_MANAGED_ARGUMENT;
+    const XrtStringBacking *text = NULL;
+    XrtManagedStatus status = rbc_value_string_borrow(activation, access.source, &text);
+    if (status != XRT_MANAGED_OK) return status;
+    int64_t start, end;
+    memcpy(&start, &first->bits, sizeof(start));
+    memcpy(&end, &last->bits, sizeof(end));
+    const XrLirValueHome *home = rbc_value_home(activation->code, access.result);
+    xrt_native_string_slice_create(activation->frame, home->temporary_first_owner, &text->managed, start, end, source);
+    return rbc_value_publish_leaf(activation, access.result);
+}
+
 static XrtManagedStatus rbc_value_host_file(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
     bool open_read = access.operation == XR_RBC_VALUE_HOST_FILE_OPEN_READ;
@@ -1441,6 +1457,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation==XR_RBC_VALUE_FUNCTION_ALIAS || access.operation==XR_RBC_VALUE_FUNCTION_SCOPE_EXIT)
         status=rbc_value_function_alias(module,stack,activation,access,source);
     else if (access.operation<=XR_RBC_VALUE_STRING_CONCAT) status=rbc_value_factory(module,stack,activation,access,source);
+    else if (access.operation==XR_RBC_VALUE_STRING_SLICE) status=rbc_value_string_slice(stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_COPY || access.operation==XR_RBC_VALUE_MOVE)
         status=rbc_value_replace(module,stack,activation,(RbcValueOrigin){activation,access.result},
             rbc_value_origin(activation,access.source),access.operation==XR_RBC_VALUE_COPY);

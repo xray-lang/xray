@@ -11,6 +11,8 @@
 #ifndef XR_VALUE_FORMAT_CORE_H
 #define XR_VALUE_FORMAT_CORE_H
 
+#include "xerror_codes.h"
+#include "xr_error_messages.h"
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -137,7 +139,8 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_panic(XrValueFormatSink sink, uint3
     }
     const char *cause = code == 420u ? "division by zero" :
                         code == 421u ? "modulo by zero" :
-                        code == 422u ? "numeric conversion is out of range" : "uncaught panic";
+                        code == 422u ? "numeric conversion is out of range" :
+                        code == XR_ERR_STRING_SLICE_RANGE ? XR_ERROR_CORE_STRING_SLICE_RANGE_MSG : "uncaught panic";
     return xr_value_format_text(sink, cause) && xr_value_format_text(sink, "\n");
 }
 

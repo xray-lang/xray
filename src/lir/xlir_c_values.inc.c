@@ -641,6 +641,17 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
         return true;
     }
+    if (v->op == XR_LIR_STRING_SLICE) {
+        c_values_ensure(c, source);
+        c_format(c, "    xrt_native_string_slice_create(xrl_frame, %zu", c->homes->values[v->result].temporary_first_owner);
+        for (uint32_t a = 0; a < 3; ++a) {
+            c_text(c, ", ");
+            c_value(c, v->operands[a]);
+        }
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        c_values_publish_leaf(c, v->result, source);
+        return true;
+    }
     if (v->op == XR_LIR_STRING_DROP) {
         if (c->homes->values[v->operands[0]].literal_cache_borrow) return true;
         c_format(c, "    { XrtManagedStatus status = xrt_managed_slot_drop(xrl_frame, %zu);\n", c->homes->values[v->operands[0]].first_owner);

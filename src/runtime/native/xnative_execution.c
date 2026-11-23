@@ -18,6 +18,7 @@
 #include "xray_native_string_value.h"
 #include "base/xchecks.h"
 #include "os/os_time.h"
+#include "shared/xerror_codes.h"
 #include "shared/xr_time_offset.h"
 #include "shared/xr_value_format_core.h"
 #include "shared/xr_range_core.h"
@@ -249,7 +250,8 @@ XRAY_API void xrt_range_check(int64_t start, int64_t end, int64_t length, uint32
 
 XRAY_API_NORET void xrt_typed_panic(uint32_t code, uint32_t source_id) {
     const XrtExecutionBinding *binding = current_execution;
-    XR_CHECK(binding && (code == 420 || code == 421 || code == 422 || code == 431) && source_id <= binding->map.count,
+    XR_CHECK(binding && (code == 420 || code == 421 || code == 422 || code == 431 ||
+        code == XR_ERR_STRING_SLICE_RANGE) && source_id <= binding->map.count,
         "Typed panic requires an active execution, admitted code and source id");
     if (binding->target) {
         binding->failure->kind = XRT_FAILURE_TYPED_PANIC;

@@ -380,6 +380,9 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return v->type == XR_LIR_STRING && a == XR_LIR_F64;
         case XR_LIR_STRING_CONCAT:
             return v->type == XR_LIR_STRING && a == XR_LIR_STRING && b == XR_LIR_STRING;
+        case XR_LIR_STRING_SLICE:
+            return v->type == XR_LIR_STRING && a == XR_LIR_STRING && b == XR_LIR_I64 &&
+                f->values[v->operands[2] - 1].type == XR_LIR_I64;
         case XR_LIR_ASSERT_CONDITION:
             return v->type == XR_LIR_UNIT && a == XR_LIR_I1 && b == XR_LIR_STRING;
         case XR_LIR_STRING_RETAIN:
