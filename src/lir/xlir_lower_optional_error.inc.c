@@ -102,6 +102,7 @@ static bool lower_optional_error_shape(const Lower *c,const XrXirFunction *f,
 }
 
 static bool lower_optional_errors(Lower *c,const XrXirFunction *f) {
+    if (c->optional_errors && c->optional_errors[c->function]) return true;
     uint8_t *uses=NULL;
     LowerOptionalErrorBlock *plan=NULL;
     for (uint32_t b=0; b<f->block_count; ++b) {

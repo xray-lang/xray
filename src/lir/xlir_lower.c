@@ -52,6 +52,11 @@ typedef struct LowerOptionalErrorBlock {
     uint32_t predecessor;
     bool join;
 } LowerOptionalErrorBlock;
+typedef struct LowerCatchPlan {
+    XrXirType *types;
+    XrXirInstruction *branches;
+    uint32_t *predecessors;
+} LowerCatchPlan;
 typedef struct Lower {
     const XrLirLowerRequest *request;
     const XrXirModule *source;
@@ -65,6 +70,7 @@ typedef struct Lower {
     uint8_t **owned_bindings;
     LowerByteLength **byte_lengths;
     LowerOptionalErrorBlock **optional_errors;
+    LowerCatchPlan *catch_errors;
     XrLirType owned_i64_cell, owned_map_cell;
     XrLirFunction *functions, print, print_string, clocks[4];
     uint8_t *active;
@@ -136,6 +142,7 @@ typedef struct LowerFunction {
 static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
 static bool lower_map_borrow(LowerFunction *, uint32_t, XrLirValue *);
 static bool lower_view_store(LowerFunction *, uint32_t, XrLirValue);
+static bool lower_value(LowerFunction *, uint32_t, XrLirValue *);
 
 static XrLirType lower_constructed_type(const Lower *c, XrXirType type) {
     uint32_t id = (uint32_t)type;
@@ -1039,6 +1046,12 @@ static bool lower_managed_storage(const LowerFunction *lower, const XrXirInstruc
          lower_set_type(c, xr_xir_cell_element(c->source->types, type)) ||
          xr_xir_cell_element(c->source->types, type) == XR_XIR_STRING);
 }
+static const LowerCatchPlan *lower_catch_plan(const Lower *c, const XrXirFunction *f) {
+    if (!c->catch_errors) return NULL;
+    const LowerCatchPlan *plan = &c->catch_errors[f - c->source->functions];
+    return plan->types ? plan : NULL;
+}
+
 static const XrXirInstruction *lower_term(Lower *c, const XrXirFunction *f, uint32_t b) {
     if (b >= f->block_count) {
         lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked block target");
@@ -1050,6 +1063,8 @@ static const XrXirInstruction *lower_term(Lower *c, const XrXirFunction *f, uint
         lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked block range");
         return NULL;
     }
+    const LowerCatchPlan *plan = lower_catch_plan(c, f);
+    if (plan && plan->branches[b].op == XR_XIR_JUMP) return &plan->branches[b];
     return &f->instructions[block->first + block->count - 1];
 }
 static bool lower_empty_error(XrXirType type) {
@@ -1199,6 +1214,7 @@ static bool lower_float_width_operation(XrXirOp op) {
 }
 #include "xlir_lower_string_length.inc.c"
 #include "xlir_lower_optional_error.inc.c"
+#include "xlir_lower_catch.inc.c"
 
 /* Closed XIR verifies each marker's unique predecessor and recoverable error. */
 static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirInstruction *call) {
@@ -1224,7 +1240,7 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
         marker->type!=XR_XIR_ERROR || marker->immediate!=origin) return false;
     const XrXirInstruction *exit=marker+1;
     if (exit->op==XR_XIR_JUMP)
-        return lower_optional_error_join(c,exit->targets[0]);
+        return lower_invoke_failure_predecessor(c,f,call->targets[1]) != 0;
     return exit->args[0]==f->parameter_count+failure->first && (exit->op==XR_XIR_PANIC_ERROR ||
         (exit->op==XR_XIR_THROW && !lower_empty_error(callee->error_type) &&
          callee->error_type==lower_error_bound(c,(uint32_t)(f-c->source->functions))));
@@ -1241,15 +1257,23 @@ static const XrXirInstruction *lower_invoke_origin(Lower *c, const XrXirFunction
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
     const LowerByteLength *byte_lengths = lower_byte_length_plan(c);
     if (byte_lengths && (byte_lengths[c->instruction].omit || byte_lengths[c->instruction].consumer)) return true;
+    if (op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
+        XrXirType exact = lower_catch_type(c,f,op->args[0]);
+        return (exact && exact != XR_XIR_NEVER && (op->op == XR_XIR_ERROR_IS || op->type == exact)) ||
+            lower_unsupported(c,xr_xir_op_name(op->op));
+    }
     if (!lower_known(op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
-    if (op->op==XR_XIR_PHI && op->type==XR_XIR_ERROR && lower_optional_error_join(c,c->block))
-        return true;
+    if (op->op==XR_XIR_PHI && op->type==XR_XIR_ERROR) {
+        if (lower_optional_error_join(c,c->block)) return true;
+        XrXirType exact = lower_catch_type(c,f,f->parameter_count + c->instruction);
+        if (exact && exact != XR_XIR_NEVER) return lower_receive_type(c,exact);
+    }
     if (op->op == XR_XIR_INVOKE_RESULT || op->op == XR_XIR_INVOKE_DISCARD || op->op == XR_XIR_INVOKE_ERROR)
         return lower_invoke_origin(c,f,c->block,op,op->op == XR_XIR_INVOKE_ERROR) ||
             lower_unsupported(c,xr_xir_op_name(op->op));
     if (op->op==XR_XIR_THROW && lower_function_error(c,c->function) &&
-        xr_xir_operand_type(f,op->args[0])==lower_error_bound(c,c->function)) return true;
+        lower_error_operand(c,f,op->args[0])==lower_error_bound(c,c->function)) return true;
     if (op->op==XR_XIR_PANIC_ERROR || op->op==XR_XIR_THROW) {
         const XrXirInstruction *marker=&f->instructions[f->blocks[c->block].first];
         return (marker->op==XR_XIR_INVOKE_ERROR && lower_invoke_origin(c,f,c->block,marker,true)) ||
@@ -1546,7 +1570,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         return lower_os_platform(c, function) || lower_host_abi(c, function, &field) != XR_NATIVE_HOST_NONE ||
             lower_unsupported(c, "function without a scalar body");
     }
-    if (!lower_byte_lengths(c, f) || !lower_optional_errors(c,f)) return false;
+    if (!lower_byte_lengths(c, f) || !lower_optional_errors(c,f) || !lower_catch_errors(c,f)) return false;
     uint8_t *seen = lower_alloc(c, f->block_count, 1);
     uint32_t *queue = lower_alloc(c, f->block_count, sizeof(*queue));
     if (!seen || !queue) {
@@ -1982,7 +2006,7 @@ static bool lower_blocks(LowerFunction *f) {
             XrLirType produced = lower_invoke_parameter(f,b);
             uint32_t offset = produced != XR_LIR_TYPE_INVALID;
             count = phis + offset;
-            bool state_parameters = !lower_optional_error_predecessor(c,b);
+            bool state_parameters = !lower_invoke_failure_predecessor(c,source,b);
             for (uint32_t cell = 0; state_parameters && cell < f->cell_count; ++cell)
                 if (f->live[(size_t) b * f->cell_count + cell]) {
                     if (count == UINT32_MAX) {
@@ -1996,7 +2020,8 @@ static bool lower_blocks(LowerFunction *f) {
                 return false;
             if (produced) types[0] = produced;
             for (uint32_t p = 0; p < phis; ++p)
-                types[offset+p] = lower_type(c, source->instructions[block->first + p].type);
+                types[offset+p] = lower_type(c,lower_error_operand(c,source,
+                    source->parameter_count + block->first + p));
             uint32_t position = phis + offset;
             for (uint32_t cell = 0; state_parameters && cell < f->cell_count; ++cell)
                 if (f->live[(size_t) b * f->cell_count + cell])
@@ -2790,7 +2815,7 @@ static bool lower_managed_copy(LowerFunction *, uint32_t, XrLirValue, XrLirValue
 
 static bool lower_body_cell(LowerFunction *f,uint32_t block,uint32_t cell,uint32_t *position) {
     Lower *c=f->owner;
-    uint32_t predecessor=lower_optional_error_predecessor(c,block);
+    uint32_t predecessor=lower_invoke_failure_predecessor(c,f->source,block);
     if (!predecessor)
         return lower_build(c,xr_lir_block_parameter(c->module,f->blocks[block],(*position)++,
             &f->current[cell]));
@@ -2799,7 +2824,7 @@ static bool lower_body_cell(LowerFunction *f,uint32_t block,uint32_t cell,uint32
     XR_DCHECK(f->next[predecessor-1]<f->next[block], "the invoke precedes its exclusive landing");
     XrLirValue state=f->states[(size_t)(predecessor-1)*f->cell_count+cell];
     if (!state.id || lir_pod_scalar(f->cell_types[cell])>=XR_POD_SCALAR_COUNT)
-        return lower_unsupported(c,"non-scalar state across an optional error successor");
+        return lower_unsupported(c,"non-scalar state across an error successor");
     f->current[cell]=state;
     return true;
 }
@@ -2832,6 +2857,11 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         const XrXirInstruction *op = &f->source->instructions[i];
         uint32_t result = f->source->parameter_count + i;
         if (op->op == XR_XIR_INVOKE_RESULT || op->op == XR_XIR_INVOKE_ERROR || op->op == XR_XIR_INVOKE_DISCARD) {
+            if (f->lexical.count && !lower_lexical_events(f,b,f->lexical.after[i])) return false;
+            continue;
+        }
+        if (op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
+            if (!lower_catch_value(f,b,op,&f->values[result])) return false;
             if (f->lexical.count && !lower_lexical_events(f,b,f->lexical.after[i])) return false;
             continue;
         }
@@ -3383,7 +3413,7 @@ static bool lower_is_plain_error_enum(const Lower *c,XrXirType type) {
  * provides the error bound; ordinary source throws already carry their type. */
 static XrXirType lower_initializer_throw_type(const Lower *c,const XrXirFunction *f,uint32_t block,
     const XrXirInstruction *exit) {
-    XrXirType type=xr_xir_operand_type(f,exit->args[0]);
+    XrXirType type=lower_error_operand(c,f,exit->args[0]);
     if (type!=XR_XIR_ERROR) return type;
     uint32_t first=f->blocks[block].first;
     const XrXirInstruction *marker=&f->instructions[first];
@@ -3402,6 +3432,8 @@ static bool lower_initializer_bound(Lower *c,uint32_t function,XrXirType *error)
     bool throws=false;
     for (uint32_t n=0;n<f->instruction_count && !throws;++n) throws=f->instructions[n].op==XR_XIR_THROW;
     if (!throws || !f->block_count) return true;
+    c->function=function;
+    if (!lower_optional_errors(c,f) || !lower_catch_errors(c,f)) return false;
 
     uint8_t *seen=lower_alloc(c,f->block_count,1);
     uint32_t *queue=lower_alloc(c,f->block_count,sizeof(*queue));
@@ -3414,7 +3446,7 @@ static bool lower_initializer_bound(Lower *c,uint32_t function,XrXirType *error)
         c->instruction=UINT32_MAX;
         const XrXirInstruction *term=lower_term(c,f,block);
         if (!term) { good=false; break; }
-        c->instruction=(uint32_t)(term-f->instructions);
+        c->instruction=f->blocks[block].first + f->blocks[block].count - 1;
         if (term->op==XR_XIR_THROW) {
             XrXirType received=lower_initializer_throw_type(c,f,block,term);
             if (*error!=XR_XIR_NEVER && *error!=received)
@@ -3500,6 +3532,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     if (!lower_map_literals(&c) || !lower_modules(&c) || !lower_initializer_errors(&c) ||
         (local && c.initializer_errors && !lower_unsupported(&c,"typed module startup in local evaluation")) ||
         !lower_error_types(&c) || !lower_state_layout(&c) || !lower_state_constructors(&c)) {
+        lower_free_error_plans(&c);
         lower_modules_free(&c);
         xr_lir_module_destroy(c.module);
         return c.status;
@@ -3596,10 +3629,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         for (uint32_t f = 0; f < source->function_count; ++f) xr_free(c.byte_lengths[f]);
         xr_free(c.byte_lengths);
     }
-    if (c.optional_errors) {
-        for (uint32_t f=0; f<source->function_count; ++f) xr_free(c.optional_errors[f]);
-        xr_free(c.optional_errors);
-    }
+    lower_free_error_plans(&c);
     if (c.owned_bindings) {
         for (uint32_t f = 0; f < source->function_count; ++f) xr_free(c.owned_bindings[f]);
         xr_free(c.owned_bindings);

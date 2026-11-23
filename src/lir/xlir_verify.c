@@ -965,6 +965,11 @@ static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirF
                 if (exit->op!=XR_LIR_UNCAUGHT_ERROR || failed->instruction_count!=1 ||
                     !lir_startup_publication(m,f,b,term)) return false;
             } else if (exit->op==XR_LIR_BR) {
+                /* A catch receives this exact edge result as its first
+                 * parameter. An empty landing cannot manufacture a replacement. */
+                const XrLirEdgeView *edge = &exit->edges[0];
+                if (failed->instruction_count==1 && edge->argument_count &&
+                    edge->arguments[0]==failed->parameters[0]) continue;
                 if (!lir_optional_error_branch(f,failed,exit)) return false;
                 if (!optional) memset(discarded,0,f->value_count);
                 optional=true;
