@@ -1,0 +1,22 @@
+enum Refusal { Retry { code: i64 }, Missing { code: i64 } }
+
+fn raise(kind: i64) throws(Refusal) {
+    if (kind > 0) { throw Refusal.Retry { code: kind } }
+    throw Refusal.Missing { code: 33 }
+}
+
+fn probe(kind: i64) throws(Refusal) {
+    try {
+        raise(kind)
+        print(99)
+    } catch (Refusal.Retry { code: 1..=20 }) {
+        print(11)
+    } catch (Refusal.Retry { code }) {
+        print(code)
+    }
+}
+
+try! probe(12)
+try! probe(22)
+try! probe(0)
+print(98)

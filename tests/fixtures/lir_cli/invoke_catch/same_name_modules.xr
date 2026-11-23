@@ -1,0 +1,16 @@
+import "./modules/_left" as left
+import "./modules/_right" as right
+
+fn probe() {
+    try {
+        left.read()
+        print(99)
+    } catch (e: right.Refusal) {
+        print(88)
+    } catch (e: left.Refusal) {
+        print(42)
+    }
+    print(13)
+}
+
+probe()

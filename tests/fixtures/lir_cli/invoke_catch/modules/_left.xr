@@ -1,0 +1,4 @@
+export enum Refusal { Denied { code: i64 } }
+export fn read() throws(Refusal) {
+    throw Refusal.Denied { code: 42 }
+}

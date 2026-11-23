@@ -1,0 +1,25 @@
+enum Refusal { Denied { code: i64 } }
+
+fn read(fail: bool) throws(Refusal) -> i64 {
+    if (fail) { throw Refusal.Denied { code: 42 } }
+    return 11
+}
+
+fn ordinary() { print(7) }
+
+fn probe(fail: bool) {
+    try {
+        ordinary()
+        print(read(false))
+        print(read(fail))
+        print(99)
+    } catch (e: Refusal) {
+        match (e) {
+            Refusal.Denied { code } => print(code),
+        }
+    }
+    print(13)
+}
+
+probe(false)
+probe(true)

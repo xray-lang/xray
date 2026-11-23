@@ -1,0 +1,30 @@
+{
+  "typed_direct": {
+    "exit": 0,
+    "stdout": "7\n11\n11\n99\n13\n7\n11\n42\n13\n",
+    "stderr": ""
+  },
+  "ordered_propagation": {
+    "exit": 1,
+    "stdout": "11\n22\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: Refusal.Missing(33)\n"
+  },
+  "same_name_modules": {
+    "exit": 0,
+    "stdout": "42\n13\n",
+    "stderr": ""
+  },
+  "panic": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  },
+  "unused_binding": {
+    "exit": 0,
+    "stdout": "42\n13\n",
+    "stderr": ""
+  },
+  "bare_name": {
+    "source_error": ":6:14: error: E0334: bare catch name must not start with an uppercase letter; use catch (e: TypeName) to filter by type"
+  }
+}

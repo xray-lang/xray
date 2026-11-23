@@ -1,0 +1,15 @@
+enum Refusal { Denied }
+fn divide(by: i64) throws(Refusal) -> i64 {
+    if (by < 0) { throw Refusal.Denied }
+    return 24 / by
+}
+fn probe() {
+    try {
+        print(divide(0))
+        print(99)
+    } catch (e: Refusal) {
+        print(88)
+    }
+    print(13)
+}
+probe()

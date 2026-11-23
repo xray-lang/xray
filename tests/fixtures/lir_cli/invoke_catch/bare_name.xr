@@ -1,0 +1,10 @@
+enum Refusal { Denied }
+fn raise() throws(Refusal) { throw Refusal.Denied }
+fn probe() {
+    try {
+        raise()
+    } catch (Refusal) {
+        print(42)
+    }
+}
+probe()
