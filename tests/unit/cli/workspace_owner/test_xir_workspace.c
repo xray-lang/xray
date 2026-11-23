@@ -295,6 +295,73 @@ static void collision(const char *parent) {
     CHECK(DeleteFileA(marker) && RemoveDirectoryA(existing)); xr_compile_resources_release(resources);
     CHECK(!runtime_live && !owner_handle_count);
 }
+static FILE_ID_INFO fixture_identity(HANDLE directory) {
+    FILE_ID_INFO identity = {0};
+    CHECK(GetFileInformationByHandleEx(directory, FileIdInfo, &identity, sizeof(identity)));
+    return identity;
+}
+static void fixture_rename(HANDLE directory, const char *destination) {
+    wchar_t native[8192];
+    int units = MultiByteToWideChar(CP_ACP, 0, destination, -1, native, (int)(sizeof(native) / sizeof(*native)));
+    CHECK(units > 0);
+    for (int i = 0; i < units; ++i) if (native[i] == L'/') native[i] = L'\\';
+    size_t name_bytes = (size_t)units * sizeof(*native);
+    size_t bytes = offsetof(FILE_RENAME_INFO, FileName) + name_bytes;
+    FILE_RENAME_INFO *info = xr_malloc(bytes);
+    CHECK(info);
+    memset(info, 0, offsetof(FILE_RENAME_INFO, FileName));
+    info->FileNameLength = (DWORD)(name_bytes - sizeof(*native));
+    memcpy(info->FileName, native, name_bytes);
+    BOOL renamed = SetFileInformationByHandle(directory, FileRenameInfo, info, (DWORD)bytes);
+    DWORD error = renamed ? ERROR_SUCCESS : GetLastError();
+    xr_free(info);
+    if (!renamed) {
+        fprintf(stderr, "fixture rename destination: %s\n", destination);
+        SetLastError(error);
+    }
+    CHECK(renamed);
+}
+static void fixture_delete(HANDLE entry) {
+    FILE_DISPOSITION_INFO disposition = {TRUE};
+    CHECK(SetFileInformationByHandle(entry, FileDispositionInfo, &disposition, sizeof(disposition)));
+    CHECK(CloseHandle(entry));
+}
+static HANDLE rejected_directory_pin(XtcXirWorkspace **owner, unsigned which) {
+    XtcXirWorkspace *workspace = *owner;
+    unsigned calls = 0;
+    while (!(workspace->close_phase == 2 && workspace->close_index == which && workspace->close_substage == 2)) {
+        CHECK(++calls < 1000);
+        CHECK(xtc_xir_workspace_close(owner, 1) == XTC_XIR_WORKSPACE_PENDING && *owner == workspace);
+    }
+    /* The identity check has failed. Keep the exact DELETE handle for the
+     * fixture rename while letting the workspace release its own reference. */
+    HANDLE process = GetCurrentProcess(), pin = NULL;
+    CHECK(DuplicateHandle(process, workspace->nodes[which].deletion, process, &pin, 0, FALSE, DUPLICATE_SAME_ACCESS));
+    size_t tracked = owner_handle_count;
+    CHECK(xtc_xir_workspace_close(owner, 1) == XTC_XIR_WORKSPACE_IDENTITY_MISMATCH);
+    CHECK(*owner == workspace && workspace->close_index == which && workspace->close_substage == 0);
+    CHECK(!workspace->nodes[which].deletion && owner_handle_count + 1 == tracked);
+    return pin;
+}
+static const char replacement_contents[] = "replacement preserved\n";
+static HANDLE replacement_marker_create(const char *path) {
+    HANDLE marker = CreateFileA(path, GENERIC_READ | GENERIC_WRITE | DELETE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    CHECK(marker != INVALID_HANDLE_VALUE);
+    DWORD written = 0;
+    CHECK(WriteFile(marker, replacement_contents, sizeof(replacement_contents) - 1, &written, NULL));
+    CHECK(written == sizeof(replacement_contents) - 1);
+    return marker;
+}
+static void replacement_marker_verify_and_remove(HANDLE marker, const char *path) {
+    CHECK(GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES);
+    CHECK(SetFilePointerEx(marker, (LARGE_INTEGER){0}, NULL, FILE_BEGIN));
+    char contents[sizeof(replacement_contents)];
+    DWORD received = 0;
+    CHECK(ReadFile(marker, contents, sizeof(contents), &received, NULL));
+    CHECK(received == sizeof(replacement_contents) - 1 && !memcmp(contents, replacement_contents, received));
+    fixture_delete(marker);
+    CHECK(GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
+}
 static void replacement(const char *parent, unsigned which) {
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited); XtcXirWorkspace *owner = NULL;
     XtcXirWorkspaceRequest request = request_for(parent);
@@ -319,34 +386,42 @@ static void replacement(const char *parent, unsigned which) {
         CHECK(owner && !corrupt_identity && xtc_xir_workspace_status(owner) == first);
         drain(&owner, 1); xr_compile_resources_release(resources); CHECK(!runtime_live && !owner_handle_count); return;
     }
-    DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE;
+    DWORD observe = share | FILE_SHARE_DELETE;
     DWORD flags = FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT;
     HANDLE original_pin = CreateFileA(original, DELETE | FILE_READ_ATTRIBUTES, share, NULL, OPEN_EXISTING, flags, NULL);
     CHECK(original_pin != INVALID_HANDLE_VALUE);
-    CHECK(MoveFileA(original, moved)); CHECK(CreateDirectoryA(original, NULL));
-    /* Keep the moved directory renameable until its identity is restored. */
-    HANDLE blocker = CreateFileA(moved, FILE_LIST_DIRECTORY, share & ~FILE_SHARE_DELETE,
+    FILE_ID_INFO original_id = fixture_identity(original_pin);
+    CHECK(workspace_identity_equal(&original_id, &owner->nodes[which].identity));
+    fixture_rename(original_pin, moved);
+    CHECK(CreateDirectoryA(original, NULL));
+    /* A second DELETE open must fail while the fixture owns the rename right. */
+    HANDLE blocker = CreateFileA(moved, DELETE, observe,
         NULL, OPEN_EXISTING, flags, NULL);
     CHECK(blocker == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION);
-    path_join(marker, sizeof(marker), original, "keep.txt"); write_file(marker, "replacement preserved\n");
-    HANDLE observer = CreateFileA(original, FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, share, NULL, OPEN_EXISTING, flags, NULL);
+    path_join(marker, sizeof(marker), original, "keep.txt");
+    HANDLE marker_pin = replacement_marker_create(marker);
+    HANDLE observer = CreateFileA(original, FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, observe, NULL, OPEN_EXISTING, flags, NULL);
     CHECK(observer != INVALID_HANDLE_VALUE);
-    CHECK(xtc_xir_workspace_close(&owner, 1000) == XTC_XIR_WORKSPACE_IDENTITY_MISMATCH);
-    CHECK(owner && GetFileAttributesA(marker) != INVALID_FILE_ATTRIBUTES);
-    CHECK(owner->close_index == which && owner->close_substage == 0 && !owner->nodes[which].deletion);
-    /* Rename the rejected fixture away while the observer still owns it.
-     * A successful deferred delete need not free the original name yet. */
+    FILE_ID_INFO replacement_id = fixture_identity(observer);
+    CHECK(!workspace_identity_equal(&original_id, &replacement_id));
+    HANDLE rejected_pin = rejected_directory_pin(&owner, which);
+    FILE_ID_INFO rejected_id = fixture_identity(rejected_pin);
+    CHECK(workspace_identity_equal(&replacement_id, &rejected_id));
+    replacement_marker_verify_and_remove(marker_pin, marker);
     char parked[8192]; CHECK(sprintf_s(parked, sizeof(parked), "%s-rejected", original) > 0);
     CHECK(GetFileAttributesA(parked) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
-    CHECK(MoveFileA(original, parked));
-    CHECK(MoveFileA(moved, original));
-    HANDLE restored = CreateFileA(original, FILE_READ_ATTRIBUTES, share, NULL, OPEN_EXISTING, flags, NULL);
-    FILE_ID_INFO identity = {0};
-    CHECK(restored != INVALID_HANDLE_VALUE && GetFileInformationByHandleEx(restored, FileIdInfo, &identity, sizeof(identity)));
-    CHECK(workspace_identity_equal(&identity, &owner->nodes[which].identity));
-    CHECK(CloseHandle(restored) && CloseHandle(original_pin) && CloseHandle(observer));
-    path_join(marker, sizeof(marker), parked, "keep.txt");
-    CHECK(DeleteFileA(marker) && RemoveDirectoryA(parked));
+    fixture_rename(rejected_pin, parked);
+    fixture_rename(original_pin, original);
+    HANDLE parked_observer = CreateFileA(parked, FILE_READ_ATTRIBUTES, observe, NULL, OPEN_EXISTING, flags, NULL);
+    HANDLE restored = CreateFileA(original, FILE_READ_ATTRIBUTES, observe, NULL, OPEN_EXISTING, flags, NULL);
+    CHECK(parked_observer != INVALID_HANDLE_VALUE && restored != INVALID_HANDLE_VALUE);
+    FILE_ID_INFO parked_id = fixture_identity(parked_observer), restored_id = fixture_identity(restored);
+    CHECK(workspace_identity_equal(&parked_id, &replacement_id) && workspace_identity_equal(&restored_id, &original_id));
+    CHECK(CloseHandle(parked_observer) && CloseHandle(restored));
+    CHECK(CloseHandle(original_pin) && CloseHandle(observer));
+    fixture_delete(rejected_pin);
+    CHECK(GetFileAttributesA(parked) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
     CHECK(xtc_xir_workspace_status(owner) == (first == XTC_XIR_WORKSPACE_OK ? XTC_XIR_WORKSPACE_IDENTITY_MISMATCH : first));
     drain(&owner, 1); xr_compile_resources_release(resources); CHECK(!runtime_live && !owner_handle_count);
     printf("fixed directory %u original identity restored with a live replacement observer PASS\n", which);
