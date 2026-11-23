@@ -474,7 +474,10 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected,
         if (c->homes->values[transfer.target].owner_count) continue;
         c_text(c, ", &"); c_value(c, transfer.target); c_text(c, ", &"); c_value(c, transfer.source);
     }
-    c_format(c, ");\n    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
+    c_text(c, ");\n    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, ");
+    if (source) c_format(c, "UINT32_C(%" PRIu32 ")", source);
+    else c_text(c, "0");
+    c_text(c, ");\n");
     if (private_scalars) {
         /* Failure is nonreturning. All old owners have retired successfully;
          * only now publish the private, already snapshotted scalar values. */

@@ -457,6 +457,9 @@ static void test_owned_string_invoke_drop(void) {
     XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
     xr_rbc_execution_free(&execution);
     CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_TRY_ASSERT && !xrt_value_root_active());
+    argument=0;
+    CHECK(run(program,&argument,1)==2 && !xrt_value_root_active());
+    xr_rbc_program_destroy(program);
     const XrtErrorSnapshot *failure=xr_rbc_outcome_try_assert(outcome);
     XrtTryAssertValue error_value={0};
     CHECK(xrt_try_assert_value(failure,&error_value) && error_value.variant==1 && error_value.field_count==1 &&
@@ -466,7 +469,6 @@ static void test_owned_string_invoke_drop(void) {
     uint64_t bits=0;
     CHECK(xrt_try_assert_field(failure,0,&scalar,&bits) && scalar==XR_POD_I64 && bits==23);
     xr_rbc_outcome_free(&outcome);
-    xr_rbc_program_destroy(program);
 }
 
 static void test_owned_startup_error(void) {
