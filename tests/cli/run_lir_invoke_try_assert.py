@@ -34,8 +34,9 @@ def main() -> None:
         environment["PATH"] = str(binary.parent) + os.pathsep + environment.get("PATH", "")
     failures = []
 
-    def run(label, command):
-        result = proc.run(command, cwd=work, env=environment, timeout=30)
+    def run(label, command, *, trace=False):
+        child_env = dict(environment, XRAY_BACKTRACE="1") if trace else environment
+        result = proc.run(command, cwd=work, env=child_env, timeout=30)
         (work / f"{label}.stdout").write_bytes(result.stdout)
         (work / f"{label}.stderr").write_bytes(result.stderr)
         row = {"argv": result.argv, "exit": result.returncode, "timed_out": result.timed_out}
@@ -68,6 +69,13 @@ def main() -> None:
             failures.append((name, "Source acceptance", checked))
         if vm != expected:
             failures.append((name, "VM result", vm, expected))
+        if "trace" in case:
+            traced = run(name + "-vm-trace", [binary, "run", source], trace=True)
+            frames = "".join(f"    at {source}:{line}:{column}\n" for line, column in case["trace"])
+            trace_stderr = expected[2] + ("Stack trace:\n" + frames).encode("utf-8")
+            trace_expected = (expected[0], expected[1], trace_stderr)
+            if traced != trace_expected:
+                failures.append((name, "VM opt-in trace", traced, trace_expected))
         if emitted[0] or not generated.is_file():
             failures.append((name, "C emission", emitted))
             continue
@@ -91,7 +99,7 @@ def main() -> None:
             print(repr(failure), file=sys.stderr)
         raise SystemExit(f"{len(failures)} try! checks failed; artifacts: {work}")
     complete_native_artifacts(work)
-    print(f"try! exits, stdout and stderr match on VM and native; artifacts: {work}")
+    print(f"try! exits, stdout, stderr and VM opt-in trace match expectations; artifacts: {work}")
 
 
 if __name__ == "__main__":

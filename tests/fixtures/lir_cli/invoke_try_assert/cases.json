@@ -7,7 +7,8 @@
   "scalar_failure": {
     "exit": 1,
     "stdout": "entered\nvalue\n",
-    "stderr": "[Uncaught Panic] E0446: try! failed: ProbeErr.Bad(23)\n"
+    "stderr": "[Uncaught Panic] E0446: try! failed: ProbeErr.Bad(23)\n",
+    "trace": [[15, 12], [19, 12], [23, 7]]
   },
   "unit_failure": {
     "exit": 1,
