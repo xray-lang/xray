@@ -1,0 +1,7 @@
+{
+  "business_propagation": {
+    "exit": 1,
+    "stdout": "entered\n1\n201\n202\n",
+    "stderr": "[Uncaught Error] Refusal.Failed(23)\n"
+  }
+}

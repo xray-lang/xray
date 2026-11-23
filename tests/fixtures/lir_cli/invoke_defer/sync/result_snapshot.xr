@@ -1,0 +1,10 @@
+fn work() -> i64 {
+    var value = 22
+    defer {
+        value = 99
+        print(value)
+    }
+    return value
+}
+
+print(work())

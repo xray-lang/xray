@@ -1,0 +1,7 @@
+fn work(divisor: i64) -> i64 {
+    defer { print(71) }
+    print(11)
+    return 22 / divisor
+}
+
+print(work(0))

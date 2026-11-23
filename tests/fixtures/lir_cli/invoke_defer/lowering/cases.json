@@ -1,0 +1,5 @@
+{
+  "forbidden_active_panic": {
+    "lowering_error": ":4:5: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
+  }
+}

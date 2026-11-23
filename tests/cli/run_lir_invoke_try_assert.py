@@ -30,6 +30,8 @@ def main() -> None:
     if not cases:
         parser.error("Error call fixtures and cases.json must match exactly")
     variant_sources = any("source" in case for case in cases.values())
+    if any("lowering_error" in case and (variant_sources or "source_error" in case) for case in cases.values()):
+        parser.error("A lowering refusal requires its own entry fixture and successful Source checking")
     if variant_sources:
         for case in cases.values():
             filename = case.get("source", "")
@@ -74,6 +76,12 @@ def main() -> None:
             failures.append((label, "timed out"))
         return result.returncode, result.stdout, result.stderr
 
+    def build_native(label, source, executable):
+        command = [binary, "build", source, "-o", executable]
+        if args.compiler:
+            command += ["--cc", args.compiler]
+        return run(label + "-build", command)
+
     identity = run("version", [binary, "--version", "--json"])
     if identity[0] or identity[2]:
         raise SystemExit(f"could not identify xray; artifacts: {work}")
@@ -81,14 +89,20 @@ def main() -> None:
     stdout_key, stderr_key = ("stdout_utf8", "stderr_utf8") if variant_sources else ("stdout", "stderr")
     for source, variants in by_source.items():
         label = source.stem
-        generated = work / f"{label}.c"
+        first_name, first_case = variants[0]
+        lowering_error = first_case.get("lowering_error")
+        products = work
+        if lowering_error is not None:
+            products = work / f"{label}-products"
+            products.mkdir()
+        generated = products / f"{label}.c"
+        executable = products / (label + (".exe" if os.name == "nt" else ""))
         checked = run(label + "-check", [binary, "check", source])
         vm_results = {
             name: run(name + "-vm", [binary, "run", source], set_env=case.get("set_env"))
             for name, case in variants
         }
         emitted = run(label + "-c", [binary, "build", "-c", source, "-o", generated])
-        first_name, first_case = variants[0]
         if not variant_sources and "source_error" in first_case:
             expected = (source.name + first_case["source_error"]).encode("utf-8")
             lines = checked[2].splitlines()
@@ -97,6 +111,18 @@ def main() -> None:
             vm = vm_results[first_name]
             if vm != checked or emitted != checked or generated.exists():
                 failures.append((first_name, "both backends must preserve the Source refusal", checked, vm, emitted))
+            continue
+        if lowering_error is not None:
+            expected = (1, b"", f"{source}{lowering_error}\n".encode("utf-8"))
+            built = build_native(label, source, executable)
+            if checked != (0, b"", b""):
+                failures.append((label, "Source acceptance before lowering refusal", checked))
+            for phase, actual in (("VM", vm_results[first_name]), ("C emission", emitted), ("native build", built)):
+                if actual != expected:
+                    failures.append((label, phase + " lowering refusal", actual, expected))
+            artifacts = sorted(path.name for path in products.iterdir())
+            if artifacts:
+                failures.append((label, "lowering refusal published artifacts", artifacts))
             continue
 
         expected_results = {
@@ -123,11 +149,7 @@ def main() -> None:
         elif b"({" in generated.read_bytes():
             failures.append((label, "C output contains a GNU statement expression"))
 
-        executable = work / (label + (".exe" if os.name == "nt" else ""))
-        command = [binary, "build", source, "-o", executable]
-        if args.compiler:
-            command += ["--cc", args.compiler]
-        built = run(label + "-build", command)
+        built = build_native(label, source, executable)
         if built[0] or not executable.is_file():
             failures.append((label, "native build", built))
             continue
