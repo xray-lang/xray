@@ -22,6 +22,7 @@
 #include "base/xchecks.h"
 #include "os/os_fs.h"
 #include "xray_native_link_paths.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -332,11 +333,17 @@ static bool native_link(NativeCommand *command, const XtcHostToolchainView *host
 
 static bool native_workspace_close(XtcXirWorkspace **workspace) {
     bool clean = true;
+    XtcXirWorkspaceStatus status = XTC_XIR_WORKSPACE_OK;
     for (unsigned attempt = 0; attempt < 8; ++attempt) {
-        if (xtc_xir_workspace_close(workspace, 1024) == XTC_XIR_WORKSPACE_OK) return clean;
+        status = xtc_xir_workspace_close(workspace, 1024);
+        if (status == XTC_XIR_WORKSPACE_OK) return clean;
         clean = false;
     }
     fputs("native workspace cleanup remains pending\n", stderr);
+    const XtcXirWorkspaceDiagnostic *diagnostic = xtc_xir_workspace_diagnostic(*workspace);
+    const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(*workspace);
+    fprintf(stderr, "cleanup status %u, first OS error %" PRIu32 ", workspace %s\n",
+        (unsigned)status, diagnostic ? diagnostic->os_error : 0, paths && paths->root ? paths->root : "unknown");
     fflush(stderr);
     _Exit(XR_CLI_EXIT_INTERNAL);
 }
