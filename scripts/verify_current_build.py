@@ -31,7 +31,7 @@ REQUIRED = (
     "test_lir_array_faults", "test_lir_array_native", "test_lir_cli_array_native",
     # Fixed receiving layouts, independent images and constructor facts replace
     # retired owner-bank tests; these retain metadata and failure cleanup checks.
-    "lir_value_layout", "lir_value_image", "lir_binding_homes", "lir_callable_facts",
+    "lir_value_layout", "lir_value_image", "lir_binding_homes", "lir_callable_facts", "lir_callable_bytecode",
     # Loop consumers rely on fresh ownership facts and failure-atomic proofs.
     "test_lir_ownership", "test_lir_ownership_faults",
     # Physical metadata, allocator and foreign-thread owner retirement.
