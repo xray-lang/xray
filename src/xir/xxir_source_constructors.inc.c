@@ -120,6 +120,29 @@ static bool source_constructor_field(SourceContext *ctx, AstNode *node, const ch
     uint32_t before=ctx->bodies[ctx->function].count;
     return source_constructor_store(ctx,action.field,*value)&&source_hir_place_emitted(ctx,&action,NULL,before);
 }
+
+/* Constructor fields already have local storage. An Array edit uses that
+ * storage while the Class identity is still unpublished. */
+static bool source_constructor_array_place(SourceContext *ctx, AstNode *node,
+    XrXirType receiver, SourceValue *place) {
+    uint32_t field;
+    XrXirType type;
+    if (!source_struct_field(ctx, node, receiver, node->as.member_access.name, 3, &field, &type))
+        return false;
+    if (!xr_xir_type_is_array(&ctx->types, type))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "class constructor field mutation requires an Array field");
+
+    SourceFunction *body = &ctx->bodies[ctx->function];
+    uint32_t storage = body->constructor_places[field];
+    XrHirPlaceAction selected;
+    if (!source_hir_place_check(ctx, node, (XrHirPlaceInput){.kind=XR_HIR_PLACE_CONSTRUCTOR,
+            .value=receiver, .type=type, .field=field, .access=3, .base=storage}, &selected) ||
+        !source_hir_place_emitted(ctx, &selected, NULL, body->count))
+        return false;
+    *place = (SourceValue){.id=storage, .type=selected.type, .place=selected.place};
+    return true;
+}
+
 static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, AstNode *node, uint32_t *next) {
     MethodDeclNode *method = &node->as.method_decl;
     if (source_hir_nominal_defaults(ctx,owner->index).constructor || *next >= ctx->first_closure || method->is_static ||

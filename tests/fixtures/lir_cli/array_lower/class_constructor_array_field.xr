@@ -1,0 +1,24 @@
+final class Bucket {
+    private values: Array<i64>
+
+    init(flag: bool) {
+        if (flag) {
+            this.values = [10]
+        } else {
+            this.values = [20]
+        }
+        this.values.push(7)
+        this.values[0] = this.values[0] + 1
+    }
+
+    sum() -> i64 {
+        return this.values[0] + this.values[1]
+    }
+}
+
+fn example() {
+    print(Bucket(true).sum())
+    print(Bucket(false).sum())
+}
+
+example()

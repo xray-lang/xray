@@ -106,8 +106,11 @@ static bool lower_array_flow_values(LowerFunction *f) {
         const XrXirBlock *block = &source->blocks[b];
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             const XrXirInstruction *op = &source->instructions[i];
+            uint32_t result = source->parameter_count + i;
             if (op->op == XR_XIR_CELL_PLACE && f->promoted_arrays[op->args[0]])
-                f->array_places[source->parameter_count + i] = f->cell_for[op->args[0]];
+                f->array_places[result] = f->cell_for[op->args[0]];
+            else if (op->op == XR_XIR_LOCAL_UNINIT && lower_array_element(c, op->type))
+                f->array_places[result] = f->cell_for[result];
             uint32_t count = lower_operand_count(source, op);
             for (uint32_t a = op->op == XR_XIR_PHI ? 1u : 0u; a < count;
                  a += op->op == XR_XIR_PHI ? 2u : 1u) {

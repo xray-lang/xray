@@ -1,0 +1,11 @@
+final class Bucket {
+    private values: Array<i64>
+
+    init(flag: bool) {
+        if (flag) { this.values = [10] }
+        this.values.push(7)
+        this.values = [20]
+    }
+}
+
+Bucket(false)

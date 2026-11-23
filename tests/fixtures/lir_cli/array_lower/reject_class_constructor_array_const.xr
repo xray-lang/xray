@@ -1,0 +1,10 @@
+final class Bucket {
+    private const values: Array<i64>
+
+    init() {
+        this.values = [10]
+        this.values.push(7)
+    }
+}
+
+Bucket()

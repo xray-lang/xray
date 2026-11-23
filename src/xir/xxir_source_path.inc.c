@@ -70,6 +70,9 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
     bool reference, const SourceReferencePlan *plan) {
     AstNode *steps[128]; uint32_t count; SourceName *root;
     if (!source_path_nodes(ctx,node,steps,&count,&root)) return false;
+    if (!reference && count == 1 && root && root->construction &&
+        steps[0]->type == AST_MEMBER_ACCESS && xr_xir_type_is_class(&ctx->types, root->type))
+        return source_constructor_array_place(ctx, steps[0], root->type, place);
     uint32_t selector = 0;
     if (plan && (!reference || plan->owner != ctx->function || plan->syntax != node || !plan->count ||
         plan->count > count || ctx->bodies[ctx->function].region_sealed))
