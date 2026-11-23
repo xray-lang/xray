@@ -319,13 +319,37 @@ static void replacement(const char *parent, unsigned which) {
         CHECK(owner && !corrupt_identity && xtc_xir_workspace_status(owner) == first);
         drain(&owner, 1); xr_compile_resources_release(resources); CHECK(!runtime_live && !owner_handle_count); return;
     }
+    DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    DWORD flags = FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT;
+    HANDLE original_pin = CreateFileA(original, DELETE | FILE_READ_ATTRIBUTES, share, NULL, OPEN_EXISTING, flags, NULL);
+    CHECK(original_pin != INVALID_HANDLE_VALUE);
     CHECK(MoveFileA(original, moved)); CHECK(CreateDirectoryA(original, NULL));
+    /* Keep the moved directory renameable until its identity is restored. */
+    HANDLE blocker = CreateFileA(moved, FILE_LIST_DIRECTORY, share & ~FILE_SHARE_DELETE,
+        NULL, OPEN_EXISTING, flags, NULL);
+    CHECK(blocker == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION);
     path_join(marker, sizeof(marker), original, "keep.txt"); write_file(marker, "replacement preserved\n");
+    HANDLE observer = CreateFileA(original, FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, share, NULL, OPEN_EXISTING, flags, NULL);
+    CHECK(observer != INVALID_HANDLE_VALUE);
     CHECK(xtc_xir_workspace_close(&owner, 1000) == XTC_XIR_WORKSPACE_IDENTITY_MISMATCH);
     CHECK(owner && GetFileAttributesA(marker) != INVALID_FILE_ATTRIBUTES);
-    CHECK(DeleteFileA(marker) && RemoveDirectoryA(original)); CHECK(MoveFileA(moved, original));
+    CHECK(owner->close_index == which && owner->close_substage == 0 && !owner->nodes[which].deletion);
+    /* Rename the rejected fixture away while the observer still owns it.
+     * A successful deferred delete need not free the original name yet. */
+    char parked[8192]; CHECK(sprintf_s(parked, sizeof(parked), "%s-rejected", original) > 0);
+    CHECK(GetFileAttributesA(parked) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
+    CHECK(MoveFileA(original, parked));
+    CHECK(MoveFileA(moved, original));
+    HANDLE restored = CreateFileA(original, FILE_READ_ATTRIBUTES, share, NULL, OPEN_EXISTING, flags, NULL);
+    FILE_ID_INFO identity = {0};
+    CHECK(restored != INVALID_HANDLE_VALUE && GetFileInformationByHandleEx(restored, FileIdInfo, &identity, sizeof(identity)));
+    CHECK(workspace_identity_equal(&identity, &owner->nodes[which].identity));
+    CHECK(CloseHandle(restored) && CloseHandle(original_pin) && CloseHandle(observer));
+    path_join(marker, sizeof(marker), parked, "keep.txt");
+    CHECK(DeleteFileA(marker) && RemoveDirectoryA(parked));
     CHECK(xtc_xir_workspace_status(owner) == (first == XTC_XIR_WORKSPACE_OK ? XTC_XIR_WORKSPACE_IDENTITY_MISMATCH : first));
     drain(&owner, 1); xr_compile_resources_release(resources); CHECK(!runtime_live && !owner_handle_count);
+    printf("fixed directory %u original identity restored with a live replacement observer PASS\n", which);
 }
 static void set_junction(const char *link, const char *outside) {
     struct MountPoint { ULONG tag; USHORT bytes, reserved, sub_offset, sub_length, print_offset, print_length; WCHAR path[4096]; } data = {0};
