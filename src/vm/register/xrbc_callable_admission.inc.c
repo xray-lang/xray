@@ -356,9 +356,12 @@ static bool rbc_callable_access_valid(const XrRbcModule *m, const XrRbcFunction 
             f->register_callables[access.source] == access.slot && f->register_callables[access.result.index] == access.slot;
     }
     if (access.operation == XR_RBC_FUNCTION_SCOPE_RETURN) {
-        uint32_t result = m->callable_results ? m->callable_results[f - m->functions] : 0;
+        uint32_t function = (uint32_t)(f - m->functions);
+        uint32_t result = m->callable_results ? m->callable_results[function] : 0;
         if (access.slot != result || access.first || access.destination || access.callee || access.window ||
             access.result.index || access.result.spill || access.count > 1) return false;
+        const XrRbcValueCode *code = xr_rbc_module_value_code(m, function);
+        if (rbc_callable_home_type(xr_rbc_module_value_image(m), rbc_result_value_type(code))) return false;
         if (f->callable) {
             XrRbcCallableValue declared = m->callable_types[f->callable - 1].result;
             if (declared.kind == XR_RBC_CALLABLE_HOME) return false;

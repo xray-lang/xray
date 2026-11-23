@@ -12,6 +12,7 @@
 #include "lir/xlir_map.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_code_owner.h"
+#include "vm/register/xrbc_internal.h"
 #include "vm/register/xrbc_value_code.h"
 #include "xray_native_function.h"
 #include "runtime/native/xnative_capture_backing.h"
@@ -107,6 +108,33 @@ static XrRbcValueAccess nullable_array_access(const XrRbcModule *module, uint32_
     CHECK(false);
     return (XrRbcValueAccess){0};
 }
+static void nullable_array_scope_return_admission(const XrRbcProgram *program, uint32_t callee) {
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    const XrRbcCodeOwner *producer = xr_rbc_module_code_owner(module);
+    CHECK(producer && module->function_count == 2 && callee == 1);
+    XrRbcFunction functions[] = {module->functions[0], module->functions[1]};
+    XrRbcModule view = *module;
+    XrRbcCodeOwner receiver = *producer;
+    receiver.module = &view;
+    receiver.functions = functions;
+    view.functions = functions;
+    view.code_lease.owner = &receiver;
+    CHECK(xr_rbc_module_code_owner(&view) == &receiver);
+    const XrtLocationOwner *locations = xr_rbc_program_locations(program);
+    CHECK(xr_rbc_module_admit(&view, locations) == XR_RBC_OK);
+    /* Admit an unused legacy descriptor against the declaration. The original
+     * instruction stream and the product program remain untouched. */
+    const XrRbcAggregateAccess scope_return = {.operation=XR_RBC_FUNCTION_SCOPE_RETURN};
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        CHECK(!functions[f].aggregate_access_count);
+        functions[f].aggregate_accesses = &scope_return;
+        functions[f].aggregate_access_count = 1;
+        XrRbcStatus admitted = xr_rbc_module_admit(&view, locations);
+        if (f == callee) CHECK(admitted == XR_RBC_INVALID);
+        else CHECK(admitted == XR_RBC_OK);
+        functions[f] = module->functions[f];
+    }
+}
 static void nullable_array_direct_boundary(void) {
     CArrayFixture c = {0};
     OK(xr_lir_module_create(NULL, &c.module));
@@ -174,6 +202,7 @@ static void nullable_array_direct_boundary(void) {
     XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_module_prepare(module, call.index, raw, 2, xr_rbc_program_locations(program),
         &execution) == XR_RBC_INVALID && !execution);
+    nullable_array_scope_return_admission(program, call.index);
 
     xr_lir_module_destroy(c.module);
     execute(program, 0);
