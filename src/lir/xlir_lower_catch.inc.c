@@ -29,50 +29,127 @@ static uint32_t lower_invoke_failure_predecessor(const Lower *c, const XrXirFunc
     return optional || !plan ? optional : plan->predecessors[block];
 }
 
-/* Closed Checked verifies exact incoming PHI pairs, the ownership of each
- * marker by its call, and the guard of every narrowing. Accept only the
- * empty, dedicated landings that forward the call's own error. */
-static XrXirType lower_catch_join_type(const Lower *c, const XrXirFunction *f, uint32_t block) {
+static bool lower_catch_reachable(Lower *c,const XrXirFunction *f,uint8_t *active) {
+    static const uint8_t edges[] = {0,
+#define XR_XIR_OP(name, stages, rule, operands, edges, terminal) edges,
+#include "../xir/xxir_ops.def"
+#undef XR_XIR_OP
+    };
+    uint32_t *queue=lower_alloc(c,f->block_count,sizeof(*queue));
+    if (!queue) return false;
+    active[0]=1;
+    queue[0]=0;
+    bool good=true;
+    for (uint32_t read=0,write=1; good && read<write; ++read) {
+        uint32_t block=queue[read],panic=f->blocks[block].panic;
+        const XrXirInstruction *term=lower_term(c,f,block);
+        if (!term) { good=false; break; }
+        uint32_t ordinary=term->op==XR_XIR_INVOKE ? lower_edge_count(c,term) : edges[term->op];
+        for (uint32_t e=0; e<ordinary+(panic!=0); ++e) {
+            uint32_t next=e<ordinary ? term->targets[e] : panic;
+            if (!active[next]) {
+                active[next]=1;
+                queue[write++]=next;
+            }
+        }
+    }
+    xr_free(queue);
+    return good;
+}
+
+static const XrXirInstruction *lower_catch_predecessor(const XrXirFunction *f,
+    uint32_t block,const uint32_t *input) {
+    const XrXirBlock *pred=&f->blocks[input[0]];
+    const XrXirInstruction *jump=&f->instructions[pred->first+pred->count-1];
+    return !pred->panic && !pred->frontier && jump->op==XR_XIR_JUMP && jump->targets[0]==block ? jump : NULL;
+}
+
+static XrXirType lower_catch_input(const Lower *c,const XrXirFunction *f,uint32_t block,
+    const uint32_t *input,const uint8_t *uses) {
+    const XrXirInstruction *jump=lower_catch_predecessor(f,block,input);
+    if (!jump) return XR_XIR_UNIT;
+    const XrXirInstruction *call=lower_forwarded_error_call(f,input[0],input[1],block);
+    if (call) {
+        if (call->immediate<0 || (uint64_t)call->immediate>=c->source->function_count) return XR_XIR_UNIT;
+        return c->source->functions[call->immediate].error_type;
+    }
+    const XrXirInstruction *producer=lower_place_definition(f,input[1]);
+    if (!producer || producer->type!=XR_XIR_ERROR) return XR_XIR_UNIT;
+    uint32_t index=(uint32_t)(producer-f->instructions);
+    if (producer->op==XR_XIR_ERROR_ERASE && producer+1==jump && uses[index]==1)
+        return xr_xir_operand_type(f,producer->args[0]);
+    if (producer->op==XR_XIR_PHI && index<f->blocks[block].first)
+        return lower_catch_type(c,f,input[1]);
+    return XR_XIR_UNIT;
+}
+
+/* Closed Checked verifies exact incoming pairs and dominance on the edge.
+ * A nested handler forwards its earlier, already proved PHI. Never-only
+ * landings are absent from the executable graph before any selector folds. */
+static XrXirType lower_catch_join_type(const Lower *c,const XrXirFunction *f,uint32_t block,
+    const uint8_t *active,const uint8_t *uses) {
     const XrXirBlock *join = &f->blocks[block];
     const XrXirInstruction *phi = &f->instructions[join->first];
     if (join->panic || join->frontier || !phi->args[1]) return XR_XIR_UNIT;
     XrXirType exact = XR_XIR_NEVER;
     for (uint32_t a = 0; a < phi->args[1]; a += 2) {
         const uint32_t *input = &f->operands[phi->args[0] + a];
-        const XrXirInstruction *call = lower_forwarded_error_call(f, input[0], input[1], block);
-        if (!call || call->immediate < 0 || (uint64_t)call->immediate >= c->source->function_count)
-            return XR_XIR_UNIT;
-        XrXirType error = c->source->functions[call->immediate].error_type;
-        if (lower_empty_error(error)) continue;
+        if (!active[input[0]]) continue;
+        XrXirType error=lower_catch_input(c,f,block,input,uses);
+        if (lower_empty_error(error)) return XR_XIR_UNIT;
         if (exact != XR_XIR_NEVER && exact != error) return XR_XIR_UNIT;
         exact = error;
     }
-    return exact == XR_XIR_NEVER || lower_is_plain_error_enum(c, exact) ? exact : XR_XIR_UNIT;
+    return lower_is_plain_error_enum(c,exact) ? exact : XR_XIR_UNIT;
+}
+
+static void lower_catch_mark_join(LowerCatchPlan *plan,const XrXirFunction *f,uint32_t first,
+    const uint8_t *active,XrXirType exact) {
+    const XrXirInstruction *phi=&f->instructions[first];
+    plan->types[first]=exact;
+    for (uint32_t a=0; a<phi->args[1]; a+=2) {
+        const uint32_t *input=&f->operands[phi->args[0]+a];
+        if (!active[input[0]]) continue;
+        const XrXirInstruction *producer=lower_place_definition(f,input[1]);
+        if (producer->op==XR_XIR_ERROR_ERASE) plan->types[producer-f->instructions]=exact;
+    }
 }
 
 static bool lower_catch_errors(Lower *c, const XrXirFunction *f) {
     if (lower_catch_plan(c, f)) return true;
     LowerCatchPlan *plan = NULL;
-    for (uint32_t b = 0; b < f->block_count; ++b) {
+    uint8_t *active=NULL,*uses=NULL;
+    bool good=true;
+    for (uint32_t b=0; good && b<f->block_count; ++b) {
         uint32_t first = f->blocks[b].first;
         const XrXirInstruction *phi = &f->instructions[first];
         if (phi->op != XR_XIR_PHI || phi->type != XR_XIR_ERROR || lower_optional_error_join(c, b))
             continue;
-        XrXirType exact = lower_catch_join_type(c, f, b);
+        if (!uses) {
+            active=lower_alloc(c,f->block_count,1);
+            uses=lower_alloc(c,f->instruction_count,1);
+            good=active && uses && lower_catch_reachable(c,f,active);
+            if (!good) break;
+            lower_optional_uses(c,f,uses);
+        }
+        if (!active[b]) continue;
+        XrXirType exact=lower_catch_join_type(c,f,b,active,uses);
         if (!exact) continue;
         if (!plan) {
             if (!c->catch_errors)
                 c->catch_errors = lower_alloc(c, c->source->function_count, sizeof(*c->catch_errors));
-            if (!c->catch_errors) return false;
+            if (!c->catch_errors) { good=false; break; }
             plan = &c->catch_errors[c->function];
             plan->types = lower_alloc(c, f->instruction_count, sizeof(*plan->types));
             plan->branches = lower_alloc(c, f->block_count, sizeof(*plan->branches));
             plan->predecessors = lower_alloc(c, f->block_count, sizeof(*plan->predecessors));
-            if (!plan->types || !plan->branches || !plan->predecessors) return false;
+            if (!plan->types || !plan->branches || !plan->predecessors) { good=false; break; }
         }
-        plan->types[first] = exact;
+        lower_catch_mark_join(plan,f,first,active,exact);
     }
-    if (!plan) return true;
+    xr_free(active);
+    xr_free(uses);
+    if (!good || !plan) return good;
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrXirInstruction *term = lower_term(c, f, b);
         if (!term) return false;
@@ -86,7 +163,7 @@ static bool lower_catch_errors(Lower *c, const XrXirFunction *f) {
             const XrXirInstruction *test = lower_place_definition(f, term->args[0]);
             if (!test || test->op != XR_XIR_ERROR_IS) continue;
             XrXirType exact = lower_catch_type(c, f, test->args[0]);
-            if (!exact || exact == XR_XIR_NEVER) continue;
+            if (!exact) continue;
             uint32_t target = term->targets[exact == (XrXirType)test->immediate ? 0 : 1];
             plan->branches[b] = (XrXirInstruction){.op = XR_XIR_JUMP, .type = XR_XIR_UNIT,
                 .targets = {target}};
@@ -110,7 +187,7 @@ static void lower_free_error_plans(Lower *c) {
 
 static bool lower_catch_value(LowerFunction *f, uint32_t block, const XrXirInstruction *op,
     XrLirValue *result) {
-    if (op->op == XR_XIR_ERROR_NARROW) return lower_value(f, op->args[0], result);
+    if (op->op != XR_XIR_ERROR_IS) return lower_value(f, op->args[0], result);
     Lower *c = f->owner;
     XrXirType exact = lower_catch_type(c, f->source, op->args[0]);
     XrLirInstruction select = {.op = XR_LIR_CONST, .type = XR_LIR_I1,

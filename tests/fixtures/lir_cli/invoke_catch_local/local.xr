@@ -1,0 +1,27 @@
+enum Refusal { Denied { code: i64 }, Missing { code: i64 } }
+fn read(mode: i64) throws(Refusal) -> i64 {
+    if (mode == 1) { throw Refusal.Missing { code: 31 } }
+    return 52
+}
+fn probe(mode: i64) {
+    var state = 0
+    try {
+        if (mode == 0) {
+            state = 11
+            throw Refusal.Denied { code: 23 }
+        }
+        state = 22
+        print(read(mode))
+        print(78)
+    } catch (failure: Refusal) {
+        print(state)
+        match (failure) {
+            Refusal.Denied { code } => print(code),
+            Refusal.Missing { code } => print(code),
+        }
+    }
+    print(98)
+}
+probe(0)
+probe(1)
+probe(2)

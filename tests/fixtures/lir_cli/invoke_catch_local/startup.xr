@@ -1,0 +1,8 @@
+enum Refusal { Denied { code: i64 }, Missing { code: i64 } }
+try {
+    print(11)
+    throw Refusal.Missing { code: 33 }
+} catch (Refusal.Denied { code }) {
+    print(code)
+}
+print(99)

@@ -1257,6 +1257,10 @@ static const XrXirInstruction *lower_invoke_origin(Lower *c, const XrXirFunction
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
     const LowerByteLength *byte_lengths = lower_byte_length_plan(c);
     if (byte_lengths && (byte_lengths[c->instruction].omit || byte_lengths[c->instruction].consumer)) return true;
+    if (op->op==XR_XIR_ERROR_ERASE) {
+        XrXirType exact=lower_catch_type(c,f,f->parameter_count+c->instruction);
+        return exact ? lower_receive_type(c,exact) : lower_unsupported(c,xr_xir_op_name(op->op));
+    }
     if (op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
         XrXirType exact = lower_catch_type(c,f,op->args[0]);
         return (exact && exact != XR_XIR_NEVER && (op->op == XR_XIR_ERROR_IS || op->type == exact)) ||
@@ -2861,7 +2865,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
             if (f->lexical.count && !lower_lexical_events(f,b,f->lexical.after[i])) return false;
             continue;
         }
-        if (op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
+        if (op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW || op->op == XR_XIR_ERROR_ERASE) {
             if (!lower_catch_value(f,b,op,&f->values[result])) return false;
             if (f->lexical.count && !lower_lexical_events(f,b,f->lexical.after[i])) return false;
             continue;

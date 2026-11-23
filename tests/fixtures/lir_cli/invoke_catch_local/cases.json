@@ -1,0 +1,5 @@
+{
+  "local": {"exit": 0, "stdout": "11\n23\n98\n22\n31\n98\n52\n78\n98\n", "stderr": ""},
+  "nested": {"exit": 0, "stdout": "10\n23\n30\n10\n41\n20\n30\n", "stderr": ""},
+  "startup": {"exit": 1, "stdout": "11\n", "stderr": "[Uncaught Error] Refusal.Missing(33)\n"}
+}

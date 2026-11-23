@@ -1,0 +1,21 @@
+enum Refusal { Denied { code: i64 }, Retry { code: i64 } }
+fn inspect(denied: bool) {
+    try {
+        try {
+            print(10)
+            if (denied) { throw Refusal.Denied { code: 23 } }
+            throw Refusal.Retry { code: 41 }
+        } catch (Refusal.Retry { code }) {
+            print(code)
+        }
+        print(20)
+    } catch (failure: Refusal) {
+        match (failure) {
+            Refusal.Denied { code } => print(code),
+            Refusal.Retry { code } => print(code),
+        }
+    }
+    print(30)
+}
+inspect(true)
+inspect(false)
