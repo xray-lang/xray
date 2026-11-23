@@ -296,7 +296,9 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_NULLABLE_SOME: {
             XrLirTypeView shape;
             return xr_lir_type_view(m, v->type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_NULLABLE &&
-                (shape.element == XR_LIR_UNIT ? v->operand_count == 0 : v->operand_count == 1 && a == shape.element);
+                (shape.element == XR_LIR_UNIT ? v->operand_count == 0 : v->operand_count == 1 && a == shape.element &&
+                    (a != XR_LIR_ARRAY || f->values[v->operands[0] - 1].array_element ==
+                        xr_lir_nullable_array_element(m, v->type)));
         }
         case XR_LIR_NULLABLE_IS_SOME: case XR_LIR_NULLABLE_UNWRAP: {
             XrLirTypeView shape;

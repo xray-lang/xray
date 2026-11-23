@@ -369,6 +369,8 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
     if (!xr_lir_internal_array_type(v->type)) return XR_LIR_TYPE_INVALID;
     const XrLirValueData *input = v->operand_count && v->operands[0] && v->operands[0] <= f->value_count ?
         &f->values[v->operands[0] - 1] : NULL;
+    if (input && v->op == XR_LIR_NULLABLE_UNWRAP && v->type == XR_LIR_ARRAY)
+        return xr_lir_nullable_array_element(m, input->type);
     if (input && (v->op == XR_LIR_STATE_READ ||
         (v->op == XR_LIR_ARRAY_BORROW && input->type == XR_LIR_STATE_REF)))
         return input->state_reference.array_element;

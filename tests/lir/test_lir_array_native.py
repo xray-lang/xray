@@ -164,7 +164,8 @@ def main():
     args = parser.parse_args()
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='array-native-', dir=args.work))
-    expected = {'scalar-edge-swap': 2011, 'scalar-edge-mixed': 2011, 'scalar-edge-pod': 2018,
+    expected = {'nullable-array-u8': 231, 'nullable-array-i64': -91,
+                'scalar-edge-swap': 2011, 'scalar-edge-mixed': 2011, 'scalar-edge-pod': 2018,
                 'slice-callback-direct-i64': 4, 'slice-callback-direct-u8': 4,
                 'slice-callback-indirect-i64': 4, 'slice-callback-indirect-u8': 4,
                 'slice-proof-branch-i64': 40, 'slice-proof-branch-u8': 40,

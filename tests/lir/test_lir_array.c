@@ -816,10 +816,67 @@ static void slice_cleanup_proofs(void) {
         xr_lir_module_destroy(c.module);
     }
 }
+typedef enum NullableArrayCase { NULLABLE_ARRAY_VALID, NULLABLE_ARRAY_WRONG_SOME, NULLABLE_ARRAY_WRONG_USE } NullableArrayCase;
+
+static XrLirModule *nullable_array_fixture(XrLirType element, NullableArrayCase scenario, XrLirFunction *root) {
+    XrLirType other = element == XR_LIR_U8 ? XR_LIR_I64 : XR_LIR_U8;
+    CArrayFixture c = {.element=scenario == NULLABLE_ARRAY_WRONG_SOME ? other : element};
+    OK(xr_lir_array_module_create(NULL, &c.module));
+    XrLirType optional;
+    OK(xr_lir_nullable_array_type(c.module, element, &optional));
+    OK(xr_lir_declare_function(c.module, &(XrLirFunctionSpec){.name="nullable_array", .name_length=14,
+        .result=XR_LIR_I64}, root));
+    OK(xr_lir_define_function(c.module, *root));
+    XrLirBlock entry = {0};
+    OK(xr_lir_add_block(c.module, *root, NULL, 0, &entry));
+    OK(xr_lir_set_entry(c.module, *root, entry));
+    XrLirValue item = ca_constant(&c, entry, c.element == XR_LIR_U8 ? 231 : -91);
+    if (c.element == XR_LIR_U8) item = ca_value(&c, entry, XR_LIR_INTCAST, XR_LIR_U8, &item, 1);
+    XrLirValue input = ca_intrinsic(&c, entry, XR_LIR_ARRAY_OP_NEW, XR_LIR_ARRAY, &item, 1);
+    XrLirValue wrapped = input;
+    XrLirInstruction some = {.op=XR_LIR_NULLABLE_SOME, .type=optional,
+        .operands=&input, .operand_count=1, .source=ca_source()};
+    XrLirStatus status = xr_lir_emit_value(c.module, entry, &some, &wrapped);
+    if (scenario == NULLABLE_ARRAY_WRONG_SOME) {
+        CHECK(status == XR_LIR_VERIFY_ERROR && !wrapped.module && !wrapped.function && !wrapped.id);
+        return c.module;
+    }
+    OK(status);
+    ca_effect(&c, entry, XR_LIR_ARRAY_DROP, input);
+    XrLirValue unwrapped = ca_value(&c, entry, XR_LIR_NULLABLE_UNWRAP, XR_LIR_ARRAY, &wrapped, 1);
+    ca_effect(&c, entry, XR_LIR_VALUE_DROP, wrapped);
+    c.element = scenario == NULLABLE_ARRAY_WRONG_USE ? other : element;
+    XrLirValue read[] = {unwrapped, ca_constant(&c, entry, 0)};
+    uint32_t get = 0;
+    OK(xr_lir_array_operation(c.module, c.element, XR_LIR_ARRAY_OP_GET, &get));
+    XrLirInstruction access = {.op=XR_LIR_CALL_INTRINSIC, .type=c.element, .intrinsic=get,
+        .operands=read, .operand_count=2, .source=ca_source()};
+    status = xr_lir_emit_value(c.module, entry, &access, &item);
+    if (scenario == NULLABLE_ARRAY_WRONG_USE) {
+        CHECK(status == XR_LIR_VERIFY_ERROR && !item.module && !item.function && !item.id);
+        return c.module;
+    }
+    OK(status);
+    if (c.element == XR_LIR_U8) item = ca_value(&c, entry, XR_LIR_INTCAST, XR_LIR_I64, &item, 1);
+    ca_effect(&c, entry, XR_LIR_ARRAY_DROP, unwrapped);
+    ca_return(&c, entry, item);
+    OK(xr_lir_module_finish(c.module, NULL));
+    XrLirArrayShape shape = {0};
+    OK(xr_lir_array_shape_view(c.module, unwrapped, &shape));
+    CHECK(shape.element == element);
+    XrLirValueData *value = &c.module->functions[root->id - 1].values[unwrapped.id - 1];
+    value->array_element = other;
+    CHECK(xr_lir_verify(c.module, NULL) == XR_LIR_VERIFY_ERROR);
+    value->array_element = element;
+    return c.module;
+}
+
 static void array_c_output(const char *name, const char *path) {
     XrLirModule *m = NULL;
     XrLirFunction root = {0};
-    if (!strncmp(name,"slice-callback-",15)) {
+    if (!strncmp(name, "nullable-array-", 15))
+        m = nullable_array_fixture(strstr(name, "-u8") ? XR_LIR_U8 : XR_LIR_I64, NULLABLE_ARRAY_VALID, &root);
+    else if (!strncmp(name,"slice-callback-",15)) {
         SliceCallbackLoanFixture c=slice_callback_loan_fixture(strstr(name,"-u8")?XR_LIR_U8:XR_LIR_I64,
             strstr(name,"-indirect-")?SLICE_CALLBACK_LOAN_INDIRECT:SLICE_CALLBACK_LOAN_DIRECT);
         m=c.module;root=c.root;OK(xr_lir_module_finish(m,NULL));
@@ -977,7 +1034,9 @@ static void array_vm_result(void *context) {
 }
 static void array_vm_fixture(const char *name,int64_t expected) {
     XrLirModule *m=NULL;XrLirFunction root={0};
-    array_c_fixture(name,&m,&root);
+    if (!strncmp(name, "nullable-array-", 15))
+        m = nullable_array_fixture(strstr(name, "-u8") ? XR_LIR_U8 : XR_LIR_I64, NULLABLE_ARRAY_VALID, &root);
+    else array_c_fixture(name,&m,&root);
     XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic={0};
     XrRbcCompileStatus status=xr_rbc_compile(m,root,&program,&diagnostic);
     if(status!=XR_RBC_COMPILE_OK)fprintf(stderr,"Array VM %s compile=%u %s\n",name,(unsigned)status,diagnostic.message);
@@ -1065,6 +1124,13 @@ int main(int argc, char **argv) {
     inline_array_external_result();
     inline_array_callable_reachability();
     if (argc == 3) { array_c_output(argv[1], argv[2]); return 0; }
+    for (NullableArrayCase scenario = NULLABLE_ARRAY_WRONG_SOME; scenario <= NULLABLE_ARRAY_WRONG_USE; ++scenario) {
+        XrLirFunction root = {0};
+        xr_lir_module_destroy(nullable_array_fixture(XR_LIR_U8, scenario, &root));
+        xr_lir_module_destroy(nullable_array_fixture(XR_LIR_I64, scenario, &root));
+    }
+    array_vm_fixture("nullable-array-u8", 231);
+    array_vm_fixture("nullable-array-i64", -91);
     frame_scalar_cell_admission();array_c_output("frame-scalar-cells",NULL);
     static const char *const set_cases[]={"set-i64-local","set-i64-state","set-formal-cell","set-formal-ref","set-formal-state",
         "set-header-copy","set-header-duplicate","set-block-cell-loop"};
