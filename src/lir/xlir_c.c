@@ -1008,6 +1008,11 @@ static void c_invoke(LirC *c,const XrLirInstructionView *v) {
     XrLirBlockView normal,failure;
     xr_lir_block_view(c->request->module,(XrLirBlock){c->request->module,c->function.id,v->edges[0].target},&normal);
     xr_lir_block_view(c->request->module,(XrLirBlock){c->request->module,c->function.id,v->edges[1].target},&failure);
+    /* The callee writes one output. Initialize the private receivers because
+     * C compilers cannot correlate the volatile status with those writes. */
+    if (normal.parameter_count)
+        c_format(c,"    v%" PRIu32 " = (%s){0};\n",normal.parameters[0],c_type(c,callee.result));
+    c_format(c,"    v%" PRIu32 " = (%s){0};\n",failure.parameters[0],c_type(c,callee.error));
     /* Like a guarded division, keep both verified guest continuations
      * visible even when MSVC inlines a call with a constant argument. */
     c_text(c,"    { volatile uint8_t xrl_status = ");
