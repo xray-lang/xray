@@ -1371,8 +1371,10 @@ def parse_def_metadata(
             host_leaf = str(props.get("host_leaf", ""))
             host_signatures = {
                 "blocking-path-bool": "(path: Path): bool",
+                "blocking-file-open-read": "(path: Path): __FileStorage?",
                 "blocking-file-open-write": "(path: Path, append: bool): __FileStorage?",
                 "blocking-file-close": "(file: __FileStorage): bool",
+                "blocking-file-read": "(file: __FileStorage, maxBytes: i64): Array<u8>?",
                 "blocking-file-write-bytes": "(file: __FileStorage, data: Array<u8>, offset: i64): i64",
                 "blocking-file-write-string": "(file: __FileStorage, data: string, offset: i64): i64",
             }

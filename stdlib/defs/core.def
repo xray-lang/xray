@@ -1247,6 +1247,7 @@ module io {
   fn __fileOpen {
     signature: "(path: Path): __FileStorage?"
     doc: "Open a file for binary reading"
+    host_leaf: "blocking-file-open-read"
     vm: ""
     argc: 1
     arg_spec: "p"
@@ -1270,6 +1271,7 @@ module io {
   fn __fileRead {
     signature: "(file: __FileStorage, maxBytes: i64): Array<u8>?"
     doc: "Read at most maxBytes from a descriptor; an empty result means EOF"
+    host_leaf: "blocking-file-read"
     vm: ""
     argc: 2
     arg_spec: "vi"
