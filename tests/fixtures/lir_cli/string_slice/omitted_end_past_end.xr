@@ -1,0 +1,7 @@
+fn tail(start: i64) -> string {
+    return "abc".slice(start)
+}
+
+print("before")
+print(tail(4))
+print("after")

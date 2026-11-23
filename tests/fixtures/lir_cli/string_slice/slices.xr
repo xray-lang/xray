@@ -1,0 +1,38 @@
+fn receiver() -> string {
+    print("receiver")
+    return "A中\u{1F600}"
+}
+
+fn bound(label: string, value: i64) -> i64 {
+    print(label)
+    return value
+}
+
+fn rebind(value: ref string) -> i64 {
+    value = "x"
+    return 1
+}
+
+fn check_snapshot() {
+    var value = "A中\u{1F600}"
+    const result = value.slice(rebind(ref value))
+    print(result)
+    print(value)
+}
+
+fn outlive_receiver() -> string {
+    var value = "A中"
+    value += "\u{1F600}"
+    return value.slice(1, 3)
+}
+
+const text = "Aé中\u{1F600}"
+print(text.slice(1, 3))
+print(text.slice(2))
+print("a\0b".slice(1, 2))
+print("e\u{0301}Z".slice(1, 2))
+print(text.slice(4, 4))
+print("".slice(0))
+print(receiver().slice(bound("start", 1), bound("end", 2)))
+check_snapshot()
+print(outlive_receiver())

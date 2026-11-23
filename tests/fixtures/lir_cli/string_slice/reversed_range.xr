@@ -1,0 +1,7 @@
+fn cut(start: i64, end: i64) -> string {
+    return "abc".slice(start, end)
+}
+
+print("before")
+print(cut(2, 1))
+print("after")
