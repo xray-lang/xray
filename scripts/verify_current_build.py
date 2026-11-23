@@ -24,6 +24,7 @@ REQUIRED = (
     "lir_assertion", "test_lir_cli_assertions",
     "test_lir_cli_string_byte_length",
     "test_lir_cli_host_path", "test_lir_cli_host_file_write",
+    "test_api_inventory_predicates",
     # Cross-module ownership and capability transport need real native execution.
     "test_lir_state", "native_module_state_owner", "test_lir_cli_module_state",
     # Exercise Array ownership, failure cleanup and complete Source/native parity.
