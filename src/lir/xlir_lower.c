@@ -60,6 +60,7 @@ typedef struct Lower {
     XrLirType *closure_types;
     uint8_t **owned_bindings;
     LowerByteLength **byte_lengths;
+    uint8_t **optional_error_joins;
     XrLirType owned_i64_cell, owned_map_cell;
     XrLirFunction *functions, print, print_string, clocks[4];
     uint8_t *active;
@@ -1193,9 +1194,9 @@ static bool lower_float_width_operation(XrXirOp op) {
     }
 }
 #include "xlir_lower_string_length.inc.c"
+#include "xlir_lower_optional_error.inc.c"
 
-/* Closed XIR verifies each marker's unique predecessor and recoverable error.
- * The dedicated failure exit either asserts or returns the exact declared error. */
+/* Closed XIR verifies each marker's unique predecessor and recoverable error. */
 static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirInstruction *call) {
     if (call->immediate < 0 || (uint64_t)call->immediate >= c->source->function_count ||
         call->targets[0] == call->targets[1]) return false;
@@ -1218,6 +1219,8 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
     if (failure->count!=2 || failure->panic || failure->frontier || marker->op!=XR_XIR_INVOKE_ERROR ||
         marker->type!=XR_XIR_ERROR || marker->immediate!=origin) return false;
     const XrXirInstruction *exit=marker+1;
+    if (exit->op==XR_XIR_JUMP)
+        return lower_optional_error_join(c,exit->targets[0]);
     return exit->args[0]==f->parameter_count+failure->first && (exit->op==XR_XIR_PANIC_ERROR ||
         (exit->op==XR_XIR_THROW && !lower_empty_error(callee->error_type) &&
          callee->error_type==lower_error_bound(c,(uint32_t)(f-c->source->functions))));
@@ -1236,6 +1239,8 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     if (byte_lengths && (byte_lengths[c->instruction].omit || byte_lengths[c->instruction].consumer)) return true;
     if (!lower_known(op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
+    if (op->op==XR_XIR_PHI && op->type==XR_XIR_ERROR && lower_optional_error_join(c,c->block))
+        return true;
     if (op->op == XR_XIR_INVOKE_RESULT || op->op == XR_XIR_INVOKE_DISCARD || op->op == XR_XIR_INVOKE_ERROR)
         return lower_invoke_origin(c,f,c->block,op,op->op == XR_XIR_INVOKE_ERROR) ||
             lower_unsupported(c,xr_xir_op_name(op->op));
@@ -1537,7 +1542,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         return lower_os_platform(c, function) || lower_host_abi(c, function, &field) != XR_NATIVE_HOST_NONE ||
             lower_unsupported(c, "function without a scalar body");
     }
-    if (!lower_byte_lengths(c, f)) return false;
+    if (!lower_byte_lengths(c, f) || !lower_optional_errors(c,f)) return false;
     uint8_t *seen = lower_alloc(c, f->block_count, 1);
     uint32_t *queue = lower_alloc(c, f->block_count, sizeof(*queue));
     if (!seen || !queue) {
@@ -1966,7 +1971,7 @@ static bool lower_blocks(LowerFunction *f) {
         if (f->reachable[b]) {
             const XrXirBlock *block = &source->blocks[b];
             uint32_t phis = 0, count = 0;
-            while (phis < block->count &&
+            while (!lower_optional_error_join(c,b) && phis < block->count &&
                    source->instructions[block->first + phis].op == XR_XIR_PHI)
                 ++phis;
             f->phis[b] = phis;
@@ -2800,7 +2805,8 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
     if (!b && f->array_values)
         for (uint32_t p = 0; p < f->source->parameter_count; ++p)
             if (f->array_values[p] != UINT32_MAX) f->current[f->array_values[p]] = f->values[p];
-    for (uint32_t i = block->first + f->phis[b]; i < block->first + block->count - 1; ++i) {
+    uint32_t first = block->first + f->phis[b] + lower_optional_error_join(c,b);
+    for (uint32_t i = first; i < block->first + block->count - 1; ++i) {
         c->instruction = i;
         if (f->lexical.count && !lower_lexical_events(f, b, f->lexical.before[i])) return false;
         const XrXirInstruction *op = &f->source->instructions[i];
@@ -3558,6 +3564,10 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     if (c.byte_lengths) {
         for (uint32_t f = 0; f < source->function_count; ++f) xr_free(c.byte_lengths[f]);
         xr_free(c.byte_lengths);
+    }
+    if (c.optional_error_joins) {
+        for (uint32_t f=0; f<source->function_count; ++f) xr_free(c.optional_error_joins[f]);
+        xr_free(c.optional_error_joins);
     }
     if (c.owned_bindings) {
         for (uint32_t f = 0; f < source->function_count; ++f) xr_free(c.owned_bindings[f]);
