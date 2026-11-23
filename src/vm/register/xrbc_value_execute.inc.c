@@ -12,6 +12,7 @@
  */
 #include "runtime/native/xnative_string_backing_ops.h"
 #include "runtime/native/xnative_array_ops.h"
+#include "runtime/native/xnative_host_environment.h"
 #include "runtime/native/xnative_map_backing.h"
 #include "runtime/native/xnative_set_backing.h"
 #include "runtime/native/xnative_values.h"
@@ -1280,6 +1281,20 @@ static XrtManagedStatus rbc_value_host_file_write(XrRbcStack *stack, RbcValueAct
     return XRT_MANAGED_OK;
 }
 
+static XrtManagedStatus rbc_value_host_environment_get(RbcValueActivation *activation, XrRbcValueAccess access,
+    uint32_t source) {
+    const XrtStringBacking *name = NULL;
+    XrtManagedStatus status = rbc_value_string_borrow(activation, access.source, &name);
+    if (status != XRT_MANAGED_OK) return status;
+    const XrLirValueHome *home = rbc_value_home(activation->code, access.result);
+    const XrtHostNullableSlots output = {activation->frame, home->first_owner, home->temporary_first_owner,
+        home->offset, home->temporary_offset + offsetof(XrtHostNullableOwner, owner)};
+    XrtHostEnvironmentGet result = xrt_host_environment_get_publish(&output, (const XrtManagedHeader *)name, source);
+    if (result.managed == XRT_MANAGED_OK && result.host != XR_OS_IO_OK)
+        xrt_value_failure(xrt_host_io_failure(result.host), source);
+    return result.managed;
+}
+
 static XrtHostFileStagedResult rbc_value_file_destination(RbcValueActivation *activation, uint32_t value) {
     const XrLirValueHome *home = rbc_value_home(activation->code, value);
     return (XrtHostFileStagedResult){
@@ -1487,6 +1502,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         access.operation==XR_RBC_VALUE_HOST_FILE_WRITE || access.operation==XR_RBC_VALUE_HOST_FILE_OPEN_READ ||
         access.operation==XR_RBC_VALUE_HOST_FILE_READ) {
         status = rbc_value_host_file(module, stack, activation, access, source);
+    } else if (access.operation==XR_RBC_VALUE_HOST_ENV_GET) {
+        status = rbc_value_host_environment_get(activation, access, source);
     } else if (access.operation==XR_RBC_VALUE_HOST_PATH_BOOL) {
         const XrtStringBacking *path = NULL;
         status = rbc_value_string_borrow(activation, access.source, &path);

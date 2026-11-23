@@ -1357,8 +1357,13 @@ static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint3
     const XrXirFunction *body = &source->functions[function];
     uint32_t id = source->declarations->functions[function].native_callable;
     XrNativeHostShape shape = xr_native_host_shape(id);
-    if (body->block_count || shape == XR_NATIVE_HOST_NONE ||
-        !xir_io_native_signature(id, source->types, body->parameters, body->parameter_count,
+    if (body->block_count || shape == XR_NATIVE_HOST_NONE) return XR_NATIVE_HOST_NONE;
+    if (shape == XR_NATIVE_HOST_ENV_GET) {
+        bool qualified = xir_os_native_signature(id, source->types, body->parameters, body->parameter_count,
+            body->result, body->error_type) && xir_os_native_scope(source->declarations, function, source->function_count);
+        return qualified ? shape : XR_NATIVE_HOST_NONE;
+    }
+    if (!xir_io_native_signature(id, source->types, body->parameters, body->parameter_count,
             body->result, body->error_type)) return XR_NATIVE_HOST_NONE;
     bool qualified = lower_host_has_path(shape) ?
         xir_io_native_scope(source->declarations, source->types, function, source->function_count,
@@ -2911,6 +2916,7 @@ static bool lower_host_function(Lower *c, uint32_t index) {
     case XR_NATIVE_HOST_FILE_OPEN_WRITE: operation = XR_LIR_HOST_FILE_OPEN_WRITE; break;
     case XR_NATIVE_HOST_FILE_OPEN_READ: operation = XR_LIR_HOST_FILE_OPEN_READ; break;
     case XR_NATIVE_HOST_FILE_READ: operation = XR_LIR_HOST_FILE_READ; break;
+    case XR_NATIVE_HOST_ENV_GET: operation = XR_LIR_HOST_ENV_GET; break;
     case XR_NATIVE_HOST_FILE_CLOSE: operation = XR_LIR_HOST_FILE_CLOSE; break;
     case XR_NATIVE_HOST_FILE_WRITE_BYTES: case XR_NATIVE_HOST_FILE_WRITE_STRING:
         operation = XR_LIR_HOST_FILE_WRITE; break;

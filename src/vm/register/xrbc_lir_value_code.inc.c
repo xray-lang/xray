@@ -489,6 +489,10 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         access.operation = i->op == XR_LIR_HOST_FILE_OPEN_READ ? XR_RBC_VALUE_HOST_FILE_OPEN_READ : XR_RBC_VALUE_HOST_FILE_READ;
         access.index = (uint32_t)i->bits;
         break;
+    case XR_LIR_HOST_ENV_GET:
+        access.operation = XR_RBC_VALUE_HOST_ENV_GET;
+        access.index = (uint32_t)i->bits;
+        break;
     case XR_LIR_HOST_FILE_WRITE:
         access.operation = XR_RBC_VALUE_HOST_FILE_WRITE;
         access.index = (uint32_t)i->bits;

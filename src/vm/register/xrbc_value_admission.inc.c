@@ -191,17 +191,17 @@ static bool rbc_value_exact_home(const XrRbcModule *module, const XrRbcValueCode
     return home && home->type == type && (rbc_value_array(module, code, value, destination) ||
         rbc_value_inline(module, code, value, destination));
 }
-static const XrtValueImageType *rbc_value_host_file_result(const XrRbcModule *module,
+static const XrtValueImageType *rbc_value_host_nullable_element(const XrRbcModule *module,
     const XrRbcValueCode *code, uint32_t value) {
     if (!rbc_value_inline(module, code, value, true)) return NULL;
     const XrtValueImage *image = xr_rbc_module_value_image(module);
     const XrLirValueHome *home = rbc_value_home(code, value);
     const XrtValueImageType *type = &image->types[home->type - 1];
     const XrtManagedFrameSpec *frame = &code->homes->frame;
-    const size_t owner = offsetof(XrtHostFileOptional, owner);
+    const size_t owner = offsetof(XrtHostNullableOwner, owner);
     if (type->kind != XRT_VALUE_NULLABLE || !type->nullable_element || type->nullable_element >= home->type ||
-        type->size != sizeof(XrtHostFileOptional) || type->alignment != _Alignof(XrtHostFileOptional) ||
-        type->nullable_tag != offsetof(XrtHostFileOptional, present) || type->nullable_payload != owner ||
+        type->size != sizeof(XrtHostNullableOwner) || type->alignment != _Alignof(XrtHostNullableOwner) ||
+        type->nullable_tag != offsetof(XrtHostNullableOwner, present) || type->nullable_payload != owner ||
         type->owned_count != 1 || !image->owned_offsets || type->first_owned >= image->owned_count ||
         image->owned_offsets[type->first_owned] != owner || !frame->owned_offsets ||
         frame->payload_alignment < type->alignment || home->first_owner == home->temporary_first_owner ||
@@ -218,7 +218,7 @@ static const XrtValueImageType *rbc_value_host_file_result(const XrRbcModule *mo
 }
 static bool rbc_value_file_storage(const XrRbcModule *module, const XrRbcValueCode *code, uint32_t value, bool optional) {
     const XrtValueImageType *type;
-    if (optional) type = rbc_value_host_file_result(module, code, value);
+    if (optional) type = rbc_value_host_nullable_element(module, code, value);
     else {
         if (!rbc_value_inline(module, code, value, false)) return false;
         const XrtValueImage *image = xr_rbc_module_value_image(module);
@@ -226,10 +226,11 @@ static bool rbc_value_file_storage(const XrRbcModule *module, const XrRbcValueCo
     }
     return type && type->kind == XRT_VALUE_CLASS && type->class_storage == XR_NATIVE_DECLARATION_FILE_STORAGE;
 }
-static bool rbc_value_file_read_result(const XrRbcModule *module, const XrRbcValueCode *code, uint32_t value) {
-    const XrtValueImageType *type = rbc_value_host_file_result(module, code, value);
+static bool rbc_value_host_nullable_backing(const XrRbcModule *module, const XrRbcValueCode *code,
+    uint32_t value, XrtValueKind kind) {
+    const XrtValueImageType *type = rbc_value_host_nullable_element(module, code, value);
     const XrtValueImage *image = xr_rbc_module_value_image(module);
-    return type && type->kind == XRT_VALUE_ARRAY_U8 && type->size == sizeof(XrtManagedHeader *) &&
+    return type && type->kind == kind && type->size == sizeof(XrtManagedHeader *) &&
         type->alignment == _Alignof(XrtManagedHeader *) && type->owned_count == 1 &&
         type->first_owned < image->owned_count && !image->owned_offsets[type->first_owned];
 }
@@ -645,7 +646,11 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_HOST_FILE_READ:
         return xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_READ &&
             rbc_value_file_storage(module, code, a.source, false) && rbc_value_scalar(code, function, a.other, XR_RBC_BITS) &&
-            rbc_value_file_read_result(module, code, a.result);
+            rbc_value_host_nullable_backing(module, code, a.result, XRT_VALUE_ARRAY_U8);
+    case XR_RBC_VALUE_HOST_ENV_GET:
+        return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_ENV_GET &&
+            rbc_value_string(module, code, a.source, false) &&
+            rbc_value_host_nullable_backing(module, code, a.result, XRT_VALUE_STRING);
     case XR_RBC_VALUE_HOST_FILE_CLOSE:
         return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_CLOSE &&
             rbc_value_file_storage(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);

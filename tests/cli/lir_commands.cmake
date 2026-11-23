@@ -61,3 +61,10 @@ add_test(NAME test_lir_cli_target_platform
         --output ${PROJECT_BINARY_DIR}/lir-cli-target-platform)
 set_tests_properties(test_lir_cli_target_platform PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
+
+add_test(NAME test_lir_cli_host_environment
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_host_environment.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --compiler "${CMAKE_C_COMPILER}" --output ${PROJECT_BINARY_DIR}/lir-cli-host-environment)
+set_tests_properties(test_lir_cli_host_environment PROPERTIES
+    TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
