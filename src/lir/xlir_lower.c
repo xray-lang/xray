@@ -1493,8 +1493,10 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         if (lir_pod_scalar(lower_type(c,f->result)) >= XR_POD_SCALAR_COUNT)
             return lower_unsupported(c,"typed function success result");
         XrXirType error=lower_error_bound(c,function);
-        if (error<XR_XIR_CONSTRUCTED_TYPE_BASE || !c->error_types ||
-            c->error_types[error-XR_XIR_CONSTRUCTED_TYPE_BASE]!=1)
+        uint32_t type_id=(uint32_t)error;
+        uint32_t ordinal=type_id-XR_XIR_CONSTRUCTED_TYPE_BASE;
+        if (type_id<XR_XIR_CONSTRUCTED_TYPE_BASE || !c->error_types ||
+            ordinal>=c->source->types->count || c->error_types[ordinal]!=1)
             return lower_unsupported(c,"typed function error boundary");
         if (!lower_receive_type(c,error)) return false;
         if (!xr_lir_error_sum_identity(c->module,lower_type(c,error),&identity))
