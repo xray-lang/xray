@@ -1,0 +1,15 @@
+enum Refusal { Denied { code: i64 } }
+fn leaf(code: i64) throws(Refusal) { throw Refusal.Denied { code: code } }
+fn total() {
+    try { leaf(42) }
+    catch (Refusal.Denied { code }) { print(code) }
+    print(13)
+}
+fn guarded(code: i64) throws(Refusal) {
+    try { leaf(code) }
+    catch (Refusal.Denied { code: 1..=20 }) { print(21) }
+}
+total()
+try! guarded(12)
+try! guarded(42)
+print(99)

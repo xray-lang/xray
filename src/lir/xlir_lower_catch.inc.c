@@ -111,8 +111,39 @@ static void lower_catch_mark_join(LowerCatchPlan *plan,const XrXirFunction *f,ui
         const uint32_t *input=&f->operands[phi->args[0]+a];
         if (!active[input[0]]) continue;
         const XrXirInstruction *producer=lower_place_definition(f,input[1]);
-        if (producer->op==XR_XIR_ERROR_ERASE) plan->types[producer-f->instructions]=exact;
+        if (producer && producer->op==XR_XIR_ERROR_ERASE)
+            plan->types[(uint32_t)(producer-f->instructions)]=exact;
     }
+}
+
+/* The canonical pattern compares the tag of a proved narrowing with its
+ * ordinal. A singleton enum has tag zero; payload comparisons remain live. */
+static bool lower_catch_single_tag(const Lower *c,const XrXirFunction *f,
+    const XrXirInstruction *test,bool *selected) {
+    if (test->op!=XR_XIR_EQ_INT || test->type!=XR_XIR_BOOL) return false;
+    const XrXirInstruction *tag=lower_place_definition(f,test->args[0]);
+    const XrXirInstruction *ordinal=lower_place_definition(f,test->args[1]);
+    if (!tag || tag->op!=XR_XIR_ENUM_TAG || tag->type!=XR_XIR_I64 ||
+        !ordinal || ordinal->op!=XR_XIR_CONST_INT || ordinal->type!=XR_XIR_I64) return false;
+    const XrXirInstruction *narrow=lower_place_definition(f,tag->args[0]);
+    if (!narrow || narrow->op!=XR_XIR_ERROR_NARROW ||
+        lower_catch_type(c,f,narrow->args[0])!=narrow->type) return false;
+    XrXirTypeDescription description={0};
+    const XrXirCompileContext *context=xr_xir_compile_artifact_context(c->request->closed);
+    if (xr_xir_compile_type_description(context,c->source->types,narrow->type,&description)!=XR_XIR_OK ||
+        description.nominal_kind!=XR_XIR_NOMINAL_ENUM || description.variant_count!=1) return false;
+    *selected=ordinal->immediate==0;
+    return true;
+}
+
+static bool lower_catch_selector(const Lower *c,const XrXirFunction *f,
+    const XrXirInstruction *test,bool *selected) {
+    if (!test) return false;
+    if (test->op!=XR_XIR_ERROR_IS) return lower_catch_single_tag(c,f,test,selected);
+    XrXirType exact=lower_catch_type(c,f,test->args[0]);
+    if (!exact) return false;
+    *selected=exact==(XrXirType)test->immediate;
+    return true;
 }
 
 static bool lower_catch_errors(Lower *c, const XrXirFunction *f) {
@@ -161,10 +192,9 @@ static bool lower_catch_errors(Lower *c, const XrXirFunction *f) {
                 plan->predecessors[failed] = b + 1;
         } else if (term->op == XR_XIR_BRANCH) {
             const XrXirInstruction *test = lower_place_definition(f, term->args[0]);
-            if (!test || test->op != XR_XIR_ERROR_IS) continue;
-            XrXirType exact = lower_catch_type(c, f, test->args[0]);
-            if (!exact) continue;
-            uint32_t target = term->targets[exact == (XrXirType)test->immediate ? 0 : 1];
+            bool selected=false;
+            if (!lower_catch_selector(c,f,test,&selected)) continue;
+            uint32_t target=term->targets[selected ? 0 : 1];
             plan->branches[b] = (XrXirInstruction){.op = XR_XIR_JUMP, .type = XR_XIR_UNIT,
                 .targets = {target}};
         }
