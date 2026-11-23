@@ -567,6 +567,9 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_RECORD_FIELD: case XR_LIR_CLASS_FIELD:
         access.operation=i->op==XR_LIR_CLASS_FIELD ? XR_RBC_VALUE_CLASS_FIELD : XR_RBC_VALUE_RECORD_FIELD;
         access.index=(uint32_t)i->bits; break;
+    case XR_LIR_CLASS_SCALAR_WRITE:
+        access.operation=XR_RBC_VALUE_CLASS_SCALAR_WRITE;
+        access.index=(uint32_t)i->bits; break;
     case XR_LIR_CLASS_ARRAY_WRITE: case XR_LIR_CLASS_ARRAY_PUSH:
         access.operation=i->op==XR_LIR_CLASS_ARRAY_WRITE ? XR_RBC_VALUE_CLASS_ARRAY_WRITE : XR_RBC_VALUE_CLASS_ARRAY_PUSH;
         access.index=(uint32_t)i->bits;

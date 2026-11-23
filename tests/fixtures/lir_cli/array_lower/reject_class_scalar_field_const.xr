@@ -1,0 +1,6 @@
+final class Reading {
+    private const open: bool
+    init() { this.open = true }
+    update() { this.open = false }
+}
+Reading().update()

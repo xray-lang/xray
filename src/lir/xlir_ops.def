@@ -132,3 +132,4 @@ XR_LIR_OP(SUM_GET, "sum_get", 1)
  * embedded NUL is part of the value rather than a terminator. EQ and NE are
  * the only predicates; ordered comparison stays unimplemented. */
 XR_LIR_OP(STRING_EQUAL, "string_equal", 2)
+XR_LIR_OP(CLASS_SCALAR_WRITE, "class_scalar_write", 2)

@@ -1081,14 +1081,15 @@ static const XrXirInstruction *lower_class_place_root(const XrXirFunction *f, ui
     return root && root->op == XR_XIR_OBJECT_PLACE ? root : NULL;
 }
 
-static bool lower_class_array_field(Lower *c, XrXirType type, uint64_t index) {
+static bool lower_writable_class_field(Lower *c, XrXirType type, uint64_t index, bool scalar) {
     XrLirType payload;
     const XrLirRecordField *fields;
     uint32_t count;
     return xr_lir_class_payload(c->module,lower_type(c,type),&payload) &&
         xr_lir_aggregate_fields(c->module,payload,&fields,&count) == XR_LIR_OK && index < count &&
-        fields[index].type == XR_LIR_ARRAY && xr_lir_class_array_element_supported(fields[index].array_element) &&
-        (fields[index].flags & XR_LIR_RECORD_MUTABLE);
+        (fields[index].flags & XR_LIR_RECORD_MUTABLE) &&
+        ((scalar && xr_lir_class_scalar_field_supported(fields[index].type)) ||
+            (fields[index].type == XR_LIR_ARRAY && xr_lir_class_array_element_supported(fields[index].array_element)));
 }
 
 /* Narrow scalars (i8/i16/i32/u16/u32/f32) are transport-only. Their physical
@@ -1175,7 +1176,8 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             lower_class_place_root(f,f->parameter_count+(uint32_t)(op-f->instructions)) : NULL;
         XrXirType type = root ? root->type : op->op == XR_XIR_CLASS_SET ?
             xr_xir_operand_type(f,op->args[0]) : XR_XIR_UNIT;
-        return lower_class_array_field(c,type,(uint64_t)op->immediate) || lower_unsupported(c,xr_xir_op_name(op->op));
+        return lower_writable_class_field(c,type,(uint64_t)op->immediate,op->op == XR_XIR_CLASS_SET) ||
+            lower_unsupported(c,xr_xir_op_name(op->op));
     }
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
         XrXirType type = op->op == XR_XIR_PLACE_WRITE ? xr_xir_operand_type(f, op->args[0]) : op->type;
@@ -2590,7 +2592,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         if (!handled && !lower_view_instruction(f, b, i, &handled)) return false;
         if (!handled && !lower_module_operation(f, b, i, &handled)) return false;
         if (!handled && !lower_set_instruction(f,b,i,&handled))return false;
-        if (!handled && !lower_class_array_instruction(f,b,i,&handled)) return false;
+        if (!handled && !lower_class_field_instruction(f,b,i,&handled)) return false;
         if (!handled && !lower_map_instruction(f, b, i, &handled)) return false;
         if (!handled && !lower_array_instruction(f, b, i, &handled)) return false;
         if (!handled && lower_binding_storage(f, op)) {

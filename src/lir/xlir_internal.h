@@ -34,6 +34,9 @@ enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP
 static inline bool xr_lir_class_array_element_supported(XrLirType element) {
     return element == XR_LIR_I64 || element == XR_LIR_U8;
 }
+static inline bool xr_lir_class_scalar_field_supported(XrLirType type) {
+    return type == XR_LIR_I1 || type == XR_LIR_I64 || type == XR_LIR_F64;
+}
 
 typedef struct XrLirValueData {
     XrLirType type;

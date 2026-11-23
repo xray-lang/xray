@@ -216,14 +216,16 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return xr_lir_aggregate_fields(m, a, &fields, &count) == XR_LIR_OK &&
                 v->bits < count && fields[v->bits].type == v->type;
         }
-        case XR_LIR_CLASS_ARRAY_WRITE: case XR_LIR_CLASS_ARRAY_PUSH: {
+        case XR_LIR_CLASS_SCALAR_WRITE: case XR_LIR_CLASS_ARRAY_WRITE: case XR_LIR_CLASS_ARRAY_PUSH: {
             const XrLirRecordField *fields;
             uint32_t count;
             if (!xr_lir_class_payload(m,a,&a) || xr_lir_aggregate_fields(m,a,&fields,&count) != XR_LIR_OK ||
                 v->bits >= count || v->type != XR_LIR_UNIT) return false;
             const XrLirRecordField *field = &fields[v->bits];
+            if (!(field->flags & XR_LIR_RECORD_MUTABLE)) return false;
+            if (v->op == XR_LIR_CLASS_SCALAR_WRITE) return field->type == b && xr_lir_class_scalar_field_supported(b);
             return field->type == XR_LIR_ARRAY && xr_lir_class_array_element_supported(field->array_element) &&
-                (field->flags & XR_LIR_RECORD_MUTABLE) && (v->op == XR_LIR_CLASS_ARRAY_PUSH ? b == field->array_element :
+                (v->op == XR_LIR_CLASS_ARRAY_PUSH ? b == field->array_element :
                     b == XR_LIR_ARRAY && f->values[v->operands[1]-1].array_element == field->array_element);
         }
         case XR_LIR_FUNCTION_SCOPE_ENTER:
@@ -505,7 +507,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
         v->op != XR_LIR_CLASS_IS &&
         v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET &&
-        v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
+        v->op != XR_LIR_CLASS_SCALAR_WRITE && v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
         goto invalid;

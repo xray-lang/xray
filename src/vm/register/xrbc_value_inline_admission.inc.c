@@ -25,6 +25,7 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
     const XrRbcFunction *function,XrRbcValueAccess a) {
     bool class_new=a.operation==XR_RBC_VALUE_CLASS_NEW, class_field=a.operation==XR_RBC_VALUE_CLASS_FIELD;
     bool class_push=a.operation==XR_RBC_VALUE_CLASS_ARRAY_PUSH, class_write=a.operation==XR_RBC_VALUE_CLASS_ARRAY_WRITE;
+    bool scalar_write=a.operation==XR_RBC_VALUE_CLASS_SCALAR_WRITE;
     bool sum_new=a.operation==XR_RBC_VALUE_SUM_NEW, sum_tag=a.operation==XR_RBC_VALUE_SUM_TAG;
     bool sum_get=a.operation==XR_RBC_VALUE_SUM_GET;
     bool create=class_new || a.operation==XR_RBC_VALUE_RECORD_NEW || sum_new ||
@@ -57,18 +58,20 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
         return rbc_value_inline_operand(module,code,function,a.result,
             image->slots[type->first_field+a.index].type,true);
     }
-    if (class_new || class_field || class_push || class_write) {
+    if (class_new || class_field || class_push || class_write || scalar_write) {
         if (!xr_rbc_module_code_owner(module) || type->kind!=XRT_VALUE_CLASS ||
             !type->element || type->element>=home->type) return false;
         type=&image->types[type->element-1];
         if (type->kind!=XRT_VALUE_RECORD) return false;
     }
-    if (class_push || class_write) {
+    if (class_push || class_write || scalar_write) {
         if (a.result || a.first || a.count || a.index>=type->field_count || !image->slots ||
             type->first_field>image->slot_count || type->field_count>image->slot_count-type->first_field) return false;
         const XrtValueImageSlot *field=&image->slots[type->first_field+a.index];
         if (field->flags!=XRT_VALUE_FIELD_MUTABLE || !field->type || field->type>image->type_count) return false;
         XrtValueKind kind=image->types[field->type-1].kind;
+        if (scalar_write) return !a.window && xrt_class_scalar_field_supported(kind) &&
+            rbc_value_inline_operand(module,code,function,a.other,field->type,false);
         if (kind!=XRT_VALUE_ARRAY_I64 && kind!=XRT_VALUE_ARRAY_U8) return false;
         if (class_write) return !a.window && rbc_value_inline_operand(module,code,function,a.other,field->type,false);
         if (!a.window || a.window>code->homes->workspace_count || !code->homes->workspaces ||

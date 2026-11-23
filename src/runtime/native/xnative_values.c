@@ -259,26 +259,32 @@ XRAY_API bool xrt_native_class_is(const XrtManagedHeader *owner, const XrtValueI
     }
     return false;
 }
-static XrtClassFieldAccess native_class_array_field(const XrtNativeClassField *field, uint32_t source) {
+static XrtClassFieldAccess native_class_field(const XrtNativeClassField *field, uint32_t source) {
     if (!field) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT,source);
     XrtBoundClass binding=native_class(field->image,field->type,source);
     return (XrtClassFieldAccess){field->instance,binding.plan,field->field};
 }
+XRAY_API void xrt_native_class_scalar_field_write(const XrtNativeClassField *field,
+    const void *bytes, size_t size, uint32_t source) {
+    XrtClassFieldAccess access=native_class_field(field,source);
+    XrtManagedStatus status=xrt_class_scalar_field_write(access.instance,access.plan,access.index,bytes,size);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+}
 XRAY_API void xrt_native_class_array_field_copy(const XrtNativeClassField *field,
     XrtManagedFrame *frame, size_t destination, uint32_t source) {
-    XrtClassFieldAccess access=native_class_array_field(field,source);
+    XrtClassFieldAccess access=native_class_field(field,source);
     XrtManagedStatus status=xrt_class_array_field_copy(&access,frame,destination);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
 }
 XRAY_API void xrt_native_class_array_field_replace(const XrtNativeClassField *field,
     const XrtManagedHeader *incoming, uint32_t source) {
-    XrtClassFieldAccess access=native_class_array_field(field,source);
+    XrtClassFieldAccess access=native_class_field(field,source);
     XrtManagedStatus status=xrt_class_array_field_replace(&access,incoming);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
 }
 XRAY_API void xrt_native_class_array_field_push(const XrtNativeClassField *field,
     XrtManagedFrame *frame, size_t workspace, int64_t item, uint32_t source) {
-    XrtClassFieldAccess access=native_class_array_field(field,source);
+    XrtClassFieldAccess access=native_class_field(field,source);
     const XrtBackingTypes *types = NULL;
     XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source),&types);
     if (status == XRT_MANAGED_OK)

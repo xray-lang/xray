@@ -53,6 +53,8 @@ typedef struct XrtNativeClassField {
     const XrtValueImage *image;
     uint32_t type, field;
 } XrtNativeClassField;
+XRAY_API void xrt_native_class_scalar_field_write(const XrtNativeClassField *,
+    const void *bytes, size_t size, uint32_t source_id);
 XRAY_API void xrt_native_class_array_field_copy(const XrtNativeClassField *,
     XrtManagedFrame *, size_t destination, uint32_t source_id);
 XRAY_API void xrt_native_class_array_field_replace(const XrtNativeClassField *,

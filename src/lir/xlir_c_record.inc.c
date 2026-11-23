@@ -14,7 +14,7 @@ static bool c_record_point(const XrLirInstructionView *v) {
     return v->op == XR_LIR_RECORD_NEW || v->op == XR_LIR_RECORD_FIELD ||
         v->op == XR_LIR_CLASS_NEW || v->op == XR_LIR_CLASS_FIELD ||
         v->op == XR_LIR_CLASS_ADOPT ||
-        v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
+        v->op == XR_LIR_CLASS_SCALAR_WRITE || v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
 }
 static void c_class_array_field(LirC *c, const XrLirInstructionView *v, uint32_t source) {
@@ -38,6 +38,16 @@ static void c_class_array_field(LirC *c, const XrLirInstructionView *v, uint32_t
 static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH) {
         c_class_array_field(c,v,source);
+        return;
+    }
+    if (v->op == XR_LIR_CLASS_SCALAR_WRITE) {
+        const XrLirValueHome *object = &c->homes->values[v->operands[0]];
+        c_format(c, "    { const %s input = ", c_type(c,c_value_type(c,v->operands[1])));
+        c_value(c,v->operands[1]);
+        c_text(c, ";\n        xrt_native_class_scalar_field_write(&(XrtNativeClassField){");
+        c_value(c,v->operands[0]);
+        c_format(c, ", &xrl_value_image, UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu64 ")}, &input, sizeof(input), UINT32_C(%" PRIu32 "));\n    }\n",
+            object->type,v->bits,source);
         return;
     }
     uint32_t destination = v->op == XR_LIR_VALUE_DROP ? v->operands[0] : v->result;
@@ -74,7 +84,7 @@ static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         const XrtValueImage *image = xr_lir_value_image_view(c->value_image);
         const XrtValueImageType *class_type = &image->types[object->type-1];
         const XrtValueImageType *row = &image->types[class_type->element-1];
-        if (image->slots[row->first_field+v->bits].flags & XRT_VALUE_FIELD_MUTABLE) {
+        if (v->type == XR_LIR_ARRAY && (image->slots[row->first_field+v->bits].flags & XRT_VALUE_FIELD_MUTABLE)) {
             c_class_array_field(c,v,source);
             return;
         }

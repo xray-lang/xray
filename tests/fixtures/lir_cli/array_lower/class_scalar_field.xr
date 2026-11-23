@@ -1,0 +1,33 @@
+final class Reading {
+    private open: bool
+    private count: i64
+    private amount: f64
+    init() {
+        this.open = true
+        this.count = 1
+        this.amount = 0.5
+    }
+    update() {
+        this.open = false
+        this.count = this.count + 41
+        this.amount = this.amount + 1.25
+    }
+    enabled() -> bool { return this.open }
+    total() -> i64 { return this.count }
+    weighted() -> f64 { return this.amount }
+}
+
+fn apply(value: Reading) {
+    value.update()
+}
+
+fn exercise() {
+    var value = Reading()
+    const alias = value
+    print(alias.enabled())
+    apply(value)
+    print(alias.enabled())
+    print(alias.total())
+    print(alias.weighted())
+}
+exercise()

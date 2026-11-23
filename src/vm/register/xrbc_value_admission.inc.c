@@ -654,7 +654,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             target->result_kind==XR_RBC_BITS && (!a.result || rbc_value_scalar(code,function,a.result,XR_RBC_BITS));
     }
     case XR_RBC_VALUE_RECORD_NEW: case XR_RBC_VALUE_RECORD_FIELD: case XR_RBC_VALUE_CLASS_NEW: case XR_RBC_VALUE_CLASS_FIELD:
-    case XR_RBC_VALUE_CLASS_ARRAY_WRITE: case XR_RBC_VALUE_CLASS_ARRAY_PUSH:
+    case XR_RBC_VALUE_CLASS_SCALAR_WRITE: case XR_RBC_VALUE_CLASS_ARRAY_WRITE: case XR_RBC_VALUE_CLASS_ARRAY_PUSH:
     case XR_RBC_VALUE_NULLABLE_NONE: case XR_RBC_VALUE_NULLABLE_SOME:
     case XR_RBC_VALUE_NULLABLE_IS_SOME: case XR_RBC_VALUE_NULLABLE_UNWRAP:
     case XR_RBC_VALUE_SUM_NEW: case XR_RBC_VALUE_SUM_TAG: case XR_RBC_VALUE_SUM_GET:

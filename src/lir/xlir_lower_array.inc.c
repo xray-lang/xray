@@ -28,7 +28,7 @@ static bool lower_array_read(LowerFunction *f, uint32_t b, XrLirValue receiver,
     return lower_build(f->owner, xr_lir_emit_value(f->owner->module, f->blocks[b], &read, output));
 }
 
-static bool lower_class_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bool *handled) {
+static bool lower_class_field_instruction(LowerFunction *f, uint32_t b, uint32_t i, bool *handled) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
     *handled = true;
@@ -45,8 +45,11 @@ static bool lower_class_array_instruction(LowerFunction *f, uint32_t b, uint32_t
     XrLirValue args[2];
     if (!lower_value(f,root ? root->args[0] : op->args[0],&args[0]) ||
         (!read && !lower_value(f,op->args[1],&args[1]))) return false;
-    XrLirInstruction lowered = {.op=read ? XR_LIR_CLASS_FIELD : op->op == XR_XIR_ARRAY_PUSH ?
-        XR_LIR_CLASS_ARRAY_PUSH : XR_LIR_CLASS_ARRAY_WRITE, .type=read ? XR_LIR_ARRAY : XR_LIR_UNIT,
+    XrLirOp operation = read ? XR_LIR_CLASS_FIELD : XR_LIR_CLASS_ARRAY_WRITE;
+    if (op->op == XR_XIR_ARRAY_PUSH) operation = XR_LIR_CLASS_ARRAY_PUSH;
+    if (whole && xr_lir_class_scalar_field_supported(lower_value_type(f,args[1])))
+        operation = XR_LIR_CLASS_SCALAR_WRITE;
+    XrLirInstruction lowered = {.op=operation,.type=read ? XR_LIR_ARRAY : XR_LIR_UNIT,
         .operands=args,.operand_count=read ? 1u : 2u,.bits=(uint64_t)field->immediate,.source=lower_source(c)};
     return lower_build(c,read ? xr_lir_emit_value(c->module,f->blocks[b],&lowered,
         &f->values[f->source->parameter_count+i]) : xr_lir_emit_effect(c->module,f->blocks[b],&lowered));
