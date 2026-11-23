@@ -43,10 +43,12 @@ typedef enum XrtExecutionFailureKind {
     XRT_FAILURE_VALUE,
     XRT_FAILURE_NULL_UNWRAP,
     XRT_FAILURE_MESSAGE_PANIC,
-    XRT_FAILURE_TRY_ASSERT
+    XRT_FAILURE_TRY_ASSERT,
+    XRT_FAILURE_UNCAUGHT_ERROR
 } XrtExecutionFailureKind;
 
-typedef struct XrtTryAssertFailure XrtTryAssertFailure;
+typedef struct XrtErrorSnapshot XrtErrorSnapshot;
+typedef XrtErrorSnapshot XrtTryAssertFailure;
 typedef struct XrtExecutionFailure {
     XrtExecutionFailureKind kind;
     union {
@@ -56,11 +58,12 @@ typedef struct XrtExecutionFailure {
         struct { XrXirValueStatus status; uint32_t source_id; } value;
         struct { uint32_t code, source_id; XrtManagedHeader *message; } message;
         XrtTryAssertFailure *assertion;
+        XrtErrorSnapshot *error;
     } detail;
 } XrtExecutionFailure;
-/* A message failure owns one genuine fixed String reference independently of
- * execution retirement. Clear the owner before drop callbacks; repeated drop
- * is harmless. A receiver must drop or transfer it before reusing failure. */
+/* A message failure owns one fixed String and a typed error owns its
+ * snapshot independently of execution retirement. Clear the owner before
+ * drop callbacks. A receiver must drop or transfer it before reusing failure. */
 XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *);
 /* Consume an independently owned fixed String, publish it to preowned failure
  * storage, then leave the active execution. Duplicate-key code 434 and
@@ -110,4 +113,5 @@ typedef struct XrtTryAssertValue {
 XR_FUNC bool xrt_try_assert_value(const XrtTryAssertFailure *,XrtTryAssertValue *);
 XR_FUNC bool xrt_try_assert_field(const XrtTryAssertFailure *,uint32_t field,uint32_t *scalar,uint64_t *bits);
 XR_FUNC bool xrt_try_assert_report(const XrtTryAssertFailure *);
+XR_FUNC bool xrt_uncaught_error_report(const XrtErrorSnapshot *);
 #endif // XNATIVE_EXECUTION_H

@@ -797,6 +797,8 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         outcome->status = XR_RBC_TRY_ASSERT;
         xr_rbc_try_trace(execution,outcome);
     }
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_UNCAUGHT_ERROR)
+        outcome->status = XR_RBC_UNCAUGHT_ERROR;
     else {
         if (status != XRT_EXECUTION_COMPLETED) outcome->status = XR_RBC_INVALID;
         xrt_locations_release(outcome->locations);
@@ -966,6 +968,10 @@ XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
 
 XR_FUNC const XrtTryAssertFailure *xr_rbc_outcome_try_assert(const XrRbcOutcome *outcome) {
     return outcome && outcome->status==XR_RBC_TRY_ASSERT ? outcome->failure.detail.assertion : NULL;
+}
+
+XR_FUNC const XrtErrorSnapshot *xr_rbc_outcome_uncaught_error(const XrRbcOutcome *outcome) {
+    return outcome && outcome->status==XR_RBC_UNCAUGHT_ERROR ? outcome->failure.detail.error : NULL;
 }
 
 XR_FUNC size_t xr_rbc_outcome_try_trace_count(const XrRbcOutcome *outcome) {

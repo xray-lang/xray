@@ -91,20 +91,23 @@ static void test_raw_typed_error_rejected(void) {
     xrt_locations_release(locations);
 }
 
-typedef struct NativeTryError {
+typedef struct NativeError {
     const XrRbcLiteral *metadata;
     struct { uint8_t tag; int64_t code; } value;
-} NativeTryError;
+    bool uncaught;
+} NativeError;
 
-static void native_try_assert_root(void *context) {
-    const NativeTryError *error=context;
-    xrt_try_assert_panic((const uint8_t *)error->metadata->bytes,error->metadata->length,
-        &error->value,sizeof(error->value),1);
+static void native_error_root(void *context) {
+    const NativeError *error = context;
+    const uint8_t *metadata = (const uint8_t *)error->metadata->bytes;
+    if (error->uncaught)
+        xrt_uncaught_error(metadata, error->metadata->length, &error->value, sizeof(error->value));
+    xrt_try_assert_panic(metadata, error->metadata->length, &error->value, sizeof(error->value), 1);
 }
 
-static void native_try_assert_reenter(void *context) { ++*(unsigned *)context; }
+static void native_error_reenter(void *context) { ++*(unsigned *)context; }
 
-static void test_native_try_assert_snapshot(const XrRbcLiteral *metadata) {
+static void test_native_error_snapshot(const XrRbcLiteral *metadata, bool uncaught) {
     const XrtSourceLocation location={"native-try.xr",13,15,12,15,23};
     size_t baseline=0;
     for (unsigned mode=0;mode<3;++mode) {
@@ -113,28 +116,30 @@ static void test_native_try_assert_snapshot(const XrRbcLiteral *metadata) {
         CHECK(xrt_native_values_prepare(&root,&billing)==XRT_MANAGED_OK && xrt_billing_owner_retain(billing));
         XrtLocationOwner *map=NULL;
         CHECK(xrt_locations_create(&location,1,&map)==XRT_LOCATION_OK);
-        NativeTryError error={.metadata=metadata,.value={(uint8_t)(mode==0 ? 2u : 1u),23}};
+        NativeError error={.metadata=metadata,.value={(uint8_t)(mode==0 ? 2u : 1u),23},.uncaught=uncaught};
         if (mode==1) xrt_billing_owner_fail_after(billing,0);
         XrtExecutionFailure failure={0};
-        CHECK(xrt_run_embedded_owned(map,&failure,native_try_assert_root,&error,&root)==XRT_EXECUTION_FAILURE);
+        CHECK(xrt_run_embedded_owned(map,&failure,native_error_root,&error,&root)==XRT_EXECUTION_FAILURE);
         CHECK(xrt_value_root_empty(&root) && !xrt_value_root_active());
         unsigned again=0;
         XrtExecutionFailure unused={0};
-        CHECK(xrt_run_embedded(map,&unused,native_try_assert_reenter,&again)==XRT_EXECUTION_COMPLETED && again==1);
+        CHECK(xrt_run_embedded(map,&unused,native_error_reenter,&again)==XRT_EXECUTION_COMPLETED && again==1);
         xrt_locations_release(map);
         if (mode<2) {
-            CHECK(failure.kind==XRT_FAILURE_VALUE && failure.detail.value.source_id==1 &&
+            CHECK(failure.kind==XRT_FAILURE_VALUE && failure.detail.value.source_id==(uncaught ? 0u : 1u) &&
                 failure.detail.value.status==(mode==0 ? XR_XIR_VALUE_BAD_ARGUMENT : XR_XIR_VALUE_OOM));
             CHECK(xrt_billing_owner_stats(billing).blocks==1);
             if (mode==0) baseline=xrt_billing_owner_stats(billing).bytes;
         } else {
-            CHECK(failure.kind==XRT_FAILURE_TRY_ASSERT && xrt_billing_owner_stats(billing).blocks==2);
-            const XrtTryAssertFailure *snapshot=failure.detail.assertion;
+            XrtExecutionFailureKind kind=uncaught ? XRT_FAILURE_UNCAUGHT_ERROR : XRT_FAILURE_TRY_ASSERT;
+            CHECK(failure.kind==kind && xrt_billing_owner_stats(billing).blocks==2);
+            const XrtErrorSnapshot *snapshot=uncaught ? failure.detail.error : failure.detail.assertion;
             const XrtSourceLocation *where=xrt_try_assert_location(snapshot);
             XrtTryAssertValue value={0};
             uint32_t scalar=0;
             uint64_t bits=0;
-            CHECK(where && where->line==15 && where->column==12 && where->path_length==13 &&
+            if (uncaught) CHECK(!where);
+            else CHECK(where && where->line==15 && where->column==12 && where->path_length==13 &&
                 !memcmp(where->path,"native-try.xr",13));
             CHECK(xrt_try_assert_value(snapshot,&value) && value.variant==1 && value.field_count==1 &&
                 value.metadata_size==metadata->length && !memcmp(value.metadata,metadata->bytes,metadata->length));
@@ -214,7 +219,8 @@ static void test_owned_try_assert(void) {
     XrtLocationOwner *locations=xr_rbc_program_locations(program);
     CHECK(module->literal_count==1 && module->literals && module->code_lease.owner);
     XrRbcLiteral literal=module->literals[0];
-    test_native_try_assert_snapshot(&literal);
+    test_native_error_snapshot(&literal, false);
+    test_native_error_snapshot(&literal, true);
 
     size_t count=xrt_locations_count(locations);
     XrtSourceLocation *forged_points=xr_malloc(count*sizeof(*forged_points));

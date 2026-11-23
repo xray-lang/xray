@@ -42,7 +42,7 @@ typedef struct XrtErrorScalar {
     XrPodScalar type;
 } XrtErrorScalar;
 
-struct XrtTryAssertFailure {
+struct XrtErrorSnapshot {
     XrtBillingOwner *billing;
     size_t allocation;
     XrtSourceLocation location;
@@ -52,7 +52,7 @@ struct XrtTryAssertFailure {
     size_t metadata_size;
     XrtErrorScalar *values;
 };
-_Static_assert(_Alignof(XrtTryAssertFailure)>=_Alignof(XrtErrorScalar),"error field alignment");
+_Static_assert(_Alignof(XrtErrorSnapshot)>=_Alignof(XrtErrorScalar),"error field alignment");
 
 typedef struct XrtErrorCursor {
     const uint8_t *next;
@@ -97,8 +97,8 @@ static bool error_field(XrtErrorCursor *cursor,size_t size,const uint8_t *value,
     return true;
 }
 
-static XrtManagedStatus try_assert_snapshot(XrtValueRoot *root,const XrtSourceLocation *location,
-    const uint8_t *metadata,size_t metadata_size,const uint8_t *value,size_t value_size,XrtTryAssertFailure **output) {
+static XrtManagedStatus error_snapshot_create(XrtValueRoot *root,const XrtSourceLocation *location,
+    const uint8_t *metadata,size_t metadata_size,const uint8_t *value,size_t value_size,XrtErrorSnapshot **output) {
     uint32_t version=0,key=0,size=0,tag=0,variants=0,arguments=0,name_size=0,variant_size=0;
     const char *module=NULL,*name=NULL,*variant=NULL;
     XrtErrorCursor cursor={metadata,metadata_size};
@@ -123,12 +123,13 @@ static XrtManagedStatus try_assert_snapshot(XrtValueRoot *root,const XrtSourceLo
             if (!error_field(&cursor,value_size,NULL,NULL)) return XRT_MANAGED_ARGUMENT;
     }
     if (cursor.remaining) return XRT_MANAGED_ARGUMENT;
-    if (active_fields && sizeof(XrtErrorScalar)>(SIZE_MAX-sizeof(XrtTryAssertFailure))/active_fields)
+    if (active_fields && sizeof(XrtErrorScalar)>(SIZE_MAX-sizeof(XrtErrorSnapshot))/active_fields)
         return XRT_MANAGED_OVERFLOW;
-    size_t allocation=sizeof(XrtTryAssertFailure)+(size_t)active_fields*sizeof(XrtErrorScalar);
-    if (metadata_size>SIZE_MAX-allocation || location->path_length>SIZE_MAX-allocation-metadata_size)
+    size_t allocation=sizeof(XrtErrorSnapshot)+(size_t)active_fields*sizeof(XrtErrorScalar);
+    size_t path_size=location ? location->path_length : 0;
+    if (metadata_size>SIZE_MAX-allocation || path_size>SIZE_MAX-allocation-metadata_size)
         return XRT_MANAGED_OVERFLOW;
-    allocation+=metadata_size+location->path_length;
+    allocation+=metadata_size+path_size;
     XrtBillingOwner *billing=NULL;
     XrtManagedStatus status=xrt_native_values_prepare(root,&billing);
     if (status!=XRT_MANAGED_OK) return status;
@@ -136,17 +137,20 @@ static XrtManagedStatus try_assert_snapshot(XrtValueRoot *root,const XrtSourceLo
     void *storage=NULL;
     status=xrt_managed_metadata_allocate(billing,allocation,&storage);
     if (status!=XRT_MANAGED_OK) { xrt_billing_owner_drop(billing); return status; }
-    XrtTryAssertFailure *failure=storage;
+    XrtErrorSnapshot *failure=storage;
     XrtErrorScalar *values=(XrtErrorScalar *)(failure+1);
     uint8_t *copy=(uint8_t *)(values+active_fields);
-    char *path=(char *)(copy+metadata_size);
-    *failure=(XrtTryAssertFailure){.billing=billing,.allocation=allocation,.location=*location,
+    *failure=(XrtErrorSnapshot){.billing=billing,.allocation=allocation,
         .name=(const char *)copy+(name-(const char *)metadata),.name_size=name_size,
         .variant=(const char *)copy+(variant-(const char *)metadata),.variant_size=variant_size,
         .selected=selected,.fields=active_fields,.metadata=copy,.metadata_size=metadata_size,.values=values};
     memcpy(copy,metadata,metadata_size);
-    memcpy(path,location->path,location->path_length);
-    failure->location.path=path;
+    if (location) {
+        char *path=(char *)(copy+metadata_size);
+        if (path_size) memcpy(path,location->path,path_size);
+        failure->location=*location;
+        failure->location.path=path;
+    }
     for (uint32_t f=0;f<active_fields;++f)
         if (!error_field(&active,value_size,value,&failure->values[f])) {
             xrt_managed_metadata_free(billing,failure,allocation);
@@ -163,11 +167,23 @@ XRAY_API_NORET void xrt_try_assert_panic(const uint8_t *metadata,size_t metadata
     XR_CHECK(binding && binding->target && source_id && source_id<=binding->map.count,
         "Try assertion panic uses the true source location");
     XrtTryAssertFailure *failure=NULL;
-    XrtManagedStatus status=try_assert_snapshot(binding->strings,&binding->map.locations[source_id-1],
+    XrtManagedStatus status=error_snapshot_create(binding->strings,&binding->map.locations[source_id-1],
         metadata,metadata_size,error,error_size,&failure);
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
     binding->failure->kind=XRT_FAILURE_TRY_ASSERT;
     binding->failure->detail.assertion=failure;
+    longjmp(*binding->target,1);
+}
+
+XRAY_API_NORET void xrt_uncaught_error(const uint8_t *metadata,size_t metadata_size,const void *error,
+    size_t error_size) {
+    const XrtExecutionBinding *binding=current_execution;
+    XR_CHECK(binding && binding->target,"Uncaught errors require an active execution root");
+    XrtErrorSnapshot *failure=NULL;
+    XrtManagedStatus status=error_snapshot_create(binding->strings,NULL,metadata,metadata_size,
+        error,error_size,&failure);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,0);
+    *binding->failure=(XrtExecutionFailure){.kind=XRT_FAILURE_UNCAUGHT_ERROR,.detail.error=failure};
     longjmp(*binding->target,1);
 }
 
@@ -184,12 +200,14 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFa
 XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *failure) {
     if (!failure) return;
     XrtManagedHeader *message = failure->kind == XRT_FAILURE_MESSAGE_PANIC ? failure->detail.message.message : NULL;
-    XrtTryAssertFailure *assertion = failure->kind == XRT_FAILURE_TRY_ASSERT ? failure->detail.assertion : NULL;
+    XrtErrorSnapshot *error = NULL;
+    if (failure->kind == XRT_FAILURE_TRY_ASSERT) error = failure->detail.assertion;
+    if (failure->kind == XRT_FAILURE_UNCAUGHT_ERROR) error = failure->detail.error;
     *failure = (XrtExecutionFailure){0};
     xrt_managed_drop(message);
-    if (assertion) {
-        XrtBillingOwner *billing=assertion->billing;
-        xrt_managed_metadata_free(billing,assertion,assertion->allocation);
+    if (error) {
+        XrtBillingOwner *billing=error->billing;
+        xrt_managed_metadata_free(billing,error,error->allocation);
         xrt_billing_owner_drop(billing);
     }
 }
@@ -331,8 +349,8 @@ static int panic_write(void *context, const void *bytes, size_t length) {
     return !xrt_io_write(2, bytes, length).failed;
 }
 
-static int try_assert_read(const void *context,XrValueFormatNode node,XrValueFormatView *view) {
-    const XrtTryAssertFailure *failure=context;
+static int error_snapshot_read(const void *context,XrValueFormatNode node,XrValueFormatView *view) {
+    const XrtErrorSnapshot *failure=context;
     if (!node.type) {
         view->kind=XR_VALUE_FORMAT_ENUM;
         view->name=failure->name;
@@ -367,15 +385,15 @@ static int try_assert_read(const void *context,XrValueFormatNode node,XrValueFor
     return 1;
 }
 
-static int try_assert_child(const void *context,XrValueFormatNode node,uint32_t index,XrValueFormatNode *child) {
-    const XrtTryAssertFailure *failure=context;
+static int error_snapshot_child(const void *context,XrValueFormatNode node,uint32_t index,XrValueFormatNode *child) {
+    const XrtErrorSnapshot *failure=context;
     if (node.type || index>=failure->fields) return 0;
     *child=(XrValueFormatNode){&failure->values[index],index+1};
     return 1;
 }
 
 XR_FUNC const XrtSourceLocation *xrt_try_assert_location(const XrtTryAssertFailure *failure) {
-    return failure ? &failure->location : NULL;
+    return failure && failure->location.path ? &failure->location : NULL;
 }
 
 XR_FUNC bool xrt_try_assert_value(const XrtTryAssertFailure *failure,XrtTryAssertValue *output) {
@@ -392,9 +410,14 @@ XR_FUNC bool xrt_try_assert_field(const XrtTryAssertFailure *failure,uint32_t fi
 }
 
 XR_FUNC bool xrt_try_assert_report(const XrtTryAssertFailure *failure) {
-    XrValueFormatReader reader={failure,try_assert_read,try_assert_child};
+    XrValueFormatReader reader={failure,error_snapshot_read,error_snapshot_child};
     return failure && xr_value_format_try_assert(reader,(XrValueFormatNode){failure,0},
         (XrValueFormatSink){NULL,panic_write});
+}
+XR_FUNC bool xrt_uncaught_error_report(const XrtErrorSnapshot *failure) {
+    XrValueFormatReader reader={failure,error_snapshot_read,error_snapshot_child};
+    return failure && xr_value_format_uncaught(reader,(XrValueFormatNode){failure,0},
+        (XrValueFormatSink){NULL,panic_write},0,0);
 }
 XR_FUNC bool xrt_message_panic_report(uint32_t code, const char *message, size_t length,
     const XrtSourceLocation *source) {
@@ -426,6 +449,14 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFa
     if (failure->kind==XRT_FAILURE_TRY_ASSERT) {
         if (!xrt_try_assert_report(failure->detail.assertion)) {
             static const char fallback[]="XR_RUN_6005: cannot render uncaught try assertion\n";
+            (void)xrt_io_write(2,fallback,sizeof(fallback)-1);
+        }
+        xrt_execution_failure_drop(failure);
+        _Exit(1);
+    }
+    if (failure->kind==XRT_FAILURE_UNCAUGHT_ERROR) {
+        if (!xrt_uncaught_error_report(failure->detail.error)) {
+            static const char fallback[]="XR_RUN_6005: cannot render uncaught error\n";
             (void)xrt_io_write(2,fallback,sizeof(fallback)-1);
         }
         xrt_execution_failure_drop(failure);

@@ -46,8 +46,11 @@ static int run_report(const XrRbcOutcome *outcome, XrRbcStatus status) {
     XrtArithmeticPanic panic;
     const XrtLocationOwner *locations;
     uint32_t message_code=0,message_source=0;const char *message=NULL;size_t message_length=0;
+    const XrtErrorSnapshot *error=xr_rbc_outcome_uncaught_error(outcome);
     const XrtTryAssertFailure *assertion=xr_rbc_outcome_try_assert(outcome);
-    if (assertion) {
+    if (error) {
+        if (!xrt_uncaught_error_report(error)) fputs("XR_RUN_6005: cannot render uncaught error\n",stderr);
+    } else if (assertion) {
         if (!xrt_try_assert_report(assertion)) fputs("cannot render uncaught try assertion\n",stderr);
         else run_try_trace(outcome);
     } else if(xr_rbc_outcome_message_panic(outcome,&message_code,&message,&message_length,&message_source,&locations)) {

@@ -118,6 +118,9 @@ XRT_NORETURN XRAY_API void xrt_null_unwrap(uint32_t source_id);
 /* Own the active fields and the checked source location before the root exits. */
 XRT_NORETURN XRAY_API void xrt_try_assert_panic(const uint8_t *metadata, size_t metadata_size,
     const void *error, size_t error_size, uint32_t source_id);
+/* Capture a business error delivered at the verified startup boundary. */
+XRT_NORETURN XRAY_API void xrt_uncaught_error(const uint8_t *metadata, size_t metadata_size,
+    const void *error, size_t error_size);
 #undef XRT_NORETURN
 
 #ifdef __cplusplus

@@ -378,7 +378,8 @@ typedef enum {
     XR_RBC_HOST_CLOCK_FAILURE,
     XR_RBC_VALUE_FAILURE,
     XR_RBC_MESSAGE_PANIC,
-    XR_RBC_TRY_ASSERT
+    XR_RBC_TRY_ASSERT,
+    XR_RBC_UNCAUGHT_ERROR
 } XrRbcStatus;
 
 // Failure leaves the output untouched. Register 255 is reserved; every
@@ -467,6 +468,7 @@ XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
 XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome);
 /* The failure owns its error payload and source through outcome destruction. */
 XR_FUNC const XrtTryAssertFailure *xr_rbc_outcome_try_assert(const XrRbcOutcome *);
+XR_FUNC const XrtErrorSnapshot *xr_rbc_outcome_uncaught_error(const XrRbcOutcome *);
 XR_FUNC size_t xr_rbc_outcome_try_trace_count(const XrRbcOutcome *);
 XR_FUNC const XrtSourceLocation *xr_rbc_outcome_try_trace_at(const XrRbcOutcome *,size_t);
 XR_FUNC const char *xr_rbc_dispatch_name(void);
