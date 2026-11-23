@@ -300,26 +300,32 @@ static FILE_ID_INFO fixture_identity(HANDLE directory) {
     CHECK(GetFileInformationByHandleEx(directory, FileIdInfo, &identity, sizeof(identity)));
     return identity;
 }
-static void fixture_rename(HANDLE directory, const char *destination) {
-    wchar_t native[8192];
-    int units = MultiByteToWideChar(CP_ACP, 0, destination, -1, native, (int)(sizeof(native) / sizeof(*native)));
-    CHECK(units > 0);
-    for (int i = 0; i < units; ++i) if (native[i] == L'/') native[i] = L'\\';
-    size_t name_bytes = (size_t)units * sizeof(*native);
-    size_t bytes = offsetof(FILE_RENAME_INFO, FileName) + name_bytes;
+/* The public SDK omits this ntdll entry and its native information class. */
+NTSYSAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS);
+enum { FIXTURE_FILE_RENAME_INFORMATION = 10 };
+
+static void fixture_rename_sibling(HANDLE directory, const wchar_t *leaf) {
+    size_t units = wcslen(leaf);
+    CHECK(units && units <= 255 && !wcspbrk(leaf, L"/\\:"));
+    size_t name_bytes = units * sizeof(*leaf);
+    /* With a simple name and a null RootDirectory, NT keeps the source parent.
+     * An absolute target would reopen that parent without sharing DELETE on
+     * Windows Server 2022, conflicting with the workspace's retained pin. */
+    size_t bytes = sizeof(FILE_RENAME_INFO) + name_bytes;
     FILE_RENAME_INFO *info = xr_malloc(bytes);
     CHECK(info);
-    memset(info, 0, offsetof(FILE_RENAME_INFO, FileName));
-    info->FileNameLength = (DWORD)(name_bytes - sizeof(*native));
-    memcpy(info->FileName, native, name_bytes);
-    BOOL renamed = SetFileInformationByHandle(directory, FileRenameInfo, info, (DWORD)bytes);
-    DWORD error = renamed ? ERROR_SUCCESS : GetLastError();
+    memset(info, 0, bytes);
+    info->FileNameLength = (DWORD)name_bytes;
+    memcpy(info->FileName, leaf, name_bytes);
+    IO_STATUS_BLOCK io = {0};
+    NTSTATUS status = NtSetInformationFile(directory, &io, info, (ULONG)bytes,
+        (FILE_INFORMATION_CLASS)FIXTURE_FILE_RENAME_INFORMATION);
     xr_free(info);
-    if (!renamed) {
-        fprintf(stderr, "fixture rename destination: %s\n", destination);
-        SetLastError(error);
+    if (status != 0) {
+        fprintf(stderr, "fixture sibling rename destination: %ls, NTSTATUS=%08lx\n", leaf, (unsigned long)status);
+        SetLastError(RtlNtStatusToDosError(status));
     }
-    CHECK(renamed);
+    CHECK(status == 0);
 }
 static void fixture_delete(HANDLE entry) {
     FILE_DISPOSITION_INFO disposition = {TRUE};
@@ -333,8 +339,8 @@ static HANDLE rejected_directory_pin(XtcXirWorkspace **owner, unsigned which) {
         CHECK(++calls < 1000);
         CHECK(xtc_xir_workspace_close(owner, 1) == XTC_XIR_WORKSPACE_PENDING && *owner == workspace);
     }
-    /* The identity check has failed. Keep the exact DELETE handle for the
-     * fixture rename while letting the workspace release its own reference. */
+    /* The identity check has failed. Keep the exact DELETE handle for fixture
+     * retirement while letting the workspace release its own reference. */
     HANDLE process = GetCurrentProcess(), pin = NULL;
     CHECK(DuplicateHandle(process, workspace->nodes[which].deletion, process, &pin, 0, FALSE, DUPLICATE_SAME_ACCESS));
     size_t tracked = owner_handle_count;
@@ -393,7 +399,10 @@ static void replacement(const char *parent, unsigned which) {
     CHECK(original_pin != INVALID_HANDLE_VALUE);
     FILE_ID_INFO original_id = fixture_identity(original_pin);
     CHECK(workspace_identity_equal(&original_id, &owner->nodes[which].identity));
-    fixture_rename(original_pin, moved);
+    const wchar_t *leaf = owner->nodes[which].name;
+    wchar_t moved_leaf[64];
+    CHECK(swprintf_s(moved_leaf, sizeof(moved_leaf) / sizeof(*moved_leaf), L"%ls-moved", leaf) > 0);
+    fixture_rename_sibling(original_pin, moved_leaf);
     CHECK(CreateDirectoryA(original, NULL));
     /* A second DELETE open must fail while the fixture owns the rename right. */
     HANDLE blocker = CreateFileA(moved, DELETE, observe,
@@ -414,7 +423,14 @@ static void replacement(const char *parent, unsigned which) {
     CHECK(CloseHandle(observer));
     fixture_delete(rejected_pin);
     CHECK(GetFileAttributesA(original) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
-    fixture_rename(original_pin, original);
+    HANDLE parent_pin = owner->nodes[0].deletion;
+    CHECK(parent_pin);
+    FILE_ID_INFO parent_id = fixture_identity(parent_pin);
+    CHECK(workspace_identity_equal(&parent_id, &owner->nodes[0].identity));
+    fixture_rename_sibling(original_pin, leaf);
+    CHECK(owner->nodes[0].deletion == parent_pin);
+    FILE_ID_INFO held_parent_id = fixture_identity(parent_pin);
+    CHECK(workspace_identity_equal(&held_parent_id, &parent_id));
     HANDLE restored = CreateFileA(original, FILE_READ_ATTRIBUTES, observe, NULL, OPEN_EXISTING, flags, NULL);
     CHECK(restored != INVALID_HANDLE_VALUE);
     FILE_ID_INFO restored_id = fixture_identity(restored);
