@@ -17,6 +17,7 @@
 #include "xnative_string_backing_ops.h"
 #include "xnative_array_ops.h"
 #include "xnative_class_array.h"
+#include "xnative_host_environment.h"
 #include "xnative_host_file.h"
 #include "xnative_host_io.h"
 #include "shared/xnative_host_leaf.h"
@@ -238,18 +239,18 @@ static XrtBoundClass native_file_class(const XrtValueImage *image, uint32_t type
     return binding;
 }
 
-static const XrtValuePlan *native_file_result_element(const XrtValueImage *image, uint32_t type, uint32_t source) {
+static const XrtValuePlan *native_host_optional_element(const XrtValueImage *image, uint32_t type, uint32_t source) {
     struct XrtNativeValues *values = native_values(source);
     const XrtModuleState *state = image == values->state_image ? values->state : NULL;
     const XrtValuePlan *plan = NULL;
     XrtManagedStatus status = native_capture_plan(values, image, state, (XrtManagedLease){0}, type, &plan);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
     XrtValuePlanSpec spec;
-    const size_t owner = offsetof(XrtHostFileOptional, owner);
+    const size_t owner = offsetof(XrtHostNullableOwner, owner);
     if (xrt_value_plan_view(plan, &spec) != XRT_MANAGED_OK || spec.kind != XRT_VALUE_NULLABLE ||
-        spec.size != sizeof(XrtHostFileOptional) || spec.alignment != _Alignof(XrtHostFileOptional) ||
+        spec.size != sizeof(XrtHostNullableOwner) || spec.alignment != _Alignof(XrtHostNullableOwner) ||
         spec.owned_count != 1 || spec.owned_offsets[0] != owner ||
-        spec.nullable.tag_offset != offsetof(XrtHostFileOptional, present) || spec.nullable.payload_offset != owner)
+        spec.nullable.tag_offset != offsetof(XrtHostNullableOwner, present) || spec.nullable.payload_offset != owner)
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
     return spec.nullable.element;
 }
@@ -258,7 +259,7 @@ XRAY_API void xrt_native_host_file_open_read(uint32_t callable, const XrtNativeF
     if (!call || xr_native_host_shape(callable) != XR_NATIVE_HOST_FILE_OPEN_READ || !xrt_backing_string_matches(call->path))
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
     XrtBoundClass binding = native_file_class(call->image, call->type, source);
-    if (native_file_result_element(call->image, call->result_type, source) != binding.plan)
+    if (native_host_optional_element(call->image, call->result_type, source) != binding.plan)
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
     const XrtHostFileStagedResult output = {call->output, call->temporary_owner_offset};
     XrtHostFileOpen opened = xrt_host_file_open_read_publish(&output, binding, (const XrtStringBacking *)call->path, source);
@@ -272,7 +273,7 @@ XRAY_API void xrt_native_host_file_read(uint32_t callable, const XrtNativeFileRe
     XrtBoundClass binding = native_file_class(call->image, call->type, source);
     XrtValuePlanSpec element;
     if (!xrt_class_backing_matches(call->file, binding.plan) ||
-        xrt_value_plan_view(native_file_result_element(call->image, call->result_type, source), &element) != XRT_MANAGED_OK ||
+        xrt_value_plan_view(native_host_optional_element(call->image, call->result_type, source), &element) != XRT_MANAGED_OK ||
         element.kind != XRT_VALUE_ARRAY_U8)
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
     const XrtBackingTypes *types = NULL;
@@ -282,6 +283,20 @@ XRAY_API void xrt_native_host_file_read(uint32_t callable, const XrtNativeFileRe
     XrtHostFileRead read = xrt_host_file_read_publish(&output, binding, call->file, types, call->max_bytes, source);
     if (read.managed != XRT_MANAGED_OK) xrt_native_managed_failure(read.managed, source);
     if (read.host != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(read.host), source);
+}
+
+XRAY_API void xrt_native_host_environment_get(uint32_t callable, const XrtNativeEnvironmentGet *call, uint32_t source) {
+    if (!call || xr_native_host_shape(callable) != XR_NATIVE_HOST_ENV_GET || !xrt_backing_string_matches(call->name))
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    XrtValuePlanSpec element;
+    if (xrt_value_plan_view(native_host_optional_element(call->image, call->result_type, source), &element) != XRT_MANAGED_OK ||
+        element.kind != XRT_VALUE_STRING)
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    const XrtHostNullableSlots output = {call->frame, call->destination, call->temporary, call->offset,
+        call->temporary_owner_offset};
+    XrtHostEnvironmentGet result = xrt_host_environment_get_publish(&output, call->name, source);
+    if (result.managed != XRT_MANAGED_OK) xrt_native_managed_failure(result.managed, source);
+    if (result.host != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(result.host), source);
 }
 
 XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage *image, uint32_t type,

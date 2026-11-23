@@ -111,6 +111,15 @@ typedef struct XrtNativeFileWrite {
 /* Borrows data through one synchronous host transfer. A refusal returns -1,
  * and a short transfer returns its actual byte count. */
 XRAY_API int64_t xrt_native_host_file_write(uint32_t callable, const XrtNativeFileWrite *, uint32_t source_id);
+typedef struct XrtNativeEnvironmentGet {
+    XrtManagedFrame *frame;
+    size_t destination, temporary, offset, temporary_owner_offset;
+    const XrtValueImage *image;
+    uint32_t result_type;
+    const XrtManagedHeader *name;
+} XrtNativeEnvironmentGet;
+/* A lookup publishes an owned String, including an empty value, or None. */
+XRAY_API void xrt_native_host_environment_get(uint32_t callable, const XrtNativeEnvironmentGet *, uint32_t source_id);
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

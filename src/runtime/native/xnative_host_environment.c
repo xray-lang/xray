@@ -9,6 +9,8 @@
 #include "xnative_host_environment.h"
 #include "xnative_host_io.h"
 #include "xnative_string_backing.h"
+#include "xnative_values.h"
+#include "xray_native_values.h"
 #include "base/xchecks.h"
 #include "os/os_proc.h"
 #include <string.h>
@@ -33,5 +35,28 @@ XR_FUNC XrtHostEnvironmentGet xrt_host_environment_get(XrtManagedFrame *frame, s
     result.managed = xrt_string_backing_create(frame, slot, types, scratch, strlen(scratch), 0);
     policy.free(policy.context, scratch);
     result.present = result.managed == XRT_MANAGED_OK;
+    return result;
+}
+
+XR_FUNC XrtHostEnvironmentGet xrt_host_environment_get_publish(const XrtHostNullableSlots *output,
+    const XrtManagedHeader *name, uint32_t source_id) {
+    if (!xrt_backing_string_matches(name)) return (XrtHostEnvironmentGet){.managed=XRT_MANAGED_ARGUMENT};
+    XrtHostNullablePlaces places;
+    XrtManagedStatus status = xrt_host_nullable_prepare(output, xrt_native_managed_root(source_id), &places);
+    if (status != XRT_MANAGED_OK) return (XrtHostEnvironmentGet){.managed=status};
+    if (places.current && !xrt_backing_string_matches(places.current))
+        return (XrtHostEnvironmentGet){.managed=XRT_MANAGED_ARGUMENT};
+
+    XrtValueRoot *execution = xrt_value_root_current(source_id);
+    XrtBillingOwner *billing = NULL;
+    const XrtBackingTypes *types = NULL;
+    status = xrt_native_values_prepare(execution, &billing);
+    if (status == XRT_MANAGED_OK) status = xrt_native_values_backings(execution, &types);
+    if (status != XRT_MANAGED_OK) return (XrtHostEnvironmentGet){.managed=status};
+    XrtHostEnvironmentGet result = xrt_host_environment_get(places.temporary.frame, places.temporary.slot,
+        billing, types, name);
+    if (result.managed == XRT_MANAGED_OK && result.host == XR_OS_IO_OK)
+        XR_CHECK(xrt_host_nullable_publish(&places, result.present) == XRT_MANAGED_OK,
+            "environment lookup keeps its preflighted nullable home");
     return result;
 }

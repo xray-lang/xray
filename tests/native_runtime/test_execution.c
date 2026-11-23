@@ -666,6 +666,58 @@ static void host_environment_value(const XrtManagedHeader *owner, const char *ex
     CHECK(value->length == strlen(expected) && !memcmp(value->bytes, expected, value->length));
 }
 
+static void host_environment_publication(void *context) {
+    const char *key = context;
+    enum { RESULT, STAGE, NAME, SLOT_COUNT };
+    static const size_t owned[] = {0, offsetof(XrtHostNullableOwner, owner)};
+    static const XrtValueImageType types[] = {
+        {.kind=XRT_VALUE_STRING,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
+        {.kind=XRT_VALUE_NULLABLE,.size=sizeof(XrtHostNullableOwner),.alignment=_Alignof(XrtHostNullableOwner),
+            .owned_count=1,.first_owned=1,.nullable_element=1,.nullable_payload=offsetof(XrtHostNullableOwner, owner)},
+    };
+    static const XrtValueImage image = {.types=types,.type_count=2,.owned_offsets=owned,.owned_count=2};
+    const size_t owner = offsetof(XrtHostNullableOwner, owner);
+    const size_t offsets[] = {owner, sizeof(XrtHostNullableOwner) + owner, SIZE_MAX};
+    const XrtManagedFrameSpec spec = {SLOT_COUNT, 2 * sizeof(XrtHostNullableOwner),
+        _Alignof(XrtHostNullableOwner), offsets};
+    XrtManagedRoot *root = xrt_native_managed_root(1);
+    XrtManagedFrame *frame = NULL;
+    void *payload = NULL;
+    managed_require(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload));
+    xrt_native_string_create(frame, NAME, key, strlen(key), 1);
+    const XrtManagedHeader *name = host_environment_slot(frame, NAME);
+    uint8_t *tag = payload;
+    const XrtNativeEnvironmentGet call = {frame, RESULT, STAGE, 0, offsets[STAGE], &image, 2, name};
+
+    host_environment_fixture_set(key, "present");
+    xrt_native_host_environment_get(XR_NATIVE_CALLABLE_OS_GETENV, &call, 1);
+    const XrtManagedHeader *prior = host_environment_slot(frame, RESULT);
+    CHECK(*tag == 1 && !host_environment_slot(frame, STAGE));
+    host_environment_value(prior, "present");
+    const XrtHostNullableSlots wrong_stage = {frame, RESULT, STAGE, 0, offsets[RESULT]};
+    XrtHostEnvironmentGet rejected = xrt_host_environment_get_publish(&wrong_stage, name, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT && *tag == 1 && host_environment_slot(frame, RESULT) == prior);
+    XrtBillingOwner *billing = NULL;
+    managed_require(xrt_native_values_prepare(xrt_value_root_current(1), &billing));
+    const XrtHostNullableSlots slots = {frame, RESULT, STAGE, 0, offsets[STAGE]};
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    xrt_billing_owner_fail_after(billing, 0);
+    rejected = xrt_host_environment_get_publish(&slots, name, 1);
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    XrtBillingStats after = xrt_billing_owner_stats(billing);
+    CHECK(rejected.host == XR_OS_IO_OUT_OF_MEMORY && *tag == 1 && host_environment_slot(frame, RESULT) == prior);
+    CHECK(after.bytes == before.bytes && after.blocks == before.blocks && !host_environment_slot(frame, STAGE));
+
+    host_environment_fixture_set(key, "");
+    xrt_native_host_environment_get(XR_NATIVE_CALLABLE_OS_GETENV, &call, 1);
+    CHECK(*tag == 1 && !host_environment_slot(frame, STAGE));
+    host_environment_value(host_environment_slot(frame, RESULT), "");
+    host_environment_fixture_set(key, NULL);
+    xrt_native_host_environment_get(XR_NATIVE_CALLABLE_OS_GETENV, &call, 1);
+    CHECK(*tag == 0 && !host_environment_slot(frame, RESULT) && !host_environment_slot(frame, STAGE));
+    managed_require(xrt_managed_frame_leave(root, frame));
+}
+
 static void managed_host_environment(void) {
     enum { NAME, RESULT, PREFIX, INVALID, NONSTRING, SLOT_COUNT };
     char key[64];
@@ -753,6 +805,13 @@ static void managed_host_environment(void) {
     xrt_backing_types_drop(&backings);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1);
     xrt_billing_owner_drop(billing);
+    XrtLocationOwner *owner = locations("host-environment.xr");
+    XrtValueRoot execution = {0};
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded_owned(owner, &failure, host_environment_publication, key, &execution) ==
+        XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&execution));
+    xrt_locations_release(owner);
 }
 
 static void managed_root(void *context) {

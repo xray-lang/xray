@@ -10,6 +10,7 @@
 #define XNATIVE_HOST_ENVIRONMENT_H
 #include "base/xio_policy.h"
 #include "xnative_backing_types.h"
+#include "xnative_host_nullable.h"
 
 typedef struct XrtHostEnvironmentGet {
     XrtManagedStatus managed;
@@ -21,4 +22,6 @@ typedef struct XrtHostEnvironmentGet {
  * empty values. Absence and failures preserve the slot. */
 XR_FUNC XrtHostEnvironmentGet xrt_host_environment_get(XrtManagedFrame *, size_t slot,
     XrtBillingOwner *, const XrtBackingTypes *, const XrtManagedHeader *name);
+XR_FUNC XrtHostEnvironmentGet xrt_host_environment_get_publish(const XrtHostNullableSlots *,
+    const XrtManagedHeader *name, uint32_t source_id);
 #endif // XNATIVE_HOST_ENVIRONMENT_H

@@ -11,6 +11,7 @@
 #include "os/os_file_owned.h"
 #include "shared/xnative_host_leaf.h"
 #include "xnative_backing_types.h"
+#include "xnative_host_nullable.h"
 #include "xnative_value_image.h"
 #include "xray_native_values.h"
 
@@ -24,10 +25,7 @@ typedef struct XrtHostFileRead {
     XrOsIoStatus host;
     bool present;
 } XrtHostFileRead;
-typedef struct XrtHostFileOptional {
-    uint8_t present;
-    XrtManagedHeader *owner;
-} XrtHostFileOptional;
+typedef XrtHostNullableOwner XrtHostFileOptional;
 typedef struct XrtHostFileStagedResult {
     XrtNativeFileResult location;
     size_t temporary_owner_offset;
