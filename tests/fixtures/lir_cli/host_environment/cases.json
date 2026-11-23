@@ -1,0 +1,39 @@
+{
+  "lookup": {
+    "source": "lookup.xr",
+    "set_env": {"XRAY_HOST_ENV_TEST_VALUE": "snow-雪", "XRAY_HOST_ENV_TEST_EMPTY": ""},
+    "unset_env": ["XRAY_HOST_ENV_TEST_MISSING"],
+    "stdout_utf8": "value:snow-雪\nnone\nvalue:\nvalue:snow-雪\n"
+  },
+  "same_name": {
+    "source": "same_name.xr",
+    "set_env": {"XRAY_HOST_ENV_TEST_VALUE": "host"},
+    "unset_env": [],
+    "stdout_utf8": "user:XRAY_HOST_ENV_TEST_VALUE\nhost\n"
+  },
+  "temp_root_tmpdir": {
+    "source": "temp_root.xr",
+    "set_env": {"TMPDIR": "xray-tmpdir", "TMP": "xray-tmp", "TEMP": "xray-temp"},
+    "unset_env": [],
+    "stdout_utf8": "xray-tmpdir\n"
+  },
+  "temp_root_tmp": {
+    "source": "temp_root.xr",
+    "set_env": {"TMPDIR": "", "TMP": "xray-tmp", "TEMP": "xray-temp"},
+    "unset_env": [],
+    "stdout_utf8": "xray-tmp\n"
+  },
+  "temp_root_temp": {
+    "source": "temp_root.xr",
+    "set_env": {"TMP": "", "TEMP": "xray-temp"},
+    "unset_env": ["TMPDIR"],
+    "stdout_utf8": "xray-temp\n"
+  },
+  "temp_root_default": {
+    "source": "temp_root.xr",
+    "set_env": {},
+    "unset_env": ["TMPDIR", "TMP", "TEMP"],
+    "stdout_windows_utf8": "C:\\Windows\\Temp\n",
+    "stdout_posix_utf8": "/tmp\n"
+  }
+}

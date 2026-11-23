@@ -1,0 +1,14 @@
+import os
+
+fn show(value: string?) {
+    if (value == null) {
+        print("none")
+        return
+    }
+    print("value:" + value!)
+}
+
+show(os.getenv("XRAY_HOST_ENV_TEST_VALUE"))
+show(os.getenv("XRAY_HOST_ENV_TEST_MISSING"))
+show(os.getenv("XRAY_HOST_ENV_TEST_EMPTY"))
+show(os.getenv("XRAY_HOST_ENV_TEST_VALUE\0ignored"))

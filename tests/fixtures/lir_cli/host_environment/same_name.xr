@@ -1,0 +1,8 @@
+import os
+
+fn __getenv(name: string) -> string? {
+    return "user:" + name
+}
+
+print(__getenv("XRAY_HOST_ENV_TEST_VALUE")!)
+print(os.getenv("XRAY_HOST_ENV_TEST_VALUE")!)
