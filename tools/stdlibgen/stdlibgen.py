@@ -1370,6 +1370,7 @@ def parse_def_metadata(
                 )
             host_leaf = str(props.get("host_leaf", ""))
             host_signatures = {
+                "blocking-env-get": "(name: string): string?",
                 "blocking-path-bool": "(path: Path): bool",
                 "blocking-file-open-read": "(path: Path): __FileStorage?",
                 "blocking-file-open-write": "(path: Path, append: bool): __FileStorage?",
@@ -1378,7 +1379,8 @@ def parse_def_metadata(
                 "blocking-file-write-bytes": "(file: __FileStorage, data: Array<u8>, offset: i64): i64",
                 "blocking-file-write-string": "(file: __FileStorage, data: string, offset: i64): i64",
             }
-            if host_leaf and (signature != host_signatures.get(host_leaf) or current_module != "io" or
+            host_module = "os" if host_leaf == "blocking-env-get" else "io"
+            if host_leaf and (signature != host_signatures.get(host_leaf) or current_module != host_module or
                               visibility != "internal" or target_fact):
                 raise SystemExit(f"{path}:{line_no}: invalid host leaf ABI for {current_module}.{current_name}")
             entries.append(

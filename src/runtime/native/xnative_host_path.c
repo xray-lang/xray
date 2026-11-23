@@ -67,6 +67,7 @@ XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBackin
     XrOsIoStatus status;
     bool result = false;
     switch (callable) {
+#define XR_NATIVE_BLOCKING_ENV_GET(id)
 #define XR_NATIVE_BLOCKING_PATH_BOOL(id, implementation) \
     case id: status = implementation(&policy, path, NULL, &result); break;
 #define XR_NATIVE_BLOCKING_FILE_OPEN_READ(id)
@@ -81,6 +82,7 @@ XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBackin
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_WRITE
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_READ
 #undef XR_NATIVE_BLOCKING_PATH_BOOL
+#undef XR_NATIVE_BLOCKING_ENV_GET
     default: status = XR_OS_IO_BAD_ARGUMENT; break;
     }
     if (status != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(status), source_id);

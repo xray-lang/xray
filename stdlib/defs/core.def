@@ -939,6 +939,7 @@ module os {
   fn __getenv {
     signature: "(name: string): string?"
     doc: "Get environment variable"
+    host_leaf: "blocking-env-get"
     vm: "os_getenv"
     aot: "xrt_os_getenv"
     argc: 1
