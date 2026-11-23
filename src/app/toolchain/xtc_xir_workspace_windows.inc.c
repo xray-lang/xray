@@ -272,9 +272,16 @@ static XtcXirWorkspaceStatus workspace_walk_step(XtcXirWorkspace *owner) {
     if (!owner->frame_count) { owner->close_phase = 4; return XTC_XIR_WORKSPACE_PENDING; }
     WorkspaceFrame *frame = &owner->frames[owner->frame_count - 1];
     if (frame->state == 0) {
-        HANDLE parent = owner->frames[owner->frame_count - 2].handle;
+        WorkspaceFrame *parent = &owner->frames[owner->frame_count - 2];
         ACCESS_MASK access = DELETE | FILE_READ_ATTRIBUTES | (frame->directory ? FILE_LIST_DIRECTORY : 0);
-        NTSTATUS status = workspace_named_open(parent, frame->name, frame->name_bytes, access, FILE_OPEN, &frame->handle);
+        NTSTATUS status = workspace_named_open(parent->handle, frame->name, frame->name_bytes, access, FILE_OPEN, &frame->handle);
+        if ((ULONG)status == 0xc0000034UL && frame->fixed < 0) {
+            /* STATUS_OBJECT_NAME_NOT_FOUND: the enumerated name disappeared
+             * under this still-open parent. Re-enumerate before touching more. */
+            --owner->frame_count;
+            parent->restart = true;
+            return XTC_XIR_WORKSPACE_PENDING;
+        }
         if (status < 0) return workspace_error(owner, RtlNtStatusToDosError(status));
         frame->state = 1; return XTC_XIR_WORKSPACE_PENDING;
     }

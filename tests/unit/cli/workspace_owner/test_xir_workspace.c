@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s error=%lu\n", __LINE__, #c, GetLastError()); exit(1); } } while (0)
 #include "workspace_faults.inc.h"
 
@@ -189,6 +190,80 @@ static void release_running_leases(XtcXirWorkspace *owner) {
         xtc_xir_file_lease_free(owner->nodes[i].lease); owner->nodes[i].lease = NULL;
     }
 }
+static void enumerated_child_open(const char *parent, bool disappears) {
+    XtcXirWorkspaceRequest request = request_for(parent);
+    XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
+    XtcXirWorkspace *owner = NULL;
+    CHECK(xtc_xir_workspace_new(resources, &request, &owner) == XTC_XIR_WORKSPACE_OK);
+    CHECK(xtc_xir_workspace_create(owner) == XTC_XIR_WORKSPACE_OK);
+    const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(owner);
+    char root[8192], vanished[8192], survivor[8192];
+    strcpy_s(root, sizeof(root), paths->root);
+    path_join(vanished, sizeof(vanished), paths->output, "vanish.tmp");
+    path_join(survivor, sizeof(survivor), paths->output, "zz-program.obj");
+    write_file(vanished, "directory entry will disappear after enumeration\n");
+    write_file(survivor, "remaining output must still be cleaned\n");
+
+    for (unsigned steps = 0;; ++steps) {
+        CHECK(steps < 1000 && owner);
+        if (owner->close_phase == 3 && owner->frame_count == 3) {
+            WorkspaceFrame *frame = &owner->frames[2];
+            if (frame->state == 0 && !wcscmp(frame->name, L"vanish.tmp")) {
+                CHECK(frame->fixed < 0 && !frame->handle);
+                break;
+            }
+        }
+        CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_PENDING);
+    }
+    size_t before = io_count;
+    CHECK(GetFileAttributesA(survivor) != INVALID_FILE_ATTRIBUTES);
+    if (disappears) {
+        CHECK(DeleteFileA(vanished));
+        XtcXirWorkspaceStatus status = xtc_xir_workspace_close(&owner, 1);
+        DWORD error = RtlNtStatusToDosError(last_relative_open);
+        printf("disappeared child relative open NTSTATUS=0x%08lx, Win32=%lu, close status=%u\n",
+            (unsigned long)last_relative_open, error, (unsigned)status);
+        CHECK(error == ERROR_FILE_NOT_FOUND);
+        CHECK(status == XTC_XIR_WORKSPACE_PENDING && owner->frame_count == 2 && owner->frames[1].restart);
+        CHECK(xtc_xir_workspace_status(owner) == XTC_XIR_WORKSPACE_OK);
+    } else {
+        io_error = ERROR_PATH_NOT_FOUND;
+        io_fail_at = before;
+        CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_UNRESOLVED);
+        io_fail_at = SIZE_MAX;
+        CHECK(owner->frame_count == 3 && owner->frames[2].state == 0 && !owner->frames[2].handle);
+        const XtcXirWorkspaceDiagnostic *diagnostic = xtc_xir_workspace_diagnostic(owner);
+        CHECK(diagnostic->status == XTC_XIR_WORKSPACE_UNRESOLVED && diagnostic->os_error == ERROR_PATH_NOT_FOUND);
+        CHECK(GetFileAttributesA(vanished) != INVALID_FILE_ATTRIBUTES);
+    }
+    CHECK(io_count - before == 1);
+    drain(&owner, 1);
+    CHECK(GetFileAttributesA(root) == INVALID_FILE_ATTRIBUTES && GetFileAttributesA(survivor) == INVALID_FILE_ATTRIBUTES);
+    xr_compile_resources_release(resources);
+    CHECK(!runtime_live && !owner_handle_count);
+}
+
+static void fixed_missing_is_unresolved(const char *parent) {
+    XtcXirWorkspaceRequest request = request_for(parent);
+    XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
+    XtcXirWorkspace *owner = NULL;
+    CHECK(xtc_xir_workspace_new(resources, &request, &owner) == XTC_XIR_WORKSPACE_OK);
+    CHECK(xtc_xir_workspace_create(owner) == XTC_XIR_WORKSPACE_OK);
+    for (unsigned steps = 0; owner->close_phase != 2 || owner->close_index != 1; ++steps) {
+        CHECK(steps < 1000 && xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_PENDING);
+    }
+    io_error = ERROR_FILE_NOT_FOUND;
+    io_fail_at = io_count;
+    CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_UNRESOLVED);
+    CHECK(owner->close_index == 1 && !owner->nodes[1].deletion && owner->nodes[1].anchor);
+    const XtcXirWorkspaceDiagnostic *diagnostic = xtc_xir_workspace_diagnostic(owner);
+    CHECK(diagnostic->status == XTC_XIR_WORKSPACE_UNRESOLVED && diagnostic->os_error == ERROR_FILE_NOT_FOUND);
+    io_fail_at = SIZE_MAX;
+    drain(&owner, 1);
+    xr_compile_resources_release(resources);
+    CHECK(!runtime_live && !owner_handle_count);
+}
+
 static void fixed_identity_retry(const char *parent) {
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited); XtcXirWorkspace *owner = NULL;
     XtcXirWorkspaceRequest request = request_for(parent);
@@ -370,6 +445,7 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[2], "--anchor-only")) {
             for (unsigned i = 0; i < 3; ++i) replacement(argv[1], i);
             reparse_refusal(argv[1]); root_reparse_refusal(argv[1]); fixed_identity_retry(argv[1]);
+            enumerated_child_open(argv[1], true); enumerated_child_open(argv[1], false); fixed_missing_is_unresolved(argv[1]);
             CHECK(handle_count() == before && !runtime_live && !runtime_bytes && !owner_handle_count);
             puts("root pin/child rename/replacement/reparse/close-one-step retry physical zero PASS"); return 0;
         }
@@ -387,6 +463,7 @@ int main(int argc, char **argv) {
     collision(argv[1]);
     for (unsigned i = 0; i < 3; ++i) replacement(argv[1], i);
     reparse_refusal(argv[1]); root_reparse_refusal(argv[1]); fixed_identity_retry(argv[1]);
+    enumerated_child_open(argv[1], true); enumerated_child_open(argv[1], false); fixed_missing_is_unresolved(argv[1]);
     os_matrix(argv[1]); printf("after OS handles=%lu\n", handle_count());
 #endif
     DWORD after = handle_count(); printf("final handles=%lu live=%zu bytes=%zu\n", after, runtime_live, runtime_bytes);

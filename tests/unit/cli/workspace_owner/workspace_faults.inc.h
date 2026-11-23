@@ -27,6 +27,7 @@ static bool fail_io(void);
 static bool fixed_nonce;
 static bool stop_before_input;
 static bool corrupt_identity;
+static NTSTATUS last_relative_open;
 static HANDLE owner_handles[128];
 static size_t owner_handle_count;
 static HANDLE workspace_record_handle(HANDLE handle) {
@@ -55,7 +56,12 @@ static bool fail_io(void) {
     SetLastError(io_error); return true;
 }
 static NTSTATUS failure_ntstatus(void) {
-    return (NTSTATUS)(io_error == ERROR_NOT_ENOUGH_MEMORY ? 0xc0000017UL : 0xc0000022UL);
+    switch (io_error) {
+    case ERROR_NOT_ENOUGH_MEMORY: return (NTSTATUS)0xc0000017UL;
+    case ERROR_FILE_NOT_FOUND: return (NTSTATUS)0xc0000034UL;
+    case ERROR_PATH_NOT_FOUND: return (NTSTATUS)0xc000003aUL;
+    default: return (NTSTATUS)0xc0000022UL;
+    }
 }
 static NTSTATUS workspace_test_nt(PHANDLE out, ACCESS_MASK access, POBJECT_ATTRIBUTES attributes,
     PIO_STATUS_BLOCK result, PLARGE_INTEGER size, ULONG attrs, ULONG share, ULONG disposition,
@@ -64,6 +70,7 @@ static NTSTATUS workspace_test_nt(PHANDLE out, ACCESS_MASK access, POBJECT_ATTRI
     if (stop_before_input && disposition == FILE_CREATE && attributes->ObjectName->Length == 10 &&
         !memcmp(attributes->ObjectName->Buffer, L"input", 10)) return (NTSTATUS)0xc0000022UL;
     NTSTATUS status = NtCreateFile(out, access, attributes, result, size, attrs, share, disposition, options, ea, ea_size);
+    if (disposition == FILE_OPEN) last_relative_open = status;
     if (status >= 0) workspace_record_handle(*out);
     return status;
 }
