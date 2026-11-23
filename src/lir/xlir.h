@@ -161,6 +161,7 @@ typedef struct XrLirFunctionView {
     uint32_t scope_count;
     XrLirType error;
     uint32_t initializer_module; /* One-based module ordinal for a typed initializer. */
+    uint32_t cleanup_owner;
 } XrLirFunctionView;
 typedef struct XrLirBlockView {
     const uint32_t *parameters;

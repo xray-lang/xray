@@ -34,6 +34,7 @@ typedef struct XrLirFunctionSpec {
     uint32_t callable_parameter_count;
     XrLirType error;
     uint32_t initializer_module; /* One-based module ordinal for a typed initializer. */
+    uint32_t cleanup_owner; /* One-based function ID of the sole registering body. */
 } XrLirFunctionSpec;
 typedef struct XrLirEdge {
     XrLirBlock target;

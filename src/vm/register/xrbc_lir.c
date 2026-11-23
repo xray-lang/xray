@@ -1975,7 +1975,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     *d = (XrRbcCompileDiagnostic) {0};
     XrLirFunctionView root;
     if (!output || *output || entry.module != input ||
-        xr_lir_function_view(input, entry, &root) != XR_LIR_OK)
+        xr_lir_function_view(input, entry, &root) != XR_LIR_OK || root.cleanup_owner)
         return rbc_lir_error(d, XR_RBC_COMPILE_INVALID, "invalid module, root or output",
             (XrLirSource) {0});
 #if defined(XR_XIR_PARANOID) && XR_XIR_PARANOID

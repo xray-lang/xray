@@ -161,6 +161,10 @@ static void lir_function_free(XrLirFunctionData *f) {
             lir_instruction_free(&block->instructions[i]);
         xr_free(block->parameters);
         xr_free(block->instructions);
+        if (block->cleanup) {
+            xr_free(block->cleanup->captures);
+            xr_free(block->cleanup);
+        }
     }
     xr_free(f->blocks);
     xr_free(f->values);
@@ -366,6 +370,9 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
     if (spec->initializer_module && (!spec->error || spec->result != XR_LIR_UNIT ||
         spec->parameter_count > 1 || (spec->parameter_count && spec->parameters[0] != XR_LIR_STATE)))
         return false;
+    if (spec->cleanup_owner && (spec->cleanup_owner > m->function_count ||
+        spec->kind != XR_LIR_FUNCTION_DEFINITION || spec->result != XR_LIR_UNIT ||
+        spec->error || spec->initializer_module || spec->callable_parameter_count)) return false;
     if (!xr_lir_internal_callable_parameters_valid(m, spec->parameters, spec->parameter_count,
         spec->callable_parameters, spec->callable_parameter_count, true)) return false;
     for (uint32_t p = 0; p < spec->parameter_count; ++p)
@@ -404,6 +411,7 @@ static bool lir_signature_copy(XrLirModule *m, const XrLirFunctionSpec *spec,
     f->result = spec->result;
     f->error = spec->error;
     f->initializer_module = spec->initializer_module;
+    f->cleanup_owner = spec->cleanup_owner;
     f->kind = spec->kind;
     f->extern_kind = spec->extern_kind;
     if (!f->parameter_count)
@@ -602,6 +610,27 @@ static uint32_t *lir_copy_values(XrLirModule *m, uint32_t function, const XrLirV
     for (uint32_t i = 0; i < count; ++i)
         ids[i] = values[i].id;
     return ids;
+}
+
+XrLirStatus xr_lir_internal_cleanup_block(XrLirModule *m, XrLirBlock handle, uint32_t frontier,
+    uint32_t registration, const XrLirValue *captures, uint32_t count) {
+    XrLirFunctionData *f = lir_block_function(m, handle);
+    if (!f || m->finished || f->blocks[handle.id - 1].cleanup || (!frontier && !registration) ||
+        (!registration && count) || frontier > m->function_count || registration > m->function_count)
+        return XR_LIR_INVALID_ARGUMENT;
+    XrLirFunctionData *registered = registration ? &m->functions[registration - 1] : NULL;
+    if ((frontier && m->functions[frontier - 1].cleanup_owner != handle.function) ||
+        (registered && (registered->cleanup_owner != handle.function || registered->cleanup_registration ||
+            registered->parameter_count != count || registration == frontier))) return XR_LIR_INVALID_ARGUMENT;
+    uint32_t *values = lir_copy_values(m, handle.function, captures, count);
+    if (count && !values) return m->failure;
+    XrLirCleanupBlock *cleanup = lir_allocate(m, 1, sizeof(*cleanup));
+    if (!cleanup) { xr_free(values); return m->failure; }
+    *cleanup = (XrLirCleanupBlock){frontier, registration, values, count};
+    f->blocks[handle.id - 1].cleanup = cleanup;
+    f->has_cleanups = true;
+    if (registered) registered->cleanup_registration = handle.id;
+    return XR_LIR_OK;
 }
 
 static bool lir_source_copy(XrLirModule *m, XrLirSource source, XrLirSource *output) {
@@ -942,7 +971,7 @@ XR_FUNC XrLirStatus xr_lir_function_view(const XrLirModule *m, XrLirFunction han
                                 f->value_count, f->entry,           f->result,
                                 f->kind,        f->extern_kind,
                                 f->callable_parameters, f->callable_parameter_count, f->scope_count, f->error,
-                                f->initializer_module};
+                                f->initializer_module, f->cleanup_owner};
     return XR_LIR_OK;
 }
 XR_FUNC XrLirStatus xr_lir_startup_entry(const XrLirModule *m, XrLirFunction *out, uint32_t *module_count) {

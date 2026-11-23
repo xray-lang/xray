@@ -611,6 +611,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     }
     if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_WEAKEN) {
         if ((v->op==XR_LIR_FUNCTION_REF && m->startup_entry && v->callee==m->startup_entry) ||
+            (v->op==XR_LIR_FUNCTION_REF && v->callee && v->callee<=m->function_count &&
+             m->functions[v->callee-1].cleanup_owner) ||
             !xr_lir_internal_callable_instruction(m, f, v)) goto invalid;
         return XR_LIR_OK;
     }
@@ -637,6 +639,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             goto invalid;
         const XrLirFunctionData *callee = &m->functions[v->callee - 1];
         if ((callee->error != 0) != (v->op == XR_LIR_INVOKE) || v->callee==m->startup_entry ||
+            (callee->cleanup_owner && callee->cleanup_owner != function) ||
             (v->op==XR_LIR_INVOKE && (!!callee->initializer_module!=(function==m->startup_entry)))) goto invalid;
         for (uint32_t p = 0; p < callee->callable_parameter_count; ++p) {
             XrLirFunctionCallableParameter parameter = callee->callable_parameters[p];
@@ -1072,6 +1075,8 @@ static XrLirStatus lir_frame_cell_constructors(const XrLirFunctionData *f,uint32
     return XR_LIR_OK;
 }
 
+#include "xlir_cleanup_verify.inc.c"
+
 static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f) {
     if (f->result == XR_LIR_FUNCTION_SCOPE || f->result == XR_LIR_MAP_STRING_I64_CELL ||
         f->result == XR_LIR_MAP_STRING_I64_REF || f->result == XR_LIR_SET_I64_CELL || f->result == XR_LIR_SET_I64_REF) return false;
@@ -1084,7 +1089,8 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
             f->callable_parameters, f->callable_parameter_count, false) ||
         !xr_lir_internal_closure_target_valid(m, f))
         return false;
-    bool startup=m->startup_entry==(uint32_t)(f-m->functions)+1;
+    uint32_t function = (uint32_t)(f - m->functions) + 1;
+    bool startup=m->startup_entry==function;
     if (startup && (f->kind!=XR_LIR_FUNCTION_DEFINITION || f->initializer_module ||
         f->error || f->closure.callable || f->parameter_count!=(uint32_t)m->state_layout_set ||
         (m->state_layout_set && (f->parameter_types[0]!=XR_LIR_STATE || m->state_entry!=m->startup_entry))))
@@ -1092,6 +1098,16 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
     if (f->initializer_module && (!m->startup_entry || f->initializer_module>m->startup_module_count ||
         !f->error || f->result!=XR_LIR_UNIT || f->kind!=XR_LIR_FUNCTION_DEFINITION ||
         f->parameter_count>1 || (f->parameter_count && f->parameter_types[0]!=XR_LIR_STATE))) return false;
+    if (f->cleanup_owner) {
+        if (f->cleanup_owner >= function || f->kind != XR_LIR_FUNCTION_DEFINITION ||
+            f->result != XR_LIR_UNIT || f->error || f->initializer_module || f->closure.callable ||
+            f->callable_parameter_count || startup || m->state_entry == function ||
+            !lir_cleanup_registration(m, f->cleanup_owner, function)) return false;
+        for (uint32_t p = 0; p < f->parameter_count; ++p) {
+            XrLirType type = f->parameter_types[p];
+            if (type != XR_LIR_I64 && type != XR_LIR_I1 && type != XR_LIR_I64_REF) return false;
+        }
+    } else if (f->cleanup_registration) return false;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (!xr_lir_internal_type_valid(m, f->parameter_types[p], false) ||
             f->parameter_types[p] == XR_LIR_FUNCTION_SCOPE ||
@@ -1544,6 +1560,9 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
             lir_graph_dominators(&graph);
             status = lir_uses(f, index + 1, &graph, d);
         }
+        if (status == XR_LIR_OK && !lir_cleanup_paths(m, f, index + 1, &graph))
+            status = xr_lir_internal_error(d, "cleanup frontier, captures or exit order is invalid",
+                index + 1, 0, 0, NULL);
         if (status == XR_LIR_OK) status = lir_state_function(m, index, d);
         if (status==XR_LIR_OK && multiplicity) {
             multiplicity[index]=(XrLirBlockConstructionFacts){graph.multiplicity,graph.cleanup_rank,f->block_count};

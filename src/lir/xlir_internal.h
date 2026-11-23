@@ -48,12 +48,17 @@ typedef struct XrLirValueData {
 typedef struct XrLirInstructionData {
     XrLirInstructionView view;
 } XrLirInstructionData;
+typedef struct XrLirCleanupBlock {
+    uint32_t frontier, registration;
+    uint32_t *captures, capture_count;
+} XrLirCleanupBlock;
 typedef struct XrLirBlockData {
     uint32_t *parameters;
     uint32_t parameter_count;
     XrLirInstructionData *instructions;
     uint32_t instruction_count, instruction_capacity;
     bool terminated;
+    XrLirCleanupBlock *cleanup;
 } XrLirBlockData;
 
 static inline bool xr_lir_function_exit(XrLirOp op) {
@@ -77,6 +82,8 @@ typedef struct XrLirFunctionData {
     XrLirType array_result;
     XrLirType error;
     uint32_t initializer_module;
+    uint32_t cleanup_owner, cleanup_registration;
+    bool has_cleanups;
     XrLirClosureTarget closure;
     XrLirFunctionCallableParameter *callable_parameters;
     uint32_t callable_parameter_count;
@@ -141,6 +148,11 @@ struct XrLirModule {
     XrLirCallableFacts *callable_facts;
     XrLirSliceFacts *slice_facts;
 };
+
+/* Only the source Lower or a verified rebuild supplies this static role and
+ * the actual SSA captures from its registration point. */
+XrLirStatus xr_lir_internal_cleanup_block(XrLirModule *, XrLirBlock, uint32_t frontier,
+    uint32_t registration, const XrLirValue *captures, uint32_t count);
 
 /* Only Lower receives these numeric contracts from the exact completed Source
  * artifact. Rebuilding copies them with actual function relocation; neither

@@ -91,7 +91,7 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
             .parameters = view.parameter_types, .parameter_count = view.parameter_count,
             .result = view.result, .kind = view.kind, .extern_kind = view.extern_kind, .error = view.error,
             .callable_parameters=view.callable_parameters, .callable_parameter_count=view.callable_parameter_count,
-            .initializer_module=view.initializer_module};
+            .initializer_module=view.initializer_module, .cleanup_owner=view.cleanup_owner};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[function.id]);
         if (status == XR_LIR_OK)
             status = lir_copy_array_signature(c->input, function, c->functions[function.id]);
@@ -132,11 +132,14 @@ static XrLirStatus rebuild_function_storage(Rebuild *c) {
     if (!c->blocks || !c->stack || !c->values || (c->view.value_count && !c->types))
         return XR_LIR_OUT_OF_MEMORY;
     uint64_t maximum = 0;
+    const XrLirFunctionData *source = &c->input->functions[c->source.id - 1];
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         XrLirBlock block;
         XrLirBlockView view;
         xr_lir_block_at(c->input, c->source, b, &block);
         xr_lir_block_view(c->input, block, &view);
+        const XrLirCleanupBlock *cleanup = source->blocks[b].cleanup;
+        if (cleanup && cleanup->capture_count > maximum) maximum = cleanup->capture_count;
         for (uint32_t n = 0; n < view.instruction_count; ++n) {
             XrLirInstructionView instruction;
             xr_lir_instruction_view(c->input, block, n, &instruction);
@@ -313,6 +316,22 @@ static XrLirStatus rebuild_cleanups(Rebuild *c) {
     return lir_slice_copy_cleanup_finish(&c->cleanups, c->output, c->functions[c->source.id], c->values, c->view.value_count);
 }
 
+static XrLirStatus rebuild_cleanup_roles(Rebuild *c, const XrLirFunctionData *source) {
+    if (!source->has_cleanups) return XR_LIR_OK;
+    for (uint32_t b = 0; b < source->block_count; ++b) {
+        const XrLirCleanupBlock *cleanup = source->blocks[b].cleanup;
+        if (!cleanup) continue;
+        XrLirStatus status = rebuild_arguments(c, cleanup->captures, cleanup->capture_count, 0);
+        if (status != XR_LIR_OK) return status;
+        uint32_t frontier = cleanup->frontier ? c->functions[cleanup->frontier].id : 0;
+        uint32_t registration = cleanup->registration ? c->functions[cleanup->registration].id : 0;
+        status = xr_lir_internal_cleanup_block(c->output, c->blocks[b + 1].handle,
+            frontier, registration, c->arguments, cleanup->capture_count);
+        if (status != XR_LIR_OK) return status;
+    }
+    return XR_LIR_OK;
+}
+
 XR_FUNC XrLirStatus xr_lir_internal_copy(const XrLirModule *input, XrLirModule **output,
     const XrLirCopyPlan *plan) {
     if (!output || *output || !xr_lir_module_is_readable(input)) return XR_LIR_INVALID_ARGUMENT;
@@ -321,7 +340,7 @@ XR_FUNC XrLirStatus xr_lir_internal_copy(const XrLirModule *input, XrLirModule *
     status = xr_lir_verify(input, NULL);
     if (status != XR_LIR_OK) return status;
 #endif
-    Rebuild c = {.input = input, .plan = plan};
+    Rebuild c = {.input = input};
     status = rebuild_registry(&c);
     uint32_t count = xr_lir_function_count(input);
     if (status == XR_LIR_OK) status = rebuild_declarations(&c, count);
@@ -329,13 +348,18 @@ XR_FUNC XrLirStatus xr_lir_internal_copy(const XrLirModule *input, XrLirModule *
         xr_lir_function_at(input, f, &c.source);
         xr_lir_function_view(input, c.source, &c.view);
         if (c.view.kind == XR_LIR_FUNCTION_EXTERNAL) continue;
-        if (plan) status = plan->begin(plan->context, input, c.source);
+        const XrLirFunctionData *source = &input->functions[f];
+        /* Instruction and block transforms cannot rewrite registration
+         * frontiers. Keep the proved cleanup functions and remap their SSA. */
+        c.plan = source->has_cleanups || source->cleanup_owner ? NULL : plan;
+        if (c.plan) status = c.plan->begin(c.plan->context, input, c.source);
         if (status == XR_LIR_OK) status = rebuild_function_storage(&c);
         if (status == XR_LIR_OK) status = rebuild_parameters(&c);
         if (status == XR_LIR_OK) status = rebuild_body(&c);
         if (status == XR_LIR_OK) status = rebuild_cleanups(&c);
+        if (status == XR_LIR_OK) status = rebuild_cleanup_roles(&c, source);
         rebuild_function_free(&c);
-        if (plan) plan->end(plan->context);
+        if (c.plan) c.plan->end(c.plan->context);
     }
     if (status == XR_LIR_OK) status = xr_lir_module_finish(c.output, NULL);
     xr_free(c.functions);

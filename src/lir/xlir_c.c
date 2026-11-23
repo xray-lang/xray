@@ -1448,7 +1448,8 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         !request->resources || !request->translation_unit || !request->module ||
         request->entry.module != request->module ||
         xr_lir_function_view(request->module, request->entry, &entry) != XR_LIR_OK ||
-        entry.kind != XR_LIR_FUNCTION_DEFINITION || entry.error || c_input_slice_result(request->module, entry.result) ||
+        entry.kind != XR_LIR_FUNCTION_DEFINITION || entry.error || entry.cleanup_owner ||
+        c_input_slice_result(request->module, entry.result) ||
         (entry.parameter_count && (entry.parameter_count != 1 || entry.parameter_types[0] != XR_LIR_STATE))) {
         c_error(&c, XR_LIR_C_BAD_ARGUMENT, "C emission requires empty output and a no-argument root");
         return c.status;
