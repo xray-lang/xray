@@ -1,0 +1,4 @@
+export fn record(label: string, value: i64) -> i64 {
+    print(label)
+    return value
+}

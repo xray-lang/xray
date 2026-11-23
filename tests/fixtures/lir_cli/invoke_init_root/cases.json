@@ -1,0 +1,38 @@
+{
+  "success": {
+    "source": "entry.xr",
+    "set_env": {
+      "XRAY_INIT_ROOT_FIXTURE_FAIL": "none"
+    },
+    "exit": 0,
+    "stdout_utf8": "prerequisite:ready\nalpha:enter\nalpha:later\nbeta:enter\nbeta:later\ndependent:ready\nentry\n64\n",
+    "stderr_utf8": ""
+  },
+  "alpha_failure": {
+    "source": "entry.xr",
+    "set_env": {
+      "XRAY_INIT_ROOT_FIXTURE_FAIL": "alpha"
+    },
+    "exit": 1,
+    "stdout_utf8": "prerequisite:ready\nalpha:enter\n",
+    "stderr_utf8": "[Uncaught Error] AlphaStartupError.Refused(17)\n"
+  },
+  "beta_failure": {
+    "source": "entry.xr",
+    "set_env": {
+      "XRAY_INIT_ROOT_FIXTURE_FAIL": "beta"
+    },
+    "exit": 1,
+    "stdout_utf8": "prerequisite:ready\nalpha:enter\nalpha:later\nbeta:enter\n",
+    "stderr_utf8": "[Uncaught Error] BetaStartupError.Refused(71)\n"
+  },
+  "control": {
+    "source": "control_entry.xr",
+    "set_env": {
+      "XRAY_INIT_ROOT_FIXTURE_FAIL": "none"
+    },
+    "exit": 0,
+    "stdout_utf8": "prerequisite:ready\nalpha:enter\nalpha:later\nbeta:enter\nbeta:later\ndependent:ready\nentry\n64\n",
+    "stderr_utf8": ""
+  }
+}

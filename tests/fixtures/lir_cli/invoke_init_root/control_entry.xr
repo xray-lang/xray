@@ -1,0 +1,4 @@
+import { result } from "./control_dependent"
+
+print("entry")
+print(result)

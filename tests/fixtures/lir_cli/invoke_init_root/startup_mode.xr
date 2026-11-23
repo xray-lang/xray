@@ -1,0 +1,7 @@
+import os
+
+export fn shouldFail(phase: string) -> bool {
+    const selected = os.getenv("XRAY_INIT_ROOT_FIXTURE_FAIL")
+    if (selected == null) { return false }
+    return selected! == phase
+}

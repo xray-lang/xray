@@ -1,0 +1,4 @@
+import { record } from "./observe"
+import { betaReady } from "./beta"
+
+export const result: i64 = record("dependent:ready", betaReady * 2)

@@ -1,0 +1,3 @@
+import { record } from "./observe"
+
+export const prepared: i64 = record("prerequisite:ready", 17)

@@ -1,0 +1,12 @@
+import { record } from "./observe"
+import { alphaReady } from "./control_alpha"
+import { shouldFail } from "./startup_mode"
+
+fn initialize(seed: i64, fail: bool) -> i64 {
+    if (fail) { return record("beta:unexpected flag", 0) }
+    return record("beta:enter", seed + 10)
+}
+
+const fail: bool = shouldFail("beta")
+const first: i64 = initialize(alphaReady, fail)
+export const betaReady: i64 = record("beta:later", first + 1)

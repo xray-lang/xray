@@ -1,0 +1,4 @@
+import { result } from "./dependent"
+
+print("entry")
+print(result)

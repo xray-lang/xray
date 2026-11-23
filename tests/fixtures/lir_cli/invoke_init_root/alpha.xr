@@ -1,0 +1,15 @@
+import { record } from "./observe"
+import { prepared } from "./prerequisite"
+import { shouldFail } from "./startup_mode"
+
+enum AlphaStartupError { Refused { code: i64 } }
+
+fn initialize(seed: i64, fail: bool) throws(AlphaStartupError) -> i64 {
+    print("alpha:enter")
+    if (fail) { throw AlphaStartupError.Refused { code: seed } }
+    return seed + 3
+}
+
+const fail: bool = shouldFail("alpha")
+const first: i64 = try initialize(prepared, fail)
+export const alphaReady: i64 = record("alpha:later", first + 1)
