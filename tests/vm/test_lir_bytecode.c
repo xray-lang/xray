@@ -181,14 +181,11 @@ static void reject_forged_error_literal(const XrRbcProgram *program, const uint6
     xr_free(forged);
 }
 
-static void test_owned_try_assert(void) {
-    XrLirModule *m=NULL;
-    OK(xr_lir_module_create(NULL,&m));
-    XrLirLiteral metadata={0};
-    XrLirType type=test_nominal_error(m,&metadata),flag=XR_LIR_I1,i64=XR_LIR_I64;
+static XrLirFunction test_throwing_leaf(XrLirModule *m, XrLirType error_type, XrLirType result_type) {
+    XrLirType flag=XR_LIR_I1;
     XrLirFunction leaf={0};
     XrLirFunctionSpec spec={.name="leaf",.name_length=4,.parameters=&flag,.parameter_count=1,
-        .result=i64,.error=type};
+        .result=result_type,.error=error_type};
     OK(xr_lir_declare_function(m,&spec,&leaf));
     OK(xr_lir_define_function(m,leaf));
     XrLirBlock leaf_entry=test_block(m,leaf,NULL,0),leaf_ok=test_block(m,leaf,NULL,0),leaf_error=test_block(m,leaf,NULL,0);
@@ -197,22 +194,36 @@ static void test_owned_try_assert(void) {
     XrLirInstruction select={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&fail,.operand_count=1,
         .edges={{.target=leaf_error},{.target=leaf_ok}},.edge_count=2};
     OK(xr_lir_set_terminator(m,leaf_entry,&select));
-    test_return(m,leaf_ok,test_constant(m,leaf_ok,i64,17));
-    XrLirValue spelling=test_constant(m,leaf_error,i64,23),value={0};
-    XrLirInstruction make={.op=XR_LIR_SUM_NEW,.type=type,.bits=1,.operands=&spelling,.operand_count=1};
+    XrLirValue result=test_constant(m,leaf_ok,XR_LIR_I64,17);
+    if (result_type!=XR_LIR_I64) {
+        XrLirValue payload=result;
+        OK(xr_lir_emit_value(m,leaf_ok,&(XrLirInstruction){.op=XR_LIR_NULLABLE_SOME,.type=result_type,
+            .operands=&payload,.operand_count=1},&result));
+    }
+    test_return(m,leaf_ok,result);
+    XrLirValue spelling=test_constant(m,leaf_error,XR_LIR_I64,23),value={0};
+    XrLirInstruction make={.op=XR_LIR_SUM_NEW,.type=error_type,.bits=1,.operands=&spelling,.operand_count=1};
     OK(xr_lir_emit_value(m,leaf_error,&make,&value));
     OK(xr_lir_set_terminator(m,leaf_error,&(XrLirInstruction){.op=XR_LIR_RETURN_ERROR,
         .type=XR_LIR_UNIT,.operands=&value,.operand_count=1}));
+    return leaf;
+}
 
+static void test_owned_try_assert(void) {
+    XrLirModule *m=NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    XrLirLiteral metadata={0};
+    XrLirType type=test_nominal_error(m,&metadata),flag=XR_LIR_I1,i64=XR_LIR_I64;
+    XrLirFunction leaf=test_throwing_leaf(m,type,i64);
     XrLirFunction asserting=test_function(m,"asserting",&flag,1,i64);
     XrLirBlock entry=test_block(m,asserting,NULL,0),ok=test_block(m,asserting,&i64,1);
     XrLirBlock error=test_block(m,asserting,&type,1);
     OK(xr_lir_set_entry(m,asserting,entry));
-    fail=parameter(m,asserting,0);
+    XrLirValue fail=parameter(m,asserting,0);
     OK(xr_lir_set_terminator(m,entry,&(XrLirInstruction){.op=XR_LIR_INVOKE,.type=i64,.callee=leaf,
         .operands=&fail,.operand_count=1,.edges={{.target=ok},{.target=error}},.edge_count=2}));
     test_return(m,ok,block_parameter(m,ok,0));
-    value=block_parameter(m,error,0);
+    XrLirValue value=block_parameter(m,error,0);
     const char *path="ownership.xr";
     OK(xr_lir_set_terminator(m,error,&(XrLirInstruction){.op=XR_LIR_PANIC_ERROR,.type=XR_LIR_UNIT,
         .operands=&value,.operand_count=1,.bits=metadata.id,.source={path,12,15,12,15,23}}));
@@ -289,6 +300,107 @@ static void test_owned_try_assert(void) {
     CHECK(!xrt_try_assert_field(failure,1,&scalar,&bits) && bits==23);
     xr_rbc_outcome_free(&outcome);
     CHECK(!outcome);
+}
+
+static void test_nullable_invoke_type_identity(const XrRbcProgram *program) {
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    CHECK(image && image->types && module->code_lease.owner);
+    uint32_t other_type=0;
+    for (uint32_t n=0;n<image->type_count;++n) {
+        const XrtValueImageType *row=&image->types[n];
+        if (row->kind==XRT_VALUE_NULLABLE && row->nullable_element && row->nullable_element<=image->type_count &&
+            image->types[row->nullable_element-1].kind==XRT_VALUE_U64)
+            other_type=n+1;
+    }
+    CHECK(other_type);
+    for (uint32_t n=0;n<module->function_count;++n) {
+        const XrRbcFunction *function=&module->functions[n];
+        const XrRbcValueCode *code=xr_rbc_module_value_code(module,n);
+        if (!code) continue;
+        for (size_t pc=0;pc<function->code_count;++pc) {
+            uint32_t word=function->code[pc],index=word>>16;
+            if ((word&65535u)!=XR_RBC_VALUE_ACCESS || index>=code->access_count ||
+                code->accesses[index].operation!=XR_RBC_VALUE_INVOKE) continue;
+            uint32_t result=code->accesses[index].result;
+            CHECK(code->homes && result && result<=code->homes->value_count);
+            XrLirValueHome *home=(XrLirValueHome *)&code->homes->values[result];
+            uint32_t original=home->type;
+            CHECK(original && original<=image->type_count);
+            const XrtValueImageType *before=&image->types[original-1],*after=&image->types[other_type-1];
+            CHECK(before->kind==XRT_VALUE_NULLABLE && before->nullable_element && before->nullable_element<=image->type_count &&
+                image->types[before->nullable_element-1].kind==XRT_VALUE_I64);
+            CHECK(!before->owned_count && !after->owned_count && before->size==after->size &&
+                before->alignment==after->alignment && before->nullable_tag==after->nullable_tag &&
+                before->nullable_payload==after->nullable_payload);
+            CHECK(xr_rbc_value_instruction_valid(module,function,pc));
+            /* Keep the real code lease and physical location. Check only admission while
+             * the success home refers to a different same-layout Nullable image row. */
+            home->type=other_type;
+            bool admitted=xr_rbc_value_instruction_valid(module,function,pc);
+            home->type=original;
+            CHECK(!admitted && xr_rbc_value_instruction_valid(module,function,pc));
+            return;
+        }
+    }
+    CHECK(false);
+}
+
+static void test_nullable_invoke_result(void) {
+    XrLirModule *m=NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    XrLirLiteral metadata={0};
+    XrLirType error_type=test_nominal_error(m,&metadata),flag=XR_LIR_I1,optional=0,other=0;
+    OK(xr_lir_nullable_type(m,XR_LIR_I64,&optional));
+    OK(xr_lir_nullable_type(m,XR_LIR_U64,&other));
+    XrLirFunction leaf=test_throwing_leaf(m,error_type,optional);
+    XrLirFunction root=test_function(m,"nullable_invoke",&flag,1,XR_LIR_I64);
+    XrLirBlock entry=test_block(m,root,NULL,0),ok=test_block(m,root,&optional,1);
+    XrLirBlock error=test_block(m,root,&error_type,1),unwrap=test_block(m,root,&optional,1);
+    XrLirBlock unexpected=test_block(m,root,NULL,0);
+    OK(xr_lir_set_entry(m,root,entry));
+    XrLirValue fail=parameter(m,root,0);
+    OK(xr_lir_set_terminator(m,entry,&(XrLirInstruction){.op=XR_LIR_INVOKE,.type=optional,.callee=leaf,
+        .operands=&fail,.operand_count=1,.edges={{.target=ok},{.target=error}},.edge_count=2}));
+    XrLirValue result=block_parameter(m,ok,0),none={0},present={0};
+    OK(xr_lir_emit_value(m,ok,&(XrLirInstruction){.op=XR_LIR_NULLABLE_NONE,.type=other},&none));
+    OK(xr_lir_emit_value(m,ok,&(XrLirInstruction){.op=XR_LIR_NULLABLE_IS_SOME,.type=flag,
+        .operands=&none,.operand_count=1},&present));
+    OK(xr_lir_set_terminator(m,ok,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+        .operands=&present,.operand_count=1,.edges={{.target=unexpected},{.target=unwrap,.arguments=&result,.argument_count=1}},
+        .edge_count=2}));
+    test_return(m,unexpected,test_constant(m,unexpected,XR_LIR_I64,0));
+    XrLirValue wrapped=block_parameter(m,unwrap,0),payload={0};
+    OK(xr_lir_emit_value(m,unwrap,&(XrLirInstruction){.op=XR_LIR_NULLABLE_UNWRAP,.type=XR_LIR_I64,
+        .operands=&wrapped,.operand_count=1},&payload));
+    test_return(m,unwrap,payload);
+    XrLirValue thrown=block_parameter(m,error,0);
+    OK(xr_lir_set_terminator(m,error,&(XrLirInstruction){.op=XR_LIR_PANIC_ERROR,.type=XR_LIR_UNIT,
+        .operands=&thrown,.operand_count=1,.bits=metadata.id,.source={"nullable.xr",11,1,1,1,5}}));
+    OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,root);
+    xr_lir_module_destroy(m);
+    test_nullable_invoke_type_identity(program);
+    uint64_t argument=0,bits=0;
+    CHECK(run(program,&argument,1)==17);
+    argument=1;
+    CHECK(execute(program,&argument,1,&bits)==XR_RBC_TRY_ASSERT);
+    xr_rbc_program_destroy(program);
+}
+
+static void test_unsupported_nullable_invoke_result(bool managed) {
+    XrLirModule *m=NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    XrLirLiteral metadata={0};
+    XrLirType error_type=test_nominal_error(m,&metadata),optional=0;
+    OK(xr_lir_nullable_type(m,managed ? XR_LIR_STRING : error_type,&optional));
+    XrLirTypeLayout layout={0};
+    OK(xr_lir_type_layout(m,optional,&layout));
+    CHECK(layout.size && layout.managed==managed);
+    XrLirFunction function={0};
+    XrLirFunctionSpec spec={.name="leaf",.name_length=4,.result=optional,.error=error_type};
+    CHECK(xr_lir_declare_function(m,&spec,&function)==XR_LIR_INVALID_ARGUMENT && !function.id);
+    xr_lir_module_destroy(m);
 }
 
 static void test_owned_startup_error(void) {
@@ -1888,6 +2000,9 @@ int main(void) {
     test_owned_arithmetic_panics();
     test_raw_typed_error_rejected();
     test_owned_try_assert();
+    test_nullable_invoke_result();
+    test_unsupported_nullable_invoke_result(false);
+    test_unsupported_nullable_invoke_result(true);
     test_owned_startup_error();
     test_integer_identity_cast(XR_LIR_I64, XR_LIR_I64);
     test_integer_identity_cast(XR_LIR_U64, XR_LIR_I64);
