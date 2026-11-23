@@ -1,4 +1,4 @@
-"""Exercise try! through the register VM and a generated native executable."""
+"""Exercise typed error calls through the register VM and a generated native executable."""
 
 from __future__ import annotations
 
@@ -20,12 +20,14 @@ def main() -> None:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compiler", help="Use this native C provider")
+    parser.add_argument("--fixtures", type=Path, default=Path("tests/fixtures/lir_cli/invoke_try_assert"),
+                        help="Fixture directory relative to the source root")
     args = parser.parse_args()
     root, binary = args.root.resolve(), args.binary.resolve()
-    fixtures = root / "tests/fixtures/lir_cli/invoke_try_assert"
+    fixtures = root / args.fixtures
     cases = json.loads((fixtures / "cases.json").read_text(encoding="utf-8"))
     if not cases or set(cases) != {path.stem for path in fixtures.glob("*.xr")}:
-        parser.error("try! fixtures and cases.json must match exactly")
+        parser.error("Error call fixtures and cases.json must match exactly")
 
     args.output.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="try-assert-", dir=args.output.resolve()))
@@ -97,9 +99,9 @@ def main() -> None:
     if failures:
         for failure in failures:
             print(repr(failure), file=sys.stderr)
-        raise SystemExit(f"{len(failures)} try! checks failed; artifacts: {work}")
+        raise SystemExit(f"{len(failures)} error call checks failed; artifacts: {work}")
     complete_native_artifacts(work)
-    print(f"try! exits, stdout, stderr and VM opt-in trace match expectations; artifacts: {work}")
+    print(f"Error call exits, output and any requested VM trace match expectations; artifacts: {work}")
 
 
 if __name__ == "__main__":

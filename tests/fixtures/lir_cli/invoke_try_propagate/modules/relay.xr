@@ -1,0 +1,12 @@
+import { TransferError, scalar, unit } from "./origin"
+
+export fn forwardValue(ok: bool) throws(TransferError) -> i64 {
+    var value = try scalar(ok)
+    print("relay:value")
+    return value + 1
+}
+
+export fn forwardUnit(ok: bool) throws(TransferError) {
+    try unit(ok)
+    print("relay:unit")
+}

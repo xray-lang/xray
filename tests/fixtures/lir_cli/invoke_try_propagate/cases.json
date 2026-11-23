@@ -1,0 +1,26 @@
+{
+  "success": {
+    "exit": 0,
+    "stdout": "entered\nleaf:value\nrelay:value\nouter:value\n20\nleaf:unit\nrelay:unit\nouter:unit\nfinished\n",
+    "stderr": ""
+  },
+  "scalar_error": {
+    "exit": 1,
+    "stdout": "entered\nleaf:value\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: TransferError.Failed(23)\n"
+  },
+  "unit_error": {
+    "exit": 1,
+    "stdout": "entered\nleaf:unit\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: TransferError.Stopped(71)\n"
+  },
+  "missing_try": {
+    "source_error": ":4:12: error: E0330: throwing call requires try or a try body"
+  },
+  "outside_declared_error": {
+    "source_error": ":4:12: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
+  },
+  "other_nominal_owner": {
+    "source_error": ":5:12: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
+  }
+}

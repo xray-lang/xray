@@ -93,6 +93,49 @@ static void invoke_rejects_forged_error(void) {
     }
 }
 
+static void invoke_must_forward_its_received_error(void) {
+    for (unsigned replace=0;replace<2;++replace) {
+        XrLirModule *module=NULL;
+        OK(xr_lir_module_create(NULL,&module));
+        XrLirType error=try_error_type(module,"Failure");
+        XrLirFunction leaf={0},caller={0};
+        XrLirFunctionSpec spec={.name="leaf",.name_length=4,.result=XR_LIR_UNIT,.error=error};
+        OK(xr_lir_declare_function(module,&spec,&leaf));
+        OK(xr_lir_define_function(module,leaf));
+        XrLirBlock body=test_block(module,leaf,NULL,0);
+        OK(xr_lir_set_entry(module,leaf,body));
+        XrLirValue payload=test_constant(module,body,XR_LIR_I64,23),value={0};
+        XrLirInstruction create={.op=XR_LIR_SUM_NEW,.type=error,.bits=1,.operands=&payload,.operand_count=1};
+        OK(xr_lir_emit_value(module,body,&create,&value));
+        XrLirInstruction failed={.op=XR_LIR_RETURN_ERROR,.type=XR_LIR_UNIT,.operands=&value,.operand_count=1};
+        OK(xr_lir_set_terminator(module,body,&failed));
+
+        spec.name="caller";
+        spec.name_length=6;
+        OK(xr_lir_declare_function(module,&spec,&caller));
+        OK(xr_lir_define_function(module,caller));
+        XrLirBlock call=test_block(module,caller,NULL,0);
+        XrLirBlock success=test_block(module,caller,NULL,0);
+        XrLirBlock error_edge=test_block(module,caller,&error,1);
+        OK(xr_lir_set_entry(module,caller,call));
+        XrLirInstruction invoke={.op=XR_LIR_INVOKE,.type=XR_LIR_UNIT,.callee=leaf,
+            .edges={{.target=success},{.target=error_edge}},.edge_count=2};
+        OK(xr_lir_set_terminator(module,call,&invoke));
+        test_return(module,success,(XrLirValue){0});
+        OK(xr_lir_block_parameter(module,error_edge,0,&value));
+        if (replace)
+            OK(xr_lir_emit_value(module,error_edge,&(XrLirInstruction){.op=XR_LIR_SUM_NEW,.type=error},&value));
+        OK(xr_lir_set_terminator(module,error_edge,&failed));
+        XrLirDiagnostic diagnostic={0};
+        XrLirStatus result=xr_lir_module_finish(module,&diagnostic);
+        if (replace)
+            CHECK(result==XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,"dedicated normal and error successors"));
+        else
+            CHECK(result==XR_LIR_OK);
+        xr_lir_module_destroy(module);
+    }
+}
+
 static void slice_callback_loan_conditions(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
     for (size_t family=0;family<2;++family) {
@@ -1121,6 +1164,7 @@ int main(void) {
     verifier_rejections();
     typed_error_cannot_be_erased();
     invoke_rejects_forged_error();
+    invoke_must_forward_its_received_error();
     definition_prevalidation_rejections();
     graph_edges();
     owned_inputs_and_growth();

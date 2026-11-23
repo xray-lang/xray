@@ -1,0 +1,16 @@
+export enum TransferError {
+    Unavailable,
+    Failed { code: i64 },
+    Stopped { reason: i64 }
+}
+
+export fn scalar(ok: bool) throws(TransferError) -> i64 {
+    print("leaf:value")
+    if (!ok) { throw TransferError.Failed { code: 23 } }
+    return 17
+}
+
+export fn unit(ok: bool) throws(TransferError) {
+    print("leaf:unit")
+    if (!ok) { throw TransferError.Stopped { reason: 71 } }
+}

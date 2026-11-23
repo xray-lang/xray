@@ -1,0 +1,12 @@
+import { TransferError } from "./modules/origin"
+import { forwardValue } from "./modules/relay"
+
+fn outerValue() throws(TransferError) -> i64 {
+    var value = try forwardValue(false)
+    print("outer:value")
+    return value + 2
+}
+
+print("entered")
+print(try! outerValue())
+print("finished")

@@ -1,0 +1,5 @@
+export enum TransferError {
+    Unavailable,
+    Failed { code: i64 },
+    Stopped { reason: i64 }
+}

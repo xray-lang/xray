@@ -1,0 +1,11 @@
+import { TransferError } from "./modules/origin"
+import { forwardUnit } from "./modules/relay"
+
+fn outerUnit() throws(TransferError) {
+    try forwardUnit(false)
+    print("outer:unit")
+}
+
+print("entered")
+try! outerUnit()
+print("finished")

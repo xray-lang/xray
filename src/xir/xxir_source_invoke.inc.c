@@ -71,7 +71,8 @@ static bool source_call_recipe_append(SourceContext *ctx,XrXirInstruction op,Sou
 }
 
 static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
-    if (!source_local_call(ctx,&op) || !source_call_borrows(ctx,&op)) return false;
+    bool propagates;
+    if (!source_local_call(ctx,&op,&propagates) || !source_call_borrows(ctx,&op)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     if(op.op==XR_XIR_RETURN) {
         XrHirBodyOrigin origin=source_hir_origin(ctx,NULL,0);
@@ -87,7 +88,7 @@ static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, Source
         return source_recipe_append(ctx,op,result)&&
             source_hir_binding_emitted(ctx,&(XrHirBindingAction){.use=use},NULL,before);
     }
-    if (!body->error_context || (op.op != XR_XIR_CALL && op.op != XR_XIR_CALL_INDIRECT &&
+    if ((!body->error_context && !propagates) || (op.op != XR_XIR_CALL && op.op != XR_XIR_CALL_INDIRECT &&
         op.op != XR_XIR_CALL_DEFAULT))
         return source_call_recipe_append(ctx,op,result);
     if (!body->block_count && !begin_block(ctx)) return false;
@@ -100,8 +101,14 @@ static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, Source
     op.targets[0] = error+1; op.targets[1] = error;
     if (!source_call_recipe_append(ctx,op,NULL) || !begin_block(ctx)) return false;
     SourceValue caught;
-    if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught) ||
-        !source_error_edge(ctx,caught) || !source_handler_site(ctx,origin,caught.id)) return false;
+    if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught))
+        return false;
+    if (propagates) {
+        if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{caught.id},{0},0,{0}},NULL))
+            return false;
+    } else if (!source_error_edge(ctx,caught) || !source_handler_site(ctx,origin,caught.id)) {
+        return false;
+    }
     body->recipes[origin].instruction.targets[0]=body->block_count;
     if(!begin_block(ctx))return false;
     if (op.type == XR_XIR_UNIT) {

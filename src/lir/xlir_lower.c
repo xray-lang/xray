@@ -1190,8 +1190,8 @@ static bool lower_float_width_operation(XrXirOp op) {
 }
 #include "xlir_lower_string_length.inc.c"
 
-/* Closed XIR verifies that both marker blocks have exactly one incoming
- * edge. The first slice accepts only the dedicated error-to-panic consumer. */
+/* Closed XIR verifies each marker's unique predecessor and recoverable error.
+ * The dedicated failure exit either asserts or returns the exact declared error. */
 static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirInstruction *call) {
     if (call->immediate < 0 || (uint64_t)call->immediate >= c->source->function_count ||
         call->targets[0] == call->targets[1]) return false;
@@ -1211,10 +1211,11 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
         (first->immediate != origin || !((first->op == XR_XIR_INVOKE_RESULT && first->type == call->type) ||
             (first->op == XR_XIR_INVOKE_DISCARD && first->type == XR_XIR_UNIT)))) return false;
     const XrXirInstruction *marker = &f->instructions[failure->first];
-    const XrXirInstruction *panic = marker + 1;
-    return failure->count == 2 && !failure->panic && !failure->frontier &&
-        marker->op == XR_XIR_INVOKE_ERROR && marker->type == XR_XIR_ERROR && marker->immediate == origin &&
-        panic->op == XR_XIR_PANIC_ERROR && panic->args[0] == f->parameter_count + failure->first;
+    if (failure->count!=2 || failure->panic || failure->frontier || marker->op!=XR_XIR_INVOKE_ERROR ||
+        marker->type!=XR_XIR_ERROR || marker->immediate!=origin) return false;
+    const XrXirInstruction *exit=marker+1;
+    return exit->args[0]==f->parameter_count+failure->first && (exit->op==XR_XIR_PANIC_ERROR ||
+        (exit->op==XR_XIR_THROW && !lower_empty_error(callee->error_type) && callee->error_type==f->error_type));
 }
 
 static const XrXirInstruction *lower_invoke_origin(Lower *c, const XrXirFunction *f, uint32_t block,
@@ -1233,14 +1234,13 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     if (op->op == XR_XIR_INVOKE_RESULT || op->op == XR_XIR_INVOKE_DISCARD || op->op == XR_XIR_INVOKE_ERROR)
         return lower_invoke_origin(c,f,c->block,op,op->op == XR_XIR_INVOKE_ERROR) ||
             lower_unsupported(c,xr_xir_op_name(op->op));
-    if (op->op == XR_XIR_PANIC_ERROR) {
-        const XrXirInstruction *marker = &f->instructions[f->blocks[c->block].first];
-        return (marker->op == XR_XIR_INVOKE_ERROR && lower_invoke_origin(c,f,c->block,marker,true)) ||
+    if (op->op==XR_XIR_THROW && lower_function_error(c,c->function) &&
+        xr_xir_operand_type(f,op->args[0])==f->error_type) return true;
+    if (op->op==XR_XIR_PANIC_ERROR || op->op==XR_XIR_THROW) {
+        const XrXirInstruction *marker=&f->instructions[f->blocks[c->block].first];
+        return (marker->op==XR_XIR_INVOKE_ERROR && lower_invoke_origin(c,f,c->block,marker,true)) ||
             lower_unsupported(c,xr_xir_op_name(op->op));
     }
-    if (op->op == XR_XIR_THROW)
-        return (lower_function_error(c,c->function) && xr_xir_operand_type(f,op->args[0]) == f->error_type) ||
-            lower_unsupported(c,xr_xir_op_name(op->op));
     if (lower_width_arithmetic(op->op) && lower_narrow_scalar(op->type))
         return lower_unsupported(c, "arithmetic on a narrow scalar");
     if (lower_float_width_operation(op->op)) {

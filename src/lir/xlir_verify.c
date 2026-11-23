@@ -898,7 +898,11 @@ static bool lir_invoke_edges(const XrLirFunctionData *f, const LirGraph *g) {
                 uint32_t target = term->edges[e].target - 1;
                 if (g->offsets[target + 1] - g->offsets[target] != 1) return false;
             }
-            if (lir_terminator(f,term->edges[1].target - 1)->op != XR_LIR_PANIC_ERROR) return false;
+            uint32_t target=term->edges[1].target-1;
+            const XrLirBlockData *failed=&f->blocks[target];
+            const XrLirInstructionView *exit=lir_terminator(f,target);
+            if ((exit->op!=XR_LIR_PANIC_ERROR && exit->op!=XR_LIR_RETURN_ERROR) ||
+                failed->parameter_count!=1 || exit->operands[0]!=failed->parameters[0]) return false;
         }
         if (term->op != XR_LIR_PANIC_ERROR) continue;
         const XrLirBlockData *block = &f->blocks[b];

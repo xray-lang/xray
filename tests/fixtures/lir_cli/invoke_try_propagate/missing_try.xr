@@ -1,0 +1,7 @@
+import { TransferError, scalar } from "./modules/origin"
+
+fn caller() throws(TransferError) -> i64 {
+    return scalar(true)
+}
+
+print(try caller())

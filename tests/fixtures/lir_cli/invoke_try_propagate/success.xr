@@ -1,0 +1,14 @@
+import { TransferError } from "./modules/origin"
+import { forwardValue, forwardUnit } from "./modules/relay"
+
+fn outer() throws(TransferError) {
+    var value = try forwardValue(true)
+    print("outer:value")
+    print(value + 2)
+    try forwardUnit(true)
+    print("outer:unit")
+}
+
+print("entered")
+try! outer()
+print("finished")

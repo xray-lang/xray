@@ -220,7 +220,8 @@ static XrXirType source_local_thrown_type(SourceContext *ctx,SourceValue value) 
     }
     return XR_XIR_ERROR;
 }
-static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op) {
+static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op,bool *propagates) {
+    *propagates=false;
     XrXirType error=XR_XIR_NEVER;uint32_t target=UINT32_MAX;
     if (op->op==XR_XIR_CALL) {
         if (op->immediate<0 || (uint64_t)op->immediate>=ctx->function_count)
@@ -292,7 +293,22 @@ static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op) {
         }
         if (!source_local_call_error(ctx,target,op->type_arguments[0],op->type_arguments[1],&error)) return false;
     }
-    return source_local_error(ctx,node,error,true);
+    if (!source_local_error(ctx,node,error,true)) return false;
+    if (op->op!=XR_XIR_CALL || op->type_arguments[1] || !node || node->type!=AST_TRY_EXPR ||
+        node->as.try_expr.mode!=XR_TRY_PROPAGATE || !ctx->active_expression ||
+        ctx->active_expression->owner!=ctx->function || ctx->active_expression->syntax->type!=AST_CALL_EXPR)
+        return true;
+    const SourceFunction *caller=&ctx->bodies[ctx->function],*callee=&ctx->bodies[target];
+    if (caller->error_context || caller->local_handler || caller->frontier || caller->infer_errors ||
+        caller->infer_initializer || (ctx->task_scope && ctx->task_scope->function==ctx->function) ||
+        !caller->node || caller->node->type!=AST_FUNCTION_DECL ||
+        !callee->node || callee->node->type!=AST_FUNCTION_DECL || !callee->node->as.function_decl.body ||
+        ((ctx->identities[ctx->function].promises | ctx->identities[target].promises) & XR_XIR_FUNCTION_GENERATOR))
+        return true;
+    /* The Checked error-edge marker reconstructs this exact bound from the
+     * call declaration. Preserve routing for every wider error or handler. */
+    *propagates=error==ctx->functions[ctx->function].error_type && xr_xir_type_is_enum(&ctx->types,error);
+    return true;
 }
 typedef struct SourceInitializationFrame {
     struct SourceInitializationFrame *next;

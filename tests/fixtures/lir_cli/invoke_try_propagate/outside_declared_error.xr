@@ -1,0 +1,7 @@
+import { scalar } from "./modules/origin"
+
+fn caller() -> i64 {
+    return try scalar(true)
+}
+
+print(caller())
