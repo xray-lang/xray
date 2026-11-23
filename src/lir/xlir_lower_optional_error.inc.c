@@ -8,8 +8,13 @@
  */
 
 static bool lower_optional_error_join(const Lower *c,uint32_t block) {
-    const uint8_t *joins=c->optional_error_joins ? c->optional_error_joins[c->function] : NULL;
-    return joins && joins[block];
+    const LowerOptionalErrorBlock *plan=c->optional_errors ? c->optional_errors[c->function] : NULL;
+    return plan && plan[block].join;
+}
+
+static uint32_t lower_optional_error_predecessor(const Lower *c,uint32_t block) {
+    const LowerOptionalErrorBlock *plan=c->optional_errors ? c->optional_errors[c->function] : NULL;
+    return plan ? plan[block].predecessor : 0;
 }
 
 static void lower_optional_uses(const Lower *c,const XrXirFunction *f,uint8_t *uses) {
@@ -97,7 +102,8 @@ static bool lower_optional_error_shape(const Lower *c,const XrXirFunction *f,
 }
 
 static bool lower_optional_errors(Lower *c,const XrXirFunction *f) {
-    uint8_t *uses=NULL,*joins=NULL;
+    uint8_t *uses=NULL;
+    LowerOptionalErrorBlock *plan=NULL;
     for (uint32_t b=0; b<f->block_count; ++b) {
         const XrXirInstruction *head=&f->instructions[f->blocks[b].first];
         if (head->op!=XR_XIR_PHI || head->type!=XR_XIR_ERROR) continue;
@@ -107,15 +113,26 @@ static bool lower_optional_errors(Lower *c,const XrXirFunction *f) {
             lower_optional_uses(c,f,uses);
         }
         if (!lower_optional_error_shape(c,f,uses,b)) continue;
-        if (!joins) {
-            if (!c->optional_error_joins)
-                c->optional_error_joins=lower_alloc(c,c->source->function_count,sizeof(*c->optional_error_joins));
-            if (c->optional_error_joins) joins=lower_alloc(c,f->block_count,1);
-            if (!joins) { xr_free(uses); return false; }
-            c->optional_error_joins[c->function]=joins;
+        if (!plan) {
+            if (!c->optional_errors)
+                c->optional_errors=lower_alloc(c,c->source->function_count,sizeof(*c->optional_errors));
+            if (c->optional_errors) plan=lower_alloc(c,f->block_count,sizeof(*plan));
+            if (!plan) { xr_free(uses); return false; }
+            c->optional_errors[c->function]=plan;
         }
-        joins[b]=1;
+        plan[b].join=true;
     }
     xr_free(uses);
+    if (!plan) return true;
+    for (uint32_t b=0; b<f->block_count; ++b) {
+        const XrXirBlock *block=&f->blocks[b];
+        const XrXirInstruction *term=&f->instructions[block->first+block->count-1];
+        if (term->op!=XR_XIR_INVOKE) continue;
+        uint32_t failure=term->targets[1];
+        const XrXirBlock *landing=&f->blocks[failure];
+        const XrXirInstruction *exit=&f->instructions[landing->first+landing->count-1];
+        if (exit->op==XR_XIR_JUMP && plan[exit->targets[0]].join)
+            plan[failure].predecessor=b+1;
+    }
     return true;
 }
