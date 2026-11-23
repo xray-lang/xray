@@ -10,6 +10,7 @@
 #define XNATIVE_HOST_FILE_H
 #include "os/os_file_owned.h"
 #include "shared/xnative_host_leaf.h"
+#include "xnative_backing_types.h"
 #include "xnative_value_image.h"
 #include "xray_native_values.h"
 
@@ -18,14 +19,26 @@ typedef struct XrtHostFileOpen {
     XrOsIoStatus host;
     bool opened;
 } XrtHostFileOpen;
+typedef struct XrtHostFileRead {
+    XrtManagedStatus managed;
+    XrOsIoStatus host;
+    bool present;
+} XrtHostFileRead;
 typedef struct XrtHostFileOptional {
     uint8_t present;
     XrtManagedHeader *owner;
 } XrtHostFileOptional;
 
 XR_FUNC XrtManagedStatus xrt_host_file_bind(XrtBillingOwner *, XrtManagedLease identity, XrtManagedOps **);
+XR_FUNC XrtHostFileOpen xrt_host_file_open_read(XrtManagedFrame *, size_t slot, XrtBoundClass,
+    const XrOsIoPolicy *, const XrtStringBacking *);
 XR_FUNC XrtHostFileOpen xrt_host_file_open_write(XrtManagedFrame *, size_t slot, XrtBoundClass,
     const XrOsIoPolicy *, const XrtStringBacking *, bool append);
+/* Publish an exact byte Array to the slot only after one successful read.
+ * EOF and valid zero-length requests publish an empty Array. Ordinary
+ * refusals leave the slot and its current owner unchanged. */
+XR_FUNC XrtHostFileRead xrt_host_file_read(XrtManagedFrame *, size_t slot, XrtBoundClass,
+    const XrtManagedHeader *file, const XrtBackingTypes *, int64_t max_bytes);
 XR_FUNC void xrt_host_file_open_publish(const XrtNativeFileResult *, XrtBoundClass,
     const XrtStringBacking *, bool append, uint32_t source_id);
 XR_FUNC XrtManagedStatus xrt_host_file_close(XrtBoundClass, const XrtManagedHeader *, bool *closed);

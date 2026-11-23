@@ -42,21 +42,74 @@ static bool host_file_storage(XrtBoundClass binding) {
         spec.kind == XRT_VALUE_CLASS && spec.class_storage == XR_NATIVE_DECLARATION_FILE_STORAGE;
 }
 
-XR_FUNC XrtHostFileOpen xrt_host_file_open_write(XrtManagedFrame *frame, size_t slot, XrtBoundClass binding,
-    const XrOsIoPolicy *policy, const XrtStringBacking *text, bool append) {
+static XrtHostFileOpen host_file_open(XrtManagedFrame *frame, size_t slot, XrtBoundClass binding,
+    const XrOsIoPolicy *policy, const XrtStringBacking *text, XrOsFileAction action, bool append) {
     if (!text || !host_file_storage(binding)) return (XrtHostFileOpen){.managed=XRT_MANAGED_ARGUMENT};
     XrtManagedHeader *pending = NULL;
     XrtHostFileOpen result = {.managed=xrt_managed_slot_prepare(frame, slot, binding.ops, sizeof(XrtHostFile), &pending)};
     if (result.managed != XRT_MANAGED_OK) return result;
+    if (!xrt_class_backing_matches(pending, binding.plan)) {
+        XR_CHECK(xrt_managed_slot_abort(frame, slot) == XRT_MANAGED_OK, "file open owns its unpublished backing");
+        return (XrtHostFileOpen){.managed=XRT_MANAGED_ARGUMENT};
+    }
     XrtHostFile *file = (XrtHostFile *)pending;
     XrOsPathSpan path = {text->bytes, text->length};
-    result.host = xr_os_io_file_open_write_sync(policy, path, append, &file->owner, &result.opened);
+    result.host = action == XR_OS_FILE_OPEN_READ
+        ? xr_os_io_file_open_read_sync(policy, path, &file->owner, &result.opened)
+        : xr_os_io_file_open_write_sync(policy, path, append, &file->owner, &result.opened);
     if (result.host == XR_OS_IO_OK && result.opened)
         result.managed = xrt_managed_slot_commit(frame, slot);
     if (result.managed != XRT_MANAGED_OK || !result.opened) {
         XrtManagedStatus aborted = xrt_managed_slot_abort(frame, slot);
         if (result.managed == XRT_MANAGED_OK && result.host == XR_OS_IO_OK) result.managed = aborted;
     }
+    return result;
+}
+
+XR_FUNC XrtHostFileOpen xrt_host_file_open_read(XrtManagedFrame *frame, size_t slot, XrtBoundClass binding,
+    const XrOsIoPolicy *policy, const XrtStringBacking *text) {
+    return host_file_open(frame, slot, binding, policy, text, XR_OS_FILE_OPEN_READ, false);
+}
+
+XR_FUNC XrtHostFileOpen xrt_host_file_open_write(XrtManagedFrame *frame, size_t slot, XrtBoundClass binding,
+    const XrOsIoPolicy *policy, const XrtStringBacking *text, bool append) {
+    return host_file_open(frame, slot, binding, policy, text, XR_OS_FILE_OPEN_WRITE, append);
+}
+
+XR_FUNC XrtHostFileRead xrt_host_file_read(XrtManagedFrame *frame, size_t slot, XrtBoundClass binding,
+    const XrtManagedHeader *value, const XrtBackingTypes *types, int64_t max_bytes) {
+    if (!types || !types->arrays[XRT_BACKING_ARRAY_U8] || !host_file_storage(binding) ||
+        !xrt_class_backing_matches(value, binding.plan))
+        return (XrtHostFileRead){.managed=XRT_MANAGED_ARGUMENT};
+    XrtHostFile *file = (XrtHostFile *)value;
+    /* Keep the historical byte Array extent and finish all allocation before
+     * the provider can advance this file's position. */
+    if (max_bytes < 0 || max_bytes > INT32_MAX || !file->owner.state ||
+        (max_bytes && !xr_os_io_file_readable_sync(&file->owner))) return (XrtHostFileRead){0};
+    if ((uint64_t)max_bytes > SIZE_MAX - sizeof(XrtArrayBacking))
+        return (XrtHostFileRead){.managed=XRT_MANAGED_OVERFLOW};
+    size_t capacity = (size_t)max_bytes;
+    XrtManagedHeader *pending = NULL;
+    XrtHostFileRead result = {.managed=xrt_managed_slot_prepare(frame, slot,
+        types->arrays[XRT_BACKING_ARRAY_U8], sizeof(XrtArrayBacking) + capacity, &pending)};
+    if (result.managed != XRT_MANAGED_OK) return result;
+    XrtArrayBacking *array = (XrtArrayBacking *)pending;
+    if (!xrt_backing_array_matches(pending, XRT_BACKING_ARRAY_U8) || array->capacity != capacity) {
+        result.managed = XRT_MANAGED_ARGUMENT;
+    } else {
+        size_t received = 0;
+        result.host = xr_os_io_file_read_sync(&file->owner, array->elements, capacity, &received);
+        if (result.host == XR_OS_IO_OK) {
+            XR_CHECK(received <= capacity, "read must fit the actual pending byte Array");
+            array->length = received;
+            result.managed = xrt_managed_slot_commit(frame, slot);
+            result.present = result.managed == XRT_MANAGED_OK;
+        } else if (result.host == XR_OS_IO_IO) {
+            result.host = XR_OS_IO_OK;
+        }
+    }
+    if (!result.present)
+        XR_CHECK(xrt_managed_slot_abort(frame, slot) == XRT_MANAGED_OK, "file read owns the pending byte Array");
     return result;
 }
 
