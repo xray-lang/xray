@@ -24,6 +24,16 @@
     "stdout": "42\n13\n",
     "stderr": ""
   },
+  "state": {
+    "exit": 0,
+    "stdout": "11\n2\n11\n2\n22\n3\n22\n",
+    "stderr": ""
+  },
+  "startup": {
+    "exit": 1,
+    "stdout": "11\n",
+    "stderr": "[Uncaught Error] Refusal.Missing(33)\n"
+  },
   "bare_name": {
     "source_error": ":6:14: error: E0334: bare catch name must not start with an uppercase letter; use catch (e: TypeName) to filter by type"
   }

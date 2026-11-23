@@ -2824,7 +2824,8 @@ static bool lower_body_cell(LowerFunction *f,uint32_t block,uint32_t cell,uint32
     XR_DCHECK(f->next[predecessor-1]<f->next[block], "the invoke precedes its exclusive landing");
     XrLirValue state=f->states[(size_t)(predecessor-1)*f->cell_count+cell];
     if (!state.id || lir_pod_scalar(f->cell_types[cell])>=XR_POD_SCALAR_COUNT)
-        return lower_unsupported(c,"non-scalar state across an error successor");
+        return lower_unsupported(c,lower_optional_error_predecessor(c,block) ?
+            "non-scalar state across an optional error successor" : "non-scalar state across a catch predecessor");
     f->current[cell]=state;
     return true;
 }

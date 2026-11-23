@@ -39,14 +39,9 @@ static XrXirType lower_catch_join_type(const Lower *c, const XrXirFunction *f, u
     XrXirType exact = XR_XIR_NEVER;
     for (uint32_t a = 0; a < phi->args[1]; a += 2) {
         const uint32_t *input = &f->operands[phi->args[0] + a];
-        const XrXirBlock *landing = &f->blocks[input[0]];
-        const XrXirInstruction *marker = &f->instructions[landing->first];
-        if (landing->count != 2 || landing->panic || landing->frontier ||
-            input[1] != f->parameter_count + landing->first || marker->op != XR_XIR_INVOKE_ERROR ||
-            marker->type != XR_XIR_ERROR || marker[1].op != XR_XIR_JUMP || marker[1].targets[0] != block)
+        const XrXirInstruction *call = lower_forwarded_error_call(f, input[0], input[1], block);
+        if (!call || call->immediate < 0 || (uint64_t)call->immediate >= c->source->function_count)
             return XR_XIR_UNIT;
-        const XrXirInstruction *call = &f->instructions[marker->immediate];
-        if (call->op != XR_XIR_INVOKE || call->targets[1] != input[0]) return XR_XIR_UNIT;
         XrXirType error = c->source->functions[call->immediate].error_type;
         if (lower_empty_error(error)) continue;
         if (exact != XR_XIR_NEVER && exact != error) return XR_XIR_UNIT;

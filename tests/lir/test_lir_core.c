@@ -94,7 +94,8 @@ static void invoke_rejects_forged_error(void) {
 }
 
 static void invoke_must_forward_its_received_error(void) {
-    for (unsigned replace=0;replace<2;++replace) {
+    enum { PROPAGATE, FORGED_PROPAGATION, CATCH, FORGED_CATCH, CASE_COUNT };
+    for (unsigned mode=PROPAGATE;mode<CASE_COUNT;++mode) {
         XrLirModule *module=NULL;
         OK(xr_lir_module_create(NULL,&module));
         XrLirType error=try_error_type(module,"Failure");
@@ -118,17 +119,28 @@ static void invoke_must_forward_its_received_error(void) {
         XrLirBlock success=test_block(module,caller,NULL,0);
         XrLirBlock error_edge=test_block(module,caller,&error,1);
         OK(xr_lir_set_entry(module,caller,call));
+        XrLirValue forged={0};
+        if (mode==FORGED_CATCH)
+            OK(xr_lir_emit_value(module,call,&(XrLirInstruction){.op=XR_LIR_SUM_NEW,.type=error},&forged));
         XrLirInstruction invoke={.op=XR_LIR_INVOKE,.type=XR_LIR_UNIT,.callee=leaf,
             .edges={{.target=success},{.target=error_edge}},.edge_count=2};
         OK(xr_lir_set_terminator(module,call,&invoke));
         test_return(module,success,(XrLirValue){0});
         OK(xr_lir_block_parameter(module,error_edge,0,&value));
-        if (replace)
+        if (mode==FORGED_PROPAGATION)
             OK(xr_lir_emit_value(module,error_edge,&(XrLirInstruction){.op=XR_LIR_SUM_NEW,.type=error},&value));
-        OK(xr_lir_set_terminator(module,error_edge,&failed));
+        if (mode==CATCH || mode==FORGED_CATCH) {
+            XrLirBlock handler=test_block(module,caller,&error,1);
+            XrLirValue argument=mode==FORGED_CATCH ? forged : value;
+            test_branch(module,error_edge,handler,&argument,1);
+            OK(xr_lir_block_parameter(module,handler,0,&value));
+            OK(xr_lir_set_terminator(module,handler,&failed));
+        } else {
+            OK(xr_lir_set_terminator(module,error_edge,&failed));
+        }
         XrLirDiagnostic diagnostic={0};
         XrLirStatus result=xr_lir_module_finish(module,&diagnostic);
-        if (replace)
+        if (mode==FORGED_PROPAGATION || mode==FORGED_CATCH)
             CHECK(result==XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,"dedicated normal and error successors"));
         else
             CHECK(result==XR_LIR_OK);

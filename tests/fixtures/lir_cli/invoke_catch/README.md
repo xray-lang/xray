@@ -8,6 +8,8 @@ The runner compares exact stdout, stderr and exit status from the register VM an
 - `same_name_modules` puts the other module's equally named error type first. Only the handler for the defining module runs.
 - `panic` checks that division by zero keeps E0420 and bypasses the business handler and subsequent prints.
 - `unused_binding` runs the catch-all with an unread Error binding.
+- `state` reads the latest scalar binding from both of the actual failure predecessors.
+- `startup` lets a matching case continue module initialization, then reports an unmatched error with its original payload before later code can run.
 - `bare_name` pins E0334 for a bare uppercase catch binding.
 
-At clean Windows Release `f24409284` the five runtime cases passed Source checking. Each stopped at the same `INVOKE` diagnostic in the VM, C emission and native build. The E0334 refusal matched in all four commands. The runtime byte expectations in `cases.json` await the catch implementation.
+At clean Windows Release `f24409284` the first five runtime cases passed Source checking. Each stopped at the same `INVOKE` diagnostic in the VM, C emission and native build. The E0334 refusal matched in all four commands.

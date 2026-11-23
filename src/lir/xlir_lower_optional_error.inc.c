@@ -63,17 +63,17 @@ static void lower_optional_uses(const Lower *c,const XrXirFunction *f,uint8_t *u
 
 /* The sealed Checked graph verifies the predecessor set of every PHI and
  * gives each INVOKE landing block exactly one predecessor. */
-static bool lower_optional_error_input(const XrXirFunction *f,const uint8_t *uses,
+static const XrXirInstruction *lower_forwarded_error_call(const XrXirFunction *f,
     uint32_t block,uint32_t value,uint32_t join) {
     const XrXirBlock *landing=&f->blocks[block];
     const XrXirInstruction *marker=&f->instructions[landing->first];
     if (landing->count!=2 || landing->panic || landing->frontier ||
         marker->op!=XR_XIR_INVOKE_ERROR || marker->type!=XR_XIR_ERROR ||
         marker->immediate<0 || (uint64_t)marker->immediate>=f->instruction_count ||
-        value!=f->parameter_count+landing->first || uses[landing->first]!=1 ||
-        marker[1].op!=XR_XIR_JUMP || marker[1].targets[0]!=join) return false;
+        value!=f->parameter_count+landing->first ||
+        marker[1].op!=XR_XIR_JUMP || marker[1].targets[0]!=join) return NULL;
     const XrXirInstruction *call=&f->instructions[marker->immediate];
-    return call->op==XR_XIR_INVOKE && call->targets[1]==block;
+    return call->op==XR_XIR_INVOKE && call->targets[1]==block ? call : NULL;
 }
 
 static bool lower_optional_result_join(const XrXirFunction *f,uint32_t block,
@@ -96,7 +96,8 @@ static bool lower_optional_error_shape(const Lower *c,const XrXirFunction *f,
         return false;
     for (uint32_t a=0; a<phi->args[1]; a+=2) {
         const uint32_t *input=f->operands+phi->args[0]+a;
-        if (!lower_optional_error_input(f,uses,input[0],input[1],block)) return false;
+        if (!lower_forwarded_error_call(f,input[0],input[1],block) ||
+            uses[f->blocks[input[0]].first]!=1) return false;
     }
     return phi->args[1]!=0;
 }

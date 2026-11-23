@@ -1,0 +1,18 @@
+enum Refusal { Denied { code: i64 }, Missing { code: i64 } }
+
+fn read(missing: bool) throws(Refusal) -> i64 {
+    if (missing) { throw Refusal.Missing { code: 33 } }
+    throw Refusal.Denied { code: 11 }
+}
+
+try {
+    print(read(false))
+} catch (Refusal.Denied { code }) {
+    print(code)
+}
+try {
+    print(read(true))
+} catch (Refusal.Denied { code }) {
+    print(code)
+}
+print(99)
