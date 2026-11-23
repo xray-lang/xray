@@ -10,8 +10,12 @@
  *   Controlled host callbacks test the common boundary, independently of VM
  *   dispatch. No standalone global is supplied to satisfy this executable.
  */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_array_backing.h"
+#include "runtime/native/xnative_host_environment.h"
 #include "runtime/native/xnative_host_file.h"
 #include "runtime/native/xnative_host_io.h"
 #include "runtime/native/xnative_values.h"
@@ -638,6 +642,119 @@ static void managed_host_file_read(void) {
     CHECK(remove(path) == 0);
 }
 
+static void host_environment_fixture_set(const char *name, const char *value) {
+#if defined(XR_OS_WINDOWS)
+    wchar_t wide_name[64], wide_value[32];
+    CHECK(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, name, -1, wide_name, 64) > 0);
+    if (value)
+        CHECK(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, wide_value, 32) > 0);
+    CHECK(SetEnvironmentVariableW(wide_name, value ? wide_value : NULL));
+#else
+    CHECK((value ? setenv(name, value, 1) : unsetenv(name)) == 0);
+#endif
+}
+
+static XrtManagedHeader *host_environment_slot(XrtManagedFrame *frame, size_t slot) {
+    XrtManagedHeader *owner = NULL;
+    CHECK(xrt_managed_slot_borrow(frame, slot, &owner) == XRT_MANAGED_OK);
+    return owner;
+}
+
+static void host_environment_value(const XrtManagedHeader *owner, const char *expected) {
+    CHECK(xrt_backing_string_matches(owner));
+    const XrtStringBacking *value = (const XrtStringBacking *)owner;
+    CHECK(value->length == strlen(expected) && !memcmp(value->bytes, expected, value->length));
+}
+
+static void managed_host_environment(void) {
+    enum { NAME, RESULT, PREFIX, INVALID, NONSTRING, SLOT_COUNT };
+    char key[64];
+#if defined(XR_OS_WINDOWS)
+    unsigned long process = GetCurrentProcessId();
+#else
+    unsigned long process = (unsigned long)getpid();
+#endif
+    int key_length = snprintf(key, sizeof(key), "XRAY_NATIVE_ENV_TEST_%lu", process);
+    CHECK(key_length > 0 && (size_t)key_length < sizeof(key));
+    const char sample[] = "v\xc3\xa9\xe4\xb8\xad";
+    XrtBillingOwner *billing = NULL;
+    XrtBackingTypes backings = {0};
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    CHECK(xrt_billing_owner_new(NULL, SIZE_MAX, &billing) == XRT_MANAGED_OK);
+    CHECK(xrt_backing_types_init(billing, &backings) == XRT_MANAGED_OK);
+    CHECK(xrt_managed_root_new(billing, &root) == XRT_MANAGED_OK);
+    CHECK(xrt_managed_frame_enter(root, SLOT_COUNT, &frame) == XRT_MANAGED_OK);
+    CHECK(xrt_string_backing_create(frame, NAME, &backings, key, (size_t)key_length, 0) == XRT_MANAGED_OK);
+    CHECK(xrt_string_backing_create(frame, RESULT, &backings, "existing", 8, 0) == XRT_MANAGED_OK);
+    CHECK(xrt_array_backing_u8_create(frame, NONSTRING, &backings, NULL, 0, 0) == XRT_MANAGED_OK);
+    const XrtManagedHeader *name = host_environment_slot(frame, NAME);
+    const XrtManagedHeader *prior = host_environment_slot(frame, RESULT);
+    XrtHostEnvironmentGet got = xrt_host_environment_get(frame, RESULT, billing, &backings, name);
+    CHECK(got.managed == XRT_MANAGED_OK && got.host == XR_OS_IO_OK && !got.present);
+    CHECK(host_environment_slot(frame, RESULT) == prior);
+    got = xrt_host_environment_get(frame, RESULT, billing, &backings, host_environment_slot(frame, NONSTRING));
+    CHECK(got.managed == XRT_MANAGED_ARGUMENT && !got.present && host_environment_slot(frame, RESULT) == prior);
+
+    host_environment_fixture_set(key, sample);
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    got = xrt_host_environment_get(frame, RESULT, billing, &backings, name);
+    CHECK(got.managed == XRT_MANAGED_OK && got.host == XR_OS_IO_OK && got.present);
+    prior = host_environment_slot(frame, RESULT);
+    host_environment_value(prior, sample);
+    XrtBillingStats retained = xrt_billing_owner_stats(billing);
+    size_t allocations = retained.allocations - before.allocations;
+    CHECK(allocations > 1);
+    for (size_t allowed = 0; allowed < allocations; ++allowed) {
+        xrt_billing_owner_fail_after(billing, allowed);
+        got = xrt_host_environment_get(frame, RESULT, billing, &backings, name);
+        CHECK(!got.present);
+        if (allowed + 1 == allocations) {
+            CHECK(got.managed == XRT_MANAGED_OOM && got.host == XR_OS_IO_OK);
+        } else {
+            CHECK(got.managed == XRT_MANAGED_OK && got.host == XR_OS_IO_OUT_OF_MEMORY);
+        }
+        XrtBillingStats after = xrt_billing_owner_stats(billing);
+        CHECK(after.blocks == retained.blocks && after.bytes == retained.bytes);
+        CHECK(host_environment_slot(frame, RESULT) == prior);
+    }
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+
+    char prefix[96];
+    const char suffix[] = "=ignored";
+    size_t prefix_length = (size_t)key_length + 1;
+    memcpy(prefix, key, prefix_length);
+    memcpy(prefix + prefix_length, suffix, sizeof(suffix) - 1);
+    CHECK(xrt_string_backing_create(frame, PREFIX, &backings, prefix,
+        prefix_length + sizeof(suffix) - 1, 0) == XRT_MANAGED_OK);
+    got = xrt_host_environment_get(frame, RESULT, billing, &backings, host_environment_slot(frame, PREFIX));
+    CHECK(got.managed == XRT_MANAGED_OK && got.host == XR_OS_IO_OK && got.present);
+    prior = host_environment_slot(frame, RESULT);
+    host_environment_fixture_set(key, "");
+    host_environment_value(prior, sample);
+    got = xrt_host_environment_get(frame, RESULT, billing, &backings, name);
+    CHECK(got.managed == XRT_MANAGED_OK && got.host == XR_OS_IO_OK && got.present);
+    prior = host_environment_slot(frame, RESULT);
+    host_environment_value(prior, "");
+    host_environment_fixture_set(key, NULL);
+    got = xrt_host_environment_get(frame, RESULT, billing, &backings, name);
+    CHECK(got.managed == XRT_MANAGED_OK && got.host == XR_OS_IO_OK && !got.present);
+    CHECK(host_environment_slot(frame, RESULT) == prior);
+
+    const char *invalid[] = {"", "invalid=name"};
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(*invalid); ++i) {
+        CHECK(xrt_string_backing_create(frame, INVALID, &backings, invalid[i], strlen(invalid[i]), 0) == XRT_MANAGED_OK);
+        got = xrt_host_environment_get(frame, RESULT, billing, &backings, host_environment_slot(frame, INVALID));
+        CHECK(got.managed == XRT_MANAGED_OK && got.host == XR_OS_IO_OK && !got.present);
+        CHECK(host_environment_slot(frame, RESULT) == prior);
+    }
+    CHECK(xrt_managed_frame_leave(root, frame) == XRT_MANAGED_OK);
+    CHECK(xrt_managed_root_destroy(&root) == XRT_MANAGED_OK);
+    xrt_backing_types_drop(&backings);
+    CHECK(xrt_billing_owner_stats(billing).blocks == 1);
+    xrt_billing_owner_drop(billing);
+}
+
 static void managed_root(void *context) {
     ManagedCall *call = context;
     XrtManagedRoot *root = xrt_native_managed_root(1);
@@ -926,6 +1043,7 @@ int main(void) {
     managed_host_path_scratch();
     managed_host_file();
     managed_host_file_read();
+    managed_host_environment();
     managed_message_owner();
     managed_assertion_owner();
     managed_map_literals();

@@ -11,11 +11,12 @@ add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c xnat
     xnative_managed.c xnative_managed_root.c xnative_place.c
     xnative_backing_types.c xnative_string_backing.c xnative_string_backing_ops.c xnative_values.c
     xnative_array_backing.c xnative_array_ops.c xnative_array_slice.c xnative_map_backing.c xnative_set_backing.c xnative_value_plan.c xnative_value_image.c xnative_capture_backing.c
-    xnative_class_array.c xnative_host_path.c xnative_host_file.c xnative_host_file_publish.c
+    xnative_class_array.c xnative_host_path.c xnative_host_file.c xnative_host_file_publish.c xnative_host_environment.c
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_mutation_${native_filesystem_platform}.c"
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_metadata_${native_filesystem_platform}.c"
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_links_${native_filesystem_platform}.c"
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_owned_${native_filesystem_platform}.c"
+    "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/proc_self_${native_filesystem_platform}.c"
     "${native_output_platform}" "${native_clock_platform}")
 add_dependencies(xray_native_runtime gen-native-type-defs gen-target-query-registry)
 target_include_directories(xray_native_runtime PUBLIC "${PROJECT_SOURCE_DIR}/include"
@@ -35,10 +36,16 @@ if(MSVC)
 else()
     target_compile_options(xray_native_runtime PRIVATE -Wall -Wextra -Werror -pedantic -ffp-contract=off)
 endif()
-if(NOT WIN32)
+if(WIN32)
+    target_link_libraries(xray_native_runtime PRIVATE advapi32 userenv)
+else()
     find_package(Threads REQUIRED)
     target_link_libraries(xray_native_runtime PRIVATE Threads::Threads)
     target_compile_definitions(xray_native_runtime PRIVATE _POSIX_C_SOURCE=200809L)
+    if(APPLE)
+        # The process provider resolves the executable path through this helper.
+        target_sources(xray_native_runtime PRIVATE "${PROJECT_SOURCE_DIR}/src/base/xfileio.c")
+    endif()
 endif()
 
 # Direct generated-C clients consume the same canonical archive closure.
