@@ -336,7 +336,8 @@ static void class_parent_boundaries(const char *programs) {
 
 static void unsupported_terminators(const char *programs) {
     char *text = read_file(programs, "unsupported-cleanup-terminator", "xr");
-    rejected(text, false, "CLEANUP_REGISTER");
+    XrLirLowered cleanup = lower_text(text);
+    xr_lir_lowered_free(&cleanup);
     xr_free(text);
 
     SourceFixture fixture = source_fixture("fn answer()->i64{return 42}\nprint(answer())\n");

@@ -10,7 +10,7 @@
       "stdout": "tests/smoke/expected/control_flow.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/control_flow.xr:88:4: CLEANUP_REGISTER is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/control_flow.xr:91:9: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
       }
     },
     {
@@ -22,7 +22,7 @@
       "stdout": "tests/smoke/expected/control_flow.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/01-basics/control_flow.xr:88:4: CLEANUP_REGISTER is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/01-basics/control_flow.xr:91:9: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
       }
     },
     {
