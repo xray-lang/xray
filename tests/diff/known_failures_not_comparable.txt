@@ -425,7 +425,6 @@ tests/diff/cases/semantics/stdlib/parallel_plan_close_lifecycle.xr  # error: E03
 tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/parallel_reduce_vm_batch.xr  # error: E0330: throwing call requires try or a try body
-tests/diff/cases/semantics/stdlib/path_isabsolute.xr  # CALL_INTRINSIC is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/path_module.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/path_string_ops.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
