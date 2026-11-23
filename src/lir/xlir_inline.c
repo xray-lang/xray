@@ -27,7 +27,7 @@ typedef struct {
     size_t first, count;
     uint64_t instructions, scratch;
     uint32_t index, low, component, component_size;
-    bool active, self, returns, eligible, cell_storage, managed_owners, borrow_scope;
+    bool active, self, returns, eligible, cell_storage, managed_owners, borrow_scope, error_edges;
 } InlineFunction;
 typedef struct { uint32_t function; size_t next; } InlineGraphFrame;
 typedef struct {
@@ -108,6 +108,7 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
                 uint64_t scratch = inline_scratch(&v);
                 if (scratch > info->scratch) info->scratch = scratch;
                 info->returns |= v.op == XR_LIR_RET;
+                info->error_edges |= v.op == XR_LIR_INVOKE || v.op == XR_LIR_PANIC_ERROR;
                 info->cell_storage |= v.op == XR_LIR_CELL_NEW || v.op == XR_LIR_FUNCTION_SCOPE_ENTER;
                 info->borrow_scope |= v.op == XR_LIR_SLICE_FORMAL_CLEANUP;
                 if (v.op != XR_LIR_CALL) continue;
@@ -182,6 +183,7 @@ static void inline_components(Inliner *c) {
     for (uint32_t f = 0; f < c->count; ++f) {
         InlineFunction *info = &c->info[f + 1];
         info->eligible = info->view.kind == XR_LIR_FUNCTION_DEFINITION && info->returns &&
+            !info->view.error && !info->error_edges &&
             !info->self && !info->cell_storage && !info->managed_owners && !info->borrow_scope &&
             c->info[info->component].component_size == 1 &&
             info->view.block_count <= 16 && info->view.value_count <= 128 &&
@@ -218,7 +220,7 @@ static XrLirStatus inline_declarations(Inliner *c) {
         const XrLirFunctionView *v = &c->info[f + 1].view;
         XrLirFunctionSpec spec = {.name = v->name, .name_length = v->name_length,
             .parameters = v->parameter_types, .parameter_count = v->parameter_count,
-            .result = v->result, .kind = v->kind, .extern_kind = v->extern_kind,
+            .result = v->result, .kind = v->kind, .extern_kind = v->extern_kind, .error = v->error,
             .callable_parameters=v->callable_parameters, .callable_parameter_count=v->callable_parameter_count};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[f + 1]);
         if (status == XR_LIR_OK) status = lir_copy_array_signature(c->input,
@@ -379,7 +381,7 @@ static XrLirStatus inline_copy(InlineBody *b, XrLirBlock cursor,
             edge.argument_count ? b->arguments + offset : NULL, edge.argument_count};
         offset += edge.argument_count;
     }
-    if (v->op == XR_LIR_BR || v->op == XR_LIR_CONDBR || v->op == XR_LIR_RET)
+    if (xr_lir_internal_terminal(v->op))
         return xr_lir_set_terminator(b->owner->output, cursor, &copy);
     if (v->result) return xr_lir_emit_value(b->owner->output, cursor, &copy, &b->values[v->result]);
     return xr_lir_emit_effect(b->owner->output, cursor, &copy);

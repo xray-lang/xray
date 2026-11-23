@@ -30,6 +30,13 @@
 #define XR_VALUE_FORMAT_MAX_DEPTH 3
 #define XR_VALUE_FORMAT_MAX_ELEMENTS 32
 
+/* Byte order for the checked, code-owned scalar error metadata. */
+#define XR_ERROR_METADATA_VERSION UINT32_C(1)
+XR_VALUE_FORMAT_FUNCTION uint32_t xr_error_metadata_u32(const uint8_t *bytes) {
+    return (uint32_t)bytes[0] | (uint32_t)bytes[1] << 8 |
+        (uint32_t)bytes[2] << 16 | (uint32_t)bytes[3] << 24;
+}
+
 XR_VALUE_FORMAT_FUNCTION int xr_value_format_depth_exceeded(int depth) {
     return depth > XR_VALUE_FORMAT_MAX_DEPTH;
 }
@@ -222,6 +229,13 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_value(XrValueFormatReader reader, X
     }
     return length > 0 && (size_t)length < sizeof(number) &&
            xr_value_format_write(sink, number, (size_t)length);
+}
+
+XR_VALUE_FORMAT_FUNCTION int xr_value_format_try_assert(XrValueFormatReader reader, XrValueFormatNode node,
+    XrValueFormatSink sink) {
+    return xr_value_format_label(sink,"[Uncaught Panic]",0) &&
+        xr_value_format_text(sink," E0446: try! failed: ") && xr_value_format_value(reader,node,sink,0) &&
+        xr_value_format_text(sink,"\n");
 }
 
 XR_VALUE_FORMAT_FUNCTION int xr_value_format_uncaught(XrValueFormatReader reader, XrValueFormatNode node,

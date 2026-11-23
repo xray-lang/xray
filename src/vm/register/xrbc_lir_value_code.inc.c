@@ -66,6 +66,7 @@ static bool rbc_lir_value_string_slot(RbcLirCompiler *c, uint64_t slot) {
         xrt_value_kind_is_array(state->values->types[type - 1].kind));
 }
 static bool rbc_lir_value_needed(RbcLirCompiler *c) {
+    if (c->view.error) return true;
     XrLirClosureTarget target={0};
     if (xr_lir_closure_target_view(c->input,c->function,&target)==XR_LIR_OK && target.callable) return true;
     for (uint32_t v = 1; v <= c->view.value_count; ++v)
@@ -103,6 +104,14 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
     if (!code) return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own typed bytecode description");
     c->value_code = code;
     code->homes = c->homes; code->value_count = c->view.value_count;
+    if (c->view.error) {
+        code->error_unit=c->view.result==XR_LIR_UNIT;
+        const XrtValuePlan *plan=NULL;
+        if (!c->literals->layouts ||
+            xr_lir_value_layouts_lookup(c->literals->layouts,(XrLirValueLayoutKey){c->view.error,0,0},
+                &plan,&code->error_type)!=XR_LIR_VALUE_LAYOUT_OK)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"function error has no receiving image row");
+    }
     if (!rbc_lir_array_region_prepare(c)) return false;
     if (c->view.scope_count) {
         uint32_t *scopes=xr_calloc(c->view.scope_count,sizeof(*scopes));
@@ -198,6 +207,28 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
     access.other=rbc_lir_array_read_edge(c->value_code,access.index);
     access.window=rbc_lir_array_push_edge(c->value_code,access.index);
     return rbc_lir_value_append(c,access);
+}
+
+/* The ordinary packed comparison selects exactly one receiver. Both
+ * receivers name the originating call access and that access's output SSA. */
+static bool rbc_lir_value_invoke(RbcLirCompiler *c,const XrLirInstructionView *i) {
+    XrLirBlockView normal,error;
+    xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[0].target},&normal);
+    xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[1].target},&error);
+    uint32_t origin=(uint32_t)c->value_code->access_count;
+    XrRbcValueAccess access={.operation=XR_RBC_VALUE_INVOKE,
+        .index=c->functions[i->callee-1]-1,.result=normal.parameter_count ? normal.parameters[0] : 0,
+        .other=error.parameters[0],.count=i->operand_count,
+        .window=c->register_count-rbc_lir_scalar_arguments(c->input,i)-1};
+    XrRbcValueAccess failed={.operation=XR_RBC_VALUE_INVOKE_ERROR,.index=origin,.result=access.other};
+    XrRbcValueAccess returned={.operation=XR_RBC_VALUE_INVOKE_RESULT,.index=origin,.result=access.result};
+    c->invoke_edges=true;
+    return rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first) &&
+        rbc_lir_value_append(c,access) &&
+        rbc_lir_emit(c,XR_RBC_EQI,access.window,0,0,0) &&
+        rbc_lir_emit(c,XR_RBC_JMP,0,0,0,2) &&
+        rbc_lir_value_append(c,failed) && rbc_lir_jump(c,i->edges[1].target) &&
+        rbc_lir_value_append(c,returned) && rbc_lir_jump(c,i->edges[0].target);
 }
 static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *i,XrRbcValueAccess *access) {
     XrLirType type=rbc_lir_value_type(c,i->operands[0]);
@@ -670,6 +701,19 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
                 rbc_lir_captured_cell(c->input,rbc_lir_value_type(c,i->operands[0])) ||
                 rbc_lir_slice_type(c->input,rbc_lir_value_type(c,i->operands[0]))))
             access.index=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_RETURN_TRANSFER,i->operands[0]);
+        break;
+    case XR_LIR_INVOKE:
+        *handled=true;
+        return rbc_lir_value_invoke(c,i);
+    case XR_LIR_RETURN_ERROR:
+        c->invoke_edges=true;
+        access.operation=XR_RBC_VALUE_RETURN_ERROR;
+        break;
+    case XR_LIR_PANIC_ERROR:
+        c->invoke_edges=true;
+        access.operation=XR_RBC_VALUE_PANIC_ERROR;
+        access.other=rbc_lir_value_type(c,i->operands[0]);
+        if (!rbc_lir_literal(c,(uint32_t)i->bits,&access.index)) return false;
         break;
     default: return true;
     }

@@ -60,7 +60,9 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_STRING_BYTE_LENGTH,
     XR_RBC_VALUE_HOST_FILE_OPEN_READ, XR_RBC_VALUE_HOST_FILE_READ, XR_RBC_VALUE_HOST_ENV_GET,
     XR_RBC_VALUE_STRING_SLICE,
-    XR_RBC_VALUE_STRING_INDEX_OF
+    XR_RBC_VALUE_STRING_INDEX_OF,
+    XR_RBC_VALUE_INVOKE, XR_RBC_VALUE_INVOKE_RESULT, XR_RBC_VALUE_INVOKE_ERROR,
+    XR_RBC_VALUE_RETURN_ERROR, XR_RBC_VALUE_PANIC_ERROR
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -134,6 +136,8 @@ typedef struct XrRbcValueCode {
     uint32_t value_count;
     const uint32_t *parameters; /* Logical LIR parameter SSA ids, in order. */
     uint32_t parameter_count;
+    uint32_t error_type; /* Exact one-based value image row for a business error. */
+    bool error_unit;
     /* Common String bindings need cold setup before any checked operand borrow.
      * The compiler projects this bit once; ordinary scalar functions never
      * acquire a typed activation or execute a new dispatch path. */

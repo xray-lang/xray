@@ -603,7 +603,7 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n      return; }\n", source);
         return true;
     }
-    if (v->op == XR_LIR_RET && c->homes && c->homes->owned_frame_needed) {
+    if (xr_lir_function_exit(v->op) && c->homes && c->homes->owned_frame_needed) {
         c_text(c, "    if (xrl_frame) { XrtManagedStatus status = xrt_managed_frame_leave(xrl_root, xrl_frame);\n");
         c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
     }

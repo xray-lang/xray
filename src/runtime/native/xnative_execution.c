@@ -16,11 +16,13 @@
 #include "xnative_values.h"
 #include "xray_native_values.h"
 #include "xray_native_string_value.h"
+#include "xray_native_pod.h"
 #include "base/xchecks.h"
 #include "os/os_time.h"
 #include "shared/xerror_codes.h"
 #include "shared/xr_time_offset.h"
 #include "shared/xr_value_format_core.h"
+#include "shared/xr_float_to_decimal.h"
 #include "shared/xr_range_core.h"
 #include <setjmp.h>
 #include <stdio.h>
@@ -35,6 +37,140 @@ typedef struct XrtExecutionBinding {
 
 static XR_THREAD_LOCAL const XrtExecutionBinding *current_execution;
 
+typedef struct XrtErrorScalar {
+    uint64_t bits;
+    XrPodScalar type;
+} XrtErrorScalar;
+
+struct XrtTryAssertFailure {
+    XrtBillingOwner *billing;
+    size_t allocation;
+    XrtSourceLocation location;
+    const char *name, *variant;
+    uint32_t name_size, variant_size, selected, fields;
+    const uint8_t *metadata;
+    size_t metadata_size;
+    XrtErrorScalar *values;
+};
+_Static_assert(_Alignof(XrtTryAssertFailure)>=_Alignof(XrtErrorScalar),"error field alignment");
+
+typedef struct XrtErrorCursor {
+    const uint8_t *next;
+    size_t remaining;
+} XrtErrorCursor;
+
+static bool error_u32(XrtErrorCursor *cursor,uint32_t *output) {
+    if (cursor->remaining<4) return false;
+    *output=xr_error_metadata_u32(cursor->next);
+    cursor->next+=4;
+    cursor->remaining-=4;
+    return true;
+}
+
+static bool error_name(XrtErrorCursor *cursor,const char **text,uint32_t *length) {
+    if (!error_u32(cursor,length) || !*length || *length>cursor->remaining) return false;
+    *text=(const char *)cursor->next;
+    cursor->next+=*length;
+    cursor->remaining-=*length;
+    return true;
+}
+
+static uint64_t error_scalar_bits(const uint8_t *bytes,uint32_t size) {
+    if (size==1) return bytes[0];
+    if (size==2) { uint16_t value; memcpy(&value,bytes,sizeof(value)); return value; }
+    if (size==4) { uint32_t value; memcpy(&value,bytes,sizeof(value)); return value; }
+    uint64_t value; memcpy(&value,bytes,sizeof(value)); return value;
+}
+
+static bool error_field(XrtErrorCursor *cursor,size_t size,const uint8_t *value,XrtErrorScalar *field) {
+    uint32_t type=0,offset=0,length=0;
+    const char *name=NULL;
+    XrPodLayout layout={0};
+    if (!error_u32(cursor,&type) || !error_u32(cursor,&offset) || !error_name(cursor,&name,&length) ||
+        !xr_pod_scalar_layout((XrPodScalar)type,&layout) || !layout.size ||
+        offset>size || layout.size>size-offset || offset%layout.alignment) return false;
+    if (field) {
+        uint64_t bits=error_scalar_bits(value+offset,layout.size);
+        if (type==XR_POD_BOOL && bits>1) return false;
+        *field=(XrtErrorScalar){bits,(XrPodScalar)type};
+    }
+    return true;
+}
+
+static XrtManagedStatus try_assert_snapshot(XrtValueRoot *root,const XrtSourceLocation *location,
+    const uint8_t *metadata,size_t metadata_size,const uint8_t *value,size_t value_size,XrtTryAssertFailure **output) {
+    uint32_t version=0,key=0,size=0,tag=0,variants=0,arguments=0,name_size=0,variant_size=0;
+    const char *module=NULL,*name=NULL,*variant=NULL;
+    XrtErrorCursor cursor={metadata,metadata_size};
+    if (!metadata || !value || !error_u32(&cursor,&version) || version!=XR_ERROR_METADATA_VERSION ||
+        !error_u32(&cursor,&key) || !key || !error_u32(&cursor,&size) || size!=value_size ||
+        !error_u32(&cursor,&tag) || !error_u32(&cursor,&variants) || !variants ||
+        tag!=(variants==1 ? 0u : variants<=256 ? 1u : variants<=65536 ? 2u : 4u) ||
+        tag>size || !error_u32(&cursor,&arguments) || !error_name(&cursor,&module,&name_size) ||
+        !error_name(&cursor,&name,&name_size) || arguments>cursor.remaining/8) return XRT_MANAGED_ARGUMENT;
+    cursor.next+=(size_t)arguments*8;
+    cursor.remaining-=(size_t)arguments*8;
+    uint32_t selected=tag ? (uint32_t)error_scalar_bits(value,tag) : 0;
+    if (selected>=variants) return XRT_MANAGED_ARGUMENT;
+    uint32_t active_fields=0;
+    XrtErrorCursor active={0};
+    for (uint32_t v=0;v<variants;++v) {
+        const char *label=NULL;
+        uint32_t label_size=0,count=0;
+        if (!error_name(&cursor,&label,&label_size) || !error_u32(&cursor,&count)) return XRT_MANAGED_ARGUMENT;
+        if (v==selected) { active=cursor; active_fields=count; variant=label; variant_size=label_size; }
+        for (uint32_t f=0;f<count;++f)
+            if (!error_field(&cursor,value_size,NULL,NULL)) return XRT_MANAGED_ARGUMENT;
+    }
+    if (cursor.remaining) return XRT_MANAGED_ARGUMENT;
+    if (active_fields && sizeof(XrtErrorScalar)>(SIZE_MAX-sizeof(XrtTryAssertFailure))/active_fields)
+        return XRT_MANAGED_OVERFLOW;
+    size_t allocation=sizeof(XrtTryAssertFailure)+(size_t)active_fields*sizeof(XrtErrorScalar);
+    if (metadata_size>SIZE_MAX-allocation || location->path_length>SIZE_MAX-allocation-metadata_size)
+        return XRT_MANAGED_OVERFLOW;
+    allocation+=metadata_size+location->path_length;
+    XrtBillingOwner *billing=NULL;
+    XrtManagedStatus status=xrt_native_values_prepare(root,&billing);
+    if (status!=XRT_MANAGED_OK) return status;
+    if (!xrt_billing_owner_retain(billing)) return XRT_MANAGED_REFCOUNT;
+    void *storage=NULL;
+    status=xrt_managed_metadata_allocate(billing,allocation,&storage);
+    if (status!=XRT_MANAGED_OK) { xrt_billing_owner_drop(billing); return status; }
+    XrtTryAssertFailure *failure=storage;
+    XrtErrorScalar *values=(XrtErrorScalar *)(failure+1);
+    uint8_t *copy=(uint8_t *)(values+active_fields);
+    char *path=(char *)(copy+metadata_size);
+    *failure=(XrtTryAssertFailure){.billing=billing,.allocation=allocation,.location=*location,
+        .name=(const char *)copy+(name-(const char *)metadata),.name_size=name_size,
+        .variant=(const char *)copy+(variant-(const char *)metadata),.variant_size=variant_size,
+        .selected=selected,.fields=active_fields,.metadata=copy,.metadata_size=metadata_size,.values=values};
+    memcpy(copy,metadata,metadata_size);
+    memcpy(path,location->path,location->path_length);
+    failure->location.path=path;
+    for (uint32_t f=0;f<active_fields;++f)
+        if (!error_field(&active,value_size,value,&failure->values[f])) {
+            xrt_managed_metadata_free(billing,failure,allocation);
+            xrt_billing_owner_drop(billing);
+            return XRT_MANAGED_ARGUMENT;
+        }
+    *output=failure;
+    return XRT_MANAGED_OK;
+}
+
+XRAY_API_NORET void xrt_try_assert_panic(const uint8_t *metadata,size_t metadata_size,const void *error,
+    size_t error_size,uint32_t source_id) {
+    const XrtExecutionBinding *binding=current_execution;
+    XR_CHECK(binding && binding->target && source_id && source_id<=binding->map.count,
+        "Try assertion panic uses the true source location");
+    XrtTryAssertFailure *failure=NULL;
+    XrtManagedStatus status=try_assert_snapshot(binding->strings,&binding->map.locations[source_id-1],
+        metadata,metadata_size,error,error_size,&failure);
+    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+    binding->failure->kind=XRT_FAILURE_TRY_ASSERT;
+    binding->failure->detail.assertion=failure;
+    longjmp(*binding->target,1);
+}
+
 XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source_id) {
     const XrtExecutionBinding *binding = current_execution;
     XR_CHECK(binding && binding->target && status != XR_XIR_VALUE_OK &&
@@ -48,8 +184,14 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFa
 XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *failure) {
     if (!failure) return;
     XrtManagedHeader *message = failure->kind == XRT_FAILURE_MESSAGE_PANIC ? failure->detail.message.message : NULL;
+    XrtTryAssertFailure *assertion = failure->kind == XRT_FAILURE_TRY_ASSERT ? failure->detail.assertion : NULL;
     *failure = (XrtExecutionFailure){0};
     xrt_managed_drop(message);
+    if (assertion) {
+        XrtBillingOwner *billing=assertion->billing;
+        xrt_managed_metadata_free(billing,assertion,assertion->allocation);
+        xrt_billing_owner_drop(billing);
+    }
 }
 XR_FUNC XR_NORET void xrt_message_panic_take(XrtManagedHeader **owned, uint32_t code, uint32_t source_id) {
     const XrtExecutionBinding *binding = current_execution;
@@ -188,6 +330,72 @@ static int panic_write(void *context, const void *bytes, size_t length) {
     (void)context;
     return !xrt_io_write(2, bytes, length).failed;
 }
+
+static int try_assert_read(const void *context,XrValueFormatNode node,XrValueFormatView *view) {
+    const XrtTryAssertFailure *failure=context;
+    if (!node.type) {
+        view->kind=XR_VALUE_FORMAT_ENUM;
+        view->name=failure->name;
+        view->name_size=failure->name_size;
+        view->member=failure->variant;
+        view->member_size=failure->variant_size;
+        view->children=failure->fields;
+        return 1;
+    }
+    if (node.type>failure->fields || node.value!=&failure->values[node.type-1]) return 0;
+    XrtErrorScalar scalar=failure->values[node.type-1];
+    if (scalar.type==XR_POD_BOOL) {
+        view->kind=XR_VALUE_FORMAT_BOOL;
+        view->unsigned_value=scalar.bits;
+    } else if (scalar.type>=XR_POD_I8 && scalar.type<=XR_POD_I64) {
+        XrPodLayout layout;
+        if (!xr_pod_scalar_layout(scalar.type,&layout)) return 0;
+        uint64_t bits=scalar.bits;
+        if (layout.size<8 && bits & (UINT64_C(1)<<(layout.size*8-1)))
+            bits|=UINT64_MAX<<(layout.size*8);
+        memcpy(&view->signed_value,&bits,sizeof(bits));
+        view->kind=XR_VALUE_FORMAT_SIGNED;
+    } else if (scalar.type>=XR_POD_U8 && scalar.type<=XR_POD_U64) {
+        view->kind=XR_VALUE_FORMAT_UNSIGNED;
+        view->unsigned_value=scalar.bits;
+    } else if (scalar.type==XR_POD_F32 || scalar.type==XR_POD_F64) {
+        if (!xr_float_to_decimal(scalar.type==XR_POD_F32 ? 32u : 64u,scalar.bits,
+            (char *)view->scalar_bytes,sizeof(view->scalar_bytes),&view->size)) return 0;
+        view->kind=XR_VALUE_FORMAT_BYTES;
+        view->bytes=view->scalar_bytes;
+    } else return 0;
+    return 1;
+}
+
+static int try_assert_child(const void *context,XrValueFormatNode node,uint32_t index,XrValueFormatNode *child) {
+    const XrtTryAssertFailure *failure=context;
+    if (node.type || index>=failure->fields) return 0;
+    *child=(XrValueFormatNode){&failure->values[index],index+1};
+    return 1;
+}
+
+XR_FUNC const XrtSourceLocation *xrt_try_assert_location(const XrtTryAssertFailure *failure) {
+    return failure ? &failure->location : NULL;
+}
+
+XR_FUNC bool xrt_try_assert_value(const XrtTryAssertFailure *failure,XrtTryAssertValue *output) {
+    if (!failure || !output) return false;
+    *output=(XrtTryAssertValue){failure->metadata,failure->metadata_size,failure->selected,failure->fields};
+    return true;
+}
+
+XR_FUNC bool xrt_try_assert_field(const XrtTryAssertFailure *failure,uint32_t field,uint32_t *scalar,uint64_t *bits) {
+    if (!failure || field>=failure->fields || !scalar || !bits) return false;
+    *scalar=(uint32_t)failure->values[field].type;
+    *bits=failure->values[field].bits;
+    return true;
+}
+
+XR_FUNC bool xrt_try_assert_report(const XrtTryAssertFailure *failure) {
+    XrValueFormatReader reader={failure,try_assert_read,try_assert_child};
+    return failure && xr_value_format_try_assert(reader,(XrValueFormatNode){failure,0},
+        (XrValueFormatSink){NULL,panic_write});
+}
 XR_FUNC bool xrt_message_panic_report(uint32_t code, const char *message, size_t length,
     const XrtSourceLocation *source) {
     XrValueFormatSink sink = {NULL, panic_write};
@@ -213,6 +421,14 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFa
         uint32_t id = failure->detail.value.source_id;
         const XrtSourceLocation *source = id && id <= map->count ? &map->locations[id - 1] : NULL;
         xrt_value_failure_report(failure->detail.value.status, source);
+        _Exit(1);
+    }
+    if (failure->kind==XRT_FAILURE_TRY_ASSERT) {
+        if (!xrt_try_assert_report(failure->detail.assertion)) {
+            static const char fallback[]="XR_RUN_6005: cannot render uncaught try assertion\n";
+            (void)xrt_io_write(2,fallback,sizeof(fallback)-1);
+        }
+        xrt_execution_failure_drop(failure);
         _Exit(1);
     }
     XrValueFormatSink sink = {NULL, panic_write};

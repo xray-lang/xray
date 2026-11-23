@@ -10,10 +10,11 @@
  *   The operand retains its declared error channel until its actual invoke
  *   landing converts the owned error. Nested functions have separate bodies.
  */
-static bool source_try_assert(SourceContext *ctx, SourceExpressionPlan *operand, SourceValue *value) {
+static bool source_try_assert(SourceContext *ctx, const AstNode *syntax, SourceExpressionPlan *operand, SourceValue *value) {
     uint32_t owner=ctx->function;
     SourceErrorContext *outer=ctx->bodies[owner].error_context;
-    SourceErrorContext handler={.frontier=ctx->bodies[owner].frontier,.asserted=true};
+    SourceErrorContext handler={.frontier=ctx->bodies[owner].frontier,.asserted=true,
+        .assertion={ctx->module,syntax->line,syntax->column,syntax->end_line,syntax->end_column}};
     ctx->bodies[owner].error_context=&handler;
     bool complete=source_plan_complete(ctx,operand,value);
     ctx->bodies[owner].error_context=outer;

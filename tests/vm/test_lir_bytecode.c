@@ -8,6 +8,8 @@
  */
 #include "../lir/lir_test_programs.h"
 #include "base/xmalloc.h"
+#include "lir/xlir_internal.h"
+#include "shared/xr_value_format_core.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_code.h"
 #include "xray_native_string_value.h"
@@ -55,6 +57,146 @@ static XrLirValue block_parameter(XrLirModule *m, XrLirBlock b, uint32_t index) 
     XrLirValue value;
     OK(xr_lir_block_parameter(m, b, index, &value));
     return value;
+}
+
+static void test_raw_typed_error_rejected(void) {
+    XrtLocationOwner *locations=NULL;
+    CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
+    uint32_t word=XR_RBC_RET0;
+    XrRbcRegisterKind kind=XR_RBC_BITS;
+    XrRbcFunction function={.code=&word,.code_count=1,.register_count=1,
+        .register_kinds=&kind,.register_kind_count=1};
+    XrRbcValueLocation value_location={0};
+    XrRbcValueCode code={.locations=&value_location};
+    const XrRbcValueCode *borrowed[]={&code};
+    XrRbcModule module={.functions=&function,.function_count=1,
+        .borrowed_value_codes=borrowed,.borrowed_value_code_count=1};
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_OK && execution);
+    xr_rbc_execution_free(&execution);
+    code.error_type=1;
+    CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_INVALID && !execution);
+    code.error_type=0;
+    XrRbcValueOperation typed[]={XR_RBC_VALUE_INVOKE,XR_RBC_VALUE_INVOKE_RESULT,
+        XR_RBC_VALUE_INVOKE_ERROR,XR_RBC_VALUE_RETURN_ERROR,XR_RBC_VALUE_PANIC_ERROR};
+    XrRbcValueAccess access={0};
+    code.accesses=&access;
+    code.access_count=1;
+    for (size_t n=0;n<sizeof(typed)/sizeof(*typed);++n) {
+        access.operation=typed[n];
+        CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_INVALID && !execution);
+    }
+    xrt_locations_release(locations);
+}
+
+static void test_owned_try_assert(void) {
+    XrLirModule *m=NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    XrLirRecordIdentity key={.module="fixture",.module_length=7,.name="ProbeErr",.name_length=8};
+    XrLirRecordField field={.name="code",.name_length=4,.type=XR_LIR_I64};
+    XrLirSumVariant variants[]={{.name="Missing",.name_length=7},
+        {.name="Bad",.name_length=3,.field_count=1}};
+    XrLirType type,flag=XR_LIR_I1,i64=XR_LIR_I64;
+    OK(xr_lir_error_sum_type(m,&key,&field,1,variants,2,&type));
+    XrLirLiteral metadata={0};
+    OK(xr_lir_error_literal(m,type,&metadata));
+    XrLirFunction leaf={0};
+    XrLirFunctionSpec spec={.name="leaf",.name_length=4,.parameters=&flag,.parameter_count=1,
+        .result=i64,.error=type};
+    OK(xr_lir_declare_function(m,&spec,&leaf));
+    OK(xr_lir_define_function(m,leaf));
+    XrLirBlock leaf_entry=test_block(m,leaf,NULL,0),leaf_ok=test_block(m,leaf,NULL,0),leaf_error=test_block(m,leaf,NULL,0);
+    OK(xr_lir_set_entry(m,leaf,leaf_entry));
+    XrLirValue fail=parameter(m,leaf,0);
+    XrLirInstruction select={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&fail,.operand_count=1,
+        .edges={{.target=leaf_error},{.target=leaf_ok}},.edge_count=2};
+    OK(xr_lir_set_terminator(m,leaf_entry,&select));
+    test_return(m,leaf_ok,test_constant(m,leaf_ok,i64,17));
+    XrLirValue spelling=test_constant(m,leaf_error,i64,23),value={0};
+    XrLirInstruction make={.op=XR_LIR_SUM_NEW,.type=type,.bits=1,.operands=&spelling,.operand_count=1};
+    OK(xr_lir_emit_value(m,leaf_error,&make,&value));
+    OK(xr_lir_set_terminator(m,leaf_error,&(XrLirInstruction){.op=XR_LIR_RETURN_ERROR,
+        .type=XR_LIR_UNIT,.operands=&value,.operand_count=1}));
+
+    XrLirFunction asserting=test_function(m,"asserting",&flag,1,i64);
+    XrLirBlock entry=test_block(m,asserting,NULL,0),ok=test_block(m,asserting,&i64,1);
+    XrLirBlock error=test_block(m,asserting,&type,1);
+    OK(xr_lir_set_entry(m,asserting,entry));
+    fail=parameter(m,asserting,0);
+    OK(xr_lir_set_terminator(m,entry,&(XrLirInstruction){.op=XR_LIR_INVOKE,.type=i64,.callee=leaf,
+        .operands=&fail,.operand_count=1,.edges={{.target=ok},{.target=error}},.edge_count=2}));
+    test_return(m,ok,block_parameter(m,ok,0));
+    value=block_parameter(m,error,0);
+    const char *path="ownership.xr";
+    OK(xr_lir_set_terminator(m,error,&(XrLirInstruction){.op=XR_LIR_PANIC_ERROR,.type=XR_LIR_UNIT,
+        .operands=&value,.operand_count=1,.bits=metadata.id,.source={path,12,15,12,15,23}}));
+    XrLirFunction root=asserting;
+    for (uint32_t n=0;n<32;++n) {
+        char name[24];
+        CHECK(snprintf(name,sizeof(name),"parent-%u",n)>0);
+        XrLirFunction caller=test_function(m,name,&flag,1,i64);
+        XrLirBlock body=test_block(m,caller,NULL,0);
+        OK(xr_lir_set_entry(m,caller,body));
+        fail=parameter(m,caller,0);
+        XrLirInstruction call_site={.op=XR_LIR_CALL,.type=i64,.callee=root,.operands=&fail,.operand_count=1,
+            .source={path,12,19+n,12,19+n,23}};
+        OK(xr_lir_emit_value(m,body,&call_site,&value));
+        test_return(m,body,value);
+        root=caller;
+    }
+    OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *rejected=NULL;
+    CHECK(xr_rbc_compile(m,leaf,&rejected,NULL)==XR_RBC_COMPILE_UNSUPPORTED && !rejected);
+    XrRbcProgram *program=compile(m,root);
+    xr_lir_module_destroy(m);
+    uint64_t argument=0;
+    CHECK(run(program,&argument,1)==17);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    XrtLocationOwner *locations=xr_rbc_program_locations(program);
+    CHECK(module->literal_count==1 && module->literals && module->code_lease.owner);
+    XrRbcLiteral literal=module->literals[0];
+    char *forged=xr_malloc(literal.length);
+    CHECK(forged && literal.length>47);
+    memcpy(forged,literal.bytes,literal.length);
+    memcpy(forged+39,"FakeType",8);
+    literal.bytes=forged;
+    XrRbcModule fake=*module;
+    fake.literals=&literal; /* The old lease cannot attest new diagnostic bytes. */
+    XrRbcExecution *fake_execution=NULL;
+    CHECK(xr_rbc_module_prepare(&fake,0,&argument,1,locations,&fake_execution)==XR_RBC_INVALID &&
+        !fake_execution);
+    xr_free(forged);
+    for (uint32_t n=0;n<module->function_count;++n) {
+        const XrRbcValueCode *code=xr_rbc_module_value_code(module,n);
+        if (code && code->error_type) {
+            XrRbcExecution *entry_execution=NULL;
+            CHECK(xr_rbc_module_prepare(module,n,&argument,1,locations,&entry_execution)==XR_RBC_INVALID &&
+                !entry_execution);
+        }
+    }
+    argument=1;
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,&argument,1,&execution)==XR_RBC_OK);
+    xr_rbc_execution_enable_try_trace(execution);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_program_destroy(program);
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_TRY_ASSERT);
+    const XrtTryAssertFailure *failure=xr_rbc_outcome_try_assert(outcome);
+    const XrtSourceLocation *where=xrt_try_assert_location(failure);
+    CHECK(where && where->line==15 && where->column==12 && where->path_length==12 &&
+        !memcmp(where->path,path,12));
+    CHECK(xr_rbc_outcome_try_trace_count(outcome)==33);
+    CHECK(xr_rbc_outcome_try_trace_at(outcome,1)->line==19);
+    CHECK(xr_rbc_outcome_try_trace_at(outcome,32)->line==50);
+    XrtTryAssertValue owned={0};
+    CHECK(xrt_try_assert_value(failure,&owned) && owned.variant==1 && owned.field_count==1 && owned.metadata_size>40);
+    CHECK(xr_error_metadata_u32(owned.metadata+4)==type && !memcmp(owned.metadata+39,"ProbeErr",8));
+    uint32_t scalar=0; uint64_t bits=0;
+    CHECK(xrt_try_assert_field(failure,0,&scalar,&bits) && scalar==XR_POD_I64 && bits==23);
+    CHECK(!xrt_try_assert_field(failure,1,&scalar,&bits) && bits==23);
+    xr_rbc_outcome_free(&outcome);
+    CHECK(!outcome);
 }
 
 static void conditional(XrLirModule *m, XrLirBlock b, XrLirValue condition,
@@ -1599,6 +1741,8 @@ int main(void) {
     test_cell_transport();
     test_edge_moves();
     test_owned_arithmetic_panics();
+    test_raw_typed_error_rejected();
+    test_owned_try_assert();
     test_integer_identity_cast(XR_LIR_I64, XR_LIR_I64);
     test_integer_identity_cast(XR_LIR_U64, XR_LIR_I64);
     test_integer_identity_cast(XR_LIR_I64, XR_LIR_U64);

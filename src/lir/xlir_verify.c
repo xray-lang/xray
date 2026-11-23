@@ -52,7 +52,8 @@ XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *m, XrLirType type, bo
     return m && m->types && m->type_count <= m->type_capacity && type - XR_LIR_TYPE_COUNT < m->type_count;
 }
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op) {
-    return op == XR_LIR_BR || op == XR_LIR_CONDBR || op == XR_LIR_RET;
+    return op == XR_LIR_BR || op == XR_LIR_CONDBR || op == XR_LIR_RET ||
+        op == XR_LIR_INVOKE || op == XR_LIR_RETURN_ERROR || op == XR_LIR_PANIC_ERROR;
 }
 XR_FUNC XrLirStatus xr_lir_internal_error(XrLirDiagnostic *d, const char *message,
                                           uint32_t function, uint32_t block, uint32_t instruction,
@@ -486,13 +487,25 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
     }
 }
 
-static bool lir_edges_valid(const XrLirFunctionData *f, const XrLirInstructionView *v) {
+static bool lir_edges_valid(const XrLirModule *m, const XrLirFunctionData *f, const XrLirInstructionView *v) {
+    const XrLirFunctionData *callee = v->op == XR_LIR_INVOKE && v->callee && v->callee <= m->function_count ?
+        &m->functions[v->callee - 1] : NULL;
+    if (v->op == XR_LIR_INVOKE && (!callee || !callee->error || v->edges[0].target == v->edges[1].target))
+        return false;
     for (uint32_t e = 0; e < v->edge_count; ++e) {
         const XrLirEdgeView *edge = &v->edges[e];
         if (!edge->target || edge->target > f->block_count ||
             (edge->argument_count && !edge->arguments))
             return false;
         const XrLirBlockData *target = &f->blocks[edge->target - 1];
+        if (callee) {
+            XrLirType produced = e ? callee->error : callee->result;
+            uint32_t parameter = target->parameter_count && target->parameters ? target->parameters[0] : 0;
+            if (edge->argument_count || target->parameter_count != (produced != XR_LIR_UNIT ? 1u : 0u) ||
+                (produced != XR_LIR_UNIT && (!parameter || parameter > f->value_count ||
+                    f->values[parameter - 1].type != produced))) return false;
+            continue;
+        }
         if (edge->argument_count != target->parameter_count ||
             (target->parameter_count && !target->parameters))
             return false;
@@ -553,6 +566,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
         v->op != XR_LIR_CLASS_IS &&
+        v->op != XR_LIR_PANIC_ERROR &&
         v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET && v->op != XR_LIR_HOST_PATH_BOOL &&
         v->op != XR_LIR_HOST_FILE_OPEN_WRITE && v->op != XR_LIR_HOST_FILE_CLOSE && v->op != XR_LIR_HOST_FILE_WRITE &&
         v->op != XR_LIR_HOST_FILE_OPEN_READ && v->op != XR_LIR_HOST_FILE_READ && v->op != XR_LIR_HOST_ENV_GET &&
@@ -560,7 +574,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
         goto invalid;
-    if ((v->op != XR_LIR_CALL && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
+    if ((v->op != XR_LIR_CALL && v->op != XR_LIR_INVOKE && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))
         goto invalid;
     if (v->op == XR_LIR_SLICE_CLEANUP || v->op == XR_LIR_SLICE_FORMAL_CLEANUP) {
@@ -569,8 +583,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (v->type != XR_LIR_UNIT || v->edge_count || v->result || !target) goto invalid;
         return XR_LIR_OK;
     }
-    uint32_t edges = v->op == XR_LIR_BR ? 1 : (v->op == XR_LIR_CONDBR ? 2 : 0);
-    if (v->edge_count != edges || !lir_edges_valid(f, v)) {
+    uint32_t edges = v->op == XR_LIR_BR ? 1 : (v->op == XR_LIR_CONDBR || v->op == XR_LIR_INVOKE ? 2 : 0);
+    if (v->edge_count != edges || !lir_edges_valid(m, f, v)) {
         message = "control flow edge target or parameter signature mismatch";
         goto invalid;
     }
@@ -598,10 +612,20 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (!xr_lir_internal_callable_instruction(m, f, v)) goto invalid;
         return XR_LIR_OK;
     }
-    if (v->op == XR_LIR_CALL) {
+    if (v->op == XR_LIR_RETURN_ERROR || v->op == XR_LIR_PANIC_ERROR) {
+        XrLirRecordIdentity identity = {0};
+        XrLirType error = f->values[v->operands[0] - 1].type;
+        if (v->type != XR_LIR_UNIT || !xr_lir_error_sum_identity(m,error,&identity) ||
+            (v->op == XR_LIR_PANIC_ERROR && (!v->source.path || v->bits>UINT32_MAX ||
+                !xr_lir_error_literal_matches(m,error,(uint32_t)v->bits))) ||
+            (v->op == XR_LIR_RETURN_ERROR && f->error != error)) goto invalid;
+        return XR_LIR_OK;
+    }
+    if (v->op == XR_LIR_CALL || v->op == XR_LIR_INVOKE) {
         if (!v->callee || v->callee > m->function_count)
             goto invalid;
         const XrLirFunctionData *callee = &m->functions[v->callee - 1];
+        if ((callee->error != 0) != (v->op == XR_LIR_INVOKE)) goto invalid;
         for (uint32_t p = 0; p < callee->callable_parameter_count; ++p) {
             XrLirFunctionCallableParameter parameter = callee->callable_parameters[p];
             if ((parameter.contract.escaping || parameter.parameter < callee->closure.capture_count) &&
@@ -866,6 +890,26 @@ static bool lir_graph_order(const XrLirFunctionData *f, LirGraph *g) {
     return true;
 }
 
+static bool lir_invoke_edges(const XrLirFunctionData *f, const LirGraph *g) {
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirInstructionView *term = lir_terminator(f,b);
+        if (term->op == XR_LIR_INVOKE) {
+            for (uint32_t e = 0; e < 2; ++e) {
+                uint32_t target = term->edges[e].target - 1;
+                if (g->offsets[target + 1] - g->offsets[target] != 1) return false;
+            }
+            if (lir_terminator(f,term->edges[1].target - 1)->op != XR_LIR_PANIC_ERROR) return false;
+        }
+        if (term->op != XR_LIR_PANIC_ERROR) continue;
+        const XrLirBlockData *block = &f->blocks[b];
+        if (block->parameter_count != 1 || term->operands[0] != block->parameters[0] ||
+            g->offsets[b + 1] - g->offsets[b] != 1) return false;
+        const XrLirInstructionView *source = lir_terminator(f,g->predecessors[g->offsets[b]]);
+        if (source->op != XR_LIR_INVOKE || source->edges[1].target != b + 1) return false;
+    }
+    return true;
+}
+
 static uint32_t lir_intersect(const LirGraph *g, uint32_t a, uint32_t b) {
     while (a != b) {
         while (g->rank[a] > g->rank[b])
@@ -1065,7 +1109,7 @@ static XrLirStatus lir_frame_cells(const XrLirModule *m, const XrLirFunctionData
                 if (!lir_frame_cell_owner(f, id))
                     return xr_lir_internal_error(d, "incoming Managed Cell borrow cannot be released",
                         function, b+1, i+1, &v->source);
-                if (f->block_count != 1 && term->op != XR_LIR_RET)
+                if (f->block_count != 1 && !xr_lir_function_exit(term->op))
                     return xr_lir_internal_error(d, "frame Managed Cell release requires a normal return",
                         function, b+1, i+1, &v->source);
                 released[id - 1] = 1;
@@ -1076,7 +1120,7 @@ static XrLirStatus lir_frame_cells(const XrLirModule *m, const XrLirFunctionData
                 if (f->values[term->edges[e].arguments[a] - 1].type == XR_LIR_STRING_CELL)
                     return xr_lir_internal_error(d, "Managed Cell handle cannot transfer on an edge",
                         function, b+1, 0, &term->source);
-        if (term->op == XR_LIR_RET)
+        if (xr_lir_function_exit(term->op))
             for (uint32_t id = 1; id <= f->value_count; ++id)
                 if (f->values[id - 1].type == XR_LIR_STRING_CELL &&
                     lir_frame_cell_owner(f, id) && !released[id - 1])
@@ -1327,6 +1371,9 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
         if (status == XR_LIR_VERIFY_ERROR)
             xr_lir_internal_error(d, "entry has an incoming edge or a block is unreachable",
                                   index + 1, 0, 0, NULL);
+        if (status == XR_LIR_OK && !lir_invoke_edges(f,&graph))
+            status = xr_lir_internal_error(d, "invoke requires dedicated normal and error successors",
+                                           index + 1, 0, 0, NULL);
         if (status==XR_LIR_OK) {
             XrLirBlockConstructionFacts blocks={0};
             status=lir_block_multiplicity_create(f,multiplicity && lir_cleanup_rank_needed(f),&blocks);

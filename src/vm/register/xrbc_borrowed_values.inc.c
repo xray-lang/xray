@@ -52,7 +52,7 @@ static bool rbc_borrowed_home_ranges(const XrRbcModule *module,const XrRbcValueC
 }
 static XrRbcStatus rbc_borrowed_home_admit(const XrRbcModule *module,const XrRbcFunction *function,
     const XrRbcValueCode *code) {
-    if (code->string_binding_setup || code->value_count==UINT32_MAX || !code->locations || code->parameter_count!=function->parameter_count ||
+    if (code->error_type || code->error_unit || code->string_binding_setup || code->value_count==UINT32_MAX || !code->locations || code->parameter_count!=function->parameter_count ||
         (code->parameter_count && !code->parameters) || code->access_count>65536 ||
         (code->access_count && !code->accesses) || (code->argument_count && !code->arguments) ||
         code->scope_count!=rbc_function_scopes(module,function).count ||
@@ -67,6 +67,8 @@ static XrRbcStatus rbc_borrowed_home_admit(const XrRbcModule *module,const XrRbc
         if (home && home->type) continue;
         if (code->locations[value].kind!=XR_RBC_VALUE_REGISTER || code->locations[value].index!=p) return XR_RBC_INVALID;
     }
+    for (size_t n=0;n<code->access_count;++n)
+        if (rbc_value_typed_error_op(code->accesses[n].operation)) return XR_RBC_INVALID;
     const XrLirValueHomes *homes=code->homes;
     if (!homes) return XR_RBC_OK;
     const XrtValueImage *image=xr_rbc_module_value_image(module);

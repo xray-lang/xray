@@ -88,6 +88,10 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
             if (!((&copy)->status == XR_XIR_OK)) return copy.status;
             const XrXirSourceDebugPoint *point=&function->points[i];
             const XrXirSourceRange *range=&point->range;
+            XrXirOp op=module->functions[f].instructions[i].op;
+            if ((point->call_line || point->call_column) &&
+                (!point->statement || point->call_line<=0 || point->call_column<=0 ||
+                 (op!=XR_XIR_CALL && op!=XR_XIR_INVOKE))) return XR_XIR_BAD_STRUCTURE;
             if ((point->flags & ~(XR_XIR_SOURCE_DEBUG_ENTRY|XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT)) || (point->flags && !point->statement) ||
                 point->environment>function->binding_count) return XR_XIR_BAD_STRUCTURE;
             if (point->statement && (range->module>=snapshot->view.module_count || range->line<=0 || range->column<=0 ||

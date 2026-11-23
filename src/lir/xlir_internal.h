@@ -56,6 +56,10 @@ typedef struct XrLirBlockData {
     bool terminated;
 } XrLirBlockData;
 
+static inline bool xr_lir_function_exit(XrLirOp op) {
+    return op == XR_LIR_RET || op == XR_LIR_RETURN_ERROR;
+}
+
 /* sink_first aliases the aligned tail of the one may_repeat allocation and
  * exists only for functions with physical cleanup candidates. */
 typedef struct XrLirBlockConstructionFacts {
@@ -71,6 +75,7 @@ typedef struct XrLirFunctionData {
     uint32_t parameter_count;
     XrLirType result;
     XrLirType array_result;
+    XrLirType error;
     XrLirClosureTarget closure;
     XrLirFunctionCallableParameter *callable_parameters;
     uint32_t callable_parameter_count;
@@ -91,6 +96,8 @@ typedef struct XrLirLiteralData {
     uint8_t *bytes;
     size_t length;
 } XrLirLiteralData;
+XrLirStatus xr_lir_error_literal(XrLirModule *, XrLirType, XrLirLiteral *);
+bool xr_lir_error_literal_matches(const XrLirModule *, XrLirType, uint32_t literal);
 typedef struct XrLirTypeData {
     XrLirTypeView shape;
     XrLirTypeLayout layout;

@@ -42,9 +42,11 @@ typedef enum XrtExecutionFailureKind {
     XRT_FAILURE_HOST_CLOCK,
     XRT_FAILURE_VALUE,
     XRT_FAILURE_NULL_UNWRAP,
-    XRT_FAILURE_MESSAGE_PANIC
+    XRT_FAILURE_MESSAGE_PANIC,
+    XRT_FAILURE_TRY_ASSERT
 } XrtExecutionFailureKind;
 
+typedef struct XrtTryAssertFailure XrtTryAssertFailure;
 typedef struct XrtExecutionFailure {
     XrtExecutionFailureKind kind;
     union {
@@ -53,6 +55,7 @@ typedef struct XrtExecutionFailure {
         XrtHostClockFailure clock;
         struct { XrXirValueStatus status; uint32_t source_id; } value;
         struct { uint32_t code, source_id; XrtManagedHeader *message; } message;
+        XrtTryAssertFailure *assertion;
     } detail;
 } XrtExecutionFailure;
 /* A message failure owns one genuine fixed String reference independently of
@@ -96,4 +99,15 @@ XR_FUNC void xrt_null_unwrap_report(const XrtSourceLocation *);
 /* Both hosted backends render the same exact message bytes, with the source
  * presented separately for assertions rather than embedded in the message. */
 XR_FUNC bool xrt_message_panic_report(uint32_t code, const char *, size_t, const XrtSourceLocation *);
+XR_FUNC const XrtSourceLocation *xrt_try_assert_location(const XrtTryAssertFailure *);
+typedef struct XrtTryAssertValue {
+    const uint8_t *metadata;
+    size_t metadata_size;
+    uint32_t variant, field_count;
+} XrtTryAssertValue;
+/* Both the field data and the borrowed name/key bytes remain valid until the
+ * failure is dropped, even after the original execution and code retire. */
+XR_FUNC bool xrt_try_assert_value(const XrtTryAssertFailure *,XrtTryAssertValue *);
+XR_FUNC bool xrt_try_assert_field(const XrtTryAssertFailure *,uint32_t field,uint32_t *scalar,uint64_t *bits);
+XR_FUNC bool xrt_try_assert_report(const XrtTryAssertFailure *);
 #endif // XNATIVE_EXECUTION_H

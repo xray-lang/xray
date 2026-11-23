@@ -16,6 +16,83 @@
 #include "lir_slice_callable_fixture.h"
 #include "lir_slice_callback_loan_fixture.h"
 
+static XrLirType try_error_type(XrLirModule *m,const char *name) {
+    XrLirRecordIdentity identity={.module="fixture",.module_length=7,.name=name,.name_length=(uint32_t)strlen(name)};
+    XrLirRecordField field={.name="code",.name_length=4,.type=XR_LIR_I64};
+    XrLirSumVariant variants[]={{.name="Missing",.name_length=7},
+        {.name="Bad",.name_length=3,.field_count=1}};
+    XrLirType type=XR_LIR_TYPE_INVALID;
+    OK(xr_lir_error_sum_type(m,&identity,&field,1,variants,2,&type));
+    return type;
+}
+
+static void typed_error_cannot_be_erased(void) {
+    XrLirModule *m=NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    XrLirType error=try_error_type(m,"Error"),callable=0;
+    OK(xr_lir_callable_type(m,&(XrLirCallableType){.result=XR_LIR_UNIT},&callable));
+    XrLirFunction f={0};
+    OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){.name="leaf",.name_length=4,
+        .result=XR_LIR_UNIT,.error=error},&f));
+    OK(xr_lir_define_function(m,f));
+    CHECK(xr_lir_set_closure_target(m,f,(XrLirClosureTarget){.callable=callable})==XR_LIR_INVALID_ARGUMENT);
+    xr_lir_module_destroy(m);
+
+    m=NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    error=try_error_type(m,"Error");
+    OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){.name="leaf",.name_length=4,
+        .result=XR_LIR_UNIT,.error=error},&f));
+    XrLirFunction caller=test_function(m,"caller",NULL,0,XR_LIR_UNIT);
+    XrLirBlock body=test_block(m,caller,NULL,0);
+    OK(xr_lir_set_entry(m,caller,body));
+    CHECK(xr_lir_emit_effect(m,body,&(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_UNIT,
+        .callee=f})==XR_LIR_VERIFY_ERROR);
+    xr_lir_module_destroy(m);
+
+    m=NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    XrLirRecordArgument parameter={.type=XR_LIR_I64};
+    XrLirRecordIdentity generic={.name="Generic",.name_length=7,.arguments=&parameter,.argument_count=1};
+    XrLirSumVariant variant={.name="Bad",.name_length=3};
+    error=0;
+    CHECK(xr_lir_error_sum_type(m,&generic,NULL,0,&variant,1,&error)==XR_LIR_INVALID_ARGUMENT && !error);
+    xr_lir_module_destroy(m);
+}
+
+static void invoke_rejects_forged_error(void) {
+    for (unsigned mode=0;mode<3;++mode) {
+        XrLirModule *m=NULL;
+        OK(xr_lir_module_create(NULL,&m));
+        XrLirType first=try_error_type(m,"First"),second=try_error_type(m,"Second");
+        CHECK(first!=second && first==try_error_type(m,"First"));
+        XrLirFunction f={0};
+        XrLirBlock block={0};
+        XrLirFunctionSpec spec={.name="probe",.name_length=5,.result=XR_LIR_UNIT,.error=first};
+        OK(xr_lir_declare_function(m,&spec,&f));
+        OK(xr_lir_define_function(m,f));
+        OK(xr_lir_add_block(m,f,NULL,0,&block));
+        OK(xr_lir_set_entry(m,f,block));
+        XrLirValue value={0};
+        XrLirInstruction create={.op=XR_LIR_SUM_NEW,.type=second,.bits=mode==2 ? 2u : 0u};
+        if (mode==2) {
+            CHECK(xr_lir_emit_value(m,block,&create,&value)==XR_LIR_VERIFY_ERROR && !value.id);
+        } else {
+            OK(xr_lir_emit_value(m,block,&create,&value));
+            XrLirInstruction term={.op=mode==0 ? XR_LIR_RETURN_ERROR : XR_LIR_PANIC_ERROR,
+                .type=XR_LIR_UNIT,.operands=&value,.operand_count=1};
+            if (mode==1) {
+                XrLirLiteral literal={0};
+                OK(xr_lir_error_literal(m,first,&literal));
+                term.bits=literal.id;
+                term.source=(XrLirSource){"test.xr",7,1,1,1,5};
+            }
+            CHECK(xr_lir_set_terminator(m,block,&term)==XR_LIR_VERIFY_ERROR);
+        }
+        xr_lir_module_destroy(m);
+    }
+}
+
 static void slice_callback_loan_conditions(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
     for (size_t family=0;family<2;++family) {
@@ -1042,6 +1119,8 @@ int main(void) {
     builder_rejections();
     foreign_handles();
     verifier_rejections();
+    typed_error_cannot_be_erased();
+    invoke_rejects_forged_error();
     definition_prevalidation_rejections();
     graph_edges();
     owned_inputs_and_growth();

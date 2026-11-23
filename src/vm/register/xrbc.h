@@ -377,7 +377,8 @@ typedef enum {
     XR_RBC_OUTPUT_FAILURE,
     XR_RBC_HOST_CLOCK_FAILURE,
     XR_RBC_VALUE_FAILURE,
-    XR_RBC_MESSAGE_PANIC
+    XR_RBC_MESSAGE_PANIC,
+    XR_RBC_TRY_ASSERT
 } XrRbcStatus;
 
 // Failure leaves the output untouched. Register 255 is reserved; every
@@ -425,6 +426,7 @@ XR_FUNC XrRbcStatus xr_rbc_owned_function_prepare(const XrtFunction *, const uin
 // A valid single-use run transfers its already allocated non-NULL outcome,
 // including ordinary VM failure. NULL/consumed misuse invokes no guest.
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution);
+XR_FUNC void xr_rbc_execution_enable_try_trace(XrRbcExecution *);
 XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution);
 XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome);
 // Query handles must be live. False preserves every output; true copies bits
@@ -463,6 +465,10 @@ XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
     XrtHostClockFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome);
+/* The failure owns its error payload and source through outcome destruction. */
+XR_FUNC const XrtTryAssertFailure *xr_rbc_outcome_try_assert(const XrRbcOutcome *);
+XR_FUNC size_t xr_rbc_outcome_try_trace_count(const XrRbcOutcome *);
+XR_FUNC const XrtSourceLocation *xr_rbc_outcome_try_trace_at(const XrRbcOutcome *,size_t);
 XR_FUNC const char *xr_rbc_dispatch_name(void);
 
 #endif  // XRBC_H

@@ -63,6 +63,7 @@ typedef struct XrXirSourceDebugBinding {
 typedef struct XrXirSourceDebugPoint {
     XrXirSourceRange range;
     uint32_t statement, flags, environment;
+    int call_line, call_column; /* Direct call expression within the source statement. */
 } XrXirSourceDebugPoint;
 
 /* A source throw may lower to a local error jump. The operand is observed

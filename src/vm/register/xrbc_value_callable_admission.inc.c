@@ -80,7 +80,7 @@ static bool rbc_value_function_access_valid(const XrRbcModule *module,const XrRb
             access.index>=module->function_count) return false;
         const XrRbcFunction *callee=&module->functions[access.index];
         const XrRbcValueCode *receiver=xr_rbc_module_value_code(module,access.index);
-        if (!receiver || receiver->parameter_count!=callee->parameter_count) return false;
+        if (!receiver || receiver->error_type || receiver->parameter_count!=callee->parameter_count) return false;
         if (home->borrow_source || event->callable_transport!=home->transport || access.count!=callee->capture_count+callee->state_capture ||
             !rbc_callable_accepts(module,rbc_value_signature(module,code,access.result),callee->callable)) return false;
         for (uint32_t p=0;p<access.count;++p) {

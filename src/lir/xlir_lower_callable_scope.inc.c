@@ -282,7 +282,7 @@ static bool lower_lexical_finish_body(LowerFunction *f, uint32_t b) {
     }
     lexical->outgoing[b] = lexical->current;
     const XrXirInstruction *term = &f->source->instructions[i];
-    for (uint32_t e = 0; e < lower_edge_count(term); ++e) {
+    for (uint32_t e = 0; e < lower_edge_count(f->owner,term); ++e) {
         uint32_t to = term->targets[e];
         if (lexical->incoming[to] != UINT32_MAX && lexical->incoming[to] != lexical->current)
             return lower_unsupported(f->owner, "function scope differs across selected predecessors");

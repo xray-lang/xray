@@ -34,7 +34,7 @@ XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *m,
     XrLirCallableType signature;
     bool assertion = function->kind == XR_LIR_FUNCTION_EXTERNAL &&
         function->extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION;
-    if ((function->kind != XR_LIR_FUNCTION_DEFINITION && !assertion) ||
+    if (function->error || (function->kind != XR_LIR_FUNCTION_DEFINITION && !assertion) ||
         xr_lir_callable_type_view(m, target.callable, &signature) != XR_LIR_OK ||
         target.capture_count > function->parameter_count ||
         (uint32_t)target.state_capture > function->parameter_count - target.capture_count ||

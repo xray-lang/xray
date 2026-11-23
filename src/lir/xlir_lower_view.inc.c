@@ -40,7 +40,7 @@ static bool lower_view_empty_entry(LowerFunction *f, uint32_t block) {
     for (uint32_t b = 0; b < f->source->block_count; ++b) if (f->reachable[b]) {
         const XrXirInstruction *term = lower_term(f->owner, f->source, b);
         if (!term) return false;
-        for (uint32_t e = 0; e < lower_edge_count(term); ++e)
+        for (uint32_t e = 0; e < lower_edge_count(f->owner,term); ++e)
             if (!term->targets[e]) return false;
     }
     /* No edge can revisit this activation entry, and no formal loan has a

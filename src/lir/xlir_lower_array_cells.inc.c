@@ -73,7 +73,7 @@ static bool lower_array_cells_inventory(LowerFunction *f) {
                 size_t at = (size_t)b * count + owner;
                 bool live_in = cells->use[at] != 0;
                 if (!cells->define[at])
-                    for (uint32_t e = 0; e < lower_edge_count(term); ++e)
+                    for (uint32_t e = 0; e < lower_edge_count(f->owner,term); ++e)
                         live_in |= cells->live[(size_t)term->targets[e] * count + owner] != 0;
                 if (live_in && !cells->live[at]) { cells->live[at] = 1; changed = true; }
             }
@@ -88,7 +88,7 @@ static bool lower_array_cell_drop_edge(const LowerFunction *f, uint32_t block,
     size_t at = (size_t)block * cells->count + owner;
     if (!cells->live[at] && !cells->define[at]) return false;
     bool any = false;
-    for (uint32_t e = 0; e < lower_edge_count(term); ++e)
+    for (uint32_t e = 0; e < lower_edge_count(f->owner,term); ++e)
         any |= cells->live[(size_t)term->targets[e] * cells->count + owner] != 0;
     if (edge == UINT32_MAX) return !any;
     return any && !cells->live[(size_t)term->targets[edge] * cells->count + owner];

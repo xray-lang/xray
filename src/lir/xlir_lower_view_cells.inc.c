@@ -55,7 +55,7 @@ static bool lower_view_cell_graph(LowerFunction *f, LowerViewCellGraph *graph) {
             (size_t)f->cell_count * sizeof(*f->current));
         const XrXirInstruction *term = lower_term(f->owner, f->source, b);
         if (!term) return false;
-        for (uint32_t e = 0; e < lower_edge_count(term); ++e) {
+        for (uint32_t e = 0; e < lower_edge_count(f->owner,term); ++e) {
             XrLirEdge edge = {0};
             if (!lower_edge(f, b, term->targets[e], &edge)) { xr_free((void *)edge.arguments); return false; }
             bool good = true;
@@ -96,7 +96,7 @@ static bool lower_view_cell_demand(LowerFunction *f, LowerViewCellGraph *graph, 
     while (head < tail) {
         uint32_t b = f->stack[head++]; const XrXirInstruction *term = lower_term(f->owner, f->source, b);
         if (!term) return false;
-        for (uint32_t e = 0; e < lower_edge_count(term); ++e) {
+    for (uint32_t e = 0; e < lower_edge_count(f->owner,term); ++e) {
             uint32_t target = term->targets[e];
             if (target != source_block && !graph->without[target]) { graph->without[target] = 1; f->stack[tail++] = target; }
         }

@@ -159,6 +159,7 @@ typedef struct XrLirFunctionView {
     const struct XrLirFunctionCallableParameter *callable_parameters;
     uint32_t callable_parameter_count;
     uint32_t scope_count;
+    XrLirType error;
 } XrLirFunctionView;
 typedef struct XrLirBlockView {
     const uint32_t *parameters;

@@ -16,6 +16,7 @@
 #include "vm/register/xrbc_lir.h"
 #include "shared/xr_value_format_core.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #if XR_OS_WINDOWS
 #include <fcntl.h>
@@ -27,12 +28,29 @@ static int run_panic_write(void *context, const void *bytes, size_t length) {
     return !xrt_io_write(2, bytes, length).failed;
 }
 
+static void run_try_trace(const XrRbcOutcome *outcome) {
+    size_t count=xr_rbc_outcome_try_trace_count(outcome);
+    if (!count) return;
+    fputs("Stack trace:\n",stderr);
+    for (size_t i=0;i<count;++i) {
+        const XrtSourceLocation *site=xr_rbc_outcome_try_trace_at(outcome,i);
+        if (!site) continue;
+        fputs("    at ",stderr);
+        (void)fwrite(site->path,1,site->path_length,stderr);
+        fprintf(stderr,":%u:%u\n",site->line,site->column);
+    }
+}
+
 static int run_report(const XrRbcOutcome *outcome, XrRbcStatus status) {
     if (status == XR_RBC_OK) return XR_CLI_EXIT_OK;
     XrtArithmeticPanic panic;
     const XrtLocationOwner *locations;
     uint32_t message_code=0,message_source=0;const char *message=NULL;size_t message_length=0;
-    if(xr_rbc_outcome_message_panic(outcome,&message_code,&message,&message_length,&message_source,&locations)) {
+    const XrtTryAssertFailure *assertion=xr_rbc_outcome_try_assert(outcome);
+    if (assertion) {
+        if (!xrt_try_assert_report(assertion)) fputs("cannot render uncaught try assertion\n",stderr);
+        else run_try_trace(outcome);
+    } else if(xr_rbc_outcome_message_panic(outcome,&message_code,&message,&message_length,&message_source,&locations)) {
         if(!xrt_message_panic_report(message_code,message,message_length,xrt_locations_get(locations,message_source)))
             fputs("cannot render uncaught message panic\n",stderr);
     } else if (xr_rbc_outcome_arithmetic_panic(outcome, &panic, &locations)) {
@@ -94,6 +112,8 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     if (result == XR_CLI_EXIT_OK) {
         XrRbcExecution *execution = NULL;
         XrRbcStatus status = xr_rbc_program_prepare(program, NULL, 0, &execution);
+        const char *backtrace=getenv("XRAY_BACKTRACE");
+        if (status==XR_RBC_OK && backtrace && !strcmp(backtrace,"1")) xr_rbc_execution_enable_try_trace(execution);
         XrRbcOutcome *outcome = status == XR_RBC_OK ? xr_rbc_execution_run(execution) : NULL;
         if (status == XR_RBC_OK) status = xr_rbc_outcome_status(outcome);
         xr_rbc_execution_free(&execution);

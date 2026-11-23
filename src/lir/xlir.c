@@ -135,6 +135,7 @@ enum {LIR_LIBRARY_ARRAY=2, LIR_LIBRARY_DISPLAY=4, LIR_LIBRARY_STRING=8,
     LIR_LIBRARY_RANGE=16, LIR_LIBRARY_MAP=32, LIR_LIBRARY_SLICE=64};
 static XrLirStatus lir_library_catalog(XrLirModule *, uint32_t);
 #include "xlir_types.inc.c"
+#include "xlir_error_metadata.inc.c"
 #include "xlir_state.inc.c"
 #include "xlir_array.inc.c"
 #include "xlir_slice.inc.c"
@@ -206,6 +207,8 @@ XR_FUNC void xr_lir_module_destroy(XrLirModule *m) {
             for (uint32_t f = 0; f < field_count; ++f) xr_free((void *)m->types[i].fields[f].name);
             xr_free((void *)m->types[i].fields);
         }
+        for (uint32_t v = 0; v < m->types[i].variant_count; ++v)
+            xr_free((void *)m->types[i].variants[v].name);
         xr_free((void *)m->types[i].variants);
     }
     xr_free(m->types);
@@ -342,6 +345,9 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
         spec->result == XR_LIR_VIEW_CELL || spec->result == XR_LIR_MAP_STRING_I64_CELL ||
         spec->result == XR_LIR_MAP_STRING_I64_REF || spec->result==XR_LIR_SET_I64_CELL || spec->result==XR_LIR_SET_I64_REF)
         return false;
+    XrLirRecordIdentity error = {0};
+    if (spec->error && (spec->kind != XR_LIR_FUNCTION_DEFINITION || lir_pod_scalar(spec->result) >= XR_POD_SCALAR_COUNT ||
+        !xr_lir_error_sum_identity(m,spec->error,&error))) return false;
     if (!xr_lir_internal_callable_parameters_valid(m, spec->parameters, spec->parameter_count,
         spec->callable_parameters, spec->callable_parameter_count, true)) return false;
     for (uint32_t p = 0; p < spec->parameter_count; ++p)
@@ -378,6 +384,7 @@ static bool lir_signature_copy(XrLirModule *m, const XrLirFunctionSpec *spec,
     f->name_length = spec->name_length;
     f->parameter_count = spec->parameter_count;
     f->result = spec->result;
+    f->error = spec->error;
     f->kind = spec->kind;
     f->extern_kind = spec->extern_kind;
     if (!f->parameter_count)
@@ -598,7 +605,7 @@ static bool lir_instruction_copy(XrLirModule *m, uint32_t function, const XrLirI
         lir_fail(m, XR_LIR_INVALID_ARGUMENT);
         return false;
     }
-    if (input->op == XR_LIR_CALL || input->op == XR_LIR_FUNCTION_REF) {
+    if (input->op == XR_LIR_CALL || input->op == XR_LIR_INVOKE || input->op == XR_LIR_FUNCTION_REF) {
         if (!lir_function(m, input->callee)) {
             lir_fail(m, XR_LIR_INVALID_ARGUMENT);
             return false;
@@ -900,7 +907,7 @@ XR_FUNC XrLirStatus xr_lir_function_view(const XrLirModule *m, XrLirFunction han
                                 f->parameters,  f->parameter_count, f->block_count,
                                 f->value_count, f->entry,           f->result,
                                 f->kind,        f->extern_kind,
-                                f->callable_parameters, f->callable_parameter_count, f->scope_count};
+                                f->callable_parameters, f->callable_parameter_count, f->scope_count, f->error};
     return XR_LIR_OK;
 }
 XR_FUNC XrLirStatus xr_lir_block_at(const XrLirModule *m, XrLirFunction handle, uint32_t ordinal,

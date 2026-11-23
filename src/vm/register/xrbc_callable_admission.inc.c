@@ -168,6 +168,8 @@ static bool rbc_callable_metadata_valid(const XrRbcModule *m) {
     if (!rbc_callable_signatures_valid(m)) return false;
     for (size_t n = 0; n < m->function_count; ++n) {
         const XrRbcFunction *f = &m->functions[n];
+        const XrRbcValueCode *callable_code=f->callable ? xr_rbc_module_value_code(m,(uint32_t)n) : NULL;
+        if (callable_code && callable_code->error_type) return false;
         XrRbcFunctionScopes scopes = rbc_function_scopes(m, f);
         if (scopes.count > f->code_count || (scopes.count ? !scopes.parents : scopes.parents != NULL)) return false;
         for (uint32_t p = 0; p < scopes.count; ++p)
@@ -329,6 +331,7 @@ static bool rbc_requires_typed_value(const XrtValueImage *image, uint32_t type) 
 static bool rbc_requires_typed_call(const XrRbcModule *module,uint32_t function) {
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,function);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
+    if (code && code->error_type) return true;
     if (!code || !code->homes || !image) return false;
     if (rbc_requires_typed_value(image, rbc_result_value_type(code))) return true;
     for (uint32_t p=0;p<code->parameter_count;++p)

@@ -41,10 +41,10 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
         if (data->shape.kind == XR_LIR_TYPE_RECORD || data->shape.kind == XR_LIR_TYPE_TUPLE) {
             if (data->shape.count > largest_record) largest_record = data->shape.count;
             for (uint32_t f = 0; f < data->shape.count; ++f) lir_import_dependency(needed, data->fields[f].type);
-            if (data->record.argument_count > largest_arguments) largest_arguments = data->record.argument_count;
-            for (uint32_t a = 0; a < data->record.argument_count; ++a)
-                lir_import_dependency(needed, data->record.arguments[a].type);
         }
+        if (data->record.argument_count > largest_arguments) largest_arguments = data->record.argument_count;
+        for (uint32_t a = 0; a < data->record.argument_count; ++a)
+            lir_import_dependency(needed, data->record.arguments[a].type);
         if (data->shape.kind == XR_LIR_TYPE_SUM) {
             if (data->variant_count > largest_variants) largest_variants = data->variant_count;
             uint32_t total = 0;
@@ -100,18 +100,18 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
                 fields[f] = data->fields[f];
                 fields[f].type = lir_imported_dependency(mapping, fields[f].type);
             }
-            record.arguments = record.argument_count ? arguments : NULL;
-            for (uint32_t a = 0; a < record.argument_count; ++a) {
-                arguments[a] = data->record.arguments[a];
-                arguments[a].type = lir_imported_dependency(mapping, arguments[a].type);
-            }
+        }
+        record.arguments = record.argument_count ? arguments : NULL;
+        for (uint32_t a = 0; a < record.argument_count; ++a) {
+            arguments[a] = data->record.arguments[a];
+            arguments[a].type = lir_imported_dependency(mapping, arguments[a].type);
         }
         status = lir_intern_type(target, shape,
             shape.kind == XR_LIR_TYPE_CALLABLE ? &callable : NULL, data->cell_element,
             lir_imported_dependency(mapping, data->class_parent),
             (shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_TUPLE) && shape.count ? fields :
                 shape.kind == XR_LIR_TYPE_SUM ? fields : NULL,
-            shape.kind == XR_LIR_TYPE_RECORD ? &record : NULL,
+            record.name ? &record : NULL,
             shape.kind == XR_LIR_TYPE_SUM ? variants : NULL, &mapping[n]);
     }
     if (status == XR_LIR_OK) *output = mapping[count - 1];

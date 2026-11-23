@@ -29,6 +29,7 @@
 #include "runtime/native/xnative_module_state.h"
 #include "runtime/native/xnative_value_image.h"
 #include "shared/xnative_host_leaf.h"
+#include "shared/xr_value_format_core.h"
 #include <float.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -112,6 +113,9 @@ struct XrRbcOutcome {
     XrRbcRegisterKind result_kind;
     XrtExecutionFailure failure;
     XrtLocationOwner *locations;
+    uint32_t *try_callers;
+    size_t try_caller_count;
+    bool try_trace;
     XrPodType aggregate_type;
     XrPodType *aggregate_types;
     size_t aggregate_type_count;
@@ -358,7 +362,7 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         const XrRbcValueCode *value_code = rbc_value_code(module, function);
         const XrtValueImage *image = xr_rbc_module_value_image(module);
         uint32_t type = rbc_result_value_type(value_code);
-        if (function->callable || function->aggregate_result_type ||
+        if ((value_code && value_code->error_type) || function->callable || function->aggregate_result_type ||
             rbc_requires_typed_value(image, type)) return false;
         if (op==XR_RBC_RET0) return word==XR_RBC_RET0;
         return a < registers && !(word >> 16) &&
@@ -552,6 +556,7 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
     size_t captures=owned ? function->capture_count : 0;
     bool inject_state = !owned && module->state_spec && entry == module->state_entry;
     const XrRbcValueCode *value_code=xr_rbc_module_value_code(module,entry);
+    if (value_code && value_code->error_type) return XR_RBC_INVALID;
     for (uint32_t p=0;value_code && value_code->parameters && p<value_code->parameter_count;++p)
         if (rbc_value_i64_ref(module,value_code,value_code->parameters[p])) return XR_RBC_INVALID;
     const XrtValueImage *image=xr_rbc_module_value_image(module);
@@ -743,6 +748,26 @@ static void xr_rbc_stack_free(XrRbcStack *stack) {
     *stack = (XrRbcStack) {0};
 }
 
+XR_FUNC void xr_rbc_execution_enable_try_trace(XrRbcExecution *execution) {
+    if (execution && !execution->consumed) execution->pending->try_trace=true;
+}
+
+static void xr_rbc_try_trace(XrRbcExecution *execution,XrRbcOutcome *outcome) {
+    const XrRbcStack *stack=&execution->stack;
+    if (!outcome->try_trace || stack->depth<2 || stack->depth-1>SIZE_MAX/sizeof(*outcome->try_callers)) return;
+    outcome->try_callers=xr_malloc((stack->depth-1)*sizeof(*outcome->try_callers));
+    if (!outcome->try_callers) return;
+    for (size_t child=stack->depth-1;child>0;--child) {
+        const XrRbcFrame *caller=&stack->frames[child-1];
+        const XrRbcFunction *function=&execution->module->functions[caller->function];
+        /* A suspended caller's continuation is the word after its CALL.
+         * The top fault uses the independent precise assertion location. */
+        if (!caller->pc || caller->pc>function->code_count || !function->source_ids) continue;
+        uint32_t source=function->source_ids[caller->pc-1];
+        if (source) outcome->try_callers[outcome->try_caller_count++]=source;
+    }
+}
+
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
     if (!execution || execution->consumed) return NULL;
     execution->consumed = true;
@@ -761,6 +786,10 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
         outcome->status = XR_RBC_VALUE_FAILURE;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_MESSAGE_PANIC)
         outcome->status = XR_RBC_MESSAGE_PANIC;
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_TRY_ASSERT) {
+        outcome->status = XR_RBC_TRY_ASSERT;
+        xr_rbc_try_trace(execution,outcome);
+    }
     else {
         if (status != XRT_EXECUTION_COMPLETED) outcome->status = XR_RBC_INVALID;
         xrt_locations_release(outcome->locations);
@@ -928,9 +957,24 @@ XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
     return true;
 }
 
+XR_FUNC const XrtTryAssertFailure *xr_rbc_outcome_try_assert(const XrRbcOutcome *outcome) {
+    return outcome && outcome->status==XR_RBC_TRY_ASSERT ? outcome->failure.detail.assertion : NULL;
+}
+
+XR_FUNC size_t xr_rbc_outcome_try_trace_count(const XrRbcOutcome *outcome) {
+    return xr_rbc_outcome_try_assert(outcome) && outcome->try_trace ? 1+outcome->try_caller_count : 0;
+}
+
+XR_FUNC const XrtSourceLocation *xr_rbc_outcome_try_trace_at(const XrRbcOutcome *outcome,size_t index) {
+    if (index>=xr_rbc_outcome_try_trace_count(outcome)) return NULL;
+    if (!index) return xrt_try_assert_location(outcome->failure.detail.assertion);
+    return xrt_locations_get(outcome->locations,outcome->try_callers[index-1]);
+}
+
 XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     if (!outcome || !*outcome) return;
     XrRbcOutcome *owned = *outcome;
+    xr_free(owned->try_callers);
     *outcome = NULL;
     xrt_execution_failure_drop(&owned->failure);
     xr_free(owned->aggregate_bytes);

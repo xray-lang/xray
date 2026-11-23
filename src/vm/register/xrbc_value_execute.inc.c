@@ -71,6 +71,7 @@ struct RbcValueActivation {
     bool owned_code; /* Only a genuine immutable code owner supplies sealed plans. */
     bool backings_ready; /* Set only after this execution's complete backing setup succeeds. */
     bool receiving_call;
+    uint32_t invoke_error, invoke_status;
     const XrLirHomeCall *receiving_slice_call;
     RbcArrayRegionState *array_regions;
     uint32_t active_array_region;
@@ -200,7 +201,8 @@ static bool rbc_value_capacities(const XrRbcValueCode *code, const XrtValueImage
             if (!stride || count>SIZE_MAX/stride) return false;
             if (count*stride>*snapshots) *snapshots=count*stride;
         }
-        if (access.operation==XR_RBC_VALUE_CALL || access.operation==XR_RBC_VALUE_FUNCTION_CALL) {
+        if (access.operation==XR_RBC_VALUE_CALL || access.operation==XR_RBC_VALUE_INVOKE ||
+            access.operation==XR_RBC_VALUE_FUNCTION_CALL) {
             size_t bytes=0;
             for (uint32_t p=0;p<access.count;++p) {
                 const XrLirValueHome *home=rbc_value_home(code,code->arguments[access.first+p]);
@@ -1015,6 +1017,7 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
     size_t parent=stack->depth-1;
     XrRbcFrame *frame=&stack->frames[parent];
     bool indirect=access.operation==XR_RBC_VALUE_FUNCTION_CALL;
+    bool invoke=access.operation==XR_RBC_VALUE_INVOKE;
     /* Keep setup evidence across known guest calls, but do not carry it
      * through a callable boundary whose external lifetime is not assumed. */
     if (indirect) for (RbcValueActivation *a=caller;a;a=a->previous) a->backings_ready=false;
@@ -1095,7 +1098,10 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *child=receiving ? stack->values->top : NULL;
     if (child) {
         child->receiving_call=true;
-        if (!indirect && access.other) {
+        if (invoke) {
+            child->invoke_error=access.other;
+            child->invoke_status=access.window;
+        } else if (!indirect && access.other) {
             child->receiving_slice_call=rbc_value_slice_call(module,caller->code,receiving,access);
             if (!child->receiving_slice_call) return XR_RBC_INVALID;
         }
@@ -1155,6 +1161,9 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
     RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
     size_t depth=stack->depth;
     XrRbcFrame frame=stack->frames[depth-1];
+    bool failed=access.operation==XR_RBC_VALUE_RETURN_ERROR;
+    if (failed && (!activation->invoke_error || depth<2)) return XR_RBC_INVALID;
+    if (failed) frame.destination=activation->invoke_error;
     XrRbcStatus result=xr_rbc_closure_scope_return(module,stack,NULL,0,source);
     if (result!=XR_RBC_OK) return result;
     const XrLirValueHome *home=rbc_value_home(activation->code,access.source);
@@ -1243,6 +1252,10 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
     if (activation->frame) {
         status=xrt_managed_frame_leave(stack->values->root,activation->frame);
         if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+    }
+    if (activation->invoke_error) {
+        size_t base=stack->frames[depth-2].base;
+        stack->slots[base+activation->invoke_status].bits=failed ? 1u : 0u;
     }
     stack->values->top=activation->previous;
     xrt_managed_metadata_free(stack->values->billing,activation,activation->bytes);
@@ -1444,9 +1457,22 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         stack->frames[stack->depth-1].pc=pc+1;
         return XR_RBC_OK;
     }
-    if (access.operation==XR_RBC_VALUE_CALL || access.operation==XR_RBC_VALUE_FUNCTION_CALL)
+    if (access.operation==XR_RBC_VALUE_CALL || access.operation==XR_RBC_VALUE_FUNCTION_CALL ||
+        access.operation==XR_RBC_VALUE_INVOKE)
         return rbc_value_call(module,stack,activation,access,pc,source);
-    if (access.operation==XR_RBC_VALUE_RETURN) return rbc_value_return(module,stack,activation,access,source);
+    if (access.operation==XR_RBC_VALUE_RETURN || access.operation==XR_RBC_VALUE_RETURN_ERROR)
+        return rbc_value_return(module,stack,activation,access,source);
+    if (access.operation==XR_RBC_VALUE_INVOKE_RESULT || access.operation==XR_RBC_VALUE_INVOKE_ERROR) {
+        stack->frames[stack->depth-1].pc=pc;
+        return XR_RBC_OK;
+    }
+    if (access.operation==XR_RBC_VALUE_PANIC_ERROR) {
+        RbcValuePayload value={0};
+        XrtManagedStatus status=rbc_value_payload(module,stack,rbc_value_origin(activation,access.source),&value);
+        if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+        const XrRbcLiteral *metadata=&module->literals[access.index];
+        xrt_try_assert_panic((const uint8_t *)metadata->bytes,metadata->length,value.address,value.size,source);
+    }
     XrtManagedStatus status=XRT_MANAGED_OK;
     if (access.operation==XR_RBC_VALUE_CELL) status=rbc_value_cell_step(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_STRING_APPEND_BINDING)

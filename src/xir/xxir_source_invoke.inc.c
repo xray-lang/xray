@@ -19,8 +19,12 @@ static bool source_error_edge(SourceContext *ctx, SourceValue value) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
     SourceErrorContext *handler = body->error_context;
-    if (handler && handler->asserted)
-        return source_recipe_append(ctx,(XrXirInstruction){XR_XIR_PANIC_ERROR,XR_XIR_UNIT,{value.id},{0},0,{0}},NULL);
+    if (handler && handler->asserted) {
+        if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_PANIC_ERROR,XR_XIR_UNIT,{value.id},{0},0,{0}},NULL))
+            return false;
+        body->recipes[body->count-1].debug.range=handler->assertion;
+        return true;
+    }
     SourceErrorEdge *edge = source_alloc(ctx,1,sizeof(*edge));
     if (!edge || !handler || handler->count >= UINT32_MAX/2)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"error continuation budget exhausted");
@@ -50,6 +54,22 @@ static bool source_error_edge(SourceContext *ctx, SourceValue value) {
     *edge=(SourceErrorEdge){handler->edges,body->current_block.identity,body->count-1,value,UINT32_MAX,source,producer};
     handler->edges=edge;++handler->count;return true;
 }
+static bool source_call_recipe_append(SourceContext *ctx,XrXirInstruction op,SourceValue *result) {
+    if (!source_recipe_append(ctx,op,result)) return false;
+    if ((op.op!=XR_XIR_CALL && op.op!=XR_XIR_INVOKE) || !ctx->active_expression) return true;
+    SourceFunction *body=&ctx->bodies[ctx->function];
+    XrXirSourceDebugPoint *debug=&body->recipes[body->count-1].debug;
+    const AstNode *call=ctx->active_expression->syntax;
+    if (debug->statement && call && call->type==AST_CALL_EXPR) {
+        const AstNode *callee=call->as.call_expr.callee;
+        if (callee && callee->line>0 && callee->column>0) {
+            debug->call_line=callee->line;
+            debug->call_column=callee->column;
+        }
+    }
+    return true;
+}
+
 static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     if (!source_local_call(ctx,&op) || !source_call_borrows(ctx,&op)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
@@ -69,7 +89,7 @@ static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, Source
     }
     if (!body->error_context || (op.op != XR_XIR_CALL && op.op != XR_XIR_CALL_INDIRECT &&
         op.op != XR_XIR_CALL_DEFAULT))
-        return source_recipe_append(ctx,op,result);
+        return source_call_recipe_append(ctx,op,result);
     if (!body->block_count && !begin_block(ctx)) return false;
     uint32_t origin = body->count, error = body->block_count;
     if (error == UINT32_MAX) return source_fail(ctx,NULL,XR_XIR_BUDGET,"invoke block identity exhausted");
@@ -78,7 +98,7 @@ static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, Source
         op.op = XR_XIR_INVOKE_DEFAULT;
     } else op.op = op.op == XR_XIR_CALL ? XR_XIR_INVOKE : XR_XIR_INVOKE_INDIRECT;
     op.targets[0] = error+1; op.targets[1] = error;
-    if (!source_recipe_append(ctx,op,NULL) || !begin_block(ctx)) return false;
+    if (!source_call_recipe_append(ctx,op,NULL) || !begin_block(ctx)) return false;
     SourceValue caught;
     if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught) ||
         !source_error_edge(ctx,caught) || !source_handler_site(ctx,origin,caught.id)) return false;

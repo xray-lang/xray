@@ -147,12 +147,18 @@ static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrL
         lir_print_text(p, " = ");
     }
     lir_print_text(p, xr_lir_op_name(v->op));
-    if (v->op == XR_LIR_CALL) {
+    if (v->op == XR_LIR_CALL || v->op == XR_LIR_INVOKE) {
         lir_print_text(p, " ");
         lir_print_name(p, &m->functions[v->callee - 1]);
         lir_print_text(p, "(");
         lir_print_values(p, v->operands, v->operand_count);
         lir_print_text(p, ")");
+        if (v->op == XR_LIR_INVOKE) {
+            lir_print_text(p," normal ");
+            lir_print_edge(p,&v->edges[0]);
+            lir_print_text(p," error ");
+            lir_print_edge(p,&v->edges[1]);
+        }
     } else if (v->op == XR_LIR_CALL_INTRINSIC) {
         lir_print_format(p, " #%" PRIu32 "(", v->intrinsic);
         lir_print_values(p, v->operands, v->operand_count);
@@ -168,11 +174,12 @@ static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrL
                 lir_print_text(p, ", ");
             lir_print_edge(p, &v->edges[e]);
         }
-    } else if (v->op == XR_LIR_RET) {
+    } else if (v->op == XR_LIR_RET || v->op == XR_LIR_RETURN_ERROR || v->op == XR_LIR_PANIC_ERROR) {
         if (v->operand_count) {
             lir_print_text(p, " ");
             lir_print_value(p, v->operands[0]);
         }
+        if (v->op == XR_LIR_PANIC_ERROR) lir_print_format(p,", metadata #%" PRIu64,v->bits);
     } else {
         XrLirType displayed = v->type;
         if (v->op == XR_LIR_ICMP || v->op == XR_LIR_FCMP || v->op == XR_LIR_STRING_EQUAL) {
@@ -241,6 +248,10 @@ static XrLirStatus lir_print_function(LirPrinter *p, const XrLirModule *m,
     lir_print_parameters(p, m, f, f->parameters, f->parameter_count, external);
     lir_print_text(p, ") -> ");
     lir_print_type(p, m, f->result);
+    if (f->error) {
+        lir_print_text(p, " throws ");
+        lir_print_type(p, m, f->error);
+    }
     if (external)
         lir_print_text(p, "\n");
     else {

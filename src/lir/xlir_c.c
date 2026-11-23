@@ -584,6 +584,14 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST:
         case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
+        case XR_LIR_RETURN_ERROR:
+            break;
+        case XR_LIR_PANIC_ERROR:
+            c->runtime=true;
+            c->used_literals[v->bits-1]=1;
+            if (c->location_count==UINT32_MAX)
+                c_error(c,XR_LIR_C_OVERFLOW,"C source inventory overflows");
+            else ++c->location_count;
             break;
         case XR_LIR_DIV: case XR_LIR_REM:
             if (v->type != XR_LIR_I64)
@@ -630,7 +638,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
                 c->runtime=true;
             }
             break;
-        case XR_LIR_CALL:
+        case XR_LIR_CALL: case XR_LIR_INVOKE:
             c_visit(c, v->callee);
             if (c_runtime_call(c, v) && c_located(&v->source)) {
                 if (c->location_count == UINT32_MAX)
@@ -686,6 +694,7 @@ static void c_admit(LirC *c) {
             return;
         }
         c_scalar(c, c->view.result);
+        if (c->view.error) c_scalar(c,c->view.error);
         for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p)
             c_scalar(c, c->view.parameter_types[p]);
         if (c->view.value_count >= UINT32_C(8388607))
@@ -752,7 +761,8 @@ static void c_locations(LirC *c) {
                 if ((!c_runtime_call(c, &v) && !c_string_point(c, &v) && !c_cell_point(c,&v) && !c_callable_point(c,&v) && !c_state_point(&v) && !c_array_point(c, &v) && !c_map_point(c, &v) && !c_set_point(c,&v) && !c_record_point(&v) && !c_view_point(c, &v) &&
                      !c_nullable_managed_point(c, &v) &&
                      !c_arithmetic_point(c, &v) &&
-                     v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP) || !c_located(&v.source))
+                     v.op != XR_LIR_FIXED_ARRAY_GET && v.op != XR_LIR_NULLABLE_UNWRAP &&
+                     v.op != XR_LIR_PANIC_ERROR) || !c_located(&v.source))
                     continue;
                 ++id;
                 c_text(c, "    { ");
@@ -778,15 +788,21 @@ static void c_signature(LirC *c, bool definition) {
     XR_DCHECK(c_type(c, c->view.result) != NULL, "function result passed scalar admission");
     if (c->runtime || c->function.id != c->request->entry.id)
         c_text(c, "static ");
-    c_format(c, "%s ", c_type(c, c->view.result));
+    c_format(c, "%s ", c->view.error ? "uint8_t" : c_type(c, c->view.result));
     c_function_name(c, c->function.id);
     c_text(c, "(");
-    if (!c->view.parameter_count)
+    if (!c->view.parameter_count && !c->view.error)
         c_text(c, "void");
     for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p) {
         if (p)
             c_text(c, ", ");
         c_format(c, "%s p%" PRIu32, c_type(c, c->view.parameter_types[p]), p);
+    }
+    if (c->view.error) {
+        if (c->view.parameter_count) c_text(c,", ");
+        if (c->view.result!=XR_LIR_UNIT)
+            c_format(c,"%s *xrl_success, ",c_type(c,c->view.result));
+        c_format(c,"%s *xrl_error",c_type(c,c->view.error));
     }
     c_text(c, definition ? ") {\n" : ");\n");
 }
@@ -822,6 +838,10 @@ static void c_declarations(LirC *c) {
     c_format(c, "    (void)&v%" PRIu32 ";\n", c->scratch);
     for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p)
         c_format(c, "    (void)p%" PRIu32 ";\n", p);
+    if (c->view.error) {
+        if (c->view.result!=XR_LIR_UNIT) c_text(c,"    (void)xrl_success;\n");
+        c_text(c,"    (void)xrl_error;\n");
+    }
 }
 static void c_reconstruct(LirC *c, XrLirType type, uint32_t result) {
     if (type == XR_LIR_I64 && c->array_helper_kind == XR_LIR_ARRAY_REGION_PRIMARY_SET) {
@@ -982,6 +1002,28 @@ static void c_division(LirC *c, const XrLirInstructionView *v) {
         c_value(c, v->operands[1]);
     c_text(c, guarded ? "; }\n" : ";\n");
 }
+static void c_invoke(LirC *c,const XrLirInstructionView *v) {
+    XrLirFunctionView callee;
+    xr_lir_function_view(c->request->module,(XrLirFunction){c->request->module,v->callee},&callee);
+    XrLirBlockView normal,failure;
+    xr_lir_block_view(c->request->module,(XrLirBlock){c->request->module,c->function.id,v->edges[0].target},&normal);
+    xr_lir_block_view(c->request->module,(XrLirBlock){c->request->module,c->function.id,v->edges[1].target},&failure);
+    /* Like a guarded division, keep both verified guest continuations
+     * visible even when MSVC inlines a call with a constant argument. */
+    c_text(c,"    { volatile uint8_t xrl_status = ");
+    c_function_name(c,v->callee);
+    c_text(c,"(");
+    for (uint32_t a=0;a<v->operand_count;++a) {
+        c_call_argument(c,callee.parameter_types[a],v->operands[a]);
+        c_text(c,", ");
+    }
+    if (normal.parameter_count) c_format(c,"&v%" PRIu32 ", ",normal.parameters[0]);
+    c_format(c,"&v%" PRIu32 ");\n"
+        "        if (xrl_status == UINT8_C(0)) goto bb%" PRIu32 ";\n"
+        "        goto bb%" PRIu32 ";\n    }\n",
+        failure.parameters[0],v->edges[0].target,v->edges[1].target);
+}
+
 static void c_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
@@ -1137,6 +1179,23 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_BR:
             c_edge(c, &v->edges[0], 1);
             break;
+        case XR_LIR_INVOKE:
+            c_invoke(c,v);
+            break;
+        case XR_LIR_PANIC_ERROR: {
+            const XrLirLiteralData *metadata=&c->request->module->literals[v->bits-1];
+            c_format(c,"    xrt_try_assert_panic(xrl_literal%" PRIu64 ", %zu, &",v->bits,metadata->length);
+            c_value(c,v->operands[0]);
+            c_text(c,", sizeof(");
+            c_value(c,v->operands[0]);
+            c_format(c,"), UINT32_C(%" PRIu32 "));\n",++c->location_cursor);
+            break;
+        }
+        case XR_LIR_RETURN_ERROR:
+            c_text(c,"    *xrl_error = ");
+            c_value(c,v->operands[0]);
+            c_text(c,";\n    return UINT8_C(1);\n");
+            break;
         case XR_LIR_CONDBR:
             c_array_push_before_branch(c);
             c_text(c, "    if (");
@@ -1148,6 +1207,15 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c, "    }\n");
             break;
         case XR_LIR_RET:
+            if (c->view.error) {
+                if (v->operand_count) {
+                    c_text(c,"    *xrl_success = ");
+                    c_value(c,v->operands[0]);
+                    c_text(c,";\n");
+                }
+                c_text(c,"    return UINT8_C(0);\n");
+                break;
+            }
             c_text(c, "    return");
             if (v->operand_count) {
                 c_text(c, " ");
@@ -1355,7 +1423,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         !request->resources || !request->translation_unit || !request->module ||
         request->entry.module != request->module ||
         xr_lir_function_view(request->module, request->entry, &entry) != XR_LIR_OK ||
-        entry.kind != XR_LIR_FUNCTION_DEFINITION || c_input_slice_result(request->module, entry.result) ||
+        entry.kind != XR_LIR_FUNCTION_DEFINITION || entry.error || c_input_slice_result(request->module, entry.result) ||
         (entry.parameter_count && (entry.parameter_count != 1 || entry.parameter_types[0] != XR_LIR_STATE))) {
         c_error(&c, XR_LIR_C_BAD_ARGUMENT, "C emission requires empty output and a no-argument root");
         return c.status;

@@ -324,6 +324,7 @@ struct SourceErrorContext {
     uint32_t count, frontier;
     SourceHandlerRecipe *route;
     bool asserted;
+    XrXirSourceRange assertion;
 };
 
 typedef struct SourceTypeScope {
@@ -2167,7 +2168,7 @@ static bool expression_structural_body(SourceContext *ctx, AstNode *node, Source
         if (!ctx->active_expression->left)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "try expression has no operand");
         if (node->as.try_expr.mode == XR_TRY_ASSERT)
-            return source_try_assert(ctx, ctx->active_expression->left, value);
+            return source_try_assert(ctx, node, ctx->active_expression->left, value);
         if (node->as.try_expr.mode == XR_TRY_OPTIONAL)
             return source_try_optional(ctx, ctx->active_expression, value);
         if (node->as.try_expr.mode != XR_TRY_PROPAGATE)

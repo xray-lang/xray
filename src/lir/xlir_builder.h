@@ -32,6 +32,7 @@ typedef struct XrLirFunctionSpec {
      * readonly synchronous borrows. These rows never authorize code targets. */
     const XrLirFunctionCallableParameter *callable_parameters;
     uint32_t callable_parameter_count;
+    XrLirType error;
 } XrLirFunctionSpec;
 typedef struct XrLirEdge {
     XrLirBlock target;

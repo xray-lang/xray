@@ -109,7 +109,7 @@ typedef struct {
     size_t value_access_capacity, value_argument_capacity, value_display_capacity, value_call_cursor;
     size_t value_region_access_capacity;
     size_t binding_event_cursor, binding_workspace_cursor, binding_forwarding_cursor, array_local_cursor;
-    bool typed_values;
+    bool typed_values, invoke_edges;
     uint32_t *slots, *spill_home, *edge_spill;
     uint32_t *aggregate_home, *aggregate_scratch;
     uint32_t *scope_home;
@@ -270,7 +270,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
     case XR_LIR_STATE_READ: case XR_LIR_STATE_WRITE: case XR_LIR_STATE_GROUP_INITIALIZE:
     case XR_LIR_STATE_CONSTRUCT: case XR_LIR_STATE_INITIALIZE:
-    case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_CALL_INDIRECT: case XR_LIR_CALL_INTRINSIC:
+    case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_INVOKE: case XR_LIR_CALL_INDIRECT: case XR_LIR_CALL_INTRINSIC:
     case XR_LIR_BR: case XR_LIR_RET: return true;
     case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG: return i->type == XR_LIR_U64;
     case XR_LIR_ICMP: return source == XR_LIR_U8 || source == XR_LIR_U64 ||
@@ -565,6 +565,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         i->op == XR_LIR_CLASS_ARRAY_PUSH || i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP ||
         i->op == XR_LIR_CLASS_ADOPT || i->op == XR_LIR_CLASS_IS ||
         i->op == XR_LIR_SUM_NEW || i->op == XR_LIR_SUM_TAG || i->op == XR_LIR_SUM_GET ||
+        i->op == XR_LIR_INVOKE || i->op == XR_LIR_RETURN_ERROR || i->op == XR_LIR_PANIC_ERROR ||
         i->op == XR_LIR_HOST_FILE_OPEN_WRITE || i->op == XR_LIR_HOST_FILE_CLOSE || i->op == XR_LIR_HOST_FILE_WRITE ||
         i->op == XR_LIR_HOST_FILE_OPEN_READ || i->op == XR_LIR_HOST_FILE_READ || i->op == XR_LIR_HOST_ENV_GET) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
@@ -655,6 +656,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:
     case XR_LIR_CALL: case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
+    case XR_LIR_INVOKE: case XR_LIR_RETURN_ERROR: case XR_LIR_PANIC_ERROR:
     case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
     case XR_LIR_STRING_LITERAL: case XR_LIR_STRING_I64: case XR_LIR_STRING_F64: case XR_LIR_STRING_CONCAT:
     case XR_LIR_STRING_SLICE:
@@ -763,7 +765,8 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                     rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED, message, i.source);
                     goto rejected;
                 }
-                if ((i.op == XR_LIR_CALL || i.op == XR_LIR_FUNCTION_REF) && !mapping[i.callee - 1]) {
+                if ((i.op == XR_LIR_CALL || i.op == XR_LIR_INVOKE || i.op == XR_LIR_FUNCTION_REF) &&
+                    !mapping[i.callee - 1]) {
                     XrLirFunctionView callee;
                     xr_lir_function_view(input, (XrLirFunction) {input, i.callee}, &callee);
                     if (callee.kind != XR_LIR_FUNCTION_DEFINITION) {
@@ -934,7 +937,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             }
             if(i.op==XR_LIR_CONDBR)c->control_scratch=true;
             if (i.op == XR_LIR_CALL_INDIRECT && window < i.operand_count) window = i.operand_count;
-            if(i.op==XR_LIR_CALL && c->functions[i.callee-1]!=RBC_LIR_PRINT_STRING) {
+            if((i.op==XR_LIR_CALL || i.op==XR_LIR_INVOKE) && c->functions[i.callee-1]!=RBC_LIR_PRINT_STRING) {
                 uint32_t mapped=c->functions[i.callee-1];
                 uint32_t physical=rbc_lir_native(mapped)?
                     (mapped==RBC_LIR_NATIVE_BASE+XR_RBC_NATIVE_PRINT_I64 ||
@@ -956,7 +959,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             XrLirInstructionView i;
             xr_lir_instruction_view(c->input, block, n, &i);
             if (i.op == XR_LIR_CALL_INDIRECT && window < i.operand_count) window = i.operand_count;
-            if (i.op == XR_LIR_CALL) {
+            if (i.op == XR_LIR_CALL || i.op == XR_LIR_INVOKE) {
                 if (c->functions[i.callee - 1] == RBC_LIR_PRINT_STRING) continue;
                 uint32_t mapped = c->functions[i.callee - 1];
                 uint32_t physical = rbc_lir_native(mapped) ?
@@ -968,7 +971,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             if (i.op == XR_LIR_INTCAST && i.type == XR_LIR_U8 && !c->scratch_count) c->scratch_count = 1;
             for (uint32_t e = 0; e < i.edge_count; ++e) {
                 bool scratch = false;
-                if (!rbc_lir_copies(c, i.edges[e], e + 1, false, &scratch)) return false;
+                if (i.op != XR_LIR_INVOKE && !rbc_lir_copies(c,i.edges[e],e+1,false,&scratch)) return false;
                 if (scratch) {
                     uint32_t count = c->state_ref_scratch ? 4u : c->state_scratch ? 3u : c->string_scratch ? 2u : 1u;
                     for (uint32_t a = 0; a < XR_RBC_ARRAY_FAMILY_COUNT; ++a)
@@ -1618,7 +1621,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         if (!xr_rbc_jump(&c->code[patch.pc], patch.pc, c->blocks[patch.block], c->code_count))
             return rbc_lir_fail(c, XR_RBC_COMPILE_LIMIT, "branch exceeds jump encoding");
     }
-    if (!rbc_lir_thread_jumps(c) || !rbc_lir_compact_jumps(c) || !rbc_lir_cells_compact(c)) return false;
+    if ((!c->invoke_edges && (!rbc_lir_thread_jumps(c) || !rbc_lir_compact_jumps(c))) ||
+        !rbc_lir_cells_compact(c)) return false;
     XrLirArrayShape array_result={0};
     if(c->view.result==XR_LIR_ARRAY && xr_lir_array_result_view(c->input,c->function,&array_result)!=XR_LIR_OK)
         return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"cannot read owned Array result shape");
@@ -1983,6 +1987,9 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
             XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID, invalid.message, invalid.source);
     }
 #endif
+    if (root.error)
+        return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+            "execution entry cannot return a typed error", (XrLirSource) {0});
     if (!lir_module_has_builtin_abi(input))
         return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "constructed physical types have no bytecode implementation", (XrLirSource) {0});

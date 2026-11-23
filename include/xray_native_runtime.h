@@ -85,6 +85,7 @@ XRAY_API void xrt_print_i64(int64_t value, uint32_t source_location_id);
 // Flush/write failures use the same execution-ending protocol as integer output.
 XRAY_API void xrt_print_string(const char *bytes, size_t byte_length, uint32_t source_location_id);
 
+
 // Read the selected system clock in nanoseconds under an active synchronous
 // execution. Source zero is unknown; nonzero IDs belong to its prepared map.
 // Realtime/monotonic read failures and any reading beyond INT64_MAX end the
@@ -114,6 +115,9 @@ XRT_NORETURN XRAY_API void xrt_typed_panic(uint32_t code, uint32_t source_id);
 XRAY_API void xrt_range_check(int64_t start, int64_t end, int64_t length, uint32_t source_id);
 XRT_NORETURN XRAY_API void xrt_fixed_array_bounds(uint32_t source_id);
 XRT_NORETURN XRAY_API void xrt_null_unwrap(uint32_t source_id);
+/* Own the active fields and the checked source location before the root exits. */
+XRT_NORETURN XRAY_API void xrt_try_assert_panic(const uint8_t *metadata, size_t metadata_size,
+    const void *error, size_t error_size, uint32_t source_id);
 #undef XRT_NORETURN
 
 #ifdef __cplusplus

@@ -67,6 +67,8 @@ typedef struct XrLirRecordArgument {
 } XrLirRecordArgument;
 typedef struct XrLirSumVariant {
     uint32_t field_begin, field_count;
+    const char *name;
+    uint32_t name_length;
 } XrLirSumVariant;
 /* Physical tag width is shared by every producer of a tagged sum. */
 static inline uint32_t xr_lir_sum_tag_size(uint32_t variant_count) {
@@ -109,6 +111,12 @@ XR_FUNC XrLirStatus xr_lir_tuple_type(XrLirModule *, const XrLirRecordField *, u
  * owner-free payload fields, so a sum's copied bytes are its complete state. */
 XR_FUNC XrLirStatus xr_lir_sum_type(XrLirModule *, const XrLirRecordField *, uint32_t field_count,
     const XrLirSumVariant *, uint32_t variant_count, XrLirType *output);
+/* The same physical tagged sum with a distinct, owned nominal error key.
+ * Its fields and variants retain the names needed by uncaught diagnostics. */
+XR_FUNC XrLirStatus xr_lir_error_sum_type(XrLirModule *, const XrLirRecordIdentity *,
+    const XrLirRecordField *, uint32_t field_count, const XrLirSumVariant *, uint32_t variant_count,
+    XrLirType *output);
+XR_FUNC bool xr_lir_error_sum_identity(const XrLirModule *, XrLirType, XrLirRecordIdentity *);
 /* Returns the flattened field span and its variant ranges. */
 XR_FUNC bool xr_lir_sum_variants(const XrLirModule *, XrLirType,
     const XrLirRecordField **fields, uint32_t *field_count,

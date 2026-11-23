@@ -165,7 +165,7 @@ int main(int argc,char **argv) {
     uint32_t first_environment=mapped->points[0].environment;
     CHECK(first_environment && mapped->bindings[first_environment-1].parent==0 &&
         mapped->bindings[first_environment-1].value==0);
-    XrXirSourceDebugPoint copied={{123,4,5,6,7},99,0,0},preserved=copied;
+    XrXirSourceDebugPoint copied={.range={123,4,5,6,7},.statement=99},preserved=copied;
     CHECK(xdap_launch_source_point(launch,UINT32_MAX,at,&copied)==XR_XIR_BAD_STRUCTURE);
     CHECK(!memcmp(&copied,&preserved,sizeof(copied)));
     CHECK(xdap_launch_source_point(launch,leaf,at,&copied)==XR_XIR_OK && copied.range.line==5 && copied.range.column==5);
