@@ -18,7 +18,7 @@ fn test_source_with_json_format() {
     log.setLevel(LogLevel.Debug)
     log.enableSource(true)
     log.setFormat(LogFormat.JSON)
-    log.info("json with source", "key", "value")
+    log.info("json with source", {"key": "value"})
     log.setFormat(LogFormat.Text)
     log.enableSource(false)
     assert(true)

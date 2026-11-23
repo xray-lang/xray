@@ -45,7 +45,7 @@ fn test_log_functions() {
 
 @test
 fn test_log_with_attrs() {
-    log.info("server started", "port", 8080, "host", "localhost")
+    log.info("server started", {"port": 8080, "host": "localhost"})
 }
 
 // ===== Format =====
@@ -53,6 +53,6 @@ fn test_log_with_attrs() {
 @test
 fn test_log_json_format() {
     log.setFormat(LogFormat.JSON)
-    log.info("json format test", "key", "value")
+    log.info("json format test", {"key": "value"})
     log.setFormat(LogFormat.Text)
 }

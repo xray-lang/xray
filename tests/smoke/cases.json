@@ -491,7 +491,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/log/log.xr:257:5: error: method declaration contract is not admitted"
+        "first_diagnostic": "stdlib/log/log.xr:78:12: error: name is not an initialized value"
       }
     },
     {
@@ -1092,7 +1092,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/log/log.xr:257:5: error: method declaration contract is not admitted"
+        "first_diagnostic": "stdlib/log/log.xr:78:12: error: name is not an initialized value"
       }
     },
     {

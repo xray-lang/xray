@@ -14,20 +14,20 @@ print(LogLevel.Fatal)
 
 log.setOutput(logPath)
 log.setLevel(LogLevel.Debug)
-log.info("server started", "port", 8080, "host", "localhost")
+log.info("server started", {"port": 8080, "host": "localhost"})
 
-var child = log.child("module", "http")
+var child = log.child({"module": "http"})
 print(typeName(child))
-child.warn("slow response", "ms", 42)
+child.warn("slow response", {"ms": 42})
 
 log.setFormat(LogFormat.JSON)
-child = log.child("module", "http")
-child = child.child("route", "/api")
-child.error("request failed", "code", 500)
+child = log.child({"module": "http"})
+child = child.child({"route": "/api"})
+child.error("request failed", {"code": 500})
 
 log.setFormat(LogFormat.Text)
 log.enableAsync(true)
-log.debug("queued", "ok", true)
+log.debug("queued", {"ok": true})
 log.flush()
 log.enableAsync(false)
 

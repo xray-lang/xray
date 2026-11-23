@@ -85,7 +85,7 @@ log.info("Application started")
 log.warn("Warning message")
 log.error("Error occurred")
 log.debug("Debug info")
-log.info("server started", "port", 8080, "host", "localhost")
+log.info("server started", {"port": 8080, "host": "localhost"})
 // Memory module
 import runtime
 runtime.liveObjects()

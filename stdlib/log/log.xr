@@ -56,15 +56,15 @@ fn _jsonEscape(s: string) -> string {
     out += "\""
     for (var i = 0; i < len(s); i++) {
         var c = s.runes().nth(i)
-        if (c == "\"") {
+        if (c == '"') {
             out += "\\\""
-        } else if (c == "\\") {
+        } else if (c == '\\') {
             out += "\\\\"
-        } else if (c == "\n") {
+        } else if (c == '\n') {
             out += "\\n"
-        } else if (c == "\r") {
+        } else if (c == '\r') {
             out += "\\r"
-        } else if (c == "\t") {
+        } else if (c == '\t') {
             out += "\\t"
         } else {
             out += "${c}"
@@ -75,33 +75,22 @@ fn _jsonEscape(s: string) -> string {
 }
 
 fn _jsonValue(value: JSON.Value) -> string {
-    var t = typeName(value)
-    if (t == "null") { return "null" }
-    if (t == "bool") { return (value as bool) ? "true" : "false" }
-    if (t == "i64" || t == "f64") { return string(value) }
-    return _jsonEscape(string(value))
+    return JSON.stringify(value)
 }
 
 fn _needsQuote(s: string) -> bool {
     for (var i = 0; i < len(s); i++) {
         var c = s.runes().nth(i)
-        if (c == " " || c == "\"" || c == "=" || c == "\n" || c == "\t") {
+        if (c == ' ' || c == '"' || c == '=' || c == '\n' || c == '\t') {
             return true
         }
     }
     return false
 }
 
-fn _message(args: Array<JSON.Value>) -> string {
-    if (len(args) == 0) { return "" }
-    return string(args[0])
-}
-
-fn _appendTextAttrs(out: ref string, args: Array<JSON.Value>, start: i64) {
-    var i = start
-    while (i + 1 < len(args)) {
-        var key = string(args[i])
-        var val = string(args[i + 1])
+fn _appendTextAttrs(out: ref string, fields: JSON.Object) {
+    for (key, value in fields) {
+        var val = string(value)
         out += " "
         out += key
         out += "="
@@ -112,35 +101,31 @@ fn _appendTextAttrs(out: ref string, args: Array<JSON.Value>, start: i64) {
         } else {
             out += val
         }
-        i = i + 2
     }
 }
 
-fn _appendJsonAttrs(out: ref string, args: Array<JSON.Value>, start: i64) {
-    var i = start
-    while (i + 1 < len(args)) {
+fn _appendJsonAttrs(out: ref string, fields: JSON.Object) {
+    for (key, value in fields) {
         out += ","
-        out += _jsonEscape(string(args[i]))
+        out += _jsonEscape(key)
         out += ":"
-        out += _jsonValue(args[i + 1])
-        i = i + 2
+        out += _jsonValue(value)
     }
 }
 
-fn _formatLine(logger: Logger, level: LogLevel, args: Array<JSON.Value>) -> string {
-    var msg = _message(args)
+fn _formatLine(logger: Logger, level: LogLevel, message: string, fields: JSON.Object) -> string {
     if (logger.format == LogFormat.JSON) {
         var out = ""
         out += "{\"level\":"
         out += _jsonEscape(_levelName(level))
         out += ",\"msg\":"
-        out += _jsonEscape(msg)
+        out += _jsonEscape(message)
         if (logger.source) { out += ",\"source\":true" }
         if (len(logger.jsonContext) > 0) {
             out += ","
             out += logger.jsonContext
         }
-        _appendJsonAttrs(ref out, args, 1)
+        _appendJsonAttrs(ref out, fields)
         out += "}"
         return out
     }
@@ -148,15 +133,15 @@ fn _formatLine(logger: Logger, level: LogLevel, args: Array<JSON.Value>) -> stri
     var out = ""
     out += _levelName(level)
     if (logger.source) { out += " [source]" }
-    if (len(msg) > 0) {
+    if (len(message) > 0) {
         out += " "
-        out += msg
+        out += message
     }
     if (len(logger.textContext) > 0) {
         out += " "
         out += logger.textContext
     }
-    _appendTextAttrs(ref out, args, 1)
+    _appendTextAttrs(ref out, fields)
     return out
 }
 
@@ -184,26 +169,26 @@ fn _emit(logger: Logger, line: string) {
     }
 }
 
-fn _logAt(logger: Logger, level: LogLevel, args: Array<JSON.Value>) {
+fn _logAt(logger: Logger, level: LogLevel, message: string, fields: JSON.Object) {
     if (_levelValue(level) < _levelValue(logger.level)) { return }
-    _emit(logger, _formatLine(logger, level, args))
+    _emit(logger, _formatLine(logger, level, message, fields))
 }
 
 fn _rootLogger() -> Logger {
     return Logger(_level, _format, _output, _source, _async, "", "")
 }
 
-fn _contextText(args: Array<JSON.Value>) -> string {
+fn _contextText(fields: JSON.Object) -> string {
     var out = ""
-    _appendTextAttrs(ref out, args, 0)
+    _appendTextAttrs(ref out, fields)
     var s = out
     if (len(s) > 0 && s.runes().nth(0) == ' ') { return s.slice(1) }
     return s
 }
 
-fn _contextJson(args: Array<JSON.Value>) -> string {
+fn _contextJson(fields: JSON.Object) -> string {
     var out = ""
-    _appendJsonAttrs(ref out, args, 0)
+    _appendJsonAttrs(ref out, fields)
     var s = out
     if (len(s) > 0 && s.runes().nth(0) == ',') { return s.slice(1) }
     return s
@@ -215,7 +200,7 @@ fn _joinContext(parent: string, child: string, sep: string) -> string {
     return parent + sep + child
 }
 
-fn _makeChild(parent: Logger, fields: Array<JSON.Value>) -> Logger {
+fn _makeChild(parent: Logger, fields: JSON.Object) -> Logger {
     return Logger(
         parent.level,
         parent.format,
@@ -254,51 +239,51 @@ export class Logger {
         this.textContext = textContext
     }
 
-    debug(...args: JSON.Value) {
-        _logAt(this, LogLevel.Debug, args)
+    debug(message: string, fields: JSON.Object = {}) {
+        _logAt(this, LogLevel.Debug, message, fields)
     }
 
-    info(...args: JSON.Value) {
-        _logAt(this, LogLevel.Info, args)
+    info(message: string, fields: JSON.Object = {}) {
+        _logAt(this, LogLevel.Info, message, fields)
     }
 
-    warn(...args: JSON.Value) {
-        _logAt(this, LogLevel.Warn, args)
+    warn(message: string, fields: JSON.Object = {}) {
+        _logAt(this, LogLevel.Warn, message, fields)
     }
 
-    error(...args: JSON.Value) {
-        _logAt(this, LogLevel.Error, args)
+    error(message: string, fields: JSON.Object = {}) {
+        _logAt(this, LogLevel.Error, message, fields)
     }
 
-    fatal(...args: JSON.Value) {
-        _logAt(this, LogLevel.Fatal, args)
+    fatal(message: string, fields: JSON.Object = {}) {
+        _logAt(this, LogLevel.Fatal, message, fields)
         flush()
         os.exit(1)
     }
 
-    child(...fields: JSON.Value) -> Logger {
+    child(fields: JSON.Object) -> Logger {
         return _makeChild(this, fields)
     }
 }
 
-export fn debug(...args: JSON.Value) {
-    _logAt(_rootLogger(), LogLevel.Debug, args)
+export fn debug(message: string, fields: JSON.Object = {}) {
+    _logAt(_rootLogger(), LogLevel.Debug, message, fields)
 }
 
-export fn info(...args: JSON.Value) {
-    _logAt(_rootLogger(), LogLevel.Info, args)
+export fn info(message: string, fields: JSON.Object = {}) {
+    _logAt(_rootLogger(), LogLevel.Info, message, fields)
 }
 
-export fn warn(...args: JSON.Value) {
-    _logAt(_rootLogger(), LogLevel.Warn, args)
+export fn warn(message: string, fields: JSON.Object = {}) {
+    _logAt(_rootLogger(), LogLevel.Warn, message, fields)
 }
 
-export fn error(...args: JSON.Value) {
-    _logAt(_rootLogger(), LogLevel.Error, args)
+export fn error(message: string, fields: JSON.Object = {}) {
+    _logAt(_rootLogger(), LogLevel.Error, message, fields)
 }
 
-export fn fatal(...args: JSON.Value) {
-    _logAt(_rootLogger(), LogLevel.Fatal, args)
+export fn fatal(message: string, fields: JSON.Object = {}) {
+    _logAt(_rootLogger(), LogLevel.Fatal, message, fields)
     flush()
     os.exit(1)
 }
@@ -340,6 +325,6 @@ export fn flush() {
     }
 }
 
-export fn child(...fields: JSON.Value) -> Logger {
+export fn child(fields: JSON.Object) -> Logger {
     return _makeChild(_rootLogger(), fields)
 }

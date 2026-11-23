@@ -6,7 +6,7 @@ import { LogFormat, LogLevel } from log
 @test
 fn test_child_logger_creation() {
     log.setLevel(LogLevel.Debug)
-    var httpLog = log.child("module", "http", "version", "1.0")
+    var httpLog = log.child({"module": "http", "version": "1.0"})
     assertEqual(typeName(httpLog), "Logger")
 }
 
@@ -14,9 +14,9 @@ fn test_child_logger_creation() {
 fn test_child_logger_methods() {
     log.setLevel(LogLevel.Debug)
     log.setFormat(LogFormat.JSON)
-    var httpLog = log.child("module", "http")
+    var httpLog = log.child({"module": "http"})
     httpLog.debug("debug from child")
-    httpLog.info("request received", "path", "/api")
+    httpLog.info("request received", {"path": "/api"})
     httpLog.warn("slow response")
     httpLog.error("connection failed")
     log.setFormat(LogFormat.Text)
@@ -26,10 +26,10 @@ fn test_child_logger_methods() {
 @test
 fn test_nested_child_logger() {
     log.setLevel(LogLevel.Debug)
-    var httpLog = log.child("module", "http")
-    var dbLog = httpLog.child("component", "database")
+    var httpLog = log.child({"module": "http"})
+    var dbLog = httpLog.child({"component": "database"})
     assertEqual(typeName(dbLog), "Logger")
-    dbLog.info("query executed", "table", "users")
+    dbLog.info("query executed", {"table": "users"})
 }
 
 print("All log child tests passed")
