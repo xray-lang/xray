@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = (
+    "test_api_inventory_predicates",
     "test_lir_core", "test_lir_carriers", "test_lir_lower", "test_lir_c",
     "test_lir_c_faults", "test_lir_c_native", "test_cgen_verify_output",
     "register_vm", "register_vm_native_print", "register_vm_alloc",
@@ -23,8 +24,7 @@ REQUIRED = (
     # callsite locations through valid LIR and Source on both execution backends.
     "lir_assertion", "test_lir_cli_assertions",
     "test_lir_cli_string_byte_length",
-    "test_lir_cli_host_path", "test_lir_cli_host_file_write",
-    "test_api_inventory_predicates",
+    "test_lir_cli_host_path", "test_lir_cli_host_file_write", "test_lir_cli_target_platform",
     # Cross-module ownership and capability transport need real native execution.
     "test_lir_state", "native_module_state_owner", "test_lir_cli_module_state",
     # Exercise Array ownership, failure cleanup and complete Source/native parity.

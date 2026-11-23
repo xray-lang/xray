@@ -54,3 +54,10 @@ add_test(NAME test_lir_cli_host_file_write
         --output ${PROJECT_BINARY_DIR}/lir-cli-host-file-write)
 set_tests_properties(test_lir_cli_host_file_write PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
+
+add_test(NAME test_lir_cli_target_platform
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_target_platform.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --output ${PROJECT_BINARY_DIR}/lir-cli-target-platform)
+set_tests_properties(test_lir_cli_target_platform PROPERTIES
+    TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")

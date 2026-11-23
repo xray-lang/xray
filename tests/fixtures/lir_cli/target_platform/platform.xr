@@ -1,0 +1,10 @@
+import os
+
+fn platform() -> string { return "user platform" }
+fn __platform() -> string { return "user __platform" }
+
+print(os.platform())
+print(platform())
+print(__platform())
+print(os.sep() == "\\")
+print(os.eol() == "\r\n")

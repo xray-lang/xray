@@ -31,6 +31,8 @@
 #include "../xir/xxir_lexical.h"
 #include "../xir/xxir_effect_module_export_internal.h"
 #include "../xir/xxir_io_native.h"
+#include "../xir/xxir_os_native.h"
+#include "../xir/xxir_target.h"
 #include "../shared/xnative_host_leaf.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -1340,6 +1342,16 @@ static bool lower_host_has_path(XrNativeHostShape shape) {
         shape == XR_NATIVE_HOST_FILE_OPEN_READ;
 }
 
+static bool lower_os_platform(const Lower *c, uint32_t function) {
+    const XrXirModule *source = c->source;
+    const XrXirFunction *body = &source->functions[function];
+    uint32_t id = source->declarations->functions[function].native_callable;
+    return !body->block_count && id == XR_NATIVE_CALLABLE_OS_PLATFORM &&
+        xir_os_native_signature(id, source->types, body->parameters, body->parameter_count,
+            body->result, body->error_type) &&
+        xir_os_native_scope(source->declarations, function, source->function_count);
+}
+
 static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint32_t *field) {
     const XrXirModule *source = c->source;
     const XrXirFunction *body = &source->functions[function];
@@ -1394,7 +1406,8 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     }
     if (!f->block_count || !f->blocks || !f->instructions) {
         uint32_t field;
-        return lower_host_abi(c, function, &field) != XR_NATIVE_HOST_NONE || lower_unsupported(c, "function without a scalar body");
+        return lower_os_platform(c, function) || lower_host_abi(c, function, &field) != XR_NATIVE_HOST_NONE ||
+            lower_unsupported(c, "function without a scalar body");
     }
     if (!lower_byte_lengths(c, f)) return false;
     uint8_t *seen = lower_alloc(c, f->block_count, 1);
@@ -2864,7 +2877,32 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     return good;
 }
 
+static bool lower_os_platform_body(Lower *c, XrLirFunction function) {
+    const XrXirTarget *target = xr_xir_compile_artifact_target(c->request->closed);
+    if (!xr_xir_target_valid(target))
+        return lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked target for os.platform"), false;
+    const char *platform;
+    switch (target->os) {
+    case XR_TARGET_QUERY_VALUE_OS_WINDOWS: platform = "windows"; break;
+    case XR_TARGET_QUERY_VALUE_OS_LINUX: platform = "linux"; break;
+    case XR_TARGET_QUERY_VALUE_OS_MACOS: platform = "darwin"; break;
+    default: return lower_error(c, XR_LIR_VERIFY_ERROR, "unsupported Checked target for os.platform"), false;
+    }
+    XrLirBlock block = {0};
+    XrLirLiteral literal = {0};
+    XrLirValue result = {0};
+    if (!lower_build(c, xr_lir_add_literal(c->module, platform, strlen(platform), &literal)) ||
+        !lower_build(c, xr_lir_define_function(c->module, function)) ||
+        !lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &block)) ||
+        !lower_build(c, xr_lir_set_entry(c->module, function, block))) return false;
+    XrLirInstruction owned = {.op=XR_LIR_STRING_LITERAL, .type=XR_LIR_STRING, .bits=literal.id};
+    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
+    return lower_build(c, xr_lir_emit_value(c->module, block, &owned, &result)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
+}
+
 static bool lower_host_function(Lower *c, uint32_t index) {
+    if (lower_os_platform(c, index)) return lower_os_platform_body(c, c->functions[index]);
     uint32_t field = 0;
     XrNativeHostShape shape = lower_host_abi(c, index, &field);
     XrLirOp operation;
@@ -2906,10 +2944,10 @@ static bool lower_host_function(Lower *c, uint32_t index) {
 }
 
 static bool lower_function(Lower *c, uint32_t index) {
-    if (!c->source->functions[index].block_count) return lower_host_function(c, index);
     c->function = index;
     c->block = 0;
     c->instruction = UINT32_MAX;
+    if (!c->source->functions[index].block_count) return lower_host_function(c, index);
     LowerFunction f = {
         .owner = c, .source = &c->source->functions[index], .function = c->functions[index]};
     f.literal_uses = lower_literal_uses(c, f.source);
