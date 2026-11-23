@@ -300,6 +300,7 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('align' '(' IntegerLiteral ')')?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
@@ -632,6 +633,7 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('align' '(' IntegerLiteral ')')?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?

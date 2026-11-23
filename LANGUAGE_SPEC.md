@@ -3907,6 +3907,7 @@ A struct / enum method that mutates its own value-semantic components explicitly
 <!-- xr-source:grammar 006-5-declarations-grammar-04 -->
 ```ebnf
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('align' '(' IntegerLiteral ')')?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 ```
@@ -4000,6 +4001,16 @@ fn main() {
 main()
 ```
 <!-- /xr-source -->
+
+#### 5.4.2 Declaration alignment
+
+A `struct` declaration may write `align(N)` after its type parameters and before `implements`, fixing a minimum alignment for every storage position of the type. Generic structs take the same clause, and the alignment does not change with the type arguments.
+
+- `N` is an integer literal and must be a power of two no smaller than the struct's natural alignment (the largest field alignment). A non-power-of-two or a value below the natural alignment is a compile error, and so are zero, negative values and a result beyond the target platform's capability.
+- Alignment is part of the declaration identity: two structs with the same name and field list but different `align(N)` are different types; they cannot be assigned to one another, compared, or used as the same generic argument.
+- The type size is padded to a multiple of `N`. Array stride equals the padded size, so every element satisfies `N` alignment.
+- Every storage position of the type satisfies `N` alignment: struct fields, module variables, stack values, heap values, and array elements. Safe code cannot observe addresses; `unsafe` and FFI can, so the constraint is guaranteed as observable behaviour rather than only recorded at the declaration.
+- Without `align(N)` the type lays out at its fields' natural alignment.
 
 ### 5.5 `interface` and `implements`
 
@@ -9375,6 +9386,7 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('align' '(' IntegerLiteral ')')?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?

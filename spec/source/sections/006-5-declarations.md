@@ -786,6 +786,7 @@ struct / enum 修改自身值语义部分的方法显式使用 `ref` receiver；
 <!-- xr-source:grammar 006-5-declarations-grammar-04 -->
 ```ebnf
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('align' '(' IntegerLiteral ')')?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 ```
@@ -879,6 +880,16 @@ fn main() {
 main()
 ```
 <!-- /xr-source -->
+
+#### 5.4.2 声明级对齐
+
+`struct` 声明可以在类型参数之后、`implements` 之前写 `align(N)`，为这个类型的每个存储位置规定最小对齐；泛型 struct 同样适用，对齐不随类型实参改变。
+
+- `N` 是整数字面量，必须是 2 的幂，且不小于该 struct 的自然对齐（各字段对齐的最大值）。非 2 的幂与小于自然对齐都是编译错误；零、负数与超出目标平台能力的结果同样是编译错误。
+- 对齐是声明身份的一部分：字段表与名字相同、`align(N)` 不同的两个 struct 不是同一个类型，不能互相赋值、不能比较，也不能作为同一个泛型实参。
+- 类型大小补齐到 `N` 的整数倍。数组元素间距等于补齐后的大小，因此每个元素都满足 `N` 对齐。
+- 该类型的每个存储位置都满足 `N` 对齐：struct 字段、模块变量、栈上值、堆上值以及数组元素。安全代码观察不到地址，`unsafe` 与 FFI 可以观察到，因此这条约束按可观察行为保证，不能只在声明处记录。
+- 没有 `align(N)` 时类型按字段的自然对齐布局。
 
 ### 5.5 `interface` 与 `implements`
 
@@ -2101,6 +2112,7 @@ A struct / enum method that mutates its own value-semantic components explicitly
 <!-- xr-source:grammar 006-5-declarations-grammar-04 -->
 ```ebnf
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('align' '(' IntegerLiteral ')')?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 ```
@@ -2194,6 +2206,16 @@ fn main() {
 main()
 ```
 <!-- /xr-source -->
+
+#### 5.4.2 Declaration alignment
+
+A `struct` declaration may write `align(N)` after its type parameters and before `implements`, fixing a minimum alignment for every storage position of the type. Generic structs take the same clause, and the alignment does not change with the type arguments.
+
+- `N` is an integer literal and must be a power of two no smaller than the struct's natural alignment (the largest field alignment). A non-power-of-two or a value below the natural alignment is a compile error, and so are zero, negative values and a result beyond the target platform's capability.
+- Alignment is part of the declaration identity: two structs with the same name and field list but different `align(N)` are different types; they cannot be assigned to one another, compared, or used as the same generic argument.
+- The type size is padded to a multiple of `N`. Array stride equals the padded size, so every element satisfies `N` alignment.
+- Every storage position of the type satisfies `N` alignment: struct fields, module variables, stack values, heap values, and array elements. Safe code cannot observe addresses; `unsafe` and FFI can, so the constraint is guaranteed as observable behaviour rather than only recorded at the declaration.
+- Without `align(N)` the type lays out at its fields' natural alignment.
 
 ### 5.5 `interface` and `implements`
 

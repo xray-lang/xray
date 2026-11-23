@@ -388,6 +388,7 @@ MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType?
 InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('align' '(' IntegerLiteral ')')?
                ('implements' NamedType (',' NamedType)*)?
                '{' ClassMember* '}'
 
