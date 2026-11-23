@@ -74,6 +74,11 @@ XRAY_API const void *xrt_native_array_inline_at(const XrtManagedHeader *, const 
     uint32_t type, int64_t index, uint32_t source_id);
 XRAY_API void xrt_native_array_repeat(XrtManagedFrame *, size_t slot,
     const XrtArrayItem *, int64_t length, uint32_t source_id);
+XRAY_API int64_t xrt_native_array_capacity(const XrtManagedHeader *, XrtBackingArrayKind, uint32_t source_id);
+/* Fill an empty temporary owner. The caller publishes to the checked place
+ * only after receiving the complete candidate. */
+XRAY_API void xrt_native_array_reserve(XrtManagedFrame *, size_t slot, const XrtManagedHeader *,
+    XrtBackingArrayKind, int64_t capacity, uint32_t source_id);
 /* String GET returns a synchronous borrow, not a new owner. */
 XRAY_API void xrt_native_array_get(const XrtManagedHeader *, XrtBackingArrayKind,
     int64_t index, XrtArrayItem *output, uint32_t source_id);

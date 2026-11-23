@@ -1,0 +1,44 @@
+var values: Array<i64> = [7]
+var calls = 0
+
+fn replacement() -> i64 {
+    calls += 1
+    values = [43, 44]
+    return 8
+}
+
+fn example() {
+    var bytes: Array<u8> = [2 as u8, 3 as u8]
+    const old = bytes
+    const oldCapacity = old.capacity
+    var reserved = bytes.reserve(8)
+    print(reserved.capacity >= 8)
+    print(bytes.capacity == reserved.capacity)
+    bytes.push(255 as u8)
+    print(bytes[2])
+    print(bytes.capacity >= 8)
+    print(len(reserved))
+    print(old.capacity == oldCapacity)
+    print(bytes.reserve(1).capacity >= 8)
+
+    var words = ["hello", "world"]
+    var wordsCopy = words.reserve(6)
+    words[0] = "changed"
+    print(wordsCopy[0])
+    print(words.capacity >= 6)
+
+    var signed = [7]
+    print(signed.reserve(5)[0])
+    var unsigned: Array<u64> = [9 as u64]
+    print(unsigned.reserve(5)[0])
+
+    const original = values
+    const afterArgument = values.reserve(replacement())
+    print(calls)
+    print(original[0])
+    print(afterArgument[0])
+    print(values[1])
+    print(values.capacity >= 8)
+}
+
+example()

@@ -168,6 +168,26 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_copy_create(XrtManagedFrame *frame
     if (!source || source->length > source->capacity) return XRT_MANAGED_ARGUMENT;
     return array_create(frame, slot, types, (ArrayInput){kind, NULL, source, source->length, capacity});
 }
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_capacity(const XrtManagedHeader *owner,
+    XrtBackingArrayKind kind, int64_t *capacity) {
+    if (!capacity || !xrt_backing_array_matches(owner,kind)) return XRT_MANAGED_ARGUMENT;
+    const XrtArrayBacking *array = (const XrtArrayBacking *)owner;
+    if (array->length > array->capacity) return XRT_MANAGED_ARGUMENT;
+    if (array->capacity > INT64_MAX) return XRT_MANAGED_OVERFLOW;
+    *capacity = (int64_t)array->capacity;
+    return XRT_MANAGED_OK;
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_reserve_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, XrtBackingArrayKind kind, const XrtManagedHeader *source, int64_t requested) {
+    if (!types || requested < 0) return XRT_MANAGED_ARGUMENT;
+    size_t capacity = (size_t)requested;
+    if ((uint64_t)capacity != (uint64_t)requested) return XRT_MANAGED_OVERFLOW;
+    int64_t current = 0;
+    XrtManagedStatus status = xrt_array_backing_capacity(source,kind,&current);
+    if (status != XRT_MANAGED_OK) return status;
+    if (requested <= current) return xrt_backing_slot_copy(frame,slot,source);
+    return xrt_array_backing_copy_create(frame,slot,types,kind,(const XrtArrayBacking *)source,capacity);
+}
 XR_FUNCDEF XrtManagedStatus xrt_array_backing_read_bits(const XrtArrayBacking *array,
     XrtBackingArrayKind kind, size_t index, uint64_t *output) {
     size_t stride = xrt_backing_array_stride(kind);

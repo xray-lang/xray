@@ -294,12 +294,14 @@ static void array_catalog(void) {
     const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t family = 0; family < sizeof(elements) / sizeof(*elements); ++family) {
         XrLirType element = elements[family];
-        for (uint32_t op = XR_LIR_ARRAY_OP_NEW; op <= XR_LIR_ARRAY_OP_DISPLAY; ++op) {
+        for (uint32_t op = XR_LIR_ARRAY_OP_NEW; op <= XR_LIR_ARRAY_OP_RESERVE; ++op) {
             uint32_t id = 0;
             OK(xr_lir_array_operation(m, element, (XrLirArrayOperation)op, &id));
             CHECK(id && id != extra.id);
             CHECK(id == m->array_operations[family][op - 1]);
-            CHECK(id == (op == XR_LIR_ARRAY_OP_DISPLAY ? 34 + family : 2 + family * 6 + op - 1));
+            if (op <= XR_LIR_ARRAY_OP_REPEAT) CHECK(id == 2 + family * 6 + op - 1);
+            else if (op == XR_LIR_ARRAY_OP_DISPLAY) CHECK(id == 34 + family);
+            else CHECK(id == 38 + family * 2 + op - XR_LIR_ARRAY_OP_CAPACITY);
         }
         for (uint32_t op = XR_LIR_ARRAY_OP_SET; op <= XR_LIR_ARRAY_OP_PUSH; ++op) {
             uint32_t cell = 0, reference = 0;

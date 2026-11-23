@@ -280,9 +280,20 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
         if (array->length>INT64_MAX) return XRT_MANAGED_OVERFLOW;
         output->bits=(uint64_t)array->length; return XRT_MANAGED_OK;
     }
+    if (access.index==XR_LIR_ARRAY_OP_CAPACITY) {
+        if (!output) return XRT_MANAGED_ARGUMENT;
+        output->bits=(uint64_t)xrt_native_array_capacity(header,kind,source);
+        return XRT_MANAGED_OK;
+    }
     XrRbcRegister *index=rbc_value_register(stack,activation,args[1]); XrtArrayItem item;
     if (!index) return XRT_MANAGED_ARGUMENT;
-    int64_t at; memcpy(&at,&index->bits,8); status=xrt_array_backing_get(array,kind,at,&item);
+    int64_t at; memcpy(&at,&index->bits,sizeof(at));
+    if (access.index==XR_LIR_ARRAY_OP_RESERVE) {
+        xrt_native_array_reserve(activation->frame,result->temporary_first_owner,header,kind,at,source);
+        activation->backings_ready=true;
+        return rbc_value_publish_leaf(activation,access.result);
+    }
+    status=xrt_array_backing_get(array,kind,at,&item);
     if (status!=XRT_MANAGED_OK) return status;
     if (kind==XRT_BACKING_ARRAY_STRING) {
         status=xrt_backing_slot_copy(activation->frame,result->temporary_first_owner,&item.value.string->managed);

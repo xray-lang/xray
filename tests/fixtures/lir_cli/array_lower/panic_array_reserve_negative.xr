@@ -1,0 +1,7 @@
+fn example() {
+    var buffer: Array<u8> = [7 as u8]
+    buffer.reserve(-1)
+    print(buffer[0])
+}
+
+example()

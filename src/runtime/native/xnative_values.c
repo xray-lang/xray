@@ -457,6 +457,21 @@ XRAY_API void xrt_native_array_repeat(XrtManagedFrame *frame, size_t slot,
     if (status==XRT_MANAGED_OK) status=xrt_array_backing_repeat_create(frame,slot,types,item,length);
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
 }
+XRAY_API int64_t xrt_native_array_capacity(const XrtManagedHeader *array,
+    XrtBackingArrayKind kind, uint32_t source_id) {
+    int64_t capacity = 0;
+    XrtManagedStatus status = xrt_array_backing_capacity(array,kind,&capacity);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+    return capacity;
+}
+XRAY_API void xrt_native_array_reserve(XrtManagedFrame *frame, size_t slot, const XrtManagedHeader *array,
+    XrtBackingArrayKind kind, int64_t capacity, uint32_t source_id) {
+    if (capacity < 0) xrt_typed_panic(422,source_id);
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id),&types);
+    if (status == XRT_MANAGED_OK) status = xrt_array_backing_reserve_create(frame,slot,types,kind,array,capacity);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
 XRAY_API void xrt_native_array_get(const XrtManagedHeader *array, XrtBackingArrayKind kind,
     int64_t index, XrtArrayItem *output, uint32_t source_id) {
     XrtManagedStatus status=xrt_array_backing_get((const XrtArrayBacking *)array,kind,index,output);

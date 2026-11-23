@@ -110,6 +110,7 @@ def main() -> None:
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "class_constructor_array_field",
              "byte_copy_before_write", "class_byte_array_field", "class_owned_class_field", "large", "large_string",
+             "array_capacity_reserve", "panic_array_reserve_negative",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
              "element_update", "element_update_carried",
@@ -197,6 +198,17 @@ def main() -> None:
     def run_ordinary(name, work, run, failures):
         source = fixtures / (name + ".xr")
         panic = name.startswith("panic_")
+        panic_location = source.name.encode()
+        if name == "panic_array_reserve_negative":
+            diagnostic = b"[Uncaught Panic] E0422:"
+            panic_location = b""
+        elif name.startswith("panic_map_"):
+            diagnostic = b"[Uncaught Panic] E0431:"
+            panic_location = b""
+        elif name.startswith("panic_nullable_"):
+            diagnostic = b"[Uncaught Panic] E0413:"
+        else:
+            diagnostic = b"XR_RUN_6002: value operation rejected"
         status, _, _ = run(name + "-check", [binary, "check", source], 0)
         if status:
             return
@@ -205,8 +217,7 @@ def main() -> None:
             result = run(name + f"-vm-{repeat}", [binary, "run", source], 1 if panic else 0)
             _, out, err = result
             if panic:
-                diagnostic = b"[Uncaught Panic] E0431:" if name.startswith("panic_map_") else b"[Uncaught Panic] E0413:" if name.startswith("panic_nullable_") else b"XR_RUN_6002: value operation rejected"
-                if out or diagnostic not in err or (not name.startswith("panic_map_") and source.name.encode() not in err):
+                if out or diagnostic not in err or panic_location not in err:
                     failures.append((name, "VM runtime diagnostic", out, err))
             elif out != source.with_suffix(".out").read_bytes() or err:
                 failures.append((name, "VM output", out, err))
@@ -289,8 +300,7 @@ def main() -> None:
                 result = run(name + f"-native-{ordinal}-{repeat}", [executable], 1 if panic else 0)
                 _, out, err = result
                 if panic:
-                    diagnostic = b"[Uncaught Panic] E0431:" if name.startswith("panic_map_") else b"[Uncaught Panic] E0413:" if name.startswith("panic_nullable_") else b"XR_RUN_6002: value operation rejected"
-                    if out or diagnostic not in err or (not name.startswith("panic_map_") and source.name.encode() not in err):
+                    if out or diagnostic not in err or panic_location not in err:
                         failures.append((name, "runtime diagnostic", out, err))
                 elif out != source.with_suffix(".out").read_bytes() or err:
                     failures.append((name, "output", out, err))

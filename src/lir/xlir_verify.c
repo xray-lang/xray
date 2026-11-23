@@ -1152,7 +1152,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "constructed type pool is invalid");
     if (m->slice_facts && !lir_slice_effects_valid(m,m->slice_facts->view))
         return lir_status_error(d,XR_LIR_VERIFY_ERROR,"Slice receiving summary is invalid");
-    uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_DISPLAY] = {{0}};
+    uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_RESERVE] = {{0}};
     uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2] = {{0}};
     if (m->intrinsic_count && !m->intrinsics)
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic registry is missing");

@@ -258,6 +258,45 @@ static void string_arrays(void) {
     same_bill(fixture.billing, baseline);
     fixture_done(&fixture);
 }
+static void array_reserve_preserves_snapshots(void) {
+    Fixture fixture;
+    fixture_init(&fixture, SIZE_MAX);
+    OK(xrt_string_backing_create(fixture.frame, 0, &fixture.types, "a", 1, 0));
+    OK(xrt_string_backing_create(fixture.frame, 1, &fixture.types, "b", 1, 0));
+    XrtStringBacking *first = (XrtStringBacking *)borrow(&fixture, 0);
+    XrtStringBacking *second = (XrtStringBacking *)borrow(&fixture, 1);
+    XrtStringBacking *values[] = {first, second};
+    OK(xrt_array_backing_string_create(fixture.frame, 2, &fixture.types, values, 2, 4));
+    const XrtManagedHeader *source = borrow(&fixture, 2);
+    int64_t capacity = -1;
+    BAD(xrt_array_backing_capacity(source, XRT_BACKING_ARRAY_I64, &capacity));
+    CHECK(capacity == -1);
+    OK(xrt_array_backing_capacity(source, XRT_BACKING_ARRAY_STRING, &capacity));
+    CHECK(capacity == 4);
+    OK(xrt_array_backing_reserve_create(fixture.frame, 3, &fixture.types, XRT_BACKING_ARRAY_STRING, source, 1));
+    CHECK(borrow(&fixture, 3) == source);
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    BAD(xrt_array_backing_reserve_create(fixture.frame, 4, &fixture.types, XRT_BACKING_ARRAY_I64, source, 8));
+    CHECK(xrt_array_backing_reserve_create(fixture.frame, 4, &fixture.types, XRT_BACKING_ARRAY_STRING,
+        source, INT64_MAX) == XRT_MANAGED_OVERFLOW);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    CHECK(xrt_array_backing_reserve_create(fixture.frame, 4, &fixture.types, XRT_BACKING_ARRAY_STRING,
+        source, 8) == XRT_MANAGED_OOM);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    atomic_store(&second->managed.references, INT32_MAX);
+    CHECK(xrt_array_backing_reserve_create(fixture.frame, 4, &fixture.types, XRT_BACKING_ARRAY_STRING,
+        source, 8) == XRT_MANAGED_REFCOUNT);
+    atomic_store(&second->managed.references, 2);
+    CHECK(!borrow(&fixture, 4) && borrow(&fixture, 2) == source && xr_signed_rc_read(&first->managed.references) == 2);
+    same_bill(fixture.billing, baseline);
+    OK(xrt_array_backing_reserve_create(fixture.frame, 4, &fixture.types, XRT_BACKING_ARRAY_STRING, source, 8));
+    const XrtArrayBacking *grown = (const XrtArrayBacking *)borrow(&fixture, 4);
+    CHECK(&grown->managed != source && grown->capacity == 8 && grown->length == 2);
+    CHECK(tail(grown, 0) == &first->managed && tail(grown, 1) == &second->managed && !tail(grown, 7));
+    OK(xrt_array_backing_capacity(source, XRT_BACKING_ARRAY_STRING, &capacity));
+    CHECK(capacity == 4 && xr_signed_rc_read(&first->managed.references) == 3);
+    fixture_done(&fixture);
+}
 static void construction_failures(void) {
     Fixture fixture;
     fixture_init(&fixture, 16384);
@@ -1005,6 +1044,7 @@ int main(void) {
     string_arrays();
     inline_array_rows();
     construction_failures();
+    array_reserve_preserves_snapshots();
     pending_capacity();
     nonlocal_retirement();
     independent_lifetimes();

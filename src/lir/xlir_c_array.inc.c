@@ -157,6 +157,10 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
     }
     const char *kind=c_array_kind(element);
     if (!kind) { c_error(c,XR_LIR_C_UNSUPPORTED,"Array element has no target receiver"); return; }
+    if (shape->operation == XR_LIR_ARRAY_OP_CAPACITY) {
+        c_format(c,"    v%" PRIu32 " = xrt_native_array_capacity(",v->result); c_value(c,v->operands[0]);
+        c_format(c,", %s, UINT32_C(%" PRIu32 "));\n",kind,source); return;
+    }
     if (shape->operation != XR_LIR_ARRAY_OP_GET || element == XR_LIR_STRING) c_values_ensure(c,source);
     const XrLirValueHome *home=v->result ? &c->homes->values[v->result] : NULL;
     switch (shape->operation) {
@@ -220,6 +224,10 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         c_format(c,"    xrt_native_array_repeat(xrl_frame, %zu, &(XrtArrayItem)",home->temporary_first_owner);
         c_array_item(c,element,v->operands[1]); c_text(c,", "); c_value(c,v->operands[0]);
         c_format(c,", UINT32_C(%" PRIu32 "));\n",source); c_values_publish_leaf(c,v->result,source); c_array_local_ready(c); return;
+    case XR_LIR_ARRAY_OP_RESERVE:
+        c_format(c,"    xrt_native_array_reserve(xrl_frame, %zu, ",home->temporary_first_owner);
+        c_value(c,v->operands[0]); c_format(c,", %s, ",kind); c_value(c,v->operands[1]);
+        c_format(c,", UINT32_C(%" PRIu32 "));\n",source); c_values_publish_leaf(c,v->result,source); return;
     case XR_LIR_ARRAY_OP_DISPLAY:
         c_format(c,"    xrt_native_array_display(xrl_frame, %zu, ",home->temporary_first_owner); c_value(c,v->operands[0]);
         c_format(c,", %s, UINT32_C(%" PRIu32 "));\n",kind,source); c_values_publish_leaf(c,v->result,source); return;

@@ -87,6 +87,8 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
         case XR_XIR_ARRAY_NEW: operation = XR_LIR_ARRAY_OP_NEW; break;
         case XR_XIR_ARRAY_REPEAT: operation = XR_LIR_ARRAY_OP_REPEAT; break;
         case XR_XIR_ARRAY_LEN: operation = XR_LIR_ARRAY_OP_LEN; break;
+        case XR_XIR_ARRAY_CAPACITY: operation = XR_LIR_ARRAY_OP_CAPACITY; break;
+        case XR_XIR_ARRAY_RESERVE: operation = XR_LIR_ARRAY_OP_RESERVE; break;
         case XR_XIR_ARRAY_GET: operation = XR_LIR_ARRAY_OP_GET; break;
         case XR_XIR_ARRAY_SET: operation = XR_LIR_ARRAY_OP_SET; break;
         case XR_XIR_ARRAY_PUSH: operation = XR_LIR_ARRAY_OP_PUSH; break;
@@ -100,8 +102,9 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
         default: *handled = false; return true;
     }
     bool grouped = op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET;
-    uint32_t count = grouped ? op->args[1] :
-        operation == XR_LIR_ARRAY_OP_LEN || operation == XR_LIR_ARRAY_OP_DISPLAY ? 1u : 2u;
+    bool single = operation == XR_LIR_ARRAY_OP_LEN || operation == XR_LIR_ARRAY_OP_CAPACITY ||
+        operation == XR_LIR_ARRAY_OP_DISPLAY;
+    uint32_t count = grouped ? op->args[1] : single ? 1u : 2u;
     XrLirValue *args = lower_alloc(c, count, sizeof(*args));
     if (count && !args) return false;
     bool good = true;

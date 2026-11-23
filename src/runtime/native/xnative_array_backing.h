@@ -49,6 +49,11 @@ XR_FUNC XrtManagedStatus xrt_array_backing_inline_at(const XrtArrayBacking *,
  * same-kind COW candidate and does not modify the source or any of its owners. */
 XR_FUNC XrtManagedStatus xrt_array_backing_copy_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, XrtBackingArrayKind, const XrtArrayBacking *, size_t capacity);
+XR_FUNC XrtManagedStatus xrt_array_backing_capacity(const XrtManagedHeader *, XrtBackingArrayKind, int64_t *);
+/* Produce one owned candidate in a true-empty slot. The source remains live
+ * and unchanged through both the reuse and allocation paths. */
+XR_FUNC XrtManagedStatus xrt_array_backing_reserve_create(XrtManagedFrame *, size_t,
+    const XrtBackingTypes *, XrtBackingArrayKind, const XrtManagedHeader *, int64_t capacity);
 /* Scalar bits are copied without pointer aliasing; U8 is zero extended. */
 XR_FUNC XrtManagedStatus xrt_array_backing_read_bits(const XrtArrayBacking *,
     XrtBackingArrayKind, size_t, uint64_t *output);

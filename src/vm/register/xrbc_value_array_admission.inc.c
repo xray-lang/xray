@@ -275,7 +275,7 @@ static bool rbc_value_array_local_valid(const XrRbcModule *module,const XrRbcVal
 static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
     if (a.source || a.first>code->argument_count || a.count>code->argument_count-a.first ||
-        (a.count && !code->arguments) || a.index<XR_LIR_ARRAY_OP_NEW || a.index>XR_LIR_ARRAY_OP_DISPLAY) return false;
+        (a.count && !code->arguments) || a.index<XR_LIR_ARRAY_OP_NEW || a.index>XR_LIR_ARRAY_OP_RESERVE) return false;
     for (uint32_t p=0;p<a.count;++p) if (!rbc_value_id(code,code->arguments[a.first+p])) return false;
     const uint32_t *args=a.count ? code->arguments+a.first : NULL;
     bool create=a.index==XR_LIR_ARRAY_OP_NEW || a.index==XR_LIR_ARRAY_OP_REPEAT;
@@ -323,8 +323,11 @@ static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcVa
         return true;
     }
     if (!a.count || !rbc_value_array(module,code,args[0],false)) return false;
-    if (a.index==XR_LIR_ARRAY_OP_LEN) return a.count==1 && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    if (a.index==XR_LIR_ARRAY_OP_LEN || a.index==XR_LIR_ARRAY_OP_CAPACITY)
+        return a.count==1 && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     if (a.index==XR_LIR_ARRAY_OP_DISPLAY) return a.count==1 && rbc_value_string(module,code,a.result,true);
+    if (a.index==XR_LIR_ARRAY_OP_RESERVE) return a.count==2 && rbc_value_scalar(code,function,args[1],XR_RBC_BITS) &&
+        rbc_value_kind(module,code,a.result)==kind && rbc_value_array(module,code,a.result,true);
     return a.count==2 && rbc_value_scalar(code,function,args[1],XR_RBC_BITS) &&
         rbc_value_array_item_valid(module,code,function,a.result,kind) &&
         (kind!=XRT_VALUE_ARRAY_STRING || rbc_value_string(module,code,a.result,true));

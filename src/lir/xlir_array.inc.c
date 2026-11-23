@@ -112,8 +112,12 @@ XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirModule *m, const X
             entry->parameters[0] == XR_LIR_I64 && entry->parameters[1] == shape->result_element;
     if (shape->variadic || !entry->parameter_count) return false;
     switch (shape->operation) {
-    case XR_LIR_ARRAY_OP_LEN:
+    case XR_LIR_ARRAY_OP_LEN: case XR_LIR_ARRAY_OP_CAPACITY:
         return entry->parameter_count == 1 && entry->parameters[0] == XR_LIR_ARRAY && entry->result == XR_LIR_I64;
+    case XR_LIR_ARRAY_OP_RESERVE:
+        return entry->parameter_count == 2 && entry->parameters[0] == XR_LIR_ARRAY &&
+            entry->parameters[1] == XR_LIR_I64 && entry->result == XR_LIR_ARRAY &&
+            shape->parameter_elements[0] == shape->result_element;
     case XR_LIR_ARRAY_OP_DISPLAY:
         return entry->parameter_count == 1 && entry->parameters[0] == XR_LIR_ARRAY && entry->result == XR_LIR_STRING;
     case XR_LIR_ARRAY_OP_GET:
@@ -168,7 +172,7 @@ XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *m, XrLirType eleme
     XrLirArrayOperation operation, uint32_t *id) {
     if (id) *id = 0;
     if (!id || !m || m->failure != XR_LIR_OK || !xr_lir_internal_array_element(m, element) ||
-        operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_DISPLAY)
+        operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_RESERVE)
         return XR_LIR_INVALID_ARGUMENT;
     uint32_t family = xr_lir_internal_array_family(element);
     if (family == UINT32_MAX) {
@@ -209,8 +213,10 @@ static void lir_array_catalog_signature(LirArrayCatalogRow *row, XrLirIntrinsic 
     case XR_LIR_ARRAY_OP_NEW:
         parameters[0] = element; shapes[0] = XR_LIR_TYPE_INVALID;
         result = XR_LIR_ARRAY; break;
-    case XR_LIR_ARRAY_OP_LEN: result = XR_LIR_I64; break;
+    case XR_LIR_ARRAY_OP_LEN: case XR_LIR_ARRAY_OP_CAPACITY: result = XR_LIR_I64; break;
     case XR_LIR_ARRAY_OP_DISPLAY: result = XR_LIR_STRING; break;
+    case XR_LIR_ARRAY_OP_RESERVE:
+        arity = 2; parameters[1] = XR_LIR_I64; result = XR_LIR_ARRAY; break;
     case XR_LIR_ARRAY_OP_GET:
         arity = 2; parameters[1] = XR_LIR_I64; result = element; break;
     case XR_LIR_ARRAY_OP_SET:
@@ -232,6 +238,7 @@ static void lir_array_catalog_signature(LirArrayCatalogRow *row, XrLirIntrinsic 
 static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra) {
     enum { operations = XR_LIR_ARRAY_OP_REPEAT, base_catalog = XR_LIR_ARRAY_FAMILY_COUNT * operations,
         reference_end = base_catalog + XR_LIR_ARRAY_FAMILY_COUNT * 2,
+        display_end = reference_end + XR_LIR_ARRAY_FAMILY_COUNT,
         catalog = XR_LIR_ARRAY_CATALOG_COUNT };
     uint32_t count = extra ? extra->count : 0;
     if (!m || m->intrinsic_count || m->function_count || (count && !extra->entries) || count > UINT32_MAX - catalog - 1 ||
@@ -261,13 +268,22 @@ static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra)
         while (used[next]) ++next;
         used[next] = 1;
         bool reference = i >= base_catalog && i < reference_end;
-        bool display = i >= reference_end;
-        uint32_t family = display ? i - reference_end : reference ? (i - base_catalog) / 2 : i / operations;
-        XrLirType element = lir_array_elements[family];
-        XrLirArrayOperation operation = display ? XR_LIR_ARRAY_OP_DISPLAY : reference ?
-            (XrLirArrayOperation)(XR_LIR_ARRAY_OP_SET + (i - base_catalog) % 2) :
-            (XrLirArrayOperation)(i % operations + 1);
-        lir_array_catalog_signature(&parts[i], &entries[count + i], next, element, operation, reference);
+        uint32_t family;
+        XrLirArrayOperation operation;
+        if (i < base_catalog) {
+            family = i / operations;
+            operation = (XrLirArrayOperation)(i % operations + 1);
+        } else if (reference) {
+            family = (i - base_catalog) / 2;
+            operation = (XrLirArrayOperation)(XR_LIR_ARRAY_OP_SET + (i - base_catalog) % 2);
+        } else if (i < display_end) {
+            family = i - reference_end;
+            operation = XR_LIR_ARRAY_OP_DISPLAY;
+        } else {
+            family = (i - display_end) / 2;
+            operation = (XrLirArrayOperation)(XR_LIR_ARRAY_OP_CAPACITY + (i - display_end) % 2);
+        }
+        lir_array_catalog_signature(&parts[i], &entries[count + i], next, lir_array_elements[family], operation, reference);
     }
     uint32_t row = catalog;
     for (uint32_t t = 0; row < rows && t < m->type_count; ++t) {
