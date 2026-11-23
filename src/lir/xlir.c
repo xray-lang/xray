@@ -335,12 +335,17 @@ static const char *clock_external_name(XrLirExternKind kind) {
 }
 
 XR_FUNC bool xr_lir_internal_invoke_result_type(const XrLirModule *m, XrLirType type) {
-    if (lir_pod_scalar(type) < XR_POD_SCALAR_COUNT)
-        return true;
-    XrLirTypeView shape = {0};
-    XrLirTypeLayout layout = {0};
-    return xr_lir_type_view(m, type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_NULLABLE &&
-        xr_lir_type_layout(m, type, &layout) == XR_LIR_OK && layout.size && !layout.managed;
+    /* A packed Nullable return needs a supported physical type at every level. */
+    while (lir_pod_scalar(type) >= XR_POD_SCALAR_COUNT) {
+        XrLirTypeView shape = {0};
+        XrLirTypeLayout layout = {0};
+        if (xr_lir_type_view(m, type, &shape) != XR_LIR_OK || shape.kind != XR_LIR_TYPE_NULLABLE ||
+            shape.element >= type || xr_lir_type_layout(m, type, &layout) != XR_LIR_OK ||
+            !layout.size || layout.managed)
+            return false;
+        type = shape.element;
+    }
+    return true;
 }
 
 static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpec *spec) {
