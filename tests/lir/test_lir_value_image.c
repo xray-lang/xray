@@ -448,6 +448,50 @@ static void derived_classes_keep_concrete_identity(void) {
     MANAGED(xrt_managed_root_destroy(&root)); xrt_value_image_drop(&bound); owner_drop(&owner);
     CHECK(owner.audit.final==1);
 }
+static void nested_classes_keep_exact_owner_plans(void) {
+    const size_t offset = 0;
+    const XrtValueImageSlot field = {.type=2,.name_length=5};
+    const XrtValueImageType types[] = {
+        {.kind=XRT_VALUE_RECORD,.size=1,.alignment=1},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=1},
+        {.kind=XRT_VALUE_RECORD,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.field_count=1},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=3},
+    };
+    const XrtValueImage image = {.types=types,.type_count=4,.slots=&field,.slot_count=1,
+        .owned_offsets=&offset,.owned_count=1,.names="child",.name_bytes=5};
+    Owner owner; owner_new(&owner,SIZE_MAX);
+    XrtValueImagePlans *bound=NULL, *different_program=NULL;
+    MANAGED(xrt_value_image_bind(owner.billing,&image,(XrtManagedLease){0},&bound));
+    MANAGED(xrt_value_image_bind(owner.billing,&image,(XrtManagedLease){0},&different_program));
+    XrtBoundClass child={0}, different={0}, parent={0};
+    MANAGED(xrt_value_image_class(bound,2,&child));
+    MANAGED(xrt_value_image_class(different_program,2,&different));
+    MANAGED(xrt_value_image_class(bound,4,&parent));
+    XrtManagedRoot *root=NULL; XrtManagedFrame *frame=NULL;
+    MANAGED(xrt_managed_root_new(owner.billing,&root)); MANAGED(xrt_managed_frame_enter(root,3,&frame));
+    const unsigned char empty=0;
+    MANAGED(xrt_class_create(frame,0,child.ops,&empty));
+    MANAGED(xrt_class_create(frame,1,different.ops,&empty));
+    XrtManagedHeader *expected=NULL,*wrong=NULL,*instance=NULL;
+    MANAGED(xrt_managed_slot_borrow(frame,0,&expected));
+    MANAGED(xrt_managed_slot_borrow(frame,1,&wrong));
+    XrtBillingStats before=xrt_billing_owner_stats(owner.billing);
+    CHECK(xrt_class_create(frame,2,parent.ops,&wrong)==XRT_MANAGED_ARGUMENT);
+    XrtBillingStats after=xrt_billing_owner_stats(owner.billing);
+    CHECK(before.bytes==after.bytes && before.blocks==after.blocks && xr_signed_rc_read(&wrong->references)==1);
+    MANAGED(xrt_managed_slot_borrow(frame,2,&instance)); CHECK(!instance);
+    MANAGED(xrt_class_create(frame,2,parent.ops,&expected));
+    MANAGED(xrt_managed_slot_borrow(frame,2,&instance));
+    const XrtValuePlan *type=NULL;
+    const void *payload=NULL;
+    MANAGED(xrt_class_field_borrow(instance,parent.plan,0,&type,&payload)); CHECK(type==child.plan);
+    XrtManagedHeader *kept=NULL;
+    MANAGED(xrt_value_copy_empty(type,payload,&kept)); CHECK(kept==expected);
+    MANAGED(xrt_managed_root_destroy(&root));
+    xrt_value_image_drop(&bound); xrt_value_image_drop(&different_program); owner_drop(&owner);
+    CHECK(!owner.audit.final && xrt_class_backing_matches(kept,type));
+    xrt_managed_drop(kept); CHECK(owner.audit.final==1);
+}
 static void nested_class_owners_are_checked_before_publication(void) {
     typedef struct Pair { XrtManagedHeader *array, *text; } Pair;
     typedef struct OptionalPair { uint8_t tag; Pair payload; } OptionalPair;
@@ -522,6 +566,7 @@ int main(void) {
     class_array_update_failure_preserves_the_field(false);
     class_array_update_failure_preserves_the_field(true);
     derived_classes_keep_concrete_identity();
+    nested_classes_keep_exact_owner_plans();
     nested_class_owners_are_checked_before_publication();
     copied_names_and_real_values(); failures_and_empty(); deep_single_inventory(); rejects_forged_display_closure();
     class_values_follow_their_exact_owner();

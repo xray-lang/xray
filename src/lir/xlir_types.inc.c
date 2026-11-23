@@ -279,7 +279,7 @@ static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField
             (field.type == XR_LIR_ARRAY ? !xr_lir_class_array_element_supported(field.array_element) :
                 field.array_element || !(field.type == XR_LIR_STRING || field.type == XR_LIR_I64 ||
                     field.type == XR_LIR_I1 || field.type == XR_LIR_F64 ||
-                    xr_lir_inline_aggregate_type(m, field.type)))) return false;
+                    xr_lir_inline_aggregate_type(m, field.type) || xr_lir_class_payload(m, field.type, NULL)))) return false;
     }
     return true;
 }

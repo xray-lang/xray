@@ -102,10 +102,11 @@ static XrtBackingArrayKind class_array_kind(XrtValueKind kind) {
     default: return XRT_BACKING_ARRAY_COUNT;
     }
 }
-static bool record_field(const XrtValuePlan *plan) {
+static bool record_field(const XrtValuePlan *plan, bool named) {
     XrtValueKind kind = plan->view.kind;
     return kind == XRT_VALUE_I64 || kind == XRT_VALUE_BOOL || kind == XRT_VALUE_F64 ||
-        kind == XRT_VALUE_STRING || class_array_kind(kind) != XRT_BACKING_ARRAY_COUNT || xrt_value_kind_has_fields(kind) ||
+        kind == XRT_VALUE_STRING || kind == XRT_VALUE_ARRAY_I64 || xrt_value_kind_has_fields(kind) ||
+        (named && (kind == XRT_VALUE_ARRAY_U8 || kind == XRT_VALUE_CLASS)) ||
         (kind == XRT_VALUE_NULLABLE && managed_nullable(plan));
 }
 static bool capture_type(const XrtValuePlan *plan) {
@@ -123,7 +124,7 @@ static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *s
     size_t end = 0, alignment = 1, owned = 0;
     for (size_t i = 0; i < count; ++i) {
         XrtValueSlotSpec field = slots[i];
-        if (!field.type || (record ? !record_field(field.type) || named != (field.name_length != 0) :
+        if (!field.type || (record ? !record_field(field.type,named) || named != (field.name_length != 0) :
             !capture_type(field.type))) return false;
         const XrtValuePlanSpec *type = &field.type->view;
         if (field.flags && (!named || field.flags != XRT_VALUE_FIELD_MUTABLE ||
@@ -460,8 +461,10 @@ static void class_finish(void *context) {
     /* Inputs borrow existing owners and need no retirement. */
     (void)context;
 }
-static bool class_leaf_matches(XrtValueKind kind, const XrtManagedHeader *owner) {
+static bool class_leaf_matches(const XrtValuePlan *plan, const XrtManagedHeader *owner) {
+    XrtValueKind kind = plan->view.kind;
     if (kind == XRT_VALUE_STRING) return owner != NULL;
+    if (kind == XRT_VALUE_CLASS) return xrt_class_backing_matches(owner, plan);
     XrtBackingArrayKind array_kind = class_array_kind(kind);
     return array_kind != XRT_BACKING_ARRAY_COUNT && xrt_backing_array_matches(owner, array_kind);
 }
@@ -477,32 +480,35 @@ static const XrtValueSlotSpec *class_payload_field_at(const XrtValuePlanSpec *pl
 /* The plan's leaves are already ordered in physical address order. Follow
  * each leaf's containing fields without walking or stacking owner-free
  * subtrees. An inactive Nullable consumes its entire null-owner range. */
-static bool class_aggregate_owners_match(const XrtValuePlanSpec *plan, const unsigned char *row) {
+static bool class_aggregate_owners_match(const XrtValuePlan *type, const unsigned char *row) {
+    const XrtValuePlanSpec *plan = &type->view;
     for (size_t leaf = 0; leaf < plan->owned_count;) {
-        const XrtValuePlanSpec *part = plan;
+        const XrtValuePlan *part = type;
         const unsigned char *bytes = row;
         size_t offset = plan->owned_offsets[leaf];
         for (;;) {
-            if (xrt_value_kind_has_fields(part->kind)) {
-                const XrtValueSlotSpec *field = class_payload_field_at(part, offset);
+            const XrtValuePlanSpec *shape = &part->view;
+            if (xrt_value_kind_has_fields(shape->kind)) {
+                const XrtValueSlotSpec *field = class_payload_field_at(shape, offset);
                 if (!field) return false;
-                offset -= field->offset; bytes += field->offset; part = &field->type->view;
-            } else if (part->kind == XRT_VALUE_NULLABLE) {
-                uint8_t tag = bytes[part->nullable.tag_offset];
+                offset -= field->offset; bytes += field->offset; part = field->type;
+            } else if (shape->kind == XRT_VALUE_NULLABLE) {
+                uint8_t tag = bytes[shape->nullable.tag_offset];
                 if (tag > 1) return false;
                 if (!tag) break;
-                offset -= part->nullable.payload_offset; bytes += part->nullable.payload_offset;
-                part = &part->nullable.element->view;
+                offset -= shape->nullable.payload_offset; bytes += shape->nullable.payload_offset;
+                part = shape->nullable.element;
             } else break;
         }
-        if (part->kind == XRT_VALUE_NULLABLE) {
-            if (!part->owned_count || part->owned_count > plan->owned_count - leaf ||
-                offset != part->owned_offsets[0]) return false;
-            for (size_t i = 0; i < part->owned_count; ++i)
-                if (payload_child(bytes, part->owned_offsets[i])) return false;
-            leaf += part->owned_count;
+        const XrtValuePlanSpec *shape = &part->view;
+        if (shape->kind == XRT_VALUE_NULLABLE) {
+            if (!shape->owned_count || shape->owned_count > plan->owned_count - leaf ||
+                offset != shape->owned_offsets[0]) return false;
+            for (size_t i = 0; i < shape->owned_count; ++i)
+                if (payload_child(bytes, shape->owned_offsets[i])) return false;
+            leaf += shape->owned_count;
         } else {
-            if (offset || !class_leaf_matches(part->kind, payload_child(bytes, 0))) return false;
+            if (offset || !class_leaf_matches(part, payload_child(bytes, 0))) return false;
             ++leaf;
         }
     }
@@ -521,8 +527,8 @@ XR_FUNCDEF XrtManagedStatus xrt_class_create(XrtManagedFrame *frame, size_t slot
         const XrtValuePlanSpec *member = &field->type->view;
         if (!member->owned_count) continue;
         const unsigned char *bytes = (const unsigned char *)row + field->offset;
-        bool matched = member->kind == XRT_VALUE_STRING || class_array_kind(member->kind) != XRT_BACKING_ARRAY_COUNT ?
-            class_leaf_matches(member->kind, payload_child(bytes, 0)) : class_aggregate_owners_match(member, bytes);
+        bool matched = pointer_kind(member->kind) ? class_leaf_matches(field->type, payload_child(bytes, 0)) :
+            class_aggregate_owners_match(field->type, bytes);
         if (!matched) return XRT_MANAGED_ARGUMENT;
     }
     ClassConstruction context = {payload,row};

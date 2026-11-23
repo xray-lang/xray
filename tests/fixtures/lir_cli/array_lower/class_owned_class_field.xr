@@ -1,0 +1,14 @@
+import path
+
+final class PathHolder {
+    private const value: path.Path
+    init(value: path.Path) { this.value = value }
+    get() -> path.Path { return this.value }
+}
+
+fn snapshot() -> path.Path {
+    var holder = PathHolder(path.from("saved"))
+    return holder.get()
+}
+
+print(snapshot().raw)

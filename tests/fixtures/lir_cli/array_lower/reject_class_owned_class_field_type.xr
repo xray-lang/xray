@@ -1,0 +1,16 @@
+final class First {
+    value: string
+    init(value: string) { this.value = value }
+}
+
+final class Second {
+    value: string
+    init(value: string) { this.value = value }
+}
+
+final class Holder {
+    private value: First
+    init(value: Second) { this.value = value }
+}
+
+var holder = Holder(Second("same shape"))
