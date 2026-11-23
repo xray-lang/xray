@@ -244,6 +244,8 @@ jobs:
               output.write('LAYOUT_CC=' + compiler + '\n')
       - name: Verify benchmark execution controls
         run: python scripts/array_access_benchmark.py self-test --work build/layout-controls
+      - name: Verify matched measurement ratios
+        run: python bench/managed-value-layout/test_run.py
       - name: Prepare the Windows layout experiment
         if: runner.os == 'Windows'
         shell: cmd

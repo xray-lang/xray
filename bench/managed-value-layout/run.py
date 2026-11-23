@@ -27,20 +27,8 @@ RATIO_CASES = ("push", "map", "push-direct", "push-noalias", "map-take", "map-ty
 # scalar-local push forms and every Map form are fast paths held to 1.3x.
 RATIO_LIMITS = {"push": 3.0, "map": 1.3, "push-direct": 1.3, "push-noalias": 1.3,
                 "map-take": 1.3, "map-typed-drop": 1.3}
-# Shared CI runners swing single samples by up to 2x; eleven alternating rounds
-# give each engine enough processes for a stable lower quartile.
-ROUNDS = 11
-
-
-def lower_quartile(values: list[float]) -> float:
-    """First quartile of per-process wall times.
-
-    Runner interference only adds time: on shared x86 VMs some processes ran
-    15% slower with identical instruction, cache-miss and TLB-miss counts. A
-    median moves whenever such processes are the majority, so ratios compare
-    the lower quartile, which a real regression still shifts with every sample.
-    """
-    return statistics.quantiles(values, n=4, method="inclusive")[0]
+# Two consecutive rounds reverse the launch order and form one paired block.
+ROUNDS = 12
 
 
 def source_identity() -> dict:
@@ -155,7 +143,8 @@ def measure(args) -> int:
     args.work.mkdir(parents=True)
     result = {"state": "RUNNING", "prepared": evidence.fingerprint(args.prepared), "samples": [],
               "timingMethod": evidence.TIMING_METHOD,
-              "timings": {}, "ratios": {}, "medianRatios": {}, "ratioEstimator": "lowerQuartile",
+              "timings": {}, "ratios": {}, "medianRatios": {}, "balancedBlockRatios": {},
+              "ratioEstimator": "balancedBlockLowerQuartile",
               "prototypeOnly": True, "productQualification": "NOT_RUN",
               "boundary": "Native local RC layout only. No VM, shared RC, Root/unwind, Source or full "
                           "sanitizer qualification. Record may fold and has no heap-allocation ratio gate. "
@@ -163,8 +152,7 @@ def measure(args) -> int:
     try:
         for case in CASES:
             for round_index in range(ROUNDS):
-                order = ("managed", "raw") if round_index % 2 == 0 else ("raw", "managed")
-                for engine in order:
+                for engine in evidence.measurement_order(("managed", "raw"), round_index):
                     mode = RAW_CASES.get(case, case) if engine == "raw" else case
                     row = evidence.execute([prepared["products"][engine], mode], args.work,
                                            f"{case}-{round_index}-{engine}", evidence.environment(ROOT),
@@ -184,11 +172,13 @@ def measure(args) -> int:
                 rows = [row for row in result["samples"] if (row["case"], row["engine"]) == (case, engine)]
                 if len(rows) == ROUNDS and all(row["ok"] for row in rows):
                     values = [row["processWallSeconds"] for row in rows]
-                    timings[engine] = {"lowerQuartile": lower_quartile(values),
+                    timings[engine] = {"lowerQuartile": evidence.lower_quartile(values),
                                        "median": statistics.median(values),
                                        "min": min(values), "max": max(values), "all": values}
             if set(timings) == {"managed", "raw"}:
-                result["ratios"][case] = timings["managed"]["lowerQuartile"] / timings["raw"]["lowerQuartile"]
+                ratios = evidence.balanced_block_ratios(timings["managed"]["all"], timings["raw"]["all"])
+                result["balancedBlockRatios"][case] = ratios
+                result["ratios"][case] = evidence.lower_quartile(ratios)
                 result["medianRatios"][case] = timings["managed"]["median"] / timings["raw"]["median"]
         result["state"] = "PASS_EXECUTION_ONLY" if complete else "FAIL"
         result["layoutGates"] = {case: {"ratio": result["ratios"].get(case), "limit": RATIO_LIMITS[case],
@@ -228,7 +218,8 @@ def report_ratios(result: dict, over: bool) -> None:
     """
     mode = "blocking" if result["ratioMode"] == "gate" else "report only"
     lines = [f"## Layout ratios ({mode}): {result['state']}", "",
-             "| case | managed / raw (lower quartile) | median ratio | limit | |", "|---|---|---|---|---|"]
+             "| case | paired-block ratio (lower quartile) | full-run median ratio | limit | |",
+             "|---|---|---|---|---|"]
     for case, gate in result["layoutGates"].items():
         ratio = "n/a" if gate["ratio"] is None else f"{gate['ratio']:.2f}"
         median = result["medianRatios"].get(case)

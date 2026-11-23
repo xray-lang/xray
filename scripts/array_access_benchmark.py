@@ -7,7 +7,7 @@ assert --prepared NEW/prepared.json --result ANOTHER_NEW/result.json --scope nat
 self-test --work NEW
 
 Preparation performs real CLI C generation and native compilation, but executes
-no workload. Measurement uses nine forward/reverse rounds and a fixed 30-second
+no workload. Measurement uses ten forward/reverse rounds and a fixed 30-second
 product timeout. Run it under the caller's exclusive performance resource lease.
 Optional --lua/--python require matching --lua-receipt/--python-receipt paths;
 the Python running this tool is never selected as a reference automatically.
@@ -33,8 +33,27 @@ import xray_process
 
 PRODUCT_TIMEOUT = 30
 TIMING_METHOD = "blocking-native-wait-observer-v1"
-ROUNDS = 9
+ROUNDS = 10
 NATIVE_LIMITS = {"push": 1.3, "inplace": 1.1}
+
+
+def measurement_order(engines, round_index: int) -> tuple[str, ...]:
+    order = tuple(engines)
+    return order if round_index % 2 == 0 else order[::-1]
+
+
+def lower_quartile(values: list[float]) -> float:
+    return statistics.quantiles(values, n=4, method="inclusive")[0]
+
+
+def balanced_block_ratios(subject: list[float], control: list[float]) -> list[float]:
+    """Pair adjacent forward and reverse rounds before comparing wall times."""
+    if len(subject) != len(control) or len(control) < 4 or len(control) % 2:
+        raise ValueError("Benchmark timings require at least two complete paired blocks")
+    # Independent percentiles can draw the two engines from different load
+    # periods. Each block samples both engines in both orders.
+    return [(subject[i] + subject[i + 1]) / (control[i] + control[i + 1])
+            for i in range(0, len(control), 2)]
 
 
 def digest(path: Path) -> str:
@@ -426,8 +445,7 @@ def measure(args) -> None:
     try:
         for case, engines in prepared["engines"].items():
             for round_index in range(ROUNDS):
-                order = list(engines) if round_index % 2 == 0 else list(reversed(engines))
-                for engine in order:
+                for engine in measurement_order(engines, round_index):
                     command = engines[engine]
                     row = execute(command["argv"], args.work, f"{case}-{round_index}-{engine}", env,
                                   bytes.fromhex(command["expectedHex"]))
@@ -459,35 +477,24 @@ def measure(args) -> None:
         raise RuntimeError("At least one declared sample failed; inspect retained raw files")
 
 
-def lower_quartile(values) -> float:
-    """Robust central timing for a shared runner.
-
-    A hosted host can only ever add delay, and a median still moves when the
-    noise reaches half of the rounds. The lower quartile of the ROUNDS samples
-    stays on the fast rounds, so the ratio it builds reports the engine
-    difference rather than the host's current load.
-    """
-    ordered = sorted(values)
-    return ordered[(len(ordered) - 1) // 4]
-
-
 def assert_result(args) -> int:
     prepared = json.loads(args.prepared.read_text(encoding="utf-8"))
     verify_prepared(prepared)
     result = json.loads(args.result.read_text(encoding="utf-8"))
     report = {"scope": args.scope, "gates": {}, "notRun": dict(prepared["open"]),
+              "ratioEstimator": "balancedBlockLowerQuartile",
               "boundary": "Single-build native Array subgate only. Other layouts, platforms, structural hot-path gates and complete Task339 qualification remain OPEN."}
     valid = result["state"] == "PASS_EXECUTION_ONLY" and result["prepared"] == fingerprint(args.prepared)
     expected_count = ROUNDS * sum(len(engines) for engines in prepared["engines"].values())
     valid &= len(result["samples"]) == expected_count
     for case, engines in prepared["engines"].items():
         rows = [r for r in result["samples"] if r["case"] == case]
-        valid &= len(rows) == ROUNDS * len(engines) and all(r["ok"] for r in rows)
-        actual = {}
-        median = {}
+        expected_order = [(round_index, engine) for round_index in range(ROUNDS)
+                          for engine in measurement_order(engines, round_index)]
+        valid &= [(r["round"], r["engine"]) for r in rows] == expected_order and all(r["ok"] for r in rows)
+        wall_times = {}
         for engine, command in engines.items():
             samples = [row for row in rows if row["engine"] == engine]
-            valid &= len(samples) == ROUNDS and sorted(row["round"] for row in samples) == list(range(ROUNDS))
             for row in samples:
                 for stream in row["streams"].values():
                     if digest(Path(stream["path"])) != stream["sha256"]:
@@ -499,14 +506,14 @@ def assert_result(args) -> int:
                 valid &= not Path(row["streams"]["stderr"]["path"]).read_bytes()
                 valid &= math.isfinite(row.get("processWallSeconds", 0)) and row.get("processWallSeconds", 0) > 0
             if valid:
-                times = [row["processWallSeconds"] for row in samples]
-                actual[engine] = lower_quartile(times)
-                median[engine] = statistics.median(times)
+                wall_times[engine] = [row["processWallSeconds"] for row in samples]
         if valid:
-            ratio = actual["native"] / actual["C"]
+            blocks = balanced_block_ratios(wall_times["native"], wall_times["C"])
+            ratio = lower_quartile(blocks)
             limit = prepared["thresholds"][case]["nativeOverC"]
             report["gates"][case] = {"ratio": ratio,
-                                      "medianRatio": median["native"] / median["C"],
+                                      "balancedBlockRatios": blocks,
+                                      "medianRatio": statistics.median(wall_times["native"]) / statistics.median(wall_times["C"]),
                                       "limit": limit, "pass": ratio <= limit,
                                       "source": prepared["thresholds"][case]["source"]}
     missing = [kind for kind in ("lua", "python") if kind not in prepared["references"]]

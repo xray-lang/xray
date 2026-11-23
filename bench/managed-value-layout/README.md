@@ -239,17 +239,15 @@ executables. Run `managed.exe verify` before requesting a coordinated measuremen
 window. Full workloads and ratios require a fixed-input, alternating-order plan
 and must retain all samples. The only ratio limits are the `run.py` gates below.
 
-The portable `run.py` driver measures all eight original and variant workloads,
-eleven alternating rounds each, with the corresponding unchanged raw workload.
-Each ratio compares the lower quartile of the per-process wall times; the median
-ratio is still reported. Runner interference only adds time: on shared Linux x86
-VMs (Intel Xeon 6975P-C, AMD EPYC 9V74 and 9V45) the managed Map workloads have a
-second mode about 15% slower with identical instruction, L1 and TLB miss counts,
-and it survives disabled ASLR with a fixed environment. Typical GCC Map ratios
-there are 1.13-1.17, yet a median taken while most processes landed in the slow
-mode reached 1.30-1.34 on GCC, MSVC and clang-cl with unchanged code. Over the
-same five runs the lower quartile crossed 1.3 once instead of five times. A real
-regression moves every sample, so the lower quartile still detects it.
+The portable `run.py` driver measures all eight original and variant workloads
+in twelve alternating rounds each, with the corresponding unchanged raw
+workload. Two adjacent rounds form a block that runs both engines in both
+orders. Divide the total managed wall time by the total raw wall time within
+each block, then take the lower quartile of the six ratios. Report the full-run
+median ratio separately and retain individual process times and all block
+ratios. This keeps both engines in the same time window when host load changes.
+Separate engine quartiles can select different load periods and exceeded 1.30
+for the same MSVC `map-take` binaries in two CI measurements.
 `record-escape` remains a separate ownership control, outside those eight modes.
 The automatic five-provider workflow holds `push-direct`, `push-noalias`, `map`,
 `map-take` and `map-typed-drop` to 1.3x their raw controls. The per-operation
@@ -258,8 +256,8 @@ generic path and is held to 3x, the bound every generic spelling must meet,
 while its scalar-local forms carry the fast-path limit.
 `measure --ratios gate` fails on any ratio over its limit; `--ratios report`
 prints the same table and warns instead. The macOS provider uses report mode:
-its shared runners swung single samples from 59 to 107 ms within one eleven-round
-run, enough to move an unchanged Map median past 1.3. Execution, golden output
+its shared runners have swung single samples from 59 to 107 ms within one run,
+enough to move an unchanged Map median past 1.3. Execution, golden output
 and source identity still block on every provider.
 The binding carries the initialized length and the backing keeps its capacity,
 so the per-push `length < capacity` check reads two objects and cannot become one
