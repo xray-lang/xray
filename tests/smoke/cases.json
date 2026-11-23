@@ -467,7 +467,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http2/http2.xr:187:19: error: E0330: throwing call requires try or a try body"
+        "first_diagnostic": "stdlib/http2/http2.xr:222:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
       }
     },
     {
@@ -671,7 +671,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/ws/ws.xr:295:19: error: E0330: throwing call requires try or a try body"
+        "first_diagnostic": "stdlib/net/net.xr:132:15: error: name is not an initialized value"
       }
     },
     {
@@ -1068,7 +1068,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http2/http2.xr:187:19: error: E0330: throwing call requires try or a try body"
+        "first_diagnostic": "stdlib/http2/http2.xr:222:9: error: E0331: escaping error exceeds the declared throws type; catch it or declare throws"
       }
     },
     {
@@ -1160,7 +1160,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/ws/ws.xr:295:19: error: E0330: throwing call requires try or a try body"
+        "first_diagnostic": "stdlib/net/net.xr:132:15: error: name is not an initialized value"
       }
     },
     {

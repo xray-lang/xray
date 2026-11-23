@@ -184,7 +184,7 @@ fn _asciiLower(s: string) -> string {
         var c = b[i] as i64
         out[i] = (c >= 65 && c <= 90 ? c + 32 : c) as u8
     }
-    return string.fromUtf8(out[:])
+    return try! string.fromUtf8(out[:])
 }
 
 fn _trimAscii(s: string) -> string {
@@ -195,7 +195,7 @@ fn _trimAscii(s: string) -> string {
     while (end > start && (b[end - 1] == 32 || b[end - 1] == 9)) { end = end - 1 }
     var out = Array<u8>(end - start)
     for (var i = start; i < end; i++) { out[i - start] = b[i] }
-    return string.fromUtf8(out[:])
+    return try! string.fromUtf8(out[:])
 }
 
 // RFC 7540 Section 8.1.2.2: connection-specific header fields must not
