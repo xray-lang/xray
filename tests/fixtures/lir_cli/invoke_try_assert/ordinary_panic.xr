@@ -1,0 +1,19 @@
+enum ProbeErr { Empty }
+
+fn ordinary(divisor: i64) -> i64 {
+    print("ordinary")
+    return 40 / divisor
+}
+
+fn value() throws(ProbeErr) -> i64 {
+    print("value")
+    throw ProbeErr.Empty
+}
+
+fn caller() -> i64 {
+    return try! (ordinary(0) + value())
+}
+
+print("entered")
+print(caller())
+print("after")

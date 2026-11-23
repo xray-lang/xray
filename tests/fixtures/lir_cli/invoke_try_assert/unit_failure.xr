@@ -1,0 +1,15 @@
+enum ProbeErr { Empty, Bad { code: i64 } }
+
+fn unit(ok: bool) throws(ProbeErr) {
+    print("unit")
+    if (!ok) { throw ProbeErr.Empty }
+}
+
+fn asserting() {
+    try! unit(false)
+    print("after assert")
+}
+
+print("entered")
+asserting()
+print("after caller")

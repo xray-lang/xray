@@ -1,0 +1,25 @@
+{
+  "success": {
+    "exit": 0,
+    "stdout": "ordinary\nvalue\n17\nunit\ndone\n",
+    "stderr": ""
+  },
+  "scalar_failure": {
+    "exit": 1,
+    "stdout": "entered\nvalue\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: ProbeErr.Bad(23)\n"
+  },
+  "unit_failure": {
+    "exit": 1,
+    "stdout": "entered\nunit\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: ProbeErr.Empty\n"
+  },
+  "ordinary_panic": {
+    "exit": 1,
+    "stdout": "entered\nordinary\n",
+    "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  },
+  "redundant": {
+    "source_error": ":5:7: error: E0336: try expression has no business-error source; remove the marker and preserve the expression"
+  }
+}

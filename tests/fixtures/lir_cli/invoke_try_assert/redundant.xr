@@ -1,0 +1,5 @@
+fn ordinary() -> i64 {
+    return 5
+}
+
+print(try! ordinary())

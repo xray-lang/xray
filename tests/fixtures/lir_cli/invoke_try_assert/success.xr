@@ -1,0 +1,25 @@
+enum ProbeErr { Empty, Bad { code: i64 } }
+
+fn ordinary() -> i64 {
+    print("ordinary")
+    return 5
+}
+
+fn value(ok: bool) throws(ProbeErr) -> i64 {
+    print("value")
+    if (!ok) { throw ProbeErr.Bad { code: 23 } }
+    return 12
+}
+
+fn unit(ok: bool) throws(ProbeErr) {
+    print("unit")
+    if (!ok) { throw ProbeErr.Empty }
+}
+
+fn caller() -> i64 {
+    return try! (ordinary() + value(true))
+}
+
+print(caller())
+try! unit(true)
+print("done")
