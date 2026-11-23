@@ -1,0 +1,30 @@
+import { File } from io
+import path
+
+fn show(bytes: Array<u8>?) {
+    if (bytes == null) {
+        print(-1)
+        return
+    }
+    var payload = bytes!
+    print(len(payload))
+    for (var i = 0; i < len(payload); i++) {
+        print(payload[i] as i64)
+    }
+}
+
+fn run() {
+    var opened = File.open(path.from("read-界.bin"))
+    if (opened == null) {
+        print("open refused")
+        return
+    }
+    var file = opened!
+    show(file.read(0))
+    show(file.read(2))
+    show(file.read(7))
+    show(file.read(1))
+    print(file.close())
+    show(file.read(0))
+}
+run()

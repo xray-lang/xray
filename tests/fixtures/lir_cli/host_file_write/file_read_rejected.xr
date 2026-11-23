@@ -1,0 +1,40 @@
+import { File } from io
+import path
+
+fn run() {
+    print(File.open(path.from("missing.bin")) == null)
+    var opened = File.open(path.from("read.bin"))
+    if (opened == null) {
+        print("open refused")
+        return
+    }
+    var reader = opened!
+    print(reader.read(-1) == null)
+    print(reader.read(2147483648) == null)
+    print(reader.writeString("bad", 0))
+    var first = reader.read(1)
+    if (first == null) {
+        print("first byte missing")
+        return
+    }
+    print(first![0] as i64)
+    print(reader.close())
+    print(reader.read(1) == null)
+
+    var appended = File.openWrite(path.from("writer.bin"), true)
+    if (appended == null) {
+        print("append refused")
+        return
+    }
+    var writer = appended!
+    print(writer.read(1) == null)
+    var empty = writer.read(0)
+    if (empty == null) {
+        print("zero read refused")
+        return
+    }
+    print(len(empty!))
+    print(writer.writeString("z", 0))
+    print(writer.close())
+}
+run()

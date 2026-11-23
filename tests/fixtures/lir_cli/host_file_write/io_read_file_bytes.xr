@@ -1,0 +1,21 @@
+import { readFileBytes } from io
+import path
+
+fn show(result: Array<u8>?) {
+    if (result == null) {
+        print(-1)
+        return
+    }
+    var bytes = result!
+    print(len(bytes))
+    for (var i = 0; i < len(bytes); i++) {
+        print(bytes[i] as i64)
+    }
+}
+
+fn run() {
+    show(readFileBytes(path.from("read.bin")))
+    show(readFileBytes(path.from("empty.bin")))
+    show(readFileBytes(path.from("missing.bin")))
+}
+run()
