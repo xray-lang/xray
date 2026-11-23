@@ -263,6 +263,8 @@ typedef struct {
     const struct XrRbcCallableValue *captures;
     uint32_t capture_count;
     bool state_capture;
+    /* The sealed code owner authenticates compiler-generated cleanup bodies. */
+    bool cleanup_only;
     const XrRbcEnvironment *environments;
     uint32_t environment_count, environment_size;
 } XrRbcFunction;

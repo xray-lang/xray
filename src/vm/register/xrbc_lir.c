@@ -1652,6 +1652,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         .captures=c->captures, .capture_count=target.capture_count, .state_capture=target.state_capture,
         .environments=c->environments, .environment_count=(uint32_t)c->environment_count,
         .environment_size=c->environment_size,
+        .cleanup_only=c->view.cleanup_owner!=0,
         .aggregate_result_type=rbc_lir_aggregate_type(c->input, c->view.result) ?
             rbc_lir_aggregate_ordinal(c, c->view.result) + 1 : 0};
     if (target.callable)

@@ -164,6 +164,68 @@ static XrLirType test_nominal_error(XrLirModule *m, XrLirLiteral *metadata) {
     return type;
 }
 
+static void test_cleanup_root_authority(bool typed) {
+    XrLirModule *m=NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    XrLirType scalar=XR_LIR_I64;
+    XrLirFunction owner=test_function(m,"owner",NULL,0,scalar),cleanup={0};
+    OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){.name="cleanup",.name_length=7,
+        .parameters=&scalar,.parameter_count=1,.result=XR_LIR_UNIT,.cleanup_owner=owner.id},&cleanup));
+    OK(xr_lir_define_function(m,cleanup));
+    XrLirBlock body=test_block(m,cleanup,NULL,0);
+    OK(xr_lir_set_entry(m,cleanup,body));
+    if (typed) {
+        XrLirLiteral metadata={0};
+        XrLirType error_type=test_nominal_error(m,&metadata);
+        XrLirValue payload=parameter(m,cleanup,0),value={0};
+        OK(xr_lir_emit_value(m,body,&(XrLirInstruction){.op=XR_LIR_SUM_NEW,.type=error_type,
+            .operands=&payload,.operand_count=1,.bits=1},&value));
+    }
+    test_return(m,body,(XrLirValue){0});
+    XrLirBlock registration=test_block(m,owner,NULL,0),retire=test_block(m,owner,NULL,0);
+    OK(xr_lir_set_entry(m,owner,registration));
+    XrLirValue saved=test_constant(m,registration,scalar,17);
+    OK(xr_lir_internal_cleanup_block(m,registration,0,cleanup.id,&saved,1));
+    test_branch(m,registration,retire,NULL,0);
+    OK(xr_lir_internal_cleanup_block(m,retire,cleanup.id,0,NULL,0));
+    OK(xr_lir_emit_effect(m,retire,&(XrLirInstruction){.op=XR_LIR_CALL,.type=XR_LIR_UNIT,
+        .callee=cleanup,.operands=&saved,.operand_count=1}));
+    test_return(m,retire,saved);
+    OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=NULL;
+    CHECK(xr_rbc_compile(m,cleanup,&program,NULL)==XR_RBC_COMPILE_INVALID && !program);
+    program=compile(m,owner);
+    xr_lir_module_destroy(m);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    XrtLocationOwner *locations=xr_rbc_program_locations(program);
+    CHECK(module->function_count==2 && !module->functions[0].cleanup_only &&
+        module->functions[1].cleanup_only && module->functions[1].parameter_count==1 &&
+        (xr_rbc_module_value_code(module,1)!=NULL)==typed);
+    CHECK(run(program,NULL,0)==17);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(module,0,NULL,0,locations,&execution)==XR_RBC_OK && execution);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    uint64_t bits=0;
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_OK);
+    xr_rbc_outcome_bits(outcome,&bits);
+    CHECK(bits==17);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_outcome_free(&outcome);
+    uint64_t argument=17;
+    CHECK(xr_rbc_module_prepare(module,1,&argument,1,locations,&execution)==XR_RBC_INVALID && !execution);
+
+    if (!typed) {
+        XrRbcModule raw={.functions=module->functions,.function_count=module->function_count};
+        CHECK(xr_rbc_module_prepare(&raw,1,&argument,1,locations,&execution)==XR_RBC_INVALID && !execution);
+        uint32_t word=XR_RBC_RET0;
+        XrRbcFunction ordinary={.code=&word,.code_count=1,.register_count=1};
+        raw=(XrRbcModule){.functions=&ordinary,.function_count=1};
+        CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,locations,&execution)==XR_RBC_OK && execution);
+        xr_rbc_execution_free(&execution);
+    }
+    xr_rbc_program_destroy(program);
+}
+
 static void reject_forged_error_literal(const XrRbcProgram *program, const uint64_t *arguments, size_t count) {
     const XrRbcModule *module = xr_rbc_program_view(program);
     CHECK(module->literal_count==1 && module->literals && module->code_lease.owner);
@@ -2067,6 +2129,8 @@ int main(void) {
     test_edge_moves();
     test_owned_arithmetic_panics();
     test_raw_typed_error_rejected();
+    test_cleanup_root_authority(false);
+    test_cleanup_root_authority(true);
     test_owned_try_assert();
     test_nullable_invoke_result();
     test_unsupported_nullable_invoke_result(false);

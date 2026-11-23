@@ -392,10 +392,13 @@ static XrRbcStatus xr_rbc_module_valid(const XrRbcModule *module) {
         if (module->literals[i].length == SIZE_MAX ||
             (module->literals[i].length && !module->literals[i].bytes)) return XR_RBC_INVALID;
     // Validate descriptors before using any call target's parameter count.
-    for (size_t f = 0; f < module->function_count; ++f)
-        if (!xr_rbc_function_valid(&module->functions[f]) &&
-            !xr_rbc_typed_container_function_valid(module,&module->functions[f])) return XR_RBC_INVALID;
-    if (!xr_rbc_module_code_owner(module) && !rbc_callable_signatures_valid(module)) return XR_RBC_INVALID;
+    const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
+    for (size_t f = 0; f < module->function_count; ++f) {
+        const XrRbcFunction *function=&module->functions[f];
+        if ((function->cleanup_only && !owner) || (!xr_rbc_function_valid(function) &&
+            !xr_rbc_typed_container_function_valid(module,function))) return XR_RBC_INVALID;
+    }
+    if (!owner && !rbc_callable_signatures_valid(module)) return XR_RBC_INVALID;
     XrRbcStatus borrowed=rbc_borrowed_values_admit(module);
     if (borrowed!=XR_RBC_OK) return borrowed;
     if (!rbc_callable_metadata_valid(module) || !rbc_callable_image_valid(module)) return XR_RBC_INVALID;
@@ -552,6 +555,7 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
         entry >= module->function_count || (argument_count && !arguments))
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
+    if (function->cleanup_only) return XR_RBC_INVALID;
     bool owned=request->owned_function!=NULL;
     size_t captures=owned ? function->capture_count : 0;
     bool inject_state = !owned && module->state_spec && entry == module->state_entry;
