@@ -299,13 +299,16 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     case XR_RBC_VALUE_RETURN: {
         if (rbc_scope_current(state)) return false;
         const XrLirValueHome *home=rbc_value_home(code,access.source);
-        if (rbc_value_slice(state->module,code,access.source)) {
+        uint32_t result_type = rbc_result_value_type(code);
+        if (rbc_callable_home_type(xr_rbc_module_value_image(state->module), result_type)) {
+            if (!rbc_value_exact_home(state->module, code, access.source, result_type, false)) return false;
+        } else if (rbc_value_slice(state->module,code,access.source)) {
             if (!rbc_value_slice_return_valid(state->module,code,access) ||
                 !rbc_value_flow_read(state,code,access.source,&incoming) || incoming.value.state!=RBC_SLICE_BORROWED) return false;
         } else if (rbc_value_function(state->module,code,access.source,false)) {
             if (!rbc_value_flow_read(state,code,access.source,&incoming) || incoming.scope==3) return false;
         } else if (rbc_value_inline(state->module,code,access.source,false)) {
-            if (!home || home->type!=code->homes->result_type) return false;
+            if (!home || home->type!=result_type) return false;
         } else if (state->function->aggregate_result_type) {
             if (!rbc_value_flow_bits(state,code,access.source)) return false;
         } else if (rbc_managed_kind(state->function->result_kind)) {

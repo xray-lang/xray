@@ -1,0 +1,10 @@
+fn pass(value: i64) -> i64 {
+    return value
+}
+
+fn exercise() {
+    const callback: CFn<fn(i64) -> i64> = pass
+    print(callback(7))
+}
+
+exercise()

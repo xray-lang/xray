@@ -1,0 +1,10 @@
+fn pass(value: Array<u8>?) -> Array<u8>? {
+    return value
+}
+
+fn exercise() {
+    const callback: CFn<fn(Array<u8>?) -> Array<u8>?> = pass
+    print(callback(null) == null)
+}
+
+exercise()

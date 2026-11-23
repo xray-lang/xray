@@ -122,6 +122,38 @@ static void callable_type_rejections(void) {
     }
 }
 
+static void nullable_array_callable_shapes(void) {
+    for (unsigned attempt = 0; attempt < 4; ++attempt) {
+        XrLirModule *module = NULL;
+        OK(xr_lir_module_create(NULL, &module));
+        XrLirType bytes = 0, integers = 0;
+        OK(xr_lir_nullable_array_type(module, XR_LIR_U8, &bytes));
+        OK(xr_lir_nullable_array_type(module, XR_LIR_I64, &integers));
+        XrLirCallableParameter parameter = {.type=bytes, .mode=XR_PARAM_READ};
+        XrLirCallableType signature = {.parameters=&parameter, .parameter_count=1, .result=bytes};
+        XrLirType read = 0, other = 0;
+        OK(xr_lir_callable_type(module, &signature, &read));
+        signature.result = integers;
+        OK(xr_lir_callable_type(module, &signature, &other));
+        CHECK(!xr_lir_callable_accepts(module, read, other));
+        signature.result = bytes;
+        parameter.type = integers;
+        OK(xr_lir_callable_type(module, &signature, &other));
+        CHECK(!xr_lir_callable_accepts(module, read, other));
+        parameter.type = bytes;
+        if (attempt < 2) {
+            signature.flags = XR_LIR_CALLABLE_C_ABI | XR_LIR_CALLABLE_NO_SUSPEND;
+            if (attempt == 0) parameter.type = XR_LIR_I64;
+            else signature.result = XR_LIR_I64;
+        } else {
+            parameter.mode = attempt == 2 ? XR_PARAM_MOVE : XR_PARAM_REF;
+        }
+        XrLirType rejected = 0;
+        CHECK(xr_lir_callable_type(module, &signature, &rejected) == XR_LIR_INVALID_ARGUMENT && !rejected);
+        xr_lir_module_destroy(module);
+    }
+}
+
 static void callable_parameter_contracts(void) {
     XrLirModule *module = NULL;
     OK(xr_lir_module_create(NULL, &module));

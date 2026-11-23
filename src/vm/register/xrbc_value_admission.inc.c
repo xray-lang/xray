@@ -185,6 +185,12 @@ static bool rbc_value_owner(const XrRbcModule *module,const XrRbcValueCode *code
     return rbc_value_string(module,code,value,destination) || rbc_value_container(module,code,value,destination) ||
         rbc_value_inline(module,code,value,destination);
 }
+static bool rbc_value_exact_home(const XrRbcModule *module, const XrRbcValueCode *code,
+    uint32_t value, uint32_t type, bool destination) {
+    const XrLirValueHome *home = rbc_value_home(code, value);
+    return home && home->type == type && (rbc_value_array(module, code, value, destination) ||
+        rbc_value_inline(module, code, value, destination));
+}
 static bool rbc_value_file_storage(const XrRbcModule *module, const XrRbcValueCode *code, uint32_t value, bool optional) {
     if (!rbc_value_inline(module, code, value, optional)) return false;
     const XrtValueImage *image = xr_rbc_module_value_image(module);
@@ -688,14 +694,14 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 if (!rbc_value_scalar(code,function,source,kind)) return false;
             }
         }
-        if (rbc_result_value_kind(module, a.index) == XRT_VALUE_ARRAY_INLINE)
-            return !a.other && rbc_value_array(module, code, a.result, true) &&
-                callee->homes->result_type == rbc_value_home(code, a.result)->type;
+        uint32_t result_type = rbc_result_value_type(callee);
+        if (rbc_callable_home_type(xr_rbc_module_value_image(module), result_type))
+            return !a.other && rbc_value_exact_home(module, code, a.result, result_type, true);
         if (callee && rbc_value_slice(module,code,a.result))
             return rbc_value_slice_call(module,code,callee,a)!=NULL;
         if (a.other) return false;
         if (callee && rbc_value_inline(module,code,a.result,true))
-            return callee->homes->result_type==rbc_value_home(code,a.result)->type;
+            return result_type==rbc_value_home(code,a.result)->type;
         if (target->aggregate_result_type)
             return callee && rbc_value_pod(module,code,function,a.result,target->aggregate_result_type) &&
                 callee->homes->result_type==rbc_value_home(code,a.result)->type;
@@ -709,8 +715,12 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_NULLABLE_IS_SOME: case XR_RBC_VALUE_NULLABLE_UNWRAP:
     case XR_RBC_VALUE_SUM_NEW: case XR_RBC_VALUE_SUM_TAG: case XR_RBC_VALUE_SUM_GET:
         return rbc_value_inline_access_valid(module,code,function,a);
-    case XR_RBC_VALUE_RETURN:
+    case XR_RBC_VALUE_RETURN: {
         if (a.result || a.other) return false;
+        uint32_t result_type = rbc_result_value_type(code);
+        const XrtValueImage *image = xr_rbc_module_value_image(module);
+        if (rbc_callable_home_type(image, result_type))
+            return !a.index && rbc_value_exact_home(module, code, a.source, result_type, false);
         if (rbc_value_slice(module,code,a.source)) return rbc_value_slice_return_valid(module,code,a);
         if (rbc_value_function(module,code,a.source,false) || rbc_value_cell(module,code,a.source,false)) {
             const XrLirHomeEvent *event=rbc_value_event(code,a.index,XR_LIR_OWNERSHIP_RETURN_TRANSFER);
@@ -719,17 +729,14 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 (event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_COPY || event->transfer_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE);
         }
         if (a.index) return false;
-        if (rbc_result_value_kind(module, (uint32_t)(function - module->functions)) == XRT_VALUE_ARRAY_INLINE)
-            return rbc_value_array(module, code, a.source, false) &&
-                code->homes->result_type == rbc_value_home(code, a.source)->type;
         if (function->aggregate_result_type)
             return rbc_value_pod(module,code,function,a.source,function->aggregate_result_type) &&
-                code->homes->result_type==rbc_value_home(code,a.source)->type;
+                result_type==rbc_value_home(code,a.source)->type;
         if (rbc_value_inline(module,code,a.source,false))
-            return code->homes->result_type == rbc_value_home(code,a.source)->type;
-        if (code->homes && rbc_inline_tuple_result(xr_rbc_module_value_image(module),code->homes->result_type))
-            return false;
+            return result_type == rbc_value_home(code,a.source)->type;
+        if (rbc_inline_tuple_result(image, result_type)) return false;
         return !a.source || rbc_value_owner(module,code,a.source,false) || rbc_value_scalar(code,function,a.source,XR_RBC_BITS);
+    }
     case XR_RBC_VALUE_ARRAY: return rbc_value_array_access_valid(module,code,function,a);
     case XR_RBC_VALUE_MAP: return rbc_value_map_access_valid(module,code,function,a);
     case XR_RBC_VALUE_SET: return rbc_value_set_access_valid(module,code,function,a);

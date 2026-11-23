@@ -21,6 +21,10 @@ static bool lower_receive_callable(Lower *c, XrXirType type, const XrXirTypeNode
     if (xr_xir_type_is_class(c->source->types, node->result))
         return lower_unsupported(c, "class callable result transport");
     if (!lower_receive_type(c, node->result)) return false;
+    bool c_abi = (node->flags & XR_XIR_CALLABLE_C_ABI) != 0;
+    XrLirType result_type = lower_type(c, node->result);
+    if (c_abi && xr_lir_nullable_array_element(c->module, result_type))
+        return lower_unsupported(c, "nullable Array callable requires the Xray ABI");
     XrLirCallableParameter *parameters = lower_alloc(c, node->parameter_count, sizeof(*parameters));
     if (node->parameter_count && !parameters) return false;
     bool good = true;
@@ -39,14 +43,18 @@ static bool lower_receive_callable(Lower *c, XrXirType type, const XrXirTypeNode
         parameters[p] = (XrLirCallableParameter){.type=lower_type(c, source.type),
             .array_element=lower_array_element(c, source.type), .mode=(XrParamMode)source.mode,
             .escaping=source.escaping != 0};
+        bool nullable_array = xr_lir_nullable_array_element(c->module, parameters[p].type) != XR_LIR_TYPE_INVALID;
         if (!parameters[p].type) good = lower_unsupported(c, "callable parameter physical type");
+        else if (c_abi && nullable_array) good = lower_unsupported(c, "nullable Array callable requires the Xray ABI");
+        else if (source.mode != XR_PARAM_READ && nullable_array)
+            good = lower_unsupported(c, "nullable Array callable parameters require read transport");
         else if (source.mode != XR_PARAM_READ && xr_lir_inline_array_ordinal(c->module, parameters[p].array_element))
             good = lower_unsupported(c, "owning callable parameters for inline-element Arrays");
     }
     XrLirCallableType shape = {.parameters=parameters, .parameter_count=node->parameter_count,
-        .result=lower_type(c, node->result), .result_element=lower_array_element(c, node->result),
+        .result=result_type, .result_element=lower_array_element(c, node->result),
         .flags=(node->flags & XR_XIR_CALLABLE_NO_SUSPEND ? XR_LIR_CALLABLE_NO_SUSPEND : 0u) |
-            (node->flags & XR_XIR_CALLABLE_C_ABI ? XR_LIR_CALLABLE_C_ABI : 0u)};
+            (c_abi ? XR_LIR_CALLABLE_C_ABI : 0u)};
     if (good && !shape.result) good = lower_unsupported(c, "callable result physical type");
     if (good) good = lower_build(c, xr_lir_callable_type(c->module, &shape, &c->constructed_types[index]));
     xr_free(parameters);

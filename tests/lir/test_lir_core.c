@@ -1011,6 +1011,7 @@ int main(void) {
     range_catalog_receivers();
     callable_type_owners();
     callable_type_rejections();
+    nullable_array_callable_shapes();
     callable_parameter_contracts();
     callable_reference_shapes();
     string_catalog_owners();

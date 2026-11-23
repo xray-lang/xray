@@ -12,6 +12,7 @@
 #include "lir/xlir_map.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_code_owner.h"
+#include "vm/register/xrbc_value_code.h"
 #include "xray_native_function.h"
 #include "runtime/native/xnative_capture_backing.h"
 #include "runtime/native/xnative_value_image.h"
@@ -67,6 +68,115 @@ static void execute(XrRbcProgram *program, uint64_t expected) {
     uint64_t bits = 0;
     CHECK(xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome,&bits) && bits == expected);
     xr_rbc_outcome_free(&outcome);
+}
+static bool nullable_array_access_admitted(const XrRbcModule *module, uint32_t function,
+    XrRbcValueAccess access, const uint32_t *arguments) {
+    CHECK(module->function_count == 2 && function < module->function_count);
+    const XrRbcValueCode *original = xr_rbc_module_value_code(module, function);
+    CHECK(original);
+    XrRbcValueCode view = *original;
+    view.accesses = &access;
+    view.access_count = 1;
+    view.arguments = arguments;
+    uint32_t word = XR_RBC_VALUE_ACCESS;
+    XrRbcFunction functions[] = {module->functions[0], module->functions[1]};
+    functions[function].code = &word;
+    functions[function].code_count = 1;
+    const XrRbcValueCode *codes[] = {xr_rbc_module_value_code(module, 0), xr_rbc_module_value_code(module, 1)};
+    codes[function] = &view;
+    XrRbcModule borrowed = *module;
+    borrowed.functions = functions;
+    borrowed.code_lease = (XrRbcCodeLease){0};
+    borrowed.borrowed_value_codes = codes;
+    borrowed.borrowed_value_code_count = module->function_count;
+    borrowed.borrowed_value_image = xr_rbc_module_value_image(module);
+    return xr_rbc_value_instruction_valid(&borrowed, &functions[function], 0);
+}
+static XrRbcValueAccess nullable_array_access(const XrRbcModule *module, uint32_t function,
+    XrRbcValueOperation operation) {
+    const XrRbcFunction *target = &module->functions[function];
+    const XrRbcValueCode *code = xr_rbc_module_value_code(module, function);
+    CHECK(code);
+    for (size_t pc = 0; pc < target->code_count; ++pc) {
+        uint32_t word = target->code[pc], index = word >> 16;
+        if ((word & 255u) != XR_RBC_VALUE_ACCESS || index >= code->access_count ||
+            code->accesses[index].operation != operation) continue;
+        CHECK(xr_rbc_value_instruction_valid(module, target, pc));
+        return code->accesses[index];
+    }
+    CHECK(false);
+    return (XrRbcValueAccess){0};
+}
+static void nullable_array_direct_boundary(void) {
+    CArrayFixture c = {0};
+    OK(xr_lir_module_create(NULL, &c.module));
+    XrLirType optional[] = {0, 0};
+    OK(xr_lir_nullable_array_type(c.module, XR_LIR_U8, &optional[0]));
+    OK(xr_lir_nullable_array_type(c.module, XR_LIR_I64, &optional[1]));
+    XrLirFunction root = {0}, receive = {0};
+    XrLirBlock body = {0};
+    OK(xr_lir_declare_function(c.module, &(XrLirFunctionSpec){.name="receive", .name_length=7,
+        .parameters=optional, .parameter_count=2, .result=optional[0]}, &receive));
+    OK(xr_lir_define_function(c.module, receive));
+    OK(xr_lir_add_block(c.module, receive, NULL, 0, &body));
+    OK(xr_lir_set_entry(c.module, receive, body));
+    XrLirValue parameter = {0};
+    OK(xr_lir_function_parameter(c.module, receive, 0, &parameter));
+    ca_return(&c, body, ca_value(&c, body, XR_LIR_VALUE_RETAIN, optional[0], &parameter, 1));
+
+    OK(xr_lir_declare_function(c.module, &(XrLirFunctionSpec){.name="entry", .name_length=5,
+        .result=XR_LIR_I1}, &root));
+    OK(xr_lir_define_function(c.module, root));
+    OK(xr_lir_add_block(c.module, root, NULL, 0, &body));
+    OK(xr_lir_set_entry(c.module, root, body));
+    XrLirValue arguments[] = {ca_value(&c, body, XR_LIR_NULLABLE_NONE, optional[0], NULL, 0),
+        ca_value(&c, body, XR_LIR_NULLABLE_NONE, optional[1], NULL, 0)};
+    XrLirValue result = {0};
+    OK(xr_lir_emit_value(c.module, body, &(XrLirInstruction){.op=XR_LIR_CALL, .type=optional[0],
+        .callee=receive, .operands=arguments, .operand_count=2}, &result));
+    XrLirValue present = ca_value(&c, body, XR_LIR_NULLABLE_IS_SOME, XR_LIR_I1, &result, 1);
+    for (unsigned p = 0; p < 2; ++p)
+        OK(xr_lir_emit_effect(c.module, body, &(XrLirInstruction){.op=XR_LIR_VALUE_DROP,
+            .type=XR_LIR_UNIT, .operands=&arguments[p], .operand_count=1}));
+    OK(xr_lir_emit_effect(c.module, body, &(XrLirInstruction){.op=XR_LIR_VALUE_DROP,
+        .type=XR_LIR_UNIT, .operands=&result, .operand_count=1}));
+    ca_return(&c, body, present);
+    OK(xr_lir_module_finish(c.module, NULL));
+
+    XrRbcProgram *program = compile(c.module, root);
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    CHECK(module && module->function_count == 2);
+    const XrRbcValueCode *caller = xr_rbc_module_value_code(module, 0);
+    XrRbcValueAccess call = nullable_array_access(module, 0, XR_RBC_VALUE_CALL);
+    const XrRbcValueCode *callee = xr_rbc_module_value_code(module, call.index);
+    CHECK(caller && callee && callee->parameter_count == 2 && call.count == 2);
+    CHECK(!module->functions[call.index].callable);
+    XrRbcValueAccess ret = nullable_array_access(module, call.index, XR_RBC_VALUE_RETURN);
+    CHECK(nullable_array_access_admitted(module, 0, call, caller->arguments));
+    CHECK(nullable_array_access_admitted(module, call.index, ret, callee->arguments));
+
+    /* Change one operand at the verifier boundary. Only the original program runs. */
+    XrRbcValueAccess wrong = ret;
+    wrong.source = callee->parameters[1];
+    CHECK(!nullable_array_access_admitted(module, call.index, wrong, callee->arguments));
+    wrong.source = 0;
+    CHECK(!nullable_array_access_admitted(module, call.index, wrong, callee->arguments));
+    wrong = call;
+    wrong.result = caller->arguments[call.first + 1];
+    CHECK(!nullable_array_access_admitted(module, 0, wrong, caller->arguments));
+    wrong.result = 0;
+    CHECK(!nullable_array_access_admitted(module, 0, wrong, caller->arguments));
+    wrong = call;
+    wrong.first = 0;
+    uint32_t wrong_arguments[] = {caller->arguments[call.first + 1], caller->arguments[call.first]};
+    CHECK(!nullable_array_access_admitted(module, 0, wrong, wrong_arguments));
+    uint64_t raw[] = {0, 0};
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(module, call.index, raw, 2, xr_rbc_program_locations(program),
+        &execution) == XR_RBC_INVALID && !execution);
+
+    xr_lir_module_destroy(c.module);
+    execute(program, 0);
 }
 #include "lir_set_bytecode_cases.h"
 static void pure_captures(void) {
@@ -886,6 +996,7 @@ int main(void) {
     class_owners_outlive_programs();
     frame_construction_proofs();
     direct_weakened_formal();
+    nullable_array_direct_boundary();
     owned_zero_capture();
     supported_and_rejected_captures();
     owned_map_captures();

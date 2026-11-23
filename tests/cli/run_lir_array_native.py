@@ -112,7 +112,7 @@ def main() -> None:
              "byte_copy_before_write", "class_byte_array_field", "class_owned_class_field", "class_scalar_field", "large", "large_string",
              "array_capacity_reserve", "panic_array_reserve_negative", "array_borrowed_formal_binding", "buffered_writer_bytes",
              "string_copy_bytes", "buffered_writer_string", "nullable_class", "nullable_class_aggregate", "panic_nullable_class",
-             "nullable_array", "panic_nullable_array",
+             "nullable_array", "panic_nullable_array", "cfn_scalar_home_control",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
              "element_update", "element_update_carried",
@@ -200,6 +200,7 @@ def main() -> None:
         "reject_function_ref": b"COPY is not supported",
         "reject_tuple_unit": b"Tuple field has no canonical inline value carrier",
         "reject_nullable_class_union": b"Nullable payload has no inline POD layout",
+        "reject_nullable_array_cfn": b"nullable Array callable requires the Xray ABI",
     }
     callback_names = ("check_view_state_indirect_callback_read", "check_view_callback_declaration", "check_view_callback_derived")
     cases = ([("ordinary", name, None) for name in cases

@@ -42,14 +42,16 @@ static bool lir_callable_signature_valid(const XrLirModule *m, const XrLirCallab
         !lir_callable_array_shape(m, type->result, type->result_element, ordinal)) return false;
     bool c_abi = (type->flags & XR_LIR_CALLABLE_C_ABI) != 0;
     if (c_abi && (!(type->flags & XR_LIR_CALLABLE_NO_SUSPEND) || type->throws ||
-        xr_lir_inline_array_ordinal(m, type->result_element))) return false;
+        xr_lir_inline_array_ordinal(m, type->result_element) ||
+        xr_lir_nullable_array_element(m, type->result))) return false;
     for (uint32_t p = 0; p < type->parameter_count; ++p) {
         XrLirCallableParameter parameter = type->parameters[p];
         if (!xr_lir_internal_type_valid(m, parameter.type, false) || parameter.type == XR_LIR_I64_REF ||
             parameter.type >= XR_LIR_TYPE_COUNT + ordinal ||
             (parameter.type >= XR_LIR_TYPE_COUNT && m->types[parameter.type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_CLASS) ||
             !xr_param_mode_is_valid(parameter.mode) ||
-            ((c_abi || parameter.mode != XR_PARAM_READ) && xr_lir_inline_array_ordinal(m, parameter.array_element)) ||
+            ((c_abi || parameter.mode != XR_PARAM_READ) && (xr_lir_inline_array_ordinal(m, parameter.array_element) ||
+                xr_lir_nullable_array_element(m, parameter.type))) ||
             !lir_callable_array_shape(m, parameter.type, parameter.array_element, ordinal)) return false;
         if (parameter.escaping && (parameter.type < XR_LIR_TYPE_COUNT ||
             m->types[parameter.type - XR_LIR_TYPE_COUNT].shape.kind != XR_LIR_TYPE_CALLABLE)) return false;
