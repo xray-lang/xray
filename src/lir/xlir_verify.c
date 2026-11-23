@@ -917,8 +917,36 @@ static bool lir_startup_publication(const XrLirModule *m,const XrLirFunctionData
         (!call->operand_count || call->operands[0]==state);
 }
 
-static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirFunctionData *f,const LirGraph *g) {
-    bool startup=function==m->startup_entry;
+static bool lir_optional_error_branch(const XrLirFunctionData *f,const XrLirBlockData *failed,
+    const XrLirInstructionView *branch) {
+    if (failed->instruction_count!=1) return false;
+    const XrLirBlockData *absent=&f->blocks[branch->edges[0].target-1];
+    const XrLirInstructionView *none=&absent->instructions[0].view;
+    const XrLirInstructionView *join=lir_terminator(f,branch->edges[0].target-1);
+    return absent->instruction_count==2 && none->op==XR_LIR_NULLABLE_NONE && join->op==XR_LIR_BR &&
+        join->edges[0].argument_count && join->edges[0].arguments[0]==none->result;
+}
+
+/* A dedicated landing block can still dominate later blocks. Check their
+ * operands and edge arguments before accepting an intentionally unused E. */
+static bool lir_discarded_errors_unused(const XrLirFunctionData *f,const uint8_t *discarded) {
+    for (uint32_t b=0;b<f->block_count;++b) {
+        const XrLirBlockData *block=&f->blocks[b];
+        for (uint32_t i=0;i<block->instruction_count;++i) {
+            const XrLirInstructionView *op=&block->instructions[i].view;
+            for (uint32_t a=0;a<op->operand_count;++a)
+                if (discarded[op->operands[a]-1]) return false;
+            for (uint32_t e=0;e<op->edge_count;++e)
+                for (uint32_t a=0;a<op->edges[e].argument_count;++a)
+                    if (discarded[op->edges[e].arguments[a]-1]) return false;
+        }
+    }
+    return true;
+}
+
+static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirFunctionData *f,
+    const LirGraph *g,uint8_t *discarded) {
+    bool startup=function==m->startup_entry,optional=false;
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirInstructionView *term = lir_terminator(f,b);
         if (startup && term->op!=XR_LIR_INVOKE && term->op!=XR_LIR_UNCAUGHT_ERROR && term->op!=XR_LIR_RET)
@@ -931,13 +959,20 @@ static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirF
             uint32_t target=term->edges[1].target-1;
             const XrLirBlockData *failed=&f->blocks[target];
             const XrLirInstructionView *exit=lir_terminator(f,target);
+            if (failed->parameter_count!=1) return false;
             if (startup) {
                 if (exit->op!=XR_LIR_UNCAUGHT_ERROR || failed->instruction_count!=1 ||
                     !lir_startup_publication(m,f,b,term)) return false;
+            } else if (exit->op==XR_LIR_BR) {
+                if (!lir_optional_error_branch(f,failed,exit)) return false;
+                if (!optional) memset(discarded,0,f->value_count);
+                optional=true;
+                discarded[failed->parameters[0]-1]=1;
+                continue;
             } else if (exit->op!=XR_LIR_PANIC_ERROR && exit->op!=XR_LIR_RETURN_ERROR) {
                 return false;
             }
-            if (failed->parameter_count!=1 || exit->operands[0]!=failed->parameters[0]) return false;
+            if (exit->operands[0]!=failed->parameters[0]) return false;
         }
         if (term->op!=XR_LIR_PANIC_ERROR && term->op!=XR_LIR_UNCAUGHT_ERROR) continue;
         const XrLirBlockData *block = &f->blocks[b];
@@ -946,7 +981,7 @@ static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirF
         const XrLirInstructionView *source = lir_terminator(f,g->predecessors[g->offsets[b]]);
         if (source->op != XR_LIR_INVOKE || source->edges[1].target != b + 1) return false;
     }
-    return true;
+    return !optional || lir_discarded_errors_unused(f,discarded);
 }
 
 static uint32_t lir_intersect(const LirGraph *g, uint32_t a, uint32_t b) {
@@ -1481,7 +1516,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
         if (status == XR_LIR_VERIFY_ERROR)
             xr_lir_internal_error(d, "entry has an incoming edge or a block is unreachable",
                                   index + 1, 0, 0, NULL);
-        if (status == XR_LIR_OK && !lir_invoke_edges(m,index+1,f,&graph))
+        if (status == XR_LIR_OK && !lir_invoke_edges(m,index+1,f,&graph,seen))
             status = xr_lir_internal_error(d, "invoke requires dedicated normal and error successors",
                                            index + 1, 0, 0, NULL);
         if (status==XR_LIR_OK) {
