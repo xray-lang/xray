@@ -39,7 +39,6 @@ tests/diff/cases/semantics/collections/array_join_shared_core.xr  # error: null 
 tests/diff/cases/semantics/collections/array_join_special_object_shared_core.xr  # error: join requires string, number, bool or rune elements
 tests/diff/cases/semantics/collections/array_member_declared_selector_refused.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/collections/array_push_scalar_target.xr  # ARRAY_NEW is not supported by LIR lowering yet
-tests/diff/cases/semantics/collections/array_resize_reserve_shared_core.xr  # ARRAY_RESERVE is not supported by LIR lowering yet
 tests/diff/cases/semantics/collections/array_reverse_shared_core.xr  # module slot payload type is not supported by LIR lowering yet
 tests/diff/cases/semantics/collections/array_shift_shared_core.xr  # module slot payload type is not supported by LIR lowering yet
 tests/diff/cases/semantics/collections/array_sort_shared_core.xr  # error: sort currently accepts no comparator arguments
