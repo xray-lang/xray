@@ -612,7 +612,7 @@ static uint32_t *lir_copy_values(XrLirModule *m, uint32_t function, const XrLirV
     return ids;
 }
 
-XrLirStatus xr_lir_internal_cleanup_block(XrLirModule *m, XrLirBlock handle, uint32_t frontier,
+XR_FUNC XrLirStatus xr_lir_internal_cleanup_block(XrLirModule *m, XrLirBlock handle, uint32_t frontier,
     uint32_t registration, const XrLirValue *captures, uint32_t count) {
     XrLirFunctionData *f = lir_block_function(m, handle);
     if (!f || m->finished || f->blocks[handle.id - 1].cleanup || (!frontier && !registration) ||

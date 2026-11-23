@@ -31,6 +31,7 @@
 #include "../xir/xxir_operand_roles.h"
 #include "../xir/xxir_closure_placement.h"
 #include "../xir/xxir_lexical.h"
+#include "../xir/xxir_instruction_flow.h"
 #include "../xir/xxir_effect_module_export_internal.h"
 #include "../xir/xxir_io_native.h"
 #include "../xir/xxir_os_native.h"
@@ -565,7 +566,8 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
 static XrLirOp lower_terminator_op(XrXirOp op) {
     switch (op) {
         case XR_XIR_RETURN: return XR_LIR_RET;
-        case XR_XIR_JUMP: return XR_LIR_BR;
+        case XR_XIR_JUMP: case XR_XIR_CLEANUP_REGISTER: case XR_XIR_CLEANUP_LEAVE:
+            return XR_LIR_BR;
         case XR_XIR_BRANCH: return XR_LIR_CONDBR;
         case XR_XIR_INVOKE: return XR_LIR_INVOKE;
         case XR_XIR_THROW: return XR_LIR_RETURN_ERROR;
@@ -1215,6 +1217,7 @@ static bool lower_float_width_operation(XrXirOp op) {
 #include "xlir_lower_string_length.inc.c"
 #include "xlir_lower_optional_error.inc.c"
 #include "xlir_lower_catch.inc.c"
+#include "xlir_cleanup_lower.inc.c"
 
 /* Closed XIR verifies each marker's unique predecessor and recoverable error. */
 static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirInstruction *call) {
@@ -1255,6 +1258,8 @@ static const XrXirInstruction *lower_invoke_origin(Lower *c, const XrXirFunction
 }
 
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
+    if (op->op == XR_XIR_CLEANUP_REGISTER) return lower_cleanup_admit(c, f, op);
+    if (op->op == XR_XIR_CLEANUP_LEAVE) return true;
     const LowerByteLength *byte_lengths = lower_byte_length_plan(c);
     if (byte_lengths && (byte_lengths[c->instruction].omit || byte_lengths[c->instruction].consumer)) return true;
     if (op->op==XR_XIR_ERROR_ERASE) {
@@ -1586,6 +1591,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     queue[0] = 0;
     seen[0] = 1;
     bool good = true;
+    bool cleanup_body = c->source->declarations->functions[function].cleanup_owner != 0;
     for (uint32_t at = 0; at < count && good; ++at) {
         uint32_t b = queue[at];
         c->block = b;
@@ -1595,13 +1601,18 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             break;
         }
         const XrXirBlock *block = &f->blocks[b];
-        if (block->panic || block->frontier) {
+        if (block->panic) {
             good = lower_unsupported(c, "panic or cleanup frontier");
             break;
         }
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             c->instruction = i;
-            if (!lower_admit_instruction(c, f, &f->instructions[i])) {
+            const XrXirInstruction *instruction = &f->instructions[i];
+            if ((block->frontier || cleanup_body) && !lower_cleanup_safe(c, f, instruction)) {
+                good = lower_unsupported(c, "operation needs a panic landing with active cleanup");
+                break;
+            }
+            if (!lower_admit_instruction(c, f, instruction)) {
                 good = false;
                 break;
             }
@@ -1634,6 +1645,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
     c->function = index;
     c->instruction = UINT32_MAX;
     const XrXirFunction *f = &c->source->functions[index];
+    const XrXirFunctionIdentity *identity = &c->source->declarations->functions[index];
     size_t name_length = f->name_length;
     if (name_length > SIZE_MAX - 32) {
         lower_error(c, XR_LIR_OUT_OF_MEMORY, "function name size overflow");
@@ -1665,7 +1677,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
         parameters[p] = lower_type(c, f->parameters[p]);
         if (c->owned_bindings && c->owned_bindings[index] && c->owned_bindings[index][p])
             parameters[p] = lower_owned_cell_type(c, f->parameters[p]);
-        if (parameters[p] == XR_LIR_I64_CELL && p >= c->source->declarations->functions[index].capture_count) {
+        if (parameters[p] == XR_LIR_I64_CELL && (identity->cleanup_owner || p >= identity->capture_count)) {
             if (c->closure_types && c->closure_types[index]) {
                 xr_free(name);
                 xr_free(parameters);
@@ -1701,6 +1713,7 @@ static bool lower_declare(Lower *c, uint32_t index) {
                               .parameter_count = count,
                               .result = lower_type(c, f->result), .callable_parameters=contracts,
                               .callable_parameter_count=contract_count};
+    if (identity->cleanup_owner) spec.cleanup_owner = c->functions[identity->cleanup_owner - 1].id;
     if (lower_function_error(c,index)) {
         spec.error=lower_type(c,lower_error_bound(c,index));
         if (c->initializer_owner[index]!=UINT32_MAX) spec.initializer_module=c->initializer_owner[index]+1;
@@ -1837,7 +1850,7 @@ static bool lower_frame_bindings(LowerFunction *f) {
             (c->owned_bindings && c->owned_bindings[c->function] && c->owned_bindings[c->function][p]);
     for (uint32_t i = 0; i < source->instruction_count; ++i) {
         const XrXirInstruction *op = &source->instructions[i];
-        bool call = op->op == XR_XIR_CALL;
+        bool call = op->op == XR_XIR_CALL || op->op == XR_XIR_CLEANUP_REGISTER;
         if (!call && op->op != XR_XIR_FUNCTION_REF) continue;
         uint32_t target = call ? c->functions[(uint32_t)op->immediate].id : 0;
         if (call && !target) continue;
@@ -3150,6 +3163,7 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     const XrXirInstruction *term = lower_term(c, f->source, b);
     if (!term)
         return false;
+    if (!lower_cleanup_block(f, b, term) || !lower_cleanup_exit(f, b, term)) return false;
     if (term->op == XR_XIR_INVOKE) return lower_invoke_terminator(f,b,term);
     XrLirOp op = lower_checked_terminator_op(c, term->op);
     if (op == XR_LIR_OP_INVALID) return false;

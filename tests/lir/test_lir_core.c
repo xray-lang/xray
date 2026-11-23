@@ -148,6 +148,64 @@ static void invoke_must_forward_its_received_error(void) {
     }
 }
 
+static void cleanup_requires_a_registered_exit(void) {
+    enum { EXACT, SKIPPED, FORGED_CAPTURE, WRONG_OWNER, PANIC_BEFORE_EXIT, CASE_COUNT };
+    for (unsigned mode = EXACT; mode < CASE_COUNT; ++mode) {
+        XrLirModule *module = NULL;
+        OK(xr_lir_module_create(NULL, &module));
+        XrLirFunction owner = test_function(module, "owner", NULL, 0, XR_LIR_UNIT), cleanup = {0};
+        XrLirType scalar = XR_LIR_I64;
+        XrLirFunctionSpec spec = {.name = "cleanup", .name_length = 7, .parameters = &scalar,
+            .parameter_count = 1, .result = XR_LIR_UNIT, .cleanup_owner = owner.id};
+        OK(xr_lir_declare_function(module, &spec, &cleanup));
+        OK(xr_lir_define_function(module, cleanup));
+        XrLirBlock body = test_block(module, cleanup, NULL, 0);
+        OK(xr_lir_set_entry(module, cleanup, body));
+        test_return(module, body, (XrLirValue){0});
+
+        XrLirBlock registration = test_block(module, owner, NULL, 0);
+        XrLirBlock active = test_block(module, owner, NULL, 0);
+        OK(xr_lir_set_entry(module, owner, registration));
+        XrLirValue capture = test_constant(module, registration, scalar, 17);
+        XrLirValue saved = capture;
+        if (mode == FORGED_CAPTURE) saved = test_constant(module, registration, scalar, 99);
+        OK(xr_lir_internal_cleanup_block(module, registration, 0, cleanup.id, &capture, 1));
+        test_branch(module, registration, active, NULL, 0);
+        OK(xr_lir_internal_cleanup_block(module, active, cleanup.id, 0, NULL, 0));
+        XrLirInstruction run = {.op = XR_LIR_CALL, .type = XR_LIR_UNIT, .callee = cleanup,
+            .operands = &saved, .operand_count = 1};
+        if (mode == WRONG_OWNER) {
+            XrLirFunction other = test_function(module, "other", NULL, 0, XR_LIR_UNIT);
+            XrLirBlock outsider = test_block(module, other, NULL, 0);
+            saved = test_constant(module, outsider, scalar, 17);
+            CHECK(xr_lir_emit_effect(module, outsider, &run) == XR_LIR_VERIFY_ERROR);
+        } else {
+            if (mode == PANIC_BEFORE_EXIT) {
+                XrLirValue zero = test_constant(module, active, scalar, 0), unused = {0};
+                XrLirValue operands[] = {capture, zero};
+                XrLirInstruction divide = {.op = XR_LIR_DIV, .type = scalar,
+                    .operands = operands, .operand_count = 2,
+                    .source = {"cleanup.xr", 10, 2, 1, 2, 7}};
+                OK(xr_lir_emit_value(module, active, &divide, &unused));
+            }
+            if (mode != SKIPPED) OK(xr_lir_emit_effect(module, active, &run));
+            test_return(module, active, (XrLirValue){0});
+            XrLirDiagnostic diagnostic = {0};
+            XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
+            if (mode == EXACT) {
+                CHECK(status == XR_LIR_OK);
+                XrLirModule *rebuilt = NULL;
+                OK(xr_lir_rebuild(module, &rebuilt));
+                OK(xr_lir_verify(rebuilt, NULL));
+                xr_lir_module_destroy(rebuilt);
+            } else {
+                CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "cleanup frontier"));
+            }
+        }
+        xr_lir_module_destroy(module);
+    }
+}
+
 static void discarded_invoke_error_cannot_be_observed(void) {
     enum { UNUSED, READ_IN_SUCCESSOR, FORWARD_IN_SUCCESSOR, CASE_COUNT };
     for (unsigned mode=UNUSED; mode<CASE_COUNT; ++mode) {
@@ -1338,6 +1396,7 @@ int main(void) {
     typed_error_cannot_be_erased();
     invoke_rejects_forged_error();
     invoke_must_forward_its_received_error();
+    cleanup_requires_a_registered_exit();
     startup_error_requires_an_initialized_origin();
     discarded_invoke_error_cannot_be_observed();
     definition_prevalidation_rejections();

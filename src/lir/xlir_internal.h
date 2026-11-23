@@ -151,7 +151,7 @@ struct XrLirModule {
 
 /* Only the source Lower or a verified rebuild supplies this static role and
  * the actual SSA captures from its registration point. */
-XrLirStatus xr_lir_internal_cleanup_block(XrLirModule *, XrLirBlock, uint32_t frontier,
+XR_FUNC XrLirStatus xr_lir_internal_cleanup_block(XrLirModule *, XrLirBlock, uint32_t frontier,
     uint32_t registration, const XrLirValue *captures, uint32_t count);
 
 /* Only Lower receives these numeric contracts from the exact completed Source
