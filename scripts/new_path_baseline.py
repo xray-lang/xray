@@ -36,7 +36,9 @@ retain exact LF output and every stream; their ratios include process startup.
 Add --append-forms when preparing or running the String benchmark to compare
 ordinary assignment, parentheses, and a loop-invariant suffix on the same
 inputs and controls. --gate-string checks all forms at the three default sizes
-against the same-host references. Startup and 1M are retained as diagnostics.
+against the same-host references. Each sample is a block with adjacent candidate
+and reference launches in both orders. The gate uses the median of their block
+ratios. Startup and 1M are retained as diagnostics.
 
 The driver census runs every original smoke input through lir_vm_run, then
 emits, links and runs the generated C. lir_c_run takes no standard library
@@ -563,6 +565,30 @@ def bench_programs(args, root):
     return engines, env
 
 
+def bench_jobs(engines, sample_count):
+    for sample in range(sample_count):
+        for label, row in engines.items():
+            ordered = reversed(row.items()) if label.startswith("String append ") and sample % 2 else row.items()
+            for engine, command in ordered:
+                yield label, engine, command, sample, None
+
+
+def string_gate_engines():
+    for backend, reference, limit in (("Xray VM", "CPython", 1.0), ("Xray native", "C -O2", 1.3)):
+        yield backend, reference, limit
+        for name, _, _ in STRING_APPEND_FORMS:
+            yield f"{backend} {name}", reference, limit
+
+
+def string_gate_jobs(engines, blocks):
+    for label, row in engines.items():
+        for candidate, reference, _ in string_gate_engines():
+            for sample in range(2 * blocks):
+                order = (reference, candidate) if sample % 2 else (candidate, reference)
+                for engine in order:
+                    yield label, engine, row[engine], sample, candidate
+
+
 def bench(args, root):
     if getattr(args, "prepared_bench", None):
         prepared = json.loads(args.prepared_bench.read_text(encoding="utf-8"))
@@ -579,41 +605,49 @@ def bench(args, root):
     samples = collections.defaultdict(list)
     outputs = collections.defaultdict(set)
     string_samples = []
-    for sample in range(args.samples):  # Alternate engines so drift hits them evenly.
-        for label, row in engines.items():
-            is_string = label.startswith("String append ")
-            ordered = reversed(row.items()) if is_string and sample % 2 else row.items()
-            for engine, command in ordered:
-                if is_string:
-                    prefix = args.work / f"sample-{sample}-{label.replace(' ', '-')}-{engine.replace(' ', '-')}"
-                    value = string_command(command, env, prefix, args.timeout)
-                    value.update(label=label, engine=engine, sample=sample)
-                    output = pathlib.Path(value["stdout"]).read_bytes()
-                    errors = pathlib.Path(value["stderr"]).read_bytes()
-                    expected = bytes.fromhex(args.string_bench["expected_stdout"][label])
-                    value["status"] = "PASS" if value["exit"] == 0 and output == expected and not errors else "FAIL"
-                    string_samples.append(value)
-                    (args.work / "string-samples.json").write_text(json.dumps(string_samples, indent=2) + "\n", encoding="utf-8")
-                    if value["status"] != "PASS":
-                        sys.exit(f"{label} {engine} failed; see {value['stdout']} and {value['stderr']}")
-                    samples[(label, engine)].append(value["seconds"])
-                    outputs[label].add(output)
-                    continue
-                start = time.perf_counter()
-                done = subprocess.run(command, capture_output=True, env=env, timeout=args.timeout)
-                samples[(label, engine)].append(time.perf_counter() - start)
-                if done.returncode != 0:
-                    sys.exit(f"{label} {engine} failed: {done.stderr[:300]}")
-                outputs[label].add(done.stdout)
+    gated = getattr(args, "gate_string", False)
+    jobs = string_gate_jobs(engines, args.samples) if gated else bench_jobs(engines, args.samples)
+    for label, engine, command, sample, candidate in jobs:
+        if label.startswith("String append "):
+            name = f"sample-{sample}-{label.replace(' ', '-')}-{engine.replace(' ', '-')}"
+            if candidate is not None:
+                name += f"-for-{candidate.replace(' ', '-')}"
+            value = string_command(command, env, args.work / name, args.timeout)
+            value.update(label=label, engine=engine, sample=sample)
+            output = pathlib.Path(value["stdout"]).read_bytes()
+            errors = pathlib.Path(value["stderr"]).read_bytes()
+            expected = bytes.fromhex(args.string_bench["expected_stdout"][label])
+            value["status"] = "PASS" if value["exit"] == 0 and output == expected and not errors else "FAIL"
+            string_samples.append(value)
+            if candidate is not None:
+                value["pair_engine"] = candidate
+                # Preserve partial receipts without rewriting the growing list between a pair.
+                with (args.work / "string-samples.jsonl").open("a", encoding="utf-8") as receipts:
+                    receipts.write(json.dumps(value) + "\n")
+            if candidate is None or value["status"] != "PASS":
+                (args.work / "string-samples.json").write_text(json.dumps(string_samples, indent=2) + "\n", encoding="utf-8")
+            if value["status"] != "PASS":
+                sys.exit(f"{label} {engine} failed; see {value['stdout']} and {value['stderr']}")
+            samples[(label, engine)].append(value["seconds"])
+            outputs[label].add(output)
+            continue
+        start = time.perf_counter()
+        done = subprocess.run(command, capture_output=True, env=env, timeout=args.timeout)
+        samples[(label, engine)].append(time.perf_counter() - start)
+        if done.returncode != 0:
+            sys.exit(f"{label} {engine} failed: {done.stderr[:300]}")
+        outputs[label].add(done.stdout)
+    if gated and string_samples:
+        (args.work / "string-samples.json").write_text(json.dumps(string_samples, indent=2) + "\n", encoding="utf-8")
     for label, seen in outputs.items():
         if len(seen) != 1:
             sys.exit(f"{label}: engines disagree on output: {seen}")
-    print(f"\nwall time, lower quartile of {args.samples} (process start to exit, seconds):")
+    summary = "engine medians across matched blocks" if gated else f"lower quartile of {args.samples}"
+    print(f"\nwall time, {summary} (process start to exit, seconds):")
     result = {}
     for label, row in engines.items():
-        # A shared host only ever adds delay, so the gate reads the lower
-        # quartile of the samples and stays on the fast rounds.
-        cells = {e: statistics.quantiles(samples[(label, e)], n=4, method="inclusive")[0] for e in row}
+        cells = {e: (statistics.median(samples[(label, e)]) if gated else
+                     statistics.quantiles(samples[(label, e)], n=4, method="inclusive")[0]) for e in row}
         result[label] = cells
         print(f"  {label:24s} " + "  ".join(f"{e} {t:.3f}" for e, t in sorted(cells.items(), key=lambda kv: -kv[1])))
     details = {label: {engine: {"command": command,
@@ -674,21 +708,47 @@ def string_ratios(medians):
     return result
 
 
-def string_performance_gate(medians):
-    """Apply current managed-value and interpreter limits to each spelling."""
+def string_block_ratios(records, candidate, reference, blocks):
+    times = {}
+    for row in records:
+        sample = row.get("sample")
+        engine = row.get("engine")
+        seconds = row.get("seconds")
+        if (type(sample) is not int or not 0 <= sample < 2 * blocks or
+                engine not in (candidate, reference) or (sample, engine) in times or
+                row.get("status") != "PASS" or type(seconds) not in (int, float) or
+                not math.isfinite(seconds) or seconds <= 0):
+            return []
+        times[sample, engine] = seconds
+    if len(times) != 4 * blocks:
+        return []
+    ratios = []
+    for first in range(0, 2 * blocks, 2):
+        candidate_total = times[first, candidate] + times[first + 1, candidate]
+        reference_total = times[first, reference] + times[first + 1, reference]
+        ratio = candidate_total / reference_total
+        if not math.isfinite(ratio) or ratio <= 0:
+            return []
+        ratios.append(ratio)
+    return ratios
+
+
+def string_performance_gate(records, blocks):
+    """Apply the limits to medians of adjacent measurements in both orders."""
+    pairs = collections.defaultdict(list)
+    for row in records:
+        pairs[row.get("label"), row.get("pair_engine")].append(row)
     rows = []
     for count in STRING_SIZES:
-        measured = medians.get(f"String append {count}", {})
-        for backend, control, limit in (("Xray VM", "CPython", 1.0), ("Xray native", "C -O2", 1.3)):
-            for name, _, _ in (("", "", ""), *STRING_APPEND_FORMS):
-                engine = f"{backend} {name}" if name else backend
-                actual, reference = measured.get(engine), measured.get(control)
-                usable = all(value is not None and math.isfinite(value) and value > 0
-                             for value in (actual, reference))
-                ratio = actual / reference if usable else None
-                rows.append({"count": count, "engine": engine, "reference": control, "ratio": ratio,
-                             "limit": limit, "status": "PASS" if ratio is not None and ratio <= limit else "FAIL"})
-    report = {"status": "PASS" if all(row["status"] == "PASS" for row in rows) else "FAIL", "rows": rows}
+        label = f"String append {count}"
+        for engine, control, limit in string_gate_engines():
+            ratios = string_block_ratios(pairs[label, engine], engine, control, blocks)
+            ratio = statistics.median(ratios) if ratios else None
+            rows.append({"count": count, "engine": engine, "reference": control, "ratio": ratio,
+                         "balanced_block_ratios": ratios, "limit": limit,
+                         "status": "PASS" if ratio is not None and ratio <= limit else "FAIL"})
+    report = {"status": "PASS" if all(row["status"] == "PASS" for row in rows) else "FAIL",
+              "ratio_estimator": "balanced_block_median", "blocks": blocks, "rows": rows}
     # A ratio failure on a shared host is only actionable with its numbers, and
     # the evidence otherwise lives in an artifact nobody outside can open.
     for row in rows:
@@ -820,7 +880,8 @@ def main():
     parser.add_argument("--build", type=pathlib.Path, required=True)
     parser.add_argument("--work", type=pathlib.Path, required=True)
     parser.add_argument("--cc", default="clang")
-    parser.add_argument("--samples", type=int, default=3)
+    parser.add_argument("--samples", type=int, default=3,
+                        help="process samples per engine (matched blocks with --gate-string)")
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--no-native", action="store_true", help="skip linking generated C (use on MSVC)")
     parser.add_argument("--no-bench", action="store_true")
@@ -856,7 +917,7 @@ def main():
     if args.gate_string:
         if (args.no_bench or args.no_native or args.prepare_only or args.prepared_bench or args.string_size or
                 args.samples < 5 or (args.bench and args.bench != ["string-append"])):
-            parser.error("--gate-string requires a fresh dual-backend run at the default sizes with at least five samples")
+            parser.error("--gate-string requires a fresh dual-backend run at the default sizes with at least five matched blocks")
         args.append_forms = True
         args.no_census = True
         args.string_size = (1, 1_000_000, *STRING_SIZES)
@@ -894,7 +955,9 @@ def main():
     if args.compile_scale:
         result["compile_scale"] = regex_compile_scale(args, args.root)
     if args.gate_string:
-        result["string_gate"] = string_performance_gate(result["bench"])
+        samples = [sample for programs in result["bench_details"].values()
+                   for engine in programs.values() for sample in engine.get("sample_records", ())]
+        result["string_gate"] = string_performance_gate(samples, args.samples)
     (args.work / "baseline.json").write_text(json.dumps(result, ensure_ascii=False, indent=1))
     print("\nfull result:", args.work / "baseline.json")
     if args.compile_scale and result["compile_scale"]["sample_gate"] != "PASS":

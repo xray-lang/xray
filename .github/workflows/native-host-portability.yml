@@ -176,6 +176,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.15.2'
+      - name: Verify matched String append measurements
+        if: ${{ !cancelled() && steps.string-reference.outcome == 'success' }}
+        run: python tests/tools/test_new_path_baseline.py
       - name: Enforce String append limits for equivalent spellings
         if: ${{ !cancelled() && steps.string-reference.outcome == 'success' }}
         shell: python
@@ -183,7 +186,7 @@ jobs:
           import os, subprocess, sys
           subprocess.run([sys.executable, 'scripts/new_path_baseline.py', '--root', '.',
                           '--build', 'build', '--work', 'build/string-performance',
-                          '--cc', os.environ['NATIVE_CC'], '--samples', '5', '--gate-string'], check=True)
+                          '--cc', os.environ['NATIVE_CC'], '--samples', '6', '--gate-string'], check=True)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -192,6 +195,7 @@ jobs:
             build/array-performance-prepare/
             build/array-performance-measured/
             build/string-performance/**/*.json
+            build/string-performance/**/*.jsonl
             build/string-performance/**/*.stdout
             build/string-performance/**/*.stderr
             current-evidence/
