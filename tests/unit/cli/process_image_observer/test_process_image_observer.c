@@ -42,6 +42,12 @@ static size_t terminate_calls, root_exit_continues, child_exit_continues;
 static bool fail_terminate, mismatch_accounting;
 static DWORD pending_exit_pid;
 static bool fail_root_continue;
+static struct {
+    size_t created, created_at_query;
+    DWORD job_total, job_active;
+    DWORD missing_image_event, missing_image_pid;
+    bool queried;
+} image_proof;
 static uint64_t sleep_ns, debug_wait_ns, pipe_ns, poll_ns, child_cpu_100ns;
 static size_t sleeps, idle_polls;
 
@@ -80,6 +86,11 @@ static BOOL debug_wait(LPDEBUG_EVENT event,DWORD timeout) {
             blocked_exit_pid=event->dwProcessId;
         HANDLE *file=event->dwDebugEventCode==CREATE_PROCESS_DEBUG_EVENT ? &event->u.CreateProcessInfo.hFile :
             event->dwDebugEventCode==LOAD_DLL_DEBUG_EVENT ? &event->u.LoadDll.hFile : NULL;
+        if (event->dwDebugEventCode==CREATE_PROCESS_DEBUG_EVENT) ++image_proof.created;
+        if (file && (!*file || *file==INVALID_HANDLE_VALUE) && !image_proof.missing_image_event) {
+            image_proof.missing_image_event=event->dwDebugEventCode;
+            image_proof.missing_image_pid=event->dwProcessId;
+        }
         if (file && *file) {
             if (null_image) { CHECK(CloseHandle(*file)); *file=NULL; null_image=false; }
             else remember_image(*file);
@@ -118,8 +129,14 @@ static DWORD debug_resume(HANDLE thread) {
 static BOOL debug_accounting(HANDLE job,JOBOBJECTINFOCLASS kind,LPVOID data,DWORD size,LPDWORD returned) {
     if (fail_accounting) { fail_accounting=false; SetLastError(injected_error); return FALSE; }
     BOOL okay=QueryInformationJobObject(job,kind,data,size,returned);
-    if (okay && mismatch_accounting && kind==JobObjectBasicAccountingInformation)
-        ++((JOBOBJECT_BASIC_ACCOUNTING_INFORMATION *)data)->TotalProcesses;
+    if (okay && kind==JobObjectBasicAccountingInformation) {
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION *accounting=data;
+        if (mismatch_accounting) ++accounting->TotalProcesses;
+        image_proof.created_at_query=image_proof.created;
+        image_proof.job_total=accounting->TotalProcesses;
+        image_proof.job_active=accounting->ActiveProcesses;
+        image_proof.queried=true;
+    }
     return okay;
 }
 static BOOL debug_detach(DWORD pid) {
@@ -278,6 +295,7 @@ static void simple(bool warmup) {
 static void reset_faults(void) {
     CHECK(!physical && !allocation_count && !image_handle_count);
     calls=wait_calls=continue_calls=0;
+    memset(&image_proof,0,sizeof(image_proof));
     command_completion=XR_PROC_COMPLETE_TREE; fail_terminate=fail_root_continue=mismatch_accounting=false;
     terminate_calls=root_exit_continues=child_exit_continues=0; pending_exit_pid=0;
     fail_at=fail_wait_at=fail_continue_at=SIZE_MAX;
@@ -361,6 +379,19 @@ static void root_executable_oracle(Observation *observation) {
     CHECK(observation->executables==own_count+host_count);
     CHECK(root_exit_continues==1 && child_exit_continues+1==observation->executables && terminate_calls>=1);
 }
+static void report_image_proof(const Observation *observation) {
+    DWORD last_error=GetLastError();
+    fprintf(stderr,"image proof create events=%zu; last job query=%s created=%zu total=%lu active=%lu; missing image event=%lu pid=%lu\n",
+        image_proof.created,image_proof.queried ? "yes" : "no",image_proof.created_at_query,
+        image_proof.job_total,image_proof.job_active,image_proof.missing_image_event,image_proof.missing_image_pid);
+    for (const ImageRecord *image=observation->images;image;image=image->next) {
+        if (image->dll) continue;
+        char path[32768];
+        DWORD length=GetFinalPathNameByHandleA(image->file,path,sizeof(path),FILE_NAME_NORMALIZED);
+        if (length && length<sizeof(path)) fprintf(stderr,"observed executable %lu: %s\n",image->pid,path);
+    }
+    SetLastError(last_error);
+}
 static void root_completion(void) {
     const XrCompileResourceLimits finite={XR_COMPILE_MEMORY_FINITE,8 * 1024 * 1024,true};
     const char *modes[]={"--root-long-closed","--root-long-pipes","--root-nonzero"};
@@ -372,6 +403,7 @@ static void root_completion(void) {
         fprintf(stderr,"root fixture %s status=%s exit=%d rootContinued=%zu childContinued=%zu\n",
             modes[i],xtc_process_status_name(status),result.exit_code,root_exit_continues,child_exit_continues);
         if (result.stderr_bytes.length) fwrite(result.stderr_bytes.data,1,result.stderr_bytes.length,stderr);
+        if (status!=XTC_PROCESS_OK || result.exit_code!=(i==2 ? 77 : 0)) report_image_proof(&o);
         CHECK(status==XTC_PROCESS_OK && result.exit_code==(i==2 ? 77 : 0));
         root_executable_oracle(&o);
         /* Native invocation rejects the nonzero root before publishing reports. */
