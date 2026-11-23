@@ -1,0 +1,8 @@
+final class Payload {
+    private const value: i64
+    init(value: i64) { this.value = value }
+    read() -> i64 { return this.value }
+}
+
+fn unwrap(value: Payload?) -> i64 { return value!.read() }
+print(unwrap(null))

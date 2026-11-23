@@ -1,0 +1,22 @@
+final class First {
+    private const number: i64
+    init(number: i64) { this.number = number }
+}
+
+final class Second {
+    private const number: i64
+    init(number: i64) { this.number = number }
+}
+
+type Either = First | Second
+fn some<T>(value: T) -> T? { return value }
+
+fn make() -> Either? {
+    const member: Either = Second(2)
+    return some<Either>(member)
+}
+
+const prior: Either = First(1)
+print(prior is First)
+var stored: Either? = make()
+if (stored != null) { print(stored! is Second) }

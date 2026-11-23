@@ -93,7 +93,8 @@ static bool scalar_layout(XrtValueKind kind, size_t *size, size_t *alignment) {
 }
 static bool managed_nullable(const XrtValuePlan *plan) {
     while (plan->view.kind == XRT_VALUE_NULLABLE) plan = plan->view.nullable.element;
-    return plan->view.kind == XRT_VALUE_STRING || xrt_value_kind_has_fields(plan->view.kind);
+    XrtValueKind kind = plan->view.kind;
+    return kind == XRT_VALUE_STRING || kind == XRT_VALUE_CLASS || xrt_value_kind_has_fields(kind);
 }
 static XrtBackingArrayKind class_array_kind(XrtValueKind kind) {
     switch (kind) {
@@ -161,7 +162,7 @@ static bool nullable_valid(const XrtValuePlanSpec *spec) {
     XrtValueKind kind = element->view.kind;
     size_t scalar_size, scalar_alignment;
     if (!scalar_layout(kind, &scalar_size, &scalar_alignment) && kind != XRT_VALUE_STRING && !xrt_value_kind_has_fields(kind) &&
-        kind != XRT_VALUE_NULLABLE && kind != XRT_VALUE_FIXED_U8) return false;
+        kind != XRT_VALUE_CLASS && kind != XRT_VALUE_NULLABLE && kind != XRT_VALUE_FIXED_U8) return false;
     size_t end = spec->nullable.payload_offset + element->view.size;
     if (end > SIZE_MAX - (spec->alignment - 1) ||
         spec->size != ((end + spec->alignment - 1) & ~(spec->alignment - 1)) ||

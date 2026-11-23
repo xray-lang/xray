@@ -1,0 +1,12 @@
+final class Payload {
+    private const value: i64
+    init(value: i64) { this.value = value }
+}
+
+final class Other {
+    private const value: i64
+    init(value: i64) { this.value = value }
+}
+
+fn make() -> Payload? { return Other(1) }
+make()

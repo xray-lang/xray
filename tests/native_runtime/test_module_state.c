@@ -520,6 +520,49 @@ static void deep_nullable(void) {
     puts("deep inline Nullable traversal is iterative and needs no managed frame");
 }
 
+static void nullable_class_state(void) {
+    typedef struct MaybeClass { uint8_t tag; XrtManagedHeader *value; } MaybeClass;
+    enum { EMPTY_RECORD = 1, CLASS_A, CLASS_B, MAYBE_A };
+    const size_t leaves[] = {0, offsetof(MaybeClass, value)};
+    const XrtValueImageType rows[] = {
+        {.kind=XRT_VALUE_RECORD,.size=1,.alignment=1},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=alignof(void *),.owned_count=1,.element=EMPTY_RECORD},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=alignof(void *),.owned_count=1,.element=EMPTY_RECORD},
+        {.kind=XRT_VALUE_NULLABLE,.size=sizeof(MaybeClass),.alignment=alignof(MaybeClass),.first_owned=1,.owned_count=1,
+            .nullable_element=CLASS_A,.nullable_payload=offsetof(MaybeClass, value)},
+    };
+    const XrtValueImage raw = {.types=rows,.type_count=4,.owned_offsets=leaves,.owned_count=2};
+    const XrtModuleSpec module = {0};
+    const XrtModuleSlotSpec slot = {0,MAYBE_A,XRT_MODULE_SLOT_MUTABLE,0,sizeof(MaybeClass),alignof(MaybeClass)};
+    const XrtModuleLayoutSpec spec = {&raw,&module,1,NULL,0,&slot,1,sizeof(MaybeClass),alignof(MaybeClass)};
+    Audit audit = {0}; XrtBillingOwner *billing = billing_new(&audit,SIZE_MAX);
+    XrtModuleLayout *layout = NULL; OK(xrt_module_layout_new(billing,&spec,(XrtManagedLease){0},&layout));
+    XrtModuleState *state = NULL; OK(xrt_module_state_new(layout,billing,&state));
+    XrtBoundClass a = {0}, b = {0};
+    OK(xrt_module_layout_class(layout,CLASS_A,&a)); OK(xrt_module_layout_class(layout,CLASS_B,&b));
+    XrtManagedRoot *root = NULL; XrtManagedFrame *frame = NULL;
+    OK(xrt_managed_root_new(billing,&root)); OK(xrt_managed_frame_enter(root,2,&frame));
+    uint8_t empty = 0;
+    OK(xrt_class_create(frame,0,a.ops,&empty)); OK(xrt_class_create(frame,1,b.ops,&empty));
+    XrtManagedHeader *right = borrow(frame,0), *wrong = borrow(frame,1);
+    XrtModuleRef *reference = NULL;
+    OK(xrt_module_begin(state,0));
+    BAD(xrt_module_construct(state,0,&(MaybeClass){1,wrong},&reference));
+    OK(xrt_module_construct(state,0,&(MaybeClass){1,right},&reference));
+    OK(xrt_module_publish(reference)); OK(xrt_module_ready(state,0));
+    BAD(xrt_module_replace(reference,&(MaybeClass){1,NULL}));
+    BAD(xrt_module_replace(reference,&(MaybeClass){0,wrong}));
+    BAD(xrt_module_replace(reference,&(MaybeClass){2,right}));
+    MaybeClass snapshot = {0}; OK(xrt_module_copy(reference,&snapshot));
+    CHECK(snapshot.tag == 1 && snapshot.value == right);
+    OK(xrt_module_replace(reference,&(MaybeClass){0}));
+    OK(xrt_managed_root_destroy(&root));
+    CHECK(xrt_class_backing_matches(snapshot.value,a.plan));
+    xrt_managed_drop(snapshot.value);
+    xrt_module_state_drop(&state); xrt_module_layout_drop(&layout); xrt_billing_owner_drop(billing);
+    CHECK(!audit.leases && !audit.blocks && !audit.bytes);
+}
+
 typedef struct FunctionCode {
     size_t references, *retirements;
     struct { uint32_t ordinal; } entries[2];
@@ -672,6 +715,6 @@ int main(void) {
     atomic_i64_group_span(); atomic_record(); family_borrows(); array_state_guards();
     inline_array_state();
     allocation_failures(); scalar_admission();
-    metadata_and_rejection(); deep_nullable(); function_state();
+    metadata_and_rejection(); deep_nullable(); nullable_class_state(); function_state();
     puts("fixed module State kernel passed"); return 0;
 }

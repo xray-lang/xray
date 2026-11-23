@@ -44,6 +44,7 @@ typedef struct ModuleValidation {
     XrtValuePlanSpec spec;
     uint8_t *value;
     size_t next;
+    const XrtValuePlan *plan;
 } ModuleValidation;
 struct XrtModuleState {
     XrtModuleLayout *layout;
@@ -148,7 +149,7 @@ static XrtManagedStatus module_function_storage(const void *value) {
  * callbacks, compiler pool queries or independent physical layout are needed. */
 static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType *type, void *value) {
     size_t depth = 1;
-    state->validation[0] = (ModuleValidation){type->spec, value, 0};
+    state->validation[0] = (ModuleValidation){type->spec, value, 0, type->plan};
     while (depth) {
         ModuleValidation *top = &state->validation[depth - 1];
         XrtValuePlanSpec *spec = &top->spec;
@@ -186,8 +187,7 @@ static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType 
             if (!xrt_array_backing_inline_matches(owner, spec->element)) return XRT_MANAGED_ARGUMENT;
         } else if (spec->kind == XRT_VALUE_CLASS) {
             XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
-            if (top != &state->validation[0] || !xrt_class_backing_matches(owner, type->plan))
-                return XRT_MANAGED_ARGUMENT;
+            if (!xrt_class_backing_matches(owner, top->plan)) return XRT_MANAGED_ARGUMENT;
         } else if (spec->kind == XRT_VALUE_FUNCTION) {
             XrtManagedStatus status = module_function_storage(top->value);
             if (status != XRT_MANAGED_OK) return status;
@@ -195,7 +195,7 @@ static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType 
         if (child) {
             XR_CHECK(depth < state->layout->depth, "the earlier-row type DAG bounds validation depth");
             ModuleValidation *next = &state->validation[depth++];
-            next->value = payload; next->next = 0;
+            next->value = payload; next->next = 0; next->plan = child;
             XR_CHECK(xrt_value_plan_view(child, &next->spec) == XRT_MANAGED_OK,
                 "the retained module layout owns every child plan");
         } else --depth;

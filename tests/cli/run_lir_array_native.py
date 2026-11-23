@@ -111,7 +111,7 @@ def main() -> None:
              "snapshots", "values", "strings", "imports", "conditional", "class_constructor_array_field",
              "byte_copy_before_write", "class_byte_array_field", "class_owned_class_field", "large", "large_string",
              "array_capacity_reserve", "panic_array_reserve_negative", "array_borrowed_formal_binding", "buffered_writer_bytes",
-             "string_copy_bytes", "buffered_writer_string",
+             "string_copy_bytes", "buffered_writer_string", "nullable_class", "nullable_class_aggregate", "panic_nullable_class",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
              "element_update", "element_update_carried",
@@ -163,6 +163,7 @@ def main() -> None:
         "reject_class_owned_class_field_type": b"expression cannot satisfy its declared type",
         "reject_array_borrowed_formal_type": b"expression cannot satisfy its declared type",
         "reject_string_copy_bytes_type": b"expression cannot satisfy its declared type",
+        "reject_nullable_class_type": b"expression cannot satisfy its declared type",
         "reject_repeat_string_default": b"type has no admitted default initializer",
         "reject_unsigned_family": b"expression cannot satisfy its declared type",
         "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",
@@ -188,12 +189,19 @@ def main() -> None:
         "reject_view_local_return": b"constructed XIR failed checking",
     }
 
-    lower_names = ("reject_bool", "reject_nested", "reject_function_reassign",
-                 "reject_function_alias", "reject_function_ref", "reject_tuple_unit")
+    lower_refusals = {
+        "reject_bool": b"module slot payload type is not supported",
+        "reject_nested": b"module slot payload type is not supported",
+        "reject_function_reassign": b"owned mutable function binding extent",
+        "reject_function_alias": b"FUNCTION_REF captured physical binding transport",
+        "reject_function_ref": b"COPY is not supported",
+        "reject_tuple_unit": b"Tuple field has no canonical inline value carrier",
+        "reject_nullable_class_union": b"Nullable payload has no inline POD layout",
+    }
     callback_names = ("check_view_state_indirect_callback_read", "check_view_callback_declaration", "check_view_callback_derived")
     cases = ([("ordinary", name, None) for name in cases
               if (not args.case or name in args.case) and name not in ("ref_global_alias", "string_append_ref")]
-             + [("lower", name, None) for name in lower_names]
+             + [("lower", name, diagnostic) for name, diagnostic in lower_refusals.items()]
              + [("callback", name, None) for name in callback_names]
              + [("rejected", name, diagnostic) for name, diagnostic in rejected_sources.items()])
     gate = SpawnGate()
@@ -310,15 +318,10 @@ def main() -> None:
                 if result != reference:
                     failures.append((name, "VM/native byte comparison", reference, result))
 
-    def run_lower_refusal(name, work, run, failures):
+    def run_lower_refusal(name, diagnostic, work, run, failures):
         source = fixtures / (name + ".xr")
         run(name + "-check", [binary, "check", source], 0)
         _, out, err = run(name + "-c", [binary, "build", "-c", source, "-o", work / (name + ".c")], 1)
-        diagnostic = (b"Tuple field has no canonical inline value carrier" if name == "reject_tuple_unit" else
-                      b"owned mutable function binding extent" if name == "reject_function_reassign" else
-                      b"FUNCTION_REF captured physical binding transport" if name == "reject_function_alias" else
-                      b"COPY is not supported" if name == "reject_function_ref" else
-                      b"module slot payload type is not supported")
         if out or diagnostic not in err:
             failures.append((name, "unsupported payload", out, err))
         _, vm_out, vm_err = run(name + "-vm", [binary, "run", source], 1)
@@ -376,7 +379,7 @@ def main() -> None:
         if kind == "ordinary":
             run_ordinary(name, work, run, failures)
         elif kind == "lower":
-            run_lower_refusal(name, work, run, failures)
+            run_lower_refusal(name, diagnostic, work, run, failures)
         elif kind == "callback":
             run_callback_check(name, run, failures)
         elif kind == "rejected":

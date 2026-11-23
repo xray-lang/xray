@@ -1,0 +1,21 @@
+final class Payload {
+    private const label: string
+    init(label: string) { this.label = label }
+    text() -> string { return this.label }
+}
+
+fn snapshot(present: bool) -> Payload? {
+    if (!present) { return null }
+    var current: Payload? = Payload("saved")
+    const saved = current
+    current = null
+    return saved
+}
+
+fn read(value: Payload?) -> string {
+    if (value == null) { return "absent" }
+    return value!.text()
+}
+
+print(read(snapshot(true)))
+print(read(snapshot(false)))

@@ -146,8 +146,6 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
     while (depth && good) {
         LowerRecordFrame *frame = &frames[depth - 1];
         const XrXirTypeNode *node = xr_xir_type_node(c->source->types, frame->type);
-        if (node && node->kind == XR_XIR_TYPE_NULLABLE && xr_xir_type_is_class(c->source->types, node->element))
-            return lower_unsupported(c, "Nullable class requires a receiving optional owner layout");
         XrXirTypeDescription description = {0};
         XrXirType base = 0;
         bool class_type = node && node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_class(c->source->types, frame->type);
@@ -189,7 +187,10 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
         else if (callable) good = lower_receive_callable(c, frame->type, node);
         else if (tuple) good = lower_tuple_finish(c, frame->type, node);
         else {
-            XrLirType element = lower_pod_element(c, node->element);
+            /* A previously received class union shares an erased member carrier.
+             * That carrier does not describe all present Optional payloads. */
+            XrLirType element = xr_xir_data_union_all_classes(c->source->types, node->element) ?
+                XR_LIR_TYPE_INVALID : lower_pod_element(c, node->element);
             if (!element || element == XR_LIR_ARRAY) good = lower_unsupported(c, "Nullable payload has no inline POD layout");
             else good = lower_build(c, xr_lir_nullable_type(c->module, element,
                 &c->constructed_types[(uint32_t)frame->type - XR_XIR_CONSTRUCTED_TYPE_BASE]));

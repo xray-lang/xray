@@ -1,0 +1,38 @@
+final class Payload {
+    private const label: string
+    init(label: string) { this.label = label }
+    text() -> string { return this.label }
+}
+
+final class Holder {
+    private const value: Payload?
+    init(value: Payload?) { this.value = value }
+    get() -> Payload? { return this.value }
+}
+
+struct Row { value: Payload? }
+
+fn layer<T>(value: T) -> T? { return value }
+
+fn snapshot(value: Payload?) -> (Row, Payload??) {
+    return (Row{value: Holder(value).get()}, layer<Payload?>(value))
+}
+
+var present = snapshot(Payload("present"))
+print(present.0.value!.text())
+print(present.1!!.text())
+var absent = snapshot(null)
+print(absent.0.value == null)
+print(absent.1 == null)
+print(absent.1! == null)
+
+var current: Payload? = null
+current = Payload("module")
+const saved = current
+current = null
+print(saved!.text())
+print(current == null)
+
+const rows: Array<Row> = [Row{value: saved}, Row{value: current}]
+print(rows[0].value!.text())
+print(rows[1].value == null)

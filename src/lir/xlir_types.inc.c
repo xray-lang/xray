@@ -126,7 +126,13 @@ static bool lir_cell_payload_valid(const XrLirModule *m, XrLirType payload,
         payload == XR_LIR_STRING || payload == XR_LIR_MAP_STRING_I64;
     /* Class field guards assume a single executor. Cells cannot transport
      * Class handles across that boundary. */
-    return m->types[payload - XR_LIR_TYPE_COUNT].shape.kind != XR_LIR_TYPE_CLASS;
+    while (payload >= XR_LIR_TYPE_COUNT) {
+        XrLirTypeView shape = m->types[payload - XR_LIR_TYPE_COUNT].shape;
+        if (shape.kind != XR_LIR_TYPE_NULLABLE) return shape.kind != XR_LIR_TYPE_CLASS;
+        if (shape.element >= payload) return false;
+        payload = shape.element;
+    }
+    return true;
 }
 
 static bool lir_tuple_shape(const XrLirModule *m, XrLirTypeView shape, const XrLirRecordField *fields,
@@ -243,7 +249,6 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape, const Xr
         shape.element >= XR_LIR_TYPE_COUNT + ordinal) return false;
     if (shape.element >= XR_LIR_TYPE_COUNT) {
         XrLirTypeData child = m->types[shape.element - XR_LIR_TYPE_COUNT];
-        if (child.shape.kind == XR_LIR_TYPE_CLASS) return false;
         if (!child.layout.size && xr_lir_inline_aggregate_type(m, shape.element)) {
             *output = child.layout;
             return true;
