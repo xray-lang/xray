@@ -1,0 +1,15 @@
+enum Refusal { Failed }
+
+fn calculate(ok: bool, denominator: i64) throws(Refusal) -> i64 {
+    if (!ok) { throw Refusal.Failed }
+    print(27)
+    return 27 / denominator
+}
+
+fn fallback() -> i64 {
+    print(98)
+    return -1
+}
+
+print((try? calculate(true, 0)) ?? fallback())
+print(99)

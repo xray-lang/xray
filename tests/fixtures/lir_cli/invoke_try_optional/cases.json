@@ -1,0 +1,28 @@
+{
+  "scalar": {
+    "exit": 0,
+    "stdout": "17\n17\n19\n-1\n18\n21\n23\n62\n18\n-3\n18\n21\n-4\n",
+    "stderr": ""
+  },
+  "flatten": {
+    "exit": 0,
+    "stdout": "0\n1\n2\n-2\n13\n-2\n",
+    "stderr": ""
+  },
+  "unit": {
+    "exit": 0,
+    "stdout": "20\n22\n30\n31\n32\n",
+    "stderr": ""
+  },
+  "panic": {
+    "exit": 1,
+    "stdout": "27\n",
+    "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  },
+  "redundant": {
+    "source_error": ":5:8: error: E0336: try expression has no business-error source; remove the marker and preserve the expression"
+  },
+  "unparenthesized": {
+    "source_error": ":7:29: error: parenthesize try? before combining it with ??"
+  }
+}
