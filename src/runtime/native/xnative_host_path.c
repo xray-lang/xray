@@ -71,7 +71,9 @@ XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBackin
     case id: status = implementation(&policy, path, NULL, &result); break;
 #define XR_NATIVE_BLOCKING_FILE_OPEN_WRITE(id)
 #define XR_NATIVE_BLOCKING_FILE_CLOSE(id)
+#define XR_NATIVE_BLOCKING_FILE_WRITE(id, kind)
 #include "shared/xnative_host_leaves.inc.h"
+#undef XR_NATIVE_BLOCKING_FILE_WRITE
 #undef XR_NATIVE_BLOCKING_FILE_CLOSE
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_WRITE
 #undef XR_NATIVE_BLOCKING_PATH_BOOL

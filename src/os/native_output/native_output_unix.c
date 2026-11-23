@@ -12,50 +12,23 @@
  *   pending pipe signal before restoring the original mask.
  */
 #include "os/os_native_output.h"
-#include <errno.h>
-#include <pthread.h>
-#include <signal.h>
+#include "os/unix/xpipe_guard.inc.h"
 #include <stdio.h>
 #include <unistd.h>
-
-typedef struct XrtPipeGuard { sigset_t previous, pipe; bool pending; } XrtPipeGuard;
 
 static XrtIoResult io_error(int code) {
     return (XrtIoResult){true, code == EPIPE,
         code ? XRT_IO_ERRNO : XRT_IO_NONE, (uint32_t)code};
 }
 
-static int pipe_begin(XrtPipeGuard *guard) {
-    sigset_t pending;
-    sigemptyset(&guard->pipe);
-    sigaddset(&guard->pipe, SIGPIPE);
-    int code = pthread_sigmask(SIG_BLOCK, &guard->pipe, &guard->previous);
-    if (code) return code;
-    if (sigpending(&pending)) {
-        code = errno;
-        (void)pthread_sigmask(SIG_SETMASK, &guard->previous, NULL);
-        return code;
-    }
-    guard->pending = sigismember(&pending, SIGPIPE) == 1;
-    return 0;
-}
-
-static XrtIoResult pipe_end(XrtPipeGuard *guard, XrtIoResult result) {
-    sigset_t pending;
-    if (result.broken_pipe && !guard->pending && sigpending(&pending) == 0 &&
-        sigismember(&pending, SIGPIPE) == 1) {
-        int signal_number;
-        int code = sigwait(&guard->pipe, &signal_number);
-        if (code && !result.failed) result = io_error(code);
-    }
-    int code = pthread_sigmask(SIG_SETMASK, &guard->previous, NULL);
-    if (code && !result.failed) result = io_error(code);
-    return result;
+static XrtIoResult pipe_end(XrOsPipeGuard *guard, XrtIoResult result) {
+    int code = xr_os_pipe_guard_end(guard, result.broken_pipe);
+    return code && !result.failed ? io_error(code) : result;
 }
 
 XR_FUNCDEF XrtIoResult xrt_io_flush_stdout(void) {
-    XrtPipeGuard guard;
-    int code = pipe_begin(&guard);
+    XrOsPipeGuard guard;
+    int code = xr_os_pipe_guard_begin(&guard);
     if (code) return io_error(code);
     errno = 0;
     XrtIoResult result = fflush(stdout) == 0 ? (XrtIoResult){0} : io_error(errno);
@@ -63,8 +36,8 @@ XR_FUNCDEF XrtIoResult xrt_io_flush_stdout(void) {
 }
 
 XR_FUNCDEF XrtIoResult xrt_io_write(unsigned stream, const char *bytes, size_t length) {
-    XrtPipeGuard guard;
-    int code = pipe_begin(&guard);
+    XrOsPipeGuard guard;
+    int code = xr_os_pipe_guard_begin(&guard);
     if (code) return io_error(code);
     XrtIoResult result = {0};
     while (length) {

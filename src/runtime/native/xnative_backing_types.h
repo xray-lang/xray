@@ -35,6 +35,7 @@ typedef struct XrtBackingTypes {
 XR_FUNC XrtManagedStatus xrt_backing_types_init(XrtBillingOwner *, XrtBackingTypes *empty);
 XR_FUNC void xrt_backing_types_drop(XrtBackingTypes *);
 /* Scalar carriers with equal strides still have distinct producer identities. */
+XR_FUNC bool xrt_backing_string_matches(const XrtManagedHeader *);
 XR_FUNC bool xrt_backing_array_matches(const XrtManagedHeader *, XrtBackingArrayKind);
 
 /* Copy one real reference into an entirely empty stable slot. Failed adoption

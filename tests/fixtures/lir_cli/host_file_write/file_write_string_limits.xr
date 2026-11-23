@@ -1,0 +1,15 @@
+import { File } from io
+import path
+
+fn run() {
+    const output = File.openWrite(path.from("unchanged.bin"), true)!
+    print(output.writeString("中\0B", -1))
+    print(output.writeString("中\0B", 5))
+    print(output.writeString("中\0B", 9223372036854775807))
+    print(output.writeString("", 0))
+    print(output.close())
+    print(output.writeString("中\0B", 0))
+    print(output.writeString("", 0))
+}
+
+run()

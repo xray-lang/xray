@@ -1373,6 +1373,8 @@ def parse_def_metadata(
                 "blocking-path-bool": "(path: Path): bool",
                 "blocking-file-open-write": "(path: Path, append: bool): __FileStorage?",
                 "blocking-file-close": "(file: __FileStorage): bool",
+                "blocking-file-write-bytes": "(file: __FileStorage, data: Array<u8>, offset: i64): i64",
+                "blocking-file-write-string": "(file: __FileStorage, data: string, offset: i64): i64",
             }
             if host_leaf and (signature != host_signatures.get(host_leaf) or current_module != "io" or
                               visibility != "internal" or target_fact):

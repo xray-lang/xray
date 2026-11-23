@@ -1324,6 +1324,10 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     return true;
 }
 
+static bool lower_host_has_path(XrNativeHostShape shape) {
+    return shape == XR_NATIVE_HOST_PATH_BOOL || shape == XR_NATIVE_HOST_FILE_OPEN_WRITE;
+}
+
 static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint32_t *field) {
     const XrXirModule *source = c->source;
     const XrXirFunction *body = &source->functions[function];
@@ -1332,10 +1336,10 @@ static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint3
     if (body->block_count || shape == XR_NATIVE_HOST_NONE ||
         !xir_io_native_signature(id, source->types, body->parameters, body->parameter_count,
             body->result, body->error_type)) return XR_NATIVE_HOST_NONE;
-    bool qualified = shape == XR_NATIVE_HOST_FILE_CLOSE ?
-        xir_io_native_module_scope(source->declarations, function, source->function_count) :
+    bool qualified = lower_host_has_path(shape) ?
         xir_io_native_scope(source->declarations, source->types, function, source->function_count,
-            body->parameters[0], field);
+            body->parameters[0], field) :
+        xir_io_native_module_scope(source->declarations, function, source->function_count);
     return qualified ? shape : XR_NATIVE_HOST_NONE;
 }
 
@@ -2850,28 +2854,38 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
 static bool lower_host_function(Lower *c, uint32_t index) {
     uint32_t field = 0;
     XrNativeHostShape shape = lower_host_abi(c, index, &field);
-    if (shape == XR_NATIVE_HOST_NONE) return lower_unsupported(c, "unregistered host leaf");
-    bool open = shape == XR_NATIVE_HOST_FILE_OPEN_WRITE;
-    bool path_argument = shape != XR_NATIVE_HOST_FILE_CLOSE;
+    XrLirOp operation;
+    switch (shape) {
+    case XR_NATIVE_HOST_PATH_BOOL: operation = XR_LIR_HOST_PATH_BOOL; break;
+    case XR_NATIVE_HOST_FILE_OPEN_WRITE: operation = XR_LIR_HOST_FILE_OPEN_WRITE; break;
+    case XR_NATIVE_HOST_FILE_CLOSE: operation = XR_LIR_HOST_FILE_CLOSE; break;
+    case XR_NATIVE_HOST_FILE_WRITE_BYTES: case XR_NATIVE_HOST_FILE_WRITE_STRING:
+        operation = XR_LIR_HOST_FILE_WRITE; break;
+    default: return lower_unsupported(c, "unregistered host leaf");
+    }
+    bool path_argument = lower_host_has_path(shape);
+    const XrXirFunction *body = &c->source->functions[index];
     XrLirFunction function = c->functions[index];
     XrLirBlock block = {0};
-    XrLirValue parameter = {0}, arguments[2] = {{0}}, result = {0};
-    XrLirInstruction read = {.op=XR_LIR_CLASS_FIELD, .type=XR_LIR_STRING,
-        .operands=&parameter, .operand_count=1, .bits=field};
-    XrLirOp operation = open ? XR_LIR_HOST_FILE_OPEN_WRITE :
-        path_argument ? XR_LIR_HOST_PATH_BOOL : XR_LIR_HOST_FILE_CLOSE;
-    XrLirInstruction call = {.op=operation, .type=lower_type(c, c->source->functions[index].result),
-        .operands=arguments, .operand_count=open ? 2u : 1u, .bits=c->source->declarations->functions[index].native_callable};
-    XrLirInstruction drop = {.op=XR_LIR_STRING_DROP, .type=XR_LIR_UNIT, .operands=arguments, .operand_count=1};
-    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
+    XrLirValue arguments[3] = {{0}}, result = {0};
+    XR_CHECK(body->parameter_count <= sizeof(arguments) / sizeof(*arguments),
+        "verified host signatures have at most three parameters");
     if (!lower_build(c, xr_lir_define_function(c->module, function)) ||
         !lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &block)) ||
-        !lower_build(c, xr_lir_set_entry(c->module, function, block)) ||
-        !lower_build(c, xr_lir_function_parameter(c->module, function, 0, &parameter))) return false;
-    arguments[0] = parameter;
-    return (!path_argument || lower_build(c, xr_lir_emit_value(c->module, block, &read, &arguments[0]))) &&
-        (!open || lower_build(c, xr_lir_function_parameter(c->module, function, 1, &arguments[1]))) &&
-        lower_build(c, xr_lir_emit_value(c->module, block, &call, &result)) &&
+        !lower_build(c, xr_lir_set_entry(c->module, function, block))) return false;
+    for (uint32_t p = 0; p < body->parameter_count; ++p)
+        if (!lower_build(c, xr_lir_function_parameter(c->module, function, p, &arguments[p]))) return false;
+    if (path_argument) {
+        XrLirValue path = arguments[0];
+        XrLirInstruction read = {.op=XR_LIR_CLASS_FIELD, .type=XR_LIR_STRING,
+            .operands=&path, .operand_count=1, .bits=field};
+        if (!lower_build(c, xr_lir_emit_value(c->module, block, &read, &arguments[0]))) return false;
+    }
+    XrLirInstruction call = {.op=operation, .type=lower_type(c, body->result),
+        .operands=arguments, .operand_count=body->parameter_count, .bits=c->source->declarations->functions[index].native_callable};
+    XrLirInstruction drop = {.op=XR_LIR_STRING_DROP, .type=XR_LIR_UNIT, .operands=arguments, .operand_count=1};
+    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
+    return lower_build(c, xr_lir_emit_value(c->module, block, &call, &result)) &&
         (!path_argument || lower_build(c, xr_lir_emit_effect(c->module, block, &drop))) &&
         lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
 }

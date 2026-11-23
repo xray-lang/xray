@@ -24,6 +24,14 @@ _Static_assert(sizeof(array_plan_families) / sizeof(*array_plan_families) == XRT
     "every scalar Array producer has an identity");
 static bool array_family_retain(void *family) { return family != NULL; }
 static void array_family_drop(void *family) { (void)family; }
+XR_FUNCDEF bool xrt_backing_string_matches(const XrtManagedHeader *owner) {
+    const XrtRuntimeTypeSpec spec = {.fixed_size=sizeof(XrtStringBacking),.alignment=alignof(XrtStringBacking),
+        .capacity_offset=offsetof(XrtStringBacking, capacity),.stride=1};
+    if (!xrt_managed_layout_matches(owner, &spec)) return false;
+    const XrtStringBacking *string = (const XrtStringBacking *)owner;
+    return string->capacity && string->capacity <= SIZE_MAX - sizeof(*string) &&
+        string->length < string->capacity && string->runes <= string->length && !string->bytes[string->length];
+}
 XR_FUNCDEF bool xrt_backing_array_matches(const XrtManagedHeader *owner, XrtBackingArrayKind family) {
     const XrtRuntimeTypeSpec *spec = NULL;
     return (unsigned)family < XRT_BACKING_ARRAY_COUNT &&

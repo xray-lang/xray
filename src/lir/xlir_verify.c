@@ -395,6 +395,15 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_HOST_FILE_CLOSE:
             return v->type == XR_LIR_I1 && xr_lir_class_storage(m, a) == XR_NATIVE_DECLARATION_FILE_STORAGE &&
                 v->bits <= UINT32_MAX && xr_native_host_shape((uint32_t)v->bits) == XR_NATIVE_HOST_FILE_CLOSE;
+        case XR_LIR_HOST_FILE_WRITE: {
+            if (v->type != XR_LIR_I64 || xr_lir_class_storage(m, a) != XR_NATIVE_DECLARATION_FILE_STORAGE ||
+                v->operand_count != 3 || f->values[v->operands[2] - 1].type != XR_LIR_I64 || v->bits > UINT32_MAX)
+                return false;
+            XrNativeHostShape shape = xr_native_host_shape((uint32_t)v->bits);
+            return (shape == XR_NATIVE_HOST_FILE_WRITE_STRING && b == XR_LIR_STRING) ||
+                (shape == XR_NATIVE_HOST_FILE_WRITE_BYTES && b == XR_LIR_ARRAY &&
+                    f->values[v->operands[1] - 1].array_element == XR_LIR_U8);
+        }
         case XR_LIR_STRING_LEN:
             return v->type == XR_LIR_I64 && a == XR_LIR_STRING;
         case XR_LIR_I64_TRY_PARSE: {
@@ -523,7 +532,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
         v->op != XR_LIR_CLASS_IS &&
         v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET && v->op != XR_LIR_HOST_PATH_BOOL &&
-        v->op != XR_LIR_HOST_FILE_OPEN_WRITE && v->op != XR_LIR_HOST_FILE_CLOSE &&
+        v->op != XR_LIR_HOST_FILE_OPEN_WRITE && v->op != XR_LIR_HOST_FILE_CLOSE && v->op != XR_LIR_HOST_FILE_WRITE &&
         v->op != XR_LIR_CLASS_SCALAR_WRITE && v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)

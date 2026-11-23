@@ -15,6 +15,7 @@
 #include "runtime/native/xnative_values.h"
 #include "runtime/native/xnative_string_backing_ops.h"
 #include "xray_native_values.h"
+#include "xray_native_array.h"
 #include "xray_native_place.h"
 #include "xray_native_state.h"
 #include "xray_native_map.h"
@@ -143,9 +144,12 @@ static void managed_host_path_scratch(void) {
     xrt_locations_release(owner);
 }
 
+typedef enum HostFileMode {
+    HOST_FILE_VALID, HOST_FILE_INVALID_HOME, HOST_FILE_WRONG_BACKING, HOST_FILE_INVALID_LENGTH,
+} HostFileMode;
 typedef struct HostFileCall {
     const char *path;
-    bool invalid_home;
+    HostFileMode mode;
 } HostFileCall;
 
 static void host_file_root(void *context) {
@@ -167,12 +171,30 @@ static void host_file_root(void *context) {
     xrt_native_string_create(frame, 2, call->path, strlen(call->path), 1);
     XrtManagedHeader *text = NULL;
     managed_require(xrt_managed_slot_borrow(frame, 2, &text));
+    bool invalid_data = call->mode == HOST_FILE_WRONG_BACKING || call->mode == HOST_FILE_INVALID_LENGTH;
     const XrtNativeFileOpen open = {
-        .output={frame,0,1,call->invalid_home ? owner_offset : 0},
-        .image=&image,.type=2,.path=(const XrtStringBacking *)text,.append=false,
+        .output={frame,0,1,call->mode == HOST_FILE_INVALID_HOME ? owner_offset : 0},
+        .image=&image,.type=2,.path=(const XrtStringBacking *)text,.append=invalid_data,
     };
     xrt_native_host_file_open_write(XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE, &open, 1);
-    CHECK(!call->invalid_home && *(const uint8_t *)payload == 1);
+    CHECK(call->mode != HOST_FILE_INVALID_HOME && *(const uint8_t *)payload == 1);
+    if (invalid_data) {
+        XrtManagedHeader *file = NULL;
+        managed_require(xrt_managed_slot_borrow(frame, 0, &file));
+        XrtManagedHeader *data = text;
+        if (call->mode == HOST_FILE_INVALID_LENGTH) {
+            const uint8_t byte = 0xff;
+            const XrtArrayInput input = {XRT_BACKING_ARRAY_U8,&byte,1};
+            xrt_native_array_create(frame, 3, &input, 1);
+            data = NULL;
+            managed_require(xrt_managed_slot_borrow(frame, 3, &data));
+            XrtArrayBacking *array = (XrtArrayBacking *)data;
+            array->length = array->capacity + 1;
+        }
+        const XrtNativeFileWrite forged = {.image=&image,.type=2,.file=file,.data=data};
+        (void)xrt_native_host_file_write(XR_NATIVE_CALLABLE_IO_FILE_WRITE, &forged, 1);
+        CHECK(false);
+    }
     const XrtPlace owner = {.frame=frame,.slot=0,.nulls=XRT_PLACE_NONNULL};
     const XrtPlace alias = {.frame=frame,.slot=3,.nulls=XRT_PLACE_NONNULL};
     managed_require(xrt_place_copy_replace(alias, owner, NULL));
@@ -200,15 +222,21 @@ static void managed_host_file(void) {
     CHECK(snprintf(path, sizeof(path), "native-execution-owned-file-%lu.dat", process) < (int)sizeof(path));
     FILE *seed = fopen(path, "wbx");
     CHECK(seed && fputs("keep", seed) >= 0 && fclose(seed) == 0);
-    HostFileCall invalid = {path,true};
     XrtValueRoot root = {0};
+    const HostFileMode invalid[] = {HOST_FILE_INVALID_HOME, HOST_FILE_WRONG_BACKING, HOST_FILE_INVALID_LENGTH};
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(*invalid); ++i) {
+        HostFileCall call = {path,invalid[i]};
+        XrtExecutionFailure failure = {0};
+        CHECK(xrt_run_embedded_owned(owner, &failure, host_file_root, &call, &root) == XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT);
+        CHECK(xrt_value_root_empty(&root));
+        seed = fopen(path, "rb");
+        char content[5] = {0};
+        CHECK(seed && fread(content, 1, 4, seed) == 4 && !strcmp(content, "keep") &&
+            fgetc(seed) == EOF && fclose(seed) == 0);
+    }
+    HostFileCall valid = {path,HOST_FILE_VALID};
     XrtExecutionFailure failure = {0};
-    CHECK(xrt_run_embedded_owned(owner, &failure, host_file_root, &invalid, &root) == XRT_EXECUTION_FAILURE);
-    CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT);
-    seed = fopen(path, "rb");
-    char content[5] = {0};
-    CHECK(seed && fread(content, 1, 4, seed) == 4 && !strcmp(content, "keep") && fclose(seed) == 0);
-    HostFileCall valid = {path,false};
     CHECK(xrt_run_embedded_owned(owner, &failure, host_file_root, &valid, &root) == XRT_EXECUTION_COMPLETED);
     CHECK(xrt_value_root_empty(&root) && remove(path) == 0);
     xrt_locations_release(owner);

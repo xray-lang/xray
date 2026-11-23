@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_file_owned.c - Real worker bytes, anchored owners and allocation cleanup
+ * test_file_owned.c - Synchronous and worker bytes, anchored owners and cleanup
  */
 #include "os/os_file_owned.h"
 #include "os/xfullpath_owned.h"
@@ -56,7 +56,11 @@ static void file_memory_free(void *context, void *pointer) {
 #include "os/win/file_owned_win.c"
 typedef wchar_t FileNativePath;
 #else
+#include <pthread.h>
+#include <signal.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include "os/unix/file_owned_unix.c"
 typedef char FileNativePath;
 #endif
@@ -173,6 +177,38 @@ static void file_sync_execute(XrOsPathSpan path, const FileNativePath *native,
     file_sync_contents(native, NULL, 0);
 }
 
+static void file_sync_transfer(XrOsPathSpan path, const FileNativePath *native) {
+    static const uint8_t expected[] = {0x41, 0x00, 0xff, 0x0d, 0x0a, 0x1a, 0x80};
+    XrOsIoPolicy memory = {&file_live, file_memory, file_memory_free};
+    XrOsFileOwner owner = {0};
+    bool opened = false;
+    CHECK(xr_os_io_file_open_write_sync(&memory, path, false, &owner, &opened) == XR_OS_IO_OK && opened);
+    size_t written = 123;
+    XrOsFileOwner copy = owner;
+    CHECK(xr_os_io_file_write_sync(&copy, expected, 1, &written) == XR_OS_IO_BAD_ARGUMENT && written == 123);
+    CHECK(xr_os_io_file_write_sync(&owner, NULL, 1, &written) == XR_OS_IO_BAD_ARGUMENT && written == 123);
+    CHECK(xr_os_io_file_write_sync(&owner, expected, 1, NULL) == XR_OS_IO_BAD_ARGUMENT);
+    CHECK(xr_os_io_file_write_sync(&owner, NULL, 0, &written) == XR_OS_IO_OK && written == 0);
+#if defined(XR_OS_MACOS)
+    int descriptor = ((const OwnedFileState *)owner.state)->descriptor;
+    CHECK(fcntl(descriptor, F_GETNOSIGPIPE) == 0);
+#endif
+    CHECK(xr_os_io_file_write_sync(&owner, expected, 3, &written) == XR_OS_IO_OK && written == 3);
+#if defined(XR_OS_MACOS)
+    CHECK(fcntl(descriptor, F_GETNOSIGPIPE) == 1);
+#endif
+    CHECK(xr_os_io_file_write_sync(&owner, expected + 3, 2, &written) == XR_OS_IO_OK && written == 2);
+    file_sync_close(&owner, native);
+    file_sync_contents(native, expected, 5);
+
+    CHECK(xr_os_io_file_open_write_sync(&memory, path, true, &owner, &opened) == XR_OS_IO_OK && opened);
+    CHECK(xr_os_io_file_write_sync(&owner, expected + 5, 2, &written) == XR_OS_IO_OK && written == 2);
+    file_sync_close(&owner, native);
+    CHECK(xr_os_io_file_write_sync(&owner, expected, 1, &written) == XR_OS_IO_BAD_ARGUMENT && written == 2);
+    CHECK(xr_os_io_file_write_sync(&owner, NULL, 0, &written) == XR_OS_IO_BAD_ARGUMENT && written == 2);
+    file_sync_contents(native, expected, sizeof(expected));
+}
+
 #if defined(XR_OS_WINDOWS)
 static bool file_current(void *context) {
     return !*(bool *) context;
@@ -222,6 +258,8 @@ static void file_opened(const XrOsIoPolicy *memory, const XrOsFileQuery *query, 
 }
 static void file_written(const XrOsIoPolicy *memory, const XrOsFileQuery *query,
                          XrOsFileOwner *owner, const uint8_t *bytes, size_t length) {
+    size_t written = 123;
+    CHECK(xr_os_io_file_write_sync(owner, bytes, length, &written) == XR_OS_IO_BAD_ARGUMENT && written == 123);
     XrOsFileOperation operation = {0};
     XrOsFileRequest request = {
         .action = XR_OS_FILE_WRITE, .standard_stream = -1, .bytes = bytes, .length = length};
@@ -407,11 +445,77 @@ static void file_kernel_execute(void) {
     file_owner_done(&owner);
     file_query_reentry(&memory, path);
     file_open_allocation_failures(&memory, &query, path);
-    file_sync_execute((XrOsPathSpan){path, (size_t)encoded - 1}, wide, expected, sizeof(expected));
+    XrOsPathSpan filename = {path, (size_t)encoded - 1};
+    file_sync_execute(filename, wide, expected, sizeof(expected));
+    file_sync_transfer(filename, wide);
     CHECK(DeleteFileW(wide) && RemoveDirectoryW(directory));
     CHECK(file_live == live && file_bytes == bytes);
 }
 #else
+static void file_sync_short_write(XrOsPathSpan name) {
+    static const uint8_t payload[] = "ABCDE";
+    pid_t child = fork();
+    CHECK(child >= 0);
+    if (child == 0) {
+        struct sigaction ignored = {.sa_handler=SIG_IGN};
+        CHECK(sigemptyset(&ignored.sa_mask) == 0 && sigaction(SIGXFSZ, &ignored, NULL) == 0);
+        struct rlimit limit;
+        CHECK(getrlimit(RLIMIT_FSIZE, &limit) == 0);
+        limit.rlim_cur = 3;
+        CHECK(setrlimit(RLIMIT_FSIZE, &limit) == 0);
+        XrOsIoPolicy memory = {&file_live, file_memory, file_memory_free};
+        XrOsFileOwner owner = {0};
+        bool opened = false;
+        CHECK(xr_os_io_file_open_write_sync(&memory, name, false, &owner, &opened) == XR_OS_IO_OK && opened);
+        size_t written = 123;
+        CHECK(xr_os_io_file_write_sync(&owner, payload, 5, &written) == XR_OS_IO_OK && written == 3);
+        CHECK(xr_os_io_file_write_sync(&owner, payload + 3, 2, &written) == XR_OS_IO_IO && written == 3);
+        file_sync_close(&owner, name.text);
+        _exit(0);
+    }
+    int status = 0;
+    pid_t completed;
+    do { completed = waitpid(child, &status, 0); } while (completed < 0 && errno == EINTR);
+    CHECK(completed == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    file_sync_contents(name.text, payload, 3);
+}
+
+static void file_sync_broken_pipe(const char *directory) {
+    char fifo[128];
+    int length = snprintf(fifo, sizeof(fifo), "%s/broken-pipe", directory);
+    CHECK(length > 0 && (size_t)length < sizeof(fifo) && mkfifo(fifo, 0600) == 0);
+    int reader = open(fifo, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    CHECK(reader >= 0);
+    XrOsIoPolicy memory = {&file_live, file_memory, file_memory_free};
+    XrOsFileOwner owner = {0};
+    XrOsPathSpan name = {fifo, (size_t)length};
+    bool opened = false;
+    CHECK(xr_os_io_file_open_write_sync(&memory, name, true, &owner, &opened) == XR_OS_IO_OK && opened);
+    CHECK(close(reader) == 0);
+
+    struct sigaction original, default_action = {.sa_handler=SIG_DFL};
+    CHECK(sigemptyset(&default_action.sa_mask) == 0 && sigaction(SIGPIPE, &default_action, &original) == 0);
+    sigset_t pipe, previous, current;
+    CHECK(sigemptyset(&pipe) == 0 && sigaddset(&pipe, SIGPIPE) == 0);
+    CHECK(pthread_sigmask(SIG_UNBLOCK, &pipe, &previous) == 0);
+    const uint8_t byte = 42;
+    size_t written = 123;
+    CHECK(xr_os_io_file_write_sync(&owner, &byte, 1, &written) == XR_OS_IO_IO && written == 123);
+    CHECK(pthread_sigmask(SIG_SETMASK, NULL, &current) == 0 && sigismember(&current, SIGPIPE) == 0);
+    CHECK(sigpending(&current) == 0 && sigismember(&current, SIGPIPE) == 0);
+
+    CHECK(pthread_sigmask(SIG_BLOCK, &pipe, NULL) == 0 && raise(SIGPIPE) == 0);
+    CHECK(xr_os_io_file_write_sync(&owner, &byte, 1, &written) == XR_OS_IO_IO && written == 123);
+    CHECK(pthread_sigmask(SIG_SETMASK, NULL, &current) == 0 && sigismember(&current, SIGPIPE) == 1);
+    CHECK(sigpending(&current) == 0 && sigismember(&current, SIGPIPE) == 1);
+    int pending;
+    CHECK(sigwait(&pipe, &pending) == 0 && pending == SIGPIPE);
+    CHECK(sigaction(SIGPIPE, &original, NULL) == 0 && pthread_sigmask(SIG_SETMASK, &previous, NULL) == 0);
+
+    file_sync_close(&owner, fifo);
+    CHECK(unlink(fifo) == 0);
+}
+
 static void file_kernel_execute(void) {
     XrOsFileOwner owner = {0};
     XrOsFileOperation operation = {0};
@@ -440,6 +544,9 @@ static void file_kernel_execute(void) {
     CHECK(close(descriptor) == 0);
     XrOsPathSpan filename = {path, (size_t)count};
     file_sync_execute(filename, path, expected, sizeof(expected));
+    file_sync_transfer(filename, path);
+    file_sync_short_write(filename);
+    file_sync_broken_pipe(directory);
     CHECK(unlink(path) == 0);
 
     XrOsIoPolicy memory = {&file_live, file_memory, file_memory_free};
@@ -500,6 +607,6 @@ int main(void) {
     file_kernel_execute();
     file_fullpath();
     CHECK(!file_live && !file_bytes);
-    puts("owned file bytes, synchronous open and close, cleanup and lexical absolute paths PASS");
+    puts("owned file bytes, synchronous transfers, cleanup and lexical absolute paths PASS");
     return 0;
 }

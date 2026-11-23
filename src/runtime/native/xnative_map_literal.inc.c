@@ -3,11 +3,7 @@
 #include "shared/xr_utf8_core.h"
 
 static bool map_literal_key(const XrtStringBacking *key) {
-    const XrtRuntimeTypeSpec spec = {.fixed_size=sizeof(XrtStringBacking), .alignment=_Alignof(XrtStringBacking),
-        .capacity_offset=offsetof(XrtStringBacking, capacity), .stride=1};
-    return key && xrt_managed_layout_matches(&key->managed, &spec) && key->capacity &&
-        key->capacity <= SIZE_MAX - sizeof(*key) && key->length < key->capacity &&
-        key->runes <= key->length && !key->bytes[key->length];
+    return xrt_backing_string_matches((const XrtManagedHeader *)key);
 }
 static bool map_literal_spread(const XrtMapBacking *map) {
     const size_t child = 0;

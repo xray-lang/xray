@@ -76,11 +76,20 @@ typedef struct XrtNativeFileOpen {
     const XrtStringBacking *path;
     bool append;
 } XrtNativeFileOpen;
-/* The verified receiver supplies two distinct owner slots and the presence
- * byte of its Nullable value. The temporary must be truly empty. */
+/* The verified receiver supplies two distinct owner slots and its Nullable
+ * frame offset. The temporary must be truly empty. */
 XRAY_API void xrt_native_host_file_open_write(uint32_t callable, const XrtNativeFileOpen *, uint32_t source_id);
 XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage *, uint32_t type,
     const XrtManagedHeader *, uint32_t source_id);
+typedef struct XrtNativeFileWrite {
+    const XrtValueImage *image;
+    uint32_t type;
+    const XrtManagedHeader *file, *data;
+    int64_t offset;
+} XrtNativeFileWrite;
+/* Borrows data through one synchronous host transfer. A refusal returns -1,
+ * and a short transfer returns its actual byte count. */
+XRAY_API int64_t xrt_native_host_file_write(uint32_t callable, const XrtNativeFileWrite *, uint32_t source_id);
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

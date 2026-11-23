@@ -1,0 +1,24 @@
+import { BufWriter, flushWriter } from io
+import path
+
+fn run() {
+    var writer = BufWriter(path.from("accumulated.bin"), 1)
+    var prefix: Array<u8> = [65 as u8, 0 as u8, 255 as u8]
+    print(writer.writeBytes(prefix))
+    print(writer.writeString("中\r\n"))
+    print(writer.size())
+    print(flushWriter(writer))
+    print(flushWriter(writer))
+    print(writer.size())
+
+    var resetWriter = BufWriter(path.from("reset.bin"), 1)
+    print(resetWriter.writeString("erase me"))
+    print(flushWriter(resetWriter))
+    resetWriter.reset()
+    print(resetWriter.size())
+    print(resetWriter.writeString("\0Z"))
+    print(flushWriter(resetWriter))
+    print(resetWriter.size())
+}
+
+run()

@@ -56,6 +56,11 @@ typedef struct XrOsFileProgress {
  * the owner. An ordinary refusal publishes opened=false and no owner. */
 XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
     XrOsPathSpan path, bool append, XrOsFileOwner *owner, bool *opened);
+/* Writes once at the owner's current position, or appends on an append owner.
+ * The span is borrowed until return. OK reports actual progress, including a
+ * short write. A zero-length span needs no transfer. Errors preserve written. */
+XR_FUNC XrOsIoStatus xr_os_io_file_write_sync(XrOsFileOwner *owner, const uint8_t *bytes,
+    size_t length, size_t *written);
 /* Retires a synchronous owner when the OS consumes its handle. Windows close
  * failures retain a live handle for another close-only attempt. Unix close
  * errors can consume the descriptor and must never replay close. */

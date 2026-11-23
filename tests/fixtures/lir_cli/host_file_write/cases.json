@@ -1,0 +1,38 @@
+{
+  "file_write_bytes": {
+    "stdout_utf8": "5\ntrue\n2\n1\ntrue\n",
+    "seed_hex": {"bytes.bin": "73656564", "cursor.bin": "6f6c642064617461"},
+    "final_hex": {"bytes.bin": "73656564000a0d1a80", "cursor.bin": "414242"}
+  },
+  "file_write_bytes_limits": {
+    "stdout_utf8": "-1\n0\n0\n0\ntrue\n-1\n-1\n",
+    "seed_hex": {"unchanged.bin": "6b656570"},
+    "final_hex": {"unchanged.bin": "6b656570"}
+  },
+  "file_write_string": {
+    "stdout_utf8": "4\n2\ntrue\n",
+    "seed_hex": {"string.bin": "73656564"},
+    "final_hex": {"string.bin": "73656564b8ad00420d0a"}
+  },
+  "file_write_string_limits": {
+    "stdout_utf8": "-1\n0\n0\n0\ntrue\n-1\n-1\n",
+    "seed_hex": {"unchanged.bin": "6b656570"},
+    "final_hex": {"unchanged.bin": "6b656570"}
+  },
+  "bufwriter_flush": {
+    "stdout_utf8": "3\n5\n8\ntrue\ntrue\n8\n8\ntrue\n0\n2\ntrue\n2\n",
+    "seed_hex": {"accumulated.bin": "6f6c6420636f6e74656e7473", "reset.bin": "646f206e6f74206b656570"},
+    "final_hex": {"accumulated.bin": "4100ffe4b8ad0d0a", "reset.bin": "005a"}
+  },
+  "bufwriter_flush_refused": {
+    "stdout_utf8": "2\nfalse\n2\n",
+    "seed_hex": {},
+    "final_hex": {},
+    "absent": ["missing", "missing/child.bin"]
+  },
+  "io_write_file_bytes": {
+    "stdout_utf8": "true\n",
+    "seed_hex": {"whole-bytes.bin": "6f6c6420636f6e74656e7473"},
+    "final_hex": {"whole-bytes.bin": "000d0a7f80ff"}
+  }
+}

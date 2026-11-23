@@ -1,0 +1,17 @@
+import { File } from io
+import path
+
+fn run() {
+    const output = File.openWrite(path.from("unchanged.bin"), true)!
+    var payload: Array<u8> = [65 as u8]
+    var empty = Array<u8>()
+    print(output.write(payload, -1))
+    print(output.write(payload, len(payload)))
+    print(output.write(payload, 9223372036854775807))
+    print(output.write(empty, 0))
+    print(output.close())
+    print(output.write(payload, 0))
+    print(output.write(empty, 0))
+}
+
+run()

@@ -544,7 +544,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         a.operation!=XR_RBC_VALUE_STRING_APPEND_BINDING &&
         a.operation!=XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_FUNCTION_CALL &&
         a.operation!=XR_RBC_VALUE_FUNCTION_ALIAS && a.operation!=XR_RBC_VALUE_SLICE &&
-        a.operation!=XR_RBC_VALUE_SUM_NEW &&
+        a.operation!=XR_RBC_VALUE_SUM_NEW && a.operation!=XR_RBC_VALUE_HOST_FILE_WRITE &&
         a.operation!=XR_RBC_VALUE_CLASS_ARRAY_PUSH && (a.first || a.count || a.window)) return false;
     if (a.operation!=XR_RBC_VALUE_STRING_LITERAL && a.operation!=XR_RBC_VALUE_STATE_CONSTRUCT &&
         a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_STATE_GROUP_INITIALIZE &&
@@ -617,6 +617,16 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_HOST_FILE_CLOSE:
         return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_CLOSE &&
             rbc_value_file_storage(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    case XR_RBC_VALUE_HOST_FILE_WRITE: {
+        if (a.count != 1 || a.window || a.first >= code->argument_count || !code->arguments ||
+            !rbc_value_file_storage(module, code, a.source, false) ||
+            !rbc_value_scalar(code, function, code->arguments[a.first], XR_RBC_BITS) ||
+            !rbc_value_scalar(code, function, a.result, XR_RBC_BITS)) return false;
+        XrNativeHostShape shape = xr_native_host_shape(a.index);
+        return (shape == XR_NATIVE_HOST_FILE_WRITE_STRING && rbc_value_string_borrow_operand(module, code, a.other)) ||
+            (shape == XR_NATIVE_HOST_FILE_WRITE_BYTES && rbc_value_array(module, code, a.other, false) &&
+                rbc_value_kind(module, code, a.other) == XRT_VALUE_ARRAY_U8);
+    }
     case XR_RBC_VALUE_I64_TRY_PARSE:
         return rbc_value_i64_try_parse_valid(module,code,function,a);
     case XR_RBC_VALUE_STATE_READ:

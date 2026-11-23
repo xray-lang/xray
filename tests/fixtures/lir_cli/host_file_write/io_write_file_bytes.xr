@@ -1,0 +1,9 @@
+import { writeFileBytes } from io
+import path
+
+fn run() {
+    var bytes: Array<u8> = [0 as u8, 13 as u8, 10 as u8, 127 as u8, 128 as u8, 255 as u8]
+    print(writeFileBytes(path.from("whole-bytes.bin"), bytes))
+}
+
+run()

@@ -14,11 +14,24 @@ static bool c_record_point(const XrLirInstructionView *v) {
     return v->op == XR_LIR_RECORD_NEW || v->op == XR_LIR_RECORD_FIELD ||
         v->op == XR_LIR_CLASS_NEW || v->op == XR_LIR_CLASS_FIELD ||
         v->op == XR_LIR_CLASS_ADOPT ||
-        v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE ||
+        v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE ||
         v->op == XR_LIR_CLASS_SCALAR_WRITE || v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
 }
 static void c_host_file_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_HOST_FILE_WRITE) {
+        uint32_t type = c->homes->values[v->operands[0]].type;
+        c_format(c, "    v%" PRIu32 " = xrt_native_host_file_write(UINT32_C(%" PRIu64
+            "), &(XrtNativeFileWrite){.image=&xrl_value_image, .type=UINT32_C(%" PRIu32 "), .file=",
+            v->result, v->bits, type);
+        c_value(c, v->operands[0]);
+        c_text(c, ", .data=(const XrtManagedHeader *)");
+        c_value(c, v->operands[1]);
+        c_text(c, ", .offset=");
+        c_value(c, v->operands[2]);
+        c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
+        return;
+    }
     if (v->op == XR_LIR_HOST_FILE_CLOSE) {
         uint32_t type = c->homes->values[v->operands[0]].type;
         c_format(c, "    v%" PRIu32 " = xrt_native_host_file_close(UINT32_C(%" PRIu64
@@ -59,7 +72,7 @@ static void c_class_array_field(LirC *c, const XrLirInstructionView *v, uint32_t
     if (read) c_values_publish_leaf(c,v->result,source);
 }
 static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
-    if (v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE) {
+    if (v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE) {
         c_host_file_instruction(c, v, source);
         return;
     }

@@ -138,6 +138,9 @@ static HANDLE owned_file_open(const wchar_t *path, XrOsFileAction action, bool a
     return CreateFileW(path, access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
         creation, FILE_ATTRIBUTE_NORMAL, NULL);
 }
+static DWORD owned_file_transfer_length(size_t length) {
+    return length > MAXDWORD ? MAXDWORD : (DWORD)length;
+}
 static XrOsIoStatus owned_file_sync_open_error(DWORD error) {
     if (error == ERROR_DISK_FULL || error == ERROR_HANDLE_DISK_FULL || error == ERROR_DISK_QUOTA_EXCEEDED)
         return XR_OS_IO_OK;
@@ -175,6 +178,29 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
     owner->busy = false;
     if (status == XR_OS_IO_OK) *opened = owner->state != NULL;
     return status;
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_file_write_sync(XrOsFileOwner *owner, const uint8_t *bytes,
+    size_t length, size_t *written) {
+    OwnedFileState *file = owned_file_state(owner);
+    if (!file || owner->busy || !file->synchronous || file->opening || file->operations ||
+        !file->handle || file->handle == INVALID_HANDLE_VALUE || !written || (length && !bytes))
+        return XR_OS_IO_BAD_ARGUMENT;
+    if (!length) { *written = 0; return XR_OS_IO_OK; }
+
+    owner->busy = true;
+    DWORD count = 0;
+    BOOL okay = WriteFile(file->handle, bytes, owned_file_transfer_length(length), &count, NULL);
+    DWORD error = okay ? ERROR_SUCCESS : GetLastError();
+    owner->busy = false;
+    if (!okay) {
+        XrOsFileProgress result = {0};
+        owned_file_result_error(&result, error, false);
+        if (result.status != XR_OS_IO_OK) return result.status;
+        if (!count) return XR_OS_IO_IO;
+    }
+    *written = count;
+    return XR_OS_IO_OK;
 }
 
 XR_FUNC XrOsIoStatus xr_os_io_file_close_sync(XrOsFileOwner *owner, bool *closed) {
@@ -321,7 +347,7 @@ static XrOsIoStatus owned_file_op_new(const XrOsIoPolicy *memory, OwnedFileState
     op->memory = *memory;
     op->action = request->action;
     op->append = request->append;
-    op->requested = request->length > MAXDWORD ? MAXDWORD : (DWORD) request->length;
+    op->requested = owned_file_transfer_length(request->length);
     atomic_init(&op->cancelled, false);
     atomic_init(&op->complete, false);
     if (file) {

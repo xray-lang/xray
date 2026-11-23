@@ -275,9 +275,8 @@ fn _writeStdStream(file: File, data: string) -> bool {
     return _drainStr(file, data) && file.flush()
 }
 
-// BufWriter batches byte writes and publishes them atomically through the
-// whole-file primitive. Repeated flushes rewrite the same complete buffer;
-// callers may reset explicitly before composing another file image.
+// BufWriter batches byte writes in memory. Each flush rewrites the destination
+// from the current buffer. Reset clears the buffer for the next file image.
 //
 // The publish step is `io.flushWriter(w)` rather than a `w.flush()` method, and
 // deliberately so: a method on a stdlib class that reaches a suspending leaf

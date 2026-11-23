@@ -56,7 +56,7 @@ typedef enum XrRbcValueOperation {
      * SUM_TAG reads the tag; SUM_GET names one flattened payload field. */
     XR_RBC_VALUE_SUM_NEW, XR_RBC_VALUE_SUM_TAG, XR_RBC_VALUE_SUM_GET,
     XR_RBC_VALUE_CLASS_SCALAR_WRITE, XR_RBC_VALUE_HOST_PATH_BOOL,
-    XR_RBC_VALUE_HOST_FILE_OPEN_WRITE, XR_RBC_VALUE_HOST_FILE_CLOSE
+    XR_RBC_VALUE_HOST_FILE_OPEN_WRITE, XR_RBC_VALUE_HOST_FILE_CLOSE, XR_RBC_VALUE_HOST_FILE_WRITE
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -98,6 +98,7 @@ typedef struct XrRbcValueAccess {
     /* CELL index is its exact one-based common Cell event. Aliases use other
      * for a physical scope capability; operation hooks keep their normal SSA
      * operands. Scope exit and RELEASE never read retired natural bytes. */
+    /* HOST_FILE_WRITE takes the byte offset from one ordinary argument row. */
     uint32_t index, first, count, window;
 } XrRbcValueAccess;
 XR_STATIC_ASSERT(sizeof(XrRbcValueAccess)==32,"ordinary typed access rows occupy thirty-two bytes");

@@ -1,0 +1,17 @@
+import { File } from io
+import path
+
+fn run() {
+    const append = File.openWrite(path.from("bytes.bin"), true)!
+    var payload: Array<u8> = [255 as u8, 0 as u8, 10 as u8, 13 as u8, 26 as u8, 128 as u8]
+    print(append.write(payload, 1))
+    print(append.close())
+
+    const output = File.openWrite(path.from("cursor.bin"), false)!
+    var cursor: Array<u8> = [9 as u8, 65 as u8, 66 as u8]
+    print(output.write(cursor, 1))
+    print(output.write(cursor, 2))
+    print(output.close())
+}
+
+run()

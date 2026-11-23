@@ -8,13 +8,20 @@
  */
 #include "../os_file_owned.h"
 #include "../file_metadata_path.inc.h"
+#if !defined(XR_OS_MACOS)
+#include "xpipe_guard.inc.h"
+#endif
 #include <fcntl.h>
+#include <limits.h>
 #include <unistd.h>
 
 typedef struct OwnedFileState {
     XrOsFileOwner *anchor;
     XrOsIoPolicy memory;
     int descriptor;
+#if defined(XR_OS_MACOS)
+    bool suppresses_sigpipe;
+#endif
 } OwnedFileState;
 
 static XrOsIoStatus owned_file_open_error(int error) {
@@ -45,7 +52,7 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
         int descriptor;
         do { descriptor = open(name, flags, 0644); } while (descriptor < 0 && errno == EINTR);
         if (descriptor >= 0) {
-            *file = (OwnedFileState){owner, *memory, descriptor};
+            *file = (OwnedFileState){.anchor=owner,.memory=*memory,.descriptor=descriptor};
             owner->state = file;
         } else {
             io_status(&io, owned_file_open_error(errno));
@@ -56,6 +63,67 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
     owner->busy = false;
     if (io.status == XR_OS_IO_OK) *opened = owner->state != NULL;
     return io.status;
+}
+
+static XrOsIoStatus owned_file_write_error(int error) {
+    switch (error) {
+    case ENOMEM: return XR_OS_IO_OUT_OF_MEMORY;
+    case EOVERFLOW: return XR_OS_IO_OVERFLOW;
+    case ECANCELED: return XR_OS_IO_CANCELLED;
+    default: return XR_OS_IO_IO;
+    }
+}
+
+#if defined(XR_OS_MACOS)
+static int owned_file_suppress_sigpipe(OwnedFileState *file) {
+    if (file->suppresses_sigpipe) return 0;
+    /* Darwin sends EPIPE's signal to the process. Protect this private descriptor. */
+    int result;
+    do { result = fcntl(file->descriptor, F_SETNOSIGPIPE, 1); } while (result < 0 && errno == EINTR);
+    if (result < 0) return errno;
+    file->suppresses_sigpipe = true;
+    return 0;
+}
+#endif
+
+XR_FUNC XrOsIoStatus xr_os_io_file_write_sync(XrOsFileOwner *owner, const uint8_t *bytes,
+    size_t length, size_t *written) {
+    if (!owner || owner->busy || !owner->state || !written || (length && !bytes))
+        return XR_OS_IO_BAD_ARGUMENT;
+    OwnedFileState *file = owner->state;
+    if (file->anchor != owner || file->descriptor < 0) return XR_OS_IO_BAD_ARGUMENT;
+    if (!length) { *written = 0; return XR_OS_IO_OK; }
+
+#if defined(XR_OS_MACOS) || defined(XR_OS_LINUX)
+    /* Darwin rejects larger sizes. Linux applies a page-dependent lower cap. */
+    size_t limit = INT_MAX;
+#else
+    size_t limit = SSIZE_MAX;
+#endif
+    owner->busy = true;
+#if defined(XR_OS_MACOS)
+    int error = owned_file_suppress_sigpipe(file);
+#else
+    XrOsPipeGuard guard;
+    int error = xr_os_pipe_guard_begin(&guard);
+#endif
+    if (error) {
+        owner->busy = false;
+        return owned_file_write_error(error);
+    }
+    ssize_t count;
+    do { count = write(file->descriptor, bytes, length < limit ? length : limit); }
+    while (count < 0 && errno == EINTR);
+    error = count < 0 ? errno : 0;
+#if !defined(XR_OS_MACOS)
+    int guard_error = xr_os_pipe_guard_end(&guard, error == EPIPE);
+    /* Preserve transferred bytes: the caller must never replay this prefix. */
+    if (!count) error = guard_error;
+#endif
+    owner->busy = false;
+    if (error) return owned_file_write_error(error);
+    *written = (size_t)count;
+    return XR_OS_IO_OK;
 }
 
 XR_FUNC XrOsIoStatus xr_os_io_file_close_sync(XrOsFileOwner *owner, bool *closed) {

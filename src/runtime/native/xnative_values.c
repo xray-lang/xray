@@ -18,6 +18,7 @@
 #include "xnative_array_ops.h"
 #include "xnative_class_array.h"
 #include "xnative_host_file.h"
+#include "xnative_host_io.h"
 #include "shared/xnative_host_leaf.h"
 #include "xnative_map_backing.h"
 #include "xnative_set_backing.h"
@@ -236,6 +237,16 @@ XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage 
     XrtManagedStatus status = xrt_host_file_close(native_class(image, type, source), owner, &closed);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
     return closed;
+}
+
+XRAY_API int64_t xrt_native_host_file_write(uint32_t callable, const XrtNativeFileWrite *call, uint32_t source) {
+    if (!call) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    XrtBoundClass binding = native_class(call->image, call->type, source);
+    int64_t count;
+    XrOsIoStatus status = xrt_host_file_write(binding, xr_native_host_shape(callable),
+        call->file, call->data, call->offset, &count);
+    if (status != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(status), source);
+    return count;
 }
 XRAY_API void xrt_native_class_create(XrtManagedFrame *frame, size_t slot, const XrtValueImage *image,
     uint32_t type, const void *row, uint32_t source) {

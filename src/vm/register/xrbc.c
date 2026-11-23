@@ -24,6 +24,7 @@
 #include "runtime/native/xnative_array_slice.h"
 #include "runtime/native/xnative_class_array.h"
 #include "runtime/native/xnative_host_file.h"
+#include "runtime/native/xnative_host_io.h"
 #include "lir/xlir_view.h"
 #include "runtime/native/xnative_module_state.h"
 #include "runtime/native/xnative_value_image.h"

@@ -1281,6 +1281,7 @@ module io {
   fn __fileWrite {
     signature: "(file: __FileStorage, data: Array<u8>, offset: i64): i64"
     doc: "Write bytes from offset once; returns how many the stream accepted"
+    host_leaf: "blocking-file-write-bytes"
     vm: ""
     argc: 3
     arg_spec: "vvi"
@@ -1291,6 +1292,7 @@ module io {
   fn __fileWriteStr {
     signature: "(file: __FileStorage, data: string, offset: i64): i64"
     doc: "Write string bytes from offset once; returns how many were accepted"
+    host_leaf: "blocking-file-write-string"
     vm: ""
     argc: 3
     arg_spec: "vsi"

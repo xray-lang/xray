@@ -12,7 +12,8 @@
 
 typedef enum XrNativeHostShape {
     XR_NATIVE_HOST_NONE, XR_NATIVE_HOST_PATH_BOOL,
-    XR_NATIVE_HOST_FILE_OPEN_WRITE, XR_NATIVE_HOST_FILE_CLOSE
+    XR_NATIVE_HOST_FILE_OPEN_WRITE, XR_NATIVE_HOST_FILE_CLOSE,
+    XR_NATIVE_HOST_FILE_WRITE_BYTES, XR_NATIVE_HOST_FILE_WRITE_STRING
 } XrNativeHostShape;
 
 static inline XrNativeHostShape xr_native_host_shape(uint32_t callable) {
@@ -20,7 +21,9 @@ static inline XrNativeHostShape xr_native_host_shape(uint32_t callable) {
 #define XR_NATIVE_BLOCKING_PATH_BOOL(id, implementation) case id: return XR_NATIVE_HOST_PATH_BOOL;
 #define XR_NATIVE_BLOCKING_FILE_OPEN_WRITE(id) case id: return XR_NATIVE_HOST_FILE_OPEN_WRITE;
 #define XR_NATIVE_BLOCKING_FILE_CLOSE(id) case id: return XR_NATIVE_HOST_FILE_CLOSE;
+#define XR_NATIVE_BLOCKING_FILE_WRITE(id, kind) case id: return XR_NATIVE_HOST_FILE_WRITE_##kind;
 #include "xnative_host_leaves.inc.h"
+#undef XR_NATIVE_BLOCKING_FILE_WRITE
 #undef XR_NATIVE_BLOCKING_FILE_CLOSE
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_WRITE
 #undef XR_NATIVE_BLOCKING_PATH_BOOL

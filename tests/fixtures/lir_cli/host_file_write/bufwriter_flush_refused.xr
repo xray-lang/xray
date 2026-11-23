@@ -1,0 +1,12 @@
+import { BufWriter, flushWriter } from io
+import path
+
+fn run() {
+    var writer = BufWriter(path.from("missing/child.bin"), 1)
+    var payload: Array<u8> = [0 as u8, 255 as u8]
+    print(writer.writeBytes(payload))
+    print(flushWriter(writer))
+    print(writer.size())
+}
+
+run()
