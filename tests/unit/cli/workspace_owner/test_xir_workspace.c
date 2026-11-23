@@ -409,22 +409,20 @@ static void replacement(const char *parent, unsigned which) {
     FILE_ID_INFO rejected_id = fixture_identity(rejected_pin);
     CHECK(workspace_identity_equal(&replacement_id, &rejected_id));
     replacement_marker_verify_and_remove(marker_pin, marker);
-    char parked[8192]; CHECK(sprintf_s(parked, sizeof(parked), "%s-rejected", original) > 0);
-    CHECK(GetFileAttributesA(parked) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
-    fixture_rename(rejected_pin, parked);
-    fixture_rename(original_pin, original);
-    HANDLE parked_observer = CreateFileA(parked, FILE_READ_ATTRIBUTES, observe, NULL, OPEN_EXISTING, flags, NULL);
-    HANDLE restored = CreateFileA(original, FILE_READ_ATTRIBUTES, observe, NULL, OPEN_EXISTING, flags, NULL);
-    CHECK(parked_observer != INVALID_HANDLE_VALUE && restored != INVALID_HANDLE_VALUE);
-    FILE_ID_INFO parked_id = fixture_identity(parked_observer), restored_id = fixture_identity(restored);
-    CHECK(workspace_identity_equal(&parked_id, &replacement_id) && workspace_identity_equal(&restored_id, &original_id));
-    CHECK(CloseHandle(parked_observer) && CloseHandle(restored));
-    CHECK(CloseHandle(original_pin) && CloseHandle(observer));
+    /* The production close has refused this exact directory and left its
+     * contents intact. Close the observer before deleting the empty fixture. */
+    CHECK(CloseHandle(observer));
     fixture_delete(rejected_pin);
-    CHECK(GetFileAttributesA(parked) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
+    CHECK(GetFileAttributesA(original) == INVALID_FILE_ATTRIBUTES && GetLastError() == ERROR_FILE_NOT_FOUND);
+    fixture_rename(original_pin, original);
+    HANDLE restored = CreateFileA(original, FILE_READ_ATTRIBUTES, observe, NULL, OPEN_EXISTING, flags, NULL);
+    CHECK(restored != INVALID_HANDLE_VALUE);
+    FILE_ID_INFO restored_id = fixture_identity(restored);
+    CHECK(workspace_identity_equal(&restored_id, &original_id));
+    CHECK(CloseHandle(restored) && CloseHandle(original_pin));
     CHECK(xtc_xir_workspace_status(owner) == (first == XTC_XIR_WORKSPACE_OK ? XTC_XIR_WORKSPACE_IDENTITY_MISMATCH : first));
     drain(&owner, 1); xr_compile_resources_release(resources); CHECK(!runtime_live && !owner_handle_count);
-    printf("fixed directory %u original identity restored with a live replacement observer PASS\n", which);
+    printf("fixed directory %u replacement preserved through refusal and original identity restored PASS\n", which);
 }
 static void set_junction(const char *link, const char *outside) {
     struct MountPoint { ULONG tag; USHORT bytes, reserved, sub_offset, sub_length, print_offset, print_length; WCHAR path[4096]; } data = {0};
