@@ -7,6 +7,7 @@
  * xnative_host_path.c - Shared synchronous host path calls
  */
 #include "xnative_values.h"
+#include "xnative_host_io.h"
 #include "base/xmax_align.h"
 #include "os/os_file_mutation.h"
 #include "shared/xnative_host_leaf.h"
@@ -41,7 +42,11 @@ static void host_path_free(void *context, void *memory) {
     xrt_managed_metadata_free(context, block, block->size);
 }
 
-static XrXirValueStatus host_path_failure(XrOsIoStatus status) {
+XR_FUNC XrOsIoPolicy xrt_host_io_policy(XrtBillingOwner *billing) {
+    return (XrOsIoPolicy){billing, host_path_allocate, host_path_free};
+}
+
+XR_FUNC XrXirValueStatus xrt_host_io_failure(XrOsIoStatus status) {
     switch (status) {
     case XR_OS_IO_BAD_ARGUMENT: return XR_XIR_VALUE_BAD_ARGUMENT;
     case XR_OS_IO_OVERFLOW: return XR_XIR_VALUE_OVERFLOW;
@@ -57,17 +62,21 @@ XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBackin
     XrtBillingOwner *billing = NULL;
     XrtManagedStatus prepared = xrt_native_values_prepare(root, &billing);
     if (prepared != XRT_MANAGED_OK) xrt_native_managed_failure(prepared, source_id);
-    XrOsIoPolicy policy = {billing, host_path_allocate, host_path_free};
+    XrOsIoPolicy policy = xrt_host_io_policy(billing);
     XrOsPathSpan path = {text->bytes, text->length};
     XrOsIoStatus status;
     bool result = false;
     switch (callable) {
 #define XR_NATIVE_BLOCKING_PATH_BOOL(id, implementation) \
     case id: status = implementation(&policy, path, NULL, &result); break;
+#define XR_NATIVE_BLOCKING_FILE_OPEN_WRITE(id)
+#define XR_NATIVE_BLOCKING_FILE_CLOSE(id)
 #include "shared/xnative_host_leaves.inc.h"
+#undef XR_NATIVE_BLOCKING_FILE_CLOSE
+#undef XR_NATIVE_BLOCKING_FILE_OPEN_WRITE
 #undef XR_NATIVE_BLOCKING_PATH_BOOL
     default: status = XR_OS_IO_BAD_ARGUMENT; break;
     }
-    if (status != XR_OS_IO_OK) xrt_value_failure(host_path_failure(status), source_id);
+    if (status != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(status), source_id);
     return result;
 }

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "evidence_scope": "generated-provider-path; binding and tests require build-bound evidence",
-  "leaf_count": 159,
+  "leaf_count": 160,
   "leaves": [
     {
       "symbol": "crypto.__fillRandomBytes",
@@ -174,7 +174,7 @@
     },
     {
       "symbol": "io.__fileClose",
-      "signature": "(handle: i64): bool",
+      "signature": "(file: __FileStorage): bool",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -193,7 +193,7 @@
     },
     {
       "symbol": "io.__fileFlush",
-      "signature": "(handle: i64): bool",
+      "signature": "(file: __FileStorage): bool",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -212,7 +212,7 @@
     },
     {
       "symbol": "io.__fileOpen",
-      "signature": "(path: Path): i64",
+      "signature": "(path: Path): __FileStorage?",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -231,7 +231,7 @@
     },
     {
       "symbol": "io.__fileOpenWrite",
-      "signature": "(path: Path, append: bool): i64",
+      "signature": "(path: Path, append: bool): __FileStorage?",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -250,7 +250,26 @@
     },
     {
       "symbol": "io.__fileRead",
-      "signature": "(handle: i64, maxBytes: i64): Array<u8>?",
+      "signature": "(file: __FileStorage, maxBytes: i64): Array<u8>?",
+      "declared": false,
+      "admitted": false,
+      "blocking_reasons": [
+        "missing-provider-declaration"
+      ],
+      "declaration": null,
+      "logical_declaration_sha256": null,
+      "binding": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-compiled-runtime-evidence"
+      },
+      "testing": {
+        "state": "NOT_VERIFIED",
+        "reason": "requires-build-bound-program-evidence"
+      }
+    },
+    {
+      "symbol": "io.__fileStandard",
+      "signature": "(stream: i64): __FileStorage",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -269,7 +288,7 @@
     },
     {
       "symbol": "io.__fileWrite",
-      "signature": "(handle: i64, data: Array<u8>, offset: i64): i64",
+      "signature": "(file: __FileStorage, data: Array<u8>, offset: i64): i64",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [
@@ -288,7 +307,7 @@
     },
     {
       "symbol": "io.__fileWriteStr",
-      "signature": "(handle: i64, data: string, offset: i64): i64",
+      "signature": "(file: __FileStorage, data: string, offset: i64): i64",
       "declared": false,
       "admitted": false,
       "blocking_reasons": [

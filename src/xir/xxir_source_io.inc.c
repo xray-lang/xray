@@ -28,33 +28,37 @@ static bool source_io_types(SourceContext *ctx) {
     }
     ctx->module=saved;return true;
 }
-/* Exactly the carrier types each descriptor leaf declares. The wrapper module
- * converts nothing: an Array<u8> argument is the same array the caller built. */
-static bool source_io_file_types(SourceContext *ctx,uint32_t id,XrXirType *parameters,XrXirType *result) {
-    if(!parameters || !result)return false;
-    XrXirType path=XR_XIR_UNIT,array=XR_XIR_UNIT,nullable=XR_XIR_UNIT;
-    if(!source_path_prelude_type(ctx,&path))return false;
-    if(id==XR_NATIVE_CALLABLE_IO_FILE_READ || id==XR_NATIVE_CALLABLE_IO_FILE_WRITE) {
-        if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8},&array))return false;
+/* Project the exact governed terms into the current module's type arena. */
+static bool source_io_file_type(SourceContext *ctx, XrNativeTypeTerm term, XrXirType *type) {
+    switch (term) {
+    case XR_NATIVE_TERM_PATH: return source_path_prelude_type(ctx, type);
+    case XR_NATIVE_TERM_I64: *type = XR_XIR_I64; return true;
+    case XR_NATIVE_TERM_BOOL: *type = XR_XIR_BOOL; return true;
+    case XR_NATIVE_TERM_STRING: *type = XR_XIR_STRING; return true;
+    case XR_NATIVE_TERM_FILE_STORAGE: {
+        SourceName *storage = find_name(ctx, ctx->names[ctx->module], "__FileStorage");
+        if (!storage || storage->kind != SOURCE_NOMINAL || !xir_io_file_storage(&ctx->types, storage->type))
+            return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "io file storage identity is missing");
+        *type = storage->type;
+        return true;
     }
-    if(id==XR_NATIVE_CALLABLE_IO_FILE_READ &&
-        !source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=array},&nullable))return false;
-    switch(id) {
-    case XR_NATIVE_CALLABLE_IO_FILE_OPEN:
-        parameters[0]=path;*result=XR_XIR_I64;return true;
-    case XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE:
-        parameters[0]=path;parameters[1]=XR_XIR_BOOL;*result=XR_XIR_I64;return true;
-    case XR_NATIVE_CALLABLE_IO_FILE_READ:
-        parameters[0]=XR_XIR_I64;parameters[1]=XR_XIR_I64;*result=nullable;return true;
-    case XR_NATIVE_CALLABLE_IO_FILE_WRITE:
-        parameters[0]=XR_XIR_I64;parameters[1]=array;parameters[2]=XR_XIR_I64;*result=XR_XIR_I64;return true;
-    case XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR:
-        parameters[0]=XR_XIR_I64;parameters[1]=XR_XIR_STRING;parameters[2]=XR_XIR_I64;*result=XR_XIR_I64;return true;
-    case XR_NATIVE_CALLABLE_IO_FILE_FLUSH:
-    case XR_NATIVE_CALLABLE_IO_FILE_CLOSE:
-        parameters[0]=XR_XIR_I64;*result=XR_XIR_BOOL;return true;
-    default:return false;
+    case XR_NATIVE_TERM_ARRAY_U8:
+        return source_intern_type(ctx, (XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8}, type);
+    case XR_NATIVE_TERM_NULLABLE_FILE_STORAGE: case XR_NATIVE_TERM_NULLABLE_ARRAY_U8: {
+        XrXirType element;
+        XrNativeTypeTerm term_element = term == XR_NATIVE_TERM_NULLABLE_FILE_STORAGE ?
+            XR_NATIVE_TERM_FILE_STORAGE : XR_NATIVE_TERM_ARRAY_U8;
+        return source_io_file_type(ctx, term_element, &element) &&
+            source_intern_type(ctx, (XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=element}, type);
     }
+    default: return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "unrecognized io file storage ABI term");
+    }
+}
+static bool source_io_file_types(SourceContext *ctx, const XirIoFileTerms *terms,
+    uint32_t count, XrXirType *parameters, XrXirType *result) {
+    for (uint32_t p = 0; p < count; ++p)
+        if (!source_io_file_type(ctx, terms->parameter_terms[p], &parameters[p])) return false;
+    return source_io_file_type(ctx, terms->result_term, result);
 }
 static bool source_io_declare(SourceContext *ctx) {
     uint32_t saved_module=ctx->module,saved_function=ctx->function;
@@ -66,7 +70,7 @@ static bool source_io_declare(SourceContext *ctx) {
         XR_NATIVE_CALLABLE_IO_DIR_OPEN,XR_NATIVE_CALLABLE_IO_DIR_NEXT,XR_NATIVE_CALLABLE_IO_DIR_CLOSE,
         XR_NATIVE_CALLABLE_IO_FILE_OPEN,XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE,XR_NATIVE_CALLABLE_IO_FILE_READ,
         XR_NATIVE_CALLABLE_IO_FILE_WRITE,XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR,XR_NATIVE_CALLABLE_IO_FILE_FLUSH,
-        XR_NATIVE_CALLABLE_IO_FILE_CLOSE};
+        XR_NATIVE_CALLABLE_IO_FILE_CLOSE,XR_NATIVE_CALLABLE_IO_FILE_STANDARD};
     for(uint32_t m=0;m<ctx->module_count;++m) {
         if(!source_request_poll(ctx,NULL))return false;
         if(!source_io_module(ctx,m) || source_owned_checked(&ctx->graph->specs[m]))continue;
@@ -87,8 +91,9 @@ static bool source_io_declare(SourceContext *ctx) {
                 return source_fail(ctx,NULL,XR_XIR_BUDGET,"io native callable inventory exhausted");
             XrXirType *parameters=source_alloc(ctx,count,sizeof(*parameters));if(!parameters)return false;
             XrXirType result=XR_XIR_UNIT;
-            if(xir_io_file_terms_of(id)) {
-                if(!source_io_file_types(ctx,id,parameters,&result))return false;
+            const XirIoFileTerms *terms=xir_io_file_terms_of(id);
+            if(terms) {
+                if(!source_io_file_types(ctx,terms,count,parameters,&result))return false;
             } else {
                 XrXirType path=XR_XIR_UNIT;
                 if(!source_path_prelude_type(ctx,&path))return false;

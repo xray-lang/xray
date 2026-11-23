@@ -457,6 +457,15 @@ XRAY_API XrtManagedStatus xrt_managed_slot_location(XrtManagedFrame *frame, size
 XR_FUNCDEF XrtManagedRoot *xrt_managed_frame_root(XrtManagedFrame *frame) {
     return frame ? frame->root : NULL;
 }
+XR_FUNCDEF uint8_t *xrt_managed_frame_scalar_byte(XrtManagedFrame *frame, size_t offset) {
+    if (!frame || !frame->root || frame->root->busy || offset >= frame->payload_size) return NULL;
+    XrtManagedSlot *slots = frame_slots(frame);
+    for (size_t i = 0; i < frame->slot_count; ++i) {
+        size_t owner = slots[i].owner_offset;
+        if (owner != SIZE_MAX && owner <= offset && offset - owner < sizeof(XrtManagedHeader *)) return NULL;
+    }
+    return (uint8_t *)frame + frame->payload_offset + offset;
+}
 
 XR_FUNCDEF XrtManagedStatus xrt_managed_slot_edit_local(XrtManagedFrame *frame, size_t binding,
     size_t workspace, XrtManagedPayloadEdit edit, void *context) {

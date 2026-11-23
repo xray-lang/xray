@@ -265,7 +265,8 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
     if (shape.kind == XR_LIR_TYPE_CLASS) {
         XrLirType parent = xr_lir_class_parent(module, type);
         *spec = (XrtValuePlanSpec){.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=alignof(void *),
-            .owned_count=1,.element=dependency(set,shape.element),.class_parent=parent ? dependency(set,parent) : NULL};
+            .owned_count=1,.element=dependency(set,shape.element),.class_parent=parent ? dependency(set,parent) : NULL,
+            .class_storage=xr_lir_class_storage(module,type)};
         return extent_add(scratch_bytes,1,sizeof(size_t)) ? XR_LIR_VALUE_LAYOUT_OK : XR_LIR_VALUE_LAYOUT_OVERFLOW;
     }
     if (shape.kind == XR_LIR_TYPE_CELL) {

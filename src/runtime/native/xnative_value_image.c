@@ -181,7 +181,8 @@ static XrtValuePlanSpec image_plan(XrtValueImagePlans *set, const XrtValueImage 
         .signature={type->parameter_count ? scratch->parameters : NULL, type->parameter_count,
             image_dependency(set, type->result), type->flags & ~(uint32_t)XRT_VALUE_INLINE_DISPLAY, type->throws != 0},
         .entry={type->entry_ordinal, image_dependency(set, type->entry_signature)},
-        .element=image_dependency(set, type->element), .class_parent=image_dependency(set, type->class_parent)};
+        .element=image_dependency(set, type->element), .class_parent=image_dependency(set, type->class_parent),
+        .class_storage=type->class_storage};
     if (type->kind == XRT_VALUE_FUNCTION || type->kind == XRT_VALUE_ENVIRONMENT) spec.code = code;
     return spec;
 }

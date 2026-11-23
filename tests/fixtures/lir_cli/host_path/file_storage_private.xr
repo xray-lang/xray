@@ -1,0 +1,3 @@
+import { __FileStorage } from io
+
+var file: __FileStorage

@@ -1,0 +1,4 @@
+import { File } from io
+import path
+
+print(File.openWrite(path.from("missing/child"), false) == null)

@@ -95,10 +95,15 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
         arguments[a] = (XrLirRecordArgument){lower_type(c, actual), lower_array_element(c, actual)};
         if (!arguments[a].type) good = lower_unsupported(c, "struct type argument has no canonical physical carrier");
     }
+    uint32_t native = description->definition ? description->definition->native.native_id : description->identity->native.native_id;
+    uint32_t storage = native == XR_NATIVE_DECLARATION_FILE_STORAGE ? native : 0;
+    if (good && storage && (!class_type || base || count))
+        good = lower_unsupported(c, "invalid host storage class");
     XrLirRecordIdentity identity = {.module=description->module.bytes, .module_length=description->module.length,
         .name=description->name.bytes, .name_length=description->name.length, .arguments=arguments,
         .argument_count=argument_count, .exported=description->definition ? description->definition->exported : description->identity->exported,
-        .flags=class_type ? 0 : description->definition ? description->definition->flags : description->identity->flags};
+        .flags=class_type ? 0 : description->definition ? description->definition->flags : description->identity->flags,
+        .native_id=storage};
     XrLirType physical = XR_LIR_TYPE_INVALID;
     if (good) good = lower_build(c, xr_lir_record_type(c->module, &identity, fields, count, &physical));
     if (good && class_type) {

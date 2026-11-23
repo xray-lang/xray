@@ -11,6 +11,7 @@
  *   Field-name indices contain ordinals and never reorder the payload.
  */
 #include "shared/xr_utf8_core.h"
+#include "shared/xnative_declaration.h"
 
 static bool lir_record_text_valid(const char *text, uint32_t length) {
     return text && length && !memchr(text, 0, length) &&
@@ -34,6 +35,14 @@ static bool lir_record_identity_valid(const XrLirModule *m, const XrLirRecordIde
         !lir_record_text_valid(identity->name, identity->name_length) || identity->exported > 1 ||
         (identity->flags & ~XR_LIR_RECORD_MODULE_LITERAL) ||
         ((identity->argument_count != 0) != (identity->arguments != NULL))) return false;
+    if (identity->native_id) {
+        static const char module[] = "stdlib-module-v1:module=2:io:path=8:io/io.xr";
+        static const char name[] = "__FileStorage";
+        if (identity->native_id != XR_NATIVE_DECLARATION_FILE_STORAGE || identity->argument_count ||
+            identity->exported || identity->flags || identity->module_length != sizeof(module) - 1 ||
+            identity->name_length != sizeof(name) - 1 || memcmp(identity->module, module, sizeof(module) - 1) ||
+            memcmp(identity->name, name, sizeof(name) - 1)) return false;
+    }
     for (uint32_t a = 0; a < identity->argument_count; ++a)
         if (!lir_record_argument_valid(m, identity->arguments[a], earlier)) return false;
     return true;
@@ -76,6 +85,7 @@ static bool lir_record_declaration_consistent(const XrLirModule *m, const XrLirR
         XrLirTypeData data = m->types[t];
         if (data.shape.kind != XR_LIR_TYPE_RECORD || !lir_record_declaration_equal(&data.record, identity)) continue;
         if (data.record.argument_count != identity->argument_count || data.record.exported != identity->exported ||
+            data.record.native_id != identity->native_id ||
             data.record.flags != identity->flags || data.shape.count != count ||
             !lir_record_schema_equal(data.fields, fields, count, false)) return false;
     }

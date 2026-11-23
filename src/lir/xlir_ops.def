@@ -135,3 +135,5 @@ XR_LIR_OP(STRING_EQUAL, "string_equal", 2)
 XR_LIR_OP(CLASS_SCALAR_WRITE, "class_scalar_write", 2)
 /* Calls the registered host leaf in bits with a borrowed Path string. */
 XR_LIR_OP(HOST_PATH_BOOL, "host_path_bool", 1)
+XR_LIR_OP(HOST_FILE_OPEN_WRITE, "host_file_open_write", 2)
+XR_LIR_OP(HOST_FILE_CLOSE, "host_file_close", 1)

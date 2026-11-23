@@ -233,6 +233,8 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape, const Xr
     if (shape.kind == XR_LIR_TYPE_CLASS) {
         if (shape.count || shape.element < XR_LIR_TYPE_COUNT || shape.element >= XR_LIR_TYPE_COUNT + ordinal ||
             m->types[shape.element - XR_LIR_TYPE_COUNT].shape.kind != XR_LIR_TYPE_RECORD) return false;
+        const XrLirTypeData *row = &m->types[shape.element - XR_LIR_TYPE_COUNT];
+        if (row->record.native_id && row->shape.count) return false;
         *output = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
         return true;
     }
@@ -298,7 +300,8 @@ static bool lir_class_parent_valid(const XrLirModule *m, XrLirTypeView shape, Xr
         base->shape.element >= parent || base->shape.element == shape.element) return false;
     const XrLirTypeData *inherited = &m->types[base->shape.element - XR_LIR_TYPE_COUNT];
     const XrLirTypeData *payload = &m->types[shape.element - XR_LIR_TYPE_COUNT];
-    return inherited->shape.count <= payload->shape.count &&
+    return !inherited->record.native_id && !payload->record.native_id &&
+        inherited->shape.count <= payload->shape.count &&
         lir_record_schema_equal(inherited->fields, payload->fields, inherited->shape.count, true);
 }
 XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
@@ -520,6 +523,10 @@ XR_FUNC bool xr_lir_class_payload(const XrLirModule *m, XrLirType type, XrLirTyp
 
 XR_FUNC XrLirType xr_lir_class_parent(const XrLirModule *m, XrLirType type) {
     return xr_lir_class_payload(m, type, NULL) ? m->types[type - XR_LIR_TYPE_COUNT].class_parent : XR_LIR_TYPE_INVALID;
+}
+XR_FUNC uint32_t xr_lir_class_storage(const XrLirModule *m, XrLirType type) {
+    XrLirType payload;
+    return xr_lir_class_payload(m, type, &payload) ? m->types[payload - XR_LIR_TYPE_COUNT].record.native_id : 0;
 }
 XR_FUNC XrLirStatus xr_lir_slice_type(XrLirModule *m, XrLirType element, XrLirType *output) {
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_SLICE, element, 0}, NULL, 0, 0, NULL, NULL, NULL, output);

@@ -288,6 +288,12 @@ add_test(NAME native_location_owner COMMAND test_native_locations)
 set_tests_properties(native_location_owner PROPERTIES LABELS "unit;native-runtime;fast" TIMEOUT 10)
 
 add_executable(test_native_execution test_execution.c)
+# Standalone kernels still compile their own owner implementation. Complete
+# their host storage references from the production archive.
+foreach(target test_native_capture_backing test_native_value_plan test_native_managed_status
+        test_native_string_backing_ops test_native_backing test_native_module_state)
+    target_link_libraries(${target} PRIVATE xray_native_runtime)
+endforeach()
 target_link_libraries(test_native_execution PRIVATE xray_native_runtime)
 target_include_directories(test_native_execution PRIVATE "${PROJECT_SOURCE_DIR}/src")
 set_target_properties(test_native_execution PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)

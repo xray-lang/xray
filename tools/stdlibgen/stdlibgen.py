@@ -439,6 +439,7 @@ class StdlibNativeClassEntry:
     visibility: str
     source_wrapper: str
     source_storage_field: str
+    host_storage: bool = False
 
     @property
     def symbol(self) -> str:
@@ -1368,8 +1369,13 @@ def parse_def_metadata(
                     "<os|arch>.<EnumMember>"
                 )
             host_leaf = str(props.get("host_leaf", ""))
-            if host_leaf and (host_leaf != "blocking-path-bool" or current_module != "io" or
-                              visibility != "internal" or target_fact or signature != "(path: Path): bool"):
+            host_signatures = {
+                "blocking-path-bool": "(path: Path): bool",
+                "blocking-file-open-write": "(path: Path, append: bool): __FileStorage?",
+                "blocking-file-close": "(file: __FileStorage): bool",
+            }
+            if host_leaf and (signature != host_signatures.get(host_leaf) or current_module != "io" or
+                              visibility != "internal" or target_fact):
                 raise SystemExit(f"{path}:{line_no}: invalid host leaf ABI for {current_module}.{current_name}")
             entries.append(
                 StdlibEntry(
@@ -1545,13 +1551,21 @@ def parse_def_metadata(
                 )
             )
         elif current_kind == "native_class":
-            missing = [k for k in ("core_slot",) if k not in props]
+            host_storage = props.get("host_storage", False)
+            if type(host_storage) is not bool:
+                raise SystemExit(f"{path}:{line_no}: host_storage must be a boolean")
+            visibility = resolve_visibility(
+                props, "public", f"{path}:{line_no}: {current_module}.{current_name}"
+            )
+            if host_storage and (visibility != "internal" or props.keys() - {"host_storage", "visibility"}):
+                raise SystemExit(f"{path}:{line_no}: host storage must be internal and fieldless")
+            missing = [k for k in ("core_slot",) if k not in props and not host_storage]
             if missing:
                 names = ", ".join(missing)
                 raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
             body_symbol = str(props.get("native_body", "")).strip()
             body_expr = str(props.get("native_body_expr", "")).strip()
-            if bool(body_symbol) == bool(body_expr):
+            if not host_storage and bool(body_symbol) == bool(body_expr):
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} requires exactly one "
                     "of native_body or native_body_expr"
@@ -1581,15 +1595,14 @@ def parse_def_metadata(
                     module=current_module,
                     name=current_name,
                     super_slot=str(props.get("super_slot", "")),
-                    core_slot=str(props["core_slot"]),
+                    core_slot=str(props.get("core_slot", "")),
                     native_body_expr=native_body_expr,
                     flags=str(props.get("flags", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY")),
                     builtin_kind=str(props.get("builtin_kind", "")),
-                    visibility=resolve_visibility(
-                        props, "public", f"{path}:{line_no}: {current_module}.{current_name}"
-                    ),
+                    visibility=visibility,
                     source_wrapper=source_wrapper,
                     source_storage_field=source_storage_field,
+                    host_storage=host_storage,
                 )
             )
         elif current_kind == "class":
@@ -2461,6 +2474,7 @@ def emit_class_bindings(
     class_methods: list[StdlibClassMethodEntry],
     class_fields: list[StdlibClassFieldEntry],
 ) -> str:
+    native_classes = [entry for entry in native_classes if not entry.host_storage]
     class_keys = {(c.module, c.name) for c in native_classes}
     class_keys.update((c.module, c.name) for c in classes)
     methods_by_class: dict[tuple[str, str], list[StdlibClassMethodEntry]] = {}

@@ -141,6 +141,7 @@ static bool image_type(ImageBuilder *builder, const XrtValuePlanSpec *spec, uint
         builder->parameters[builder->used.parameters++] = (XrtValueImageParameter){child, (uint32_t)source.mode, source.escaping,
             image_name(builder, source.name, source.name_length), source.name_length};
     }
+    row->class_storage = spec->class_storage;
     bool complete = image_child(builder, spec->nullable.element, id, &row->nullable_element) &&
         image_child(builder, spec->signature.result, id, &row->result) &&
         image_child(builder, spec->entry.signature, id, &row->entry_signature) &&

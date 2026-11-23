@@ -55,7 +55,8 @@ typedef enum XrRbcValueOperation {
      * SUM_NEW names its variant in index and its fields in the argument span;
      * SUM_TAG reads the tag; SUM_GET names one flattened payload field. */
     XR_RBC_VALUE_SUM_NEW, XR_RBC_VALUE_SUM_TAG, XR_RBC_VALUE_SUM_GET,
-    XR_RBC_VALUE_CLASS_SCALAR_WRITE, XR_RBC_VALUE_HOST_PATH_BOOL
+    XR_RBC_VALUE_CLASS_SCALAR_WRITE, XR_RBC_VALUE_HOST_PATH_BOOL,
+    XR_RBC_VALUE_HOST_FILE_OPEN_WRITE, XR_RBC_VALUE_HOST_FILE_CLOSE
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {

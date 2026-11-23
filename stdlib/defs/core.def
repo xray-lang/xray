@@ -1190,6 +1190,11 @@ module os {
 }
 
 module io {
+  native_class __FileStorage {
+    visibility: "internal"
+    host_storage: true
+  }
+
   handle __FileStat {
     fields: "const size: i64, const mode: i64, const mtime: i64, const atime: i64, const ctime: i64, const uid: i64?, const gid: i64?, const isFile: bool, const isDir: bool, const isSymlink: bool"
   }
@@ -1219,97 +1224,89 @@ module io {
   }
 
   fn __fileClose {
-    signature: "(handle: i64): bool"
-    doc: "Close an owned file descriptor; 0, 1 and 2 are refused"
-    vm: "io_fileClose"
-    aot: "xrt_io_file_close"
+    signature: "(file: __FileStorage): bool"
+    doc: "Close this file owner or retire a borrowed standard stream wrapper"
+    host_leaf: "blocking-file-close"
+    vm: ""
     argc: 1
-    arg_spec: "i"
-    aot_direct: true
-    link_object: false
+    arg_spec: "v"
     layer: "system"
     visibility: "internal"
   }
 
   fn __fileFlush {
-    signature: "(handle: i64): bool"
+    signature: "(file: __FileStorage): bool"
     doc: "Flush any C-runtime buffering behind a standard stream handle"
-    vm: "io_fileFlush"
-    aot: "xrt_io_file_flush"
+    vm: ""
     argc: 1
-    arg_spec: "i"
-    aot_direct: true
-    link_object: false
+    arg_spec: "v"
     layer: "system"
     visibility: "internal"
   }
 
   fn __fileOpen {
-    signature: "(path: Path): i64"
-    doc: "Open a file for binary reading and return a file descriptor"
-    vm: "io_fileOpen"
-    aot: "xrt_io_file_open"
+    signature: "(path: Path): __FileStorage?"
+    doc: "Open a file for binary reading"
+    vm: ""
     argc: 1
     arg_spec: "p"
-    aot_direct: true
-    link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn __fileOpenWrite {
-    signature: "(path: Path, append: bool): i64"
-    doc: "Open a file for binary writing and return a file descriptor"
-    vm: "io_fileOpenWrite"
-    aot: "xrt_io_file_open_write"
+    signature: "(path: Path, append: bool): __FileStorage?"
+    doc: "Open a file for binary writing"
+    host_leaf: "blocking-file-open-write"
+    vm: ""
     argc: 2
     arg_spec: "pv"
-    aot_direct: true
-    link_object: false
     layer: "system"
     visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn __fileRead {
-    signature: "(handle: i64, maxBytes: i64): Array<u8>?"
+    signature: "(file: __FileStorage, maxBytes: i64): Array<u8>?"
     doc: "Read at most maxBytes from a descriptor; an empty result means EOF"
-    vm: "io_fileRead"
-    aot: "xrt_io_read_handle_chunk"
+    vm: ""
     argc: 2
-    arg_spec: "ii"
-    aot_direct: true
-    link_object: false
+    arg_spec: "vi"
     layer: "system"
     visibility: "internal"
     return_ownership: "fresh"
   }
 
   fn __fileWrite {
-    signature: "(handle: i64, data: Array<u8>, offset: i64): i64"
+    signature: "(file: __FileStorage, data: Array<u8>, offset: i64): i64"
     doc: "Write bytes from offset once; returns how many the stream accepted"
-    vm: "io_fileWrite"
-    vm_binding: "yieldable"
-    aot: "xrt_io_write_handle_chunk"
+    vm: ""
     argc: 3
-    arg_spec: "ivi"
-    aot_direct: true
-    link_object: false
+    arg_spec: "vvi"
     layer: "system"
     visibility: "internal"
   }
 
   fn __fileWriteStr {
-    signature: "(handle: i64, data: string, offset: i64): i64"
+    signature: "(file: __FileStorage, data: string, offset: i64): i64"
     doc: "Write string bytes from offset once; returns how many were accepted"
-    vm: "io_fileWriteStr"
-    vm_binding: "yieldable"
-    aot: "xrt_io_write_handle_str"
+    vm: ""
     argc: 3
-    arg_spec: "isi"
-    aot_direct: true
-    link_object: false
+    arg_spec: "vsi"
     layer: "system"
     visibility: "internal"
+  }
+
+  fn __fileStandard {
+    signature: "(stream: i64): __FileStorage"
+    doc: "Borrow one standard stream through file storage"
+    vm: ""
+    argc: 1
+    arg_spec: "i"
+    layer: "system"
+    visibility: "internal"
+    return_ownership: "fresh"
   }
 
   fn __mkdir {

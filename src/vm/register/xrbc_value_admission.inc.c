@@ -185,6 +185,32 @@ static bool rbc_value_owner(const XrRbcModule *module,const XrRbcValueCode *code
     return rbc_value_string(module,code,value,destination) || rbc_value_container(module,code,value,destination) ||
         rbc_value_inline(module,code,value,destination);
 }
+static bool rbc_value_file_storage(const XrRbcModule *module, const XrRbcValueCode *code, uint32_t value, bool optional) {
+    if (!rbc_value_inline(module, code, value, optional)) return false;
+    const XrtValueImage *image = xr_rbc_module_value_image(module);
+    const XrLirValueHome *home = rbc_value_home(code, value);
+    const XrtValueImageType *type = &image->types[home->type - 1];
+    if (optional) {
+        const XrtManagedFrameSpec *frame = &code->homes->frame;
+        const size_t owner = offsetof(XrtHostFileOptional, owner);
+        if (type->kind != XRT_VALUE_NULLABLE || !type->nullable_element || type->nullable_element >= home->type ||
+            type->size != sizeof(XrtHostFileOptional) || type->alignment != _Alignof(XrtHostFileOptional) ||
+            type->nullable_tag != offsetof(XrtHostFileOptional, present) || type->nullable_payload != owner ||
+            type->owned_count != 1 || !image->owned_offsets || type->first_owned >= image->owned_count ||
+            image->owned_offsets[type->first_owned] != owner || !frame->owned_offsets ||
+            frame->payload_alignment < type->alignment || home->first_owner == home->temporary_first_owner ||
+            home->first_owner >= frame->slot_count || home->temporary_first_owner >= frame->slot_count) return false;
+        size_t offsets[] = {home->offset, home->temporary_offset};
+        size_t slots[] = {home->first_owner, home->temporary_first_owner};
+        for (size_t i = 0; i < 2; ++i) {
+            size_t base = offsets[i];
+            if (base % type->alignment || base > frame->payload_size || type->size > frame->payload_size - base ||
+                frame->owned_offsets[slots[i]] != base + owner) return false;
+        }
+        type = &image->types[type->nullable_element - 1];
+    }
+    return type->kind == XRT_VALUE_CLASS && type->class_storage == XR_NATIVE_DECLARATION_FILE_STORAGE;
+}
 /* An owner-free Tuple (possibly wrapped in Nullable) can leave the outer
  * activation as natural bytes and its original image type. */
 static bool rbc_inline_tuple_result(const XrtValueImage *image, uint32_t type) {
@@ -554,6 +580,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         const XrLirValueHome *destination=rbc_value_home(code,a.result),*from=rbc_value_home(code,a.source);
         return !a.other && !a.index && image && image->types && destination && from &&
             destination->type && from->type && destination->type<=image->type_count && from->type<=image->type_count &&
+            !image->types[destination->type-1].class_storage && !image->types[from->type-1].class_storage &&
             image->types[destination->type-1].kind==XRT_VALUE_CLASS && image->types[from->type-1].kind==XRT_VALUE_CLASS &&
             rbc_value_inline(module,code,a.result,true) && rbc_value_inline(module,code,a.source,false);
     }
@@ -583,6 +610,13 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_HOST_PATH_BOOL:
         return !a.other && xr_native_blocking_path_bool(a.index) &&
             rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    case XR_RBC_VALUE_HOST_FILE_OPEN_WRITE:
+        return xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_OPEN_WRITE &&
+            rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.other,XR_RBC_BITS) &&
+            rbc_value_file_storage(module,code,a.result,true);
+    case XR_RBC_VALUE_HOST_FILE_CLOSE:
+        return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_CLOSE &&
+            rbc_value_file_storage(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     case XR_RBC_VALUE_I64_TRY_PARSE:
         return rbc_value_i64_try_parse_valid(module,code,function,a);
     case XR_RBC_VALUE_STATE_READ:

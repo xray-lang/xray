@@ -13,7 +13,7 @@
 #define CHECK(test) do { if (!(test)) { fprintf(stderr,"check failed at %d: %s\n",__LINE__,#test); abort(); } } while (0)
 static const char *const native_names[]={"Array","string","Atomic","Ordering","Task","Channel","Recv","SendResult","Iterator","Map","Set","i64","f64","bool","rune"};
 static const uint32_t native_ids[]={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
-static const uint32_t native_members[]={32,19,10,5,3,10,4,4,5,13,15,29,12,1,6};
+static const uint32_t native_members[]={34,19,10,5,8,10,4,4,5,13,15,29,12,1,6};
 static const uint32_t native_parameters[]={1,0,1,0,2,1,1,0,2,2,1,0,0,0,0};
 static void complete_declarations(void) {
     for (uint32_t id=1;id<=sizeof(native_names)/sizeof(*native_names);++id) {
@@ -74,4 +74,17 @@ static void complete_lookup_boundaries(void) {
             CHECK(xr_native_declaration_member(declaration,declaration->members[i].name)==&declaration->members[i]);
     }
 }
-int main(void) { complete_declarations();lookup_boundaries();complete_lookup_boundaries();return 0; }
+static void file_storage_boundary(void) {
+    const XrNativeTypeDeclaration *file=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_FILE_STORAGE);
+    CHECK(file && xr_native_declaration_validate(file));
+    CHECK(file->kind==XR_NATIVE_DECLARATION_STORAGE && !file->member_count && !file->parameter_count);
+    CHECK(!strcmp(file->name,"__FileStorage"));
+    CHECK(xr_native_declaration_by_name("__FileStorage")==file);
+}
+int main(void) {
+    complete_declarations();
+    lookup_boundaries();
+    complete_lookup_boundaries();
+    file_storage_boundary();
+    return 0;
+}

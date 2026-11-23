@@ -480,6 +480,10 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         access.operation = XR_RBC_VALUE_HOST_PATH_BOOL;
         access.index = (uint32_t)i->bits;
         break;
+    case XR_LIR_HOST_FILE_OPEN_WRITE: case XR_LIR_HOST_FILE_CLOSE:
+        access.operation = i->op == XR_LIR_HOST_FILE_OPEN_WRITE ? XR_RBC_VALUE_HOST_FILE_OPEN_WRITE : XR_RBC_VALUE_HOST_FILE_CLOSE;
+        access.index = (uint32_t)i->bits;
+        break;
     case XR_LIR_STRING_EQUAL:
         access.operation = i->predicate == XR_LIR_NE ? XR_RBC_VALUE_STRING_NOT_EQUAL :
                                                        XR_RBC_VALUE_STRING_EQUAL;

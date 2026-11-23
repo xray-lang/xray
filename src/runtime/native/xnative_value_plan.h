@@ -78,6 +78,7 @@ typedef struct XrtValuePlanSpec {
     XrtValueEntrySpec entry;
     const XrtValuePlan *element; /* Cell or class payload, or the exact inline Array row. */
     const XrtValuePlan *class_parent;
+    uint32_t class_storage;
     XrtManagedLease code;
 } XrtValuePlanSpec;
 

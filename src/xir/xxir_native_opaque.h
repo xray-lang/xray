@@ -11,7 +11,7 @@
  *   An opaque native nominal has no source AST. The source layer may name the
  *   type and hand it back to the native query that produced it, and nothing
  *   else: no fields, no methods, no interfaces, no construction, no hashing.
- *   File metadata is one; the network storage classes are three more.
+ *   The generated storage registry supplies the private class identities.
  */
 #ifndef XXIR_NATIVE_OPAQUE_H
 #define XXIR_NATIVE_OPAQUE_H
@@ -21,7 +21,8 @@
 static inline bool xir_native_opaque_storage(uint32_t id) {
     return id == XR_NATIVE_DECLARATION_NET_CONN_STORAGE ||
         id == XR_NATIVE_DECLARATION_NET_LISTENER_STORAGE ||
-        id == XR_NATIVE_DECLARATION_TLS_CONTEXT_STORAGE;
+        id == XR_NATIVE_DECLARATION_TLS_CONTEXT_STORAGE ||
+        id == XR_NATIVE_DECLARATION_FILE_STORAGE;
 }
 
 static inline bool xir_native_opaque_nominal(uint32_t id) {

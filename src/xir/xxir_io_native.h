@@ -43,13 +43,14 @@ static const XirIoNativeContract xir_io_native_contracts[]={
  * They own one host descriptor operation each; buffering, retries and text
  * validation stay in the wrapper. */
 static const XirIoNativeContract xir_io_file_contracts[]={
-    {XR_NATIVE_CALLABLE_IO_FILE_OPEN,1,1,"__fileOpen","(path: Path): i64"},
-    {XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE,2,1,"__fileOpenWrite","(path: Path, append: bool): i64"},
-    {XR_NATIVE_CALLABLE_IO_FILE_READ,2,0,"__fileRead","(handle: i64, maxBytes: i64): Array<u8>?"},
-    {XR_NATIVE_CALLABLE_IO_FILE_WRITE,3,0,"__fileWrite","(handle: i64, data: Array<u8>, offset: i64): i64"},
-    {XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR,3,0,"__fileWriteStr","(handle: i64, data: string, offset: i64): i64"},
-    {XR_NATIVE_CALLABLE_IO_FILE_FLUSH,1,0,"__fileFlush","(handle: i64): bool"},
-    {XR_NATIVE_CALLABLE_IO_FILE_CLOSE,1,0,"__fileClose","(handle: i64): bool"}
+    {XR_NATIVE_CALLABLE_IO_FILE_OPEN,1,1,"__fileOpen","(path: Path): __FileStorage?"},
+    {XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE,2,1,"__fileOpenWrite","(path: Path, append: bool): __FileStorage?"},
+    {XR_NATIVE_CALLABLE_IO_FILE_READ,2,0,"__fileRead","(file: __FileStorage, maxBytes: i64): Array<u8>?"},
+    {XR_NATIVE_CALLABLE_IO_FILE_WRITE,3,0,"__fileWrite","(file: __FileStorage, data: Array<u8>, offset: i64): i64"},
+    {XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR,3,0,"__fileWriteStr","(file: __FileStorage, data: string, offset: i64): i64"},
+    {XR_NATIVE_CALLABLE_IO_FILE_FLUSH,1,0,"__fileFlush","(file: __FileStorage): bool"},
+    {XR_NATIVE_CALLABLE_IO_FILE_CLOSE,1,0,"__fileClose","(file: __FileStorage): bool"},
+    {XR_NATIVE_CALLABLE_IO_FILE_STANDARD,1,0,"__fileStandard","(stream: i64): __FileStorage"}
 };
 /* Exact result and parameter terms for the descriptor leaves, in contract order. */
 typedef struct XirIoFileTerms {
@@ -58,13 +59,14 @@ typedef struct XirIoFileTerms {
     const char *result_text;
 } XirIoFileTerms;
 static const XirIoFileTerms xir_io_file_terms[]={
-    {XR_NATIVE_CALLABLE_IO_FILE_OPEN,XR_NATIVE_TERM_I64,{XR_NATIVE_TERM_PATH},  "i64"},
-    {XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE,XR_NATIVE_TERM_I64,{XR_NATIVE_TERM_PATH,XR_NATIVE_TERM_BOOL},"i64"},
-    {XR_NATIVE_CALLABLE_IO_FILE_READ,XR_NATIVE_TERM_NULLABLE_ARRAY_U8,{XR_NATIVE_TERM_I64,XR_NATIVE_TERM_I64},"Array<u8>?"},
-    {XR_NATIVE_CALLABLE_IO_FILE_WRITE,XR_NATIVE_TERM_I64,{XR_NATIVE_TERM_I64,XR_NATIVE_TERM_ARRAY_U8,XR_NATIVE_TERM_I64},"i64"},
-    {XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR,XR_NATIVE_TERM_I64,{XR_NATIVE_TERM_I64,XR_NATIVE_TERM_STRING,XR_NATIVE_TERM_I64},"i64"},
-    {XR_NATIVE_CALLABLE_IO_FILE_FLUSH,XR_NATIVE_TERM_BOOL,{XR_NATIVE_TERM_I64},"bool"},
-    {XR_NATIVE_CALLABLE_IO_FILE_CLOSE,XR_NATIVE_TERM_BOOL,{XR_NATIVE_TERM_I64},"bool"}
+    {XR_NATIVE_CALLABLE_IO_FILE_OPEN,XR_NATIVE_TERM_NULLABLE_FILE_STORAGE,{XR_NATIVE_TERM_PATH},"__FileStorage?"},
+    {XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE,XR_NATIVE_TERM_NULLABLE_FILE_STORAGE,{XR_NATIVE_TERM_PATH,XR_NATIVE_TERM_BOOL},"__FileStorage?"},
+    {XR_NATIVE_CALLABLE_IO_FILE_READ,XR_NATIVE_TERM_NULLABLE_ARRAY_U8,{XR_NATIVE_TERM_FILE_STORAGE,XR_NATIVE_TERM_I64},"Array<u8>?"},
+    {XR_NATIVE_CALLABLE_IO_FILE_WRITE,XR_NATIVE_TERM_I64,{XR_NATIVE_TERM_FILE_STORAGE,XR_NATIVE_TERM_ARRAY_U8,XR_NATIVE_TERM_I64},"i64"},
+    {XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR,XR_NATIVE_TERM_I64,{XR_NATIVE_TERM_FILE_STORAGE,XR_NATIVE_TERM_STRING,XR_NATIVE_TERM_I64},"i64"},
+    {XR_NATIVE_CALLABLE_IO_FILE_FLUSH,XR_NATIVE_TERM_BOOL,{XR_NATIVE_TERM_FILE_STORAGE},"bool"},
+    {XR_NATIVE_CALLABLE_IO_FILE_CLOSE,XR_NATIVE_TERM_BOOL,{XR_NATIVE_TERM_FILE_STORAGE},"bool"},
+    {XR_NATIVE_CALLABLE_IO_FILE_STANDARD,XR_NATIVE_TERM_FILE_STORAGE,{XR_NATIVE_TERM_I64},"__FileStorage"}
 };
 static inline const XirIoFileTerms *xir_io_file_terms_of(uint32_t id) {
     for(uint32_t n=0;n<sizeof(xir_io_file_terms)/sizeof(*xir_io_file_terms);++n)
@@ -89,6 +91,16 @@ static inline bool xir_io_array_u8(const XrXirTypes *types,XrXirType type) {
 static inline bool xir_io_nullable_array_u8(const XrXirTypes *types,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     return node && node->kind==XR_XIR_TYPE_NULLABLE && xir_io_array_u8(types,node->element);
+}
+static inline bool xir_io_file_storage(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    if (!node || node->kind != XR_XIR_TYPE_NOMINAL || node->nominal.argument_count ||
+        node->nominal.field_count || !types->nominals || node->nominal.declaration >= types->nominals->count)
+        return false;
+    uint32_t id = node->nominal.declaration;
+    const XrXirNominalTable *table = types->nominals;
+    return (table->declarations ? table->declarations[id].native.native_id : table->identities[id].native.native_id)
+        == XR_NATIVE_DECLARATION_FILE_STORAGE;
 }
 /* This observes a declaration, not a field-read capability. */
 static inline bool xir_io_path_field(const XrXirTypes *types,XrXirType type,uint32_t *output) {
@@ -125,6 +137,11 @@ static inline bool xir_io_call_type(const XrXirTypes *types,XrNativeTypeTerm ter
     case XR_NATIVE_TERM_STRING:return type==XR_XIR_STRING;
     case XR_NATIVE_TERM_ARRAY_U8:return xir_io_array_u8(types,type);
     case XR_NATIVE_TERM_NULLABLE_ARRAY_U8:return xir_io_nullable_array_u8(types,type);
+    case XR_NATIVE_TERM_FILE_STORAGE:return xir_io_file_storage(types,type);
+    case XR_NATIVE_TERM_NULLABLE_FILE_STORAGE: {
+        const XrXirTypeNode *node = xr_xir_type_node(types, type);
+        return node && node->kind == XR_XIR_TYPE_NULLABLE && xir_io_file_storage(types, node->element);
+    }
     default:return false;
     }
 }

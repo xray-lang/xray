@@ -54,9 +54,113 @@ static void file_memory_free(void *context, void *pointer) {
 }
 #if defined(XR_OS_WINDOWS)
 #include "os/win/file_owned_win.c"
+typedef wchar_t FileNativePath;
 #else
+#include <sys/stat.h>
 #include "os/unix/file_owned_unix.c"
+typedef char FileNativePath;
 #endif
+
+static void file_sync_contents(const FileNativePath *path, const uint8_t *expected, size_t length) {
+    uint8_t actual[32];
+    CHECK(length < sizeof(actual));
+#if defined(XR_OS_WINDOWS)
+    HANDLE handle = CreateFileW(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    DWORD got = 0;
+    CHECK(handle != INVALID_HANDLE_VALUE);
+    CHECK(ReadFile(handle, actual, sizeof(actual), &got, NULL));
+    CHECK(CloseHandle(handle));
+#else
+    int descriptor = open(path, O_RDONLY | O_CLOEXEC);
+    CHECK(descriptor >= 0);
+    ssize_t got = read(descriptor, actual, sizeof(actual));
+    CHECK(got >= 0 && close(descriptor) == 0);
+#endif
+    CHECK((size_t)got == length && (!length || !memcmp(actual, expected, length)));
+}
+
+static void file_sync_close(XrOsFileOwner *owner, const FileNativePath *path) {
+    XrOsFileOwner copy = *owner;
+    bool closed = false;
+    CHECK(xr_os_io_file_close_sync(&copy, &closed) == XR_OS_IO_BAD_ARGUMENT && !closed);
+#if defined(XR_OS_WINDOWS)
+    HANDLE handle = CreateFileW(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    CHECK(handle == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION);
+#else
+    (void)path;
+    int descriptor = ((const OwnedFileState *)owner->state)->descriptor;
+    CHECK(fcntl(descriptor, F_GETFD) != -1);
+#endif
+    CHECK(xr_os_io_file_close_sync(owner, &closed) == XR_OS_IO_OK && closed);
+    CHECK(!owner->state && !owner->busy && !file_live && !file_bytes);
+#if !defined(XR_OS_WINDOWS)
+    CHECK(fcntl(descriptor, F_GETFD) == -1 && errno == EBADF);
+#endif
+    closed = false;
+    CHECK(xr_os_io_file_close_sync(owner, &closed) == XR_OS_IO_OK && closed);
+}
+
+#if defined(XR_OS_WINDOWS)
+static void file_sync_close_refused(XrOsFileOwner *owner) {
+    OwnedFileState *state = owned_file_state(owner);
+    CHECK(state);
+    HANDLE handle = state->handle;
+    size_t bytes = file_bytes;
+    /* A close-protected real handle stays valid even when CloseHandle reports ERROR_INVALID_HANDLE. */
+    DWORD protection = HANDLE_FLAG_PROTECT_FROM_CLOSE;
+    CHECK(SetHandleInformation(handle, protection, protection));
+    bool closed = false;
+    CHECK(xr_os_io_file_close_sync(owner, &closed) == XR_OS_IO_IO && !closed);
+    CHECK(owner->state == state && !owner->busy && file_live == 1 && file_bytes == bytes);
+    DWORD flags = 0;
+    CHECK(GetHandleInformation(handle, &flags) && (flags & protection));
+    CHECK(SetHandleInformation(handle, protection, 0));
+}
+#endif
+
+static void file_sync_execute(XrOsPathSpan path, const FileNativePath *native,
+    const uint8_t *expected, size_t length) {
+    XrOsIoPolicy memory = {&file_live, file_memory, file_memory_free};
+    XrOsFileOwner owner = {0};
+    bool opened = false;
+    size_t first_attempt = file_attempts;
+    CHECK(xr_os_io_file_open_write_sync(&memory, path, true, &owner, &opened) == XR_OS_IO_OK && opened);
+    size_t allocations = file_attempts - first_attempt;
+    CHECK(owner.state && !owner.busy && file_live == 1 && allocations >= 2);
+#if defined(XR_OS_WINDOWS)
+    file_sync_close_refused(&owner);
+#endif
+    file_sync_close(&owner, native);
+    file_sync_contents(native, expected, length);
+
+    for (size_t index = 0; index < allocations; ++index) {
+        opened = true;
+        file_fail_at = file_attempts + index;
+        CHECK(xr_os_io_file_open_write_sync(&memory, path, false, &owner, &opened) == XR_OS_IO_OUT_OF_MEMORY);
+        file_fail_at = SIZE_MAX;
+        CHECK(opened && !owner.state && !owner.busy && !file_live && !file_bytes);
+        file_sync_contents(native, expected, length);
+    }
+
+    XrOsPathSpan embedded_nul = {path.text, path.length + 1};
+    CHECK(xr_os_io_file_open_write_sync(&memory, embedded_nul, false, &owner, &opened) == XR_OS_IO_BAD_ARGUMENT);
+    CHECK(opened && !owner.state && !owner.busy && !file_live && !file_bytes);
+#if defined(XR_OS_WINDOWS)
+    const char *separator = strrchr(path.text, '\\');
+#else
+    const char *separator = strrchr(path.text, '/');
+#endif
+    CHECK(separator && separator > path.text);
+    XrOsPathSpan directory = {path.text, (size_t)(separator - path.text)};
+    CHECK(xr_os_io_file_open_write_sync(&memory, directory, false, &owner, &opened) == XR_OS_IO_OK && !opened);
+    CHECK(!owner.state && !owner.busy && !file_live && !file_bytes);
+    file_sync_contents(native, expected, length);
+
+    CHECK(xr_os_io_file_open_write_sync(&memory, path, false, &owner, &opened) == XR_OS_IO_OK && opened);
+    file_sync_close(&owner, native);
+    file_sync_contents(native, NULL, 0);
+}
+
 #if defined(XR_OS_WINDOWS)
 static bool file_current(void *context) {
     return !*(bool *) context;
@@ -291,6 +395,7 @@ static void file_kernel_execute(void) {
     file_owner_done(&owner);
     file_query_reentry(&memory, path);
     file_open_allocation_failures(&memory, &query, path);
+    file_sync_execute((XrOsPathSpan){path, (size_t)encoded - 1}, wide, expected, sizeof(expected));
     CHECK(DeleteFileW(wide) && RemoveDirectoryW(directory));
     CHECK(file_live == live && file_bytes == bytes);
 }
@@ -310,6 +415,31 @@ static void file_kernel_execute(void) {
     CHECK(xr_os_io_file_operation_close(&operation, &closed) == XR_OS_IO_UNSUPPORTED && !closed);
     CHECK(xr_os_io_file_close(&owner, &closed) == XR_OS_IO_UNSUPPORTED && !closed && !owner.state &&
           !operation.state);
+
+    char directory[] = "/tmp/xray-file-XXXXXX";
+    char path[sizeof(directory) + 32];
+    CHECK(mkdtemp(directory));
+    int count = snprintf(path, sizeof(path), "%s/bytes-\xe6\x96\x87.bin", directory);
+    CHECK(count > 0 && (size_t)count < sizeof(path));
+    static const uint8_t expected[] = {0x0d, 0x0a, 0x1a, 0x00, 0xff, 0x42, 0x00, 0xe4, 0xb8, 0xad};
+    int descriptor = open(path, O_CREAT | O_WRONLY | O_EXCL | O_CLOEXEC, 0600);
+    CHECK(descriptor >= 0);
+    CHECK(write(descriptor, expected, sizeof(expected)) == (ssize_t)sizeof(expected));
+    CHECK(close(descriptor) == 0);
+    XrOsPathSpan filename = {path, (size_t)count};
+    file_sync_execute(filename, path, expected, sizeof(expected));
+    CHECK(unlink(path) == 0);
+
+    XrOsIoPolicy memory = {&file_live, file_memory, file_memory_free};
+    bool opened = false;
+    mode_t previous = umask(0);
+    XrOsIoStatus status = xr_os_io_file_open_write_sync(&memory, filename, true, &owner, &opened);
+    (void)umask(previous);
+    CHECK(status == XR_OS_IO_OK && opened);
+    struct stat created;
+    CHECK(stat(path, &created) == 0 && (created.st_mode & 07777) == 0644);
+    file_sync_close(&owner, path);
+    CHECK(unlink(path) == 0 && rmdir(directory) == 0);
 }
 #endif
 
@@ -358,6 +488,6 @@ int main(void) {
     file_kernel_execute();
     file_fullpath();
     CHECK(!file_live && !file_bytes);
-    puts("owned file bytes, cleanup and lexical absolute paths PASS");
+    puts("owned file bytes, synchronous open and close, cleanup and lexical absolute paths PASS");
     return 0;
 }

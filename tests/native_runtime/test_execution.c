@@ -11,6 +11,7 @@
  *   dispatch. No standalone global is supplied to satisfy this executable.
  */
 #include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_host_file.h"
 #include "runtime/native/xnative_values.h"
 #include "runtime/native/xnative_string_backing_ops.h"
 #include "xray_native_values.h"
@@ -139,6 +140,77 @@ static void managed_host_path_scratch(void) {
         CHECK(xrt_value_root_empty(&root) && xrt_billing_owner_stats(call.billing).blocks == 1);
         xrt_billing_owner_drop(call.billing);
     }
+    xrt_locations_release(owner);
+}
+
+typedef struct HostFileCall {
+    const char *path;
+    bool invalid_home;
+} HostFileCall;
+
+static void host_file_root(void *context) {
+    const HostFileCall *call = context;
+    const size_t owner_offset = offsetof(XrtHostFileOptional, owner);
+    const size_t frame_offsets[] = {owner_offset, SIZE_MAX, SIZE_MAX, SIZE_MAX};
+    const size_t image_offset = 0;
+    const XrtValueImageType types[] = {
+        {.kind=XRT_VALUE_RECORD,.size=1,.alignment=1},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=1,
+            .class_storage=XR_NATIVE_DECLARATION_FILE_STORAGE},
+    };
+    const XrtValueImage image = {.types=types,.type_count=2,.owned_offsets=&image_offset,.owned_count=1};
+    const XrtManagedFrameSpec spec = {4,sizeof(XrtHostFileOptional),_Alignof(XrtHostFileOptional),frame_offsets};
+    XrtManagedRoot *root = xrt_native_managed_root(1);
+    XrtManagedFrame *frame = NULL;
+    void *payload = NULL;
+    managed_require(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload));
+    xrt_native_string_create(frame, 2, call->path, strlen(call->path), 1);
+    XrtManagedHeader *text = NULL;
+    managed_require(xrt_managed_slot_borrow(frame, 2, &text));
+    const XrtNativeFileOpen open = {
+        .output={frame,0,1,call->invalid_home ? owner_offset : 0},
+        .image=&image,.type=2,.path=(const XrtStringBacking *)text,.append=false,
+    };
+    xrt_native_host_file_open_write(XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE, &open, 1);
+    CHECK(!call->invalid_home && *(const uint8_t *)payload == 1);
+    const XrtPlace owner = {.frame=frame,.slot=0,.nulls=XRT_PLACE_NONNULL};
+    const XrtPlace alias = {.frame=frame,.slot=3,.nulls=XRT_PLACE_NONNULL};
+    managed_require(xrt_place_copy_replace(alias, owner, NULL));
+    managed_require(xrt_managed_slot_drop(frame, 0));
+#if defined(XR_OS_WINDOWS)
+    HANDLE probe = CreateFileA(call->path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    CHECK(probe == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION);
+#endif
+    managed_require(xrt_managed_slot_drop(frame, 3));
+#if defined(XR_OS_WINDOWS)
+    probe = CreateFileA(call->path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    CHECK(probe != INVALID_HANDLE_VALUE && CloseHandle(probe));
+#endif
+    managed_require(xrt_managed_frame_leave(root, frame));
+}
+
+static void managed_host_file(void) {
+    XrtLocationOwner *owner = locations("host-file.xr");
+    char path[64];
+#if defined(XR_OS_WINDOWS)
+    unsigned long process = GetCurrentProcessId();
+#else
+    unsigned long process = (unsigned long)getpid();
+#endif
+    CHECK(snprintf(path, sizeof(path), "native-execution-owned-file-%lu.dat", process) < (int)sizeof(path));
+    FILE *seed = fopen(path, "wbx");
+    CHECK(seed && fputs("keep", seed) >= 0 && fclose(seed) == 0);
+    HostFileCall invalid = {path,true};
+    XrtValueRoot root = {0};
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded_owned(owner, &failure, host_file_root, &invalid, &root) == XRT_EXECUTION_FAILURE);
+    CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_BAD_ARGUMENT);
+    seed = fopen(path, "rb");
+    char content[5] = {0};
+    CHECK(seed && fread(content, 1, 4, seed) == 4 && !strcmp(content, "keep") && fclose(seed) == 0);
+    HostFileCall valid = {path,false};
+    CHECK(xrt_run_embedded_owned(owner, &failure, host_file_root, &valid, &root) == XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&root) && remove(path) == 0);
     xrt_locations_release(owner);
 }
 
@@ -428,6 +500,7 @@ static void standalone_state_string(void) {
 int main(void) {
     managed_scopes();
     managed_host_path_scratch();
+    managed_host_file();
     managed_message_owner();
     managed_assertion_owner();
     managed_map_literals();

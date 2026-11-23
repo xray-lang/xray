@@ -17,6 +17,8 @@
 #include "xnative_string_backing_ops.h"
 #include "xnative_array_ops.h"
 #include "xnative_class_array.h"
+#include "xnative_host_file.h"
+#include "shared/xnative_host_leaf.h"
 #include "xnative_map_backing.h"
 #include "xnative_set_backing.h"
 #include "xnative_status.h"
@@ -217,6 +219,23 @@ static XrtBoundClass native_class(const XrtValueImage *image, uint32_t type, uin
     }
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
     return binding;
+}
+
+XRAY_API void xrt_native_host_file_open_write(uint32_t callable, const XrtNativeFileOpen *call, uint32_t source) {
+    if (!call || xr_native_host_shape(callable) != XR_NATIVE_HOST_FILE_OPEN_WRITE)
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    XrtBoundClass binding = native_class(call->image, call->type, source);
+    xrt_host_file_open_publish(&call->output, binding, call->path, call->append, source);
+}
+
+XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage *image, uint32_t type,
+    const XrtManagedHeader *owner, uint32_t source) {
+    if (xr_native_host_shape(callable) != XR_NATIVE_HOST_FILE_CLOSE)
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    bool closed;
+    XrtManagedStatus status = xrt_host_file_close(native_class(image, type, source), owner, &closed);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    return closed;
 }
 XRAY_API void xrt_native_class_create(XrtManagedFrame *frame, size_t slot, const XrtValueImage *image,
     uint32_t type, const void *row, uint32_t source) {

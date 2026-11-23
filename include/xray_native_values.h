@@ -65,6 +65,22 @@ XRAY_API void xrt_native_class_array_field_push(const XrtNativeClassField *,
  * this call only. Host refusals return false, while execution faults retire
  * the active execution after the OS kernel releases its temporary state. */
 XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBacking *, uint32_t source_id);
+typedef struct XrtNativeFileResult {
+    XrtManagedFrame *frame;
+    size_t destination, temporary, offset;
+} XrtNativeFileResult;
+typedef struct XrtNativeFileOpen {
+    XrtNativeFileResult output;
+    const XrtValueImage *image;
+    uint32_t type;
+    const XrtStringBacking *path;
+    bool append;
+} XrtNativeFileOpen;
+/* The verified receiver supplies two distinct owner slots and the presence
+ * byte of its Nullable value. The temporary must be truly empty. */
+XRAY_API void xrt_native_host_file_open_write(uint32_t callable, const XrtNativeFileOpen *, uint32_t source_id);
+XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage *, uint32_t type,
+    const XrtManagedHeader *, uint32_t source_id);
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

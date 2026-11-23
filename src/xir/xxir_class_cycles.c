@@ -10,6 +10,7 @@
 #include "xxir_nominal.h"
 #include "xxir_receive_control.h"
 #include "xxir_types.h"
+#include "../shared/xnative_declaration.h"
 
 struct XrXirClassCycles {
     const XrXirArtifact *artifact;
@@ -67,6 +68,8 @@ static uint32_t class_cycle_edge_count(const XrXirTypes *types, const XrXirTypeN
         const XrXirNominalIdentity *identity = definition ? NULL : &table->identities[declaration];
         uint32_t fields = definition ? definition->field_count : identity->field_count;
         uint32_t native = definition ? definition->native.native_id : identity->native.native_id;
+        /* File storage owns a host descriptor and has no guest reference edges. */
+        if (native == XR_NATIVE_DECLARATION_FILE_STORAGE && !fields && !node->nominal.field_count) return 0;
         if (!native && node->nominal.field_count == fields && (!fields || node->nominal.fields)) return fields;
         break;
     }

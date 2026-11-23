@@ -31,6 +31,8 @@ XR_FUNC XrtManagedStatus xrt_managed_slot_construct(XrtManagedFrame *, size_t,
 /* Borrow the actual Root of a live frame for a nested ordinary temporary
  * frame. This neither extends its lifetime nor authorizes a guest operation. */
 XR_FUNC XrtManagedRoot *xrt_managed_frame_root(XrtManagedFrame *);
+/* Borrow one scalar byte in the frame after excluding every owner field. */
+XR_FUNC uint8_t *xrt_managed_frame_scalar_byte(XrtManagedFrame *, size_t offset);
 
 /* A Cell domain pins its real owner before entering its atomic Header guard.
  * A bool domain belongs to one executor. The descriptor stays borrowed and

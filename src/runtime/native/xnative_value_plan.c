@@ -11,6 +11,8 @@
  *   leaves before publication; physical object retirement stays in the kernel.
  */
 #include "xnative_value_plan.h"
+#include "xnative_host_file.h"
+#include "shared/xnative_declaration.h"
 #include "xnative_managed_root.h"
 #include "xnative_backing_types.h"
 #include "xnative_class_array.h"
@@ -173,9 +175,12 @@ static bool nullable_valid(const XrtValuePlanSpec *spec) {
 }
 static bool class_payload_valid(const XrtValuePlanSpec *spec) {
     if (!spec->element || spec->element->view.kind != XRT_VALUE_RECORD) return false;
+    if (spec->class_storage)
+        return spec->class_storage == XR_NATIVE_DECLARATION_FILE_STORAGE && !spec->class_parent &&
+            !spec->element->view.field_count;
     if (!spec->class_parent) return true;
     const XrtValuePlanSpec *parent = &spec->class_parent->view;
-    if (parent->kind != XRT_VALUE_CLASS || parent->element == spec->element) return false;
+    if (parent->kind != XRT_VALUE_CLASS || parent->class_storage || parent->element == spec->element) return false;
     const XrtValuePlanSpec *base = &parent->element->view, *payload = &spec->element->view;
     if (base->field_count > payload->field_count) return false;
     for (size_t i = 0; i < base->field_count; ++i) {
@@ -231,7 +236,7 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
             spec->sum.tag_offset || spec->sum.tag_size || spec->sum.payload_offset)) ||
         (spec->kind != XRT_VALUE_CELL && spec->kind != XRT_VALUE_ARRAY_INLINE &&
             spec->kind != XRT_VALUE_CLASS && spec->element) ||
-        (spec->kind != XRT_VALUE_CLASS && spec->class_parent) ||
+        (spec->kind != XRT_VALUE_CLASS && (spec->class_parent || spec->class_storage)) ||
         (spec->kind != XRT_VALUE_FIXED_U8 && spec->count)) return false;
     for (size_t i = 0; i < spec->owned_count; ++i) {
         size_t offset = spec->owned_offsets[i];
@@ -426,6 +431,9 @@ static bool class_has_guards(const XrtValuePlanSpec *payload) {
 XR_FUNCDEF XrtManagedStatus xrt_class_backing_bind(XrtBillingOwner *billing,
     const XrtValuePlan *class_plan, XrtManagedOps **empty) {
     if (!class_plan || class_plan->view.kind != XRT_VALUE_CLASS) return XRT_MANAGED_ARGUMENT;
+    XrtManagedLease identity = {(void *)class_plan, class_plan_retain, class_plan_drop};
+    if (class_plan->view.class_storage == XR_NATIVE_DECLARATION_FILE_STORAGE)
+        return xrt_host_file_bind(billing, identity, empty);
     const XrtValuePlanSpec *payload = &class_plan->view.element->view;
     size_t local_offsets[8], *offsets = local_offsets;
     size_t bytes = 0;
@@ -440,8 +448,7 @@ XR_FUNCDEF XrtManagedStatus xrt_class_backing_bind(XrtBillingOwner *billing,
     size_t guards = 0;
     if (class_has_guards(payload) && !extent_add(&guards, payload->field_count, sizeof(bool)))
         status = XRT_MANAGED_OVERFLOW;
-    if (status == XRT_MANAGED_OK) status = inline_payload_backing_bind(billing, payload, guards, offsets,
-        (XrtManagedLease){(void *)class_plan, class_plan_retain, class_plan_drop}, empty);
+    if (status == XRT_MANAGED_OK) status = inline_payload_backing_bind(billing, payload, guards, offsets, identity, empty);
     if (bytes) xrt_managed_metadata_free(billing, offsets, bytes);
     return status;
 }
@@ -521,6 +528,7 @@ XR_FUNCDEF XrtManagedStatus xrt_class_create(XrtManagedFrame *frame, size_t slot
     XrtManagedStatus status = xrt_managed_ops_producer_borrow(ops, class_plan_retain, class_plan_drop, &physical);
     if (status != XRT_MANAGED_OK) return status;
     const XrtValuePlan *plan = physical->code.context;
+    if (plan->view.class_storage) return XRT_MANAGED_ARGUMENT;
     const XrtValuePlan *payload = plan->view.element;
     if (!row || (uintptr_t)row % payload->view.alignment) return XRT_MANAGED_ARGUMENT;
     for (size_t i = 0; i < payload->view.field_count; ++i) {

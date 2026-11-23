@@ -73,6 +73,7 @@ typedef struct XrtValueImageType {
     size_t nullable_tag, nullable_payload;
     uint32_t entry_ordinal, entry_signature, element;
     uint32_t class_parent; /* Earlier concrete class row, zero for a root. */
+    uint32_t class_storage; /* Governed host storage identity, zero for an ordinary class. */
     /* Tagged sum: tag bytes precede one overlapping variant payload. Variant
      * rows index the same flattened field span as records and tuples. */
     size_t sum_tag, sum_tag_size, sum_payload;

@@ -1254,6 +1254,37 @@ static XrtManagedStatus rbc_value_publish_leaf(RbcValueActivation *activation,ui
     if (status==XRT_MANAGED_OK) status=rbc_value_place((RbcValueOrigin){activation,result},true,0,&temporary);
     return status==XRT_MANAGED_OK ? xrt_place_move_replace(destination,temporary,NULL) : status;
 }
+static XrtManagedStatus rbc_value_host_file(const XrRbcModule *module, XrRbcStack *stack,
+    RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
+    bool open = access.operation == XR_RBC_VALUE_HOST_FILE_OPEN_WRITE;
+    const XrLirValueHome *home = rbc_value_home(activation->code, open ? access.result : access.source);
+    const XrtValueImageType *type = &activation->image->types[home->type - 1];
+    uint32_t class_type = open ? type->nullable_element : home->type;
+    XrtBoundClass binding = {0};
+    XrtManagedStatus status = rbc_value_plan_set(module, stack);
+    if (status == XRT_MANAGED_OK) status = stack->layout ? xrt_module_layout_class(stack->layout, class_type, &binding) :
+        xrt_value_image_class(stack->values->plans, class_type, &binding);
+    if (status != XRT_MANAGED_OK) return status;
+    if (open) {
+        const XrtStringBacking *path = NULL;
+        status = rbc_value_string_borrow(activation, access.source, &path);
+        XrRbcRegister *append = rbc_value_register(stack, activation, access.other);
+        if (!append || append->bits > 1) return XRT_MANAGED_ARGUMENT;
+        if (status == XRT_MANAGED_OK) {
+            XrtNativeFileResult output = {activation->frame, home->first_owner, home->temporary_first_owner, home->offset};
+            xrt_host_file_open_publish(&output, binding, path, append->bits != 0, source);
+        }
+    } else {
+        const XrtManagedHeader *file = NULL;
+        status = rbc_value_borrow_header(rbc_value_origin(activation, access.source), home, &file);
+        XrRbcRegister *output = rbc_value_register(stack, activation, access.result);
+        if (!output) return XRT_MANAGED_ARGUMENT;
+        bool closed;
+        if (status == XRT_MANAGED_OK) status = xrt_host_file_close(binding, file, &closed);
+        if (status == XRT_MANAGED_OK) output->bits = closed;
+    }
+    return status;
+}
 #include "xrbc_value_inline_execute.inc.c"
 #include "xrbc_value_array_execute.inc.c"
 #include "xrbc_value_array_region.inc.c"
@@ -1388,6 +1419,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         XrRbcRegister *condition=rbc_value_register(stack,activation,access.source);
         if (status==XRT_MANAGED_OK && (!condition || condition->bits>1)) status=XRT_MANAGED_ARGUMENT;
         if (status==XRT_MANAGED_OK) xrt_assert_condition((uint8_t)condition->bits,message,source);
+    } else if (access.operation==XR_RBC_VALUE_HOST_FILE_OPEN_WRITE || access.operation==XR_RBC_VALUE_HOST_FILE_CLOSE) {
+        status = rbc_value_host_file(module, stack, activation, access, source);
     } else if (access.operation==XR_RBC_VALUE_HOST_PATH_BOOL) {
         const XrtStringBacking *path = NULL;
         status = rbc_value_string_borrow(activation, access.source, &path);

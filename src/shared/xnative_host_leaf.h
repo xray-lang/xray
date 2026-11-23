@@ -10,12 +10,24 @@
 #define XNATIVE_HOST_LEAF_H
 #include "xnative_declaration.h"
 
-static inline bool xr_native_blocking_path_bool(uint32_t callable) {
+typedef enum XrNativeHostShape {
+    XR_NATIVE_HOST_NONE, XR_NATIVE_HOST_PATH_BOOL,
+    XR_NATIVE_HOST_FILE_OPEN_WRITE, XR_NATIVE_HOST_FILE_CLOSE
+} XrNativeHostShape;
+
+static inline XrNativeHostShape xr_native_host_shape(uint32_t callable) {
     switch (callable) {
-#define XR_NATIVE_BLOCKING_PATH_BOOL(id, implementation) case id: return true;
+#define XR_NATIVE_BLOCKING_PATH_BOOL(id, implementation) case id: return XR_NATIVE_HOST_PATH_BOOL;
+#define XR_NATIVE_BLOCKING_FILE_OPEN_WRITE(id) case id: return XR_NATIVE_HOST_FILE_OPEN_WRITE;
+#define XR_NATIVE_BLOCKING_FILE_CLOSE(id) case id: return XR_NATIVE_HOST_FILE_CLOSE;
 #include "xnative_host_leaves.inc.h"
+#undef XR_NATIVE_BLOCKING_FILE_CLOSE
+#undef XR_NATIVE_BLOCKING_FILE_OPEN_WRITE
 #undef XR_NATIVE_BLOCKING_PATH_BOOL
-    default: return false;
+    default: return XR_NATIVE_HOST_NONE;
     }
+}
+static inline bool xr_native_blocking_path_bool(uint32_t callable) {
+    return xr_native_host_shape(callable) == XR_NATIVE_HOST_PATH_BOOL;
 }
 #endif // XNATIVE_HOST_LEAF_H

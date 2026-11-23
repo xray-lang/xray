@@ -1,0 +1,28 @@
+import { File } from io
+import path
+
+fn openAndClose() {
+    var opened = File.openWrite(path.from("preserved"), true)
+    print(opened != null)
+    const alias = opened!
+    print(alias.close())
+    print(opened!.close())
+
+    var truncated = File.openWrite(path.from("truncated"), false)
+    print(truncated != null)
+    print(truncated!.close())
+}
+
+fn retireOnReturn() {
+    const opened = File.openWrite(path.from("implicit"), true)
+    assert(opened != null)
+}
+
+fn run() {
+    openAndClose()
+    for (var i = 0; i < 160; i = i + 1) {
+        retireOnReturn()
+    }
+}
+
+run()

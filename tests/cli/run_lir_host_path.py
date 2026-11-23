@@ -2,11 +2,28 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+
+
+@contextmanager
+def file_descriptor_limit(enabled):
+    if os.name == "nt" or not enabled:
+        yield
+        return
+    import resource
+
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    limit = 64 if soft == resource.RLIM_INFINITY else min(soft, 64)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (limit, hard))
+    try:
+        yield
+    finally:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
 
 
 def main() -> None:
@@ -23,39 +40,55 @@ def main() -> None:
     environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
     args.output.mkdir(parents=True, exist_ok=True)
 
-    def run(command, cwd, stem):
+    def run(command, cwd, stem, limit=False):
         out, err = cwd / (stem + ".stdout"), cwd / (stem + ".stderr")
         with out.open("xb") as stdout, err.open("xb") as stderr:
-            status = run_child(list(map(str, command)), cwd=cwd, env=environment,
-                               stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, timeout=30)
+            with file_descriptor_limit(limit):
+                status = run_child(list(map(str, command)), cwd=cwd, env=environment,
+                                   stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, timeout=30)
         return status, out.read_bytes(), err.read_bytes()
 
     with tempfile.TemporaryDirectory(prefix="host-path-", dir=args.output.resolve()) as directory:
         work = Path(directory)
-        for name in ("mkdir", "nul_path", "unregistered"):
+        for name in ("mkdir", "nul_path", "unregistered", "file_open_write", "file_open_refused", "file_storage_private"):
             source = fixtures / (name + ".xr")
             vm_dir, native_dir = work / (name + "-vm"), work / (name + "-native")
             for cwd in (vm_dir, native_dir):
                 cwd.mkdir()
                 (cwd / "file").write_bytes(b"keep")
-            vm = run([binary, "run", source], vm_dir, "run")
+                if name == "file_open_write":
+                    (cwd / "preserved").write_bytes(b"preserve")
+                    (cwd / "truncated").write_bytes(b"truncate")
+            limited = name == "file_open_write"
+            vm = run([binary, "run", source], vm_dir, "run", limit=limited)
             output = native_dir / ("program.exe" if os.name == "nt" else "program")
             built = run([binary, "build", source, "-o", output], native_dir, "build")
-            if name == "unregistered":
+            if name in ("unregistered", "file_storage_private"):
                 assert vm == built, (name, vm, built)
                 assert vm[0] == 1 and not vm[1] and not output.exists(), (name, vm)
-                assert b"function without a scalar body is not supported by LIR lowering yet" in vm[2], vm
+                expected = (b"import requires an exported declaration" if name == "file_storage_private" else
+                            b"function without a scalar body is not supported by LIR lowering yet")
+                assert expected in vm[2], vm
             else:
                 assert built[0] == 0 and not built[2], (name, built)
-                native = run([output], native_dir, "run")
+                native = run([output], native_dir, "run", limit=limited)
                 assert vm == native, (name, vm, native)
                 if name == "mkdir":
                     assert vm == (0, b"true\ntrue\nfalse\nfalse\n", b""), vm
                     assert all((cwd / "目录").is_dir() and not (cwd / "missing").exists()
                                for cwd in (vm_dir, native_dir)), name
-                else:
+                elif name == "nul_path":
                     assert vm[0] == 1 and not vm[1] and b"XR_RUN_6002: value operation rejected (status 1)" in vm[2], vm
                     assert all(not (cwd / "must-not-exist").exists() for cwd in (vm_dir, native_dir)), name
+                elif name == "file_open_write":
+                    assert vm == (0, b"true\n" * 5, b""), vm
+                    for cwd in (vm_dir, native_dir):
+                        assert (cwd / "preserved").read_bytes() == b"preserve"
+                        assert (cwd / "truncated").read_bytes() == b""
+                        assert (cwd / "implicit").is_file()
+                else:
+                    assert vm == (0, b"true\n", b""), vm
+                    assert all(not (cwd / "missing").exists() for cwd in (vm_dir, native_dir)), name
             assert all((cwd / "file").read_bytes() == b"keep" for cwd in (vm_dir, native_dir)), name
             print(f"{name}: VM and native agree on output, exit and filesystem effects")
 

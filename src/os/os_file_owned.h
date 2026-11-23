@@ -8,7 +8,7 @@
  */
 #ifndef XR_OS_FILE_OWNED_H
 #define XR_OS_FILE_OWNED_H
-#include "../base/xio_policy.h"
+#include "os_file_mutation.h"
 #include <stdbool.h>
 
 typedef struct XrOsFileOwner {
@@ -50,6 +50,16 @@ typedef struct XrOsFileProgress {
     uint32_t native_error;
     const uint8_t *bytes;
 } XrOsFileProgress;
+
+/* The synchronous writer publishes an address-stable owner only after a
+ * successful open. The path is borrowed and the allocation policy outlives
+ * the owner. An ordinary refusal publishes opened=false and no owner. */
+XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
+    XrOsPathSpan path, bool append, XrOsFileOwner *owner, bool *opened);
+/* Retires a synchronous owner when the OS consumes its handle. Windows close
+ * failures retain a live handle for another close-only attempt. Unix close
+ * errors can consume the descriptor and must never replay close. */
+XR_FUNC XrOsIoStatus xr_os_io_file_close_sync(XrOsFileOwner *owner, bool *closed);
 
 /* Owners and operations are zero-initialized, address-stable and externally
  * serialized. Copies acquire no ownership. Memory policy/context outlive every

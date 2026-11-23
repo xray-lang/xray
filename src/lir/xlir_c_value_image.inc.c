@@ -27,6 +27,7 @@ static void c_value_image(LirC *c, const XrtValueImage *image) {
         C_IMAGE_U32(first_variant); C_IMAGE_U32(variant_count);
         C_IMAGE_U32(entry_ordinal); C_IMAGE_U32(entry_signature); C_IMAGE_U32(element);
         if (row->class_parent) C_IMAGE_U32(class_parent);
+        if (row->class_storage) C_IMAGE_U32(class_storage);
 #undef C_IMAGE_U32
 #undef C_IMAGE_SIZE
         c_text(c, "    },\n");
