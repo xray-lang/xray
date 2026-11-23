@@ -564,6 +564,13 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
     bool inline_result = rbc_inline_tuple_result(image,result_type);
     const XrRbcCodeOwner *owner=xr_rbc_code_owner_borrow((XrtManagedLease){module->code_lease.owner,
         module->code_lease.retain,module->code_lease.release});
+    /* Typed errors own their true source location across root retirement.
+     * A raw caller may still supply a map for ordinary admitted code. */
+    const XrRbcCodeOwner *code_owner=xr_rbc_module_code_owner(module);
+    if (code_owner && locations!=code_owner->locations && code_owner->value_codes) {
+        for (size_t n=0;n<code_owner->function_count;++n)
+            if (code_owner->value_codes[n] && code_owner->value_codes[n]->error_type) return XR_RBC_INVALID;
+    }
     bool function_result=function->result_kind==XR_RBC_FUNCTION;
     XrtValueKind result_kind = rbc_image_value_kind(image, result_type);
     if (function->result_kind == XR_RBC_SLICE_I64 || function->result_kind == XR_RBC_BOXED ||

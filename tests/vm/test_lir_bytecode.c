@@ -9,6 +9,8 @@
 #include "../lir/lir_test_programs.h"
 #include "base/xmalloc.h"
 #include "lir/xlir_internal.h"
+#include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_values.h"
 #include "shared/xr_value_format_core.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_code.h"
@@ -89,6 +91,63 @@ static void test_raw_typed_error_rejected(void) {
     xrt_locations_release(locations);
 }
 
+typedef struct NativeTryError {
+    const XrRbcLiteral *metadata;
+    struct { uint8_t tag; int64_t code; } value;
+} NativeTryError;
+
+static void native_try_assert_root(void *context) {
+    const NativeTryError *error=context;
+    xrt_try_assert_panic((const uint8_t *)error->metadata->bytes,error->metadata->length,
+        &error->value,sizeof(error->value),1);
+}
+
+static void native_try_assert_reenter(void *context) { ++*(unsigned *)context; }
+
+static void test_native_try_assert_snapshot(const XrRbcLiteral *metadata) {
+    const XrtSourceLocation location={"native-try.xr",13,15,12,15,23};
+    size_t baseline=0;
+    for (unsigned mode=0;mode<3;++mode) {
+        XrtValueRoot root={0};
+        XrtBillingOwner *billing=NULL;
+        CHECK(xrt_native_values_prepare(&root,&billing)==XRT_MANAGED_OK && xrt_billing_owner_retain(billing));
+        XrtLocationOwner *map=NULL;
+        CHECK(xrt_locations_create(&location,1,&map)==XRT_LOCATION_OK);
+        NativeTryError error={.metadata=metadata,.value={(uint8_t)(mode==0 ? 2u : 1u),23}};
+        if (mode==1) xrt_billing_owner_fail_after(billing,0);
+        XrtExecutionFailure failure={0};
+        CHECK(xrt_run_embedded_owned(map,&failure,native_try_assert_root,&error,&root)==XRT_EXECUTION_FAILURE);
+        CHECK(xrt_value_root_empty(&root) && !xrt_value_root_active());
+        unsigned again=0;
+        XrtExecutionFailure unused={0};
+        CHECK(xrt_run_embedded(map,&unused,native_try_assert_reenter,&again)==XRT_EXECUTION_COMPLETED && again==1);
+        xrt_locations_release(map);
+        if (mode<2) {
+            CHECK(failure.kind==XRT_FAILURE_VALUE && failure.detail.value.source_id==1 &&
+                failure.detail.value.status==(mode==0 ? XR_XIR_VALUE_BAD_ARGUMENT : XR_XIR_VALUE_OOM));
+            CHECK(xrt_billing_owner_stats(billing).blocks==1);
+            if (mode==0) baseline=xrt_billing_owner_stats(billing).bytes;
+        } else {
+            CHECK(failure.kind==XRT_FAILURE_TRY_ASSERT && xrt_billing_owner_stats(billing).blocks==2);
+            const XrtTryAssertFailure *snapshot=failure.detail.assertion;
+            const XrtSourceLocation *where=xrt_try_assert_location(snapshot);
+            XrtTryAssertValue value={0};
+            uint32_t scalar=0;
+            uint64_t bits=0;
+            CHECK(where && where->line==15 && where->column==12 && where->path_length==13 &&
+                !memcmp(where->path,"native-try.xr",13));
+            CHECK(xrt_try_assert_value(snapshot,&value) && value.variant==1 && value.field_count==1 &&
+                value.metadata_size==metadata->length && !memcmp(value.metadata,metadata->bytes,metadata->length));
+            CHECK(xrt_try_assert_field(snapshot,0,&scalar,&bits) && scalar==XR_POD_I64 && bits==23);
+        }
+        xrt_execution_failure_drop(&failure);
+        xrt_execution_failure_drop(&failure);
+        XrtBillingStats stats=xrt_billing_owner_stats(billing);
+        CHECK(stats.blocks==1 && stats.bytes==baseline);
+        xrt_billing_owner_drop(billing);
+    }
+}
+
 static void test_owned_try_assert(void) {
     XrLirModule *m=NULL;
     OK(xr_lir_module_create(NULL,&m));
@@ -155,6 +214,21 @@ static void test_owned_try_assert(void) {
     XrtLocationOwner *locations=xr_rbc_program_locations(program);
     CHECK(module->literal_count==1 && module->literals && module->code_lease.owner);
     XrRbcLiteral literal=module->literals[0];
+    test_native_try_assert_snapshot(&literal);
+
+    size_t count=xrt_locations_count(locations);
+    XrtSourceLocation *forged_points=xr_malloc(count*sizeof(*forged_points));
+    CHECK(count && forged_points);
+    for (size_t n=0;n<count;++n)
+        forged_points[n]=(XrtSourceLocation){"forged.xr",9,999,7,999,7};
+    XrtLocationOwner *forged_map=NULL;
+    CHECK(xrt_locations_create(forged_points,count,&forged_map)==XRT_LOCATION_OK);
+    xr_free(forged_points);
+    XrRbcExecution *forged_execution=NULL;
+    CHECK(xr_rbc_module_prepare(module,0,&argument,1,forged_map,&forged_execution)==XR_RBC_INVALID &&
+        !forged_execution);
+    xrt_locations_release(forged_map);
+
     char *forged=xr_malloc(literal.length);
     CHECK(forged && literal.length>47);
     memcpy(forged,literal.bytes,literal.length);
