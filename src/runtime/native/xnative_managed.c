@@ -29,6 +29,7 @@ struct XrtRuntimeTypePlan {
     _Atomic(int32_t) references;
     XrtBillingOwner *billing;
     XrtRuntimeTypeSpec spec;
+    size_t owned_tail_length_offset;
 };
 struct XrtManagedOps {
     _Atomic(int32_t) references;
@@ -190,9 +191,21 @@ static bool type_spec_valid(const XrtRuntimeTypeSpec *spec) {
     }
     return true;
 }
-XRAY_API XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
-    const XrtRuntimeTypeSpec *spec, XrtRuntimeTypePlan **output) {
+static bool prefix_count_offset_valid(const XrtRuntimeTypeSpec *spec, size_t offset) {
+    if (offset == SIZE_MAX) return true;
+    if (!spec->tail_child_count || offset < sizeof(XrtManagedHeader) ||
+        offset > spec->fixed_size - sizeof(size_t) || offset % alignof(size_t) || offset == spec->capacity_offset)
+        return false;
+    for (size_t i = 0; i < spec->child_count; ++i) {
+        size_t child = spec->child_offsets[i];
+        if (child < offset + sizeof(size_t) && offset < child + sizeof(XrtManagedHeader *)) return false;
+    }
+    return true;
+}
+static XrtManagedStatus runtime_type_plan_new(XrtBillingOwner *owner, const XrtRuntimeTypeSpec *spec,
+    size_t owned_tail_length_offset, XrtRuntimeTypePlan **output) {
     if (!owner || !output || *output || !type_spec_valid(spec)) return XRT_MANAGED_ARGUMENT;
+    if (!prefix_count_offset_valid(spec, owned_tail_length_offset)) return XRT_MANAGED_ARGUMENT;
     if (!xrt_billing_owner_retain(owner)) return XRT_MANAGED_REFCOUNT;
     if (!lease_take(spec->code)) { xrt_billing_owner_drop(owner); return XRT_MANAGED_REFCOUNT; }
     size_t bytes = sizeof(XrtRuntimeTypePlan) + (spec->child_count + spec->tail_child_count) * sizeof(size_t);
@@ -202,6 +215,7 @@ XRAY_API XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
     XrtRuntimeTypePlan *plan = memory;
     atomic_init(&plan->references, -1);
     plan->billing = owner; plan->spec = *spec;
+    plan->owned_tail_length_offset = owned_tail_length_offset;
     size_t *fields = (size_t *)(plan + 1);
     if (spec->child_count) memcpy(fields, spec->child_offsets, spec->child_count * sizeof(size_t));
     plan->spec.child_offsets = fields;
@@ -210,6 +224,15 @@ XRAY_API XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
     plan->spec.tail_child_offsets = fields;
     *output = plan;
     return XRT_MANAGED_OK;
+}
+XRAY_API XrtManagedStatus xrt_runtime_type_plan_new(XrtBillingOwner *owner,
+    const XrtRuntimeTypeSpec *spec, XrtRuntimeTypePlan **output) {
+    return runtime_type_plan_new(owner, spec, SIZE_MAX, output);
+}
+XR_FUNCDEF XrtManagedStatus xrt_runtime_type_plan_new_owned_prefix(XrtBillingOwner *owner,
+    const XrtRuntimeTypeSpec *spec, size_t length_offset, XrtRuntimeTypePlan **output) {
+    if (length_offset == SIZE_MAX) return XRT_MANAGED_ARGUMENT;
+    return runtime_type_plan_new(owner, spec, length_offset, output);
 }
 XRAY_API bool xrt_runtime_type_plan_retain(XrtRuntimeTypePlan *plan) {
     return plan && xr_signed_rc_retain(&plan->references);
@@ -301,7 +324,8 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_ops_producer_borrow(const XrtManagedOps 
 }
 XR_FUNCDEF bool xrt_managed_layout_matches(const XrtManagedHeader *owner, const XrtRuntimeTypeSpec *expected) {
     if (!owner || !owner->ops || !expected || (expected->child_count && !expected->child_offsets) ||
-        (expected->tail_child_count && !expected->tail_child_offsets)) return false;
+        (expected->tail_child_count && !expected->tail_child_offsets) ||
+        owner->ops->plan->owned_tail_length_offset != SIZE_MAX) return false;
     const XrtRuntimeTypeSpec *actual = &owner->ops->plan->spec;
     return actual->fixed_size == expected->fixed_size && actual->alignment == expected->alignment &&
         actual->capacity_offset == expected->capacity_offset && actual->stride == expected->stride &&
@@ -331,6 +355,17 @@ static bool allocation_children(const XrtRuntimeTypeSpec *spec, size_t bytes, si
     if (spec->tail_child_count && capacity > (SIZE_MAX - spec->child_count) / spec->tail_child_count)
         return false;
     *count = spec->child_count + capacity * spec->tail_child_count;
+    return true;
+}
+static bool allocation_owned_children(const XrtManagedHeader *value, size_t bytes, size_t *count) {
+    const XrtRuntimeTypePlan *plan = value->ops->plan;
+    const XrtRuntimeTypeSpec *spec = &plan->spec;
+    if (!allocation_children(spec, bytes, count)) return false;
+    if (plan->owned_tail_length_offset == SIZE_MAX) return true;
+    size_t length;
+    memcpy(&length, (const unsigned char *)value + plan->owned_tail_length_offset, sizeof(length));
+    if (length > (bytes - spec->fixed_size) / spec->stride) return false;
+    *count = spec->child_count + length * spec->tail_child_count;
     return true;
 }
 XR_FUNCDEF XrtManagedStatus xrt_managed_grow_unique_scalar_tail(XrtManagedHeader **binding,
@@ -378,8 +413,8 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_grow_unique_scalar_tail(XrtManagedHeader
 static const uint32_t retirement_cursor = UINT32_C(0x80000000);
 _Static_assert(sizeof(size_t) <= sizeof(XrtManagedHeader *), "a dead child slot holds its cursor bytes");
 
-/* The logical inventory concatenates the prefix with every physical row. Its
- * first two slots provide the same continuation regardless of their region. */
+/* The logical inventory concatenates the fixed fields with its owned rows.
+ * Its first two slots provide the same continuation regardless of region. */
 static void *child_field(XrtManagedHeader *value, size_t index) {
     const XrtRuntimeTypeSpec *spec = &value->ops->plan->spec;
     size_t offset;
@@ -464,7 +499,7 @@ static void allocation_dispose(XrtManagedHeader *root, size_t root_bytes) {
         size_t bytes = root_bytes, children;
         if (value != root)
             XR_CHECK(allocation_extent(value->ops->plan, value, &bytes), "published physical extent remains representable");
-        XR_CHECK(allocation_children(&value->ops->plan->spec, bytes, &children),
+        XR_CHECK(allocation_owned_children(value, bytes, &children),
             "physical extent bounds every fixed and repeated owned slot");
         XrtManagedHeader *child = NULL;
         if (retirement_next(value, parent, entering, children, &child)) {
@@ -485,6 +520,10 @@ static XrtManagedStatus managed_prepare(XrtManagedOps *ops, size_t bytes, bool c
         return XRT_MANAGED_ARGUMENT;
     size_t children;
     if (!allocation_children(spec, bytes, &children)) return XRT_MANAGED_ARGUMENT;
+    if (ops->plan->owned_tail_length_offset != SIZE_MAX) {
+        clear_tail = false;
+        children = spec->child_count;
+    }
     if (!xrt_managed_ops_retain(ops)) return XRT_MANAGED_REFCOUNT;
     if (!xrt_billing_owner_retain(ops->billing)) { xrt_managed_ops_drop(ops); return XRT_MANAGED_REFCOUNT; }
     void *memory = NULL;
@@ -518,6 +557,9 @@ XRAY_API XrtManagedStatus xrt_managed_commit(XrtManagedPending *pending, XrtMana
     size_t bytes;
     if (!allocation_extent(pending->value->ops->plan, pending->value, &bytes) ||
         bytes != pending->allocation_bytes) return XRT_MANAGED_ARGUMENT;
+    size_t children;
+    if (pending->value->ops->plan->owned_tail_length_offset != SIZE_MAX &&
+        !allocation_owned_children(pending->value, bytes, &children)) return XRT_MANAGED_ARGUMENT;
     *output = pending->value;
     *pending = (XrtManagedPending){0};
     return XRT_MANAGED_OK;

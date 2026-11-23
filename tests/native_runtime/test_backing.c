@@ -236,7 +236,7 @@ static void string_arrays(void) {
     OK(xrt_array_backing_string_create(fixture.frame, 1, &fixture.types, values, 3, 7));
     XrtArrayBacking *array = (XrtArrayBacking *)borrow(&fixture, 1);
     CHECK(array->capacity == 7 && array->length == 3 && xr_signed_rc_read(&string->managed.references) == 4);
-    for (size_t i = 0; i < array->capacity; ++i) CHECK(tail(array, i) == (i < 3 ? &string->managed : NULL));
+    for (size_t i = 0; i < array->length; ++i) CHECK(tail(array, i) == &string->managed);
     const XrtStringBacking *borrowed = NULL;
     OK(xrt_array_backing_string_at(array, 2, &borrowed));
     CHECK(borrowed == string);
@@ -250,7 +250,7 @@ static void string_arrays(void) {
     OK(xrt_array_backing_string_create(fixture.frame, 1, &fixture.types, NULL, 0, 4));
     CHECK(borrow(&fixture, 3) == &array->managed && array->length == 3);
     XrtArrayBacking *empty = (XrtArrayBacking *)borrow(&fixture, 1);
-    for (size_t i = 0; i < empty->capacity; ++i) CHECK(!tail(empty, i));
+    CHECK(empty->length == 0 && empty->capacity == 4);
     XrtStringBacking *invalid[] = {string, NULL};
     XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
     BAD(xrt_array_backing_string_create(fixture.frame, 1, &fixture.types, invalid, 2, 4));
@@ -289,10 +289,17 @@ static void array_reserve_preserves_snapshots(void) {
     atomic_store(&second->managed.references, 2);
     CHECK(!borrow(&fixture, 4) && borrow(&fixture, 2) == source && xr_signed_rc_read(&first->managed.references) == 2);
     same_bill(fixture.billing, baseline);
+    fixture.audit.allocation_fill = 0xa5;
     OK(xrt_array_backing_reserve_create(fixture.frame, 4, &fixture.types, XRT_BACKING_ARRAY_STRING, source, 8));
-    const XrtArrayBacking *grown = (const XrtArrayBacking *)borrow(&fixture, 4);
+    XrtArrayBacking *grown = (XrtArrayBacking *)borrow(&fixture, 4);
     CHECK(&grown->managed != source && grown->capacity == 8 && grown->length == 2);
-    CHECK(tail(grown, 0) == &first->managed && tail(grown, 1) == &second->managed && !tail(grown, 7));
+    CHECK(tail(grown, 0) == &first->managed && tail(grown, 1) == &second->managed);
+    CHECK(grown->elements[7 * sizeof(XrtManagedHeader *)] == 0xa5);
+    XrtArrayUpdate append = {.operation=XRT_ARRAY_UPDATE_PUSH,
+        .item={.kind=XRT_BACKING_ARRAY_STRING,.value.string=second}};
+    bool applied = false;
+    OK(xrt_array_backing_try_update(grown,&append,&applied));
+    CHECK(applied && grown->length == 3 && tail(grown, 2) == &second->managed);
     OK(xrt_array_backing_capacity(source, XRT_BACKING_ARRAY_STRING, &capacity));
     CHECK(capacity == 4 && xr_signed_rc_read(&first->managed.references) == 3);
     fixture_done(&fixture);
@@ -334,12 +341,14 @@ static void pending_capacity(void) {
     OK(xrt_array_backing_string_create(fixture.frame, 1, &fixture.types, NULL, 0, 1));
     XrtManagedHeader *old = borrow(&fixture, 1), *string = borrow(&fixture, 0), *payload = NULL;
     XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
-    OK(xrt_managed_slot_prepare(fixture.frame, 1, fixture.types.arrays[XRT_BACKING_ARRAY_STRING], 32 + 5 * 8, &payload));
+    fixture.audit.allocation_fill = 0xa5;
+    OK(xrt_managed_slot_prepare(fixture.frame, 1, fixture.types.arrays[XRT_BACKING_ARRAY_STRING],
+        sizeof(XrtArrayBacking) + 5 * sizeof(string), &payload));
     XrtArrayBacking *array = (XrtArrayBacking *)payload;
-    for (size_t i = 0; i < 5; ++i) CHECK(!tail(array, i));
+    CHECK(array->length == 0 && array->capacity == 5 && array->elements[0] == 0xa5);
     CHECK(xrt_managed_retain(string));
-    memcpy(array->elements + 4 * sizeof(string), &string, sizeof(string));
-    array->length = 0;
+    memcpy(array->elements, &string, sizeof(string));
+    array->length = 1;
     array->capacity = SIZE_MAX;
     BAD(xrt_managed_slot_commit(fixture.frame, 1));
     OK(xrt_managed_slot_abort(fixture.frame, 1));
@@ -351,10 +360,13 @@ static void jump_pending(Fixture *fixture) {
     jmp_buf target;
     if (!setjmp(target)) {
         XrtManagedHeader *payload = NULL, *string = borrow(fixture, 0);
-        OK(xrt_managed_slot_prepare(fixture->frame, 1, fixture->types.arrays[XRT_BACKING_ARRAY_STRING], 32 + 4 * 8, &payload));
+        fixture->audit.allocation_fill = 0xa5;
+        OK(xrt_managed_slot_prepare(fixture->frame, 1, fixture->types.arrays[XRT_BACKING_ARRAY_STRING],
+            sizeof(XrtArrayBacking) + 4 * sizeof(string), &payload));
         CHECK(xrt_managed_retain(string));
         XrtArrayBacking *array = (XrtArrayBacking *)payload;
-        memcpy(array->elements + 3 * sizeof(string), &string, sizeof(string));
+        memcpy(array->elements, &string, sizeof(string));
+        array->length = 1;
         longjmp(target, 1);
     }
     OK(xrt_managed_root_drain(fixture->root));
@@ -578,7 +590,6 @@ static void string_updates(void) {
     XrtArrayBacking *next = (XrtArrayBacking *)borrow(&fixture, 2);
     CHECK(next != array && next->length == 3 && array->length == 2);
     CHECK(tail(next, 0) == &fresh->managed && tail(next, 1) == &old->managed && tail(next, 2) == &old->managed);
-    CHECK(!tail(next, 3) && !tail(array, 2) && !tail(array, 3));
     // Replacing the sole old element does not retain a child that is discarded.
     edit.operation = XRT_ARRAY_UPDATE_SET; edit.index = 0; edit.item.value.string = old;
     atomic_store(&fresh->managed.references, INT32_MAX);
@@ -646,8 +657,6 @@ static void repeat_and_get(void) {
             else if (kind == XRT_BACKING_ARRAY_U8) CHECK(item.value.u8 == UINT8_MAX);
             else CHECK(item.value.u64 == UINT64_MAX);
         }
-        if (kind == XRT_BACKING_ARRAY_STRING)
-            for (size_t i = 5; i < array->capacity; ++i) CHECK(!tail(array, i));
         XrtArrayItem unchanged = scalar_item(XRT_BACKING_ARRAY_U64, 37);
         CHECK(xrt_array_backing_get(array, kind, -1, &unchanged) == XRT_MANAGED_BOUNDS);
         CHECK(xrt_array_backing_get(array, kind, 5, &unchanged) == XRT_MANAGED_BOUNDS);

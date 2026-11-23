@@ -28,6 +28,12 @@ XR_FUNC XrtManagedStatus xrt_managed_ops_producer_borrow(const XrtManagedOps *,
  * a producer identity nor grants a borrow or mutation permission. */
 XR_FUNC bool xrt_managed_layout_matches(const XrtManagedHeader *, const XrtRuntimeTypeSpec *);
 
+/* Trusted contiguous-tail producers publish their initialized row count after
+ * installing each row, even on pending objects. Only this prefix owns child
+ * fields. The remaining bytes are raw capacity and are never visited. */
+XR_FUNC XrtManagedStatus xrt_runtime_type_plan_new_owned_prefix(XrtBillingOwner *,
+    const XrtRuntimeTypeSpec *, size_t length_offset, XrtRuntimeTypePlan **);
+
 /* Prepare a private replacement whose scalar tail is written before its
  * logical length is published. Only the fixed prefix is initialized here.
  * An owned field or a payload callback makes this preparation invalid. */

@@ -7,8 +7,8 @@
  * xnative_array_backing.h - One fixed prefix for typed Array tails
  *
  * KEY CONCEPT:
- *   Every owned tail field is a real NULL or owner; logical length never bounds
- *   the generic iterative retirement of the actual allocated capacity.
+ *   String arrays own exactly the initialized prefix. The underlying allocation
+ *   still tracks its complete capacity for extent and billing.
  */
 #ifndef XNATIVE_ARRAY_BACKING_H
 #define XNATIVE_ARRAY_BACKING_H
@@ -19,8 +19,8 @@
 
 /* Capacity counts elements and is derived by prepare from the actual extent.
  * Typed factories select only their setup's descriptor. Inputs remain borrowed;
- * String elements are retained before installing each owned tail pointer.
- * Failure retires the full pending capacity and keeps the old slot unchanged. */
+ * String producers retain each element, install it, then advance length.
+ * Failure retires the initialized prefix and keeps the old slot unchanged. */
 XR_FUNC XrtManagedStatus xrt_array_backing_i64_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, const int64_t *, size_t count, size_t capacity);
 XR_FUNC XrtManagedStatus xrt_array_backing_string_create(XrtManagedFrame *, size_t,

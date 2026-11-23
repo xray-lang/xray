@@ -54,10 +54,9 @@ static XrtManagedStatus map_snapshot_fill(XrtArrayBacking *array, const XrtMapBa
             if (!xrt_managed_retain(key)) return XRT_MANAGED_REFCOUNT;
             memcpy(array->elements + count * sizeof(key), &key, sizeof(key));
         } else memcpy(array->elements + count * sizeof(entry->value), &entry->value, sizeof(entry->value));
-        ++count;
+        array->length = ++count;
     }
     if (count != array->capacity) return XRT_MANAGED_ARGUMENT;
-    array->length = count;
     return XRT_MANAGED_OK;
 }
 XR_FUNCDEF XrtManagedStatus xrt_map_backing_snapshot_held(XrtManagedFrame *frame, size_t slot,

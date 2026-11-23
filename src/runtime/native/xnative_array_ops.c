@@ -83,7 +83,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_try_update(XrtArrayBacking *array,
     if (!xr_signed_rc_unique(&array->managed.references)) { xrt_managed_drop(child); return XRT_MANAGED_OK; }
     size_t index = update->operation == XRT_ARRAY_UPDATE_PUSH ? array->length : (size_t)update->index;
     size_t stride = xrt_backing_array_stride(update->item.kind);
-    XrtManagedHeader *old = child ? array_owned_child(array, index) : NULL;
+    XrtManagedHeader *old = child && update->operation == XRT_ARRAY_UPDATE_SET ? array_owned_child(array, index) : NULL;
     if (child) memcpy(array->elements + index * stride, &child, sizeof(child));
     else array_store_scalar(array->elements + index * stride, &update->item);
     array->length = length;
@@ -116,6 +116,7 @@ static XrtManagedStatus array_update_create(XrtManagedFrame *frame, size_t slot,
             XrtManagedHeader *child = i == changed ? &update->item.value.string->managed : array_owned_child(source, i);
             if (!xrt_managed_retain(child)) { status = XRT_MANAGED_REFCOUNT; break; }
             memcpy(array->elements + i * stride, &child, sizeof(child));
+            array->length = i + 1;
         }
     } else {
         /* Both extents were bounded above. Only initialized scalar elements
@@ -228,6 +229,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_repeat_create(XrtManagedFrame *fra
             XrtManagedHeader *child = &fill->value.string->managed;
             if (!xrt_managed_retain(child)) { status = XRT_MANAGED_REFCOUNT; break; }
             memcpy(array->elements + i * stride, &child, sizeof(child));
+            array->length = i + 1;
         } else array_store_scalar(array->elements + i * stride, fill);
     }
     if (status == XRT_MANAGED_OK) array->length = (size_t)count;

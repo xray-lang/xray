@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   Failed construction leaves its installed owners in the pending allocation
- *   for the common capacity-based iterative walker to retire.
+ *   for the common iterative ownership walker to retire.
  */
 #include "xnative_array_backing.h"
 #include "base/xchecks.h"
@@ -37,6 +37,7 @@ static XrtManagedStatus array_fill(XrtArrayBacking *array, ArrayInput input, siz
             XrtManagedHeader *child = input.copy ? array_child(input.copy, i) : &strings[i]->managed;
             if (!xrt_managed_retain(child)) return XRT_MANAGED_REFCOUNT;
             memcpy(array->elements + i * stride, &child, sizeof(child));
+            array->length = i + 1;
         }
     }
     return XRT_MANAGED_OK;

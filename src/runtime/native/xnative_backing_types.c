@@ -38,9 +38,10 @@ static bool backing_types_empty(const XrtBackingTypes *types) {
     return true;
 }
 static XrtManagedStatus backing_bind(XrtBillingOwner *billing, XrtRuntimeTypeSpec spec,
-    XrtManagedOps **output) {
+    size_t length_offset, XrtManagedOps **output) {
     XrtRuntimeTypePlan *plan = NULL;
-    XrtManagedStatus status = xrt_runtime_type_plan_new(billing, &spec, &plan);
+    XrtManagedStatus status = length_offset == SIZE_MAX ? xrt_runtime_type_plan_new(billing, &spec, &plan) :
+        xrt_runtime_type_plan_new_owned_prefix(billing, &spec, length_offset, &plan);
     if (status == XRT_MANAGED_OK) status = xrt_managed_ops_bind(billing, plan, output);
     xrt_runtime_type_plan_drop(plan);
     return status;
@@ -59,7 +60,7 @@ XR_FUNCDEF XrtManagedStatus xrt_backing_types_init(XrtBillingOwner *billing, Xrt
     XrtBackingTypes types = {0};
     XrtRuntimeTypeSpec spec = {.fixed_size=sizeof(XrtStringBacking), .alignment=alignof(XrtStringBacking),
         .capacity_offset=offsetof(XrtStringBacking, capacity), .stride=1};
-    XrtManagedStatus status = backing_bind(billing, spec, &types.string);
+    XrtManagedStatus status = backing_bind(billing, spec, SIZE_MAX, &types.string);
     size_t tail = 0;
     for (size_t i = 0; status == XRT_MANAGED_OK && i < XRT_BACKING_ARRAY_COUNT; ++i) {
         spec = (XrtRuntimeTypeSpec){.fixed_size=sizeof(XrtArrayBacking), .alignment=alignof(XrtArrayBacking),
@@ -67,18 +68,19 @@ XR_FUNCDEF XrtManagedStatus xrt_backing_types_init(XrtBillingOwner *billing, Xrt
             .tail_child_offsets=i == XRT_BACKING_ARRAY_STRING ? &tail : NULL,
             .tail_child_count=i == XRT_BACKING_ARRAY_STRING ? 1 : 0,
             .code={(void *)&array_plan_families[i],array_family_retain,array_family_drop}};
-        status = backing_bind(billing, spec, &types.arrays[i]);
+        size_t length_offset = i == XRT_BACKING_ARRAY_STRING ? offsetof(XrtArrayBacking,length) : SIZE_MAX;
+        status = backing_bind(billing, spec, length_offset, &types.arrays[i]);
     }
     if (status == XRT_MANAGED_OK) {
         spec = (XrtRuntimeTypeSpec){.fixed_size=sizeof(XrtMapBacking), .alignment=alignof(XrtMapBacking),
             .capacity_offset=offsetof(XrtMapBacking, capacity), .stride=sizeof(XrtMapBackingRow),
             .tail_child_offsets=&tail, .tail_child_count=1};
-        status = backing_bind(billing, spec, &types.map);
+        status = backing_bind(billing, spec, SIZE_MAX, &types.map);
     }
     if (status == XRT_MANAGED_OK) {
         spec = (XrtRuntimeTypeSpec){.fixed_size=sizeof(XrtSetBacking), .alignment=alignof(XrtSetBacking),
             .capacity_offset=offsetof(XrtSetBacking,capacity), .stride=sizeof(XrtSetBackingRow)};
-        status = backing_bind(billing,spec,&types.set);
+        status = backing_bind(billing,spec,SIZE_MAX,&types.set);
     }
     if (status != XRT_MANAGED_OK) { xrt_backing_types_drop(&types); return status; }
     XR_CHECK(types.string && types.arrays[XRT_BACKING_ARRAY_STRING] && types.map && types.set,
