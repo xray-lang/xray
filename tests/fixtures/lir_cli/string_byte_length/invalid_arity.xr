@@ -1,0 +1,5 @@
+fn lenBytes(s: string) -> i64 {
+    return len(s.bytes(0))
+}
+
+print(lenBytes("x"))

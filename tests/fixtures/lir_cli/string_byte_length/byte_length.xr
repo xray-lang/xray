@@ -1,0 +1,21 @@
+fn lenBytes(s: string) -> i64 {
+    return len(s.bytes())
+}
+
+fn sample() -> string {
+    print(9)
+    return "中\0\u{1F600}"
+}
+
+fn currentLength() -> i64 {
+    var s = "x"
+    const first = len(s.bytes())
+    s += "中"
+    return first + len(s.bytes())
+}
+
+print(lenBytes(""))
+print(lenBytes("A中\0\u{1F600}"))
+print(len("A中\0\u{1F600}"))
+print(len(sample().bytes()))
+print(currentLength())

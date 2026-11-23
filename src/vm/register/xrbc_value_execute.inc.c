@@ -1472,16 +1472,18 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
                 destination.address[0] = 1;
             }
         }
-    } else if (access.operation==XR_RBC_VALUE_STRING_PRINT || access.operation==XR_RBC_VALUE_STRING_LENGTH) {
+    } else if (access.operation==XR_RBC_VALUE_STRING_PRINT || access.operation==XR_RBC_VALUE_STRING_LENGTH ||
+        access.operation==XR_RBC_VALUE_STRING_BYTE_LENGTH) {
         const XrtStringBacking *string=NULL;
         status=rbc_value_string_borrow(activation,access.source,&string);
         if (status==XRT_MANAGED_OK && access.operation==XR_RBC_VALUE_STRING_PRINT)
             xrt_print_string(string->bytes,string->length,source);
         else if (status==XRT_MANAGED_OK) {
             XrRbcRegister *output=rbc_value_register(stack,activation,access.result);
+            size_t length = access.operation == XR_RBC_VALUE_STRING_BYTE_LENGTH ? string->length : string->runes;
             if (!output) status=XRT_MANAGED_ARGUMENT;
-            else if (string->runes>INT64_MAX) status=XRT_MANAGED_OVERFLOW;
-            else output->bits=(uint64_t)string->runes;
+            else if (length>INT64_MAX) status=XRT_MANAGED_OVERFLOW;
+            else output->bits=(uint64_t)length;
         }
     } else if (access.operation==XR_RBC_VALUE_STRING_EQUAL || access.operation==XR_RBC_VALUE_STRING_NOT_EQUAL) {
         const XrtStringBacking *left=NULL,*right=NULL;

@@ -1,0 +1,8 @@
+fn lenBytes(s: string) -> i64 {
+    var root = s
+    const all: Slice<u8> = root.bytes()
+    root = "replacement"
+    return len(all)
+}
+
+print(lenBytes("x"))

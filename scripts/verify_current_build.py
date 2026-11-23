@@ -22,6 +22,7 @@ REQUIRED = (
     # Preserve written Bool/String evaluation order, retained messages and real
     # callsite locations through valid LIR and Source on both execution backends.
     "lir_assertion", "test_lir_cli_assertions",
+    "test_lir_cli_string_byte_length",
     "test_lir_cli_host_path", "test_lir_cli_host_file_write",
     # Cross-module ownership and capability transport need real native execution.
     "test_lir_state", "native_module_state_owner", "test_lir_cli_module_state",

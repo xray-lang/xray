@@ -1,0 +1,8 @@
+import { writeFile } from io
+import path
+
+fn run() {
+    print(writeFile(path.from("whole-utf8.bin"), "中\0B\r\n"))
+}
+
+run()

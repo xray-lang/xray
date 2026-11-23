@@ -78,6 +78,7 @@ static bool lower_view_cleanup(LowerFunction *f, uint32_t block, const XrXirInst
     for (uint32_t n = 0; n < op->args[1]; ++n) {
         uint32_t ordinal = f->source->operands[op->args[0] + n];
         if (ordinal >= f->value_count) return lower_unsupported(f->owner, "Slice cleanup source ordinal");
+        if (lower_byte_length_elided_view(lower_byte_length_plan(f->owner), f->source, ordinal)) continue;
         if (ordinal >= f->source->parameter_count && f->value_blocks && f->value_blocks[ordinal] == UINT32_MAX) continue;
         XrLirType element = lower_slice_element(f->owner, xr_xir_operand_type(f->source, ordinal));
         if (!element) return lower_unsupported(f->owner, "Slice cleanup requires a natural readonly Array loan");
@@ -149,6 +150,17 @@ static bool lower_view_instruction(LowerFunction *f, uint32_t block, uint32_t in
     Lower *c = f->owner; const XrXirInstruction *op = &f->source->instructions[index];
     uint32_t result = f->source->parameter_count + index;
     *handled = false;
+    const LowerByteLength *byte_lengths = lower_byte_length_plan(c);
+    if (byte_lengths && byte_lengths[index].omit) { *handled = true; return true; }
+    if (byte_lengths && byte_lengths[index].consumer) {
+        *handled = true;
+        XrLirValue text;
+        if (!lower_value(f, byte_lengths[index].receiver, &text)) return false;
+        XrLirInstruction length = {.op=XR_LIR_STRING_BYTE_LEN,.type=XR_LIR_I64,
+            .operands=&text,.operand_count=1,.source=lower_source(c)};
+        uint32_t consumer = f->source->parameter_count + byte_lengths[index].consumer - 1;
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &length, &f->values[consumer]));
+    }
     if (op->op == XR_XIR_VIEW_CLEANUP) { *handled = true; return lower_view_cleanup(f, block, op); }
     if (!lower_view_local(f, block, index, handled)) return false;
     if (*handled) return true;

@@ -34,6 +34,13 @@ add_test(NAME test_lir_cli_assertions
 set_tests_properties(test_lir_cli_assertions PROPERTIES
     TIMEOUT 180 PROCESSORS 1 RUN_SERIAL TRUE LABELS "cli;lir;native;ownership")
 
+add_test(NAME test_lir_cli_string_byte_length
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_string_byte_length.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --output ${PROJECT_BINARY_DIR}/lir-cli-string-byte-length)
+set_tests_properties(test_lir_cli_string_byte_length PROPERTIES
+    TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
+
 add_test(NAME test_lir_cli_host_path
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_host_path.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}

@@ -34,5 +34,10 @@
     "stdout_utf8": "true\n",
     "seed_hex": {"whole-bytes.bin": "6f6c6420636f6e74656e7473"},
     "final_hex": {"whole-bytes.bin": "000d0a7f80ff"}
+  },
+  "io_write_file_utf8": {
+    "stdout_utf8": "true\n",
+    "seed_hex": {"whole-utf8.bin": "6f6c6420636f6e74656e7473"},
+    "final_hex": {"whole-utf8.bin": "e4b8ad00420d0a"}
   }
 }

@@ -404,7 +404,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 (shape == XR_NATIVE_HOST_FILE_WRITE_BYTES && b == XR_LIR_ARRAY &&
                     f->values[v->operands[1] - 1].array_element == XR_LIR_U8);
         }
-        case XR_LIR_STRING_LEN:
+        case XR_LIR_STRING_LEN: case XR_LIR_STRING_BYTE_LEN:
             return v->type == XR_LIR_I64 && a == XR_LIR_STRING;
         case XR_LIR_I64_TRY_PARSE: {
             XrLirTypeView shape;

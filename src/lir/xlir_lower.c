@@ -39,6 +39,11 @@
 #include <string.h>
 
 typedef struct LowerRecordFrame LowerRecordFrame;
+typedef struct LowerByteLength {
+    uint32_t consumer, receiver;
+    uint8_t uses;
+    bool omit;
+} LowerByteLength;
 typedef struct Lower {
     const XrLirLowerRequest *request;
     const XrXirModule *source;
@@ -49,6 +54,7 @@ typedef struct Lower {
     XrXirType *class_types;
     XrLirType *closure_types;
     uint8_t **owned_bindings;
+    LowerByteLength **byte_lengths;
     XrLirType owned_i64_cell, owned_map_cell;
     XrLirFunction *functions, print, print_string, clocks[4];
     uint8_t *active;
@@ -1126,7 +1132,11 @@ static bool lower_float_width_operation(XrXirOp op) {
         return false;
     }
 }
+#include "xlir_lower_string_length.inc.c"
+
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
+    const LowerByteLength *byte_lengths = lower_byte_length_plan(c);
+    if (byte_lengths && (byte_lengths[c->instruction].omit || byte_lengths[c->instruction].consumer)) return true;
     if (!lower_known(op->op))
         return lower_unsupported(c, xr_xir_op_name(op->op));
     if (lower_width_arithmetic(op->op) && lower_narrow_scalar(op->type))
@@ -1146,10 +1156,11 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             return lower_unsupported(c, "conversion from a subclass to its parent class");
     }
     const XrXirTypeNode *view = xr_xir_type_node(c->source->types, op->type);
-    if ((view && view->kind == XR_XIR_TYPE_SLICE) || (op->op == XR_XIR_VIEW_CLEANUP && op->args[1])) {
-        c->views = true;
-        c->arrays = true;
-    }
+    if (view && view->kind == XR_XIR_TYPE_SLICE) c->views = c->arrays = true;
+    if (op->op == XR_XIR_VIEW_CLEANUP)
+        for (uint32_t p = 0; p < op->args[1]; ++p)
+            if (!lower_byte_length_elided_view(byte_lengths, f, f->operands[op->args[0] + p]))
+                c->views = c->arrays = true;
     if (op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_SLOT_INIT ||
         op->op == XR_XIR_SLOT_PLACE) {
         const XrXirDeclarations *d = c->source->declarations;
@@ -1384,6 +1395,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         uint32_t field;
         return lower_host_abi(c, function, &field) != XR_NATIVE_HOST_NONE || lower_unsupported(c, "function without a scalar body");
     }
+    if (!lower_byte_lengths(c, f)) return false;
     uint8_t *seen = lower_alloc(c, f->block_count, 1);
     uint32_t *queue = lower_alloc(c, f->block_count, sizeof(*queue));
     if (!seen || !queue) {
@@ -3122,6 +3134,10 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     xr_lir_module_destroy(c.module);
     xr_free(c.functions);
     xr_free(c.closure_types);
+    if (c.byte_lengths) {
+        for (uint32_t f = 0; f < source->function_count; ++f) xr_free(c.byte_lengths[f]);
+        xr_free(c.byte_lengths);
+    }
     if (c.owned_bindings) {
         for (uint32_t f = 0; f < source->function_count; ++f) xr_free(c.owned_bindings[f]);
         xr_free(c.owned_bindings);

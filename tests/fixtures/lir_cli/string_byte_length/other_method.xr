@@ -1,0 +1,9 @@
+final class ByteProvider {
+    init() {}
+    bytes() -> Array<u8> {
+        print(9)
+        return [5 as u8, 0 as u8]
+    }
+}
+
+print(len(ByteProvider().bytes()))
