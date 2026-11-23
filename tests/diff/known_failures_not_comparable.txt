@@ -239,7 +239,6 @@ tests/diff/cases/semantics/modules/value_struct_return_release.xr  # function wi
 tests/diff/cases/semantics/modules/xmod_class.xr  # error: method declaration contract is not admitted
 tests/diff/cases/semantics/modules/xmod_coro.xr  # GO is not supported by LIR lowering yet
 tests/diff/cases/semantics/modules/xmod_dead_net_helper.xr  # error: name is not an initialized value
-tests/diff/cases/semantics/modules/xmod_default_arg_class.xr  # CLASS_SET is not supported by LIR lowering yet
 tests/diff/cases/semantics/modules/xmod_inherit.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/modules/xmod_inherit_lib_subclass.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/modules/xmod_namespace_generic.xr  # error: closure parameter requires an annotation or complete callable context
