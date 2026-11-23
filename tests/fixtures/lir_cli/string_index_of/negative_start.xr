@@ -1,0 +1,16 @@
+fn receiver() -> string {
+    print("receiver")
+    return "é\u{1F600}"
+}
+
+fn needle() -> string {
+    print("needle")
+    return ""
+}
+
+fn start() -> i64 {
+    print("start")
+    return -1
+}
+
+print(receiver().indexOf(needle(), start()))

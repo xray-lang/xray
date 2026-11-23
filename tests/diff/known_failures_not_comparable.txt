@@ -471,7 +471,6 @@ tests/diff/cases/semantics/string/char_scalar.xr  # error: scalar method require
 tests/diff/cases/semantics/string/interpolation_display_shapes.xr  # error: value has no admitted builtin display
 tests/diff/cases/semantics/string/multiconcat.xr  # error: null requires an exact nullable context
 tests/diff/cases/semantics/string/rune_string_conversion.xr  # CONST_RUNE is not supported by LIR lowering yet
-tests/diff/cases/semantics/string/string_indexof_start_shared_core.xr  # STRING_INDEX_OF is not supported by LIR lowering yet
 tests/diff/cases/semantics/string/string_surface_declared_methods.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/string/template_nested_quotes.xr  # module slot payload type is not supported by LIR lowering yet
 tests/diff/cases/semantics/string/unicode_escape.xr  # GENERATOR_NEW is not supported by LIR lowering yet

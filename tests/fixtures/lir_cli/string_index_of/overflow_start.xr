@@ -1,0 +1,7 @@
+fn find(text: string, start: i64) -> i64 {
+    return text.indexOf("", start)
+}
+
+print("before")
+print(find("é\u{1F600}", 9223372036854775807))
+print("after")

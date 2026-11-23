@@ -1,0 +1,42 @@
+fn receiver(value: string) -> string {
+    print("receiver")
+    return value
+}
+
+fn pattern(value: ref string, needle: string) -> string {
+    print("needle")
+    value = "changed receiver"
+    return needle
+}
+
+fn start(needle: ref string) -> i64 {
+    print("start")
+    needle = "changed needle"
+    return 1
+}
+
+fn snapshots() {
+    var value = "A中中"
+    var needle = "中"
+    print(receiver(value).indexOf(pattern(ref value, needle), start(ref needle)))
+    print(value)
+    print(needle)
+    value = "A中中"
+    needle = "中"
+    print(value.indexOf(pattern(ref value, needle), start(ref needle)))
+}
+
+const text = "Aé中\u{1F600}\0中e\u{0301}"
+print(text.indexOf("中"))
+print(text.indexOf("中", 3))
+print(text.indexOf("\u{1F600}\0中"))
+print(text.indexOf("\0"))
+print(text.indexOf("e\u{0301}"))
+print(text.indexOf("é", 2))
+print(text.indexOf("\u{0301}"))
+print(text.indexOf("", len(text)))
+print(text.indexOf("中", len(text)))
+print(text.indexOf("", 2))
+print("".indexOf(""))
+print("".indexOf("x"))
+snapshots()

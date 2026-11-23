@@ -593,7 +593,7 @@ static bool lower_known(const XrXirInstruction *instruction) {
         case XR_XIR_COPY:
         case XR_XIR_TO_STRING:
         case XR_XIR_CONCAT_STRING:
-        case XR_XIR_STRING_LEN: case XR_XIR_I64_TRY_PARSE:
+        case XR_XIR_STRING_LEN: case XR_XIR_STRING_INDEX_OF: case XR_XIR_I64_TRY_PARSE:
         case XR_XIR_ADD_INT:
         case XR_XIR_SUB_INT:
         case XR_XIR_MUL_INT:
@@ -1055,6 +1055,7 @@ static uint8_t *lower_literal_uses(Lower *c, const XrXirFunction *f) {
         const XrXirInstruction *op = &f->instructions[i];
         if (!lower_known(op)) continue;
         if (op->op == XR_XIR_CALL || op->op == XR_XIR_CALL_INTRINSIC || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI ||
+            op->op == XR_XIR_STRING_INDEX_OF ||
             op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET ||
             op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT) {
@@ -2279,6 +2280,17 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         XrLirInstruction slice = {.op=operation, .type=XR_LIR_STRING,
             .operands=args, .operand_count=3, .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &slice, &f->values[result]));
+    }
+    if (op->op == XR_XIR_STRING_INDEX_OF) {
+        if (op->args[1] != 3 || op->args[0] > f->source->operand_count ||
+            op->args[1] > f->source->operand_count - op->args[0])
+            return lower_unsupported(c, "invalid String indexOf operand range");
+        XrLirValue args[3] = {{0}};
+        for (uint32_t a = 0; a < 3; ++a)
+            if (!lower_value(f, f->source->operands[op->args[0] + a], &args[a])) return false;
+        XrLirInstruction search = {.op=XR_LIR_STRING_INDEX_OF, .type=XR_LIR_I64,
+            .operands=args, .operand_count=3, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &search, &f->values[result]));
     }
     if (op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_I64_TRY_PARSE) {
         XrLirValue input = {0};

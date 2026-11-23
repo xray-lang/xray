@@ -481,6 +481,10 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_STRING_PRINT: access.operation = XR_RBC_VALUE_STRING_PRINT; break;
     case XR_LIR_STRING_LEN: access.operation = XR_RBC_VALUE_STRING_LENGTH; break;
     case XR_LIR_STRING_BYTE_LEN: access.operation = XR_RBC_VALUE_STRING_BYTE_LENGTH; break;
+    case XR_LIR_STRING_INDEX_OF:
+        access.operation = XR_RBC_VALUE_STRING_INDEX_OF;
+        access.index = i->operands[2];
+        break;
     case XR_LIR_HOST_PATH_BOOL:
         access.operation = XR_RBC_VALUE_HOST_PATH_BOOL;
         access.index = (uint32_t)i->bits;

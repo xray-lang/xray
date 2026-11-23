@@ -136,6 +136,9 @@ XRAY_API void xrt_native_string_f64_create(XrtManagedFrame *, size_t slot,
 /* Parse the complete UTF-8 byte span of a live admitted String borrow.
  * Success writes the scalar. Invalid syntax or range leaves output unchanged. */
 XRAY_API bool xrt_native_string_try_parse_i64(const XrtStringBacking *, int64_t *output);
+/* Search live String borrows from a rune ordinal and return a rune ordinal or -1. */
+XRAY_API int64_t xrt_native_string_index_of(const XrtStringBacking *, const XrtStringBacking *,
+    int64_t start, uint32_t source_id);
 /* Inputs are live admitted String borrows, including aliases. The destination
  * slot is empty. Publication preserves both input objects and their owners. */
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
