@@ -120,6 +120,18 @@ static void file_sync_close_refused(XrOsFileOwner *owner) {
 
 static void file_sync_execute(XrOsPathSpan path, const FileNativePath *native,
     const uint8_t *expected, size_t length) {
+#if defined(XR_OS_WINDOWS)
+    CHECK(owned_file_sync_open_error(ERROR_DISK_FULL) == XR_OS_IO_OK);
+    CHECK(owned_file_sync_open_error(ERROR_HANDLE_DISK_FULL) == XR_OS_IO_OK);
+    CHECK(owned_file_sync_open_error(ERROR_DISK_QUOTA_EXCEEDED) == XR_OS_IO_OK);
+    CHECK(owned_file_sync_open_error(ERROR_OUTOFMEMORY) == XR_OS_IO_OUT_OF_MEMORY);
+#else
+    CHECK(owned_file_open_error(ENOSPC) == XR_OS_IO_OK);
+#if defined(EDQUOT)
+    CHECK(owned_file_open_error(EDQUOT) == XR_OS_IO_OK);
+#endif
+    CHECK(owned_file_open_error(ENOMEM) == XR_OS_IO_OUT_OF_MEMORY);
+#endif
     XrOsIoPolicy memory = {&file_live, file_memory, file_memory_free};
     XrOsFileOwner owner = {0};
     bool opened = false;

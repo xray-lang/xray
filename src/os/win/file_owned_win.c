@@ -138,6 +138,13 @@ static HANDLE owned_file_open(const wchar_t *path, XrOsFileAction action, bool a
     return CreateFileW(path, access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
         creation, FILE_ATTRIBUTE_NORMAL, NULL);
 }
+static XrOsIoStatus owned_file_sync_open_error(DWORD error) {
+    if (error == ERROR_DISK_FULL || error == ERROR_HANDLE_DISK_FULL || error == ERROR_DISK_QUOTA_EXCEEDED)
+        return XR_OS_IO_OK;
+    XrOsFileProgress result = {0};
+    owned_file_result_error(&result, error, true);
+    return result.status;
+}
 
 XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
     XrOsPathSpan path, bool append, XrOsFileOwner *owner, bool *opened) {
@@ -160,12 +167,7 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
             file->synchronous = true;
             owner->state = file;
         } else {
-            DWORD error = GetLastError();
-            if (error != ERROR_DISK_FULL && error != ERROR_HANDLE_DISK_FULL) {
-                XrOsFileProgress result = {0};
-                owned_file_result_error(&result, error, true);
-                status = result.status;
-            }
+            status = owned_file_sync_open_error(GetLastError());
             memory->free(memory->context, file);
         }
     }
