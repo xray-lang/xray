@@ -160,6 +160,7 @@ typedef struct XrLirFunctionView {
     uint32_t callable_parameter_count;
     uint32_t scope_count;
     XrLirType error;
+    uint32_t initializer_module; /* One-based module ordinal for a typed initializer. */
 } XrLirFunctionView;
 typedef struct XrLirBlockView {
     const uint32_t *parameters;
@@ -199,6 +200,7 @@ XR_FUNC XrLirStatus xr_lir_intrinsic_at(const XrLirModule *, uint32_t ordinal, X
 XR_FUNC XrLirStatus xr_lir_intrinsic_view(const XrLirModule *, uint32_t id, XrLirIntrinsic *);
 XR_FUNC XrLirStatus xr_lir_function_at(const XrLirModule *, uint32_t ordinal, XrLirFunction *);
 XR_FUNC XrLirStatus xr_lir_function_view(const XrLirModule *, XrLirFunction, XrLirFunctionView *);
+XR_FUNC XrLirStatus xr_lir_startup_entry(const XrLirModule *, XrLirFunction *, uint32_t *module_count);
 XR_FUNC XrLirStatus xr_lir_block_at(const XrLirModule *, XrLirFunction, uint32_t ordinal,
                                     XrLirBlock *);
 XR_FUNC XrLirStatus xr_lir_block_view(const XrLirModule *, XrLirBlock, XrLirBlockView *);

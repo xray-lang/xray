@@ -90,7 +90,8 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
         XrLirFunctionSpec spec = {.name = view.name, .name_length = view.name_length,
             .parameters = view.parameter_types, .parameter_count = view.parameter_count,
             .result = view.result, .kind = view.kind, .extern_kind = view.extern_kind, .error = view.error,
-            .callable_parameters=view.callable_parameters, .callable_parameter_count=view.callable_parameter_count};
+            .callable_parameters=view.callable_parameters, .callable_parameter_count=view.callable_parameter_count,
+            .initializer_module=view.initializer_module};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[function.id]);
         if (status == XR_LIR_OK)
             status = lir_copy_array_signature(c->input, function, c->functions[function.id]);
@@ -101,6 +102,10 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
     XrLirFunction entry;
     XrLirStatus status = xr_lir_state_entry(c->input, &entry);
     if (status == XR_LIR_OK && entry.id) status = xr_lir_set_state_entry(c->output, c->functions[entry.id]);
+    uint32_t module_count;
+    if (status == XR_LIR_OK) status = xr_lir_startup_entry(c->input, &entry, &module_count);
+    if (status == XR_LIR_OK && entry.id)
+        status = xr_lir_set_startup_entry(c->output, c->functions[entry.id], module_count);
     if (status == XR_LIR_OK) status = xr_lir_internal_slice_effects_copy(c->output, c->input, c->functions, count);
     return status;
 }

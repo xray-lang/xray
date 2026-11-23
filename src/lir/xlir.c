@@ -348,6 +348,9 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
     XrLirRecordIdentity error = {0};
     if (spec->error && (spec->kind != XR_LIR_FUNCTION_DEFINITION || lir_pod_scalar(spec->result) >= XR_POD_SCALAR_COUNT ||
         !xr_lir_error_sum_identity(m,spec->error,&error))) return false;
+    if (spec->initializer_module && (!spec->error || spec->result != XR_LIR_UNIT ||
+        spec->parameter_count > 1 || (spec->parameter_count && spec->parameters[0] != XR_LIR_STATE)))
+        return false;
     if (!xr_lir_internal_callable_parameters_valid(m, spec->parameters, spec->parameter_count,
         spec->callable_parameters, spec->callable_parameter_count, true)) return false;
     for (uint32_t p = 0; p < spec->parameter_count; ++p)
@@ -385,6 +388,7 @@ static bool lir_signature_copy(XrLirModule *m, const XrLirFunctionSpec *spec,
     f->parameter_count = spec->parameter_count;
     f->result = spec->result;
     f->error = spec->error;
+    f->initializer_module = spec->initializer_module;
     f->kind = spec->kind;
     f->extern_kind = spec->extern_kind;
     if (!f->parameter_count)
@@ -529,6 +533,21 @@ XR_FUNC XrLirStatus xr_lir_block_parameter(XrLirModule *m, XrLirBlock handle, ui
     if (!output || !f || ordinal >= f->blocks[handle.id - 1].parameter_count)
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     *output = (XrLirValue) {m, handle.function, f->blocks[handle.id - 1].parameters[ordinal]};
+    return XR_LIR_OK;
+}
+
+XR_FUNC XrLirStatus xr_lir_set_startup_entry(XrLirModule *m, XrLirFunction handle, uint32_t module_count) {
+    XrLirStatus status = lir_writable(m);
+    if (status != XR_LIR_OK)
+        return status;
+    XrLirFunctionData *f = lir_function(m, handle);
+    if (!f || m->startup_entry || !module_count || f->kind != XR_LIR_FUNCTION_DEFINITION ||
+        f->error || f->parameter_count != (uint32_t)m->state_layout_set ||
+        (m->state_layout_set && (f->parameter_types[0] != XR_LIR_STATE ||
+            m->state_entry != handle.id || m->state_layout.module_count != module_count)))
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    m->startup_entry = handle.id;
+    m->startup_module_count = module_count;
     return XR_LIR_OK;
 }
 
@@ -907,9 +926,19 @@ XR_FUNC XrLirStatus xr_lir_function_view(const XrLirModule *m, XrLirFunction han
                                 f->parameters,  f->parameter_count, f->block_count,
                                 f->value_count, f->entry,           f->result,
                                 f->kind,        f->extern_kind,
-                                f->callable_parameters, f->callable_parameter_count, f->scope_count, f->error};
+                                f->callable_parameters, f->callable_parameter_count, f->scope_count, f->error,
+                                f->initializer_module};
     return XR_LIR_OK;
 }
+XR_FUNC XrLirStatus xr_lir_startup_entry(const XrLirModule *m, XrLirFunction *out, uint32_t *module_count) {
+    if (out) *out = (XrLirFunction){0};
+    if (module_count) *module_count = 0;
+    if (!out || !module_count || !lir_readable(m)) return XR_LIR_INVALID_ARGUMENT;
+    if (m->startup_entry) *out = (XrLirFunction){m, m->startup_entry};
+    *module_count = m->startup_module_count;
+    return XR_LIR_OK;
+}
+
 XR_FUNC XrLirStatus xr_lir_block_at(const XrLirModule *m, XrLirFunction handle, uint32_t ordinal,
                                     XrLirBlock *out) {
     if (out)

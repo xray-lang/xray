@@ -33,6 +33,7 @@ typedef struct XrLirFunctionSpec {
     const XrLirFunctionCallableParameter *callable_parameters;
     uint32_t callable_parameter_count;
     XrLirType error;
+    uint32_t initializer_module; /* One-based module ordinal for a typed initializer. */
 } XrLirFunctionSpec;
 typedef struct XrLirEdge {
     XrLirBlock target;
@@ -74,6 +75,7 @@ XR_FUNC XrLirStatus xr_lir_add_block(XrLirModule *, XrLirFunction, const XrLirTy
 XR_FUNC XrLirStatus xr_lir_block_parameter(XrLirModule *, XrLirBlock, uint32_t ordinal,
                                            XrLirValue *);
 XR_FUNC XrLirStatus xr_lir_set_entry(XrLirModule *, XrLirFunction, XrLirBlock);
+XR_FUNC XrLirStatus xr_lir_set_startup_entry(XrLirModule *, XrLirFunction, uint32_t module_count);
 XR_FUNC XrLirStatus xr_lir_emit_value(XrLirModule *, XrLirBlock, const XrLirInstruction *,
                                       XrLirValue *);
 XR_FUNC XrLirStatus xr_lir_emit_effect(XrLirModule *, XrLirBlock, const XrLirInstruction *);

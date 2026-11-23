@@ -76,6 +76,7 @@ typedef struct XrLirFunctionData {
     XrLirType result;
     XrLirType array_result;
     XrLirType error;
+    uint32_t initializer_module;
     XrLirClosureTarget closure;
     XrLirFunctionCallableParameter *callable_parameters;
     uint32_t callable_parameter_count;
@@ -135,6 +136,7 @@ struct XrLirModule {
     bool finished;
     XrLirStateLayout state_layout;
     uint32_t state_entry;
+    uint32_t startup_entry, startup_module_count;
     bool state_layout_set;
     XrLirCallableFacts *callable_facts;
     XrLirSliceFacts *slice_facts;

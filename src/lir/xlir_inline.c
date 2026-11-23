@@ -221,7 +221,8 @@ static XrLirStatus inline_declarations(Inliner *c) {
         XrLirFunctionSpec spec = {.name = v->name, .name_length = v->name_length,
             .parameters = v->parameter_types, .parameter_count = v->parameter_count,
             .result = v->result, .kind = v->kind, .extern_kind = v->extern_kind, .error = v->error,
-            .callable_parameters=v->callable_parameters, .callable_parameter_count=v->callable_parameter_count};
+            .callable_parameters=v->callable_parameters, .callable_parameter_count=v->callable_parameter_count,
+            .initializer_module=v->initializer_module};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[f + 1]);
         if (status == XR_LIR_OK) status = lir_copy_array_signature(c->input,
             (XrLirFunction){c->input, f + 1}, c->functions[f + 1]);
@@ -232,6 +233,10 @@ static XrLirStatus inline_declarations(Inliner *c) {
     XrLirFunction entry;
     XrLirStatus status = xr_lir_state_entry(c->input, &entry);
     if (status == XR_LIR_OK && entry.id) status = xr_lir_set_state_entry(c->output, c->functions[entry.id]);
+    uint32_t module_count;
+    if (status == XR_LIR_OK) status = xr_lir_startup_entry(c->input, &entry, &module_count);
+    if (status == XR_LIR_OK && entry.id)
+        status = xr_lir_set_startup_entry(c->output, c->functions[entry.id], module_count);
     if (status == XR_LIR_OK) status = xr_lir_internal_slice_effects_copy(c->output, c->input, c->functions, c->count);
     return status;
 }
