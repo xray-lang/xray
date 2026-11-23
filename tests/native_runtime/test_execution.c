@@ -11,6 +11,7 @@
  *   dispatch. No standalone global is supplied to satisfy this executable.
  */
 #include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_array_backing.h"
 #include "runtime/native/xnative_host_file.h"
 #include "runtime/native/xnative_host_io.h"
 #include "runtime/native/xnative_values.h"
@@ -264,6 +265,123 @@ static void check_file_read_bytes(XrtManagedFrame *frame, size_t slot, const uin
     CHECK(!length || !memcmp(array->elements, bytes, length));
 }
 
+typedef struct HostFileReadPublicationCall {
+    const char *path;
+    const uint8_t *bytes;
+    size_t length;
+} HostFileReadPublicationCall;
+
+static void host_file_read_publication(void *context) {
+    const HostFileReadPublicationCall *call = context;
+    enum { READER, OPEN_STAGE, RESULT, READ_STAGE, PATH, MISSING, SLOT_COUNT };
+    const size_t owner_offset = offsetof(XrtHostFileOptional, owner);
+    const size_t homes[] = {0, sizeof(XrtHostFileOptional), 2 * sizeof(XrtHostFileOptional),
+        3 * sizeof(XrtHostFileOptional)};
+    const size_t offsets[] = {homes[0] + owner_offset, homes[1] + owner_offset, homes[2] + owner_offset,
+        homes[3] + owner_offset, SIZE_MAX, SIZE_MAX};
+    const XrtManagedFrameSpec spec = {SLOT_COUNT, 4 * sizeof(XrtHostFileOptional), _Alignof(XrtHostFileOptional), offsets};
+    XrtManagedRoot *root = xrt_native_managed_root(1);
+    XrtValueRoot *execution = xrt_value_root_current(1);
+    XrtBillingOwner *billing = NULL;
+    const XrtBackingTypes *backings = NULL;
+    managed_require(xrt_native_values_prepare(execution, &billing));
+    managed_require(xrt_native_values_backings(execution, &backings));
+    XrtValueImagePlans *plans = NULL;
+    XrtBoundClass binding = {0};
+    managed_require(xrt_value_image_bind(billing, &host_file_image, (XrtManagedLease){0}, &plans));
+    managed_require(xrt_value_image_class(plans, 2, &binding));
+    XrtManagedFrame *frame = NULL;
+    void *payload = NULL;
+    managed_require(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload));
+    uint8_t *open_tag = (uint8_t *)payload + homes[0], *tag = (uint8_t *)payload + homes[2];
+    managed_require(xrt_string_backing_create(frame, PATH, backings, call->path, strlen(call->path), 0));
+    const XrtStringBacking *path = (const XrtStringBacking *)host_file_borrow(frame, PATH);
+    const XrtHostFileStagedResult opened_home = {{frame, READER, OPEN_STAGE, homes[0]}, offsets[OPEN_STAGE]};
+    const XrtHostFileStagedResult read_home = {{frame, RESULT, READ_STAGE, homes[2]}, offsets[READ_STAGE]};
+    XrtHostFileOpen opened = xrt_host_file_open_read_publish(&opened_home, binding, path, 1);
+    CHECK(opened.managed == XRT_MANAGED_OK && opened.host == XR_OS_IO_OK && opened.opened && *open_tag == 1);
+    const XrtManagedHeader *reader = host_file_borrow(frame, READER);
+    CHECK(reader && !host_file_borrow(frame, OPEN_STAGE));
+
+    managed_require(xrt_array_backing_i64_create(frame, RESULT, backings, NULL, 0, 0));
+    const XrtManagedHeader *wrong_family = host_file_borrow(frame, RESULT);
+    *tag = 1;
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    XrtHostFileRead rejected = xrt_host_file_read_publish(&read_home, binding, reader, backings, 1, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT && *tag == 1 && host_file_borrow(frame, RESULT) == wrong_family);
+    CHECK(xrt_billing_owner_stats(billing).allocations == before.allocations);
+    managed_require(xrt_managed_slot_drop(frame, RESULT));
+    rejected = xrt_host_file_read_publish(&read_home, binding, reader, backings, 1, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT && *tag == 1 && !host_file_borrow(frame, RESULT));
+    *tag = 2;
+    rejected = xrt_host_file_read_publish(&read_home, binding, reader, backings, 1, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT && *tag == 2);
+    *tag = 0;
+
+    const XrtHostFileStagedResult owner_as_tag = {{frame, RESULT, READ_STAGE, offsets[RESULT]}, offsets[READ_STAGE]};
+    rejected = xrt_host_file_read_publish(&owner_as_tag, binding, reader, backings, 1, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT);
+    const XrtHostFileStagedResult wrong_stage = {read_home.location, offsets[OPEN_STAGE]};
+    rejected = xrt_host_file_read_publish(&wrong_stage, binding, reader, backings, 1, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT);
+    const XrtHostFileStagedResult aliased_home = {{frame, RESULT, RESULT, homes[2]}, offsets[RESULT]};
+    rejected = xrt_host_file_read_publish(&aliased_home, binding, reader, backings, 1, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT);
+
+    XrtManagedRoot *other_root = NULL;
+    XrtManagedFrame *other_frame = NULL;
+    managed_require(xrt_managed_root_new(billing, &other_root));
+    managed_require(xrt_managed_frame_enter_layout(other_root, &spec, &other_frame));
+    const XrtHostFileStagedResult foreign_home = {{other_frame, RESULT, READ_STAGE, homes[2]}, offsets[READ_STAGE]};
+    rejected = xrt_host_file_read_publish(&foreign_home, binding, reader, backings, 1, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT);
+    managed_require(xrt_managed_frame_leave(other_root, other_frame));
+    managed_require(xrt_managed_root_destroy(&other_root));
+
+    managed_require(xrt_array_backing_u8_create(frame, READ_STAGE, backings, NULL, 0, 0));
+    const XrtManagedHeader *occupied = host_file_borrow(frame, READ_STAGE);
+    rejected = xrt_host_file_read_publish(&read_home, binding, reader, backings, 1, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT && *tag == 0 && host_file_borrow(frame, READ_STAGE) == occupied);
+    managed_require(xrt_managed_slot_drop(frame, READ_STAGE));
+    XrtManagedHeader *pending = NULL;
+    managed_require(xrt_managed_slot_prepare(frame, READ_STAGE, backings->arrays[XRT_BACKING_ARRAY_U8],
+        sizeof(XrtArrayBacking), &pending));
+    rejected = xrt_host_file_read_publish(&read_home, binding, reader, backings, 1, 1);
+    CHECK(rejected.managed == XRT_MANAGED_ARGUMENT && *tag == 0);
+    managed_require(xrt_managed_slot_abort(frame, READ_STAGE));
+
+    /* All rejected homes left the real file at its original offset. */
+    check_file_read_result(xrt_host_file_read_publish(&read_home, binding, reader, backings, 2, 1), true);
+    CHECK(*tag == 1 && !host_file_borrow(frame, READ_STAGE));
+    check_file_read_bytes(frame, RESULT, call->bytes, 2, 2);
+    const XrtManagedHeader *prior = host_file_borrow(frame, RESULT);
+    xrt_billing_owner_fail_after(billing, 0);
+    rejected = xrt_host_file_read_publish(&read_home, binding, reader, backings, 8, 1);
+    CHECK(rejected.managed == XRT_MANAGED_OOM && *tag == 1 && host_file_borrow(frame, RESULT) == prior);
+    opened = xrt_host_file_open_read_publish(&opened_home, binding, path, 1);
+    CHECK(opened.managed == XRT_MANAGED_OOM && *open_tag == 1 && host_file_borrow(frame, READER) == reader);
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    check_file_read_result(xrt_host_file_read_publish(&read_home, binding, reader, backings, 8, 1), true);
+    CHECK(*tag == 1 && !host_file_borrow(frame, READ_STAGE));
+    check_file_read_bytes(frame, RESULT, call->bytes + 2, call->length - 2, 8);
+    check_file_read_result(xrt_host_file_read_publish(&read_home, binding, reader, backings, -1, 1), false);
+    CHECK(*tag == 0 && !host_file_borrow(frame, RESULT) && !host_file_borrow(frame, READ_STAGE));
+    check_file_read_result(xrt_host_file_read_publish(&read_home, binding, reader, backings, 8, 1), true);
+    CHECK(*tag == 1 && !host_file_borrow(frame, READ_STAGE));
+    check_file_read_bytes(frame, RESULT, NULL, 0, 8);
+
+    char missing[96];
+    int length = snprintf(missing, sizeof(missing), "%s/no-entry", call->path);
+    CHECK(length > 0 && (size_t)length < sizeof(missing));
+    managed_require(xrt_string_backing_create(frame, MISSING, backings, missing, (size_t)length, 0));
+    const XrtStringBacking *missing_path = (const XrtStringBacking *)host_file_borrow(frame, MISSING);
+    opened = xrt_host_file_open_read_publish(&opened_home, binding, missing_path, 1);
+    CHECK(opened.managed == XRT_MANAGED_OK && opened.host == XR_OS_IO_OK && !opened.opened && *open_tag == 0);
+    CHECK(!host_file_borrow(frame, READER) && !host_file_borrow(frame, OPEN_STAGE));
+    managed_require(xrt_managed_frame_leave(root, frame));
+    xrt_value_image_drop(&plans);
+}
+
 static void managed_host_file_read(void) {
     enum { PATH, READER, WRITER, RESULT, DIRECTORY_PATH, DIRECTORY, SLOT_COUNT };
     const uint8_t bytes[] = {0, 127, 128, 255, 10};
@@ -363,6 +481,14 @@ static void managed_host_file_read(void) {
     xrt_value_image_drop(&plans);
     CHECK(xrt_billing_owner_stats(billing).blocks == 1);
     xrt_billing_owner_drop(billing);
+    HostFileReadPublicationCall publication = {path, bytes, sizeof(bytes)};
+    XrtLocationOwner *owner = locations("host-file-read.xr");
+    XrtValueRoot execution = {0};
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded_owned(owner, &failure, host_file_read_publication, &publication, &execution) ==
+        XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&execution));
+    xrt_locations_release(owner);
     CHECK(remove(path) == 0);
 }
 
