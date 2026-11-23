@@ -120,9 +120,8 @@ static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcSta
                 if (!item) return XRT_MANAGED_ARGUMENT;
                 status=xrt_native_values_backings(xrt_value_root_current(source),&types);
                 const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window-1];
-                const XrtArrayUpdate update={XRT_ARRAY_UPDATE_PUSH,0,{XRT_BACKING_ARRAY_I64,{.i64=(int64_t)item->bits}}};
-                return status==XRT_MANAGED_OK ? xrt_class_array_field_update(&field_access,
-                    activation->frame,workspace->first_owner,types,&update) : status;
+                return status==XRT_MANAGED_OK ? xrt_class_array_field_push(&field_access,
+                    activation->frame,workspace->first_owner,types,(int64_t)item->bits) : status;
             }
             if (class_write) {
                 const XrLirValueHome *incoming_home=rbc_value_home(activation->code,access.other);

@@ -276,7 +276,7 @@ static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField
             (field.flags & ~(XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED|XR_LIR_RECORD_MUTABLE)) ||
             ((field.flags & (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) == (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) ||
             field.type >= XR_LIR_TYPE_COUNT + earlier ||
-            (field.type == XR_LIR_ARRAY ? field.array_element != XR_LIR_I64 :
+            (field.type == XR_LIR_ARRAY ? !xr_lir_class_array_element_supported(field.array_element) :
                 field.array_element || !(field.type == XR_LIR_STRING || field.type == XR_LIR_I64 ||
                     field.type == XR_LIR_I1 || field.type == XR_LIR_F64 ||
                     xr_lir_inline_aggregate_type(m, field.type)))) return false;

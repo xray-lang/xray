@@ -1,0 +1,10 @@
+final class ByteCollector {
+    private buffer: Array<u8>
+
+    init() { this.buffer = [1 as u8] }
+
+    replace(data: Array<i64>) { this.buffer = data }
+}
+
+var collector = ByteCollector()
+collector.replace([2])

@@ -439,7 +439,8 @@ static void fill_composite(const XrLirModule *module, const XrLirValueLayouts *s
         XrtValuePlanSpec child;
         XR_CHECK(xrt_value_plan_view(plan, &child) == XRT_MANAGED_OK && align_size(&offset, child.alignment),
             "record offsets were checked before scratch allocation");
-        uint32_t flags = child.kind == XRT_VALUE_ARRAY_I64 && (fields[f].flags & XR_LIR_RECORD_MUTABLE) ?
+        uint32_t flags = fields[f].type == XR_LIR_ARRAY && xr_lir_class_array_element_supported(fields[f].array_element) &&
+            (fields[f].flags & XR_LIR_RECORD_MUTABLE) ?
             XRT_VALUE_FIELD_MUTABLE : 0;
         slots[f] = (XrtValueSlotSpec){plan, offset, fields[f].name, fields[f].name_length, flags};
         for (size_t i = 0; i < child.owned_count; ++i) owned[leaves++] = offset + child.owned_offsets[i];

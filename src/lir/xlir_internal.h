@@ -31,6 +31,10 @@
 enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_REPEAT + 3) };
 
+static inline bool xr_lir_class_array_element_supported(XrLirType element) {
+    return element == XR_LIR_I64 || element == XR_LIR_U8;
+}
+
 typedef struct XrLirValueData {
     XrLirType type;
     uint32_t block, instruction;

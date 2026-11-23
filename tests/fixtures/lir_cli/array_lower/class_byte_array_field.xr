@@ -1,0 +1,35 @@
+final class ByteCollector {
+    private buffer: Array<u8>
+
+    init() {
+        this.buffer = [1 as u8]
+        this.buffer.push(2 as u8)
+    }
+
+    append(data: Slice<u8>) -> i64 {
+        var chunk: Array<u8> = copy data[:]
+        var count = len(chunk)
+        for (var i = 0; i < count; i++) { this.buffer.push(chunk[i]) }
+        return count
+    }
+
+    bytes() -> Array<u8> { return this.buffer }
+
+    replace(data: Array<u8>) { this.buffer = data }
+}
+
+fn example() {
+    var collector = ByteCollector()
+    var snapshot = collector.bytes()
+    print(collector.append(snapshot[:]))
+    var result = collector.bytes()
+    print(len(snapshot))
+    print(len(result))
+    print(result[2])
+    print(result[3])
+    collector.replace([255 as u8])
+    print(collector.bytes()[0])
+    print(len(result))
+}
+
+example()

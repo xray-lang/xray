@@ -95,10 +95,17 @@ static bool managed_nullable(const XrtValuePlan *plan) {
     while (plan->view.kind == XRT_VALUE_NULLABLE) plan = plan->view.nullable.element;
     return plan->view.kind == XRT_VALUE_STRING || xrt_value_kind_has_fields(plan->view.kind);
 }
+static XrtBackingArrayKind class_array_kind(XrtValueKind kind) {
+    switch (kind) {
+    case XRT_VALUE_ARRAY_I64: return XRT_BACKING_ARRAY_I64;
+    case XRT_VALUE_ARRAY_U8: return XRT_BACKING_ARRAY_U8;
+    default: return XRT_BACKING_ARRAY_COUNT;
+    }
+}
 static bool record_field(const XrtValuePlan *plan) {
     XrtValueKind kind = plan->view.kind;
     return kind == XRT_VALUE_I64 || kind == XRT_VALUE_BOOL || kind == XRT_VALUE_F64 ||
-        kind == XRT_VALUE_STRING || kind == XRT_VALUE_ARRAY_I64 || xrt_value_kind_has_fields(kind) ||
+        kind == XRT_VALUE_STRING || class_array_kind(kind) != XRT_BACKING_ARRAY_COUNT || xrt_value_kind_has_fields(kind) ||
         (kind == XRT_VALUE_NULLABLE && managed_nullable(plan));
 }
 static bool capture_type(const XrtValuePlan *plan) {
@@ -119,7 +126,8 @@ static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *s
         if (!field.type || (record ? !record_field(field.type) || named != (field.name_length != 0) :
             !capture_type(field.type))) return false;
         const XrtValuePlanSpec *type = &field.type->view;
-        if (field.flags && (!named || field.flags != XRT_VALUE_FIELD_MUTABLE || type->kind != XRT_VALUE_ARRAY_I64))
+        if (field.flags && (!named || field.flags != XRT_VALUE_FIELD_MUTABLE ||
+            class_array_kind(type->kind) == XRT_BACKING_ARRAY_COUNT))
             return false;
         if (type->alignment > alignment) alignment = type->alignment;
         if (end > SIZE_MAX - (type->alignment - 1)) return false;
@@ -454,7 +462,8 @@ static void class_finish(void *context) {
 }
 static bool class_leaf_matches(XrtValueKind kind, const XrtManagedHeader *owner) {
     if (kind == XRT_VALUE_STRING) return owner != NULL;
-    return kind == XRT_VALUE_ARRAY_I64 && xrt_backing_array_matches(owner, XRT_BACKING_ARRAY_I64);
+    XrtBackingArrayKind array_kind = class_array_kind(kind);
+    return array_kind != XRT_BACKING_ARRAY_COUNT && xrt_backing_array_matches(owner, array_kind);
 }
 static const XrtValueSlotSpec *class_payload_field_at(const XrtValuePlanSpec *plan, size_t offset) {
     size_t first = 0, end = plan->field_count;
@@ -512,7 +521,7 @@ XR_FUNCDEF XrtManagedStatus xrt_class_create(XrtManagedFrame *frame, size_t slot
         const XrtValuePlanSpec *member = &field->type->view;
         if (!member->owned_count) continue;
         const unsigned char *bytes = (const unsigned char *)row + field->offset;
-        bool matched = member->kind == XRT_VALUE_STRING || member->kind == XRT_VALUE_ARRAY_I64 ?
+        bool matched = member->kind == XRT_VALUE_STRING || class_array_kind(member->kind) != XRT_BACKING_ARRAY_COUNT ?
             class_leaf_matches(member->kind, payload_child(bytes, 0)) : class_aggregate_owners_match(member, bytes);
         if (!matched) return XRT_MANAGED_ARGUMENT;
     }
@@ -536,24 +545,33 @@ XR_FUNCDEF XrtManagedStatus xrt_class_field_borrow(const XrtManagedHeader *owner
     *empty_payload = (const unsigned char *)(owner + 1) + row->fields[index].offset;
     return XRT_MANAGED_OK;
 }
-static XrtManagedStatus class_array_preflight(void *context, XrtPlaceAction action) {
+static XrtManagedStatus class_array_i64_preflight(void *context, XrtPlaceAction action) {
     (void)action;
     XrtManagedHeader *const *field = context;
     return xrt_backing_array_matches(*field, XRT_BACKING_ARRAY_I64) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
 }
+static XrtManagedStatus class_array_u8_preflight(void *context, XrtPlaceAction action) {
+    (void)action;
+    XrtManagedHeader *const *field = context;
+    return xrt_backing_array_matches(*field, XRT_BACKING_ARRAY_U8) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+}
 /* The admitted writable class is executor-confined. Its live receiver owns
  * both the field and its guard, including when another binding shares it. */
-XR_FUNCDEF XrtManagedStatus xrt_class_array_binding(const XrtClassFieldAccess *access, XrtExternalOwner *output) {
+XR_FUNCDEF XrtManagedStatus xrt_class_array_binding(const XrtClassFieldAccess *access, XrtExternalOwner *output,
+    XrtBackingArrayKind *kind) {
     if (!access || !output || !xrt_class_backing_matches(access->instance,access->plan)) return XRT_MANAGED_ARGUMENT;
     const XrtValuePlanSpec *row = &access->plan->view.element->view;
     if (access->index >= row->field_count) return XRT_MANAGED_BOUNDS;
     const XrtValueSlotSpec *field = &row->fields[access->index];
-    if (!(field->flags & XRT_VALUE_FIELD_MUTABLE)) return XRT_MANAGED_ARGUMENT;
+    XrtBackingArrayKind field_kind = class_array_kind(field->type->view.kind);
+    if (!(field->flags & XRT_VALUE_FIELD_MUTABLE) || field_kind == XRT_BACKING_ARRAY_COUNT) return XRT_MANAGED_ARGUMENT;
     unsigned char *payload = (unsigned char *)(access->instance + 1);
     XrtManagedHeader **slot = (XrtManagedHeader **)(payload + field->offset);
     bool *guards = (bool *)(payload + row->size);
     *output = (XrtExternalOwner){.owner=slot, .busy=&guards[access->index],
-        .preflight=class_array_preflight, .context=slot};
+        .preflight=field_kind == XRT_BACKING_ARRAY_U8 ? class_array_u8_preflight : class_array_i64_preflight,
+        .context=slot};
+    if (kind) *kind = field_kind;
     return XRT_MANAGED_OK;
 }
 static bool payload_valid(const XrtValuePlan *plan, const void *payload) {

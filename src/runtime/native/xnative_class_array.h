@@ -21,9 +21,9 @@ typedef struct XrtClassFieldAccess {
 } XrtClassFieldAccess;
 /* Called only by the synchronous transactions below. No owner contents may
  * be accessed before locking the actual instance field guard. */
-XR_FUNC XrtManagedStatus xrt_class_array_binding(const XrtClassFieldAccess *, XrtExternalOwner *);
+XR_FUNC XrtManagedStatus xrt_class_array_binding(const XrtClassFieldAccess *, XrtExternalOwner *, XrtBackingArrayKind *);
 XR_FUNC XrtManagedStatus xrt_class_array_field_copy(const XrtClassFieldAccess *, XrtManagedFrame *, size_t destination);
 XR_FUNC XrtManagedStatus xrt_class_array_field_replace(const XrtClassFieldAccess *, const XrtManagedHeader *incoming);
-XR_FUNC XrtManagedStatus xrt_class_array_field_update(const XrtClassFieldAccess *,
-    XrtManagedFrame *, size_t workspace, const XrtBackingTypes *, const XrtArrayUpdate *);
+XR_FUNC XrtManagedStatus xrt_class_array_field_push(const XrtClassFieldAccess *,
+    XrtManagedFrame *, size_t workspace, const XrtBackingTypes *, int64_t item);
 #endif // XNATIVE_CLASS_ARRAY_H

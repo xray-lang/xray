@@ -281,9 +281,8 @@ XRAY_API void xrt_native_class_array_field_push(const XrtNativeClassField *field
     XrtClassFieldAccess access=native_class_array_field(field,source);
     const XrtBackingTypes *types = NULL;
     XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source),&types);
-    const XrtArrayUpdate update = {XRT_ARRAY_UPDATE_PUSH,0,{XRT_BACKING_ARRAY_I64,{.i64=item}}};
     if (status == XRT_MANAGED_OK)
-        status = xrt_class_array_field_update(&access,frame,workspace,types,&update);
+        status = xrt_class_array_field_push(&access,frame,workspace,types,item);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
 }
 static XrtManagedStatus native_environment_type(struct XrtNativeValues *values,

@@ -345,11 +345,12 @@ static void class_arrays_keep_their_exact_backing(void) {
     CHECK(!memcmp(((const XrtArrayBacking *)kept)->elements,data,sizeof(data)));
     xrt_managed_drop(kept); CHECK(owner.audit.final==1);
 }
-static void class_array_update_failure_preserves_the_field(void) {
+static void class_array_update_failure_preserves_the_field(bool byte_array) {
     const size_t offset=0;
     const XrtValueImageSlot field={.type=1,.flags=XRT_VALUE_FIELD_MUTABLE,.name_length=5};
     const XrtValueImageType types[]={
-        {.kind=XRT_VALUE_ARRAY_I64,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
+        {.kind=byte_array ? XRT_VALUE_ARRAY_U8 : XRT_VALUE_ARRAY_I64,
+            .size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
         {.kind=XRT_VALUE_RECORD,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.field_count=1},
         {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=2}
     };
@@ -361,30 +362,43 @@ static void class_array_update_failure_preserves_the_field(void) {
     XrtBoundClass holder={0}; MANAGED(xrt_value_image_class(bound,3,&holder));
     XrtBackingTypes backings={0}; XrtManagedRoot *root=NULL; XrtManagedFrame *frame=NULL;
     MANAGED(xrt_backing_types_init(owner.billing,&backings));
-    MANAGED(xrt_managed_root_new(owner.billing,&root)); MANAGED(xrt_managed_frame_enter(root,5,&frame));
+    MANAGED(xrt_managed_root_new(owner.billing,&root)); MANAGED(xrt_managed_frame_enter(root,6,&frame));
     const int64_t item=3;
-    MANAGED(xrt_array_backing_i64_create(frame,0,&backings,&item,1,1));
-    XrtManagedHeader *old=NULL,*instance=NULL,*read=NULL,*work=NULL;
+    const uint8_t byte=3;
+    MANAGED(xrt_array_backing_i64_create(frame,byte_array ? 5 : 0,&backings,&item,1,1));
+    MANAGED(xrt_array_backing_u8_create(frame,byte_array ? 0 : 5,&backings,&byte,1,1));
+    XrtManagedHeader *old=NULL,*instance=NULL,*read=NULL,*work=NULL,*wrong=NULL;
     MANAGED(xrt_managed_slot_borrow(frame,0,&old));
+    MANAGED(xrt_managed_slot_borrow(frame,5,&wrong));
+    CHECK(xrt_class_create(frame,1,holder.ops,&wrong)==XRT_MANAGED_ARGUMENT);
     MANAGED(xrt_class_create(frame,1,holder.ops,&old));
     MANAGED(xrt_managed_slot_borrow(frame,1,&instance));
     const XrtClassFieldAccess access={instance,holder.plan,0};
     MANAGED(xrt_class_array_field_copy(&access,frame,2));
-    const XrtArrayUpdate update={XRT_ARRAY_UPDATE_PUSH,0,{XRT_BACKING_ARRAY_I64,{.i64=7}}};
+    const int64_t appended = byte_array ? UINT8_MAX : -7;
     XrtBillingStats before=xrt_billing_owner_stats(owner.billing);
+    CHECK(xrt_class_array_field_replace(&access,wrong)==XRT_MANAGED_ARGUMENT);
+    if (byte_array) {
+        CHECK(xrt_class_array_field_push(&access,frame,3,&backings,-1)==XRT_MANAGED_ARGUMENT);
+        CHECK(xrt_class_array_field_push(&access,frame,3,&backings,256)==XRT_MANAGED_ARGUMENT);
+    }
     xrt_billing_owner_fail_after(owner.billing,0);
-    CHECK(xrt_class_array_field_update(&access,frame,3,&backings,&update)==XRT_MANAGED_OOM);
+    CHECK(xrt_class_array_field_push(&access,frame,3,&backings,appended)==XRT_MANAGED_OOM);
     xrt_billing_owner_fail_after(owner.billing,SIZE_MAX);
     XrtBillingStats after=xrt_billing_owner_stats(owner.billing);
     CHECK(after.bytes==before.bytes && after.blocks==before.blocks);
     MANAGED(xrt_managed_slot_borrow(frame,3,&work)); CHECK(!work);
     MANAGED(xrt_class_array_field_copy(&access,frame,4));
     MANAGED(xrt_managed_slot_borrow(frame,4,&read)); CHECK(read==old);
-    MANAGED(xrt_class_array_field_update(&access,frame,3,&backings,&update));
+    MANAGED(xrt_class_array_field_push(&access,frame,3,&backings,appended));
     MANAGED(xrt_class_array_field_copy(&access,frame,4));
     read=NULL;
     MANAGED(xrt_managed_slot_borrow(frame,4,&read)); CHECK(read!=old);
     CHECK(((const XrtArrayBacking *)old)->length==1 && ((const XrtArrayBacking *)read)->length==2);
+    const uint8_t expected_bytes[]={3,UINT8_MAX};
+    const int64_t expected_i64[]={3,-7};
+    CHECK(!(byte_array ? memcmp(((const XrtArrayBacking *)read)->elements,expected_bytes,sizeof(expected_bytes)) :
+        memcmp(((const XrtArrayBacking *)read)->elements,expected_i64,sizeof(expected_i64))));
     MANAGED(xrt_class_array_field_replace(&access,old));
     MANAGED(xrt_class_array_field_copy(&access,frame,4));
     read=NULL;
@@ -505,7 +519,8 @@ static void nested_class_owners_are_checked_before_publication(void) {
 }
 int main(void) {
     class_arrays_keep_their_exact_backing();
-    class_array_update_failure_preserves_the_field();
+    class_array_update_failure_preserves_the_field(false);
+    class_array_update_failure_preserves_the_field(true);
     derived_classes_keep_concrete_identity();
     nested_class_owners_are_checked_before_publication();
     copied_names_and_real_values(); failures_and_empty(); deep_single_inventory(); rejects_forged_display_closure();

@@ -1087,7 +1087,7 @@ static bool lower_class_array_field(Lower *c, XrXirType type, uint64_t index) {
     uint32_t count;
     return xr_lir_class_payload(c->module,lower_type(c,type),&payload) &&
         xr_lir_aggregate_fields(c->module,payload,&fields,&count) == XR_LIR_OK && index < count &&
-        fields[index].type == XR_LIR_ARRAY && fields[index].array_element == XR_LIR_I64 &&
+        fields[index].type == XR_LIR_ARRAY && xr_lir_class_array_element_supported(fields[index].array_element) &&
         (fields[index].flags & XR_LIR_RECORD_MUTABLE);
 }
 

@@ -67,8 +67,9 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
         if (a.result || a.first || a.count || a.index>=type->field_count || !image->slots ||
             type->first_field>image->slot_count || type->field_count>image->slot_count-type->first_field) return false;
         const XrtValueImageSlot *field=&image->slots[type->first_field+a.index];
-        if (field->flags!=XRT_VALUE_FIELD_MUTABLE || !field->type || field->type>image->type_count ||
-            image->types[field->type-1].kind!=XRT_VALUE_ARRAY_I64) return false;
+        if (field->flags!=XRT_VALUE_FIELD_MUTABLE || !field->type || field->type>image->type_count) return false;
+        XrtValueKind kind=image->types[field->type-1].kind;
+        if (kind!=XRT_VALUE_ARRAY_I64 && kind!=XRT_VALUE_ARRAY_U8) return false;
         if (class_write) return !a.window && rbc_value_inline_operand(module,code,function,a.other,field->type,false);
         if (!a.window || a.window>code->homes->workspace_count || !code->homes->workspaces ||
             !rbc_value_scalar(code,function,a.other,XR_RBC_BITS)) return false;

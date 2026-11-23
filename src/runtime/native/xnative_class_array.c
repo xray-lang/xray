@@ -16,17 +16,18 @@
 XR_FUNCDEF XrtManagedStatus xrt_class_array_field_copy(const XrtClassFieldAccess *access,
     XrtManagedFrame *frame, size_t destination) {
     XrtExternalOwner field;
-    XrtManagedStatus status = xrt_class_array_binding(access,&field);
+    XrtManagedStatus status = xrt_class_array_binding(access,&field,NULL);
     if (status != XRT_MANAGED_OK) return status;
     return xrt_place_copy_replace((XrtPlace){.frame=frame,.slot=destination,.nulls=XRT_PLACE_NONNULL},
         (XrtPlace){.external=&field,.nulls=XRT_PLACE_NONNULL}, NULL);
 }
 XR_FUNCDEF XrtManagedStatus xrt_class_array_field_replace(const XrtClassFieldAccess *access,
     const XrtManagedHeader *incoming) {
-    if (!xrt_backing_array_matches(incoming,XRT_BACKING_ARRAY_I64)) return XRT_MANAGED_ARGUMENT;
     XrtExternalOwner field;
-    XrtManagedStatus status = xrt_class_array_binding(access,&field);
+    XrtBackingArrayKind kind;
+    XrtManagedStatus status = xrt_class_array_binding(access,&field,&kind);
     if (status != XRT_MANAGED_OK) return status;
+    if (!xrt_backing_array_matches(incoming,kind)) return XRT_MANAGED_ARGUMENT;
     XrtManagedSlotLocation guard = {.busy=field.busy};
     status = xrt_managed_domain_enter(guard);
     if (status != XRT_MANAGED_OK) return status;
@@ -42,11 +43,17 @@ XR_FUNCDEF XrtManagedStatus xrt_class_array_field_replace(const XrtClassFieldAcc
     xrt_managed_domain_leave(guard);
     return status;
 }
-XR_FUNCDEF XrtManagedStatus xrt_class_array_field_update(const XrtClassFieldAccess *access,
-    XrtManagedFrame *frame, size_t workspace, const XrtBackingTypes *types, const XrtArrayUpdate *update) {
+XR_FUNCDEF XrtManagedStatus xrt_class_array_field_push(const XrtClassFieldAccess *access,
+    XrtManagedFrame *frame, size_t workspace, const XrtBackingTypes *types, int64_t item) {
     XrtExternalOwner field;
-    XrtManagedStatus status = xrt_class_array_binding(access,&field);
+    XrtBackingArrayKind kind;
+    XrtManagedStatus status = xrt_class_array_binding(access,&field,&kind);
     if (status != XRT_MANAGED_OK) return status;
+    XrtArrayUpdate update = {.operation=XRT_ARRAY_UPDATE_PUSH,.item={.kind=kind}};
+    if (kind == XRT_BACKING_ARRAY_U8) {
+        if (item < 0 || item > UINT8_MAX) return XRT_MANAGED_ARGUMENT;
+        update.item.value.u8 = (uint8_t)item;
+    } else update.item.value.i64 = item;
     return xrt_array_update_place((XrtPlace){.external=&field,.nulls=XRT_PLACE_NONNULL},
-        XRT_BACKING_ARRAY_I64, frame, workspace, types, update);
+        kind, frame, workspace, types, &update);
 }
