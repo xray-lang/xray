@@ -161,6 +161,7 @@ def main():
     parser.add_argument('--msvc-runtime', default='MultiThreaded')
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--asan', action='store_true')
+    parser.add_argument('--line-tables-only', action='store_true')
     args = parser.parse_args()
     args.work.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='array-native-', dir=args.work))
@@ -244,7 +245,9 @@ def main():
             command = [args.compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-pedantic',
                        '-I' + str(args.include), client, *archive_link_arguments(args.library, driver=args.kind), '-lm', '-pthread', '-o', binary]
             command += ['-Wl,-dead_strip' if platform.system() == 'Darwin' else '-Wl,--gc-sections']
-            if args.asan: command += ['-fsanitize=address,undefined', '-g']
+            if args.asan:
+                debug = '-gline-tables-only' if args.line_tables_only else '-g'
+                command += ['-fsanitize=address,undefined', debug]
         run(command, work)
         result = run([binary], work, 1 if answer is None else 0)
         if answer is None:
