@@ -382,6 +382,149 @@ static void host_file_read_publication(void *context) {
     xrt_value_image_drop(&plans);
 }
 
+enum {
+    READ_ABI_RECORD = 1, READ_ABI_FILE, READ_ABI_OTHER_FILE, READ_ABI_NULL_FILE, READ_ABI_NULL_OTHER,
+    READ_ABI_BYTES, READ_ABI_NULL_BYTES, READ_ABI_INTS, READ_ABI_NULL_INTS,
+};
+static const size_t file_read_abi_owned[] = {0, offsetof(XrtHostFileOptional, owner)};
+static const XrtValueImageType file_read_abi_types[] = {
+    {.kind=XRT_VALUE_RECORD,.size=1,.alignment=1},
+    {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=READ_ABI_RECORD,
+        .class_storage=XR_NATIVE_DECLARATION_FILE_STORAGE},
+    {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=READ_ABI_RECORD,
+        .class_storage=XR_NATIVE_DECLARATION_FILE_STORAGE},
+    {.kind=XRT_VALUE_NULLABLE,.size=sizeof(XrtHostFileOptional),.alignment=_Alignof(XrtHostFileOptional),
+        .first_owned=1,.owned_count=1,.nullable_element=READ_ABI_FILE,.nullable_payload=offsetof(XrtHostFileOptional, owner)},
+    {.kind=XRT_VALUE_NULLABLE,.size=sizeof(XrtHostFileOptional),.alignment=_Alignof(XrtHostFileOptional),
+        .first_owned=1,.owned_count=1,.nullable_element=READ_ABI_OTHER_FILE,.nullable_payload=offsetof(XrtHostFileOptional, owner)},
+    {.kind=XRT_VALUE_ARRAY_U8,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
+    {.kind=XRT_VALUE_NULLABLE,.size=sizeof(XrtHostFileOptional),.alignment=_Alignof(XrtHostFileOptional),
+        .first_owned=1,.owned_count=1,.nullable_element=READ_ABI_BYTES,.nullable_payload=offsetof(XrtHostFileOptional, owner)},
+    {.kind=XRT_VALUE_ARRAY_I64,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
+    {.kind=XRT_VALUE_NULLABLE,.size=sizeof(XrtHostFileOptional),.alignment=_Alignof(XrtHostFileOptional),
+        .first_owned=1,.owned_count=1,.nullable_element=READ_ABI_INTS,.nullable_payload=offsetof(XrtHostFileOptional, owner)},
+};
+static const XrtValueImage file_read_abi_image = {.types=file_read_abi_types,.type_count=READ_ABI_NULL_INTS,
+    .owned_offsets=file_read_abi_owned,.owned_count=2};
+enum { FILE_ABI_RESULT, FILE_ABI_STAGE, FILE_ABI_PATH, FILE_ABI_SLOTS };
+static const size_t file_read_abi_offsets[] = {offsetof(XrtHostFileOptional, owner),
+    sizeof(XrtHostFileOptional) + offsetof(XrtHostFileOptional, owner), SIZE_MAX};
+static const XrtManagedFrameSpec file_read_abi_frame = {
+    FILE_ABI_SLOTS, 2 * sizeof(XrtHostFileOptional), _Alignof(XrtHostFileOptional), file_read_abi_offsets};
+
+typedef enum HostFileReadAbiFault {
+    READ_ABI_OPEN_ID, READ_ABI_OPEN_PATH, READ_ABI_OPEN_RESULT,
+    READ_ABI_READ_ID, READ_ABI_READ_RESULT, READ_ABI_READ_FILE, READ_ABI_READ_STAGE, READ_ABI_READ_OOM,
+} HostFileReadAbiFault;
+typedef struct HostFileReadAbiCall {
+    XrtModuleState *state;
+    const XrtManagedHeader *reader, *path;
+    HostFileReadAbiFault fault;
+} HostFileReadAbiCall;
+
+static void host_file_read_abi_fault(void *context) {
+    const HostFileReadAbiCall *call = context;
+    XrtManagedRoot *root = xrt_native_managed_root(1);
+    XrtValueRoot *execution = xrt_value_root_current(1);
+    xrt_native_values_use_state(execution, call->state, &file_read_abi_image);
+    XrtManagedFrame *frame = NULL;
+    managed_require(xrt_managed_frame_enter_layout(root, &file_read_abi_frame, &frame));
+    XrtNativeFileResult output = {frame, FILE_ABI_RESULT, FILE_ABI_STAGE, 0};
+    size_t temporary = file_read_abi_offsets[FILE_ABI_STAGE];
+    if (call->fault <= READ_ABI_OPEN_RESULT) {
+        const XrtNativeFileOpenRead open = {
+            .output=output,.temporary_owner_offset=temporary,.image=&file_read_abi_image,.type=READ_ABI_FILE,
+            .result_type=call->fault == READ_ABI_OPEN_RESULT ? READ_ABI_NULL_OTHER : READ_ABI_NULL_FILE,
+            .path=call->fault == READ_ABI_OPEN_PATH ? call->reader : call->path,
+        };
+        uint32_t id = call->fault == READ_ABI_OPEN_ID ? XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE : XR_NATIVE_CALLABLE_IO_FILE_OPEN;
+        xrt_native_host_file_open_read(id, &open, 1);
+    } else {
+        if (call->fault == READ_ABI_READ_OOM) {
+            XrtBillingOwner *billing = NULL;
+            const XrtBackingTypes *types = NULL;
+            managed_require(xrt_native_values_prepare(execution, &billing));
+            managed_require(xrt_native_values_backings(execution, &types));
+            xrt_billing_owner_fail_after(billing, 0);
+        }
+        const XrtNativeFileRead read = {
+            .output=output,.temporary_owner_offset=call->fault == READ_ABI_READ_STAGE ? 0 : temporary,
+            .image=&file_read_abi_image,.type=call->fault == READ_ABI_READ_FILE ? READ_ABI_OTHER_FILE : READ_ABI_FILE,
+            .result_type=call->fault == READ_ABI_READ_RESULT ? READ_ABI_NULL_INTS : READ_ABI_NULL_BYTES,
+            .file=call->reader,.max_bytes=1,
+        };
+        uint32_t id = call->fault == READ_ABI_READ_ID ? XR_NATIVE_CALLABLE_IO_FILE_WRITE : XR_NATIVE_CALLABLE_IO_FILE_READ;
+        xrt_native_host_file_read(id, &read, 1);
+    }
+    CHECK(false);
+}
+
+static void host_file_read_native_abi(void *context) {
+    const HostFileReadPublicationCall *call = context;
+    XrtValueRoot *execution = xrt_value_root_current(1);
+    XrtManagedRoot *root = xrt_native_managed_root(1);
+    XrtBillingOwner *billing = NULL;
+    managed_require(xrt_native_values_prepare(execution, &billing));
+    const XrtModuleSpec module = {0};
+    const XrtModuleSlotSpec module_slot = {0, READ_ABI_FILE, 0, 0, sizeof(void *), _Alignof(void *)};
+    const XrtModuleLayoutSpec module_spec = {&file_read_abi_image, &module, 1, NULL, 0, &module_slot, 1,
+        sizeof(void *), _Alignof(void *)};
+    XrtModuleLayout *layout = NULL;
+    XrtModuleState *state = NULL;
+    managed_require(xrt_module_layout_new(billing, &module_spec, (XrtManagedLease){0}, &layout));
+    managed_require(xrt_module_state_new(layout, billing, &state));
+    xrt_module_layout_drop(&layout);
+    xrt_native_values_use_state(execution, state, &file_read_abi_image);
+
+    XrtManagedFrame *file_frame = NULL, *read_frame = NULL;
+    void *file_payload = NULL, *read_payload = NULL;
+    managed_require(xrt_managed_frame_enter_payload(root, &file_read_abi_frame, &file_frame, &file_payload));
+    xrt_native_string_create(file_frame, FILE_ABI_PATH, call->path, strlen(call->path), 1);
+    const XrtManagedHeader *path = host_file_borrow(file_frame, FILE_ABI_PATH);
+    size_t temporary = file_read_abi_offsets[FILE_ABI_STAGE];
+    const XrtNativeFileOpenRead open = {.output={file_frame, FILE_ABI_RESULT, FILE_ABI_STAGE, 0},
+        .temporary_owner_offset=temporary,.image=&file_read_abi_image,.type=READ_ABI_FILE,
+        .result_type=READ_ABI_NULL_FILE,.path=path};
+    xrt_native_host_file_open_read(XR_NATIVE_CALLABLE_IO_FILE_OPEN, &open, 1);
+    const XrtManagedHeader *reader = host_file_borrow(file_frame, FILE_ABI_RESULT);
+    CHECK(*(uint8_t *)file_payload == 1 && reader && !host_file_borrow(file_frame, FILE_ABI_STAGE));
+
+    XrtLocationOwner *location = locations("file-read-abi-fault.xr");
+    for (HostFileReadAbiFault fault = READ_ABI_OPEN_ID; fault <= READ_ABI_READ_OOM; ++fault) {
+        HostFileReadAbiCall rejected = {state, reader, path, fault};
+        XrtExecutionFailure failure = {0};
+        XrtValueRoot inner = {0};
+        CHECK(xrt_run_embedded_owned(location, &failure, host_file_read_abi_fault, &rejected, &inner) ==
+            XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.source_id == 1 &&
+            failure.detail.value.status == (fault == READ_ABI_READ_OOM ? XR_XIR_VALUE_OOM : XR_XIR_VALUE_BAD_ARGUMENT));
+        CHECK(xrt_value_root_empty(&inner));
+    }
+    xrt_locations_release(location);
+
+    /* The nested failures borrow this same live reader and leave its cursor in place. */
+    managed_require(xrt_managed_frame_enter_payload(root, &file_read_abi_frame, &read_frame, &read_payload));
+    XrtNativeFileRead read = {.output={read_frame, FILE_ABI_RESULT, FILE_ABI_STAGE, 0},
+        .temporary_owner_offset=temporary,.image=&file_read_abi_image,.type=READ_ABI_FILE,
+        .result_type=READ_ABI_NULL_BYTES,.file=reader,.max_bytes=2};
+    xrt_native_host_file_read(XR_NATIVE_CALLABLE_IO_FILE_READ, &read, 1);
+    CHECK(*(uint8_t *)read_payload == 1 && !host_file_borrow(read_frame, FILE_ABI_STAGE));
+    check_file_read_bytes(read_frame, FILE_ABI_RESULT, call->bytes, 2, 2);
+    read.max_bytes = 8;
+    xrt_native_host_file_read(XR_NATIVE_CALLABLE_IO_FILE_READ, &read, 1);
+    check_file_read_bytes(read_frame, FILE_ABI_RESULT, call->bytes + 2, call->length - 2, 8);
+    xrt_native_host_file_read(XR_NATIVE_CALLABLE_IO_FILE_READ, &read, 1);
+    CHECK(*(uint8_t *)read_payload == 1);
+    check_file_read_bytes(read_frame, FILE_ABI_RESULT, NULL, 0, 8);
+    CHECK(xrt_native_host_file_close(XR_NATIVE_CALLABLE_IO_FILE_CLOSE, &file_read_abi_image, READ_ABI_FILE, reader, 1));
+    xrt_native_host_file_read(XR_NATIVE_CALLABLE_IO_FILE_READ, &read, 1);
+    CHECK(*(uint8_t *)read_payload == 0 && !host_file_borrow(read_frame, FILE_ABI_RESULT));
+
+    managed_require(xrt_managed_frame_leave(root, read_frame));
+    managed_require(xrt_managed_frame_leave(root, file_frame));
+    xrt_module_state_drop(&state);
+}
+
 static void managed_host_file_read(void) {
     enum { PATH, READER, WRITER, RESULT, DIRECTORY_PATH, DIRECTORY, SLOT_COUNT };
     const uint8_t bytes[] = {0, 127, 128, 255, 10};
@@ -486,6 +629,9 @@ static void managed_host_file_read(void) {
     XrtValueRoot execution = {0};
     XrtExecutionFailure failure = {0};
     CHECK(xrt_run_embedded_owned(owner, &failure, host_file_read_publication, &publication, &execution) ==
+        XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&execution));
+    CHECK(xrt_run_embedded_owned(owner, &failure, host_file_read_native_abi, &publication, &execution) ==
         XRT_EXECUTION_COMPLETED);
     CHECK(xrt_value_root_empty(&execution));
     xrt_locations_release(owner);

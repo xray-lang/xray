@@ -79,6 +79,27 @@ typedef struct XrtNativeFileOpen {
 /* The verified receiver supplies two distinct owner slots and its Nullable
  * frame offset. The temporary must be truly empty. */
 XRAY_API void xrt_native_host_file_open_write(uint32_t callable, const XrtNativeFileOpen *, uint32_t source_id);
+typedef struct XrtNativeFileOpenRead {
+    XrtNativeFileResult output;
+    size_t temporary_owner_offset;
+    const XrtValueImage *image;
+    uint32_t type, result_type;
+    const XrtManagedHeader *path;
+} XrtNativeFileOpenRead;
+typedef struct XrtNativeFileRead {
+    XrtNativeFileResult output;
+    size_t temporary_owner_offset;
+    const XrtValueImage *image;
+    uint32_t type, result_type;
+    const XrtManagedHeader *file;
+    int64_t max_bytes;
+} XrtNativeFileRead;
+/* Types are the exact file class and Nullable result ids in the same image.
+ * The temporary owner offset is relative to the frame payload. Inputs are
+ * borrowed until return. A host refusal publishes None; EOF publishes an
+ * owned empty byte Array. Typed faults retire the active execution. */
+XRAY_API void xrt_native_host_file_open_read(uint32_t callable, const XrtNativeFileOpenRead *, uint32_t source_id);
+XRAY_API void xrt_native_host_file_read(uint32_t callable, const XrtNativeFileRead *, uint32_t source_id);
 XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage *, uint32_t type,
     const XrtManagedHeader *, uint32_t source_id);
 typedef struct XrtNativeFileWrite {
