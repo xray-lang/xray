@@ -19,6 +19,11 @@
     "stdout": "ordinary\n",
     "stderr": "[Uncaught Panic] E0420: division by zero\n"
   },
+  "discard": {
+    "exit": 0,
+    "stdout": "0\n1\n2\nfinished\n",
+    "stderr": ""
+  },
   "plain": {
     "exit": 1,
     "stdout": "界\u0000é🙂\nordinary\n",

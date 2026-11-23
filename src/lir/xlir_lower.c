@@ -3072,9 +3072,20 @@ static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstr
     }
     if (good) good=lower_invoke_forward(f,b,term->targets[0],produced,&forward.edges[0]);
     if (good && typed) {
-        for (uint32_t a=0;a<forward.edges[0].argument_count && good;++a)
-            if (lower_managed_type(c,lower_value_type(f,forward.edges[0].arguments[a])))
+        const XrXirBlock *landed=&f->source->blocks[term->targets[0]];
+        const XrXirInstruction *receiver=&f->source->instructions[landed->first];
+        if (result==XR_LIR_STRING && receiver->op==XR_XIR_INVOKE_DISCARD) {
+            XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,
+                .operands=&produced,.operand_count=1,.source=call.source};
+            good=lower_build(c,xr_lir_emit_effect(c->module,normal,&drop));
+        }
+        for (uint32_t a=0;a<forward.edges[0].argument_count && good;++a) {
+            XrLirValue value=forward.edges[0].arguments[a];
+            bool result_owner=a==0 && result==XR_LIR_STRING &&
+                receiver->op==XR_XIR_INVOKE_RESULT && value.id==produced.id;
+            if (!result_owner && lower_managed_type(c,lower_value_type(f,value)))
                 good=lower_unsupported(c,"managed state across invoke successor");
+        }
         if (good) good=lower_build(c,xr_lir_set_terminator(c->module,normal,&forward));
         if (good) {
             call.op=XR_LIR_INVOKE;

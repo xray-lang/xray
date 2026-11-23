@@ -1,0 +1,16 @@
+enum Failure { Bad { code: i64 } }
+fn prefix() -> string { return "hé\0" }
+fn produce(mark: i64) throws(Failure) -> string {
+    print(mark)
+    if (mark < 0) { throw Failure.Bad { code: mark } }
+    return prefix() + "界"
+}
+fn discard() {
+    var iteration = 0
+    while (iteration < 3) {
+        try! produce(iteration)
+        iteration += 1
+    }
+    print("finished")
+}
+discard()
