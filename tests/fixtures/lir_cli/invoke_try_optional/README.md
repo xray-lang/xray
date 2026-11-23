@@ -11,6 +11,8 @@ directory. Their error enums hold only scalar fields or a unit variant.
   existing value, and a null produced from a business failure.
 - `unit` uses distinct fallback markers to check that successful `Unit` skips
   its fallback and a business failure runs the other fallback once.
+- `state` preserves a live local scalar binding on both exits and checks the
+  selected fallible-call and fallback effects before reading that binding.
 - `panic` divides by zero during the throwing call. The ordinary panic keeps
   its root diagnostic and the fallback and following print stay unexecuted.
 - `redundant` pins E0336 for an ordinary call. `unparenthesized` pins the parser

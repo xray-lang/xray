@@ -1,0 +1,19 @@
+enum Failure { Bad }
+fn attempt(ok: bool) throws(Failure) -> i64 {
+    print(30)
+    if (!ok) { throw Failure.Bad }
+    print(31)
+    return 3
+}
+fn fallback() -> i64 {
+    print(40)
+    return 40
+}
+fn preserved(ok: bool, outer: i64) -> i64 {
+    var retained = outer
+    retained += 1
+    const result = try? attempt(ok)
+    return retained + (result ?? fallback())
+}
+print(preserved(false, 7))
+print(preserved(true, 7))

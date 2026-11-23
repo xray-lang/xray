@@ -921,9 +921,10 @@ static bool lir_optional_error_branch(const XrLirFunctionData *f,const XrLirBloc
     const XrLirInstructionView *branch) {
     if (failed->instruction_count!=1) return false;
     const XrLirBlockData *absent=&f->blocks[branch->edges[0].target-1];
+    if (absent->instruction_count!=2) return false;
     const XrLirInstructionView *none=&absent->instructions[0].view;
-    const XrLirInstructionView *join=lir_terminator(f,branch->edges[0].target-1);
-    return absent->instruction_count==2 && none->op==XR_LIR_NULLABLE_NONE && join->op==XR_LIR_BR &&
+    const XrLirInstructionView *join=&absent->instructions[1].view;
+    return none->op==XR_LIR_NULLABLE_NONE && join->op==XR_LIR_BR &&
         join->edges[0].argument_count && join->edges[0].arguments[0]==none->result;
 }
 
