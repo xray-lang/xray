@@ -1336,7 +1336,8 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
 }
 
 static bool lower_host_has_path(XrNativeHostShape shape) {
-    return shape == XR_NATIVE_HOST_PATH_BOOL || shape == XR_NATIVE_HOST_FILE_OPEN_WRITE;
+    return shape == XR_NATIVE_HOST_PATH_BOOL || shape == XR_NATIVE_HOST_FILE_OPEN_WRITE ||
+        shape == XR_NATIVE_HOST_FILE_OPEN_READ;
 }
 
 static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint32_t *field) {
@@ -2870,6 +2871,8 @@ static bool lower_host_function(Lower *c, uint32_t index) {
     switch (shape) {
     case XR_NATIVE_HOST_PATH_BOOL: operation = XR_LIR_HOST_PATH_BOOL; break;
     case XR_NATIVE_HOST_FILE_OPEN_WRITE: operation = XR_LIR_HOST_FILE_OPEN_WRITE; break;
+    case XR_NATIVE_HOST_FILE_OPEN_READ: operation = XR_LIR_HOST_FILE_OPEN_READ; break;
+    case XR_NATIVE_HOST_FILE_READ: operation = XR_LIR_HOST_FILE_READ; break;
     case XR_NATIVE_HOST_FILE_CLOSE: operation = XR_LIR_HOST_FILE_CLOSE; break;
     case XR_NATIVE_HOST_FILE_WRITE_BYTES: case XR_NATIVE_HOST_FILE_WRITE_STRING:
         operation = XR_LIR_HOST_FILE_WRITE; break;

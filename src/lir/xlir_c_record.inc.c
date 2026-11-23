@@ -15,10 +15,38 @@ static bool c_record_point(const XrLirInstructionView *v) {
         v->op == XR_LIR_CLASS_NEW || v->op == XR_LIR_CLASS_FIELD ||
         v->op == XR_LIR_CLASS_ADOPT ||
         v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE ||
+        v->op == XR_LIR_HOST_FILE_OPEN_READ || v->op == XR_LIR_HOST_FILE_READ ||
         v->op == XR_LIR_CLASS_SCALAR_WRITE || v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
 }
+static void c_host_file_read_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    bool open = v->op == XR_LIR_HOST_FILE_OPEN_READ;
+    const XrLirValueHome *home = &c->homes->values[v->result];
+    const XrtValueImage *image = xr_lir_value_image_view(c->value_image);
+    const XrtValueImageType *optional = &image->types[home->type - 1];
+    XR_CHECK(optional->kind == XRT_VALUE_NULLABLE && home->temporary_offset != SIZE_MAX &&
+        optional->nullable_payload <= SIZE_MAX - home->temporary_offset,
+        "verified file result has a stable nullable owner offset");
+    uint32_t file_type = open ? optional->nullable_element : c->homes->values[v->operands[0]].type;
+    c_values_ensure(c, source);
+    c_format(c, "    xrt_native_host_file_%s(UINT32_C(%" PRIu64 "), &(XrtNativeFile%s){"
+        ".output={xrl_frame, %zu, %zu, %zu}, .temporary_owner_offset=%zu, "
+        ".image=&xrl_value_image, .type=UINT32_C(%" PRIu32 "), .result_type=UINT32_C(%" PRIu32 "), "
+        ".%s=(const XrtManagedHeader *)", open ? "open_read" : "read", v->bits, open ? "OpenRead" : "Read",
+        home->first_owner, home->temporary_first_owner, home->offset,
+        home->temporary_offset + optional->nullable_payload, file_type, home->type, open ? "path" : "file");
+    c_value(c, v->operands[0]);
+    if (!open) {
+        c_text(c, ", .max_bytes=");
+        c_value(c, v->operands[1]);
+    }
+    c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
+}
 static void c_host_file_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_HOST_FILE_OPEN_READ || v->op == XR_LIR_HOST_FILE_READ) {
+        c_host_file_read_instruction(c, v, source);
+        return;
+    }
     if (v->op == XR_LIR_HOST_FILE_WRITE) {
         uint32_t type = c->homes->values[v->operands[0]].type;
         c_format(c, "    v%" PRIu32 " = xrt_native_host_file_write(UINT32_C(%" PRIu64
@@ -72,7 +100,8 @@ static void c_class_array_field(LirC *c, const XrLirInstructionView *v, uint32_t
     if (read) c_values_publish_leaf(c,v->result,source);
 }
 static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
-    if (v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE) {
+    if (v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE ||
+        v->op == XR_LIR_HOST_FILE_OPEN_READ || v->op == XR_LIR_HOST_FILE_READ) {
         c_host_file_instruction(c, v, source);
         return;
     }
