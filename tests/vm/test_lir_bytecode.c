@@ -197,7 +197,8 @@ static XrLirFunction test_throwing_leaf(XrLirModule *m, XrLirType error_type, Xr
     XrLirValue result=test_constant(m,leaf_ok,XR_LIR_I64,17);
     if (result_type!=XR_LIR_I64) {
         XrLirValue payload=result;
-        OK(xr_lir_emit_value(m,leaf_ok,&(XrLirInstruction){.op=XR_LIR_NULLABLE_SOME,.type=result_type,
+        XrLirOp op=result_type==XR_LIR_STRING ? XR_LIR_STRING_I64 : XR_LIR_NULLABLE_SOME;
+        OK(xr_lir_emit_value(m,leaf_ok,&(XrLirInstruction){.op=op,.type=result_type,
             .operands=&payload,.operand_count=1},&result));
     }
     test_return(m,leaf_ok,result);
@@ -401,6 +402,71 @@ static void test_unsupported_nullable_invoke_result(bool managed) {
     XrLirFunctionSpec spec={.name="leaf",.name_length=4,.result=optional,.error=error_type};
     CHECK(xr_lir_declare_function(m,&spec,&function)==XR_LIR_INVALID_ARGUMENT && !function.id);
     xr_lir_module_destroy(m);
+}
+
+static void test_owned_string_invoke_drop(void) {
+    XrLirModule *m=NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    XrLirLiteral metadata={0};
+    XrLirType error_type=test_nominal_error(m,&metadata),flag=XR_LIR_I1,text=XR_LIR_STRING;
+    XrLirFunction leaf=test_throwing_leaf(m,error_type,text);
+    XrLirFunction root=test_function(m,"discard_invoke_string",&flag,1,XR_LIR_I64);
+    XrLirBlock entry=test_block(m,root,NULL,0),ok=test_block(m,root,&text,1);
+    XrLirBlock error=test_block(m,root,&error_type,1);
+    OK(xr_lir_set_entry(m,root,entry));
+    XrLirValue fail=parameter(m,root,0);
+    OK(xr_lir_set_terminator(m,entry,&(XrLirInstruction){.op=XR_LIR_INVOKE,.type=text,.callee=leaf,
+        .operands=&fail,.operand_count=1,.edges={{.target=ok},{.target=error}},.edge_count=2}));
+    XrLirValue received=block_parameter(m,ok,0),length={0};
+    OK(xr_lir_emit_value(m,ok,&(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,
+        .operands=&received,.operand_count=1},&length));
+    OK(xr_lir_emit_effect(m,ok,&(XrLirInstruction){.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,
+        .operands=&received,.operand_count=1}));
+    test_return(m,ok,length);
+    XrLirValue thrown=block_parameter(m,error,0);
+    OK(xr_lir_set_terminator(m,error,&(XrLirInstruction){.op=XR_LIR_PANIC_ERROR,.type=XR_LIR_UNIT,
+        .operands=&thrown,.operand_count=1,.bits=metadata.id,.source={"drop.xr",7,1,1,1,5}}));
+    XrLirDiagnostic diagnostic={0};
+    XrLirStatus status=xr_lir_module_finish(m,&diagnostic);
+    if (status!=XR_LIR_OK) fprintf(stderr,"String INVOKE with drop: finish f%u b%u i%u status %u %s\n",
+        diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned)status,diagnostic.message);
+    CHECK(status==XR_LIR_OK);
+    XrRbcProgram *program=compile(m,root);
+    xr_lir_module_destroy(m);
+
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    bool landing=false,dropped=false;
+    for (uint32_t n=0;n<module->function_count;++n) {
+        const XrRbcValueCode *code=xr_rbc_module_value_code(module,n);
+        if (!code || !code->homes || code->homes->source_function!=root.id) continue;
+        CHECK(code->homes->values && received.id<=code->homes->value_count);
+        const XrLirValueHome *home=&code->homes->values[received.id];
+        CHECK(home->owner_count==1 && !home->parameter);
+        for (size_t k=0;k<code->access_count;++k) {
+            XrRbcValueAccess a=code->accesses[k];
+            landing|=a.operation==XR_RBC_VALUE_INVOKE_RESULT && a.result==received.id;
+            dropped|=a.operation==XR_RBC_VALUE_DROP && a.source==received.id;
+        }
+    }
+    CHECK(landing && dropped);
+    uint64_t argument=0;
+    CHECK(run(program,&argument,1)==2 && !xrt_value_root_active());
+    argument=1;
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,&argument,1,&execution)==XR_RBC_OK);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_TRY_ASSERT && !xrt_value_root_active());
+    const XrtErrorSnapshot *failure=xr_rbc_outcome_try_assert(outcome);
+    XrtTryAssertValue error_value={0};
+    CHECK(xrt_try_assert_value(failure,&error_value) && error_value.variant==1 && error_value.field_count==1 &&
+        error_value.metadata_size>=47 && xr_error_metadata_u32(error_value.metadata+4)==error_type &&
+        !memcmp(error_value.metadata+39,"ProbeErr",8));
+    uint32_t scalar=0;
+    uint64_t bits=0;
+    CHECK(xrt_try_assert_field(failure,0,&scalar,&bits) && scalar==XR_POD_I64 && bits==23);
+    xr_rbc_outcome_free(&outcome);
+    xr_rbc_program_destroy(program);
 }
 
 static void test_owned_startup_error(void) {
@@ -2003,6 +2069,7 @@ int main(void) {
     test_nullable_invoke_result();
     test_unsupported_nullable_invoke_result(false);
     test_unsupported_nullable_invoke_result(true);
+    test_owned_string_invoke_drop();
     test_owned_startup_error();
     test_integer_identity_cast(XR_LIR_I64, XR_LIR_I64);
     test_integer_identity_cast(XR_LIR_U64, XR_LIR_I64);
