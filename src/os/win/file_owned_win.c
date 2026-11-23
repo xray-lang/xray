@@ -35,6 +35,7 @@ struct OwnedFileState {
     XrOsFileOwner *anchor;
     XrOsIoPolicy memory;
     HANDLE handle;
+    XrOsFileAction action;
     bool opening, synchronous;
     OwnedFileOp *operations;
 };
@@ -60,9 +61,15 @@ static bool owned_file_memory_valid(const XrOsIoPolicy *memory) {
 static bool owned_file_current(const XrOsFileQuery *query) {
     return !query || query->current(query->context);
 }
-static OwnedFileState *owned_file_state(XrOsFileOwner *owner) {
+static OwnedFileState *owned_file_state(const XrOsFileOwner *owner) {
     OwnedFileState *state = owner ? owner->state : NULL;
     return state && state->anchor == owner ? state : NULL;
+}
+static OwnedFileState *owned_file_sync_state(const XrOsFileOwner *owner) {
+    OwnedFileState *file = owned_file_state(owner);
+    return file && !owner->busy && file->synchronous && !file->opening && !file->operations &&
+        file->handle && file->handle != INVALID_HANDLE_VALUE &&
+        (file->action == XR_OS_FILE_OPEN_READ || file->action == XR_OS_FILE_OPEN_WRITE) ? file : NULL;
 }
 static OwnedFileOp *owned_file_operation(XrOsFileOperation *operation) {
     OwnedFileOp *op = operation ? operation->state : NULL;
@@ -132,6 +139,17 @@ static void owned_file_result_error(XrOsFileProgress *result, DWORD error, bool 
         result->status = XR_OS_IO_OK;
 }
 
+static XrOsFileProgress owned_file_handle_result(BOOL okay, DWORD count, DWORD error, bool reading) {
+    XrOsFileProgress result = {.count=count};
+    if (okay || (reading && (error == ERROR_HANDLE_EOF || error == ERROR_BROKEN_PIPE))) {
+        result.success = true;
+    } else {
+        owned_file_result_error(&result, error, false);
+        result.success = result.status == XR_OS_IO_OK && count != 0;
+    }
+    return result;
+}
+
 static HANDLE owned_file_open(const wchar_t *path, XrOsFileAction action, bool append) {
     DWORD access = action == XR_OS_FILE_OPEN_READ ? GENERIC_READ : (append ? FILE_APPEND_DATA : GENERIC_WRITE);
     DWORD creation = action == XR_OS_FILE_OPEN_READ ? OPEN_EXISTING : (append ? OPEN_ALWAYS : CREATE_ALWAYS);
@@ -149,8 +167,8 @@ static XrOsIoStatus owned_file_sync_open_error(DWORD error) {
     return result.status;
 }
 
-XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
-    XrOsPathSpan path, bool append, XrOsFileOwner *owner, bool *opened) {
+static XrOsIoStatus owned_file_open_sync(const XrOsIoPolicy *memory, XrOsPathSpan path,
+    XrOsFileAction action, bool append, XrOsFileOwner *owner, bool *opened) {
     if (!owned_file_memory_valid(memory) || !path.text || !owner || owner->state || owner->busy || !opened)
         return XR_OS_IO_BAD_ARGUMENT;
     owner->busy = true;
@@ -162,11 +180,12 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
     if (status == XR_OS_IO_OK && !refused)
         status = owned_file_allocate(memory, sizeof(*file), _Alignof(OwnedFileState), (void **)&file);
     if (file) {
-        HANDLE handle = owned_file_open(wide, XR_OS_FILE_OPEN_WRITE, append);
+        HANDLE handle = owned_file_open(wide, action, append);
         if (handle != INVALID_HANDLE_VALUE) {
             file->anchor = owner;
             file->memory = *memory;
             file->handle = handle;
+            file->action = action;
             file->synchronous = true;
             owner->state = file;
         } else {
@@ -180,13 +199,46 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
     return status;
 }
 
+XR_FUNC XrOsIoStatus xr_os_io_file_open_read_sync(const XrOsIoPolicy *memory,
+    XrOsPathSpan path, XrOsFileOwner *owner, bool *opened) {
+    return owned_file_open_sync(memory, path, XR_OS_FILE_OPEN_READ, false, owner, opened);
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
+    XrOsPathSpan path, bool append, XrOsFileOwner *owner, bool *opened) {
+    return owned_file_open_sync(memory, path, XR_OS_FILE_OPEN_WRITE, append, owner, opened);
+}
+
+XR_FUNC bool xr_os_io_file_readable_sync(const XrOsFileOwner *owner) {
+    const OwnedFileState *file = owned_file_sync_state(owner);
+    return file && file->action == XR_OS_FILE_OPEN_READ;
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_file_read_sync(XrOsFileOwner *owner, uint8_t *bytes,
+    size_t capacity, size_t *received) {
+    const OwnedFileState *file = owned_file_sync_state(owner);
+    if (!file || !received || (capacity && !bytes)) return XR_OS_IO_BAD_ARGUMENT;
+    if (!capacity) { *received = 0; return XR_OS_IO_OK; }
+    if (file->action != XR_OS_FILE_OPEN_READ) return XR_OS_IO_IO;
+
+    owner->busy = true;
+    DWORD count = 0;
+    BOOL okay = ReadFile(file->handle, bytes, owned_file_transfer_length(capacity), &count, NULL);
+    DWORD error = okay ? ERROR_SUCCESS : GetLastError();
+    owner->busy = false;
+    XrOsFileProgress result = owned_file_handle_result(okay, count, error, true);
+    if (result.status != XR_OS_IO_OK) return result.status;
+    if (!result.success) return XR_OS_IO_IO;
+    *received = result.count;
+    return XR_OS_IO_OK;
+}
+
 XR_FUNC XrOsIoStatus xr_os_io_file_write_sync(XrOsFileOwner *owner, const uint8_t *bytes,
     size_t length, size_t *written) {
-    OwnedFileState *file = owned_file_state(owner);
-    if (!file || owner->busy || !file->synchronous || file->opening || file->operations ||
-        !file->handle || file->handle == INVALID_HANDLE_VALUE || !written || (length && !bytes))
-        return XR_OS_IO_BAD_ARGUMENT;
+    OwnedFileState *file = owned_file_sync_state(owner);
+    if (!file || !written || (length && !bytes)) return XR_OS_IO_BAD_ARGUMENT;
     if (!length) { *written = 0; return XR_OS_IO_OK; }
+    if (file->action != XR_OS_FILE_OPEN_WRITE) return XR_OS_IO_IO;
 
     owner->busy = true;
     DWORD count = 0;
@@ -268,23 +320,11 @@ static unsigned __stdcall owned_file_worker(void *context) {
         owned_file_stream_io(op);
     else {
         DWORD count = 0;
-        BOOL okay = op->action == XR_OS_FILE_READ
-                        ? ReadFile(op->duplicate, op->buffer, op->requested, &count, NULL)
-                        : WriteFile(op->duplicate, op->buffer, op->requested, &count, NULL);
-        op->result.count = count;
-        if (okay)
-            op->result.success = true;
-        else {
-            DWORD error = GetLastError();
-            if (op->action == XR_OS_FILE_READ &&
-                (error == ERROR_HANDLE_EOF || error == ERROR_BROKEN_PIPE))
-                op->result.success = true;
-            else {
-                owned_file_result_error(&op->result, error, false);
-                if (op->result.status == XR_OS_IO_OK && count)
-                    op->result.success = true;
-            }
-        }
+        bool reading = op->action == XR_OS_FILE_READ;
+        BOOL okay = reading ? ReadFile(op->duplicate, op->buffer, op->requested, &count, NULL)
+                            : WriteFile(op->duplicate, op->buffer, op->requested, &count, NULL);
+        DWORD error = okay ? ERROR_SUCCESS : GetLastError();
+        op->result = owned_file_handle_result(okay, count, error, reading);
     }
     atomic_store_explicit(&op->complete, true, memory_order_release);
     return 0;

@@ -19,10 +19,17 @@ typedef struct OwnedFileState {
     XrOsFileOwner *anchor;
     XrOsIoPolicy memory;
     int descriptor;
+    XrOsFileAction action;
 #if defined(XR_OS_MACOS)
     bool suppresses_sigpipe;
 #endif
 } OwnedFileState;
+
+static OwnedFileState *owned_file_sync_state(const XrOsFileOwner *owner) {
+    OwnedFileState *file = owner && !owner->busy ? owner->state : NULL;
+    return file && file->anchor == owner && file->descriptor >= 0 &&
+        (file->action == XR_OS_FILE_OPEN_READ || file->action == XR_OS_FILE_OPEN_WRITE) ? file : NULL;
+}
 
 static XrOsIoStatus owned_file_open_error(int error) {
     switch (error) {
@@ -38,8 +45,8 @@ static XrOsIoStatus owned_file_open_error(int error) {
     }
 }
 
-XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
-    XrOsPathSpan path, bool append, XrOsFileOwner *owner, bool *opened) {
+static XrOsIoStatus owned_file_open_sync(const XrOsIoPolicy *memory, XrOsPathSpan path,
+    XrOsFileAction action, bool append, XrOsFileOwner *owner, bool *opened) {
     if (!io_policy_valid(memory) || !path.text || !owner || owner->state || owner->busy || !opened)
         return XR_OS_IO_BAD_ARGUMENT;
     owner->busy = true;
@@ -48,11 +55,12 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
     io_status(&io, metadata_path_owned(memory, path.text, path.length, NULL, &name));
     OwnedFileState *file = io_alloc(&io, sizeof(*file));
     if (file) {
-        int flags = O_WRONLY | O_CREAT | O_CLOEXEC | O_NOCTTY | (append ? O_APPEND : O_TRUNC);
+        int flags = O_CLOEXEC | O_NOCTTY;
+        flags |= action == XR_OS_FILE_OPEN_READ ? O_RDONLY : O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC);
         int descriptor;
         do { descriptor = open(name, flags, 0644); } while (descriptor < 0 && errno == EINTR);
         if (descriptor >= 0) {
-            *file = (OwnedFileState){.anchor=owner,.memory=*memory,.descriptor=descriptor};
+            *file = (OwnedFileState){.anchor=owner,.memory=*memory,.descriptor=descriptor,.action=action};
             owner->state = file;
         } else {
             io_status(&io, owned_file_open_error(errno));
@@ -65,13 +73,56 @@ XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
     return io.status;
 }
 
-static XrOsIoStatus owned_file_write_error(int error) {
+XR_FUNC XrOsIoStatus xr_os_io_file_open_read_sync(const XrOsIoPolicy *memory,
+    XrOsPathSpan path, XrOsFileOwner *owner, bool *opened) {
+    return owned_file_open_sync(memory, path, XR_OS_FILE_OPEN_READ, false, owner, opened);
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
+    XrOsPathSpan path, bool append, XrOsFileOwner *owner, bool *opened) {
+    return owned_file_open_sync(memory, path, XR_OS_FILE_OPEN_WRITE, append, owner, opened);
+}
+
+XR_FUNC bool xr_os_io_file_readable_sync(const XrOsFileOwner *owner) {
+    const OwnedFileState *file = owned_file_sync_state(owner);
+    return file && file->action == XR_OS_FILE_OPEN_READ;
+}
+
+static XrOsIoStatus owned_file_transfer_error(int error) {
     switch (error) {
     case ENOMEM: return XR_OS_IO_OUT_OF_MEMORY;
     case EOVERFLOW: return XR_OS_IO_OVERFLOW;
     case ECANCELED: return XR_OS_IO_CANCELLED;
     default: return XR_OS_IO_IO;
     }
+}
+
+static size_t owned_file_transfer_limit(void) {
+#if defined(XR_OS_MACOS) || defined(XR_OS_LINUX)
+    /* Darwin rejects larger sizes. Linux applies a page-dependent lower cap. */
+    return INT_MAX;
+#else
+    return SSIZE_MAX;
+#endif
+}
+
+XR_FUNC XrOsIoStatus xr_os_io_file_read_sync(XrOsFileOwner *owner, uint8_t *bytes,
+    size_t capacity, size_t *received) {
+    const OwnedFileState *file = owned_file_sync_state(owner);
+    if (!file || !received || (capacity && !bytes)) return XR_OS_IO_BAD_ARGUMENT;
+    if (!capacity) { *received = 0; return XR_OS_IO_OK; }
+    if (file->action != XR_OS_FILE_OPEN_READ) return XR_OS_IO_IO;
+
+    size_t limit = owned_file_transfer_limit();
+    owner->busy = true;
+    ssize_t count;
+    do { count = read(file->descriptor, bytes, capacity < limit ? capacity : limit); }
+    while (count < 0 && errno == EINTR);
+    int error = count < 0 ? errno : 0;
+    owner->busy = false;
+    if (count < 0) return owned_file_transfer_error(error);
+    *received = (size_t)count;
+    return XR_OS_IO_OK;
 }
 
 #if defined(XR_OS_MACOS)
@@ -88,18 +139,12 @@ static int owned_file_suppress_sigpipe(OwnedFileState *file) {
 
 XR_FUNC XrOsIoStatus xr_os_io_file_write_sync(XrOsFileOwner *owner, const uint8_t *bytes,
     size_t length, size_t *written) {
-    if (!owner || owner->busy || !owner->state || !written || (length && !bytes))
-        return XR_OS_IO_BAD_ARGUMENT;
-    OwnedFileState *file = owner->state;
-    if (file->anchor != owner || file->descriptor < 0) return XR_OS_IO_BAD_ARGUMENT;
+    OwnedFileState *file = owned_file_sync_state(owner);
+    if (!file || !written || (length && !bytes)) return XR_OS_IO_BAD_ARGUMENT;
     if (!length) { *written = 0; return XR_OS_IO_OK; }
+    if (file->action != XR_OS_FILE_OPEN_WRITE) return XR_OS_IO_IO;
 
-#if defined(XR_OS_MACOS) || defined(XR_OS_LINUX)
-    /* Darwin rejects larger sizes. Linux applies a page-dependent lower cap. */
-    size_t limit = INT_MAX;
-#else
-    size_t limit = SSIZE_MAX;
-#endif
+    size_t limit = owned_file_transfer_limit();
     owner->busy = true;
 #if defined(XR_OS_MACOS)
     int error = owned_file_suppress_sigpipe(file);
@@ -109,7 +154,7 @@ XR_FUNC XrOsIoStatus xr_os_io_file_write_sync(XrOsFileOwner *owner, const uint8_
 #endif
     if (error) {
         owner->busy = false;
-        return owned_file_write_error(error);
+        return owned_file_transfer_error(error);
     }
     ssize_t count;
     do { count = write(file->descriptor, bytes, length < limit ? length : limit); }
@@ -121,7 +166,7 @@ XR_FUNC XrOsIoStatus xr_os_io_file_write_sync(XrOsFileOwner *owner, const uint8_
     if (!count) error = guard_error;
 #endif
     owner->busy = false;
-    if (error) return owned_file_write_error(error);
+    if (error) return owned_file_transfer_error(error);
     *written = (size_t)count;
     return XR_OS_IO_OK;
 }

@@ -51,14 +51,25 @@ typedef struct XrOsFileProgress {
     const uint8_t *bytes;
 } XrOsFileProgress;
 
-/* The synchronous writer publishes an address-stable owner only after a
+/* Synchronous opens publish an address-stable owner only after a
  * successful open. The path is borrowed and the allocation policy outlives
  * the owner. An ordinary refusal publishes opened=false and no owner. */
+XR_FUNC XrOsIoStatus xr_os_io_file_open_read_sync(const XrOsIoPolicy *memory,
+    XrOsPathSpan path, XrOsFileOwner *owner, bool *opened);
 XR_FUNC XrOsIoStatus xr_os_io_file_open_write_sync(const XrOsIoPolicy *memory,
     XrOsPathSpan path, bool append, XrOsFileOwner *owner, bool *opened);
+/* Checks positive-length read authority without allocating or entering the OS. */
+XR_FUNC bool xr_os_io_file_readable_sync(const XrOsFileOwner *owner);
+/* Performs one read at the owner's current position. Short reads return the
+ * actual initialized prefix. EOF and a zero-capacity request on an open owner
+ * return OK with count zero. Positive reads on write owners return IO. Count
+ * is published only on OK. The provider borrows the buffer until return. */
+XR_FUNC XrOsIoStatus xr_os_io_file_read_sync(XrOsFileOwner *owner, uint8_t *bytes,
+    size_t capacity, size_t *received);
 /* Writes once at the owner's current position, or appends on an append owner.
  * The span is borrowed until return. OK reports actual progress, including a
- * short write. A zero-length span needs no transfer. Errors preserve written. */
+ * short write. A zero-length span needs no transfer. Positive writes on read
+ * owners return IO. Errors preserve written. */
 XR_FUNC XrOsIoStatus xr_os_io_file_write_sync(XrOsFileOwner *owner, const uint8_t *bytes,
     size_t length, size_t *written);
 /* Retires a synchronous owner when the OS consumes its handle. Windows close

@@ -209,6 +209,79 @@ static void file_sync_transfer(XrOsPathSpan path, const FileNativePath *native) 
     file_sync_contents(native, expected, sizeof(expected));
 }
 
+static void file_sync_read_sequence(XrOsFileOwner *owner, const uint8_t *expected, size_t length) {
+    uint8_t actual[32];
+    CHECK(length > 3 && length < sizeof(actual));
+    memset(actual, 0xa5, sizeof(actual));
+    size_t received = 123;
+    XrOsFileOwner copy = *owner;
+    CHECK(!xr_os_io_file_readable_sync(&copy));
+    CHECK(xr_os_io_file_read_sync(&copy, actual, 1, &received) == XR_OS_IO_BAD_ARGUMENT && received == 123);
+    CHECK(xr_os_io_file_read_sync(owner, NULL, 1, &received) == XR_OS_IO_BAD_ARGUMENT && received == 123);
+    CHECK(xr_os_io_file_read_sync(owner, actual, 1, NULL) == XR_OS_IO_BAD_ARGUMENT);
+    OwnedFileState *state = owner->state;
+    state->action = XR_OS_FILE_FLUSH;
+    CHECK(!xr_os_io_file_readable_sync(owner));
+    CHECK(xr_os_io_file_read_sync(owner, actual, 1, &received) == XR_OS_IO_BAD_ARGUMENT && received == 123);
+    state->action = XR_OS_FILE_OPEN_READ;
+
+    size_t written = 123;
+    CHECK(xr_os_io_file_write_sync(owner, expected, 1, &written) == XR_OS_IO_IO && written == 123);
+    CHECK(xr_os_io_file_write_sync(owner, NULL, 0, &written) == XR_OS_IO_OK && written == 0);
+
+    CHECK(xr_os_io_file_read_sync(owner, NULL, 0, &received) == XR_OS_IO_OK && received == 0);
+    CHECK(xr_os_io_file_read_sync(owner, actual, 3, &received) == XR_OS_IO_OK && received == 3);
+    CHECK(xr_os_io_file_read_sync(owner, actual + 3, sizeof(actual) - 3, &received) == XR_OS_IO_OK &&
+          received == length - 3);
+    CHECK(!memcmp(actual, expected, length) && actual[length] == 0xa5);
+    CHECK(xr_os_io_file_read_sync(owner, actual + length, 1, &received) == XR_OS_IO_OK && received == 0 &&
+          actual[length] == 0xa5);
+    CHECK(xr_os_io_file_read_sync(owner, actual + length, 1, &received) == XR_OS_IO_OK && received == 0 &&
+          actual[length] == 0xa5);
+}
+
+static void file_sync_read_execute(XrOsPathSpan path, const FileNativePath *native,
+    const uint8_t *expected, size_t length) {
+    XrOsIoPolicy memory = {&file_live, file_memory, file_memory_free};
+    XrOsFileOwner owner = {0};
+    bool opened = false;
+    size_t first_attempt = file_attempts;
+    CHECK(xr_os_io_file_open_read_sync(&memory, path, &owner, &opened) == XR_OS_IO_OK && opened);
+    size_t allocations = file_attempts - first_attempt;
+    CHECK(allocations >= 2 && file_live == 1 && xr_os_io_file_readable_sync(&owner));
+    first_attempt = file_attempts;
+    file_sync_read_sequence(&owner, expected, length);
+    CHECK(file_attempts == first_attempt && file_live == 1 && !owner.busy);
+    file_sync_close(&owner, native);
+    CHECK(!xr_os_io_file_readable_sync(&owner));
+    size_t received = 123;
+    uint8_t byte = 0xa5;
+    CHECK(xr_os_io_file_read_sync(&owner, &byte, 1, &received) == XR_OS_IO_BAD_ARGUMENT && received == 123);
+    CHECK(xr_os_io_file_read_sync(&owner, NULL, 0, &received) == XR_OS_IO_BAD_ARGUMENT && received == 123);
+
+    CHECK(xr_os_io_file_open_write_sync(&memory, path, true, &owner, &opened) == XR_OS_IO_OK && opened);
+    CHECK(!xr_os_io_file_readable_sync(&owner));
+    CHECK(xr_os_io_file_read_sync(&owner, &byte, 1, &received) == XR_OS_IO_IO && received == 123 && byte == 0xa5);
+    CHECK(xr_os_io_file_read_sync(&owner, NULL, 0, &received) == XR_OS_IO_OK && received == 0);
+    file_sync_close(&owner, native);
+
+    for (size_t index = 0; index < allocations; ++index) {
+        opened = true;
+        file_fail_at = file_attempts + index;
+        CHECK(xr_os_io_file_open_read_sync(&memory, path, &owner, &opened) == XR_OS_IO_OUT_OF_MEMORY);
+        file_fail_at = SIZE_MAX;
+        CHECK(opened && !owner.state && !owner.busy && !file_live && !file_bytes);
+    }
+    XrOsPathSpan embedded_nul = {path.text, path.length + 1};
+    CHECK(xr_os_io_file_open_read_sync(&memory, embedded_nul, &owner, &opened) == XR_OS_IO_BAD_ARGUMENT && opened);
+    CHECK(!owner.state && !owner.busy && !file_live && !file_bytes);
+    CHECK(path.length > 4 && !memcmp(path.text + path.length - 4, ".bin", 4));
+    XrOsPathSpan missing = {path.text, path.length - 4};
+    CHECK(xr_os_io_file_open_read_sync(&memory, missing, &owner, &opened) == XR_OS_IO_OK && !opened);
+    CHECK(!owner.state && !owner.busy && !file_live && !file_bytes);
+    file_sync_contents(native, expected, length);
+}
+
 #if defined(XR_OS_WINDOWS)
 static bool file_current(void *context) {
     return !*(bool *) context;
@@ -446,6 +519,7 @@ static void file_kernel_execute(void) {
     file_query_reentry(&memory, path);
     file_open_allocation_failures(&memory, &query, path);
     XrOsPathSpan filename = {path, (size_t)encoded - 1};
+    file_sync_read_execute(filename, wide, expected, sizeof(expected));
     file_sync_execute(filename, wide, expected, sizeof(expected));
     file_sync_transfer(filename, wide);
     CHECK(DeleteFileW(wide) && RemoveDirectoryW(directory));
@@ -543,6 +617,7 @@ static void file_kernel_execute(void) {
     CHECK(write(descriptor, expected, sizeof(expected)) == (ssize_t)sizeof(expected));
     CHECK(close(descriptor) == 0);
     XrOsPathSpan filename = {path, (size_t)count};
+    file_sync_read_execute(filename, path, expected, sizeof(expected));
     file_sync_execute(filename, path, expected, sizeof(expected));
     file_sync_transfer(filename, path);
     file_sync_short_write(filename);
