@@ -53,7 +53,8 @@ XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *m, XrLirType type, bo
 }
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op) {
     return op == XR_LIR_BR || op == XR_LIR_CONDBR || op == XR_LIR_RET ||
-        op == XR_LIR_INVOKE || op == XR_LIR_RETURN_ERROR || op == XR_LIR_PANIC_ERROR;
+        op == XR_LIR_INVOKE || op == XR_LIR_RETURN_ERROR || op == XR_LIR_PANIC_ERROR ||
+        op == XR_LIR_UNCAUGHT_ERROR;
 }
 XR_FUNC XrLirStatus xr_lir_internal_error(XrLirDiagnostic *d, const char *message,
                                           uint32_t function, uint32_t block, uint32_t instruction,
@@ -566,7 +567,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
         v->op != XR_LIR_CLASS_IS &&
-        v->op != XR_LIR_PANIC_ERROR &&
+        v->op != XR_LIR_PANIC_ERROR && v->op != XR_LIR_UNCAUGHT_ERROR &&
         v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET && v->op != XR_LIR_HOST_PATH_BOOL &&
         v->op != XR_LIR_HOST_FILE_OPEN_WRITE && v->op != XR_LIR_HOST_FILE_CLOSE && v->op != XR_LIR_HOST_FILE_WRITE &&
         v->op != XR_LIR_HOST_FILE_OPEN_READ && v->op != XR_LIR_HOST_FILE_READ && v->op != XR_LIR_HOST_ENV_GET &&
@@ -609,23 +610,34 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         return XR_LIR_OK;
     }
     if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_WEAKEN) {
-        if (!xr_lir_internal_callable_instruction(m, f, v)) goto invalid;
+        if ((v->op==XR_LIR_FUNCTION_REF && m->startup_entry && v->callee==m->startup_entry) ||
+            !xr_lir_internal_callable_instruction(m, f, v)) goto invalid;
         return XR_LIR_OK;
     }
-    if (v->op == XR_LIR_RETURN_ERROR || v->op == XR_LIR_PANIC_ERROR) {
-        XrLirRecordIdentity identity = {0};
-        XrLirType error = f->values[v->operands[0] - 1].type;
-        if (v->type != XR_LIR_UNIT || !xr_lir_error_sum_identity(m,error,&identity) ||
-            (v->op == XR_LIR_PANIC_ERROR && (!v->source.path || v->bits>UINT32_MAX ||
-                !xr_lir_error_literal_matches(m,error,(uint32_t)v->bits))) ||
-            (v->op == XR_LIR_RETURN_ERROR && f->error != error)) goto invalid;
+    if (v->op==XR_LIR_RETURN_ERROR || v->op==XR_LIR_PANIC_ERROR || v->op==XR_LIR_UNCAUGHT_ERROR) {
+        XrLirRecordIdentity identity={0};
+        XrLirType error=f->values[v->operands[0]-1].type;
+        if (v->type!=XR_LIR_UNIT || !xr_lir_error_sum_identity(m,error,&identity)) goto invalid;
+        if (v->op==XR_LIR_RETURN_ERROR) {
+            if (f->error!=error) goto invalid;
+            return XR_LIR_OK;
+        }
+        if (v->bits>UINT32_MAX || !xr_lir_error_literal_matches(m,error,(uint32_t)v->bits)) goto invalid;
+        if (v->op==XR_LIR_PANIC_ERROR) {
+            if (!v->source.path) goto invalid;
+        } else {
+            XrLirSource where=v->source;
+            if (function!=m->startup_entry || where.path || where.path_length ||
+                where.line || where.column || where.end_line || where.end_column) goto invalid;
+        }
         return XR_LIR_OK;
     }
     if (v->op == XR_LIR_CALL || v->op == XR_LIR_INVOKE) {
         if (!v->callee || v->callee > m->function_count)
             goto invalid;
         const XrLirFunctionData *callee = &m->functions[v->callee - 1];
-        if ((callee->error != 0) != (v->op == XR_LIR_INVOKE)) goto invalid;
+        if ((callee->error != 0) != (v->op == XR_LIR_INVOKE) || v->callee==m->startup_entry ||
+            (v->op==XR_LIR_INVOKE && (!!callee->initializer_module!=(function==m->startup_entry)))) goto invalid;
         for (uint32_t p = 0; p < callee->callable_parameter_count; ++p) {
             XrLirFunctionCallableParameter parameter = callee->callable_parameters[p];
             if ((parameter.contract.escaping || parameter.parameter < callee->closure.capture_count) &&
@@ -890,9 +902,27 @@ static bool lir_graph_order(const XrLirFunctionData *f, LirGraph *g) {
     return true;
 }
 
-static bool lir_invoke_edges(const XrLirFunctionData *f, const LirGraph *g) {
+static bool lir_startup_publication(const XrLirModule *m,const XrLirFunctionData *f,
+    uint32_t block,const XrLirInstructionView *call) {
+    if (!m->state_layout_set) return true;
+    const XrLirBlockData *from=&f->blocks[block],*normal=&f->blocks[call->edges[0].target-1];
+    uint32_t owner=m->functions[call->callee-1].initializer_module-1;
+    if (from->instruction_count<2) return false;
+    const XrLirInstructionView *begin=&from->instructions[from->instruction_count-2].view;
+    const XrLirInstructionView *ready=&normal->instructions[0].view;
+    uint32_t state=f->parameters[0];
+    return begin->op==XR_LIR_MODULE_BEGIN && ready->op==XR_LIR_MODULE_READY &&
+        begin->bits==owner && ready->bits==owner &&
+        begin->operands[0]==state && ready->operands[0]==state &&
+        (!call->operand_count || call->operands[0]==state);
+}
+
+static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirFunctionData *f,const LirGraph *g) {
+    bool startup=function==m->startup_entry;
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirInstructionView *term = lir_terminator(f,b);
+        if (startup && term->op!=XR_LIR_INVOKE && term->op!=XR_LIR_UNCAUGHT_ERROR && term->op!=XR_LIR_RET)
+            return false;
         if (term->op == XR_LIR_INVOKE) {
             for (uint32_t e = 0; e < 2; ++e) {
                 uint32_t target = term->edges[e].target - 1;
@@ -901,10 +931,15 @@ static bool lir_invoke_edges(const XrLirFunctionData *f, const LirGraph *g) {
             uint32_t target=term->edges[1].target-1;
             const XrLirBlockData *failed=&f->blocks[target];
             const XrLirInstructionView *exit=lir_terminator(f,target);
-            if ((exit->op!=XR_LIR_PANIC_ERROR && exit->op!=XR_LIR_RETURN_ERROR) ||
-                failed->parameter_count!=1 || exit->operands[0]!=failed->parameters[0]) return false;
+            if (startup) {
+                if (exit->op!=XR_LIR_UNCAUGHT_ERROR || failed->instruction_count!=1 ||
+                    !lir_startup_publication(m,f,b,term)) return false;
+            } else if (exit->op!=XR_LIR_PANIC_ERROR && exit->op!=XR_LIR_RETURN_ERROR) {
+                return false;
+            }
+            if (failed->parameter_count!=1 || exit->operands[0]!=failed->parameters[0]) return false;
         }
-        if (term->op != XR_LIR_PANIC_ERROR) continue;
+        if (term->op!=XR_LIR_PANIC_ERROR && term->op!=XR_LIR_UNCAUGHT_ERROR) continue;
         const XrLirBlockData *block = &f->blocks[b];
         if (block->parameter_count != 1 || term->operands[0] != block->parameters[0] ||
             g->offsets[b + 1] - g->offsets[b] != 1) return false;
@@ -1008,6 +1043,14 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
             f->callable_parameters, f->callable_parameter_count, false) ||
         !xr_lir_internal_closure_target_valid(m, f))
         return false;
+    bool startup=m->startup_entry==(uint32_t)(f-m->functions)+1;
+    if (startup && (f->kind!=XR_LIR_FUNCTION_DEFINITION || f->initializer_module ||
+        f->error || f->closure.callable || f->parameter_count!=(uint32_t)m->state_layout_set ||
+        (m->state_layout_set && (f->parameter_types[0]!=XR_LIR_STATE || m->state_entry!=m->startup_entry))))
+        return false;
+    if (f->initializer_module && (!m->startup_entry || f->initializer_module>m->startup_module_count ||
+        !f->error || f->result!=XR_LIR_UNIT || f->kind!=XR_LIR_FUNCTION_DEFINITION ||
+        f->parameter_count>1 || (f->parameter_count && f->parameter_types[0]!=XR_LIR_STATE))) return false;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (!xr_lir_internal_type_valid(m, f->parameter_types[p], false) ||
             f->parameter_types[p] == XR_LIR_FUNCTION_SCOPE ||
@@ -1238,6 +1281,66 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
 #include "xlir_callable_scope_verify.inc.c"
 #include "xlir_slice_verify.inc.c"
 
+typedef struct LirStartupRole {
+    uint32_t initializer, call_block, ready_block;
+} LirStartupRole;
+
+static XrLirStatus lir_startup_boundaries(const XrLirModule *m,const LirStartupRole *roles,XrLirDiagnostic *d) {
+    if (!m->state_layout_set) return XR_LIR_OK;
+    for (uint32_t f=0;f<m->function_count;++f) {
+        const XrLirFunctionData *function=&m->functions[f];
+        for (uint32_t b=0;b<function->block_count;++b) {
+            const XrLirBlockData *block=&function->blocks[b];
+            for (uint32_t i=0;i<block->instruction_count;++i) {
+                const XrLirInstructionView *op=&block->instructions[i].view;
+                if (op->op!=XR_LIR_MODULE_BEGIN && op->op!=XR_LIR_MODULE_READY) continue;
+                const LirStartupRole *role=&roles[op->bits];
+                if (!role->initializer) continue;
+                bool position=op->op==XR_LIR_MODULE_BEGIN ?
+                    role->call_block==b+1 && i==block->instruction_count-2 :
+                    role->ready_block==b+1 && i==0;
+                if (f+1!=m->startup_entry || !position)
+                    return xr_lir_internal_error(d,"typed module publication is outside its startup invoke",
+                        f+1,b+1,i+1,&op->source);
+            }
+        }
+    }
+    return XR_LIR_OK;
+}
+
+static XrLirStatus lir_startup_inventory(const XrLirModule *m,XrLirDiagnostic *d) {
+    if (!m->startup_entry) return XR_LIR_OK;
+    LirStartupRole *roles=xr_calloc(m->startup_module_count,sizeof(*roles));
+    if (!roles) return lir_status_error(d,XR_LIR_OUT_OF_MEMORY,"startup role verification allocation failed");
+    bool good=true;
+    uint32_t remaining=0;
+    for (uint32_t f=0;good && f<m->function_count;++f) {
+        uint32_t owner=m->functions[f].initializer_module;
+        if (!owner) continue;
+        if (roles[owner-1].initializer) good=false;
+        roles[owner-1].initializer=f+1;
+        ++remaining;
+    }
+    const XrLirFunctionData *startup=&m->functions[m->startup_entry-1];
+    good=good && remaining!=0;
+    for (uint32_t b=0;good && b<startup->block_count;++b) {
+        const XrLirInstructionView *term=lir_terminator(startup,b);
+        if (term->op!=XR_LIR_INVOKE) continue;
+        uint32_t owner=m->functions[term->callee-1].initializer_module;
+        LirStartupRole *role=owner ? &roles[owner-1] : NULL;
+        if (!role || role->initializer!=term->callee || role->call_block) good=false;
+        else {
+            role->call_block=b+1;
+            role->ready_block=term->edges[0].target;
+            --remaining;
+        }
+    }
+    XrLirStatus status=good && !remaining ? lir_startup_boundaries(m,roles,d) :
+        xr_lir_internal_error(d,"startup requires one invoke per typed initializer",m->startup_entry,0,0,NULL);
+    xr_free(roles);
+    return status;
+}
+
 static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d, XrLirCallableFacts **facts,
     XrLirBlockConstructionFacts *multiplicity) {
     if (d)
@@ -1335,6 +1438,9 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
     for (uint32_t i = 0; i < m->literal_count; ++i)
         if (!m->literals[i].bytes || m->literals[i].length == SIZE_MAX)
             return lir_status_error(d, XR_LIR_INVALID_ARGUMENT, "invalid literal record");
+    if (!!m->startup_entry!=!!m->startup_module_count || m->startup_entry>m->function_count ||
+        (m->startup_entry && m->state_layout_set && m->startup_module_count!=m->state_layout.module_count))
+        return xr_lir_internal_error(d,"invalid startup entry",0,0,0,NULL);
     XrLirStatus state_status = lir_state_layout_verify(m, d);
     if (state_status != XR_LIR_OK) {
         if (d && d->status == XR_LIR_OK)
@@ -1375,7 +1481,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
         if (status == XR_LIR_VERIFY_ERROR)
             xr_lir_internal_error(d, "entry has an incoming edge or a block is unreachable",
                                   index + 1, 0, 0, NULL);
-        if (status == XR_LIR_OK && !lir_invoke_edges(f,&graph))
+        if (status == XR_LIR_OK && !lir_invoke_edges(m,index+1,f,&graph))
             status = xr_lir_internal_error(d, "invoke requires dedicated normal and error successors",
                                            index + 1, 0, 0, NULL);
         if (status==XR_LIR_OK) {
@@ -1412,7 +1518,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
             return status;
         }
     }
-    return XR_LIR_OK;
+    return lir_startup_inventory(m,d);
 }
 static XrLirStatus lir_verify(const XrLirModule *m, XrLirDiagnostic *d,XrLirCallableFacts **facts,
     XrLirBlockConstructionFacts *multiplicity) {

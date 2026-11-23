@@ -68,6 +68,7 @@ typedef struct Lower {
     XrLirStatus status;
     XrLirLowerFailure *failure;
     uint32_t *module_order, *initializer_owner;
+    XrXirType *initializer_errors;
     uint8_t *active_modules;
     uint32_t initialization_count;
     XrLirStateLayout state_layout;
@@ -790,6 +791,7 @@ static void lower_modules_free(Lower *c) {
     xr_free(c->module_order);
     xr_free(c->active_modules);
     xr_free(c->initializer_owner);
+    xr_free(c->initializer_errors);
 }
 static bool lower_modules(Lower *c) {
     const XrXirDeclarations *d = c->source->declarations;
@@ -1049,12 +1051,14 @@ static bool lower_empty_error(XrXirType type) {
     return type==XR_XIR_NEVER || type==XR_XIR_UNIT;
 }
 
+static XrXirType lower_error_bound(const Lower *c,uint32_t function) {
+    uint32_t owner=c->initializer_owner[function];
+    if (owner!=UINT32_MAX) return c->initializer_errors ? c->initializer_errors[owner] : XR_XIR_NEVER;
+    return c->source->functions[function].error_type;
+}
+
 static bool lower_function_error(const Lower *c,uint32_t function) {
-    XrXirType error=c->source->functions[function].error_type;
-    /* Synthetic initializers have the wide root boundary. This slice can
-     * admit their normal execution only. Actual escaping throws are rejected. */
-    return !lower_empty_error(error) &&
-        !(error==XR_XIR_ERROR && c->initializer_owner[function]!=UINT32_MAX);
+    return !lower_empty_error(lower_error_bound(c,function));
 }
 
 static uint32_t lower_edge_count(const Lower *c, const XrXirInstruction *term) {
@@ -1215,7 +1219,8 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
         marker->type!=XR_XIR_ERROR || marker->immediate!=origin) return false;
     const XrXirInstruction *exit=marker+1;
     return exit->args[0]==f->parameter_count+failure->first && (exit->op==XR_XIR_PANIC_ERROR ||
-        (exit->op==XR_XIR_THROW && !lower_empty_error(callee->error_type) && callee->error_type==f->error_type));
+        (exit->op==XR_XIR_THROW && !lower_empty_error(callee->error_type) &&
+         callee->error_type==lower_error_bound(c,(uint32_t)(f-c->source->functions))));
 }
 
 static const XrXirInstruction *lower_invoke_origin(Lower *c, const XrXirFunction *f, uint32_t block,
@@ -1235,7 +1240,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
         return lower_invoke_origin(c,f,c->block,op,op->op == XR_XIR_INVOKE_ERROR) ||
             lower_unsupported(c,xr_xir_op_name(op->op));
     if (op->op==XR_XIR_THROW && lower_function_error(c,c->function) &&
-        xr_xir_operand_type(f,op->args[0])==f->error_type) return true;
+        xr_xir_operand_type(f,op->args[0])==lower_error_bound(c,c->function)) return true;
     if (op->op==XR_XIR_PANIC_ERROR || op->op==XR_XIR_THROW) {
         const XrXirInstruction *marker=&f->instructions[f->blocks[c->block].first];
         return (marker->op==XR_XIR_INVOKE_ERROR && lower_invoke_origin(c,f,c->block,marker,true)) ||
@@ -1487,11 +1492,12 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         XrLirRecordIdentity identity = {0};
         if (lir_pod_scalar(lower_type(c,f->result)) >= XR_POD_SCALAR_COUNT)
             return lower_unsupported(c,"typed function success result");
-        if (f->error_type<XR_XIR_CONSTRUCTED_TYPE_BASE || !c->error_types ||
-            c->error_types[f->error_type-XR_XIR_CONSTRUCTED_TYPE_BASE]!=1)
+        XrXirType error=lower_error_bound(c,function);
+        if (error<XR_XIR_CONSTRUCTED_TYPE_BASE || !c->error_types ||
+            c->error_types[error-XR_XIR_CONSTRUCTED_TYPE_BASE]!=1)
             return lower_unsupported(c,"typed function error boundary");
-        if (!lower_receive_type(c,f->error_type)) return false;
-        if (!xr_lir_error_sum_identity(c->module,lower_type(c,f->error_type),&identity))
+        if (!lower_receive_type(c,error)) return false;
+        if (!xr_lir_error_sum_identity(c->module,lower_type(c,error),&identity))
             return lower_unsupported(c,"typed function error boundary");
     }
     if (!lower_type(c, f->result) || lower_type(c, f->result) == XR_LIR_I64_CELL ||
@@ -1656,7 +1662,10 @@ static bool lower_declare(Lower *c, uint32_t index) {
                               .parameter_count = count,
                               .result = lower_type(c, f->result), .callable_parameters=contracts,
                               .callable_parameter_count=contract_count};
-    if (lower_function_error(c,index)) spec.error = lower_type(c,f->error_type);
+    if (lower_function_error(c,index)) {
+        spec.error=lower_type(c,lower_error_bound(c,index));
+        if (c->initializer_owner[index]!=UINT32_MAX) spec.initializer_module=c->initializer_owner[index]+1;
+    }
     if (lower_core_assertion(c, index)) {
         spec.kind = XR_LIR_FUNCTION_EXTERNAL;
         spec.extern_kind = XR_LIR_EXTERN_ASSERT_CONDITION;
@@ -3214,6 +3223,27 @@ static bool lower_function(Lower *c, uint32_t index) {
     return good;
 }
 
+static bool lower_startup_invoke(Lower *c,XrLirFunction wrapper,XrLirBlock *block,
+    XrLirInstruction call,XrLirType error) {
+    XrLirBlock success={0},failure={0};
+    XrLirValue received={0};
+    XrLirLiteral metadata={0};
+    if (!lower_build(c,xr_lir_add_block(c->module,wrapper,NULL,0,&success)) ||
+        !lower_build(c,xr_lir_add_block(c->module,wrapper,&error,1,&failure)) ||
+        !lower_build(c,xr_lir_block_parameter(c->module,failure,0,&received)) ||
+        !lower_build(c,xr_lir_error_literal(c->module,error,&metadata))) return false;
+    call.op=XR_LIR_INVOKE;
+    call.edges[0].target=success;
+    call.edges[1].target=failure;
+    call.edge_count=2;
+    XrLirInstruction uncaught={.op=XR_LIR_UNCAUGHT_ERROR,.type=XR_LIR_UNIT,
+        .operands=&received,.operand_count=1,.bits=metadata.id};
+    if (!lower_build(c,xr_lir_set_terminator(c->module,*block,&call)) ||
+        !lower_build(c,xr_lir_set_terminator(c->module,failure,&uncaught))) return false;
+    *block=success;
+    return true;
+}
+
 static bool lower_wrapper(Lower *c, XrLirFunction *output) {
     const XrXirDeclarations *d = c->source->declarations;
     uint32_t entry = d->entry_function;
@@ -3228,6 +3258,7 @@ static bool lower_wrapper(Lower *c, XrLirFunction *output) {
     if (!lower_build(c, xr_lir_declare_function(c->module, &spec, &wrapper)) ||
         (stateful && !lower_build(c, xr_lir_set_state_entry(c->module, wrapper))) ||
         !lower_build(c, xr_lir_define_function(c->module, wrapper)) ||
+        (c->initializer_errors && !lower_build(c,xr_lir_set_startup_entry(c->module,wrapper,d->module_count))) ||
         !lower_build(c, xr_lir_add_block(c->module, wrapper, NULL, 0, &block)) ||
         !lower_build(c, xr_lir_set_entry(c->module, wrapper, block)) ||
         (stateful && !lower_build(c, xr_lir_function_parameter(c->module, wrapper, 0, &state))))
@@ -3246,7 +3277,9 @@ static bool lower_wrapper(Lower *c, XrLirFunction *output) {
             .type = lower_type(c, c->source->functions[selected].result),
             .callee = c->functions[selected], .operands = &state,
             .operand_count = lower_hidden_state(c, selected)};
-        if (!lower_build(c, call.type == XR_LIR_UNIT
+        if (initializer && lower_function_error(c,selected)) {
+            if (!lower_startup_invoke(c,wrapper,&block,call,lower_type(c,lower_error_bound(c,selected)))) return false;
+        } else if (!lower_build(c, call.type == XR_LIR_UNIT
             ? xr_lir_emit_effect(c->module, block, &call)
             : xr_lir_emit_value(c->module, block, &call, &result))) return false;
         boundary.op = XR_LIR_MODULE_READY;
@@ -3307,9 +3340,85 @@ static bool lower_is_plain_error_enum(const Lower *c,XrXirType type) {
     return true;
 }
 
+/* The Checked marker is erased. Its authenticated direct predecessor
+ * provides the error bound; ordinary source throws already carry their type. */
+static XrXirType lower_initializer_throw_type(const Lower *c,const XrXirFunction *f,uint32_t block,
+    const XrXirInstruction *exit) {
+    XrXirType type=xr_xir_operand_type(f,exit->args[0]);
+    if (type!=XR_XIR_ERROR) return type;
+    uint32_t first=f->blocks[block].first;
+    const XrXirInstruction *marker=&f->instructions[first];
+    if (exit->args[0]!=f->parameter_count+first || marker->op!=XR_XIR_INVOKE_ERROR ||
+        marker->immediate<0 || (uint64_t)marker->immediate>=f->instruction_count) return XR_XIR_ERROR;
+    const XrXirInstruction *origin=&f->instructions[marker->immediate];
+    if (origin->op!=XR_XIR_INVOKE || origin->targets[1]!=block ||
+        origin->immediate<0 || (uint64_t)origin->immediate>=c->source->function_count) return XR_XIR_ERROR;
+    return c->source->functions[origin->immediate].error_type;
+}
+
+static bool lower_initializer_bound(Lower *c,uint32_t function,XrXirType *error) {
+    const XrXirFunction *f=&c->source->functions[function];
+    /* Ordinary initializers need no worklist. Only actual THROW operations
+     * can contribute an error to the effective startup ABI. */
+    bool throws=false;
+    for (uint32_t n=0;n<f->instruction_count && !throws;++n) throws=f->instructions[n].op==XR_XIR_THROW;
+    if (!throws || !f->block_count) return true;
+
+    uint8_t *seen=lower_alloc(c,f->block_count,1);
+    uint32_t *queue=lower_alloc(c,f->block_count,sizeof(*queue));
+    bool good=seen && queue;
+    if (good) { seen[0]=1; queue[0]=0; }
+    c->function=function;
+    for (uint32_t read=0,write=1;good && read<write;++read) {
+        uint32_t block=queue[read];
+        c->block=block;
+        c->instruction=UINT32_MAX;
+        const XrXirInstruction *term=lower_term(c,f,block);
+        if (!term) { good=false; break; }
+        c->instruction=(uint32_t)(term-f->instructions);
+        if (term->op==XR_XIR_THROW) {
+            XrXirType received=lower_initializer_throw_type(c,f,block,term);
+            if (*error!=XR_XIR_NEVER && *error!=received)
+                good=lower_unsupported(c,"mixed module initializer errors");
+            else if (*error==XR_XIR_NEVER && !lower_is_plain_error_enum(c,received))
+                good=lower_unsupported(c,"module initializer error boundary");
+            else
+                *error=received;
+        }
+        for (uint32_t n=0;good && n<lower_edge_count(c,term);++n) {
+            uint32_t next=term->targets[n];
+            if (next>=f->block_count) {
+                lower_error(c,XR_LIR_VERIFY_ERROR,"invalid Checked initializer branch");
+                good=false;
+            } else if (!seen[next]) {
+                seen[next]=1;
+                queue[write++]=next;
+            }
+        }
+    }
+    xr_free(seen);
+    xr_free(queue);
+    return good;
+}
+
+static bool lower_initializer_errors(Lower *c) {
+    const XrXirDeclarations *d=c->source->declarations;
+    for (uint32_t n=0;n<c->initialization_count;++n) {
+        uint32_t owner=c->module_order[n];
+        XrXirType error=XR_XIR_NEVER;
+        if (!lower_initializer_bound(c,d->modules[owner].initializer,&error)) return false;
+        if (lower_empty_error(error)) continue;
+        if (!c->initializer_errors)
+            c->initializer_errors=lower_alloc(c,d->module_count,sizeof(*c->initializer_errors));
+        if (!c->initializer_errors) return false;
+        c->initializer_errors[owner]=error;
+    }
+    return true;
+}
+
 static bool lower_error_types(Lower *c) {
     for (uint32_t f = 0; f < c->source->function_count; ++f) {
-        XrXirType type=c->source->functions[f].error_type;
+        XrXirType type=lower_error_bound(c,f);
         const XrXirTypeNode *node=xr_xir_type_node(c->source->types,type);
         if (!node || node->kind != XR_XIR_TYPE_NOMINAL) continue;
         if (!c->error_types) c->error_types=lower_alloc(c,c->source->types->count,1);
@@ -3349,8 +3458,9 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         d->modules[0].initializer >= source->function_count)
         return lower_error(&c, XR_LIR_VERIFY_ERROR, "invalid Checked program entry");
     if (!lower_build(&c, xr_lir_module_create(NULL, &c.module))) return c.status;
-    if (!lower_error_types(&c) || !lower_map_literals(&c) || !lower_modules(&c) ||
-        !lower_state_layout(&c) || !lower_state_constructors(&c)) {
+    if (!lower_map_literals(&c) || !lower_modules(&c) || !lower_initializer_errors(&c) ||
+        (local && c.initializer_errors && !lower_unsupported(&c,"typed module startup in local evaluation")) ||
+        !lower_error_types(&c) || !lower_state_layout(&c) || !lower_state_constructors(&c)) {
         lower_modules_free(&c);
         xr_lir_module_destroy(c.module);
         return c.status;

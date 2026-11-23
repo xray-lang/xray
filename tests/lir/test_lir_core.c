@@ -136,6 +136,120 @@ static void invoke_must_forward_its_received_error(void) {
     }
 }
 
+static void startup_error_requires_an_initialized_origin(void) {
+    enum { VALID, NO_STARTUP, ORDINARY_CALLEE, CALLABLE_ROOT, WRONG_ARGUMENT,
+           WRONG_ERROR, FAILED_READY, EARLY_READY, CALLEE_READY, NO_INITIALIZER_CALL, MODE_COUNT };
+    for (unsigned mode=0;mode<MODE_COUNT;++mode) {
+        XrLirModule *m=NULL;
+        OK(xr_lir_module_create(NULL,&m));
+        XrLirType error=try_error_type(m,"StartupError"),state_type=XR_LIR_STATE;
+        bool stateful=mode==FAILED_READY || mode==WRONG_ARGUMENT || mode==EARLY_READY || mode==CALLEE_READY;
+        if (stateful) {
+            XrLirStateModule module={0};
+            XrLirStateSlot slot={.payload=XR_LIR_I64,.size=8,.alignment=8};
+            XrLirStateLayout layout={.modules=&module,.module_count=1,.slots=&slot,.slot_count=1,
+                .payload_size=8,.payload_alignment=8};
+            OK(xr_lir_set_state_layout(m,&layout));
+        }
+        XrLirFunction init={0};
+        OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){
+            .name="init",.name_length=4,.result=XR_LIR_UNIT,.error=error,
+            .parameters=stateful ? &state_type : NULL,.parameter_count=stateful,
+            .initializer_module=mode!=ORDINARY_CALLEE},&init));
+        OK(xr_lir_define_function(m,init));
+        XrLirBlock callee=test_block(m,init,NULL,0);
+        OK(xr_lir_set_entry(m,init,callee));
+        if (mode==CALLEE_READY) {
+            XrLirValue own_state={0};
+            OK(xr_lir_function_parameter(m,init,0,&own_state));
+            OK(xr_lir_emit_effect(m,callee,&(XrLirInstruction){.op=XR_LIR_MODULE_READY,.type=XR_LIR_UNIT,
+                .operands=&own_state,.operand_count=1}));
+        }
+        XrLirValue thrown={0};
+        XrLirInstruction make={.op=XR_LIR_SUM_NEW,.type=error};
+        OK(xr_lir_emit_value(m,callee,&make,&thrown));
+        OK(xr_lir_set_terminator(m,callee,&(XrLirInstruction){.op=XR_LIR_RETURN_ERROR,
+            .type=XR_LIR_UNIT,.operands=&thrown,.operand_count=1}));
+
+        XrLirFunction root=test_function(m,"root",stateful ? &state_type : NULL,stateful,XR_LIR_UNIT);
+        if (stateful) OK(xr_lir_set_state_entry(m,root));
+        if (mode!=NO_STARTUP) OK(xr_lir_set_startup_entry(m,root,1));
+        XrLirBlock entry=test_block(m,root,NULL,0);
+        OK(xr_lir_set_entry(m,root,entry));
+        if (mode==CALLABLE_ROOT) {
+            XrLirFunction ordinary=test_function(m,"ordinary",NULL,0,XR_LIR_UNIT);
+            XrLirBlock body=test_block(m,ordinary,NULL,0);
+            OK(xr_lir_set_entry(m,ordinary,body));
+            CHECK(xr_lir_emit_effect(m,body,&(XrLirInstruction){.op=XR_LIR_CALL,
+                .type=XR_LIR_UNIT,.callee=root})==XR_LIR_VERIFY_ERROR);
+            xr_lir_module_destroy(m);
+            continue;
+        }
+        if (mode==NO_INITIALIZER_CALL) {
+            test_return(m,entry,(XrLirValue){0});
+            XrLirDiagnostic diagnostic={0};
+            CHECK(xr_lir_module_finish(m,&diagnostic)==XR_LIR_VERIFY_ERROR &&
+                strstr(diagnostic.message,"startup requires one invoke per typed initializer"));
+            xr_lir_module_destroy(m);
+            continue;
+        }
+        XrLirBlock normal=test_block(m,root,NULL,0),failed=test_block(m,root,&error,1);
+        XrLirValue state={0};
+        XrLirInstruction publication={.op=XR_LIR_MODULE_BEGIN,.type=XR_LIR_UNIT,
+            .operands=&state,.operand_count=1};
+        if (stateful) {
+            OK(xr_lir_function_parameter(m,root,0,&state));
+            if (mode==EARLY_READY) {
+                publication.op=XR_LIR_MODULE_READY;
+                OK(xr_lir_emit_effect(m,entry,&publication));
+                publication.op=XR_LIR_MODULE_BEGIN;
+            }
+            OK(xr_lir_emit_effect(m,entry,&publication));
+        }
+        XrLirValue argument=mode==WRONG_ARGUMENT ? test_constant(m,entry,XR_LIR_I64,0) : state;
+        XrLirInstruction invoke={.op=XR_LIR_INVOKE,.type=XR_LIR_UNIT,.callee=init,
+            .operands=stateful ? &argument : NULL,.operand_count=stateful,
+            .edges={{.target=normal},{.target=failed}},.edge_count=2};
+        XrLirStatus status=xr_lir_set_terminator(m,entry,&invoke);
+        if (mode==NO_STARTUP || mode==ORDINARY_CALLEE || mode==WRONG_ARGUMENT) {
+            CHECK(status==XR_LIR_VERIFY_ERROR);
+            xr_lir_module_destroy(m);
+            continue;
+        }
+        CHECK(status==XR_LIR_OK);
+        if (stateful) {
+            publication.op=XR_LIR_MODULE_READY;
+            OK(xr_lir_emit_effect(m,normal,&publication));
+            if (mode==FAILED_READY) OK(xr_lir_emit_effect(m,failed,&publication));
+        }
+        test_return(m,normal,(XrLirValue){0});
+        XrLirValue received={0};
+        OK(xr_lir_block_parameter(m,failed,0,&received));
+        if (mode==WRONG_ERROR) OK(xr_lir_emit_value(m,failed,&make,&received));
+        XrLirLiteral metadata={0};
+        OK(xr_lir_error_literal(m,error,&metadata));
+        OK(xr_lir_set_terminator(m,failed,&(XrLirInstruction){.op=XR_LIR_UNCAUGHT_ERROR,.type=XR_LIR_UNIT,
+            .operands=&received,.operand_count=1,.bits=metadata.id}));
+        XrLirDiagnostic diagnostic={0};
+        status=xr_lir_module_finish(m,&diagnostic);
+        if (mode==VALID) {
+            CHECK(status==XR_LIR_OK);
+            XrLirModule *copy=NULL;
+            OK(xr_lir_rebuild(m,&copy));
+            uint32_t count=0;
+            XrLirFunction entry_role={0};
+            OK(xr_lir_startup_entry(copy,&entry_role,&count));
+            CHECK(entry_role.id==root.id && entry_role.module==copy && count==1);
+            xr_lir_module_destroy(copy);
+        } else {
+            const char *why=mode==EARLY_READY || mode==CALLEE_READY ?
+                "typed module publication is outside its startup invoke" : "dedicated normal and error successors";
+            CHECK(status==XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,why));
+        }
+        xr_lir_module_destroy(m);
+    }
+}
+
 static void slice_callback_loan_conditions(void) {
     const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8};
     for (size_t family=0;family<2;++family) {
@@ -1165,6 +1279,7 @@ int main(void) {
     typed_error_cannot_be_erased();
     invoke_rejects_forged_error();
     invoke_must_forward_its_received_error();
+    startup_error_requires_an_initialized_origin();
     definition_prevalidation_rejections();
     graph_edges();
     owned_inputs_and_growth();
