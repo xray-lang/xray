@@ -153,17 +153,39 @@ static void test_native_error_snapshot(const XrRbcLiteral *metadata, bool uncaug
     }
 }
 
+static XrLirType test_nominal_error(XrLirModule *m, XrLirLiteral *metadata) {
+    XrLirRecordIdentity key = {.module="fixture",.module_length=7,.name="ProbeErr",.name_length=8};
+    XrLirRecordField field = {.name="code",.name_length=4,.type=XR_LIR_I64};
+    XrLirSumVariant variants[] = {{.name="Missing",.name_length=7},
+        {.name="Bad",.name_length=3,.field_count=1}};
+    XrLirType type;
+    OK(xr_lir_error_sum_type(m,&key,&field,1,variants,2,&type));
+    OK(xr_lir_error_literal(m,type,metadata));
+    return type;
+}
+
+static void reject_forged_error_literal(const XrRbcProgram *program, const uint64_t *arguments, size_t count) {
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    CHECK(module->literal_count==1 && module->literals && module->code_lease.owner);
+    XrRbcLiteral literal = module->literals[0];
+    char *forged = xr_malloc(literal.length);
+    CHECK(forged && literal.length>47);
+    memcpy(forged,literal.bytes,literal.length);
+    memcpy(forged+39,"FakeType",8);
+    literal.bytes=forged;
+    XrRbcModule fake=*module;
+    fake.literals=&literal; /* The old lease cannot attest new diagnostic bytes. */
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(&fake,0,arguments,count,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID &&
+        !execution);
+    xr_free(forged);
+}
+
 static void test_owned_try_assert(void) {
     XrLirModule *m=NULL;
     OK(xr_lir_module_create(NULL,&m));
-    XrLirRecordIdentity key={.module="fixture",.module_length=7,.name="ProbeErr",.name_length=8};
-    XrLirRecordField field={.name="code",.name_length=4,.type=XR_LIR_I64};
-    XrLirSumVariant variants[]={{.name="Missing",.name_length=7},
-        {.name="Bad",.name_length=3,.field_count=1}};
-    XrLirType type,flag=XR_LIR_I1,i64=XR_LIR_I64;
-    OK(xr_lir_error_sum_type(m,&key,&field,1,variants,2,&type));
     XrLirLiteral metadata={0};
-    OK(xr_lir_error_literal(m,type,&metadata));
+    XrLirType type=test_nominal_error(m,&metadata),flag=XR_LIR_I1,i64=XR_LIR_I64;
     XrLirFunction leaf={0};
     XrLirFunctionSpec spec={.name="leaf",.name_length=4,.parameters=&flag,.parameter_count=1,
         .result=i64,.error=type};
@@ -235,17 +257,7 @@ static void test_owned_try_assert(void) {
         !forged_execution);
     xrt_locations_release(forged_map);
 
-    char *forged=xr_malloc(literal.length);
-    CHECK(forged && literal.length>47);
-    memcpy(forged,literal.bytes,literal.length);
-    memcpy(forged+39,"FakeType",8);
-    literal.bytes=forged;
-    XrRbcModule fake=*module;
-    fake.literals=&literal; /* The old lease cannot attest new diagnostic bytes. */
-    XrRbcExecution *fake_execution=NULL;
-    CHECK(xr_rbc_module_prepare(&fake,0,&argument,1,locations,&fake_execution)==XR_RBC_INVALID &&
-        !fake_execution);
-    xr_free(forged);
+    reject_forged_error_literal(program,&argument,1);
     for (uint32_t n=0;n<module->function_count;++n) {
         const XrRbcValueCode *code=xr_rbc_module_value_code(module,n);
         if (code && code->error_type) {
@@ -275,6 +287,59 @@ static void test_owned_try_assert(void) {
     uint32_t scalar=0; uint64_t bits=0;
     CHECK(xrt_try_assert_field(failure,0,&scalar,&bits) && scalar==XR_POD_I64 && bits==23);
     CHECK(!xrt_try_assert_field(failure,1,&scalar,&bits) && bits==23);
+    xr_rbc_outcome_free(&outcome);
+    CHECK(!outcome);
+}
+
+static void test_owned_startup_error(void) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL,&m));
+    XrLirLiteral metadata = {0};
+    XrLirType type = test_nominal_error(m,&metadata);
+    XrLirFunction initializer = {0};
+    XrLirFunctionSpec spec = {.name="initializer",.name_length=11,.result=XR_LIR_UNIT,
+        .error=type,.initializer_module=1};
+    OK(xr_lir_declare_function(m,&spec,&initializer));
+    OK(xr_lir_define_function(m,initializer));
+    XrLirBlock init = test_block(m,initializer,NULL,0);
+    OK(xr_lir_set_entry(m,initializer,init));
+    XrLirValue payload = test_constant(m,init,XR_LIR_I64,23), value = {0};
+    OK(xr_lir_emit_value(m,init,&(XrLirInstruction){.op=XR_LIR_SUM_NEW,.type=type,
+        .bits=1,.operands=&payload,.operand_count=1},&value));
+    OK(xr_lir_set_terminator(m,init,&(XrLirInstruction){.op=XR_LIR_RETURN_ERROR,.type=XR_LIR_UNIT,
+        .operands=&value,.operand_count=1}));
+
+    XrLirFunction root = test_function(m,"startup",NULL,0,XR_LIR_UNIT);
+    XrLirBlock entry = test_block(m,root,NULL,0), ok = test_block(m,root,NULL,0);
+    XrLirBlock error = test_block(m,root,&type,1);
+    OK(xr_lir_set_entry(m,root,entry));
+    OK(xr_lir_set_startup_entry(m,root,1));
+    OK(xr_lir_set_terminator(m,entry,&(XrLirInstruction){.op=XR_LIR_INVOKE,.type=XR_LIR_UNIT,
+        .callee=initializer,.edge_count=2,.edges={{.target=ok},{.target=error}}}));
+    OK(xr_lir_set_terminator(m,ok,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT}));
+    value=block_parameter(m,error,0);
+    OK(xr_lir_set_terminator(m,error,&(XrLirInstruction){.op=XR_LIR_UNCAUGHT_ERROR,.type=XR_LIR_UNIT,
+        .operands=&value,.operand_count=1,.bits=metadata.id}));
+    OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,root);
+    xr_lir_module_destroy(m);
+    reject_forged_error_literal(program,NULL,0);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    xr_rbc_program_destroy(program);
+    xr_rbc_execution_enable_try_trace(execution);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    CHECK(xr_rbc_outcome_status(outcome)==XR_RBC_UNCAUGHT_ERROR);
+    CHECK(!xr_rbc_outcome_try_assert(outcome) && !xr_rbc_outcome_try_trace_count(outcome));
+    const XrtErrorSnapshot *failure=xr_rbc_outcome_uncaught_error(outcome);
+    CHECK(failure && !xrt_try_assert_location(failure));
+    XrtTryAssertValue owned={0};
+    CHECK(xrt_try_assert_value(failure,&owned) && owned.variant==1 && owned.field_count==1 && owned.metadata_size>47);
+    CHECK(xr_error_metadata_u32(owned.metadata+4)==type && !memcmp(owned.metadata+39,"ProbeErr",8));
+    uint32_t scalar=0;
+    uint64_t bits=0;
+    CHECK(xrt_try_assert_field(failure,0,&scalar,&bits) && scalar==XR_POD_I64 && bits==23);
     xr_rbc_outcome_free(&outcome);
     CHECK(!outcome);
 }
@@ -1823,6 +1888,7 @@ int main(void) {
     test_owned_arithmetic_panics();
     test_raw_typed_error_rejected();
     test_owned_try_assert();
+    test_owned_startup_error();
     test_integer_identity_cast(XR_LIR_I64, XR_LIR_I64);
     test_integer_identity_cast(XR_LIR_U64, XR_LIR_I64);
     test_integer_identity_cast(XR_LIR_I64, XR_LIR_U64);
