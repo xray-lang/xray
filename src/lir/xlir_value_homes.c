@@ -299,7 +299,7 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
     XrtValuePlanSpec spec;
     if (!lir_home_binding_spec(b,type,&spec)) return false;
     if (borrowed_copy && spec.kind != XRT_VALUE_STRING && spec.kind != XRT_VALUE_MAP_STRING_I64 &&
-        spec.kind != XRT_VALUE_SET_I64) return true;
+        spec.kind != XRT_VALUE_SET_I64 && !xrt_value_kind_is_array(spec.kind)) return true;
     XrLirHomeWorkspace workspace = {.block=fact.block,.instruction=fact.instruction,
         .type=type,.value=string || borrowed_copy ? fact.value : 0};
     if (string || borrowed_copy) workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;

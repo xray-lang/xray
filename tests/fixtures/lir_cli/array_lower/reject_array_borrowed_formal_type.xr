@@ -1,0 +1,6 @@
+fn replace(target: ref Array<u8>, incoming: Array<i64>) {
+    target = incoming
+}
+
+var bytes: Array<u8> = [7 as u8]
+replace(ref bytes, [2])

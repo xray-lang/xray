@@ -84,7 +84,7 @@ static void c_set_instruction(LirC *c,const XrLirInstructionView *v,uint32_t sou
     bool copy=v->op==XR_LIR_SET_REF_WRITE || (v->op==XR_LIR_CELL_NEW && v->type==XR_LIR_SET_I64_CELL) ||
         (v->op==XR_LIR_CELL_WRITE && c_value_type(c,v->operands[0])==XR_LIR_SET_I64_CELL);
     if (copy && c->homes->values[v->operands[v->operand_count-1]].parameter) {
-        c_hash_binding_stage_copy(c,v->op==XR_LIR_CELL_NEW?v->result:v->operands[0],
+        c_collection_binding_stage_copy(c,v->op==XR_LIR_CELL_NEW?v->result:v->operands[0],
             v->operands[v->operand_count-1],source);return;
     }
     if (v->op!=XR_LIR_SET_BORROW) c_values_ensure(c,source);

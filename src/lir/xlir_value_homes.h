@@ -130,11 +130,11 @@ typedef struct XrLirHomeWorkspace {
      * offset/temporary_offset start complete bundles; each has one actual hold
      * slot. Other workspaces keep their existing VALUE interpretation. */
     XrLirHomeWorkspaceKind kind;
-    /* A String append or borrowed String/Map/Set copy VALUE stage names the actual
+    /* A String append or borrowed String/Array/Map/Set copy VALUE stage names the actual
      * nonconsumed binding here.
      * It has one pending/owner slot and no separate temporary. The matching
      * STRING_OPERATION supplies an append suffix; BINDING_NEW/WRITE supplies
-     * a borrowed String/Map/Set formal copied into this true-empty stage. Its
+     * a borrowed String/Array/Map/Set formal copied into this true-empty stage. Its
      * registered owner is distinct from the actual destination; a single
      * replacement MOVEs it after retain/adopt without fabricating a formal
      * source Place. CLASS_ARRAY_PUSH names the actual Class receiver here.

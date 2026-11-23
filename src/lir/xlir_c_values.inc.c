@@ -237,6 +237,7 @@ static void c_values_function(LirC *c) {
     c->array_region = c->array_regions ? &c->array_regions[c->function.id - 1] : NULL;
     c->home_edge_cursor = 0;
     c->string_event_cursor = c->string_workspace_cursor = 0;
+    c->array_stage_event_cursor = c->array_stage_workspace_cursor = 0;
     c->map_stage_event_cursor = c->map_stage_workspace_cursor = 0;
     c->set_stage_event_cursor = c->set_stage_workspace_cursor = c->set_event_cursor = 0;
     c->view_call_cursor = c->view_event_cursor = 0;

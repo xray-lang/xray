@@ -106,7 +106,7 @@ static void c_state_access(LirC *c, const XrLirInstructionView *v, uint32_t sour
         }
     } else if ((shape.payload == XR_LIR_MAP_STRING_I64 || shape.payload == XR_LIR_SET_I64) &&
         c->homes->values[v->operands[1]].parameter) {
-        c_hash_binding_stage_copy(c,reference,v->operands[1],source);
+        c_collection_binding_stage_copy(c,reference,v->operands[1],source);
     } else if (c_managed_leaf(shape.payload) || shape.payload == XR_LIR_UNIT || shape.payload >= XR_LIR_TYPE_COUNT) {
         c_text(c, "    xrt_module_require(xrt_module_replace("); c_value(c, reference); c_text(c, ", ");
         if (shape.payload == XR_LIR_UNIT) c_text(c, "NULL");

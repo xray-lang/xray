@@ -1,0 +1,24 @@
+fn append(values: ref Array<u8>) { values.push(17 as u8) }
+
+fn materialize(source: Array<u8>) -> Array<u8> {
+    var local = source
+    append(ref local)
+    return local
+}
+
+fn replace(target: ref Array<u8>, incoming: Array<u8>) {
+    target = incoming
+}
+
+fn example() {
+    const original: Array<u8> = [2 as u8]
+    var updated = materialize(original)
+    print(len(original))
+    print(len(updated))
+    print(updated[1])
+    replace(ref updated, original)
+    print(len(updated))
+    print(updated[0])
+}
+
+example()

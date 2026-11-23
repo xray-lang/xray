@@ -1,0 +1,18 @@
+import { BufWriter } from io
+import path
+
+fn example() {
+    var writer = BufWriter(path.from("unused"), 2)
+    var input: Array<u8> = [65 as u8, 66 as u8]
+    print(writer.writeBytes(input))
+    var snapshot = writer.bytes()
+    print(writer.write(snapshot[:]))
+    print(writer.size())
+    print(len(snapshot))
+    print(writer.bytes()[3])
+    writer.reset()
+    print(writer.size())
+    print(len(snapshot))
+}
+
+example()

@@ -95,6 +95,7 @@ typedef struct LirC {
     _Atomic(XrCompileResourceStatus) value_allocation_failure;
     size_t home_edge_cursor;
     size_t string_event_cursor, string_workspace_cursor;
+    size_t array_stage_event_cursor, array_stage_workspace_cursor;
     size_t map_stage_event_cursor, map_stage_workspace_cursor;
     size_t set_stage_event_cursor, set_stage_workspace_cursor, set_event_cursor;
     size_t view_call_cursor, view_event_cursor;
@@ -124,7 +125,7 @@ static bool c_values_owned_type(LirC *, XrLirType);
 static void c_cell_scope_release(LirC *, uint32_t);
 static void c_cell_events_prepare(LirC *);
 static void c_cell_instruction(LirC *, const XrLirInstructionView *, uint32_t);
-static void c_hash_binding_stage_copy(LirC *, uint32_t, uint32_t, uint32_t);
+static void c_collection_binding_stage_copy(LirC *, uint32_t, uint32_t, uint32_t);
 static bool c_binding_forward_begin(LirC *, const XrLirInstructionView *);
 static bool c_binding_forward_drop(LirC *, const XrLirInstructionView *);
 static bool c_array_local_begin(LirC *, const XrLirInstructionView *, const XrLirArrayIntrinsic *, const XrLirHomeWorkspace *);
