@@ -586,12 +586,14 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
         case XR_LIR_RETURN_ERROR:
             break;
-        case XR_LIR_PANIC_ERROR:
+        case XR_LIR_PANIC_ERROR: case XR_LIR_UNCAUGHT_ERROR:
             c->runtime=true;
             c->used_literals[v->bits-1]=1;
-            if (c->location_count==UINT32_MAX)
-                c_error(c,XR_LIR_C_OVERFLOW,"C source inventory overflows");
-            else ++c->location_count;
+            if (v->op==XR_LIR_PANIC_ERROR) {
+                if (c->location_count==UINT32_MAX)
+                    c_error(c,XR_LIR_C_OVERFLOW,"C source inventory overflows");
+                else ++c->location_count;
+            }
             break;
         case XR_LIR_DIV: case XR_LIR_REM:
             if (v->type != XR_LIR_I64)
@@ -1187,13 +1189,17 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_INVOKE:
             c_invoke(c,v);
             break;
-        case XR_LIR_PANIC_ERROR: {
+        case XR_LIR_PANIC_ERROR: case XR_LIR_UNCAUGHT_ERROR: {
             const XrLirLiteralData *metadata=&c->request->module->literals[v->bits-1];
-            c_format(c,"    xrt_try_assert_panic(xrl_literal%" PRIu64 ", %zu, &",v->bits,metadata->length);
+            const char *reporter=v->op==XR_LIR_PANIC_ERROR ? "xrt_try_assert_panic" : "xrt_uncaught_error";
+            c_format(c,"    %s(xrl_literal%" PRIu64 ", %zu, &",reporter,v->bits,metadata->length);
             c_value(c,v->operands[0]);
             c_text(c,", sizeof(");
             c_value(c,v->operands[0]);
-            c_format(c,"), UINT32_C(%" PRIu32 "));\n",++c->location_cursor);
+            c_text(c,")");
+            if (v->op==XR_LIR_PANIC_ERROR)
+                c_format(c,", UINT32_C(%" PRIu32 ")",++c->location_cursor);
+            c_text(c,");\n");
             break;
         }
         case XR_LIR_RETURN_ERROR:

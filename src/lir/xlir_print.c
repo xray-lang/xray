@@ -174,12 +174,14 @@ static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrL
                 lir_print_text(p, ", ");
             lir_print_edge(p, &v->edges[e]);
         }
-    } else if (v->op == XR_LIR_RET || v->op == XR_LIR_RETURN_ERROR || v->op == XR_LIR_PANIC_ERROR) {
+    } else if (v->op == XR_LIR_RET || v->op == XR_LIR_RETURN_ERROR ||
+               v->op == XR_LIR_PANIC_ERROR || v->op == XR_LIR_UNCAUGHT_ERROR) {
         if (v->operand_count) {
             lir_print_text(p, " ");
             lir_print_value(p, v->operands[0]);
         }
-        if (v->op == XR_LIR_PANIC_ERROR) lir_print_format(p,", metadata #%" PRIu64,v->bits);
+        if (v->op == XR_LIR_PANIC_ERROR || v->op == XR_LIR_UNCAUGHT_ERROR)
+            lir_print_format(p,", metadata #%" PRIu64,v->bits);
     } else {
         XrLirType displayed = v->type;
         if (v->op == XR_LIR_ICMP || v->op == XR_LIR_FCMP || v->op == XR_LIR_STRING_EQUAL) {

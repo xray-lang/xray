@@ -108,7 +108,7 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
                 uint64_t scratch = inline_scratch(&v);
                 if (scratch > info->scratch) info->scratch = scratch;
                 info->returns |= v.op == XR_LIR_RET;
-                info->error_edges |= v.op == XR_LIR_INVOKE || v.op == XR_LIR_PANIC_ERROR;
+                info->error_edges |= v.op == XR_LIR_INVOKE || v.op == XR_LIR_PANIC_ERROR || v.op == XR_LIR_UNCAUGHT_ERROR;
                 info->cell_storage |= v.op == XR_LIR_CELL_NEW || v.op == XR_LIR_FUNCTION_SCOPE_ENTER;
                 info->borrow_scope |= v.op == XR_LIR_SLICE_FORMAL_CLEANUP;
                 if (v.op != XR_LIR_CALL) continue;
@@ -233,7 +233,7 @@ static XrLirStatus inline_declarations(Inliner *c) {
     XrLirFunction entry;
     XrLirStatus status = xr_lir_state_entry(c->input, &entry);
     if (status == XR_LIR_OK && entry.id) status = xr_lir_set_state_entry(c->output, c->functions[entry.id]);
-    uint32_t module_count;
+    uint32_t module_count = 0;
     if (status == XR_LIR_OK) status = xr_lir_startup_entry(c->input, &entry, &module_count);
     if (status == XR_LIR_OK && entry.id)
         status = xr_lir_set_startup_entry(c->output, c->functions[entry.id], module_count);

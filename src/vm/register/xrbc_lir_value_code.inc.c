@@ -709,9 +709,9 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         c->invoke_edges=true;
         access.operation=XR_RBC_VALUE_RETURN_ERROR;
         break;
-    case XR_LIR_PANIC_ERROR:
+    case XR_LIR_PANIC_ERROR: case XR_LIR_UNCAUGHT_ERROR:
         c->invoke_edges=true;
-        access.operation=XR_RBC_VALUE_PANIC_ERROR;
+        access.operation=i->op==XR_LIR_PANIC_ERROR ? XR_RBC_VALUE_PANIC_ERROR : XR_RBC_VALUE_UNCAUGHT_ERROR;
         access.other=rbc_lir_value_type(c,i->operands[0]);
         if (!rbc_lir_literal(c,(uint32_t)i->bits,&access.index)) return false;
         break;

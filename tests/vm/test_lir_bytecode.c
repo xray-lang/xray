@@ -80,7 +80,7 @@ static void test_raw_typed_error_rejected(void) {
     CHECK(xr_rbc_module_prepare(&module,0,NULL,0,locations,&execution)==XR_RBC_INVALID && !execution);
     code.error_type=0;
     XrRbcValueOperation typed[]={XR_RBC_VALUE_INVOKE,XR_RBC_VALUE_INVOKE_RESULT,
-        XR_RBC_VALUE_INVOKE_ERROR,XR_RBC_VALUE_RETURN_ERROR,XR_RBC_VALUE_PANIC_ERROR};
+        XR_RBC_VALUE_INVOKE_ERROR,XR_RBC_VALUE_RETURN_ERROR,XR_RBC_VALUE_PANIC_ERROR,XR_RBC_VALUE_UNCAUGHT_ERROR};
     XrRbcValueAccess access={0};
     code.accesses=&access;
     code.access_count=1;

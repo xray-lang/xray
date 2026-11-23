@@ -546,7 +546,7 @@ static bool rbc_value_string_append_valid(const XrRbcModule *module,const XrRbcV
 static bool rbc_value_typed_error_op(XrRbcValueOperation operation) {
     return operation==XR_RBC_VALUE_INVOKE || operation==XR_RBC_VALUE_INVOKE_RESULT ||
         operation==XR_RBC_VALUE_INVOKE_ERROR || operation==XR_RBC_VALUE_RETURN_ERROR ||
-        operation==XR_RBC_VALUE_PANIC_ERROR;
+        operation==XR_RBC_VALUE_PANIC_ERROR || operation==XR_RBC_VALUE_UNCAUGHT_ERROR;
 }
 
 static bool rbc_error_home(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,
@@ -797,7 +797,12 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     }
     case XR_RBC_VALUE_RETURN_ERROR:
         return !a.result && !a.other && !a.index && rbc_error_home(module,code,a.source,code->error_type,false);
-    case XR_RBC_VALUE_PANIC_ERROR: {
+    case XR_RBC_VALUE_PANIC_ERROR: case XR_RBC_VALUE_UNCAUGHT_ERROR: {
+        if (a.operation==XR_RBC_VALUE_UNCAUGHT_ERROR) {
+            const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
+            if (!owner || !owner->startup_function || owner->startup_function>module->function_count ||
+                function!=module->functions+owner->startup_function-1 || code->error_type) return false;
+        }
         const XrLirValueHome *home=rbc_value_home(code,a.source);
         const XrtValueImage *image=xr_rbc_module_value_image(module);
         if (a.result || !home || !rbc_error_home(module,code,a.source,home->type,false) ||
@@ -856,5 +861,6 @@ static bool xr_rbc_value_return_word(const XrRbcModule *module, const XrRbcFunct
     const XrRbcValueCode *code = rbc_value_code(module,function);
     if ((word&65535u)!=XR_RBC_VALUE_ACCESS || !code || !code->accesses || (word>>16)>=code->access_count) return false;
     XrRbcValueOperation op=code->accesses[word>>16].operation;
-    return op==XR_RBC_VALUE_RETURN || op==XR_RBC_VALUE_RETURN_ERROR || op==XR_RBC_VALUE_PANIC_ERROR;
+    return op==XR_RBC_VALUE_RETURN || op==XR_RBC_VALUE_RETURN_ERROR || op==XR_RBC_VALUE_PANIC_ERROR ||
+        op==XR_RBC_VALUE_UNCAUGHT_ERROR;
 }

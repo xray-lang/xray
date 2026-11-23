@@ -1466,11 +1466,14 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         stack->frames[stack->depth-1].pc=pc;
         return XR_RBC_OK;
     }
-    if (access.operation==XR_RBC_VALUE_PANIC_ERROR) {
+    if (access.operation==XR_RBC_VALUE_PANIC_ERROR || access.operation==XR_RBC_VALUE_UNCAUGHT_ERROR) {
+        if (access.operation==XR_RBC_VALUE_UNCAUGHT_ERROR && stack->depth!=1) return XR_RBC_INVALID;
         RbcValuePayload value={0};
         XrtManagedStatus status=rbc_value_payload(module,stack,rbc_value_origin(activation,access.source),&value);
         if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
         const XrRbcLiteral *metadata=&module->literals[access.index];
+        if (access.operation==XR_RBC_VALUE_UNCAUGHT_ERROR)
+            xrt_uncaught_error((const uint8_t *)metadata->bytes,metadata->length,value.address,value.size);
         xrt_try_assert_panic((const uint8_t *)metadata->bytes,metadata->length,value.address,value.size,source);
     }
     XrtManagedStatus status=XRT_MANAGED_OK;

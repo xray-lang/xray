@@ -102,7 +102,7 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
     XrLirFunction entry;
     XrLirStatus status = xr_lir_state_entry(c->input, &entry);
     if (status == XR_LIR_OK && entry.id) status = xr_lir_set_state_entry(c->output, c->functions[entry.id]);
-    uint32_t module_count;
+    uint32_t module_count = 0;
     if (status == XR_LIR_OK) status = xr_lir_startup_entry(c->input, &entry, &module_count);
     if (status == XR_LIR_OK && entry.id)
         status = xr_lir_set_startup_entry(c->output, c->functions[entry.id], module_count);

@@ -566,6 +566,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         i->op == XR_LIR_CLASS_ADOPT || i->op == XR_LIR_CLASS_IS ||
         i->op == XR_LIR_SUM_NEW || i->op == XR_LIR_SUM_TAG || i->op == XR_LIR_SUM_GET ||
         i->op == XR_LIR_INVOKE || i->op == XR_LIR_RETURN_ERROR || i->op == XR_LIR_PANIC_ERROR ||
+        i->op == XR_LIR_UNCAUGHT_ERROR ||
         i->op == XR_LIR_HOST_FILE_OPEN_WRITE || i->op == XR_LIR_HOST_FILE_CLOSE || i->op == XR_LIR_HOST_FILE_WRITE ||
         i->op == XR_LIR_HOST_FILE_OPEN_READ || i->op == XR_LIR_HOST_FILE_READ || i->op == XR_LIR_HOST_ENV_GET) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
@@ -656,7 +657,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:
     case XR_LIR_CALL: case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
-    case XR_LIR_INVOKE: case XR_LIR_RETURN_ERROR: case XR_LIR_PANIC_ERROR:
+    case XR_LIR_INVOKE: case XR_LIR_RETURN_ERROR: case XR_LIR_PANIC_ERROR: case XR_LIR_UNCAUGHT_ERROR:
     case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
     case XR_LIR_STRING_LITERAL: case XR_LIR_STRING_I64: case XR_LIR_STRING_F64: case XR_LIR_STRING_CONCAT:
     case XR_LIR_STRING_SLICE:
@@ -1718,7 +1719,7 @@ static void rbc_code_retire(XrRbcCodeOwner *owner) {
     xr_free(image->type_callables);
     xr_free(image);
 }
-static bool rbc_lir_seal(XrRbcProgram *program) {
+static bool rbc_lir_seal(XrRbcProgram *program, bool startup) {
     XrRbcCodeImage *image = xr_calloc(1, sizeof(*image));
     if (!image) return false;
     atomic_init(&image->code.references, 1);
@@ -1743,6 +1744,7 @@ static bool rbc_lir_seal(XrRbcProgram *program) {
     }
     image->code.functions = image->module.functions;
     image->code.function_count = image->module.function_count;
+    image->code.startup_function = startup ? 1u : 0u;
     image->code.value_homes = image->value_homes;
     image->code.value_codes = image->value_codes;
     image->code.values = image->value_image ? xr_lir_value_image_view(image->value_image) : NULL;
@@ -1987,6 +1989,10 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
             XR_RBC_COMPILE_OUT_OF_MEMORY : XR_RBC_COMPILE_INVALID, invalid.message, invalid.source);
     }
 #endif
+    XrLirFunction startup;
+    uint32_t startup_modules;
+    if (xr_lir_startup_entry(input, &startup, &startup_modules) != XR_LIR_OK)
+        return rbc_lir_error(d, XR_RBC_COMPILE_INVALID, "invalid startup entry", (XrLirSource){0});
     if (root.error)
         return rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
             "execution entry cannot return a typed error", (XrLirSource) {0});
@@ -2101,7 +2107,7 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     status = rbc_lir_value_homes(input, ids, p, &preparation, d);
     if (status == XR_RBC_COMPILE_OK) status = rbc_lir_build(input, ids, mapping, p, preparation.layouts, d);
     if (status == XR_RBC_COMPILE_OK) {
-        if (!rbc_lir_seal(p)) {
+        if (!rbc_lir_seal(p, startup.id == entry.id)) {
             status = rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY,
                 "cannot own the immutable code image", (XrLirSource){0});
             goto done;

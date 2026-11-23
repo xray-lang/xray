@@ -321,6 +321,8 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         return !access.result || rbc_value_flow_write(state,code,access.result,
             (RbcValueEdgeState){.value={0,RBC_BITS}});
     }
+    case XR_RBC_VALUE_UNCAUGHT_ERROR:
+        return !rbc_scope_current(state) && rbc_value_flow_read(state,code,access.source,&incoming);
     case XR_RBC_VALUE_PANIC_ERROR:
         return rbc_value_flow_read(state,code,access.source,&incoming);
     case XR_RBC_VALUE_RETURN: case XR_RBC_VALUE_RETURN_ERROR: {
