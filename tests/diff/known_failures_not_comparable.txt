@@ -386,10 +386,10 @@ tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr  # error: class fie
 tests/diff/cases/semantics/stdlib/http_typed_request_surface.xr  # error: class field carrier is not implemented
 tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr  # error: len receiver family is not admitted
 tests/diff/cases/semantics/stdlib/io_chmod_shared_core.xr  # error: receiver may be null: check it for null, unwrap it with !, or use ?.
-tests/diff/cases/semantics/stdlib/io_path_result_shared_core.xr  # error: constructed XIR failed checking during view lifetime normalization
-tests/diff/cases/semantics/stdlib/io_read_dir_shared_core.xr  # error: constructed XIR failed checking during view lifetime normalization
-tests/diff/cases/semantics/stdlib/io_read_stdin_shared_core.xr  # error: constructed XIR failed checking during view lifetime normalization
-tests/diff/cases/semantics/stdlib/io_remove_all_shared_core.xr  # error: constructed XIR failed checking during view lifetime normalization
+tests/diff/cases/semantics/stdlib/io_path_result_shared_core.xr  # Nullable class requires a receiving optional owner layout is not supported by LIR lowering yet
+tests/diff/cases/semantics/stdlib/io_read_dir_shared_core.xr  # module slot payload type is not supported by LIR lowering yet
+tests/diff/cases/semantics/stdlib/io_read_stdin_shared_core.xr  # CALL_INTRINSIC is not supported by LIR lowering yet
+tests/diff/cases/semantics/stdlib/io_remove_all_shared_core.xr  # Nullable class requires a receiving optional owner layout is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/io_system_direct.xr  # error: len receiver family is not admitted
 tests/diff/cases/semantics/stdlib/io_touch_shared_core.xr  # error: receiver may be null: check it for null, unwrap it with !, or use ?.
 tests/diff/cases/semantics/stdlib/io_write_shared_core.xr  # error: len receiver family is not admitted
@@ -418,7 +418,7 @@ tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr  # error:
 tests/diff/cases/semantics/stdlib/net_copy_bidirectional_transfer.xr  # error: name is not an initialized value
 tests/diff/cases/semantics/stdlib/net_copy_bidirectional_type_surface.xr  # error: name is not an initialized value
 tests/diff/cases/semantics/stdlib/os_exec_system_direct.xr  # error: Array member has no admitted value-operation contract
-tests/diff/cases/semantics/stdlib/os_query_system_direct.xr  # error: constructed XIR failed checking during view lifetime normalization
+tests/diff/cases/semantics/stdlib/os_query_system_direct.xr  # Nullable payload has no inline POD layout is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/parallel_api_reference.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/parallel_default_options.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/parallel_for_each_vm_batch.xr  # error: E0330: throwing call requires try or a try body
@@ -467,8 +467,8 @@ tests/diff/cases/semantics/stdlib/url_core_direct.xr  # record field has no cano
 tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr  # error: Array member has no admitted value-operation contract
-tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr  # error: constructed XIR failed checking during view lifetime normalization
-tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr  # error: constructed XIR failed checking during view lifetime normalization
+tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr  # enum payload field type is not supported by LIR lowering yet
+tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr  # enum payload field of a non-scalar type is not supported by LIR lowering yet
 tests/diff/cases/semantics/string/builtin_runtime_string_split.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/string/char_scalar.xr  # error: scalar method requires its exact admitted ordinary declaration
 tests/diff/cases/semantics/string/interpolation_display_shapes.xr  # error: value has no admitted builtin display

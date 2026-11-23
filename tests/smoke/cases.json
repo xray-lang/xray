@@ -474,13 +474,9 @@
       "id": "stdlib/io/io.xr",
       "path": "stdlib/io/io.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:313:5: error: constructed XIR failed checking during view lifetime normalization at function 156 block 2 instruction 11 (ARRAY_PUSH)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/log/log.xr",
@@ -678,25 +674,17 @@
       "id": "stdlib/xml/xml.xr",
       "path": "stdlib/xml/xml.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:313:5: error: constructed XIR failed checking during view lifetime normalization at function 235 block 2 instruction 11 (ARRAY_PUSH)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/yaml/yaml.xr",
       "path": "stdlib/yaml/yaml.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:313:5: error: constructed XIR failed checking during view lifetime normalization at function 269 block 2 instruction 11 (ARRAY_PUSH)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "demos/07-advanced/readonly_byte_slice.xr",
@@ -1075,13 +1063,9 @@
       "id": "native:stdlib/io/io.xr",
       "path": "stdlib/io/io.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:313:5: error: constructed XIR failed checking during view lifetime normalization at function 156 block 2 instruction 11 (ARRAY_PUSH)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/log/log.xr",
@@ -1167,25 +1151,17 @@
       "id": "native:stdlib/xml/xml.xr",
       "path": "stdlib/xml/xml.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:313:5: error: constructed XIR failed checking during view lifetime normalization at function 235 block 2 instruction 11 (ARRAY_PUSH)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/yaml/yaml.xr",
       "path": "stdlib/yaml/yaml.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/io/io.xr:313:5: error: constructed XIR failed checking during view lifetime normalization at function 269 block 2 instruction 11 (ARRAY_PUSH)"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "tests/smoke/inputs/os_path_sys_regex.xr",

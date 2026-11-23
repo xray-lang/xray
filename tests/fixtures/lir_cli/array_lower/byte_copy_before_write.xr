@@ -1,0 +1,19 @@
+import io
+
+fn append(out: ref Array<u8>, data: Slice<u8>) -> i64 {
+    var chunk: Array<u8> = copy data[:]
+    var count = len(chunk)
+    for (var i = 0; i < count; i++) { out.push(chunk[i]) }
+    return count
+}
+
+fn example() {
+    var output: Array<u8> = [2 as u8, 3 as u8]
+    var snapshot = output
+    print(append(ref output, snapshot[:]))
+    print(len(output))
+    print(len(snapshot))
+    print(output[3])
+}
+
+example()

@@ -1,0 +1,8 @@
+fn example() {
+    var buffer: Array<u8> = [7 as u8]
+    var view: Slice<u8> = buffer[:]
+    buffer.push(9 as u8)
+    print(view[0])
+}
+
+example()

@@ -311,8 +311,11 @@ export final class BufWriter {
     }
 
     write(data: Slice<u8>) -> i64 {
-        for (var i = 0; i < len(data); i++) { this._buffer.push(data[i]) }
-        return len(data)
+        // End the source borrow before growing the buffer.
+        var chunk: Array<u8> = copy data[:]
+        var count = len(chunk)
+        for (var i = 0; i < count; i++) { this._buffer.push(chunk[i]) }
+        return count
     }
 
     writeBytes(data: Array<u8>) -> i64 { return this.write(data[:]) }
