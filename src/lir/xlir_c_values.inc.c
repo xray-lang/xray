@@ -418,7 +418,7 @@ static void c_values_helpers(LirC *c) {
     }
     c->homes = NULL;
 }
-static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
+static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected, uint32_t source) {
     if (!c->homes) return false;
     const XrLirHomeEdge *home = NULL;
     while (c->home_edge_cursor < c->homes->edge_count) {
@@ -439,7 +439,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
     XrLirBlockView target;
     xr_lir_block_view(c->request->module, (XrLirBlock){c->request->module, c->function.id, edge->target}, &target);
     c_text(c, "    {\n");
-    c_values_ensure(c,0);
+    c_values_ensure(c,source);
     uint32_t scalars = c_values_scalar_count(c, edge);
     bool private_scalars = c_values_private_scalars(c, edge);
     if (private_scalars) {
@@ -474,7 +474,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
         if (c->homes->values[transfer.target].owner_count) continue;
         c_text(c, ", &"); c_value(c, transfer.target); c_text(c, ", &"); c_value(c, transfer.source);
     }
-    c_text(c, ");\n    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, 0);\n");
+    c_format(c, ");\n    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
     if (private_scalars) {
         /* Failure is nonreturning. All old owners have retired successfully;
          * only now publish the private, already snapshotted scalar values. */
@@ -491,12 +491,21 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected)
 }
 static bool c_values_signature(LirC *c, bool definition) {
     if (!c_values_owned_type(c, c->view.result) && !c_slice_type(c, c->view.result)) return false;
-    c_text(c, "static void "); c_function_name(c, c->function.id);
+    c_text(c, c->view.error ? "static uint8_t " : "static void ");
+    c_function_name(c, c->function.id);
     c_format(c, "(XrlLanding_%" PRIu32 " xrl_result", c->function.id);
     for (uint32_t p = 0; p < c->view.parameter_count && c_request_poll(c); ++p)
         c_format(c, ", %s p%" PRIu32, c_type(c, c->view.parameter_types[p]), p);
+    if (c->view.error)
+        c_format(c, ", %s *xrl_error", c_type(c, c->view.error));
     c_text(c, definition ? ") {\n" : ");\n");
     return true;
+}
+
+static void c_values_call_landing(LirC *c, uint32_t callee, uint32_t destination) {
+    const XrLirValueHome *home = &c->homes->values[destination];
+    c_format(c, "(XrlLanding_%" PRIu32 "){xrl_frame, %zu, %zu, (void *)((unsigned char *)xrl_payload + %zu), (void *)((unsigned char *)xrl_payload + %zu)}",
+        callee, home->first_owner, home->temporary_first_owner, home->offset, home->temporary_offset);
 }
 static void c_values_root(LirC *c) {
     uint32_t entry = c->request->entry.id;
@@ -583,10 +592,9 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         XrLirFunctionView callee;
         xr_lir_function_view(c->request->module,(XrLirFunction){c->request->module,v->callee},&callee);
         c_values_ensure(c, source);
-        const XrLirValueHome *home = &c->homes->values[v->result];
         c_text(c, "    "); c_function_name(c, v->callee);
-        c_format(c, "((XrlLanding_%" PRIu32 "){xrl_frame, %zu, %zu, (void *)((unsigned char *)xrl_payload + %zu), (void *)((unsigned char *)xrl_payload + %zu)}",
-            v->callee, home->first_owner, home->temporary_first_owner, home->offset, home->temporary_offset);
+        c_text(c, "(");
+        c_values_call_landing(c, v->callee, v->result);
         for (uint32_t a = 0; a < v->operand_count && c_request_poll(c); ++a) {
             c_text(c, ", "); c_call_argument(c, callee.parameter_types[a], v->operands[a]);
         }
@@ -600,7 +608,8 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         if (!c->homes->values[v->operands[0]].owner_count) { c_text(c,"&"); c_value(c,v->operands[0]); }
         else c_text(c,"xrl_payload");
         c_text(c,", xrl_result);\n");
-        c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n      return; }\n", source);
+        c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
+        c_text(c, c->view.error ? "      return UINT8_C(0); }\n" : "      return; }\n");
         return true;
     }
     if (xr_lir_function_exit(v->op) && c->homes && c->homes->owned_frame_needed) {

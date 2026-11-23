@@ -48,18 +48,20 @@ static bool rbc_value_string(const XrRbcModule *module, const XrRbcValueCode *co
     return rbc_value_string_shape(module,code,value,destination) &&
         !rbc_value_home(code,value)->literal_cache_borrow;
 }
-static bool rbc_value_string_literal(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value) {
+static bool rbc_value_string_destination(const XrRbcModule *module,const XrRbcValueCode *code,
+    uint32_t value,bool literal) {
     if (!xr_rbc_module_code_owner(module) || !rbc_value_string_shape(module,code,value,true)) return false;
     const XrLirValueHome *home=rbc_value_home(code,value);
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     const XrtValueImageType *type=&image->types[home->type-1];
     const XrtManagedFrameSpec *frame=&code->homes->frame;
-    if (type->size!=sizeof(XrtManagedHeader *) || type->alignment!=_Alignof(XrtManagedHeader *) || type->owned_count!=1 ||
+    if ((!literal && home->literal_cache_borrow) || type->size!=sizeof(XrtManagedHeader *) ||
+        type->alignment!=_Alignof(XrtManagedHeader *) || type->owned_count!=1 ||
         type->first_owned>=image->owned_count || !image->owned_offsets || image->owned_offsets[type->first_owned] ||
         !code->homes->owned_frame_needed || !frame->owned_offsets || frame->payload_alignment<_Alignof(XrtManagedHeader *)) return false;
     size_t offsets[]={home->offset,home->temporary_offset,home->literal_cache_offset};
     size_t slots[]={home->first_owner,home->temporary_first_owner,home->literal_cache_owner};
-    for (size_t n=0;n<3;++n) {
+    for (size_t n=0;n<(literal ? 3u : 2u);++n) {
         if (slots[n]>=frame->slot_count || offsets[n]%_Alignof(XrtManagedHeader *) ||
             offsets[n]>frame->payload_size || sizeof(XrtManagedHeader *)>frame->payload_size-offsets[n] ||
             frame->owned_offsets[slots[n]]!=offsets[n]) return false;
@@ -70,7 +72,7 @@ static bool rbc_value_string_literal(const XrRbcModule *module,const XrRbcValueC
 static bool rbc_value_string_borrow_operand(const XrRbcModule *module, const XrRbcValueCode *code,
     uint32_t value) {
     const XrLirValueHome *home = rbc_value_home(code,value);
-    return home && (home->literal_cache_borrow ? rbc_value_string_literal(module,code,value) :
+    return home && (home->literal_cache_borrow ? rbc_value_string_destination(module,code,value,true) :
         rbc_value_string(module,code,value,false));
 }
 static const XrLirHomeBinding *rbc_value_binding(const XrRbcValueCode *code, uint32_t value) {
@@ -560,8 +562,11 @@ static bool rbc_error_home(const XrRbcModule *module,const XrRbcValueCode *code,
 
 static bool rbc_invoke_result_home(const XrRbcModule *module,const XrRbcFunction *caller,
     const XrRbcValueCode *code,const XrRbcFunction *target,const XrRbcValueCode *callee,uint32_t result) {
-    if (target->result_kind!=XR_RBC_BITS) return false;
     uint32_t aggregate=target->aggregate_result_type;
+    if (target->result_kind==XR_RBC_STRING)
+        return !callee->error_unit && !aggregate && rbc_value_string_destination(module,code,result,false) &&
+            rbc_value_home(code,result)->type==rbc_result_value_type(callee);
+    if (target->result_kind!=XR_RBC_BITS) return false;
     if (callee->error_unit) return !aggregate && !result;
     if (!aggregate) return rbc_value_scalar(code,caller,result,XR_RBC_BITS);
     if (!rbc_value_pod(module,code,caller,result,aggregate)) return false;
@@ -635,7 +640,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_FUNCTION_ALIAS: case XR_RBC_VALUE_FUNCTION_SCOPE_EXIT:
         return rbc_value_function_access_valid(module,code,function,a);
     case XR_RBC_VALUE_STRING_LITERAL:
-        return !a.source && !a.other && a.index < module->literal_count && rbc_value_string_literal(module,code,a.result);
+        return !a.source && !a.other && a.index < module->literal_count && rbc_value_string_destination(module,code,a.result,true);
     case XR_RBC_VALUE_STRING_I64: case XR_RBC_VALUE_STRING_F64:
         return !a.other && rbc_value_string(module,code,a.result,true) && rbc_value_scalar(code,function,a.source,XR_RBC_BITS);
     case XR_RBC_VALUE_STRING_CONCAT:

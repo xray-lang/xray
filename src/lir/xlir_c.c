@@ -394,12 +394,18 @@ static bool c_string_binding_point(LirC *c, const XrLirInstructionView *v) {
 static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
     if (c_string_binding_point(c, v) || c_display_point(c, v) || xr_lir_string_role(c->request->module, v) ||
         xr_lir_range_point(c->request->module, v)) return true;
+    if (v->op == XR_LIR_INVOKE) return v->type == XR_LIR_STRING;
+    if ((v->op == XR_LIR_RET || v->op == XR_LIR_RETURN_ERROR) && c->view.error && c->view.result == XR_LIR_STRING)
+        return true;
+    if (v->op == XR_LIR_BR && v->edges[0].argument_count &&
+        c_value_type(c, v->edges[0].arguments[0]) == XR_LIR_STRING)
+        return true;
     if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 || v->op == XR_LIR_STRING_F64 ||
         v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_SLICE || v->op == XR_LIR_STRING_RETAIN ||
         v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN || v->op == XR_LIR_STRING_BYTE_LEN ||
         v->op == XR_LIR_I64_TRY_PARSE ||
         v->op == XR_LIR_STRING_EQUAL || v->op == XR_LIR_STRING_INDEX_OF || v->op == XR_LIR_ASSERT_CONDITION ||
-        v->op == XR_LIR_HOST_PATH_BOOL) return true;
+        v->op == XR_LIR_HOST_PATH_BOOL || v->op == XR_LIR_STRING_DROP) return true;
     return (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_STRING_CELL) ||
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_STRING) ||
         (v->op == XR_LIR_CELL_WRITE && c_value_type(c, v->operands[0]) == XR_LIR_STRING_CELL);
@@ -841,7 +847,8 @@ static void c_declarations(LirC *c) {
     for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p)
         c_format(c, "    (void)p%" PRIu32 ";\n", p);
     if (c->view.error) {
-        if (c->view.result!=XR_LIR_UNIT) c_text(c,"    (void)xrl_success;\n");
+        if (c->view.result!=XR_LIR_UNIT && !c_values_owned_type(c,c->view.result))
+            c_text(c,"    (void)xrl_success;\n");
         c_text(c,"    (void)xrl_error;\n");
     }
 }
@@ -934,8 +941,8 @@ static void c_float_conversion(LirC *c, const XrLirInstructionView *v) {
         c_format(c, " = xrt_f64_to_i64(xrl_bits, UINT32_C(%" PRIu32 "));\n    }\n", source);
     }
 }
-static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected) {
-    if (c_values_edge(c, edge, selected)) return;
+static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected, uint32_t source) {
+    if (c_values_edge(c, edge, selected, source)) return;
     XrLirBlock target = {c->request->module, c->function.id, edge->target};
     XrLirBlockView block;
     xr_lir_block_view(c->request->module, target, &block);
@@ -1004,15 +1011,17 @@ static void c_division(LirC *c, const XrLirInstructionView *v) {
         c_value(c, v->operands[1]);
     c_text(c, guarded ? "; }\n" : ";\n");
 }
-static void c_invoke(LirC *c,const XrLirInstructionView *v) {
+static void c_invoke(LirC *c,const XrLirInstructionView *v,uint32_t source) {
     XrLirFunctionView callee;
     xr_lir_function_view(c->request->module,(XrLirFunction){c->request->module,v->callee},&callee);
     XrLirBlockView normal,failure;
     xr_lir_block_view(c->request->module,(XrLirBlock){c->request->module,c->function.id,v->edges[0].target},&normal);
     xr_lir_block_view(c->request->module,(XrLirBlock){c->request->module,c->function.id,v->edges[1].target},&failure);
+    bool owned=c_values_owned_type(c,callee.result);
+    if (owned) c_values_ensure(c,source);
     /* The callee writes one output. Initialize the private receivers because
      * C compilers cannot correlate the volatile status with those writes. */
-    if (normal.parameter_count)
+    if (normal.parameter_count && !owned)
         c_format(c,"    v%" PRIu32 " = (%s){0};\n",normal.parameters[0],c_type(c,callee.result));
     c_format(c,"    v%" PRIu32 " = (%s){0};\n",failure.parameters[0],c_type(c,callee.error));
     /* Like a guarded division, keep both verified guest continuations
@@ -1020,11 +1029,15 @@ static void c_invoke(LirC *c,const XrLirInstructionView *v) {
     c_text(c,"    { volatile uint8_t xrl_status = ");
     c_function_name(c,v->callee);
     c_text(c,"(");
+    if (owned) {
+        c_values_call_landing(c,v->callee,normal.parameters[0]);
+        c_text(c,", ");
+    }
     for (uint32_t a=0;a<v->operand_count;++a) {
         c_call_argument(c,callee.parameter_types[a],v->operands[a]);
         c_text(c,", ");
     }
-    if (normal.parameter_count) c_format(c,"&v%" PRIu32 ", ",normal.parameters[0]);
+    if (normal.parameter_count && !owned) c_format(c,"&v%" PRIu32 ", ",normal.parameters[0]);
     c_format(c,"&v%" PRIu32 ");\n"
         "        if (xrl_status == UINT8_C(0)) goto bb%" PRIu32 ";\n"
         "        goto bb%" PRIu32 ";\n    }\n",
@@ -1184,10 +1197,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         }
         case XR_LIR_BR:
-            c_edge(c, &v->edges[0], 1);
+            c_edge(c, &v->edges[0], 1, string_source);
             break;
         case XR_LIR_INVOKE:
-            c_invoke(c,v);
+            c_invoke(c,v,string_source);
             break;
         case XR_LIR_PANIC_ERROR: case XR_LIR_UNCAUGHT_ERROR: {
             const XrLirLiteralData *metadata=&c->request->module->literals[v->bits-1];
@@ -1212,9 +1225,9 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c, "    if (");
             c_value(c, v->operands[0]);
             c_text(c, ") {\n");
-            c_edge(c, &v->edges[0], 1);
+            c_edge(c, &v->edges[0], 1, 0);
             c_text(c, "    } else {\n");
-            c_edge(c, &v->edges[1], 2);
+            c_edge(c, &v->edges[1], 2, 0);
             c_text(c, "    }\n");
             break;
         case XR_LIR_RET:
