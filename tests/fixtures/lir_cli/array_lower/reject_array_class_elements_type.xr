@@ -1,0 +1,12 @@
+final class Reading {
+    private count: i64
+    init(count: i64) { this.count = count }
+}
+
+final class OtherReading {
+    private count: i64
+    init(count: i64) { this.count = count }
+}
+
+const values: Array<Reading> = [OtherReading(7)]
+print(len(values))

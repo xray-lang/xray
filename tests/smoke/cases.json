@@ -142,7 +142,7 @@
       "stdout": "tests/fixtures/xir_class_inheritance/classes.expected.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/03-oop/classes.xr:71:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/03-oop/classes.xr:26:1: CLASS_METHOD_REF is not supported by LIR lowering yet"
       }
     },
     {
@@ -154,7 +154,7 @@
       "stdout": "tests/fixtures/xir_class_inheritance/classes.expected.txt",
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/03-oop/classes.xr:71:5: module slot payload type is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/03-oop/classes.xr:26:1: CLASS_METHOD_REF is not supported by LIR lowering yet"
       }
     },
     {

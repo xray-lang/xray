@@ -1263,8 +1263,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
         for (uint32_t t = 0; t < m->type_count; ++t) {
             const XrLirTypeData *type = &m->types[t];
             if (!type->inline_array_ordinal) continue;
-            if (type->inline_array_ordinal != ++count ||
-                (type->shape.kind != XR_LIR_TYPE_RECORD && type->shape.kind != XR_LIR_TYPE_TUPLE))
+            if (type->inline_array_ordinal != ++count || !xr_lir_internal_array_element(m, XR_LIR_TYPE_COUNT + t))
                 return lir_status_error(d, XR_LIR_VERIFY_ERROR, "inline Array element plan is invalid");
             for (uint32_t op = 0; op < XR_LIR_ARRAY_OP_GET; ++op) {
                 uint32_t index = type->inline_array_operations[op];

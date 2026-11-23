@@ -1,0 +1,35 @@
+final class Reading {
+    private count: i64
+    init(count: i64) { this.count = count }
+    set(count: i64) { this.count = count }
+    value() -> i64 { return this.count }
+}
+
+fn at(values: Array<Reading>, index: i64) -> Reading {
+    return values[index]
+}
+
+fn readings() -> Array<Reading> {
+    const same = Reading(7)
+    return [same, same, Reading(19)]
+}
+
+fn afterArray() -> Reading {
+    const values: Array<Reading> = [Reading(51)]
+    return at(values, 0)
+}
+
+fn exercise() {
+    const empty: Array<Reading> = []
+    print(len(empty))
+    const values = readings()
+    print(len(values))
+    const alias = at(values, 1)
+    print(alias.value())
+    alias.set(14)
+    print(values[0].value())
+    print(values[2].value())
+    print(afterArray().value())
+}
+
+exercise()

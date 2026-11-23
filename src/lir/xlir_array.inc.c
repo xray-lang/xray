@@ -18,8 +18,14 @@ XR_FUNC uint32_t xr_lir_inline_array_ordinal(const XrLirModule *m, XrLirType typ
     return m && type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < m->type_count
         ? m->types[type - XR_LIR_TYPE_COUNT].inline_array_ordinal : 0;
 }
+static bool lir_inline_array_element_supported(const XrLirModule *m, XrLirType type) {
+    XrLirTypeKind kind = m->types[type - XR_LIR_TYPE_COUNT].shape.kind;
+    return kind == XR_LIR_TYPE_RECORD || kind == XR_LIR_TYPE_TUPLE ||
+        (kind == XR_LIR_TYPE_CLASS && !xr_lir_class_storage(m, type));
+}
 XR_FUNC bool xr_lir_internal_array_element(const XrLirModule *m, XrLirType type) {
-    return xr_lir_internal_array_family(type) != UINT32_MAX || xr_lir_inline_array_ordinal(m, type);
+    return xr_lir_internal_array_family(type) != UINT32_MAX ||
+        (xr_lir_inline_array_ordinal(m, type) && lir_inline_array_element_supported(m, type));
 }
 XR_FUNC uint32_t xr_lir_array_layout_family(const XrLirModule *m, XrLirType type) {
     uint32_t fixed = xr_lir_internal_array_family(type);
@@ -32,7 +38,7 @@ XR_FUNC XrLirStatus xr_lir_require_inline_array_element(XrLirModule *m, XrLirTyp
     if (type < XR_LIR_TYPE_COUNT || type - XR_LIR_TYPE_COUNT >= m->type_count)
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     XrLirTypeData *data = &m->types[type - XR_LIR_TYPE_COUNT];
-    if (data->shape.kind != XR_LIR_TYPE_RECORD && data->shape.kind != XR_LIR_TYPE_TUPLE)
+    if (!lir_inline_array_element_supported(m, type))
         return lir_fail(m, XR_LIR_UNSUPPORTED);
     if (!data->inline_array_ordinal) {
         if (m->intrinsic_count) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);

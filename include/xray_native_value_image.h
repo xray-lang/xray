@@ -38,6 +38,9 @@ enum { XRT_VALUE_FIELD_MUTABLE = 1u };
 static inline int xrt_value_kind_has_fields(XrtValueKind kind) {
     return kind == XRT_VALUE_RECORD || kind == XRT_VALUE_TUPLE;
 }
+static inline int xrt_value_inline_array_element_supported(XrtValueKind kind, uint32_t class_storage) {
+    return xrt_value_kind_has_fields(kind) || (kind == XRT_VALUE_CLASS && !class_storage);
+}
 static inline int xrt_value_kind_is_array(XrtValueKind kind) {
     return (kind >= XRT_VALUE_ARRAY_I64 && kind <= XRT_VALUE_ARRAY_U64) || kind == XRT_VALUE_ARRAY_INLINE;
 }

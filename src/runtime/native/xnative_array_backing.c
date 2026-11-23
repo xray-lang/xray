@@ -107,7 +107,8 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_bind(XrtBillingOwner *billi
     const XrtValuePlan *element, XrtManagedOps **empty) {
     XrtValuePlanSpec shape;
     if (!billing || !empty || *empty || xrt_value_plan_view(element, &shape) != XRT_MANAGED_OK ||
-        !xrt_value_kind_has_fields(shape.kind) || !shape.size || sizeof(XrtArrayBacking) % shape.alignment)
+        !xrt_value_inline_array_element_supported(shape.kind, shape.class_storage) || !shape.size ||
+        sizeof(XrtArrayBacking) % shape.alignment)
         return XRT_MANAGED_ARGUMENT;
     size_t alignment = shape.alignment > alignof(XrtArrayBacking) ? shape.alignment : alignof(XrtArrayBacking);
     XrtRuntimeTypeSpec spec = {
@@ -134,6 +135,14 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_create(XrtManagedFrame *fra
     if (count > capacity || (count && (!rows || (uintptr_t)rows % element.alignment))) return XRT_MANAGED_ARGUMENT;
     size_t bytes = array_bytes(spec->stride, capacity);
     if (!bytes) return XRT_MANAGED_OVERFLOW;
+    if (element.kind == XRT_VALUE_CLASS) {
+        /* Class rows own the same object under the Array's exact class plan. */
+        for (size_t row = 0; row < count; ++row) {
+            XrtManagedHeader *object = NULL;
+            memcpy(&object, (const unsigned char *)rows + row * spec->stride, sizeof(object));
+            if (!xrt_class_backing_matches(object, spec->code.context)) return XRT_MANAGED_ARGUMENT;
+        }
+    }
     XrtManagedHeader *payload = NULL;
     status = array_prepare(frame, slot, ops, bytes, capacity, &payload);
     if (status != XRT_MANAGED_OK) return status;

@@ -489,7 +489,8 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
         const XrXirTypeNode *row = xr_xir_type_node(c->source->types, node->element);
         XrXirTypeDescription record = {0};
         if (row && (row->kind == XR_XIR_TYPE_TUPLE ||
-            (row->kind == XR_XIR_TYPE_NOMINAL && lower_record_description(c, node->element, &record)))) {
+            (row->kind == XR_XIR_TYPE_NOMINAL && (xr_xir_type_is_class(c->source->types, node->element) ||
+                lower_record_description(c, node->element, &record))))) {
             if (!lower_receive_record_shapes(c, node->element)) return false;
             return lower_build(c, xr_lir_require_inline_array_element(c->module, lower_type(c, node->element)));
         }

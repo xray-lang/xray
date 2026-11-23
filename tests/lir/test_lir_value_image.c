@@ -669,6 +669,64 @@ static void nullable_arrays_keep_their_exact_backing(void) {
     MANAGED(xrt_managed_root_destroy(&root)); xrt_backing_types_drop(&backings);
     xrt_value_image_drop(&bound); owner_drop(&owner); CHECK(owner.audit.final == 1);
 }
+static void class_array_elements_keep_their_exact_backing(void) {
+    const size_t offsets[] = {0};
+    const XrtValueImageSlot fields[] = {{.type=1,.name_length=5}};
+    const XrtValueImageType types[] = {
+        {.kind=XRT_VALUE_I64,.size=8,.alignment=8},
+        {.kind=XRT_VALUE_RECORD,.size=8,.alignment=8,.field_count=1},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=2},
+        {.kind=XRT_VALUE_CLASS,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=2},
+        {.kind=XRT_VALUE_ARRAY_INLINE,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1,.element=3},
+    };
+    const XrtValueImage image = {.types=types,.type_count=5,.slots=fields,.slot_count=1,
+        .owned_offsets=offsets,.owned_count=1,.names="count",.name_bytes=5};
+    Owner owner; owner_new(&owner, SIZE_MAX);
+    XrtValueImagePlans *bound = NULL;
+    MANAGED(xrt_value_image_bind(owner.billing, &image, (XrtManagedLease){0}, &bound));
+    XrtBoundClass type = {0}, other = {0};
+    XrtBoundInlineArray array_type = {0};
+    MANAGED(xrt_value_image_class(bound, 3, &type));
+    MANAGED(xrt_value_image_class(bound, 4, &other));
+    MANAGED(xrt_value_image_inline_array(bound, 5, &array_type));
+    CHECK(array_type.element == type.plan && other.plan != type.plan);
+    XrtManagedRoot *root = NULL; XrtManagedFrame *frame = NULL;
+    MANAGED(xrt_managed_root_new(owner.billing, &root));
+    MANAGED(xrt_managed_frame_enter(root, 3, &frame));
+    int64_t count = 42;
+    MANAGED(xrt_class_create(frame, 0, type.ops, &count));
+    MANAGED(xrt_class_create(frame, 1, other.ops, &count));
+    XrtManagedHeader *original = NULL, *wrong = NULL, *array = NULL;
+    MANAGED(xrt_managed_slot_borrow(frame, 0, &original));
+    MANAGED(xrt_managed_slot_borrow(frame, 1, &wrong));
+    XrtManagedHeader *rows[] = {original, original};
+    MANAGED(xrt_array_backing_inline_create(frame, 2, array_type.ops, rows, 2, 2));
+    MANAGED(xrt_managed_slot_borrow(frame, 2, &array));
+    CHECK(xr_signed_rc_read(&original->references) == 3);
+    size_t allocations = owner.audit.allocations;
+    rows[1] = wrong;
+    CHECK(xrt_array_backing_inline_create(frame, 2, array_type.ops, rows, 2, 2) == XRT_MANAGED_ARGUMENT);
+    rows[1] = NULL;
+    CHECK(xrt_array_backing_inline_create(frame, 2, array_type.ops, rows, 2, 2) == XRT_MANAGED_ARGUMENT);
+    XrtManagedHeader *current = NULL;
+    MANAGED(xrt_managed_slot_borrow(frame, 2, &current));
+    CHECK(current == array && owner.audit.allocations == allocations &&
+        xr_signed_rc_read(&original->references) == 3 && xr_signed_rc_read(&wrong->references) == 1);
+    MANAGED(xrt_managed_slot_drop(frame, 0));
+    const void *row = NULL;
+    CHECK(xrt_array_backing_inline_at((const XrtArrayBacking *)array, other.plan, 1, &row) == XRT_MANAGED_ARGUMENT && !row);
+    MANAGED(xrt_array_backing_inline_at((const XrtArrayBacking *)array, type.plan, 1, &row));
+    XrtManagedHeader *kept = NULL;
+    MANAGED(xrt_value_copy_empty(type.plan, row, &kept)); CHECK(kept == original);
+    MANAGED(xrt_managed_slot_drop(frame, 2));
+    CHECK(xr_signed_rc_read(&kept->references) == 1);
+    const XrtValuePlan *field = NULL; const void *payload = NULL;
+    MANAGED(xrt_class_field_borrow(kept, type.plan, 0, &field, &payload));
+    CHECK(*(const int64_t *)payload == count);
+    xrt_value_drop(type.plan, &kept);
+    MANAGED(xrt_managed_root_destroy(&root));
+    xrt_value_image_drop(&bound); owner_drop(&owner); CHECK(owner.audit.final == 1);
+}
 int main(void) {
     class_arrays_keep_their_exact_backing();
     class_array_update_failure_preserves_the_field(false);
@@ -677,6 +735,7 @@ int main(void) {
     nested_classes_keep_exact_owner_plans();
     nested_class_owners_are_checked_before_publication();
     nullable_arrays_keep_their_exact_backing();
+    class_array_elements_keep_their_exact_backing();
     copied_names_and_real_values(); failures_and_empty(); deep_single_inventory(); rejects_forged_display_closure();
     class_values_follow_their_exact_owner();
     puts("raw value images: billed ownership, copied names, exact ids, creator retirement and real inline values passed");

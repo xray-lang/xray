@@ -56,8 +56,11 @@ static bool rbc_state_image_shape(const XrtValueImage *image) {
             type->class_parent > i || (type->class_parent && (type->kind != XRT_VALUE_CLASS ||
                 image->types[type->class_parent - 1].kind != XRT_VALUE_CLASS)))
             return false;
-        if (type->kind == XRT_VALUE_ARRAY_INLINE &&
-            (!type->element || !xrt_value_kind_has_fields(image->types[type->element - 1].kind))) return false;
+        if (type->kind == XRT_VALUE_ARRAY_INLINE) {
+            if (!type->element) return false;
+            const XrtValueImageType *element = &image->types[type->element - 1];
+            if (!xrt_value_inline_array_element_supported(element->kind, element->class_storage)) return false;
+        }
         if (type->kind == XRT_VALUE_CLASS &&
             (!type->element || image->types[type->element-1].kind != XRT_VALUE_RECORD ||
                 type->size != sizeof(XrtManagedHeader *) || type->alignment != _Alignof(XrtManagedHeader *) ||

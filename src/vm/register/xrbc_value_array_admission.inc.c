@@ -293,7 +293,9 @@ static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcVa
         if (!image || !image->types || !home->type || home->type > image->type_count ||
             image->types[home->type - 1].kind != XRT_VALUE_ARRAY_INLINE) return false;
         uint32_t element = image->types[home->type - 1].element;
-        if (!element || element >= home->type || !xrt_value_kind_has_fields(image->types[element - 1].kind)) return false;
+        if (!element || element >= home->type) return false;
+        const XrtValueImageType *row = &image->types[element - 1];
+        if (!xrt_value_inline_array_element_supported(row->kind, row->class_storage)) return false;
         if (create) {
             for (uint32_t p = 0; p < a.count; ++p)
                 if (!rbc_value_inline_operand(module,code,function,args[p],element,false)) return false;

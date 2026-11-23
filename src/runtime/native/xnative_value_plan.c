@@ -260,7 +260,7 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
             (i && offset < spec->owned_offsets[i - 1])) return false;
     }
     if (spec->kind == XRT_VALUE_ARRAY_INLINE && (!spec->element || !spec->element->view.size ||
-        !xrt_value_kind_has_fields(spec->element->view.kind))) return false;
+        !xrt_value_inline_array_element_supported(spec->element->view.kind, spec->element->view.class_storage))) return false;
     if (spec->kind == XRT_VALUE_CLASS && !class_payload_valid(spec)) return false;
     if (spec->kind == XRT_VALUE_SUM) return sum_valid(spec);
     if (pointer_kind(spec->kind))
