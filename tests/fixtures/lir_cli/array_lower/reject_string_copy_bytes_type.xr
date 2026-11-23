@@ -1,0 +1,2 @@
+const bytes: Array<i64> = "hello".copyBytes()
+print(len(bytes))

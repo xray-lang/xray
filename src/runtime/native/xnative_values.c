@@ -457,6 +457,13 @@ XRAY_API void xrt_native_array_repeat(XrtManagedFrame *frame, size_t slot,
     if (status==XRT_MANAGED_OK) status=xrt_array_backing_repeat_create(frame,slot,types,item,length);
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
 }
+XRAY_API void xrt_native_string_copy_bytes(XrtManagedFrame *frame, size_t slot,
+    const XrtStringBacking *string, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id),&types);
+    if (status == XRT_MANAGED_OK) status = xrt_string_backing_copy_bytes_create(frame,slot,types,string);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+}
 XRAY_API int64_t xrt_native_array_capacity(const XrtManagedHeader *array,
     XrtBackingArrayKind kind, uint32_t source_id) {
     int64_t capacity = 0;

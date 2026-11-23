@@ -1,0 +1,17 @@
+fn copyText(input: string) -> Array<u8> { return input.copyBytes() }
+
+fn example() {
+    const input = "A\0λ"
+    var copied = copyText(input)
+    print(len(copied))
+    print(copied[0])
+    print(copied[1])
+    print(copied[2])
+    print(copied[3])
+    copied[0] = 90 as u8
+    print(copied[0])
+    print(input.copyBytes()[0])
+    print(len("".copyBytes()))
+}
+
+example()

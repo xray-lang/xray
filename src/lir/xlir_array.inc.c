@@ -118,6 +118,9 @@ XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirModule *m, const X
         return entry->parameter_count == 2 && entry->parameters[0] == XR_LIR_ARRAY &&
             entry->parameters[1] == XR_LIR_I64 && entry->result == XR_LIR_ARRAY &&
             shape->parameter_elements[0] == shape->result_element;
+    case XR_LIR_ARRAY_OP_COPY_STRING_BYTES:
+        return entry->parameter_count == 1 && entry->parameters[0] == XR_LIR_STRING &&
+            entry->result == XR_LIR_ARRAY && shape->result_element == XR_LIR_U8;
     case XR_LIR_ARRAY_OP_DISPLAY:
         return entry->parameter_count == 1 && entry->parameters[0] == XR_LIR_ARRAY && entry->result == XR_LIR_STRING;
     case XR_LIR_ARRAY_OP_GET:
@@ -172,7 +175,7 @@ XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *m, XrLirType eleme
     XrLirArrayOperation operation, uint32_t *id) {
     if (id) *id = 0;
     if (!id || !m || m->failure != XR_LIR_OK || !xr_lir_internal_array_element(m, element) ||
-        operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_RESERVE)
+        operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_COPY_STRING_BYTES)
         return XR_LIR_INVALID_ARGUMENT;
     uint32_t family = xr_lir_internal_array_family(element);
     if (family == UINT32_MAX) {
@@ -217,6 +220,9 @@ static void lir_array_catalog_signature(LirArrayCatalogRow *row, XrLirIntrinsic 
     case XR_LIR_ARRAY_OP_DISPLAY: result = XR_LIR_STRING; break;
     case XR_LIR_ARRAY_OP_RESERVE:
         arity = 2; parameters[1] = XR_LIR_I64; result = XR_LIR_ARRAY; break;
+    case XR_LIR_ARRAY_OP_COPY_STRING_BYTES:
+        parameters[0] = XR_LIR_STRING; shapes[0] = XR_LIR_TYPE_INVALID;
+        result = XR_LIR_ARRAY; break;
     case XR_LIR_ARRAY_OP_GET:
         arity = 2; parameters[1] = XR_LIR_I64; result = element; break;
     case XR_LIR_ARRAY_OP_SET:
@@ -267,6 +273,11 @@ static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra)
     for (uint32_t i = 0; i < catalog; ++i) {
         while (used[next]) ++next;
         used[next] = 1;
+        if (i == catalog - 1) {
+            lir_array_catalog_signature(&parts[i], &entries[count + i], next,
+                XR_LIR_U8, XR_LIR_ARRAY_OP_COPY_STRING_BYTES, false);
+            continue;
+        }
         bool reference = i >= base_catalog && i < reference_end;
         uint32_t family;
         XrLirArrayOperation operation;

@@ -550,7 +550,7 @@ static bool lower_known(XrXirOp op) {
         case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
         case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP:
         case XR_XIR_FIXED_ARRAY_NEW: case XR_XIR_FIXED_ARRAY_GET: case XR_XIR_FIXED_ARRAY_LEN:
-        case XR_XIR_ARRAY_NEW:
+        case XR_XIR_ARRAY_NEW: case XR_XIR_STRING_COPY_BYTES:
         case XR_XIR_SET_NEW: case XR_XIR_SET_ADD:
         case XR_XIR_MAP_NEW: case XR_XIR_MAP_LITERAL: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_MAP_SET:
         case XR_XIR_HASH_LEN: case XR_XIR_HASH_CONTAINS: case XR_XIR_HASH_DELETE: case XR_XIR_HASH_CLEAR:

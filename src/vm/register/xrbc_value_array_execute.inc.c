@@ -227,7 +227,8 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     if (access.operation!=XR_RBC_VALUE_ARRAY) return rbc_value_binding_step(module,stack,activation,access,source);
     const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
-    bool create=access.index==XR_LIR_ARRAY_OP_NEW || access.index==XR_LIR_ARRAY_OP_REPEAT;
+    bool create=access.index==XR_LIR_ARRAY_OP_NEW || access.index==XR_LIR_ARRAY_OP_REPEAT ||
+        access.index==XR_LIR_ARRAY_OP_COPY_STRING_BYTES;
     XrtValueKind value_kind=rbc_value_kind(module,activation->code,create ? access.result : args[0]);
     if (value_kind==XRT_VALUE_ARRAY_INLINE) return rbc_value_array_inline(module,stack,activation,access,args);
     XrtBackingArrayKind kind=(XrtBackingArrayKind)(value_kind-XRT_VALUE_ARRAY_I64);
@@ -256,7 +257,12 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     if (create) {
         XrtManagedStatus status;
         if (access.index==XR_LIR_ARRAY_OP_NEW) status=rbc_value_array_new(stack,activation,access,types,kind);
-        else {
+        else if (access.index==XR_LIR_ARRAY_OP_COPY_STRING_BYTES) {
+            const XrtStringBacking *string = NULL;
+            status = rbc_value_string_borrow(activation,args[0],&string);
+            if (status==XRT_MANAGED_OK)
+                status=xrt_string_backing_copy_bytes_create(activation->frame,result->temporary_first_owner,types,string);
+        } else {
             XrRbcRegister *length=rbc_value_register(stack,activation,args[0]); XrtArrayItem item;
             if (!length) return XRT_MANAGED_ARGUMENT;
             int64_t count; memcpy(&count,&length->bits,8);

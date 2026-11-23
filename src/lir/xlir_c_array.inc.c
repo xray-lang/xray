@@ -228,6 +228,11 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         c_format(c,"    xrt_native_array_reserve(xrl_frame, %zu, ",home->temporary_first_owner);
         c_value(c,v->operands[0]); c_format(c,", %s, ",kind); c_value(c,v->operands[1]);
         c_format(c,", UINT32_C(%" PRIu32 "));\n",source); c_values_publish_leaf(c,v->result,source); return;
+    case XR_LIR_ARRAY_OP_COPY_STRING_BYTES:
+        c_format(c,"    xrt_native_string_copy_bytes(xrl_frame, %zu, (const XrtStringBacking *)",
+            home->temporary_first_owner);
+        c_value(c,v->operands[0]); c_format(c,", UINT32_C(%" PRIu32 "));\n",source);
+        c_values_publish_leaf(c,v->result,source); return;
     case XR_LIR_ARRAY_OP_DISPLAY:
         c_format(c,"    xrt_native_array_display(xrl_frame, %zu, ",home->temporary_first_owner); c_value(c,v->operands[0]);
         c_format(c,", %s, UINT32_C(%" PRIu32 "));\n",kind,source); c_values_publish_leaf(c,v->result,source); return;

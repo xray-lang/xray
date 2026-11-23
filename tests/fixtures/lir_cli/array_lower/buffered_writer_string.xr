@@ -1,0 +1,16 @@
+import { BufWriter } from io
+import path
+
+fn example() {
+    var writer = BufWriter(path.from("unused"), 1)
+    print(writer.writeString("Ω\0"))
+    print(writer.size())
+    const snapshot = writer.bytes()
+    print(snapshot[0])
+    print(snapshot[1])
+    print(snapshot[2])
+    print(writer.writeString(""))
+    print(writer.size())
+}
+
+example()
