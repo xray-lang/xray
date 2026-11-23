@@ -198,9 +198,71 @@ static void cleanup_requires_a_registered_exit(void) {
                 OK(xr_lir_rebuild(module, &rebuilt));
                 OK(xr_lir_verify(rebuilt, NULL));
                 xr_lir_module_destroy(rebuilt);
+                XrLirModule *inlined = NULL;
+                OK(xr_lir_inline(module, &inlined));
+                XrLirFunction inlined_cleanup = {0};
+                XrLirFunctionView view = {0};
+                OK(xr_lir_function_at(inlined, cleanup.id - 1, &inlined_cleanup));
+                OK(xr_lir_function_view(inlined, inlined_cleanup, &view));
+                CHECK(view.cleanup_owner == owner.id);
+                OK(xr_lir_verify(inlined, NULL));
+                xr_lir_module_destroy(inlined);
             } else {
                 CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "cleanup frontier"));
             }
+        }
+        xr_lir_module_destroy(module);
+    }
+}
+
+static void cleanup_suffix_precedes_retirement(void) {
+    for (unsigned crossed = 0; crossed < 2; ++crossed) {
+        XrLirModule *module = NULL;
+        OK(xr_lir_module_create(NULL, &module));
+        XrLirFunction owner = test_function(module, "owner", NULL, 0, XR_LIR_UNIT);
+        XrLirFunction cleanup[2] = {{0}};
+        const char *names[] = {"outer", "inner"};
+        for (uint32_t n = 0; n < 2; ++n) {
+            XrLirFunctionSpec spec = {.name = names[n], .name_length = 5, .result = XR_LIR_UNIT,
+                .cleanup_owner = owner.id};
+            OK(xr_lir_declare_function(module, &spec, &cleanup[n]));
+            OK(xr_lir_define_function(module, cleanup[n]));
+            XrLirBlock body = test_block(module, cleanup[n], NULL, 0);
+            OK(xr_lir_set_entry(module, cleanup[n], body));
+            test_return(module, body, (XrLirValue){0});
+        }
+        XrLirType string = XR_LIR_STRING;
+        XrLirBlock outer = test_block(module, owner, NULL, 0);
+        XrLirBlock inner = test_block(module, owner, &string, 1);
+        XrLirBlock active = test_block(module, owner, &string, 1);
+        OK(xr_lir_set_entry(module, owner, outer));
+        XrLirLiteral literal = {0};
+        OK(xr_lir_add_literal(module, (const uint8_t *)"owner", 5, &literal));
+        XrLirValue value = {0};
+        OK(xr_lir_emit_value(module, outer, &(XrLirInstruction){.op = XR_LIR_STRING_LITERAL,
+            .type = string, .bits = literal.id}, &value));
+        OK(xr_lir_internal_cleanup_block(module, outer, 0, cleanup[0].id, NULL, 0));
+        test_branch(module, outer, inner, &value, 1);
+        OK(xr_lir_block_parameter(module, inner, 0, &value));
+        OK(xr_lir_internal_cleanup_block(module, inner, cleanup[0].id, cleanup[1].id, NULL, 0));
+        test_branch(module, inner, active, &value, 1);
+        OK(xr_lir_block_parameter(module, active, 0, &value));
+        OK(xr_lir_internal_cleanup_block(module, active, cleanup[1].id, 0, NULL, 0));
+        XrLirInstruction drop = {.op = XR_LIR_STRING_DROP, .type = XR_LIR_UNIT,
+            .operands = &value, .operand_count = 1};
+        XrLirInstruction run = {.op = XR_LIR_CALL, .type = XR_LIR_UNIT, .callee = cleanup[1]};
+        OK(xr_lir_emit_effect(module, active, &run));
+        if (crossed) OK(xr_lir_emit_effect(module, active, &drop));
+        run.callee = cleanup[0];
+        OK(xr_lir_emit_effect(module, active, &run));
+        if (!crossed) OK(xr_lir_emit_effect(module, active, &drop));
+        test_return(module, active, (XrLirValue){0});
+        XrLirDiagnostic diagnostic = {0};
+        XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
+        if (crossed) {
+            CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "cleanup frontier"));
+        } else {
+            CHECK(status == XR_LIR_OK);
         }
         xr_lir_module_destroy(module);
     }
@@ -1397,6 +1459,7 @@ int main(void) {
     invoke_rejects_forged_error();
     invoke_must_forward_its_received_error();
     cleanup_requires_a_registered_exit();
+    cleanup_suffix_precedes_retirement();
     startup_error_requires_an_initialized_origin();
     discarded_invoke_error_cannot_be_observed();
     definition_prevalidation_rejections();

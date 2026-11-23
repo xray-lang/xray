@@ -12,6 +12,7 @@
  */
 #include "xlir_inline.h"
 #include "xlir_builder.h"
+#include "xlir_internal.h"
 #include "xlir_verify.h"
 #include "xlir_state.h"
 #include "xlir_array_copy.h"
@@ -28,6 +29,7 @@ typedef struct {
     uint64_t instructions, scratch;
     uint32_t index, low, component, component_size;
     bool active, self, returns, eligible, cell_storage, managed_owners, borrow_scope, error_edges;
+    bool cleanup_related;
 } InlineFunction;
 typedef struct { uint32_t function; size_t next; } InlineGraphFrame;
 typedef struct {
@@ -92,6 +94,8 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
     for (uint32_t f = 0; f < c->count; ++f) {
         InlineFunction *info = &c->info[f + 1];
         xr_lir_function_view(c->input, (XrLirFunction){c->input, f + 1}, &info->view);
+        const XrLirFunctionData *source = &c->input->functions[f];
+        info->cleanup_related = source->has_cleanups || source->cleanup_owner;
         for (uint32_t v = 1; v <= info->view.value_count; ++v) {
             XrLirType type = XR_LIR_TYPE_INVALID;
             xr_lir_value_type(c->input, (XrLirValue){c->input, f + 1, v}, &type);
@@ -102,6 +106,8 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
         info->first = c->edge_count;
         for (uint32_t b = 0; b < info->view.block_count; ++b) {
             XrLirBlockView block = inline_block_view(c, f + 1, b + 1);
+            const XrLirCleanupBlock *cleanup = source->blocks[b].cleanup;
+            if (cleanup && cleanup->capture_count > info->scratch) info->scratch = cleanup->capture_count;
             info->instructions += block.instruction_count;
             for (uint32_t n = 0; n < block.instruction_count; ++n) {
                 XrLirInstructionView v = inline_view(c, f + 1, b + 1, n);
@@ -183,7 +189,7 @@ static void inline_components(Inliner *c) {
     for (uint32_t f = 0; f < c->count; ++f) {
         InlineFunction *info = &c->info[f + 1];
         info->eligible = info->view.kind == XR_LIR_FUNCTION_DEFINITION && info->returns &&
-            !info->view.error && !info->error_edges &&
+            !info->view.error && !info->error_edges && !info->cleanup_related &&
             !info->self && !info->cell_storage && !info->managed_owners && !info->borrow_scope &&
             c->info[info->component].component_size == 1 &&
             info->view.block_count <= 16 && info->view.value_count <= 128 &&
@@ -222,7 +228,8 @@ static XrLirStatus inline_declarations(Inliner *c) {
             .parameters = v->parameter_types, .parameter_count = v->parameter_count,
             .result = v->result, .kind = v->kind, .extern_kind = v->extern_kind, .error = v->error,
             .callable_parameters=v->callable_parameters, .callable_parameter_count=v->callable_parameter_count,
-            .initializer_module=v->initializer_module};
+            .initializer_module=v->initializer_module,
+            .cleanup_owner=v->cleanup_owner ? c->functions[v->cleanup_owner].id : 0};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[f + 1]);
         if (status == XR_LIR_OK) status = lir_copy_array_signature(c->input,
             (XrLirFunction){c->input, f + 1}, c->functions[f + 1]);
@@ -425,10 +432,29 @@ static XrLirStatus inline_site(InlineBody *caller, XrLirBlock *cursor,
     inline_body_free(&clone);
     return status;
 }
+static XrLirStatus inline_cleanup_roles(InlineBody *body) {
+    Inliner *c = body->owner;
+    const XrLirFunctionData *source = &c->input->functions[body->source - 1];
+    if (!source->has_cleanups) return XR_LIR_OK;
+    for (uint32_t n = 0; n < source->block_count; ++n) {
+        const XrLirCleanupBlock *cleanup = source->blocks[n].cleanup;
+        if (!cleanup) continue;
+        XrLirStatus status = inline_arguments(body, cleanup->captures, cleanup->capture_count, 0);
+        if (status != XR_LIR_OK) return status;
+        uint32_t frontier = cleanup->frontier ? c->functions[cleanup->frontier].id : 0;
+        uint32_t registration = cleanup->registration ? c->functions[cleanup->registration].id : 0;
+        status = xr_lir_internal_cleanup_block(c->output, body->blocks[n + 1].entry,
+            frontier, registration, body->arguments, cleanup->capture_count);
+        if (status != XR_LIR_OK) return status;
+    }
+    return XR_LIR_OK;
+}
+
 static XrLirStatus inline_definition(Inliner *c, uint32_t id) {
     InlineBody body = {.owner = c, .source = id, .destination = c->functions[id],
         .view = c->info[id].view, .scratch = c->info[id].scratch};
-    XrLirStatus status = inline_body_storage(&body, true);
+    /* Preserve the registration blocks and their capture dominance. */
+    XrLirStatus status = inline_body_storage(&body, !c->info[id].cleanup_related);
     if (status == XR_LIR_OK) status = xr_lir_define_function(c->output, body.destination);
     for (uint32_t p = 0; p < body.view.parameter_count && status == XR_LIR_OK; ++p) {
         status = xr_lir_function_parameter(c->output, body.destination, p, &body.values[body.view.parameters[p]]);
@@ -441,13 +467,14 @@ static XrLirStatus inline_definition(Inliner *c, uint32_t id) {
         InlineFrame *frame; XrLirInstructionView v;
         while (status == XR_LIR_OK && inline_next(&body, &frame, &v)) {
             size_t site = body.blocks[frame->block].first + frame->instruction - 1;
-            if (body.sites[site]) status = inline_site(&body, &frame->cursor, &v);
+            if (body.sites && body.sites[site]) status = inline_site(&body, &frame->cursor, &v);
             else status = inline_copy(&body, frame->cursor, &v, (XrLirBlock){0});
         }
     }
     if (status == XR_LIR_OK)
         status = lir_slice_copy_cleanup_finish(&body.cleanups, c->output,
             body.destination, body.values, body.view.value_count);
+    if (status == XR_LIR_OK) status = inline_cleanup_roles(&body);
     inline_body_free(&body);
     return status;
 }

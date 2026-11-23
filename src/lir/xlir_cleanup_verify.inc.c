@@ -80,22 +80,24 @@ static bool lir_cleanup_captures(const XrLirFunctionData *f, const LirGraph *g,
 
 static bool lir_cleanup_calls(const XrLirModule *m, const XrLirFunctionData *f,
     uint32_t owner, const XrLirBlockData *block, uint32_t *frontier) {
-    bool clearing = false;
+    enum { BODY, CLEANUPS, RETIREMENT } phase = BODY;
     bool guarded = *frontier || f->cleanup_owner;
     for (uint32_t i = 0; i + 1 < block->instruction_count; ++i) {
         const XrLirInstructionView *call = &block->instructions[i].view;
         if (call->op != XR_LIR_CALL || !m->functions[call->callee - 1].cleanup_owner) {
-            if (clearing ? !lir_cleanup_retirement(call->op) :
-                guarded && !lir_cleanup_nopanic(m, f, call)) return false;
+            if (phase != BODY) {
+                if (!lir_cleanup_retirement(call->op)) return false;
+                phase = RETIREMENT;
+            } else if (guarded && !lir_cleanup_nopanic(m, f, call)) return false;
             continue;
         }
-        if (call->callee != *frontier) return false;
+        if (phase == RETIREMENT || call->callee != *frontier) return false;
         const XrLirCleanupBlock *registration = lir_cleanup_registration(m, owner, *frontier);
         if (!registration || call->operand_count != registration->capture_count) return false;
         for (uint32_t a = 0; a < call->operand_count; ++a)
             if (call->operands[a] != registration->captures[a]) return false;
         *frontier = registration->frontier;
-        clearing = true;
+        phase = CLEANUPS;
     }
     return true;
 }
