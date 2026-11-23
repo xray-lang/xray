@@ -580,6 +580,9 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     case XR_RBC_VALUE_STRING_LENGTH:
         return !a.other && rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    case XR_RBC_VALUE_HOST_PATH_BOOL:
+        return !a.other && xr_native_blocking_path_bool(a.index) &&
+            rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     case XR_RBC_VALUE_I64_TRY_PARSE:
         return rbc_value_i64_try_parse_valid(module,code,function,a);
     case XR_RBC_VALUE_STATE_READ:

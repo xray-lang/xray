@@ -1,0 +1,4 @@
+import io
+import path
+
+print(io.remove(path.from("file")))

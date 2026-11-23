@@ -1315,6 +1315,7 @@ module io {
   fn __mkdir {
     signature: "(path: Path): bool"
     doc: "Create directory"
+    host_leaf: "blocking-path-bool"
     vm: "io_mkdir"
     aot: "xrt_io_mkdir"
     argc: 1

@@ -12,6 +12,7 @@
  *   definition, including block parameters and values passed along backedges.
  */
 #include "xlir_internal.h"
+#include "../shared/xnative_host_leaf.h"
 #include "xlir_verify.h"
 #include "xlir_ownership.h"
 #include "xlir_cell.h"
@@ -379,6 +380,9 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return v->type == XR_LIR_UNIT && a == XR_LIR_I1 && b == XR_LIR_STRING;
         case XR_LIR_STRING_RETAIN:
             return v->type == XR_LIR_STRING && a == XR_LIR_STRING;
+        case XR_LIR_HOST_PATH_BOOL:
+            return v->type == XR_LIR_I1 && a == XR_LIR_STRING && v->bits <= UINT32_MAX &&
+                xr_native_blocking_path_bool((uint32_t)v->bits);
         case XR_LIR_STRING_LEN:
             return v->type == XR_LIR_I64 && a == XR_LIR_STRING;
         case XR_LIR_I64_TRY_PARSE: {
@@ -506,7 +510,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_FUNCTION_REF && v->op != XR_LIR_FUNCTION_BIND &&
         v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
         v->op != XR_LIR_CLASS_IS &&
-        v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET &&
+        v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET && v->op != XR_LIR_HOST_PATH_BOOL &&
         v->op != XR_LIR_CLASS_SCALAR_WRITE && v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)

@@ -657,7 +657,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_STRING_LITERAL: case XR_LIR_STRING_I64: case XR_LIR_STRING_F64: case XR_LIR_STRING_CONCAT:
     case XR_LIR_STRING_RETAIN: case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP:
     case XR_LIR_STRING_PRINT: case XR_LIR_STRING_LEN: case XR_LIR_STRING_EQUAL:
-    case XR_LIR_I64_TRY_PARSE: case XR_LIR_ASSERT_CONDITION:
+    case XR_LIR_I64_TRY_PARSE: case XR_LIR_ASSERT_CONDITION: case XR_LIR_HOST_PATH_BOOL:
         return true;
     case XR_LIR_INTCAST: {
         XrLirType source = XR_LIR_TYPE_INVALID;

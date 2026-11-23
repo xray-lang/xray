@@ -26,6 +26,7 @@
 #include "lir/xlir_view.h"
 #include "runtime/native/xnative_module_state.h"
 #include "runtime/native/xnative_value_image.h"
+#include "shared/xnative_host_leaf.h"
 #include <float.h>
 #include <limits.h>
 #include <stdlib.h>

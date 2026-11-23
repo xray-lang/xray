@@ -1388,6 +1388,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         XrRbcRegister *condition=rbc_value_register(stack,activation,access.source);
         if (status==XRT_MANAGED_OK && (!condition || condition->bits>1)) status=XRT_MANAGED_ARGUMENT;
         if (status==XRT_MANAGED_OK) xrt_assert_condition((uint8_t)condition->bits,message,source);
+    } else if (access.operation==XR_RBC_VALUE_HOST_PATH_BOOL) {
+        const XrtStringBacking *path = NULL;
+        status = rbc_value_string_borrow(activation, access.source, &path);
+        XrRbcRegister *output = rbc_value_register(stack, activation, access.result);
+        if (!output) status = XRT_MANAGED_ARGUMENT;
+        if (status == XRT_MANAGED_OK) output->bits = xrt_native_host_path_bool(access.index, path, source);
     } else if (access.operation==XR_RBC_VALUE_I64_TRY_PARSE) {
         const XrtStringBacking *string = NULL;
         RbcValuePayload destination;

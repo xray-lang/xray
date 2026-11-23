@@ -1,0 +1,7 @@
+import io
+import path
+
+print(io.mkdir(path.from("目录")))
+print(io.mkdir(path.from("目录")))
+print(io.mkdir(path.from("file")))
+print(io.mkdir(path.from("missing/child")))

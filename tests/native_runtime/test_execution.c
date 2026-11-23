@@ -18,6 +18,7 @@
 #include "xray_native_state.h"
 #include "xray_native_map.h"
 #include "base/xmalloc.h"
+#include "shared/xnative_declaration.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -102,6 +103,45 @@ typedef struct ManagedCall {
 static void managed_require(XrtManagedStatus status) {
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,1);
 }
+
+typedef struct HostPathCall {
+    XrtBillingOwner *billing;
+    size_t allowance;
+} HostPathCall;
+
+static void host_path_root(void *context) {
+    HostPathCall *call = context;
+    XrtManagedFrame *frame = NULL;
+    managed_require(xrt_managed_frame_enter(xrt_native_managed_root(1), 1, &frame));
+    const char path[] = "native-execution-test-missing-parent/child";
+    xrt_native_string_create(frame, 0, path, sizeof(path) - 1, 1);
+    XrtManagedHeader *text = NULL;
+    managed_require(xrt_managed_slot_borrow(frame, 0, &text));
+    xrt_billing_owner_fail_after(call->billing, call->allowance);
+    (void)xrt_native_host_path_bool(XR_NATIVE_CALLABLE_IO_MKDIR, (const XrtStringBacking *)text, 1);
+}
+
+static void managed_host_path_scratch(void) {
+    XrtLocationOwner *owner = locations("host-path.xr");
+    size_t allocations = 1;
+#if defined(XR_OS_WINDOWS)
+    allocations = 2; /* Terminated UTF-8 and the wide OS path. */
+#endif
+    for (size_t allowance = 0; allowance < allocations; ++allowance) {
+        XrtValueRoot root = {0};
+        HostPathCall call = {.allowance=allowance};
+        XrtExecutionFailure failure = {0};
+        CHECK(xrt_native_values_prepare(&root, &call.billing) == XRT_MANAGED_OK);
+        CHECK(xrt_billing_owner_retain(call.billing));
+        CHECK(xrt_run_embedded_owned(owner, &failure, host_path_root, &call, &root) == XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_OOM &&
+            failure.detail.value.source_id == 1);
+        CHECK(xrt_value_root_empty(&root) && xrt_billing_owner_stats(call.billing).blocks == 1);
+        xrt_billing_owner_drop(call.billing);
+    }
+    xrt_locations_release(owner);
+}
+
 static void managed_root(void *context) {
     ManagedCall *call = context;
     XrtManagedRoot *root = xrt_native_managed_root(1);
@@ -387,6 +427,7 @@ static void standalone_state_string(void) {
 }
 int main(void) {
     managed_scopes();
+    managed_host_path_scratch();
     managed_message_owner();
     managed_assertion_owner();
     managed_map_literals();

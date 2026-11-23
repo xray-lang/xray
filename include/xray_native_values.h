@@ -61,6 +61,10 @@ XRAY_API void xrt_native_class_array_field_replace(const XrtNativeClassField *,
     const XrtManagedHeader *, uint32_t source_id);
 XRAY_API void xrt_native_class_array_field_push(const XrtNativeClassField *,
     XrtManagedFrame *, size_t workspace, int64_t item, uint32_t source_id);
+/* Executes a numbered synchronous path operation. The String is borrowed for
+ * this call only. Host refusals return false, while execution faults retire
+ * the active execution after the OS kernel releases its temporary state. */
+XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBacking *, uint32_t source_id);
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

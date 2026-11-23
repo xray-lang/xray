@@ -157,6 +157,7 @@ class StdlibEntry:
     suspension_kind: str = ""
     provider_declaration: ProviderDeclaration | None = None
     target_fact: str = ""
+    host_leaf: str = ""
 
     @property
     def symbol(self) -> str:
@@ -1366,6 +1367,10 @@ def parse_def_metadata(
                     f"{path}:{line_no}: {current_module}.{current_name} target_fact must name "
                     "<os|arch>.<EnumMember>"
                 )
+            host_leaf = str(props.get("host_leaf", ""))
+            if host_leaf and (host_leaf != "blocking-path-bool" or current_module != "io" or
+                              visibility != "internal" or target_fact or signature != "(path: Path): bool"):
+                raise SystemExit(f"{path}:{line_no}: invalid host leaf ABI for {current_module}.{current_name}")
             entries.append(
                 StdlibEntry(
                     module=current_module,
@@ -1394,6 +1399,7 @@ def parse_def_metadata(
                     provider_declaration=provider_declaration,
                     suspension_kind=suspension_kind,
                     target_fact=target_fact,
+                    host_leaf=host_leaf,
                 )
             )
         elif current_kind == "const":

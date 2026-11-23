@@ -1,0 +1,4 @@
+import io
+import path
+
+print(io.mkdir(path.from("must-not-exist\0ignored")))

@@ -308,6 +308,7 @@ add_custom_command(OUTPUT ${XRAY_GEN_STDLIB_METADATA_DEPS}
 add_custom_target(gen-stdlib-metadata DEPENDS ${XRAY_GEN_STDLIB_METADATA_DEPS})
 add_custom_command(
     OUTPUT ${CMAKE_SOURCE_DIR}/src/shared/xnative_declarations.inc.c
+           ${CMAKE_SOURCE_DIR}/src/shared/xnative_host_leaves.inc.h
            ${CMAKE_SOURCE_DIR}/src/shared/xprelude_source.inc.c
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/scripts/gen_native_declarations.py
             --root ${CMAKE_SOURCE_DIR}
@@ -332,6 +333,7 @@ add_custom_command(
 
 add_custom_target(gen-native-type-defs DEPENDS
     ${CMAKE_SOURCE_DIR}/src/shared/xnative_declarations.inc.c
+    ${CMAKE_SOURCE_DIR}/src/shared/xnative_host_leaves.inc.h
     ${CMAKE_SOURCE_DIR}/src/shared/xprelude_source.inc.c)
 # CoreSpec is the target-neutral semantic registry introduced by Task 295.
 # Checked-in projections make reviews explicit; this build edge only verifies

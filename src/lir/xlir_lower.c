@@ -30,6 +30,8 @@
 #include "../xir/xxir_closure_placement.h"
 #include "../xir/xxir_lexical.h"
 #include "../xir/xxir_effect_module_export_internal.h"
+#include "../xir/xxir_io_native.h"
+#include "../shared/xnative_host_leaf.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <stdio.h>
@@ -1322,6 +1324,17 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     return true;
 }
 
+static bool lower_host_path_bool(const Lower *c, uint32_t function, uint32_t *field) {
+    const XrXirModule *source = c->source;
+    const XrXirFunction *body = &source->functions[function];
+    uint32_t id = source->declarations->functions[function].native_callable;
+    return !body->block_count && xr_native_blocking_path_bool(id) &&
+        xir_io_native_signature(id, source->types, body->parameters, body->parameter_count,
+            body->result, body->error_type) &&
+        xir_io_native_scope(source->declarations, source->types, function, source->function_count,
+            body->parameters[0], field);
+}
+
 static bool lower_admit_function(Lower *c, uint32_t function) {
     c->function = function;
     c->block = 0;
@@ -1359,8 +1372,10 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         lower_error(c, XR_LIR_VERIFY_ERROR, "Checked specialization source mapping differs");
         return false;
     }
-    if (!f->block_count || !f->blocks || !f->instructions)
-        return lower_unsupported(c, "function without a scalar body");
+    if (!f->block_count || !f->blocks || !f->instructions) {
+        uint32_t field;
+        return lower_host_path_bool(c, function, &field) || lower_unsupported(c, "function without a scalar body");
+    }
     uint8_t *seen = lower_alloc(c, f->block_count, 1);
     uint32_t *queue = lower_alloc(c, f->block_count, sizeof(*queue));
     if (!seen || !queue) {
@@ -2828,7 +2843,30 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     return good;
 }
 
+static bool lower_host_function(Lower *c, uint32_t index) {
+    uint32_t field;
+    if (!lower_host_path_bool(c, index, &field)) return lower_unsupported(c, "unregistered host leaf");
+    XrLirFunction function = c->functions[index];
+    XrLirBlock block = {0};
+    XrLirValue path = {0}, text = {0}, result = {0};
+    XrLirInstruction read = {.op=XR_LIR_CLASS_FIELD, .type=XR_LIR_STRING,
+        .operands=&path, .operand_count=1, .bits=field};
+    XrLirInstruction call = {.op=XR_LIR_HOST_PATH_BOOL, .type=XR_LIR_I1,
+        .operands=&text, .operand_count=1, .bits=c->source->declarations->functions[index].native_callable};
+    XrLirInstruction drop = {.op=XR_LIR_STRING_DROP, .type=XR_LIR_UNIT, .operands=&text, .operand_count=1};
+    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
+    return lower_build(c, xr_lir_define_function(c->module, function)) &&
+        lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &block)) &&
+        lower_build(c, xr_lir_set_entry(c->module, function, block)) &&
+        lower_build(c, xr_lir_function_parameter(c->module, function, 0, &path)) &&
+        lower_build(c, xr_lir_emit_value(c->module, block, &read, &text)) &&
+        lower_build(c, xr_lir_emit_value(c->module, block, &call, &result)) &&
+        lower_build(c, xr_lir_emit_effect(c->module, block, &drop)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
+}
+
 static bool lower_function(Lower *c, uint32_t index) {
+    if (!c->source->functions[index].block_count) return lower_host_function(c, index);
     c->function = index;
     c->block = 0;
     c->instruction = UINT32_MAX;
