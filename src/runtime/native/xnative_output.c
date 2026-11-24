@@ -74,9 +74,13 @@ static void diagnostic_location(const XrtSourceMap *map, uint32_t id) {
 
 XR_FUNC void xrt_value_failure_report(XrXirValueStatus status, const XrtSourceLocation *source) {
     XrtSourceMap map = {source, source ? 1u : 0u};
-    diagnostic_text("XR_RUN_6002: value operation rejected (status ");
-    diagnostic_number((uint32_t)status);
-    diagnostic_text(") at ");
+    if (status == XR_XIR_VALUE_CANCELLED) {
+        diagnostic_text("[Uncaught Cancellation] at ");
+    } else {
+        diagnostic_text("XR_RUN_6002: value operation rejected (status ");
+        diagnostic_number((uint32_t)status);
+        diagnostic_text(") at ");
+    }
     diagnostic_location(&map, source ? 1u : 0u);
     diagnostic_text("\n");
 }

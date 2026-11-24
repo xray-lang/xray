@@ -53,6 +53,7 @@ XR_FUNC XrXirValueStatus xrt_host_io_failure(XrOsIoStatus status) {
     case XR_OS_IO_OVERFLOW: return XR_XIR_VALUE_OVERFLOW;
     case XR_OS_IO_OUT_OF_MEMORY: return XR_XIR_VALUE_OOM;
     case XR_OS_IO_MEMORY_LIMIT: return XR_XIR_VALUE_MEMORY_LIMIT;
+    case XR_OS_IO_CANCELLED: return XR_XIR_VALUE_CANCELLED;
     default: return XR_XIR_VALUE_IO;
     }
 }

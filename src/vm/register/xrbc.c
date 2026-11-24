@@ -781,11 +781,16 @@ static void xr_rbc_try_trace(XrRbcExecution *execution,XrRbcOutcome *outcome) {
 }
 
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
-    if (!execution || execution->consumed) return NULL;
+    return xr_rbc_execution_run_controlled(execution, NULL);
+}
+
+XR_FUNC XrRbcOutcome *xr_rbc_execution_run_controlled(XrRbcExecution *execution,
+    const XrtHostExecutionControl *control) {
+    if (!execution || execution->consumed || (control && !control->current)) return NULL;
     execution->consumed = true;
     XrRbcOutcome *outcome = execution->pending;
-    XrtExecutionStatus status = xrt_run_embedded_owned(outcome->locations, &outcome->failure,
-        xr_rbc_root, execution, &execution->values);
+    XrtExecutionStatus status = xrt_run_embedded_owned_controlled(outcome->locations, &outcome->failure,
+        xr_rbc_root, execution, &execution->values, control);
     if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_OUTPUT)
         outcome->status = XR_RBC_OUTPUT_FAILURE;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_TYPED_PANIC)

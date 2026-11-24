@@ -18,6 +18,7 @@
 #include "runtime/native/xnative_host_environment.h"
 #include "runtime/native/xnative_host_file.h"
 #include "runtime/native/xnative_host_io.h"
+#include "runtime/native/xnative_host_stat.h"
 #include "runtime/native/xnative_values.h"
 #include "runtime/native/xnative_string_backing_ops.h"
 #include "xray_native_values.h"
@@ -27,6 +28,7 @@
 #include "xray_native_map.h"
 #include "base/xmalloc.h"
 #include "shared/xnative_declaration.h"
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -238,6 +240,92 @@ static void managed_metadata_retirement(void) {
     XrtExecutionFailure failure = {0};
     CHECK(xrt_run_embedded(where, &failure, implicit_metadata_root, &visits) == XRT_EXECUTION_COMPLETED);
     CHECK(visits == 1 && xrt_value_root_active() == previous);
+    xrt_locations_release(where);
+}
+
+typedef struct HostStatControl {
+    atomic_bool cancelled;
+    unsigned polls;
+    bool bad_path;
+} HostStatControl;
+
+static bool stat_control_current(void *context) {
+    HostStatControl *request = context;
+    ++request->polls;
+    return !atomic_load_explicit(&request->cancelled, memory_order_acquire);
+}
+
+static void controlled_metadata_root(void *context) {
+    HostStatControl *request = context;
+    const XrtHostExecutionControl *control = xrt_execution_host_control();
+    CHECK(control && control->context == request);
+    XrtValueRoot *root = xrt_value_root_active();
+    XrtHostStatQuery query = {.current=control->current, .context=control->context};
+    managed_require(xrt_native_values_stat_prepare(root, &query.billing, &query.owner));
+    const XrtBackingTypes *types = NULL;
+    XrtManagedFrame *frame = NULL;
+    XrtManagedHeader *path = NULL;
+    managed_require(xrt_native_values_backings(root, &types));
+    managed_require(xrt_managed_frame_enter(xrt_native_managed_root(1), 1, &frame));
+    const char name[] = ".\0invalid";
+    managed_require(xrt_string_backing_create(frame, 0, types, name, request->bad_path ? sizeof(name) - 1 : 1, 0));
+    managed_require(xrt_managed_slot_borrow(frame, 0, &path));
+    XrOsFileMetadata result = {.size=77};
+    XrOsIoStatus status = xrt_host_stat_query(&query, path, &result);
+    if (status != XR_OS_IO_OK) {
+        CHECK(result.size == 77 && !result.present);
+        if (request->bad_path) {
+            CHECK(status == XR_OS_IO_BAD_ARGUMENT);
+            atomic_store_explicit(&request->cancelled, true, memory_order_release);
+        }
+        xrt_value_failure(xrt_host_io_failure(status), 1);
+    }
+    CHECK(result.present && result.is_dir);
+}
+
+static void metadata_without_control(void *context) {
+    CHECK(!xrt_execution_host_control());
+    ++*(unsigned *)context;
+}
+
+typedef struct NestedStatControl {
+    HostStatControl outer, inner;
+    const XrtLocationOwner *where;
+} NestedStatControl;
+
+static void nested_metadata_control(void *context) {
+    NestedStatControl *calls = context;
+    const XrtHostExecutionControl *outer = xrt_execution_host_control();
+    CHECK(outer && outer->context == &calls->outer);
+    unsigned ordinary = 0;
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded(calls->where, &failure, metadata_without_control, &ordinary) == XRT_EXECUTION_COMPLETED);
+    CHECK(ordinary == 1 && xrt_execution_host_control() == outer);
+    for (unsigned bad_path = 0; bad_path <= 1; ++bad_path) {
+        XrtValueRoot owned = {0};
+        calls->inner.bad_path = bad_path != 0;
+        atomic_store_explicit(&calls->inner.cancelled, !bad_path, memory_order_release);
+        const XrtHostExecutionControl inner = {stat_control_current, &calls->inner};
+        CHECK(xrt_run_embedded_owned_controlled(calls->where, &failure, controlled_metadata_root, &calls->inner,
+            &owned, &inner) == XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.source_id == 1 &&
+            failure.detail.value.status == (bad_path ? XR_XIR_VALUE_BAD_ARGUMENT : XR_XIR_VALUE_CANCELLED));
+        CHECK(xrt_value_root_empty(&owned) && xrt_execution_host_control() == outer);
+    }
+    controlled_metadata_root(&calls->outer);
+}
+
+static void managed_host_stat_control(void) {
+    XrtLocationOwner *where = locations("metadata-control.xr");
+    NestedStatControl calls = {.where=where};
+    atomic_init(&calls.outer.cancelled, false);
+    atomic_init(&calls.inner.cancelled, false);
+    const XrtHostExecutionControl control = {stat_control_current, &calls.outer};
+    XrtValueRoot root = {0};
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded_owned_controlled(where, &failure, nested_metadata_control, &calls, &root, &control) ==
+        XRT_EXECUTION_COMPLETED);
+    CHECK(calls.outer.polls && calls.inner.polls && !xrt_execution_host_control() && xrt_value_root_empty(&root));
     xrt_locations_release(where);
 }
 
@@ -1192,6 +1280,7 @@ int main(void) {
     managed_scopes();
     managed_host_path_scratch();
     managed_metadata_retirement();
+    managed_host_stat_control();
     managed_host_file();
     managed_host_file_read();
     managed_host_environment();

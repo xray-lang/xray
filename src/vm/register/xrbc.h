@@ -429,6 +429,8 @@ XR_FUNC XrRbcStatus xr_rbc_owned_function_prepare(const XrtFunction *, const uin
 // A valid single-use run transfers its already allocated non-NULL outcome,
 // including ordinary VM failure. NULL/consumed misuse invokes no guest.
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution);
+/* Borrow the host's control only until this single-use owned execution returns. */
+XR_FUNC XrRbcOutcome *xr_rbc_execution_run_controlled(XrRbcExecution *, const XrtHostExecutionControl *);
 XR_FUNC void xr_rbc_execution_enable_try_trace(XrRbcExecution *);
 /* Success consumes *execution. A failed native close preserves the retired
  * execution for another free attempt and cannot restart the guest. */

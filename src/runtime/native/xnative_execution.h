@@ -93,6 +93,17 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
  * owner remains live for close-only retry via xrt_value_root_drain. */
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings);
+/* The host owns a stable descriptor and live context for the synchronous
+ * call. The callback observes the request through that context. Neither the
+ * Root nor a pending close retains the descriptor or the context. */
+typedef struct XrtHostExecutionControl {
+    bool (*current)(void *context);
+    void *context;
+} XrtHostExecutionControl;
+XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_controlled(const XrtLocationOwner *, XrtExecutionFailure *,
+    XrtSynchronousRoot, void *context, XrtValueRoot *, const XrtHostExecutionControl *);
+/* A leaf borrows only the current execution's control, when one was supplied. */
+XR_FUNC const XrtHostExecutionControl *xrt_execution_host_control(void);
 /* The closer is borrowed through the one drain at execution exit. */
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_with_metadata_close(const XrtLocationOwner *, XrtExecutionFailure *,
     XrtSynchronousRoot, void *context, XrtValueRoot *, XrtMetadataCloser);

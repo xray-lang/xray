@@ -7,6 +7,7 @@
  * xnative_host_stat.c - Query a filesystem snapshot before publishing it
  */
 #include "xnative_host_stat.h"
+#include "xnative_execution.h"
 #include "xnative_host_io.h"
 #include "xnative_string_backing.h"
 #include "xnative_values.h"
@@ -82,6 +83,11 @@ XR_FUNC XrtHostStatResult xrt_host_stat_publish(const XrtHostNullableSlots *outp
     XrtHostStatQuery query = {0};
     result.managed = xrt_native_values_stat_prepare(xrt_value_root_current(source_id), &query.billing, &query.owner);
     if (result.managed != XRT_MANAGED_OK) return result;
+    const XrtHostExecutionControl *control = xrt_execution_host_control();
+    if (control) {
+        query.current = control->current;
+        query.context = control->context;
+    }
     XrOsFileMetadata metadata;
     result.host = xrt_host_stat_query(&query, path, &metadata);
     if (result.host != XR_OS_IO_OK) return result;
@@ -91,6 +97,10 @@ XR_FUNC XrtHostStatResult xrt_host_stat_publish(const XrtHostNullableSlots *outp
         xrt_host_stat_row(&metadata, &row);
         result.managed = xrt_host_stat_class_create(places.temporary.frame, places.temporary.slot, binding, &row);
         if (result.managed != XRT_MANAGED_OK) return result;
+    }
+    if (control && !control->current(control->context)) {
+        result.host = XR_OS_IO_CANCELLED;
+        return result;
     }
     XR_CHECK(xrt_host_nullable_publish(&places, metadata.present) == XRT_MANAGED_OK,
         "metadata publication keeps the preflighted nullable home");
