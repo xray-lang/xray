@@ -40,8 +40,11 @@ def _load_sources(root: Path) -> dict[str, str]:
         if not base.is_dir():
             continue
         for path in sorted(base.rglob("*.xr")):
+            # One governed fixture is deliberately invalid UTF-8. Decoding it
+            # byte-preservingly keeps the ASCII symbol scan exact instead of
+            # aborting the whole surface check on that file.
             sources[path.relative_to(root).as_posix()] = path.read_text(
-                encoding="utf-8", errors="strict"
+                encoding="utf-8", errors="surrogateescape"
             )
     return sources
 

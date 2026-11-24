@@ -20,9 +20,9 @@ def main():
     args = parser.parse_args()
     compiler = str(args.compiler.resolve(strict=True))
     cases = {
-        "builtin": ('fn fail() { throw CryptoError.InvalidLength }\n'
+        "builtin": ('fn fail() throws(CryptoError) { throw CryptoError.InvalidLength }\n'
                     'try { fail() } catch (e: CryptoError) { print("builtin") }\n'),
-        "source": ('enum ProbeError { Bad }\nfn fail() { throw ProbeError.Bad }\n'
+        "source": ('enum ProbeError { Bad }\nfn fail() throws(ProbeError) { throw ProbeError.Bad }\n'
                    'try { fail() } catch (e: ProbeError) { print("source") }\n'),
     }
     with tempfile.TemporaryDirectory(prefix="xray-enum-execution-") as temporary:
