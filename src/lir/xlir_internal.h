@@ -290,7 +290,6 @@ XR_FUNC bool xr_lir_internal_array_instruction(const XrLirModule *,
 XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirModule *, const XrLirStateLayout *);
 XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *, XrLirType, uint32_t *, uint32_t *);
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op);
-XR_FUNC bool xr_lir_internal_invoke_result_type(const XrLirModule *, XrLirType);
 /* Cold backend collection immediately follows successful verification of this
  * exact unchanged finished module. Public plan_create still revalidates all IR.
  * This internal entry copies events only; it grants no admission or trust flag.

@@ -334,20 +334,6 @@ static const char *clock_external_name(XrLirExternKind kind) {
     }
 }
 
-XR_FUNC bool xr_lir_internal_invoke_result_type(const XrLirModule *m, XrLirType type) {
-    /* A packed Nullable return needs a supported physical type at every level. */
-    while (lir_pod_scalar(type) >= XR_POD_SCALAR_COUNT) {
-        XrLirTypeView shape = {0};
-        XrLirTypeLayout layout = {0};
-        if (xr_lir_type_view(m, type, &shape) != XR_LIR_OK || shape.kind != XR_LIR_TYPE_NULLABLE ||
-            shape.element >= type || xr_lir_type_layout(m, type, &layout) != XR_LIR_OK ||
-            !layout.size || layout.managed)
-            return false;
-        type = shape.element;
-    }
-    return true;
-}
-
 static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpec *spec) {
     if (!spec || !spec->name || !spec->name_length || spec->name_length == SIZE_MAX ||
         memchr(spec->name, 0, spec->name_length) ||
@@ -360,7 +346,7 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
         spec->result == XR_LIR_MAP_STRING_I64_REF || spec->result==XR_LIR_SET_I64_CELL || spec->result==XR_LIR_SET_I64_REF)
         return false;
     XrLirRecordIdentity error = {0};
-    if (spec->error && (spec->kind != XR_LIR_FUNCTION_DEFINITION || !xr_lir_internal_invoke_result_type(m, spec->result) ||
+    if (spec->error && (spec->kind != XR_LIR_FUNCTION_DEFINITION || lir_pod_scalar(spec->result) >= XR_POD_SCALAR_COUNT ||
         !xr_lir_error_sum_identity(m,spec->error,&error))) return false;
     if (spec->initializer_module && (!spec->error || spec->result != XR_LIR_UNIT ||
         spec->parameter_count > 1 || (spec->parameter_count && spec->parameters[0] != XR_LIR_STATE)))

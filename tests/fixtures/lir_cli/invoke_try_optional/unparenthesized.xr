@@ -1,8 +1,0 @@
-enum Refusal { Failed }
-
-fn value() throws(Refusal) -> i64 {
-    throw Refusal.Failed
-}
-
-const result = try? value() ?? 0
-print(result)

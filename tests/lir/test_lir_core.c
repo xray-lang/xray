@@ -136,53 +136,6 @@ static void invoke_must_forward_its_received_error(void) {
     }
 }
 
-static void discarded_invoke_error_cannot_be_observed(void) {
-    enum { UNUSED, READ_IN_SUCCESSOR, FORWARD_IN_SUCCESSOR, CASE_COUNT };
-    for (unsigned mode=UNUSED; mode<CASE_COUNT; ++mode) {
-        XrLirModule *m=NULL;
-        OK(xr_lir_module_create(NULL,&m));
-        XrLirType error=try_error_type(m,"Failure"),optional=0;
-        OK(xr_lir_nullable_type(m,XR_LIR_UNIT,&optional));
-        XrLirFunction leaf={0};
-        OK(xr_lir_declare_function(m,&(XrLirFunctionSpec){.name="leaf",.name_length=4,
-            .result=XR_LIR_UNIT,.error=error},&leaf));
-        OK(xr_lir_define_function(m,leaf));
-        XrLirBlock body=test_block(m,leaf,NULL,0);
-        OK(xr_lir_set_entry(m,leaf,body));
-        XrLirValue original={0};
-        OK(xr_lir_emit_value(m,body,&(XrLirInstruction){.op=XR_LIR_SUM_NEW,.type=error},&original));
-        OK(xr_lir_set_terminator(m,body,&(XrLirInstruction){.op=XR_LIR_RETURN_ERROR,
-            .type=XR_LIR_UNIT,.operands=&original,.operand_count=1}));
-
-        XrLirFunction caller=test_function(m,"caller",NULL,0,XR_LIR_UNIT);
-        XrLirBlock call=test_block(m,caller,NULL,0),success=test_block(m,caller,NULL,0);
-        XrLirBlock failed=test_block(m,caller,&error,1),absent=test_block(m,caller,NULL,0);
-        XrLirType types[]={optional,error};
-        XrLirBlock join=test_block(m,caller,types,mode==FORWARD_IN_SUCCESSOR ? 2u : 1u);
-        OK(xr_lir_set_entry(m,caller,call));
-        OK(xr_lir_set_terminator(m,call,&(XrLirInstruction){.op=XR_LIR_INVOKE,.type=XR_LIR_UNIT,
-            .callee=leaf,.edges={{.target=success},{.target=failed}},.edge_count=2}));
-        test_return(m,success,(XrLirValue){0});
-        XrLirValue captured={0},none={0};
-        OK(xr_lir_block_parameter(m,failed,0,&captured));
-        test_branch(m,failed,absent,NULL,0);
-        OK(xr_lir_emit_value(m,absent,&(XrLirInstruction){.op=XR_LIR_NULLABLE_NONE,.type=optional},&none));
-        XrLirValue values[]={none,captured};
-        test_branch(m,absent,join,values,mode==FORWARD_IN_SUCCESSOR ? 2u : 1u);
-        if (mode==READ_IN_SUCCESSOR) {
-            XrLirValue tag={0};
-            OK(xr_lir_emit_value(m,join,&(XrLirInstruction){.op=XR_LIR_SUM_TAG,.type=XR_LIR_I64,
-                .operands=&captured,.operand_count=1},&tag));
-        }
-        test_return(m,join,(XrLirValue){0});
-        XrLirDiagnostic diagnostic={0};
-        XrLirStatus status=xr_lir_module_finish(m,&diagnostic);
-        if (mode==UNUSED) CHECK(status==XR_LIR_OK);
-        else CHECK(status==XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,"dedicated normal and error successors"));
-        xr_lir_module_destroy(m);
-    }
-}
-
 static void startup_error_requires_an_initialized_origin(void) {
     enum { VALID, NO_STARTUP, ORDINARY_CALLEE, CALLABLE_ROOT, WRONG_ARGUMENT,
            WRONG_ERROR, FAILED_READY, EARLY_READY, CALLEE_READY, NO_INITIALIZER_CALL, MODE_COUNT };
@@ -1327,7 +1280,6 @@ int main(void) {
     invoke_rejects_forged_error();
     invoke_must_forward_its_received_error();
     startup_error_requires_an_initialized_origin();
-    discarded_invoke_error_cannot_be_observed();
     definition_prevalidation_rejections();
     graph_edges();
     owned_inputs_and_growth();

@@ -558,20 +558,6 @@ static bool rbc_error_home(const XrRbcModule *module,const XrRbcValueCode *code,
         rbc_value_inline(module,code,value,output);
 }
 
-static bool rbc_invoke_result_home(const XrRbcModule *module,const XrRbcFunction *caller,
-    const XrRbcValueCode *code,const XrRbcFunction *target,const XrRbcValueCode *callee,uint32_t result) {
-    if (target->result_kind!=XR_RBC_BITS) return false;
-    uint32_t aggregate=target->aggregate_result_type;
-    if (callee->error_unit) return !aggregate && !result;
-    if (!aggregate) return rbc_value_scalar(code,caller,result,XR_RBC_BITS);
-    if (!rbc_value_pod(module,code,caller,result,aggregate)) return false;
-    const XrLirValueHome *home=rbc_value_home(code,result);
-    const XrtValueImage *image=xr_rbc_module_value_image(module);
-    const XrtValueImageType *type=&image->types[home->type-1];
-    return !home->parameter && home->type==rbc_result_value_type(callee) &&
-        type->kind==XRT_VALUE_NULLABLE && !type->owned_count;
-}
-
 static bool rbc_invoke_receivers(const XrRbcFunction *function,const XrRbcValueCode *code,size_t pc,
     uint32_t ordinal,XrRbcValueAccess access) {
     if (function->code_count-pc<7 ||
@@ -782,7 +768,8 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         if (invoke)
             return !a.source && a.result!=a.other && rbc_register_kind(function,a.window)==XR_RBC_CALL_WINDOW &&
                 rbc_error_home(module,code,a.other,callee->error_type,true) &&
-                rbc_invoke_result_home(module,function,code,target,callee,a.result) &&
+                target->result_kind==XR_RBC_BITS && !target->aggregate_result_type &&
+                (callee->error_unit ? !a.result : rbc_value_scalar(code,function,a.result,XR_RBC_BITS)) &&
                 rbc_invoke_receivers(function,code,pc,(uint32_t)index,a);
         uint32_t result_type = rbc_result_value_type(callee);
         if (rbc_callable_home_type(xr_rbc_module_value_image(module), result_type))
