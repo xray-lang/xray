@@ -1,0 +1,17 @@
+enum Refusal { Failed { code: i64 } }
+
+fn leaf(divisor: i64) throws(Refusal) -> i64 {
+    print(1)
+    const quotient = 42 / divisor
+    defer { print(301) }
+    if (divisor < 0) { throw Refusal.Failed { code: divisor } }
+    return quotient
+}
+
+fn caller(divisor: i64) {
+    defer { print(302) }
+    print(try! leaf(divisor))
+    print(99)
+}
+
+caller(0)

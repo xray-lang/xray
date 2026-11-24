@@ -30,6 +30,7 @@ REQUIRED = (
     "test_lir_cli_class_optional_i64",
     "test_lir_cli_defer_sync", "test_lir_cli_defer_lowering", "test_lir_cli_defer_source",
     "test_lir_cli_defer_propagation",
+    "test_lir_cli_defer_panic",
     "test_lir_cli_invoke_init_root",
     "test_lir_cli_string_byte_length",
     "test_lir_cli_host_path", "test_lir_cli_host_file_write", "test_lir_cli_target_platform",

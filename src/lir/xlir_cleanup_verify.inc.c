@@ -111,10 +111,11 @@ static bool lir_cleanup_invoke_shape(const XrLirModule *m, const XrLirFunctionDa
     const XrLirInstructionView *call, uint32_t frontier) {
     uint32_t failed = call->edges[1].target - 1;
     const XrLirInstructionView *first = &f->blocks[failed].instructions[0].view;
-    return f->error && f->error == m->functions[call->callee - 1].error &&
-        (call->type == XR_LIR_UNIT || lir_cleanup_scalar(call->type)) &&
-        first->op == XR_LIR_CALL && first->callee == frontier &&
-        lir_terminator(f, failed)->op == XR_LIR_RETURN_ERROR;
+    XrLirOp exit = lir_terminator(f, failed)->op;
+    bool typed_exit = exit == XR_LIR_PANIC_ERROR ||
+        (exit == XR_LIR_RETURN_ERROR && f->error && f->error == m->functions[call->callee - 1].error);
+    return typed_exit && (call->type == XR_LIR_UNIT || lir_cleanup_scalar(call->type)) &&
+        first->op == XR_LIR_CALL && first->callee == frontier;
 }
 
 static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
@@ -138,11 +139,14 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
         if (from || f->cleanup_owner) {
             if (term->op == XR_LIR_INVOKE) {
                 if (!from || !lir_cleanup_invoke_shape(m, f, term, from)) return false;
-            } else if (term->op != XR_LIR_BR && term->op != XR_LIR_CONDBR && !xr_lir_function_exit(term->op)) {
+            } else if (term->op != XR_LIR_BR && term->op != XR_LIR_CONDBR &&
+                !xr_lir_function_exit(term->op) && term->op != XR_LIR_PANIC_ERROR) {
                 return false;
             }
         }
         if ((term->op == XR_LIR_CONDBR || term->op == XR_LIR_INVOKE) && remaining != from) return false;
+        /* The invoke verifier already ties PANIC_ERROR to the original
+         * failure value. Every terminal must empty the active frontier. */
         if (!term->edge_count && remaining) return false;
         for (uint32_t e = 0; e < term->edge_count; ++e)
             if (lir_cleanup_frontier(f, term->edges[e].target) != remaining) return false;

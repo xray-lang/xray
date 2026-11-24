@@ -153,7 +153,7 @@ static bool lower_cleanup_exit(LowerFunction *f, uint32_t block, const XrXirInst
     if (!frontier) return true;
     uint32_t target = 0;
     if (term->op == XR_XIR_CLEANUP_LEAVE) target = (uint32_t)term->immediate;
-    else if (term->op != XR_XIR_RETURN && term->op != XR_XIR_THROW) return true;
+    else if (term->op != XR_XIR_RETURN && term->op != XR_XIR_THROW && term->op != XR_XIR_PANIC_ERROR) return true;
     while (frontier != target) {
         uint32_t parent, handler;
         if (xr_xir_cleanup_frontier(f->source, frontier, &parent, &handler) != XR_XIR_OK || handler)

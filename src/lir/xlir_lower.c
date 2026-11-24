@@ -1266,16 +1266,18 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
     const XrXirInstruction *exit=lower_invoke_landing_exit(f,failure);
     if (!exit || failure->panic || marker->op!=XR_XIR_INVOKE_ERROR ||
         marker->type!=XR_XIR_ERROR || marker->immediate!=origin) return false;
-    bool propagated = exit->op == XR_XIR_THROW && exit->args[0] == f->parameter_count + failure->first &&
+    bool original_error = exit->args[0] == f->parameter_count + failure->first;
+    bool asserted = exit->op == XR_XIR_PANIC_ERROR && original_error;
+    bool propagated = exit->op == XR_XIR_THROW && original_error &&
         !lower_empty_error(callee->error_type) && callee->error_type == lower_error_bound(c,(uint32_t)(f-c->source->functions));
     if (failure->frontier || normal->frontier) {
-        return failure->frontier == normal->frontier && !normal->panic && propagated &&
+        return failure->frontier == normal->frontier && !normal->panic && (propagated || asserted) &&
             (call->type == XR_XIR_UNIT || lower_cleanup_scalar(call->type)) &&
             lower_is_plain_error_enum(c, callee->error_type) && lower_cleanup_direct_leaf(c, (uint32_t)call->immediate);
     }
     if (exit->op==XR_XIR_JUMP)
         return lower_invoke_failure_predecessor(c,f,call->targets[1]) != 0;
-    return propagated || (exit->op==XR_XIR_PANIC_ERROR && exit->args[0]==f->parameter_count+failure->first);
+    return propagated || asserted;
 }
 
 static const XrXirInstruction *lower_invoke_origin(Lower *c, const XrXirFunction *f, uint32_t block,
@@ -1297,7 +1299,7 @@ static bool lower_cleanup_instruction(Lower *c, const XrXirFunction *f, uint32_t
         return lower_invoke_origin(c, f, block, op, false) != NULL;
     case XR_XIR_INVOKE_ERROR:
         return lower_invoke_origin(c, f, block, op, true) != NULL;
-    case XR_XIR_THROW: {
+    case XR_XIR_THROW: case XR_XIR_PANIC_ERROR: {
         const XrXirInstruction *marker = &f->instructions[f->blocks[block].first];
         return marker->op == XR_XIR_INVOKE_ERROR && lower_invoke_origin(c, f, block, marker, true) != NULL;
     }

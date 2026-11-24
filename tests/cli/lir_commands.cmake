@@ -144,6 +144,7 @@ set_tests_properties(test_lir_cli_class_optional_i64 PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
 
 foreach(defer_profile IN ITEMS sync lowering source propagation)
+foreach(defer_profile IN ITEMS sync lowering source propagation panic)
     add_test(NAME test_lir_cli_defer_${defer_profile}
         COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
             --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}

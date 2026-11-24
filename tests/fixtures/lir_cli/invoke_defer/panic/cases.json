@@ -3,5 +3,13 @@
     "exit": 1,
     "stdout": "1\n301\n302\n",
     "stderr": "[Uncaught Panic] E0446: try! failed: Refusal.Failed(29)\n"
+  },
+  "assertion_success": {
+    "exit": 0,
+    "stdout": "1\n301\n30\n303\n302\n31\n",
+    "stderr": ""
+  },
+  "callee_may_panic": {
+    "lowering_error": ":13:5: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
   }
 }
