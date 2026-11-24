@@ -1,0 +1,12 @@
+// A method is reached through the module that declares its receiver type.
+// Reaching one through another module's signature without importing that
+// module must be named at the method, not reported as a constructed-module
+// failure.
+import io
+
+const made = io.tempDir()
+if (made == null) {
+    print("none")
+} else {
+    print(made!.toString())
+}

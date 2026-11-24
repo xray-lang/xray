@@ -1,0 +1,5 @@
+{
+  "missing_import": {
+    "source_error": ":11:17: error: method requires importing the module that declares its receiver type"
+  }
+}
