@@ -112,17 +112,13 @@ static bool source_class_method_reference(SourceContext *ctx,AstNode *node,Sourc
         source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_CLASS_METHOD_REF,.type=signature,
             .args={receiver.id},.immediate=method->index},value);
 }
-/* A method belongs to the module that declares its receiver type. Reaching it
- * from another module requires that module's ordinary import, and a type its
- * module does not export is reachable only inside that module's scope. Report
- * the miss where the source names the method; otherwise it surfaces later as a
+/* A nominal declaration owns its methods. Reaching one from another module
+ * requires that module's ordinary import, and a type its module does not
+ * export is reachable only inside that module's scope. Report the miss where
+ * the source names the method; otherwise it surfaces later as a
  * constructed-module failure without a source position. */
-static bool source_method_receiver_imported(SourceContext *ctx, AstNode *node, XrXirType type) {
-    if (xr_xir_type_is_cell(&ctx->types, type)) type = xr_xir_cell_element(&ctx->types, type);
-    const XrXirTypeNode *receiver = xr_xir_type_node(&ctx->types, type);
-    if (!receiver || receiver->kind != XR_XIR_TYPE_NOMINAL || !ctx->nominals.declarations ||
-        receiver->nominal.declaration >= ctx->nominals.count) return true;
-    const XrXirNominalDeclaration *declaration = &ctx->nominals.declarations[receiver->nominal.declaration];
+static bool source_nominal_declaration_imported(SourceContext *ctx, AstNode *node,
+    const XrXirNominalDeclaration *declaration, const char *missing_import, const char *not_exported) {
     uint32_t declaring = UINT32_MAX;
     for (uint32_t m = 0; m < ctx->module_count; ++m)
         if (ctx->modules[m].name_length == declaration->module.length &&
@@ -135,12 +131,29 @@ static bool source_method_receiver_imported(SourceContext *ctx, AstNode *node, X
     XrXirDeclarations declarations;
     (void)source_module_view(ctx, &declarations);
     if (!declaration->exported && !xr_xir_module_same_scope(&declarations, caller, declaring))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE,
-            "method receiver type is not exported from its declaring module");
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, not_exported);
     if (!xr_xir_module_imports(&declarations, caller, declaring))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE,
-            "method requires importing the module that declares its receiver type");
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, missing_import);
     return true;
+}
+/* An inherited method keeps the declaration that owns it, so its module is
+ * required in addition to the receiver type's module. */
+static bool source_method_receiver_imported(SourceContext *ctx, AstNode *node, XrXirType type,
+    const XrXirFunctionIdentity *method) {
+    if (xr_xir_type_is_cell(&ctx->types, type)) type = xr_xir_cell_element(&ctx->types, type);
+    const XrXirTypeNode *receiver = xr_xir_type_node(&ctx->types, type);
+    if (!receiver || receiver->kind != XR_XIR_TYPE_NOMINAL || !ctx->nominals.declarations ||
+        receiver->nominal.declaration >= ctx->nominals.count) return true;
+    if (!source_nominal_declaration_imported(ctx, node,
+            &ctx->nominals.declarations[receiver->nominal.declaration],
+            "method requires importing the module that declares its receiver type",
+            "method receiver type is not exported from its declaring module")) return false;
+    if (!method || !method->nominal_owner || method->nominal_owner > ctx->nominals.count ||
+        method->nominal_owner - 1 == receiver->nominal.declaration) return true;
+    return source_nominal_declaration_imported(ctx, node,
+        &ctx->nominals.declarations[method->nominal_owner - 1],
+        "method requires importing the module that declares it",
+        "method owner type is not exported from its declaring module");
 }
 /* `reference_receiver` is the receiver's place syntax when the method borrows
  * it as a ref receiver, NULL when the receiver is an ordinary value. */
@@ -148,7 +161,7 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
     AstNode *reference_receiver, SourceName *method, SourceExpectedType result_context, SourceValue *value) {
     const XrXirFunctionIdentity *identity = source_method_identity(ctx,node,method);
     if (!identity) return false;
-    if (!source_method_receiver_imported(ctx, node, receiver.type)) return false;
+    if (!source_method_receiver_imported(ctx, node, receiver.type, identity)) return false;
     if (identity->method_kind == XR_XIR_STATIC_METHOD)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method requires type-qualified access");
     if(source_class_virtual_method(ctx,method)) {
@@ -274,7 +287,7 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     }
     const XrXirFunctionIdentity *identity = source_method_identity(ctx,node,method);
     if (!identity) return false;
-    if (!source_method_receiver_imported(ctx, node, receiver.type)) return false;
+    if (!source_method_receiver_imported(ctx, node, receiver.type, identity)) return false;
     if (identity->method_kind == XR_XIR_STATIC_METHOD)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "static method value requires type-qualified access");
     if (identity->member_access && ctx->identities[ctx->function].nominal_owner != identity->nominal_owner)

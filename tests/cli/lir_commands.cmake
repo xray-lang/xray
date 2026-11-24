@@ -159,6 +159,12 @@ add_test(NAME test_lir_cli_host_method_import
 set_tests_properties(test_lir_cli_host_method_import PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
 
+add_test(NAME test_cli_method_import_visibility
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_method_import_visibility_tests.py
+        --binary $<TARGET_FILE:xray> --output ${PROJECT_BINARY_DIR}/method-import-visibility)
+set_tests_properties(test_cli_method_import_visibility PROPERTIES
+    TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;ownership")
+
 foreach(enum_profile IN ITEMS class_enum_field enum_equality)
     add_test(NAME test_lir_cli_${enum_profile}
         COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
