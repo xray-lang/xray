@@ -1215,6 +1215,19 @@ static bool lower_float_width_operation(XrXirOp op) {
     }
 }
 #include "xlir_lower_string_length.inc.c"
+
+/* Checked XIR places the cleanup of temporary loans after the receiving
+ * marker on each selected edge. No user operation belongs to this prefix. */
+static const XrXirInstruction *lower_invoke_landing_exit(const XrXirFunction *f,
+    const XrXirBlock *landing) {
+    if (landing->count < 2) return NULL;
+    const XrXirInstruction *first = &f->instructions[landing->first];
+    const XrXirInstruction *exit = first + landing->count - 1;
+    for (const XrXirInstruction *cleanup = first + 1; cleanup < exit; ++cleanup)
+        if (cleanup->op != XR_XIR_VIEW_CLEANUP) return NULL;
+    return exit;
+}
+
 #include "xlir_lower_optional_error.inc.c"
 #include "xlir_lower_catch.inc.c"
 #include "xlir_cleanup_lower.inc.c"
@@ -1229,8 +1242,12 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
         call->type != callee->result || call->args[1] != callee->parameter_count ||
         call->args[0] > f->operand_count || call->args[1] > f->operand_count - call->args[0])
         return false;
-    for (uint32_t a = 0; a < callee->parameter_count; ++a)
-        if (lir_pod_scalar(lower_type(c,callee->parameters[a])) >= XR_POD_SCALAR_COUNT) return false;
+    for (uint32_t a = 0; a < callee->parameter_count; ++a) {
+        XrXirType type = callee->parameters[a];
+        if (lir_pod_scalar(lower_type(c,type)) < XR_POD_SCALAR_COUNT) continue;
+        const XrXirTypeNode *node = xr_xir_type_node(c->source->types,type);
+        if (!node || node->kind != XR_XIR_TYPE_SLICE || node->element != XR_XIR_U8) return false;
+    }
     if (!lower_term(c,f,call->targets[0]) || !lower_term(c,f,call->targets[1])) return false;
     const XrXirBlock *normal = &f->blocks[call->targets[0]], *failure = &f->blocks[call->targets[1]];
     uint32_t origin = (uint32_t)(call - f->instructions);
@@ -1239,9 +1256,9 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
         (first->immediate != origin || !((first->op == XR_XIR_INVOKE_RESULT && first->type == call->type) ||
             (first->op == XR_XIR_INVOKE_DISCARD && first->type == XR_XIR_UNIT)))) return false;
     const XrXirInstruction *marker = &f->instructions[failure->first];
-    if (failure->count!=2 || failure->panic || failure->frontier || marker->op!=XR_XIR_INVOKE_ERROR ||
+    const XrXirInstruction *exit=lower_invoke_landing_exit(f,failure);
+    if (!exit || failure->panic || failure->frontier || marker->op!=XR_XIR_INVOKE_ERROR ||
         marker->type!=XR_XIR_ERROR || marker->immediate!=origin) return false;
-    const XrXirInstruction *exit=marker+1;
     if (exit->op==XR_XIR_JUMP)
         return lower_invoke_failure_predecessor(c,f,call->targets[1]) != 0;
     return exit->args[0]==f->parameter_count+failure->first && (exit->op==XR_XIR_PANIC_ERROR ||
@@ -3101,7 +3118,7 @@ static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstr
     if (count && !arguments) return false;
     bool good=true;
     for (uint32_t a=0;a<term->args[1] && good;++a)
-        good=lower_value(f,f->source->operands[term->args[0]+a],&arguments[a]);
+        good=lower_slice_source(f,f->source->operands[term->args[0]+a],&arguments[a]);
     if (hidden) arguments[count-1]=f->state;
     XrLirType result=lower_type(c,term->type);
     XrLirInstruction call={.op=XR_LIR_CALL,.type=result,.callee=c->functions[callee],

@@ -82,7 +82,7 @@ static XrLirStatus lir_slice_frontier(const XrLirModule *m, const XrLirFunctionD
             bool admitted = v->op == XR_LIR_CALL_INTRINSIC &&
                 xr_lir_slice_intrinsic_view(m, v->intrinsic, &role) == XR_LIR_OK;
             if (v->op == XR_LIR_RET && checked && xr_lir_internal_slice_type(m, f->result)) admitted = true;
-            if (v->op == XR_LIR_CALL) {
+            if (v->op == XR_LIR_CALL || v->op == XR_LIR_INVOKE) {
                 XrLirSliceFunctionFact callee;
                 admitted = xr_lir_internal_slice_function_fact(m, v->callee, &callee) == XR_LIR_OK && callee.available &&
                     (!xr_lir_internal_slice_type(m, v->type) || callee.result_parameter < v->operand_count);
@@ -179,7 +179,8 @@ static bool lir_slice_call_conflict(const XrLirModule *m, const XrLirInstruction
 #include "xlir_slice_callable.inc.c"
 static bool lir_slice_instruction_conflict(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *v, const LirSliceFlow *flow) {
-    if (v->op == XR_LIR_CALL && m->slice_facts) return lir_slice_call_conflict(m, v, flow);
+    if (v->op == XR_LIR_INVOKE || (v->op == XR_LIR_CALL && m->slice_facts))
+        return lir_slice_call_conflict(m, v, flow);
     if (v->op == XR_LIR_CALL || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_REF) {
         for (uint32_t a = 0; a < v->operand_count; ++a) {
             uint32_t value = v->operands[a];

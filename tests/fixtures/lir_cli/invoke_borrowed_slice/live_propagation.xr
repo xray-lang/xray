@@ -1,0 +1,22 @@
+enum Refusal { Denied { code: i64 } }
+
+fn read(view: Slice<u8>, fail: bool) throws(Refusal) -> i64 {
+    if (fail) { throw Refusal.Denied { code: len(view) } }
+    return len(view)
+}
+
+fn forward(view: Slice<u8>, fail: bool) throws(Refusal) -> i64 {
+    return try read(view, fail)
+}
+
+fn probe(fail: bool) {
+    var bytes: Array<u8> = [255, 68, 255]
+    var live: Slice<u8> = bytes[1:2]
+    print((try? forward(live, fail)) ?? -1)
+    print(live[0])
+    bytes[1] = 92
+    print(bytes[1])
+}
+
+probe(false)
+probe(true)

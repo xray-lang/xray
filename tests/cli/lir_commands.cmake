@@ -95,6 +95,14 @@ add_test(NAME test_lir_cli_invoke_catch_local
 set_tests_properties(test_lir_cli_invoke_catch_local PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
 
+add_test(NAME test_lir_cli_invoke_borrowed_slice
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --fixtures tests/fixtures/lir_cli/invoke_borrowed_slice --compiler "${CMAKE_C_COMPILER}"
+        --output ${PROJECT_BINARY_DIR}/lir-cli-invoke-borrowed-slice)
+set_tests_properties(test_lir_cli_invoke_borrowed_slice PROPERTIES
+    TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
+
 foreach(defer_profile IN ITEMS sync lowering source)
     add_test(NAME test_lir_cli_defer_${defer_profile}
         COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py

@@ -67,11 +67,12 @@ static const XrXirInstruction *lower_forwarded_error_call(const XrXirFunction *f
     uint32_t block,uint32_t value,uint32_t join) {
     const XrXirBlock *landing=&f->blocks[block];
     const XrXirInstruction *marker=&f->instructions[landing->first];
-    if (landing->count!=2 || landing->panic || landing->frontier ||
+    const XrXirInstruction *exit=lower_invoke_landing_exit(f,landing);
+    if (!exit || landing->panic || landing->frontier ||
         marker->op!=XR_XIR_INVOKE_ERROR || marker->type!=XR_XIR_ERROR ||
         marker->immediate<0 || (uint64_t)marker->immediate>=f->instruction_count ||
         value!=f->parameter_count+landing->first ||
-        marker[1].op!=XR_XIR_JUMP || marker[1].targets[0]!=join) return NULL;
+        exit->op!=XR_XIR_JUMP || exit->targets[0]!=join) return NULL;
     const XrXirInstruction *call=&f->instructions[marker->immediate];
     return call->op==XR_XIR_INVOKE && call->targets[1]==block ? call : NULL;
 }

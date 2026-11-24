@@ -920,9 +920,15 @@ static bool lir_startup_publication(const XrLirModule *m,const XrLirFunctionData
         (!call->operand_count || call->operands[0]==state);
 }
 
-static bool lir_optional_error_branch(const XrLirFunctionData *f,const XrLirBlockData *failed,
-    const XrLirInstructionView *branch) {
-    if (failed->instruction_count!=1) return false;
+static bool lir_invoke_landing_view_cleanup(const XrLirBlockData *failed) {
+    for (uint32_t i = 0; i + 1 < failed->instruction_count; ++i) {
+        XrLirOp op = failed->instructions[i].view.op;
+        if (op != XR_LIR_SLICE_CLEANUP && op != XR_LIR_SLICE_FORMAL_CLEANUP) return false;
+    }
+    return true;
+}
+
+static bool lir_optional_error_branch(const XrLirFunctionData *f,const XrLirInstructionView *branch) {
     const XrLirBlockData *absent=&f->blocks[branch->edges[0].target-1];
     if (absent->instruction_count!=2) return false;
     const XrLirInstructionView *none=&absent->instructions[0].view;
@@ -969,11 +975,12 @@ static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirF
                     !lir_startup_publication(m,f,b,term)) return false;
             } else if (exit->op==XR_LIR_BR) {
                 /* A catch receives this exact edge result as its first
-                 * parameter. An empty landing cannot manufacture a replacement. */
+                 * parameter after retiring its temporary Slice loans. */
                 const XrLirEdgeView *edge = &exit->edges[0];
-                if (failed->instruction_count==1 && edge->argument_count &&
+                if (!lir_invoke_landing_view_cleanup(failed)) return false;
+                if (edge->argument_count &&
                     edge->arguments[0]==failed->parameters[0]) continue;
-                if (!lir_optional_error_branch(f,failed,exit)) return false;
+                if (!lir_optional_error_branch(f,exit)) return false;
                 if (!optional) memset(discarded,0,f->value_count);
                 optional=true;
                 discarded[failed->parameters[0]-1]=1;

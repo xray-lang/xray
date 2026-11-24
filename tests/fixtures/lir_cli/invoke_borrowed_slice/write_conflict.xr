@@ -1,0 +1,16 @@
+enum Refusal { Empty }
+
+fn read(view: Slice<u8>) throws(Refusal) -> u8 {
+    if (len(view) == 0) { throw Refusal.Empty }
+    return view[0]
+}
+
+fn probe() {
+    var bytes: Array<u8> = [65, 66]
+    var live: Slice<u8> = bytes[0:2]
+    print(try! read(live))
+    bytes[1] = 90
+    print(try! read(live))
+}
+
+probe()
