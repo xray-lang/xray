@@ -193,6 +193,31 @@ XRT_ARRAY_LOCAL_INLINE bool xrt_array_i64_region_try_begin(const XrtArrayI64Regi
     return true;
 }
 
+/* Only a live region borrow with a proven pointwise I64 update can be
+ * summarized this way. Compose on the unsigned representation, then touch
+ * each element once. No owner is retained, moved or published here. */
+XRT_ARRAY_LOCAL_INLINE void xrt_array_i64_region_repeat_affine(const XrtArrayI64RegionCache *cache,
+    uint64_t scale, uint64_t bias, uint64_t rounds) {
+    if (!rounds) return;
+    uint64_t composed_scale = 1, composed_bias = 0;
+    while (rounds) {
+        if (rounds & UINT64_C(1)) {
+            composed_bias = scale * composed_bias + bias;
+            composed_scale *= scale;
+        }
+        bias = scale * bias + bias;
+        scale *= scale;
+        rounds >>= 1;
+    }
+    for (size_t i = 0; i < cache->length; ++i) {
+        unsigned char *slot = cache->elements + i * sizeof(uint64_t);
+        uint64_t value;
+        memcpy(&value, slot, sizeof(value));
+        value = composed_scale * value + composed_bias;
+        memcpy(slot, &value, sizeof(value));
+    }
+}
+
 /* Actual private factory objects provide the immutable geometry. Preparation
  * allocates nothing and does not inspect live owner/pending/busy state. It may
  * run before backing initialization. False leaves an empty output unchanged. */

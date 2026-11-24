@@ -244,6 +244,28 @@ static void c_array_region_fast_edge(LirC *c, size_t region, size_t ordinal, con
     } else c_format(c,"    goto xrl_ar_%zu_bb%" PRIu32 ";\n",region,edge->target);
     c_text(c,"    }\n");
 }
+static void c_array_repeated_affine(LirC *c, size_t ordinal, const XrLirArraySetRegion *region) {
+    XrLirArrayRepeatedAffine affine = region->repeated_affine;
+    if (!affine.round || c->array_helper_kind) return;
+    /* A positive round at index zero proves the full ordinary first round
+     * finished. Keep the inner header and its real owner/exit publication. */
+    c_format(c, "    if (xrl_ar_%zu_phase == 0 && ", ordinal);
+    c_value(c, region->range.iv); c_text(c, " == 0 && ");
+    c_value(c, affine.round); c_text(c, " > 0 && ");
+    c_value(c, affine.round); c_text(c, " < "); c_value(c, affine.limit); c_text(c, ") {\n"
+        "        XrtArrayI64RegionCache xrl_affine = {0};\n");
+    c_format(c, "        if (xrt_array_i64_region_try_begin(&(XrtArrayI64RegionContext){xrl_frame, xrl_payload,"
+        " &xrl_frame_locations, &xrl_frame_%" PRIu32 "}, &xrl_ar_spec_%" PRIu32 "_%zu, true, &xrl_affine)"
+        " && xrl_affine.length) {\n", c->function.id, c->function.id, ordinal);
+    c_format(c, "            xrt_array_i64_region_repeat_affine(&xrl_affine, UINT64_C(%" PRIu64
+        "), UINT64_C(%" PRIu64 "), (uint64_t)", affine.scale, affine.bias);
+    c_value(c, affine.limit); c_text(c, " - (uint64_t)"); c_value(c, affine.round);
+    c_text(c, ");\n            ");
+    c_value(c, region->range.iv); c_text(c, " = (int64_t)xrl_affine.length;\n            ");
+    c_value(c, affine.round); c_text(c, " = "); c_value(c, affine.limit);
+    c_format(c, " - INT64_C(1);\n            goto bb%" PRIu32 ";\n        }\n    }\n", region->header);
+}
+
 static void c_array_region_edge_begin(LirC *c, size_t edge, const XrLirEdgeView *selected) {
     if (!c_array_region_present(c)) return;
     const XrLirArrayRegionBindings *binding = c->array_region->bindings;
@@ -255,6 +277,7 @@ static void c_array_region_edge_begin(LirC *c, size_t edge, const XrLirEdgeView 
         c_array_region_clear(c,region,0); return;
     }
     if (role.kind != XR_LIR_ARRAY_REGION_EDGE_BODY || c->block != row->region.header) return;
+    c_array_repeated_affine(c, region, &row->region);
     c_format(c,"    if (xrl_ar_%zu_phase == 1) {\n",region);
     c_format(c,"    if (xrt_array_i64_region_try_begin(&(XrtArrayI64RegionContext){xrl_frame, xrl_payload,"
         " &xrl_frame_locations, &xrl_frame_%" PRIu32 "}, &xrl_ar_spec_%" PRIu32 "_%zu, true, &xrl_ar_%zu_cache)) {\n",

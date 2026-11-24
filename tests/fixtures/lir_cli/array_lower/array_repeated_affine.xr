@@ -1,0 +1,31 @@
+fn update(count: i64, length: i64) {
+    var values: Array<i64> = []
+    var index = 0
+    while (index < length) {
+        values.push(9223372036854775807 - index)
+        index += 1
+    }
+    var round = 0
+    while (round < count) {
+        index = 0
+        while (index < len(values)) {
+            const previous = values[index]
+            values[index] = 1 + values[index] * 7 - previous * 4
+            index += 1
+        }
+        round += 1
+    }
+    print(round)
+    print(len(values))
+    index = 0
+    while (index < len(values)) {
+        print(values[index])
+        index += 1
+    }
+}
+
+update(-2, 2)
+update(0, 2)
+update(1, 2)
+update(4, 3)
+update(5, 0)

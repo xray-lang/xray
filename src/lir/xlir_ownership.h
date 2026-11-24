@@ -243,6 +243,15 @@ typedef struct XrLirArrayPushCapacity {
     uint32_t condition, condition_instruction, increment, increment_block, increment_instruction;
     uint32_t one, latch_iv, item, first_active_step, checkpoint_step;
 } XrLirArrayPushCapacity;
+/* A complete pointwise update rectangle. The inner header carries the
+ * current outer round; the limit is invariant. A consumer preserves the
+ * first ordinary round, then may compose remaining affine writes modulo
+ * 2^64 and resume the original inner header at its final exit values. */
+typedef struct XrLirArrayRepeatedAffine {
+    uint32_t round, limit;
+    uint64_t scale, bias;
+} XrLirArrayRepeatedAffine;
+
 /* The primary access is an original element operation, not CELL_READ/death.
  * SET retains its existing body contract. GET names the sole element read in
  * a closed unit/same-length read-only loop; no mutation permission follows. */
@@ -257,6 +266,7 @@ typedef struct XrLirArraySetRegion {
      * Consumers must still run the original final iteration and owner exit. */
     uint32_t element_read;
     XrLirArrayPushCapacity push_capacity;
+    XrLirArrayRepeatedAffine repeated_affine;
 } XrLirArraySetRegion;
 
 typedef struct XrLirOwnershipFunction {

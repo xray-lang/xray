@@ -503,7 +503,7 @@ static bool lir_array_region_body(LirArrayRegionProof *p, uint32_t block, uint32
                 p->push_item = op->operands[1];
             }
         } else if (shape->operation == XR_LIR_ARRAY_OP_GET) {
-            if (p->get_count < 2) ++p->get_count;
+            ++p->get_count;
             p->get_block = block + 1; p->get_instruction = i + 1;
         }
     }
@@ -671,6 +671,8 @@ static bool lir_array_element_update(LirArrayRegionProof *p, const XrLirArraySet
         lir_array_region_scalar_passthrough(p,region,region->range.iv,0);
 }
 
+#include "xlir_array_affine_repeat.inc.c"
+
 static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint32_t body_edge,
     XrLirArraySetRegion *region) {
     if (!lir_array_region_shape(p, header, body_edge, region)) return false;
@@ -710,6 +712,7 @@ static bool lir_array_region_prove(LirArrayRegionProof *p, uint32_t header, uint
     }
     region->owner_home = lir_array_region_owner_home(p,region);
     if (lir_array_element_update(p,region)) region->element_read = p->get_instruction;
+    region->repeated_affine = lir_array_affine_repeat(p, region);
     if (region->primary_kind == XR_LIR_ARRAY_REGION_PRIMARY_GET &&
         region->owner_home.kind != XR_LIR_ARRAY_SET_OWNER_HOME_READ_ONLY_WINDOW) return false;
     return true;
@@ -776,6 +779,8 @@ static bool lir_array_region_equal(XrLirArraySetRegion a, XrLirArraySetRegion b)
         a.body_block_count == b.body_block_count && a.primary_kind == b.primary_kind &&
         a.primary_block == b.primary_block && a.primary_instruction == b.primary_instruction &&
         a.first_step == b.first_step && a.step_count == b.step_count && a.element_read == b.element_read &&
+        a.repeated_affine.round == b.repeated_affine.round && a.repeated_affine.limit == b.repeated_affine.limit &&
+        a.repeated_affine.scale == b.repeated_affine.scale && a.repeated_affine.bias == b.repeated_affine.bias &&
         a.range.kind == b.range.kind && a.range.iv == b.range.iv && a.range.iv_argument == b.range.iv_argument &&
         a.range.entry_iv == b.range.entry_iv && a.range.length == b.range.length &&
         a.range.length_instruction == b.range.length_instruction && a.range.condition == b.range.condition &&

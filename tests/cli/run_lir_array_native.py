@@ -116,6 +116,7 @@ def main() -> None:
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
              "region_zero", "region_one", "region_set", "region_two", "region_scalar_phi", "push_capacity", "array_stationary_edges",
              "element_update", "element_update_carried",
+             "array_repeated_affine", "array_repeated_affine_fallback", "panic_array_repeated_affine_bounds",
              "panic_region_get", "panic_region_set",
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
              "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
@@ -215,6 +216,8 @@ def main() -> None:
         source = fixtures / (name + ".xr")
         panic = name.startswith("panic_")
         panic_location = source.name.encode()
+        if name == "panic_array_repeated_affine_bounds":
+            panic_location += b":7:13-7:13"
         if name == "panic_array_reserve_negative":
             diagnostic = b"[Uncaught Panic] E0422:"
             panic_location = b""
@@ -273,6 +276,9 @@ def main() -> None:
             if name == "region_set":
                 assert "XRT_ARRAY_I64_REGION_COPY(" not in generated_text
                 assert "XRT_ARRAY_I64_REGION_RECONSTRUCT(" not in generated_text
+        if name in ("array_repeated_affine", "array_repeated_affine_fallback", "panic_array_repeated_affine_bounds"):
+            composed = "xrt_array_i64_region_repeat_affine(" in generated_text
+            assert composed == (name == "array_repeated_affine"), name
         if name in ("element_update", "element_update_carried"):
             assert "XRT_ARRAY_I64_REGION_RECONSTRUCT(" in generated_text
             assert ("xrt_array_i64_pair_store(" in generated_text) == (name == "element_update"), name

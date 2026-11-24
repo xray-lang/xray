@@ -1,0 +1,14 @@
+fn update() {
+    var values: Array<i64> = [3, 5]
+    var round = 0
+    while (round < 3) {
+        var index = 0
+        while (index < len(values)) {
+            values[index] = values[index + round] * 3 + 1
+            index += 1
+        }
+        round += 1
+    }
+}
+
+update()
