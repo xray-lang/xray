@@ -1,0 +1,11 @@
+enum ReadError { Invalid { count: i64 } }
+fn read(value: string, code: i64) throws(ReadError) -> i64 {
+    if (len(value) == 0) { throw ReadError.Invalid { count: code } }
+    return code + 9
+}
+
+fn required(input: string) -> i64 {
+    return try! read(input, -19)
+}
+
+print(required(""))

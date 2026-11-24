@@ -654,6 +654,11 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (!lir_signature_matches(m, f, v, callee->parameter_types, callee->parameter_count,
                                    callee->result))
             goto invalid;
+        if (v->op == XR_LIR_INVOKE)
+            for (uint32_t a = 0; a < v->operand_count; ++a) {
+                const XrLirValueData *actual = &f->values[v->operands[a] - 1];
+                if (actual->type == XR_LIR_STRING && (!actual->parameter || actual->block)) goto invalid;
+            }
         if (callee->kind == XR_LIR_FUNCTION_EXTERNAL && callee->extern_kind == XR_LIR_EXTERN_PRINT_STRING &&
             !lir_literal_call(m, f, v)) goto invalid;
         if (!xr_lir_internal_array_instruction(m, f, v)) goto invalid;

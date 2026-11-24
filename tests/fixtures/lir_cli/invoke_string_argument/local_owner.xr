@@ -1,0 +1,12 @@
+enum ReadError { Invalid { count: i64 } }
+fn read(value: string) throws(ReadError) -> i64 {
+    if (len(value) == 0) { throw ReadError.Invalid { count: 2 } }
+    return 1
+}
+
+fn probe() {
+    const local = "owned"
+    print(try! read(local))
+}
+
+probe()

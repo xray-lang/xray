@@ -1247,6 +1247,16 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
     for (uint32_t a = 0; a < callee->parameter_count; ++a) {
         XrXirType type = callee->parameters[a];
         if (lir_pod_scalar(lower_type(c,type)) < XR_POD_SCALAR_COUNT) continue;
+        if (type == XR_XIR_STRING) {
+            uint32_t argument = f->operands[call->args[0] + a];
+            const XrXirTypes *types = c->source->types;
+            if (argument >= f->parameter_count || f->parameters[argument] != XR_XIR_STRING ||
+                xr_xir_declared_parameter_mode(types,type,callee->consume_parameters,
+                    callee->consume_parameter_count,a) != XR_PARAM_READ ||
+                xr_xir_declared_parameter_mode(types,type,f->consume_parameters,
+                    f->consume_parameter_count,argument) != XR_PARAM_READ) return false;
+            continue;
+        }
         const XrXirTypeNode *node = xr_xir_type_node(c->source->types,type);
         if (!node || node->kind != XR_XIR_TYPE_SLICE || node->element != XR_XIR_U8) return false;
     }
@@ -3139,8 +3149,16 @@ static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstr
     XrLirValue *arguments=lower_alloc(c,count,sizeof(*arguments));
     if (count && !arguments) return false;
     bool good=true;
-    for (uint32_t a=0;a<term->args[1] && good;++a)
-        good=lower_slice_source(f,f->source->operands[term->args[0]+a],&arguments[a]);
+    for (uint32_t a = 0; a < term->args[1] && good; ++a) {
+        uint32_t argument = f->source->operands[term->args[0] + a];
+        if (c->source->functions[callee].parameters[a] == XR_XIR_STRING) {
+            /* The incoming argument remains live throughout this activation.
+             * A block-local retained copy would need cleanup on both successors. */
+            good = lower_build(c, xr_lir_function_parameter(c->module,f->function,argument,&arguments[a]));
+        } else {
+            good = lower_slice_source(f,argument,&arguments[a]);
+        }
+    }
     if (hidden) arguments[count-1]=f->state;
     XrLirType result=lower_type(c,term->type);
     XrLirInstruction call={.op=XR_LIR_CALL,.type=result,.callee=c->functions[callee],

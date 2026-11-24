@@ -1,0 +1,15 @@
+{
+  "forward": {
+    "exit": 0,
+    "stdout": "49\n-1\n49\n",
+    "stderr": ""
+  },
+  "fault": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "[Uncaught Panic] E0446: try! failed: ReadError.Invalid(-19)\n"
+  },
+  "local_owner": {
+    "lowering_error": ":9:5: INVOKE is not supported by LIR lowering yet"
+  }
+}
