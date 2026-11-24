@@ -16,6 +16,7 @@
 #include "shared/xnative_declaration.h"
 #include "xnative_managed_root.h"
 #include "xnative_backing_types.h"
+#include "xnative_array_backing.h"
 #include "xnative_class_array.h"
 #include "xray_native_array_slice.h"
 #include "xray_native_function.h"
@@ -109,16 +110,20 @@ static XrtBackingArrayKind writable_class_array_kind(XrtValueKind kind) {
         array_backing_kind(kind) : XRT_BACKING_ARRAY_COUNT;
 }
 
+static bool nullable_array_kind(XrtValueKind kind) {
+    return kind == XRT_VALUE_ARRAY_INLINE || array_backing_kind(kind) != XRT_BACKING_ARRAY_COUNT;
+}
+
 static bool managed_nullable(const XrtValuePlan *plan) {
     while (plan->view.kind == XRT_VALUE_NULLABLE) plan = plan->view.nullable.element;
     XrtValueKind kind = plan->view.kind;
     return kind == XRT_VALUE_STRING || kind == XRT_VALUE_CLASS || xrt_value_kind_has_fields(kind) ||
-        array_backing_kind(kind) != XRT_BACKING_ARRAY_COUNT;
+        nullable_array_kind(kind);
 }
 static bool plan_has_nullable_array_owners(const XrtValuePlanSpec *spec) {
     if (spec->kind == XRT_VALUE_NULLABLE) {
         const XrtValuePlan *element = spec->nullable.element;
-        return element->nullable_array_owners || array_backing_kind(element->view.kind) != XRT_BACKING_ARRAY_COUNT;
+        return element->nullable_array_owners || nullable_array_kind(element->view.kind);
     }
     if (xrt_value_kind_has_fields(spec->kind)) {
         for (size_t i = 0; i < spec->field_count; ++i)
@@ -201,7 +206,7 @@ static bool nullable_valid(const XrtValuePlanSpec *spec) {
     size_t scalar_size, scalar_alignment;
     if (!scalar_layout(kind, &scalar_size, &scalar_alignment) && kind != XRT_VALUE_STRING && !xrt_value_kind_has_fields(kind) &&
         kind != XRT_VALUE_CLASS && kind != XRT_VALUE_NULLABLE && kind != XRT_VALUE_FIXED_U8 &&
-        array_backing_kind(kind) == XRT_BACKING_ARRAY_COUNT) return false;
+        !nullable_array_kind(kind)) return false;
     size_t end = spec->nullable.payload_offset + element->view.size;
     if (end > SIZE_MAX - (spec->alignment - 1) ||
         spec->size != ((end + spec->alignment - 1) & ~(spec->alignment - 1)) ||
@@ -550,6 +555,7 @@ static bool class_leaf_matches(const XrtValuePlan *plan, const XrtManagedHeader 
     XrtValueKind kind = plan->view.kind;
     if (kind == XRT_VALUE_STRING) return owner != NULL;
     if (kind == XRT_VALUE_CLASS) return xrt_class_backing_matches(owner, plan);
+    if (kind == XRT_VALUE_ARRAY_INLINE) return xrt_array_backing_inline_matches(owner, plan->view.element);
     XrtBackingArrayKind array_kind = array_backing_kind(kind);
     return array_kind != XRT_BACKING_ARRAY_COUNT && xrt_backing_array_matches(owner, array_kind);
 }
@@ -586,7 +592,7 @@ static bool aggregate_owners_match(const XrtValuePlan *type, const unsigned char
                 if (!tag) break;
                 offset -= shape->nullable.payload_offset; bytes += shape->nullable.payload_offset;
                 part = shape->nullable.element;
-                check_leaf |= array_backing_kind(part->view.kind) != XRT_BACKING_ARRAY_COUNT;
+                check_leaf |= nullable_array_kind(part->view.kind);
             } else break;
         }
         const XrtValuePlanSpec *shape = &part->view;

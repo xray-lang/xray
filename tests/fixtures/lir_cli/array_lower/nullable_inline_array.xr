@@ -1,0 +1,43 @@
+import path
+
+struct Row {
+    name: string
+    number: i64
+}
+
+fn relay(callback: fn(Array<path.Path>?) -> Array<path.Path>?, value: Array<path.Path>?) -> Array<path.Path>? {
+    return callback(value)
+}
+
+fn paths() -> Array<path.Path>? {
+    const items: Array<path.Path> = [path.from("目录/猫.txt")]
+    return items
+}
+
+fn records() -> Array<Row>? {
+    const items: Array<Row> = [Row{name: "旧\0猫", number: 41}]
+    return items
+}
+
+fn tuples() -> Array<(string, i64)>? {
+    const items: Array<(string, i64)> = [("second", -6)]
+    return items
+}
+
+fn exercise() {
+    const identity = fn(value: Array<path.Path>?) -> Array<path.Path>? { return value }
+    const kept = relay(identity, paths())
+    print(path.basename(kept![0]) == "猫.txt")
+    const empty = relay(identity, Array<path.Path>())
+    print(empty != null)
+    print(len(empty!))
+    print(relay(identity, null) == null)
+    const row = records()![0]
+    print(row.name == "旧\0猫")
+    print(row.number)
+    const tuple = tuples()![0]
+    print(tuple.0)
+    print(tuple.1)
+}
+
+exercise()

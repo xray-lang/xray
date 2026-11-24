@@ -522,15 +522,10 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
     }
     if (node && node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_enum(c->source->types, type))
         return lower_receive_enum_sum(c, type);
-    if (node && node->kind == XR_XIR_TYPE_ARRAY) {
-        const XrXirTypeNode *row = xr_xir_type_node(c->source->types, node->element);
-        XrXirTypeDescription record = {0};
-        if (row && (row->kind == XR_XIR_TYPE_TUPLE ||
-            (row->kind == XR_XIR_TYPE_NOMINAL && (xr_xir_type_is_class(c->source->types, node->element) ||
-                lower_record_description(c, node->element, &record))))) {
-            if (!lower_receive_record_shapes(c, node->element)) return false;
-            return lower_build(c, xr_lir_require_inline_array_element(c->module, lower_type(c, node->element)));
-        }
+    XrXirType inline_element = lower_inline_array_source_element(c, type);
+    if (inline_element) {
+        if (!lower_receive_record_shapes(c, inline_element)) return false;
+        return lower_build(c, xr_lir_require_inline_array_element(c->module, lower_type(c, inline_element)));
     }
     if (node && node->kind == XR_XIR_TYPE_SLICE) {
         XrLirType element = lower_type(c, node->element);

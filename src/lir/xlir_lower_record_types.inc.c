@@ -19,6 +19,16 @@ static bool lower_record_description(Lower *c, XrXirType type, XrXirTypeDescript
     uint32_t native = description->definition ? description->definition->native.native_id : description->identity->native.native_id;
     return description->nominal_kind == XR_XIR_NOMINAL_STRUCT && !native && !(flags & ~XR_XIR_NOMINAL_MODULE_LITERAL);
 }
+static XrXirType lower_inline_array_source_element(Lower *c, XrXirType type) {
+    const XrXirTypeNode *array = xr_xir_type_node(c->source->types, type);
+    if (!array || array->kind != XR_XIR_TYPE_ARRAY) return 0;
+    const XrXirTypeNode *row = xr_xir_type_node(c->source->types, array->element);
+    XrXirTypeDescription description = {0};
+    if (row && (row->kind == XR_XIR_TYPE_TUPLE ||
+        (row->kind == XR_XIR_TYPE_NOMINAL && (xr_xir_type_is_class(c->source->types, array->element) ||
+            lower_record_description(c, array->element, &description))))) return array->element;
+    return 0;
+}
 static bool lower_class_parent_type(Lower *c, uint32_t declaration, XrXirType *parent) {
     const XrXirTypes *types = c->source->types;
     const XrXirNominalTable *table = types->nominals;
@@ -182,6 +192,10 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
                 }
             } else if (callable) dependency = frame->next ? node->parameters[frame->next - 1].type : node->result;
             else if (tuple) dependency = node->parameters[frame->next].type;
+            else {
+                XrXirType array_element = lower_inline_array_source_element(c, dependency);
+                if (array_element) dependency = array_element;
+            }
             ++frame->next;
             const XrXirTypeNode *child = xr_xir_type_node(c->source->types, dependency);
             if (!child || c->constructed_types[(uint32_t)dependency - XR_XIR_CONSTRUCTED_TYPE_BASE]) continue;
@@ -197,13 +211,20 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
         else if (callable) good = lower_receive_callable(c, frame->type, node);
         else if (tuple) good = lower_tuple_finish(c, frame->type, node);
         else {
+            XrXirType inline_element = lower_inline_array_source_element(c, node->element);
+            if (inline_element) {
+                good = lower_build(c, xr_lir_require_inline_array_element(c->module, lower_type(c, inline_element)));
+                if (!good) break;
+                c->arrays = true;
+            }
             /* A previously received class union shares an erased member carrier.
              * That carrier does not describe all present Optional payloads. */
             XrLirType element = xr_xir_data_union_all_classes(c->source->types, node->element) ?
                 XR_LIR_TYPE_INVALID : lower_pod_element(c, node->element);
             XrLirType array_element = element == XR_LIR_ARRAY ? lower_array_element(c, node->element) : XR_LIR_TYPE_INVALID;
             XrLirType *output = &c->constructed_types[(uint32_t)frame->type - XR_XIR_CONSTRUCTED_TYPE_BASE];
-            if (array_element == XR_LIR_U8 || array_element == XR_LIR_I64 || array_element == XR_LIR_STRING)
+            if (inline_element || array_element == XR_LIR_U8 || array_element == XR_LIR_I64 ||
+                array_element == XR_LIR_STRING)
                 good = lower_build(c, xr_lir_nullable_array_type(c->module, array_element, output));
             else if (!element || element == XR_LIR_ARRAY) good = lower_unsupported(c, "Nullable payload has no inline POD layout");
             else good = lower_build(c, xr_lir_nullable_type(c->module, element, output));

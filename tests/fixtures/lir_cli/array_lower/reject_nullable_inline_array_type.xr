@@ -1,0 +1,13 @@
+import path
+
+final class Other {
+    const name: string
+    init(name: string) { this.name = name }
+}
+
+fn accept(value: Array<path.Path>?) -> bool { return value == null }
+fn run() {
+    const items: Array<Other> = [Other("item")]
+    print(accept(items))
+}
+run()

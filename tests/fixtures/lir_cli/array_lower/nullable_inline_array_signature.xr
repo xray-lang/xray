@@ -1,0 +1,7 @@
+import path
+
+fn absent(value: Array<path.Path>?) -> bool {
+    return value == null
+}
+
+print(absent(null))

@@ -12,7 +12,8 @@ static bool rbc_callable_home_type(const XrtValueImage *image, uint32_t type) {
     if (row->kind == XRT_VALUE_ARRAY_INLINE) return true;
     if (row->kind != XRT_VALUE_NULLABLE || !row->nullable_element || row->nullable_element >= type) return false;
     XrtValueKind payload = image->types[row->nullable_element - 1].kind;
-    return payload == XRT_VALUE_ARRAY_U8 || payload == XRT_VALUE_ARRAY_I64 || payload == XRT_VALUE_ARRAY_STRING;
+    return payload == XRT_VALUE_ARRAY_U8 || payload == XRT_VALUE_ARRAY_I64 ||
+        payload == XRT_VALUE_ARRAY_STRING || payload == XRT_VALUE_ARRAY_INLINE;
 }
 
 static bool rbc_callable_value_valid(const XrRbcModule *m, XrRbcCallableValue value, size_t before) {
