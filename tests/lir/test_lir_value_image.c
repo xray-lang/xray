@@ -727,6 +727,116 @@ static void class_array_elements_keep_their_exact_backing(void) {
     MANAGED(xrt_managed_root_destroy(&root));
     xrt_value_image_drop(&bound); owner_drop(&owner); CHECK(owner.audit.final == 1);
 }
+static void class_optional_i64_fields_keep_their_inline_layout(void) {
+    typedef struct OptionalI64 { uint8_t tag; int64_t payload; } OptionalI64;
+    typedef struct Row { OptionalI64 uid; int64_t size; OptionalI64 gid; } Row;
+    const XrLirRecordIdentity identity = {.module="tests.lir.value_image",.module_length=sizeof("tests.lir.value_image")-1,
+        .name="Metadata",.name_length=sizeof("Metadata")-1};
+    XrLirModule *module = NULL;
+    XrLirType optional, class_type, derived_type;
+    LIR(xr_lir_module_create(NULL, &module));
+    LIR(xr_lir_nullable_type(module, XR_LIR_I64, &optional));
+    const XrLirRecordField fields[] = {{"uid",3,optional,0,0},{"size",4,XR_LIR_I64,0,0},{"gid",3,optional,0,0}};
+    LIR(xr_lir_internal_named_class_type(module, &identity, fields, 3, XR_LIR_TYPE_INVALID, &class_type));
+    XrLirRecordIdentity derived = identity;
+    derived.name = "DerivedMetadata";
+    derived.name_length = sizeof("DerivedMetadata") - 1;
+    LIR(xr_lir_internal_named_class_type(module, &derived, fields, 3, class_type, &derived_type));
+    LIR(xr_lir_module_finish(module, NULL));
+    for (unsigned selective = 0; selective < 2; ++selective) {
+        XrLirModule *receiving = NULL;
+        XrLirType received = derived_type, row;
+        LIR(xr_lir_module_create(NULL, &receiving));
+        if (selective) {
+            XrLirType extra;
+            LIR(xr_lir_nullable_type(receiving, XR_LIR_I1, &extra));
+            LIR(xr_lir_import_type(receiving, module, derived_type, &received));
+            CHECK(received != derived_type);
+        } else {
+            LIR(xr_lir_copy_types(receiving, module));
+        }
+        CHECK(xr_lir_class_payload(receiving, xr_lir_class_parent(receiving, received), &row));
+        CHECK(!xr_lir_internal_type_valid(receiving, row, true) && !xr_lir_inline_aggregate_type(receiving, row));
+        CHECK(xr_lir_internal_types_valid(receiving));
+        if (selective) {
+            LIR(xr_lir_require_inline_array_element(receiving, received));
+            CHECK(xr_lir_internal_array_element(receiving, received));
+            CHECK(xr_lir_require_inline_array_element(receiving, row) == XR_LIR_UNSUPPORTED);
+        } else {
+            const XrLirRecordField tuple_member = {.type=row};
+            XrLirType refused = XR_LIR_I64;
+            CHECK(xr_lir_tuple_type(receiving, &tuple_member, 1, &refused) == XR_LIR_INVALID_ARGUMENT &&
+                refused == XR_LIR_I64);
+        }
+        xr_lir_module_destroy(receiving);
+    }
+
+    Owner owner; owner_new(&owner, SIZE_MAX);
+    XrLirValueLayouts *layouts = NULL;
+    XrLirValueImage *image = NULL;
+    const XrLirValueLayoutKey key = {class_type,0,0};
+    LAYOUT(xr_lir_value_layouts_create(module, &key, 1, owner.billing, &layouts));
+    LAYOUT(xr_lir_value_image_create(layouts, owner.billing, &image));
+    const XrtValuePlan *class_plan = NULL;
+    uint32_t id;
+    LAYOUT(xr_lir_value_layouts_lookup(layouts, key, &class_plan, &id));
+    const XrtValueImage *view = xr_lir_value_image_view(image);
+    const XrtValueImageType *payload = &view->types[view->types[id - 1].element - 1];
+    CHECK(payload->kind == XRT_VALUE_RECORD && payload->size == sizeof(Row) &&
+        !payload->owned_count && payload->field_count == 3 && view->slot_count == 3);
+    const XrtValueImageSlot *slots = view->slots;
+    CHECK(slots[0].offset == offsetof(Row,uid) && slots[1].offset == offsetof(Row,size) &&
+        slots[2].offset == offsetof(Row,gid) && slots[0].type == slots[2].type);
+    const XrtValueImageType *member = &view->types[slots[0].type - 1];
+    CHECK(member->kind == XRT_VALUE_NULLABLE && member->size == sizeof(OptionalI64) &&
+        member->nullable_tag == offsetof(OptionalI64,tag) && member->nullable_payload == offsetof(OptionalI64,payload) &&
+        !member->owned_count && view->types[member->nullable_element - 1].kind == XRT_VALUE_I64);
+
+    XrtValueImageSlot forged_slots[3];
+    memcpy(forged_slots, slots, sizeof(forged_slots));
+    forged_slots[2].offset = forged_slots[1].offset;
+    XrtValueImage forged = *view;
+    forged.slots = forged_slots;
+    XrtValueImagePlans *bound = NULL;
+    CHECK(xrt_value_image_bind(owner.billing, &forged, (XrtManagedLease){0}, &bound) == XRT_MANAGED_ARGUMENT && !bound);
+    MANAGED(xrt_value_image_bind(owner.billing, view, (XrtManagedLease){0}, &bound));
+    xr_lir_value_image_destroy(image); xr_lir_value_layouts_destroy(layouts); xr_lir_module_destroy(module);
+
+    XrtBoundClass type = {0};
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    MANAGED(xrt_value_image_class(bound, id, &type));
+    MANAGED(xrt_managed_root_new(owner.billing, &root));
+    MANAGED(xrt_managed_frame_enter(root, 1, &frame));
+    Row row = {{1,0},7,{0,0}};
+    MANAGED(xrt_class_create(frame, 0, type.ops, &row));
+    XrtManagedHeader *original = NULL, *current = NULL;
+    MANAGED(xrt_managed_slot_borrow(frame, 0, &original));
+    size_t allocations = owner.audit.allocations;
+    XrtValuePlanSpec class_spec;
+    MANAGED(xrt_value_plan_view(type.plan, &class_spec));
+    const XrtValueSlotSpec nested = {.type=class_spec.element,.name="nested",.name_length=6};
+    const XrtValuePlanSpec nested_row = {.kind=XRT_VALUE_RECORD,.size=sizeof(Row),.alignment=_Alignof(Row),
+        .fields=&nested,.field_count=1};
+    XrtValuePlan *rejected = NULL;
+    CHECK(xrt_value_plan_new(owner.billing, &nested_row, &rejected) == XRT_MANAGED_ARGUMENT && !rejected);
+    row.uid.tag = 2;
+    CHECK(xrt_class_create(frame, 0, type.ops, &row) == XRT_MANAGED_ARGUMENT);
+    MANAGED(xrt_managed_slot_borrow(frame, 0, &current));
+    CHECK(current == original && owner.audit.allocations == allocations);
+
+    const XrtValuePlan *uid = NULL, *gid = NULL;
+    const void *uid_bytes = NULL, *gid_bytes = NULL;
+    MANAGED(xrt_class_field_borrow(current, type.plan, 0, &uid, &uid_bytes));
+    MANAGED(xrt_class_field_borrow(current, type.plan, 2, &gid, &gid_bytes));
+    OptionalI64 some = {0}, none = {0};
+    CHECK(uid == gid);
+    MANAGED(xrt_value_copy_empty(uid, uid_bytes, &some));
+    MANAGED(xrt_value_copy_empty(gid, gid_bytes, &none));
+    MANAGED(xrt_managed_root_destroy(&root));
+    CHECK(some.tag == 1 && some.payload == 0 && none.tag == 0);
+    xrt_value_image_drop(&bound); owner_drop(&owner); CHECK(owner.audit.final == 1);
+}
 int main(void) {
     class_arrays_keep_their_exact_backing();
     class_array_update_failure_preserves_the_field(false);
@@ -736,6 +846,7 @@ int main(void) {
     nested_class_owners_are_checked_before_publication();
     nullable_arrays_keep_their_exact_backing();
     class_array_elements_keep_their_exact_backing();
+    class_optional_i64_fields_keep_their_inline_layout();
     copied_names_and_real_values(); failures_and_empty(); deep_single_inventory(); rejects_forged_display_closure();
     class_values_follow_their_exact_owner();
     puts("raw value images: billed ownership, copied names, exact ids, creator retirement and real inline values passed");

@@ -1,0 +1,13 @@
+{
+  "roundtrip": {
+    "exit": 0,
+    "stdout": "7\n0\n1\n-29\n",
+    "stderr": ""
+  },
+  "wrong_type": {
+    "source_error": ":6:25: error: expression cannot satisfy its declared type"
+  },
+  "ordinary_record": {
+    "lowering_error": ":5:11: record field has no canonical physical carrier is not supported by LIR lowering yet"
+  }
+}

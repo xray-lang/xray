@@ -1,0 +1,7 @@
+final class Metadata {
+    const uid: i64?
+    init(uid: i64?) { this.uid = uid }
+}
+
+const record = Metadata(true)
+if (record.uid != null) { print(record.uid!) }

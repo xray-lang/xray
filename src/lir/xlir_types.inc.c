@@ -291,10 +291,11 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape, const Xr
 }
 
 static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField *fields,
-    uint32_t count, uint32_t earlier) {
+    uint32_t count, uint32_t earlier, bool allow_class_fields, bool *class_payload_only) {
     if ((count != 0) != (fields != NULL)) return false;
     for (uint32_t f = 0; f < count; ++f) {
         XrLirRecordField field = fields[f];
+        bool class_field = allow_class_fields && xr_lir_internal_optional_i64_field(m, field.type, field.flags);
         if (!lir_record_text_valid(field.name,field.name_length) ||
             (field.flags & ~(XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED|XR_LIR_RECORD_MUTABLE)) ||
             ((field.flags & (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) == (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) ||
@@ -302,7 +303,9 @@ static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField
             (field.type == XR_LIR_ARRAY ? !xr_lir_class_array_element_supported(field.array_element) :
                 field.array_element || !(field.type == XR_LIR_STRING || field.type == XR_LIR_I64 ||
                     field.type == XR_LIR_I1 || field.type == XR_LIR_F64 ||
-                    xr_lir_inline_aggregate_type(m, field.type) || xr_lir_class_payload(m, field.type, NULL)))) return false;
+                    xr_lir_inline_aggregate_type(m, field.type) || xr_lir_class_payload(m, field.type, NULL) ||
+                    class_field))) return false;
+        *class_payload_only |= class_field;
     }
     return true;
 }
@@ -365,6 +368,7 @@ XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
     for (uint32_t n = 0; n < m->type_count; ++n) {
         XrLirTypeData type = m->types[n];
         XrLirTypeLayout expected;
+        bool class_payload_only = false;
         if (!lir_shape_layout(m, type.shape, type.fields, type.variants, n, &expected) ||
             !lir_class_parent_valid(m, type.shape, type.class_parent, n) ||
             expected.size != type.layout.size || expected.alignment != type.layout.alignment ||
@@ -374,8 +378,10 @@ XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
                     !lir_callable_signature_valid(m, &type.callable, n))) ||
             (type.shape.kind != XR_LIR_TYPE_CALLABLE && type.callable.parameters) ||
             (type.shape.kind == XR_LIR_TYPE_RECORD ?
-                (!lir_record_fields_valid(m, type.fields, type.shape.count, n) ||
-                 !lir_record_identity_valid(m,&type.record,n) || !lir_record_name_index_valid(&type)) :
+                (!lir_record_fields_valid(m, type.fields, type.shape.count, n, type.class_payload_only,
+                     &class_payload_only) || !lir_record_identity_valid(m,&type.record,n) ||
+                 (class_payload_only && (type.record.native_id || type.record.flags)) ||
+                 !lir_record_name_index_valid(&type)) :
                 ((type.shape.kind != XR_LIR_TYPE_TUPLE && type.shape.kind != XR_LIR_TYPE_SUM && type.fields) ||
                  (type.shape.kind != XR_LIR_TYPE_SUM && (
                  type.record.module || type.record.name || type.record.arguments || type.record.module_length ||
@@ -385,6 +391,7 @@ XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
                 (!type.variants || type.variant_count != type.shape.count ||
                  !lir_sum_names_valid(m,type.shape,&type.record,type.fields,type.variants,n)) :
                 (type.variants || type.variant_count)) ||
+            class_payload_only != type.class_payload_only ||
             !lir_type_element_valid(m, type.shape, type.cell_element, n) ||
             m->type_index[lir_type_slot(m, type.shape, &type.callable, type.cell_element, type.fields,
                 &type.record, type.variants)] != n + 1) return false;
@@ -411,9 +418,15 @@ static bool lir_inline_display_shape(const XrLirModule *m, XrLirTypeView shape, 
     return true;
 }
 
+typedef struct LirNominalType {
+    const XrLirRecordIdentity *identity;
+    bool allow_class_fields;
+} LirNominalType;
+
 static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
     const XrLirCallableType *callable, XrLirType cell_element, XrLirType class_parent, const XrLirRecordField *fields,
-    const XrLirRecordIdentity *record, const XrLirSumVariant *variants, XrLirType *output) {
+    LirNominalType nominal, const XrLirSumVariant *variants, XrLirType *output) {
+    const XrLirRecordIdentity *record = nominal.identity;
     XrLirStatus status = lir_writable(m);
     if (status != XR_LIR_OK) return status;
     XrLirTypeLayout layout;
@@ -429,10 +442,15 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
         (shape.kind == XR_LIR_TYPE_CALLABLE && !lir_callable_signature_valid(m, callable, m->type_count)) ||
         !lir_type_element_valid(m, shape, cell_element, m->type_count))
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    bool class_payload_only = false;
     if (shape.kind == XR_LIR_TYPE_RECORD) {
-        if (!lir_record_fields_valid(m, fields, shape.count, m->type_count) ||
+        if (!lir_record_fields_valid(m, fields, shape.count, m->type_count, nominal.allow_class_fields,
+                &class_payload_only) ||
             !lir_record_identity_valid(m,record,m->type_count) ||
+            (class_payload_only && (record->native_id || record->flags)) ||
             !lir_record_declaration_consistent(m,record,fields,shape.count)) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    } else if (nominal.allow_class_fields) {
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     } else if (shape.kind == XR_LIR_TYPE_SUM) {
         if (!lir_sum_names_valid(m,shape,record,fields,variants,m->type_count))
             return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
@@ -441,8 +459,11 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
     if (!m->type_index_capacity || m->type_count >= m->type_index_capacity / 2)
         if (!lir_type_index_grow(m)) return m->failure;
     uint32_t slot = lir_type_slot(m, shape, callable, cell_element, fields, record, variants);
-    if (m->type_index[slot] && m->types[m->type_index[slot] - 1].class_parent != class_parent)
-        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    if (m->type_index[slot]) {
+        const XrLirTypeData *found = &m->types[m->type_index[slot] - 1];
+        if (found->class_parent != class_parent || found->class_payload_only != class_payload_only)
+            return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    }
     if(m->type_index[slot] && shape.kind==XR_LIR_TYPE_RECORD &&
         !lir_record_schema_equal(m->types[m->type_index[slot]-1].fields,fields,shape.count,true))
         return lir_fail(m,XR_LIR_INVALID_ARGUMENT);
@@ -509,7 +530,7 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
             .variants=owned_variants, .variant_count=shape.kind==XR_LIR_TYPE_SUM ? shape.count : 0,
             .record=owned_record,
             .record_names=names,.record_name_capacity=name_capacity,
-            .inline_display=lir_inline_display_shape(m,shape,owned_fields)};
+            .inline_display=lir_inline_display_shape(m,shape,owned_fields), .class_payload_only=class_payload_only};
         m->type_index[slot] = ++m->type_count;
         *output = XR_LIR_TYPE_COUNT + m->type_index[slot] - 1;
         return XR_LIR_OK;
@@ -526,14 +547,14 @@ nominal_copy_failed:
 
 XR_FUNC XrLirStatus xr_lir_fixed_array_type(XrLirModule *m, XrLirType element,
     uint32_t count, XrLirType *output) {
-    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_FIXED_ARRAY, element, count}, NULL, 0, 0, NULL, NULL, NULL, output);
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_FIXED_ARRAY, element, count}, NULL, 0, 0, NULL, (LirNominalType){0}, NULL, output);
 }
 
 XR_FUNC XrLirStatus xr_lir_nullable_type(XrLirModule *m, XrLirType element, XrLirType *output) {
-    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_NULLABLE, element, 0}, NULL, 0, 0, NULL, NULL, NULL, output);
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_NULLABLE, element, 0}, NULL, 0, 0, NULL, (LirNominalType){0}, NULL, output);
 }
 XR_FUNC XrLirStatus xr_lir_nullable_array_type(XrLirModule *m, XrLirType element, XrLirType *output) {
-    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_NULLABLE, XR_LIR_ARRAY, 0}, NULL, element, 0, NULL, NULL, NULL, output);
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_NULLABLE, XR_LIR_ARRAY, 0}, NULL, element, 0, NULL, (LirNominalType){0}, NULL, output);
 }
 XR_FUNC XrLirType xr_lir_nullable_array_element(const XrLirModule *m, XrLirType type) {
     XrLirTypeView shape;
@@ -542,7 +563,7 @@ XR_FUNC XrLirType xr_lir_nullable_array_element(const XrLirModule *m, XrLirType 
 }
 XR_FUNC XrLirStatus xr_lir_tuple_type(XrLirModule *m, const XrLirRecordField *fields,
     uint32_t count, XrLirType *output) {
-    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_TUPLE, 0, count}, NULL, 0, 0, fields, NULL, NULL, output);
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_TUPLE, 0, count}, NULL, 0, 0, fields, (LirNominalType){0}, NULL, output);
 }
 XR_FUNC XrLirStatus xr_lir_tuple_i64_type(XrLirModule *m, uint32_t count, XrLirType *output) {
     XrLirStatus status = lir_writable(m);
@@ -566,7 +587,7 @@ static XrLirStatus lir_sum_type(XrLirModule *m, const XrLirRecordIdentity *ident
     }
     if (total != field_count) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_SUM, 0, variant_count}, NULL, 0, 0,
-        fields, identity, variants, output);
+        fields, (LirNominalType){.identity=identity}, variants, output);
 }
 XR_FUNC XrLirStatus xr_lir_sum_type(XrLirModule *m, const XrLirRecordField *fields, uint32_t field_count,
     const XrLirSumVariant *variants, uint32_t variant_count, XrLirType *output) {
@@ -603,11 +624,21 @@ XR_FUNC bool xr_lir_sum_variants(const XrLirModule *m, XrLirType type,
 
 XR_FUNC XrLirStatus xr_lir_record_type(XrLirModule *m, const XrLirRecordIdentity *identity, const XrLirRecordField *fields,
     uint32_t count, XrLirType *output) {
-    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_RECORD, 0, count}, NULL, 0, 0, fields, identity, NULL, output);
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_RECORD, 0, count}, NULL, 0, 0, fields,
+        (LirNominalType){.identity=identity}, NULL, output);
 }
 
 XR_FUNC XrLirStatus xr_lir_internal_class_type(XrLirModule *m, XrLirType payload, XrLirType parent, XrLirType *output) {
-    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_CLASS, payload, 0}, NULL, 0, parent, NULL, NULL, NULL, output);
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_CLASS, payload, 0}, NULL, 0, parent, NULL, (LirNominalType){0}, NULL, output);
+}
+
+XR_FUNC XrLirStatus xr_lir_internal_named_class_type(XrLirModule *m, const XrLirRecordIdentity *identity,
+    const XrLirRecordField *fields, uint32_t count, XrLirType parent, XrLirType *output) {
+    if (!output) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirType payload = XR_LIR_TYPE_INVALID;
+    XrLirStatus status = lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_RECORD, 0, count}, NULL, 0, 0, fields,
+        (LirNominalType){.identity=identity, .allow_class_fields=true}, NULL, &payload);
+    return status == XR_LIR_OK ? xr_lir_internal_class_type(m, payload, parent, output) : status;
 }
 
 XR_FUNC bool xr_lir_class_payload(const XrLirModule *m, XrLirType type, XrLirType *output) {
@@ -625,7 +656,7 @@ XR_FUNC uint32_t xr_lir_class_storage(const XrLirModule *m, XrLirType type) {
     return xr_lir_class_payload(m, type, &payload) ? m->types[payload - XR_LIR_TYPE_COUNT].record.native_id : 0;
 }
 XR_FUNC XrLirStatus xr_lir_slice_type(XrLirModule *m, XrLirType element, XrLirType *output) {
-    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_SLICE, element, 0}, NULL, 0, 0, NULL, NULL, NULL, output);
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_SLICE, element, 0}, NULL, 0, 0, NULL, (LirNominalType){0}, NULL, output);
 }
 XR_FUNC XrLirStatus xr_lir_aggregate_fields(const XrLirModule *m, XrLirType type,
     const XrLirRecordField **fields, uint32_t *count) {
@@ -645,10 +676,10 @@ XR_FUNC XrLirStatus xr_lir_record_identity(const XrLirModule *m,XrLirType type,X
 }
 
 XR_FUNC bool xr_lir_boxed_type(const XrLirModule *m, XrLirType type) {
-    if (!m || type < XR_LIR_TYPE_COUNT || type - XR_LIR_TYPE_COUNT >= m->type_count) return false;
-    XrLirTypeData data = m->types[type - XR_LIR_TYPE_COUNT];
-    return data.shape.kind == XR_LIR_TYPE_RECORD || data.shape.kind == XR_LIR_TYPE_CLASS ||
-        ((data.shape.kind == XR_LIR_TYPE_NULLABLE || data.shape.kind == XR_LIR_TYPE_TUPLE) && data.layout.managed);
+    const XrLirTypeData *data = xr_lir_internal_constructed_data(m, type);
+    if (!data || data->class_payload_only) return false;
+    return data->shape.kind == XR_LIR_TYPE_RECORD || data->shape.kind == XR_LIR_TYPE_CLASS ||
+        ((data->shape.kind == XR_LIR_TYPE_NULLABLE || data->shape.kind == XR_LIR_TYPE_TUPLE) && data->layout.managed);
 }
 
 XR_FUNC XrLirStatus xr_lir_callable_type(XrLirModule *m, const XrLirCallableType *signature,
@@ -656,11 +687,11 @@ XR_FUNC XrLirStatus xr_lir_callable_type(XrLirModule *m, const XrLirCallableType
     if (!signature) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     if (signature->throws) return lir_fail(m, XR_LIR_UNSUPPORTED);
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_CALLABLE,
-        signature->result, signature->parameter_count}, signature, 0, 0, NULL, NULL, NULL, output);
+        signature->result, signature->parameter_count}, signature, 0, 0, NULL, (LirNominalType){0}, NULL, output);
 }
 
 XR_FUNC XrLirStatus xr_lir_cell_type(XrLirModule *m, XrLirCellType cell, XrLirType *output) {
-    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_CELL, cell.payload, 0}, NULL, cell.array_element, 0, NULL, NULL, NULL, output);
+    return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_CELL, cell.payload, 0}, NULL, cell.array_element, 0, NULL, (LirNominalType){0}, NULL, output);
 }
 
 XR_FUNC XrLirStatus xr_lir_cell_type_view(const XrLirModule *m, XrLirType type, XrLirCellType *output) {
@@ -681,7 +712,8 @@ XR_FUNC bool xr_lir_cell_value_type(const XrLirModule *m, XrLirType type, XrLirC
 XR_FUNC bool xr_lir_inline_aggregate_type(const XrLirModule *m, XrLirType type) {
     while (m && type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < m->type_count) {
         XrLirTypeData data = m->types[type - XR_LIR_TYPE_COUNT];
-        if (data.shape.kind == XR_LIR_TYPE_RECORD || data.shape.kind == XR_LIR_TYPE_TUPLE) return true;
+        if (data.shape.kind == XR_LIR_TYPE_RECORD) return !data.class_payload_only;
+        if (data.shape.kind == XR_LIR_TYPE_TUPLE) return true;
         if (data.shape.kind != XR_LIR_TYPE_NULLABLE || data.shape.element >= type) return false;
         if (data.layout.managed) return true;
         type = data.shape.element;
@@ -691,11 +723,15 @@ XR_FUNC bool xr_lir_inline_aggregate_type(const XrLirModule *m, XrLirType type) 
 
 XR_FUNC XrLirStatus xr_lir_type_view(const XrLirModule *m, XrLirType type,
     XrLirTypeView *output) {
-    if (!m || m->failure != XR_LIR_OK || !output || !xr_lir_internal_type_valid(m, type, true))
-        return XR_LIR_INVALID_ARGUMENT;
-    XrLirTypeView view = {XR_LIR_TYPE_BUILTIN, XR_LIR_TYPE_INVALID, 0};
-    if (type >= XR_LIR_TYPE_COUNT) view = m->types[type - XR_LIR_TYPE_COUNT].shape;
-    *output = view;
+    if (!m || m->failure != XR_LIR_OK || !output) return XR_LIR_INVALID_ARGUMENT;
+    if (type >= XR_LIR_TYPE_COUNT) {
+        const XrLirTypeData *data = xr_lir_internal_constructed_data(m, type);
+        if (!data) return XR_LIR_INVALID_ARGUMENT;
+        *output = data->shape;
+    } else {
+        if (!xr_lir_internal_type_valid(m, type, true)) return XR_LIR_INVALID_ARGUMENT;
+        *output = (XrLirTypeView){XR_LIR_TYPE_BUILTIN, XR_LIR_TYPE_INVALID, 0};
+    }
     return XR_LIR_OK;
 }
 
@@ -777,7 +813,8 @@ XR_FUNC XrLirStatus xr_lir_copy_types(XrLirModule *target, const XrLirModule *so
         status = lir_intern_type(target, source->types[n].shape,
             source->types[n].shape.kind == XR_LIR_TYPE_CALLABLE ? &source->types[n].callable : NULL,
             source->types[n].cell_element, source->types[n].class_parent, source->types[n].fields,
-            source->types[n].record.name ? &source->types[n].record : NULL,
+            (LirNominalType){.identity=source->types[n].record.name ? &source->types[n].record : NULL,
+                .allow_class_fields=source->types[n].class_payload_only},
             source->types[n].shape.kind==XR_LIR_TYPE_SUM ? source->types[n].variants : NULL, &imported);
         if (status != XR_LIR_OK) return status;
         XR_DCHECK(imported == XR_LIR_TYPE_COUNT + n, "a fresh receiving pool preserves canonical order");

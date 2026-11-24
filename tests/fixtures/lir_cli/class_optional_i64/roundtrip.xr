@@ -1,0 +1,28 @@
+final class Metadata {
+    const uid: i64?
+    size: i64
+    const gid: i64?
+
+    init(uid: i64?, size: i64, gid: i64?) {
+        this.uid = uid
+        this.size = size
+        this.gid = gid
+    }
+}
+
+fn alias(record: Metadata) -> Metadata { return record }
+fn detachedField() -> i64? { return Metadata(null, 11, -29).gid }
+
+fn run() {
+    const original = Metadata(0, 7, null)
+    const saved = alias(original)
+    const uid = saved.uid
+    const gid = saved.gid
+    print(saved.size)
+    if (uid != null) { print(uid!) }
+    if (gid == null) { print(1) }
+    const detached = detachedField()
+    if (detached != null) { print(detached!) }
+}
+
+run()

@@ -38,6 +38,7 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
         if (!needed[n]) continue;
         const XrLirTypeData *data = &source->types[n];
         lir_import_dependency(needed, data->shape.element);
+        lir_import_dependency(needed, data->class_parent);
         if (data->shape.kind == XR_LIR_TYPE_RECORD || data->shape.kind == XR_LIR_TYPE_TUPLE) {
             if (data->shape.count > largest_record) largest_record = data->shape.count;
             for (uint32_t f = 0; f < data->shape.count; ++f) lir_import_dependency(needed, data->fields[f].type);
@@ -111,7 +112,7 @@ static XrLirStatus lir_import_dependencies(XrLirModule *target, const XrLirModul
             lir_imported_dependency(mapping, data->class_parent),
             (shape.kind == XR_LIR_TYPE_RECORD || shape.kind == XR_LIR_TYPE_TUPLE) && shape.count ? fields :
                 shape.kind == XR_LIR_TYPE_SUM ? fields : NULL,
-            record.name ? &record : NULL,
+            (LirNominalType){.identity=record.name ? &record : NULL, .allow_class_fields=data->class_payload_only},
             shape.kind == XR_LIR_TYPE_SUM ? variants : NULL, &mapping[n]);
     }
     if (status == XR_LIR_OK) *output = mapping[count - 1];

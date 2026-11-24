@@ -19,8 +19,9 @@ XR_FUNC uint32_t xr_lir_inline_array_ordinal(const XrLirModule *m, XrLirType typ
         ? m->types[type - XR_LIR_TYPE_COUNT].inline_array_ordinal : 0;
 }
 static bool lir_inline_array_element_supported(const XrLirModule *m, XrLirType type) {
-    XrLirTypeKind kind = m->types[type - XR_LIR_TYPE_COUNT].shape.kind;
-    return kind == XR_LIR_TYPE_RECORD || kind == XR_LIR_TYPE_TUPLE ||
+    const XrLirTypeData *data = &m->types[type - XR_LIR_TYPE_COUNT];
+    XrLirTypeKind kind = data->shape.kind;
+    return (kind == XR_LIR_TYPE_RECORD && !data->class_payload_only) || kind == XR_LIR_TYPE_TUPLE ||
         (kind == XR_LIR_TYPE_CLASS && !xr_lir_class_storage(m, type));
 }
 XR_FUNC bool xr_lir_internal_array_element(const XrLirModule *m, XrLirType type) {

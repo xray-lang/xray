@@ -49,7 +49,8 @@ XR_FUNC const char *xr_lir_op_name(XrLirOp op) {
 XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *m, XrLirType type, bool unit) {
     if (type < XR_LIR_TYPE_COUNT) return type > XR_LIR_TYPE_INVALID && (unit || type != XR_LIR_UNIT) &&
         type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64;
-    return m && m->types && m->type_count <= m->type_capacity && type - XR_LIR_TYPE_COUNT < m->type_count;
+    const XrLirTypeData *data = xr_lir_internal_constructed_data(m, type);
+    return data && !data->class_payload_only;
 }
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op) {
     return op == XR_LIR_BR || op == XR_LIR_CONDBR || op == XR_LIR_RET ||

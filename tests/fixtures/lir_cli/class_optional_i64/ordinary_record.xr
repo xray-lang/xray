@@ -1,0 +1,8 @@
+struct Check {
+    value: i64?
+}
+fn probe() {
+    const value = Check{ value: 5 }.value
+    if (value != null) { print(value!) }
+}
+probe()

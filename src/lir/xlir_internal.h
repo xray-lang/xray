@@ -120,6 +120,7 @@ typedef struct XrLirTypeData {
     uint32_t inline_array_ordinal;
     uint32_t inline_array_operations[XR_LIR_ARRAY_OP_GET];
     bool inline_display;
+    bool class_payload_only; /* A row with immutable inline optional integer fields. */
 } XrLirTypeData;
 struct XrLirModule {
     XrLirTypeData *types;
@@ -270,8 +271,19 @@ static inline const XrLirInstructionView *xr_lir_internal_branch_i64_lt(
     } else return NULL;
     return compare;
 }
+static inline const XrLirTypeData *xr_lir_internal_constructed_data(const XrLirModule *m, XrLirType type) {
+    if (!m || type < XR_LIR_TYPE_COUNT || !m->types || m->type_count > m->type_capacity ||
+        type - XR_LIR_TYPE_COUNT >= m->type_count) return NULL;
+    return &m->types[type - XR_LIR_TYPE_COUNT];
+}
 XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *, XrLirType type, bool unit);
 XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *);
+static inline bool xr_lir_internal_optional_i64_field(const XrLirModule *m, XrLirType type,
+    uint32_t flags) {
+    XrLirTypeView shape;
+    return !(flags & XR_LIR_RECORD_MUTABLE) && xr_lir_type_view(m, type, &shape) == XR_LIR_OK &&
+        shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_I64;
+}
 XR_FUNC bool xr_lir_internal_map_literals_valid(const XrLirModule *);
 XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *, const XrLirFunctionData *);
 XR_FUNC bool xr_lir_internal_callable_parameters_valid(const XrLirModule *, const XrLirType *, uint32_t,
@@ -288,6 +300,8 @@ XR_FUNC uint32_t xr_lir_array_layout_family(const XrLirModule *, XrLirType);
 XR_FUNC XrLirStatus xr_lir_require_inline_array_element(XrLirModule *, XrLirType);
 /* The caller consumes Checked's allocation-cycle result before admitting this shape. */
 XR_FUNC XrLirStatus xr_lir_internal_class_type(XrLirModule *, XrLirType payload, XrLirType parent, XrLirType *);
+XR_FUNC XrLirStatus xr_lir_internal_named_class_type(XrLirModule *, const XrLirRecordIdentity *,
+    const XrLirRecordField *, uint32_t count, XrLirType parent, XrLirType *);
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType);
 static inline bool xr_lir_internal_array_type(XrLirType type) {
     return type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;

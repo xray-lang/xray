@@ -86,7 +86,8 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
         XrLirType element = good && field == XR_LIR_ARRAY ? lower_array_element(c, member.type) : XR_LIR_TYPE_INVALID;
         if (good && !(field == XR_LIR_STRING || field == XR_LIR_I64 || field == XR_LIR_I1 || field == XR_LIR_F64 ||
             (class_type && ((field == XR_LIR_ARRAY && xr_lir_class_array_element_supported(element)) ||
-                xr_lir_class_payload(c->module, field, NULL))) ||
+                xr_lir_class_payload(c->module, field, NULL) ||
+                xr_lir_internal_optional_i64_field(c->module, field, member.flags))) ||
             xr_lir_inline_aggregate_type(c->module, field))) good = lower_unsupported(c, "record field has no canonical physical carrier");
         fields[n] = (XrLirRecordField){member.name.bytes, member.name.length, field, member.flags, element};
     }
@@ -105,12 +106,11 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
         .flags=class_type ? 0 : description->definition ? description->definition->flags : description->identity->flags,
         .native_id=storage};
     XrLirType physical = XR_LIR_TYPE_INVALID;
-    if (good) good = lower_build(c, xr_lir_record_type(c->module, &identity, fields, count, &physical));
     if (good && class_type) {
         XrLirType parent = base ? lower_type(c, base) : XR_LIR_TYPE_INVALID;
         if (base && !parent) good = lower_unsupported(c, "class parent layout has no exact physical carrier");
-        else good = lower_build(c, xr_lir_internal_class_type(c->module, physical, parent, &physical));
-    }
+        else good = lower_build(c, xr_lir_internal_named_class_type(c->module, &identity, fields, count, parent, &physical));
+    } else if (good) good = lower_build(c, xr_lir_record_type(c->module, &identity, fields, count, &physical));
     if (good) c->constructed_types[(uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE] = physical;
     xr_free(arguments);
     xr_free(fields);

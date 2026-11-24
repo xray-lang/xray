@@ -26,6 +26,7 @@
 struct XrtValuePlan {
     _Atomic(int32_t) references;
     bool nullable_array_owners;
+    bool class_payload_only;
     XrtBillingOwner *billing;
     size_t allocation_bytes, dependency_count;
     XrtValuePlan **dependencies;
@@ -118,12 +119,22 @@ static bool plan_has_nullable_array_owners(const XrtValuePlanSpec *spec) {
     }
     return false;
 }
+static bool optional_i64(const XrtValuePlanSpec *spec) {
+    return spec->kind == XRT_VALUE_NULLABLE && spec->nullable.element->view.kind == XRT_VALUE_I64;
+}
+static bool plan_has_optional_i64_fields(const XrtValuePlanSpec *spec) {
+    if (spec->kind != XRT_VALUE_RECORD) return false;
+    for (size_t i = 0; i < spec->field_count; ++i)
+        if (optional_i64(&spec->fields[i].type->view)) return true;
+    return false;
+}
 static bool record_field(const XrtValuePlan *plan, bool named) {
+    if (plan->class_payload_only) return false;
     XrtValueKind kind = plan->view.kind;
     return kind == XRT_VALUE_I64 || kind == XRT_VALUE_BOOL || kind == XRT_VALUE_F64 ||
         kind == XRT_VALUE_STRING || kind == XRT_VALUE_ARRAY_I64 || xrt_value_kind_has_fields(kind) ||
         (named && (kind == XRT_VALUE_ARRAY_U8 || kind == XRT_VALUE_CLASS)) ||
-        (kind == XRT_VALUE_NULLABLE && managed_nullable(plan));
+        (kind == XRT_VALUE_NULLABLE && (managed_nullable(plan) || (named && optional_i64(&plan->view))));
 }
 static bool capture_type(const XrtValuePlan *plan) {
     XrtValueKind kind = plan->view.kind;
@@ -159,11 +170,12 @@ static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *s
         end <= SIZE_MAX - (alignment - 1) && spec->size == ((end + alignment - 1) & ~(alignment - 1));
 }
 static bool signature_valid(const XrtValueSignatureSpec *signature) {
-    if (!signature->result || signature->throws || (signature->flags & ~(XRT_VALUE_NO_SUSPEND | XRT_VALUE_C_ABI)) ||
+    if (!signature->result || signature->result->class_payload_only || signature->throws ||
+        (signature->flags & ~(XRT_VALUE_NO_SUSPEND | XRT_VALUE_C_ABI)) ||
         ((signature->flags & XRT_VALUE_C_ABI) && !(signature->flags & XRT_VALUE_NO_SUSPEND))) return false;
     for (size_t i = 0; i < signature->parameter_count; ++i) {
         XrtValueParameterSpec parameter = signature->parameters[i];
-        if (!parameter.type || !xr_param_mode_is_valid(parameter.mode) ||
+        if (!parameter.type || parameter.type->class_payload_only || !xr_param_mode_is_valid(parameter.mode) ||
             (parameter.escaping && parameter.type->view.kind != XRT_VALUE_FUNCTION) ||
             ((parameter.mode == XR_PARAM_REF) != (parameter.type->view.kind == XRT_VALUE_CELL))) return false;
     }
@@ -171,7 +183,8 @@ static bool signature_valid(const XrtValueSignatureSpec *signature) {
 }
 static bool nullable_valid(const XrtValuePlanSpec *spec) {
     const XrtValuePlan *element = spec->nullable.element;
-    if (!element || spec->nullable.tag_offset || spec->nullable.payload_offset != element->view.alignment ||
+    if (!element || element->class_payload_only || spec->nullable.tag_offset ||
+        spec->nullable.payload_offset != element->view.alignment ||
         spec->alignment != element->view.alignment || element->view.size > SIZE_MAX - spec->nullable.payload_offset)
         return false;
     XrtValueKind kind = element->view.kind;
@@ -218,7 +231,7 @@ static bool sum_valid(const XrtValuePlanSpec *spec) {
         size_t end = payload;
         for (size_t f = 0; f < variant.field_count; ++f) {
             const XrtValueSlotSpec *slot = &spec->fields[fields + f];
-            if (!slot->type || slot->name || slot->name_length || slot->flags) return false;
+            if (!slot->type || slot->type->class_payload_only || slot->name || slot->name_length || slot->flags) return false;
             const XrtValuePlanSpec *child = &slot->type->view;
             if (!child->size || !child->alignment || child->owned_count) return false;
             if (child->alignment > alignment) alignment = child->alignment;
@@ -259,7 +272,8 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
             (i && offset - spec->owned_offsets[i - 1] < sizeof(XrtManagedHeader *)) ||
             (i && offset < spec->owned_offsets[i - 1])) return false;
     }
-    if (spec->kind == XRT_VALUE_ARRAY_INLINE && (!spec->element || !spec->element->view.size ||
+    if (spec->kind == XRT_VALUE_ARRAY_INLINE && (!spec->element || spec->element->class_payload_only ||
+        !spec->element->view.size ||
         !xrt_value_inline_array_element_supported(spec->element->view.kind, spec->element->view.class_storage))) return false;
     if (spec->kind == XRT_VALUE_CLASS && !class_payload_valid(spec)) return false;
     if (spec->kind == XRT_VALUE_SUM) return sum_valid(spec);
@@ -340,6 +354,9 @@ XR_FUNCDEF XrtManagedStatus xrt_value_plan_new(XrtBillingOwner *billing, const X
     XrtValuePlan *plan = memory;
     atomic_init(&plan->references, -1);
     plan->nullable_array_owners = plan_has_nullable_array_owners(spec);
+    /* Class construction checks these tags before publishing the payload. The
+     * bare row cannot be embedded through a transport that omits that check. */
+    plan->class_payload_only = plan_has_optional_i64_fields(spec);
     plan->billing = billing;
     plan->allocation_bytes = bytes;
     plan->dependency_count = 0;
@@ -553,8 +570,11 @@ XR_FUNCDEF XrtManagedStatus xrt_class_create(XrtManagedFrame *frame, size_t slot
     for (size_t i = 0; i < payload->view.field_count; ++i) {
         const XrtValueSlotSpec *field = &payload->view.fields[i];
         const XrtValuePlanSpec *member = &field->type->view;
-        if (!member->owned_count) continue;
         const unsigned char *bytes = (const unsigned char *)row + field->offset;
+        if (!member->owned_count) {
+            if (optional_i64(member) && bytes[member->nullable.tag_offset] > 1) return XRT_MANAGED_ARGUMENT;
+            continue;
+        }
         bool matched = pointer_kind(member->kind) ? class_leaf_matches(field->type, payload_child(bytes, 0)) :
             aggregate_owners_match(field->type, bytes, true);
         if (!matched) return XRT_MANAGED_ARGUMENT;
