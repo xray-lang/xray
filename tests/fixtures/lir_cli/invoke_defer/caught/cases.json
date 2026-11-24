@@ -8,5 +8,18 @@
     "exit": 0,
     "stdout": "10\n42\n8\n102\n9\n101\n99\n10\n102\n101\n23\n99\n",
     "stderr": ""
+  },
+  "scope_throw": {
+    "exit": 0,
+    "stdout": "10\n101\n23\n99\n",
+    "stderr": ""
+  },
+  "state_after_error_cleanup": {
+    "exit": 0,
+    "stdout": "10\n23\n111\n21\n10\n42\n10\n23\n112\n22\n10\n42\n10\n42\n112\n22\n",
+    "stderr": ""
+  },
+  "callee_may_panic": {
+    "lowering_error": ":12:9: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
   }
 }

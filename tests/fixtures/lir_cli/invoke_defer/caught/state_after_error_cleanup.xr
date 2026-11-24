@@ -1,0 +1,28 @@
+enum Refusal { Denied { code: i64 } }
+fn read(fail: bool) throws(Refusal) -> i64 {
+    print(10)
+    if (fail) { throw Refusal.Denied { code: 23 } }
+    return 42
+}
+fn probe(mode: i64) {
+    var cell = 5
+    var plain = 1
+    try {
+        defer { cell += 100 }
+        cell = 11
+        plain = 21
+        print(read(mode == 1))
+        cell = 12
+        plain = 22
+        print(read(mode == 2))
+    } catch (e: Refusal) {
+        match (e) {
+            Refusal.Denied { code } => print(code),
+        }
+    }
+    print(cell)
+    print(plain)
+}
+probe(1)
+probe(2)
+probe(0)
