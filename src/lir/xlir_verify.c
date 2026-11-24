@@ -974,6 +974,13 @@ static bool lir_discarded_errors_unused(const XrLirFunctionData *f,const uint8_t
     return true;
 }
 
+static bool lir_catch_receives_error(const XrLirBlockData *failed,
+    const XrLirInstructionView *branch) {
+    if (branch->op != XR_LIR_BR || failed->parameter_count != 1) return false;
+    const XrLirEdgeView *edge = &branch->edges[0];
+    return edge->argument_count && edge->arguments[0] == failed->parameters[0];
+}
+
 static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirFunctionData *f,
     const LirGraph *g,uint8_t *discarded) {
     bool startup=function==m->startup_entry,optional=false;
@@ -1001,12 +1008,18 @@ static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirF
                 if (exit->op!=XR_LIR_UNCAUGHT_ERROR || failed->instruction_count!=1 ||
                     !lir_startup_publication(m,f,b,term)) return false;
             } else if (exit->op==XR_LIR_BR) {
-                /* A catch receives this exact edge result as its first
-                 * parameter after retiring its temporary Slice loans. */
-                const XrLirEdgeView *edge = &exit->edges[0];
+                /* A catch receives this exact edge result as its first parameter.
+                 * The landing may first retire temporary Slice loans, or run a
+                 * proved cleanup suffix that shares the call's frontier. */
+                if (lir_catch_receives_error(failed, exit)) {
+                    if (failed->instruction_count == 1) continue;
+                    if (lir_invoke_landing_view_cleanup(failed)) continue;
+                    const XrLirCleanupBlock *source = f->blocks[b].cleanup;
+                    if (f->has_cleanups && source && source->frontier && failed->cleanup &&
+                        failed->cleanup->frontier == source->frontier) continue;
+                    return false;
+                }
                 if (!lir_invoke_landing_view_cleanup(failed)) return false;
-                if (edge->argument_count &&
-                    edge->arguments[0]==failed->parameters[0]) continue;
                 if (!lir_optional_error_branch(f,exit)) return false;
                 if (!optional) memset(discarded,0,f->value_count);
                 optional=true;

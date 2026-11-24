@@ -110,10 +110,12 @@ static uint32_t lir_cleanup_frontier(const XrLirFunctionData *f, uint32_t target
 static bool lir_cleanup_invoke_shape(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *call, uint32_t frontier) {
     uint32_t failed = call->edges[1].target - 1;
-    const XrLirInstructionView *first = &f->blocks[failed].instructions[0].view;
-    XrLirOp exit = lir_terminator(f, failed)->op;
-    bool typed_exit = exit == XR_LIR_PANIC_ERROR ||
-        (exit == XR_LIR_RETURN_ERROR && f->error && f->error == m->functions[call->callee - 1].error);
+    const XrLirBlockData *failure = &f->blocks[failed];
+    const XrLirInstructionView *first = &failure->instructions[0].view;
+    const XrLirInstructionView *exit = lir_terminator(f, failed);
+    bool typed_exit = exit->op == XR_LIR_PANIC_ERROR ||
+        (exit->op == XR_LIR_RETURN_ERROR && f->error && f->error == m->functions[call->callee - 1].error) ||
+        (lir_catch_receives_error(failure, exit) && !lir_cleanup_frontier(f, exit->edges[0].target));
     return typed_exit && (call->type == XR_LIR_UNIT || lir_cleanup_scalar(call->type)) &&
         first->op == XR_LIR_CALL && first->callee == frontier;
 }

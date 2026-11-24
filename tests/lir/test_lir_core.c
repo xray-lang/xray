@@ -269,8 +269,9 @@ static void cleanup_suffix_precedes_retirement(void) {
 }
 
 static void cleanup_invoke_checks_the_complete_callee(void) {
-    enum { EXACT, DIVIDE_IN_CALLEE, EFFECT_ON_FAILURE, MODE_COUNT };
+    enum { EXACT, DIVIDE_IN_CALLEE, EFFECT_ON_FAILURE, CATCH, REPLACED_CATCH, MODE_COUNT };
     for (unsigned mode = EXACT; mode < MODE_COUNT; ++mode) {
+        bool catches = mode == CATCH || mode == REPLACED_CATCH;
         XrLirModule *module = NULL;
         OK(xr_lir_module_create(NULL, &module));
         XrLirType error = try_error_type(module, "Failure"), scalar = XR_LIR_I64;
@@ -289,6 +290,7 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
         test_return(module, body, result);
         typed.name = "owner";
         typed.name_length = 5;
+        if (catches) typed.error = 0;
         OK(xr_lir_declare_function(module, &typed, &owner));
         OK(xr_lir_define_function(module, owner));
         OK(xr_lir_declare_function(module, &(XrLirFunctionSpec){.name = "cleanup", .name_length = 7,
@@ -307,7 +309,13 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
         XrLirBlock call = test_block(module, owner, NULL, 0);
         XrLirBlock normal = test_block(module, owner, &scalar, 1);
         XrLirBlock failed = test_block(module, owner, &error, 1);
+        XrLirBlock handler = {0};
+        XrLirValue other = {0};
+        if (catches) handler = test_block(module, owner, &error, 1);
         OK(xr_lir_set_entry(module, owner, registration));
+        if (mode == REPLACED_CATCH)
+            OK(xr_lir_emit_value(module, registration, &(XrLirInstruction){
+                .op = XR_LIR_SUM_NEW, .type = error}, &other));
         OK(xr_lir_internal_cleanup_block(module, registration, 0, cleanup.id, NULL, 0));
         test_branch(module, registration, call, NULL, 0);
         OK(xr_lir_internal_cleanup_block(module, call, cleanup.id, 0, NULL, 0));
@@ -324,16 +332,24 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
             OK(xr_lir_emit_effect(module, exits[e], &(XrLirInstruction){.op = XR_LIR_CALL,
                 .type = XR_LIR_UNIT, .callee = cleanup}));
             OK(xr_lir_block_parameter(module, exits[e], 0, &result));
+            if (e && catches) {
+                XrLirValue received = mode == REPLACED_CATCH ? other : result;
+                test_branch(module, exits[e], handler, &received, 1);
+                continue;
+            }
             OK(xr_lir_set_terminator(module, exits[e], &(XrLirInstruction){
                 .op = e ? XR_LIR_RETURN_ERROR : XR_LIR_RET, .type = XR_LIR_UNIT,
                 .operands = &result, .operand_count = 1}));
         }
+        if (catches) test_return(module, handler, test_constant(module, handler, scalar, 23));
         XrLirDiagnostic diagnostic = {0};
         XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
         if (mode == DIVIDE_IN_CALLEE)
             CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "panic-free leaf"));
         else if (mode == EFFECT_ON_FAILURE)
             CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "cleanup frontier"));
+        else if (mode == REPLACED_CATCH)
+            CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "dedicated normal and error successors"));
         else CHECK(status == XR_LIR_OK);
         xr_lir_module_destroy(module);
     }
