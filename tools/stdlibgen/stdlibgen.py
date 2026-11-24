@@ -1372,6 +1372,7 @@ def parse_def_metadata(
             host_signatures = {
                 "blocking-env-get": "(name: string): string?",
                 "blocking-path-bool": "(path: Path): bool",
+                "blocking-path-pair-bool": "(old: Path, new: Path): bool",
                 "blocking-file-open-read": "(path: Path): __FileStorage?",
                 "blocking-file-open-write": "(path: Path, append: bool): __FileStorage?",
                 "blocking-file-close": "(file: __FileStorage): bool",

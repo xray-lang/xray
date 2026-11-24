@@ -1557,11 +1557,15 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     } else if (access.operation==XR_RBC_VALUE_HOST_ENV_GET) {
         status = rbc_value_host_environment_get(activation, access, source);
     } else if (access.operation==XR_RBC_VALUE_HOST_PATH_BOOL) {
-        const XrtStringBacking *path = NULL;
+        const XrtStringBacking *path = NULL, *destination = NULL;
         status = rbc_value_string_borrow(activation, access.source, &path);
+        if (status == XRT_MANAGED_OK && access.other)
+            status = rbc_value_string_borrow(activation, access.other, &destination);
         XrRbcRegister *output = rbc_value_register(stack, activation, access.result);
         if (!output) status = XRT_MANAGED_ARGUMENT;
-        if (status == XRT_MANAGED_OK) output->bits = xrt_native_host_path_bool(access.index, path, source);
+        if (status == XRT_MANAGED_OK)
+            output->bits = access.other ? xrt_native_host_path_pair_bool(access.index, path, destination, source) :
+                xrt_native_host_path_bool(access.index, path, source);
     } else if (access.operation==XR_RBC_VALUE_I64_TRY_PARSE) {
         const XrtStringBacking *string = NULL;
         RbcValuePayload destination;

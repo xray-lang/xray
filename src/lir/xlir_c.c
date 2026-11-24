@@ -78,7 +78,7 @@ typedef struct LirC {
     uint32_t location_count, location_cursor;
     bool runtime, runtime_header, f64, state, arrays, views, displays, tuple_displays, maps, sets, i64_refs;
     bool string_values, inline_values, callables, cells, header_edges, binding_forwarding;
-    bool array_local, array_local_runtime;
+    bool array_local, array_local_runtime, host_path_pair;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;
@@ -577,10 +577,12 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_STRING_LEN: case XR_LIR_STRING_BYTE_LEN: case XR_LIR_STRING_EQUAL:
         case XR_LIR_STRING_INDEX_OF:
         case XR_LIR_I64_TRY_PARSE: case XR_LIR_ASSERT_CONDITION:
-        case XR_LIR_HOST_PATH_BOOL:
         case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
         case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE:
         case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
+            break;
+        case XR_LIR_HOST_PATH_BOOL:
+            c->host_path_pair |= v->operand_count == 2;
             break;
         case XR_LIR_CALL_INTRINSIC: {
             XrLirArrayIntrinsic shape = {0};
@@ -1341,6 +1343,9 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->maps) c_text(c, "#include \"xray_native_map.h\"\n\n");
     if (c->sets) c_text(c,"#include \"xray_native_set.h\"\n\n");
     if (c->displays) c_text(c, "#include \"xray_native_pod.h\"\n\n");
+    if (c->host_path_pair)
+        c_text(c, "extern bool xrt_native_host_path_pair_bool(uint32_t, "
+            "const XrtStringBacking *, const XrtStringBacking *, uint32_t);\n\n");
     c_constructed_types(c);
     c_values_landing_types(c);
     c_callable_types(c);

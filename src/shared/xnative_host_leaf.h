@@ -15,13 +15,14 @@ typedef enum XrNativeHostShape {
     XR_NATIVE_HOST_FILE_OPEN_WRITE, XR_NATIVE_HOST_FILE_CLOSE,
     XR_NATIVE_HOST_FILE_WRITE_BYTES, XR_NATIVE_HOST_FILE_WRITE_STRING,
     XR_NATIVE_HOST_FILE_OPEN_READ, XR_NATIVE_HOST_FILE_READ,
-    XR_NATIVE_HOST_ENV_GET
+    XR_NATIVE_HOST_ENV_GET, XR_NATIVE_HOST_PATH_PAIR_BOOL
 } XrNativeHostShape;
 
 static inline XrNativeHostShape xr_native_host_shape(uint32_t callable) {
     switch (callable) {
 #define XR_NATIVE_BLOCKING_ENV_GET(id) case id: return XR_NATIVE_HOST_ENV_GET;
 #define XR_NATIVE_BLOCKING_PATH_BOOL(id, implementation) case id: return XR_NATIVE_HOST_PATH_BOOL;
+#define XR_NATIVE_BLOCKING_PATH_PAIR_BOOL(id, implementation) case id: return XR_NATIVE_HOST_PATH_PAIR_BOOL;
 #define XR_NATIVE_BLOCKING_FILE_OPEN_READ(id) case id: return XR_NATIVE_HOST_FILE_OPEN_READ;
 #define XR_NATIVE_BLOCKING_FILE_OPEN_WRITE(id) case id: return XR_NATIVE_HOST_FILE_OPEN_WRITE;
 #define XR_NATIVE_BLOCKING_FILE_CLOSE(id) case id: return XR_NATIVE_HOST_FILE_CLOSE;
@@ -33,12 +34,17 @@ static inline XrNativeHostShape xr_native_host_shape(uint32_t callable) {
 #undef XR_NATIVE_BLOCKING_FILE_CLOSE
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_WRITE
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_READ
+#undef XR_NATIVE_BLOCKING_PATH_PAIR_BOOL
 #undef XR_NATIVE_BLOCKING_PATH_BOOL
 #undef XR_NATIVE_BLOCKING_ENV_GET
     default: return XR_NATIVE_HOST_NONE;
     }
 }
-static inline bool xr_native_blocking_path_bool(uint32_t callable) {
-    return xr_native_host_shape(callable) == XR_NATIVE_HOST_PATH_BOOL;
+static inline uint32_t xr_native_blocking_path_count(uint32_t callable) {
+    switch (xr_native_host_shape(callable)) {
+    case XR_NATIVE_HOST_PATH_BOOL: return 1;
+    case XR_NATIVE_HOST_PATH_PAIR_BOOL: return 2;
+    default: return 0;
+    }
 }
 #endif // XNATIVE_HOST_LEAF_H

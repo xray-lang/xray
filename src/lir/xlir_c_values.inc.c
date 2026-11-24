@@ -682,9 +682,13 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         return true;
     }
     if (v->op == XR_LIR_HOST_PATH_BOOL) {
-        c_format(c, "    v%" PRIu32 " = xrt_native_host_path_bool(UINT32_C(%" PRIu64 "), (const XrtStringBacking *)",
-            v->result, v->bits);
-        c_value(c, v->operands[0]);
+        bool pair = v->operand_count == 2;
+        c_format(c, "    v%" PRIu32 " = %s(UINT32_C(%" PRIu64 ")", v->result,
+            pair ? "xrt_native_host_path_pair_bool" : "xrt_native_host_path_bool", v->bits);
+        for (uint32_t i = 0; i < v->operand_count; ++i) {
+            c_text(c, ", (const XrtStringBacking *)");
+            c_value(c, v->operands[i]);
+        }
         c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
         return true;
     }

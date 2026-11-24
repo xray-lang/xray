@@ -1698,6 +1698,7 @@ def render_io_callables(declarations):
 def render_host_leaves(declarations):
     implementations = {
         '__mkdir': ('blocking-path-bool', 'XR_NATIVE_BLOCKING_PATH_BOOL(XR_NATIVE_CALLABLE_IO_MKDIR, xr_os_io_path_mkdir)'),
+        '__rename': ('blocking-path-pair-bool', 'XR_NATIVE_BLOCKING_PATH_PAIR_BOOL(XR_NATIVE_CALLABLE_IO_RENAME, xr_os_io_path_rename)'),
         '__fileOpen': ('blocking-file-open-read', 'XR_NATIVE_BLOCKING_FILE_OPEN_READ(XR_NATIVE_CALLABLE_IO_FILE_OPEN)'),
         '__fileOpenWrite': ('blocking-file-open-write', 'XR_NATIVE_BLOCKING_FILE_OPEN_WRITE(XR_NATIVE_CALLABLE_IO_FILE_OPEN_WRITE)'),
         '__fileClose': ('blocking-file-close', 'XR_NATIVE_BLOCKING_FILE_CLOSE(XR_NATIVE_CALLABLE_IO_FILE_CLOSE)'),

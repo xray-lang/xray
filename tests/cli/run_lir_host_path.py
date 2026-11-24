@@ -50,12 +50,19 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="host-path-", dir=args.output.resolve()) as directory:
         work = Path(directory)
-        for name in ("mkdir", "nul_path", "unregistered", "file_open_write", "file_open_refused", "file_storage_private"):
+        for name in ("mkdir", "nul_path", "rename", "rename_nul_source", "rename_nul_destination",
+                     "unregistered", "file_open_write", "file_open_refused", "file_storage_private"):
             source = fixtures / (name + ".xr")
             vm_dir, native_dir = work / (name + "-vm"), work / (name + "-native")
             for cwd in (vm_dir, native_dir):
                 cwd.mkdir()
                 (cwd / "file").write_bytes(b"keep")
+                if name == "rename":
+                    (cwd / "起点.txt").write_bytes(b"old\x00bytes")
+                    (cwd / "source").write_bytes(b"new")
+                    (cwd / "occupied").write_bytes(b"existing")
+                elif name in ("rename_nul_source", "rename_nul_destination"):
+                    (cwd / "must-stay").write_bytes(b"untouched")
                 if name == "file_open_write":
                     (cwd / "preserved").write_bytes(b"preserve")
                     (cwd / "truncated").write_bytes(b"truncate")
@@ -80,6 +87,23 @@ def main() -> None:
                 elif name == "nul_path":
                     assert vm[0] == 1 and not vm[1] and b"XR_RUN_6002: value operation rejected (status 1)" in vm[2], vm
                     assert all(not (cwd / "must-not-exist").exists() for cwd in (vm_dir, native_dir)), name
+                elif name == "rename":
+                    collision = b"false\n" if os.name == "nt" else b"true\n"
+                    assert vm == (0, b"true\nfalse\n" + collision, b""), vm
+                    for cwd in (vm_dir, native_dir):
+                        assert not (cwd / "起点.txt").exists() and not (cwd / "missing").exists(), name
+                        assert (cwd / "到达.txt").read_bytes() == b"old\x00bytes"
+                        if os.name == "nt":
+                            assert (cwd / "source").read_bytes() == b"new"
+                            assert (cwd / "occupied").read_bytes() == b"existing"
+                        else:
+                            assert not (cwd / "source").exists()
+                            assert (cwd / "occupied").read_bytes() == b"new"
+                elif name in ("rename_nul_source", "rename_nul_destination"):
+                    assert vm[0] == 1 and not vm[1] and b"XR_RUN_6002: value operation rejected (status 1)" in vm[2], vm
+                    for cwd in (vm_dir, native_dir):
+                        assert (cwd / "must-stay").read_bytes() == b"untouched"
+                        assert not (cwd / "must-not-exist").exists()
                 elif name == "file_open_write":
                     assert vm == (0, b"true\n" * 5, b""), vm
                     for cwd in (vm_dir, native_dir):

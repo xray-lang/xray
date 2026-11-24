@@ -693,9 +693,12 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return !a.first && !a.count && !a.window && rbc_value_string(module,code,a.source,false) &&
             rbc_value_string(module,code,a.other,false) && rbc_value_scalar(code,function,a.index,XR_RBC_BITS) &&
             rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
-    case XR_RBC_VALUE_HOST_PATH_BOOL:
-        return !a.other && xr_native_blocking_path_bool(a.index) &&
-            rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    case XR_RBC_VALUE_HOST_PATH_BOOL: {
+        uint32_t paths = xr_native_blocking_path_count(a.index);
+        return paths == (a.other ? 2u : 1u) && rbc_value_string(module,code,a.source,false) &&
+            (!a.other || rbc_value_string(module,code,a.other,false)) &&
+            rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    }
     case XR_RBC_VALUE_HOST_FILE_OPEN_WRITE:
         return xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_OPEN_WRITE &&
             rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.other,XR_RBC_BITS) &&

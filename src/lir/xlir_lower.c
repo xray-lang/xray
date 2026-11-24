@@ -1507,9 +1507,13 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     return true;
 }
 
-static bool lower_host_has_path(XrNativeHostShape shape) {
-    return shape == XR_NATIVE_HOST_PATH_BOOL || shape == XR_NATIVE_HOST_FILE_OPEN_WRITE ||
-        shape == XR_NATIVE_HOST_FILE_OPEN_READ;
+static uint32_t lower_host_path_count(XrNativeHostShape shape) {
+    switch (shape) {
+    case XR_NATIVE_HOST_PATH_BOOL: case XR_NATIVE_HOST_FILE_OPEN_WRITE:
+    case XR_NATIVE_HOST_FILE_OPEN_READ: return 1;
+    case XR_NATIVE_HOST_PATH_PAIR_BOOL: return 2;
+    default: return 0;
+    }
 }
 
 static bool lower_os_platform(const Lower *c, uint32_t function) {
@@ -1522,7 +1526,7 @@ static bool lower_os_platform(const Lower *c, uint32_t function) {
         xir_os_native_scope(source->declarations, function, source->function_count);
 }
 
-static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint32_t *field) {
+static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint32_t fields[2]) {
     const XrXirModule *source = c->source;
     const XrXirFunction *body = &source->functions[function];
     uint32_t id = source->declarations->functions[function].native_callable;
@@ -1535,11 +1539,15 @@ static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint3
     }
     if (!xir_io_native_signature(id, source->types, body->parameters, body->parameter_count,
             body->result, body->error_type)) return XR_NATIVE_HOST_NONE;
-    bool qualified = lower_host_has_path(shape) ?
-        xir_io_native_scope(source->declarations, source->types, function, source->function_count,
-            body->parameters[0], field) :
-        xir_io_native_module_scope(source->declarations, function, source->function_count);
-    return qualified ? shape : XR_NATIVE_HOST_NONE;
+    uint32_t paths = lower_host_path_count(shape);
+    if (!paths)
+        return xir_io_native_module_scope(source->declarations, function, source->function_count) ?
+            shape : XR_NATIVE_HOST_NONE;
+    if (paths > body->parameter_count) return XR_NATIVE_HOST_NONE;
+    for (uint32_t p = 0; p < paths; ++p)
+        if (!xir_io_native_scope(source->declarations, source->types, function, source->function_count,
+            body->parameters[p], &fields[p])) return XR_NATIVE_HOST_NONE;
+    return shape;
 }
 
 static bool lower_admit_function(Lower *c, uint32_t function) {
@@ -1598,8 +1606,8 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             c->strict_utf8 = true;
             return true;
         }
-        uint32_t field;
-        return lower_os_platform(c, function) || lower_host_abi(c, function, &field) != XR_NATIVE_HOST_NONE ||
+        uint32_t fields[2];
+        return lower_os_platform(c, function) || lower_host_abi(c, function, fields) != XR_NATIVE_HOST_NONE ||
             lower_unsupported(c, "function without a scalar body");
     }
     if (!lower_byte_lengths(c, f) || !lower_optional_errors(c,f) || !lower_catch_errors(c,f)) return false;
@@ -3304,11 +3312,12 @@ static bool lower_strict_utf8_body(Lower *c, uint32_t index) {
 static bool lower_host_function(Lower *c, uint32_t index) {
     if (xir_strict_utf8_callable(c->source, index)) return lower_strict_utf8_body(c, index);
     if (lower_os_platform(c, index)) return lower_os_platform_body(c, c->functions[index]);
-    uint32_t field = 0;
-    XrNativeHostShape shape = lower_host_abi(c, index, &field);
+    uint32_t fields[2] = {0};
+    XrNativeHostShape shape = lower_host_abi(c, index, fields);
     XrLirOp operation;
     switch (shape) {
-    case XR_NATIVE_HOST_PATH_BOOL: operation = XR_LIR_HOST_PATH_BOOL; break;
+    case XR_NATIVE_HOST_PATH_BOOL: case XR_NATIVE_HOST_PATH_PAIR_BOOL:
+        operation = XR_LIR_HOST_PATH_BOOL; break;
     case XR_NATIVE_HOST_FILE_OPEN_WRITE: operation = XR_LIR_HOST_FILE_OPEN_WRITE; break;
     case XR_NATIVE_HOST_FILE_OPEN_READ: operation = XR_LIR_HOST_FILE_OPEN_READ; break;
     case XR_NATIVE_HOST_FILE_READ: operation = XR_LIR_HOST_FILE_READ; break;
@@ -3318,7 +3327,7 @@ static bool lower_host_function(Lower *c, uint32_t index) {
         operation = XR_LIR_HOST_FILE_WRITE; break;
     default: return lower_unsupported(c, "unregistered host leaf");
     }
-    bool path_argument = lower_host_has_path(shape);
+    uint32_t paths = lower_host_path_count(shape);
     const XrXirFunction *body = &c->source->functions[index];
     XrLirFunction function = c->functions[index];
     XrLirBlock block = {0};
@@ -3330,19 +3339,22 @@ static bool lower_host_function(Lower *c, uint32_t index) {
         !lower_build(c, xr_lir_set_entry(c->module, function, block))) return false;
     for (uint32_t p = 0; p < body->parameter_count; ++p)
         if (!lower_build(c, xr_lir_function_parameter(c->module, function, p, &arguments[p]))) return false;
-    if (path_argument) {
-        XrLirValue path = arguments[0];
+    for (uint32_t p = 0; p < paths; ++p) {
+        XrLirValue path = arguments[p];
         XrLirInstruction read = {.op=XR_LIR_CLASS_FIELD, .type=XR_LIR_STRING,
-            .operands=&path, .operand_count=1, .bits=field};
-        if (!lower_build(c, xr_lir_emit_value(c->module, block, &read, &arguments[0]))) return false;
+            .operands=&path, .operand_count=1, .bits=fields[p]};
+        if (!lower_build(c, xr_lir_emit_value(c->module, block, &read, &arguments[p]))) return false;
     }
     XrLirInstruction call = {.op=operation, .type=lower_type(c, body->result),
         .operands=arguments, .operand_count=body->parameter_count, .bits=c->source->declarations->functions[index].native_callable};
-    XrLirInstruction drop = {.op=XR_LIR_STRING_DROP, .type=XR_LIR_UNIT, .operands=arguments, .operand_count=1};
+    if (!lower_build(c, xr_lir_emit_value(c->module, block, &call, &result))) return false;
+    for (uint32_t p = 0; p < paths; ++p) {
+        XrLirInstruction drop = {.op=XR_LIR_STRING_DROP, .type=XR_LIR_UNIT,
+            .operands=&arguments[p], .operand_count=1};
+        if (!lower_build(c, xr_lir_emit_effect(c->module, block, &drop))) return false;
+    }
     XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
-    return lower_build(c, xr_lir_emit_value(c->module, block, &call, &result)) &&
-        (!path_argument || lower_build(c, xr_lir_emit_effect(c->module, block, &drop))) &&
-        lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
+    return lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
 }
 
 static bool lower_function(Lower *c, uint32_t index) {

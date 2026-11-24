@@ -8,6 +8,7 @@
  */
 #include "xnative_values.h"
 #include "xnative_host_io.h"
+#include "xnative_backing_types.h"
 #include "base/xmax_align.h"
 #include "os/os_file_mutation.h"
 #include "shared/xnative_host_leaf.h"
@@ -56,9 +57,11 @@ XR_FUNC XrXirValueStatus xrt_host_io_failure(XrOsIoStatus status) {
     }
 }
 
-XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBacking *text, uint32_t source_id) {
+static bool host_path_bool(uint32_t callable, const XrtStringBacking *text,
+    const XrtStringBacking *destination, uint32_t source_id) {
     XrtValueRoot *root = xrt_value_root_current(source_id);
-    if (!text) xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
+    if (!text || xr_native_blocking_path_count(callable) != (destination ? 2u : 1u))
+        xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
     XrtBillingOwner *billing = NULL;
     XrtManagedStatus prepared = xrt_native_values_prepare(root, &billing);
     if (prepared != XRT_MANAGED_OK) xrt_native_managed_failure(prepared, source_id);
@@ -70,6 +73,11 @@ XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBackin
 #define XR_NATIVE_BLOCKING_ENV_GET(id)
 #define XR_NATIVE_BLOCKING_PATH_BOOL(id, implementation) \
     case id: status = implementation(&policy, path, NULL, &result); break;
+#define XR_NATIVE_BLOCKING_PATH_PAIR_BOOL(id, implementation) \
+    case id: { \
+        XrOsPathSpan target = {destination->bytes, destination->length}; \
+        status = implementation(&policy, path, target, NULL, &result); break; \
+    }
 #define XR_NATIVE_BLOCKING_FILE_OPEN_READ(id)
 #define XR_NATIVE_BLOCKING_FILE_OPEN_WRITE(id)
 #define XR_NATIVE_BLOCKING_FILE_CLOSE(id)
@@ -81,10 +89,23 @@ XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBackin
 #undef XR_NATIVE_BLOCKING_FILE_CLOSE
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_WRITE
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_READ
+#undef XR_NATIVE_BLOCKING_PATH_PAIR_BOOL
 #undef XR_NATIVE_BLOCKING_PATH_BOOL
 #undef XR_NATIVE_BLOCKING_ENV_GET
     default: status = XR_OS_IO_BAD_ARGUMENT; break;
     }
     if (status != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(status), source_id);
     return result;
+}
+
+XRAY_API bool xrt_native_host_path_bool(uint32_t callable, const XrtStringBacking *text, uint32_t source_id) {
+    return host_path_bool(callable, text, NULL, source_id);
+}
+
+XRAY_API bool xrt_native_host_path_pair_bool(uint32_t callable, const XrtStringBacking *text,
+    const XrtStringBacking *destination, uint32_t source_id) {
+    if (!xrt_backing_string_matches((const XrtManagedHeader *)text) ||
+        !xrt_backing_string_matches((const XrtManagedHeader *)destination))
+        xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
+    return host_path_bool(callable, text, destination, source_id);
 }

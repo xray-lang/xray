@@ -392,9 +392,11 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return v->type == XR_LIR_UNIT && a == XR_LIR_I1 && b == XR_LIR_STRING;
         case XR_LIR_STRING_RETAIN:
             return v->type == XR_LIR_STRING && a == XR_LIR_STRING;
-        case XR_LIR_HOST_PATH_BOOL:
-            return v->type == XR_LIR_I1 && a == XR_LIR_STRING && v->bits <= UINT32_MAX &&
-                xr_native_blocking_path_bool((uint32_t)v->bits);
+        case XR_LIR_HOST_PATH_BOOL: {
+            uint32_t paths = v->bits <= UINT32_MAX ? xr_native_blocking_path_count((uint32_t)v->bits) : 0;
+            return paths && v->operand_count == paths && v->type == XR_LIR_I1 &&
+                a == XR_LIR_STRING && (paths == 1 || b == XR_LIR_STRING);
+        }
         case XR_LIR_HOST_FILE_OPEN_WRITE: case XR_LIR_HOST_FILE_OPEN_READ: {
             XrLirTypeView shape;
             bool writing = v->op == XR_LIR_HOST_FILE_OPEN_WRITE;

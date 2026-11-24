@@ -1422,6 +1422,7 @@ module io {
   fn __rename {
     signature: "(old: Path, new: Path): bool"
     doc: "Rename a file"
+    host_leaf: "blocking-path-pair-bool"
     vm: "io_rename"
     aot: "xrt_io_rename"
     argc: 2

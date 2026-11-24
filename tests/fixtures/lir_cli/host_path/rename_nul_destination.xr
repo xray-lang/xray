@@ -1,0 +1,4 @@
+import io
+import path
+
+print(io.rename(path.from("must-stay"), path.from("must-not-exist\0suffix")))

@@ -1,0 +1,6 @@
+import io
+import path
+
+print(io.rename(path.from("起点.txt"), path.from("到达.txt")))
+print(io.rename(path.from("起点.txt"), path.from("missing")))
+print(io.rename(path.from("source"), path.from("occupied")))
