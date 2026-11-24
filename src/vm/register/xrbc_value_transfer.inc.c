@@ -265,7 +265,7 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
             rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
     case XR_RBC_VALUE_HOST_FILE_OPEN_WRITE: case XR_RBC_VALUE_HOST_FILE_READ:
         return rbc_value_flow_read(state,code,access.source,&incoming) && rbc_value_flow_bits(state,code,access.other);
-    case XR_RBC_VALUE_HOST_FILE_OPEN_READ: case XR_RBC_VALUE_HOST_ENV_GET:
+    case XR_RBC_VALUE_HOST_PATH_CLASS: case XR_RBC_VALUE_HOST_ENV_GET:
         return rbc_value_flow_read(state, code, access.source, &incoming);
     case XR_RBC_VALUE_HOST_PATH_BOOL: case XR_RBC_VALUE_HOST_FILE_CLOSE:
         return rbc_value_flow_read(state,code,access.source,&incoming) &&

@@ -17,6 +17,7 @@
 #include "runtime/native/xnative_value.h"
 #include "runtime/native/xnative_value_image.h"
 #include "runtime/native/xnative_host_stat.h"
+#include "shared/xnative_declaration.h"
 #include "xray_native_values.h"
 #include <stdalign.h>
 #include <stdio.h>
@@ -92,6 +93,12 @@ static void file_stat_payload_facts(void) {
     XrtValuePlanSpec received;
     OK(xrt_value_plan_view(record, &received));
     CHECK(xrt_host_stat_row_matches(&received));
+    const size_t owner_offset = 0;
+    XrtValuePlanSpec stat_class = {.kind=XRT_VALUE_CLASS, .size=sizeof(XrtManagedHeader *),
+        .alignment=alignof(XrtManagedHeader *), .owned_offsets=&owner_offset, .owned_count=1,
+        .element=record, .class_storage=XR_NATIVE_DECLARATION_FILE_STAT};
+    XrtValuePlan *stat_plan = NULL;
+    OK(xrt_value_plan_new(billing, &stat_class, &stat_plan));
 
     fields[5].type = boolean;
     CHECK(!xrt_host_stat_row_matches(&type));
@@ -102,6 +109,13 @@ static void file_stat_payload_facts(void) {
     fields[6].offset = 57;
     CHECK(!xrt_host_stat_row_matches(&type));
     CHECK(xrt_host_stat_row_matches(&received));
+    fields[6].offset = 56;
+    fields[6].name = "bad";
+    XrtValuePlan *wrong_name = NULL, *rejected = NULL;
+    OK(xrt_value_plan_new(billing, &type, &wrong_name));
+    stat_class.element = wrong_name;
+    CHECK(xrt_value_plan_new(billing, &stat_class, &rejected) == XRT_MANAGED_ARGUMENT && !rejected);
+    xrt_value_plan_drop(wrong_name);
 
     const XrOsFileMetadata metadata = {.present=true, .size=42, .mode=0644, .mtime=-30, .atime=40, .ctime=50,
         .uid={true, 0}, .gid={false, 13}, .is_file=true, .is_dir=false, .is_symlink=true};
@@ -116,6 +130,26 @@ static void file_stat_payload_facts(void) {
     memcpy(expected, required, sizeof(required));
     expected[40] = expected[72] = expected[74] = 1;
     CHECK(sizeof(row) == sizeof(expected) && !memcmp(&row, expected, sizeof(expected)));
+
+    XrtManagedOps *ops = NULL;
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    OK(xrt_class_backing_bind(billing, stat_plan, &ops));
+    OK(xrt_managed_root_new(billing, &root));
+    OK(xrt_managed_frame_enter(root, 1, &frame));
+    CHECK(xrt_class_create(frame, 0, ops, &row) == XRT_MANAGED_ARGUMENT);
+    OK(xrt_host_stat_class_create(frame, 0, (XrtBoundClass){stat_plan, ops}, &row));
+    XrtManagedHeader *object = NULL;
+    const XrtValuePlan *field_type = NULL;
+    const void *field = NULL;
+    OK(xrt_managed_slot_borrow(frame, 0, &object));
+    OK(xrt_class_field_borrow(object, stat_plan, 0, &field_type, &field));
+    CHECK(field_type == integer && *(const int64_t *)field == 42);
+    const int64_t replacement = 1;
+    CHECK(xrt_class_scalar_field_write(object, stat_plan, 0, &replacement, sizeof(replacement)) == XRT_MANAGED_ARGUMENT);
+    OK(xrt_managed_root_destroy(&root));
+    xrt_managed_ops_drop(ops);
+    xrt_value_plan_drop(stat_plan);
 
     xrt_value_plan_drop(record);
     xrt_value_plan_drop(nullable);

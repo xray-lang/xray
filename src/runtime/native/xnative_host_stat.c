@@ -9,7 +9,10 @@
 #include "xnative_host_stat.h"
 #include "xnative_host_io.h"
 #include "xnative_string_backing.h"
+#include "xnative_values.h"
 #include "base/xchecks.h"
+#include "shared/xnative_host_leaf.h"
+#include "xray_native_values.h"
 #include <string.h>
 
 typedef struct HostStatPolicy {
@@ -43,35 +46,6 @@ XR_FUNC XrOsIoStatus xrt_host_stat_query(const XrtHostStatQuery *query, const Xr
         query->current ? host_stat_current : NULL, query->owner, output);
 }
 
-static bool host_stat_optional_i64(const XrtValuePlanSpec *spec) {
-    XrtValuePlanSpec element;
-    return spec->kind == XRT_VALUE_NULLABLE && spec->size == sizeof(XrtHostStatOptionalI64) &&
-        spec->alignment == _Alignof(XrtHostStatOptionalI64) &&
-        spec->nullable.tag_offset == offsetof(XrtHostStatOptionalI64, present) &&
-        spec->nullable.payload_offset == offsetof(XrtHostStatOptionalI64, value) &&
-        xrt_value_plan_view(spec->nullable.element, &element) == XRT_MANAGED_OK && element.kind == XRT_VALUE_I64;
-}
-
-XR_FUNC bool xrt_host_stat_row_matches(const XrtValuePlanSpec *spec) {
-    static const size_t offsets[] = {offsetof(XrtHostStatRow, size), offsetof(XrtHostStatRow, mode),
-        offsetof(XrtHostStatRow, mtime), offsetof(XrtHostStatRow, atime), offsetof(XrtHostStatRow, ctime),
-        offsetof(XrtHostStatRow, uid), offsetof(XrtHostStatRow, gid), offsetof(XrtHostStatRow, is_file),
-        offsetof(XrtHostStatRow, is_dir), offsetof(XrtHostStatRow, is_symlink)};
-    if (!spec || spec->kind != XRT_VALUE_RECORD || spec->owned_count || spec->size != sizeof(XrtHostStatRow) ||
-        spec->alignment != _Alignof(XrtHostStatRow) || !spec->fields ||
-        spec->field_count != sizeof(offsets) / sizeof(*offsets)) return false;
-    for (size_t i = 0; i < spec->field_count; ++i) {
-        const XrtValueSlotSpec *slot = &spec->fields[i];
-        XrtValueKind expected = i < 5 ? XRT_VALUE_I64 : i < 7 ? XRT_VALUE_NULLABLE : XRT_VALUE_BOOL;
-        XrtValuePlanSpec field;
-        if (slot->flags || slot->offset != offsets[i] ||
-            xrt_value_plan_view(slot->type, &field) != XRT_MANAGED_OK || field.owned_count ||
-            field.kind != expected || (expected == XRT_VALUE_NULLABLE && !host_stat_optional_i64(&field)))
-            return false;
-    }
-    return true;
-}
-
 static void host_stat_store_optional(unsigned char *bytes, const XrOsOptionalI64 *value) {
     bytes[offsetof(XrtHostStatOptionalI64, present)] = value->present;
     if (value->present) memcpy(bytes + offsetof(XrtHostStatOptionalI64, value), &value->value, sizeof(value->value));
@@ -91,4 +65,34 @@ XR_FUNC void xrt_host_stat_row(const XrOsFileMetadata *metadata, XrtHostStatRow 
     bytes[offsetof(XrtHostStatRow, is_file)] = metadata->is_file;
     bytes[offsetof(XrtHostStatRow, is_dir)] = metadata->is_dir;
     bytes[offsetof(XrtHostStatRow, is_symlink)] = metadata->is_symlink;
+}
+
+XR_FUNC XrtHostStatResult xrt_host_stat_publish(const XrtHostNullableSlots *output, XrtBoundClass binding,
+    const XrtManagedHeader *path, uint32_t source_id) {
+    XrtValuePlanSpec type;
+    if (!binding.ops || xrt_value_plan_view(binding.plan, &type) != XRT_MANAGED_OK ||
+        type.kind != XRT_VALUE_CLASS || type.class_storage != XR_NATIVE_DECLARATION_FILE_STAT ||
+        !xrt_backing_string_matches(path)) return (XrtHostStatResult){.managed=XRT_MANAGED_ARGUMENT};
+    XrtHostNullablePlaces places;
+    XrtHostStatResult result = {.managed=xrt_host_nullable_prepare(output, xrt_native_managed_root(source_id), &places)};
+    if (result.managed != XRT_MANAGED_OK) return result;
+    if (places.current && !xrt_class_backing_matches(places.current, binding.plan))
+        return (XrtHostStatResult){.managed=XRT_MANAGED_ARGUMENT};
+
+    XrtHostStatQuery query = {0};
+    result.managed = xrt_native_values_stat_prepare(xrt_value_root_current(source_id), &query.billing, &query.owner);
+    if (result.managed != XRT_MANAGED_OK) return result;
+    XrOsFileMetadata metadata;
+    result.host = xrt_host_stat_query(&query, path, &metadata);
+    if (result.host != XR_OS_IO_OK) return result;
+    XR_CHECK(!query.owner->handle, "metadata must close before publishing a result");
+    if (metadata.present) {
+        XrtHostStatRow row;
+        xrt_host_stat_row(&metadata, &row);
+        result.managed = xrt_host_stat_class_create(places.temporary.frame, places.temporary.slot, binding, &row);
+        if (result.managed != XRT_MANAGED_OK) return result;
+    }
+    XR_CHECK(xrt_host_nullable_publish(&places, metadata.present) == XRT_MANAGED_OK,
+        "metadata publication keeps the preflighted nullable home");
+    return result;
 }

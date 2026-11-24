@@ -11,7 +11,7 @@
  *   Field-name indices contain ordinals and never reorder the payload.
  */
 #include "shared/xr_utf8_core.h"
-#include "shared/xnative_declaration.h"
+#include "shared/xnative_host_leaf.h"
 
 static bool lir_record_text_valid(const char *text, uint32_t length) {
     return text && length && !memchr(text, 0, length) &&
@@ -37,14 +37,36 @@ static bool lir_record_identity_valid(const XrLirModule *m, const XrLirRecordIde
         ((identity->argument_count != 0) != (identity->arguments != NULL))) return false;
     if (identity->native_id) {
         static const char module[] = "stdlib-module-v1:module=2:io:path=8:io/io.xr";
-        static const char name[] = "__FileStorage";
-        if (identity->native_id != XR_NATIVE_DECLARATION_FILE_STORAGE || identity->argument_count ||
+        const char *name;
+        switch (identity->native_id) {
+        case XR_NATIVE_DECLARATION_FILE_STORAGE: name = "__FileStorage"; break;
+        case XR_NATIVE_DECLARATION_FILE_STAT: name = "__FileStat"; break;
+        default: return false;
+        }
+        if (identity->argument_count ||
             identity->exported || identity->flags || identity->module_length != sizeof(module) - 1 ||
-            identity->name_length != sizeof(name) - 1 || memcmp(identity->module, module, sizeof(module) - 1) ||
-            memcmp(identity->name, name, sizeof(name) - 1)) return false;
+            identity->name_length != strlen(name) || memcmp(identity->module, module, sizeof(module) - 1) ||
+            memcmp(identity->name, name, identity->name_length)) return false;
     }
     for (uint32_t a = 0; a < identity->argument_count; ++a)
         if (!lir_record_argument_valid(m, identity->arguments[a], earlier)) return false;
+    return true;
+}
+
+static bool lir_record_payload_identity_valid(const XrLirModule *m, const XrLirRecordIdentity *identity,
+    const XrLirRecordField *fields, uint32_t count, bool class_only) {
+    if (identity->native_id != XR_NATIVE_DECLARATION_FILE_STAT)
+        return !class_only || (!identity->native_id && !identity->flags);
+    if (!class_only || count != XR_NATIVE_FILE_STAT_FIELD_COUNT) return false;
+    for (uint32_t i = 0; i < count; ++i) {
+        const XrLirRecordField *field = &fields[i];
+        if (field->flags || field->array_element) return false;
+        XrNativeTypeTerm type = field->type == XR_LIR_I64 ? XR_NATIVE_TERM_I64 :
+            field->type == XR_LIR_I1 ? XR_NATIVE_TERM_BOOL :
+            xr_lir_internal_optional_i64_field(m, field->type, 0) ? XR_NATIVE_TERM_NULLABLE_I64 : XR_NATIVE_TERM_UNADMITTED;
+        if (type == XR_NATIVE_TERM_UNADMITTED || xr_native_file_stat_field(i, field->name, field->name_length) != type)
+            return false;
+    }
     return true;
 }
 

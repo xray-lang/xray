@@ -60,7 +60,8 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
     }
     if (class_new || class_field || class_push || class_write || scalar_write) {
         if (!xr_rbc_module_code_owner(module) || type->kind!=XRT_VALUE_CLASS ||
-            type->class_storage || !type->element || type->element>=home->type) return false;
+            (type->class_storage && !(class_field && type->class_storage == XR_NATIVE_DECLARATION_FILE_STAT)) ||
+            !type->element || type->element>=home->type) return false;
         type=&image->types[type->element-1];
         if (type->kind!=XRT_VALUE_RECORD) return false;
     }

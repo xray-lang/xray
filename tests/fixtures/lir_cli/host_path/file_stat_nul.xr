@@ -1,0 +1,4 @@
+import io
+import path
+
+print(io.exists(path.from("file\0ignored")))

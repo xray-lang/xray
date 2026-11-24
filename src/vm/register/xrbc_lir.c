@@ -568,7 +568,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         i->op == XR_LIR_INVOKE || i->op == XR_LIR_RETURN_ERROR || i->op == XR_LIR_PANIC_ERROR ||
         i->op == XR_LIR_UNCAUGHT_ERROR ||
         i->op == XR_LIR_HOST_FILE_OPEN_WRITE || i->op == XR_LIR_HOST_FILE_CLOSE || i->op == XR_LIR_HOST_FILE_WRITE ||
-        i->op == XR_LIR_HOST_FILE_OPEN_READ || i->op == XR_LIR_HOST_FILE_READ || i->op == XR_LIR_HOST_ENV_GET) return true;
+        i->op == XR_LIR_HOST_PATH_CLASS || i->op == XR_LIR_HOST_FILE_READ || i->op == XR_LIR_HOST_ENV_GET) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return true;
     if (i->op==XR_LIR_MAP_BORROW && i->operand_count) {

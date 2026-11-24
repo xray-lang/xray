@@ -1441,6 +1441,7 @@ module io {
     link_object: false
     layer: "system"
     return_ownership: "fresh"
+    host_leaf: "blocking-file-stat"
   }
 
   fn __symlink {

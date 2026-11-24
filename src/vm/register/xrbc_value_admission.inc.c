@@ -711,9 +711,12 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_OPEN_WRITE &&
             rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.other,XR_RBC_BITS) &&
             rbc_value_file_storage(module,code,a.result,true);
-    case XR_RBC_VALUE_HOST_FILE_OPEN_READ:
-        return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_OPEN_READ &&
-            rbc_value_string(module, code, a.source, false) && rbc_value_file_storage(module, code, a.result, true);
+    case XR_RBC_VALUE_HOST_PATH_CLASS: {
+        uint32_t storage = xr_native_host_path_result_class(a.index);
+        const XrtValueImageType *type = rbc_value_host_nullable_element(module, code, a.result);
+        return !a.other && storage && type && type->kind == XRT_VALUE_CLASS && type->class_storage == storage &&
+            rbc_value_string(module, code, a.source, false);
+    }
     case XR_RBC_VALUE_HOST_FILE_READ:
         return xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_READ &&
             rbc_value_file_storage(module, code, a.source, false) && rbc_value_scalar(code, function, a.other, XR_RBC_BITS) &&

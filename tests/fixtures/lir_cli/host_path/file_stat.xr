@@ -1,0 +1,17 @@
+import io
+import path
+
+const file = path.from("数据.txt")
+const folder = path.from("目录")
+const missing = path.from("不存在")
+
+print(io.exists(file))
+print(io.fileSize(file))
+print(io.isFile(file))
+print(io.isDir(file))
+print(io.exists(folder))
+print(io.isDir(folder))
+print(io.isSymlink(folder))
+print(io.exists(missing))
+print(io.fileSize(missing))
+print(io.isDir(missing))

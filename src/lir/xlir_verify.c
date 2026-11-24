@@ -398,14 +398,15 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             return paths && v->operand_count == paths && v->type == XR_LIR_I1 &&
                 a == XR_LIR_STRING && (paths == 1 || b == XR_LIR_STRING);
         }
-        case XR_LIR_HOST_FILE_OPEN_WRITE: case XR_LIR_HOST_FILE_OPEN_READ: {
+        case XR_LIR_HOST_FILE_OPEN_WRITE: case XR_LIR_HOST_PATH_CLASS: {
             XrLirTypeView shape;
             bool writing = v->op == XR_LIR_HOST_FILE_OPEN_WRITE;
-            XrNativeHostShape host = writing ? XR_NATIVE_HOST_FILE_OPEN_WRITE : XR_NATIVE_HOST_FILE_OPEN_READ;
-            return a == XR_LIR_STRING && (!writing || b == XR_LIR_I1) && v->bits <= UINT32_MAX &&
-                xr_native_host_shape((uint32_t)v->bits) == host &&
+            if (a != XR_LIR_STRING || v->bits > UINT32_MAX) return false;
+            uint32_t id = (uint32_t)v->bits;
+            uint32_t storage = writing ? XR_NATIVE_DECLARATION_FILE_STORAGE : xr_native_host_path_result_class(id);
+            return storage && (!writing || (b == XR_LIR_I1 && xr_native_host_shape(id) == XR_NATIVE_HOST_FILE_OPEN_WRITE)) &&
                 xr_lir_type_view(m, v->type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_NULLABLE &&
-                xr_lir_class_storage(m, shape.element) == XR_NATIVE_DECLARATION_FILE_STORAGE;
+                xr_lir_class_storage(m, shape.element) == storage;
         }
         case XR_LIR_HOST_FILE_READ:
             return xr_lir_class_storage(m, a) == XR_NATIVE_DECLARATION_FILE_STORAGE &&
@@ -578,7 +579,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_PANIC_ERROR && v->op != XR_LIR_UNCAUGHT_ERROR &&
         v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET && v->op != XR_LIR_HOST_PATH_BOOL &&
         v->op != XR_LIR_HOST_FILE_OPEN_WRITE && v->op != XR_LIR_HOST_FILE_CLOSE && v->op != XR_LIR_HOST_FILE_WRITE &&
-        v->op != XR_LIR_HOST_FILE_OPEN_READ && v->op != XR_LIR_HOST_FILE_READ && v->op != XR_LIR_HOST_ENV_GET &&
+        v->op != XR_LIR_HOST_PATH_CLASS && v->op != XR_LIR_HOST_FILE_READ && v->op != XR_LIR_HOST_ENV_GET &&
         v->op != XR_LIR_CLASS_SCALAR_WRITE && v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)

@@ -1,0 +1,3 @@
+import { __FileStat } from io
+
+var snapshot: __FileStat

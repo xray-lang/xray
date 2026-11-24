@@ -19,6 +19,7 @@
 #include "xnative_class_array.h"
 #include "xnative_host_environment.h"
 #include "xnative_host_file.h"
+#include "xnative_host_stat.h"
 #include "xnative_host_io.h"
 #include "shared/xerror_codes.h"
 #include "shared/xnative_host_leaf.h"
@@ -264,11 +265,21 @@ static const XrtValuePlan *native_host_optional_element(const XrtValueImage *ima
 }
 
 XRAY_API void xrt_native_host_file_open_read(uint32_t callable, const XrtNativeFileOpenRead *call, uint32_t source) {
-    if (!call || xr_native_host_shape(callable) != XR_NATIVE_HOST_FILE_OPEN_READ || !xrt_backing_string_matches(call->path))
+    uint32_t native_class_id = xr_native_host_path_result_class(callable);
+    if (!call || !native_class_id || !xrt_backing_string_matches(call->path))
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
-    XrtBoundClass binding = native_file_class(call->image, call->type, source);
+    XrtBoundClass binding = native_class_id == XR_NATIVE_DECLARATION_FILE_STORAGE ?
+        native_file_class(call->image, call->type, source) : native_class(call->image, call->type, source);
     if (native_host_optional_element(call->image, call->result_type, source) != binding.plan)
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    if (native_class_id == XR_NATIVE_DECLARATION_FILE_STAT) {
+        const XrtHostNullableSlots output = {call->output.frame, call->output.destination, call->output.temporary,
+            call->output.offset, call->temporary_owner_offset};
+        XrtHostStatResult stat = xrt_host_stat_publish(&output, binding, call->path, source);
+        if (stat.host != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(stat.host), source);
+        if (stat.managed != XRT_MANAGED_OK) xrt_native_managed_failure(stat.managed, source);
+        return;
+    }
     const XrtHostFileStagedResult output = {call->output, call->temporary_owner_offset};
     XrtHostFileOpen opened = xrt_host_file_open_read_publish(&output, binding, (const XrtStringBacking *)call->path, source);
     if (opened.managed != XRT_MANAGED_OK) xrt_native_managed_failure(opened.managed, source);

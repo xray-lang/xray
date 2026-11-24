@@ -100,6 +100,11 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
     uint32_t storage = native == XR_NATIVE_DECLARATION_FILE_STORAGE ? native : 0;
     if (good && storage && (!class_type || base || count))
         good = lower_unsupported(c, "invalid host storage class");
+    if (good && native == XR_NATIVE_DECLARATION_FILE_STAT) {
+        if (!class_type || base || !xir_file_stat_type(c->source->types, type))
+            good = lower_unsupported(c, "invalid private file metadata identity");
+        else storage = native;
+    }
     XrLirRecordIdentity identity = {.module=description->module.bytes, .module_length=description->module.length,
         .name=description->name.bytes, .name_length=description->name.length, .arguments=arguments,
         .argument_count=argument_count, .exported=description->definition ? description->definition->exported : description->identity->exported,

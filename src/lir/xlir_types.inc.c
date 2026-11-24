@@ -250,7 +250,7 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape, const Xr
         if (shape.count || shape.element < XR_LIR_TYPE_COUNT || shape.element >= XR_LIR_TYPE_COUNT + ordinal ||
             m->types[shape.element - XR_LIR_TYPE_COUNT].shape.kind != XR_LIR_TYPE_RECORD) return false;
         const XrLirTypeData *row = &m->types[shape.element - XR_LIR_TYPE_COUNT];
-        if (row->record.native_id && row->shape.count) return false;
+        if (row->record.native_id == XR_NATIVE_DECLARATION_FILE_STORAGE && row->shape.count) return false;
         *output = (XrLirTypeLayout){sizeof(void *), _Alignof(void *), 0, true};
         return true;
     }
@@ -380,7 +380,7 @@ XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *m) {
             (type.shape.kind == XR_LIR_TYPE_RECORD ?
                 (!lir_record_fields_valid(m, type.fields, type.shape.count, n, type.class_payload_only,
                      &class_payload_only) || !lir_record_identity_valid(m,&type.record,n) ||
-                 (class_payload_only && (type.record.native_id || type.record.flags)) ||
+                 !lir_record_payload_identity_valid(m, &type.record, type.fields, type.shape.count, class_payload_only) ||
                  !lir_record_name_index_valid(&type)) :
                 ((type.shape.kind != XR_LIR_TYPE_TUPLE && type.shape.kind != XR_LIR_TYPE_SUM && type.fields) ||
                  (type.shape.kind != XR_LIR_TYPE_SUM && (
@@ -447,7 +447,7 @@ static XrLirStatus lir_intern_type(XrLirModule *m, XrLirTypeView shape,
         if (!lir_record_fields_valid(m, fields, shape.count, m->type_count, nominal.allow_class_fields,
                 &class_payload_only) ||
             !lir_record_identity_valid(m,record,m->type_count) ||
-            (class_payload_only && (record->native_id || record->flags)) ||
+            !lir_record_payload_identity_valid(m, record, fields, shape.count, class_payload_only) ||
             !lir_record_declaration_consistent(m,record,fields,shape.count)) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
     } else if (nominal.allow_class_fields) {
         return lir_fail(m, XR_LIR_INVALID_ARGUMENT);

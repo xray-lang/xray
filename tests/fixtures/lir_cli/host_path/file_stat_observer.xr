@@ -1,0 +1,20 @@
+export fn observeFileStat(target: Path) {
+    const result = __stat(target)
+    print(result != null)
+    if (result == null) { return }
+    const snapshot = result!
+    print(snapshot.size)
+    print(snapshot.mode)
+    print(snapshot.mtime)
+    print(snapshot.atime)
+    print(snapshot.ctime)
+    const uid = snapshot.uid
+    const gid = snapshot.gid
+    print(uid != null)
+    if (uid != null) { print(uid!) }
+    print(gid != null)
+    if (gid != null) { print(gid!) }
+    print(snapshot.isFile)
+    print(snapshot.isDir)
+    print(snapshot.isSymlink)
+}

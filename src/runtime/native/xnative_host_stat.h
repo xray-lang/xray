@@ -8,7 +8,8 @@
  */
 #ifndef XNATIVE_HOST_STAT_H
 #define XNATIVE_HOST_STAT_H
-#include "xnative_value_plan.h"
+#include "xnative_host_nullable.h"
+#include "xnative_value_image.h"
 #include "os/os_file_metadata.h"
 
 typedef struct XrtHostStatQuery {
@@ -40,4 +41,13 @@ XR_FUNC bool xrt_host_stat_row_matches(const XrtValuePlanSpec *);
 /* Initialize the full row's representation, including padding copied during
  * class construction. The metadata and output are distinct live objects. */
 XR_FUNC void xrt_host_stat_row(const XrOsFileMetadata *, XrtHostStatRow *output);
+
+XR_FUNC XrtManagedStatus xrt_host_stat_class_create(XrtManagedFrame *, size_t slot, XrtBoundClass,
+    const XrtHostStatRow *);
+typedef struct XrtHostStatResult {
+    XrtManagedStatus managed;
+    XrOsIoStatus host;
+} XrtHostStatResult;
+XR_FUNC XrtHostStatResult xrt_host_stat_publish(const XrtHostNullableSlots *, XrtBoundClass,
+    const XrtManagedHeader *path, uint32_t source_id);
 #endif // XNATIVE_HOST_STAT_H

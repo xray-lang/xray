@@ -1519,7 +1519,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
 static uint32_t lower_host_path_count(XrNativeHostShape shape) {
     switch (shape) {
     case XR_NATIVE_HOST_PATH_BOOL: case XR_NATIVE_HOST_FILE_OPEN_WRITE:
-    case XR_NATIVE_HOST_FILE_OPEN_READ: return 1;
+    case XR_NATIVE_HOST_FILE_OPEN_READ: case XR_NATIVE_HOST_FILE_STAT: return 1;
     case XR_NATIVE_HOST_PATH_PAIR_BOOL: return 2;
     default: return 0;
     }
@@ -3365,7 +3365,7 @@ static bool lower_host_function(Lower *c, uint32_t index) {
     case XR_NATIVE_HOST_PATH_BOOL: case XR_NATIVE_HOST_PATH_PAIR_BOOL:
         operation = XR_LIR_HOST_PATH_BOOL; break;
     case XR_NATIVE_HOST_FILE_OPEN_WRITE: operation = XR_LIR_HOST_FILE_OPEN_WRITE; break;
-    case XR_NATIVE_HOST_FILE_OPEN_READ: operation = XR_LIR_HOST_FILE_OPEN_READ; break;
+    case XR_NATIVE_HOST_FILE_OPEN_READ: case XR_NATIVE_HOST_FILE_STAT: operation = XR_LIR_HOST_PATH_CLASS; break;
     case XR_NATIVE_HOST_FILE_READ: operation = XR_LIR_HOST_FILE_READ; break;
     case XR_NATIVE_HOST_ENV_GET: operation = XR_LIR_HOST_ENV_GET; break;
     case XR_NATIVE_HOST_FILE_CLOSE: operation = XR_LIR_HOST_FILE_CLOSE; break;

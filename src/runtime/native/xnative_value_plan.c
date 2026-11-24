@@ -12,6 +12,7 @@
  */
 #include "xnative_value_plan.h"
 #include "xnative_host_file.h"
+#include "xnative_host_stat.h"
 #include "shared/xnative_declaration.h"
 #include "xnative_managed_root.h"
 #include "xnative_backing_types.h"
@@ -200,8 +201,43 @@ static bool nullable_valid(const XrtValuePlanSpec *spec) {
         if (spec->owned_offsets[i] != spec->nullable.payload_offset + element->view.owned_offsets[i]) return false;
     return true;
 }
+static bool host_stat_optional_i64(const XrtValuePlanSpec *spec) {
+    XrtValuePlanSpec element;
+    return spec->kind == XRT_VALUE_NULLABLE && spec->size == sizeof(XrtHostStatOptionalI64) &&
+        spec->alignment == _Alignof(XrtHostStatOptionalI64) &&
+        spec->nullable.tag_offset == offsetof(XrtHostStatOptionalI64, present) &&
+        spec->nullable.payload_offset == offsetof(XrtHostStatOptionalI64, value) &&
+        xrt_value_plan_view(spec->nullable.element, &element) == XRT_MANAGED_OK && element.kind == XRT_VALUE_I64;
+}
+
+XR_FUNC bool xrt_host_stat_row_matches(const XrtValuePlanSpec *spec) {
+    static const size_t offsets[] = {offsetof(XrtHostStatRow, size), offsetof(XrtHostStatRow, mode),
+        offsetof(XrtHostStatRow, mtime), offsetof(XrtHostStatRow, atime), offsetof(XrtHostStatRow, ctime),
+        offsetof(XrtHostStatRow, uid), offsetof(XrtHostStatRow, gid), offsetof(XrtHostStatRow, is_file),
+        offsetof(XrtHostStatRow, is_dir), offsetof(XrtHostStatRow, is_symlink)};
+    if (!spec || spec->kind != XRT_VALUE_RECORD || spec->owned_count || spec->size != sizeof(XrtHostStatRow) ||
+        spec->alignment != _Alignof(XrtHostStatRow) || !spec->fields ||
+        spec->field_count != sizeof(offsets) / sizeof(*offsets)) return false;
+    _Static_assert(sizeof(offsets) / sizeof(*offsets) == XR_NATIVE_FILE_STAT_FIELD_COUNT,
+        "the immutable file metadata row and its governed schema match");
+    for (uint32_t i = 0; i < XR_NATIVE_FILE_STAT_FIELD_COUNT; ++i) {
+        const XrtValueSlotSpec *slot = &spec->fields[i];
+        XrtValuePlanSpec field;
+        if (slot->flags || slot->offset != offsets[i] ||
+            xrt_value_plan_view(slot->type, &field) != XRT_MANAGED_OK || field.owned_count) return false;
+        XrNativeTypeTerm type = field.kind == XRT_VALUE_I64 ? XR_NATIVE_TERM_I64 :
+            field.kind == XRT_VALUE_BOOL ? XR_NATIVE_TERM_BOOL :
+            host_stat_optional_i64(&field) ? XR_NATIVE_TERM_NULLABLE_I64 : XR_NATIVE_TERM_UNADMITTED;
+        if (type == XR_NATIVE_TERM_UNADMITTED || xr_native_file_stat_field(i, slot->name, slot->name_length) != type)
+            return false;
+    }
+    return true;
+}
+
 static bool class_payload_valid(const XrtValuePlanSpec *spec) {
     if (!spec->element || spec->element->view.kind != XRT_VALUE_RECORD) return false;
+    if (spec->class_storage == XR_NATIVE_DECLARATION_FILE_STAT)
+        return !spec->class_parent && xrt_host_stat_row_matches(&spec->element->view);
     if (spec->class_storage)
         return spec->class_storage == XR_NATIVE_DECLARATION_FILE_STORAGE && !spec->class_parent &&
             !spec->element->view.field_count;
@@ -558,13 +594,13 @@ static bool aggregate_owners_match(const XrtValuePlan *type, const unsigned char
     }
     return true;
 }
-XR_FUNCDEF XrtManagedStatus xrt_class_create(XrtManagedFrame *frame, size_t slot,
-    XrtManagedOps *ops, const void *row) {
+static XrtManagedStatus class_create(XrtManagedFrame *frame, size_t slot,
+    XrtManagedOps *ops, const void *row, uint32_t storage, const XrtValuePlan *expected) {
     const XrtRuntimeTypeSpec *physical = NULL;
     XrtManagedStatus status = xrt_managed_ops_producer_borrow(ops, class_plan_retain, class_plan_drop, &physical);
     if (status != XRT_MANAGED_OK) return status;
     const XrtValuePlan *plan = physical->code.context;
-    if (plan->view.class_storage) return XRT_MANAGED_ARGUMENT;
+    if (plan->view.class_storage != storage || (expected && plan != expected)) return XRT_MANAGED_ARGUMENT;
     const XrtValuePlan *payload = plan->view.element;
     if (!row || (uintptr_t)row % payload->view.alignment) return XRT_MANAGED_ARGUMENT;
     for (size_t i = 0; i < payload->view.field_count; ++i) {
@@ -582,6 +618,15 @@ XR_FUNCDEF XrtManagedStatus xrt_class_create(XrtManagedFrame *frame, size_t slot
     ClassConstruction context = {payload,row};
     const XrtManagedSlotConstruction construction = {class_initialize,class_finish,&context};
     return xrt_managed_slot_construct(frame, slot, ops, physical->fixed_size, &construction);
+}
+XR_FUNCDEF XrtManagedStatus xrt_class_create(XrtManagedFrame *frame, size_t slot,
+    XrtManagedOps *ops, const void *row) {
+    return class_create(frame, slot, ops, row, 0, NULL);
+}
+XR_FUNCDEF XrtManagedStatus xrt_host_stat_class_create(XrtManagedFrame *frame, size_t slot,
+    XrtBoundClass binding, const XrtHostStatRow *row) {
+    if (!binding.plan) return XRT_MANAGED_ARGUMENT;
+    return class_create(frame, slot, binding.ops, row, XR_NATIVE_DECLARATION_FILE_STAT, binding.plan);
 }
 XR_FUNCDEF bool xrt_class_backing_matches(const XrtManagedHeader *owner, const XrtValuePlan *expected) {
     const XrtRuntimeTypeSpec *physical = NULL;

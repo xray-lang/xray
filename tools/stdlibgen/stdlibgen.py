@@ -1374,6 +1374,7 @@ def parse_def_metadata(
                 "blocking-path-bool": "(path: Path): bool",
                 "blocking-path-pair-bool": "(old: Path, new: Path): bool",
                 "blocking-file-open-read": "(path: Path): __FileStorage?",
+                "blocking-file-stat": "(path: Path): __FileStat?",
                 "blocking-file-open-write": "(path: Path, append: bool): __FileStorage?",
                 "blocking-file-close": "(file: __FileStorage): bool",
                 "blocking-file-read": "(file: __FileStorage, maxBytes: i64): Array<u8>?",

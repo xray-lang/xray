@@ -79,16 +79,19 @@ static bool host_path_bool(uint32_t callable, const XrtStringBacking *text,
         status = implementation(&policy, path, target, NULL, &result); break; \
     }
 #define XR_NATIVE_BLOCKING_FILE_OPEN_READ(id)
+#define XR_NATIVE_BLOCKING_FILE_STAT(id)
 #define XR_NATIVE_BLOCKING_FILE_OPEN_WRITE(id)
 #define XR_NATIVE_BLOCKING_FILE_CLOSE(id)
 #define XR_NATIVE_BLOCKING_FILE_READ(id)
 #define XR_NATIVE_BLOCKING_FILE_WRITE(id, kind)
 #include "shared/xnative_host_leaves.inc.h"
+#undef XR_NATIVE_FILE_STAT_FIELDS
 #undef XR_NATIVE_BLOCKING_FILE_WRITE
 #undef XR_NATIVE_BLOCKING_FILE_READ
 #undef XR_NATIVE_BLOCKING_FILE_CLOSE
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_WRITE
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_READ
+#undef XR_NATIVE_BLOCKING_FILE_STAT
 #undef XR_NATIVE_BLOCKING_PATH_PAIR_BOOL
 #undef XR_NATIVE_BLOCKING_PATH_BOOL
 #undef XR_NATIVE_BLOCKING_ENV_GET
