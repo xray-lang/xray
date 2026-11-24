@@ -269,9 +269,9 @@ static void cleanup_suffix_precedes_retirement(void) {
 }
 
 static void cleanup_invoke_checks_the_complete_callee(void) {
-    enum { EXACT, DIVIDE_IN_CALLEE, EFFECT_ON_FAILURE, CATCH, REPLACED_CATCH, MODE_COUNT };
+    enum { EXACT, DIVIDE_IN_CALLEE, EFFECT_ON_FAILURE, CATCH, REPLACED_CATCH, REPEATED_CATCH_ERROR, MODE_COUNT };
     for (unsigned mode = EXACT; mode < MODE_COUNT; ++mode) {
-        bool catches = mode == CATCH || mode == REPLACED_CATCH;
+        bool catches = mode >= CATCH;
         XrLirModule *module = NULL;
         OK(xr_lir_module_create(NULL, &module));
         XrLirType error = try_error_type(module, "Failure"), scalar = XR_LIR_I64;
@@ -311,7 +311,8 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
         XrLirBlock failed = test_block(module, owner, &error, 1);
         XrLirBlock handler = {0};
         XrLirValue other = {0};
-        if (catches) handler = test_block(module, owner, &error, 1);
+        XrLirType handler_types[] = {error, error};
+        if (catches) handler = test_block(module, owner, handler_types, mode == REPEATED_CATCH_ERROR ? 2 : 1);
         OK(xr_lir_set_entry(module, owner, registration));
         if (mode == REPLACED_CATCH)
             OK(xr_lir_emit_value(module, registration, &(XrLirInstruction){
@@ -333,8 +334,8 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
                 .type = XR_LIR_UNIT, .callee = cleanup}));
             OK(xr_lir_block_parameter(module, exits[e], 0, &result));
             if (e && catches) {
-                XrLirValue received = mode == REPLACED_CATCH ? other : result;
-                test_branch(module, exits[e], handler, &received, 1);
+                XrLirValue received[] = {mode == REPLACED_CATCH ? other : result, result};
+                test_branch(module, exits[e], handler, received, mode == REPEATED_CATCH_ERROR ? 2 : 1);
                 continue;
             }
             OK(xr_lir_set_terminator(module, exits[e], &(XrLirInstruction){
@@ -346,7 +347,7 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
         XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
         if (mode == DIVIDE_IN_CALLEE)
             CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "panic-free leaf"));
-        else if (mode == EFFECT_ON_FAILURE)
+        else if (mode == EFFECT_ON_FAILURE || mode == REPEATED_CATCH_ERROR)
             CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "cleanup frontier"));
         else if (mode == REPLACED_CATCH)
             CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "dedicated normal and error successors"));

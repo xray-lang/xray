@@ -14,6 +14,7 @@
 #include "xlir_internal.h"
 #include "../shared/xnative_host_leaf.h"
 #include "xlir_verify.h"
+#include "xlir_pod.h"
 #include "xlir_ownership.h"
 #include "xlir_cell.h"
 #include "../base/xchecks.h"

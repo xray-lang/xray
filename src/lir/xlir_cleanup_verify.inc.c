@@ -51,8 +51,14 @@ static bool lir_cleanup_nopanic(const XrLirModule *m, const XrLirFunctionData *f
         return type == XR_LIR_I64_CELL || type == XR_LIR_I64_REF;
     }
     case XR_LIR_SUM_NEW: {
-        XrLirRecordIdentity identity;
-        return xr_lir_error_sum_identity(m, op->type, &identity);
+        const XrLirRecordField *fields;
+        const XrLirSumVariant *variants;
+        uint32_t field_count, variant_count;
+        if (xr_lir_boxed_type(m, op->type) ||
+            !xr_lir_sum_variants(m, op->type, &fields, &field_count, &variants, &variant_count)) return false;
+        for (uint32_t i = 0; i < field_count; ++i)
+            if (lir_pod_scalar(fields[i].type) >= XR_POD_SCALAR_COUNT) return false;
+        return true;
     }
     case XR_LIR_CALL:
         return m->functions[op->callee - 1].kind == XR_LIR_FUNCTION_EXTERNAL &&
@@ -107,6 +113,19 @@ static uint32_t lir_cleanup_frontier(const XrLirFunctionData *f, uint32_t target
     return block ? block->frontier : 0;
 }
 
+static bool lir_cleanup_catch_shape(const XrLirFunctionData *f, const XrLirBlockData *failure,
+    const XrLirInstructionView *exit) {
+    if (!lir_catch_receives_error(failure, exit)) return false;
+    const XrLirEdgeView *edge = &exit->edges[0];
+    if (lir_cleanup_frontier(f, edge->target)) return false;
+    for (uint32_t a = 1; a < edge->argument_count; ++a) {
+        uint32_t value = edge->arguments[a];
+        if (value == failure->parameters[0] || lir_pod_scalar(f->values[value - 1].type) >= XR_POD_SCALAR_COUNT)
+            return false;
+    }
+    return true;
+}
+
 static bool lir_cleanup_invoke_shape(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *call, uint32_t frontier) {
     uint32_t failed = call->edges[1].target - 1;
@@ -115,7 +134,7 @@ static bool lir_cleanup_invoke_shape(const XrLirModule *m, const XrLirFunctionDa
     const XrLirInstructionView *exit = lir_terminator(f, failed);
     bool typed_exit = exit->op == XR_LIR_PANIC_ERROR ||
         (exit->op == XR_LIR_RETURN_ERROR && f->error && f->error == m->functions[call->callee - 1].error) ||
-        (lir_catch_receives_error(failure, exit) && !lir_cleanup_frontier(f, exit->edges[0].target));
+        lir_cleanup_catch_shape(f, failure, exit);
     return typed_exit && (call->type == XR_LIR_UNIT || lir_cleanup_scalar(call->type)) &&
         first->op == XR_LIR_CALL && first->callee == frontier;
 }
