@@ -563,6 +563,7 @@ static XrLirOp lower_terminator_op(XrXirOp op) {
     switch (op) {
         case XR_XIR_RETURN: return XR_LIR_RET;
         case XR_XIR_JUMP: case XR_XIR_CLEANUP_REGISTER: case XR_XIR_CLEANUP_LEAVE:
+        case XR_XIR_CLEANUP_ERROR:
             return XR_LIR_BR;
         case XR_XIR_BRANCH: return XR_LIR_CONDBR;
         case XR_XIR_INVOKE: return XR_LIR_INVOKE;
@@ -1271,7 +1272,9 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
     bool propagated = exit->op == XR_XIR_THROW && original_error &&
         !lower_empty_error(callee->error_type) && callee->error_type == lower_error_bound(c,(uint32_t)(f-c->source->functions));
     if (failure->frontier || normal->frontier) {
-        return failure->frontier == normal->frontier && !normal->panic && (propagated || asserted) &&
+        bool caught = exit->op==XR_XIR_CLEANUP_ERROR && original_error &&
+            lower_invoke_failure_predecessor(c,f,call->targets[1]) != 0;
+        return failure->frontier == normal->frontier && !normal->panic && (propagated || asserted || caught) &&
             (call->type == XR_XIR_UNIT || lower_cleanup_scalar(call->type)) &&
             lower_is_plain_error_enum(c, callee->error_type) && lower_cleanup_direct_leaf(c, (uint32_t)call->immediate);
     }
@@ -1299,7 +1302,7 @@ static bool lower_cleanup_instruction(Lower *c, const XrXirFunction *f, uint32_t
         return lower_invoke_origin(c, f, block, op, false) != NULL;
     case XR_XIR_INVOKE_ERROR:
         return lower_invoke_origin(c, f, block, op, true) != NULL;
-    case XR_XIR_THROW: case XR_XIR_PANIC_ERROR: {
+    case XR_XIR_THROW: case XR_XIR_PANIC_ERROR: case XR_XIR_CLEANUP_ERROR: {
         const XrXirInstruction *marker = &f->instructions[f->blocks[block].first];
         return marker->op == XR_XIR_INVOKE_ERROR && lower_invoke_origin(c, f, block, marker, true) != NULL;
     }
@@ -1311,6 +1314,8 @@ static bool lower_cleanup_instruction(Lower *c, const XrXirFunction *f, uint32_t
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
     if (op->op == XR_XIR_CLEANUP_REGISTER) return lower_cleanup_admit(c, f, op);
     if (op->op == XR_XIR_CLEANUP_LEAVE) return true;
+    if (op->op == XR_XIR_CLEANUP_ERROR)
+        return lower_invoke_failure_predecessor(c,f,c->block) != 0 || lower_unsupported(c,xr_xir_op_name(op->op));
     const LowerByteLength *byte_lengths = lower_byte_length_plan(c);
     if (byte_lengths && (byte_lengths[c->instruction].omit || byte_lengths[c->instruction].consumer)) return true;
     if (op->op==XR_XIR_ERROR_ERASE) {

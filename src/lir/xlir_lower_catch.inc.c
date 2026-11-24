@@ -61,14 +61,19 @@ static const XrXirInstruction *lower_catch_predecessor(const XrXirFunction *f,
     uint32_t block,const uint32_t *input) {
     const XrXirBlock *pred=&f->blocks[input[0]];
     const XrXirInstruction *jump=&f->instructions[pred->first+pred->count-1];
-    return !pred->panic && !pred->frontier && jump->op==XR_XIR_JUMP && jump->targets[0]==block ? jump : NULL;
+    if (pred->panic || jump->targets[0]!=block) return NULL;
+    XrXirOp exit = pred->frontier ? XR_XIR_CLEANUP_ERROR : XR_XIR_JUMP;
+    return jump->op==exit ? jump : NULL;
 }
 
 static XrXirType lower_catch_input(const Lower *c,const XrXirFunction *f,uint32_t block,
     const uint32_t *input,const uint8_t *uses) {
     const XrXirInstruction *jump=lower_catch_predecessor(f,block,input);
     if (!jump) return XR_XIR_UNIT;
-    const XrXirInstruction *call=lower_forwarded_error_call(f,input[0],input[1],block);
+    const XrXirInstruction *call=lower_forwarded_error_call(f,input[0],input[1],block,jump->op);
+    /* The cleanup terminator and this handler PHI are the only uses of the released error edge. */
+    if (jump->op==XR_XIR_CLEANUP_ERROR && (!call || uses[f->blocks[input[0]].first]!=2))
+        return XR_XIR_UNIT;
     if (call) {
         if (call->immediate<0 || (uint64_t)call->immediate>=c->source->function_count) return XR_XIR_UNIT;
         return c->source->functions[call->immediate].error_type;
@@ -161,7 +166,7 @@ static bool lower_catch_errors(Lower *c, const XrXirFunction *f) {
             uses=lower_alloc(c,f->instruction_count,1);
             good=active && uses && lower_catch_reachable(c,f,active);
             if (!good) break;
-            lower_optional_uses(c,f,uses);
+            lower_count_operand_uses(c,f,uses);
         }
         if (!active[b]) continue;
         XrXirType exact=lower_catch_join_type(c,f,b,active,uses);
@@ -188,7 +193,10 @@ static bool lower_catch_errors(Lower *c, const XrXirFunction *f) {
             uint32_t failed = term->targets[1];
             const XrXirInstruction *exit = lower_term(c, f, failed);
             if (!exit) return false;
-            if (exit->op == XR_XIR_JUMP && plan->types[f->blocks[exit->targets[0]].first])
+            if ((exit->op==XR_XIR_JUMP || exit->op==XR_XIR_CLEANUP_ERROR) &&
+                plan->types[f->blocks[exit->targets[0]].first] &&
+                lower_forwarded_error_call(f,failed,f->parameter_count+f->blocks[failed].first,
+                    exit->targets[0],exit->op)==term)
                 plan->predecessors[failed] = b + 1;
         } else if (term->op == XR_XIR_BRANCH) {
             const XrXirInstruction *test = lower_place_definition(f, term->args[0]);

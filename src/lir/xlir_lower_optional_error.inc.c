@@ -17,7 +17,7 @@ static uint32_t lower_optional_error_predecessor(const Lower *c,uint32_t block) 
     return plan ? plan[block].predecessor : 0;
 }
 
-static void lower_optional_uses(const Lower *c,const XrXirFunction *f,uint8_t *uses) {
+static void lower_count_operand_uses(const Lower *c,const XrXirFunction *f,uint8_t *uses) {
     static const uint8_t arity[] = {0,
 #define XR_XIR_OP(name, stages, rule, operands, edges, terminal) operands,
 #include "../xir/xxir_ops.def"
@@ -55,7 +55,7 @@ static void lower_optional_uses(const Lower *c,const XrXirFunction *f,uint8_t *u
             uint32_t value=args[a];
             if (value>=f->parameter_count && value-f->parameter_count<f->instruction_count) {
                 uint8_t *use=&uses[value-f->parameter_count];
-                if (*use<2) ++*use;
+                if (*use<3) ++*use;
             }
         }
     }
@@ -64,15 +64,18 @@ static void lower_optional_uses(const Lower *c,const XrXirFunction *f,uint8_t *u
 /* The sealed Checked graph verifies the predecessor set of every PHI and
  * gives each INVOKE landing block exactly one predecessor. */
 static const XrXirInstruction *lower_forwarded_error_call(const XrXirFunction *f,
-    uint32_t block,uint32_t value,uint32_t join) {
+    uint32_t block,uint32_t value,uint32_t join,XrXirOp exit_op) {
     const XrXirBlock *landing=&f->blocks[block];
     const XrXirInstruction *marker=&f->instructions[landing->first];
     const XrXirInstruction *exit=lower_invoke_landing_exit(f,landing);
-    if (!exit || landing->panic || landing->frontier ||
+    if (!exit || landing->panic || exit->op!=exit_op ||
         marker->op!=XR_XIR_INVOKE_ERROR || marker->type!=XR_XIR_ERROR ||
         marker->immediate<0 || (uint64_t)marker->immediate>=f->instruction_count ||
         value!=f->parameter_count+landing->first ||
-        exit->op!=XR_XIR_JUMP || exit->targets[0]!=join) return NULL;
+        exit->targets[0]!=join) return NULL;
+    if (exit_op==XR_XIR_CLEANUP_ERROR) {
+        if (!landing->frontier || exit->immediate || exit->args[0]!=value) return NULL;
+    } else if (landing->frontier) return NULL;
     const XrXirInstruction *call=&f->instructions[marker->immediate];
     return call->op==XR_XIR_INVOKE && call->targets[1]==block ? call : NULL;
 }
@@ -97,7 +100,7 @@ static bool lower_optional_error_shape(const Lower *c,const XrXirFunction *f,
         return false;
     for (uint32_t a=0; a<phi->args[1]; a+=2) {
         const uint32_t *input=f->operands+phi->args[0]+a;
-        if (!lower_forwarded_error_call(f,input[0],input[1],block) ||
+        if (!lower_forwarded_error_call(f,input[0],input[1],block,XR_XIR_JUMP) ||
             uses[f->blocks[input[0]].first]!=1) return false;
     }
     return phi->args[1]!=0;
@@ -113,7 +116,7 @@ static bool lower_optional_errors(Lower *c,const XrXirFunction *f) {
         if (!uses) {
             uses=lower_alloc(c,f->instruction_count,1);
             if (!uses) return false;
-            lower_optional_uses(c,f,uses);
+            lower_count_operand_uses(c,f,uses);
         }
         if (!lower_optional_error_shape(c,f,uses,b)) continue;
         if (!plan) {
