@@ -5,5 +5,7 @@
   "discard": {"exit": 0, "stdout": "3\n0\nfinished\n", "stderr": ""},
   "recover": {"exit": 0, "stdout": "-23\n-23\n1\n41\n99\n2\n99\n", "stderr": ""},
   "families": {"exit": 0, "stdout": "14\n29\nread\nrecord\n31\n", "stderr": ""},
-  "wrong_element": {"source_error": ":4:36: error: expression cannot satisfy its declared type"}
+  "wrong_element": {"source_error": ":4:36: error: expression cannot satisfy its declared type"},
+  "branch_array": {"exit": 0, "stdout": "1\n93\n0\n-3\n", "stderr": ""},
+  "branch_string": {"exit": 0, "stdout": "false\n猫\ntrue\n", "stderr": ""}
 }

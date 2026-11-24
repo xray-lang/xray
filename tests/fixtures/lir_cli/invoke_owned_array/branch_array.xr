@@ -1,0 +1,21 @@
+enum ReadError { Bad { status: i64 } }
+
+fn read(which: i64) throws(ReadError) -> Array<u8> {
+    if (which < 0) { throw ReadError.Bad { status: which } }
+    if (which == 0) { return [] }
+    return [93]
+}
+
+fn exercise(which: i64) {
+    try {
+        const bytes = try read(which)
+        print(len(bytes))
+        if (len(bytes) > 0) { print(bytes[0] as i64) }
+    } catch (e: ReadError) {
+        print(-3)
+    }
+}
+
+exercise(1)
+exercise(0)
+exercise(-1)

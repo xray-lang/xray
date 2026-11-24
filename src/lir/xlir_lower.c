@@ -2912,6 +2912,8 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         const XrXirInstruction *op = &f->source->instructions[i];
         uint32_t result = f->source->parameter_count + i;
         if (op->op == XR_XIR_INVOKE_RESULT || op->op == XR_XIR_INVOKE_ERROR || op->op == XR_XIR_INVOKE_DISCARD) {
+            if (op->op == XR_XIR_INVOKE_RESULT && f->array_values && f->array_values[result] != UINT32_MAX)
+                f->current[f->array_values[result]] = f->values[result];
             if (f->lexical.count && !lower_lexical_events(f,b,f->lexical.after[i])) return false;
             continue;
         }

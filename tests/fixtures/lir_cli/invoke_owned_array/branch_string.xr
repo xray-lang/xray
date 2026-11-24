@@ -1,0 +1,16 @@
+enum ReadError { Bad { status: i64 } }
+
+fn read(which: i64) throws(ReadError) -> string {
+    if (which < 0) { throw ReadError.Bad { status: which } }
+    if (which == 0) { return "" }
+    return "猫"
+}
+
+fn exercise(which: i64) {
+    const text = try! read(which)
+    print(len(text) == 0)
+    if (len(text) > 0) { print(text) }
+}
+
+exercise(1)
+exercise(0)
