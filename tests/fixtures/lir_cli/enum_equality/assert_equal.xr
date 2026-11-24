@@ -1,0 +1,16 @@
+﻿enum Flag { Off, On }
+
+final class Holder {
+    flag: Flag
+    init() { this.flag = Flag.On }
+}
+
+fn probe() {
+    assertEqual(Flag.On, Flag.On)
+    assertEqual(Flag.Off, Flag.Off)
+    const holder = Holder()
+    assertEqual(holder.flag, Flag.On)
+    print("ok")
+}
+
+probe()

@@ -2777,9 +2777,15 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         }
         LowerFunction comparison_owner={.owner=c,.source=target};
         XrLirValue condition={0};
+        /* The checked recipe is the same equality operator, so a fieldless
+         * enum compares through its tags here too. */
+        bool tagged=lower_payloadless_enum_equality(&comparison_owner,&target->instructions[0]);
+        XrLirValue tags[2]={{0}};
+        for (uint32_t a=0; a<2 && tagged && good; ++a)
+            good=lower_enum_tag(f,b,arguments[a],&tags[a]);
         XrLirInstruction compare={.op=lower_operation(&comparison_owner,&target->instructions[0]),
             .type=XR_LIR_I1,.predicate=lower_predicate(&target->instructions[0]),
-            .operands=arguments,.operand_count=2,.source=call.source};
+            .operands=tagged?tags:arguments,.operand_count=2,.source=call.source};
         if (good) good=lower_build(c,xr_lir_emit_value(c->module,f->blocks[b],&compare,&condition));
         arguments[0]=condition; arguments[1]=arguments[2];
         call.op=XR_LIR_ASSERT_CONDITION; call.callee=(XrLirFunction){0}; call.operand_count=2;

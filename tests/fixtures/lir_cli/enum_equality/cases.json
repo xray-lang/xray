@@ -9,5 +9,10 @@
   },
   "payload_enum": {
     "source_error": ":4:17: error: equality requires its declaration predicate"
+  },
+  "assert_equal": {
+    "exit": 0,
+    "stdout": "ok\n",
+    "stderr": ""
   }
 }
