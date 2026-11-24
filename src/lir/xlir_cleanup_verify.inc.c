@@ -52,6 +52,12 @@ static bool lir_cleanup_nopanic(const XrLirModule *m, const XrLirFunctionData *f
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
         /* Snapshots and local bindings retain and retire within the active scope. */
         return true;
+    case XR_LIR_SLICE_CLEANUP: case XR_LIR_SLICE_FORMAL_CLEANUP:
+        /* Retiring a temporary view loan only releases the recorded loan. */
+        return true;
+    case XR_LIR_STRING_RETAIN: case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP:
+        /* Retaining or releasing a temporary string runs no guest code. */
+        return true;
     case XR_LIR_CELL_NEW:
         return op->type == XR_LIR_I64_CELL || op->type == XR_LIR_ARRAY_CELL;
     case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE: {

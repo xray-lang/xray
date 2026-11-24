@@ -29,6 +29,9 @@ static bool lower_cleanup_safe(const Lower *c, const XrXirFunction *f, const XrX
         return op->args[1] == 0;
     case XR_XIR_ARRAY_LEN:
         return true;
+    case XR_XIR_VIEW_CLEANUP:
+        /* Retiring a temporary view loan releases only the recorded loan. */
+        return true;
     case XR_XIR_CELL_PLACE: {
         const XrXirInstruction *cell = lower_place_definition(f, op->args[0]);
         return cell && cell->op == XR_XIR_CELL_NEW && lower_type(c, cell->type) == XR_LIR_ARRAY_CELL;

@@ -1,0 +1,33 @@
+enum Refusal { Denied { code: i64 } }
+
+fn measure(text: string, fail: bool) throws(Refusal) -> i64 {
+    if (fail) { throw Refusal.Denied { code: 7 } }
+    return 1
+}
+
+fn succeeding(text: string) {
+    try {
+        defer { print(101) }
+        print(measure(text, false))
+    } catch (e: Refusal) {
+        match (e) {
+            Refusal.Denied { code } => print(code),
+        }
+    }
+    print(199)
+}
+
+fn failing(text: string) {
+    try {
+        defer { print(201) }
+        print(measure(text, true))
+    } catch (e: Refusal) {
+        match (e) {
+            Refusal.Denied { code } => print(code),
+        }
+    }
+    print(299)
+}
+
+succeeding("abc")
+failing("abc")

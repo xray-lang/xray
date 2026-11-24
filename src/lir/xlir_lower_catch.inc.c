@@ -133,7 +133,7 @@ static void lower_catch_mark_join(LowerCatchPlan *plan,const XrXirFunction *f,ui
             uint32_t erased=(uint32_t)(producer-f->instructions);
             plan->types[erased]=exact;
             /* An active local throw proved the immediately preceding constructor. */
-            if (f->blocks[input[0]].frontier)
+            if (f->blocks[input[0]].frontier && erased && f->instructions[erased-1].op==XR_XIR_ENUM_NEW)
                 plan->types[erased-1]=exact;
         }
     }
