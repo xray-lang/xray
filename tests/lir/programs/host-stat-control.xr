@@ -1,0 +1,6 @@
+import io
+import path
+
+print(11)
+print(io.fileSize(path.from("file.txt")))
+print(22)
