@@ -1,0 +1,23 @@
+final class Metadata {
+    uid: i64?
+    init(uid: i64?) { this.uid = uid }
+}
+
+fn update(object: Metadata, value: i64?) { object.uid = value }
+
+fn run() {
+    const object = Metadata(null)
+    const alias = object
+    print(alias.uid == null)
+    update(object, -29)
+    const saved = alias.uid
+    if (saved != null) { print(saved!) }
+    alias.uid = 0
+    const zero = object.uid
+    if (zero != null) { print(zero!) }
+    if (saved != null) { print(saved!) }
+    object.uid = null
+    print(alias.uid == null)
+}
+
+run()

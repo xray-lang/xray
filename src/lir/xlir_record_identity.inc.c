@@ -63,7 +63,7 @@ static bool lir_record_payload_identity_valid(const XrLirModule *m, const XrLirR
         if (field->flags || field->array_element) return false;
         XrNativeTypeTerm type = field->type == XR_LIR_I64 ? XR_NATIVE_TERM_I64 :
             field->type == XR_LIR_I1 ? XR_NATIVE_TERM_BOOL :
-            xr_lir_internal_optional_i64_field(m, field->type, 0) ? XR_NATIVE_TERM_NULLABLE_I64 : XR_NATIVE_TERM_UNADMITTED;
+            xr_lir_internal_optional_i64_field(m, field->type) ? XR_NATIVE_TERM_NULLABLE_I64 : XR_NATIVE_TERM_UNADMITTED;
         if (type == XR_NATIVE_TERM_UNADMITTED || xr_native_file_stat_field(i, field->name, field->name_length) != type)
             return false;
     }

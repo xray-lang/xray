@@ -87,7 +87,7 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
         if (good && !(field == XR_LIR_STRING || field == XR_LIR_I64 || field == XR_LIR_I1 || field == XR_LIR_F64 ||
             (class_type && ((field == XR_LIR_ARRAY && xr_lir_class_array_element_supported(element)) ||
                 xr_lir_class_payload(c->module, field, NULL) ||
-                xr_lir_internal_optional_i64_field(c->module, field, member.flags))) ||
+                xr_lir_internal_optional_i64_field(c->module, field))) ||
             xr_lir_inline_aggregate_type(c->module, field))) good = lower_unsupported(c, "record field has no canonical physical carrier");
         fields[n] = (XrLirRecordField){member.name.bytes, member.name.length, field, member.flags, element};
     }

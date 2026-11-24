@@ -736,7 +736,8 @@ static void class_optional_i64_fields_keep_their_inline_layout(void) {
     XrLirType optional, class_type, derived_type;
     LIR(xr_lir_module_create(NULL, &module));
     LIR(xr_lir_nullable_type(module, XR_LIR_I64, &optional));
-    const XrLirRecordField fields[] = {{"uid",3,optional,0,0},{"size",4,XR_LIR_I64,0,0},{"gid",3,optional,0,0}};
+    const XrLirRecordField fields[] = {{"uid",3,optional,XR_LIR_RECORD_MUTABLE,0},
+        {"size",4,XR_LIR_I64,0,0},{"gid",3,optional,0,0}};
     LIR(xr_lir_internal_named_class_type(module, &identity, fields, 3, XR_LIR_TYPE_INVALID, &class_type));
     XrLirRecordIdentity derived = identity;
     derived.name = "DerivedMetadata";
@@ -786,7 +787,8 @@ static void class_optional_i64_fields_keep_their_inline_layout(void) {
         !payload->owned_count && payload->field_count == 3 && view->slot_count == 3);
     const XrtValueImageSlot *slots = view->slots;
     CHECK(slots[0].offset == offsetof(Row,uid) && slots[1].offset == offsetof(Row,size) &&
-        slots[2].offset == offsetof(Row,gid) && slots[0].type == slots[2].type);
+        slots[2].offset == offsetof(Row,gid) && slots[0].type == slots[2].type &&
+        slots[0].flags == XRT_VALUE_FIELD_MUTABLE && !slots[2].flags);
     const XrtValueImageType *member = &view->types[slots[0].type - 1];
     CHECK(member->kind == XRT_VALUE_NULLABLE && member->size == sizeof(OptionalI64) &&
         member->nullable_tag == offsetof(OptionalI64,tag) && member->nullable_payload == offsetof(OptionalI64,payload) &&
@@ -833,6 +835,20 @@ static void class_optional_i64_fields_keep_their_inline_layout(void) {
     CHECK(uid == gid);
     MANAGED(xrt_value_copy_empty(uid, uid_bytes, &some));
     MANAGED(xrt_value_copy_empty(gid, gid_bytes, &none));
+    OptionalI64 replacement = {1,-29};
+    MANAGED(xrt_class_scalar_field_write(current, type.plan, 0, &replacement, sizeof(replacement)));
+    CHECK(xrt_class_scalar_field_write(current, type.plan, 2, &replacement, sizeof(replacement)) == XRT_MANAGED_ARGUMENT);
+    replacement.tag = 2;
+    CHECK(xrt_class_scalar_field_write(current, type.plan, 0, &replacement, sizeof(replacement)) == XRT_MANAGED_ARGUMENT);
+    CHECK(((const OptionalI64 *)uid_bytes)->tag == 1 && ((const OptionalI64 *)uid_bytes)->payload == -29);
+    MANAGED(xrt_class_scalar_field_write(current, type.plan, 0, uid_bytes, sizeof(replacement)));
+    CHECK(((const OptionalI64 *)uid_bytes)->tag == 1 && ((const OptionalI64 *)uid_bytes)->payload == -29);
+    memset(&replacement, 0xff, sizeof(replacement));
+    replacement.tag = 0;
+    MANAGED(xrt_class_scalar_field_write(current, type.plan, 0, &replacement, sizeof(replacement)));
+    const unsigned char zero[sizeof(OptionalI64)] = {0};
+    CHECK(!memcmp(uid_bytes, zero, sizeof(zero)) && !memcmp(gid_bytes, zero, sizeof(zero)));
+    CHECK(owner.audit.allocations == allocations);
     MANAGED(xrt_managed_root_destroy(&root));
     CHECK(some.tag == 1 && some.payload == 0 && none.tag == 0);
     xrt_value_image_drop(&bound); owner_drop(&owner); CHECK(owner.audit.final == 1);

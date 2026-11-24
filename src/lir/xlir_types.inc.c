@@ -295,7 +295,7 @@ static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField
     if ((count != 0) != (fields != NULL)) return false;
     for (uint32_t f = 0; f < count; ++f) {
         XrLirRecordField field = fields[f];
-        bool class_field = allow_class_fields && xr_lir_internal_optional_i64_field(m, field.type, field.flags);
+        bool class_field = allow_class_fields && xr_lir_internal_optional_i64_field(m, field.type);
         if (!lir_record_text_valid(field.name,field.name_length) ||
             (field.flags & ~(XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED|XR_LIR_RECORD_MUTABLE)) ||
             ((field.flags & (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) == (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) ||

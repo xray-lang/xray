@@ -1,0 +1,12 @@
+final class Metadata {
+    uid: i64?
+    init(uid: i64?) { this.uid = uid }
+}
+
+fn run() {
+    const object = Metadata(null)
+    const wrong = true
+    object.uid = wrong
+}
+
+run()

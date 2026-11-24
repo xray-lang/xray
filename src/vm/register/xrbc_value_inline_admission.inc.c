@@ -21,6 +21,12 @@ static bool rbc_value_inline_operand(const XrRbcModule *module,const XrRbcValueC
     return !row->owned_count && row->size<=8 && row->kind<XRT_VALUE_STRING &&
         rbc_value_scalar(code,function,value,XR_RBC_BITS);
 }
+static bool rbc_writable_class_scalar(const XrtValueImage *image, const XrtValueImageType *type) {
+    return xrt_class_scalar_field_supported(type->kind) ||
+        (type->kind==XRT_VALUE_NULLABLE && !type->owned_count && type->nullable_element &&
+            type->nullable_element<=image->type_count &&
+            image->types[type->nullable_element-1].kind==XRT_VALUE_I64);
+}
 static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
     bool class_new=a.operation==XR_RBC_VALUE_CLASS_NEW, class_field=a.operation==XR_RBC_VALUE_CLASS_FIELD;
@@ -70,10 +76,10 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
             type->first_field>image->slot_count || type->field_count>image->slot_count-type->first_field) return false;
         const XrtValueImageSlot *field=&image->slots[type->first_field+a.index];
         if (field->flags!=XRT_VALUE_FIELD_MUTABLE || !field->type || field->type>image->type_count) return false;
-        XrtValueKind kind=image->types[field->type-1].kind;
-        if (scalar_write) return !a.window && xrt_class_scalar_field_supported(kind) &&
+        const XrtValueImageType *member=&image->types[field->type-1];
+        if (scalar_write) return !a.window && rbc_writable_class_scalar(image,member) &&
             rbc_value_inline_operand(module,code,function,a.other,field->type,false);
-        if (kind!=XRT_VALUE_ARRAY_I64 && kind!=XRT_VALUE_ARRAY_U8) return false;
+        if (member->kind!=XRT_VALUE_ARRAY_I64 && member->kind!=XRT_VALUE_ARRAY_U8) return false;
         if (class_write) return !a.window && rbc_value_inline_operand(module,code,function,a.other,field->type,false);
         if (!a.window || a.window>code->homes->workspace_count || !code->homes->workspaces ||
             !rbc_value_scalar(code,function,a.other,XR_RBC_BITS)) return false;

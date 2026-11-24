@@ -1,0 +1,22 @@
+import io
+import path
+
+const measured = io.stat(path.from("数据.txt"))
+if (measured != null) {
+    const original = measured!
+    const alias = original
+    print(alias.size)
+    print(alias.isFile)
+    alias.uid = -7
+    const uid = original.uid
+    if (uid != null) { print(uid!) }
+    original.gid = 0
+    const saved = alias.gid
+    if (saved != null) { print(saved!) }
+    alias.gid = null
+    if (saved != null) { print(saved!) }
+    print(original.gid == null)
+    original.uid = null
+    print(alias.uid == null)
+}
+print(io.stat(path.from("不存在")) == null)

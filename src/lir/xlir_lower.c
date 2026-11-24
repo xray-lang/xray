@@ -1180,7 +1180,7 @@ static bool lower_writable_class_field(Lower *c, XrXirType type, uint64_t index,
     return xr_lir_class_payload(c->module,lower_type(c,type),&payload) &&
         xr_lir_aggregate_fields(c->module,payload,&fields,&count) == XR_LIR_OK && index < count &&
         (fields[index].flags & XR_LIR_RECORD_MUTABLE) &&
-        ((scalar && xr_lir_class_scalar_field_supported(fields[index].type)) ||
+        ((scalar && xr_lir_class_scalar_field_supported(c->module, fields[index].type)) ||
             (fields[index].type == XR_LIR_ARRAY && xr_lir_class_array_element_supported(fields[index].array_element)));
 }
 

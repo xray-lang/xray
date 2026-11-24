@@ -229,7 +229,7 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 v->bits >= count || v->type != XR_LIR_UNIT) return false;
             const XrLirRecordField *field = &fields[v->bits];
             if (!(field->flags & XR_LIR_RECORD_MUTABLE)) return false;
-            if (v->op == XR_LIR_CLASS_SCALAR_WRITE) return field->type == b && xr_lir_class_scalar_field_supported(b);
+            if (v->op == XR_LIR_CLASS_SCALAR_WRITE) return field->type == b && xr_lir_class_scalar_field_supported(m,b);
             return field->type == XR_LIR_ARRAY && xr_lir_class_array_element_supported(field->array_element) &&
                 (v->op == XR_LIR_CLASS_ARRAY_PUSH ? b == field->array_element :
                     b == XR_LIR_ARRAY && f->values[v->operands[1]-1].array_element == field->array_element);

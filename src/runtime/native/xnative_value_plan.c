@@ -123,6 +123,9 @@ static bool plan_has_nullable_array_owners(const XrtValuePlanSpec *spec) {
 static bool optional_i64(const XrtValuePlanSpec *spec) {
     return spec->kind == XRT_VALUE_NULLABLE && spec->nullable.element->view.kind == XRT_VALUE_I64;
 }
+static bool writable_class_scalar(const XrtValuePlanSpec *spec) {
+    return xrt_class_scalar_field_supported(spec->kind) || optional_i64(spec);
+}
 static bool plan_has_optional_i64_fields(const XrtValuePlanSpec *spec) {
     if (spec->kind != XRT_VALUE_RECORD) return false;
     for (size_t i = 0; i < spec->field_count; ++i)
@@ -156,7 +159,7 @@ static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *s
             !capture_type(field.type))) return false;
         const XrtValuePlanSpec *type = &field.type->view;
         if (field.flags && (!named || field.flags != XRT_VALUE_FIELD_MUTABLE ||
-            (array_backing_kind(type->kind) == XRT_BACKING_ARRAY_COUNT && !xrt_class_scalar_field_supported(type->kind))))
+            (array_backing_kind(type->kind) == XRT_BACKING_ARRAY_COUNT && !writable_class_scalar(type))))
             return false;
         if (type->alignment > alignment) alignment = type->alignment;
         if (end > SIZE_MAX - (type->alignment - 1)) return false;
@@ -647,7 +650,7 @@ XR_FUNCDEF XrtManagedStatus xrt_class_field_borrow(const XrtManagedHeader *owner
     const XrtValueSlotSpec *slot;
     XrtManagedStatus status = class_field_slot(owner, expected, index, &slot);
     if (status != XRT_MANAGED_OK) return status;
-    if ((slot->flags & XRT_VALUE_FIELD_MUTABLE) && !xrt_class_scalar_field_supported(slot->type->view.kind))
+    if ((slot->flags & XRT_VALUE_FIELD_MUTABLE) && !writable_class_scalar(&slot->type->view))
         return XRT_MANAGED_ARGUMENT;
     *empty_type = slot->type;
     *empty_payload = (const unsigned char *)(owner + 1) + slot->offset;
@@ -659,12 +662,23 @@ XR_FUNCDEF XrtManagedStatus xrt_class_scalar_field_write(XrtManagedHeader *owner
     XrtManagedStatus status = class_field_slot(owner, expected, index, &slot);
     if (status != XRT_MANAGED_OK) return status;
     const XrtValuePlanSpec *type = &slot->type->view;
-    if (!(slot->flags & XRT_VALUE_FIELD_MUTABLE) || !xrt_class_scalar_field_supported(type->kind) ||
+    if (!(slot->flags & XRT_VALUE_FIELD_MUTABLE) || !writable_class_scalar(type) ||
         !bytes || size != type->size || (type->kind == XRT_VALUE_BOOL && *(const uint8_t *)bytes > 1))
         return XRT_MANAGED_ARGUMENT;
-    /* These class instances are executor-confined. The scalar has no owner or
-     * callback to observe a partial write. */
-    memmove((unsigned char *)(owner + 1) + slot->offset, bytes, size);
+    /* These values have no owners and the class is executor-confined. */
+    unsigned char *destination = (unsigned char *)(owner + 1) + slot->offset;
+    if (optional_i64(type)) {
+        const unsigned char *input = bytes;
+        uint8_t present = input[type->nullable.tag_offset];
+        if (present > 1) return XRT_MANAGED_ARGUMENT;
+        int64_t value = 0;
+        if (present) memcpy(&value, input + type->nullable.payload_offset, sizeof(value));
+        memset(destination, 0, size);
+        destination[type->nullable.tag_offset] = present;
+        if (present) memcpy(destination + type->nullable.payload_offset, &value, sizeof(value));
+    } else {
+        memmove(destination, bytes, size);
+    }
     return XRT_MANAGED_OK;
 }
 static XrtManagedStatus class_array_i64_preflight(void *context, XrtPlaceAction action) {

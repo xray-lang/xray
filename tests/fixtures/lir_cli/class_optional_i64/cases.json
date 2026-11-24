@@ -4,6 +4,14 @@
     "stdout": "7\n0\n1\n-29\n",
     "stderr": ""
   },
+  "mutable_roundtrip": {
+    "exit": 0,
+    "stdout": "true\n-29\n0\n-29\ntrue\n",
+    "stderr": ""
+  },
+  "mutable_wrong_type": {
+    "source_error": ":9:18: error: expression cannot satisfy its declared type"
+  },
   "wrong_type": {
     "source_error": ":6:25: error: expression cannot satisfy its declared type"
   },

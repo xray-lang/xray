@@ -107,7 +107,8 @@ def main() -> None:
         work = Path(directory)
         private_types = ("file_storage_private", "file_stat_private")
         for name in ("mkdir", "nul_path", "rename", "rename_nul_source", "rename_nul_destination",
-                     "unregistered", "file_open_write", "file_open_refused", "file_stat", "file_stat_nul", *private_types):
+                     "unregistered", "file_open_write", "file_open_refused", "file_stat", "file_stat_nul",
+                     "file_stat_public", *private_types):
             source = fixtures / (name + ".xr")
             vm_dir, native_dir = work / (name + "-vm"), work / (name + "-native")
             for cwd in (vm_dir, native_dir):
@@ -122,7 +123,7 @@ def main() -> None:
                 if name == "file_open_write":
                     (cwd / "preserved").write_bytes(b"preserve")
                     (cwd / "truncated").write_bytes(b"truncate")
-                if name == "file_stat":
+                if name in ("file_stat", "file_stat_public"):
                     (cwd / "数据.txt").write_bytes(b"snapshot")
                     (cwd / "目录").mkdir()
             limited = name == "file_open_write"
@@ -175,6 +176,11 @@ def main() -> None:
                     for cwd in (vm_dir, native_dir):
                         assert (cwd / "数据.txt").read_bytes() == b"snapshot"
                         assert (cwd / "目录").is_dir() and not (cwd / "不存在").exists()
+                elif name == "file_stat_public":
+                    assert vm == (0, b"8\ntrue\n-7\n0\n0\ntrue\ntrue\ntrue\n", b""), vm
+                    for cwd in (vm_dir, native_dir):
+                        assert (cwd / "数据.txt").read_bytes() == b"snapshot"
+                        assert not (cwd / "不存在").exists()
                 else:
                     assert vm == (0, b"true\n", b""), vm
                     assert all(not (cwd / "missing").exists() for cwd in (vm_dir, native_dir)), name

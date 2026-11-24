@@ -34,9 +34,6 @@ enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP
 static inline bool xr_lir_class_array_element_supported(XrLirType element) {
     return element == XR_LIR_I64 || element == XR_LIR_U8;
 }
-static inline bool xr_lir_class_scalar_field_supported(XrLirType type) {
-    return type == XR_LIR_I1 || type == XR_LIR_I64 || type == XR_LIR_F64;
-}
 
 typedef struct XrLirValueData {
     XrLirType type;
@@ -278,11 +275,14 @@ static inline const XrLirTypeData *xr_lir_internal_constructed_data(const XrLirM
 }
 XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *, XrLirType type, bool unit);
 XR_FUNC bool xr_lir_internal_types_valid(const XrLirModule *);
-static inline bool xr_lir_internal_optional_i64_field(const XrLirModule *m, XrLirType type,
-    uint32_t flags) {
+static inline bool xr_lir_internal_optional_i64_field(const XrLirModule *m, XrLirType type) {
     XrLirTypeView shape;
-    return !(flags & XR_LIR_RECORD_MUTABLE) && xr_lir_type_view(m, type, &shape) == XR_LIR_OK &&
+    return xr_lir_type_view(m, type, &shape) == XR_LIR_OK &&
         shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_I64;
+}
+static inline bool xr_lir_class_scalar_field_supported(const XrLirModule *m, XrLirType type) {
+    return type == XR_LIR_I1 || type == XR_LIR_I64 || type == XR_LIR_F64 ||
+        xr_lir_internal_optional_i64_field(m, type);
 }
 XR_FUNC bool xr_lir_internal_map_literals_valid(const XrLirModule *);
 XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *, const XrLirFunctionData *);
