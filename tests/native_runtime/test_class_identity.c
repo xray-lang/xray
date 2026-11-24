@@ -16,6 +16,7 @@
  */
 #include "runtime/native/xnative_value.h"
 #include "runtime/native/xnative_value_image.h"
+#include "runtime/native/xnative_host_stat.h"
 #include "xray_native_values.h"
 #include <stdalign.h>
 #include <stdio.h>
@@ -67,7 +68,56 @@ static XrtManagedHeader *instance(XrtManagedFrame *frame, size_t slot, uint32_t 
     return owner;
 }
 
+static void file_stat_payload_facts(void) {
+    XrtBillingOwner *billing = NULL;
+    OK(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
+    XrtValuePlan *integer = NULL, *boolean = NULL, *nullable = NULL, *record = NULL;
+    const XrtValuePlanSpec i64 = {.kind=XRT_VALUE_I64, .size=8, .alignment=8};
+    const XrtValuePlanSpec flag = {.kind=XRT_VALUE_BOOL, .size=1, .alignment=1};
+    OK(xrt_value_plan_new(billing, &i64, &integer));
+    OK(xrt_value_plan_new(billing, &flag, &boolean));
+    const XrtValuePlanSpec optional_i64 = {.kind=XRT_VALUE_NULLABLE, .size=16, .alignment=8,
+        .nullable={.tag_offset=0, .payload_offset=8, .element=integer}};
+    OK(xrt_value_plan_new(billing, &optional_i64, &nullable));
+    XrtValueSlotSpec fields[] = {
+        {integer, 0, "size", 4, 0}, {integer, 8, "mode", 4, 0}, {integer, 16, "mtime", 5, 0},
+        {integer, 24, "atime", 5, 0}, {integer, 32, "ctime", 5, 0}, {nullable, 40, "uid", 3, 0},
+        {nullable, 56, "gid", 3, 0}, {boolean, 72, "isFile", 6, 0}, {boolean, 73, "isDir", 5, 0},
+        {boolean, 74, "isSymlink", 9, 0},
+    };
+    const XrtValuePlanSpec type = {.kind=XRT_VALUE_RECORD, .size=80, .alignment=8,
+        .fields=fields, .field_count=sizeof(fields) / sizeof(*fields)};
+    OK(xrt_value_plan_new(billing, &type, &record));
+    XrtValuePlanSpec received;
+    OK(xrt_value_plan_view(record, &received));
+    CHECK(xrt_host_stat_row_matches(&received));
+
+    fields[5].type = boolean;
+    CHECK(!xrt_host_stat_row_matches(&type));
+    fields[5].type = nullable;
+    fields[0].flags = XRT_VALUE_FIELD_MUTABLE;
+    CHECK(!xrt_host_stat_row_matches(&type));
+    fields[0].flags = 0;
+    fields[6].offset = 57;
+    CHECK(!xrt_host_stat_row_matches(&type));
+    CHECK(xrt_host_stat_row_matches(&received));
+
+    const XrOsFileMetadata metadata = {.present=true, .size=42, .mode=0644, .mtime=-30, .atime=40, .ctime=50,
+        .uid={true, 0}, .gid={false, 13}, .is_file=true, .is_dir=false, .is_symlink=true};
+    XrtHostStatRow row = xrt_host_stat_row(&metadata);
+    CHECK(row.size == 42 && row.mode == 0644 && row.mtime == -30 && row.atime == 40 && row.ctime == 50);
+    CHECK(row.uid.present == 1 && row.uid.value == 0 && row.gid.present == 0 && row.gid.value == 0);
+    CHECK(row.is_file == 1 && row.is_dir == 0 && row.is_symlink == 1);
+
+    xrt_value_plan_drop(record);
+    xrt_value_plan_drop(nullable);
+    xrt_value_plan_drop(integer);
+    xrt_value_plan_drop(boolean);
+    xrt_billing_owner_drop(billing);
+}
+
 int main(void) {
+    file_stat_payload_facts();
     XrtValueRoot owner = {0};
     XrtValueBinding previous = xrt_value_root_bind((XrtValueBinding){&owner, 1});
     XrtManagedRoot *root = xrt_native_managed_root(1);
