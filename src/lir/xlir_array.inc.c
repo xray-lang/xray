@@ -389,7 +389,7 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
             return XR_LIR_TYPE_INVALID;
         return fields[v->bits].array_element;
     }
-    if (v->op == XR_LIR_CALL && v->callee && v->callee <= m->function_count)
+    if ((v->op == XR_LIR_CALL || v->op == XR_LIR_INVOKE) && v->callee && v->callee <= m->function_count)
         return m->functions[v->callee - 1].array_result;
     if (v->op == XR_LIR_CALL_INDIRECT && input) {
         XrLirCallableType signature;

@@ -2080,8 +2080,14 @@ static bool lower_blocks(LowerFunction *f) {
             xr_free(types);
             if (!good)
                 return false;
-            if (produced && !lower_build(c,xr_lir_block_parameter(c->module,f->blocks[b],0,
-                &f->values[source->parameter_count + block->first]))) return false;
+            if (produced) {
+                XrLirValue *value = &f->values[source->parameter_count + block->first];
+                if (!lower_build(c, xr_lir_block_parameter(c->module, f->blocks[b], 0, value))) return false;
+                if (produced == XR_LIR_ARRAY) {
+                    XrLirArrayShape shape = {lower_array_element(c, source->instructions[block->first].type)};
+                    if (!lower_build(c, xr_lir_set_array_shape(c->module, *value, &shape))) return false;
+                }
+            }
             for (uint32_t p = 0; p < phis; ++p) {
                 XrLirValue *value = &f->values[source->parameter_count + block->first + p];
                 if (!lower_build(c, xr_lir_block_parameter(c->module, f->blocks[b], offset+p, value)))
@@ -3141,10 +3147,15 @@ static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstr
     XrLirValue produced={0};
     XrLirBlock normal=f->blocks[b];
     bool typed=!lower_empty_error(c->source->functions[callee].error_type);
+    bool owned_result=lower_managed_type(c,result);
     if (good && typed) {
         good=lower_build(c,xr_lir_add_block(c->module,f->function,result==XR_LIR_UNIT ? NULL : &result,
                 result==XR_LIR_UNIT ? 0u : 1u,&normal)) &&
             (result==XR_LIR_UNIT || lower_build(c,xr_lir_block_parameter(c->module,normal,0,&produced)));
+        if (good && result==XR_LIR_ARRAY) {
+            XrLirArrayShape shape = {lower_array_element(c, term->type)};
+            good=lower_build(c,xr_lir_set_array_shape(c->module,produced,&shape));
+        }
     } else if (good) {
         good=lower_build(c,result==XR_LIR_UNIT ? xr_lir_emit_effect(c->module,normal,&call) :
             xr_lir_emit_value(c->module,normal,&call,&produced));
@@ -3153,14 +3164,14 @@ static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstr
     if (good && typed) {
         const XrXirBlock *landed=&f->source->blocks[term->targets[0]];
         const XrXirInstruction *receiver=&f->source->instructions[landed->first];
-        if (result==XR_LIR_STRING && receiver->op==XR_XIR_INVOKE_DISCARD) {
-            XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,
+        if (owned_result && receiver->op==XR_XIR_INVOKE_DISCARD) {
+            XrLirInstruction drop={.op=lower_drop_operation(result),.type=XR_LIR_UNIT,
                 .operands=&produced,.operand_count=1,.source=call.source};
             good=lower_build(c,xr_lir_emit_effect(c->module,normal,&drop));
         }
         for (uint32_t a=0;a<forward.edges[0].argument_count && good;++a) {
             XrLirValue value=forward.edges[0].arguments[a];
-            bool result_owner=a==0 && result==XR_LIR_STRING &&
+            bool result_owner=a==0 && owned_result &&
                 receiver->op==XR_XIR_INVOKE_RESULT && value.id==produced.id;
             if (!result_owner && lower_managed_type(c,lower_value_type(f,value)))
                 good=lower_unsupported(c,"managed state across invoke successor");

@@ -1,0 +1,9 @@
+{
+  "asserted": {"exit": 0, "stdout": "231\n231\n255\n17\n0\n0\n", "stderr": ""},
+  "optional": {"exit": 0, "stdout": "2\nfalse\n2\n2\n1\nfalse\n2\n1\n0\nfalse\n0\n-1\ntrue\n-2\ntrue\n", "stderr": ""},
+  "fault": {"exit": 1, "stdout": "41\n41\n-23\n", "stderr": "[Uncaught Panic] E0446: try! failed: ReadFailure.Unavailable(-23)\n"},
+  "discard": {"exit": 0, "stdout": "3\n0\nfinished\n", "stderr": ""},
+  "recover": {"exit": 0, "stdout": "-23\n-23\n1\n41\n99\n2\n99\n", "stderr": ""},
+  "families": {"exit": 0, "stdout": "14\n29\nread\nrecord\n31\n", "stderr": ""},
+  "wrong_element": {"source_error": ":4:36: error: expression cannot satisfy its declared type"}
+}

@@ -1,0 +1,32 @@
+enum ReadFailure { Unavailable { code: i64 } }
+
+fn readIntegers(mode: i64) throws(ReadFailure) -> Array<i64> {
+    if (mode < 0) { throw ReadFailure.Unavailable { code: mode } }
+    return [mode]
+}
+
+fn readUnsigned(mode: i64) throws(ReadFailure) -> Array<u64> {
+    if (mode < 0) { throw ReadFailure.Unavailable { code: mode } }
+    return [mode as u64]
+}
+
+fn readText(mode: i64) throws(ReadFailure) -> Array<string> {
+    if (mode < 0) { throw ReadFailure.Unavailable { code: mode } }
+    return ["read", "mode"]
+}
+
+fn readRecords(mode: i64) throws(ReadFailure) -> Array<(string, i64)> {
+    if (mode < 0) { throw ReadFailure.Unavailable { code: mode } }
+    return [("record", mode)]
+}
+
+fn probe() {
+    print((try! readIntegers(14))[0])
+    print((try! readUnsigned(29))[0])
+    print((try! readText(1))[0])
+    const record = (try! readRecords(31))[0]
+    print(record.0)
+    print(record.1)
+}
+
+probe()

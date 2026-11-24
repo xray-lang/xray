@@ -256,12 +256,22 @@ static XrLirFunction test_throwing_leaf(XrLirModule *m, XrLirType error_type, Xr
     XrLirInstruction select={.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&fail,.operand_count=1,
         .edges={{.target=leaf_error},{.target=leaf_ok}},.edge_count=2};
     OK(xr_lir_set_terminator(m,leaf_entry,&select));
-    XrLirValue result=test_constant(m,leaf_ok,XR_LIR_I64,17);
-    if (result_type!=XR_LIR_I64) {
-        XrLirValue payload=result;
-        XrLirOp op=result_type==XR_LIR_STRING ? XR_LIR_STRING_I64 : XR_LIR_NULLABLE_SOME;
-        OK(xr_lir_emit_value(m,leaf_ok,&(XrLirInstruction){.op=op,.type=result_type,
-            .operands=&payload,.operand_count=1},&result));
+    XrLirValue result={0};
+    if (result_type==XR_LIR_ARRAY) {
+        XrLirValue byte=test_constant(m,leaf_ok,XR_LIR_U8,17);
+        uint32_t constructor=0;
+        OK(xr_lir_set_array_result(m,leaf,&(XrLirArrayShape){XR_LIR_U8}));
+        OK(xr_lir_array_operation(m,XR_LIR_U8,XR_LIR_ARRAY_OP_NEW,&constructor));
+        OK(xr_lir_emit_value(m,leaf_ok,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_ARRAY,
+            .intrinsic=constructor,.operands=&byte,.operand_count=1},&result));
+    } else {
+        result=test_constant(m,leaf_ok,XR_LIR_I64,17);
+        if (result_type!=XR_LIR_I64) {
+            XrLirValue payload=result;
+            XrLirOp op=result_type==XR_LIR_STRING ? XR_LIR_STRING_I64 : XR_LIR_NULLABLE_SOME;
+            OK(xr_lir_emit_value(m,leaf_ok,&(XrLirInstruction){.op=op,.type=result_type,
+                .operands=&payload,.operand_count=1},&result));
+        }
     }
     test_return(m,leaf_ok,result);
     XrLirValue spelling=test_constant(m,leaf_error,XR_LIR_I64,23),value={0};
@@ -464,6 +474,97 @@ static void test_unsupported_nullable_invoke_result(bool managed) {
     XrLirFunctionSpec spec={.name="leaf",.name_length=4,.result=optional,.error=error_type};
     CHECK(xr_lir_declare_function(m,&spec,&function)==XR_LIR_INVALID_ARGUMENT && !function.id);
     xr_lir_module_destroy(m);
+}
+
+static void test_array_invoke_receivers(const XrRbcProgram *program) {
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrtValueImage *image=xr_rbc_module_value_image(module);
+    CHECK(image && image->types && module->code_lease.owner);
+    uint32_t other_type=0;
+    for (uint32_t n=0;n<image->type_count;++n)
+        if (image->types[n].kind==XRT_VALUE_ARRAY_I64) other_type=n+1;
+    CHECK(other_type);
+    for (uint32_t n=0;n<module->function_count;++n) {
+        const XrRbcFunction *function=&module->functions[n];
+        const XrRbcValueCode *code=xr_rbc_module_value_code(module,n);
+        if (!code) continue;
+        for (size_t pc=0;pc<function->code_count;++pc) {
+            uint32_t word=function->code[pc],index=word>>16;
+            if ((word&65535u)!=XR_RBC_VALUE_ACCESS || index>=code->access_count ||
+                code->accesses[index].operation!=XR_RBC_VALUE_INVOKE) continue;
+            XrRbcValueAccess call=code->accesses[index];
+            CHECK(xr_rbc_value_instruction_valid(module,function,pc));
+            XrLirValueHome *home=(XrLirValueHome *)&code->homes->values[call.result];
+            uint32_t original=home->type;
+            CHECK(image->types[original-1].kind==XRT_VALUE_ARRAY_U8 && home->owner_count==1 && !home->parameter &&
+                image->types[original-1].size==image->types[other_type-1].size);
+            home->type=other_type;
+            bool wrong_family=xr_rbc_value_instruction_valid(module,function,pc);
+            home->type=original;
+            CHECK(!wrong_family);
+
+            XrRbcValueAccess *error=(XrRbcValueAccess *)&code->accesses[function->code[pc+3]>>16];
+            CHECK(error->operation==XR_RBC_VALUE_INVOKE_ERROR && error->result==call.other && call.other!=call.result);
+            error->result=call.result;
+            bool wrong_edge=xr_rbc_value_instruction_valid(module,function,pc);
+            error->result=call.other;
+            CHECK(!wrong_edge && xr_rbc_value_instruction_valid(module,function,pc));
+            return;
+        }
+    }
+    CHECK(false);
+}
+
+static void test_owned_array_invoke(bool wrong_element) {
+    XrLirModule *m=NULL;
+    OK(xr_lir_array_module_create(NULL,&m));
+    XrLirLiteral metadata={0};
+    XrLirType error_type=test_nominal_error(m,&metadata),flag=XR_LIR_I1,array=XR_LIR_ARRAY;
+    XrLirType element=wrong_element ? XR_LIR_I64 : XR_LIR_U8;
+    XrLirFunction leaf=test_throwing_leaf(m,error_type,array);
+    XrLirFunction root=test_function(m,"invoke_array",&flag,1,XR_LIR_I64);
+    XrLirBlock entry=test_block(m,root,NULL,0),normal=test_block(m,root,&array,1);
+    XrLirBlock failure=test_block(m,root,&error_type,1);
+    OK(xr_lir_set_entry(m,root,entry));
+    XrLirValue fail=parameter(m,root,0),result=block_parameter(m,normal,0);
+    OK(xr_lir_set_array_shape(m,result,&(XrLirArrayShape){element}));
+    XrLirStatus invoke=xr_lir_set_terminator(m,entry,&(XrLirInstruction){.op=XR_LIR_INVOKE,.type=array,.callee=leaf,
+        .operands=&fail,.operand_count=1,.edges={{.target=normal},{.target=failure}},.edge_count=2});
+    if (wrong_element) {
+        XrLirDiagnostic diagnostic={0};
+        CHECK(invoke==XR_LIR_VERIFY_ERROR && xr_lir_module_finish(m,&diagnostic)==XR_LIR_VERIFY_ERROR &&
+            diagnostic.function==root.id && diagnostic.block==entry.id);
+        xr_lir_module_destroy(m);
+        return;
+    }
+    CHECK(invoke==XR_LIR_OK);
+    uint32_t length_operation=0,other_constructor=0;
+    XrLirValue length={0},other_array={0};
+    OK(xr_lir_array_operation(m,element,XR_LIR_ARRAY_OP_LEN,&length_operation));
+    OK(xr_lir_emit_value(m,normal,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_I64,
+        .intrinsic=length_operation,.operands=&result,.operand_count=1},&length));
+    OK(xr_lir_emit_effect(m,normal,&(XrLirInstruction){.op=XR_LIR_ARRAY_DROP,.type=XR_LIR_UNIT,
+        .operands=&result,.operand_count=1}));
+    OK(xr_lir_array_operation(m,XR_LIR_I64,XR_LIR_ARRAY_OP_NEW,&other_constructor));
+    OK(xr_lir_emit_value(m,normal,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_ARRAY,
+        .intrinsic=other_constructor},&other_array));
+    OK(xr_lir_emit_effect(m,normal,&(XrLirInstruction){.op=XR_LIR_ARRAY_DROP,.type=XR_LIR_UNIT,
+        .operands=&other_array,.operand_count=1}));
+    test_return(m,normal,length);
+    XrLirValue thrown=block_parameter(m,failure,0);
+    OK(xr_lir_set_terminator(m,failure,&(XrLirInstruction){.op=XR_LIR_PANIC_ERROR,.type=XR_LIR_UNIT,
+        .operands=&thrown,.operand_count=1,.bits=metadata.id,.source={"array.xr",7,1,1,1,5}}));
+    OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,root);
+    xr_lir_module_destroy(m);
+    test_array_invoke_receivers(program);
+    uint64_t argument=0,bits=0;
+    CHECK(run(program,&argument,1)==1 && !xrt_value_root_active());
+    argument=1;
+    CHECK(execute(program,&argument,1,&bits)==XR_RBC_TRY_ASSERT && !xrt_value_root_active());
+    argument=0;
+    CHECK(run(program,&argument,1)==1 && !xrt_value_root_active());
+    xr_rbc_program_destroy(program);
 }
 
 static void test_owned_string_invoke_drop(void) {
@@ -2135,6 +2236,8 @@ int main(void) {
     test_nullable_invoke_result();
     test_unsupported_nullable_invoke_result(false);
     test_unsupported_nullable_invoke_result(true);
+    test_owned_array_invoke(false);
+    test_owned_array_invoke(true);
     test_owned_string_invoke_drop();
     test_owned_startup_error();
     test_integer_identity_cast(XR_LIR_I64, XR_LIR_I64);

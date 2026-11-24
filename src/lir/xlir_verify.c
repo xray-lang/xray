@@ -507,6 +507,8 @@ static bool lir_edges_valid(const XrLirModule *m, const XrLirFunctionData *f, co
             if (edge->argument_count || target->parameter_count != (produced != XR_LIR_UNIT ? 1u : 0u) ||
                 (produced != XR_LIR_UNIT && (!parameter || parameter > f->value_count ||
                     f->values[parameter - 1].type != produced))) return false;
+            if (produced == XR_LIR_ARRAY &&
+                f->values[parameter - 1].array_element != callee->array_result) return false;
             continue;
         }
         if (edge->argument_count != target->parameter_count ||

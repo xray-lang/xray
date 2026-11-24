@@ -1,0 +1,17 @@
+import { ReadFailure, read } from "./modules/bytes"
+
+fn relay(mode: i64) throws(ReadFailure) -> Array<u8> {
+    return try read(mode)
+}
+
+fn probe() {
+    var bytes = try! relay(231)
+    bytes.push(17)
+    print(bytes[0] as i64)
+    print(bytes[1] as i64)
+    print(bytes[2] as i64)
+    const empty = try! relay(0)
+    print(len(empty))
+}
+
+probe()

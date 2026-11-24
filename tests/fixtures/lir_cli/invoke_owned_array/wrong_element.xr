@@ -1,0 +1,8 @@
+import { read } from "./modules/bytes"
+
+fn probe() {
+    const wrong: Array<i64> = try! read(7)
+    print(len(wrong))
+}
+
+probe()

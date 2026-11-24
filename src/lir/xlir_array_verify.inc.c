@@ -70,7 +70,7 @@ XR_FUNC bool xr_lir_internal_array_instruction(const XrLirModule *m,
         !xr_lir_internal_array_element(m, xr_lir_internal_array_result(m, f, v))) return false;
     if (v->result && v->result <= f->value_count &&
         f->values[v->result - 1].array_element != xr_lir_internal_array_result(m, f, v)) return false;
-    if (v->op == XR_LIR_CALL) return lir_array_call_shape(m, f, v);
+    if (v->op == XR_LIR_CALL || v->op == XR_LIR_INVOKE) return lir_array_call_shape(m, f, v);
     if (v->op == XR_LIR_CALL_INTRINSIC) return lir_array_intrinsic_call(m, f, v);
     if (v->op == XR_LIR_RET && f->result == XR_LIR_ARRAY)
         return v->operand_count == 1 &&

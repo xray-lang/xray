@@ -566,6 +566,14 @@ static bool rbc_invoke_result_home(const XrRbcModule *module,const XrRbcFunction
     if (target->result_kind==XR_RBC_STRING)
         return !callee->error_unit && !aggregate && rbc_value_string_destination(module,code,result,false) &&
             rbc_value_home(code,result)->type==rbc_result_value_type(callee);
+    XrtValueKind kind=rbc_value_kind(module,code,result);
+    if (xrt_value_kind_is_array(kind)) {
+        uint32_t family=xr_rbc_array_family(target->result_kind);
+        return !callee->error_unit && !aggregate && rbc_value_array(module,code,result,true) &&
+            rbc_value_home(code,result)->type==rbc_result_value_type(callee) &&
+            (family < XR_RBC_ARRAY_FAMILY_COUNT ? kind==(XrtValueKind)(XRT_VALUE_ARRAY_I64+family) :
+                target->result_kind==XR_RBC_BITS && kind==XRT_VALUE_ARRAY_INLINE);
+    }
     if (target->result_kind!=XR_RBC_BITS) return false;
     if (callee->error_unit) return !aggregate && !result;
     if (!aggregate) return rbc_value_scalar(code,caller,result,XR_RBC_BITS);

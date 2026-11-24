@@ -395,8 +395,9 @@ static bool c_string_binding_point(LirC *c, const XrLirInstructionView *v) {
 static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
     if (c_string_binding_point(c, v) || c_display_point(c, v) || xr_lir_string_role(c->request->module, v) ||
         xr_lir_range_point(c->request->module, v)) return true;
-    if (v->op == XR_LIR_INVOKE) return v->type == XR_LIR_STRING;
-    if ((v->op == XR_LIR_RET || v->op == XR_LIR_RETURN_ERROR) && c->view.error && c->view.result == XR_LIR_STRING)
+    if (v->op == XR_LIR_INVOKE) return c_values_owned_type(c, v->type);
+    if ((v->op == XR_LIR_RET || v->op == XR_LIR_RETURN_ERROR) && c->view.error &&
+        c_values_owned_type(c, c->view.result))
         return true;
     if (v->op == XR_LIR_BR && v->edges[0].argument_count &&
         c_value_type(c, v->edges[0].arguments[0]) == XR_LIR_STRING)

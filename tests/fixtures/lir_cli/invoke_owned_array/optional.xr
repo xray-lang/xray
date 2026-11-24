@@ -1,0 +1,16 @@
+import { read } from "./modules/bytes"
+
+fn probe() {
+    var mode = 2
+    while (mode >= -2) {
+        const maybeBytes = try? read(mode)
+        print(maybeBytes == null)
+        if (maybeBytes != null) {
+            print(len(maybeBytes!))
+            if (mode > 0) { print(maybeBytes![0] as i64) }
+        }
+        mode -= 1
+    }
+}
+
+probe()

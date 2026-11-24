@@ -1,0 +1,10 @@
+import { read } from "./modules/bytes"
+
+fn probe() {
+    const existing = try! read(41)
+    print(existing[0] as i64)
+    const failed = try! read(-23)
+    print(len(failed))
+}
+
+probe()

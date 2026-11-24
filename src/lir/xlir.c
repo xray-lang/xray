@@ -339,7 +339,7 @@ static const char *clock_external_name(XrLirExternKind kind) {
 }
 
 XR_FUNC bool xr_lir_internal_invoke_result_type(const XrLirModule *m, XrLirType type) {
-    if (type == XR_LIR_STRING) return true;
+    if (type == XR_LIR_STRING || type == XR_LIR_ARRAY) return true;
     /* A packed Nullable return needs a supported physical type at every level. */
     while (lir_pod_scalar(type) >= XR_POD_SCALAR_COUNT) {
         XrLirTypeView shape = {0};

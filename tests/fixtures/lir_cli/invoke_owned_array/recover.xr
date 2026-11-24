@@ -1,0 +1,21 @@
+import { ReadFailure, read } from "./modules/bytes"
+
+var saved: Array<u8> = [41]
+
+fn replace(mode: i64) {
+    try {
+        saved = read(mode)
+    } catch (ReadFailure.Unavailable { code }) {
+        print(code)
+    }
+}
+
+fn inspect() {
+    print(len(saved))
+    print(saved[0] as i64)
+}
+
+replace(-23)
+inspect()
+replace(99)
+inspect()

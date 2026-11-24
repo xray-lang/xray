@@ -1,0 +1,8 @@
+export enum ReadFailure { Unavailable { code: i64 } }
+
+export fn read(mode: i64) throws(ReadFailure) -> Array<u8> {
+    print(mode)
+    if (mode < 0) { throw ReadFailure.Unavailable { code: mode } }
+    if (mode == 0) { return Array<u8>() }
+    return [mode as u8, 255]
+}

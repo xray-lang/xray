@@ -1,0 +1,9 @@
+import { read } from "./modules/bytes"
+
+fn probe() {
+    try! read(3)
+    try! read(0)
+    print("finished")
+}
+
+probe()
