@@ -599,6 +599,8 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
         case XR_LIR_CLASS_IS:
         case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
+        case XR_LIR_BIT_AND: case XR_LIR_BIT_OR: case XR_LIR_BIT_XOR:
+        case XR_LIR_SHL: case XR_LIR_SHR:
         case XR_LIR_NEG: case XR_LIR_ICMP: case XR_LIR_INTCAST:
         case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
         case XR_LIR_RETURN_ERROR:
@@ -881,6 +883,18 @@ static void c_reconstruct(LirC *c, XrLirType type, uint32_t result) {
         c_format(c, "(%s)v%" PRIu32 ";\n", c_type(c, type), c->scratch);
     }
 }
+static const char *c_integer_binary_operator(XrLirOp op) {
+    switch (op) {
+    case XR_LIR_ADD: return " + ";
+    case XR_LIR_SUB: return " - ";
+    case XR_LIR_MUL: return " * ";
+    case XR_LIR_BIT_AND: return " & ";
+    case XR_LIR_BIT_OR: return " | ";
+    case XR_LIR_BIT_XOR: return " ^ ";
+    default: return NULL;
+    }
+}
+
 static void c_integer(LirC *c, const XrLirInstructionView *v) {
     if (v->type == XR_LIR_I1) {
         c_format(c, "    v%" PRIu32 " = %u;\n", v->result, (unsigned) v->bits);
@@ -905,13 +919,30 @@ static void c_integer(LirC *c, const XrLirInstructionView *v) {
     c_text(c, "(uint64_t)");
     c_value(c, v->operands[0]);
     if (v->operand_count == 2) {
-        c_text(c, v->op == XR_LIR_ADD ? " + " : v->op == XR_LIR_SUB ? " - " : " * ");
+        c_text(c, c_integer_binary_operator(v->op));
         c_text(c, "(uint64_t)");
         c_value(c, v->operands[1]);
     }
     c_format(c, ") & UINT64_C(%" PRIu64 ");\n", c_mask(v->type));
     c_reconstruct(c, v->type, v->result);
 }
+static void c_shift(LirC *c, const XrLirInstructionView *v) {
+    c_text(c, "    { uint64_t xrl_bits = (uint64_t)");
+    c_value(c, v->operands[0]);
+    c_text(c, ", xrl_amount = (uint64_t)");
+    c_value(c, v->operands[1]);
+    c_text(c, " & UINT64_C(63);\n");
+    c_format(c, "        v%" PRIu32 " = (", c->scratch);
+    if (v->op == XR_LIR_SHL)
+        c_text(c, "xrl_bits << xrl_amount");
+    else if (v->type <= XR_LIR_I64)
+        c_text(c, "xrl_bits >> 63 ? ~(~xrl_bits >> xrl_amount) : xrl_bits >> xrl_amount");
+    else
+        c_text(c, "xrl_bits >> xrl_amount");
+    c_format(c, ") & UINT64_C(%" PRIu64 "); }\n", c_mask(v->type));
+    c_reconstruct(c, v->type, v->result);
+}
+
 static void c_fneg(LirC *c, const XrLirInstructionView *v) {
     c_format(c, "    v%" PRIu32 " = -", v->result);
     c_value(c, v->operands[0]);
@@ -1152,8 +1183,12 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                 c_integer(c, v);
             break;
         case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
+        case XR_LIR_BIT_AND: case XR_LIR_BIT_OR: case XR_LIR_BIT_XOR:
         case XR_LIR_NEG: case XR_LIR_INTCAST:
             c_integer(c, v);
+            break;
+        case XR_LIR_SHL: case XR_LIR_SHR:
+            c_shift(c, v);
             break;
         case XR_LIR_DIV: case XR_LIR_REM:
             c_division(c, v);

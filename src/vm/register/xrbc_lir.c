@@ -219,9 +219,7 @@ static bool rbc_lir_jump(RbcLirCompiler *c, uint32_t target) {
 }
 
 static bool rbc_lir_scalar(XrLirType type) {
-    // Slot transport is bit-preserving; operation admission remains separate.
-    // Narrow scalars carry their exact widths (sum/Nullable payloads, bindings,
-    // call edges); width-sensitive operations are rejected during lowering.
+    // Slot transport carries the exact scalar bits. Operation admission remains separate.
     return type == XR_LIR_I64 || type == XR_LIR_U8 || type == XR_LIR_U64 || type == XR_LIR_I1 ||
         type == XR_LIR_F64 || type == XR_LIR_I8 || type == XR_LIR_I16 || type == XR_LIR_I32 ||
         type == XR_LIR_F32;
@@ -273,6 +271,8 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_INVOKE: case XR_LIR_CALL_INDIRECT: case XR_LIR_CALL_INTRINSIC:
     case XR_LIR_BR: case XR_LIR_RET: return true;
     case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG: return i->type == XR_LIR_U64;
+    case XR_LIR_BIT_AND: case XR_LIR_BIT_OR: case XR_LIR_BIT_XOR:
+    case XR_LIR_SHL: case XR_LIR_SHR: return true;
     case XR_LIR_ICMP: return source == XR_LIR_U8 || source == XR_LIR_U64 ||
         i->predicate == XR_LIR_EQ || i->predicate == XR_LIR_NE;
     case XR_LIR_INTCAST: return (i->type == XR_LIR_I64 || i->type == XR_LIR_U8 || i->type == XR_LIR_U64) &&
@@ -655,6 +655,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_FIXED_ARRAY_NEW: case XR_LIR_FIXED_ARRAY_GET:
     case XR_LIR_LITERAL_ADDR:
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
+    case XR_LIR_BIT_AND: case XR_LIR_BIT_OR: case XR_LIR_BIT_XOR:
+    case XR_LIR_SHL: case XR_LIR_SHR:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:
     case XR_LIR_CALL: case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
     case XR_LIR_INVOKE: case XR_LIR_RETURN_ERROR: case XR_LIR_PANIC_ERROR: case XR_LIR_UNCAUGHT_ERROR:
@@ -870,6 +872,18 @@ static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind
 static bool rbc_lir_value_edge(RbcLirCompiler *, XrLirEdgeView, uint32_t);
 #include "xrbc_lir_registers.inc.c"
 
+static unsigned rbc_lir_narrow_shift_width(const XrLirInstructionView *i) {
+    if (i->op != XR_LIR_SHL && i->op != XR_LIR_SHR) return 0;
+    if (i->type >= XR_LIR_I8 && i->type < XR_LIR_I64)
+        return 8u << (unsigned)(i->type - XR_LIR_I8);
+    return i->type == XR_LIR_U8 ? 8u : 0;
+}
+
+static bool rbc_lir_arithmetic_scratch(const XrLirInstructionView *i) {
+    return (i->op == XR_LIR_INTCAST && i->type == XR_LIR_U8) ||
+        rbc_lir_narrow_shift_width(i) != 0;
+}
+
 static bool rbc_lir_layout(RbcLirCompiler *c) {
     uint32_t window = 0;
     for(uint32_t b=0;b<c->view.block_count;++b) {
@@ -925,7 +939,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE && i.type!=XR_LIR_VIEW_FRAME &&
                     i.type!=XR_LIR_VIEW_CELL && i.type!=XR_LIR_SLICE_I64 && i.type<XR_LIR_TYPE_COUNT)++bits;
             }
-            if (i.op == XR_LIR_INTCAST && i.type == XR_LIR_U8) ++bits;
+            if (rbc_lir_arithmetic_scratch(&i)) ++bits;
             if(strings>UINT32_MAX || bits>UINT32_MAX)
                 return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporary count exceeds index space");
             if(c->temporary_maps<maps)c->temporary_maps=(uint32_t)maps;
@@ -969,7 +983,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 if (window < physical + 1) window = physical + 1;
             }
             if (i.op == XR_LIR_CONDBR && !c->scratch_count) c->scratch_count = 1;
-            if (i.op == XR_LIR_INTCAST && i.type == XR_LIR_U8 && !c->scratch_count) c->scratch_count = 1;
+            if (rbc_lir_arithmetic_scratch(&i) && !c->scratch_count) c->scratch_count = 1;
             for (uint32_t e = 0; e < i.edge_count; ++e) {
                 bool scratch = false;
                 if (i.op != XR_LIR_INVOKE && !rbc_lir_copies(c,i.edges[e],e+1,false,&scratch)) return false;
@@ -1066,6 +1080,35 @@ static bool rbc_lir_constant(RbcLirCompiler *c, uint32_t slot, uint64_t bits) {
     uint32_t index;
     return rbc_lir_pool(c, bits, &index) &&
         rbc_lir_emit(c, XR_RBC_LOADK, slot, 0, 0, index);
+}
+
+static uint32_t rbc_lir_arithmetic_temporary(const RbcLirCompiler *c) {
+    if (!c->typed_spills) return c->slot_count;
+    return c->slot_count + c->temporary_strings +
+        (uint32_t)rbc_lir_array_temporaries(c, XR_RBC_ARRAY_FAMILY_COUNT) +
+        c->temporary_maps + c->temporary_refs + c->temporary_bits - 1;
+}
+
+static bool rbc_lir_shift(RbcLirCompiler *c, const XrLirInstructionView *i, uint32_t result) {
+    uint32_t left = c->slots[i->operands[0]], right = c->slots[i->operands[1]];
+    XrRbcOp shift = i->op == XR_LIR_SHL ? XR_RBC_SHL :
+        i->type <= XR_LIR_I64 ? XR_RBC_SHR : XR_RBC_USHR;
+    unsigned width = rbc_lir_narrow_shift_width(i);
+    if (!width) return rbc_lir_emit(c, shift, result, left, right, 0);
+
+    uint32_t temporary = rbc_lir_arithmetic_temporary(c);
+    if (shift == XR_RBC_SHR) {
+        /* Narrow values occupy packed bits. Move the real sign bit to the
+         * register sign position, then extend it before shifting. */
+        if (!rbc_lir_constant(c, temporary, 64u - width) ||
+            !rbc_lir_emit(c, XR_RBC_SHL, result, left, temporary, 0) ||
+            !rbc_lir_emit(c, XR_RBC_SHR, result, result, temporary, 0))
+            return false;
+        left = result;
+    }
+    return rbc_lir_emit(c, shift, result, left, right, 0) &&
+        rbc_lir_constant(c, temporary, (UINT64_C(1) << width) - 1) &&
+        rbc_lir_emit(c, XR_RBC_AND, result, result, temporary, 0);
 }
 
 static bool rbc_lir_predicate(RbcLirCompiler *c, const XrLirInstructionView *i) {
@@ -1188,11 +1231,11 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         return true;
     case XR_LIR_FUNCTION_WEAKEN:
         return rbc_lir_emit(c, XR_RBC_MOV, result, c->slots[i->operands[0]], 0, 0);
+    case XR_LIR_SHL: case XR_LIR_SHR:
+        return rbc_lir_shift(c, i, result);
     case XR_LIR_INTCAST:
         if (i->type == XR_LIR_U8) {
-            uint32_t temporary = c->slot_count;
-            if (c->typed_spills) temporary += c->temporary_strings +
-                (uint32_t)rbc_lir_array_temporaries(c, XR_RBC_ARRAY_FAMILY_COUNT) + c->temporary_maps + c->temporary_refs + c->temporary_bits - 1;
+            uint32_t temporary = rbc_lir_arithmetic_temporary(c);
             return rbc_lir_emit(c, XR_RBC_LOADI, temporary, 0, 0, UINT8_MAX) &&
                 rbc_lir_emit(c, XR_RBC_AND, result, c->slots[i->operands[0]], temporary, 0);
         }
@@ -1291,6 +1334,9 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         case XR_LIR_ADD: op = XR_RBC_ADD; break;
         case XR_LIR_SUB: op = XR_RBC_SUB; break;
         case XR_LIR_MUL: op = XR_RBC_MUL; break;
+        case XR_LIR_BIT_AND: op = XR_RBC_AND; break;
+        case XR_LIR_BIT_OR: op = XR_RBC_OR; break;
+        case XR_LIR_BIT_XOR: op = XR_RBC_XOR; break;
         case XR_LIR_DIV: op = XR_RBC_DIV; break;
         case XR_LIR_REM: op = XR_RBC_REM; break;
         case XR_LIR_NEG: op = XR_RBC_NEG; break;

@@ -1,0 +1,8 @@
+import encoding
+
+fn decode(input: string) -> i64 {
+    const bytes = try! encoding.hexDecode(input)
+    return len(bytes)
+}
+
+print(decode("0g"))

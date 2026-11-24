@@ -278,7 +278,7 @@
       },
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:96:13: SHR_INT is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {
@@ -836,7 +836,7 @@
       },
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "stdlib/crypto/crypto.xr:96:13: SHR_INT is not supported by LIR lowering yet"
+        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
       }
     },
     {

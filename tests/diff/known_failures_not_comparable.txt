@@ -46,7 +46,6 @@ tests/diff/cases/semantics/collections/array_typed_fill_storage_shared_core.xr  
 tests/diff/cases/semantics/collections/array_unshift_shared_core.xr  # module slot payload type is not supported by LIR lowering yet
 tests/diff/cases/semantics/collections/bool_conversion_truthy_shared_core.xr  # error: name is not an initialized value
 tests/diff/cases/semantics/collections/byte_array_append_repeat_safe_shared_core.xr  # error: Array member has no admitted value-operation contract
-tests/diff/cases/semantics/collections/byte_array_bool_short_circuit_liveness_shared_core.xr  # AND_INT is not supported by LIR lowering yet
 tests/diff/cases/semantics/collections/byte_array_constructor_shared_core.xr  # error: expression cannot satisfy its declared type
 tests/diff/cases/semantics/collections/byte_array_int_arg_shared_core.xr  # error: name is not an initialized value
 tests/diff/cases/semantics/collections/byte_array_range_arg_shared_core.xr  # error: indirect call has no generic declaration parameters
@@ -202,8 +201,6 @@ tests/diff/cases/semantics/int_wrap/exact_integer_bit_intrinsics.xr  # error: in
 tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr  # error: this fixed array element is not yet supported by the compiler
 tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr  # error: null requires an exact nullable context
 tests/diff/cases/semantics/int_wrap/int_as_truncation.xr  # module slot payload type is not supported by LIR lowering yet
-tests/diff/cases/semantics/int_wrap/int_bits_methods.xr  # SHR_INT is not supported by LIR lowering yet
-tests/diff/cases/semantics/int_wrap/int_overflow_predicates.xr  # XOR_INT is not supported by LIR lowering yet
 tests/diff/cases/semantics/int_wrap/int_safe_methods.xr  # XOR_INT is not supported by LIR lowering yet
 tests/diff/cases/semantics/int_wrap/narrow_arith_wrap.xr  # print other than one supported value is not supported by LIR lowering yet
 tests/diff/cases/semantics/int_wrap/numeric_method_shared_core.xr  # error: scalar method requires its exact admitted ordinary declaration

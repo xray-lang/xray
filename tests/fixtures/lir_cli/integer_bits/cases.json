@@ -1,0 +1,30 @@
+{
+  "widths": {
+    "exit": 0,
+    "stdout": "0\n-5\n-5\n7\n0\n-1\n0\n-5\n-5\n7\n-8\n-8\n0\n1\n9223372036854775808\n9223372036854775808\n128\n1\n0\n0\n129\n129\nnarrow\n",
+    "stderr": ""
+  },
+  "bool_operand": {
+    "source_error": ":2:18: error: operator requires a declared concrete operand contract"
+  },
+  "hex_success": {
+    "exit": 0,
+    "stdout": "5\n",
+    "stderr": ""
+  },
+  "hex_odd": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "[Uncaught Panic] E0446: try! failed: HexError.OddLength(1)\n"
+  },
+  "hex_digit": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "[Uncaught Panic] E0446: try! failed: HexError.InvalidDigit(1, 103)\n"
+  },
+  "loop_count": {
+    "exit": 0,
+    "stdout": "true\ntrue\n",
+    "stderr": ""
+  }
+}

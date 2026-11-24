@@ -1,0 +1,62 @@
+fn signedWide(value: i64, mask: i64, amount: i64) {
+    print(value & mask)
+    print(value | mask)
+    print(value ^ mask)
+    print(~value)
+    print(value << amount)
+    print(value >> amount)
+}
+
+fn unsignedWide(value: u64, amount: i64) {
+    print(value << amount)
+    print(value >> amount)
+}
+
+fn unsignedByte(value: u8, amount: i64) {
+    print((value << amount) as i64)
+    print((value >> amount) as i64)
+}
+
+fn signedNarrow(small: i8, medium: i16, large: i32, amount: i64) {
+    const smallMask: i8 = 15
+    const smallAnd: i8 = 14
+    const smallXor: i8 = -15
+    const minusOne8: i8 = -1
+    const minusOne16: i16 = -1
+    const minusOne32: i32 = -1
+    const zero8: i8 = 0
+    const minus512: i16 = -512
+    const top32: i32 = -2147483648
+    const shifted32: i32 = -2097152
+    const one8: i8 = 1
+    const two32: i32 = 2
+    assert((small & smallMask) == smallAnd)
+    assert((small | smallMask) == minusOne8)
+    assert((small ^ smallMask) == smallXor)
+    assert((~small) == one8)
+    assert((small >> amount) == minusOne8)
+    assert((medium >> amount) == minusOne16)
+    assert((large >> amount) == shifted32)
+    assert((large >> (amount * 4)) == minusOne32)
+    assert((small << amount) == zero8)
+    assert((medium << amount) == minus512)
+    assert((large << two32) == top32)
+}
+
+fn main() {
+    signedWide(-8, 3, -1)
+    signedWide(-8, 3, 64)
+    const high: u64 = 9223372036854775808
+    unsignedWide(high, -1)
+    unsignedWide(high, 64)
+    unsignedByte(129, 7)
+    unsignedByte(129, 8)
+    unsignedByte(129, 64)
+    const small: i8 = -2
+    const medium: i16 = -2
+    const large: i32 = -536870912
+    signedNarrow(small, medium, large, 8)
+    print("narrow")
+}
+
+main()

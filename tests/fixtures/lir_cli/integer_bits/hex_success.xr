@@ -1,0 +1,14 @@
+import encoding
+
+fn decode(input: string) -> i64 {
+    const bytes = try! encoding.hexDecode(input)
+    assert(len(bytes) == 5)
+    assert((bytes[0] as i64) == 0)
+    assert((bytes[1] as i64) == 1)
+    assert((bytes[2] as i64) == 127)
+    assert((bytes[3] as i64) == 128)
+    assert((bytes[4] as i64) == 255)
+    return len(bytes)
+}
+
+print(decode("00017F80ff"))

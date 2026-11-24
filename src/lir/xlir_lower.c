@@ -207,9 +207,8 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
         return XR_LIR_U8;
     if (type == XR_XIR_U64)
         return XR_LIR_U64;
-    /* Narrow scalars are transport-only: constants, bindings, call edges, sum
-     * payloads and Nullable payloads carry their exact widths. Operations whose
-     * result depends on the width stay rejected in lower_admit_instruction. */
+    /* Narrow scalars and their bit operations preserve the exact width.
+     * Other width-sensitive arithmetic remains closed during admission. */
     if (type == XR_XIR_I8)
         return XR_LIR_I8;
     if (type == XR_XIR_I16)
@@ -642,6 +641,8 @@ static bool lower_known(const XrXirInstruction *instruction) {
         case XR_XIR_MUL_INT:
         case XR_XIR_DIV_INT:
         case XR_XIR_REM_INT:
+        case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
+        case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
         case XR_XIR_EQ_INT:
         case XR_XIR_NE_INT:
         case XR_XIR_LT_INT:
@@ -1195,8 +1196,6 @@ static bool lower_width_arithmetic(XrXirOp op) {
     switch (op) {
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
-    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
-    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
         return true;
     default:
         return false;
@@ -2170,6 +2169,16 @@ static XrLirOp lower_operation(const LowerFunction *f, const XrXirInstruction *o
             return XR_LIR_DIV;
         case XR_XIR_REM_INT:
             return XR_LIR_REM;
+        case XR_XIR_AND_INT:
+            return XR_LIR_BIT_AND;
+        case XR_XIR_OR_INT:
+            return XR_LIR_BIT_OR;
+        case XR_XIR_XOR_INT:
+            return XR_LIR_BIT_XOR;
+        case XR_XIR_SHL_INT:
+            return XR_LIR_SHL;
+        case XR_XIR_SHR_INT:
+            return XR_LIR_SHR;
         case XR_XIR_ADD_FLOAT:
             return XR_LIR_FADD;
         case XR_XIR_SUB_FLOAT:
@@ -2548,9 +2557,15 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
                                     .predicate = lower_predicate(op),
                                     .source = lower_source(c)};
     XrLirValue operands[2] = {{0}};
-    if (instruction.op == XR_LIR_CONST)
+    if (instruction.op == XR_LIR_CONST) {
         instruction.bits = (uint64_t) op->immediate;
-    else {
+        if (instruction.type >= XR_LIR_I8 && instruction.type < XR_LIR_I64) {
+            /* Checked signed constants carry a sign-extended value. LIR
+             * constants carry just the declared width's bits. */
+            unsigned width = 8u << (unsigned)(instruction.type - XR_LIR_I8);
+            instruction.bits &= (UINT64_C(1) << width) - 1;
+        }
+    } else {
         instruction.operand_count =
             op->op == XR_XIR_NEG_FLOAT || op->op == XR_XIR_CONVERT_NUMBER ? 1u : 2u;
         for (uint32_t a = 0; a < instruction.operand_count; ++a)

@@ -1,0 +1,20 @@
+fn shifted(value: i8, amount: i8, rounds: i64) -> i8 {
+    var current = amount
+    var i = 0
+    while (i < rounds) {
+        current = value >> current
+        i = i + 1
+    }
+    return current
+}
+
+fn main() {
+    const value: i8 = -128
+    const amount: i8 = 2
+    const once: i8 = -32
+    const twice: i8 = -1
+    print(shifted(value, amount, 1) == once)
+    print(shifted(value, amount, 2) == twice)
+}
+
+main()

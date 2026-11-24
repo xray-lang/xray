@@ -148,3 +148,10 @@ XR_LIR_OP(INVOKE, "invoke", -1)
 XR_LIR_OP(RETURN_ERROR, "return_error", 1)
 XR_LIR_OP(PANIC_ERROR, "panic_error", 1)
 XR_LIR_OP(UNCAUGHT_ERROR, "uncaught_error", 1)
+/* Bit operations preserve the exact left operand width. Shift counts are
+ * independent integer operands and use their low six bits. */
+XR_LIR_OP(BIT_AND, "bit_and", 2)
+XR_LIR_OP(BIT_OR, "bit_or", 2)
+XR_LIR_OP(BIT_XOR, "bit_xor", 2)
+XR_LIR_OP(SHL, "shl", 2)
+XR_LIR_OP(SHR, "shr", 2)

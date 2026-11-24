@@ -447,7 +447,10 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_MUL:
         case XR_LIR_DIV:
         case XR_LIR_REM:
+        case XR_LIR_BIT_AND: case XR_LIR_BIT_OR: case XR_LIR_BIT_XOR:
             return lir_integer(v->type) && a == v->type && b == v->type;
+        case XR_LIR_SHL: case XR_LIR_SHR:
+            return lir_integer(v->type) && a == v->type && lir_integer(b);
         case XR_LIR_NEG:
             return lir_integer(v->type) && a == v->type;
         case XR_LIR_FADD:
