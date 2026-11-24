@@ -1,0 +1,29 @@
+fn choose(index: i64) -> Endian {
+    if (index == 0) { return Endian.Native }
+    if (index == 1) { return Endian.LE }
+    return Endian.BE
+}
+
+fn compare(left: Endian, right: Endian) {
+    print(left == right)
+    print(left != right)
+}
+
+fn exercise() {
+    var index = 0
+    while (index < 3) {
+        compare(choose(index), choose(2 - index))
+        compare(choose(index), choose(index))
+        if (choose(index) == Endian.BE) { print(37) } else { print(73) }
+        index = index + 1
+    }
+}
+
+enum Flag { Enabled, Disabled }
+
+fn flagsDiffer(left: Flag, right: Flag) -> bool {
+    return left != right
+}
+
+exercise()
+print(flagsDiffer(Flag.Enabled, Flag.Disabled))

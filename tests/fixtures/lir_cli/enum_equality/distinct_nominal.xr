@@ -1,0 +1,7 @@
+enum Other { Native, LE, BE }
+
+fn compare(left: Endian, right: Other) -> bool {
+    return left == right
+}
+
+print(compare(Endian.LE, Other.LE))

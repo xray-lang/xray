@@ -1,0 +1,7 @@
+enum Token { Data { item: i64 }, Other }
+
+fn compare(left: Token, right: Token) -> bool {
+    return left == right
+}
+
+print(compare(Token.Other, Token.Other))

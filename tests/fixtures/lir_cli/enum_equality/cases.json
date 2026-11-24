@@ -1,0 +1,13 @@
+{
+  "payloadless": {
+    "exit": 0,
+    "stdout": "false\ntrue\ntrue\nfalse\n73\ntrue\nfalse\ntrue\nfalse\n73\nfalse\ntrue\ntrue\nfalse\n37\ntrue\n",
+    "stderr": ""
+  },
+  "distinct_nominal": {
+    "source_error": ":4:17: error: equality requires the same declared operand type"
+  },
+  "payload_enum": {
+    "source_error": ":4:17: error: equality requires its declaration predicate"
+  }
+}

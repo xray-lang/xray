@@ -2334,6 +2334,24 @@ static bool lower_display(LowerFunction *f, uint32_t block, XrLirValue argument,
         .intrinsic=intrinsic, .operands=&argument, .operand_count=1, .source=lower_source(c)};
     return lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &call, output));
 }
+static bool lower_enum_tag(LowerFunction *f, uint32_t block, XrLirValue input, XrLirValue *output) {
+    Lower *c = f->owner;
+    XrLirInstruction tag = {.op=XR_LIR_SUM_TAG, .type=XR_LIR_I64,
+        .operands=&input, .operand_count=1, .source=lower_source(c)};
+    return lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &tag, output));
+}
+
+static bool lower_payloadless_enum_equality(const LowerFunction *f, const XrXirInstruction *op) {
+    const Lower *c = f->owner;
+    const XrXirTypes *types = c->source->types;
+    XrXirType type = xr_xir_operand_type(f->source, op->args[0]);
+    /* Different nominal enums can have the same physical sum shape. */
+    if (type != xr_xir_operand_type(f->source, op->args[1]) || !xr_xir_type_is_enum(types, type)) return false;
+    XrXirTypeDescription description = {0};
+    return xr_xir_compile_type_description(xr_xir_compile_artifact_context(c->request->closed),
+        types, type, &description) == XR_XIR_OK && !description.field_count;
+}
+
 static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
@@ -2378,9 +2396,7 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         XrLirType sum = lower_type(c, enum_type);
         XrLirValue input = {0};
         if (!sum || !lower_value(f, op->args[0], &input)) return lower_unsupported(c, "enum tag has no tagged-sum carrier");
-        XrLirInstruction tag = {.op=XR_LIR_SUM_TAG, .type=XR_LIR_I64,
-            .operands=&input, .operand_count=1, .source=lower_source(c)};
-        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &tag, &f->values[result]));
+        return lower_enum_tag(f, b, input, &f->values[result]);
     }
     if (op->op == XR_XIR_ENUM_GET) {
         XrXirType enum_type = xr_xir_operand_type(f->source, op->args[0]);
@@ -2605,6 +2621,9 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         for (uint32_t a = 0; a < instruction.operand_count; ++a)
             if (!lower_value(f, op->args[a], &operands[a]))
                 return false;
+        if (op->op == XR_XIR_EQUAL && lower_payloadless_enum_equality(f, op))
+            for (uint32_t a = 0; a < 2; ++a)
+                if (!lower_enum_tag(f, b, operands[a], &operands[a])) return false;
         instruction.operands = operands;
     }
     if (!instruction.op)
