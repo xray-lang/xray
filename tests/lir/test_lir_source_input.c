@@ -12,6 +12,7 @@
 #include "base/xsha256.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_class_cycles.h"
+#include "xir/xxir_file_stat_native.h"
 #include "xir/xxir_type_description.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_internal.h"
@@ -493,6 +494,79 @@ static void class_cycle_facts(void) {
     xr_xir_compile_source_result_free(&source);
 }
 
+static void file_stat_cycle_facts(void) {
+#if defined(XR_OS_WINDOWS)
+#define FILE_STAT_TEST_ROOT "C:/xray-class-cycles-test"
+#else
+#define FILE_STAT_TEST_ROOT "/xray-class-cycles-test"
+#endif
+    static const char path_source[] =
+        "export class Path{raw:string\ninit(raw:string){this.raw=raw}}\n";
+    static const char io_source[] =
+        "import {Path} from path\n"
+        "export fn exists(path: Path) -> bool { return __stat(path) != null }\n"
+        "print(exists(Path(\"fixture\")))\n";
+    const XrModuleIdentityAuthority io = {XR_MODULE_IDENTITY_STDLIB, "io", FILE_STAT_TEST_ROOT};
+    const XrModuleOverlayInput overlays[] = {
+        {io, "io/io.xr", FILE_STAT_TEST_ROOT "/io/io.xr", io_source, sizeof(io_source) - 1},
+        {{XR_MODULE_IDENTITY_STDLIB, "path", FILE_STAT_TEST_ROOT}, "path/path.xr",
+            FILE_STAT_TEST_ROOT "/path/path.xr", path_source, sizeof(path_source) - 1}
+    };
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrXirCompileContext context = {.limits=xr_xir_compile_default_limits()};
+    CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
+    const XrXirSourceRequest request = {.session=session, .entry_path=overlays[0].source_path, .authority=&io,
+        .context=&context, .stdlib_path=FILE_STAT_TEST_ROOT, .linkage_kind=XR_XIR_PROGRAM, .target=XR_XIR_HOST_TARGET};
+#undef FILE_STAT_TEST_ROOT
+    XrXirSourceResult source = {0};
+    XIR_OK(xr_xir_compile_source_check_overlay(&request, overlays, sizeof(overlays) / sizeof(*overlays),
+        &source, NULL, NULL));
+    XrXirArtifact *closed = NULL;
+    XIR_OK(xr_xir_compile_specialize(source.checked, &closed, NULL, NULL));
+    const XrXirModule *module = xr_xir_compile_artifact_module(closed);
+    XrXirType type = XR_XIR_UNIT;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        if (module->declarations->functions[f].native_callable != XR_NATIVE_CALLABLE_IO_STAT) continue;
+        XrXirType result = module->functions[f].result;
+        CHECK(type == XR_XIR_UNIT && xir_file_stat_nullable(module->types, result));
+        type = xr_xir_type_node(module->types, result)->element;
+    }
+    CHECK(type != XR_XIR_UNIT);
+    XrXirClassCycles *cycles = NULL;
+    XIR_OK(xr_xir_class_cycles_build(closed, &cycles, NULL));
+    XrXirClassCycleKind kind = XR_XIR_CLASS_CYCLE_UNKNOWN;
+    XIR_OK(xr_xir_class_cycles_query(cycles, closed, type, &kind));
+    CHECK(kind == XR_XIR_CLASS_CYCLE_ACYCLIC);
+    xr_xir_class_cycles_free(cycles);
+
+    XrXirTypes altered_types = *module->types;
+    XrXirNominalTable altered_table = *altered_types.nominals;
+    CHECK(altered_table.declarations);
+    size_t bytes = altered_table.count * sizeof(*altered_table.declarations);
+    XrXirNominalDeclaration *declarations = xr_malloc(bytes);
+    CHECK(declarations);
+    memcpy(declarations, altered_table.declarations, bytes);
+    uint32_t index = xr_xir_type_node(module->types, type)->nominal.declaration;
+    declarations[index].native.source_fingerprint[0] ^= 1;
+    altered_table.declarations = declarations;
+    altered_types.nominals = &altered_table;
+    XrXirArtifact altered = *closed;
+    altered.module.types = &altered_types;
+    cycles = NULL;
+    XIR_OK(xr_xir_class_cycles_build(&altered, &cycles, NULL));
+    XIR_OK(xr_xir_class_cycles_query(cycles, &altered, type, &kind));
+    CHECK(kind == XR_XIR_CLASS_CYCLE_UNKNOWN);
+    xr_xir_class_cycles_free(cycles);
+    xr_free(declarations);
+
+    xr_xir_compile_artifact_free(closed);
+    xr_xir_compile_source_result_free(&source);
+    xr_compile_session_free(session);
+    xr_compile_resources_release(context.resources);
+}
+
 int main(void) {
     source_target_admission();
     scalar_input_facts();
@@ -503,5 +577,6 @@ int main(void) {
     lowered_origin_rejected();
     evaluation_origin_rejected();
     class_cycle_facts();
+    file_stat_cycle_facts();
     return 0;
 }

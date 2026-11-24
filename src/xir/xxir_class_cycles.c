@@ -6,6 +6,7 @@
  * xxir_class_cycles.c - Strong ownership edges of specialized types
  */
 #include "xxir_class_cycles.h"
+#include "xxir_file_stat_native.h"
 #include "xxir_internal.h"
 #include "xxir_nominal.h"
 #include "xxir_receive_control.h"
@@ -40,7 +41,8 @@ static bool class_cycle_leaf(XrXirType type) {
         type == XR_XIR_RUNE || type == XR_XIR_STRING || xr_xir_type_is_number(type);
 }
 
-static uint32_t class_cycle_edge_count(const XrXirTypes *types, const XrXirTypeNode *node, bool *unknown) {
+static uint32_t class_cycle_edge_count(const XrXirTypes *types, uint32_t index, bool *unknown) {
+    const XrXirTypeNode *node = &types->nodes[index];
     if (node->parameter_span) {
         *unknown = true;
         return 0;
@@ -70,6 +72,8 @@ static uint32_t class_cycle_edge_count(const XrXirTypes *types, const XrXirTypeN
         uint32_t native = definition ? definition->native.native_id : identity->native.native_id;
         /* File storage owns a host descriptor and has no guest reference edges. */
         if (native == XR_NATIVE_DECLARATION_FILE_STORAGE && !fields && !node->nominal.field_count) return 0;
+        if (native == XR_NATIVE_DECLARATION_FILE_STAT &&
+            xir_file_stat_type(types, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + index))) return fields;
         if (!native && node->nominal.field_count == fields && (!fields || node->nominal.fields)) return fields;
         break;
     }
@@ -95,7 +99,7 @@ static void class_cycle_enter(ClassCycleWalk *walk, uint32_t index) {
     ClassCycleVertex *vertex = &walk->vertices[index];
     vertex->number = vertex->low = ++walk->numbered;
     vertex->active = true;
-    uint32_t count = class_cycle_edge_count(walk->types, &walk->types->nodes[index], &vertex->unknown);
+    uint32_t count = class_cycle_edge_count(walk->types, index, &vertex->unknown);
     walk->frames[walk->depth++] = (ClassCycleFrame){index, 0, count};
     walk->active[walk->active_count++] = index;
 }
