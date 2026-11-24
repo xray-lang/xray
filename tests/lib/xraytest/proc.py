@@ -12,13 +12,29 @@ stream. We do not guess an encoding. A caller that knows a stream is UTF-8
 
 from __future__ import annotations
 
+import importlib.util
 import os
-import signal
 import subprocess
 import sys
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
+
+from .platform import project_root
+
+
+def _load_owned_process_runner():
+    # Use this checkout's helper even if a caller imported another checkout's scripts.
+    path = project_root() / "scripts" / "xray_process.py"
+    spec = importlib.util.spec_from_file_location("_xraytest_owned_process", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_owned_process = _load_owned_process_runner()
 
 
 @dataclass(frozen=True)
@@ -47,38 +63,45 @@ class ProcResult:
         return self.stdout.decode("utf-8", errors) + self.stderr.decode("utf-8", errors)
 
 
-def _terminate_tree(proc: "subprocess.Popen") -> None:
-    """Kill a timed-out child and any group it leads.
-
-    On POSIX the child is its own process group (start_new_session), so one
-    killpg reaches the grandchildren a compiler or linker spawned. Windows
-    process groups do not provide forced tree termination, so taskkill /T /F
-    walks the process tree rooted at the exact child PID.
-    """
+def _terminate_windows_tree(proc: "subprocess.Popen") -> None:
+    """Walk the Windows timeout tree rooted at the exact child PID."""
     if proc.poll() is not None:
         return
-    if os.name == "nt":
-        system_root = Path(os.environ.get("SystemRoot") or r"C:\Windows")
-        taskkill = system_root / "System32" / "taskkill.exe"
-        try:
-            killed = subprocess.run(
-                [str(taskkill), "/PID", str(proc.pid), "/T", "/F"],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=5,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            proc.kill()
-            return
-        if killed.returncode != 0 and proc.poll() is None:
-            proc.kill()
-        return
+    system_root = Path(os.environ.get("SystemRoot") or r"C:\Windows")
+    taskkill = system_root / "System32" / "taskkill.exe"
     try:
-        os.killpg(proc.pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
+        killed = subprocess.run(
+            [str(taskkill), "/PID", str(proc.pid), "/T", "/F"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
         proc.kill()
+        return
+    if killed.returncode != 0 and proc.poll() is None:
+        proc.kill()
+
+
+@contextmanager
+def terminate_tree(proc: "subprocess.Popen"):
+    """Terminate an owned Popen tree and let the caller drain/reap it within the cleanup budget."""
+    if os.name == "nt":
+        _terminate_windows_tree(proc)
+        yield None
+        return
+    # Keep the leader's PID reserved until the real group has been signalled.
+    with _owned_process.terminate_posix_group(proc.pid, leader_unreaped=True) as deadline:
+        try:
+            yield max(0.0, deadline - time.monotonic())
+        except subprocess.TimeoutExpired as error:
+            for pipe in (proc.stdin, proc.stdout, proc.stderr):
+                if pipe is not None:
+                    pipe.close()
+            proc.poll()
+            raise _owned_process.RecoveryRequired("Timed-out command did not drain") from error
 
 
 def run(
@@ -136,8 +159,8 @@ def run(
         out, err = proc.communicate(input=stdin, timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
-        _terminate_tree(proc)
-        out, err = proc.communicate()
+        with terminate_tree(proc) as cleanup_timeout:
+            out, err = proc.communicate(timeout=cleanup_timeout)
 
     result = ProcResult(
         argv=tuple(argv),
@@ -191,8 +214,8 @@ def run_passthrough(
     try:
         return proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        _terminate_tree(proc)
-        proc.wait()
+        with terminate_tree(proc) as cleanup_timeout:
+            proc.wait(timeout=cleanup_timeout)
         return 124
 
 

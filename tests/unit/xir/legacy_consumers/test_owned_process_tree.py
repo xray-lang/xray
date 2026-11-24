@@ -53,6 +53,19 @@ def running(pid,terminate=False):
 
 
 class OwnedProcessTree(unittest.TestCase):
+    @unittest.skipIf(os.name == 'nt', 'Requires a POSIX process group')
+    def test_timeout_terminates_group_after_leader_exits(self):
+        child = ("import sys,time;time.sleep(4);"
+                 "sys.stderr.write('descendant survived\\n')")
+        parent = ("import subprocess,sys;"
+                  f"subprocess.Popen([sys.executable,'-c',{child!r}],stdout=subprocess.DEVNULL);"
+                  "print('leader exited',flush=True)")
+        result = proc.run([sys.executable, '-c', parent], timeout=2)
+        self.assertTrue(result.timed_out)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b'leader exited\n')
+        self.assertEqual(result.stderr, b'')
+
     def test_timeout_terminates_real_descendant_and_preserves_output(self):
         self.assertIsNotNone(proc)
         child="import os,time;print(os.getpid(),flush=True);time.sleep(60)"

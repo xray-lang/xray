@@ -116,7 +116,7 @@ def main():
         names=['tests/unit/xir/test_xir_generator_receiver_compiler.c','tests/unit/xir/run_receiver_compiler_faults.py',
                'tests/unit/xir/run_generic_callable_compiler_faults.py','tests/unit/xir/generator_driver.cmake',
                'tests/unit/xir/xir_library_compile_owner.h','tests/unit/xir/xir_source_program_compile_owner.h',
-               'tests/lib/xraytest/windows_owned_job.py','tests/lib/xraytest/proc.py',*FIXTURE_INPUTS]
+               'tests/lib/xraytest/windows_owned_job.py','tests/lib/xraytest/proc.py','scripts/xray_process.py',*FIXTURE_INPUTS]
         owned.checked(all(name in inputs for name in names),'Actual driver, registry or finite owner input is missing')
         length,digest=fixture_identity(source);binary=owned.sha(executable,deadline);nonce=uuid.uuid4().hex
         identity={'nonce':nonce,'input_sha256':owned.mapping_sha(inputs),'binary_sha256':binary,

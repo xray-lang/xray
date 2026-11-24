@@ -24,7 +24,7 @@ import uuid
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
 from xraytest.windows_owned_job import establish_job
-from xraytest.proc import _terminate_tree
+from xraytest.proc import terminate_tree
 
 WORKERS = 8
 TIMEOUT = 600
@@ -252,9 +252,9 @@ def posix_parent():
         remaining(deadline)
         return status
     except BaseException as error:
-        if child is not None and child.poll() is None:
-            _terminate_tree(child)  # Same native group owner as the shared test process layer.
-            child.wait()
+        if child is not None and child.returncode is None:
+            with terminate_tree(child) as cleanup_timeout:
+                child.wait(timeout=cleanup_timeout)
         print(f"Generic compiler POSIX owner FAIL: {error}", file=sys.stderr)
         return 1
     finally:
@@ -371,7 +371,7 @@ def main():
                            "tests/unit/xir/xir_generic_compiler_fault_shards.h",
                            "tests/unit/xir/run_generic_callable_compiler_faults.py",
                            "tests/unit/xir/root_conditional.cmake", "tests/lib/xraytest/windows_owned_job.py",
-                           "tests/lib/xraytest/proc.py",
+                           "tests/lib/xraytest/proc.py", "scripts/xray_process.py",
                            "tests/unit/xir/xir_library_compile_owner.h", "tests/unit/xir/xir_source_program_compile_owner.h"]
         checked(all(path in inputs for path in required_inputs), "Missing actual helper, driver, registry or original owner")
         config = config_snapshot(build, deadline)

@@ -1,6 +1,6 @@
 """Run a command with an owned process tree, including abnormal parent exits."""
 
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 import ctypes
 from ctypes import wintypes
 import os
@@ -17,7 +17,7 @@ class RecoveryRequired(RuntimeError):
 GROUP_EXIT_SECONDS = 5.0
 
 
-def _kill_group(group: int, deadline: float | None = None) -> bool:
+def _kill_group(group: int, deadline: float | None = None, *, leader_unreaped: bool = False) -> bool:
     """Kill every remaining member of a command's POSIX process group.
 
     Darwin answers EPERM rather than ESRCH while the group holds only exiting
@@ -25,7 +25,8 @@ def _kill_group(group: int, deadline: float | None = None) -> bool:
     disappears; a group that still refuses after the deadline is reported
     instead of being treated as gone.
 
-    Return True if the signal was accepted, or False if the group was gone.
+    Return True if the signal was accepted or an unreaped Darwin leader may
+    be holding the group, or False if the group was gone.
     """
     if deadline is None:
         deadline = time.monotonic() + GROUP_EXIT_SECONDS
@@ -36,6 +37,10 @@ def _kill_group(group: int, deadline: float | None = None) -> bool:
         except ProcessLookupError:
             return False
         except PermissionError:
+            if leader_unreaped and sys.platform == "darwin":
+                # A zombie leader cannot disappear until our caller reaps it.
+                # Verify disappearance afterward without signalling a reused ID.
+                return True
             if time.monotonic() >= deadline:
                 raise RecoveryRequired("Command process group refused termination") from None
             time.sleep(0.01)
@@ -59,6 +64,16 @@ def _wait_darwin_group(group: int, deadline: float) -> None:
         time.sleep(min(0.01, remaining))
 
 
+@contextmanager
+def terminate_posix_group(group: int, *, leader_unreaped: bool = False):
+    """Signal the group, let the caller reap its leader, then verify the drain."""
+    deadline = time.monotonic() + GROUP_EXIT_SECONDS
+    needs_drain = _kill_group(group, deadline, leader_unreaped=leader_unreaped)
+    yield deadline
+    if needs_drain and sys.platform == "darwin":
+        _wait_darwin_group(group, deadline)
+
+
 def run_child(command: list[str], *, timeout: float | None = None, spawn_guard=nullcontext, **kwargs) -> int:
     """Wait for the leader; cleanup completes before propagating a timeout.
 
@@ -73,11 +88,8 @@ def run_child(command: list[str], *, timeout: float | None = None, spawn_guard=n
             return child.wait(timeout=timeout)
         finally:
             if child is not None:
-                deadline = time.monotonic() + GROUP_EXIT_SECONDS
-                signalled = _kill_group(child.pid, deadline)
-                child.wait()
-                if signalled and sys.platform == "darwin":
-                    _wait_darwin_group(child.pid, deadline)
+                with terminate_posix_group(child.pid):
+                    child.wait()
     return _run_windows(command, timeout=timeout, spawn_guard=spawn_guard, **kwargs)
 
 

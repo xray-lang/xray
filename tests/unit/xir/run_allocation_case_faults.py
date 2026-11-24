@@ -23,7 +23,7 @@ import uuid
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
 from xraytest.windows_owned_job import establish_job
-from xraytest.proc import _terminate_tree
+from xraytest.proc import terminate_tree
 
 TIMEOUT = 300
 WORKERS = 12
@@ -126,7 +126,7 @@ def input_paths(source, build, executable, deadline):
                 "tests/unit/xir/xir_allocation_request_trace.h", "tests/unit/xir/allocation_feedback.cmake",
                 "tests/unit/CMakeLists.txt", "tests/unit/xir/run_allocation_case_faults.py",
                 "tests/unit/xir/test_allocation_case_driver.py",
-                "tests/lib/xraytest/windows_owned_job.py", "tests/lib/xraytest/proc.py"]
+                "tests/lib/xraytest/windows_owned_job.py", "tests/lib/xraytest/proc.py", "scripts/xray_process.py"]
     for name in required:
         path = (source / name).resolve(strict=True)
         checked(path.is_file(), f"Missing real qualification input: {name}")
@@ -465,9 +465,9 @@ def posix_parent():
         remaining(deadline)
         return status
     except BaseException as error:
-        if child is not None and child.poll() is None:
-            _terminate_tree(child)
-            child.wait()
+        if child is not None and child.returncode is None:
+            with terminate_tree(child) as cleanup_timeout:
+                child.wait(timeout=cleanup_timeout)
         print(f"Allocation POSIX owner FAIL: {error}", file=sys.stderr)
         return 1
     finally:

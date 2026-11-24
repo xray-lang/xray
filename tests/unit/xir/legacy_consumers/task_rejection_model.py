@@ -5,7 +5,8 @@ import hashlib
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-_INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
+_INPUTS = {'scripts/xray_process.py': '66d440668626d773dc709e37801f8c40030502ecb1ef505c652c62af8160eeb8',
+ 'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
  'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
  'src/api/xsource_compile.h': '502cfdddebfb278ab2b3deaa3e27371aa4ecdb9ccba43b472189aa2036ffaf7e',
  'src/base/xcompile_resources.c': 'fcf26222e273a27348bddbe01381f5e64d3b1cfc2282d65472976bd5c5fa405f',
@@ -23,7 +24,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e
  'tests/diff/cases/semantics/coro/task_transfer_return_native_class.xr': '68952e6c3b9d277b1e6fcb47c5f98e0657638f89fdcc00bdb0843d1c7b2549f7',
  'tests/lib/xraytest/__init__.py': '39d234cb4da7097df911c0a99fdfabe7fcc829beeefc536ab1108503217b640d',
  'tests/lib/xraytest/platform.py': 'c03df3dc8b3381586b2d8832edde82cc5bcdaa6c745bf291e6d7826f338bce53',
- 'tests/lib/xraytest/proc.py': '9418f1b80e3c14f85bea25d8a25753423333914da7435a0c3a66d963581dd1f5',
+ 'tests/lib/xraytest/proc.py': '36caec2f8154e3e10283fd9076c187f940b1543cb62a3b37b6d36bfe98481bec',
  'tests/unit/xir/legacy_consumers/build_source_rejection_owner.py': 'd256154dd986b1811435360ea39db6dd429ef823027ac37964cee03bfdc77505',
  'tests/unit/xir/legacy_consumers/fixtures/source_rejection_controls/direct_class.xr': '36a881ed7694d823946f159e01bdb539571bb5f9d34a261716e53d3dd161a12e',
  'tests/unit/xir/legacy_consumers/fixtures/source_rejection_controls/go_i64.xr': 'a2aab9569362f06c064851cf5390a243c9ded84855fa7b2547addf761bcced9b',
@@ -35,11 +36,12 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e
  'tests/unit/xir/legacy_consumers/source_rejection_owner/CMakeLists.txt': '64042a2db0abc88fc8a678bc0bec777d8c86fe9aaca65d999cf86dcbfe50f025',
  'tests/unit/xir/legacy_consumers/source_rejection_owner/source_rejection_faults.c': '24a43b0852c8a461d71cb754f51950d23b8fbacd2845fbcf6341b7c3285bbaf4',
  'tests/unit/xir/legacy_consumers/source_rejection_owner/source_rejection_owner.c': '6ee80b8f6ec209c35dace65abf01eb65810bb3e9e875356f979dc30ae18ee669',
- 'tests/unit/xir/legacy_consumers/test_owned_process_tree.py': '65ac2e9ed33bc8542ac84dfd466b94e8c37425e04834b8ad5e691d6055145272',
+ 'tests/unit/xir/legacy_consumers/test_owned_process_tree.py': 'ffa12254f95e6a8ba0e4b9ae0121b052c87b341c31b3d8bc93cc5d5c920c1a39',
  'tests/unit/xir/legacy_consumers/test_source_rejection_fault_review.py': '63f63ce2294f9088e33b845e2f9f19d2e801baec81464465bddcdaafbec4d977',
  'tests/unit/xir/legacy_consumers/test_source_rejection_model.py': '440722be5661c4f394092032715a7c4008dcc40a1c4accaa193cdcfe3faa62b3',
  'tests/unit/xir/xir_instance_compile_observer.h': 'd1c48e7330b30d7d9ea6044e5fea086c7d5181b92a77915aa6b90903a68b695d'}
-_REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
+_REQUIRED_INPUTS = ('scripts/xray_process.py',
+ 'spec/source/sections/003-2-type-system.md',
  'spec/source/sections/015-14-built-in-type-methods.md',
  'src/api/xsource_compile.h',
  'src/base/xcompile_resources.c',

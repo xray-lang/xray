@@ -134,6 +134,14 @@ class ProcessGroupCleanupTest(unittest.TestCase):
             self.assertEqual(xray_process.run_child(["fixture"]), 3)
         kill.assert_called_once_with(child.pid, signal.SIGKILL)
 
+    def test_darwin_unreaped_leader_is_retired_before_verifying_group_exit(self):
+        signals = [PermissionError(), ProcessLookupError()]
+        with mock.patch.object(xray_process.sys, "platform", "darwin"), \
+                mock.patch.object(xray_process.os, "killpg", side_effect=signals) as kill:
+            with xray_process.terminate_posix_group(1234, leader_unreaped=True):
+                kill.assert_called_once_with(1234, signal.SIGKILL)
+        self.assertEqual(kill.call_args_list, [mock.call(1234, signal.SIGKILL), mock.call(1234, 0)])
+
     def test_darwin_uncertain_drain_fails_closed_at_the_shared_deadline(self):
         for response in (None, PermissionError(), OSError("group query failed")):
             with self.subTest(response=response):
