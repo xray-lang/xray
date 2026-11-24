@@ -33,6 +33,7 @@ def main() -> None:
     negatives = {
         "active_view_write": b"during view lifetime normalization",
         "invalid_arity": b"bytes requires its exact lowered readonly String declaration",
+        "byte_view_module_origin": b"readonly String byte view of a nonlocal binding",
         "byte_view_ref_conflict": b"during view lifetime normalization",
         "byte_view_temporary_call": b"String bytes cannot borrow a temporary receiver",
         "byte_view_temporary_literal": b"String bytes cannot borrow a temporary receiver",

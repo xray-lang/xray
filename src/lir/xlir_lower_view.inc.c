@@ -13,8 +13,11 @@ static XrLirType lower_slice_element(const Lower *c, XrXirType type) {
 static bool lower_slice_call(LowerFunction *f, uint32_t block, XrLirSliceOperation role,
     XrLirType element, const XrLirValue *args, uint32_t count, XrLirValue *output) {
     Lower *c = f->owner; uint32_t id = 0; XrLirType binding = XR_LIR_TYPE_INVALID;
-    if (role == XR_LIR_SLICE_OP_NEW)
+    if (role == XR_LIR_SLICE_OP_NEW) {
         binding = c->module->functions[f->function.id - 1].values[args[0].id - 1].type;
+        if (count == 1 && binding != XR_LIR_STRING_CELL)
+            return lower_unsupported(c, "readonly String byte view of a nonlocal binding");
+    }
     if (!lower_build(c, xr_lir_slice_operation(c->module, role, element, binding, &id))) return false;
     const XrLirIntrinsic *entry = xr_lir_internal_slice_intrinsic(c->module, id);
     if (!entry) return lower_unsupported(c, "Slice role lost its receiving signature");

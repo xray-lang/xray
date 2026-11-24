@@ -1,0 +1,9 @@
+import encoding
+
+var owner = "A"
+
+fn verify() {
+    print(encoding.utf8Valid(owner.bytes()))
+}
+
+verify()
