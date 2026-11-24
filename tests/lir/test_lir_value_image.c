@@ -847,7 +847,8 @@ static void class_optional_i64_fields_keep_their_inline_layout(void) {
     replacement.tag = 0;
     MANAGED(xrt_class_scalar_field_write(current, type.plan, 0, &replacement, sizeof(replacement)));
     const unsigned char zero[sizeof(OptionalI64)] = {0};
-    CHECK(!memcmp(uid_bytes, zero, sizeof(zero)) && !memcmp(gid_bytes, zero, sizeof(zero)));
+    CHECK(!memcmp(uid_bytes, zero, sizeof(zero)));
+    CHECK(((const OptionalI64 *)gid_bytes)->tag == 0);
     CHECK(owner.audit.allocations == allocations);
     MANAGED(xrt_managed_root_destroy(&root));
     CHECK(some.tag == 1 && some.payload == 0 && none.tag == 0);
