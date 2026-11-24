@@ -816,19 +816,22 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
     return outcome;
 }
 
-XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution) {
-    if (!execution || !*execution) return;
+XR_FUNC XrOsIoStatus xr_rbc_execution_free(XrRbcExecution **execution) {
+    if (!execution || !*execution) return XR_OS_IO_OK;
     XrRbcExecution *owned = *execution;
-    *execution = NULL;
+    owned->consumed = true;
     xr_rbc_stack_free(&owned->stack);
     xrt_module_state_drop(&owned->state);
+    XrOsIoStatus status = xrt_value_root_drain(&owned->values);
+    if (status != XR_OS_IO_OK) return status;
+    *execution = NULL;
     xr_free(owned->entries);
     xr_rbc_outcome_free(&owned->pending);
     xrt_module_layout_drop(&owned->layout);
-    xrt_value_root_drain(&owned->values);
     xrt_managed_drop(owned->owned_function.owner);
     if (owned->code_lease.owner) owned->code_lease.release(owned->code_lease.owner);
     xr_free(owned);
+    return XR_OS_IO_OK;
 }
 
 XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome) {

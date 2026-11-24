@@ -13,22 +13,26 @@
 #ifndef XNATIVE_VALUE_H
 #define XNATIVE_VALUE_H
 #include "base/xdefs.h"
+#include "base/xio_policy.h"
 #include "shared/xr_value_status.h"
 
 typedef struct XrtValueRoot {
     uint64_t byte_limit; /* Zero selects the ordinary unbounded policy. */
     struct XrtNativeValues *managed;
     bool draining;
+    bool implicit; /* The local embedded convenience wrapper cannot own pending host handles. */
 } XrtValueRoot;
 typedef struct XrtValueBinding { XrtValueRoot *root; size_t sources; } XrtValueBinding;
+struct XrOsFileMetadataOwner;
+typedef XrOsIoStatus (*XrtMetadataCloser)(struct XrOsFileMetadataOwner *);
 
 /* One synchronous thread binding is restored on every normal or failed exit. */
 XR_FUNC XrtValueBinding xrt_value_root_bind(XrtValueBinding);
 XR_FUNC XrtValueRoot *xrt_value_root_active(void);
 XR_FUNC XrtValueRoot *xrt_value_root_current(uint32_t source_id);
 XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus, uint32_t source_id);
-XR_FUNC void xrt_value_root_drain(XrtValueRoot *);
-XR_FUNC void xrt_native_values_drain(XrtValueRoot *);
+/* An OS close failure keeps this Root alive for close-only retirement. */
+XR_FUNC XrOsIoStatus xrt_value_root_drain(XrtValueRoot *);
 XR_FUNC bool xrt_native_values_prepared(const XrtValueRoot *);
 static inline bool xrt_value_root_storage_empty(const XrtValueRoot *root) {
     return root && !root->draining;

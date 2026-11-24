@@ -10,6 +10,7 @@
 #include "xnative_host_io.h"
 #include "xnative_string_backing.h"
 #include "base/xchecks.h"
+#include <string.h>
 
 typedef struct HostStatPolicy {
     XrOsIoPolicy billed;
@@ -71,11 +72,23 @@ XR_FUNC bool xrt_host_stat_row_matches(const XrtValuePlanSpec *spec) {
     return true;
 }
 
-XR_FUNC XrtHostStatRow xrt_host_stat_row(const XrOsFileMetadata *metadata) {
-    XR_DCHECK(metadata && metadata->present, "only present metadata has a class payload");
-    return (XrtHostStatRow){.size=metadata->size, .mode=metadata->mode,
-        .mtime=metadata->mtime, .atime=metadata->atime, .ctime=metadata->ctime,
-        .uid={metadata->uid.present, metadata->uid.present ? metadata->uid.value : 0},
-        .gid={metadata->gid.present, metadata->gid.present ? metadata->gid.value : 0},
-        .is_file=metadata->is_file, .is_dir=metadata->is_dir, .is_symlink=metadata->is_symlink};
+static void host_stat_store_optional(unsigned char *bytes, const XrOsOptionalI64 *value) {
+    bytes[offsetof(XrtHostStatOptionalI64, present)] = value->present;
+    if (value->present) memcpy(bytes + offsetof(XrtHostStatOptionalI64, value), &value->value, sizeof(value->value));
+}
+
+XR_FUNC void xrt_host_stat_row(const XrOsFileMetadata *metadata, XrtHostStatRow *output) {
+    XR_DCHECK(metadata && metadata->present && output, "only present metadata has a class payload");
+    unsigned char *bytes = (unsigned char *)output;
+    memset(bytes, 0, sizeof(*output));
+    memcpy(bytes + offsetof(XrtHostStatRow, size), &metadata->size, sizeof(metadata->size));
+    memcpy(bytes + offsetof(XrtHostStatRow, mode), &metadata->mode, sizeof(metadata->mode));
+    memcpy(bytes + offsetof(XrtHostStatRow, mtime), &metadata->mtime, sizeof(metadata->mtime));
+    memcpy(bytes + offsetof(XrtHostStatRow, atime), &metadata->atime, sizeof(metadata->atime));
+    memcpy(bytes + offsetof(XrtHostStatRow, ctime), &metadata->ctime, sizeof(metadata->ctime));
+    host_stat_store_optional(bytes + offsetof(XrtHostStatRow, uid), &metadata->uid);
+    host_stat_store_optional(bytes + offsetof(XrtHostStatRow, gid), &metadata->gid);
+    bytes[offsetof(XrtHostStatRow, is_file)] = metadata->is_file;
+    bytes[offsetof(XrtHostStatRow, is_dir)] = metadata->is_dir;
+    bytes[offsetof(XrtHostStatRow, is_symlink)] = metadata->is_symlink;
 }

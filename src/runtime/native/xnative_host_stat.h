@@ -37,5 +37,7 @@ typedef struct XrtHostStatRow {
 /* The runtime image must already authenticate the private class. Only its
  * exact owner-free Layout can consume this C11 staging row. */
 XR_FUNC bool xrt_host_stat_row_matches(const XrtValuePlanSpec *);
-XR_FUNC XrtHostStatRow xrt_host_stat_row(const XrOsFileMetadata *);
+/* Initialize the full row's representation, including padding copied during
+ * class construction. The metadata and output are distinct live objects. */
+XR_FUNC void xrt_host_stat_row(const XrOsFileMetadata *, XrtHostStatRow *output);
 #endif // XNATIVE_HOST_STAT_H

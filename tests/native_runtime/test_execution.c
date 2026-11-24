@@ -150,6 +150,97 @@ static void managed_host_path_scratch(void) {
     xrt_locations_release(owner);
 }
 
+typedef struct MetadataRetirement {
+    XrtValueRoot *root;
+    XrtBillingOwner *billing;
+    XrOsFileMetadataOwner *metadata;
+    size_t cold_bytes;
+    unsigned visits, closes;
+    bool fail_guest;
+} MetadataRetirement;
+
+static MetadataRetirement *metadata_retirement;
+
+static void metadata_root(void *context) {
+    MetadataRetirement *call = context;
+    ++call->visits;
+    CHECK(xrt_value_root_active() == call->root);
+    managed_require(xrt_native_values_stat_prepare(call->root, &call->billing, &call->metadata));
+    CHECK(call->metadata && !call->metadata->handle && xrt_billing_owner_retain(call->billing));
+    call->cold_bytes = xrt_billing_owner_stats(call->billing).bytes;
+    const XrtBackingTypes *types = NULL;
+    XrtManagedFrame *frame = NULL;
+    managed_require(xrt_native_values_backings(call->root, &types));
+    managed_require(xrt_managed_frame_enter(xrt_native_managed_root(1), 1, &frame));
+    managed_require(xrt_string_backing_create(frame, 0, types, "live", 4, 0));
+    CHECK(xrt_billing_owner_stats(call->billing).bytes > call->cold_bytes);
+    call->metadata->handle = 17; /* Token used only with the injected closer. */
+    if (call->fail_guest) xrt_value_failure(XR_XIR_VALUE_BAD_UTF8, 1);
+}
+
+static XrOsIoStatus metadata_close(XrOsFileMetadataOwner *owner) {
+    MetadataRetirement *call = metadata_retirement;
+    CHECK(call && call->visits == 1 && owner == call->metadata && owner->handle == 17);
+    CHECK(xrt_billing_owner_stats(call->billing).bytes == call->cold_bytes);
+    CHECK(xrt_value_root_drain(call->root) == XR_OS_IO_BAD_ARGUMENT);
+    if (++call->closes <= 2) return XR_OS_IO_IO;
+    owner->handle = 0;
+    return XR_OS_IO_OK;
+}
+
+static void implicit_metadata_root(void *context) {
+    XrtValueRoot *root = xrt_value_root_active();
+    XrtBillingOwner *billing = NULL;
+    XrOsFileMetadataOwner *metadata = NULL;
+    CHECK(xrt_native_values_stat_prepare(root, &billing, &metadata) == XRT_MANAGED_ARGUMENT);
+    CHECK(!billing && !metadata && xrt_value_root_empty(root));
+    ++*(unsigned *)context;
+}
+
+static void managed_metadata_retirement(void) {
+    XrtLocationOwner *where = locations("metadata-close.xr");
+    XrtValueRoot *previous = xrt_value_root_active();
+    for (unsigned fail_guest = 0; fail_guest < 2; ++fail_guest) {
+        XrtValueRoot root = {.byte_limit=1024 * 1024};
+        MetadataRetirement call = {.root=&root, .fail_guest=fail_guest != 0};
+        XrtExecutionFailure failure = {0};
+        metadata_retirement = &call;
+        CHECK(xrt_run_embedded_owned_with_metadata_close(where, &failure, metadata_root, &call, &root, metadata_close) ==
+            XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.source_id == fail_guest);
+        CHECK(failure.detail.value.status == (fail_guest ? XR_XIR_VALUE_BAD_UTF8 : XR_XIR_VALUE_IO));
+        unsigned char original_failure[sizeof(failure)];
+        memcpy(original_failure, &failure, sizeof(failure));
+        CHECK(call.closes == 1 && call.metadata->handle == 17 && !xrt_value_root_empty(&root));
+        CHECK(xrt_value_root_active() == previous);
+        Context refused = {0};
+        CHECK(xrt_run_embedded_owned(where, &failure, normal_root, &refused, &root) == XRT_EXECUTION_INVALID);
+        XrOsFileMetadataOwner *unused = NULL;
+        XrtBillingOwner *billing = NULL;
+        const XrtBackingTypes *types = NULL;
+        CHECK(xrt_native_values_stat_prepare(&root, &billing, &unused) == XRT_MANAGED_ARGUMENT);
+        CHECK(xrt_native_values_backings(&root, &types) == XRT_MANAGED_ARGUMENT);
+        CHECK(!refused.visits && !billing && !unused && !types);
+
+        CHECK(xrt_value_root_drain_with(&root, metadata_close) == XR_OS_IO_IO);
+        CHECK(call.closes == 2 && call.metadata->handle == 17 && !xrt_value_root_empty(&root));
+        CHECK(xrt_value_root_drain_with(&root, metadata_close) == XR_OS_IO_OK);
+        CHECK(call.closes == 3 && call.visits == 1 && xrt_value_root_empty(&root));
+        CHECK(root.byte_limit == 1024 * 1024 && xrt_billing_owner_stats(call.billing).blocks == 1);
+        CHECK(xrt_value_root_drain_with(&root, metadata_close) == XR_OS_IO_OK && call.closes == 3);
+        CHECK(xrt_run_embedded_owned(where, &failure, normal_root, &refused, &root) == XRT_EXECUTION_COMPLETED);
+        CHECK(refused.visits == 1 && xrt_value_root_empty(&root));
+        CHECK(!memcmp(original_failure, &failure, sizeof(failure)));
+        metadata_retirement = NULL;
+        xrt_billing_owner_drop(call.billing);
+    }
+    unsigned visits = 0;
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_run_embedded(where, &failure, implicit_metadata_root, &visits) == XRT_EXECUTION_COMPLETED);
+    CHECK(visits == 1 && xrt_value_root_active() == previous);
+    xrt_locations_release(where);
+}
+
 typedef enum HostFileMode {
     HOST_FILE_VALID, HOST_FILE_INVALID_HOME, HOST_FILE_WRONG_BACKING, HOST_FILE_INVALID_LENGTH,
 } HostFileMode;
@@ -1100,6 +1191,7 @@ static void standalone_state_string(void) {
 int main(void) {
     managed_scopes();
     managed_host_path_scratch();
+    managed_metadata_retirement();
     managed_host_file();
     managed_host_file_read();
     managed_host_environment();

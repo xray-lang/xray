@@ -119,11 +119,19 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         if (status==XR_RBC_OK && backtrace && !strcmp(backtrace,"1")) xr_rbc_execution_enable_try_trace(execution);
         XrRbcOutcome *outcome = status == XR_RBC_OK ? xr_rbc_execution_run(execution) : NULL;
         if (status == XR_RBC_OK) status = xr_rbc_outcome_status(outcome);
-        xr_rbc_execution_free(&execution);
+        XrOsIoStatus retired = xr_rbc_execution_free(&execution);
         xr_rbc_program_destroy(program);
         program = NULL;
         result = run_report(outcome, status);
         xr_rbc_outcome_free(&outcome);
+        if (retired != XR_OS_IO_OK) {
+            if (result == XR_CLI_EXIT_OK) {
+                fprintf(stderr, "register VM retirement failed (%u)\n", (unsigned)retired);
+                result = XR_CLI_EXIT_FAIL;
+            }
+            /* The execution still owns the exact handle at process exit. */
+            _Exit(result);
+        }
     }
     xr_rbc_program_destroy(program);
     return result;

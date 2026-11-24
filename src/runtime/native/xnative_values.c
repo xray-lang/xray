@@ -50,6 +50,8 @@ struct XrtNativeValues {
     NativeEnvironmentType *environments;
     const XrtModuleState *state;
     const XrtValueImage *state_image;
+    XrOsFileMetadataOwner metadata;
+    bool retired;
 };
 static XR_THREAD_LOCAL XrtValueBinding value_binding;
 XR_FUNC XrtValueBinding xrt_value_root_bind(XrtValueBinding binding) {
@@ -63,21 +65,18 @@ XR_FUNC XrtValueRoot *xrt_value_root_current(uint32_t source_id) {
         "value operations require an active execution and its source id");
     return value_binding.root;
 }
-XR_FUNC void xrt_value_root_drain(XrtValueRoot *owner) {
-    if (!owner || owner->draining) return;
-    uint64_t limit = owner->byte_limit;
-    owner->draining = true;
-    xrt_native_values_drain(owner);
-    *owner = (XrtValueRoot){.byte_limit=limit};
-}
-
 XRAY_API_NORET void xrt_native_managed_failure(XrtManagedStatus status, uint32_t source_id) {
     XR_CHECK(status != XRT_MANAGED_OK, "managed failure preserves a real failing kernel result");
     xrt_value_failure(xrt_managed_value_status(status), source_id);
 }
 
+static bool native_values_accepts_work(const XrtValueRoot *owner) {
+    return xrt_value_root_storage_empty(owner) &&
+        (!owner->managed || (!owner->managed->retired && !owner->managed->metadata.handle));
+}
+
 XR_FUNC XrtManagedStatus xrt_native_values_prepare(XrtValueRoot *owner, XrtBillingOwner **output) {
-    if (!owner || owner->draining || !output || *output) return XRT_MANAGED_ARGUMENT;
+    if (!native_values_accepts_work(owner) || !output || *output) return XRT_MANAGED_ARGUMENT;
     if (!owner->managed) {
         XrtBillingOwner *billing = NULL;
         size_t limit = SIZE_MAX;
@@ -104,13 +103,21 @@ XR_FUNC XrtManagedStatus xrt_native_values_prepare(XrtValueRoot *owner, XrtBilli
     return XRT_MANAGED_OK;
 }
 
+XR_FUNC XrtManagedStatus xrt_native_values_stat_prepare(XrtValueRoot *owner, XrtBillingOwner **billing,
+    XrOsFileMetadataOwner **output) {
+    if (!owner || owner->implicit || !output || *output) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = xrt_native_values_prepare(owner, billing);
+    if (status == XRT_MANAGED_OK) *output = &owner->managed->metadata;
+    return status;
+}
+
 XR_FUNC bool xrt_native_values_prepared(const XrtValueRoot *owner) {
-    return owner && xrt_value_root_storage_empty(owner) &&
+    return native_values_accepts_work(owner) &&
         (!owner->managed || (!owner->managed->root && !owner->managed->backings.string &&
             !owner->managed->images && !owner->managed->environments));
 }
 XR_FUNC XrtManagedStatus xrt_native_values_backings(XrtValueRoot *owner, const XrtBackingTypes **output) {
-    if (!owner || owner->draining || !output || *output) return XRT_MANAGED_ARGUMENT;
+    if (!native_values_accepts_work(owner) || !output || *output) return XRT_MANAGED_ARGUMENT;
     /* The String descriptor is published with the entire backing family. */
     if (owner->managed && owner->managed->backings.string) {
         *output = &owner->managed->backings;
@@ -774,9 +781,7 @@ XRAY_API void xrt_native_tuple_display_create(XrtManagedFrame *frame, size_t slo
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
 
-XR_FUNC void xrt_native_values_drain(XrtValueRoot *owner) {
-    struct XrtNativeValues *values = owner->managed;
-    if (!values) return;
+static void native_values_retire_managed(struct XrtNativeValues *values) {
     XrtManagedStatus status = xrt_managed_root_destroy(&values->root);
     XR_CHECK(status == XRT_MANAGED_OK, "execution retirement runs outside every managed mutation");
     while (values->environments) {
@@ -795,8 +800,37 @@ XR_FUNC void xrt_native_values_drain(XrtValueRoot *owner) {
         if (code_owned) code.drop(code.context);
     }
     xrt_backing_types_drop(&values->backings);
+    values->state = NULL;
+    values->state_image = NULL;
+}
+
+XR_FUNC XrOsIoStatus xrt_value_root_drain_with(XrtValueRoot *owner, XrtMetadataCloser close_metadata) {
+    if (!owner || !owner->managed) return XR_OS_IO_OK;
+    if (owner->draining || !close_metadata) return XR_OS_IO_BAD_ARGUMENT;
+    owner->draining = true;
+    struct XrtNativeValues *values = owner->managed;
+    if (!values->retired) {
+        native_values_retire_managed(values);
+        values->retired = true;
+    }
+    if (values->metadata.handle) {
+        intptr_t handle = values->metadata.handle;
+        XrOsIoStatus status = close_metadata(&values->metadata);
+        XR_CHECK(values->metadata.handle == (status == XR_OS_IO_OK ? 0 : handle),
+            "metadata close consumes only on success and otherwise preserves the original handle");
+        if (status != XR_OS_IO_OK) {
+            owner->draining = false;
+            return status;
+        }
+    }
     XrtBillingOwner *billing = values->billing;
     owner->managed = NULL;
     xrt_managed_metadata_free(billing, values, sizeof(*values));
     xrt_billing_owner_drop(billing);
+    owner->draining = false;
+    return XR_OS_IO_OK;
+}
+
+XR_FUNC XrOsIoStatus xrt_value_root_drain(XrtValueRoot *owner) {
+    return xrt_value_root_drain_with(owner, xr_os_io_file_metadata_close);
 }

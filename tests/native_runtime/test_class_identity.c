@@ -21,6 +21,7 @@
 #include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); abort(); } } while (0)
 #define OK(c) CHECK((c) == XRT_MANAGED_OK)
@@ -104,10 +105,17 @@ static void file_stat_payload_facts(void) {
 
     const XrOsFileMetadata metadata = {.present=true, .size=42, .mode=0644, .mtime=-30, .atime=40, .ctime=50,
         .uid={true, 0}, .gid={false, 13}, .is_file=true, .is_dir=false, .is_symlink=true};
-    XrtHostStatRow row = xrt_host_stat_row(&metadata);
+    XrtHostStatRow row;
+    memset(&row, 0xa5, sizeof(row));
+    xrt_host_stat_row(&metadata, &row);
     CHECK(row.size == 42 && row.mode == 0644 && row.mtime == -30 && row.atime == 40 && row.ctime == 50);
     CHECK(row.uid.present == 1 && row.uid.value == 0 && row.gid.present == 0 && row.gid.value == 0);
     CHECK(row.is_file == 1 && row.is_dir == 0 && row.is_symlink == 1);
+    unsigned char expected[80] = {0};
+    const int64_t required[] = {42, 0644, -30, 40, 50};
+    memcpy(expected, required, sizeof(required));
+    expected[40] = expected[72] = expected[74] = 1;
+    CHECK(sizeof(row) == sizeof(expected) && !memcmp(&row, expected, sizeof(expected)));
 
     xrt_value_plan_drop(record);
     xrt_value_plan_drop(nullable);

@@ -11,6 +11,7 @@
  *   changes across recovery, so no changed automatic owner is lost to a jump.
  */
 #include "xnative_execution.h"
+#include "xnative_host_io.h"
 #include "xnative_module_state.h"
 #include "xnative_status.h"
 #include "xnative_values.h"
@@ -235,23 +236,26 @@ XRAY_API_NORET void xrt_fixed_array_bounds(uint32_t source_id) {
 
 /* Mutable managed-value state belongs to the caller of this setjmp function. */
 static XrtExecutionStatus run_bound(const XrtSourceMap *map, XrtExecutionFailure *failure,
-    XrtSynchronousRoot root, void *context, XrtValueRoot *strings) {
+    XrtSynchronousRoot root, void *context, XrtValueRoot *strings, XrtMetadataCloser close_metadata) {
     jmp_buf target;
     const XrtExecutionBinding binding = {.map = *map, .previous = current_execution,
         .target = &target, .failure = failure, .strings = strings};
     current_execution = &binding;
     const XrtValueBinding previous_strings = xrt_value_root_bind((XrtValueBinding){strings, map->count});
+    XrtExecutionStatus result;
     if (setjmp(target) == 0) {
         root(context);
-        xrt_value_root_drain(strings);
-        current_execution = binding.previous;
-        (void)xrt_value_root_bind(previous_strings);
-        return XRT_EXECUTION_COMPLETED;
-    }
-    xrt_value_root_drain(strings);
+        result = XRT_EXECUTION_COMPLETED;
+    } else result = XRT_EXECUTION_FAILURE;
+    XrOsIoStatus retired = xrt_value_root_drain_with(strings, close_metadata);
     current_execution = binding.previous;
     (void)xrt_value_root_bind(previous_strings);
-    return XRT_EXECUTION_FAILURE;
+    if (result == XRT_EXECUTION_COMPLETED && retired != XR_OS_IO_OK) {
+        *failure = (XrtExecutionFailure){.kind=XRT_FAILURE_VALUE,
+            .detail.value={.status=xrt_host_io_failure(retired)}};
+        return XRT_EXECUTION_FAILURE;
+    }
+    return result;
 }
 
 static bool source_map_valid(const XrtSourceMap *map) {
@@ -275,7 +279,8 @@ XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot roo
     XR_CHECK(root && source_map_valid(map), "A standalone root requires a valid prepared source map");
     XrtValueRoot strings = {0};
     XrtExecutionFailure failure = {0};
-    if (run_bound(map, &failure, root, context, &strings) == XRT_EXECUTION_FAILURE)
+    /* A failed drain leaves the handle owned until standalone process exit. */
+    if (run_bound(map, &failure, root, context, &strings, xr_os_io_file_metadata_close) == XRT_EXECUTION_FAILURE)
         native_failure_exit(map, &failure);
 }
 
@@ -305,31 +310,40 @@ XRAY_API void xrt_run_standalone_state(const XrtSourceMap *map, XrtSynchronousSt
     XrtExecutionFailure failure = {0};
     if (status != XRT_MANAGED_OK) {
         xrt_module_state_drop(&state);
-        xrt_value_root_drain(&values);
+        (void)xrt_value_root_drain(&values);
         failure.kind = XRT_FAILURE_VALUE;
         failure.detail.value.status = xrt_managed_value_status(status);
         native_failure_exit(map, &failure);
     }
     xrt_native_values_use_state(&values, state, spec->values);
     XrtStateInvocation invocation = {root, context, state};
-    XrtExecutionStatus result = run_bound(map, &failure, state_root_invoke, &invocation, &values);
+    XrtExecutionStatus result = run_bound(map, &failure, state_root_invoke, &invocation, &values,
+        xr_os_io_file_metadata_close);
     xrt_module_state_drop(&state);
     if (result == XRT_EXECUTION_FAILURE) native_failure_exit(map, &failure);
 }
 
 XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context) {
-    XrtValueRoot strings = {0};
-    return xrt_run_embedded_owned(locations, failure, root, context, &strings);
+    XrtValueRoot strings = {.implicit=true};
+    XrtExecutionStatus status = xrt_run_embedded_owned(locations, failure, root, context, &strings);
+    XR_CHECK(xrt_value_root_empty(&strings), "a local execution cannot retain a host handle past its lifetime");
+    return status;
 }
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings) {
-    if (!locations || !failure || !root || !strings || !xrt_native_values_prepared(strings))
+    return xrt_run_embedded_owned_with_metadata_close(locations, failure, root, context, strings,
+        xr_os_io_file_metadata_close);
+}
+XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_with_metadata_close(const XrtLocationOwner *locations,
+    XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings,
+    XrtMetadataCloser close_metadata) {
+    if (!locations || !failure || !root || !strings || !close_metadata || !xrt_native_values_prepared(strings))
         return XRT_EXECUTION_INVALID;
     for (const XrtExecutionBinding *active = current_execution; active; active = active->previous)
         if (active->strings == strings) return XRT_EXECUTION_INVALID;
     XrtSourceMap map = {xrt_locations_get(locations, 1), xrt_locations_count(locations)};
-    return run_bound(&map, failure, root, context, strings);
+    return run_bound(&map, failure, root, context, strings, close_metadata);
 }
 
 XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,

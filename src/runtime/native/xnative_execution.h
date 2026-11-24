@@ -79,17 +79,23 @@ typedef enum XrtExecutionStatus {
 // All inputs are borrowed through this active synchronous C call only. The
 // caller holds a location reference and owns failure/context, including the
 // sole mutable VM stack. INVALID invokes no guest. COMPLETED and INVALID
-// preserve every byte of failure. COMPLETED means root returned normally;
+// preserve every byte of failure. COMPLETED means the root ran and retired normally;
 // it does not reinterpret VM statuses.
 // FAILURE writes tagged captured facts only. The previous binding/target is
 // restored on either return. No target crosses yield, thread handoff or FFI.
+// The local wrapper cannot borrow metadata owners that could outlive the call.
 XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context);
 /* An outer owner is either empty or contains constructor-produced cold billing
  * setup only. An active ancestor's owner cannot be reused by a nested execution.
- * Both successful and failed execution drain the supplied outer owner. */
+ * Both successful and failed execution drain the supplied outer owner. If a
+ * close fails, the first execution failure is preserved and the supplied
+ * owner remains live for close-only retry via xrt_value_root_drain. */
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings);
+/* The closer is borrowed through the one drain at execution exit. */
+XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_with_metadata_close(const XrtLocationOwner *, XrtExecutionFailure *,
+    XrtSynchronousRoot, void *context, XrtValueRoot *, XrtMetadataCloser);
 
 // I/O helpers have already restored their OS state before this transfer.
 XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,

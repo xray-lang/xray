@@ -430,7 +430,9 @@ XR_FUNC XrRbcStatus xr_rbc_owned_function_prepare(const XrtFunction *, const uin
 // including ordinary VM failure. NULL/consumed misuse invokes no guest.
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution);
 XR_FUNC void xr_rbc_execution_enable_try_trace(XrRbcExecution *);
-XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution);
+/* Success consumes *execution. A failed native close preserves the retired
+ * execution for another free attempt and cannot restart the guest. */
+XR_FUNC XrOsIoStatus xr_rbc_execution_free(XrRbcExecution **execution);
 XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome);
 // Query handles must be live. False preserves every output; true copies bits
 // or scalar facts and borrows locations only through the outcome's lifetime.
