@@ -1,0 +1,18 @@
+enum Refusal { Denied }
+var bytes: Array<u8> = [65, 66]
+
+fn mutate(fail: bool) throws(Refusal) -> i64 {
+    bytes[1] = 90
+    if (fail) { throw Refusal.Denied }
+    return 10
+}
+fn relay(fail: bool) throws(Refusal) -> i64 {
+    return try mutate(fail)
+}
+fn probe(fail: bool) {
+    var view: Slice<u8> = bytes[0:2]
+    print(view[1])
+    print((try? relay(fail)) ?? -1)
+}
+probe(false)
+probe(true)

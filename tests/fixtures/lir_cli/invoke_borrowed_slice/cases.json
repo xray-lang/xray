@@ -3,5 +3,7 @@
   "catch": {"exit": 0, "stdout": "267\n91\n1267\n91\n", "stderr": ""},
   "live_propagation": {"exit": 0, "stdout": "1\n68\n92\n-1\n68\n92\n", "stderr": ""},
   "panic": {"exit": 1, "stdout": "66\n", "stderr": "[Uncaught Panic] E0446: try! failed: Refusal.Empty\n"},
-  "write_conflict": {"source_error": ":8:4: error: constructed XIR failed checking during view lifetime normalization at function 2 block 16 instruction 74 (ARRAY_SET)"}
+  "write_conflict": {"source_error": ":8:4: error: constructed XIR failed checking during view lifetime normalization at function 2 block 16 instruction 74 (ARRAY_SET)"},
+  "transitive_write": {"lowering_error": ":14:17: Array binding write conflicts with a live readonly Slice loan"},
+  "transitive_write_after_read": {"exit": 0, "stdout": "66\n10\n90\n-1\n", "stderr": ""}
 }
