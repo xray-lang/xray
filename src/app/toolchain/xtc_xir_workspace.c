@@ -77,8 +77,18 @@ struct XtcXirWorkspace {
 #endif
 };
 static XtcXirWorkspaceStatus workspace_fail(XtcXirWorkspace *owner, XtcXirWorkspaceStatus status, uint32_t error) {
-    if (owner->diagnostic.status == XTC_XIR_WORKSPACE_OK)
-        owner->diagnostic = (XtcXirWorkspaceDiagnostic){status, error};
+    if (owner->diagnostic.status == XTC_XIR_WORKSPACE_OK) {
+        owner->diagnostic = (XtcXirWorkspaceDiagnostic){.status=status, .os_error=error};
+#ifdef XR_OS_WINDOWS
+        if (owner->closing) {
+            owner->diagnostic.during_cleanup = true;
+            owner->diagnostic.cleanup_phase = owner->close_phase;
+            owner->diagnostic.cleanup_depth = owner->frame_count;
+            owner->diagnostic.cleanup_step = owner->frame_count ?
+                owner->frames[owner->frame_count - 1].state : owner->close_index;
+        }
+#endif
+    }
     return status;
 }
 static XtcXirWorkspaceStatus workspace_resource_status(XrCompileResourceStatus status) {

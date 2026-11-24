@@ -332,6 +332,13 @@ static bool native_link(NativeCommand *command, const XtcHostToolchainView *host
     return native_command_run(command, "link", okay);
 }
 
+static void native_workspace_cleanup_position(const XtcXirWorkspaceDiagnostic *failure) {
+    if (failure->during_cleanup)
+        fprintf(stderr, "first cleanup phase=%" PRIu32 " step=%" PRIu32
+            " depth=%" PRIu32 " NTSTATUS=0x%08" PRIx32 "\n",
+            failure->cleanup_phase, failure->cleanup_step, failure->cleanup_depth, failure->nt_status);
+}
+
 XR_FUNC bool xr_cli_lir_workspace_close(XtcXirWorkspace **workspace, const char *subject) {
     const XtcXirWorkspaceDiagnostic *diagnostic = xtc_xir_workspace_diagnostic(*workspace);
     XtcXirWorkspaceDiagnostic first = diagnostic ? *diagnostic : (XtcXirWorkspaceDiagnostic){0};
@@ -346,6 +353,7 @@ XR_FUNC bool xr_cli_lir_workspace_close(XtcXirWorkspace **workspace, const char 
             if (first.status == XTC_XIR_WORKSPACE_OK) return true;
             fprintf(stderr, "%s cleanup failed (first status %u, first OS error %" PRIu32 ")\n",
                 subject, (unsigned)first.status, first.os_error);
+            native_workspace_cleanup_position(&first);
             return false;
         }
         diagnostic = xtc_xir_workspace_diagnostic(*workspace);
@@ -360,7 +368,7 @@ XR_FUNC bool xr_cli_lir_workspace_close(XtcXirWorkspace **workspace, const char 
         if (status == XTC_XIR_WORKSPACE_SHARING_RETRY) {
             if (sharing_retries == 5) {
                 if (first.status == XTC_XIR_WORKSPACE_OK)
-                    first = (XtcXirWorkspaceDiagnostic){status, ERROR_SHARING_VIOLATION};
+                    first = (XtcXirWorkspaceDiagnostic){.status=status, .os_error=ERROR_SHARING_VIOLATION};
                 break;
             }
             xr_time_sleep_ms(UINT64_C(1) << sharing_retries++);
@@ -377,6 +385,7 @@ XR_FUNC bool xr_cli_lir_workspace_close(XtcXirWorkspace **workspace, const char 
         (unsigned)status, first.os_error, paths && paths->root ? paths->root : "unknown");
     if (first.status != XTC_XIR_WORKSPACE_OK && first.status != status)
         fprintf(stderr, "first cleanup status %u\n", (unsigned)first.status);
+    native_workspace_cleanup_position(&first);
     fflush(stderr);
     _Exit(XR_CLI_EXIT_INTERNAL);
 }

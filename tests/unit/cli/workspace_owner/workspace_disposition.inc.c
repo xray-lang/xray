@@ -100,7 +100,16 @@ static void disposition_case(const char *parent, const char *program, Dispositio
     else disposition_hard_case(&owner, frame, path, mode == DISPOSITION_READONLY);
     const XtcXirWorkspaceDiagnostic *diagnostic = xtc_xir_workspace_diagnostic(owner);
     if (mode == DISPOSITION_RELEASE_IMAGE) CHECK(diagnostic->status == XTC_XIR_WORKSPACE_OK);
-    else CHECK(diagnostic->status == XTC_XIR_WORKSPACE_IO && diagnostic->os_error == ERROR_ACCESS_DENIED);
+    else {
+        CHECK(diagnostic->status == XTC_XIR_WORKSPACE_IO && diagnostic->os_error == ERROR_ACCESS_DENIED);
+        CHECK(diagnostic->during_cleanup && diagnostic->cleanup_phase == 3 && diagnostic->cleanup_depth == 3);
+        if (mode == DISPOSITION_READONLY) {
+            CHECK(diagnostic->cleanup_step == WORKSPACE_RECHECK_DISPOSITION && !diagnostic->nt_status);
+        } else {
+            uint32_t expected = mode == DISPOSITION_KEEP_IMAGE ? UINT32_C(0xc0000121) : UINT32_C(0xc0000022);
+            CHECK(diagnostic->cleanup_step == WORKSPACE_DISPOSITION && diagnostic->nt_status == expected);
+        }
+    }
     drain(&owner, 1);
     CHECK(GetFileAttributesA(root) == INVALID_FILE_ATTRIBUTES && sdk_stats(resources).held_bytes == held);
     xr_compile_resources_release(resources);

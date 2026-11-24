@@ -13,6 +13,12 @@ static XtcXirWorkspaceStatus workspace_error(XtcXirWorkspace *owner, DWORD error
     else if (error == ERROR_NOT_SUPPORTED || error == ERROR_INVALID_FUNCTION) status = XTC_XIR_WORKSPACE_UNSUPPORTED;
     return workspace_fail(owner, status, error);
 }
+static XtcXirWorkspaceStatus workspace_nt_error(XtcXirWorkspace *owner, NTSTATUS status) {
+    bool first = owner->diagnostic.status == XTC_XIR_WORKSPACE_OK;
+    XtcXirWorkspaceStatus result = workspace_error(owner, RtlNtStatusToDosError(status));
+    if (first) owner->diagnostic.nt_status = (uint32_t)status;
+    return result;
+}
 static bool workspace_target(XtcXirWorkspace *owner, XrXirTargetStatus status) {
     if (status == XR_XIR_TARGET_OK) return true;
     XtcXirWorkspaceStatus result = XTC_XIR_WORKSPACE_INVALID;
@@ -60,7 +66,7 @@ static bool workspace_anchor(XtcXirWorkspace *owner, uint32_t index) {
     WorkspaceNode *node = &owner->nodes[index];
     NTSTATUS status = workspace_named_open(workspace_parent_handle(owner, index), node->name, node->name_bytes,
         FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_OPEN, &node->anchor);
-    if (status < 0) { workspace_error(owner, RtlNtStatusToDosError(status)); return false; }
+    if (status < 0) { workspace_nt_error(owner, status); return false; }
     FILE_ID_INFO identity = {0};
     if (!GetFileInformationByHandleEx(node->anchor, FileIdInfo, &identity, sizeof(identity))) {
         workspace_error(owner, GetLastError()); return false;
@@ -111,7 +117,7 @@ static XtcXirWorkspaceStatus workspace_create_windows(XtcXirWorkspace *owner) {
     for (uint32_t attempt = 0; attempt < 16; ++attempt) {
         uint8_t nonce[16]; WorkspaceNode *node = &owner->nodes[0];
         NTSTATUS random = BCryptGenRandom(NULL, nonce, sizeof(nonce), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-        if (random < 0) return workspace_error(owner, RtlNtStatusToDosError(random));
+        if (random < 0) return workspace_nt_error(owner, random);
         memcpy(node->name, L"xray-", 5 * sizeof(wchar_t));
         for (size_t i = 0; i < 16; ++i) {
             node->name[5 + i * 2] = L"0123456789abcdef"[nonce[i] >> 4];
@@ -122,7 +128,7 @@ static XtcXirWorkspaceStatus workspace_create_windows(XtcXirWorkspace *owner) {
         NTSTATUS made = workspace_named_open(owner->parent_handle, node->name, node->name_bytes,
             FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_CREATE, &node->created);
         if (made >= 0) { node->exists = true; break; }
-        if ((ULONG)made != 0xc0000035UL) return workspace_error(owner, RtlNtStatusToDosError(made));
+        if ((ULONG)made != 0xc0000035UL) return workspace_nt_error(owner, made);
         if (attempt == 15) return workspace_fail(owner, XTC_XIR_WORKSPACE_IO, ERROR_ALREADY_EXISTS);
     }
     for (uint32_t i = 0; i < 3; ++i) {
@@ -132,7 +138,7 @@ static XtcXirWorkspaceStatus workspace_create_windows(XtcXirWorkspace *owner) {
             memcpy(node->name, i == 1 ? L"input" : L"output", node->name_bytes + sizeof(wchar_t));
             NTSTATUS made = workspace_named_open(owner->nodes[0].anchor, node->name, node->name_bytes,
                 FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_CREATE, &node->created);
-            if (made < 0) return workspace_error(owner, RtlNtStatusToDosError(made));
+            if (made < 0) return workspace_nt_error(owner, made);
             node->exists = true;
         }
         if (!workspace_identify(owner, node) || !workspace_anchor(owner, i)) return owner->diagnostic.status;
@@ -166,7 +172,7 @@ static XtcXirWorkspaceStatus workspace_close_bridge(XtcXirWorkspace *owner) {
     if (!node->anchor) {
         NTSTATUS status = workspace_named_open(workspace_parent_handle(owner, owner->close_index), node->name, node->name_bytes,
             FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_OPEN, &node->anchor);
-        return status < 0 ? workspace_error(owner, RtlNtStatusToDosError(status)) : XTC_XIR_WORKSPACE_PENDING;
+        return status < 0 ? workspace_nt_error(owner, status) : XTC_XIR_WORKSPACE_PENDING;
     }
     if (!node->anchored) {
         FILE_ID_INFO identity = {0};
@@ -207,7 +213,7 @@ static XtcXirWorkspaceStatus workspace_close_fixed(XtcXirWorkspace *owner) {
     if (!node->deletion) {
         NTSTATUS status = workspace_named_open(workspace_parent_handle(owner, owner->close_index), node->name, node->name_bytes,
             DELETE | FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES, FILE_OPEN, &node->deletion);
-        return status < 0 ? workspace_error(owner, RtlNtStatusToDosError(status)) : XTC_XIR_WORKSPACE_PENDING;
+        return status < 0 ? workspace_nt_error(owner, status) : XTC_XIR_WORKSPACE_PENDING;
     }
     FILE_ID_INFO identity = {0};
     if (!GetFileInformationByHandleEx(node->deletion, FileIdInfo, &identity, sizeof(identity))) return workspace_error(owner, GetLastError());
@@ -284,8 +290,9 @@ static XtcXirWorkspaceStatus workspace_disposition_step(XtcXirWorkspace *owner, 
         /* A readonly file can return the same NT status as a mapped image. */
         if (!GetFileInformationByHandleEx(frame->handle, FileAttributeTagInfo, &attributes, sizeof(attributes)) ||
             (attributes.FileAttributes & disallowed)) {
+            XtcXirWorkspaceStatus error = workspace_error(owner, ERROR_ACCESS_DENIED);
             frame->state = 2;
-            return workspace_error(owner, ERROR_ACCESS_DENIED);
+            return error;
         }
         frame->state = WORKSPACE_DISPOSITION;
         ++owner->disposition_retries;
@@ -301,7 +308,7 @@ static XtcXirWorkspaceStatus workspace_disposition_step(XtcXirWorkspace *owner, 
             frame->state = WORKSPACE_RECHECK_DISPOSITION;
             return XTC_XIR_WORKSPACE_PENDING;
         }
-        if (status < 0) return workspace_error(owner, RtlNtStatusToDosError(status));
+        if (status < 0) return workspace_nt_error(owner, status);
     } else {
         FILE_DISPOSITION_INFO disposition = {TRUE};
         if (!SetFileInformationByHandle(frame->handle, FileDispositionInfo, &disposition, sizeof(disposition)))
@@ -330,7 +337,7 @@ static XtcXirWorkspaceStatus workspace_walk_step(XtcXirWorkspace *owner) {
              * Keep the open parent and the enumerated name and identity. */
             return XTC_XIR_WORKSPACE_SHARING_RETRY;
         }
-        if (status < 0) return workspace_error(owner, RtlNtStatusToDosError(status));
+        if (status < 0) return workspace_nt_error(owner, status);
         frame->state = 1; return XTC_XIR_WORKSPACE_PENDING;
     }
     if (frame->state == 1) {

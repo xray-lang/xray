@@ -24,7 +24,14 @@ typedef struct XtcXirWorkspaceRequest {
     XtcXirWorkspaceLimits limits;
 } XtcXirWorkspaceRequest;
 typedef struct XtcXirWorkspacePaths { const char *root, *input, *output; } XtcXirWorkspacePaths;
-typedef struct XtcXirWorkspaceDiagnostic { XtcXirWorkspaceStatus status; uint32_t os_error; } XtcXirWorkspaceDiagnostic;
+typedef struct XtcXirWorkspaceDiagnostic {
+    XtcXirWorkspaceStatus status;
+    uint32_t os_error;
+    /* Windows-only context for the first failure. nt_status is zero for Win32 calls. */
+    uint32_t nt_status;
+    uint32_t cleanup_phase, cleanup_step, cleanup_depth;
+    bool during_cleanup;
+} XtcXirWorkspaceDiagnostic;
 
 /* Copies and preallocates through the supplied memory owner without disk I/O.
  * Output must be NULL and remains unchanged on failure. Calls are serial.
