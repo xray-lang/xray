@@ -1,0 +1,8 @@
+import io
+import path
+
+print(io.remove(path.from("删除.txt")))
+print(io.remove(path.from("删除.txt")))
+print(io.remove(path.from("nonempty")))
+print(io.remove(path.from("link-dir")))
+print(io.remove(path.from("link-dir")))

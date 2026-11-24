@@ -1398,6 +1398,7 @@ module io {
   fn __rmdir {
     signature: "(path: Path): bool"
     doc: "Remove an empty directory"
+    host_leaf: "blocking-path-bool"
     vm: "io_rmdir"
     aot: "xrt_io_rmdir"
     argc: 1
@@ -1410,6 +1411,7 @@ module io {
   fn __remove {
     signature: "(path: Path): bool"
     doc: "Remove a file"
+    host_leaf: "blocking-path-bool"
     vm: "io_remove"
     aot: "xrt_io_remove"
     argc: 1

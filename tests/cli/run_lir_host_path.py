@@ -46,24 +46,34 @@ def stat_observations(path, is_link):
             metadata.st_atime_ns // 10**9, ctime_ns // 10**9, *ids, is_file, is_dir, is_link]
 
 
-def check_stat_observer(work, root, binary, appendix, run):
-    # The copied canonical module is the only fixture with access to private metadata.
+def observer_stdlib(work, root, fixtures):
+    # The copied canonical module gives the fixtures access to private leaves.
     stdlib = work / "stdlib"
     shutil.copytree(root / "stdlib", stdlib)
     with (stdlib / "io/io.xr").open("ab") as module:
-        module.write(b"\n" + appendix.read_bytes())
+        for observer in ("file_stat_observer.xr", "rmdir_observer.xr"):
+            module.write(b"\n" + (fixtures / observer).read_bytes())
+    return stdlib
 
-    directory = work / "stat-observer"
-    directory.mkdir()
-    data_file = directory / "元数据.txt"
-    data_file.write_bytes(b"measure\0size")
-    (directory / "target-dir").mkdir()
+
+def link_directory(directory):
+    target = directory / "target-dir"
+    target.mkdir()
     link = directory / "link-dir"
     if os.name == "nt":
         subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", "link-dir", "target-dir"],
                        cwd=directory, capture_output=True, check=True, timeout=30)
     else:
         link.symlink_to("target-dir", target_is_directory=True)
+    return link
+
+
+def check_stat_observer(work, stdlib, binary, run):
+    directory = work / "stat-observer"
+    directory.mkdir()
+    data_file = directory / "元数据.txt"
+    data_file.write_bytes(b"measure\0size")
+    link = link_directory(directory)
     fixture = directory / "observe.xr"
     fixture.write_text('import { observeFileStat } from io\nimport path\n'
                        'observeFileStat(path.from("元数据.txt"))\n'
@@ -105,11 +115,14 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="host-path-", dir=args.output.resolve()) as directory:
         work = Path(directory)
+        stdlib = observer_stdlib(work, root, fixtures)
         private_types = ("file_storage_private", "file_stat_private")
         for name in ("mkdir", "nul_path", "rename", "rename_nul_source", "rename_nul_destination",
-                     "unregistered", "file_open_write", "file_open_refused", "file_stat", "file_stat_nul",
+                     "remove", "remove_nul", "rmdir", "rmdir_nul", "unregistered",
+                     "file_open_write", "file_open_refused", "file_stat", "file_stat_nul",
                      "file_stat_public", *private_types):
             source = fixtures / (name + ".xr")
+            mirrored = stdlib if name in ("rmdir", "rmdir_nul") else None
             vm_dir, native_dir = work / (name + "-vm"), work / (name + "-native")
             for cwd in (vm_dir, native_dir):
                 cwd.mkdir()
@@ -118,8 +131,17 @@ def main() -> None:
                     (cwd / "起点.txt").write_bytes(b"old\x00bytes")
                     (cwd / "source").write_bytes(b"new")
                     (cwd / "occupied").write_bytes(b"existing")
-                elif name in ("rename_nul_source", "rename_nul_destination"):
+                elif name in ("rename_nul_source", "rename_nul_destination", "remove_nul"):
                     (cwd / "must-stay").write_bytes(b"untouched")
+                if name in ("remove", "rmdir"):
+                    (cwd / "nonempty").mkdir()
+                    (cwd / "nonempty" / "child").write_bytes(b"nonempty")
+                if name == "remove":
+                    (cwd / "删除.txt").write_bytes(b"removed\x00file")
+                    link_directory(cwd)
+                    (cwd / "target-dir" / "sentinel").write_bytes(b"linked file")
+                if name in ("rmdir", "rmdir_nul"):
+                    (cwd / "空目录").mkdir()
                 if name == "file_open_write":
                     (cwd / "preserved").write_bytes(b"preserve")
                     (cwd / "truncated").write_bytes(b"truncate")
@@ -127,9 +149,9 @@ def main() -> None:
                     (cwd / "数据.txt").write_bytes(b"snapshot")
                     (cwd / "目录").mkdir()
             limited = name == "file_open_write"
-            vm = run([binary, "run", source], vm_dir, "run", limit=limited)
+            vm = run([binary, "run", source], vm_dir, "run", limit=limited, stdlib=mirrored)
             output = native_dir / ("program.exe" if os.name == "nt" else "program")
-            built = run([binary, "build", source, "-o", output], native_dir, "build")
+            built = run([binary, "build", source, "-o", output], native_dir, "build", stdlib=mirrored)
             if name == "unregistered" or name in private_types:
                 assert vm == built, (name, vm, built)
                 assert vm[0] == 1 and not vm[1] and not output.exists(), (name, vm)
@@ -159,11 +181,25 @@ def main() -> None:
                         else:
                             assert not (cwd / "source").exists()
                             assert (cwd / "occupied").read_bytes() == b"new"
-                elif name in ("rename_nul_source", "rename_nul_destination"):
+                elif name in ("rename_nul_source", "rename_nul_destination", "remove_nul", "rmdir_nul"):
                     assert vm[0] == 1 and not vm[1] and b"XR_RUN_6002: value operation rejected (status 1)" in vm[2], vm
                     for cwd in (vm_dir, native_dir):
-                        assert (cwd / "must-stay").read_bytes() == b"untouched"
+                        if name == "rmdir_nul":
+                            assert (cwd / "空目录").is_dir(), name
+                        else:
+                            assert (cwd / "must-stay").read_bytes() == b"untouched", name
                         assert not (cwd / "must-not-exist").exists()
+                elif name == "remove":
+                    assert vm == (0, b"true\nfalse\nfalse\ntrue\nfalse\n", b""), vm
+                    for cwd in (vm_dir, native_dir):
+                        assert not (cwd / "删除.txt").exists() and not os.path.lexists(cwd / "link-dir"), name
+                        assert (cwd / "nonempty" / "child").read_bytes() == b"nonempty", name
+                        assert (cwd / "target-dir" / "sentinel").read_bytes() == b"linked file", name
+                elif name == "rmdir":
+                    assert vm == (0, b"true\nfalse\nfalse\nfalse\n", b""), vm
+                    for cwd in (vm_dir, native_dir):
+                        assert not (cwd / "空目录").exists(), name
+                        assert (cwd / "nonempty" / "child").read_bytes() == b"nonempty", name
                 elif name == "file_open_write":
                     assert vm == (0, b"true\n" * 5, b""), vm
                     for cwd in (vm_dir, native_dir):
@@ -186,7 +222,7 @@ def main() -> None:
                     assert all(not (cwd / "missing").exists() for cwd in (vm_dir, native_dir)), name
             assert all((cwd / "file").read_bytes() == b"keep" for cwd in (vm_dir, native_dir)), name
             print(f"{name}: VM and native agree on output, exit and filesystem effects")
-        check_stat_observer(work, root, binary, fixtures / "file_stat_observer.xr", run)
+        check_stat_observer(work, stdlib, binary, run)
 
 
 if __name__ == "__main__":

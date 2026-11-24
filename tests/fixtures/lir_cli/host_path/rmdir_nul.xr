@@ -1,0 +1,4 @@
+import { observeRmdir } from io
+import path
+
+print(observeRmdir(path.from("空目录\0ignored")))

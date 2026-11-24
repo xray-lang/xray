@@ -7,8 +7,10 @@
  * xnative_host_path.c - Shared synchronous host path calls
  */
 #include "xnative_values.h"
+#include "xnative_execution.h"
 #include "xnative_host_io.h"
 #include "xnative_backing_types.h"
+#include "base/xchecks.h"
 #include "base/xmax_align.h"
 #include "os/os_file_mutation.h"
 #include "shared/xnative_host_leaf.h"
@@ -58,22 +60,53 @@ XR_FUNC XrXirValueStatus xrt_host_io_failure(XrOsIoStatus status) {
     }
 }
 
+typedef struct HostPathRequest {
+    XrOsIoPolicy billed;
+    const XrtHostExecutionControl *control;
+} HostPathRequest;
+
+static XrOsIoStatus host_path_request_allocate(void *context, size_t size, void **output) {
+    const HostPathRequest *request = context;
+    return request->billed.alloc(request->billed.context, size, output);
+}
+
+static void host_path_request_free(void *context, void *memory) {
+    const HostPathRequest *request = context;
+    request->billed.free(request->billed.context, memory);
+}
+
+static bool host_path_request_current(void *context) {
+    const HostPathRequest *request = context;
+    return request->control->current(request->control->context);
+}
+
 static bool host_path_bool(uint32_t callable, const XrtStringBacking *text,
     const XrtStringBacking *destination, uint32_t source_id) {
     XrtValueRoot *root = xrt_value_root_current(source_id);
-    if (!text || xr_native_blocking_path_count(callable) != (destination ? 2u : 1u))
+    bool remove = callable == XR_NATIVE_CALLABLE_IO_REMOVE;
+    bool deletion = remove || callable == XR_NATIVE_CALLABLE_IO_RMDIR;
+    if (!text || xr_native_blocking_path_count(callable) != (destination ? 2u : 1u) ||
+        (deletion && !xrt_backing_string_matches((const XrtManagedHeader *)text)))
         xrt_value_failure(XR_XIR_VALUE_BAD_ARGUMENT, source_id);
     XrtBillingOwner *billing = NULL;
-    XrtManagedStatus prepared = xrt_native_values_prepare(root, &billing);
+    XrOsFileMetadataOwner *owner = NULL;
+    XrtManagedStatus prepared = remove ? xrt_native_values_stat_prepare(root, &billing, &owner) :
+        xrt_native_values_prepare(root, &billing);
     if (prepared != XRT_MANAGED_OK) xrt_native_managed_failure(prepared, source_id);
-    XrOsIoPolicy policy = xrt_host_io_policy(billing);
+    const XrtHostExecutionControl *control = deletion ? xrt_execution_host_control() : NULL;
+    HostPathRequest request = {xrt_host_io_policy(billing), control};
+    XrOsIoPolicy policy = control ?
+        (XrOsIoPolicy){&request, host_path_request_allocate, host_path_request_free} : request.billed;
+    bool (*current)(void *) = control ? host_path_request_current : NULL;
     XrOsPathSpan path = {text->bytes, text->length};
     XrOsIoStatus status;
     bool result = false;
     switch (callable) {
 #define XR_NATIVE_BLOCKING_ENV_GET(id)
 #define XR_NATIVE_BLOCKING_PATH_BOOL(id, implementation) \
-    case id: status = implementation(&policy, path, NULL, &result); break;
+    case id: status = implementation(&policy, path, current, &result); break;
+#define XR_NATIVE_BLOCKING_OWNED_PATH_BOOL(id, implementation) \
+    case id: status = implementation(&policy, path, current, owner, &result); break;
 #define XR_NATIVE_BLOCKING_PATH_PAIR_BOOL(id, implementation) \
     case id: { \
         XrOsPathSpan target = {destination->bytes, destination->length}; \
@@ -94,11 +127,14 @@ static bool host_path_bool(uint32_t callable, const XrtStringBacking *text,
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_READ
 #undef XR_NATIVE_BLOCKING_FILE_STAT
 #undef XR_NATIVE_BLOCKING_PATH_PAIR_BOOL
+#undef XR_NATIVE_BLOCKING_OWNED_PATH_BOOL
 #undef XR_NATIVE_BLOCKING_PATH_BOOL
 #undef XR_NATIVE_BLOCKING_ENV_GET
     default: status = XR_OS_IO_BAD_ARGUMENT; break;
     }
     if (status != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(status), source_id);
+    XR_CHECK(!owner || !owner->handle, "host deletion must close before reporting success");
+    if (current && !current(policy.context)) xrt_value_failure(XR_XIR_VALUE_CANCELLED, source_id);
     return result;
 }
 

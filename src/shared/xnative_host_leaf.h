@@ -23,6 +23,7 @@ static inline XrNativeHostShape xr_native_host_shape(uint32_t callable) {
     switch (callable) {
 #define XR_NATIVE_BLOCKING_ENV_GET(id) case id: return XR_NATIVE_HOST_ENV_GET;
 #define XR_NATIVE_BLOCKING_PATH_BOOL(id, implementation) case id: return XR_NATIVE_HOST_PATH_BOOL;
+#define XR_NATIVE_BLOCKING_OWNED_PATH_BOOL(id, implementation) case id: return XR_NATIVE_HOST_PATH_BOOL;
 #define XR_NATIVE_BLOCKING_PATH_PAIR_BOOL(id, implementation) case id: return XR_NATIVE_HOST_PATH_PAIR_BOOL;
 #define XR_NATIVE_BLOCKING_FILE_OPEN_READ(id) case id: return XR_NATIVE_HOST_FILE_OPEN_READ;
 #define XR_NATIVE_BLOCKING_FILE_STAT(id) case id: return XR_NATIVE_HOST_FILE_STAT;
@@ -38,6 +39,7 @@ static inline XrNativeHostShape xr_native_host_shape(uint32_t callable) {
 #undef XR_NATIVE_BLOCKING_FILE_OPEN_READ
 #undef XR_NATIVE_BLOCKING_FILE_STAT
 #undef XR_NATIVE_BLOCKING_PATH_PAIR_BOOL
+#undef XR_NATIVE_BLOCKING_OWNED_PATH_BOOL
 #undef XR_NATIVE_BLOCKING_PATH_BOOL
 #undef XR_NATIVE_BLOCKING_ENV_GET
     default: return XR_NATIVE_HOST_NONE;
