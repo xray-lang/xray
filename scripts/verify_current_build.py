@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = (
     "test_api_inventory_predicates",
-    "test_lir_core", "test_lir_carriers", "test_lir_lower", "test_lir_c",
+    "test_lir_core", "test_lir_carriers", "test_lir_source_input", "test_lir_lower", "test_lir_c",
     "test_lir_c_faults", "test_lir_c_native", "test_cgen_verify_output",
     "register_vm", "register_vm_native_print", "register_vm_alloc",
     "lir_bytecode", "lir_bytecode_alloc", "lir_bytecode_source",

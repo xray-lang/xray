@@ -363,7 +363,7 @@ set_tests_properties(test_lir_rebuild test_lir_rebuild_faults test_lir_string_el
 add_test(NAME test_lir_allocations COMMAND test_lir_allocations)
 add_test(NAME lir_block_facts_faults COMMAND test_lir_block_facts_faults)
 set_tests_properties(lir_block_facts_faults PROPERTIES LABELS "unit;lir;allocation;ownership" TIMEOUT 30)
-add_test(NAME test_lir_source_input COMMAND test_lir_source_input)
+add_test(NAME test_lir_source_input COMMAND test_lir_source_input "${PROJECT_SOURCE_DIR}/stdlib")
 add_test(NAME test_lir_lower COMMAND test_lir_lower "${CMAKE_CURRENT_SOURCE_DIR}/programs" "${CMAKE_CURRENT_SOURCE_DIR}/golden")
 add_test(NAME test_lir_lower_allocations COMMAND test_lir_lower_allocations)
 add_test(NAME test_lir_print COMMAND test_lir_print "${CMAKE_CURRENT_SOURCE_DIR}/golden")

@@ -6,6 +6,7 @@
  *
  * test_lir_source_input.c - Real Checked inputs and specialization source mapping
  */
+#include "base/xfileio.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_source.h"
@@ -494,35 +495,43 @@ static void class_cycle_facts(void) {
     xr_xir_compile_source_result_free(&source);
 }
 
-static void file_stat_cycle_facts(void) {
-#if defined(XR_OS_WINDOWS)
-#define FILE_STAT_TEST_ROOT "C:/xray-class-cycles-test"
-#else
-#define FILE_STAT_TEST_ROOT "/xray-class-cycles-test"
-#endif
+static void file_stat_cycle_facts(const char *stdlib_path) {
     static const char path_source[] =
         "export class Path{raw:string\ninit(raw:string){this.raw=raw}}\n";
     static const char io_source[] =
         "import {Path} from path\n"
         "export fn exists(path: Path) -> bool { return __stat(path) != null }\n"
         "print(exists(Path(\"fixture\")))\n";
-    const XrModuleIdentityAuthority io = {XR_MODULE_IDENTITY_STDLIB, "io", FILE_STAT_TEST_ROOT};
-    const XrModuleOverlayInput overlays[] = {
-        {io, "io/io.xr", FILE_STAT_TEST_ROOT "/io/io.xr", io_source, sizeof(io_source) - 1},
-        {{XR_MODULE_IDENTITY_STDLIB, "path", FILE_STAT_TEST_ROOT}, "path/path.xr",
-            FILE_STAT_TEST_ROOT "/path/path.xr", path_source, sizeof(path_source) - 1}
-    };
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrXirCompileContext context = {.limits=xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
+    XrOsIoPolicy policy = xr_compile_io_policy(context.resources);
+    char *root = NULL, *io_path = NULL, *path_path = NULL;
+    /* Named imports canonicalize the stdlib root before consulting the overlay. */
+    XrOsIoStatus path_status = xr_realpath_owned(&policy, stdlib_path, &root);
+    if (path_status != XR_OS_IO_OK)
+        fprintf(stderr, "file stat stdlib root %s: I/O status %u\n", stdlib_path, (unsigned)path_status);
+    CHECK(path_status == XR_OS_IO_OK);
+    CHECK(xr_path_join_owned(&policy, root, "io/io.xr", &io_path) == XR_OS_IO_OK);
+    CHECK(xr_path_join_owned(&policy, root, "path/path.xr", &path_path) == XR_OS_IO_OK);
+    const XrModuleIdentityAuthority io = {XR_MODULE_IDENTITY_STDLIB, "io", root};
+    const XrModuleOverlayInput overlays[] = {
+        {io, "io/io.xr", io_path, io_source, sizeof(io_source) - 1},
+        {{XR_MODULE_IDENTITY_STDLIB, "path", root}, "path/path.xr", path_path, path_source, sizeof(path_source) - 1}
+    };
+
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
-    const XrXirSourceRequest request = {.session=session, .entry_path=overlays[0].source_path, .authority=&io,
-        .context=&context, .stdlib_path=FILE_STAT_TEST_ROOT, .linkage_kind=XR_XIR_PROGRAM, .target=XR_XIR_HOST_TARGET};
-#undef FILE_STAT_TEST_ROOT
+    const XrXirSourceRequest request = {.session=session, .entry_path=io_path, .authority=&io,
+        .context=&context, .stdlib_path=root, .linkage_kind=XR_XIR_PROGRAM, .target=XR_XIR_HOST_TARGET};
     XrXirSourceResult source = {0};
-    XIR_OK(xr_xir_compile_source_check_overlay(&request, overlays, sizeof(overlays) / sizeof(*overlays),
-        &source, NULL, NULL));
+    XrXirSourceDiagnostic diagnostic = {0};
+    XrXirStatus status = xr_xir_compile_source_check_overlay(&request, overlays,
+        sizeof(overlays) / sizeof(*overlays), &source, &diagnostic, NULL);
+    if (status != XR_XIR_OK)
+        fprintf(stderr, "file stat overlay %s: source status %u:%d:%d: %s\n",
+            io_path, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
+    XIR_OK(status);
     XrXirArtifact *closed = NULL;
     XIR_OK(xr_xir_compile_specialize(source.checked, &closed, NULL, NULL));
     const XrXirModule *module = xr_xir_compile_artifact_module(closed);
@@ -564,10 +573,14 @@ static void file_stat_cycle_facts(void) {
     xr_xir_compile_artifact_free(closed);
     xr_xir_compile_source_result_free(&source);
     xr_compile_session_free(session);
+    xr_compile_resources_free(path_path);
+    xr_compile_resources_free(io_path);
+    xr_compile_resources_free(root);
     xr_compile_resources_release(context.resources);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    CHECK(argc == 2);
     source_target_admission();
     scalar_input_facts();
     literal_output_source_facts();
@@ -577,6 +590,6 @@ int main(void) {
     lowered_origin_rejected();
     evaluation_origin_rejected();
     class_cycle_facts();
-    file_stat_cycle_facts();
+    file_stat_cycle_facts(argv[1]);
     return 0;
 }
