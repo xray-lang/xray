@@ -1,0 +1,7 @@
+fn exercise(count: i64) {
+    defer { print(71) }
+    const items = Array<i64>(count, 7)
+    print(len(items))
+}
+
+exercise(-1)

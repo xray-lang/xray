@@ -59,6 +59,13 @@ static bool lower_selected_edge(LowerFunction *f, uint32_t from, uint32_t ordina
         incoming[i] = owners->values[i];
     }
     if (good) good = lower_build(c, xr_lir_add_block(c->module, f->function, types, count, &block));
+    uint32_t frontier = f->source->blocks[from].frontier;
+    if (good && frontier) {
+        /* Splitting a conditional edge leaves its registered cleanups active. */
+        const XrXirInstruction *registration = &f->source->instructions[frontier - 1];
+        uint32_t cleanup = lower_cleanup_target(f, registration).id;
+        good = lower_build(c, xr_lir_internal_cleanup_block(c->module, block, cleanup, 0, NULL, 0));
+    }
     for (uint32_t i = 0; i < count && good; ++i) {
         good = lower_build(c, xr_lir_block_parameter(c->module, block, i, &parameters[i]));
         if (good && types[i] == XR_LIR_ARRAY) {

@@ -1,0 +1,7 @@
+fn exercise(index: i64) {
+    const items: Array<i64> = [3]
+    defer { print(71) }
+    print(items[index])
+}
+
+exercise(2)

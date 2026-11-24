@@ -44,11 +44,20 @@ static bool lir_cleanup_nopanic(const XrLirModule *m, const XrLirFunctionData *f
         return lir_cleanup_scalar(op->type);
     case XR_LIR_ICMP:
         return lir_cleanup_scalar(f->values[op->operands[0] - 1].type);
+    case XR_LIR_CALL_INTRINSIC: {
+        const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(m, op->intrinsic);
+        return shape && ((shape->operation == XR_LIR_ARRAY_OP_NEW && op->operand_count == 0) ||
+            (shape->operation == XR_LIR_ARRAY_OP_LEN && op->operand_count == 1));
+    }
+    case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
+        /* Snapshots and local bindings retain and retire within the active scope. */
+        return true;
     case XR_LIR_CELL_NEW:
-        return op->type == XR_LIR_I64_CELL;
+        return op->type == XR_LIR_I64_CELL || op->type == XR_LIR_ARRAY_CELL;
     case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE: {
         XrLirType type = f->values[op->operands[0] - 1].type;
-        return type == XR_LIR_I64_CELL || type == XR_LIR_I64_REF;
+        return type == XR_LIR_I64_CELL || type == XR_LIR_I64_REF ||
+            (op->op == XR_LIR_CELL_READ && type == XR_LIR_ARRAY_CELL);
     }
     case XR_LIR_SUM_NEW: {
         const XrLirRecordField *fields;

@@ -1,0 +1,15 @@
+fn exercise(takes_branch: bool) -> i64 {
+    const existing: Array<i64> = [5, 8]
+    defer { print(100) }
+    var names: Array<string> = []
+    print(len(existing))
+    if (takes_branch) {
+        defer { print(200) }
+        print(len(names))
+        return len(names) + 9
+    }
+    print(12)
+    return len(existing)
+}
+print(exercise(true))
+print(exercise(false))

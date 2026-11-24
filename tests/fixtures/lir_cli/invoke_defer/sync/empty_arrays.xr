@@ -1,0 +1,16 @@
+fn exercise() {
+    defer { print(100) }
+    const numbers: Array<i64> = []
+    var names: Array<string> = []
+    print(len(numbers))
+    print(len(names))
+    if (true) {
+        defer { print(200) }
+        const bytes: Array<u8> = []
+        print(len(bytes))
+    }
+    print(19)
+}
+
+exercise()
+print(99)

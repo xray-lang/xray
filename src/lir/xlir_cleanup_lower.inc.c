@@ -25,9 +25,21 @@ static bool lower_cleanup_safe(const Lower *c, const XrXirFunction *f, const XrX
         return lower_cleanup_scalar(op->type);
     case XR_XIR_SCALAR_COPY: case XR_XIR_COPY:
         return lower_cleanup_scalar(op->type) || lower_cleanup_cell(c, op->type);
+    case XR_XIR_ARRAY_NEW:
+        return op->args[1] == 0;
+    case XR_XIR_ARRAY_LEN:
+        return true;
+    case XR_XIR_CELL_PLACE: {
+        const XrXirInstruction *cell = lower_place_definition(f, op->args[0]);
+        return cell && cell->op == XR_XIR_CELL_NEW && lower_type(c, cell->type) == XR_LIR_ARRAY_CELL;
+    }
     case XR_XIR_CELL_NEW:
-        return lower_cleanup_cell(c, op->type);
-    case XR_XIR_CELL_WRITE: case XR_XIR_CELL_READ:
+        return lower_cleanup_cell(c, op->type) || lower_type(c, op->type) == XR_LIR_ARRAY_CELL;
+    case XR_XIR_CELL_READ: {
+        XrXirType type = xr_xir_operand_type(f, op->args[0]);
+        return lower_cleanup_cell(c, type) || lower_type(c, type) == XR_LIR_ARRAY_CELL;
+    }
+    case XR_XIR_CELL_WRITE:
         return lower_cleanup_cell(c, xr_xir_operand_type(f, op->args[0]));
     case XR_XIR_EQUAL: case XR_XIR_EQ_INT: case XR_XIR_NE_INT:
     case XR_XIR_LT_INT: case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
