@@ -1,0 +1,7 @@
+enum Token { Value { code: i64 }, Empty }
+final class State {
+    token: Token
+    init() { this.token = Token.Empty }
+}
+fn probe() { const state = State(); print(91) }
+probe()

@@ -1,0 +1,10 @@
+enum Other { Native, LE, BE }
+final class State {
+    order: Endian
+    init() { this.order = Endian.LE }
+}
+fn probe() {
+    var state = State()
+    state.order = Other.BE
+}
+probe()

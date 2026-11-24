@@ -59,6 +59,12 @@ static inline size_t xrt_value_sum_size(size_t extent, size_t alignment) {
     size_t size = (extent + alignment - 1) & ~(alignment - 1);
     return size ? size : 1;
 }
+static inline bool xrt_payloadless_sum_layout(size_t variants, size_t tag, size_t size, size_t alignment) {
+    if (!variants || variants > UINT32_MAX) return false;
+    size_t width = variants == 1 ? 0 : variants <= 256 ? 1 : variants <= 65536 ? 2 : 4;
+    size_t extent = width ? width : 1;
+    return tag == width && size == extent && alignment == extent;
+}
 typedef struct XrtValueEntrySpec {
     uint32_t ordinal;
     const XrtValuePlan *signature;

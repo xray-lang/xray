@@ -97,7 +97,7 @@ static bool lower_record_finish(Lower *c, XrXirType type, const XrXirTypeDescrip
         if (good && !(field == XR_LIR_STRING || field == XR_LIR_I64 || field == XR_LIR_I1 || field == XR_LIR_F64 ||
             (class_type && ((field == XR_LIR_ARRAY && xr_lir_class_array_element_supported(element)) ||
                 xr_lir_class_payload(c->module, field, NULL) ||
-                xr_lir_internal_optional_i64_field(c->module, field))) ||
+                xr_lir_internal_class_only_field(c->module, field))) ||
             xr_lir_inline_aggregate_type(c->module, field))) good = lower_unsupported(c, "record field has no canonical physical carrier");
         fields[n] = (XrLirRecordField){member.name.bytes, member.name.length, field, member.flags, element};
     }
@@ -181,6 +181,7 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
             callable ? node->parameter_count + 1u : tuple ? node->parameter_count : 1u;
         if (frame->next < count) {
             XrXirType dependency = node->element;
+            bool class_field = class_type && frame->next < description.field_count;
             if (record) {
                 if (frame->next < description.field_count) {
                     XrXirFieldDescription member = {0};
@@ -198,7 +199,17 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
             }
             ++frame->next;
             const XrXirTypeNode *child = xr_xir_type_node(c->source->types, dependency);
-            if (!child || c->constructed_types[(uint32_t)dependency - XR_XIR_CONSTRUCTED_TYPE_BASE]) continue;
+            if (!child) continue;
+            if (class_field && xr_xir_type_is_enum(c->source->types, dependency)) {
+                XrXirTypeDescription marker = {0};
+                if (xr_xir_compile_type_description(xr_xir_compile_artifact_context(c->request->closed),
+                    c->source->types, dependency, &marker) != XR_XIR_OK ||
+                    marker.field_count || marker.instance->argument_count)
+                    good = lower_unsupported(c, "class enum field requires a payloadless nominal enum");
+                else good = lower_receive_type(c, dependency);
+                continue;
+            }
+            if (c->constructed_types[(uint32_t)dependency - XR_XIR_CONSTRUCTED_TYPE_BASE]) continue;
             if (child->kind == XR_XIR_TYPE_NULLABLE || child->kind == XR_XIR_TYPE_NOMINAL ||
                 child->kind == XR_XIR_TYPE_CALLABLE || child->kind == XR_XIR_TYPE_TUPLE) {
                 if (depth == capacity) { good = lower_unsupported(c, "cyclic canonical record dependency"); break; }

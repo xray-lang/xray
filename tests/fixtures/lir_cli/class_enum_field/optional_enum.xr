@@ -1,0 +1,6 @@
+final class State {
+    order: Endian?
+    init() { this.order = null }
+}
+fn probe() { const state = State(); print(91) }
+probe()

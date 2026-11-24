@@ -1,0 +1,19 @@
+{
+  "error_role": {
+    "exit": 1,
+    "stdout": "true\ntrue\n",
+    "stderr": "[Uncaught Error] Signal.Stopped\n"
+  },
+  "ordinary_record": {
+    "lowering_error": ":5:11: record field has no canonical physical carrier is not supported by LIR lowering yet"
+  },
+  "payload_enum": {
+    "lowering_error": ":6:20: class enum field requires a payloadless nominal enum is not supported by LIR lowering yet"
+  },
+  "optional_enum": {
+    "lowering_error": ":5:20: Nullable payload has no inline POD layout is not supported by LIR lowering yet"
+  },
+  "wrong_nominal": {
+    "source_error": ":8:25: error: expression cannot satisfy its declared type"
+  }
+}

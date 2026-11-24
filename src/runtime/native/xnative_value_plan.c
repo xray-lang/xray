@@ -134,13 +134,21 @@ static bool plan_has_nullable_array_owners(const XrtValuePlanSpec *spec) {
 static bool optional_i64(const XrtValuePlanSpec *spec) {
     return spec->kind == XRT_VALUE_NULLABLE && spec->nullable.element->view.kind == XRT_VALUE_I64;
 }
-static bool writable_class_scalar(const XrtValuePlanSpec *spec) {
-    return xrt_class_scalar_field_supported(spec->kind) || optional_i64(spec);
+static bool payloadless_sum(const XrtValuePlanSpec *spec) {
+    return spec->kind == XRT_VALUE_SUM && !spec->field_count && !spec->owned_count &&
+        !spec->sum.tag_offset && spec->sum.payload_offset == spec->sum.tag_size &&
+        xrt_payloadless_sum_layout(spec->sum.variant_count, spec->sum.tag_size, spec->size, spec->alignment);
 }
-static bool plan_has_optional_i64_fields(const XrtValuePlanSpec *spec) {
+static bool class_only_field(const XrtValuePlanSpec *spec) {
+    return optional_i64(spec) || payloadless_sum(spec);
+}
+static bool writable_class_scalar(const XrtValuePlanSpec *spec) {
+    return xrt_class_scalar_field_supported(spec->kind) || class_only_field(spec);
+}
+static bool plan_has_class_only_fields(const XrtValuePlanSpec *spec) {
     if (spec->kind != XRT_VALUE_RECORD) return false;
     for (size_t i = 0; i < spec->field_count; ++i)
-        if (optional_i64(&spec->fields[i].type->view)) return true;
+        if (class_only_field(&spec->fields[i].type->view)) return true;
     return false;
 }
 static bool record_field(const XrtValuePlan *plan, bool named) {
@@ -148,8 +156,8 @@ static bool record_field(const XrtValuePlan *plan, bool named) {
     XrtValueKind kind = plan->view.kind;
     return kind == XRT_VALUE_I64 || kind == XRT_VALUE_BOOL || kind == XRT_VALUE_F64 ||
         kind == XRT_VALUE_STRING || kind == XRT_VALUE_ARRAY_I64 || xrt_value_kind_has_fields(kind) ||
-        (named && (kind == XRT_VALUE_ARRAY_U8 || kind == XRT_VALUE_CLASS)) ||
-        (kind == XRT_VALUE_NULLABLE && (managed_nullable(plan) || (named && optional_i64(&plan->view))));
+        (named && (kind == XRT_VALUE_ARRAY_U8 || kind == XRT_VALUE_CLASS || class_only_field(&plan->view))) ||
+        (kind == XRT_VALUE_NULLABLE && managed_nullable(plan));
 }
 static bool capture_type(const XrtValuePlan *plan) {
     XrtValueKind kind = plan->view.kind;
@@ -406,7 +414,7 @@ XR_FUNCDEF XrtManagedStatus xrt_value_plan_new(XrtBillingOwner *billing, const X
     plan->nullable_array_owners = plan_has_nullable_array_owners(spec);
     /* Class construction checks these tags before publishing the payload. The
      * bare row cannot be embedded through a transport that omits that check. */
-    plan->class_payload_only = plan_has_optional_i64_fields(spec);
+    plan->class_payload_only = plan_has_class_only_fields(spec);
     plan->billing = billing;
     plan->allocation_bytes = bytes;
     plan->dependency_count = 0;
@@ -609,6 +617,23 @@ static bool aggregate_owners_match(const XrtValuePlan *type, const unsigned char
     }
     return true;
 }
+static bool class_enum_tag_valid(const XrtValuePlanSpec *member, const void *bytes) {
+    uint32_t tag;
+    switch (member->sum.tag_size) {
+        case 0: return true;
+        case 1: tag = *(const unsigned char *)bytes; break;
+        case 2: {
+            uint16_t value;
+            memcpy(&value, bytes, sizeof(value));
+            tag = value;
+            break;
+        }
+        case 4: memcpy(&tag, bytes, sizeof(tag)); break;
+        default: return false;
+    }
+    return tag < member->sum.variant_count;
+}
+
 static XrtManagedStatus class_create(XrtManagedFrame *frame, size_t slot,
     XrtManagedOps *ops, const void *row, uint32_t storage, const XrtValuePlan *expected) {
     const XrtRuntimeTypeSpec *physical = NULL;
@@ -624,6 +649,7 @@ static XrtManagedStatus class_create(XrtManagedFrame *frame, size_t slot,
         const unsigned char *bytes = (const unsigned char *)row + field->offset;
         if (!member->owned_count) {
             if (optional_i64(member) && bytes[member->nullable.tag_offset] > 1) return XRT_MANAGED_ARGUMENT;
+            if (payloadless_sum(member) && !class_enum_tag_valid(member, bytes)) return XRT_MANAGED_ARGUMENT;
             continue;
         }
         bool matched = pointer_kind(member->kind) ? class_leaf_matches(field->type, payload_child(bytes, 0)) :
@@ -664,8 +690,11 @@ XR_FUNCDEF XrtManagedStatus xrt_class_field_borrow(const XrtManagedHeader *owner
     if (status != XRT_MANAGED_OK) return status;
     if ((slot->flags & XRT_VALUE_FIELD_MUTABLE) && !writable_class_scalar(&slot->type->view))
         return XRT_MANAGED_ARGUMENT;
+    const void *payload = (const unsigned char *)(owner + 1) + slot->offset;
+    if (payloadless_sum(&slot->type->view) && !class_enum_tag_valid(&slot->type->view, payload))
+        return XRT_MANAGED_ARGUMENT;
     *empty_type = slot->type;
-    *empty_payload = (const unsigned char *)(owner + 1) + slot->offset;
+    *empty_payload = payload;
     return XRT_MANAGED_OK;
 }
 XR_FUNCDEF XrtManagedStatus xrt_class_scalar_field_write(XrtManagedHeader *owner,
@@ -677,6 +706,7 @@ XR_FUNCDEF XrtManagedStatus xrt_class_scalar_field_write(XrtManagedHeader *owner
     if (!(slot->flags & XRT_VALUE_FIELD_MUTABLE) || !writable_class_scalar(type) ||
         !bytes || size != type->size || (type->kind == XRT_VALUE_BOOL && *(const uint8_t *)bytes > 1))
         return XRT_MANAGED_ARGUMENT;
+    if (payloadless_sum(type) && !class_enum_tag_valid(type, bytes)) return XRT_MANAGED_ARGUMENT;
     /* These values have no owners and the class is executor-confined. */
     unsigned char *destination = (unsigned char *)(owner + 1) + slot->offset;
     if (optional_i64(type)) {

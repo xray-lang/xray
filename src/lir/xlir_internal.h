@@ -280,9 +280,17 @@ static inline bool xr_lir_internal_optional_i64_field(const XrLirModule *m, XrLi
     return xr_lir_type_view(m, type, &shape) == XR_LIR_OK &&
         shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_I64;
 }
+XR_FUNC XrLirStatus xr_lir_internal_payloadless_enum_type(XrLirModule *, const XrLirRecordIdentity *,
+    const XrLirSumVariant *, uint32_t variant_count, XrLirType *);
+static inline bool xr_lir_internal_class_only_field(const XrLirModule *m, XrLirType type) {
+    const XrLirTypeData *data = xr_lir_internal_constructed_data(m, type);
+    return xr_lir_internal_optional_i64_field(m, type) ||
+        (data && data->shape.kind == XR_LIR_TYPE_SUM && data->record.name &&
+            !data->record.argument_count && !data->fields);
+}
 static inline bool xr_lir_class_scalar_field_supported(const XrLirModule *m, XrLirType type) {
     return type == XR_LIR_I1 || type == XR_LIR_I64 || type == XR_LIR_F64 ||
-        xr_lir_internal_optional_i64_field(m, type);
+        xr_lir_internal_class_only_field(m, type);
 }
 XR_FUNC bool xr_lir_internal_map_literals_valid(const XrLirModule *);
 XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *, const XrLirFunctionData *);

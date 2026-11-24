@@ -151,6 +151,16 @@ add_test(NAME test_lir_cli_f64_try_parse
 set_tests_properties(test_lir_cli_f64_try_parse PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
 
+foreach(enum_profile IN ITEMS class_enum_field enum_equality)
+    add_test(NAME test_lir_cli_${enum_profile}
+        COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
+            --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+            --fixtures tests/fixtures/lir_cli/${enum_profile} --compiler "${CMAKE_C_COMPILER}"
+            --output ${PROJECT_BINARY_DIR}/lir-cli-${enum_profile})
+    set_tests_properties(test_lir_cli_${enum_profile} PROPERTIES
+        TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
+endforeach()
+
 foreach(defer_profile IN ITEMS sync lowering source propagation panic caught)
     add_test(NAME test_lir_cli_defer_${defer_profile}
         COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py

@@ -1,0 +1,19 @@
+enum Signal { Waiting, Stopped }
+
+final class State {
+    signal: Signal
+    init() { this.signal = Signal.Waiting }
+}
+
+fn stop() throws(Signal) { throw Signal.Stopped }
+
+fn verify() {
+    var state = State()
+    print(state.signal == Signal.Waiting)
+    state.signal = Signal.Stopped
+    print(state.signal == Signal.Stopped)
+}
+
+verify()
+try stop()
+print(91)

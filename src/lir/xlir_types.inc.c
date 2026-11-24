@@ -90,7 +90,8 @@ static uint32_t lir_type_slot(const XrLirModule *m, XrLirTypeView shape,
             lir_record_identity_equal(&found->record, identity)) break;
         if (shape.kind == XR_LIR_TYPE_SUM && found->shape.kind == shape.kind) {
             bool nominal = identity && identity->name;
-            if (nominal ? found->record.name && lir_record_identity_equal(&found->record, identity) :
+            if (nominal ? found->record.name && found->record.flags == identity->flags &&
+                    lir_record_identity_equal(&found->record, identity) :
                 !found->record.name && lir_sum_shape_equal(found, shape, record, variants)) break;
         }
         if (shape.kind != XR_LIR_TYPE_RECORD && found->shape.kind == shape.kind && found->shape.element == shape.element &&
@@ -297,7 +298,7 @@ static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField
     if ((count != 0) != (fields != NULL)) return false;
     for (uint32_t f = 0; f < count; ++f) {
         XrLirRecordField field = fields[f];
-        bool class_field = allow_class_fields && xr_lir_internal_optional_i64_field(m, field.type);
+        bool class_field = allow_class_fields && xr_lir_internal_class_only_field(m, field.type);
         if (!lir_record_text_valid(field.name,field.name_length) ||
             (field.flags & ~(XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED|XR_LIR_RECORD_MUTABLE)) ||
             ((field.flags & (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) == (XR_LIR_RECORD_PRIVATE|XR_LIR_RECORD_PROTECTED)) ||
@@ -312,13 +313,21 @@ static bool lir_record_fields_valid(const XrLirModule *m, const XrLirRecordField
     return true;
 }
 
+enum { LIR_SUM_PAYLOADLESS_ENUM = 1u << 1 };
+
 static bool lir_sum_names_valid(const XrLirModule *m, XrLirTypeView shape, const XrLirRecordIdentity *identity,
     const XrLirRecordField *fields, const XrLirSumVariant *variants, uint32_t earlier) {
     bool nominal = identity && identity->name;
-    if (nominal && (identity->native_id || identity->flags || !lir_record_identity_valid(m, identity, earlier)))
-        return false;
+    bool payloadless = nominal && identity->flags == LIR_SUM_PAYLOADLESS_ENUM;
+    if (nominal) {
+        XrLirRecordIdentity key = *identity;
+        key.flags = 0;
+        if (key.native_id || key.argument_count || (identity->flags && !payloadless) ||
+            !lir_record_identity_valid(m, &key, earlier)) return false;
+    } else if (identity && identity->flags) return false;
     for (uint32_t v = 0; v < shape.count; ++v) {
         XrLirSumVariant variant = variants[v];
+        if (payloadless && variant.field_count) return false;
         if (nominal ? !lir_record_text_valid(variant.name, variant.name_length) :
             variant.name || variant.name_length) return false;
         for (uint32_t n = 0; n < variant.field_count; ++n) {
@@ -335,7 +344,7 @@ static bool lir_named_sum_equal(const XrLirTypeData *found, XrLirTypeView shape,
     const XrLirRecordIdentity *identity, const XrLirRecordField *fields, const XrLirSumVariant *variants,
     uint32_t field_count) {
     if (!lir_sum_shape_equal(found, shape, fields, variants) ||
-        found->record.exported != identity->exported ||
+        found->record.exported != identity->exported || found->record.flags != identity->flags ||
         !lir_record_schema_equal(found->fields, fields, field_count, true)) return false;
     for (uint32_t v = 0; v < shape.count; ++v)
         if (found->variants[v].name_length != variants[v].name_length ||
@@ -598,13 +607,22 @@ XR_FUNC XrLirStatus xr_lir_sum_type(XrLirModule *m, const XrLirRecordField *fiel
 XR_FUNC XrLirStatus xr_lir_error_sum_type(XrLirModule *m, const XrLirRecordIdentity *identity,
     const XrLirRecordField *fields, uint32_t field_count, const XrLirSumVariant *variants,
     uint32_t variant_count, XrLirType *output) {
-    if (!identity || !identity->name || identity->argument_count) return lir_fail(m,XR_LIR_INVALID_ARGUMENT);
+    if (!identity || !identity->name || identity->argument_count || identity->flags)
+        return lir_fail(m,XR_LIR_INVALID_ARGUMENT);
     return lir_sum_type(m,identity,fields,field_count,variants,variant_count,output);
+}
+XR_FUNC XrLirStatus xr_lir_internal_payloadless_enum_type(XrLirModule *m, const XrLirRecordIdentity *identity,
+    const XrLirSumVariant *variants, uint32_t variant_count, XrLirType *output) {
+    if (!identity || !identity->name || identity->argument_count || identity->flags)
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirRecordIdentity key = *identity;
+    key.flags = LIR_SUM_PAYLOADLESS_ENUM;
+    return lir_sum_type(m, &key, NULL, 0, variants, variant_count, output);
 }
 XR_FUNC bool xr_lir_error_sum_identity(const XrLirModule *m, XrLirType type, XrLirRecordIdentity *output) {
     if (!output || type < XR_LIR_TYPE_COUNT || !xr_lir_internal_type_valid(m,type,true)) return false;
     const XrLirTypeData *data = &m->types[type - XR_LIR_TYPE_COUNT];
-    if (data->shape.kind != XR_LIR_TYPE_SUM || !data->record.name) return false;
+    if (data->shape.kind != XR_LIR_TYPE_SUM || !data->record.name || data->record.flags) return false;
     *output = data->record;
     return true;
 }

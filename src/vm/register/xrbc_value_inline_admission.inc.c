@@ -23,6 +23,9 @@ static bool rbc_value_inline_operand(const XrRbcModule *module,const XrRbcValueC
 }
 static bool rbc_writable_class_scalar(const XrtValueImage *image, const XrtValueImageType *type) {
     return xrt_class_scalar_field_supported(type->kind) ||
+        (type->kind == XRT_VALUE_SUM && !type->owned_count && !type->field_count &&
+            !type->sum_tag && type->sum_payload == type->sum_tag_size &&
+            xrt_payloadless_sum_layout(type->variant_count, type->sum_tag_size, type->size, type->alignment)) ||
         (type->kind==XRT_VALUE_NULLABLE && !type->owned_count && type->nullable_element &&
             type->nullable_element<=image->type_count &&
             image->types[type->nullable_element-1].kind==XRT_VALUE_I64);

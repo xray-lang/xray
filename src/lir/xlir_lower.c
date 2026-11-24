@@ -462,6 +462,7 @@ static bool lower_receive_enum_sum(Lower *c, XrXirType type) {
     XrLirSumVariant *variants = lower_alloc(c, description.variant_count, sizeof(*variants));
     if ((field_count && !fields) || !variants) { xr_free(fields); return false; }
     bool error = c->error_types && c->error_types[index]==1;
+    bool named = error || (!field_count && !description.instance->argument_count);
     bool good = true;
     for (uint32_t v = 0; v < description.variant_count && good; ++v) {
         XrXirNominalVariant variant = description.variants[v];
@@ -470,7 +471,7 @@ static bool lower_receive_enum_sum(Lower *c, XrXirType type) {
             break;
         }
         variants[v] = (XrLirSumVariant){.field_begin=variant.field_begin,.field_count=variant.field_count,
-            .name=error ? variant.name.bytes : NULL,.name_length=error ? variant.name.length : 0};
+            .name=named ? variant.name.bytes : NULL,.name_length=named ? variant.name.length : 0};
         for (uint32_t f = 0; f < variant.field_count && good; ++f) {
             XrXirFieldDescription member = {0};
             if (!lower_record_member(c, &description, variant.field_begin + f, &member)) { good = false; break; }
@@ -483,12 +484,14 @@ static bool lower_receive_enum_sum(Lower *c, XrXirType type) {
                 .name=error ? member.name.bytes : NULL,.name_length=error ? member.name.length : 0};
         }
     }
-    if (good && error) {
+    if (good && named) {
         XrLirRecordIdentity identity={.module=description.module.bytes,.module_length=description.module.length,
             .name=description.name.bytes,.name_length=description.name.length,
             .exported=description.definition ? description.definition->exported : description.identity->exported};
-        good = lower_build(c,xr_lir_error_sum_type(c->module,&identity,fields,field_count,variants,
-            description.variant_count,&c->constructed_types[index]));
+        good = lower_build(c, error ? xr_lir_error_sum_type(c->module,&identity,fields,field_count,variants,
+            description.variant_count,&c->constructed_types[index]) :
+            xr_lir_internal_payloadless_enum_type(c->module,&identity,variants,
+                description.variant_count,&c->constructed_types[index]));
     } else if (good) {
         good = lower_build(c,xr_lir_sum_type(c->module,fields,field_count,variants,
             description.variant_count,&c->constructed_types[index]));

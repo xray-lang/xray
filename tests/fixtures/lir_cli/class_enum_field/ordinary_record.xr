@@ -1,0 +1,8 @@
+struct Check {
+    order: Endian
+}
+fn probe() {
+    const value = Check{ order: Endian.LE }.order
+    print(value == Endian.LE)
+}
+probe()
