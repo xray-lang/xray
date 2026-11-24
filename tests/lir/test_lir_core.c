@@ -339,6 +339,82 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
     }
 }
 
+static void cleanup_callback_cannot_assert(void) {
+    enum { DIRECT_ASSERTION, NESTED_RETURN, NESTED_ASSERTION, MODE_COUNT };
+    for (unsigned mode = DIRECT_ASSERTION; mode < MODE_COUNT; ++mode) {
+        XrLirModule *module = NULL;
+        OK(xr_lir_module_create(NULL, &module));
+        XrLirType error = try_error_type(module, "Failure");
+        XrLirFunction leaf = {0};
+        OK(xr_lir_declare_function(module, &(XrLirFunctionSpec){.name = "leaf", .name_length = 4,
+            .result = XR_LIR_UNIT, .error = error}, &leaf));
+        OK(xr_lir_define_function(module, leaf));
+        XrLirBlock leaf_entry = test_block(module, leaf, NULL, 0);
+        OK(xr_lir_set_entry(module, leaf, leaf_entry));
+        test_return(module, leaf_entry, (XrLirValue){0});
+
+        XrLirFunction owner = test_function(module, "owner", NULL, 0, XR_LIR_UNIT);
+        XrLirFunction caller = owner, inner = {0};
+        if (mode != DIRECT_ASSERTION) {
+            OK(xr_lir_declare_function(module, &(XrLirFunctionSpec){.name = "callback", .name_length = 8,
+                .result = XR_LIR_UNIT, .cleanup_owner = owner.id}, &caller));
+            OK(xr_lir_define_function(module, caller));
+            XrLirBlock register_callback = test_block(module, owner, NULL, 0);
+            XrLirBlock run_callback = test_block(module, owner, NULL, 0);
+            OK(xr_lir_set_entry(module, owner, register_callback));
+            OK(xr_lir_internal_cleanup_block(module, register_callback, 0, caller.id, NULL, 0));
+            test_branch(module, register_callback, run_callback, NULL, 0);
+            OK(xr_lir_internal_cleanup_block(module, run_callback, caller.id, 0, NULL, 0));
+            OK(xr_lir_emit_effect(module, run_callback, &(XrLirInstruction){.op = XR_LIR_CALL,
+                .type = XR_LIR_UNIT, .callee = caller}));
+            test_return(module, run_callback, (XrLirValue){0});
+        }
+        OK(xr_lir_declare_function(module, &(XrLirFunctionSpec){.name = "inner", .name_length = 5,
+            .result = XR_LIR_UNIT, .cleanup_owner = caller.id}, &inner));
+        OK(xr_lir_define_function(module, inner));
+        XrLirBlock inner_entry = test_block(module, inner, NULL, 0);
+        OK(xr_lir_set_entry(module, inner, inner_entry));
+        test_return(module, inner_entry, (XrLirValue){0});
+
+        XrLirBlock registration = test_block(module, caller, NULL, 0);
+        XrLirBlock active = test_block(module, caller, NULL, 0);
+        OK(xr_lir_set_entry(module, caller, registration));
+        OK(xr_lir_internal_cleanup_block(module, registration, 0, inner.id, NULL, 0));
+        test_branch(module, registration, active, NULL, 0);
+        OK(xr_lir_internal_cleanup_block(module, active, inner.id, 0, NULL, 0));
+        XrLirInstruction cleanup = {.op = XR_LIR_CALL, .type = XR_LIR_UNIT, .callee = inner};
+        if (mode == NESTED_RETURN) {
+            OK(xr_lir_emit_effect(module, active, &cleanup));
+            test_return(module, active, (XrLirValue){0});
+        } else {
+            XrLirBlock normal = test_block(module, caller, NULL, 0);
+            XrLirBlock failed = test_block(module, caller, &error, 1);
+            OK(xr_lir_set_terminator(module, active, &(XrLirInstruction){.op = XR_LIR_INVOKE,
+                .type = XR_LIR_UNIT, .callee = leaf,
+                .edges = {{.target = normal}, {.target = failed}}, .edge_count = 2}));
+            OK(xr_lir_internal_cleanup_block(module, normal, inner.id, 0, NULL, 0));
+            OK(xr_lir_internal_cleanup_block(module, failed, inner.id, 0, NULL, 0));
+            OK(xr_lir_emit_effect(module, normal, &cleanup));
+            OK(xr_lir_emit_effect(module, failed, &cleanup));
+            test_return(module, normal, (XrLirValue){0});
+            XrLirValue error_value = {0};
+            XrLirLiteral metadata = {0};
+            OK(xr_lir_block_parameter(module, failed, 0, &error_value));
+            OK(xr_lir_error_literal(module, error, &metadata));
+            OK(xr_lir_set_terminator(module, failed, &(XrLirInstruction){.op = XR_LIR_PANIC_ERROR,
+                .type = XR_LIR_UNIT, .operands = &error_value, .operand_count = 1, .bits = metadata.id,
+                .source = {"cleanup.xr", 10, 2, 5, 2, 10}}));
+        }
+        XrLirDiagnostic diagnostic = {0};
+        XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
+        if (mode == NESTED_ASSERTION) {
+            CHECK(status == XR_LIR_VERIFY_ERROR && diagnostic.function == caller.id &&
+                strstr(diagnostic.message, "cleanup frontier"));
+        } else CHECK(status == XR_LIR_OK);
+        xr_lir_module_destroy(module);
+    }
+}
+
 static void discarded_invoke_error_cannot_be_observed(void) {
     enum { UNUSED, READ_IN_SUCCESSOR, FORWARD_IN_SUCCESSOR, CASE_COUNT };
     for (unsigned mode=UNUSED; mode<CASE_COUNT; ++mode) {
@@ -1532,6 +1608,7 @@ int main(void) {
     cleanup_requires_a_registered_exit();
     cleanup_suffix_precedes_retirement();
     cleanup_invoke_checks_the_complete_callee();
+    cleanup_callback_cannot_assert();
     startup_error_requires_an_initialized_origin();
     discarded_invoke_error_cannot_be_observed();
     definition_prevalidation_rejections();

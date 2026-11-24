@@ -128,6 +128,10 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
         const XrLirInstructionView *term = lir_terminator(f, b);
         uint32_t from = meta ? meta->frontier : 0, remaining = from;
         if (from && !lir_cleanup_registration(m, owner, from)) return false;
+        /* A callback is already unwinding its owner's frontier and must
+         * complete normally even when it registers its own cleanup. */
+        if (f->cleanup_owner && (term->op == XR_LIR_INVOKE || term->op == XR_LIR_PANIC_ERROR))
+            return false;
         if (!lir_cleanup_calls(m, f, owner, block, &remaining)) return false;
         if (meta && meta->registration) {
             uint32_t target = meta->registration;
