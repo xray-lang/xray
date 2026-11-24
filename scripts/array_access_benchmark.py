@@ -15,6 +15,7 @@ the Python running this tool is never selected as a reference automatically.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import math
@@ -27,7 +28,9 @@ import subprocess
 import sys
 import threading
 import time
+from ctypes import wintypes
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import xray_process
 
@@ -74,18 +77,52 @@ def environment(root: Path) -> dict:
     return result
 
 
+def windows_process_accounting(handle: int) -> dict:
+    """Read the retained root process handle after the owned wait and drain."""
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    get_times = kernel.GetProcessTimes
+    get_times.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    get_times.restype = wintypes.BOOL
+    get_cycles = kernel.QueryProcessCycleTime
+    get_cycles.argtypes = [wintypes.HANDLE, ctypes.POINTER(ctypes.c_uint64)]
+    get_cycles.restype = wintypes.BOOL
+    creation, exit_time, kernel_time, user_time = (wintypes.FILETIME() for _ in range(4))
+    accounting = {}
+    if get_times(handle, ctypes.byref(creation), ctypes.byref(exit_time),
+                 ctypes.byref(kernel_time), ctypes.byref(user_time)):
+        def ticks(value):
+            return (value.dwHighDateTime << 32) | value.dwLowDateTime
+
+        accounting["times100ns"] = {"created": ticks(creation), "exited": ticks(exit_time),
+                                    "kernel": ticks(kernel_time), "user": ticks(user_time)}
+    else:
+        accounting["timesWinError"] = ctypes.get_last_error()
+    cycles = ctypes.c_uint64()
+    if get_cycles(handle, ctypes.byref(cycles)):
+        accounting["cycles"] = cycles.value
+    else:
+        accounting["cyclesWinError"] = ctypes.get_last_error()
+    return accounting
+
+
 def execute(argv: list, directory: Path, name: str, env: dict, expected: bytes | None = None,
-            *, timeout: float = PRODUCT_TIMEOUT) -> dict:
+            *, timeout: float = PRODUCT_TIMEOUT, collect_process_accounting: bool = False) -> dict:
     """Observe the existing process owner; never replace its cleanup or drain."""
     captured = []
+    retain_handle = collect_process_accounting and sys.platform == "win32"
+    process_handle = None
 
     class ObservedPopen(subprocess.Popen):
         def __init__(self, *args, **kwargs):
+            nonlocal process_handle
             self.exit_observed = threading.Event()
             self.exit_waiter = None
             self.exit_error = None
             self.observation = {"started": time.perf_counter(), "parentPID": os.getpid()}
             super().__init__(*args, **kwargs)
+            if retain_handle:
+                process_handle = self._handle
+                self.observation["spawnReturned"] = time.perf_counter()
             self.observation["pid"] = self.pid
             captured.append(self.observation)
 
@@ -102,7 +139,12 @@ def execute(argv: list, directory: Path, name: str, env: dict, expected: bytes |
                 self.exit_observed.set()
 
         def wait(self, timeout=None):
-            deadline = None if timeout is None else time.perf_counter() + timeout
+            deadline = None
+            if timeout is not None:
+                started = time.perf_counter()
+                deadline = started + timeout
+                if retain_handle and "firstWaitStarted" not in self.observation:
+                    self.observation["firstWaitStarted"] = started
             def remaining():
                 return None if deadline is None else max(0.0, deadline - time.perf_counter())
             if self.exit_waiter is None:
@@ -153,6 +195,11 @@ def execute(argv: list, directory: Path, name: str, env: dict, expected: bytes |
         row["exitAfterCleanup"] = captured[0]["exit"]
     if failure:
         row["error"] = repr(failure)
+    if process_handle is not None and len(captured) == 1 and "finished" in captured[0] and failure is None:
+        try:
+            row["windowsProcess"] = windows_process_accounting(int(process_handle))
+        except (AttributeError, OSError) as error:
+            row["windowsProcess"] = {"unavailable": str(error)}
     row["timingValid"] = (len(captured) == 1 and "finished" in captured[0]
                           and "waitObservationError" not in captured[0])
     row["ok"] = row["timingValid"] and failure is None and code == 0 and (expected is None or
@@ -442,13 +489,18 @@ def measure(args) -> None:
     env["XRAY_STDLIB_PATH"] = prepared["stdlib"]
     result = {"schema": 1, "state": "RUNNING", "prepared": fingerprint(args.prepared),
               "samples": [], "medians": {}, "rounds": ROUNDS, "scope": prepared["scope"]}
+    if sys.platform == "win32":
+        result["windowsHost"] = {"build": sys.getwindowsversion().build, "logicalCpus": os.cpu_count(),
+                                 "processorIdentifier": os.environ.get("PROCESSOR_IDENTIFIER"),
+                                 "runnerImage": os.environ.get("ImageOS"),
+                                 "runnerImageVersion": os.environ.get("ImageVersion")}
     try:
         for case, engines in prepared["engines"].items():
             for round_index in range(ROUNDS):
                 for engine in measurement_order(engines, round_index):
                     command = engines[engine]
                     row = execute(command["argv"], args.work, f"{case}-{round_index}-{engine}", env,
-                                  bytes.fromhex(command["expectedHex"]))
+                                  bytes.fromhex(command["expectedHex"]), collect_process_accounting=True)
                     row.update(case=case, engine=engine, round=round_index)
                     result["samples"].append(row)
                     save(args.work / "result.json", result)
@@ -587,13 +639,31 @@ def self_test(args) -> None:
     rows = []
     for name, (source, timeout, expected) in cases.items():
         row = execute([sys.executable, "-E", "-c", source], args.work, name, environment(Path.cwd()),
-                      b"ok\n", timeout=timeout)
+                      b"ok\n", timeout=timeout, collect_process_accounting=True)
         rows.append(dict(row, name=name))
         save(args.work / "self-test.json", {"state": "RUNNING", "rows": rows, "benchmarkMeasurement": False})
         if row["ok"] != expected or row["state"] != "TERMINAL_DRAINED" or (name == "timeout" and not row["timedOut"]):
             raise RuntimeError("Hard-failure self-test failed: " + name)
         if any(t.name == "benchmark-exit-observer" for t in threading.enumerate()):
             raise RuntimeError("An exit observer survived owned cleanup")
+        if sys.platform == "win32" and name == "good":
+            process = row["processes"][0]
+            accounting = row["windowsProcess"]
+            times = accounting["times100ns"]
+            if (not process["started"] <= process["spawnReturned"] <= process["firstWaitStarted"] <= process["finished"]
+                    or not 0 < times["created"] <= times["exited"] or accounting["cycles"] <= 0):
+                raise RuntimeError("Invalid Windows process accounting")
+        if row["timedOut"] and "windowsProcess" in row:
+            raise RuntimeError("An incomplete sample reported successful process accounting")
+    if sys.platform == "win32":
+        with patch(__name__ + ".windows_process_accounting", side_effect=OSError("diagnostic unavailable")):
+            row = execute([sys.executable, "-E", "-c", cases["good"][0]], args.work,
+                          "accounting-unavailable", environment(Path.cwd()), b"ok\n",
+                          collect_process_accounting=True)
+        rows.append(dict(row, name="accounting-unavailable"))
+        if (not row["ok"] or row["state"] != "TERMINAL_DRAINED"
+                or row["windowsProcess"] != {"unavailable": "diagnostic unavailable"}):
+            raise RuntimeError("Unavailable process accounting changed the execution result")
     original_start = threading.Thread.start
     def unavailable_observer(thread):
         raise RuntimeError("injected exit observer unavailability")
