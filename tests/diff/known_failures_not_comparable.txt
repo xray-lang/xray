@@ -477,7 +477,6 @@ tests/diff/cases/semantics/types/object_optional_sparse_fields.xr  # error: omit
 tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr  # error: E0352: a data union member must be a closed scalar or string type, or a Class identity
 tests/diff/cases/semantics/types/union_as_conversion.xr  # error: numeric cast requires a concrete numeric operand
 tests/diff/cases/semantics/types/union_member_selection.xr  # error: value has no admitted builtin display
-tests/diff/cases/semantics/unit_enum_return_value.xr  # instruction type or signature mismatch
 tests/diff/cases/semantics/user_hashable_map_set_key.xr  # error: method declaration contract is not admitted
 tests/diff/cases/semantics/value_struct_generic_annotation.xr  # non-container place is not supported by LIR lowering yet
 tests/diff/cases/semantics/value_struct_generic_literal.xr  # non-container place is not supported by LIR lowering yet
