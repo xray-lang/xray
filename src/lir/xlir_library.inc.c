@@ -10,7 +10,7 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
     XrLirStatus status = lir_writable(m);
     if (status != XR_LIR_OK) return status;
     enum { string_count = sizeof(lir_string_signatures) / sizeof(*lir_string_signatures), library_id_base = 512 };
-    XrLirIntrinsic local[string_count + 2 + LIR_SLICE_CATALOG_COUNT] = {{0}};
+    XrLirIntrinsic local[string_count + 3 + LIR_SLICE_CATALOG_COUNT] = {{0}};
     XrLirIntrinsic *entries = local;
     if (flags & LIR_LIBRARY_MAP) {
         entries = xr_malloc((sizeof(local) / sizeof(*local) + LIR_MAP_CATALOG_COUNT) * sizeof(*entries));
@@ -37,6 +37,15 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
                     slice_parameters[added++], arity, result, true, LIR_SLICE_OPERATION_BASE + encoded};
             }
         }
+    }
+    XrLirType bytes = XR_LIR_TYPE_INVALID;
+    if (flags & LIR_LIBRARY_STRICT_UTF8) {
+        XrLirType decoded = XR_LIR_TYPE_INVALID;
+        status = xr_lir_slice_type(m, XR_LIR_U8, &bytes);
+        if (status == XR_LIR_OK) status = xr_lir_nullable_type(m, XR_LIR_STRING, &decoded);
+        if (status != XR_LIR_OK) { if (entries != local) xr_free(entries); return status; }
+        entries[count++] = (XrLirIntrinsic){LIR_SLICE_ID_BASE + LIR_SLICE_STRICT_UTF8,
+            &bytes, 1, decoded, true, LIR_SLICE_OPERATION_BASE + LIR_SLICE_STRICT_UTF8};
     }
     if (flags & LIR_LIBRARY_DISPLAY)
         entries[count++] = (XrLirIntrinsic){library_id_base,

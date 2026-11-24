@@ -104,6 +104,7 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
     if (!code) return rbc_lir_fail(c,XR_RBC_COMPILE_OUT_OF_MEMORY,"cannot own typed bytecode description");
     c->value_code = code;
     code->homes = c->homes; code->value_count = c->view.value_count;
+    code->strict_utf8 = c->input->functions[c->function.id - 1].strict_utf8;
     if (c->view.error) {
         code->error_unit=c->view.result==XR_LIR_UNIT;
         const XrtValuePlan *plan=NULL;

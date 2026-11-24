@@ -1,0 +1,17 @@
+fn report(window: Slice<u8>) {
+    try {
+        print(string.fromUtf8(window))
+    } catch (e: Utf8Error) {
+        print(17)
+    }
+}
+
+fn probe() {
+    var bytes: Array<u8> = [192, 128, 237, 160, 128, 244, 144, 128, 128, 128, 226, 130]
+    report(bytes[0:2])
+    report(bytes[2:5])
+    report(bytes[5:9])
+    report(bytes[9:10])
+    report(bytes[10:12])
+}
+probe()

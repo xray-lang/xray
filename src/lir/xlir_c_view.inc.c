@@ -246,6 +246,22 @@ static void c_view_instruction(LirC *c, const XrLirInstructionView *v, uint32_t 
         c_text(c, "    { XrtManagedStatus status = xrt_array_slice_clear("); c_view_home_parts(c, workspace);
         c_text(c, ");\n"); c_array_require(c, source); c_text(c, "    }\n"); return;
     }
+    if (shape.operation == XR_LIR_SLICE_OP_STRICT_UTF8) {
+        const XrLirValueHome *result = &c->homes->values[v->result];
+        XR_CHECK(result->owner_count == 1 && result->temporary_offset != SIZE_MAX,
+            "strict decoding has a stable nullable owner offset");
+        c_values_ensure(c, source);
+        c_format(c, "    { XrtManagedStatus status = xrt_array_slice_strict_utf8(xrl_frame, %zu, %zu, %zu, "
+            "%zu + offsetof(%s, payload), &", result->first_owner, result->temporary_first_owner,
+            result->offset, result->temporary_offset, c_type(c, v->type));
+        c_value(c, value);
+        c_text(c, ", ");
+        c_owned_source(c, source);
+        c_text(c, ");\n        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, ");
+        c_owned_source(c, source);
+        c_text(c, ");\n    }\n");
+        return;
+    }
     if (shape.operation == XR_LIR_SLICE_OP_COPY) {
         const XrLirValueHome *result = &c->homes->values[v->result];
         if (result->owner_count != 1 || result->temporary_first_owner == SIZE_MAX) {

@@ -72,6 +72,11 @@ XRAY_API XrtManagedStatus xrt_array_slice_read_bits(const XrtReadonlyArraySlice 
  * and copy callbacks. Destination is an ordinary true-empty Array slot. */
 XRAY_API void xrt_native_array_slice_copy(XrtManagedFrame *, size_t,
     XrtBackingArrayKind, const XrtReadonlyArraySlice *, uint32_t source_id);
+/* Strict decoding uses an already admitted byte loan and the result's real
+ * Nullable<String> owner places. Only invalid UTF-8 publishes absence. */
+XRAY_API XrtManagedStatus xrt_array_slice_strict_utf8(XrtManagedFrame *, size_t destination,
+    size_t temporary, size_t offset, size_t temporary_owner_offset,
+    const XrtReadonlyArraySlice *, uint32_t source_id);
 #ifdef __cplusplus
 }
 #endif

@@ -7,7 +7,8 @@
  * xlir_slice.inc.c - One typed catalog for natural readonly Array windows
  */
 enum { LIR_SLICE_OPERATION_BASE = 65536, LIR_SLICE_ID_BASE = 1024, LIR_SLICE_CATALOG_COUNT = 18,
-    LIR_SLICE_ROLE_STRIDE = XR_LIR_SLICE_OP_CLEANUP };
+    LIR_SLICE_ROLE_STRIDE = XR_LIR_SLICE_OP_CLEANUP,
+    LIR_SLICE_STRICT_UTF8 = 6 * LIR_SLICE_ROLE_STRIDE };
 XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *m, XrLirType type) {
     return m && type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < m->type_count &&
         m->types[type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_SLICE;
@@ -15,6 +16,10 @@ XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *m, XrLirType type) {
 static bool lir_slice_decode(uint32_t operation, XrLirSliceIntrinsic *output) {
     if (operation < LIR_SLICE_OPERATION_BASE) return false;
     uint32_t encoded = operation - LIR_SLICE_OPERATION_BASE;
+    if (encoded == LIR_SLICE_STRICT_UTF8) {
+        *output = (XrLirSliceIntrinsic){.operation=XR_LIR_SLICE_OP_STRICT_UTF8, .element=XR_LIR_U8};
+        return true;
+    }
     uint32_t role = encoded % LIR_SLICE_ROLE_STRIDE, family = encoded / LIR_SLICE_ROLE_STRIDE;
     if (!role || family >= 6 || (((family & 1u) || family >= 4) && role != XR_LIR_SLICE_OP_NEW)) return false;
     *output = (XrLirSliceIntrinsic){.operation=(XrLirSliceOperation)role,
@@ -49,6 +54,12 @@ XR_FUNC bool xr_lir_internal_slice_intrinsic_valid(const XrLirModule *m, const X
     XrLirSliceIntrinsic shape; XrLirType parameters[4] = {0}, result;
     if (!entry || !entry->scalar_sync || !lir_slice_decode(entry->operation, &shape)) return false;
     XrLirType type = lir_slice_find_type(m, shape.element);
+    if (shape.operation == XR_LIR_SLICE_OP_STRICT_UTF8) {
+        XrLirTypeView optional;
+        return type && entry->parameters && entry->parameter_count == 1 && entry->parameters[0] == type &&
+            xr_lir_type_view(m, entry->result, &optional) == XR_LIR_OK &&
+            optional.kind == XR_LIR_TYPE_NULLABLE && optional.element == XR_LIR_STRING;
+    }
     uint32_t count = lir_slice_signature(shape, type, parameters, &result);
     if (!type || !count || !entry->parameters || entry->parameter_count != count || entry->result != result) return false;
     for (uint32_t p = 0; p < count; ++p) if (entry->parameters[p] != parameters[p]) return false;
@@ -81,12 +92,13 @@ XR_FUNC XrLirStatus xr_lir_slice_operation(const XrLirModule *m, XrLirSliceOpera
 }
 XR_FUNC XrLirStatus xr_lir_slice_library_catalog_install(XrLirModule *m, uint32_t flags) {
     if (flags & ~(XR_LIR_SLICE_LIBRARY_DISPLAY | XR_LIR_SLICE_LIBRARY_STRING |
-            XR_LIR_SLICE_LIBRARY_RANGE | XR_LIR_SLICE_LIBRARY_MAP)) return XR_LIR_INVALID_ARGUMENT;
+            XR_LIR_SLICE_LIBRARY_RANGE | XR_LIR_SLICE_LIBRARY_MAP | XR_LIR_SLICE_LIBRARY_STRICT_UTF8)) return XR_LIR_INVALID_ARGUMENT;
     uint32_t catalog = LIR_LIBRARY_SLICE | LIR_LIBRARY_ARRAY;
     if (flags & XR_LIR_SLICE_LIBRARY_DISPLAY) catalog |= LIR_LIBRARY_DISPLAY;
     if (flags & XR_LIR_SLICE_LIBRARY_STRING) catalog |= LIR_LIBRARY_STRING;
     if (flags & XR_LIR_SLICE_LIBRARY_RANGE) catalog |= LIR_LIBRARY_RANGE;
     if (flags & XR_LIR_SLICE_LIBRARY_MAP) catalog |= LIR_LIBRARY_MAP;
+    if (flags & XR_LIR_SLICE_LIBRARY_STRICT_UTF8) catalog |= LIR_LIBRARY_STRICT_UTF8;
     return lir_library_catalog(m, catalog);
 }
 XR_FUNC XrLirStatus xr_lir_slice_catalog_install(XrLirModule *m) {

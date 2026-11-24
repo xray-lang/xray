@@ -1,0 +1,24 @@
+fn decode(bytes: Slice<u8>) throws(Utf8Error) -> string {
+    const text = try string.fromUtf8(bytes)
+    return text
+}
+
+fn handle(bytes: Slice<u8>) {
+    try {
+        print(string.fromUtf8(bytes))
+    } catch (e: Utf8Error) {
+        print(17)
+    }
+    print(19)
+}
+
+fn probe() {
+    var bytes: Array<u8> = [255, 67, 0, 90, 255]
+    print((try? decode(bytes[1:4])) ?? "fallback")
+    print((try? decode(bytes[0:2])) ?? "fallback")
+    handle(bytes[1:4])
+    handle(bytes[0:2])
+    bytes[0] = 68
+    print(try! string.fromUtf8(bytes[0:2]))
+}
+probe()

@@ -220,6 +220,8 @@ static XrXirType source_local_thrown_type(SourceContext *ctx,SourceValue value) 
     }
     return XR_XIR_ERROR;
 }
+#include "xxir_native_callable.h"
+
 static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op,bool *propagates) {
     *propagates=false;
     XrXirType error=XR_XIR_NEVER;uint32_t target=UINT32_MAX;
@@ -301,9 +303,13 @@ static bool source_local_call(SourceContext *ctx,const XrXirInstruction *op,bool
     const SourceFunction *caller=&ctx->bodies[ctx->function],*callee=&ctx->bodies[target];
     if (caller->error_context || caller->local_handler || caller->frontier || caller->infer_errors ||
         caller->infer_initializer || (ctx->task_scope && ctx->task_scope->function==ctx->function) ||
-        !callee->node || callee->node->type!=AST_FUNCTION_DECL || !callee->node->as.function_decl.body ||
         ((ctx->identities[ctx->function].promises | ctx->identities[target].promises) & XR_XIR_FUNCTION_GENERATOR))
         return true;
+    if (!callee->node || callee->node->type!=AST_FUNCTION_DECL || !callee->node->as.function_decl.body) {
+        XrXirDeclarations declarations;
+        XrXirModule module = source_module_view(ctx, &declarations);
+        if (!xir_strict_utf8_callable(&module, target)) return true;
+    }
     bool initializer=caller->module<ctx->module_count && ctx->modules[caller->module].initializer==ctx->function;
     bool declaration=caller->node && caller->node->type==AST_FUNCTION_DECL &&
         error==ctx->functions[ctx->function].error_type;

@@ -27,6 +27,7 @@ typedef enum XrLirSliceOperation {
     /* Call and return hooks are common events, not intrinsic catalog rows. */
     XR_LIR_SLICE_OP_CALL,
     XR_LIR_SLICE_OP_RETURN,
+    XR_LIR_SLICE_OP_STRICT_UTF8,
     XR_LIR_SLICE_OP_COUNT
 } XrLirSliceOperation;
 typedef struct XrLirSliceIntrinsic {
@@ -45,7 +46,8 @@ typedef struct XrLirSliceIntrinsic {
 XR_FUNC XrLirStatus xr_lir_slice_catalog_install(XrLirModule *);
 enum XrLirSliceLibraryFlags {
     XR_LIR_SLICE_LIBRARY_DISPLAY = 1u, XR_LIR_SLICE_LIBRARY_STRING = 2u,
-    XR_LIR_SLICE_LIBRARY_RANGE = 4u, XR_LIR_SLICE_LIBRARY_MAP = 8u
+    XR_LIR_SLICE_LIBRARY_RANGE = 4u, XR_LIR_SLICE_LIBRARY_MAP = 8u,
+    XR_LIR_SLICE_LIBRARY_STRICT_UTF8 = 16u
 };
 XR_FUNC XrLirStatus xr_lir_slice_library_catalog_install(XrLirModule *, uint32_t flags);
 XR_FUNC XrLirStatus xr_lir_slice_operation(const XrLirModule *, XrLirSliceOperation,

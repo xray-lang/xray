@@ -1445,6 +1445,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     }
     if (!activation || activation->depth!=stack->depth || index>=activation->code->access_count) return XR_RBC_INVALID;
     XrRbcValueAccess access=activation->code->accesses[index];
+    if (!source && activation->code->strict_utf8 && activation->invoke_error && stack->depth > 1) {
+        const XrRbcFrame *caller = &stack->frames[stack->depth - 2];
+        const XrRbcFunction *owner = &module->functions[caller->function];
+        if (owner->source_ids && caller->pc && caller->pc <= owner->source_id_count)
+            source = owner->source_ids[caller->pc - 1];
+    }
     XrtManagedStatus region_status=XRT_MANAGED_OK;
     if (rbc_value_array_region_before(module,stack,activation,index,&region_status)) {
         if (region_status!=XRT_MANAGED_OK) xrt_native_managed_failure(region_status,source);

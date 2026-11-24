@@ -1,0 +1,30 @@
+{
+  "window": {
+    "exit": 0,
+    "stdout": "A\u0000é\n\na\nA\u0000é\n",
+    "stderr": ""
+  },
+  "routing": {
+    "exit": 0,
+    "stdout": "C\u0000Z\nfallback\nC\u0000Z\n19\n17\n19\nDC\n",
+    "stderr": ""
+  },
+  "assert_invalid": {
+    "exit": 1,
+    "stdout": "11\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: Utf8Error.InvalidUtf8\n"
+  },
+  "wrong_family": {
+    "source_error": ":3:0: error: view element differs from its exact root element"
+  },
+  "invalid_encodings": {
+    "exit": 0,
+    "stdout": "17\n17\n17\n17\n17\n",
+    "stderr": ""
+  },
+  "read_io": {
+    "exit": 0,
+    "stdout": "A\u0000é\nrejected\n",
+    "stderr": ""
+  }
+}

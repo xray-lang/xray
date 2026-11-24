@@ -94,6 +94,9 @@ static XrLirStatus rebuild_declarations(Rebuild *c, uint32_t count) {
             .initializer_module=view.initializer_module, .cleanup_owner=view.cleanup_owner};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[function.id]);
         if (status == XR_LIR_OK)
+            c->output->functions[c->functions[function.id].id - 1].strict_utf8 =
+                c->input->functions[function.id - 1].strict_utf8;
+        if (status == XR_LIR_OK)
             status = lir_copy_array_signature(c->input, function, c->functions[function.id]);
         if (status == XR_LIR_OK)
             status = lir_copy_closure_target(c->input, function, c->functions[function.id]);
@@ -351,7 +354,7 @@ XR_FUNC XrLirStatus xr_lir_internal_copy(const XrLirModule *input, XrLirModule *
         const XrLirFunctionData *source = &input->functions[f];
         /* Instruction and block transforms cannot rewrite registration
          * frontiers. Keep the proved cleanup functions and remap their SSA. */
-        c.plan = source->has_cleanups || source->cleanup_owner ? NULL : plan;
+        c.plan = source->has_cleanups || source->cleanup_owner || source->strict_utf8 ? NULL : plan;
         if (c.plan) status = c.plan->begin(c.plan->context, input, c.source);
         if (status == XR_LIR_OK) status = rebuild_function_storage(&c);
         if (status == XR_LIR_OK) status = rebuild_parameters(&c);

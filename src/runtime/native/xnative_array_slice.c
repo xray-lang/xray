@@ -8,6 +8,8 @@
  */
 #include "xnative_array_slice.h"
 #include "xnative_values.h"
+#include "xnative_host_nullable.h"
+#include "base/xchecks.h"
 #include "xray_native_values.h"
 #include <string.h>
 
@@ -102,4 +104,29 @@ XRAY_API void xrt_native_array_slice_copy(XrtManagedFrame *frame, size_t slot,
         status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
     if (status == XRT_MANAGED_OK) status = xrt_array_slice_copy_create(frame, slot, types, kind, slice);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+
+XRAY_API XrtManagedStatus xrt_array_slice_strict_utf8(XrtManagedFrame *frame, size_t destination,
+    size_t temporary, size_t offset, size_t temporary_owner_offset,
+    const XrtReadonlyArraySlice *bytes, uint32_t source) {
+    if (!bytes || !bytes->backing || !xrt_backing_array_matches(&bytes->backing->managed, XRT_BACKING_ARRAY_U8))
+        return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = slice_range(bytes, XRT_BACKING_ARRAY_U8);
+    if (status != XRT_MANAGED_OK) return status;
+
+    const XrtHostNullableSlots output = {frame, destination, temporary, offset, temporary_owner_offset};
+    XrtHostNullablePlaces places;
+    status = xrt_host_nullable_prepare(&output, xrt_native_managed_root(source), &places);
+    if (status != XRT_MANAGED_OK) return status;
+    if (places.current && !xrt_backing_string_matches(places.current)) return XRT_MANAGED_ARGUMENT;
+
+    const XrtBackingTypes *types = NULL;
+    status = xrt_native_values_backings(xrt_value_root_current(source), &types);
+    if (status != XRT_MANAGED_OK) return status;
+    status = xrt_string_backing_create(places.temporary.frame, places.temporary.slot, types,
+        (const char *)(bytes->backing->elements + bytes->start), bytes->count, 0);
+    if (status != XRT_MANAGED_OK && status != XRT_MANAGED_BAD_UTF8) return status;
+    XR_CHECK(xrt_host_nullable_publish(&places, status == XRT_MANAGED_OK) == XRT_MANAGED_OK,
+        "strict decoding keeps its preflighted nullable home");
+    return XRT_MANAGED_OK;
 }

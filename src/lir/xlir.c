@@ -132,7 +132,7 @@ static XrLirFunctionData *lir_block_function(XrLirModule *m, XrLirBlock handle) 
 }
 
 enum {LIR_LIBRARY_ARRAY=2, LIR_LIBRARY_DISPLAY=4, LIR_LIBRARY_STRING=8,
-    LIR_LIBRARY_RANGE=16, LIR_LIBRARY_MAP=32, LIR_LIBRARY_SLICE=64};
+    LIR_LIBRARY_RANGE=16, LIR_LIBRARY_MAP=32, LIR_LIBRARY_SLICE=64, LIR_LIBRARY_STRICT_UTF8=128};
 static XrLirStatus lir_library_catalog(XrLirModule *, uint32_t);
 #include "xlir_types.inc.c"
 #include "xlir_error_metadata.inc.c"

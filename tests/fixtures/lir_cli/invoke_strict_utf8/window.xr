@@ -1,0 +1,18 @@
+fn decode(bytes: Slice<u8>) throws(Utf8Error) -> string {
+    return try string.fromUtf8(bytes)
+}
+
+fn probe() {
+    var bytes: Array<u8> = [255, 65, 0, 195, 169, 255]
+    print(try! decode(bytes[1:5]))
+    print(try! decode(bytes[3:3]))
+    bytes[1] = 97
+    print(try! string.fromUtf8(bytes[1:2]))
+}
+fn copyAndRelease() -> string {
+    var source: Array<u8> = [255, 65, 0, 195, 169, 255]
+    return try! string.fromUtf8(source[1:5])
+}
+
+probe()
+print(copyAndRelease())

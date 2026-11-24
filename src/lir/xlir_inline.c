@@ -231,6 +231,8 @@ static XrLirStatus inline_declarations(Inliner *c) {
             .initializer_module=v->initializer_module,
             .cleanup_owner=v->cleanup_owner ? c->functions[v->cleanup_owner].id : 0};
         XrLirStatus status = xr_lir_declare_function(c->output, &spec, &c->functions[f + 1]);
+        if (status == XR_LIR_OK)
+            c->output->functions[c->functions[f + 1].id - 1].strict_utf8 = c->input->functions[f].strict_utf8;
         if (status == XR_LIR_OK) status = lir_copy_array_signature(c->input,
             (XrLirFunction){c->input, f + 1}, c->functions[f + 1]);
         if (status == XR_LIR_OK) status = lir_copy_closure_target(c->input,

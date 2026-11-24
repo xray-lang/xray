@@ -137,7 +137,7 @@ typedef struct XrRbcValueCode {
     const uint32_t *parameters; /* Logical LIR parameter SSA ids, in order. */
     uint32_t parameter_count;
     uint32_t error_type; /* Exact one-based value image row for a business error. */
-    bool error_unit;
+    bool error_unit, strict_utf8;
     /* Common String bindings need cold setup before any checked operand borrow.
      * The compiler projects this bit once; ordinary scalar functions never
      * acquire a typed activation or execute a new dispatch path. */

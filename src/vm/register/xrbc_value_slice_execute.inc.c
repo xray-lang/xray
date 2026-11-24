@@ -70,6 +70,11 @@ static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStac
     }
     if (access.index==XR_LIR_SLICE_OP_BIND)
         return xrt_array_slice_bind(&destination,kind,slice.backing,slice.start,slice.count);
+    if (access.index==XR_LIR_SLICE_OP_STRICT_UTF8) {
+        const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
+        return xrt_array_slice_strict_utf8(activation->frame,home->first_owner,home->temporary_first_owner,
+            home->offset,home->temporary_offset + offsetof(XrtHostNullableOwner, owner),&slice,source);
+    }
     if (access.index==XR_LIR_SLICE_OP_COPY) {
         const XrtBackingTypes *types=NULL;
         status=xrt_native_values_backings(xrt_value_root_current(source),&types);

@@ -1,0 +1,5 @@
+fn probe() {
+    var bytes: Array<i64> = [65]
+    print(try! string.fromUtf8(bytes[:]))
+}
+probe()

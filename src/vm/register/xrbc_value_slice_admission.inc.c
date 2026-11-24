@@ -53,7 +53,8 @@ static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcVa
     const XrRbcFunction *function,XrRbcValueAccess access) {
     if (!xr_rbc_module_code_owner(module) || access.other ||
         (access.source && (access.index!=XR_LIR_SLICE_OP_NEW || access.source!=XR_LIR_STATE_REF)) ||
-        access.index<=XR_LIR_SLICE_OP_NONE || access.index>XR_LIR_SLICE_OP_CLEANUP) return false;
+        access.index<=XR_LIR_SLICE_OP_NONE ||
+        (access.index>XR_LIR_SLICE_OP_CLEANUP && access.index!=XR_LIR_SLICE_OP_STRICT_UTF8)) return false;
     if (access.index==XR_LIR_SLICE_OP_CLEANUP) {
         if (access.result || access.first || access.count || !code->homes || !code->homes->events ||
             !access.window || access.window>code->homes->event_count) return false;
@@ -102,6 +103,9 @@ static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcVa
     if (access.index==XR_LIR_SLICE_OP_LEN || access.index==XR_LIR_SLICE_OP_GET)
         return rbc_value_scalar(code,function,access.result,XR_RBC_BITS) &&
             (access.index!=XR_LIR_SLICE_OP_GET || rbc_value_scalar(code,function,args[1],XR_RBC_BITS));
+    if (access.index==XR_LIR_SLICE_OP_STRICT_UTF8)
+        return code->strict_utf8 && code->parameter_count==1 && args[0]==code->parameters[0] &&
+            kind==XRT_VALUE_SLICE_U8 && rbc_value_host_nullable_backing(module,code,access.result,XRT_VALUE_STRING);
     if (access.index==XR_LIR_SLICE_OP_COPY)
         return rbc_value_array(module,code,access.result,true) && rbc_value_kind(module,code,access.result)==
             (kind==XRT_VALUE_SLICE_I64 ? XRT_VALUE_ARRAY_I64 : XRT_VALUE_ARRAY_U8);

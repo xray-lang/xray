@@ -281,11 +281,15 @@ static void c_values_ensure(LirC *c, uint32_t source) {
     XR_CHECK(c->homes && c->homes->owned_frame_needed, "owned production has a stable receiving frame");
     if (c->array_frame_block && c->array_frame_block == c->block) return;
     c_text(c, "    if (!xrl_frame) {\n");
-    c_format(c, "        xrl_root = xrt_native_managed_root(UINT32_C(%" PRIu32 "));\n", source);
+    c_text(c, "        xrl_root = xrt_native_managed_root(");
+    c_owned_source(c, source);
+    c_text(c, ");\n");
     if (c->header_edges || c->binding_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c))
         c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_locations(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame_locations);\n", c->function.id);
     else c_format(c, "        XrtManagedStatus status = xrt_managed_frame_enter_payload(xrl_root, &xrl_frame_%" PRIu32 ", &xrl_frame, &xrl_payload);\n", c->function.id);
-    c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
+    c_text(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, ");
+    c_owned_source(c, source);
+    c_text(c, ");\n");
     if (c->header_edges || c->binding_forwarding || c->array_local || c_array_region_present(c) || c_array_push_present(c))
         c_text(c, "        xrl_frame = xrl_frame_locations.frame; xrl_payload = xrl_frame_locations.payload;\n");
     if (c->array_local)
@@ -312,7 +316,9 @@ static void c_values_replace_begin(LirC *c, uint32_t value, uint32_t source) {
 }
 static void c_values_replace_end(LirC *c, uint32_t source) {
     c_text(c, ");\n");
-    c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
+    c_text(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, ");
+    c_owned_source(c, source);
+    c_text(c, "); }\n");
 }
 static uint32_t c_values_scalar_count(LirC *c, const XrLirEdgeView *edge) {
     uint32_t count = 0;
@@ -501,6 +507,7 @@ static bool c_values_signature(LirC *c, bool definition) {
         c_format(c, ", %s p%" PRIu32, c_type(c, c->view.parameter_types[p]), p);
     if (c->view.error)
         c_format(c, ", %s *xrl_error", c_type(c, c->view.error));
+    if (c_strict_utf8_function(c, c->function.id)) c_text(c, ", uint32_t xrl_call_source");
     c_text(c, definition ? ") {\n" : ");\n");
     return true;
 }
@@ -611,13 +618,17 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         if (!c->homes->values[v->operands[0]].owner_count) { c_text(c,"&"); c_value(c,v->operands[0]); }
         else c_text(c,"xrl_payload");
         c_text(c,", xrl_result);\n");
-        c_format(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);
+        c_text(c, "      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, ");
+        c_owned_source(c, source);
+        c_text(c, ");\n");
         c_text(c, c->view.error ? "      return UINT8_C(0); }\n" : "      return; }\n");
         return true;
     }
     if (xr_lir_function_exit(v->op) && c->homes && c->homes->owned_frame_needed) {
         c_text(c, "    if (xrl_frame) { XrtManagedStatus status = xrt_managed_frame_leave(xrl_root, xrl_frame);\n");
-        c_format(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 ")); }\n", source);
+        c_text(c, "        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, ");
+        c_owned_source(c, source);
+        c_text(c, "); }\n");
     }
     if (v->op == XR_LIR_STRING_I64) {
         c_values_ensure(c, source);

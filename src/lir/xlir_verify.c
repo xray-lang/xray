@@ -693,6 +693,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
                 XrLirSliceIntrinsic slice;
                 if (!lir_signature_matches(m, f, v, entry->parameters, entry->parameter_count, entry->result) ||
                     xr_lir_slice_intrinsic_view(m, entry->id, &slice) != XR_LIR_OK) goto invalid;
+                if (slice.operation == XR_LIR_SLICE_OP_STRICT_UTF8 &&
+                    (!f->strict_utf8 || f->parameter_count != 1 || v->operands[0] != f->parameters[0])) goto invalid;
                 if (slice.operation == XR_LIR_SLICE_OP_NEW) {
                     const XrLirValueData *binding = &f->values[v->operands[0] - 1];
                     if (slice.binding_type == XR_LIR_STATE_REF) {
@@ -957,6 +959,13 @@ static bool lir_discarded_errors_unused(const XrLirFunctionData *f,const uint8_t
 static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirFunctionData *f,
     const LirGraph *g,uint8_t *discarded) {
     bool startup=function==m->startup_entry,optional=false;
+    if (f->strict_utf8) {
+        const XrLirInstructionView *decode = &f->blocks[f->entry - 1].instructions[0].view;
+        XrLirSliceIntrinsic role;
+        if (decode->op != XR_LIR_CALL_INTRINSIC ||
+            xr_lir_slice_intrinsic_view(m, decode->intrinsic, &role) != XR_LIR_OK ||
+            role.operation != XR_LIR_SLICE_OP_STRICT_UTF8) return false;
+    }
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirInstructionView *term = lir_terminator(f,b);
         if (startup && term->op!=XR_LIR_INVOKE && term->op!=XR_LIR_UNCAUGHT_ERROR && term->op!=XR_LIR_RET)
@@ -1098,6 +1107,9 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
         return false;
     uint32_t function = (uint32_t)(f - m->functions) + 1;
     bool startup=m->startup_entry==function;
+    if (f->strict_utf8 && (startup || m->state_entry == function || f->initializer_module ||
+        f->kind != XR_LIR_FUNCTION_DEFINITION || !f->error || f->result != XR_LIR_STRING ||
+        f->parameter_count != 1 || f->cleanup_owner || f->closure.callable)) return false;
     if (startup && (f->kind!=XR_LIR_FUNCTION_DEFINITION || f->initializer_module ||
         f->error || f->closure.callable || f->parameter_count!=(uint32_t)m->state_layout_set ||
         (m->state_layout_set && (f->parameter_types[0]!=XR_LIR_STATE || m->state_entry!=m->startup_entry))))

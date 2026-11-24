@@ -418,6 +418,13 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
 #include "xlir_c_record.inc.c"
 static bool c_sum_point(const XrLirInstructionView *);
 static void c_sum_instruction(LirC *, const XrLirInstructionView *);
+static bool c_strict_utf8_function(const LirC *c, uint32_t id) {
+    return c->request->module->functions[id - 1].strict_utf8;
+}
+static void c_owned_source(LirC *c, uint32_t source) {
+    if (!source && c_strict_utf8_function(c, c->function.id)) c_text(c, "xrl_call_source");
+    else c_format(c, "UINT32_C(%" PRIu32 ")", source);
+}
 #include "xlir_c_view.inc.c"
 #include "xlir_c_display.inc.c"
 #include "xlir_c_string_library.inc.c"
@@ -1039,10 +1046,12 @@ static void c_invoke(LirC *c,const XrLirInstructionView *v,uint32_t source) {
         c_text(c,", ");
     }
     if (normal.parameter_count && !owned) c_format(c,"&v%" PRIu32 ", ",normal.parameters[0]);
-    c_format(c,"&v%" PRIu32 ");\n"
+    c_format(c,"&v%" PRIu32, failure.parameters[0]);
+    if (c_strict_utf8_function(c, v->callee)) c_format(c, ", UINT32_C(%" PRIu32 ")", source);
+    c_format(c, ");\n"
         "        if (xrl_status == UINT8_C(0)) goto bb%" PRIu32 ";\n"
         "        goto bb%" PRIu32 ";\n    }\n",
-        failure.parameters[0],v->edges[0].target,v->edges[1].target);
+        v->edges[0].target,v->edges[1].target);
 }
 
 static void c_instruction(LirC *c, const XrLirInstructionView *v) {

@@ -1,0 +1,14 @@
+import io
+import path
+
+fn probe() {
+    const valid = path.from("strict-valid.txt")
+    const invalid = path.from("strict-invalid.txt")
+    if (io.writeFile(valid, "A\0é")) {
+        print(io.readFile(valid) ?? "missing")
+    }
+    if (io.writeFileBytes(invalid, [192 as u8, 128 as u8])) {
+        print(io.readFile(invalid) ?? "rejected")
+    }
+}
+probe()

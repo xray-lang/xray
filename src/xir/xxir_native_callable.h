@@ -186,4 +186,14 @@ static inline XrXirStatus xir_native_callable_verify(const XrXirModule *module,u
     return xir_native_callable_types(id->native_callable,module->types,function->parameters,
         function->parameter_count,function->result,function->error_type) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
 }
+/* The strictly decoding prelude member is the only bodyless direct
+ * throwing definition admitted by the target execution backends. */
+static inline bool xir_strict_utf8_callable(const XrXirModule *module, uint32_t index) {
+    if (!module || !module->declarations || !module->declarations->functions ||
+        index >= module->function_count) return false;
+    const XrXirFunctionIdentity *identity = &module->declarations->functions[index];
+    return identity->native_callable == XR_NATIVE_CALLABLE_STRING_FROM_UTF8 &&
+        !identity->capture_owner && !identity->capture_count &&
+        xir_native_callable_verify(module, index) == XR_XIR_OK;
+}
 #endif

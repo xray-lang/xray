@@ -35,6 +35,7 @@
 #include "../xir/xxir_effect_module_export_internal.h"
 #include "../xir/xxir_io_native.h"
 #include "../xir/xxir_os_native.h"
+#include "../xir/xxir_native_callable.h"
 #include "../xir/xxir_target.h"
 #include "../shared/xnative_host_leaf.h"
 #include "../base/xchecks.h"
@@ -86,7 +87,7 @@ typedef struct Lower {
     XrLirStateLayout state_layout;
     uint32_t *state_slots, **module_cells;
     uint8_t *state_required;
-    bool prints, string_prints, arrays, views, displays, string_appends, ranges, scalar_bindings, maps;
+    bool prints, string_prints, arrays, views, displays, string_appends, ranges, scalar_bindings, maps, strict_utf8;
     uint8_t clock_kinds;
 } Lower;
 typedef struct LowerArrayCells {
@@ -1238,7 +1239,8 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
         call->targets[0] == call->targets[1]) return false;
     const XrXirFunction *callee = &c->source->functions[call->immediate];
     XrLirType result = lower_type(c,call->type);
-    if (!callee->block_count || !xr_lir_internal_invoke_result_type(c->module,result) ||
+    if ((!callee->block_count && !xir_strict_utf8_callable(c->source, (uint32_t)call->immediate)) ||
+        !xr_lir_internal_invoke_result_type(c->module,result) ||
         call->type != callee->result || call->args[1] != callee->parameter_count ||
         call->args[0] > f->operand_count || call->args[1] > f->operand_count - call->args[0])
         return false;
@@ -1592,6 +1594,10 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         return false;
     }
     if (!f->block_count || !f->blocks || !f->instructions) {
+        if (xir_strict_utf8_callable(c->source, function)) {
+            c->strict_utf8 = true;
+            return true;
+        }
         uint32_t field;
         return lower_os_platform(c, function) || lower_host_abi(c, function, &field) != XR_NATIVE_HOST_NONE ||
             lower_unsupported(c, "function without a scalar body");
@@ -3252,7 +3258,51 @@ static bool lower_os_platform_body(Lower *c, XrLirFunction function) {
         lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
 }
 
+static bool lower_strict_utf8_body(Lower *c, uint32_t index) {
+    XrLirFunction function = c->functions[index];
+    XrLirType optional = XR_LIR_TYPE_INVALID;
+    XrLirType error = lower_type(c, c->source->functions[index].error_type);
+    XrLirBlock entry = {0}, normal = {0}, failure = {0};
+    XrLirValue bytes = {0}, decoded = {0}, present = {0}, string = {0}, invalid = {0};
+    XrLirValue normal_value = {0}, failure_value = {0};
+    uint32_t intrinsic = 0;
+    if (!lower_build(c, xr_lir_nullable_type(c->module, XR_LIR_STRING, &optional)) ||
+        !lower_build(c, xr_lir_slice_operation(c->module, XR_LIR_SLICE_OP_STRICT_UTF8, XR_LIR_U8, 0, &intrinsic)) ||
+        !lower_build(c, xr_lir_define_function(c->module, function)) ||
+        !lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &entry)) ||
+        !lower_build(c, xr_lir_add_block(c->module, function, &optional, 1, &normal)) ||
+        !lower_build(c, xr_lir_add_block(c->module, function, &optional, 1, &failure)) ||
+        !lower_build(c, xr_lir_block_parameter(c->module, normal, 0, &normal_value)) ||
+        !lower_build(c, xr_lir_block_parameter(c->module, failure, 0, &failure_value)) ||
+        !lower_build(c, xr_lir_set_entry(c->module, function, entry)) ||
+        !lower_build(c, xr_lir_function_parameter(c->module, function, 0, &bytes))) return false;
+    c->module->functions[function.id - 1].strict_utf8 = true;
+    XrLirInstruction decode = {.op=XR_LIR_CALL_INTRINSIC, .type=optional,
+        .intrinsic=intrinsic, .operand_count=1, .operands=&bytes};
+    XrLirInstruction test = {.op=XR_LIR_NULLABLE_IS_SOME, .type=XR_LIR_I1, .operand_count=1, .operands=&decoded};
+    XrLirInstruction branch = {.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT, .operand_count=1, .operands=&present,
+        .edge_count=2, .edges={{.target=normal,.arguments=&decoded,.argument_count=1},
+            {.target=failure,.arguments=&decoded,.argument_count=1}}};
+    XrLirInstruction unwrap = {.op=XR_LIR_NULLABLE_UNWRAP, .type=XR_LIR_STRING, .operand_count=1, .operands=&normal_value};
+    XrLirInstruction drop_normal = {.op=XR_LIR_VALUE_DROP, .type=XR_LIR_UNIT, .operand_count=1, .operands=&normal_value};
+    XrLirInstruction drop_failure = {.op=XR_LIR_VALUE_DROP, .type=XR_LIR_UNIT, .operand_count=1, .operands=&failure_value};
+    XrLirInstruction returned = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operand_count=1, .operands=&string};
+    /* The authenticated prelude enum has exactly one variant, InvalidUtf8. */
+    XrLirInstruction construct = {.op=XR_LIR_SUM_NEW, .type=error};
+    XrLirInstruction thrown = {.op=XR_LIR_RETURN_ERROR, .type=XR_LIR_UNIT, .operand_count=1, .operands=&invalid};
+    return lower_build(c, xr_lir_emit_value(c->module, entry, &decode, &decoded)) &&
+        lower_build(c, xr_lir_emit_value(c->module, entry, &test, &present)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, entry, &branch)) &&
+        lower_build(c, xr_lir_emit_value(c->module, normal, &unwrap, &string)) &&
+        lower_build(c, xr_lir_emit_effect(c->module, normal, &drop_normal)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, normal, &returned)) &&
+        lower_build(c, xr_lir_emit_effect(c->module, failure, &drop_failure)) &&
+        lower_build(c, xr_lir_emit_value(c->module, failure, &construct, &invalid)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, failure, &thrown));
+}
+
 static bool lower_host_function(Lower *c, uint32_t index) {
+    if (xir_strict_utf8_callable(c->source, index)) return lower_strict_utf8_body(c, index);
     if (lower_os_platform(c, index)) return lower_os_platform_body(c, c->functions[index]);
     uint32_t field = 0;
     XrNativeHostShape shape = lower_host_abi(c, index, &field);
@@ -3592,7 +3642,8 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     if (good && c.views) {
         uint32_t flags = (c.displays ? XR_LIR_SLICE_LIBRARY_DISPLAY : 0) |
             (c.string_appends ? XR_LIR_SLICE_LIBRARY_STRING : 0) |
-            (c.ranges ? XR_LIR_SLICE_LIBRARY_RANGE : 0) | (c.maps ? XR_LIR_SLICE_LIBRARY_MAP : 0);
+            (c.ranges ? XR_LIR_SLICE_LIBRARY_RANGE : 0) | (c.maps ? XR_LIR_SLICE_LIBRARY_MAP : 0) |
+            (c.strict_utf8 ? XR_LIR_SLICE_LIBRARY_STRICT_UTF8 : 0);
         good = lower_build(&c, xr_lir_slice_library_catalog_install(c.module, flags));
     } else if (good && c.maps)
         good = lower_build(&c, xr_lir_map_catalog_install(c.module, c.views, c.arrays, c.displays, c.string_appends, c.ranges));

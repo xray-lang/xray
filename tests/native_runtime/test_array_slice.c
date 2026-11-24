@@ -7,7 +7,11 @@
  * test_array_slice.c - Real hidden keepers without an owning Slice value
  */
 #include "runtime/native/xnative_array_slice.h"
+#include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_host_nullable.h"
+#include "runtime/native/xnative_values.h"
 #include "xray_native_state.h"
+#include "xray_native_values.h"
 #include "base/xmalloc.h"
 #include <limits.h>
 #include <stdio.h>
@@ -202,7 +206,71 @@ static void slice_provider_state_probe(XrtBackingArrayKind kind, bool published_
     xrt_billing_owner_drop(data); xrt_billing_owner_drop(frames);
     CHECK(!probe.blocks && !probe.bytes && probe.leases == 1);
 }
+
+typedef struct StrictUtf8Storage { XrtHostNullableOwner result, temporary; } StrictUtf8Storage;
+
+static XrtManagedStatus strict_utf8(XrtManagedFrame *frame, size_t temporary,
+    const XrtReadonlyArraySlice *slice) {
+    return xrt_array_slice_strict_utf8(frame, 0, temporary, offsetof(StrictUtf8Storage, result),
+        offsetof(StrictUtf8Storage, temporary.owner), slice, 0);
+}
+
+static void strict_utf8_transaction(void *context) {
+    XrtValueRoot *execution = context;
+    XrtBillingOwner *billing = NULL;
+    const XrtBackingTypes *types = NULL;
+    OK(xrt_native_values_prepare(execution, &billing));
+    OK(xrt_native_values_backings(execution, &types));
+    const size_t offsets[] = {offsetof(StrictUtf8Storage, result.owner),
+        offsetof(StrictUtf8Storage, temporary.owner), SIZE_MAX, SIZE_MAX};
+    const XrtManagedFrameSpec spec = {4, sizeof(StrictUtf8Storage), _Alignof(StrictUtf8Storage), offsets};
+    XrtManagedRoot *root = xrt_native_managed_root(0);
+    XrtManagedFrame *frame = NULL;
+    void *payload = NULL;
+    OK(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload));
+    StrictUtf8Storage *storage = payload;
+    const uint8_t content[] = {255, 'A', 0, 195, 169, 255};
+    const int64_t integers[] = {65};
+    OK(xrt_array_backing_u8_create(frame, 2, types, content, sizeof(content), sizeof(content)));
+    OK(xrt_array_backing_i64_create(frame, 3, types, integers, 1, 1));
+    OK(xrt_string_backing_create(frame, 0, types, "old", 3, 0));
+    storage->result.present = 1;
+    XrtManagedHeader *old = storage->result.owner;
+    XrtManagedHeader *bytes = NULL, *wrong = NULL;
+    OK(xrt_managed_slot_borrow(frame, 2, &bytes));
+    OK(xrt_managed_slot_borrow(frame, 3, &wrong));
+    const XrtReadonlyArraySlice valid = {(const XrtArrayBacking *)bytes, 1, 4};
+    const XrtReadonlyArraySlice invalid = {(const XrtArrayBacking *)bytes, 0, 1};
+    CHECK(strict_utf8(frame, 1, &(XrtReadonlyArraySlice){(const XrtArrayBacking *)wrong, 0, 1}) == XRT_MANAGED_ARGUMENT);
+    CHECK(strict_utf8(frame, 1, &(XrtReadonlyArraySlice){(const XrtArrayBacking *)bytes, 2, SIZE_MAX}) == XRT_MANAGED_BOUNDS);
+    CHECK(strict_utf8(frame, 0, &valid) == XRT_MANAGED_ARGUMENT);
+    xrt_billing_owner_fail_after(billing, 0);
+    CHECK(strict_utf8(frame, 1, &valid) == XRT_MANAGED_OOM);
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    CHECK(storage->result.present == 1 && storage->result.owner == old && !storage->temporary.owner);
+
+    OK(strict_utf8(frame, 1, &invalid));
+    CHECK(!storage->result.present && !storage->result.owner && !storage->temporary.owner);
+    OK(strict_utf8(frame, 1, &valid));
+    OK(xrt_managed_slot_drop(frame, 2));
+    const XrtStringBacking *text = (const XrtStringBacking *)storage->result.owner;
+    CHECK(storage->result.present == 1 && text && text->length == 4 && text->runes == 3 &&
+        !memcmp(text->bytes, content + 1, 4) && !storage->temporary.owner);
+    OK(xrt_managed_frame_leave(root, frame));
+}
+
+static void strict_utf8_output(void) {
+    XrtLocationOwner *locations = NULL;
+    XrtExecutionFailure failure = {0};
+    XrtValueRoot root = {0};
+    CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK);
+    CHECK(xrt_run_embedded_owned(locations, &failure, strict_utf8_transaction, &root, &root) == XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&root));
+    xrt_execution_failure_drop(&failure);
+    xrt_locations_release(locations);
+}
 int main(void) {
+    strict_utf8_output();
     XrtInlineValueSpec spec = xrt_array_slice_bundle_spec();
     CHECK(spec.size == sizeof(XrtArraySliceBundle) && spec.owned_count == 1 &&
         spec.owned_offsets[0] == offsetof(XrtArraySliceBundle, hold));
