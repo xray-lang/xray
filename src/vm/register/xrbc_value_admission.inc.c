@@ -701,6 +701,10 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return !a.first && !a.count && !a.window && rbc_value_string(module,code,a.source,false) &&
             rbc_value_string(module,code,a.other,false) && rbc_value_scalar(code,function,a.index,XR_RBC_BITS) &&
             rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
+    case XR_RBC_VALUE_STRING_ORDER:
+        return a.index >= XR_LIR_LT && a.index <= XR_LIR_GE && !a.first && !a.count && !a.window &&
+            rbc_value_string(module,code,a.source,false) && rbc_value_string(module,code,a.other,false) &&
+            rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     case XR_RBC_VALUE_STRING_LAST_INDEX_OF:
         return !a.index && !a.first && !a.count && !a.window &&
             rbc_value_string(module,code,a.source,false) && rbc_value_string(module,code,a.other,false) &&

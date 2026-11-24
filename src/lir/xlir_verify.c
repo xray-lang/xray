@@ -390,6 +390,9 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_STRING_INDEX_OF:
             return v->type == XR_LIR_I64 && a == XR_LIR_STRING && b == XR_LIR_STRING &&
                 f->values[v->operands[2] - 1].type == XR_LIR_I64;
+        case XR_LIR_STRING_ORDER:
+            return v->type == XR_LIR_I1 && v->operand_count == 2 && a == XR_LIR_STRING &&
+                b == XR_LIR_STRING && v->predicate >= XR_LIR_LT && v->predicate <= XR_LIR_GE;
         case XR_LIR_STRING_LAST_INDEX_OF:
             return v->type == XR_LIR_I64 && v->operand_count == 2 && a == XR_LIR_STRING && b == XR_LIR_STRING;
         case XR_LIR_STRING_TEST:
@@ -575,7 +578,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             message = "instruction uses an undefined value";
             goto invalid;
         }
-    bool comparison = v->op == XR_LIR_ICMP || v->op == XR_LIR_FCMP;
+    bool comparison = v->op == XR_LIR_ICMP || v->op == XR_LIR_FCMP || v->op == XR_LIR_STRING_ORDER;
     bool equality = v->op == XR_LIR_STRING_EQUAL;
     if (comparison ? v->predicate < XR_LIR_EQ || v->predicate > XR_LIR_GE
                    : equality ? v->predicate != XR_LIR_EQ && v->predicate != XR_LIR_NE

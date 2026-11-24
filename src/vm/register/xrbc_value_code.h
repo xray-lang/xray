@@ -63,6 +63,8 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_STRING_INDEX_OF,
     /* Last occurrence over two String borrows; both operands stay borrowed. */
     XR_RBC_VALUE_STRING_LAST_INDEX_OF,
+    /* Ordered comparison over two String borrows; index is the LIR predicate. */
+    XR_RBC_VALUE_STRING_ORDER,
     /* One predicate over two String borrows: index is the runtime test ordinal. */
     XR_RBC_VALUE_STRING_TEST,
     XR_RBC_VALUE_INVOKE, XR_RBC_VALUE_INVOKE_RESULT, XR_RBC_VALUE_INVOKE_ERROR,

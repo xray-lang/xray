@@ -700,6 +700,15 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
         return true;
     }
+    if (v->op == XR_LIR_STRING_ORDER) {
+        static const char *const symbols[] = {"< 0", "<= 0", "> 0", ">= 0"};
+        uint32_t symbol = (uint32_t)(v->predicate - XR_LIR_LT);
+        c_format(c, "    v%" PRIu32 " = xrt_native_string_order((const XrtStringBacking *)", v->result);
+        c_value(c, v->operands[0]);
+        c_text(c, ", (const XrtStringBacking *)"); c_value(c, v->operands[1]);
+        c_format(c, ", UINT32_C(%" PRIu32 ")) %s;\n", source, symbols[symbol]);
+        return true;
+    }
     if (v->op == XR_LIR_STRING_LAST_INDEX_OF) {
         c_format(c, "    v%" PRIu32 " = xrt_native_string_last_index_of((const XrtStringBacking *)", v->result);
         c_value(c, v->operands[0]);

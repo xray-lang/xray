@@ -1,0 +1,10 @@
+{
+  "ordering": {
+    "exit": 0,
+    "stdout": "true\ntrue\nfalse\nfalse\nfalse\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\n",
+    "stderr": ""
+  },
+  "reject_type": {
+    "source_error": ":2:0: error: operator requires a declared concrete operand contract"
+  }
+}

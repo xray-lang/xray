@@ -1626,6 +1626,20 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
                 output->bits=(uint64_t)xrt_native_string_index_of(text,search,from,source);
             }
         }
+    } else if (access.operation==XR_RBC_VALUE_STRING_ORDER) {
+        const XrtStringBacking *left=NULL,*right=NULL;
+        status=rbc_value_string_borrow(activation,access.source,&left);
+        if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&right);
+        if (status==XRT_MANAGED_OK) {
+            XrRbcRegister *output=rbc_value_register(stack,activation,access.result);
+            if (!output) status=XRT_MANAGED_ARGUMENT;
+            else {
+                int32_t order=xrt_native_string_order(left,right,source);
+                bool result=access.index==XR_LIR_LT ? order<0 : access.index==XR_LIR_LE ? order<=0 :
+                    access.index==XR_LIR_GT ? order>0 : order>=0;
+                output->bits=result ? 1u : 0u;
+            }
+        }
     } else if (access.operation==XR_RBC_VALUE_STRING_LAST_INDEX_OF) {
         const XrtStringBacking *text=NULL,*search=NULL;
         status=rbc_value_string_borrow(activation,access.source,&text);

@@ -1,0 +1,16 @@
+const a = "apple"
+const b = "banana"
+print(a < b)
+print(a <= b)
+print(b < a)
+print(a > b)
+print(a >= b)
+print(a <= a)
+print(a >= a)
+print("abc" < "abd")
+print("abc" < "ab")
+print("Z" < "a")
+print("é" > "e")
+print("a\0b" < "a\0c")
+const owned = "ap" + "ple"
+print(owned < b)
