@@ -6,6 +6,10 @@ fn applyItems(callback: fn(Array<i64>?) -> Array<i64>?, value: Array<i64>?) -> A
     return callback(value)
 }
 
+fn applyTexts(callback: fn(Array<string>?) -> Array<string>?, value: Array<string>?) -> Array<string>? {
+    return callback(value)
+}
+
 fn snapshots() {
     const bytes = fn(value: Array<u8>?) -> Array<u8>? { return value }
     var source: Array<u8> = [231]
@@ -33,6 +37,18 @@ fn snapshots() {
     print(noItems == null)
     print(len(noItems!))
     print(applyItems(items, null) == null)
+
+    const texts = fn(value: Array<string>?) -> Array<string>? { return value }
+    var words: Array<string> = ["旧\0猫", "second"]
+    const held = applyTexts(texts, words)
+    words[0] = "changed"
+    print(held![0] == "旧\0猫")
+    print(len(held!))
+    print(words[0])
+    const noWords = applyTexts(texts, Array<string>())
+    print(noWords == null)
+    print(len(noWords!))
+    print(applyTexts(texts, null) == null)
 }
 
 snapshots()

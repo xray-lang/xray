@@ -169,6 +169,7 @@ def main() -> None:
         "reject_string_copy_bytes_type": b"expression cannot satisfy its declared type",
         "reject_nullable_class_type": b"expression cannot satisfy its declared type",
         "reject_nullable_array_type": b"expression cannot satisfy its declared type",
+        "reject_nullable_string_array_type": b"expression cannot satisfy its declared type",
         "reject_repeat_string_default": b"type has no admitted default initializer",
         "reject_unsigned_family": b"expression cannot satisfy its declared type",
         "reject_unsigned_byte_literal": b"integer literal is outside its contextual type",

@@ -1,0 +1,5 @@
+fn wrong(value: Array<u8>) -> Array<string>? {
+    return value
+}
+
+print(wrong([7]) == null)

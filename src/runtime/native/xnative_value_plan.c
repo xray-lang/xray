@@ -99,10 +99,16 @@ static bool scalar_layout(XrtValueKind kind, size_t *size, size_t *alignment) {
 static XrtBackingArrayKind array_backing_kind(XrtValueKind kind) {
     switch (kind) {
     case XRT_VALUE_ARRAY_I64: return XRT_BACKING_ARRAY_I64;
+    case XRT_VALUE_ARRAY_STRING: return XRT_BACKING_ARRAY_STRING;
     case XRT_VALUE_ARRAY_U8: return XRT_BACKING_ARRAY_U8;
     default: return XRT_BACKING_ARRAY_COUNT;
     }
 }
+static XrtBackingArrayKind writable_class_array_kind(XrtValueKind kind) {
+    return kind == XRT_VALUE_ARRAY_I64 || kind == XRT_VALUE_ARRAY_U8 ?
+        array_backing_kind(kind) : XRT_BACKING_ARRAY_COUNT;
+}
+
 static bool managed_nullable(const XrtValuePlan *plan) {
     while (plan->view.kind == XRT_VALUE_NULLABLE) plan = plan->view.nullable.element;
     XrtValueKind kind = plan->view.kind;
@@ -159,7 +165,7 @@ static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *s
             !capture_type(field.type))) return false;
         const XrtValuePlanSpec *type = &field.type->view;
         if (field.flags && (!named || field.flags != XRT_VALUE_FIELD_MUTABLE ||
-            (array_backing_kind(type->kind) == XRT_BACKING_ARRAY_COUNT && !writable_class_scalar(type))))
+            (writable_class_array_kind(type->kind) == XRT_BACKING_ARRAY_COUNT && !writable_class_scalar(type))))
             return false;
         if (type->alignment > alignment) alignment = type->alignment;
         if (end > SIZE_MAX - (type->alignment - 1)) return false;
@@ -699,7 +705,7 @@ XR_FUNCDEF XrtManagedStatus xrt_class_array_binding(const XrtClassFieldAccess *a
     const XrtValuePlanSpec *row = &access->plan->view.element->view;
     if (access->index >= row->field_count) return XRT_MANAGED_BOUNDS;
     const XrtValueSlotSpec *field = &row->fields[access->index];
-    XrtBackingArrayKind field_kind = array_backing_kind(field->type->view.kind);
+    XrtBackingArrayKind field_kind = writable_class_array_kind(field->type->view.kind);
     if (!(field->flags & XRT_VALUE_FIELD_MUTABLE) || field_kind == XRT_BACKING_ARRAY_COUNT) return XRT_MANAGED_ARGUMENT;
     unsigned char *payload = (unsigned char *)(access->instance + 1);
     XrtManagedHeader **slot = (XrtManagedHeader **)(payload + field->offset);

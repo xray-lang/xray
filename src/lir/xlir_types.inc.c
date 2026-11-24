@@ -147,7 +147,7 @@ static bool lir_cell_payload_valid(const XrLirModule *m, XrLirType payload,
 
 static bool lir_type_element_valid(const XrLirModule *m, XrLirTypeView shape, XrLirType element, uint32_t ordinal) {
     if (shape.kind == XR_LIR_TYPE_CELL) return lir_cell_payload_valid(m, shape.element, element, ordinal);
-    if (lir_nullable_array_shape(shape)) return element == XR_LIR_U8 || element == XR_LIR_I64;
+    if (lir_nullable_array_shape(shape)) return element == XR_LIR_U8 || element == XR_LIR_I64 || element == XR_LIR_STRING;
     return element == XR_LIR_TYPE_INVALID;
 }
 
