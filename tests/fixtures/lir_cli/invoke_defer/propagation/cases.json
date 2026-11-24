@@ -9,6 +9,11 @@
     "stdout": "1\n201\n25\n302\n202\n26\n",
     "stderr": ""
   },
+  "unit_success_and_error": {
+    "exit": 1,
+    "stdout": "1\n201\n99\n202\n201\n202\n",
+    "stderr": "[Uncaught Error] Refusal.Failed(7)\n"
+  },
   "before_register_same_e": {
     "lowering_error": ":13:11: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
   }

@@ -1,0 +1,16 @@
+enum Refusal { Failed { code: i64 } }
+
+fn leaf(fail: bool) throws(Refusal) {
+    defer { print(201) }
+    if (fail) { throw Refusal.Failed { code: 7 } }
+    print(1)
+}
+
+fn relay(fail: bool) throws(Refusal) {
+    defer { print(202) }
+    try leaf(fail)
+    print(99)
+}
+
+try relay(false)
+try relay(true)
