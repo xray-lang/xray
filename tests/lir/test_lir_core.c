@@ -269,7 +269,8 @@ static void cleanup_suffix_precedes_retirement(void) {
 }
 
 static void cleanup_invoke_checks_the_complete_callee(void) {
-    for (unsigned divide = 0; divide < 2; ++divide) {
+    enum { EXACT, DIVIDE_IN_CALLEE, EFFECT_ON_FAILURE, MODE_COUNT };
+    for (unsigned mode = EXACT; mode < MODE_COUNT; ++mode) {
         XrLirModule *module = NULL;
         OK(xr_lir_module_create(NULL, &module));
         XrLirType error = try_error_type(module, "Failure"), scalar = XR_LIR_I64;
@@ -280,7 +281,7 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
         XrLirBlock body = test_block(module, leaf, NULL, 0);
         OK(xr_lir_set_entry(module, leaf, body));
         XrLirValue result = test_constant(module, body, scalar, 17);
-        if (divide) {
+        if (mode == DIVIDE_IN_CALLEE) {
             XrLirValue args[] = {result, test_constant(module, body, scalar, 0)};
             OK(xr_lir_emit_value(module, body, &(XrLirInstruction){.op = XR_LIR_DIV, .type = scalar,
                 .operands = args, .operand_count = 2, .source = {"cleanup.xr", 10, 2, 1, 2, 7}}, &result));
@@ -296,6 +297,11 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
         body = test_block(module, cleanup, NULL, 0);
         OK(xr_lir_set_entry(module, cleanup, body));
         test_return(module, body, (XrLirValue){0});
+        XrLirFunction print = {0};
+        if (mode == EFFECT_ON_FAILURE)
+            OK(xr_lir_declare_function(module, &(XrLirFunctionSpec){.name = "xrt_print_i64", .name_length = 13,
+                .parameters = &scalar, .parameter_count = 1, .result = XR_LIR_UNIT,
+                .kind = XR_LIR_FUNCTION_EXTERNAL, .extern_kind = XR_LIR_EXTERN_PRINT_I64}, &print));
 
         XrLirBlock registration = test_block(module, owner, NULL, 0);
         XrLirBlock call = test_block(module, owner, NULL, 0);
@@ -310,6 +316,11 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
         XrLirBlock exits[] = {normal, failed};
         for (uint32_t e = 0; e < 2; ++e) {
             OK(xr_lir_internal_cleanup_block(module, exits[e], cleanup.id, 0, NULL, 0));
+            if (e && mode == EFFECT_ON_FAILURE) {
+                XrLirValue extra = test_constant(module, failed, scalar, 42);
+                OK(xr_lir_emit_effect(module, failed, &(XrLirInstruction){.op = XR_LIR_CALL,
+                    .type = XR_LIR_UNIT, .callee = print, .operands = &extra, .operand_count = 1}));
+            }
             OK(xr_lir_emit_effect(module, exits[e], &(XrLirInstruction){.op = XR_LIR_CALL,
                 .type = XR_LIR_UNIT, .callee = cleanup}));
             OK(xr_lir_block_parameter(module, exits[e], 0, &result));
@@ -319,7 +330,10 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
         }
         XrLirDiagnostic diagnostic = {0};
         XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
-        if (divide) CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "panic-free leaf"));
+        if (mode == DIVIDE_IN_CALLEE)
+            CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "panic-free leaf"));
+        else if (mode == EFFECT_ON_FAILURE)
+            CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "cleanup frontier"));
         else CHECK(status == XR_LIR_OK);
         xr_lir_module_destroy(module);
     }

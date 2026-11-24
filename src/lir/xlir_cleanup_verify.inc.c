@@ -108,10 +108,12 @@ static uint32_t lir_cleanup_frontier(const XrLirFunctionData *f, uint32_t target
 }
 
 static bool lir_cleanup_invoke_shape(const XrLirModule *m, const XrLirFunctionData *f,
-    const XrLirInstructionView *call) {
+    const XrLirInstructionView *call, uint32_t frontier) {
     uint32_t failed = call->edges[1].target - 1;
+    const XrLirInstructionView *first = &f->blocks[failed].instructions[0].view;
     return f->error && f->error == m->functions[call->callee - 1].error &&
         (call->type == XR_LIR_UNIT || lir_cleanup_scalar(call->type)) &&
+        first->op == XR_LIR_CALL && first->callee == frontier &&
         lir_terminator(f, failed)->op == XR_LIR_RETURN_ERROR;
 }
 
@@ -135,7 +137,7 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
         }
         if (from || f->cleanup_owner) {
             if (term->op == XR_LIR_INVOKE) {
-                if (!from || !lir_cleanup_invoke_shape(m, f, term)) return false;
+                if (!from || !lir_cleanup_invoke_shape(m, f, term, from)) return false;
             } else if (term->op != XR_LIR_BR && term->op != XR_LIR_CONDBR && !xr_lir_function_exit(term->op)) {
                 return false;
             }
