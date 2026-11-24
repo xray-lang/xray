@@ -700,6 +700,14 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
         return true;
     }
+    if (v->op == XR_LIR_STRING_TEST) {
+        c_format(c, "    v%" PRIu32 " = xrt_native_string_test((const XrtStringBacking *)", v->result);
+        c_value(c, v->operands[0]);
+        c_text(c, ", (const XrtStringBacking *)");
+        c_value(c, v->operands[1]);
+        c_format(c, ", UINT32_C(%" PRIu64 "), UINT32_C(%" PRIu32 "));\n", v->bits, source);
+        return true;
+    }
     if (v->op == XR_LIR_I64_TRY_PARSE || v->op == XR_LIR_F64_TRY_PARSE) {
         c_format(c, "    v%" PRIu32 " = (%s){0};\n", v->result, c_type(c, v->type));
         c_format(c, "    v%" PRIu32 ".tag = xrt_native_string_try_parse_%s((const XrtStringBacking *)",

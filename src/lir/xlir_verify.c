@@ -390,6 +390,9 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_STRING_INDEX_OF:
             return v->type == XR_LIR_I64 && a == XR_LIR_STRING && b == XR_LIR_STRING &&
                 f->values[v->operands[2] - 1].type == XR_LIR_I64;
+        case XR_LIR_STRING_TEST:
+            return v->type == XR_LIR_I1 && v->operand_count == 2 && a == XR_LIR_STRING &&
+                b == XR_LIR_STRING && v->bits <= 2;
         case XR_LIR_ASSERT_CONDITION:
             return v->type == XR_LIR_UNIT && a == XR_LIR_I1 && b == XR_LIR_STRING;
         case XR_LIR_STRING_RETAIN:
@@ -589,7 +592,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_HOST_PATH_CLASS && v->op != XR_LIR_HOST_FILE_READ && v->op != XR_LIR_HOST_ENV_GET &&
         v->op != XR_LIR_CLASS_SCALAR_WRITE && v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
-        v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW && v->bits)
+        v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW &&
+        v->op != XR_LIR_STRING_TEST && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->op != XR_LIR_INVOKE && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))

@@ -145,6 +145,8 @@ XR_LIR_OP(HOST_FILE_READ, "host_file_read", 2)
 XR_LIR_OP(HOST_ENV_GET, "host_env_get", 1)
 XR_LIR_OP(STRING_SLICE, "string_slice", 3)
 XR_LIR_OP(STRING_INDEX_OF, "string_index_of", 3)
+/* One predicate over two live String borrows; bits is the test selector. */
+XR_LIR_OP(STRING_TEST, "string_test", 2)
 XR_LIR_OP(INVOKE, "invoke", -1)
 XR_LIR_OP(RETURN_ERROR, "return_error", 1)
 XR_LIR_OP(PANIC_ERROR, "panic_error", 1)

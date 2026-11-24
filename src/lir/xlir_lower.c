@@ -587,10 +587,25 @@ static XrLirOp lower_checked_terminator_op(Lower *c, XrXirOp op) {
     return result;
 }
 
+/* The three predicates share one operation; their selector is the declaration's
+ * intrinsic implementation ordinal in runtime order. */
+static uint32_t lower_string_test_selector(XrNativeIntrinsicImplementation implementation) {
+    switch (implementation) {
+    case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_CONTAINS: return 0;
+    case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_STARTS_WITH: return 1;
+    case XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_ENDS_WITH: return 2;
+    default: return UINT32_MAX;
+    }
+}
+
 static XrLirOp lower_string_intrinsic_operation(const XrXirInstruction *instruction) {
     const XrNativeIntrinsicDeclaration *call = xr_xir_intrinsic(instruction->immediate);
-    return call && call->implementation == XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE &&
-        instruction->type == XR_XIR_STRING && instruction->args[1] == 3 ? XR_LIR_STRING_SLICE : XR_LIR_OP_INVALID;
+    if (!call) return XR_LIR_OP_INVALID;
+    if (call->implementation == XR_NATIVE_INTRINSIC_IMPLEMENTATION_STRING_SLICE)
+        return instruction->type == XR_XIR_STRING && instruction->args[1] == 3 ? XR_LIR_STRING_SLICE : XR_LIR_OP_INVALID;
+    if (lower_string_test_selector(call->implementation) != UINT32_MAX)
+        return instruction->type == XR_XIR_BOOL && instruction->args[1] == 2 ? XR_LIR_STRING_TEST : XR_LIR_OP_INVALID;
+    return XR_LIR_OP_INVALID;
 }
 
 static bool lower_known(const XrXirInstruction *instruction) {
@@ -2561,12 +2576,20 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     }
     if (op->op == XR_XIR_CALL_INTRINSIC) {
         XrLirOp operation = lower_string_intrinsic_operation(op);
-        if (operation == XR_LIR_OP_INVALID || op->args[0] > f->source->operand_count ||
+        const XrNativeIntrinsicDeclaration *intrinsic = xr_xir_intrinsic(op->immediate);
+        if (operation == XR_LIR_OP_INVALID || !intrinsic || op->args[0] > f->source->operand_count ||
             op->args[1] > f->source->operand_count - op->args[0])
             return lower_unsupported(c, xr_xir_op_name(op->op));
         XrLirValue args[3] = {{0}};
-        for (uint32_t a = 0; a < 3; ++a)
+        uint32_t operand_count = operation == XR_LIR_STRING_TEST ? 2u : 3u;
+        for (uint32_t a = 0; a < operand_count; ++a)
             if (!lower_value(f, f->source->operands[op->args[0] + a], &args[a])) return false;
+        if (operation == XR_LIR_STRING_TEST) {
+            XrLirInstruction test = {.op=operation, .type=XR_LIR_I1,
+                .operands=args, .operand_count=operand_count, .bits=lower_string_test_selector(intrinsic->implementation),
+                .source=lower_source(c)};
+            return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &test, &f->values[result]));
+        }
         XrLirInstruction slice = {.op=operation, .type=XR_LIR_STRING,
             .operands=args, .operand_count=3, .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &slice, &f->values[result]));

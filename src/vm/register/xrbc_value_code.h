@@ -61,6 +61,8 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_HOST_PATH_CLASS, XR_RBC_VALUE_HOST_FILE_READ, XR_RBC_VALUE_HOST_ENV_GET,
     XR_RBC_VALUE_STRING_SLICE,
     XR_RBC_VALUE_STRING_INDEX_OF,
+    /* One predicate over two String borrows: index is the runtime test ordinal. */
+    XR_RBC_VALUE_STRING_TEST,
     XR_RBC_VALUE_INVOKE, XR_RBC_VALUE_INVOKE_RESULT, XR_RBC_VALUE_INVOKE_ERROR,
     XR_RBC_VALUE_RETURN_ERROR, XR_RBC_VALUE_PANIC_ERROR, XR_RBC_VALUE_UNCAUGHT_ERROR
 } XrRbcValueOperation;
@@ -99,6 +101,7 @@ typedef struct XrRbcValueAccess {
      * source moves, other borrows, and result has its own real staging slot. */
     /* STRING_SLICE borrows source, with the start and end SSA ids in other and index. */
     /* STRING_INDEX_OF borrows source and other and names the start SSA id in index. */
+    /* STRING_TEST borrows source and other; index is its runtime test ordinal. */
     /* String BINDING accesses and STRING_APPEND_BINDING index their exact
      * common event. A writing access uses window=UINT32_MAX without a stage,
      * otherwise the zero-based independent VALUE workspace ordinal. Append

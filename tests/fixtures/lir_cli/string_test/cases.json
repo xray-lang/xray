@@ -1,0 +1,13 @@
+{
+  "predicates": {
+    "exit": 0,
+    "stdout": "true\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\nfalse\ntrue\n",
+    "stderr": ""
+  },
+  "reject_type": {
+    "source_error": ":2:23: error: expression cannot satisfy its declared type"
+  },
+  "reject_arity": {
+    "source_error": ":2:12: error: intrinsic requires its declared plain arguments"
+  }
+}

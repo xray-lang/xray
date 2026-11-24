@@ -1,0 +1,21 @@
+const text = "héllo wörld"
+print(text.startsWith("hé"))
+print(text.endsWith("wörld"))
+print(text.contains("llo"))
+print(text.startsWith("llo"))
+print(text.endsWith("héllo"))
+print(text.contains(""))
+print(text.startsWith(""))
+print(text.endsWith(""))
+print(text.contains("zz"))
+print(text.startsWith("héllo wörld!"))
+print("abc".endsWith("bc"))
+print("a\0b".contains("\0"))
+const empty = ""
+print(empty.contains(""))
+print(empty.startsWith(""))
+print(empty.endsWith(""))
+print(empty.contains("x"))
+const owned = "x" + "héllo"
+print(owned.startsWith("héllo"))
+print(owned.contains("héll"))
