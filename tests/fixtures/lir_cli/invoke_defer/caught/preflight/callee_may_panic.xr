@@ -1,0 +1,22 @@
+enum Refusal { Denied { code: i64 } }
+
+fn read(divisor: i64) throws(Refusal) -> i64 {
+    print(10)
+    if (divisor < 0) { throw Refusal.Denied { code: 23 } }
+    return 42 / divisor
+}
+
+fn probe(divisor: i64) {
+    try {
+        defer { print(101) }
+        print(read(divisor))
+        print(8)
+    } catch (e: Refusal) {
+        match (e) {
+            Refusal.Denied { code } => print(code),
+        }
+    }
+    print(99)
+}
+
+probe(0)

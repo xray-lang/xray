@@ -1,0 +1,12 @@
+{
+  "scope_call": {
+    "exit": 0,
+    "stdout": "10\n42\n8\n101\n99\n10\n101\n23\n99\n",
+    "stderr": ""
+  },
+  "nested_scope_call": {
+    "exit": 0,
+    "stdout": "10\n42\n8\n102\n9\n101\n99\n10\n102\n101\n23\n99\n",
+    "stderr": ""
+  }
+}

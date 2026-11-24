@@ -1,0 +1,16 @@
+enum Refusal { Denied { code: i64 } }
+
+fn probe() {
+    try {
+        defer { print(101) }
+        print(10)
+        throw Refusal.Denied { code: 23 }
+    } catch (e: Refusal) {
+        match (e) {
+            Refusal.Denied { code } => print(code),
+        }
+    }
+    print(99)
+}
+
+probe()
