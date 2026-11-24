@@ -66,18 +66,31 @@ static const XrXirInstruction *lower_catch_predecessor(const XrXirFunction *f,
     return jump->op==exit ? jump : NULL;
 }
 
+static XrXirType lower_catch_local_throw(const XrXirFunction *f,const XrXirInstruction *exit,
+    uint32_t value,const uint8_t *uses) {
+    const XrXirInstruction *erase=lower_place_definition(f,value);
+    if (exit->immediate || exit->args[0]!=value || !erase || erase->op!=XR_XIR_ERROR_ERASE ||
+        erase+1!=exit || uses[erase-f->instructions]!=2) return XR_XIR_UNIT;
+    const XrXirInstruction *error=lower_place_definition(f,erase->args[0]);
+    if (!error || error->op!=XR_XIR_ENUM_NEW || error+1!=erase ||
+        uses[error-f->instructions]!=1) return XR_XIR_UNIT;
+    return error->type;
+}
+
 static XrXirType lower_catch_input(const Lower *c,const XrXirFunction *f,uint32_t block,
     const uint32_t *input,const uint8_t *uses) {
     const XrXirInstruction *jump=lower_catch_predecessor(f,block,input);
     if (!jump) return XR_XIR_UNIT;
     const XrXirInstruction *call=lower_forwarded_error_call(f,input[0],input[1],block,jump->op);
-    /* The cleanup terminator and this handler PHI are the only uses of the released error edge. */
-    if (jump->op==XR_XIR_CLEANUP_ERROR && (!call || uses[f->blocks[input[0]].first]!=2))
-        return XR_XIR_UNIT;
     if (call) {
+        /* The terminator and handler PHI are the only uses of the released error edge. */
+        if (jump->op==XR_XIR_CLEANUP_ERROR && uses[f->blocks[input[0]].first]!=2)
+            return XR_XIR_UNIT;
         if (call->immediate<0 || (uint64_t)call->immediate>=c->source->function_count) return XR_XIR_UNIT;
         return c->source->functions[call->immediate].error_type;
     }
+    if (jump->op==XR_XIR_CLEANUP_ERROR)
+        return lower_catch_local_throw(f,jump,input[1],uses);
     const XrXirInstruction *producer=lower_place_definition(f,input[1]);
     if (!producer || producer->type!=XR_XIR_ERROR) return XR_XIR_UNIT;
     uint32_t index=(uint32_t)(producer-f->instructions);
@@ -116,9 +129,22 @@ static void lower_catch_mark_join(LowerCatchPlan *plan,const XrXirFunction *f,ui
         const uint32_t *input=&f->operands[phi->args[0]+a];
         if (!active[input[0]]) continue;
         const XrXirInstruction *producer=lower_place_definition(f,input[1]);
-        if (producer && producer->op==XR_XIR_ERROR_ERASE)
-            plan->types[(uint32_t)(producer-f->instructions)]=exact;
+        if (producer && producer->op==XR_XIR_ERROR_ERASE) {
+            uint32_t erased=(uint32_t)(producer-f->instructions);
+            plan->types[erased]=exact;
+            /* An active local throw proved the immediately preceding constructor. */
+            if (f->blocks[input[0]].frontier)
+                plan->types[erased-1]=exact;
+        }
     }
+}
+
+static bool lower_catch_local_cleanup_exit(const Lower *c,const XrXirFunction *f,uint32_t block,
+    const XrXirInstruction *exit) {
+    const XrXirBlock *landing=&f->blocks[block];
+    if (!landing->frontier || landing->count<3 || exit->immediate) return false;
+    uint32_t erased=f->parameter_count+(uint32_t)(exit-f->instructions)-1;
+    return exit->args[0]==erased && exit[-1].op==XR_XIR_ERROR_ERASE && lower_catch_type(c,f,erased)!=XR_XIR_UNIT;
 }
 
 /* The canonical pattern compares the tag of a proved narrowing with its
