@@ -18,6 +18,11 @@
 #include <winternl.h>
 #include <bcrypt.h>
 
+/* The public Windows SDK omits this native information entry point. */
+#ifndef NtSetInformationFile
+NTSYSAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS);
+#endif
+
 typedef struct WorkspaceNode {
     HANDLE created, anchor, deletion;
     XtcXirFileLease *lease;
@@ -60,6 +65,7 @@ struct XtcXirWorkspace {
     WorkspaceNode nodes[3];
     WorkspaceFrame *frames;
     uint32_t close_phase, close_index, close_substage, frame_count;
+    uint8_t disposition_retries;
 #else
     XtcXirFileLease *parent_lease, *leases[3];
     WorkspaceFrame *frames;

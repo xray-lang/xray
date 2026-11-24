@@ -338,6 +338,7 @@ XR_FUNC bool xr_cli_lir_workspace_close(XtcXirWorkspace **workspace, const char 
     XtcXirWorkspaceStatus status = XTC_XIR_WORKSPACE_OK;
 #if XR_OS_WINDOWS
     unsigned sharing_retries = 0;
+    uint64_t disposition_delay = 1;
 #endif
     for (unsigned attempt = 0; attempt < 8;) {
         status = xtc_xir_workspace_close(workspace, 1024);
@@ -350,6 +351,12 @@ XR_FUNC bool xr_cli_lir_workspace_close(XtcXirWorkspace **workspace, const char 
         diagnostic = xtc_xir_workspace_diagnostic(*workspace);
         if (first.status == XTC_XIR_WORKSPACE_OK && diagnostic) first = *diagnostic;
 #if XR_OS_WINDOWS
+        if (status == XTC_XIR_WORKSPACE_DISPOSITION_RETRY) {
+            /* The workspace bounds the number of retries for its original handle. */
+            xr_time_sleep_ms(disposition_delay);
+            disposition_delay *= 2;
+            continue;
+        }
         if (status == XTC_XIR_WORKSPACE_SHARING_RETRY) {
             if (sharing_retries == 5) {
                 if (first.status == XTC_XIR_WORKSPACE_OK)

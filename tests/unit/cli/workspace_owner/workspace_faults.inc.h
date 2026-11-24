@@ -27,7 +27,8 @@ static bool fail_io(void);
 static bool fixed_nonce;
 static bool stop_before_input;
 static bool corrupt_identity;
-static NTSTATUS last_relative_open;
+static NTSTATUS last_relative_open, last_native_disposition;
+NTSYSAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS);
 static HANDLE owner_handles[128];
 static size_t owner_handle_count;
 static HANDLE workspace_record_handle(HANDLE handle) {
@@ -89,6 +90,13 @@ static BOOL workspace_information(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS kind,
     }
     return okay;
 }
+static NTSTATUS workspace_test_disposition(HANDLE handle, PIO_STATUS_BLOCK result,
+    PVOID data, ULONG size, FILE_INFORMATION_CLASS kind) {
+    if (fail_io()) return failure_ntstatus();
+    last_native_disposition = NtSetInformationFile(handle, result, data, size, kind);
+    return last_native_disposition;
+}
+#define NtSetInformationFile workspace_test_disposition
 #define NtCreateFile workspace_test_nt
 #define BCryptGenRandom workspace_random
 #define CreateFileW(...) (fail_io() ? INVALID_HANDLE_VALUE : workspace_record_handle(CreateFileW(__VA_ARGS__)))
@@ -98,6 +106,7 @@ static BOOL workspace_information(HANDLE handle, FILE_INFO_BY_HANDLE_CLASS kind,
 #define GetFileType(...) (fail_io() ? FILE_TYPE_UNKNOWN : GetFileType(__VA_ARGS__))
 #define CloseHandle workspace_close_handle
 #include "app/toolchain/xtc_xir_workspace.c"
+#undef NtSetInformationFile
 #undef NtCreateFile
 #undef BCryptGenRandom
 #undef CreateFileW

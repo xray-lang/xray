@@ -268,6 +268,49 @@ static XtcXirWorkspaceStatus workspace_enumerated(XtcXirWorkspace *owner, Worksp
         offset += entry->NextEntryOffset;
     }
 }
+enum {
+    WORKSPACE_DISPOSITION = 7,
+    WORKSPACE_RECHECK_DISPOSITION = 11,
+    WORKSPACE_FILE_DISPOSITION_INFORMATION = 13,
+    WORKSPACE_MAX_DISPOSITION_RETRIES = 5
+};
+typedef struct WorkspaceFileDisposition { BOOLEAN delete_file; } WorkspaceFileDisposition;
+
+static XtcXirWorkspaceStatus workspace_disposition_step(XtcXirWorkspace *owner, WorkspaceFrame *frame) {
+    if (frame->state == WORKSPACE_RECHECK_DISPOSITION) {
+        FILE_ATTRIBUTE_TAG_INFO attributes = {0};
+        const DWORD disallowed = FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_DIRECTORY |
+            FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DEVICE;
+        /* A readonly file can return the same NT status as a mapped image. */
+        if (!GetFileInformationByHandleEx(frame->handle, FileAttributeTagInfo, &attributes, sizeof(attributes)) ||
+            (attributes.FileAttributes & disallowed)) {
+            frame->state = 2;
+            return workspace_error(owner, ERROR_ACCESS_DENIED);
+        }
+        frame->state = WORKSPACE_DISPOSITION;
+        ++owner->disposition_retries;
+        return XTC_XIR_WORKSPACE_DISPOSITION_RETRY;
+    }
+    if (frame->fixed < 0 && !frame->directory) {
+        WorkspaceFileDisposition disposition = {TRUE};
+        IO_STATUS_BLOCK result = {0};
+        NTSTATUS status = NtSetInformationFile(frame->handle, &result, &disposition, sizeof(disposition),
+            (FILE_INFORMATION_CLASS)WORKSPACE_FILE_DISPOSITION_INFORMATION);
+        if ((ULONG)status == 0xc0000121UL && owner->disposition_retries < WORKSPACE_MAX_DISPOSITION_RETRIES) {
+            /* STATUS_CANNOT_DELETE: recheck this same identity before a bounded retry. */
+            frame->state = WORKSPACE_RECHECK_DISPOSITION;
+            return XTC_XIR_WORKSPACE_PENDING;
+        }
+        if (status < 0) return workspace_error(owner, RtlNtStatusToDosError(status));
+    } else {
+        FILE_DISPOSITION_INFO disposition = {TRUE};
+        if (!SetFileInformationByHandle(frame->handle, FileDispositionInfo, &disposition, sizeof(disposition)))
+            return workspace_error(owner, GetLastError());
+    }
+    frame->state = 8;
+    return XTC_XIR_WORKSPACE_PENDING;
+}
+
 static XtcXirWorkspaceStatus workspace_walk_step(XtcXirWorkspace *owner) {
     if (!owner->frame_count) { owner->close_phase = 4; return XTC_XIR_WORKSPACE_PENDING; }
     WorkspaceFrame *frame = &owner->frames[owner->frame_count - 1];
@@ -315,23 +358,19 @@ static XtcXirWorkspaceStatus workspace_walk_step(XtcXirWorkspace *owner) {
     if (frame->state == 3) {
         DWORD type = GetFileType(frame->handle);
         if (type != FILE_TYPE_DISK) return workspace_error(owner, type == FILE_TYPE_UNKNOWN ? GetLastError() : ERROR_NOT_SUPPORTED);
-        frame->state = frame->directory ? 4 : 7; return XTC_XIR_WORKSPACE_PENDING;
+        frame->state = frame->directory ? 4 : WORKSPACE_DISPOSITION; return XTC_XIR_WORKSPACE_PENDING;
     }
     if (frame->state == 4) {
         FILE_INFO_BY_HANDLE_CLASS kind = frame->restart ? FileIdExtdDirectoryRestartInfo : FileIdExtdDirectoryInfo;
         if (!GetFileInformationByHandleEx(frame->handle, kind, owner->enumeration, owner->limits.enum_bytes)) {
             DWORD error = GetLastError();
             if (error != ERROR_NO_MORE_FILES) return workspace_error(owner, error);
-            frame->state = 7; return XTC_XIR_WORKSPACE_PENDING;
+            frame->state = WORKSPACE_DISPOSITION; return XTC_XIR_WORKSPACE_PENDING;
         }
         frame->restart = false; return workspace_enumerated(owner, frame);
     }
-    if (frame->state == 7) {
-        FILE_DISPOSITION_INFO disposition = {TRUE};
-        if (!SetFileInformationByHandle(frame->handle, FileDispositionInfo, &disposition, sizeof(disposition)))
-            return workspace_error(owner, GetLastError());
-        frame->state = 8; return XTC_XIR_WORKSPACE_PENDING;
-    }
+    if (frame->state == WORKSPACE_DISPOSITION || frame->state == WORKSPACE_RECHECK_DISPOSITION)
+        return workspace_disposition_step(owner, frame);
     if (frame->state == 8) {
         if (frame->fixed >= 0 && owner->nodes[frame->fixed].anchor) {
             if (!CloseHandle(owner->nodes[frame->fixed].anchor)) return workspace_error(owner, GetLastError());

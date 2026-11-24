@@ -380,8 +380,7 @@ static FILE_ID_INFO fixture_identity(HANDLE directory) {
     CHECK(GetFileInformationByHandleEx(directory, FileIdInfo, &identity, sizeof(identity)));
     return identity;
 }
-/* The public SDK omits this ntdll entry and its native information class. */
-NTSYSAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS);
+#include "workspace_disposition.inc.c"
 enum { FIXTURE_FILE_RENAME_INFORMATION = 10 };
 
 static void fixture_rename_sibling(HANDLE directory, const wchar_t *leaf) {
@@ -649,6 +648,9 @@ int main(int argc, char **argv) {
         CHECK(!strcmp(argv[2], "--compiler")); compiler_transaction(argv[1]);
         CHECK(handle_count() == before); return 0;
     }
+#ifndef WORKSPACE_PRODUCTION
+    before = disposition_cases(argv[1]);
+#endif
     printf("initial handles=%lu\n", before);
     basics(argv[1]); printf("after basics handles=%lu\n", handle_count());
     busy_regular_file(argv[1]);
