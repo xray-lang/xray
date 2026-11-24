@@ -1,0 +1,6 @@
+import { observeRmdir } from io
+import path
+
+print(11)
+print(observeRmdir(path.from("leaf")))
+print(22)

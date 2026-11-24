@@ -69,6 +69,9 @@ target_link_libraries(lir_pipeline_eval PRIVATE xray_lir_c xray_lir_lower xray_l
 add_executable(lir_host_stat_control lir_host_stat_control.c)
 target_link_libraries(lir_host_stat_control PRIVATE xray_lir_lower xray_lir_bytecode xray_native_runtime)
 add_dependencies(lir_host_stat_control xray)
+add_executable(lir_host_remove_control lir_host_remove_control.c)
+target_link_libraries(lir_host_remove_control PRIVATE xray_lir_lower xray_lir_bytecode xray_native_runtime)
+add_dependencies(lir_host_remove_control xray)
 add_executable(test_lir_c_faults test_lir_c_faults.c "${PROJECT_SOURCE_DIR}/src/lir/xi_cgen_verify_output.c")
 target_include_directories(test_lir_c_faults PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(test_lir_c_faults PRIVATE xray_lir_value_layout xray_compile_resources)
@@ -93,7 +96,7 @@ add_executable(test_lir_print_allocations test_lir_print_allocations.c)
 target_link_libraries(test_lir_print_allocations PRIVATE xray_lir)
 foreach(target test_lir_assertion test_lir_binding_homes test_lir_callable_bytecode test_lir_callable_facts test_lir_carriers test_lir_inline test_lir_inline_faults test_lir_sccp test_lir_sccp_faults test_lir_rebuild test_lir_rebuild_faults test_lir_string_elide lir_c_run lir_pipeline_eval test_lir_c test_lir_c_faults test_lir_core test_lir_source_input test_lir_lower test_lir_lower_allocations test_lir_lower_allocations_l3
         test_lir_allocations test_lir_allocations_l3 test_lir_block_facts_faults test_lir_print test_lir_print_allocations test_lir_state test_lir_state_projection test_lir_value_layout test_lir_value_image test_lir_array test_lir_array_faults
-        test_lir_ownership test_lir_ownership_faults test_lir_c_value_types test_lir_c_value_transfers lir_host_stat_control)
+        test_lir_ownership test_lir_ownership_faults test_lir_c_value_types test_lir_c_value_transfers lir_host_stat_control lir_host_remove_control)
     target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/src")
     target_compile_features(${target} PRIVATE c_std_11)
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
@@ -318,6 +321,13 @@ add_test(NAME test_lir_host_stat_control COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/host-stat-control" ${lir_c_transfer_options})
 set_tests_properties(test_lir_host_stat_control PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 120)
+add_test(NAME test_lir_host_remove_control COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_host_remove_control.py"
+    --binary $<TARGET_FILE:xray> --driver $<TARGET_FILE:lir_host_remove_control>
+    --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+    --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
+    --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
+    --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/host-remove-control" ${lir_c_transfer_options})
+set_tests_properties(test_lir_host_remove_control PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 120)
 add_test(NAME test_lir_rebuild_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_rebuild_native.py"
     --driver $<TARGET_FILE:test_lir_rebuild>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"

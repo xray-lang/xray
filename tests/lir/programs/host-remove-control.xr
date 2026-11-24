@@ -1,0 +1,6 @@
+import io
+import path
+
+print(11)
+print(io.remove(path.from("leaf")))
+print(22)
