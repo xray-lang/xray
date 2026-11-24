@@ -1,0 +1,2 @@
+const parsed: f64 = f64.tryParse("1.5")
+print(parsed)

@@ -37,7 +37,7 @@ REQUIRED = (
     "test_lir_cli_host_environment", "test_lir_host_stat_control",
     "test_lir_host_remove_control",
     "test_lir_cli_string_slice",
-    "test_lir_cli_string_index_of",
+    "test_lir_cli_string_index_of", "test_lir_cli_f64_try_parse",
     # Cross-module ownership and capability transport need real native execution.
     "test_lir_state", "native_module_state_owner", "test_lir_cli_module_state",
     # Exercise Array ownership, failure cleanup and complete Source/native parity.

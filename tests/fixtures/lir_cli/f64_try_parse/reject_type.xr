@@ -1,0 +1,2 @@
+fn show(value: i64) { print(value) }
+show(f64.tryParse("1.5") ?? 0)

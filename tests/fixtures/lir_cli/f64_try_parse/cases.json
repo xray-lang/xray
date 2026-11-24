@@ -1,0 +1,13 @@
+{
+  "parse_values": {
+    "exit": 0,
+    "stdout": "none\nnone\nsome\nsome\nsome\nnone\nsome\nnone\nnone\nnone\nnone\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\n",
+    "stderr": ""
+  },
+  "reject_type": {
+    "source_error": ":2:0: error: expression cannot satisfy its declared type"
+  },
+  "reject_nullable": {
+    "source_error": ":1:25: error: expression cannot satisfy its declared type"
+  }
+}

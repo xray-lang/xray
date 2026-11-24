@@ -441,6 +441,12 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 xr_lir_type_view(m, v->type, &shape) == XR_LIR_OK &&
                 shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_I64;
         }
+        case XR_LIR_F64_TRY_PARSE: {
+            XrLirTypeView shape;
+            return a == XR_LIR_STRING &&
+                xr_lir_type_view(m, v->type, &shape) == XR_LIR_OK &&
+                shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_F64;
+        }
         case XR_LIR_STRING_DROP: case XR_LIR_STRING_PRINT:
             return v->type == XR_LIR_UNIT && a == XR_LIR_STRING;
         case XR_LIR_STRING_CELL_DROP:

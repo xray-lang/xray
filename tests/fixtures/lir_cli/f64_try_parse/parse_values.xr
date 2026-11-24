@@ -1,0 +1,45 @@
+fn classify(text: string) -> string {
+    const parsed = f64.tryParse(text)
+    if (parsed == null) { return "none" }
+    return "some"
+}
+
+fn equals(text: string, expected: f64) -> bool {
+    const parsed = f64.tryParse(text)
+    if (parsed == null) { return false }
+    return parsed! == expected
+}
+
+fn overflows(text: string) -> bool {
+    const parsed = f64.tryParse(text)
+    if (parsed == null) { return false }
+    return parsed! > 1.7976931348623157e308
+}
+
+print(classify(""))
+print(classify(" \t\r\n"))
+print(classify("1.5"))
+print(classify(" -2.25e3 "))
+print(classify("+0.5"))
+print(classify("."))
+print(classify("1e400"))
+print(classify("12.0tail"))
+print(classify("0x10"))
+print(classify("nan"))
+print(classify("inf"))
+print(equals("1.5", 1.5))
+print(equals("-2.5", -2.5))
+print(equals("1", 1.0))
+print(equals("1.5x", 1.5))
+print(equals(" -1.25e2 ", -125.0))
+print(equals(" -2.25e3 ", -2250.0))
+print(equals("+0.5", 0.5))
+print(equals("5e-324", 5e-324))
+print(overflows("1e400"))
+print(overflows("-1e400"))
+const folded = comptime (f64.tryParse(" 2.5 ") ?? -911.0)
+print(folded == 2.5)
+const runtime_value = f64.tryParse("6.25") ?? -1.0
+print(runtime_value == 6.25)
+const runtime_missing = f64.tryParse("x") ?? -1.0
+print(runtime_missing == -1.0)

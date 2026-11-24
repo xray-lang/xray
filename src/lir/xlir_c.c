@@ -405,7 +405,7 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
     if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 || v->op == XR_LIR_STRING_F64 ||
         v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_SLICE || v->op == XR_LIR_STRING_RETAIN ||
         v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN || v->op == XR_LIR_STRING_BYTE_LEN ||
-        v->op == XR_LIR_I64_TRY_PARSE ||
+        v->op == XR_LIR_I64_TRY_PARSE || v->op == XR_LIR_F64_TRY_PARSE ||
         v->op == XR_LIR_STRING_EQUAL || v->op == XR_LIR_STRING_INDEX_OF || v->op == XR_LIR_ASSERT_CONDITION ||
         v->op == XR_LIR_HOST_PATH_BOOL || v->op == XR_LIR_STRING_DROP) return true;
     return (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_STRING_CELL) ||
@@ -577,7 +577,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_STRING_PRINT:
         case XR_LIR_STRING_LEN: case XR_LIR_STRING_BYTE_LEN: case XR_LIR_STRING_EQUAL:
         case XR_LIR_STRING_INDEX_OF:
-        case XR_LIR_I64_TRY_PARSE: case XR_LIR_ASSERT_CONDITION:
+        case XR_LIR_I64_TRY_PARSE: case XR_LIR_F64_TRY_PARSE: case XR_LIR_ASSERT_CONDITION:
         case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
         case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE:
         case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:

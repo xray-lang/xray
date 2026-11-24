@@ -28,6 +28,13 @@ XRAY_API bool xrt_native_string_try_parse_i64(const XrtStringBacking *string, in
     *output = parsed.value;
     return true;
 }
+XRAY_API bool xrt_native_string_try_parse_f64(const XrtStringBacking *string, double *output) {
+    XR_DCHECK(string && output, "float conversion requires a live String and scalar destination");
+    XrStringParseFloatResult parsed = xr_string_parse_float64(string->bytes, string->length);
+    if (parsed.failure != XR_NUMBER_PARSE_OK) return false;
+    *output = parsed.value;
+    return true;
+}
 
 static XrtManagedStatus string_prepare(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, size_t length, size_t runes, XrtStringBacking **output) {

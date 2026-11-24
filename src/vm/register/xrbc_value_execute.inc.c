@@ -1574,18 +1574,28 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         if (status == XRT_MANAGED_OK)
             output->bits = access.other ? xrt_native_host_path_pair_bool(access.index, path, destination, source) :
                 xrt_native_host_path_bool(access.index, path, source);
-    } else if (access.operation==XR_RBC_VALUE_I64_TRY_PARSE) {
+    } else if (access.operation==XR_RBC_VALUE_I64_TRY_PARSE || access.operation==XR_RBC_VALUE_F64_TRY_PARSE) {
         const XrtStringBacking *string = NULL;
         RbcValuePayload destination;
         status = rbc_value_string_borrow(activation, access.source, &string);
         if (status == XRT_MANAGED_OK)
             status = rbc_value_payload(module, stack, (RbcValueOrigin){activation, access.result}, &destination);
         if (status == XRT_MANAGED_OK) {
-            int64_t parsed;
-            bool some = xrt_native_string_try_parse_i64(string, &parsed);
+            int64_t parsed_i64 = 0;
+            double parsed_f64 = 0.0;
+            const void *parsed = &parsed_i64;
+            size_t parsed_size = sizeof(parsed_i64);
+            bool some;
+            if (access.operation==XR_RBC_VALUE_I64_TRY_PARSE) {
+                some = xrt_native_string_try_parse_i64(string, &parsed_i64);
+            } else {
+                some = xrt_native_string_try_parse_f64(string, &parsed_f64);
+                parsed = &parsed_f64;
+                parsed_size = sizeof(parsed_f64);
+            }
             memset(destination.address, 0, destination.size);
             if (some) {
-                memcpy(destination.address + destination.packed.physical.alignment, &parsed, sizeof(parsed));
+                memcpy(destination.address + destination.packed.physical.alignment, parsed, parsed_size);
                 destination.address[0] = 1;
             }
         }
