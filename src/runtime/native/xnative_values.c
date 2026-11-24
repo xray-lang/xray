@@ -556,6 +556,13 @@ XRAY_API int64_t xrt_native_string_index_of(const XrtStringBacking *text, const 
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
     return ordinal;
 }
+XRAY_API int64_t xrt_native_string_last_index_of(const XrtStringBacking *text, const XrtStringBacking *search,
+    uint32_t source_id) {
+    int64_t ordinal;
+    XrtManagedStatus status = xrt_string_backing_last_index_of(text, search, &ordinal);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+    return ordinal;
+}
 XRAY_API bool xrt_native_string_test(const XrtStringBacking *text, const XrtStringBacking *pattern,
     uint32_t test, uint32_t source_id) {
     bool output = false;

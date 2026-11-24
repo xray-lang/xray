@@ -263,6 +263,9 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         return rbc_value_flow_read(state,code,access.source,&incoming) && rbc_value_flow_read(state,code,access.other,&incoming) &&
             rbc_value_flow_bits(state,code,access.index) &&
             rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
+    case XR_RBC_VALUE_STRING_LAST_INDEX_OF:
+        return rbc_value_flow_read(state,code,access.source,&incoming) && rbc_value_flow_read(state,code,access.other,&incoming) &&
+            rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
     case XR_RBC_VALUE_STRING_TEST:
         return rbc_value_flow_read(state,code,access.source,&incoming) && rbc_value_flow_read(state,code,access.other,&incoming) &&
             rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});

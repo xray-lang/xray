@@ -1,0 +1,16 @@
+const text = "a/b.c/b"
+print(text.lastIndexOf("/"))
+print(text.lastIndexOf("b"))
+print(text.lastIndexOf("zz"))
+print(text.lastIndexOf(""))
+print("héllo wörld".lastIndexOf("ö"))
+print("a\0b\0c".lastIndexOf("\0"))
+print("abc".lastIndexOf("abc"))
+const owned = "a" + "/b/c"
+print(owned.lastIndexOf("/"))
+print("aaaaa".lastIndexOf("aa"))
+print("Abc".lastIndexOf("abc"))
+print("🙂a🙂".lastIndexOf("🙂"))
+print("abc".lastIndexOf("abcd"))
+print("".lastIndexOf(""))
+print("".lastIndexOf("a"))

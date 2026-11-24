@@ -1,5 +1,0 @@
-fn find(text: string) -> i64 {
-    return text.lastIndexOf("中")
-}
-
-print(find("中"))

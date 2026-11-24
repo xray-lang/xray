@@ -518,6 +518,9 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         access.operation = XR_RBC_VALUE_STRING_INDEX_OF;
         access.index = i->operands[2];
         break;
+    case XR_LIR_STRING_LAST_INDEX_OF:
+        access.operation = XR_RBC_VALUE_STRING_LAST_INDEX_OF;
+        break;
     case XR_LIR_STRING_TEST:
         access.operation = XR_RBC_VALUE_STRING_TEST;
         access.index = (uint32_t)i->bits;

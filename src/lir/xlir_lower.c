@@ -650,7 +650,8 @@ static bool lower_known(const XrXirInstruction *instruction) {
         case XR_XIR_COPY:
         case XR_XIR_TO_STRING:
         case XR_XIR_CONCAT_STRING:
-        case XR_XIR_STRING_LEN: case XR_XIR_STRING_INDEX_OF: case XR_XIR_I64_TRY_PARSE: case XR_XIR_F64_TRY_PARSE:
+        case XR_XIR_STRING_LEN: case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF:
+        case XR_XIR_I64_TRY_PARSE: case XR_XIR_F64_TRY_PARSE:
         case XR_XIR_ADD_INT:
         case XR_XIR_SUB_INT:
         case XR_XIR_MUL_INT:
@@ -2603,6 +2604,14 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
             if (!lower_value(f, f->source->operands[op->args[0] + a], &args[a])) return false;
         XrLirInstruction search = {.op=XR_LIR_STRING_INDEX_OF, .type=XR_LIR_I64,
             .operands=args, .operand_count=3, .source=lower_source(c)};
+        return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &search, &f->values[result]));
+    }
+    if (op->op == XR_XIR_STRING_LAST_INDEX_OF) {
+        XrLirValue args[2] = {{0}};
+        for (uint32_t a = 0; a < 2; ++a)
+            if (!lower_value(f, op->args[a], &args[a])) return false;
+        XrLirInstruction search = {.op=XR_LIR_STRING_LAST_INDEX_OF, .type=XR_LIR_I64,
+            .operands=args, .operand_count=2, .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &search, &f->values[result]));
     }
     if (op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_I64_TRY_PARSE || op->op == XR_XIR_F64_TRY_PARSE) {

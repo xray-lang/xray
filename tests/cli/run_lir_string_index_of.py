@@ -55,16 +55,5 @@ def main() -> None:
             assert vm == native == expected, (name, vm, native, expected)
             print(f"{name}: VM and native agree on output and exit")
 
-        cwd = Path(directory) / "control"
-        cwd.mkdir()
-        source = fixtures / "unadmitted_last_index_of.xr"
-        c = cwd / "control.c"
-        assert run([binary, "check", source], cwd, "check") == (0, b"", b"")
-        refused = (1, b"", f"{source}:2:5: STRING_LAST_INDEX_OF is not supported by LIR lowering yet\n".encode("utf-8"))
-        assert run([binary, "run", source], cwd, "vm") == refused
-        assert run([binary, "build", "-c", source, "-o", c], cwd, "c") == refused and not c.exists()
-        print("unadmitted_last_index_of: VM and C lowering retain the same refusal")
-
-
 if __name__ == "__main__":
     main()

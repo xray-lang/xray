@@ -140,6 +140,9 @@ XRAY_API bool xrt_native_string_try_parse_f64(const XrtStringBacking *, double *
 /* Search live String borrows from a rune ordinal and return a rune ordinal or -1. */
 XRAY_API int64_t xrt_native_string_index_of(const XrtStringBacking *, const XrtStringBacking *,
     int64_t start, uint32_t source_id);
+/* Last occurrence of one live String borrow inside another, or -1. */
+XRAY_API int64_t xrt_native_string_last_index_of(const XrtStringBacking *, const XrtStringBacking *,
+    uint32_t source_id);
 /* Test one live String borrow against another. The selector is the runtime test
  * ordinal: 0 contains, 1 starts with, 2 ends with. */
 XRAY_API bool xrt_native_string_test(const XrtStringBacking *, const XrtStringBacking *,

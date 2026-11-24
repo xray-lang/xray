@@ -61,6 +61,8 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_HOST_PATH_CLASS, XR_RBC_VALUE_HOST_FILE_READ, XR_RBC_VALUE_HOST_ENV_GET,
     XR_RBC_VALUE_STRING_SLICE,
     XR_RBC_VALUE_STRING_INDEX_OF,
+    /* Last occurrence over two String borrows; both operands stay borrowed. */
+    XR_RBC_VALUE_STRING_LAST_INDEX_OF,
     /* One predicate over two String borrows: index is the runtime test ordinal. */
     XR_RBC_VALUE_STRING_TEST,
     XR_RBC_VALUE_INVOKE, XR_RBC_VALUE_INVOKE_RESULT, XR_RBC_VALUE_INVOKE_ERROR,
