@@ -25,7 +25,7 @@
 #include "xlir_value_homes.h"
 #include "xlir_array_region_binding.h"
 #include "xlir_value_image.h"
-#include "xray_native_array_slice.h"
+#include "xray_native_window.h"
 #include "xi_cgen_verify_output.h"
 #include "../base/xchecks.h"
 #include <inttypes.h>
@@ -1335,7 +1335,7 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->state || c->i64_refs) c_text(c, "#include \"xray_native_state.h\"\n\n");
     if (c->i64_refs)
         c_text(c,"typedef struct { int64_t *address; const uint8_t *flags; uint8_t required_flags; } XrlI64Ref;\n");
-    if (c->views) c_text(c, "#include \"xray_native_array_slice.h\"\n\n");
+    if (c->views) c_text(c, "#include \"xray_native_window.h\"\n\n");
     if (c->arrays) c_text(c, "#include \"xray_native_array.h\"\n\n");
     if (c->array_local_runtime) c_text(c,"#include \"xray_native_array_local.h\"\n\n");
     if (c->maps) c_text(c, "#include \"xray_native_map.h\"\n\n");

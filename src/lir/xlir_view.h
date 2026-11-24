@@ -4,13 +4,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlir_view.h - Closed roles for natural readonly Array windows
+ * xlir_view.h - Closed roles for natural readonly windows
  */
 #ifndef XLIR_VIEW_H
 #define XLIR_VIEW_H
 #include "xlir_builder.h"
 
-/* Natural readonly Array operations use no ViewFrame or ViewCell operand.
+/* Natural readonly Slice operations use no ViewFrame or ViewCell operand.
  * Only the shared verifier may turn these closed instructions into loan facts. */
 typedef enum XrLirSliceOperation {
     XR_LIR_SLICE_OP_NONE,
@@ -34,12 +34,13 @@ typedef struct XrLirSliceIntrinsic {
     uint32_t id;
     XrLirSliceOperation operation;
     XrLirType element;
-    /* NEW reads the actual ARRAY_CELL, ARRAY_REF or Array STATE_REF binding.
+    /* NEW reads an actual String Cell or Array binding.
      * State reads require the exact slot payload and element, not write access.
      * Other roles consume a Slice and require TYPE_INVALID here. */
     XrLirType binding_type;
 } XrLirSliceIntrinsic;
 /* NEW(binding,start,limit) receives Source-normalized Array bounds.
+ * NEW(String Cell) borrows the complete code-unit window.
  * REBORROW(parent,start,limit,open) keeps strict View-window semantics.
  * BIND(parent), LEN(view), GET(view,index), COPY(view), END(view) have their
  * natural typed signatures. No explicit slot is a language operand. */

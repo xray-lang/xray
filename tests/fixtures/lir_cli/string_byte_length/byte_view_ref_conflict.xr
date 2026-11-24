@@ -1,0 +1,10 @@
+fn replace(text: ref string) { text = "B" }
+
+fn invalid() {
+    var owner = "A"
+    const bytes: Slice<u8> = owner.bytes()
+    replace(ref owner)
+    print(bytes[0] as i64)
+}
+
+invalid()

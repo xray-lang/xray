@@ -1,0 +1,6 @@
+fn read(text: string, at: i64) -> i64 {
+    var bytes: Slice<u8> = text.bytes()
+    return bytes[at] as i64
+}
+
+print(read("é", 2))

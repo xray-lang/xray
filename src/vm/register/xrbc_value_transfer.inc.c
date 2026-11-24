@@ -194,7 +194,8 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
                 binding=rbc_value_flow_reference(state,code,args[0],
                     kind==XRT_VALUE_SLICE_I64 ? XRT_VALUE_ARRAY_I64 : XRT_VALUE_ARRAY_U8,false);
             } else binding=rbc_value_flow_binding(state,code,args[0],false);
-            if (!binding || !rbc_value_flow_bits(state,code,args[1]) || !rbc_value_flow_bits(state,code,args[2])) return false;
+            if (!binding || (access.source!=XR_LIR_STRING_CELL &&
+                (!rbc_value_flow_bits(state,code,args[1]) || !rbc_value_flow_bits(state,code,args[2])))) return false;
         } else {
             if (!rbc_value_flow_read(state,code,args[0],&incoming) || incoming.value.state!=RBC_SLICE_BORROWED) return false;
             for (uint32_t p=1;p<access.count;++p) if (!rbc_value_flow_bits(state,code,args[p])) return false;

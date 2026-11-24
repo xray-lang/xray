@@ -1,0 +1,13 @@
+fn decode(text: string) -> string {
+    var bytes: Slice<u8> = text.bytes()
+    return try! string.fromUtf8(bytes[:])
+}
+
+fn chopped(text: string) -> bool {
+    var bytes: Slice<u8> = text.bytes()
+    var next = try? string.fromUtf8(bytes[1:])
+    return next == null
+}
+
+print(decode("é"))
+print(chopped("é"))

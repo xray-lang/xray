@@ -121,6 +121,8 @@ typedef struct SourceContext {
     SourceName **names, *locals, *scope;
     AstNode *recursive_initializer;
     AstNode *binding_site;
+    /* Only the exact operand of the active builtin len can elide a temporary String byte loan. */
+    const AstNode *byte_length_operand;
     const char *recursive_name;
     SourceFact *facts;
     SourceEpoch *epochs;

@@ -37,6 +37,13 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
                     slice_parameters[added++], arity, result, true, LIR_SLICE_OPERATION_BASE + encoded};
             }
         }
+        XrLirType slice = XR_LIR_TYPE_INVALID;
+        status = xr_lir_slice_type(m, XR_LIR_U8, &slice);
+        if (status != XR_LIR_OK) { if (entries != local) xr_free(entries); return status; }
+        XR_CHECK(added + 1 == LIR_SLICE_CATALOG_COUNT, "the String source is the last Slice catalog row");
+        slice_parameters[added][0] = XR_LIR_STRING_CELL;
+        entries[count++] = (XrLirIntrinsic){LIR_SLICE_ID_BASE + LIR_SLICE_STRING_BYTES,
+            slice_parameters[added], 1, slice, true, LIR_SLICE_OPERATION_BASE + LIR_SLICE_STRING_BYTES};
     }
     XrLirType bytes = XR_LIR_TYPE_INVALID;
     if (flags & LIR_LIBRARY_STRICT_UTF8) {

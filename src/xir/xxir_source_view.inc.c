@@ -30,9 +30,15 @@ static bool source_string_bytes_call(SourceContext *ctx,AstNode *node,SourceValu
     AstNode *syntax=call->callee->as.member_access.object;
     while (syntax && syntax->type==AST_GROUPING) syntax=syntax->as.grouping;
     SourceName *binding=syntax && syntax->type==AST_VARIABLE ? visible_name(ctx,syntax->as.variable.name) : NULL;
+    bool named=binding && (binding->kind==SOURCE_LOCAL || binding->kind==SOURCE_SLOT) &&
+        binding->type==XR_XIR_STRING;
+    if (!named && ctx->byte_length_operand!=node) {
+        const char *message=syntax && (syntax->type==AST_VARIABLE || syntax->type==AST_MEMBER_ACCESS) ?
+            "String bytes has no admitted stable receiver binding" : "String bytes cannot borrow a temporary receiver";
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,message);
+    }
     SourceValue arguments[3]={{0}};
-    if (binding && (binding->kind==SOURCE_LOCAL || binding->kind==SOURCE_SLOT) &&
-        binding->mutable && binding->type==XR_XIR_STRING) {
+    if (named && binding->mutable) {
         if (!source_binding_cell(ctx,binding,arguments)) return false;
     } else if (!source_cell_type(ctx,XR_XIR_STRING,&cell) ||
         !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell,{receiver.id},{0},0,{0}},arguments)) return false;

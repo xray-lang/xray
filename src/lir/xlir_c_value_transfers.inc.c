@@ -306,7 +306,7 @@ static void c_value_edge(LirC *c, const XrLirValueHomes *homes,
         const XrLirHomeWorkspace *stage = c_value_borrow_stage(c,homes,transfer,edge);
         if (!stage) return;
         if (transfer.source_storage == XR_LIR_SLICE_STORAGE_BORROWED_FORMAL)
-            c_format(c, "    { XrtManagedHeader *incoming = source_%zu && source_%zu->backing ? (XrtManagedHeader *)&source_%zu->backing->managed : NULL;\n", i, i, i);
+            c_format(c, "    { XrtManagedHeader *incoming = source_%zu ? (XrtManagedHeader *)source_%zu->owner : NULL;\n", i, i);
         else c_format(c,"    { XrtManagedHeader *incoming = borrowed_%zu ? *borrowed_%zu : NULL;\n",i,i);
         c_text(c,"      if (!incoming) { status = XRT_MANAGED_ARGUMENT; goto xrl_borrow_failed; }\n"
             "      if (!xrt_managed_retain(incoming)) { status = XRT_MANAGED_REFCOUNT; goto xrl_borrow_failed; }\n");
@@ -365,10 +365,10 @@ static void c_value_returns(LirC *c, const XrLirValueHomes *homes) {
                 homes->source_function, event->block, event->instruction);
             c_format(c, "(XrtManagedRoot *root, XrtManagedFrame *frame, const void *source, XrlLanding_%" PRIu32 " landing) {\n",
                 homes->source_function);
-            c_text(c, "    const XrtReadonlyArraySlice *value = source;\n"
-                "    if (!value || !value->backing || !landing.frame || !landing.destination || !landing.temporary || (frame && !root))\n"
+            c_text(c, "    const XrtReadonlyWindow *value = source;\n"
+                "    if (!value || !value->owner || !landing.frame || !landing.destination || !landing.temporary || (frame && !root))\n"
                 "        return XRT_MANAGED_ARGUMENT;\n"
-                "    XrtArraySliceBundle incoming = {*value, (XrtManagedHeader *)&value->backing->managed};\n"
+                "    XrtReadonlyWindowBundle incoming = {*value, (XrtManagedHeader *)value->owner};\n"
                 "    XrtInlineValueSpec spec = xrt_array_slice_bundle_spec();\n"
                 "    XrtManagedStatus status = xrt_inline_value_replace(&(XrtInlineValueHome){landing.frame, landing.destination, landing.temporary, landing.first_owner, landing.temporary_first_owner}, &spec, &incoming);\n"
                 "    if (status != XRT_MANAGED_OK) return status;\n"
@@ -468,7 +468,7 @@ XR_FUNC XrLirCStatus xr_lir_emit_c_value_transfers(const XrLirCValueTransfersReq
         }
     for (size_t i = 0; i < types.count && c_request_poll(&c); ++i)
         if (types.rows[i].spec.kind == XRT_VALUE_SLICE_I64 || types.rows[i].spec.kind == XRT_VALUE_SLICE_U8) {
-            c_text(&c, "#include \"xray_native_array_slice.h\"\n");
+            c_text(&c, "#include \"xray_native_window.h\"\n");
             break;
         }
     if (homes->owned_frame_needed) c_text(&c, "#include <string.h>\n#include \"xray_native_place.h\"\n");

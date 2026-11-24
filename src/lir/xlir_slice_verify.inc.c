@@ -42,19 +42,25 @@ static bool lir_slice_root_alias(LirSliceRoot a, LirSliceRoot b, bool checked_in
         return a.kind == b.kind && a.identity == b.identity;
     return a.kind != LIR_SLICE_ROOT_STATE || b.kind != LIR_SLICE_ROOT_STATE || a.identity == b.identity;
 }
-static void lir_slice_binding_roots(const XrLirFunctionData *f, LirSliceRoot *roots) {
+static void lir_slice_binding_roots(const XrLirModule *m, const XrLirFunctionData *f, LirSliceRoot *roots) {
     for (uint32_t n = 0; n < f->value_count; ++n) {
         XrLirType type = f->values[n].type;
-        if (type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF && type != XR_LIR_STATE_REF) continue;
-        if (type == XR_LIR_STATE_REF && f->values[n].state_reference.payload != XR_LIR_ARRAY) continue;
+        if (type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF && type != XR_LIR_STATE_REF &&
+            type != XR_LIR_STRING_CELL && type != XR_LIR_STRING_REF) continue;
+        if (type == XR_LIR_STATE_REF && f->values[n].state_reference.payload != XR_LIR_ARRAY &&
+            f->values[n].state_reference.payload != XR_LIR_STRING) continue;
         const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, n + 1);
         LirSliceRoot root = {type == XR_LIR_STATE_REF ? LIR_SLICE_ROOT_STATE_ANY : LIR_SLICE_ROOT_UNKNOWN,0};
         if (f->values[n].parameter && !f->values[n].block) root = (LirSliceRoot){LIR_SLICE_ROOT_FORMAL,n + 1};
         else if (definition && definition->op == XR_LIR_CELL_NEW) root = (LirSliceRoot){LIR_SLICE_ROOT_LOCAL,n + 1};
         else if (definition && (definition->op == XR_LIR_STATE_REFERENCE || definition->op == XR_LIR_STATE_CONSTRUCT))
             root = (LirSliceRoot){LIR_SLICE_ROOT_STATE,(uint32_t)definition->bits};
-        else if (definition && definition->op == XR_LIR_ARRAY_BORROW && roots[definition->operands[0]].kind)
-            root = roots[definition->operands[0]];
+        else if (definition) {
+            uint32_t role = xr_lir_string_role(m, definition);
+            if ((definition->op == XR_LIR_ARRAY_BORROW || role == XR_LIR_STRING_OP_BORROW_CELL ||
+                 role == XR_LIR_STRING_OP_BORROW_STATE) && roots[definition->operands[0]].kind)
+                root = roots[definition->operands[0]];
+        }
         roots[n + 1] = root;
     }
 }
@@ -123,7 +129,7 @@ static bool lir_slice_flow_create(const XrLirModule *m, const XrLirFunctionData 
     flow->input_roots = xr_calloc((size_t)f->block_count * flow->count, sizeof(*flow->input_roots));
     flow->roots = xr_malloc(flow->count * sizeof(*flow->roots));
     flow->edge_roots = xr_malloc(flow->count * sizeof(*flow->edge_roots));
-    if (flow->bindings) lir_slice_binding_roots(f, flow->bindings);
+    if (flow->bindings) lir_slice_binding_roots(m, f, flow->bindings);
     return flow->inputs && flow->scratch && flow->edge && flow->queued && flow->queue &&
         flow->bindings && flow->input_roots && flow->roots && flow->edge_roots;
 }
@@ -192,12 +198,17 @@ static bool lir_slice_instruction_conflict(const XrLirModule *m, const XrLirFunc
     }
     if (v->op == XR_LIR_STATE_CONSTRUCT || v->op == XR_LIR_STATE_INITIALIZE) {
         LirSliceRoot root = {LIR_SLICE_ROOT_STATE,(uint32_t)v->bits};
-        return m->state_layout.slots[v->bits].payload == XR_LIR_ARRAY && lir_slice_write_conflict(flow, root);
+        XrLirType payload = m->state_layout.slots[v->bits].payload;
+        return (payload == XR_LIR_ARRAY || payload == XR_LIR_STRING) && lir_slice_write_conflict(flow, root);
     }
     bool write = v->op == XR_LIR_CELL_WRITE || v->op == XR_LIR_ARRAY_REF_WRITE ||
-        v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_STATE_WRITE || v->op == XR_LIR_STATE_PUBLISH;
+        v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_STRING_CELL_DROP ||
+        v->op == XR_LIR_STATE_WRITE || v->op == XR_LIR_STATE_PUBLISH;
     const XrLirArrayIntrinsic *array = v->op == XR_LIR_CALL_INTRINSIC ? xr_lir_internal_array_intrinsic(m, v->intrinsic) : NULL;
     write |= array && (array->operation == XR_LIR_ARRAY_OP_SET || array->operation == XR_LIR_ARRAY_OP_PUSH);
+    uint32_t string = xr_lir_string_role(m, v);
+    write |= string == XR_LIR_STRING_OP_APPEND_CELL || string == XR_LIR_STRING_OP_APPEND_STATE ||
+        string == XR_LIR_STRING_OP_APPEND_REF || string == XR_LIR_STRING_OP_WRITE_REF;
     return write && v->operand_count && lir_slice_write_conflict(flow, flow->bindings[v->operands[0]]);
 }
 static XrLirStatus lir_slice_block(const XrLirModule *m, const XrLirFunctionData *f,

@@ -4,11 +4,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlir_slice.inc.c - One typed catalog for natural readonly Array windows
+ * xlir_slice.inc.c - One typed catalog for natural readonly windows
  */
-enum { LIR_SLICE_OPERATION_BASE = 65536, LIR_SLICE_ID_BASE = 1024, LIR_SLICE_CATALOG_COUNT = 18,
+enum { LIR_SLICE_OPERATION_BASE = 65536, LIR_SLICE_ID_BASE = 1024, LIR_SLICE_CATALOG_COUNT = 19,
     LIR_SLICE_ROLE_STRIDE = XR_LIR_SLICE_OP_CLEANUP,
-    LIR_SLICE_STRICT_UTF8 = 6 * LIR_SLICE_ROLE_STRIDE };
+    LIR_SLICE_STRICT_UTF8 = 6 * LIR_SLICE_ROLE_STRIDE,
+    LIR_SLICE_STRING_BYTES = LIR_SLICE_STRICT_UTF8 + 1 };
 XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *m, XrLirType type) {
     return m && type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < m->type_count &&
         m->types[type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_SLICE;
@@ -18,6 +19,11 @@ static bool lir_slice_decode(uint32_t operation, XrLirSliceIntrinsic *output) {
     uint32_t encoded = operation - LIR_SLICE_OPERATION_BASE;
     if (encoded == LIR_SLICE_STRICT_UTF8) {
         *output = (XrLirSliceIntrinsic){.operation=XR_LIR_SLICE_OP_STRICT_UTF8, .element=XR_LIR_U8};
+        return true;
+    }
+    if (encoded == LIR_SLICE_STRING_BYTES) {
+        *output = (XrLirSliceIntrinsic){.operation=XR_LIR_SLICE_OP_NEW, .element=XR_LIR_U8,
+            .binding_type=XR_LIR_STRING_CELL};
         return true;
     }
     uint32_t role = encoded % LIR_SLICE_ROLE_STRIDE, family = encoded / LIR_SLICE_ROLE_STRIDE;
@@ -39,7 +45,9 @@ static uint32_t lir_slice_signature(XrLirSliceIntrinsic shape, XrLirType slice,
     parameters[0] = slice; *result = slice;
     switch (shape.operation) {
     case XR_LIR_SLICE_OP_NEW:
-        parameters[0] = shape.binding_type; parameters[1] = parameters[2] = XR_LIR_I64; return 3;
+        parameters[0] = shape.binding_type;
+        if (shape.binding_type == XR_LIR_STRING_CELL) return 1;
+        parameters[1] = parameters[2] = XR_LIR_I64; return 3;
     case XR_LIR_SLICE_OP_REBORROW:
         parameters[1] = parameters[2] = XR_LIR_I64; parameters[3] = XR_LIR_I1; return 4;
     case XR_LIR_SLICE_OP_BIND: return 1;

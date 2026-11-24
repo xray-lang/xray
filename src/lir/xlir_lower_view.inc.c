@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlir_lower_view.inc.c - Natural readonly windows on actual Array bindings
+ * xlir_lower_view.inc.c - Natural readonly windows on actual bindings
  */
 static XrLirType lower_slice_element(const Lower *c, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(c->source->types, type);
@@ -32,6 +32,20 @@ static bool lower_slice_source(LowerFunction *f, uint32_t ordinal, XrLirValue *o
         return output->id != 0 || lower_unsupported(f->owner, "Slice local has no live SSA binding");
     }
     return lower_value(f, ordinal, output);
+}
+static bool lower_full_string_view(LowerFunction *f, const XrXirInstruction *op, XrLirType element) {
+    Lower *c = f->owner;
+    const uint32_t *args = f->source->operands + op->args[0];
+    if (op->immediate != 1 || element != XR_LIR_U8 ||
+        xr_xir_cell_element(c->source->types, xr_xir_operand_type(f->source, args[0])) != XR_XIR_STRING)
+        return false;
+    for (uint32_t a = 1; a < 3; ++a) {
+        if (args[a] < f->source->parameter_count) return false;
+        uint32_t index = args[a] - f->source->parameter_count;
+        if (index >= f->source->instruction_count || !lower_byte_length_zero(&f->source->instructions[index]))
+            return false;
+    }
+    return true;
 }
 static bool lower_view_empty_entry(LowerFunction *f, uint32_t block) {
     if (block || f->owner->instruction) return false;
@@ -168,14 +182,17 @@ static bool lower_view_instruction(LowerFunction *f, uint32_t block, uint32_t in
     XrLirSliceOperation role; XrLirType element;
     if (op->op == XR_XIR_VIEW_NEW || op->op == XR_XIR_VIEW_REBORROW) {
         element = lower_slice_element(c, op->type);
-        for (uint32_t a = 0; a < 3; ++a)
-            if (!lower_slice_source(f, f->source->operands[op->args[0] + a], &args[a])) return false;
         role = op->op == XR_XIR_VIEW_NEW ? XR_LIR_SLICE_OP_NEW : XR_LIR_SLICE_OP_REBORROW;
-        count = 3;
+        if (role == XR_LIR_SLICE_OP_NEW && op->immediate) {
+            if (!lower_full_string_view(f, op, element))
+                return lower_unsupported(c, "readonly Array Slice requires normalized bounds");
+        } else count = 3;
+        for (uint32_t a = 0; a < count; ++a)
+            if (!lower_slice_source(f, f->source->operands[op->args[0] + a], &args[a])) return false;
         if (role == XR_LIR_SLICE_OP_REBORROW) {
             XrLirInstruction open = {.op=XR_LIR_CONST,.type=XR_LIR_I1,.bits=(uint64_t)op->immediate,.source=lower_source(c)};
             if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &open, &args[count++]))) return false;
-        } else if (op->immediate) return lower_unsupported(c, "readonly Array Slice requires normalized bounds");
+        }
     } else if (op->op == XR_XIR_VIEW_LEN || op->op == XR_XIR_VIEW_GET || op->op == XR_XIR_VIEW_COPY || op->op == XR_XIR_VIEW_END) {
         element = lower_slice_element(c, xr_xir_operand_type(f->source, op->args[0]));
         if (!lower_slice_source(f, op->args[0], &args[0])) return false;

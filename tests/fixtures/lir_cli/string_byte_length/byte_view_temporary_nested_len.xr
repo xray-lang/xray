@@ -1,0 +1,3 @@
+fn identity(input: Slice<u8>) -> Slice<u8> { return input }
+
+print(len(identity("A".bytes())))

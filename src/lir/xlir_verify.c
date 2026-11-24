@@ -700,6 +700,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
                     if (slice.binding_type == XR_LIR_STATE_REF) {
                         if (binding->state_reference.payload != XR_LIR_ARRAY ||
                             binding->state_reference.array_element != slice.element) goto invalid;
+                    } else if (slice.binding_type == XR_LIR_STRING_CELL) {
+                        const XrLirInstructionView *root = xr_lir_internal_value_definition(f, v->operands[0]);
+                        if (slice.element != XR_LIR_U8 || binding->array_element || v->operand_count != 1 ||
+                            !root || root->op != XR_LIR_CELL_NEW) goto invalid;
                     } else if (binding->array_element != slice.element) goto invalid;
                 }
                 return XR_LIR_OK;
@@ -1220,10 +1224,14 @@ static XrLirStatus lir_frame_cells(const XrLirModule *m, const XrLirFunctionData
                 if (f->values[id - 1].type != XR_LIR_STRING_CELL) continue;
                 if (released[id - 1])
                     return xr_lir_internal_error(d, "Managed Cell use follows release", function, b+1, i+1, &v->source);
+                XrLirSliceIntrinsic slice;
+                bool bytes = a == 0 && v->op == XR_LIR_CALL_INTRINSIC &&
+                    xr_lir_slice_intrinsic_view(m, v->intrinsic, &slice) == XR_LIR_OK &&
+                    slice.operation == XR_LIR_SLICE_OP_NEW && slice.binding_type == XR_LIR_STRING_CELL;
                 if (v->op != XR_LIR_CELL_READ && v->op != XR_LIR_CELL_WRITE &&
                     v->op != XR_LIR_CALL && v->op != XR_LIR_STRING_CELL_DROP &&
                     xr_lir_string_role(m, v) != XR_LIR_STRING_OP_APPEND_CELL &&
-                    xr_lir_string_role(m, v) != XR_LIR_STRING_OP_BORROW_CELL)
+                    xr_lir_string_role(m, v) != XR_LIR_STRING_OP_BORROW_CELL && !bytes)
                     return xr_lir_internal_error(d, "Managed Cell handle cannot escape its frame",
                         function, b+1, i+1, &v->source);
             }

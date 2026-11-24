@@ -382,7 +382,16 @@ static bool source_length(SourceContext *ctx, AstNode *node,
         (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len requires one ordinary value operand");
     SourceValue array;
-    if (!source_array_receiver(ctx, call->arguments[0], NULL, false, &array)) return false;
+    AstNode *operand = call->arguments[0];
+    while (operand && operand->type == AST_GROUPING) {
+        if (!source_request_poll(ctx, operand)) return false;
+        operand = operand->as.grouping;
+    }
+    const AstNode *previous = ctx->byte_length_operand;
+    ctx->byte_length_operand = operand;
+    bool received = source_array_receiver(ctx, call->arguments[0], NULL, false, &array);
+    ctx->byte_length_operand = previous;
+    if (!received) return false;
     uint32_t view_kind=0;XrXirType view_element=XR_XIR_UNIT;
     bool view=source_view_shape(ctx,array.type,&view_kind,&view_element);
     bool range=source_range_is(ctx,array.type);

@@ -1,0 +1,4 @@
+fn text() -> string { return "A" }
+fn count(input: Slice<u8>) -> i64 { return len(input) }
+
+print(count(text().bytes()))

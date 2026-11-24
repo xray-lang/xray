@@ -48,7 +48,8 @@ static void kernel(XrtBackingArrayKind kind) {
     XrtBillingStats before = xrt_billing_owner_stats(billing);
     xrt_billing_owner_fail_after(billing, 0);
     OK(xrt_array_slice_bind(&primary, kind, (const XrtArrayBacking *)header, 1, 2));
-    CHECK(storage->value.hold == header && storage->value.value.backing == (const XrtArrayBacking *)header);
+    CHECK(storage->value.hold == header && storage->value.value.backing == (const XrtArrayBacking *)header &&
+        storage->value.value.backing->length == 3);
     CHECK(!storage->temporary.hold);
     int64_t length = -1; uint64_t bits = 0;
     OK(xrt_array_slice_length(&storage->value.value, &length)); CHECK(length == 2);
@@ -104,6 +105,91 @@ static void kernel(XrtBackingArrayKind kind) {
     CHECK(storage->value.hold == header);
     OK(xrt_managed_root_destroy(&root));
     XrtBillingStats final = xrt_billing_owner_stats(billing);
+    CHECK(final.bytes == initial.bytes && final.blocks == initial.blocks);
+    xrt_billing_owner_drop(billing);
+}
+
+static void string_window(void) {
+    typedef struct WindowStorage {
+        XrtReadonlyWindowBundle value, temporary, child, child_temporary;
+    } WindowStorage;
+    XrtBillingOwner *billing = NULL;
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    XrtBackingTypes types = {0};
+    OK(xrt_billing_owner_new(NULL, SIZE_MAX, &billing));
+    XrtBillingStats initial = xrt_billing_owner_stats(billing);
+    OK(xrt_backing_types_init(billing, &types));
+    OK(xrt_managed_root_new(billing, &root));
+    const size_t offsets[] = {offsetof(WindowStorage, value.hold), offsetof(WindowStorage, temporary.hold),
+        offsetof(WindowStorage, child.hold), offsetof(WindowStorage, child_temporary.hold), SIZE_MAX, SIZE_MAX};
+    const XrtManagedFrameSpec layout = {6, sizeof(WindowStorage), _Alignof(WindowStorage), offsets};
+    void *payload = NULL;
+    OK(xrt_managed_frame_enter_payload(root, &layout, &frame, &payload));
+    WindowStorage *storage = payload;
+    const unsigned char text[] = {'A', 0, 195, 169};
+    OK(xrt_string_backing_create(frame, 4, &types, (const char *)text, sizeof(text), 0));
+    XrtManagedHeader *owner = NULL;
+    OK(xrt_managed_slot_borrow(frame, 4, &owner));
+
+    /* This live managed object has identical String geometry and content but
+     * was created through a different descriptor. Shape is not authority. */
+    const XrtRuntimeTypeSpec geometry = {.fixed_size=sizeof(XrtStringBacking),
+        .alignment=_Alignof(XrtStringBacking), .capacity_offset=offsetof(XrtStringBacking, capacity), .stride=1};
+    XrtRuntimeTypePlan *plan = NULL;
+    XrtManagedOps *ops = NULL;
+    OK(xrt_runtime_type_plan_new(billing, &geometry, &plan));
+    OK(xrt_managed_ops_bind(billing, plan, &ops));
+    XrtManagedHeader *lookalike = NULL;
+    OK(xrt_managed_slot_prepare(frame, 5, ops, sizeof(XrtStringBacking) + sizeof(text) + 1, &lookalike));
+    XrtStringBacking *shaped = (XrtStringBacking *)lookalike;
+    shaped->length = sizeof(text);
+    shaped->runes = 3;
+    memcpy(shaped->bytes, text, sizeof(text));
+    shaped->bytes[sizeof(text)] = 0;
+    OK(xrt_managed_slot_commit(frame, 5));
+    xrt_managed_ops_drop(ops);
+    xrt_runtime_type_plan_drop(plan);
+
+    XrtInlineValueHome whole = {frame, &storage->value, &storage->temporary, 0, 1};
+    XrtInlineValueHome child = {frame, &storage->child, &storage->child_temporary, 2, 3};
+    const XrtBillingStats before = xrt_billing_owner_stats(billing);
+    xrt_billing_owner_fail_after(billing, 0);
+    OK(xrt_string_bytes_bind(&whole, owner));
+    CHECK(storage->value.value.owner == owner && storage->value.hold == owner && !storage->temporary.hold);
+    XrtReadonlyWindowBundle saved = storage->value;
+    CHECK(xrt_string_bytes_bind(&whole, lookalike) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_array_slice_bind(&whole, XRT_BACKING_ARRAY_U8,
+        (const XrtArrayBacking *)owner, 0, 1) == XRT_MANAGED_ARGUMENT);
+    CHECK(!memcmp(&saved, &storage->value, sizeof(saved)) && !storage->temporary.hold);
+    uint64_t bits = 99;
+    CHECK(xrt_window_read_bits(&(XrtReadonlyWindow){lookalike, 0, 1},
+        XRT_BACKING_ARRAY_U8, 0, &bits) == XRT_MANAGED_ARGUMENT && bits == 99);
+    CHECK(xrt_window_read_bits(&storage->value.value,
+        XRT_BACKING_ARRAY_I64, 0, &bits) == XRT_MANAGED_ARGUMENT && bits == 99);
+    CHECK(xrt_window_read_bits(&storage->value.value,
+        XRT_BACKING_ARRAY_U8, 4, &bits) == XRT_MANAGED_BOUNDS && bits == 99);
+    OK(xrt_window_range_reborrow(&child, XRT_BACKING_ARRAY_U8, &storage->value.value, 2, 0, true));
+    CHECK(storage->child.hold == owner && !storage->child_temporary.hold);
+    OK(xrt_managed_slot_drop(frame, 4));
+    OK(xrt_array_slice_clear(whole.frame, whole.value, whole.temporary, whole.first_owner, whole.temporary_first_owner));
+    OK(xrt_window_read_bits(&storage->child.value, XRT_BACKING_ARRAY_U8, 1, &bits));
+    CHECK(bits == 169);
+    const XrtBillingStats after = xrt_billing_owner_stats(billing);
+    CHECK(before.allocations == after.allocations && before.bytes == after.bytes && before.blocks == after.blocks);
+
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    OK(xrt_managed_slot_drop(frame, 5));
+    OK(xrt_window_copy_create(frame, 5, &types, XRT_BACKING_ARRAY_U8, &storage->child.value));
+    XrtManagedHeader *copy = NULL;
+    OK(xrt_managed_slot_borrow(frame, 5, &copy));
+    CHECK(copy && copy != owner);
+    OK(xrt_array_slice_clear(child.frame, child.value, child.temporary, child.first_owner, child.temporary_first_owner));
+    OK(xrt_array_backing_read_bits((const XrtArrayBacking *)copy, XRT_BACKING_ARRAY_U8, 0, &bits));
+    CHECK(bits == 195);
+    OK(xrt_managed_root_destroy(&root));
+    xrt_backing_types_drop(&types);
+    const XrtBillingStats final = xrt_billing_owner_stats(billing);
     CHECK(final.bytes == initial.bytes && final.blocks == initial.blocks);
     xrt_billing_owner_drop(billing);
 }
@@ -271,6 +357,7 @@ static void strict_utf8_output(void) {
 }
 int main(void) {
     strict_utf8_output();
+    string_window();
     XrtInlineValueSpec spec = xrt_array_slice_bundle_spec();
     CHECK(spec.size == sizeof(XrtArraySliceBundle) && spec.owned_count == 1 &&
         spec.owned_offsets[0] == offsetof(XrtArraySliceBundle, hold));

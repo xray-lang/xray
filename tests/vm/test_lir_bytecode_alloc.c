@@ -11,7 +11,7 @@
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_code.h"
 #include "xray_native_values.h"
-#include "xray_native_array_slice.h"
+#include "xray_native_window.h"
 #include "lir/xlir_internal.h"
 
 

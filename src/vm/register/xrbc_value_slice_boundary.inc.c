@@ -36,11 +36,11 @@ static XrtManagedStatus rbc_value_borrow_stage_owner(const XrRbcModule *module,X
         return rbc_value_cell_borrow(module,stack,activation,transfer.source,output);
     RbcValuePayload payload;
     XrtManagedStatus status=rbc_value_payload(module,stack,rbc_value_origin(activation,transfer.source),&payload);
-    if (status!=XRT_MANAGED_OK || payload.size!=sizeof(XrtReadonlyArraySlice) || payload.lanes)
+    if (status!=XRT_MANAGED_OK || payload.size!=sizeof(XrtReadonlyWindow) || payload.lanes)
         return status!=XRT_MANAGED_OK ? status : XRT_MANAGED_ARGUMENT;
-    XrtReadonlyArraySlice slice; memcpy(&slice,payload.address,sizeof(slice));
-    if (!slice.backing) return XRT_MANAGED_ARGUMENT;
-    *output=(XrtManagedHeader *)slice.backing;
+    XrtReadonlyWindow slice; memcpy(&slice,payload.address,sizeof(slice));
+    if (!slice.owner) return XRT_MANAGED_ARGUMENT;
+    *output=(XrtManagedHeader *)slice.owner;
     return XRT_MANAGED_OK;
 }
 static XrtManagedStatus rbc_value_slice_return(const XrRbcModule *module,XrRbcStack *stack,
@@ -56,14 +56,14 @@ static XrtManagedStatus rbc_value_slice_return(const XrRbcModule *module,XrRbcSt
         !rbc_value_slice(module,caller->code,call->view_result_source_argument)) return XRT_MANAGED_ARGUMENT;
     RbcValuePayload payload;
     XrtManagedStatus status=rbc_value_payload(module,stack,rbc_value_origin(activation,access.source),&payload);
-    if (status!=XRT_MANAGED_OK || payload.size!=sizeof(XrtReadonlyArraySlice) || payload.lanes)
+    if (status!=XRT_MANAGED_OK || payload.size!=sizeof(XrtReadonlyWindow) || payload.lanes)
         return status!=XRT_MANAGED_OK ? status : XRT_MANAGED_ARGUMENT;
-    XrtArraySliceBundle borrowed={0}; memcpy(&borrowed.value,payload.address,sizeof(borrowed.value));
-    if (!borrowed.value.backing) return XRT_MANAGED_ARGUMENT;
+    XrtReadonlyWindowBundle borrowed={0}; memcpy(&borrowed.value,payload.address,sizeof(borrowed.value));
+    if (!borrowed.value.owner) return XRT_MANAGED_ARGUMENT;
     /* The common return event proves the unique formal origin. Its live
      * backing is the physical hold source, never an address-indexed directory.
      * COPY publishes the caller's complete bundle before this callee retires. */
-    borrowed.hold=(XrtManagedHeader *)borrowed.value.backing;
+    borrowed.hold=(XrtManagedHeader *)borrowed.value.owner;
     XrtInlineValueHome landing={0};
     status=rbc_value_slice_storage(caller,call->view_result_workspace,&landing);
     XrtInlineValueSpec spec=xrt_array_slice_bundle_spec();

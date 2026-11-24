@@ -1,0 +1,6 @@
+fn wrong(text: string) -> i64 {
+    var bytes: Slice<i64> = text.bytes()
+    return bytes[0]
+}
+
+print(wrong("A"))

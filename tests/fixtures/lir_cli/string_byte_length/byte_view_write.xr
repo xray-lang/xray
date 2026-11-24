@@ -1,0 +1,6 @@
+fn overwrite(text: string) {
+    var bytes: Slice<u8> = text.bytes()
+    bytes[0] = 66 as u8
+}
+
+overwrite("A")

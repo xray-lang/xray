@@ -15,28 +15,30 @@
 #include "base/xchecks.h"
 #include <stdalign.h>
 
-/* Builtin Array producer identities live for the process. These callbacks
+/* Builtin backing producer identities live for the process. These callbacks
  * certify the immutable family separately from its shared physical stride. */
 static const XrtBackingArrayKind array_plan_families[] = {
     XRT_BACKING_ARRAY_I64, XRT_BACKING_ARRAY_STRING, XRT_BACKING_ARRAY_U8, XRT_BACKING_ARRAY_U64
 };
 _Static_assert(sizeof(array_plan_families) / sizeof(*array_plan_families) == XRT_BACKING_ARRAY_COUNT,
     "every scalar Array producer has an identity");
-static bool array_family_retain(void *family) { return family != NULL; }
-static void array_family_drop(void *family) { (void)family; }
+static const uint8_t string_producer = 0;
+static bool backing_producer_retain(void *producer) { return producer != NULL; }
+static void backing_producer_drop(void *producer) { (void)producer; }
+static const void *backing_producer(const XrtManagedHeader *owner) {
+    const XrtRuntimeTypeSpec *spec = NULL;
+    return xrt_managed_producer_borrow(owner, backing_producer_retain, backing_producer_drop, &spec) ==
+        XRT_MANAGED_OK ? spec->code.context : NULL;
+}
 XR_FUNCDEF bool xrt_backing_string_matches(const XrtManagedHeader *owner) {
-    const XrtRuntimeTypeSpec spec = {.fixed_size=sizeof(XrtStringBacking),.alignment=alignof(XrtStringBacking),
-        .capacity_offset=offsetof(XrtStringBacking, capacity),.stride=1};
-    if (!xrt_managed_layout_matches(owner, &spec)) return false;
+    if (backing_producer(owner) != &string_producer) return false;
     const XrtStringBacking *string = (const XrtStringBacking *)owner;
     return string->capacity && string->capacity <= SIZE_MAX - sizeof(*string) &&
         string->length < string->capacity && string->runes <= string->length && !string->bytes[string->length];
 }
 XR_FUNCDEF bool xrt_backing_array_matches(const XrtManagedHeader *owner, XrtBackingArrayKind family) {
-    const XrtRuntimeTypeSpec *spec = NULL;
     return (unsigned)family < XRT_BACKING_ARRAY_COUNT &&
-        xrt_managed_producer_borrow(owner, array_family_retain, array_family_drop, &spec) == XRT_MANAGED_OK &&
-        spec->code.context == &array_plan_families[family];
+        backing_producer(owner) == &array_plan_families[family];
 }
 
 static bool backing_types_empty(const XrtBackingTypes *types) {
@@ -67,7 +69,8 @@ XR_FUNCDEF XrtManagedStatus xrt_backing_types_init(XrtBillingOwner *billing, Xrt
     if (!billing || !backing_types_empty(output)) return XRT_MANAGED_ARGUMENT;
     XrtBackingTypes types = {0};
     XrtRuntimeTypeSpec spec = {.fixed_size=sizeof(XrtStringBacking), .alignment=alignof(XrtStringBacking),
-        .capacity_offset=offsetof(XrtStringBacking, capacity), .stride=1};
+        .capacity_offset=offsetof(XrtStringBacking, capacity), .stride=1,
+        .code={(void *)&string_producer, backing_producer_retain, backing_producer_drop}};
     XrtManagedStatus status = backing_bind(billing, spec, SIZE_MAX, &types.string);
     size_t tail = 0;
     for (size_t i = 0; status == XRT_MANAGED_OK && i < XRT_BACKING_ARRAY_COUNT; ++i) {
@@ -75,7 +78,7 @@ XR_FUNCDEF XrtManagedStatus xrt_backing_types_init(XrtBillingOwner *billing, Xrt
             .capacity_offset=offsetof(XrtArrayBacking, capacity), .stride=xrt_backing_array_stride((XrtBackingArrayKind)i),
             .tail_child_offsets=i == XRT_BACKING_ARRAY_STRING ? &tail : NULL,
             .tail_child_count=i == XRT_BACKING_ARRAY_STRING ? 1 : 0,
-            .code={(void *)&array_plan_families[i],array_family_retain,array_family_drop}};
+            .code={(void *)&array_plan_families[i],backing_producer_retain,backing_producer_drop}};
         size_t length_offset = i == XRT_BACKING_ARRAY_STRING ? offsetof(XrtArrayBacking,length) : SIZE_MAX;
         status = backing_bind(billing, spec, length_offset, &types.arrays[i]);
     }

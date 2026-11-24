@@ -12,7 +12,7 @@ typedef struct SliceFaultObservation {
     size_t returns,retains,fail_return,fail_retain;
     bool pending_return,pending_edge,checked;
     XrtInlineValueHome landing;
-    XrtArraySliceBundle old_landing,old_edge[2];
+    XrtReadonlyWindowBundle old_landing,old_edge[2];
     RbcValueActivation *edge_activation;
     XrtManagedHeader *backing;
     int32_t references;
@@ -20,12 +20,12 @@ typedef struct SliceFaultObservation {
 } SliceFaultObservation;
 static SliceFaultObservation slice_fault;
 static bool slice_zero_bundle(const void *bytes) {
-    const unsigned char zero[sizeof(XrtArraySliceBundle)]={0};
+    const unsigned char zero[sizeof(XrtReadonlyWindowBundle)]={0};
     return memcmp(bytes,zero,sizeof(zero))==0;
 }
 static XrtManagedStatus slice_observe_inline(const XrtInlineValueHome *home,const XrtInlineValueSpec *spec,const void *source) {
-    if (!slice_running_execution || !source || spec->size!=sizeof(XrtArraySliceBundle) ||
-        spec->owned_count!=1 || spec->owned_offsets[0]!=offsetof(XrtArraySliceBundle,hold))
+    if (!slice_running_execution || !source || spec->size!=sizeof(XrtReadonlyWindowBundle) ||
+        spec->owned_count!=1 || spec->owned_offsets[0]!=offsetof(XrtReadonlyWindowBundle,hold))
         return xrt_inline_value_replace(home,spec,source);
     ++slice_fault.returns;
     if (slice_fault.returns!=slice_fault.fail_return) return xrt_inline_value_replace(home,spec,source);
@@ -35,7 +35,7 @@ static XrtManagedStatus slice_observe_inline(const XrtInlineValueHome *home,cons
     XrtBillingStats before=xrt_billing_owner_stats(billing);
     CHECK(xrt_inline_value_replace(home,spec,source)==XRT_MANAGED_OK);
     slice_fault.landing=*home; memcpy(&slice_fault.old_landing,home->value,sizeof(slice_fault.old_landing));
-    slice_fault.backing=((const XrtArraySliceBundle *)source)->hold;
+    slice_fault.backing=((const XrtReadonlyWindowBundle *)source)->hold;
     CHECK(slice_fault.backing && slice_fault.old_landing.hold==slice_fault.backing);
     slice_fault.references=atomic_load(&slice_fault.backing->references);
     atomic_store(&slice_fault.backing->references,-INT32_MAX);
@@ -57,9 +57,9 @@ static void slice_seed_edge(RbcValueActivation *activation) {
         RbcValuePayload payload;
         CHECK(rbc_value_payload(slice_running_execution->module,&slice_running_execution->stack,
             rbc_value_origin(activation,transfer.source),&payload)==XRT_MANAGED_OK &&
-            payload.size==sizeof(XrtReadonlyArraySlice) && !payload.lanes);
-        XrtArraySliceBundle source={0}; memcpy(&source.value,payload.address,sizeof(source.value));
-        source.hold=(XrtManagedHeader *)source.value.backing;
+            payload.size==sizeof(XrtReadonlyWindow) && !payload.lanes);
+        XrtReadonlyWindowBundle source={0}; memcpy(&source.value,payload.address,sizeof(source.value));
+        source.hold=(XrtManagedHeader *)source.value.owner;
         XrtInlineValueHome target={0}; CHECK(rbc_value_slice_storage(activation,transfer.target_workspace,&target)==XRT_MANAGED_OK);
         /* Existing real destinations model the next loop visit. Neither their
          * storage nor their owning positions are fabricated by this test. */

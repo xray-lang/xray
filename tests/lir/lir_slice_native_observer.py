@@ -5,7 +5,7 @@ def slice_boundary_observer_source(generated):
     text = r'''#include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_values.h"
 #include "runtime/native/xnative_managed_root.h"
-#include "xray_native_array_slice.h"
+#include "xray_native_window.h"
 #include "xray_native_values.h"
 #include "xray_native_place.h"
 #include <limits.h>
@@ -104,16 +104,16 @@ static void observed_array(XrtManagedFrame *frame, size_t slot, const XrtArrayIn
 static XrtManagedStatus observed_replace(const XrtInlineValueHome *home,
     const XrtInlineValueSpec *spec, const void *source) {
     bool returning=probe.depth && home->frame!=probe.frames[probe.depth-1] &&
-        spec->size==sizeof(XrtArraySliceBundle);
+        spec->size==sizeof(XrtReadonlyWindowBundle);
     if (returning) ++probe.returns;
     if (returning && !probe.injected && (probe.fault==RETURN_RETAIN || probe.fault==RETURN_BUSY)) {
         /* Seed this actual caller landing through the existing transaction.
          * A distinct valid old window makes failed replacement observable. */
-        const XrtArraySliceBundle *incoming=source;
+        const XrtReadonlyWindowBundle *incoming=source;
         REQUIRE(incoming && incoming->hold && incoming->value.count>1);
-        XrtArraySliceBundle old=*incoming; old.value.count=1;
+        XrtReadonlyWindowBundle old=*incoming; old.value.count=1;
         REQUIRE(xrt_inline_value_replace(home,spec,&old)==XRT_MANAGED_OK);
-        XrtArraySliceBundle saved; memcpy(&saved,home->value,sizeof(saved));
+        XrtReadonlyWindowBundle saved; memcpy(&saved,home->value,sizeof(saved));
         XrtBillingStats before=xrt_billing_owner_stats(probe.billing);
         XrtManagedStatus status;
         if (probe.fault==RETURN_RETAIN) {
@@ -129,7 +129,7 @@ static XrtManagedStatus observed_replace(const XrtInlineValueHome *home,
             status=xrt_inline_value_replace(home,spec,source);
             xrt_managed_domain_leave(location); REQUIRE(status==XRT_MANAGED_ARGUMENT);
         }
-        XrtArraySliceBundle empty={0};
+        XrtReadonlyWindowBundle empty={0};
         REQUIRE(!memcmp(&saved,home->value,sizeof(saved)) && !memcmp(&empty,home->temporary,sizeof(empty)));
         no_allocation(before); ++probe.injected; ++probe.checked; return status;
     }

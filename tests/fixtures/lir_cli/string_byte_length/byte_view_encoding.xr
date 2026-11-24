@@ -1,0 +1,13 @@
+import encoding
+
+fn verify() {
+    var text = "A\u{0}你好"
+    print(encoding.utf8Valid(text.bytes()))
+    var invalid: Array<u8> = [192, 175]
+    print(encoding.utf8Valid(invalid[:]))
+    print(encoding.hexValid("00Ff"))
+    print(encoding.hexValid("0"))
+    print(encoding.hexValid("0z"))
+}
+
+verify()

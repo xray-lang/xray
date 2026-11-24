@@ -9,9 +9,12 @@
 #ifndef XNATIVE_ARRAY_SLICE_H
 #define XNATIVE_ARRAY_SLICE_H
 #include "xray_native_array_slice.h"
+#include "xray_native_window.h"
 #include "xnative_array_backing.h"
 /* Source protection precedes every allocating factory callback. The target is
  * an ordinary empty Array pending slot, never an owning Slice or a heap View. */
 XR_FUNC XrtManagedStatus xrt_array_slice_copy_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, XrtBackingArrayKind, const XrtReadonlyArraySlice *);
+XR_FUNC XrtManagedStatus xrt_window_copy_create(XrtManagedFrame *, size_t,
+    const XrtBackingTypes *, XrtBackingArrayKind, const XrtReadonlyWindow *);
 #endif // XNATIVE_ARRAY_SLICE_H

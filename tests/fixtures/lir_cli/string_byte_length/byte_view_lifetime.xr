@@ -1,0 +1,28 @@
+fn tail(input: Slice<u8>) -> Slice<u8> {
+    return input[1:]
+}
+
+fn length(input: Slice<u8>) -> i64 { return len(input) }
+
+fn replace(input: ref string) { input = "B" }
+
+fn verify(text: string) {
+    var owner = text
+    var view: Slice<u8> = owner.bytes()
+    print(view[0] as i64)
+    var window: Slice<u8> = tail(view)
+    print(len(window))
+    print(window[0] as i64)
+    print(window[1] as i64)
+    var copied: Array<u8> = copy window[:]
+    replace(ref owner)
+    print(copied[2] as i64)
+    print(owner.bytes()[0] as i64)
+    const empty = ""
+    print(length((empty).bytes()))
+    var arrays: Array<u8> = [7, 8]
+    var arrayTail: Slice<u8> = tail(arrays[:])
+    print(arrayTail[0] as i64)
+}
+
+verify("A\u{0}é")

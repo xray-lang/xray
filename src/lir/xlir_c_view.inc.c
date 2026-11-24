@@ -38,14 +38,14 @@ static const XrLirHomeWorkspace *c_view_workspace(LirC *c, const XrLirValueHomes
         workspace->temporary_first_owner >= homes->frame.slot_count ||
         workspace->first_owner == workspace->temporary_first_owner ||
         workspace->offset > homes->frame.payload_size ||
-        sizeof(XrtArraySliceBundle) > homes->frame.payload_size - workspace->offset ||
+        sizeof(XrtReadonlyWindowBundle) > homes->frame.payload_size - workspace->offset ||
         workspace->temporary_offset > homes->frame.payload_size ||
-        sizeof(XrtArraySliceBundle) > homes->frame.payload_size - workspace->temporary_offset ||
+        sizeof(XrtReadonlyWindowBundle) > homes->frame.payload_size - workspace->temporary_offset ||
         (workspace->offset <= workspace->temporary_offset ?
-            workspace->temporary_offset - workspace->offset : workspace->offset - workspace->temporary_offset) < sizeof(XrtArraySliceBundle) ||
-        homes->frame.owned_offsets[workspace->first_owner] != workspace->offset + offsetof(XrtArraySliceBundle, hold) ||
+            workspace->temporary_offset - workspace->offset : workspace->offset - workspace->temporary_offset) < sizeof(XrtReadonlyWindowBundle) ||
+        homes->frame.owned_offsets[workspace->first_owner] != workspace->offset + offsetof(XrtReadonlyWindowBundle, hold) ||
         homes->frame.owned_offsets[workspace->temporary_first_owner] !=
-            workspace->temporary_offset + offsetof(XrtArraySliceBundle, hold)) {
+            workspace->temporary_offset + offsetof(XrtReadonlyWindowBundle, hold)) {
         c_error(c, XR_LIR_C_INVALID_LIR, "Slice keeper lost its exact bundle and temporary slots"); return NULL;
     }
     return workspace;
@@ -57,11 +57,11 @@ static const XrLirHomeWorkspace *c_view_value_workspace(LirC *c, const XrLirValu
     const XrLirValueHome *home = &homes->values[value];
     const XrLirHomeWorkspace *workspace = c_view_workspace(c, homes, home->view_workspace);
     if (workspace && (home->parameter || home->owner_count || home->first_owner != SIZE_MAX ||
-        workspace->type != home->type || home->size != sizeof(XrtReadonlyArraySlice) ||
+        workspace->type != home->type || home->size != sizeof(XrtReadonlyWindow) ||
         home->first_bytes >= homes->byte_count || home->byte_count != 1 ||
         homes->bytes[home->first_bytes].offset != 0 || homes->bytes[home->first_bytes].size != home->size ||
-        home->offset != workspace->offset + offsetof(XrtArraySliceBundle, value) ||
-        home->temporary_offset != workspace->temporary_offset + offsetof(XrtArraySliceBundle, value))) {
+        home->offset != workspace->offset + offsetof(XrtReadonlyWindowBundle, value) ||
+        home->temporary_offset != workspace->temporary_offset + offsetof(XrtReadonlyWindowBundle, value))) {
         c_error(c, XR_LIR_C_INVALID_LIR, "Slice natural bytes disagree with their common keeper projection"); return NULL;
     }
     return workspace;
@@ -77,7 +77,7 @@ static bool c_view_value_valid(LirC *c, const XrLirValueHomes *homes, uint32_t v
     if (!home->type || !home->parameter || home->view_parameter != home->parameter - 1 ||
         home->view_workspace || home->owner_count || home->first_owner != SIZE_MAX ||
         home->temporary_first_owner != SIZE_MAX || home->offset != SIZE_MAX ||
-        home->temporary_offset != SIZE_MAX || home->size != sizeof(XrtReadonlyArraySlice) ||
+        home->temporary_offset != SIZE_MAX || home->size != sizeof(XrtReadonlyWindow) ||
         !homes->bytes || home->byte_count != 1 || home->first_bytes >= homes->byte_count ||
         homes->bytes[home->first_bytes].offset || homes->bytes[home->first_bytes].size != home->size) {
         c_error(c, XR_LIR_C_INVALID_LIR, "Slice formal lost its complete slotless borrowed representation"); return false;
@@ -204,22 +204,22 @@ static void c_view_bind(LirC *c, const XrLirInstructionView *v,
             c_text(c, "    status = xrt_place_borrow(");
             c_value(c, v->operands[0]); c_text(c, ", &owner);\n"); c_array_require(c, source);
         }
-        c_text(c, "    status = xrt_array_slice_range_bind("); c_view_home(c, workspace);
-        c_format(c, ", %s, (const XrtArrayBacking *)owner, ", kind);
-        c_value(c, v->operands[1]); c_text(c, ", "); c_value(c, v->operands[2]);
+        if (shape->binding_type == XR_LIR_STRING_CELL) {
+            c_text(c, "    status = xrt_string_bytes_bind("); c_view_home(c, workspace);
+            c_text(c, ", owner");
+        } else {
+            c_text(c, "    status = xrt_window_range_bind("); c_view_home(c, workspace);
+            c_format(c, ", %s, owner, ", kind);
+            c_value(c, v->operands[1]); c_text(c, ", "); c_value(c, v->operands[2]);
+        }
     } else if (shape->operation == XR_LIR_SLICE_OP_REBORROW) {
-        c_text(c, "    status = xrt_array_slice_range_reborrow("); c_view_home(c, workspace);
+        c_text(c, "    status = xrt_window_range_reborrow("); c_view_home(c, workspace);
         c_format(c, ", %s, &", kind); c_value(c, v->operands[0]);
         for (uint32_t a = 1; a < v->operand_count; ++a) { c_text(c, ", "); c_value(c, v->operands[a]); }
     } else {
         if (!c_view_value_valid(c, c->homes, v->operands[0])) return;
-        /* The common loan grants the read; the fixed backing prefix supplies
-         * only its physical keepalive, never a second permission check. */
-        c_text(c, "    const XrtReadonlyArraySlice *parent = &"); c_value(c, v->operands[0]);
-        c_text(c, ";\n    XrtArraySliceBundle incoming = {*parent, (XrtManagedHeader *)&parent->backing->managed};\n");
-        c_text(c, "    XrtInlineValueSpec spec = xrt_array_slice_bundle_spec();\n");
-        c_text(c, "    status = xrt_inline_value_replace("); c_view_home(c, workspace);
-        c_text(c, ", &spec, &incoming");
+        c_text(c, "    status = xrt_window_rebind("); c_view_home(c, workspace);
+        c_format(c, ", %s, &", kind); c_value(c, v->operands[0]);
     }
     c_text(c, ");\n"); c_array_require(c, source); c_text(c, "    }\n");
 }
@@ -251,7 +251,7 @@ static void c_view_instruction(LirC *c, const XrLirInstructionView *v, uint32_t 
         XR_CHECK(result->owner_count == 1 && result->temporary_offset != SIZE_MAX,
             "strict decoding has a stable nullable owner offset");
         c_values_ensure(c, source);
-        c_format(c, "    { XrtManagedStatus status = xrt_array_slice_strict_utf8(xrl_frame, %zu, %zu, %zu, "
+        c_format(c, "    { XrtManagedStatus status = xrt_window_strict_utf8(xrl_frame, %zu, %zu, %zu, "
             "%zu + offsetof(%s, payload), &", result->first_owner, result->temporary_first_owner,
             result->offset, result->temporary_offset, c_type(c, v->type));
         c_value(c, value);
@@ -268,16 +268,16 @@ static void c_view_instruction(LirC *c, const XrLirInstructionView *v, uint32_t 
             c_error(c, XR_LIR_C_INVALID_LIR, "Slice copy has no true Array result staging"); return;
         }
         c_values_ensure(c, source);
-        c_format(c, "    xrt_native_array_slice_copy(xrl_frame, %zu, %s, &", result->temporary_first_owner, c_array_kind(shape.element));
+        c_format(c, "    xrt_native_window_copy(xrl_frame, %zu, %s, &", result->temporary_first_owner, c_array_kind(shape.element));
         c_value(c, value); c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
         c_values_publish_leaf(c, v->result, source); return;
     }
     if (shape.operation == XR_LIR_SLICE_OP_LEN) {
-        c_text(c, "    { XrtManagedStatus status = xrt_array_slice_length(&"); c_value(c, value);
+        c_text(c, "    { XrtManagedStatus status = xrt_window_length(&"); c_value(c, value);
         c_format(c, ", &v%" PRIu32 ");\n", v->result); c_array_require(c, source); c_text(c, "    }\n"); return;
     }
     if (shape.operation == XR_LIR_SLICE_OP_GET) {
-        c_text(c, "    { uint64_t bits = 0;\n    XrtManagedStatus status = xrt_array_slice_read_bits(&"); c_value(c, value);
+        c_text(c, "    { uint64_t bits = 0;\n    XrtManagedStatus status = xrt_window_read_bits(&"); c_value(c, value);
         c_format(c, ", %s, ", c_array_kind(shape.element)); c_value(c, v->operands[1]); c_text(c, ", &bits);\n");
         c_array_require(c, source);
         if (shape.element == XR_LIR_I64) c_format(c, "    memcpy(&v%" PRIu32 ", &bits, sizeof(bits));\n", v->result);
