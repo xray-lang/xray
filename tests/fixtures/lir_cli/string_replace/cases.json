@@ -1,0 +1,10 @@
+{
+  "replacement": {
+    "exit": 0,
+    "stdout": "a-b/c\na-b-c\na/b/c\nab/c\nhéllo world\na-b\na:b:c\na/b/c\n\nxxx\nxxx\nbb\nx\n",
+    "stderr": ""
+  },
+  "reject_type": {
+    "source_error": ":2:20: error: expression cannot satisfy its declared type"
+  }
+}

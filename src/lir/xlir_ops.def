@@ -144,6 +144,8 @@ XR_LIR_OP(HOST_PATH_CLASS, "host_path_class", 1)
 XR_LIR_OP(HOST_FILE_READ, "host_file_read", 2)
 XR_LIR_OP(HOST_ENV_GET, "host_env_get", 1)
 XR_LIR_OP(STRING_SLICE, "string_slice", 3)
+/* Replaces occurrences into a new String; bits selects all matches. */
+XR_LIR_OP(STRING_REPLACE, "string_replace", 3)
 XR_LIR_OP(STRING_INDEX_OF, "string_index_of", 3)
 XR_LIR_OP(STRING_LAST_INDEX_OF, "string_last_index_of", 2)
 /* One ordered comparison over two live String borrows; predicate is LT..GE. */

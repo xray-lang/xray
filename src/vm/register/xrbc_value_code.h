@@ -60,6 +60,8 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_STRING_BYTE_LENGTH,
     XR_RBC_VALUE_HOST_PATH_CLASS, XR_RBC_VALUE_HOST_FILE_READ, XR_RBC_VALUE_HOST_ENV_GET,
     XR_RBC_VALUE_STRING_SLICE,
+    /* STRING_REPLACE borrows source/other/index; first selects all matches. */
+    XR_RBC_VALUE_STRING_REPLACE,
     XR_RBC_VALUE_STRING_INDEX_OF,
     /* Last occurrence over two String borrows; both operands stay borrowed. */
     XR_RBC_VALUE_STRING_LAST_INDEX_OF,

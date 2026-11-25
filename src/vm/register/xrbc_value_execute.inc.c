@@ -1331,6 +1331,19 @@ static XrtManagedStatus rbc_value_host_file_read(XrRbcStack *stack, RbcValueActi
     return read.managed;
 }
 
+static XrtManagedStatus rbc_value_string_replace(XrRbcStack *stack, RbcValueActivation *activation,
+    XrRbcValueAccess access, uint32_t source) {
+    const XrtStringBacking *text = NULL, *search = NULL, *replacement = NULL;
+    XrtManagedStatus status = rbc_value_string_borrow(activation, access.source, &text);
+    if (status == XRT_MANAGED_OK) status = rbc_value_string_borrow(activation, access.other, &search);
+    if (status == XRT_MANAGED_OK) status = rbc_value_string_borrow(activation, access.index, &replacement);
+    if (status != XRT_MANAGED_OK) return status;
+    const XrLirValueHome *home = rbc_value_home(activation->code, access.result);
+    xrt_native_string_replace_create(activation->frame, home->temporary_first_owner, text, search,
+        replacement, access.first != 0, source);
+    return rbc_value_publish_leaf(activation, access.result);
+}
+
 static XrtManagedStatus rbc_value_string_slice(XrRbcStack *stack, RbcValueActivation *activation,
     XrRbcValueAccess access, uint32_t source) {
     XrRbcRegister *first = rbc_value_register(stack, activation, access.other);
@@ -1501,6 +1514,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         status=rbc_value_function_alias(module,stack,activation,access,source);
     else if (access.operation<=XR_RBC_VALUE_STRING_CONCAT) status=rbc_value_factory(module,stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_STRING_SLICE) status=rbc_value_string_slice(stack,activation,access,source);
+    else if (access.operation==XR_RBC_VALUE_STRING_REPLACE) status=rbc_value_string_replace(stack,activation,access,source);
     else if (access.operation==XR_RBC_VALUE_COPY || access.operation==XR_RBC_VALUE_MOVE)
         status=rbc_value_replace(module,stack,activation,(RbcValueOrigin){activation,access.result},
             rbc_value_origin(activation,access.source),access.operation==XR_RBC_VALUE_COPY);

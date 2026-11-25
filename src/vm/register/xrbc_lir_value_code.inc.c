@@ -480,6 +480,11 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_STRING_I64: access.operation = XR_RBC_VALUE_STRING_I64; break;
     case XR_LIR_STRING_F64: access.operation = XR_RBC_VALUE_STRING_F64; break;
     case XR_LIR_STRING_CONCAT: access.operation = XR_RBC_VALUE_STRING_CONCAT; break;
+    case XR_LIR_STRING_REPLACE:
+        access.operation = XR_RBC_VALUE_STRING_REPLACE;
+        access.index = i->operands[2];
+        access.first = (uint32_t)i->bits;
+        break;
     case XR_LIR_STRING_SLICE:
         access.operation = XR_RBC_VALUE_STRING_SLICE;
         access.index = i->operands[2];

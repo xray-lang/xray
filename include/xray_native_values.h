@@ -154,6 +154,11 @@ XRAY_API bool xrt_native_string_test(const XrtStringBacking *, const XrtStringBa
  * slot is empty. Publication preserves both input objects and their owners. */
 XRAY_API void xrt_native_string_concat_create(XrtManagedFrame *, size_t slot,
     const XrtManagedHeader *left, const XrtManagedHeader *right, uint32_t source_id);
+/* Replaces occurrences of one live String borrow inside another into a new
+ * String backing; an empty search or no match copies the receiver. */
+XRAY_API void xrt_native_string_replace_create(XrtManagedFrame *, size_t slot,
+    const XrtStringBacking *, const XrtStringBacking *, const XrtStringBacking *, bool all,
+    uint32_t source_id);
 /* Copies the admitted half-open rune range into its own String backing. */
 XRAY_API void xrt_native_string_slice_create(XrtManagedFrame *, size_t slot,
     const XrtManagedHeader *receiver, int64_t start, int64_t end, uint32_t source_id);

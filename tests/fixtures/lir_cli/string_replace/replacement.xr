@@ -1,0 +1,15 @@
+const text = "a/b/c"
+print(text.replace("/", "-"))
+print(text.replaceAll("/", "-"))
+print(text.replace("zz", "-"))
+print(text.replace("/", ""))
+print("héllo wörld".replace("ö", "o"))
+print("a\0b".replace("\0", "-"))
+const owned = "a" + "/b/c"
+print(owned.replaceAll("/", ":"))
+print(owned)
+print("".replace("a", "b"))
+print("xxx".replace("", "-"))
+print("xxx".replaceAll("", "-"))
+print("aaaa".replaceAll("aa", "b"))
+print("abc".replace("abc", "x"))

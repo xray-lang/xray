@@ -256,6 +256,10 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     case XR_RBC_VALUE_STRING_BYTE_LENGTH:
         return rbc_value_flow_read(state,code,access.source,&incoming) &&
             rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
+    case XR_RBC_VALUE_STRING_REPLACE:
+        return rbc_value_flow_read(state,code,access.source,&incoming) &&
+            rbc_value_flow_read(state,code,access.other,&incoming) &&
+            rbc_value_flow_read(state,code,access.index,&incoming);
     case XR_RBC_VALUE_STRING_SLICE:
         return rbc_value_flow_read(state,code,access.source,&incoming) &&
             rbc_value_flow_bits(state,code,access.other) && rbc_value_flow_bits(state,code,access.index);

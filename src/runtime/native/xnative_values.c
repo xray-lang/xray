@@ -548,6 +548,16 @@ XRAY_API void xrt_native_string_slice_create(XrtManagedFrame *frame, size_t slot
     }
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }
+XRAY_API void xrt_native_string_replace_create(XrtManagedFrame *frame, size_t slot,
+    const XrtStringBacking *text, const XrtStringBacking *search, const XrtStringBacking *replacement,
+    bool all, uint32_t source_id) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source_id), &types);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_string_backing_replace_create(frame, slot, types, text,
+            (XrtStringReplacement){search, replacement, all});
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
 XRAY_API int64_t xrt_native_string_index_of(const XrtStringBacking *text, const XrtStringBacking *search,
     int64_t start, uint32_t source_id) {
     int64_t ordinal;

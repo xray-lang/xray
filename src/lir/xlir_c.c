@@ -403,7 +403,8 @@ static bool c_string_point(LirC *c, const XrLirInstructionView *v) {
         c_value_type(c, v->edges[0].arguments[0]) == XR_LIR_STRING)
         return true;
     if (v->op == XR_LIR_STRING_LITERAL || v->op == XR_LIR_STRING_I64 || v->op == XR_LIR_STRING_F64 ||
-        v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_SLICE || v->op == XR_LIR_STRING_RETAIN ||
+        v->op == XR_LIR_STRING_CONCAT || v->op == XR_LIR_STRING_SLICE || v->op == XR_LIR_STRING_REPLACE ||
+        v->op == XR_LIR_STRING_RETAIN ||
         v->op == XR_LIR_STRING_PRINT || v->op == XR_LIR_STRING_LEN || v->op == XR_LIR_STRING_BYTE_LEN ||
         v->op == XR_LIR_I64_TRY_PARSE || v->op == XR_LIR_F64_TRY_PARSE ||
         v->op == XR_LIR_STRING_EQUAL || v->op == XR_LIR_STRING_INDEX_OF || v->op == XR_LIR_STRING_TEST ||
@@ -576,6 +577,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
         case XR_LIR_STRING_I64: case XR_LIR_STRING_F64: case XR_LIR_STRING_CONCAT: case XR_LIR_STRING_SLICE:
+        case XR_LIR_STRING_REPLACE:
         case XR_LIR_STRING_RETAIN:
         case XR_LIR_STRING_DROP: case XR_LIR_STRING_CELL_DROP: case XR_LIR_STRING_PRINT:
         case XR_LIR_STRING_LEN: case XR_LIR_STRING_BYTE_LEN: case XR_LIR_STRING_EQUAL:

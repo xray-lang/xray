@@ -628,7 +628,8 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         a.operation!=XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_FUNCTION_CALL &&
         a.operation!=XR_RBC_VALUE_FUNCTION_ALIAS && a.operation!=XR_RBC_VALUE_SLICE &&
         a.operation!=XR_RBC_VALUE_SUM_NEW && a.operation!=XR_RBC_VALUE_HOST_FILE_WRITE &&
-        a.operation!=XR_RBC_VALUE_CLASS_ARRAY_PUSH && (a.first || a.count || a.window)) return false;
+        a.operation!=XR_RBC_VALUE_CLASS_ARRAY_PUSH && a.operation!=XR_RBC_VALUE_STRING_REPLACE &&
+        (a.first || a.count || a.window)) return false;
     if (a.operation!=XR_RBC_VALUE_STRING_LITERAL && a.operation!=XR_RBC_VALUE_STATE_CONSTRUCT &&
         a.operation!=XR_RBC_VALUE_STATE_INITIALIZE && a.operation!=XR_RBC_VALUE_STATE_GROUP_INITIALIZE &&
         a.operation!=XR_RBC_VALUE_CALL &&
@@ -638,7 +639,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         a.operation!=XR_RBC_VALUE_SUM_NEW && a.operation!=XR_RBC_VALUE_SUM_GET &&
         a.operation!=XR_RBC_VALUE_RETURN &&
         !(a.operation>=XR_RBC_VALUE_BINDING_NEW && a.operation<=XR_RBC_VALUE_BINDING_DROP) &&
-        a.operation<XR_RBC_VALUE_FUNCTION_NEW && a.index) return false;
+        (a.operation<XR_RBC_VALUE_FUNCTION_NEW && a.operation!=XR_RBC_VALUE_STRING_REPLACE) && a.index) return false;
     switch (a.operation) {
     case XR_RBC_VALUE_CELL: return rbc_value_cell_access_valid(module,code,function,a);
     case XR_RBC_VALUE_STRING_APPEND_OWNED: return rbc_value_string_append_valid(module,code,a);
@@ -654,6 +655,10 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_STRING_CONCAT:
         return rbc_value_string(module,code,a.result,true) && rbc_value_string(module,code,a.source,false) &&
             rbc_value_string(module,code,a.other,false);
+    case XR_RBC_VALUE_STRING_REPLACE:
+        return a.first <= 1 && !a.count && !a.window && rbc_value_string(module,code,a.result,true) &&
+            rbc_value_string(module,code,a.source,false) && rbc_value_string(module,code,a.other,false) &&
+            rbc_value_string(module,code,a.index,false);
     case XR_RBC_VALUE_STRING_SLICE:
         return !a.first && !a.count && !a.window && rbc_value_string(module,code,a.result,true) &&
             rbc_value_string(module,code,a.source,false) && rbc_value_scalar(code,function,a.other,XR_RBC_BITS) &&
