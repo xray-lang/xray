@@ -53,7 +53,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_LE_FLOAT:
     case XR_XIR_GT_FLOAT:
     case XR_XIR_GE_FLOAT:
-    case XR_XIR_I64_TRY_PARSE: case XR_XIR_F64_TRY_PARSE:
+    case XR_XIR_I64_TRY_PARSE: case XR_XIR_F64_TRY_PARSE: case XR_XIR_BOOL_TRY_PARSE:
     case XR_XIR_ADD_INT:
     case XR_XIR_AND_INT:
     case XR_XIR_OR_INT:

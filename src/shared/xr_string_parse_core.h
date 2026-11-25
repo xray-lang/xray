@@ -61,6 +61,11 @@ typedef struct XrStringParseFloatResult {
     double value;
 } XrStringParseFloatResult;
 
+typedef struct XrStringParseBoolResult {
+    XrNumberParseFailure failure;
+    bool value;
+} XrStringParseBoolResult;
+
 static inline uint32_t xr_number_parse_failure_member_index(XrNumberParseFailure failure) {
     switch (failure) {
         case XR_NUMBER_PARSE_INVALID_SYNTAX:
@@ -141,6 +146,34 @@ static inline XrStringParseIntResult xr_string_parse_int64(const char *data, siz
 
     out.failure = XR_NUMBER_PARSE_OK;
     out.value = negative ? accumulated : -accumulated;
+    return out;
+}
+
+/*
+ * Strict boolean parse over the whole [data, data+len) span: surrounding ASCII
+ * whitespace is accepted, the word itself is case-sensitive and must be
+ * exactly "true" or "false". Anything else is invalid syntax; there is no
+ * range failure for a two-word domain.
+ */
+static inline XrStringParseBoolResult xr_string_parse_bool(const char *data, size_t len) {
+    XrStringParseBoolResult out = {XR_NUMBER_PARSE_INVALID_SYNTAX, false};
+    if (!data)
+        return out;
+    size_t start = 0, end = len;
+    while (start < end && xr_string_parse_is_space((unsigned char) data[start]))
+        start++;
+    while (end > start && xr_string_parse_is_space((unsigned char) data[end - 1]))
+        end--;
+    const size_t length = end - start;
+    if (length == 4 && data[start] == 't' && data[start + 1] == 'r' && data[start + 2] == 'u' &&
+        data[start + 3] == 'e') {
+        out.failure = XR_NUMBER_PARSE_OK;
+        out.value = true;
+    } else if (length == 5 && data[start] == 'f' && data[start + 1] == 'a' && data[start + 2] == 'l' &&
+        data[start + 3] == 's' && data[start + 4] == 'e') {
+        out.failure = XR_NUMBER_PARSE_OK;
+        out.value = false;
+    }
     return out;
 }
 

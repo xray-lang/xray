@@ -493,7 +493,8 @@ AstNode *xr_parse_regex_literal(Parser *parser) {
     return node;
 }
 
-// Parse the remaining value conversion keywords: string(x), bool(x), rune(x).
+// Parse the remaining value conversion keywords: string(x) and rune(x).
+// A bool is not a conversion target; that spelling is refused below.
 AstNode *xr_parse_type_cast(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_type_cast: NULL parser");
@@ -523,6 +524,16 @@ AstNode *xr_parse_type_cast(Parser *parser) {
      * starts ordinary member access; only a following '(' is a cast. */
     if (xr_parser_check(parser, TK_DOT))
         return xr_ast_variable(parser->compiler_session, type_name, line);
+
+    /* Spec 13.2: bool(x) is not a conversion. A condition takes a bool value
+     * and text becomes a bool through bool.tryParse, so the removed spelling
+     * fails here rather than as a missing name later. The refusal needs the
+     * '(', so a bare `bool` keeps its ordinary cast-shape diagnostic. */
+    if (parser->previous.type == TK_BOOL && xr_parser_check(parser, TK_LPAREN)) {
+        xr_parser_error_at_previous(parser,
+            "bool(x) is not a conversion; compare explicitly or use bool.tryParse");
+        return NULL;
+    }
 
     if (!xr_parser_match(parser, TK_LPAREN)) {
         do {

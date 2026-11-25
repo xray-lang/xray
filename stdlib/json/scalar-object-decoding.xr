@@ -74,7 +74,5 @@ export fn jsonScalarObject(text:string,keys:Array<string>)->Array<string>? {
     return null
 }
 export fn jsonBoolean(text:string)->bool? {
-    if(text=="true"){return true}
-    if(text=="false"){return false}
-    return null
+    return bool.tryParse(text)
 }

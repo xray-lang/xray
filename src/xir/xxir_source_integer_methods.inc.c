@@ -36,6 +36,7 @@ static bool source_primitive_query_type(SourceContext *ctx,XrNativeTypeTerm term
     case XR_NATIVE_TERM_U32: *type=XR_XIR_U32;return true;
     case XR_NATIVE_TERM_NULLABLE_I64: return source_nullable_type(ctx,XR_XIR_I64,type);
     case XR_NATIVE_TERM_NULLABLE_F64: return source_nullable_type(ctx,XR_XIR_F64,type);
+    case XR_NATIVE_TERM_NULLABLE_BOOL: return source_nullable_type(ctx,XR_XIR_BOOL,type);
     default: return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"primitive declaration has no admitted type contract");
     }
 }

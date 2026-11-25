@@ -744,10 +744,10 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_format(c, ", UINT32_C(%" PRIu64 "), UINT32_C(%" PRIu32 "));\n", v->bits, source);
         return true;
     }
-    if (v->op == XR_LIR_I64_TRY_PARSE || v->op == XR_LIR_F64_TRY_PARSE) {
+    if (v->op == XR_LIR_I64_TRY_PARSE || v->op == XR_LIR_F64_TRY_PARSE || v->op == XR_LIR_BOOL_TRY_PARSE) {
         c_format(c, "    v%" PRIu32 " = (%s){0};\n", v->result, c_type(c, v->type));
         c_format(c, "    v%" PRIu32 ".tag = xrt_native_string_try_parse_%s((const XrtStringBacking *)",
-            v->result, v->op == XR_LIR_I64_TRY_PARSE ? "i64" : "f64");
+            v->result, v->op == XR_LIR_I64_TRY_PARSE ? "i64" : v->op == XR_LIR_BOOL_TRY_PARSE ? "bool" : "f64");
         c_value(c, v->operands[0]);
         c_format(c, ", &v%" PRIu32 ".payload);\n", v->result);
         return true;

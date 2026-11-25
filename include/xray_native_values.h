@@ -150,6 +150,7 @@ XRAY_API void xrt_native_string_f64_create(XrtManagedFrame *, size_t slot,
  * Success writes the scalar. Invalid syntax or range leaves output unchanged. */
 XRAY_API bool xrt_native_string_try_parse_i64(const XrtStringBacking *, int64_t *output);
 XRAY_API bool xrt_native_string_try_parse_f64(const XrtStringBacking *, double *output);
+XRAY_API bool xrt_native_string_try_parse_bool(const XrtStringBacking *, bool *output);
 /* Search live String borrows from a rune ordinal and return a rune ordinal or -1. */
 XRAY_API int64_t xrt_native_string_index_of(const XrtStringBacking *, const XrtStringBacking *,
     int64_t start, uint32_t source_id);

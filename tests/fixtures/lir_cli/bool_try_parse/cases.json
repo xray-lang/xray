@@ -1,0 +1,15 @@
+{
+  "bool_try_parse_values": {
+    "exit": 0,
+    "stdout": "none\nnone\nsome\nsome\nsome\nnone\nnone\nnone\nnone\nnone\nnone\ntrue\ntrue\nfalse\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\n",
+    "stderr": ""
+  },
+  "bool_try_parse_next_to_aggregate": {
+    "exit": 0,
+    "stdout": "true\n4\n4\ntrue\ntrue\n",
+    "stderr": ""
+  },
+  "bool_try_parse_rejects_bool_call": {
+    "source_error": ":4:21: error: bool(x) is not a conversion; compare explicitly or use bool.tryParse"
+  }
+}

@@ -759,6 +759,8 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             (shape == XR_NATIVE_HOST_FILE_WRITE_BYTES && rbc_value_array(module, code, a.other, false) &&
                 rbc_value_kind(module, code, a.other) == XRT_VALUE_ARRAY_U8);
     }
+    case XR_RBC_VALUE_BOOL_TRY_PARSE:
+        return rbc_value_try_parse_valid(module,code,function,a,XRT_VALUE_BOOL,XR_POD_BOOL);
     case XR_RBC_VALUE_I64_TRY_PARSE:
         return rbc_value_try_parse_valid(module,code,function,a,XRT_VALUE_I64,XR_POD_I64);
     case XR_RBC_VALUE_F64_TRY_PARSE:

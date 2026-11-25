@@ -243,6 +243,7 @@ XR_XIR_OP(JSON_NULL,3,VALUE,0,0,0)
 XR_XIR_OP(JSON_VALUE_INJECT,3,VALUE,1,0,0)
 
 XR_XIR_OP(I64_TRY_PARSE,7,OWNED,1,0,0)
+XR_XIR_OP(BOOL_TRY_PARSE,7,OWNED,1,0,0)
 
 /* Discriminant observation over a Class-identity data union. The union value is
  * one nominal class handle; its actual class identity, not a stored tag byte,

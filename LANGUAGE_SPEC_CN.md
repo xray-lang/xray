@@ -6661,17 +6661,20 @@ fn measuredKernel(value: u64) -> u64 {
 | `i64.tryParse(s)` | `(string) -> i64?` | 严格解析十进制整数；失败返回 `null` |
 | `f64.parse(s)` | `(string) -> f64` | 严格解析十进制浮点数；失败抛异常 |
 | `f64.tryParse(s)` | `(string) -> f64?` | 严格解析十进制浮点数；失败返回 `null` |
+| `bool.parse(s)` | `(string) -> bool` | 严格解析布尔文本；失败抛异常 |
+| `bool.tryParse(s)` | `(string) -> bool?` | 严格解析布尔文本；失败返回 `null` |
 | `string(x)` | `(value) -> string` | 转为字符串；`rune` 转为单 scalar 字符串 |
-| `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
 | `rune(n)` | `(i64) -> rune` | 从 i64 构造 Unicode scalar；负数、surrogate 或越界值触发范围 panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy x` | `(position) -> logical copy` | 显式逻辑复制，源位置不变；普通值默认使用 COW，身份值复制引用，不可复制值拒绝。借用视图须按 §2.4 物化独立 owner `Array<T>`，不能复制借用权限 |
 
 `i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` 都解析整个字符串：允许首尾空白与前导符号，其余必须符合十进制文法；`f64` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留、十六进制、`inf` / `nan` 以及越界整数都解析失败。`parse` 用 typed error channel 报错，`tryParse` 返回 `null`。数值之间的转换只能写成显式 `as`，文本解析不经过数值 cast。
 
+`bool.parse` / `bool.tryParse` 同样解析整个字符串：允许首尾的空格、制表符、换行与回车，区分大小写，只接受 `true` 与 `false`；其余文本（包括 `TRUE`、`1` 和空串）解析失败。布尔文本没有数值范围，因此不产生 `OutOfRange`。语言不提供 `bool(x)` 真值转换：判断真假写显式比较（`n != 0`、`len(s) != 0`、`x != null`、`flag ?? false`），文本转布尔只经过这两个解析函数。
+
 `f64` 文本解析复用字面量的同一精确整数转换核，以 nearest / ties-to-even 一次舍入到 binary64；渐进下溢保留负零，合法十进制幅度溢出产生带符号无穷。文法仍拒绝 `inf` / `nan` 拼写，不依赖 libc、locale 或宿主浮点舍入环境。运行时文本的首尾 ASCII 空白与无下划线文法分别验证，字面量的数字间下划线规则不授予文本解析。
 
-当前 XIR 的 `f64.tryParse` 由受治理的 f64 静态声明准入；普通 Source、显式 comptime、VM 与生成 C11 共享同一精确转换和 Nullable Value 构造。语法无效构造拥有式 None，成功构造拥有式 Some；两者都可能分配。分配、retain 或有限 work 失败保持真实失败身份，不折叠成 `null`，失败不发布部分输出。声明在词法遮蔽检查后绑定；方法拼写不自行授予 native 权限。此项准入不代表其他数值转换或完整 JSON 已实现。
+当前 XIR 的 `i64.tryParse`、`f64.tryParse` 与 `bool.tryParse` 由各自受治理的静态声明准入；普通 Source、显式 comptime、VM 与生成 C11 共享同一精确转换和 Nullable Value 构造。语法无效构造拥有式 None，成功构造拥有式 Some；两者都可能分配。分配、retain 或有限 work 失败保持真实失败身份，不折叠成 `null`，失败不发布部分输出。声明在词法遮蔽检查后绑定；方法拼写不自行授予 native 权限。`i64.parse`／`f64.parse`／`bool.parse` 三行是目标表面，三者都要经 typed error channel 抛错，而该通道尚未接入 XIR，所以当前被拒绝；此项准入不代表其他数值转换或完整 JSON 已实现。
 
 ### 13.3 类型检查
 

@@ -44,7 +44,7 @@ tests/diff/cases/semantics/collections/array_shift_shared_core.xr  # module slot
 tests/diff/cases/semantics/collections/array_sort_shared_core.xr  # error: sort currently accepts no comparator arguments
 tests/diff/cases/semantics/collections/array_typed_fill_storage_shared_core.xr  # module slot payload type is not supported by LIR lowering yet
 tests/diff/cases/semantics/collections/array_unshift_shared_core.xr  # module slot payload type is not supported by LIR lowering yet
-tests/diff/cases/semantics/collections/bool_conversion_truthy_shared_core.xr  # error: name is not an initialized value
+tests/diff/cases/semantics/collections/bool_conversion_truthy_shared_core.xr  # error: bool(x) is not a conversion; compare explicitly or use bool.parse / bool.tryParse
 tests/diff/cases/semantics/collections/byte_array_append_repeat_safe_shared_core.xr  # error: Array member has no admitted value-operation contract
 tests/diff/cases/semantics/collections/byte_array_constructor_shared_core.xr  # error: expression cannot satisfy its declared type
 tests/diff/cases/semantics/collections/byte_array_int_arg_shared_core.xr  # error: name is not an initialized value

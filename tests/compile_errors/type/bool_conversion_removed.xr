@@ -1,0 +1,7 @@
+// Spec 13.2: `bool(x)` is not a conversion. A condition takes a bool value;
+// text becomes a bool only through `bool.parse` / `bool.tryParse`.
+fn main() {
+    print(string(bool(1)))
+}
+
+main()

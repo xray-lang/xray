@@ -151,6 +151,14 @@ add_test(NAME test_lir_cli_f64_try_parse
 set_tests_properties(test_lir_cli_f64_try_parse PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
 
+add_test(NAME test_lir_cli_bool_try_parse
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --fixtures tests/fixtures/lir_cli/bool_try_parse --compiler "${CMAKE_C_COMPILER}"
+        --output ${PROJECT_BINARY_DIR}/lir-cli-bool-try-parse)
+set_tests_properties(test_lir_cli_bool_try_parse PROPERTIES
+    TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
+
 add_test(NAME test_lir_cli_string_test
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}

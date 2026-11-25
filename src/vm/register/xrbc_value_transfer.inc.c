@@ -386,6 +386,7 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     case XR_RBC_VALUE_SUM_TAG: case XR_RBC_VALUE_SUM_GET:
         return rbc_value_flow_read(state,code,access.source,&incoming) &&
             rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
+    case XR_RBC_VALUE_BOOL_TRY_PARSE:
     case XR_RBC_VALUE_I64_TRY_PARSE:
     case XR_RBC_VALUE_F64_TRY_PARSE:
     case XR_RBC_VALUE_RECORD_FIELD: case XR_RBC_VALUE_CLASS_FIELD: case XR_RBC_VALUE_NULLABLE_SOME:

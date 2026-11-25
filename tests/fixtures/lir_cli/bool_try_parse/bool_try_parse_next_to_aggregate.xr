@@ -1,0 +1,18 @@
+// A bool? home lives in the same aggregate region as Array values. Its payload
+// is one byte at offset one of a two-byte value, so a write width derived from
+// the wrong scalar would run past it into a neighbour. The declarations below
+// place three optional bools before one Array value on purpose.
+fn main() {
+    var first: bool? = null
+    var second: bool? = null
+    var third: bool? = null
+    const values: Array<i64> = [1, 2, 3, 4]
+    first = bool.tryParse("true")
+    print(string(first!))
+    print(string(len(values)))
+    print(string(values[3]))
+    print(string(second == null))
+    print(string(third == null))
+}
+
+main()

@@ -397,6 +397,48 @@ TEST(string_parse_int64) {
                   XR_NUMBER_PARSE_INVALID_SYNTAX);
 }
 
+/* The bool parser accepts exactly the two case-sensitive words, bounded by
+ * the span rather than a NUL, with the same four whitespace characters as the
+ * numeric parsers (space, tab, newline, carriage return). */
+TEST(string_parse_bool) {
+    XrStringParseBoolResult parsed = xr_string_parse_bool("true", 4);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
+    ASSERT_TRUE(parsed.value);
+
+    parsed = xr_string_parse_bool(" false ", 7);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
+    ASSERT_FALSE(parsed.value);
+
+    parsed = xr_string_parse_bool(" \t\r\nfalse \t\r\n", strlen(" \t\r\nfalse \t\r\n"));
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
+    ASSERT_FALSE(parsed.value);
+
+    /* A span boundary, not a terminator, decides the word. */
+    const char bounded[] = {'t', 'r', 'u', 'e', 'X'};
+    parsed = xr_string_parse_bool(bounded, 4);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
+    ASSERT_TRUE(parsed.value);
+
+    /* The word is case-sensitive and admits no other spelling. */
+    ASSERT_EQ_INT(xr_string_parse_bool("TRUE", 4).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_bool("True", 4).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_bool("tru", 3).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_bool("truex", 5).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_bool("false ", 6).failure, XR_NUMBER_PARSE_OK);
+    ASSERT_EQ_INT(xr_string_parse_bool("1", 1).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_bool("0", 1).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_bool("", 0).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_bool("   ", 3).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_bool(NULL, 0).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+
+    /* Vertical tab and form feed are not part of the accepted whitespace, and
+     * an embedded NUL inside the span is residue rather than a terminator. */
+    ASSERT_EQ_INT(xr_string_parse_bool("\vtrue", 5).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_bool("\ftrue", 5).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    const char embedded[] = {'t', 'r', 'u', 'e', '\0'};
+    ASSERT_EQ_INT(xr_string_parse_bool(embedded, 5).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+}
+
 TEST(string_parse_float64) {
     XrStringParseFloatResult parsed = xr_string_parse_float64(" \n-3.5e2 ", strlen(" \n-3.5e2 "));
     ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
@@ -569,6 +611,7 @@ RUN_TEST(string_core_pad_plan_and_write);
 RUN_TEST(string_core_replace_plan_and_write);
 RUN_TEST(string_core_split_plan_and_each);
 RUN_TEST(string_parse_int64);
+RUN_TEST(string_parse_bool);
 RUN_TEST(string_parse_float64);
 RUN_TEST(string_core_substring_bounds);
 RUN_TEST(string_core_slice_bounds);

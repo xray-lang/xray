@@ -29,17 +29,20 @@ order: 014
 | `i64.tryParse(s)` | `(string) -> i64?` | 严格解析十进制整数；失败返回 `null` |
 | `f64.parse(s)` | `(string) -> f64` | 严格解析十进制浮点数；失败抛异常 |
 | `f64.tryParse(s)` | `(string) -> f64?` | 严格解析十进制浮点数；失败返回 `null` |
+| `bool.parse(s)` | `(string) -> bool` | 严格解析布尔文本；失败抛异常 |
+| `bool.tryParse(s)` | `(string) -> bool?` | 严格解析布尔文本；失败返回 `null` |
 | `string(x)` | `(value) -> string` | 转为字符串；`rune` 转为单 scalar 字符串 |
-| `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
 | `rune(n)` | `(i64) -> rune` | 从 i64 构造 Unicode scalar；负数、surrogate 或越界值触发范围 panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy x` | `(position) -> logical copy` | 显式逻辑复制，源位置不变；普通值默认使用 COW，身份值复制引用，不可复制值拒绝。借用视图须按 §2.4 物化独立 owner `Array<T>`，不能复制借用权限 |
 
 `i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` 都解析整个字符串：允许首尾空白与前导符号，其余必须符合十进制文法；`f64` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留、十六进制、`inf` / `nan` 以及越界整数都解析失败。`parse` 用 typed error channel 报错，`tryParse` 返回 `null`。数值之间的转换只能写成显式 `as`，文本解析不经过数值 cast。
 
+`bool.parse` / `bool.tryParse` 同样解析整个字符串：允许首尾的空格、制表符、换行与回车，区分大小写，只接受 `true` 与 `false`；其余文本（包括 `TRUE`、`1` 和空串）解析失败。布尔文本没有数值范围，因此不产生 `OutOfRange`。语言不提供 `bool(x)` 真值转换：判断真假写显式比较（`n != 0`、`len(s) != 0`、`x != null`、`flag ?? false`），文本转布尔只经过这两个解析函数。
+
 `f64` 文本解析复用字面量的同一精确整数转换核，以 nearest / ties-to-even 一次舍入到 binary64；渐进下溢保留负零，合法十进制幅度溢出产生带符号无穷。文法仍拒绝 `inf` / `nan` 拼写，不依赖 libc、locale 或宿主浮点舍入环境。运行时文本的首尾 ASCII 空白与无下划线文法分别验证，字面量的数字间下划线规则不授予文本解析。
 
-当前 XIR 的 `f64.tryParse` 由受治理的 f64 静态声明准入；普通 Source、显式 comptime、VM 与生成 C11 共享同一精确转换和 Nullable Value 构造。语法无效构造拥有式 None，成功构造拥有式 Some；两者都可能分配。分配、retain 或有限 work 失败保持真实失败身份，不折叠成 `null`，失败不发布部分输出。声明在词法遮蔽检查后绑定；方法拼写不自行授予 native 权限。此项准入不代表其他数值转换或完整 JSON 已实现。
+当前 XIR 的 `i64.tryParse`、`f64.tryParse` 与 `bool.tryParse` 由各自受治理的静态声明准入；普通 Source、显式 comptime、VM 与生成 C11 共享同一精确转换和 Nullable Value 构造。语法无效构造拥有式 None，成功构造拥有式 Some；两者都可能分配。分配、retain 或有限 work 失败保持真实失败身份，不折叠成 `null`，失败不发布部分输出。声明在词法遮蔽检查后绑定；方法拼写不自行授予 native 权限。`i64.parse`／`f64.parse`／`bool.parse` 三行是目标表面，三者都要经 typed error channel 抛错，而该通道尚未接入 XIR，所以当前被拒绝；此项准入不代表其他数值转换或完整 JSON 已实现。
 
 ### 13.3 类型检查
 
@@ -143,17 +146,20 @@ These global functions and built-in constructor/static functions are usable with
 | `i64.tryParse(s)` | `(string) -> i64?` | strict decimal integer parse; returns `null` on failure |
 | `f64.parse(s)` | `(string) -> f64` | strict decimal floating-point parse; throws on failure |
 | `f64.tryParse(s)` | `(string) -> f64?` | strict decimal floating-point parse; returns `null` on failure |
+| `bool.parse(s)` | `(string) -> bool` | strict boolean text parse; throws on failure |
+| `bool.tryParse(s)` | `(string) -> bool?` | strict boolean text parse; returns `null` on failure |
 | `string(x)` | `(value) -> string` | convert to string; `rune` converts to a one-scalar string |
-| `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
 | `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from i64; negative, surrogate and out-of-range values trigger range panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode code point → one-scalar string |
 | `copy x` | `(position) -> logical copy` | Explicit logical copy leaving the source position unchanged; ordinary values use COW by default, identity values copy references, and noncopyable values reject. Borrowed views require an independent owner `Array<T>` under §2.4, without copying borrow authority |
 
 `i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` consume the whole string. Surrounding whitespace and a leading sign are accepted; `f64` additionally accepts a fractional part and exponent, with at least one digit across the integer and fractional parts (`.5` and `1.` are valid). Trailing residue, hexadecimal input, `inf` / `nan`, and out-of-range integers fail. `parse` reports failure through the typed error channel; `tryParse` returns `null`. Numeric conversions use explicit `as`; text parsing is not a numeric cast.
 
+`bool.parse` / `bool.tryParse` also consume the whole string: leading and trailing spaces, tabs, line breaks and carriage returns are accepted, the word is case-sensitive, and only `true` and `false` are admitted; every other text (including `TRUE`, `1` and the empty string) fails. Boolean text has no numeric range, so `OutOfRange` never arises. The language has no `bool(x)` truthiness conversion: test truth with an explicit comparison (`n != 0`, `len(s) != 0`, `x != null`, `flag ?? false`), and turn text into a bool only through these two parsers.
+
 `f64` text parsing uses the same exact integer conversion kernel as decimal literals, rounding once to binary64 with nearest / ties-to-even. Gradual underflow preserves negative zero; a syntactically valid decimal magnitude that overflows produces signed infinity. The grammar still rejects `inf` / `nan` spellings, independently of libc, locale, or the host floating-point rounding environment. Surrounding ASCII whitespace and the runtime text grammar without underscores are checked separately; literal digit separators do not extend the text grammar.
 
-Current XIR admits `f64.tryParse` through the governed f64 static declaration. Ordinary Source, explicit comptime, VM, and generated C11 share the exact conversion and Nullable Value constructor. Invalid syntax constructs owned None; valid syntax constructs owned Some. Both may allocate. Allocation, retain, or finite-work failure keeps its actual failure identity rather than becoming `null`, and publishes no partial output. Lexical shadowing is checked before declaration binding; a method spelling grants no native authority. This admission does not imply support for other numeric conversions or complete JSON.
+Current XIR admits `i64.tryParse`, `f64.tryParse` and `bool.tryParse` through their governed static declarations. Ordinary Source, explicit comptime, VM, and generated C11 share the exact conversion and Nullable Value constructor. Invalid syntax constructs owned None; valid syntax constructs owned Some. Both may allocate. Allocation, retain, or finite-work failure keeps its actual failure identity rather than becoming `null`, and publishes no partial output. Lexical shadowing is checked before declaration binding; a method spelling grants no native authority. The `i64.parse` / `f64.parse` / `bool.parse` rows are target surface: all three report through the typed error channel, which XIR does not admit yet, so the current tree rejects them. This admission does not imply support for other numeric conversions or complete JSON.
 
 ### 13.3 Type Checking
 

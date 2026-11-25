@@ -668,7 +668,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_STRING_PRINT: case XR_LIR_STRING_LEN: case XR_LIR_STRING_BYTE_LEN: case XR_LIR_STRING_EQUAL:
     case XR_LIR_STRING_INDEX_OF: case XR_LIR_STRING_TEST: case XR_LIR_STRING_LAST_INDEX_OF:
     case XR_LIR_STRING_ORDER:
-    case XR_LIR_I64_TRY_PARSE: case XR_LIR_F64_TRY_PARSE: case XR_LIR_ASSERT_CONDITION: case XR_LIR_HOST_PATH_BOOL:
+    case XR_LIR_I64_TRY_PARSE: case XR_LIR_F64_TRY_PARSE: case XR_LIR_BOOL_TRY_PARSE:
+    case XR_LIR_ASSERT_CONDITION: case XR_LIR_HOST_PATH_BOOL:
         return true;
     case XR_LIR_INTCAST: {
         XrLirType source = XR_LIR_TYPE_INVALID;

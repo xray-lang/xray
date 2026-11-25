@@ -321,13 +321,17 @@ static const XrNativeTypeDeclaration xr_native_f64 = {
     3, 7, xr_native_f64_members, 12
 };
 
+static const XrNativeParameter xr_native_bool_parameters_1[] = {
+    {"text", "string", XR_NATIVE_TERM_STRING, false, false, false},
+};
 static const XrNativeMemberDeclaration xr_native_bool_members[] = {
     {1, "toString", "() -> string", "string", 5, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_BOOL_TO_STRING, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING},
+    {2, "tryParse", "(text: string) -> bool?", "bool ?", 8, 12, XR_NATIVE_RECEIVER_READ, true, true, true, true, XR_NATIVE_OPERATION_BOOL_TRY_PARSE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_bool_parameters_1, 1, XR_NATIVE_TERM_NULLABLE_BOOL},
 };
 static const XrNativeTypeDeclaration xr_native_bool = {
     14, XR_NATIVE_DECLARATION_VALUE, "bool", NULL, 0,
-    "stdlib/types/bool.xr", "xray-native:prelude/bool", {{194, 227, 191, 162, 40, 67, 50, 167, 90, 255, 196, 243, 230, 122, 78, 147, 89, 89, 50, 216, 135, 91, 116, 186, 199, 167, 188, 237, 80, 95, 182, 227}},
-    3, 7, xr_native_bool_members, 1
+    "stdlib/types/bool.xr", "xray-native:prelude/bool", {{144, 74, 31, 127, 217, 93, 250, 28, 187, 103, 121, 158, 42, 8, 128, 227, 225, 237, 194, 72, 77, 16, 108, 42, 21, 12, 59, 75, 122, 94, 193, 161}},
+    3, 7, xr_native_bool_members, 2
 };
 
 static const XrNativeMemberDeclaration xr_native_rune_members[] = {

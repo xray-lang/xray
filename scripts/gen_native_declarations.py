@@ -179,6 +179,8 @@ def simple_term(term, binder):
         return 'STRING'
     if term == ('name', 'bool', ()):
         return 'BOOL'
+    if term == ('nullable', ('name', 'bool', ())):
+        return 'NULLABLE_BOOL'
     if term == ('name', 'Ordering', ()):
         return 'ORDERING'
     if binder and term == ('tuple', (('name', binder, ()), ('name', 'bool', ()))):
@@ -385,7 +387,8 @@ def parse_source(source, prelude):
                 'FLOAT_CEIL': ('ceil', '() -> i64', 'no_heap', 'numeric_range'),
                 'FLOAT_ROUND': ('round', '() -> i64', 'no_heap', 'numeric_range'),
                 'FLOAT_IS_NAN': ('isNaN', '() -> bool', 'no_heap', 'none')},
-            14: {'BOOL_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit')},
+            14: {'BOOL_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit'),
+                 'BOOL_TRY_PARSE': ('tryParse', '(text: string) -> bool?', 'may_heap', 'allocation,retain,limit')},
             15: {'RUNE_TO_U32': ('toUInt32', '() -> u32', 'no_heap', 'none'),
                 'RUNE_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit'),
                 'RUNE_IS_WHITESPACE': ('isWhitespace', '() -> bool', 'no_heap', 'none')},
@@ -395,7 +398,7 @@ def parse_source(source, prelude):
             if member.operation == 'NONE':
                 continue
             shape = (member.name, member.signature, member.allocation, member.failures)
-            static_parse = member.operation == 'F64_TRY_PARSE'
+            static_parse = member.operation in ('F64_TRY_PARSE', 'BOOL_TRY_PARSE')
             if (shape != contracts.get(member.operation) or member.receiver != 'READ' or
                     member.static != static_parse or not member.method or member.lowered != static_parse or
                     member.ownership != 'owned' or any(p[3] or p[4] for p in member.parameters) or

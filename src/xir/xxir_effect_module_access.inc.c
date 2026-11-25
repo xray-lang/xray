@@ -326,7 +326,7 @@ static bool effect_module_storage_read_only(XrXirOp op) {
         return true;
     case XR_XIR_JSON_NULL: case XR_XIR_JSON_VALUE_INJECT:
     case XR_XIR_DATA_UNION_IS:
-    case XR_XIR_I64_TRY_PARSE: return true;
+    case XR_XIR_I64_TRY_PARSE: case XR_XIR_BOOL_TRY_PARSE: return true;
     default:
         return op >= XR_XIR_SET_UNION && op <= XR_XIR_MAP_VALUE_AT;
     }

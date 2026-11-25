@@ -6711,17 +6711,20 @@ These global functions and built-in constructor/static functions are usable with
 | `i64.tryParse(s)` | `(string) -> i64?` | strict decimal integer parse; returns `null` on failure |
 | `f64.parse(s)` | `(string) -> f64` | strict decimal floating-point parse; throws on failure |
 | `f64.tryParse(s)` | `(string) -> f64?` | strict decimal floating-point parse; returns `null` on failure |
+| `bool.parse(s)` | `(string) -> bool` | strict boolean text parse; throws on failure |
+| `bool.tryParse(s)` | `(string) -> bool?` | strict boolean text parse; returns `null` on failure |
 | `string(x)` | `(value) -> string` | convert to string; `rune` converts to a one-scalar string |
-| `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
 | `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from i64; negative, surrogate and out-of-range values trigger range panic E0422 |
 | `chr(n)` | `(i64) -> string` | Unicode code point → one-scalar string |
 | `copy x` | `(position) -> logical copy` | Explicit logical copy leaving the source position unchanged; ordinary values use COW by default, identity values copy references, and noncopyable values reject. Borrowed views require an independent owner `Array<T>` under §2.4, without copying borrow authority |
 
 `i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` consume the whole string. Surrounding whitespace and a leading sign are accepted; `f64` additionally accepts a fractional part and exponent, with at least one digit across the integer and fractional parts (`.5` and `1.` are valid). Trailing residue, hexadecimal input, `inf` / `nan`, and out-of-range integers fail. `parse` reports failure through the typed error channel; `tryParse` returns `null`. Numeric conversions use explicit `as`; text parsing is not a numeric cast.
 
+`bool.parse` / `bool.tryParse` also consume the whole string: leading and trailing spaces, tabs, line breaks and carriage returns are accepted, the word is case-sensitive, and only `true` and `false` are admitted; every other text (including `TRUE`, `1` and the empty string) fails. Boolean text has no numeric range, so `OutOfRange` never arises. The language has no `bool(x)` truthiness conversion: test truth with an explicit comparison (`n != 0`, `len(s) != 0`, `x != null`, `flag ?? false`), and turn text into a bool only through these two parsers.
+
 `f64` text parsing uses the same exact integer conversion kernel as decimal literals, rounding once to binary64 with nearest / ties-to-even. Gradual underflow preserves negative zero; a syntactically valid decimal magnitude that overflows produces signed infinity. The grammar still rejects `inf` / `nan` spellings, independently of libc, locale, or the host floating-point rounding environment. Surrounding ASCII whitespace and the runtime text grammar without underscores are checked separately; literal digit separators do not extend the text grammar.
 
-Current XIR admits `f64.tryParse` through the governed f64 static declaration. Ordinary Source, explicit comptime, VM, and generated C11 share the exact conversion and Nullable Value constructor. Invalid syntax constructs owned None; valid syntax constructs owned Some. Both may allocate. Allocation, retain, or finite-work failure keeps its actual failure identity rather than becoming `null`, and publishes no partial output. Lexical shadowing is checked before declaration binding; a method spelling grants no native authority. This admission does not imply support for other numeric conversions or complete JSON.
+Current XIR admits `i64.tryParse`, `f64.tryParse` and `bool.tryParse` through their governed static declarations. Ordinary Source, explicit comptime, VM, and generated C11 share the exact conversion and Nullable Value constructor. Invalid syntax constructs owned None; valid syntax constructs owned Some. Both may allocate. Allocation, retain, or finite-work failure keeps its actual failure identity rather than becoming `null`, and publishes no partial output. Lexical shadowing is checked before declaration binding; a method spelling grants no native authority. The `i64.parse` / `f64.parse` / `bool.parse` rows are target surface: all three report through the typed error channel, which XIR does not admit yet, so the current tree rejects them. This admission does not imply support for other numeric conversions or complete JSON.
 
 ### 13.3 Type Checking
 

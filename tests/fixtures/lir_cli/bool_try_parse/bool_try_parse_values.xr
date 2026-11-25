@@ -1,0 +1,39 @@
+fn classify(text: string) -> string {
+    const parsed = bool.tryParse(text)
+    if (parsed == null) { return "none" }
+    return "some"
+}
+
+fn equals(text: string, expected: bool) -> bool {
+    const parsed = bool.tryParse(text)
+    if (parsed == null) { return false }
+    return parsed! == expected
+}
+
+print(classify(""))
+print(classify(" \t\r\n"))
+print(classify("true"))
+print(classify("false"))
+print(classify(" true "))
+print(classify("TRUE"))
+print(classify("True"))
+print(classify("1"))
+print(classify("0"))
+print(classify("tru"))
+print(classify("truex"))
+print(equals("true", true))
+print(equals(" false ", false))
+print(equals("TRUE", true))
+print(equals("", false))
+const folded = comptime (bool.tryParse(" true ") ?? false)
+print(folded)
+const folded_missing = comptime (bool.tryParse("TRUE") ?? false)
+print(folded_missing)
+const runtime_value = bool.tryParse("  false\n") ?? true
+print(runtime_value == false)
+const runtime_missing = bool.tryParse("yes") ?? false
+print(runtime_missing == false)
+const folded_none = comptime (bool.tryParse("TRUE") == null)
+print(folded_none)
+const folded_false = comptime (bool.tryParse(" false ") ?? true)
+print(folded_false == false)
