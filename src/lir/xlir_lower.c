@@ -1145,7 +1145,7 @@ static uint8_t *lower_literal_uses(Lower *c, const XrXirFunction *f) {
         const XrXirInstruction *op = &f->instructions[i];
         if (!lower_known(op)) continue;
         if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE || op->op == XR_XIR_CALL_INTRINSIC || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI ||
-            op->op == XR_XIR_STRING_INDEX_OF ||
+            op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE ||
             op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET ||
             op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT) {

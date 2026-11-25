@@ -1,0 +1,44 @@
+fn discardConst() {
+    const s = "a/b/c"
+    s.replace("/", "-")
+    print(s)
+}
+
+fn discardConstAll() {
+    const s = "a/b/c"
+    s.replaceAll("/", "-")
+    print(s)
+}
+
+fn discardBound() {
+    const s = "a/b/c"
+    const t = s.replace("/", "-")
+    print(s)
+}
+
+fn discardParameter(value: string) {
+    value.replace("/", "-")
+    print(value)
+}
+
+fn forwarded(receiver: string, search: string, replacement: string) -> string {
+    return receiver.replaceAll(search, replacement)
+}
+
+fn unicode() {
+    const grown = "a\u{00E9}".replace("\u{00E9}", "\u{1F36A}")
+    print(grown)
+    const shrunk = "a\u{1F36A}b".replace("\u{1F36A}", "e")
+    print(shrunk)
+    const both = "\u{00E9}/\u{00E9}".replaceAll("\u{00E9}", "\u{1F36A}")
+    print(both)
+}
+
+discardConst()
+discardConstAll()
+discardBound()
+discardParameter("a/b/c")
+print(forwarded("a/b/c", "/", "-"))
+print("aaaa".replace("aa", "X"))
+print("aaa".replaceAll("a", "aa"))
+unicode()
