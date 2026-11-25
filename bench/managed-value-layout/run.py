@@ -29,6 +29,10 @@ RATIO_LIMITS = {"push": 3.0, "map": 1.3, "push-direct": 1.3, "push-noalias": 1.3
                 "map-take": 1.3, "map-typed-drop": 1.3}
 # Two consecutive rounds reverse the launch order and form one paired block.
 ROUNDS = 12
+# Preparation compiles the prototype, so it inherits cold-runner cost that says
+# nothing about product speed; only the measured runs keep the 30 s product
+# timeout. A cold Windows image spent 15 s on `--version` alone.
+PREPARE_TIMEOUT = 300
 
 
 def source_identity() -> dict:
@@ -67,7 +71,7 @@ def prepare(args) -> None:
     env = evidence.environment(ROOT)
 
     def run(name, argv, expected=None):
-        row = evidence.execute(argv, args.work, name, env, expected)
+        row = evidence.execute(argv, args.work, name, env, expected, timeout=PREPARE_TIMEOUT)
         result["commands"].append(row)
         evidence.save(args.work / "preparation.json", result)
         if row["state"] == "NEEDS_RECOVERY":
