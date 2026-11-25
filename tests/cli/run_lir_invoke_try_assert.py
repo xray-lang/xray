@@ -40,6 +40,9 @@ def main() -> None:
                 parser.error("Each runtime variant must name an existing entry fixture")
     elif set(cases) != {path.stem for path in fixtures.glob("*.xr")}:
         parser.error("Error call fixtures and cases.json must match exactly")
+    for name, case in cases.items():
+        if "setup" in case and case is not next(iter(cases.values())):
+            parser.error("Only the first variant of a source may declare its host fixture setup")
     unknown = set(args.case) - cases.keys()
     if unknown:
         parser.error("Unknown error call cases: " + ", ".join(sorted(unknown)))
@@ -97,6 +100,13 @@ def main() -> None:
             products.mkdir()
         generated = products / f"{label}.c"
         executable = products / (label + (".exe" if os.name == "nt" else ""))
+        for index, command in enumerate(first_case.get("setup", [])):
+            setup = proc.run([str(part) for part in command], cwd=work, env=environment, timeout=30)
+            (work / f"{label}-setup-{index}.json").write_text(
+                json.dumps({"argv": setup.argv, "exit": setup.returncode}, indent=2) + "\n",
+                encoding="utf-8")
+            if setup.returncode:
+                failures.append((first_name, "host fixture setup", command, setup.stderr))
         checked = run(label + "-check", [binary, "check", source])
         vm_results = {
             name: run(name + "-vm", [binary, "run", source], set_env=case.get("set_env"))

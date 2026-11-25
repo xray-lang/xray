@@ -116,7 +116,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     xr_lir_lowered_free(&lowered);
     xr_compile_resources_release(resources);
     /* Preparation moves the admitted value code into its execution image. */
-    const bool receives_temp = xr_rbc_program_receives_temp(program);
+    const bool receives_temp = xr_rbc_program_receives_text_result(program);
     if (result == XR_CLI_EXIT_OK) {
         XrRbcExecution *execution = NULL;
         XrRbcStatus status = xr_rbc_program_prepare(program, NULL, 0, &execution);

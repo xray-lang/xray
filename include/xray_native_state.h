@@ -134,8 +134,8 @@ typedef void (*XrtSynchronousStateRoot)(void *context, XrtModuleState *state);
 XRAY_API void xrt_run_standalone_state(const XrtSourceMap *, XrtSynchronousStateRoot,
     void *context, const XrtModuleLayoutSpec *);
 /* A program whose admitted code contains a nullable-text host leaf runs under
- * this entry: the process owns the temporary-directory receiving binding and
- * reports an unresolved rollback instead of returning it. */
+ * this entry: the process owns the receiving binding that leaf publishes into
+ * and reports an unresolved rollback instead of returning it. */
 XRAY_API void xrt_run_standalone_state_receiving_temp(const XrtSourceMap *, XrtSynchronousStateRoot,
     void *context, const XrtModuleLayoutSpec *);
 

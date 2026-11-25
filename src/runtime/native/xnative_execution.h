@@ -14,6 +14,7 @@
 #define XNATIVE_EXECUTION_H
 #include "xnative_locations.h"
 #include "xnative_host_temp.h"
+#include "xnative_host_links.h"
 #include "os/os_native_output.h"
 #include "xnative_value.h"
 #include "xnative_managed.h"
@@ -126,9 +127,13 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded_receiving_temp(const XrtLocationOwne
     XrtExecutionFailure *, XrtSynchronousRoot, void *context, XrtValueRoot *, XrtTempFailure *receiver);
 /* The receiving binding is required before any host effect. If rollback stays
  * pending, transfer the actual owner to the outer failure before leaving. */
-XR_FUNC XrtHostTempResult xrt_execution_temp_directory(const XrtHostNullableSlots *,
-    const XrtManagedHeader *root, bool (*current)(void *), void *context, uint32_t source_id);
-XR_FUNC XrtHostTempResult xrt_execution_temp_admission(uint32_t source_id);
+XR_FUNC XrtHostTempResult xrt_execution_temp_result(const XrtHostNullableSlots *,
+    const XrtManagedHeader *root, bool directory, bool (*current)(void *), void *context,
+    uint32_t source_id);
+/* The same receiving binding carries both kinds of textual leaf. */
+XR_FUNC XrtHostTempResult xrt_execution_receiving_admission(uint32_t source_id);
+XR_FUNC XrtHostLinkResult xrt_execution_link_result(const XrtHostNullableSlots *,
+    const XrtManagedHeader *path, bool follow, uint32_t source_id);
 XR_FUNC XR_NORET void xrt_execution_temp_failure_take(XrtTempFailure *owned);
 
 // I/O helpers have already restored their OS state before this transfer.

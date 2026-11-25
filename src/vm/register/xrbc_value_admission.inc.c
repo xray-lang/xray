@@ -743,7 +743,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             rbc_value_string(module, code, a.source, false) &&
             rbc_value_host_nullable_backing(module, code, a.result, XRT_VALUE_STRING);
     case XR_RBC_VALUE_HOST_TEXT_RESULT:
-        return !a.other && a.index == XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR &&
+        return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_TEXT_RESULT &&
             rbc_value_string(module, code, a.source, false) &&
             rbc_value_host_nullable_backing(module, code, a.result, XRT_VALUE_STRING);
     case XR_RBC_VALUE_HOST_FILE_CLOSE:

@@ -1370,6 +1370,7 @@ module io {
   fn __readlink {
     signature: "(path: Path): string?"
     doc: "Read symlink target (raw string; io.xr wraps as Path)"
+    host_leaf: "blocking-text-result"
     vm: "io_readlink"
     aot: "xrt_io_readlink"
     argc: 1
@@ -1384,6 +1385,7 @@ module io {
   fn __realpath {
     signature: "(path: Path): string?"
     doc: "Resolve to absolute path (raw string; io.xr wraps as Path)"
+    host_leaf: "blocking-text-result"
     vm: "io_realpath"
     aot: "xrt_io_realpath"
     argc: 1
@@ -1475,6 +1477,7 @@ module io {
   fn __makeTempFile {
     signature: "(root: string): string?"
     doc: "Create a uniquely named file inside the given root"
+    host_leaf: "blocking-text-result"
     vm: "io_make_temp_file"
     aot: "xrt_io_make_temp_file"
     argc: 1

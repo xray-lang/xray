@@ -26,7 +26,6 @@
 #include "shared/xr_float_to_decimal.h"
 #include "shared/xr_range_core.h"
 #include <setjmp.h>
-#include <stdio.h>
 
 typedef struct XrtExecutionBinding {
     XrtSourceMap map;
@@ -224,19 +223,32 @@ XR_FUNC bool xrt_temp_failure_take(XrtTempFailure *received, XrtTempFailure *emp
     received->owner = NULL;
     return true;
 }
-XR_FUNC XrtHostTempResult xrt_execution_temp_admission(uint32_t source_id) {
+XR_FUNC XrtHostTempResult xrt_execution_receiving_admission(uint32_t source_id) {
     const XrtExecutionBinding *binding = current_execution;
     if (!binding || !binding->temp) return (XrtHostTempResult){.host=XR_OS_IO_UNSUPPORTED};
     if (source_id > binding->map.count || binding->temp->owner)
         return (XrtHostTempResult){.managed=XRT_MANAGED_ARGUMENT};
     return (XrtHostTempResult){0};
 }
+XR_FUNC XrtHostLinkResult xrt_execution_link_result(const XrtHostNullableSlots *output,
+    const XrtManagedHeader *path, bool follow, uint32_t source_id) {
+    XrtHostTempResult admitted = xrt_execution_receiving_admission(source_id);
+    if (admitted.managed != XRT_MANAGED_OK)
+        return (XrtHostLinkResult){.managed=admitted.managed};
+    /* An absent receiving binding has no place to publish a present answer,
+     * so the query must not run at all: treat it as an argument failure rather
+     * than as the host's empty optional. */
+    if (admitted.host != XR_OS_IO_OK)
+        return (XrtHostLinkResult){.managed=XRT_MANAGED_ARGUMENT};
+    return xrt_host_link_text_publish(output, path, follow, source_id);
+}
+
 XR_FUNC XR_NORET void xrt_execution_temp_failure_take(XrtTempFailure *owned) {
     const XrtExecutionBinding *binding = current_execution;
     XR_CHECK(binding && binding->temp && !binding->temp->owner &&
         owned && owned->owner && !owned->result.present && owned->result.rollback != XR_OS_IO_OK &&
         owned->source_id <= binding->map.count,
-        "the synchronous temporary-directory leaf transfers to its admitted receiving binding");
+        "the synchronous temporary-path leaf transfers to its admitted receiving binding");
     *binding->temp = *owned;
     owned->owner = NULL;
     *binding->failure = (XrtExecutionFailure){.kind=XRT_FAILURE_TEMP, .temp_source=owned->source_id};

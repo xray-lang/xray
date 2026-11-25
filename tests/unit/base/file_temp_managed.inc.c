@@ -68,7 +68,7 @@ static int temp_managed_operation(TempManagedWitness *witness) {
     const unsigned calls = temp_create_calls;
     if (witness->mode == TEMP_MANAGED_CREATE) {
         const XrtHostNullableSlots wrong = {frame, RESULT, SCRATCH, 0, offsets[RESULT]};
-        XrtHostTempResult rejected = xrt_host_temp_directory_publish(&wrong, path, NULL, NULL, 1, &witness->retry);
+        XrtHostTempResult rejected = xrt_host_temp_publish(&wrong, path, true, NULL, NULL, 1, &witness->retry);
         CHECK(rejected.managed == XRT_MANAGED_ARGUMENT && !witness->retry && temp_create_calls == calls);
     }
     if (witness->mode == TEMP_MANAGED_OOM) temp_fail_preparation = billing;
@@ -83,7 +83,7 @@ static int temp_managed_operation(TempManagedWitness *witness) {
         }
     }
 #endif
-    XrtHostTempResult result = xrt_host_temp_directory_publish(&output, path,
+    XrtHostTempResult result = xrt_host_temp_publish(&output, path, true,
         temp_managed_current, witness, 1, &witness->retry);
 #if defined(XR_OS_WINDOWS)
     xrt_billing_owner_fail_after(billing, SIZE_MAX);

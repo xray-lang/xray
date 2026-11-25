@@ -72,8 +72,8 @@ XRAY_API const XrtSourceMap xrt_standalone_source_map;
 // aborts before guest execution, without a specified guest configuration code.
 XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot root, void *context);
 /* A program whose admitted code contains a nullable-text host leaf runs under
- * this entry: the process owns the temporary-directory receiving binding and
- * reports an unresolved rollback instead of returning it. */
+ * this entry: the process owns the receiving binding that leaf publishes into
+ * and reports an unresolved rollback instead of returning it. */
 XRAY_API void xrt_run_standalone_receiving_temp(const XrtSourceMap *map, XrtSynchronousRoot root, void *context);
 /* One line per unresolved rollback obligation; the process still owns it. */
 XRAY_API void xrt_temp_failure_report(const XrtSourceLocation *source);

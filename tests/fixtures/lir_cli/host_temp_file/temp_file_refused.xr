@@ -1,0 +1,10 @@
+// A root the host cannot use is the leaf's null result, not an execution
+// failure: the program continues and reports the empty optional.
+import io
+
+fn main() {
+    const made = io.tempFile()
+    print("made=" + string(made == null))
+}
+
+main()

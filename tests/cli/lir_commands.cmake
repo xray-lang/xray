@@ -207,7 +207,7 @@ add_test(NAME test_lir_cli_struct_align
 set_tests_properties(test_lir_cli_struct_align PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
 
-# The temporary-directory transport exists only on Windows: the Unix boundary
+# The temporary-path transports exist only on Windows: the Unix boundary
 # reports the primitive unavailable, which is a legitimate null result.
 if(WIN32)
     add_test(NAME test_lir_cli_host_temp_directory
@@ -216,6 +216,20 @@ if(WIN32)
             --fixtures tests/fixtures/lir_cli/host_temp_directory --compiler "${CMAKE_C_COMPILER}"
             --output ${PROJECT_BINARY_DIR}/lir-cli-host-temp-directory)
     set_tests_properties(test_lir_cli_host_temp_directory PROPERTIES
+        TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;host")
+    add_test(NAME test_lir_cli_host_temp_file
+        COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
+            --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+            --fixtures tests/fixtures/lir_cli/host_temp_file --compiler "${CMAKE_C_COMPILER}"
+            --output ${PROJECT_BINARY_DIR}/lir-cli-host-temp-file)
+    set_tests_properties(test_lir_cli_host_temp_file PROPERTIES
+        TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;host")
+    add_test(NAME test_lir_cli_host_links
+        COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
+            --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+            --fixtures tests/fixtures/lir_cli/host_links --compiler "${CMAKE_C_COMPILER}"
+            --output ${PROJECT_BINARY_DIR}/lir-cli-host-links)
+    set_tests_properties(test_lir_cli_host_links PROPERTIES
         TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;host")
 endif()
 

@@ -432,8 +432,8 @@ XR_FUNC XrRbcStatus xr_rbc_owned_function_prepare(const XrtFunction *, const uin
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution);
 /* Borrow the host's control only until this single-use owned execution returns. */
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run_controlled(XrRbcExecution *, const XrtHostExecutionControl *);
-/* A receiving caller accepts responsibility for a temporary-directory owner
- * and must take it before discarding a failure outcome. */
+/* A receiving caller accepts responsibility for a temporary-path owner and
+ * must take it before discarding a failure outcome. */
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run_receiving_temp(XrRbcExecution *);
 XR_FUNC void xr_rbc_execution_enable_try_trace(XrRbcExecution *);
 /* Success consumes *execution. A failed native close preserves the retired
@@ -478,7 +478,7 @@ XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
 XR_FUNC bool xr_rbc_outcome_take_temp(XrRbcOutcome *, XrtTempFailure *empty);
 /* Borrow the original source through the live outcome, even after take. */
 XR_FUNC const XrtSourceLocation *xr_rbc_outcome_temp_location(const XrRbcOutcome *);
-/* An unclaimed temporary-directory owner leaves the entire outcome intact. */
+/* An unclaimed temporary-path owner leaves the entire outcome intact. */
 XR_FUNC bool xr_rbc_outcome_free(XrRbcOutcome **outcome);
 /* The failure owns its error payload and source through outcome destruction. */
 XR_FUNC const XrtTryAssertFailure *xr_rbc_outcome_try_assert(const XrRbcOutcome *);

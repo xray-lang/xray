@@ -1324,16 +1324,27 @@ static XrtManagedStatus rbc_value_host_environment_get(RbcValueActivation *activ
 
 static XrtManagedStatus rbc_value_host_text_result(RbcValueActivation *activation, XrRbcValueAccess access,
     uint32_t source) {
-    const XrtStringBacking *root = NULL;
-    XrtManagedStatus status = rbc_value_string_borrow(activation, access.source, &root);
+    const XrtStringBacking *operand = NULL;
+    XrtManagedStatus status = rbc_value_string_borrow(activation, access.source, &operand);
     if (status != XRT_MANAGED_OK) return status;
-    /* A platform without the primitive leaves the validated empty optional. */
-    if (!xr_os_io_temp_available()) return XRT_MANAGED_OK;
     const XrLirValueHome *home = rbc_value_home(activation->code, access.result);
     const XrtHostNullableSlots output = {activation->frame, home->first_owner, home->temporary_first_owner,
         home->offset, home->temporary_offset + offsetof(XrtHostNullableOwner, owner)};
-    XrtHostTempResult result = xrt_execution_temp_directory(&output, (const XrtManagedHeader *)root,
-        NULL, NULL, source);
+    if (access.index == XR_NATIVE_CALLABLE_IO_READLINK || access.index == XR_NATIVE_CALLABLE_IO_REALPATH) {
+        XrtHostLinkResult link = xrt_execution_link_result(&output, (const XrtManagedHeader *)operand,
+            access.index == XR_NATIVE_CALLABLE_IO_REALPATH, source);
+        if (link.managed == XRT_MANAGED_OK &&
+            (link.host == XR_OS_IO_OUT_OF_MEMORY || link.host == XR_OS_IO_MEMORY_LIMIT))
+            xrt_value_failure(xrt_host_io_failure(link.host), source);
+        return link.managed;
+    }
+    if (access.index != XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR && access.index != XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE)
+        return XRT_MANAGED_ARGUMENT;
+    const bool directory = access.index == XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR;
+    /* A platform without the primitive leaves the validated empty optional. */
+    if (!xr_os_io_temp_available()) return XRT_MANAGED_OK;
+    XrtHostTempResult result = xrt_execution_temp_result(&output, (const XrtManagedHeader *)operand,
+        directory, NULL, NULL, source);
     /* Available but inadmissible means this execution installed no receiving
      * binding. A transport that could not allocate cannot promise null either,
      * so only an ordinary host refusal is the null result. */

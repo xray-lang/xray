@@ -1,0 +1,26 @@
+// A path query publishes the text the host answers, or the empty optional
+// when the host has no answer. The fixture gate creates "probe-target" and
+// the "probe-link" junction, because a real symlink needs a privilege the
+// test must not assume.
+import io
+import path
+
+fn main() {
+    const resolved = io.realpath(path.Path("."))
+    print("resolved=" + string(resolved != null))
+    if (resolved == null) { return }
+    print("absolute=" + string(path.isAbsolute(resolved!)))
+    const again = io.realpath(resolved!)
+    print("stable=" + string(again != null && again!.raw == resolved!.raw))
+    print("missing=" + string(io.realpath(path.Path("probe-missing")) == null))
+    print("plain=" + string(io.readlink(path.Path(".")) == null))
+    print("missinglink=" + string(io.readlink(path.Path("probe-missing")) == null))
+    const link = io.readlink(path.Path("probe-link"))
+    print("link=" + string(link != null))
+    if (link == null) { return }
+    print("target=" + string(path.basename(link!) == "probe-target"))
+    const followed = io.realpath(path.Path("probe-link"))
+    print("follow=" + string(followed != null && path.basename(followed!) == "probe-target"))
+}
+
+main()

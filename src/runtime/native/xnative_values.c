@@ -323,19 +323,32 @@ XRAY_API void xrt_native_host_environment_get(uint32_t callable, const XrtNative
     if (result.host != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(result.host), source);
 }
 
-XRAY_API void xrt_native_host_temp_directory(uint32_t callable, const XrtNativeHostTempDirectory *call,
+XRAY_API void xrt_native_host_text_result(uint32_t callable, const XrtNativeHostTextResult *call,
     uint32_t source) {
-    if (!call || callable != XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR || !xrt_backing_string_matches(call->root))
+    if (!call || !xrt_backing_string_matches(call->operand))
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
     XrtValuePlanSpec element;
     if (xrt_value_plan_view(native_host_optional_element(call->image, call->result_type, source), &element) != XRT_MANAGED_OK ||
         element.kind != XRT_VALUE_STRING)
         xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
-    /* A platform without the primitive leaves the validated empty optional. */
-    if (!xr_os_io_temp_available()) return;
     const XrtHostNullableSlots output = {call->frame, call->destination, call->temporary, call->offset,
         call->temporary_owner_offset};
-    XrtHostTempResult result = xrt_execution_temp_directory(&output, call->root, NULL, NULL, source);
+    if (callable == XR_NATIVE_CALLABLE_IO_READLINK || callable == XR_NATIVE_CALLABLE_IO_REALPATH) {
+        XrtHostLinkResult link = xrt_execution_link_result(&output, call->operand,
+            callable == XR_NATIVE_CALLABLE_IO_REALPATH, source);
+        if (link.managed != XRT_MANAGED_OK) xrt_native_managed_failure(link.managed, source);
+        if (link.host == XR_OS_IO_OUT_OF_MEMORY || link.host == XR_OS_IO_MEMORY_LIMIT)
+            xrt_value_failure(xrt_host_io_failure(link.host), source);
+        return;
+    }
+    const bool directory = callable == XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR;
+    if (callable != XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR && callable != XR_NATIVE_CALLABLE_IO_MAKE_TEMP_FILE)
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    /* A platform without the creation primitive leaves the validated empty
+     * optional; the receiving binding is still required, so nothing is
+     * published before it exists. */
+    if (!xr_os_io_temp_available()) return;
+    XrtHostTempResult result = xrt_execution_temp_result(&output, call->operand, directory, NULL, NULL, source);
     if (result.managed != XRT_MANAGED_OK) xrt_native_managed_failure(result.managed, source);
     /* Available but inadmissible means this execution installed no receiving
      * binding. A transport that could not allocate cannot promise null either,

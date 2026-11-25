@@ -226,7 +226,7 @@ class = "host_abi_leaf"
 abi = "mkdtemp(3); Win32 GetTempFileNameA plus DeleteFileA plus CreateDirectoryA"
 ownership = "fresh"
 effect = "nothrow"
-provider = "libc. VM stdlib/io/io.c io_make_temp_dir; AOT src/aot/xrt_io.h xrt_io_make_temp_dir. Both build the same \"%s/xray_XXXXXX\" template and neither uses src/os/os_temp.h"
+provider = "libc and Win32 through src/os: the admitted text-result host leaf calls src/runtime/native/xnative_host_temp.c, which asks os_file_temp for one exclusive directory name"
 deletion_trigger = "when Xray source can issue the mkdtemp(3) call itself; the atomic create-and-name step cannot be split into smaller Xray-expressible parts without reintroducing the race mkdtemp exists to avoid"
 
 [[leaf]]
@@ -236,7 +236,7 @@ class = "host_abi_leaf"
 abi = "mkstemp(3) plus close(2); Win32 GetTempFileNameA"
 ownership = "fresh"
 effect = "nothrow"
-provider = "libc. VM stdlib/io/io.c io_make_temp_file; AOT src/aot/xrt_io.h xrt_io_make_temp_file"
+provider = "libc and Win32 through src/os: the admitted text-result host leaf calls src/runtime/native/xnative_host_temp.c, which asks os_file_temp for one exclusive file name"
 deletion_trigger = "when Xray source can issue the mkstemp(3) call itself; as with __makeTempDir the create-and-name step is atomic by design and has no smaller form"
 
 [[leaf]]
@@ -256,7 +256,7 @@ class = "host_abi_leaf"
 abi = "readlink(2); Win32 CreateFileA with FILE_FLAG_OPEN_REPARSE_POINT plus GetFinalPathNameByHandleA"
 ownership = "fresh"
 effect = "nothrow"
-provider = "kernel. VM stdlib/io/io.c io_readlink and AOT src/aot/xrt_io.h xrt_io_readlink each inline the call into a PATH_MAX buffer; neither goes through src/os"
+provider = "kernel through src/os: the admitted text-result host leaf calls src/runtime/native/xnative_host_links.c, which queries os_file_links with the caller's borrowed path text"
 deletion_trigger = "when Xray source can issue the readlink(2) call itself; the leaf is already the minimal form of this boundary"
 
 [[leaf]]
@@ -266,7 +266,7 @@ class = "host_abi_leaf"
 abi = "realpath(3); Win32 CRT _fullpath"
 ownership = "fresh"
 effect = "nothrow"
-provider = "libc. VM stdlib/io/io.c io_realpath -> src/os/unix/fs_unix.c xr_fs_realpath, which lets realpath allocate and copies the result back; AOT src/aot/xrt_io.h passes a stack buffer to realpath directly"
+provider = "libc through src/os: the admitted text-result host leaf calls src/runtime/native/xnative_host_links.c, which queries os_file_links realpath with the caller's borrowed path text"
 deletion_trigger = "when Xray source can issue the realpath(3) call itself; symlink resolution against the live filesystem has no smaller boundary to reduce to"
 
 [[leaf]]

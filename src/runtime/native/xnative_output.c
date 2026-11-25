@@ -74,7 +74,7 @@ static void diagnostic_location(const XrtSourceMap *map, uint32_t id) {
 
 XR_FUNC void xrt_temp_failure_report(const XrtSourceLocation *source) {
     XrtSourceMap map = {source, source ? 1u : 0u};
-    diagnostic_text("XR_RUN_6020: temporary directory rollback is unresolved at ");
+    diagnostic_text("XR_RUN_6020: temporary path rollback is unresolved at ");
     diagnostic_location(&map, source ? 1u : 0u);
     diagnostic_text("\n");
 }

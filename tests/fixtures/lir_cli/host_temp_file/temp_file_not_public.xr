@@ -1,0 +1,8 @@
+// The private leaf is not a public product entry: user code cannot name it.
+import io
+
+fn main() {
+    print("unreachable=" + string(__makeTempFile(".") != null))
+}
+
+main()

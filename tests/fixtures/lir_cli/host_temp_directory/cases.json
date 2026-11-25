@@ -13,7 +13,8 @@
     "stderr": "",
     "set_env": {
       "TEMP": "missing-temp-root",
-      "TMP": "missing-temp-root"
+      "TMP": "missing-temp-root",
+      "TMPDIR": "missing-temp-root"
     }
   }
 }

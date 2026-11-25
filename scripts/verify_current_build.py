@@ -76,9 +76,10 @@ if (os.name == "nt" and _MACHINE in ("amd64", "x86_64")) or (
         sys.platform in ("darwin", "linux")
         and _MACHINE in ("x86_64", "amd64", "arm64", "aarch64")):
     REQUIRED = REQUIRED + ("test_cli_resource_profiles_native",)
-# The temporary-directory transport exists only on Windows today.
+# The temporary-path transports exist only on Windows today.
 if os.name == "nt":
-    REQUIRED = REQUIRED + ("test_lir_cli_host_temp_directory",)
+    REQUIRED = REQUIRED + ("test_lir_cli_host_temp_directory", "test_lir_cli_host_temp_file",
+                          "test_lir_cli_host_links")
 
 
 def require(condition: bool, message: str) -> None:

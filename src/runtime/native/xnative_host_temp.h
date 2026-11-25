@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xnative_host_temp.h - Managed publication of an exclusive temporary directory
+ * xnative_host_temp.h - Managed publication of an exclusive temporary path
  */
 #ifndef XNATIVE_HOST_TEMP_H
 #define XNATIVE_HOST_TEMP_H
@@ -22,9 +22,9 @@ typedef struct XrtHostTempResult {
  * and cannot reenter guest or modify the frame. Failed publication preserves
  * the destination. The caller supplies an empty owner that outlives the frame
  * and assumes any remaining rollback obligation even if the call fails. */
-XR_FUNC XrtHostTempResult xrt_host_temp_directory_publish(const XrtHostNullableSlots *,
-    const XrtManagedHeader *root, bool (*current)(void *), void *context, uint32_t source_id,
-    XrtHostTempRetry **retained);
+XR_FUNC XrtHostTempResult xrt_host_temp_publish(const XrtHostNullableSlots *,
+    const XrtManagedHeader *root, bool directory, bool (*current)(void *), void *context,
+    uint32_t source_id, XrtHostTempRetry **retained);
 
 /* The sole caller owning this handle attempts rollback once, without an
  * active execution. Failure preserves the actual handles and allocation lease. */

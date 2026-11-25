@@ -1,0 +1,20 @@
+{
+  "temp_file_created": {
+    "exit": 0,
+    "stdout": "made=true\nstat=true\nfile=true\ndir=false\nnamed=true\nsecond=true\ndiffers=true\n",
+    "stderr": ""
+  },
+  "temp_file_not_public": {
+    "source_error": ":5:35: error: name is not an initialized value"
+  },
+  "temp_file_refused": {
+    "exit": 0,
+    "stdout": "made=true\n",
+    "stderr": "",
+    "set_env": {
+      "TEMP": "missing-temp-root",
+      "TMP": "missing-temp-root",
+      "TMPDIR": "missing-temp-root"
+    }
+  }
+}

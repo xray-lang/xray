@@ -86,9 +86,9 @@ static void temp_publish(const XrtHostNullablePlaces *places, XrtHostTempRetry *
     xrt_managed_drop(retired);
 }
 
-XR_FUNC XrtHostTempResult xrt_host_temp_directory_publish(const XrtHostNullableSlots *output,
-    const XrtManagedHeader *root, bool (*current)(void *), void *context, uint32_t source_id,
-    XrtHostTempRetry **retained) {
+XR_FUNC XrtHostTempResult xrt_host_temp_publish(const XrtHostNullableSlots *output,
+    const XrtManagedHeader *root, bool directory, bool (*current)(void *), void *context,
+    uint32_t source_id, XrtHostTempRetry **retained) {
     if (!retained || *retained || !output || !xrt_backing_string_matches(root))
         return (XrtHostTempResult){.managed=XRT_MANAGED_ARGUMENT};
     if (!xr_os_io_temp_available()) return (XrtHostTempResult){.host=XR_OS_IO_UNSUPPORTED};
@@ -122,7 +122,8 @@ XR_FUNC XrtHostTempResult xrt_host_temp_directory_publish(const XrtHostNullableS
     const XrOsIoPolicy policy = xrt_host_io_policy(billing);
     const XrOsFileTempRequest request = {&policy,{path->bytes,path->length},&preparation,temp_current,temp_prepare};
     bool created = false;
-    result.host = xr_os_io_temp_directory(&request, &retry->owner, &created);
+    result.host = directory ? xr_os_io_temp_directory(&request, &retry->owner, &created) :
+        xr_os_io_temp_file(&request, &retry->owner, &created);
     result.managed = preparation.status;
     if (result.host == XR_OS_IO_OK && !temp_current(&preparation)) result.host = XR_OS_IO_CANCELLED;
     if (result.host == XR_OS_IO_OK && !created)
@@ -140,12 +141,14 @@ XR_FUNC XrtHostTempResult xrt_host_temp_directory_publish(const XrtHostNullableS
     return result;
 }
 
-XR_FUNC XrtHostTempResult xrt_execution_temp_directory(const XrtHostNullableSlots *output,
-    const XrtManagedHeader *root, bool (*current)(void *), void *context, uint32_t source_id) {
-    XrtHostTempResult result = xrt_execution_temp_admission(source_id);
+XR_FUNC XrtHostTempResult xrt_execution_temp_result(const XrtHostNullableSlots *output,
+    const XrtManagedHeader *root, bool directory, bool (*current)(void *), void *context,
+    uint32_t source_id) {
+    XrtHostTempResult result = xrt_execution_receiving_admission(source_id);
     if (result.host != XR_OS_IO_OK || result.managed != XRT_MANAGED_OK) return result;
     XrtTempFailure failure = {.source_id=source_id};
-    failure.result = xrt_host_temp_directory_publish(output, root, current, context, source_id, &failure.owner);
+    failure.result = xrt_host_temp_publish(output, root, directory, current, context, source_id,
+        &failure.owner);
     if (failure.owner) xrt_execution_temp_failure_take(&failure);
     return failure.result;
 }

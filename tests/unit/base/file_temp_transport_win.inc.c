@@ -70,7 +70,7 @@ static int temp_transport_effect(TempTransportProbe *probe) {
     CHECK(xrt_native_values_prepare(xrt_value_root_current(1), &probe->billing) == XRT_MANAGED_OK);
     CHECK(xrt_billing_owner_retain(probe->billing));
     const XrtHostNullableSlots slots = {frame,RESULT,STAGE,0,offsets[STAGE]};
-    XrtHostTempResult admitted = xrt_execution_temp_directory(&slots, name, temp_transport_current, probe, 1);
+    XrtHostTempResult admitted = xrt_execution_temp_result(&slots, name, true, temp_transport_current, probe, 1);
     ++probe->returned;
     const XrtManagedHeader *after = NULL;
     probe->unsupported = admitted.host == XR_OS_IO_UNSUPPORTED && admitted.managed == XRT_MANAGED_OK;

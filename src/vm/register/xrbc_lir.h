@@ -71,8 +71,8 @@ XR_FUNC XrRbcStatus xr_rbc_program_prepare(const XrRbcProgram *program, const ui
 // expose lifetime operations, not mutation of the admitted representation.
 XR_FUNC const XrRbcModule *xr_rbc_program_view(const XrRbcProgram *program);
 /* True when the admitted program contains one nullable-text host leaf, so its
- * execution must install the temporary-directory receiving binding. */
-XR_FUNC bool xr_rbc_program_receives_temp(const XrRbcProgram *program);
+ * execution must install the receiving binding that leaf publishes into. */
+XR_FUNC bool xr_rbc_program_receives_text_result(const XrRbcProgram *program);
 // Borrowed immutable metadata, including a real owner for empty tables. Retain
 // before using it beyond Program destruction; release only references you own.
 XR_FUNC XrtLocationOwner *xr_rbc_program_locations(const XrRbcProgram *program);

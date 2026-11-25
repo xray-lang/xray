@@ -126,9 +126,9 @@ static void c_host_text_result(LirC *c, const XrLirInstructionView *v, uint32_t 
         "verified text result has a stable nullable owner offset");
     c->host_text_result = true;
     c_values_ensure(c, source);
-    c_format(c, "    xrt_native_host_temp_directory(UINT32_C(%" PRIu64 "), &(XrtNativeHostTempDirectory){"
+    c_format(c, "    xrt_native_host_text_result(UINT32_C(%" PRIu64 "), &(XrtNativeHostTextResult){"
         ".frame=xrl_frame, .destination=%zu, .temporary=%zu, .offset=%zu, .temporary_owner_offset=%zu, "
-        ".image=&xrl_value_image, .result_type=UINT32_C(%" PRIu32 "), .root=(const XrtManagedHeader *)",
+        ".image=&xrl_value_image, .result_type=UINT32_C(%" PRIu32 "), .operand=(const XrtManagedHeader *)",
         v->bits, home->first_owner, home->temporary_first_owner, home->offset,
         home->temporary_offset + optional->nullable_payload, home->type);
     c_value(c, v->operands[0]);

@@ -2195,7 +2195,7 @@ XR_FUNC XrRbcStatus xr_rbc_program_prepare(const XrRbcProgram *p, const uint64_t
     return xr_rbc_module_prepare_admitted(&p->module, 0, arguments, count, p->locations, output);
 }
 
-XR_FUNC bool xr_rbc_program_receives_temp(const XrRbcProgram *program) {
+XR_FUNC bool xr_rbc_program_receives_text_result(const XrRbcProgram *program) {
     if (!program) return false;
     /* Compilation may already have published the value code into the borrowed
      * module view; preparation moves it again, so both owners are accepted. */

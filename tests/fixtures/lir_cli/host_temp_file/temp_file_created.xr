@@ -1,0 +1,24 @@
+// A temporary file leaf publishes an owned path or None, and the entry it
+// creates is a regular file: the program pins its presence, its kind and its
+// uniqueness, not the host-formatted length of the generated name.
+import io
+import path
+
+fn main() {
+    const made = io.tempFile()
+    print("made=" + string(made != null))
+    if (made == null) { return }
+    const file = made!
+    const info = io.stat(file)
+    print("stat=" + string(info != null))
+    if (info == null) { return }
+    print("file=" + string(info!.isFile))
+    print("dir=" + string(info!.isDir))
+    print("named=" + string(len(path.basename(file)) > 0))
+    const second = io.tempFile()
+    print("second=" + string(second != null))
+    if (second == null) { return }
+    print("differs=" + string(path.basename(file) != path.basename(second!)))
+}
+
+main()

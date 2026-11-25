@@ -1370,20 +1370,26 @@ def parse_def_metadata(
                 )
             host_leaf = str(props.get("host_leaf", ""))
             host_signatures = {
-                "blocking-env-get": "(name: string): string?",
-                "blocking-path-bool": "(path: Path): bool",
-                "blocking-path-pair-bool": "(old: Path, new: Path): bool",
-                "blocking-file-open-read": "(path: Path): __FileStorage?",
-                "blocking-file-stat": "(path: Path): __FileStat?",
-                "blocking-file-open-write": "(path: Path, append: bool): __FileStorage?",
-                "blocking-file-close": "(file: __FileStorage): bool",
-                "blocking-file-read": "(file: __FileStorage, maxBytes: i64): Array<u8>?",
-                "blocking-file-write-bytes": "(file: __FileStorage, data: Array<u8>, offset: i64): i64",
-                "blocking-file-write-string": "(file: __FileStorage, data: string, offset: i64): i64",
-                "blocking-text-result": "(root: string): string?",
+                "blocking-env-get": {"__getenv": "(name: string): string?"},
+                "blocking-path-bool": {"__mkdir": "(path: Path): bool", "__rmdir": "(path: Path): bool",
+                                       "__remove": "(path: Path): bool"},
+                "blocking-path-pair-bool": {"__rename": "(old: Path, new: Path): bool"},
+                "blocking-file-open-read": {"__fileOpen": "(path: Path): __FileStorage?"},
+                "blocking-file-stat": {"__stat": "(path: Path): __FileStat?"},
+                "blocking-file-open-write": {"__fileOpenWrite": "(path: Path, append: bool): __FileStorage?"},
+                "blocking-file-close": {"__fileClose": "(file: __FileStorage): bool"},
+                "blocking-file-read": {"__fileRead": "(file: __FileStorage, maxBytes: i64): Array<u8>?"},
+                "blocking-file-write-bytes": {"__fileWrite": "(file: __FileStorage, data: Array<u8>, offset: i64): i64"},
+                "blocking-file-write-string": {"__fileWriteStr": "(file: __FileStorage, data: string, offset: i64): i64"},
+                "blocking-text-result": {
+                    "__makeTempDir": "(root: string): string?",
+                    "__makeTempFile": "(root: string): string?",
+                    "__readlink": "(path: Path): string?",
+                    "__realpath": "(path: Path): string?",
+                },
             }
             host_module = "os" if host_leaf == "blocking-env-get" else "io"
-            if host_leaf and (signature != host_signatures.get(host_leaf) or current_module != host_module or
+            if host_leaf and (signature != (host_signatures.get(host_leaf) or {}).get(current_name) or current_module != host_module or
                               visibility != "internal" or target_fact):
                 raise SystemExit(f"{path}:{line_no}: invalid host leaf ABI for {current_module}.{current_name}")
             entries.append(

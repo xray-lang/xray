@@ -1569,11 +1569,16 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     return true;
 }
 
-static uint32_t lower_host_path_count(XrNativeHostShape shape) {
+static uint32_t lower_host_path_count(uint32_t callable, XrNativeHostShape shape) {
     switch (shape) {
     case XR_NATIVE_HOST_PATH_BOOL: case XR_NATIVE_HOST_FILE_OPEN_WRITE:
     case XR_NATIVE_HOST_FILE_OPEN_READ: case XR_NATIVE_HOST_FILE_STAT: return 1;
     case XR_NATIVE_HOST_PATH_PAIR_BOOL: return 2;
+    /* Only the two path queries consume a Path argument; the exclusive
+     * creations take the caller's plain text root. */
+    case XR_NATIVE_HOST_TEXT_RESULT:
+        return callable == XR_NATIVE_CALLABLE_IO_READLINK ||
+            callable == XR_NATIVE_CALLABLE_IO_REALPATH ? 1u : 0u;
     default: return 0;
     }
 }
@@ -1601,7 +1606,7 @@ static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint3
     }
     if (!xir_io_native_signature(id, source->types, body->parameters, body->parameter_count,
             body->result, body->error_type)) return XR_NATIVE_HOST_NONE;
-    uint32_t paths = lower_host_path_count(shape);
+    uint32_t paths = lower_host_path_count(id, shape);
     if (!paths)
         return xir_io_native_module_scope(source->declarations, function, source->function_count) ?
             shape : XR_NATIVE_HOST_NONE;
@@ -3500,7 +3505,8 @@ static bool lower_host_function(Lower *c, uint32_t index) {
         operation = XR_LIR_HOST_FILE_WRITE; break;
     default: return lower_unsupported(c, "unregistered host leaf");
     }
-    uint32_t paths = lower_host_path_count(shape);
+    uint32_t paths = lower_host_path_count(
+        c->source->declarations->functions[index].native_callable, shape);
     const XrXirFunction *body = &c->source->functions[index];
     XrLirFunction function = c->functions[index];
     XrLirBlock block = {0};
