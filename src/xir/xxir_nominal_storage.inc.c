@@ -21,6 +21,15 @@ static bool nominal_storage_align(uint32_t size, uint32_t alignment, uint32_t *o
     if (size > UINT32_MAX - padding) return false;
     *output = size + padding; return true;
 }
+/* The declaration's explicit alignment raises a finished record's alignment; it
+ * may never ask for less than the fields already require. */
+static uint32_t nominal_storage_declared_alignment(const XrXirTypes *types, uint32_t declaration) {
+    if (!types->nominals) return 0;
+    uint32_t flags = types->nominals->declarations ?
+        types->nominals->declarations[declaration].flags :
+        types->nominals->identities[declaration].flags;
+    return xr_xir_nominal_alignment(flags);
+}
 static XrXirStatus nominal_storage_walk(const XrXirTypes *types,
     XrXirCompileContext *budget, NominalStorageNode *nodes, uint32_t *stack, uint32_t root_index) {
     uint32_t depth = 1;
@@ -73,6 +82,18 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types,
             }
             if (!nominal_storage_align(current->layout.size, current->layout.alignment, &current->layout.size)) {
                 status = XR_XIR_BAD_LAYOUT; break;
+            }
+            if (!nullable) {
+                uint32_t explicit_alignment = nominal_storage_declared_alignment(types, nominal->declaration);
+                if (explicit_alignment && explicit_alignment < current->layout.alignment) {
+                    status = XR_XIR_BAD_LAYOUT; break;
+                }
+                if (explicit_alignment > current->layout.alignment) {
+                    current->layout.alignment = explicit_alignment;
+                    if (!nominal_storage_align(current->layout.size, explicit_alignment, &current->layout.size)) {
+                        status = XR_XIR_BAD_LAYOUT; break;
+                    }
+                }
             }
             current->state = 2; --depth; continue;
         }

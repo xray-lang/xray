@@ -647,9 +647,58 @@ static void inline_frame_replacement(void) {
     OK(xrt_managed_frame_leave(f.root, frame)); fixture_done(&f);
     puts("inline Frame replacement publishes all leaves and bytes before guarded retirement");
 }
+static void explicit_record_alignment(void) {
+    /* A declaration may raise its record above what its fields need. Field
+     * offsets stay natural and only the total extent is padded to the promise. */
+    Fixture f; fixture_init(&f, SIZE_MAX, false);
+    XrtValuePlan *flag = scalar(&f, XRT_VALUE_BOOL, 1, 1);
+    char name[] = "on";
+    XrtValueSlotSpec raised[] = {{flag, 0, name, 2, 0}};
+    XrtValuePlan *aligned = new_plan(&f, (XrtValuePlanSpec){.kind=XRT_VALUE_RECORD, .size=8, .alignment=8,
+        .fields=raised, .field_count=1});
+    XrtValuePlanSpec view = {0}; OK(xrt_value_plan_view(aligned, &view));
+    CHECK(view.size == 8 && view.alignment == 8 && view.fields[0].offset == 0);
+    unsigned char bytes[8] = {1}, copy[8] = {0};
+    OK(xrt_value_copy_empty(aligned, bytes, copy)); CHECK(copy[0] == 1);
+    xrt_value_drop(aligned, copy);
+    /* The same fields without the padded extent cannot carry that promise. */
+    XrtValueSlotSpec tight[] = {{flag, 0, name, 2, 0}};
+    XrtValuePlanSpec unpadded = {.kind=XRT_VALUE_RECORD, .size=1, .alignment=8,
+        .fields=tight, .field_count=1};
+    XrtValuePlan *rejected = NULL;
+    STATUS(xrt_value_plan_new(f.billing, &unpadded, &rejected), XRT_MANAGED_ARGUMENT);
+    CHECK(!rejected);
+    /* A Tuple is positional physical layout, never a declaration promise. */
+    XrtValueSlotSpec tuple_fields[] = {{flag, 0, NULL, 0, 0}};
+    XrtValuePlanSpec tuple = {.kind=XRT_VALUE_TUPLE, .size=8, .alignment=8,
+        .fields=tuple_fields, .field_count=1};
+    XrtValuePlan *tuple_raised = NULL;
+    STATUS(xrt_value_plan_new(f.billing, &tuple, &tuple_raised), XRT_MANAGED_ARGUMENT);
+    CHECK(!tuple_raised);
+    /* The natural record stays exactly as it was. */
+    XrtValueSlotSpec plain_fields[] = {{flag, 0, name, 2, 0}};
+    XrtValuePlan *plain = new_plan(&f, (XrtValuePlanSpec){.kind=XRT_VALUE_RECORD, .size=1, .alignment=1,
+        .fields=plain_fields, .field_count=1});
+    XrtValuePlanSpec plain_view = {0}; OK(xrt_value_plan_view(plain, &plain_view));
+    CHECK(plain_view.size == 1 && plain_view.alignment == 1);
+    /* An empty record's one private home is padded to its own alignment. */
+    XrtValuePlan *empty = new_plan(&f, (XrtValuePlanSpec){.kind=XRT_VALUE_RECORD, .size=8, .alignment=8});
+    XrtValuePlanSpec empty_view = {0}; OK(xrt_value_plan_view(empty, &empty_view));
+    CHECK(empty_view.size == 8 && empty_view.alignment == 8);
+    XrtValuePlanSpec bad_empty = {.kind=XRT_VALUE_RECORD, .size=1, .alignment=8};
+    XrtValuePlan *bad_empty_plan = NULL;
+    STATUS(xrt_value_plan_new(f.billing, &bad_empty, &bad_empty_plan), XRT_MANAGED_ARGUMENT);
+    CHECK(!bad_empty_plan);
+    xrt_value_plan_drop(empty);
+    xrt_value_plan_drop(plain);
+    xrt_value_plan_drop(aligned);
+    xrt_value_plan_drop(flag);
+    fixture_done(&f);
+    puts("a declared record alignment raises the plan and pads its extent");
+}
 int main(void) {
     raw_image_retirement(); raw_image_failures();
-    empty_record_storage();
+    empty_record_storage(); explicit_record_alignment();
     inline_frame_replacement();
     inline_owners(); retain_failure_and_alias(); nullable_values(); typed_metadata_and_code(); function_shape_admission();
     failures_and_admission(); deep_metadata();

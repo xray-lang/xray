@@ -1,0 +1,11 @@
+// One is the natural alignment of a bool-only record, so the clause holds.
+struct Bit align(1) {
+    on: bool
+}
+
+fn main() {
+    var bit = Bit{on: true}
+    print("on=" + string(bit.on))
+}
+
+main()

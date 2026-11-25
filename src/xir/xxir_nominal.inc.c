@@ -64,7 +64,12 @@ static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *va
 static bool nominal_flags_valid(uint32_t kind, uint32_t flags) {
     if (kind == XR_XIR_NOMINAL_CLASS)
         return !(flags & ~(XR_XIR_NOMINAL_FINAL | XR_XIR_NOMINAL_SENDABLE));
-    if (kind == XR_XIR_NOMINAL_STRUCT) return flags == XR_XIR_NOMINAL_MODULE_LITERAL || flags == 0;
+    if (kind == XR_XIR_NOMINAL_STRUCT) {
+        uint32_t declared = xr_xir_nominal_alignment(flags);
+        uint32_t rest = flags & ~XR_XIR_NOMINAL_ALIGN_MASK;
+        return (rest == XR_XIR_NOMINAL_MODULE_LITERAL || rest == 0) &&
+            declared <= XR_XIR_NOMINAL_ALIGN_LIMIT;
+    }
     return flags == 0;
 }
 static XrXirStatus nominal_field_begin(uint32_t kind, const XrXirNominalVariant *variants,

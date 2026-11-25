@@ -32,6 +32,29 @@ typedef struct XrXirNominalField {
 #define XR_XIR_NOMINAL_SENDABLE 2u
 /* Equal flag bits are interpreted only within the declared nominal kind. */
 
+/* An explicit struct alignment is a declaration fact, so it rides in the same
+ * flag word as the other declaration facts: one plus the base-2 exponent of N
+ * occupies the bits above the kind-specific ones. Zero therefore states "no
+ * clause", while align(1) stays a distinct spellable promise. One encoded
+ * shape keeps the Checked wire form and its golden files unchanged. */
+#define XR_XIR_NOMINAL_ALIGN_SHIFT 2u
+#define XR_XIR_NOMINAL_ALIGN_BITS 6u
+#define XR_XIR_NOMINAL_ALIGN_MASK (((1u << XR_XIR_NOMINAL_ALIGN_BITS) - 1u) << XR_XIR_NOMINAL_ALIGN_SHIFT)
+/* One alignment promise must hold on every platform this language runs on, so
+ * the admitted maximum is the portable allocation alignment rather than the
+ * host C library's. Raising it needs a per-plan over-aligned allocator first. */
+#define XR_XIR_NOMINAL_ALIGN_LIMIT 8u
+static inline uint32_t xr_xir_nominal_alignment(uint32_t flags) {
+    uint32_t encoded = (flags & XR_XIR_NOMINAL_ALIGN_MASK) >> XR_XIR_NOMINAL_ALIGN_SHIFT;
+    return encoded ? 1u << ((encoded - 1u) & 31u) : 0;
+}
+static inline uint32_t xr_xir_nominal_alignment_flags(uint32_t alignment) {
+    uint32_t exponent = 0;
+    if (!alignment || (alignment & (alignment - 1))) return 0;
+    while ((1u << exponent) < alignment) ++exponent;
+    return (exponent + 1u) << XR_XIR_NOMINAL_ALIGN_SHIFT;
+}
+
 typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM, XR_XIR_NOMINAL_CLASS } XrXirNominalKind;
 typedef struct XrXirNominalVariant {
     XrXirLiteral name;

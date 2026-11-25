@@ -1,0 +1,10 @@
+// No platform stores a value at four kilobytes.
+struct Huge align(4096) {
+    value: bool
+}
+
+fn main() {
+    print(1)
+}
+
+main()

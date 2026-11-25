@@ -61,6 +61,16 @@ enum {
     XR_LIR_RECORD_MUTABLE = 4u,
     XR_LIR_RECORD_MODULE_LITERAL = 2u
 };
+/* A declaration's explicit alignment keeps the Checked encoding: one plus its
+ * base-2 exponent occupies the same flags above the kind-specific bits. */
+#define XR_LIR_RECORD_ALIGN_SHIFT 2u
+#define XR_LIR_RECORD_ALIGN_MASK (63u << XR_LIR_RECORD_ALIGN_SHIFT)
+/* The admitted maximum is the portable one; see the Checked declaration limit. */
+#define XR_LIR_RECORD_ALIGN_LIMIT 8u
+static inline uint32_t xr_lir_record_alignment(uint32_t flags) {
+    uint32_t encoded = (flags & XR_LIR_RECORD_ALIGN_MASK) >> XR_LIR_RECORD_ALIGN_SHIFT;
+    return encoded ? 1u << ((encoded - 1u) & 31u) : 0;
+}
 
 typedef struct XrLirRecordArgument {
     XrLirType type, array_element;

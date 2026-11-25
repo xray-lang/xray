@@ -1,0 +1,11 @@
+// A clause equal to the natural alignment changes nothing physical.
+struct Word align(8) {
+    value: i64
+}
+
+fn main() {
+    var w = Word{value: 9}
+    print("w=" + string(w.value))
+}
+
+main()

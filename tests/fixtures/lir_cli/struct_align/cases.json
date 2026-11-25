@@ -1,0 +1,35 @@
+{
+  "align_bool": {
+    "exit": 0,
+    "stdout": "a=true,41\nb=false,-7\nsame=true\n",
+    "stderr": ""
+  },
+  "align_natural": {
+    "exit": 0,
+    "stdout": "w=9\n",
+    "stderr": ""
+  },
+  "align_below": {
+    "source_error": ":2:8: error: explicit struct alignment is below the alignment its fields require"
+  },
+  "align_zero": {
+    "source_error": ":2:20: error: align requires a positive power of two"
+  },
+  "align_odd": {
+    "source_error": ":2:19: error: align requires a positive power of two"
+  },
+  "align_limit": {
+    "source_error": ":2:8: error: explicit struct alignment exceeds the supported maximum"
+  },
+  "align_wide": {
+    "source_error": ":2:8: error: explicit struct alignment exceeds the supported maximum"
+  },
+  "align_one": {
+    "source_error": ":2:8: error: explicit struct alignment is below the alignment its fields require"
+  },
+  "align_one_legal": {
+    "exit": 0,
+    "stdout": "on=true\n",
+    "stderr": ""
+  }
+}

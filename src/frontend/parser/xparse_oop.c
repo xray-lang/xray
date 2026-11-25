@@ -65,6 +65,13 @@ static uint32_t xr_parse_struct_align_clause(Parser *parser) {
                 xr_parser_error(parser, "align value is too large");
                 if (!xr_parser_healthy(parser)) return 0;
             } while (0);
+        } else if (!parsed || (parsed & (parsed - 1)) != 0) {
+            /* Zero is not the omitted clause here: the spelling is present, so
+             * the declaration asks for an impossible alignment. */
+            do {
+                xr_parser_error(parser, "align requires a positive power of two");
+                if (!xr_parser_healthy(parser)) return 0;
+            } while (0);
         } else {
             result = (uint32_t) parsed;
         }

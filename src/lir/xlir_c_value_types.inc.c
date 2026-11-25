@@ -109,10 +109,14 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
     } else {
         c_format(c, "typedef struct XrlValue_%zu {\n", type_id);
         if (xrt_value_kind_has_fields(spec->kind)) {
-            if (!spec->field_count) c_text(c, "    uint8_t padding;\n");
+            /* Only a first member can raise a struct's alignment; the declared
+             * promise never falls below any field's own alignment. */
+            if (!spec->field_count)
+                c_format(c, "    _Alignas(%zu) uint8_t padding;\n", spec->alignment);
             for (size_t f = 0; f < spec->field_count && c_request_poll(c); ++f) {
                 size_t child = c_value_dependency(c, types, spec->fields[f].type, ordinal);
-                c_format(c, "    XrlValue_%zu f%zu;\n", child + 1, f);
+                if (!f) c_format(c, "    _Alignas(%zu) ", spec->alignment);
+                c_format(c, "XrlValue_%zu f%zu;\n", child + 1, f);
             }
         } else if (spec->kind == XRT_VALUE_NULLABLE) {
             size_t child = c_value_dependency(c, types, spec->nullable.element, ordinal);

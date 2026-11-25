@@ -1,0 +1,28 @@
+// anchor: struct-explicit-alignment
+// An explicit declaration alignment raises a record above its fields and pads
+// its size. Records are inline in both backends, so the printed values and the
+// nested strides must be identical, and the generated C must keep the promise.
+struct Flag align(8) {
+    on: bool
+}
+
+struct Pair {
+    flag: Flag
+    n: i64
+}
+
+fn pair(label: string, on: bool, n: i64) {
+    var p = Pair{flag: Flag{on: on}, n: n}
+    print(label + "=" + string(p.flag.on) + "," + string(p.n))
+}
+
+fn main() {
+    pair("a", true, 41)
+    pair("b", false, -7)
+    var same = Flag{on: true}
+    var again = Flag{on: true}
+    print("same=" + string(same.on == again.on))
+    print("tag=" + string(Pair{flag: Flag{on: false}, n: 3}.n))
+}
+
+main()

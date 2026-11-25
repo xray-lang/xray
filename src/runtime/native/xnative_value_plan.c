@@ -167,9 +167,11 @@ static bool capture_type(const XrtValuePlan *plan) {
 }
 static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *slots, size_t count, bool record) {
     /* Portable C has no empty structure. Its one private padding byte carries
-     * no language field and is shared with bytecode's physical home. */
+     * no language field and is shared with bytecode's physical home. A declared
+     * align(N) pads that home and raises the record's alignment. */
     if (record && !count)
-        return spec->kind == XRT_VALUE_RECORD && spec->size == 1 && spec->alignment == 1 && !spec->owned_count;
+        return spec->kind == XRT_VALUE_RECORD && !spec->owned_count && spec->alignment &&
+            (spec->alignment & (spec->alignment - 1)) == 0 && spec->size == spec->alignment;
     bool named = spec->kind == XRT_VALUE_RECORD;
     size_t end = 0, alignment = 1, owned = 0;
     for (size_t i = 0; i < count; ++i) {
@@ -189,8 +191,12 @@ static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *s
             if (owned == spec->owned_count || spec->owned_offsets[owned++] != offset + type->owned_offsets[n]) return false;
         }
     }
-    return owned == spec->owned_count && alignment == spec->alignment &&
-        end <= SIZE_MAX - (alignment - 1) && spec->size == ((end + alignment - 1) & ~(alignment - 1));
+    /* A record declaration may raise its alignment above what its fields need;
+     * offsets stay natural, so only the total extent is padded to that promise. */
+    size_t required = named && spec->alignment > alignment ? spec->alignment : alignment;
+    if (!required || (required & (required - 1))) return false;
+    return owned == spec->owned_count && required == spec->alignment &&
+        end <= SIZE_MAX - (required - 1) && spec->size == ((end + required - 1) & ~(required - 1));
 }
 static bool signature_valid(const XrtValueSignatureSpec *signature) {
     if (!signature->result || signature->result->class_payload_only || signature->throws ||

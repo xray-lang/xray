@@ -199,6 +199,14 @@ add_test(NAME test_lir_cli_array_capacity
 set_tests_properties(test_lir_cli_array_capacity PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
 
+add_test(NAME test_lir_cli_struct_align
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --fixtures tests/fixtures/lir_cli/struct_align --compiler "${CMAKE_C_COMPILER}"
+        --output ${PROJECT_BINARY_DIR}/lir-cli-struct-align)
+set_tests_properties(test_lir_cli_struct_align PROPERTIES
+    TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
+
 add_test(NAME test_lir_cli_host_method_import
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}

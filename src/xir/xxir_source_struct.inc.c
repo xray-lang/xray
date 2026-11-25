@@ -195,13 +195,61 @@ static bool source_nominal_constraints(SourceContext *ctx) {
     }
     ctx->type_scope = saved; ctx->module = module; return ok;
 }
+static bool source_struct_alignment(SourceContext *ctx,AstNode *node,uint32_t alignment) {
+    if (!alignment) return true;
+    if (alignment & (alignment - 1))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"explicit struct alignment must be a power of two");
+    if (alignment > XR_XIR_NOMINAL_ALIGN_LIMIT)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"explicit struct alignment exceeds the supported maximum");
+    return true;
+}
+/* align(N) may raise a record above its fields, never below them. Each concrete
+ * declaration is checked after every field row exists, used or not, and the
+ * clause is cleared for the one query so the shared layout walk reports what the
+ * actual fields require. A generic declaration is re-checked per instance. */
+static bool source_struct_alignment_natural(SourceContext *ctx) {
+    for (uint32_t m = 0; m < (uint32_t) ctx->graph->spec_count; ++m) {
+        for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
+            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
+            if (symbol->kind != SOURCE_NOMINAL || symbol->checked_library || !symbol->node ||
+                symbol->node->type != AST_STRUCT_DECL) continue;
+            ClassDeclNode *syntax = &symbol->node->as.struct_decl;
+            XrXirNominalDeclaration *declaration =
+                (XrXirNominalDeclaration *)&ctx->nominals.declarations[symbol->index];
+            if (!(declaration->flags & XR_XIR_NOMINAL_ALIGN_MASK) || declaration->parameter_count) continue;
+            uint32_t count = declaration->field_count;
+            uint32_t *offsets = count ? source_alloc(ctx,count,sizeof(*offsets)) : NULL;
+            if (count && !offsets) return false;
+            uint32_t saved = declaration->flags;
+            declaration->flags &= ~XR_XIR_NOMINAL_ALIGN_MASK;
+            XrXirLayout natural = {0};
+            XrXirStatus status = xr_xir_compile_nominal_layout(&ctx->compile,&ctx->types,(XrXirType)symbol->type,
+                &ctx->target,&natural,offsets,count);
+            declaration->flags = saved;
+            if (status != XR_XIR_OK)
+                return source_fail(ctx,symbol->node,XR_XIR_BAD_LAYOUT,
+                    "record alignment needs a complete field layout");
+            if (syntax->explicit_align < natural.alignment)
+                return source_fail(ctx,symbol->node,XR_XIR_BAD_TYPE,
+                    "explicit struct alignment is below the alignment its fields require");
+        }
+    }
+    return true;
+}
 static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.struct_decl;
     if (decl->type_param_count < 0 || decl->type_param_count > 65536 || decl->super_name ||
-        decl->is_packed || decl->explicit_align || decl->attr_count || decl->field_count < 0)
+        decl->is_packed || decl->attr_count || decl->field_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct declaration contract is not admitted");
-    return source_nominal_declare(ctx, node, decl->name, decl->type_params,
-        (uint32_t) decl->type_param_count, XR_XIR_NOMINAL_STRUCT);
+    if (!source_struct_alignment(ctx,node,decl->explicit_align)) return false;
+    if (!source_nominal_declare(ctx, node, decl->name, decl->type_params,
+        (uint32_t) decl->type_param_count, XR_XIR_NOMINAL_STRUCT)) return false;
+    /* The clause is part of the declaration identity, so it lands with the
+     * declaration rather than in one instantiation's layout. */
+    if (decl->explicit_align)
+        ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count - 1].flags |=
+            xr_xir_nominal_alignment_flags(decl->explicit_align);
+    return true;
 }
 static bool source_sendable_marker(SourceContext *ctx,const XrTypeRef *ref) {
     return ref && ref->kind==XR_TREF_NAMED && !ref->nchildren && ref->name &&
@@ -248,7 +296,7 @@ static bool source_struct_fields(SourceContext *ctx) {
                 (symbol->node->type!=AST_STRUCT_DECL && symbol->node->type!=AST_CLASS_DECL))continue;
             if(!source_nominal_fields(ctx,symbol,state,stack,count))return false;
         }
-    return true;
+    return source_struct_alignment_natural(ctx);
 }
 static bool source_nominal_function_scope(SourceContext *ctx, uint32_t index, SourceName *symbol) {
     const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];

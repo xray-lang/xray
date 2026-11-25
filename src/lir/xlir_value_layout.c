@@ -67,6 +67,11 @@ static bool align_size(size_t *size, size_t alignment) {
     *size = (*size + alignment - 1) & ~(alignment - 1);
     return true;
 }
+/* A record declaration may raise its own alignment; every other row is natural. */
+static uint32_t declared_record_alignment(const XrLirModule *module, XrLirType type) {
+    return module && type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < module->type_count ?
+        xr_lir_record_alignment(module->types[type - XR_LIR_TYPE_COUNT].record.flags) : 0;
+}
 static XrLirType array_element(size_t family) {
     static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     return elements[family];
@@ -361,7 +366,16 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
     if (xr_lir_aggregate_fields(module, type, &fields, &count) != XR_LIR_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     spec->kind = shape.kind == XR_LIR_TYPE_TUPLE ? XRT_VALUE_TUPLE : XRT_VALUE_RECORD;
     spec->alignment = 1; spec->field_count = count;
-    if (!count) { spec->size = 1; return XR_LIR_VALUE_LAYOUT_OK; }
+    if (!count) {
+        /* Portable C has no empty structure: one private byte carries the
+         * record, and a declared alignment pads that one home. */
+        spec->size = 1;
+        uint32_t declared = declared_record_alignment(module, type);
+        if (shape.kind == XR_LIR_TYPE_RECORD && declared) {
+            spec->alignment = declared; spec->size = declared;
+        }
+        return XR_LIR_VALUE_LAYOUT_OK;
+    }
     for (uint32_t f = 0; f < count; ++f) {
         XrtValuePlanSpec child;
         if (xrt_value_plan_view(shaped_dependency(set, fields[f].type, fields[f].array_element), &child) != XRT_MANAGED_OK || !child.size)
@@ -372,6 +386,16 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
     }
     if (!align_size(&spec->size, spec->alignment) || !extent_add(scratch_bytes, count, sizeof(XrtValueSlotSpec)) ||
         !extent_add(scratch_bytes, spec->owned_count, sizeof(size_t))) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+    if (shape.kind == XR_LIR_TYPE_RECORD) {
+        /* A declared align(N) raises the record above its fields and pads the
+         * total size; a promise below the natural alignment cannot be kept. */
+        uint32_t declared = declared_record_alignment(module, type);
+        if (declared) {
+            if (declared < spec->alignment) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+            spec->alignment = declared;
+            if (!align_size(&spec->size, declared)) return XR_LIR_VALUE_LAYOUT_OVERFLOW;
+        }
+    }
     return XR_LIR_VALUE_LAYOUT_OK;
 }
 static void fill_composite(const XrLirModule *module, const XrLirValueLayouts *set, XrLirType type,

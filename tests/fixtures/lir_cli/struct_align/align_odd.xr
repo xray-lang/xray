@@ -1,0 +1,10 @@
+// Three is not a power of two.
+struct Odd align(3) {
+    value: i64
+}
+
+fn main() {
+    print(1)
+}
+
+main()

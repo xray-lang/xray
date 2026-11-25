@@ -250,6 +250,16 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     size_t regions=xr_rbc_module_code_owner(module) && code->array_region_runtime ?
         code->array_regions->region_count : 0;
     const XrtValueImage *image=xr_rbc_module_value_image(module);
+    /* An inline record home keeps its declared alignment, so the one payload
+     * region reserves the padding its own rounding may consume. */
+    size_t payload_alignment = code->homes && code->homes->frame.payload_alignment ?
+        code->homes->frame.payload_alignment : 1;
+    if (payload_alignment & (payload_alignment - 1))
+        xrt_native_managed_failure(XRT_MANAGED_OVERFLOW,source);
+    size_t payload_bytes = code->homes && !code->homes->owned_frame_needed ?
+        code->homes->frame.payload_size : 0;
+    if (payload_bytes && !rbc_value_extent(&payload_bytes,payload_alignment - 1,1))
+        xrt_native_managed_failure(XRT_MANAGED_OVERFLOW,source);
     if (!rbc_value_capacities(code,image,&leaves,&rows,&snapshots) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(const uint8_t *)) ||
@@ -257,7 +267,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
         !rbc_value_extent(&bytes,leaves,sizeof(XrtPlaceEdge)) ||
         !rbc_value_extent(&bytes,rows,sizeof(RbcValuePublication)) || !rbc_value_extent(&bytes,snapshots,1) ||
         !rbc_value_extent(&bytes,regions,sizeof(RbcArrayRegionState)) ||
-        !rbc_value_extent(&bytes,code->homes && !code->homes->owned_frame_needed ? code->homes->frame.payload_size : 0,1))
+        !rbc_value_extent(&bytes,payload_bytes,1))
         xrt_native_managed_failure(XRT_MANAGED_OVERFLOW,source);
     void *memory = NULL;
     status = xrt_managed_metadata_allocate(runtime->billing,bytes,&memory);
@@ -281,7 +291,11 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
         memset(activation->array_regions,0,regions*sizeof(RbcArrayRegionState));
     }
     if (code->homes && !code->homes->owned_frame_needed && code->homes->frame.payload_size) {
-        RBC_VALUE_PART(payload,code->homes->frame.payload_size,uint8_t);
+        /* The one inline payload region starts on its own alignment, not the
+         * eight-byte part alignment used by the metadata around it. */
+        offset = (offset + payload_alignment - 1) & ~(payload_alignment - 1);
+        activation->payload = (uint8_t *)memory + offset;
+        offset += code->homes->frame.payload_size;
         memset(activation->payload,0,code->homes->frame.payload_size);
     }
 #undef RBC_VALUE_PART

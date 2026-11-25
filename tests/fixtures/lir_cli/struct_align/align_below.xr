@@ -1,0 +1,10 @@
+// Four is below the alignment an i64 field already requires.
+struct Low align(4) {
+    value: i64
+}
+
+fn main() {
+    print(1)
+}
+
+main()

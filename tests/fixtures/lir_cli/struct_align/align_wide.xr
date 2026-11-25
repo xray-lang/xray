@@ -1,0 +1,10 @@
+// Sixteen is beyond the alignment every supported platform can promise.
+struct Wide align(16) {
+    value: bool
+}
+
+fn main() {
+    print(1)
+}
+
+main()

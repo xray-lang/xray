@@ -1,0 +1,10 @@
+// Zero cannot be an alignment even though an omitted clause means natural.
+struct Zero align(0) {
+    value: i64
+}
+
+fn main() {
+    print(1)
+}
+
+main()

@@ -17,7 +17,8 @@ static bool lower_record_description(Lower *c, XrXirType type, XrXirTypeDescript
         c->source->types, type, description) != XR_XIR_OK || description->kind != XR_XIR_TYPE_NOMINAL) return false;
     uint32_t flags = description->definition ? description->definition->flags : description->identity->flags;
     uint32_t native = description->definition ? description->definition->native.native_id : description->identity->native.native_id;
-    return description->nominal_kind == XR_XIR_NOMINAL_STRUCT && !native && !(flags & ~XR_XIR_NOMINAL_MODULE_LITERAL);
+    return description->nominal_kind == XR_XIR_NOMINAL_STRUCT && !native &&
+        !(flags & ~(XR_XIR_NOMINAL_MODULE_LITERAL | XR_XIR_NOMINAL_ALIGN_MASK));
 }
 static XrXirType lower_inline_array_source_element(Lower *c, XrXirType type) {
     const XrXirTypeNode *array = xr_xir_type_node(c->source->types, type);
