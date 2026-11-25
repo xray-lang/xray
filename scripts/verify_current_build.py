@@ -7,8 +7,11 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import re
+import struct
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 
@@ -58,6 +61,21 @@ REQUIRED = (
     "test_lexer", "test_parser_recoverable", "test_parser_arrow_syntax",
     "test_fmt_roundtrip", "test_value_arrow_syntax", "spec_snippets_cn", "spec_snippets_en",
 )
+# Product execution is registered only where XIR can run: 64-bit little-endian
+# hosts own the command gates, and native executables are published on Windows
+# x86_64 and on macOS/Linux x86_64 and arm64. Every other host emits C only.
+if struct.calcsize("P") == 8 and sys.byteorder == "little":
+    REQUIRED = REQUIRED + (
+        # A product option nobody implements must be refused, never ignored: the
+        # VM command and a program built by `xray build` each own a verdict.
+        "test_cli_resource_profiles_vm", "test_cli_resource_profiles_large",
+        "test_cli_resource_profiles_test_role",
+    )
+_MACHINE = platform.machine().lower()
+if (os.name == "nt" and _MACHINE in ("amd64", "x86_64")) or (
+        sys.platform in ("darwin", "linux")
+        and _MACHINE in ("x86_64", "amd64", "arm64", "aarch64")):
+    REQUIRED = REQUIRED + ("test_cli_resource_profiles_native",)
 # The temporary-directory transport exists only on Windows today.
 if os.name == "nt":
     REQUIRED = REQUIRED + ("test_lir_cli_host_temp_directory",)

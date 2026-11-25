@@ -280,7 +280,7 @@ def main() -> None:
 
     generated = work / "hello.c"
     run("c-only", [binary, "build", fixtures / "hello.xr", "--c-only", "-o", generated], 0)
-    assert "int main(void)" in generated.read_text(encoding="utf-8")
+    assert "int main(int argc, char **argv)" in generated.read_text(encoding="utf-8")
     for flag, path in (([], work / "protected.exe"), (["--c-only"], generated)):
         path.write_bytes(sentinel)
         run("invalid-" + path.suffix[1:],

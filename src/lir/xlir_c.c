@@ -1342,6 +1342,7 @@ static void c_preamble(LirC *c) {
             "(defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ > 0)\n"
             "#error F64_TRANSPORT_REQUIRES_NONFAST_FLOATING_POINT_MODE\n#endif\n"
             "#include <stdint.h>\n#include <stddef.h>\n#include <limits.h>\n#include <float.h>\n#include <string.h>\n"
+            "#include <stdio.h>\n"
             "#if CHAR_BIT != 8 || FLT_RADIX != 2 || DBL_MANT_DIG != 53 || "
             "DBL_MIN_EXP != -1021 || DBL_MAX_EXP != 1024\n"
             "#error F64_TRANSPORT_REQUIRES_BINARY64\n#endif\n"
@@ -1350,9 +1351,8 @@ static void c_preamble(LirC *c) {
             "_Static_assert(FLT_RADIX == 2 && DBL_MANT_DIG == 53 && DBL_MIN_EXP == -1021 "
             "&& DBL_MAX_EXP == 1024, \"binary64 precision\");\n\n");
     } else {
-        c_text(c, "#include <stdint.h>\n#include <stddef.h>\n\n");
+        c_text(c, "#include <stdint.h>\n#include <stddef.h>\n#include <string.h>\n#include <stdio.h>\n\n");
     }
-    if (c->state && !c->f64) c_text(c, "#include <string.h>\n\n");
 }
 static void c_literals(LirC *c) {
     for (uint32_t i = 0; i < xr_lir_literal_count(c->request->module) && c_request_poll(c); ++i) {
@@ -1568,11 +1568,40 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     if (c.status == XR_LIR_C_OK)
         c_emit(&c, entry.result);
     if (c.status == XR_LIR_C_OK && standalone) {
+        /* A program built by `xray build` owns no resource profile, so it
+         * refuses the product options instead of silently running without
+         * them. Exit codes follow the CLI model: 3 unavailable, 2 usage. The
+         * command paths answer the same option with 1 because there the
+         * requested execution failed, while a program built without the
+         * feature can only report it as unavailable. */
+        c_text(&c, "\nstatic int xrl_reject_options(int argc, char **argv) {\n"
+            "    for (int i = 1; i < argc; ++i) {\n"
+            "        if (strcmp(argv[i], \"--\") == 0) break;\n"
+            "        if (strncmp(argv[i], \"--\", 2) != 0) continue;\n"
+            "        if (strncmp(argv[i], \"--sandbox\", 9) == 0\n"
+            "                && (argv[i][9] == '\\0' || argv[i][9] == '=')) {\n"
+            "            fputs(\"error: --sandbox is not available in a generated program\\n\",\n"
+            "                stderr);\n"
+            "            fprintf(stderr, \"Usage: %s\\n\", argv[0]);\n"
+            "            return 3;\n"
+            "        }\n"
+            "        fprintf(stderr, \"error: unknown option %s\\n\", argv[i]);\n"
+            "        fprintf(stderr, \"Usage: %s\\n\", argv[0]);\n"
+            "        return 2;\n"
+            "    }\n"
+            "    return 0;\n"
+            "}\n");
         if (c_managed_leaf(entry.result))
-            c_text(&c, "\nint main(void) {\n    XrtManagedHeader *result = xray_lir_entry();\n"
+            c_text(&c, "int main(int argc, char **argv) {\n"
+                "    int rejected = xrl_reject_options(argc, argv);\n"
+                "    if (rejected) return rejected;\n"
+                "    XrtManagedHeader *result = xray_lir_entry();\n"
                 "    xrt_managed_drop(result);\n    return 0;\n}\n");
         else
-            c_text(&c, "\nint main(void) {\n    (void)xray_lir_entry();\n    return 0;\n}\n");
+            c_text(&c, "int main(int argc, char **argv) {\n"
+                "    int rejected = xrl_reject_options(argc, argv);\n"
+                "    if (rejected) return rejected;\n"
+                "    (void)xray_lir_entry();\n    return 0;\n}\n");
     }
     c_verify_text(&c);
 

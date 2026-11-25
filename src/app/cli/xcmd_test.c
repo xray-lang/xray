@@ -12,8 +12,11 @@
  *   timeout, so discovery is a read of that artifact and only the entry module's
  *   own roles count. Starting a test needs the backend's test-role startup,
  *   which does not exist yet: until it does, options that only make sense while
- *   running (-j, --sandbox, --report) are refused and the command exits non-zero
- *   instead of inventing outcomes.
+ *   running (-j, --report) are refused and the command exits non-zero instead of
+ *   inventing outcomes. `--sandbox` is answered like `xray run` answers it --
+ *   the resource profile itself is unavailable, so the command fails rather than
+ *   reporting the option invalid. Diagnostics go to binary streams, as run,
+ *   build and check already do, so their text is identical on every host.
  */
 #include "xcli.h"
 #include "xcli_fs.h"
@@ -22,6 +25,10 @@
 #include "../../xir/xxir.h"
 #include <stdio.h>
 #include <string.h>
+#if XR_OS_WINDOWS
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 typedef struct XrCliTestTally {
     uint32_t tests, skipped, hooks;
@@ -86,10 +93,6 @@ static bool test_discover(const XrXirModule *module, const XrCliTestDiscoverOpts
 
 /* Options that promise an execution outcome cannot be honored before it exists. */
 static bool test_refuse_execution_options(const XrCliInvocation *inv) {
-    if (xr_cli_opt_present(&inv->options, "sandbox")) {
-        xr_cli_error("test", "--sandbox needs backend test-role startup; discovery runs no code");
-        return false;
-    }
     if (xr_cli_opt_string(&inv->options, "report", NULL)) {
         xr_cli_error("test", "--report needs backend test-role startup; there are no outcomes yet");
         return false;
@@ -98,6 +101,10 @@ static bool test_refuse_execution_options(const XrCliInvocation *inv) {
 }
 
 XR_FUNC int cmd_test(const XrCliInvocation *inv) {
+#if XR_OS_WINDOWS
+    if (_setmode(_fileno(stdout), _O_BINARY) == -1 ||
+        _setmode(_fileno(stderr), _O_BINARY) == -1) return XR_CLI_EXIT_INTERNAL;
+#endif
     if (!inv || inv->positional_count < 1) {
         xr_cli_error("test", "requires at least one file or directory");
         return XR_CLI_EXIT_USAGE;
@@ -108,6 +115,10 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     if (xr_cli_opt_int(&inv->options, "jobs", 1) < 1) {
         xr_cli_error("test", "parallel jobs must be at least one");
         return XR_CLI_EXIT_USAGE;
+    }
+    if (xr_cli_opt_present(&inv->options, "sandbox")) {
+        xr_cli_error("test", "sandbox execution is temporarily unavailable");
+        return XR_CLI_EXIT_FAIL;
     }
     if (!test_refuse_execution_options(inv)) return XR_CLI_EXIT_USAGE;
     XrCliTestDiscoverOpts discover = {

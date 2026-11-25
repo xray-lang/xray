@@ -19,7 +19,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest import proc
 
 
-RESOURCE_DIAGNOSTIC = b"XR_RUN_6003: canonical execution exceeded its resource budget\n"
+# The sandbox is a product option that is temporarily unavailable on every
+# execution path. A generated program owns no resource profile, so it rejects
+# the option instead of silently running unrestricted.
+RUN_SANDBOX_DIAGNOSTIC = b"xray run: sandbox execution is temporarily unavailable\n"
+TEST_SANDBOX_DIAGNOSTIC = b"xray test: sandbox execution is temporarily unavailable\n"
+TEST_ROLE_REPORT = (
+    b"xray test: running tests needs backend test-role startup; discovery only\n"
+    b"xray test: discovered 1 test(s), 0 skipped, 0 hook(s)\n"
+)
+NATIVE_SANDBOX_DIAGNOSTIC = b"error: --sandbox is not available in a generated program"
 FIB_SOURCE = """fn fib(n: i64) -> i64 {
     if (n <= 1) { return n }
     return fib(n - 1) + fib(n - 2)
@@ -40,6 +49,11 @@ fn resourceProfileAcceptsSmallTests() {
 """
 
 
+# A diagnostic line is either one exact byte string, or the set of byte strings
+# the same text can take when the platform decides how a path is encoded.
+Line = bytes | tuple[bytes, ...]
+
+
 @dataclass(frozen=True)
 class Case:
     name: str
@@ -48,8 +62,22 @@ class Case:
     exit_code: int = 0
     stdout: bytes | None = b"42\n"
     stderr: bytes | None = b""
-    usage_line: bytes | None = None
+    stderr_lines: tuple[Line, ...] | None = None
     artifact: Path | None = None
+
+
+def usage_line(executable: Path) -> tuple[bytes, ...]:
+    """The program prints the `argv[0]` it was given. Windows hands a C `main`
+    the console code page bytes of that argument, so the same path can arrive in
+    another encoding than the one this script holds it in."""
+    text = f"Usage: {executable}"
+    variants = [text.encode("utf-8")]
+    if os.name == "nt":
+        try:
+            variants.append(text.encode("mbcs"))
+        except (LookupError, UnicodeEncodeError):
+            pass  # A path outside the code page has no second form.
+    return tuple(dict.fromkeys(variants))
 
 
 def source(directory: Path, name: str, text: str) -> Path:
@@ -63,28 +91,45 @@ def vm_cases(binary: Path, directory: Path, short_timeout: float) -> list[Case]:
     tests = source(directory, "profile_test.xr", TEST_SOURCE)
     return [
         Case("run-default-small", [binary, "run", simple], short_timeout),
-        Case("run-sandbox-small", [binary, "run", "--sandbox", simple], short_timeout),
-        Case("test-default-small", [binary, "test", "--quiet", tests], short_timeout,
-             stdout=b""),
+        Case("run-sandbox-small", [binary, "run", "--sandbox", simple], short_timeout,
+             exit_code=1, stdout=b"", stderr=RUN_SANDBOX_DIAGNOSTIC),
         Case("test-sandbox-small", [binary, "test", "--sandbox", "--quiet", tests],
-             short_timeout, stdout=b""),
+             short_timeout, exit_code=1, stdout=b"", stderr=TEST_SANDBOX_DIAGNOSTIC),
     ]
+
+
+def test_role_cases(binary: Path, directory: Path, short_timeout: float) -> list[Case]:
+    """Running a discovered test needs backend test-role startup; until it
+    exists this suite records that one remaining product gap by itself: the
+    file is discovered, its single test is counted, nothing runs, and the
+    command fails instead of reporting an invented outcome."""
+    tests = source(directory, "profile_test.xr", TEST_SOURCE)
+    return [Case("test-discovery-small", [binary, "test", tests], short_timeout,
+                 exit_code=1, stdout=b"", stderr=TEST_ROLE_REPORT)]
 
 
 def native_cases(binary: Path, directory: Path, short_timeout: float,
                  build_timeout: float) -> list[Case]:
     simple = source(directory, "simple.xr", "print(42)\n")
     executable = directory / ("profile.exe" if os.name == "nt" else "profile")
-    usage = f"Usage: {executable} [--sandbox]".encode("utf-8")
+    usage = usage_line(executable)
+    sandbox = (NATIVE_SANDBOX_DIAGNOSTIC, usage)
+    unknown = (b"error: unknown option --unknown-resource-profile", usage)
     return [
         Case("build-native-small", [binary, "build", simple, "-o", executable],
              build_timeout, stdout=None, stderr=None, artifact=executable),
         Case("native-default-small", [executable], short_timeout),
-        Case("native-sandbox-small", [executable, "--sandbox"], short_timeout),
+        Case("native-sandbox-small", [executable, "--sandbox"], short_timeout,
+             exit_code=3, stdout=b"", stderr=None, stderr_lines=sandbox),
+        Case("native-sandbox-value", [executable, "--sandbox=true"], short_timeout,
+             exit_code=3, stdout=b"", stderr=None, stderr_lines=sandbox),
+        # An unknown option is a usage error, not the unavailable feature.
         Case("native-unknown-option", [executable, "--unknown-resource-profile"],
-             short_timeout, exit_code=3, stdout=b"", stderr=None, usage_line=usage),
+             short_timeout, exit_code=2, stdout=b"", stderr=None, stderr_lines=unknown),
         Case("native-duplicate-sandbox", [executable, "--sandbox", "--sandbox"],
-             short_timeout, exit_code=3, stdout=b"", stderr=None, usage_line=usage),
+             short_timeout, exit_code=3, stdout=b"", stderr=None, stderr_lines=sandbox),
+        # Only options are refused: a plain argument still runs the program.
+        Case("native-plain-argument", [executable, "value"], short_timeout),
     ]
 
 
@@ -100,7 +145,7 @@ def large_cases(binary: Path, directory: Path, large_timeout: float,
                           stdout=expected))
         cases.append(Case(name + "-sandbox", [binary, "run", "--sandbox", path],
                           sandbox_timeout, exit_code=1, stdout=b"",
-                          stderr=RESOURCE_DIAGNOSTIC))
+                          stderr=RUN_SANDBOX_DIAGNOSTIC))
     return cases
 
 
@@ -114,10 +159,14 @@ def verdict(case: Case, result: proc.ProcResult) -> list[str]:
         failures.append(f"stdout differs: expected {case.stdout!r}, got {result.stdout!r}")
     if case.stderr is not None and result.stderr != case.stderr:
         failures.append(f"stderr differs: expected {case.stderr!r}, got {result.stderr!r}")
-    # The native launcher's usage rejection precedes binary stream setup on
-    # Windows. Only this diagnostic accepts the platform's CRLF line ending.
-    if case.usage_line is not None and result.stderr.splitlines() != [case.usage_line]:
-        failures.append(f"usage diagnostic differs: got {result.stderr!r}")
+    # Diagnostic lines are compared line by line, so the platform's own line
+    # ending does not decide the verdict while the text of every line does.
+    if case.stderr_lines is not None:
+        actual = result.stderr.splitlines()
+        if len(actual) != len(case.stderr_lines) or any(
+                line not in expected if isinstance(expected, tuple) else line != expected
+                for line, expected in zip(actual, case.stderr_lines)):
+            failures.append(f"stderr lines differ: got {result.stderr!r}")
     if case.artifact is not None and (
             not case.artifact.is_file() or case.artifact.stat().st_size == 0):
         failures.append("successful native build did not produce a nonempty executable")
@@ -164,7 +213,7 @@ def main() -> int:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--suite", choices=("vm", "native", "large"), required=True)
+    parser.add_argument("--suite", choices=("vm", "native", "large", "test-role"), required=True)
     parser.add_argument("--short-timeout", type=float, default=15)
     parser.add_argument("--build-timeout", type=float, default=120)
     parser.add_argument("--large-timeout", type=float, default=300)
@@ -190,6 +239,8 @@ def main() -> int:
             cases = vm_cases(binary, directory, args.short_timeout)
         elif args.suite == "native":
             cases = native_cases(binary, directory, args.short_timeout, args.build_timeout)
+        elif args.suite == "test-role":
+            cases = test_role_cases(binary, directory, args.short_timeout)
         else:
             cases = large_cases(binary, directory, args.large_timeout, args.sandbox_timeout)
         report["planned_cases"] = [case.name for case in cases]

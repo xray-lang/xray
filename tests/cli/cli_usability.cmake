@@ -22,8 +22,9 @@ add_test(NAME test_cli_build_options
 set_tests_properties(test_cli_build_options PROPERTIES
     TIMEOUT 120 PROCESSORS 1 LABELS "cli;usability;build")
 
-# The legacy native builder remains observable in the nightly lane until its
-# replacement is available; it must not block VM and compiler integration.
+# A program published by `xray build` owns no resource profile, so it has to
+# refuse the product options with the CLI's own exit codes instead of running
+# without them; this gate also covers the build that publishes it.
 add_test(NAME test_cli_resource_profiles_native
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_resource_profiles.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
@@ -40,13 +41,24 @@ add_test(NAME test_cli_resource_profiles_vm
         --output ${CMAKE_CURRENT_BINARY_DIR}/resource-profiles-vm --suite vm)
 set_tests_properties(test_cli_resource_profiles_vm PROPERTIES
     TIMEOUT 90 PROCESSORS 1 LABELS "cli;resources;usability")
-# Two default executions and two finite-profile rejections, each run once.
-# COST rounds the measured 94.328-second Windows Release gate up to 95 seconds.
-# The 840-second sum of command timeouts leaves time for owned-tree cleanup.
+# One default run, one refusal per backend, and two long default runs that
+# prove the profile is unlimited: 0.17 s for the command gates and 1.3 s for the
+# large one in a Release tree, 20 s for the same large gate under ASan/UBSan.
+# COST reflects the sanitizer measurement, and the 900-second floor of the
+# command timeouts leaves time for owned-tree cleanup.
 add_test(NAME test_cli_resource_profiles_large
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_resource_profiles.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
         --output ${CMAKE_CURRENT_BINARY_DIR}/resource-profiles-large --suite large)
 set_tests_properties(test_cli_resource_profiles_large PROPERTIES
-    TIMEOUT 900 COST 95 PROCESSORS 1 RUN_SERIAL TRUE LABELS "cli;resources;large")
+    TIMEOUT 900 COST 20 PROCESSORS 1 RUN_SERIAL TRUE LABELS "cli;resources;large")
+# Running one discovered test still needs backend test-role startup, so that
+# single product gap has its own gate instead of holding the sandbox profile
+# assertions red.
+add_test(NAME test_cli_resource_profiles_test_role
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_resource_profiles.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --output ${CMAKE_CURRENT_BINARY_DIR}/resource-profiles-test-role --suite test-role)
+set_tests_properties(test_cli_resource_profiles_test_role PROPERTIES
+    TIMEOUT 90 PROCESSORS 1 LABELS "cli;resources;test-role")
 endif()
