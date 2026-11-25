@@ -44,6 +44,7 @@ static void run_try_trace(const XrRbcOutcome *outcome) {
 static int run_report(const XrRbcOutcome *outcome, XrRbcStatus status) {
     if (status == XR_RBC_OK) return XR_CLI_EXIT_OK;
     XrtArithmeticPanic panic;
+    XrtTempFailure temp = {0};
     const XrtLocationOwner *locations;
     uint32_t message_code=0,message_source=0;const char *message=NULL;size_t message_length=0;
     const XrtErrorSnapshot *error=xr_rbc_outcome_uncaught_error(outcome);
@@ -73,6 +74,8 @@ static int run_report(const XrRbcOutcome *outcome, XrRbcStatus status) {
                 source ? source->column : 0);
         } else if (xr_rbc_outcome_value_failure(outcome, &value_status, &source_id, &locations)) {
             xrt_value_failure_report(value_status, xrt_locations_get(locations, source_id));
+        } else if (xr_rbc_outcome_take_temp(outcome, &temp)) {
+            xrt_temp_failure_report(xr_rbc_outcome_temp_location(outcome));
         } else fprintf(stderr, "register VM execution failed (%u)\n", (unsigned)status);
     }
     return XR_CLI_EXIT_FAIL;
@@ -112,12 +115,15 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     }
     xr_lir_lowered_free(&lowered);
     xr_compile_resources_release(resources);
+    /* Preparation moves the admitted value code into its execution image. */
+    const bool receives_temp = xr_rbc_program_receives_temp(program);
     if (result == XR_CLI_EXIT_OK) {
         XrRbcExecution *execution = NULL;
         XrRbcStatus status = xr_rbc_program_prepare(program, NULL, 0, &execution);
         const char *backtrace=getenv("XRAY_BACKTRACE");
         if (status==XR_RBC_OK && backtrace && !strcmp(backtrace,"1")) xr_rbc_execution_enable_try_trace(execution);
-        XrRbcOutcome *outcome = status == XR_RBC_OK ? xr_rbc_execution_run(execution) : NULL;
+        XrRbcOutcome *outcome = status == XR_RBC_OK ? (receives_temp ?
+            xr_rbc_execution_run_receiving_temp(execution) : xr_rbc_execution_run(execution)) : NULL;
         if (status == XR_RBC_OK) status = xr_rbc_outcome_status(outcome);
         XrOsIoStatus retired = xr_rbc_execution_free(&execution);
         xr_rbc_program_destroy(program);

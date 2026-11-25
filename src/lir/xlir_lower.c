@@ -3494,6 +3494,7 @@ static bool lower_host_function(Lower *c, uint32_t index) {
     case XR_NATIVE_HOST_FILE_OPEN_READ: case XR_NATIVE_HOST_FILE_STAT: operation = XR_LIR_HOST_PATH_CLASS; break;
     case XR_NATIVE_HOST_FILE_READ: operation = XR_LIR_HOST_FILE_READ; break;
     case XR_NATIVE_HOST_ENV_GET: operation = XR_LIR_HOST_ENV_GET; break;
+    case XR_NATIVE_HOST_TEXT_RESULT: operation = XR_LIR_HOST_TEXT_RESULT; break;
     case XR_NATIVE_HOST_FILE_CLOSE: operation = XR_LIR_HOST_FILE_CLOSE; break;
     case XR_NATIVE_HOST_FILE_WRITE_BYTES: case XR_NATIVE_HOST_FILE_WRITE_STRING:
         operation = XR_LIR_HOST_FILE_WRITE; break;

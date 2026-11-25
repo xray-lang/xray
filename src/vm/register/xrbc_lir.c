@@ -568,7 +568,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         i->op == XR_LIR_INVOKE || i->op == XR_LIR_RETURN_ERROR || i->op == XR_LIR_PANIC_ERROR ||
         i->op == XR_LIR_UNCAUGHT_ERROR ||
         i->op == XR_LIR_HOST_FILE_OPEN_WRITE || i->op == XR_LIR_HOST_FILE_CLOSE || i->op == XR_LIR_HOST_FILE_WRITE ||
-        i->op == XR_LIR_HOST_PATH_CLASS || i->op == XR_LIR_HOST_FILE_READ || i->op == XR_LIR_HOST_ENV_GET) return true;
+        i->op == XR_LIR_HOST_PATH_CLASS || i->op == XR_LIR_HOST_FILE_READ || i->op == XR_LIR_HOST_ENV_GET ||
+        i->op == XR_LIR_HOST_TEXT_RESULT) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return true;
     if (i->op==XR_LIR_MAP_BORROW && i->operand_count) {
@@ -2194,6 +2195,23 @@ XR_FUNC XrRbcStatus xr_rbc_program_prepare(const XrRbcProgram *p, const uint64_t
     return xr_rbc_module_prepare_admitted(&p->module, 0, arguments, count, p->locations, output);
 }
 
+XR_FUNC bool xr_rbc_program_receives_temp(const XrRbcProgram *program) {
+    if (!program) return false;
+    /* Compilation may already have published the value code into the borrowed
+     * module view; preparation moves it again, so both owners are accepted. */
+    const XrRbcValueCode *const *codes = program->value_codes ?
+        (const XrRbcValueCode *const *)program->value_codes : program->module.borrowed_value_codes;
+    const size_t count = program->value_codes ? program->module.function_count :
+        program->module.borrowed_value_code_count;
+    if (!codes) return false;
+    for (size_t f = 0; f < count; ++f) {
+        const XrRbcValueCode *code = codes[f];
+        if (!code || !code->accesses) continue;
+        for (size_t a = 0; a < code->access_count; ++a)
+            if (code->accesses[a].operation == XR_RBC_VALUE_HOST_TEXT_RESULT) return true;
+    }
+    return false;
+}
 XR_FUNC const XrRbcModule *xr_rbc_program_view(const XrRbcProgram *program) {
     return program ? &program->module : NULL;
 }

@@ -78,7 +78,7 @@ typedef struct LirC {
     uint32_t location_count, location_cursor;
     bool runtime, runtime_header, f64, state, arrays, views, displays, tuple_displays, maps, sets, i64_refs;
     bool string_values, inline_values, callables, cells, header_edges, binding_forwarding;
-    bool array_local, array_local_runtime, host_path_pair;
+    bool array_local, array_local_runtime, host_path_pair, host_text_result;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;
@@ -1324,11 +1324,12 @@ static void c_standalone_root(LirC *c, XrLirType result) {
     c_function_name(c, c->request->entry.id);
     c_text(c, "();\n}\n\n");
     c_format(c, "%s xray_lir_entry(void) {\n", type);
+    const char *runner = c->host_text_result ? "xrt_run_standalone_receiving_temp" : "xrt_run_standalone";
     if (result == XR_LIR_UNIT) {
-        c_text(c, "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, NULL);\n");
+        c_format(c, "    %s(&xrt_standalone_source_map, xrl_invoke, NULL);\n", runner);
     } else {
         c_format(c, "    %s result;\n", type);
-        c_text(c, "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, &result);\n");
+        c_format(c, "    %s(&xrt_standalone_source_map, xrl_invoke, &result);\n", runner);
         c_text(c, "    return result;\n");
     }
     c_text(c, "}\n\n");

@@ -71,6 +71,12 @@ XRAY_API const XrtSourceMap xrt_standalone_source_map;
 // one completed root call. Invalid map/root violates a host precondition and
 // aborts before guest execution, without a specified guest configuration code.
 XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot root, void *context);
+/* A program whose admitted code contains a nullable-text host leaf runs under
+ * this entry: the process owns the temporary-directory receiving binding and
+ * reports an unresolved rollback instead of returning it. */
+XRAY_API void xrt_run_standalone_receiving_temp(const XrtSourceMap *map, XrtSynchronousRoot root, void *context);
+/* One line per unresolved rollback obligation; the process still owns it. */
+XRAY_API void xrt_temp_failure_report(const XrtSourceLocation *source);
 
 // Emit signed decimal followed by exactly one LF. Zero means unknown source;
 // ids 1..count select locations[id - 1]. On write or flush failure this does

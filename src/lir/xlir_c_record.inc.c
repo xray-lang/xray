@@ -16,6 +16,7 @@ static bool c_record_point(const XrLirInstructionView *v) {
         v->op == XR_LIR_CLASS_ADOPT ||
         v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE ||
         v->op == XR_LIR_HOST_PATH_CLASS || v->op == XR_LIR_HOST_FILE_READ || v->op == XR_LIR_HOST_ENV_GET ||
+        v->op == XR_LIR_HOST_TEXT_RESULT ||
         v->op == XR_LIR_CLASS_SCALAR_WRITE || v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
 }
@@ -116,9 +117,30 @@ static void c_host_environment_get(LirC *c, const XrLirInstructionView *v, uint3
     c_value(c, v->operands[0]);
     c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
 }
+static void c_host_text_result(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    const XrLirValueHome *home = &c->homes->values[v->result];
+    const XrtValueImage *image = xr_lir_value_image_view(c->value_image);
+    const XrtValueImageType *optional = &image->types[home->type - 1];
+    XR_CHECK(optional->kind == XRT_VALUE_NULLABLE && home->temporary_offset != SIZE_MAX &&
+        optional->nullable_payload <= SIZE_MAX - home->temporary_offset,
+        "verified text result has a stable nullable owner offset");
+    c->host_text_result = true;
+    c_values_ensure(c, source);
+    c_format(c, "    xrt_native_host_temp_directory(UINT32_C(%" PRIu64 "), &(XrtNativeHostTempDirectory){"
+        ".frame=xrl_frame, .destination=%zu, .temporary=%zu, .offset=%zu, .temporary_owner_offset=%zu, "
+        ".image=&xrl_value_image, .result_type=UINT32_C(%" PRIu32 "), .root=(const XrtManagedHeader *)",
+        v->bits, home->first_owner, home->temporary_first_owner, home->offset,
+        home->temporary_offset + optional->nullable_payload, home->type);
+    c_value(c, v->operands[0]);
+    c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
+}
 static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (v->op == XR_LIR_HOST_ENV_GET) {
         c_host_environment_get(c, v, source);
+        return;
+    }
+    if (v->op == XR_LIR_HOST_TEXT_RESULT) {
+        c_host_text_result(c, v, source);
         return;
     }
     if (v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE ||

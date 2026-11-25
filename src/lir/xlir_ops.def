@@ -143,6 +143,7 @@ XR_LIR_OP(HOST_FILE_WRITE, "host_file_write", 3)
 XR_LIR_OP(HOST_PATH_CLASS, "host_path_class", 1)
 XR_LIR_OP(HOST_FILE_READ, "host_file_read", 2)
 XR_LIR_OP(HOST_ENV_GET, "host_env_get", 1)
+XR_LIR_OP(HOST_TEXT_RESULT, "host_text_result", 1)
 XR_LIR_OP(STRING_SLICE, "string_slice", 3)
 /* Replaces occurrences into a new String; bits selects all matches. */
 XR_LIR_OP(STRING_REPLACE, "string_replace", 3)

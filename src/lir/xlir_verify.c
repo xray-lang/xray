@@ -432,6 +432,13 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 xr_lir_type_view(m, v->type, &shape) == XR_LIR_OK &&
                 shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_STRING;
         }
+        case XR_LIR_HOST_TEXT_RESULT: {
+            XrLirTypeView shape;
+            return a == XR_LIR_STRING && v->bits <= UINT32_MAX &&
+                xr_native_host_shape((uint32_t)v->bits) == XR_NATIVE_HOST_TEXT_RESULT &&
+                xr_lir_type_view(m, v->type, &shape) == XR_LIR_OK &&
+                shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_STRING;
+        }
         case XR_LIR_HOST_FILE_CLOSE:
             return v->type == XR_LIR_I1 && xr_lir_class_storage(m, a) == XR_NATIVE_DECLARATION_FILE_STORAGE &&
                 v->bits <= UINT32_MAX && xr_native_host_shape((uint32_t)v->bits) == XR_NATIVE_HOST_FILE_CLOSE;
@@ -598,6 +605,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET && v->op != XR_LIR_HOST_PATH_BOOL &&
         v->op != XR_LIR_HOST_FILE_OPEN_WRITE && v->op != XR_LIR_HOST_FILE_CLOSE && v->op != XR_LIR_HOST_FILE_WRITE &&
         v->op != XR_LIR_HOST_PATH_CLASS && v->op != XR_LIR_HOST_FILE_READ && v->op != XR_LIR_HOST_ENV_GET &&
+        v->op != XR_LIR_HOST_TEXT_RESULT &&
         v->op != XR_LIR_CLASS_SCALAR_WRITE && v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW &&

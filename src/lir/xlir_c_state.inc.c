@@ -179,7 +179,8 @@ static void c_state_root(LirC *c, XrLirType result) {
     c_function_name(c, c->request->entry.id); c_text(c, "(state);\n}\n\n");
     c_format(c, "%s xray_lir_entry(void) {\n", type);
     if (result != XR_LIR_UNIT) c_format(c, "    %s result = {0};\n", type);
-    c_format(c, "    xrt_run_standalone_state(&xrt_standalone_source_map, xrl_invoke, %s, &xrl_state_spec);\n",
+    c_format(c, "    %s(&xrt_standalone_source_map, xrl_invoke, %s, &xrl_state_spec);\n",
+        c->host_text_result ? "xrt_run_standalone_state_receiving_temp" : "xrt_run_standalone_state",
         result == XR_LIR_UNIT ? "NULL" : "&result");
     if (result != XR_LIR_UNIT) c_text(c, "    return result;\n");
     c_text(c, "}\n\n");

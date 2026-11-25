@@ -1322,6 +1322,29 @@ static XrtManagedStatus rbc_value_host_environment_get(RbcValueActivation *activ
     return result.managed;
 }
 
+static XrtManagedStatus rbc_value_host_text_result(RbcValueActivation *activation, XrRbcValueAccess access,
+    uint32_t source) {
+    const XrtStringBacking *root = NULL;
+    XrtManagedStatus status = rbc_value_string_borrow(activation, access.source, &root);
+    if (status != XRT_MANAGED_OK) return status;
+    /* A platform without the primitive leaves the validated empty optional. */
+    if (!xr_os_io_temp_available()) return XRT_MANAGED_OK;
+    const XrLirValueHome *home = rbc_value_home(activation->code, access.result);
+    const XrtHostNullableSlots output = {activation->frame, home->first_owner, home->temporary_first_owner,
+        home->offset, home->temporary_offset + offsetof(XrtHostNullableOwner, owner)};
+    XrtHostTempResult result = xrt_execution_temp_directory(&output, (const XrtManagedHeader *)root,
+        NULL, NULL, source);
+    /* Available but inadmissible means this execution installed no receiving
+     * binding. A transport that could not allocate cannot promise null either,
+     * so only an ordinary host refusal is the null result. */
+    if (result.managed == XRT_MANAGED_OK && result.host == XR_OS_IO_UNSUPPORTED)
+        return XRT_MANAGED_ARGUMENT;
+    if (result.managed == XRT_MANAGED_OK &&
+        (result.host == XR_OS_IO_OUT_OF_MEMORY || result.host == XR_OS_IO_MEMORY_LIMIT))
+        xrt_value_failure(xrt_host_io_failure(result.host), source);
+    return result.managed;
+}
+
 static XrtHostFileStagedResult rbc_value_file_destination(RbcValueActivation *activation, uint32_t value) {
     const XrLirValueHome *home = rbc_value_home(activation->code, value);
     return (XrtHostFileStagedResult){
@@ -1592,6 +1615,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         status = rbc_value_host_file(module, stack, activation, access, source);
     } else if (access.operation==XR_RBC_VALUE_HOST_ENV_GET) {
         status = rbc_value_host_environment_get(activation, access, source);
+    } else if (access.operation==XR_RBC_VALUE_HOST_TEXT_RESULT) {
+        status = rbc_value_host_text_result(activation, access, source);
     } else if (access.operation==XR_RBC_VALUE_HOST_PATH_BOOL) {
         const XrtStringBacking *path = NULL, *destination = NULL;
         status = rbc_value_string_borrow(activation, access.source, &path);

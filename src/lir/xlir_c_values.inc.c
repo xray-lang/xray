@@ -540,9 +540,13 @@ static void c_values_root(LirC *c) {
         "    status = xrt_managed_frame_leave(root, landing);\n"
         "    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, 0);\n}\n"
         "XrtManagedHeader *xray_lir_entry(void) {\n    XrtManagedHeader *result = NULL;\n");
-    c_text(c, c->state ?
-        "    xrt_run_standalone_state(&xrt_standalone_source_map, xrl_invoke, &result, &xrl_state_spec);\n" :
-        "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, &result);\n");
+    c_text(c, c->host_text_result ?
+        (c->state ?
+            "    xrt_run_standalone_state_receiving_temp(&xrt_standalone_source_map, xrl_invoke, &result, &xrl_state_spec);\n" :
+            "    xrt_run_standalone_receiving_temp(&xrt_standalone_source_map, xrl_invoke, &result);\n") :
+        (c->state ?
+            "    xrt_run_standalone_state(&xrt_standalone_source_map, xrl_invoke, &result, &xrl_state_spec);\n" :
+            "    xrt_run_standalone(&xrt_standalone_source_map, xrl_invoke, &result);\n"));
     c_text(c, "    return result;\n}\n");
 }
 static void c_values_string_literal(LirC *c, const XrLirInstructionView *v, uint32_t source) {

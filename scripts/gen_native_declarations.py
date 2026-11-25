@@ -1712,6 +1712,7 @@ def render_host_leaves(declarations, stat_fields):
         '__fileRead': ('blocking-file-read', 'XR_NATIVE_BLOCKING_FILE_READ(XR_NATIVE_CALLABLE_IO_FILE_READ)'),
         '__fileWrite': ('blocking-file-write-bytes', 'XR_NATIVE_BLOCKING_FILE_WRITE(XR_NATIVE_CALLABLE_IO_FILE_WRITE, BYTES)'),
         '__fileWriteStr': ('blocking-file-write-string', 'XR_NATIVE_BLOCKING_FILE_WRITE(XR_NATIVE_CALLABLE_IO_FILE_WRITE_STR, STRING)'),
+        '__makeTempDir': ('blocking-text-result', 'XR_NATIVE_BLOCKING_TEXT_RESULT(XR_NATIVE_CALLABLE_IO_MAKE_TEMP_DIR)'),
     }
     by_module = {
         'io': implementations,

@@ -1,0 +1,26 @@
+// A temporary directory leaf publishes an owned path or None. The program's
+// entry installs the receiving binding that carries a rollback obligation, so
+// both backends must create a real directory and report the same facts. The
+// generated name is host-formatted, so only its presence and uniqueness are
+// pinned, not its length.
+import io
+import path
+
+fn exists(root: Path) -> bool {
+    return io.stat(root) != null
+}
+
+fn main() {
+    const made = io.tempDir()
+    print("made=" + string(made != null))
+    if (made == null) { return }
+    const dir = made!
+    print("exists=" + string(exists(dir)))
+    print("named=" + string(len(path.basename(dir)) > 0))
+    const second = io.tempDir()
+    print("second=" + string(second != null))
+    if (second == null) { return }
+    print("differs=" + string(path.basename(dir) != path.basename(second!)))
+}
+
+main()

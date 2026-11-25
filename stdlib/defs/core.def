@@ -1461,6 +1461,7 @@ module io {
   fn __makeTempDir {
     signature: "(root: string): string?"
     doc: "Create a uniquely named directory inside the given root"
+    host_leaf: "blocking-text-result"
     vm: "io_make_temp_dir"
     aot: "xrt_io_make_temp_dir"
     argc: 1

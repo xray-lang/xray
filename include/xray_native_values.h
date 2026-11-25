@@ -120,6 +120,17 @@ typedef struct XrtNativeEnvironmentGet {
 } XrtNativeEnvironmentGet;
 /* A lookup publishes an owned String, including an empty value, or None. */
 XRAY_API void xrt_native_host_environment_get(uint32_t callable, const XrtNativeEnvironmentGet *, uint32_t source_id);
+typedef struct XrtNativeHostTempDirectory {
+    XrtManagedFrame *frame;
+    size_t destination, temporary, offset, temporary_owner_offset;
+    const XrtValueImage *image;
+    uint32_t result_type;
+    const XrtManagedHeader *root;
+} XrtNativeHostTempDirectory;
+/* A create publishes the owned directory path, or None when the host refuses.
+ * A missing receiving binding or a transport allocation failure ends the
+ * execution instead, because neither can promise the empty optional. */
+XRAY_API void xrt_native_host_temp_directory(uint32_t callable, const XrtNativeHostTempDirectory *, uint32_t source_id);
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

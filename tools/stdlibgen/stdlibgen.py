@@ -1380,6 +1380,7 @@ def parse_def_metadata(
                 "blocking-file-read": "(file: __FileStorage, maxBytes: i64): Array<u8>?",
                 "blocking-file-write-bytes": "(file: __FileStorage, data: Array<u8>, offset: i64): i64",
                 "blocking-file-write-string": "(file: __FileStorage, data: string, offset: i64): i64",
+                "blocking-text-result": "(root: string): string?",
             }
             host_module = "os" if host_leaf == "blocking-env-get" else "io"
             if host_leaf and (signature != host_signatures.get(host_leaf) or current_module != host_module or

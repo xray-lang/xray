@@ -239,7 +239,7 @@ XR_FUNC XR_NORET void xrt_execution_temp_failure_take(XrtTempFailure *owned) {
         "the synchronous temporary-directory leaf transfers to its admitted receiving binding");
     *binding->temp = *owned;
     owned->owner = NULL;
-    *binding->failure = (XrtExecutionFailure){.kind=XRT_FAILURE_TEMP};
+    *binding->failure = (XrtExecutionFailure){.kind=XRT_FAILURE_TEMP, .temp_source=owned->source_id};
     longjmp(*binding->target, 1);
 }
 XR_FUNC XR_NORET void xrt_message_panic_take(XrtManagedHeader **owned, uint32_t code, uint32_t source_id) {
@@ -312,6 +312,18 @@ static bool source_map_valid(const XrtSourceMap *map) {
     return true;
 }
 
+XRAY_API void xrt_run_standalone_receiving_temp(const XrtSourceMap *map, XrtSynchronousRoot root,
+    void *context) {
+    XR_CHECK(root && source_map_valid(map), "A receiving standalone root requires a valid prepared map");
+    XrtValueRoot strings = {0};
+    XrtExecutionFailure failure = {0};
+    XrtTempFailure receiver = {0};
+    const XrtExecutionHooks hooks = {.close_metadata=xr_os_io_file_metadata_close, .temp=&receiver};
+    if (run_bound(map, &failure, root, context, &strings, hooks) == XRT_EXECUTION_FAILURE)
+        native_failure_exit(map, &failure);
+    /* A completed run owns no rollback obligation. */
+    XR_CHECK(!receiver.owner, "a completed standalone run holds no temporary rollback");
+}
 XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot root, void *context) {
     XR_CHECK(root && source_map_valid(map), "A standalone root requires a valid prepared source map");
     XrtValueRoot strings = {0};
@@ -359,6 +371,36 @@ XRAY_API void xrt_run_standalone_state(const XrtSourceMap *map, XrtSynchronousSt
     XrtExecutionStatus result = run_bound(map, &failure, state_root_invoke, &invocation, &values, hooks);
     xrt_module_state_drop(&state);
     if (result == XRT_EXECUTION_FAILURE) native_failure_exit(map, &failure);
+}
+
+XRAY_API void xrt_run_standalone_state_receiving_temp(const XrtSourceMap *map, XrtSynchronousStateRoot root,
+    void *context, const XrtModuleLayoutSpec *spec) {
+    XR_CHECK(root && spec && source_map_valid(map), "A receiving state root requires a prepared map and layout");
+    XrtValueRoot values = {0};
+    XrtBillingOwner *billing = NULL;
+    XrtModuleLayout *layout = NULL;
+    XrtModuleState *state = NULL;
+    XrtModuleStatus status = xrt_native_values_prepare(&values, &billing);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_module_layout_new(billing, spec, (XrtManagedLease){0}, &layout);
+    if (status == XRT_MANAGED_OK) status = xrt_module_state_new(layout, billing, &state);
+    xrt_module_layout_drop(&layout);
+    XrtExecutionFailure failure = {0};
+    if (status != XRT_MANAGED_OK) {
+        xrt_module_state_drop(&state);
+        (void)xrt_value_root_drain(&values);
+        failure.kind = XRT_FAILURE_VALUE;
+        failure.detail.value.status = xrt_managed_value_status(status);
+        native_failure_exit(map, &failure);
+    }
+    xrt_native_values_use_state(&values, state, spec->values);
+    XrtStateInvocation invocation = {root, context, state};
+    XrtTempFailure receiver = {0};
+    const XrtExecutionHooks hooks = {.close_metadata=xr_os_io_file_metadata_close, .temp=&receiver};
+    XrtExecutionStatus result = run_bound(map, &failure, state_root_invoke, &invocation, &values, hooks);
+    xrt_module_state_drop(&state);
+    if (result == XRT_EXECUTION_FAILURE) native_failure_exit(map, &failure);
+    XR_CHECK(!receiver.owner, "a completed standalone run holds no temporary rollback");
 }
 
 XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
@@ -505,6 +547,11 @@ XR_FUNC bool xrt_message_panic_report(uint32_t code, const char *message, size_t
         panic_write(NULL, position, (size_t)written);
 }
 static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFailure *failure) {
+    if (failure->kind == XRT_FAILURE_TEMP) {
+        uint32_t id = failure->temp_source;
+        xrt_temp_failure_report(id && id <= map->count ? &map->locations[id - 1] : NULL);
+        _Exit(1);
+    }
     if (failure->kind == XRT_FAILURE_OUTPUT)
         xrt_output_exit(map, failure->detail.output.io,
             failure->detail.output.operation, failure->detail.output.source_id);

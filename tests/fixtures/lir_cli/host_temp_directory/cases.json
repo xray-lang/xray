@@ -1,0 +1,19 @@
+{
+  "temp_directory_created": {
+    "exit": 0,
+    "stdout": "made=true\nexists=true\nnamed=true\nsecond=true\ndiffers=true\n",
+    "stderr": ""
+  },
+  "temp_leaf_not_public": {
+    "source_error": ":5:35: error: name is not an initialized value"
+  },
+  "temp_directory_refused": {
+    "exit": 0,
+    "stdout": "made=true\n",
+    "stderr": "",
+    "set_env": {
+      "TEMP": "missing-temp-root",
+      "TMP": "missing-temp-root"
+    }
+  }
+}

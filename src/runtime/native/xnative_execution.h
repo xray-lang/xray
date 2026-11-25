@@ -58,6 +58,8 @@ typedef struct XrtTempFailure {
 typedef struct XrtErrorSnapshot XrtErrorSnapshot;
 typedef XrtErrorSnapshot XrtTryAssertFailure;
 typedef struct XrtExecutionFailure {
+    /* Present for XRT_FAILURE_TEMP: the leaf that could not roll back. */
+    uint32_t temp_source;
     XrtExecutionFailureKind kind;
     union {
         XrtOutputFailure output;

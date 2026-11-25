@@ -58,6 +58,9 @@ REQUIRED = (
     "test_lexer", "test_parser_recoverable", "test_parser_arrow_syntax",
     "test_fmt_roundtrip", "test_value_arrow_syntax", "spec_snippets_cn", "spec_snippets_en",
 )
+# The temporary-directory transport exists only on Windows today.
+if os.name == "nt":
+    REQUIRED = REQUIRED + ("test_lir_cli_host_temp_directory",)
 
 
 def require(condition: bool, message: str) -> None:
