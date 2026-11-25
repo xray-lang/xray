@@ -130,6 +130,51 @@ def relative_command(command: list[str], reference: Path, output: Path) -> None:
     assert next(item for item in samples if item["candidate"] == "relative")["command"][0] == str(tool.resolve())
 
 
+def unsettled_series(command: list[str], reference: Path, output: Path) -> None:
+    """A series that hops cannot become the number an isolated lane reports."""
+    script = """
+import os, pathlib, sys, tempfile
+case, n = sys.argv[1:3]
+n = int(n)
+previous, current = 0, 1
+for _ in range(n):
+    previous, current = current, previous + current
+# Most samples of the five are stall-sized outliers, so the median itself is
+# raised; the run is identified by its parent so a later run cannot inherit
+# this counter.
+state = pathlib.Path(tempfile.gettempdir()) / ("xray-bench-hoppy-" + str(os.getppid()))
+count = int(state.read_text()) + 1 if state.exists() else 1
+state.write_text(str(count))
+if count % 2 == 1:
+    import time
+    time.sleep(0.15)
+sys.stdout.reconfigure(newline='\\n')
+print(previous)
+"""
+    candidates = output / "unsettled-candidate.json"
+    candidates.write_text(json.dumps([{"name": "hoppy", "command": [
+        sys.executable, "-c", script, "{case}", "{n}"
+    ]}]), encoding="utf-8")
+    base = [sys.executable, str(Path(__file__).with_name("run.py")),
+            "--reference", str(reference), "--output", str(output / "unsettled-run")]
+    process = subprocess.run(base + ["--samples", "5", "--measurement", "isolated",
+                                     "--case", "fib", "--candidates", str(candidates)],
+                             capture_output=True, text=True, timeout=120)
+    assert process.returncode == 1, process.stdout + process.stderr
+    path, rows = results(process)
+    row = next(row for row in rows if row["candidate"] == "hoppy")
+    assert row["status"] == "unsettled" and not row["median_ms"], row
+    assert row["settled"] == "false" and float(row["spread"]) > 1.5, row
+    assert float(row["median_ms"] or 0) == 0, row
+    assert row["max_ms"] and row["min_ms"], row
+    reference_row = next(row for row in rows if row["candidate"] == "c")
+    # The reference itself may or may not be settled on a busy host; the guard's
+    # job is to refuse a number either way, so only its recorded spread matters.
+    assert reference_row["settled"] in ("true", "false") and reference_row["min_ms"], reference_row
+    metadata = json.loads(path.with_name("metadata.json").read_text(encoding="utf-8"))
+    assert metadata["run_status"] == "failed", metadata["run_status"]
+
+
 def descendant_cleanup(runner: dict, output: Path) -> None:
     for mode in ("timeout", "exit"):
         folder = Path(tempfile.mkdtemp(prefix=f"descendants-{mode}-", dir=output))
@@ -304,6 +349,7 @@ def main() -> None:
     assert failed["status"] == "launch-failed" and failed["returncode"] is None
     assert Path(failed["stderr"]).read_bytes()
     identity_change(command, Path(args.reference), args.output)
+    unsettled_series(command, Path(args.reference), args.output)
     relative_command(command, Path(args.reference), args.output)
     descendant_cleanup(runner, args.output)
     late_descendant(runner, Path(args.reference), args.output)

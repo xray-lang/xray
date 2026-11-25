@@ -23,6 +23,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from xray_process import RecoveryRequired, run_child
 
 CASES = {"fib": 32, "integer_loop": 100_000_000, "push_sum": 10_000_000}
+# A steady series sits inside a narrow band: its median stays close to the
+# fastest sample. The bound is a ratio to that sample, so it is independent of
+# the machine's clock; a single scheduling stall cannot move a median, but a
+# sustained load or a majority of stalls does.
+SETTLE_MEDIAN = 1.25
 QUICK = {"fib": 10, "integer_loop": 1000, "push_sum": 1000}
 QUOTA = re.compile(rb"quota|budget|fuel|resource.exhausted|work.limit", re.IGNORECASE)
 
@@ -85,6 +90,16 @@ def run_sample(command: list[str], wanted: bytes, timeout: float, prefix: Path) 
     return {"status": status, "elapsed_ms": elapsed_ms, "returncode": returncode,
             "command": command, "stdout": str(stdout_path), "stderr": str(stderr_path),
             "execution_error": execution_error}
+
+
+def settle(times: list[float]) -> dict:
+    smallest, largest = min(times), max(times)
+    median = statistics.median(times)
+    spread = largest / smallest if smallest > 0 else float("inf")
+    # One stall leaves a median where it was; a raised median means the series is
+    # not showing the steady cost. The spread is recorded, not judged.
+    settled = median <= smallest * SETTLE_MEDIAN
+    return {"min": smallest, "median": median, "max": largest, "spread": spread, "settled": settled}
 
 
 def write_results(output: Path, rows: list[dict], *, finalized: bool) -> None:
@@ -190,9 +205,18 @@ def main() -> int:
         for name, group in by_candidate.items():
             statuses = sorted({sample["status"] for sample in group})
             passed = statuses == ["ok"] and len(group) == args.samples
+            verdict = settle([sample["elapsed_ms"] for sample in group]) if passed else None
+            status = "+".join(statuses) if len(group) == args.samples else "incomplete"
+            reported = passed and (verdict["settled"] or args.measurement != "isolated")
+            if passed and not verdict["settled"] and args.measurement == "isolated":
+                status = "unsettled"
             rows.append({"case": case, "candidate": name, "n": n, "samples": len(group),
-                         "status": "+".join(statuses) if len(group) == args.samples else "incomplete",
-                         "median_ms": f"{statistics.median(sample['elapsed_ms'] for sample in group):.6f}" if passed else "",
+                         "status": status,
+                         "median_ms": f"{verdict['median']:.6f}" if reported else "",
+                         "min_ms": f"{verdict['min']:.6f}" if passed else "",
+                         "max_ms": f"{verdict['max']:.6f}" if passed else "",
+                         "spread": f"{verdict['spread']:.3f}" if passed else "",
+                         "settled": ("true" if verdict["settled"] else "false") if passed else "",
                          "measurement": args.measurement, "quick": args.quick,
                          "source_commit": metadata["source_commit"],
                          "machine": metadata["machine"], "platform": metadata["platform"]})
