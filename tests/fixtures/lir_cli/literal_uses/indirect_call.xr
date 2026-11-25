@@ -1,0 +1,13 @@
+fn consume(value: string) -> i64 {
+    print(value)
+    return 1
+}
+
+fn f() {
+    const s = "a/b/c"
+    const dispatch = consume
+    const n = dispatch(s)
+    print(s)
+    print(n)
+}
+f()

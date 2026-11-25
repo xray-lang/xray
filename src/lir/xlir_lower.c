@@ -1144,11 +1144,9 @@ static uint8_t *lower_literal_uses(Lower *c, const XrXirFunction *f) {
     for (uint32_t i = 0; i < f->instruction_count; ++i) {
         const XrXirInstruction *op = &f->instructions[i];
         if (!lower_known(op)) continue;
-        if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE || op->op == XR_XIR_CALL_INTRINSIC || op->op == XR_XIR_PRINT || op->op == XR_XIR_PHI ||
-            op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE ||
-            op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET ||
-            op->op == XR_XIR_FIXED_ARRAY_NEW || op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_STRUCT_NEW ||
-            op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT) {
+        /* The cleanup instruction's table names the owners of dead loans, not
+         * values it reads, so it never counts a language-level literal use. */
+        if (op->op != XR_XIR_VIEW_CLEANUP && xr_xir_op_uses_operand_table(op->op)) {
             if (op->args[0] > f->operand_count || op->args[1] > f->operand_count - op->args[0]) {
                 lower_unsupported(c, "literal use range");
                 xr_free(uses);

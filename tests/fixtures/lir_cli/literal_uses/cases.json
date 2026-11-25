@@ -1,0 +1,17 @@
+{
+  "indirect_call": {
+    "exit": 0,
+    "stdout": "a/b/c\na/b/c\n1\n",
+    "stderr": ""
+  },
+  "map_literal": {
+    "exit": 0,
+    "stdout": "key\n1\n",
+    "stderr": ""
+  },
+  "map_set": {
+    "exit": 0,
+    "stdout": "key\n1\n",
+    "stderr": ""
+  }
+}

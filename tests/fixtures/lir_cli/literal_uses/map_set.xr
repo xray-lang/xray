@@ -1,0 +1,8 @@
+fn f() {
+    const k = "key"
+    var m: Map<string,i64> = {}
+    m.set(k, 1)
+    print(k)
+    print(m.get("key")!)
+}
+f()

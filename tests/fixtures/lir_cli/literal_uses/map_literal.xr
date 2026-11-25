@@ -1,0 +1,7 @@
+fn f() {
+    const k = "key"
+    const m = { k: 1 }
+    print(k)
+    print(m.get("key")!)
+}
+f()
