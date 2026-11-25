@@ -74,6 +74,12 @@ XRAY_API const void *xrt_native_array_inline_at(const XrtManagedHeader *, const 
     uint32_t type, int64_t index, uint32_t source_id);
 XRAY_API void xrt_native_array_repeat(XrtManagedFrame *, size_t slot,
     const XrtArrayItem *, int64_t length, uint32_t source_id);
+/* Construct an empty Array whose allocated tail holds `capacity` rows. The
+ * receiver keeps every capacity row initialized, so no element owner exists
+ * before the first append. A negative or oversized capacity is a failure, not
+ * an empty Array. */
+XRAY_API void xrt_native_array_with_capacity(XrtManagedFrame *, size_t slot,
+    XrtBackingArrayKind, int64_t capacity, uint32_t source_id);
 XRAY_API void xrt_native_string_copy_bytes(XrtManagedFrame *, size_t slot, const XrtStringBacking *, uint32_t source_id);
 XRAY_API int64_t xrt_native_array_capacity(const XrtManagedHeader *, XrtBackingArrayKind, uint32_t source_id);
 /* Fill an empty temporary owner. The caller publishes to the checked place

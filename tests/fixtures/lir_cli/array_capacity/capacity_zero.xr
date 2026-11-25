@@ -1,0 +1,7 @@
+var empty = Array<i64>.withCapacity(0)
+print(len(empty))
+print(empty.capacity == 0)
+empty.push(9)
+print(len(empty))
+print(empty[0])
+print(empty.capacity >= 1)

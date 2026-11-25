@@ -1,0 +1,2 @@
+var values = Array<i64>.withCapacity("eight")
+print(len(values))

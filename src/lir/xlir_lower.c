@@ -632,6 +632,7 @@ static bool lower_known(const XrXirInstruction *instruction) {
         case XR_XIR_HASH_LEN: case XR_XIR_HASH_CONTAINS: case XR_XIR_HASH_DELETE: case XR_XIR_HASH_CLEAR:
         case XR_XIR_HASH_KEYS: case XR_XIR_HASH_VALUES:
         case XR_XIR_ARRAY_REPEAT:
+        case XR_XIR_ARRAY_WITH_CAPACITY:
         case XR_XIR_ARRAY_LEN: case XR_XIR_ARRAY_CAPACITY: case XR_XIR_ARRAY_RESERVE:
         case XR_XIR_ARRAY_GET:
         case XR_XIR_ARRAY_SET:

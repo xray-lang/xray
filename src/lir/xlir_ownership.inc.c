@@ -441,7 +441,8 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                     const XrLirArrayIntrinsic *shape = xr_lir_internal_array_intrinsic(m,v->intrinsic);
                     if (shape) {
                         bool constructor = shape->operation == XR_LIR_ARRAY_OP_NEW || shape->operation == XR_LIR_ARRAY_OP_REPEAT ||
-                            shape->operation == XR_LIR_ARRAY_OP_COPY_STRING_BYTES;
+                            shape->operation == XR_LIR_ARRAY_OP_COPY_STRING_BYTES ||
+                            shape->operation == XR_LIR_ARRAY_OP_WITH_CAPACITY;
                         uint32_t receiver = constructor ? 0 : v->operands[0];
                         if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_ARRAY_OPERATION,
                             .function=function,.block=b + 1,.instruction=i + 1,.value=receiver,

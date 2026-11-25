@@ -303,9 +303,12 @@ static void array_catalog(void) {
             else if (op == XR_LIR_ARRAY_OP_DISPLAY) CHECK(id == 34 + family);
             else CHECK(id == 38 + family * 2 + op - XR_LIR_ARRAY_OP_CAPACITY);
         }
+        uint32_t capacity_id = 0;
+        OK(xr_lir_array_operation(m, element, XR_LIR_ARRAY_OP_WITH_CAPACITY, &capacity_id));
+        CHECK(capacity_id == 46 + family && capacity_id == m->array_operations[family][XR_LIR_ARRAY_OP_WITH_CAPACITY - 1]);
         uint32_t copy_bytes = 0;
         XrLirStatus copy_status = xr_lir_array_operation(m,element,XR_LIR_ARRAY_OP_COPY_STRING_BYTES,&copy_bytes);
-        CHECK(element == XR_LIR_U8 ? copy_status == XR_LIR_OK && copy_bytes == 46 :
+        CHECK(element == XR_LIR_U8 ? copy_status == XR_LIR_OK && copy_bytes == 50 :
             copy_status == XR_LIR_UNSUPPORTED && !copy_bytes);
         for (uint32_t op = XR_LIR_ARRAY_OP_SET; op <= XR_LIR_ARRAY_OP_PUSH; ++op) {
             uint32_t cell = 0, reference = 0;

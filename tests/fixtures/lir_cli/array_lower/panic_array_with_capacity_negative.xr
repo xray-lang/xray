@@ -1,0 +1,10 @@
+fn negative() -> i64 {
+    return 0 - 1
+}
+
+fn example() {
+    var values = Array<i64>.withCapacity(negative())
+    print(len(values))
+}
+
+example()

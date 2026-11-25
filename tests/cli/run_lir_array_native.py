@@ -110,7 +110,7 @@ def main() -> None:
              "range_fill", "panic_range_negative", "panic_range_reversed", "panic_range_end",
              "snapshots", "values", "strings", "imports", "conditional", "class_constructor_array_field", "array_class_elements",
              "byte_copy_before_write", "class_byte_array_field", "class_owned_class_field", "class_scalar_field", "large", "large_string",
-             "array_capacity_reserve", "panic_array_reserve_negative", "array_borrowed_formal_binding", "buffered_writer_bytes",
+             "array_capacity_reserve", "panic_array_reserve_negative", "panic_array_with_capacity_negative", "array_borrowed_formal_binding", "buffered_writer_bytes",
              "string_copy_bytes", "buffered_writer_string", "nullable_class", "nullable_class_aggregate", "panic_nullable_class",
              "nullable_array", "nullable_inline_array", "nullable_inline_array_signature", "panic_nullable_array", "cfn_scalar_home_control",
              "local_loop", "loop_temporary", "nested_lifetimes", "loop_lifetimes", "loop_carry",
@@ -220,7 +220,7 @@ def main() -> None:
         panic_location = source.name.encode()
         if name == "panic_array_repeated_affine_bounds":
             panic_location += b":7:13-7:13"
-        if name == "panic_array_reserve_negative":
+        if name in ("panic_array_reserve_negative", "panic_array_with_capacity_negative"):
             diagnostic = b"[Uncaught Panic] E0422:"
             panic_location = b""
         elif name.startswith("panic_map_"):

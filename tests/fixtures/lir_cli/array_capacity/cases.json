@@ -1,0 +1,21 @@
+{
+  "capacity_backing": {
+    "exit": 0,
+    "stdout": "true\n0\ntrue\n2\n2\ntrue\n1\ntrue\n1\ntrue\n0\n",
+    "stderr": ""
+  },
+  "capacity_inline_element": {
+    "lowering_error": ":7:5: Array.withCapacity for an inline element is not supported by LIR lowering yet"
+  },
+  "capacity_type_error": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "",
+    "source_error": ":1:38: error: expression cannot satisfy its declared type"
+  },
+  "capacity_zero": {
+    "exit": 0,
+    "stdout": "0\ntrue\n1\n9\ntrue\n",
+    "stderr": ""
+  }
+}

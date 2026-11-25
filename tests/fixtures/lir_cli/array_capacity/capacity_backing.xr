@@ -1,0 +1,22 @@
+var values = Array<i64>.withCapacity(8)
+print(values.capacity >= 8)
+print(len(values))
+values.push(1)
+values.push(2)
+print(values.capacity >= 8)
+print(len(values))
+print(values[1])
+
+var names = Array<string>.withCapacity(2)
+names.push("a")
+print(names.capacity >= 2)
+print(len(names))
+
+var bytes = Array<u8>.withCapacity(3)
+bytes.push(7)
+print(bytes.capacity >= 3)
+print(len(bytes))
+
+var words = Array<u64>.withCapacity(5)
+print(words.capacity >= 5)
+print(len(words))

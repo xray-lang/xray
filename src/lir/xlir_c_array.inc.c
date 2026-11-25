@@ -163,6 +163,15 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
     }
     if (shape->operation != XR_LIR_ARRAY_OP_GET || element == XR_LIR_STRING) c_values_ensure(c,source);
     const XrLirValueHome *home=v->result ? &c->homes->values[v->result] : NULL;
+    if (shape->operation == XR_LIR_ARRAY_OP_WITH_CAPACITY) {
+        c_format(c,"    xrt_native_array_with_capacity(xrl_frame, %zu, %s, ",home->temporary_first_owner,kind);
+        c_value(c,v->operands[0]);
+        c_format(c,", UINT32_C(%" PRIu32 "));\n",source);
+        c_values_publish_leaf(c,v->result,source);
+        c_array_local_ready(c);
+        if (c->status == XR_LIR_C_OK) c->array_frame_block = c->block;
+        return;
+    }
     switch (shape->operation) {
     case XR_LIR_ARRAY_OP_NEW:
         c_format(c,"    xrt_native_array_create(xrl_frame, %zu, &(XrtArrayInput){%s, ",home->temporary_first_owner,kind);

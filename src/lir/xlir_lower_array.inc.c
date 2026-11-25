@@ -89,6 +89,7 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
     switch (op->op) {
         case XR_XIR_ARRAY_NEW: operation = XR_LIR_ARRAY_OP_NEW; break;
         case XR_XIR_ARRAY_REPEAT: operation = XR_LIR_ARRAY_OP_REPEAT; break;
+        case XR_XIR_ARRAY_WITH_CAPACITY: operation = XR_LIR_ARRAY_OP_WITH_CAPACITY; break;
         case XR_XIR_ARRAY_LEN: operation = XR_LIR_ARRAY_OP_LEN; break;
         case XR_XIR_ARRAY_CAPACITY: operation = XR_LIR_ARRAY_OP_CAPACITY; break;
         case XR_XIR_ARRAY_RESERVE: operation = XR_LIR_ARRAY_OP_RESERVE; break;
@@ -107,13 +108,14 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
     }
     bool grouped = op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_ARRAY_SET;
     bool single = operation == XR_LIR_ARRAY_OP_LEN || operation == XR_LIR_ARRAY_OP_CAPACITY ||
-        operation == XR_LIR_ARRAY_OP_DISPLAY || operation == XR_LIR_ARRAY_OP_COPY_STRING_BYTES;
+        operation == XR_LIR_ARRAY_OP_DISPLAY || operation == XR_LIR_ARRAY_OP_COPY_STRING_BYTES ||
+        operation == XR_LIR_ARRAY_OP_WITH_CAPACITY;
     uint32_t count = grouped ? op->args[1] : single ? 1u : 2u;
     XrLirValue *args = lower_alloc(c, count, sizeof(*args));
     if (count && !args) return false;
     bool good = true;
     bool constructor = operation == XR_LIR_ARRAY_OP_NEW || operation == XR_LIR_ARRAY_OP_REPEAT ||
-        operation == XR_LIR_ARRAY_OP_COPY_STRING_BYTES;
+        operation == XR_LIR_ARRAY_OP_COPY_STRING_BYTES || operation == XR_LIR_ARRAY_OP_WITH_CAPACITY;
     uint32_t receiver = constructor ? UINT32_MAX :
         grouped ? f->source->operands[op->args[0]] : op->args[0];
     uint32_t cell = f->array_places && receiver != UINT32_MAX ? f->array_places[receiver] : UINT32_MAX;
@@ -145,9 +147,16 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
         } else if (type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF)
             good = lower_unsupported(c, "Array mutation without a mutable binding");
     }
-    if (good) good = lower_build(c, mutation ? xr_lir_array_mutator(c->module,
-        lower_array_element(c, array), lower_value_type(f, args[0]), operation, &intrinsic) :
-        xr_lir_array_operation(c->module, lower_array_element(c, array), operation, &intrinsic));
+    if (good) {
+        XrLirStatus query = mutation ? xr_lir_array_mutator(c->module,
+            lower_array_element(c, array), lower_value_type(f, args[0]), operation, &intrinsic) :
+            xr_lir_array_operation(c->module, lower_array_element(c, array), operation, &intrinsic);
+        /* The query has no intrinsic row for an inline element constructor.
+         * Name the missing capability instead of failing on the empty block. */
+        if (query == XR_LIR_UNSUPPORTED && operation == XR_LIR_ARRAY_OP_WITH_CAPACITY)
+            good = lower_unsupported(c, "Array.withCapacity for an inline element");
+        else good = lower_build(c, query);
+    }
     XrLirInstruction call = {.op = XR_LIR_CALL_INTRINSIC, .type = lower_type(c, op->type),
         .intrinsic = intrinsic, .operands = args, .operand_count = count, .source = lower_source(c)};
     if (good) good = lower_build(c, call.type == XR_LIR_UNIT

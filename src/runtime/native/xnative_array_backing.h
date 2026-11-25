@@ -29,6 +29,11 @@ XR_FUNC XrtManagedStatus xrt_array_backing_u8_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, const uint8_t *, size_t count, size_t capacity);
 XR_FUNC XrtManagedStatus xrt_array_backing_u64_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, const uint64_t *, size_t count, size_t capacity);
+/* An empty Array whose allocated tail holds `capacity` rows. The capacity is
+ * language-supplied rather than derived from input, so a negative request is
+ * an argument failure and an unrepresentable one is an overflow failure. */
+XR_FUNC XrtManagedStatus xrt_array_backing_with_capacity_create(XrtManagedFrame *, size_t,
+    const XrtBackingTypes *, XrtBackingArrayKind, int64_t capacity);
 
 /* The bound Ops owns the exact inline aggregate plan and its physical schema.
  * Bind once during receiving-layout preparation, then use those Ops throughout

@@ -85,6 +85,19 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_i64_create(XrtManagedFrame *frame,
     const XrtBackingTypes *types, const int64_t *values, size_t count, size_t capacity) {
     return array_create(frame, slot, types, (ArrayInput){XRT_BACKING_ARRAY_I64, values, NULL, count, capacity});
 }
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_with_capacity_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, XrtBackingArrayKind kind, int64_t capacity) {
+    if (!types || capacity < 0) return XRT_MANAGED_ARGUMENT;
+    if ((uint64_t)capacity > SIZE_MAX) return XRT_MANAGED_OVERFLOW;
+    size_t rows = (size_t)capacity;
+    switch (kind) {
+    case XRT_BACKING_ARRAY_I64: return xrt_array_backing_i64_create(frame, slot, types, NULL, 0, rows);
+    case XRT_BACKING_ARRAY_STRING: return xrt_array_backing_string_create(frame, slot, types, NULL, 0, rows);
+    case XRT_BACKING_ARRAY_U8: return xrt_array_backing_u8_create(frame, slot, types, NULL, 0, rows);
+    case XRT_BACKING_ARRAY_U64: return xrt_array_backing_u64_create(frame, slot, types, NULL, 0, rows);
+    default: return XRT_MANAGED_ARGUMENT;
+    }
+}
 XR_FUNCDEF XrtManagedStatus xrt_array_backing_string_create(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, XrtStringBacking *const *values, size_t count, size_t capacity) {
     return array_create(frame, slot, types, (ArrayInput){XRT_BACKING_ARRAY_STRING, values, NULL, count, capacity});

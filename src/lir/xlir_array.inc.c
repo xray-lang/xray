@@ -117,6 +117,9 @@ XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirModule *m, const X
     if (shape->operation == XR_LIR_ARRAY_OP_REPEAT)
         return !shape->variadic && entry->result == XR_LIR_ARRAY && entry->parameter_count == 2 &&
             entry->parameters[0] == XR_LIR_I64 && entry->parameters[1] == shape->result_element;
+    if (shape->operation == XR_LIR_ARRAY_OP_WITH_CAPACITY)
+        return !shape->variadic && entry->result == XR_LIR_ARRAY && entry->parameter_count == 1 &&
+            entry->parameters[0] == XR_LIR_I64;
     if (shape->variadic || !entry->parameter_count) return false;
     switch (shape->operation) {
     case XR_LIR_ARRAY_OP_LEN: case XR_LIR_ARRAY_OP_CAPACITY:
@@ -182,7 +185,7 @@ XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *m, XrLirType eleme
     XrLirArrayOperation operation, uint32_t *id) {
     if (id) *id = 0;
     if (!id || !m || m->failure != XR_LIR_OK || !xr_lir_internal_array_element(m, element) ||
-        operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_COPY_STRING_BYTES)
+        operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_WITH_CAPACITY)
         return XR_LIR_INVALID_ARGUMENT;
     uint32_t family = xr_lir_internal_array_family(element);
     if (family == UINT32_MAX) {
@@ -241,6 +244,9 @@ static void lir_array_catalog_signature(LirArrayCatalogRow *row, XrLirIntrinsic 
     case XR_LIR_ARRAY_OP_REPEAT:
         arity = 2; parameters[0] = XR_LIR_I64; parameters[1] = element;
         shapes[0] = XR_LIR_TYPE_INVALID; result = XR_LIR_ARRAY; break;
+    case XR_LIR_ARRAY_OP_WITH_CAPACITY:
+        parameters[0] = XR_LIR_I64; shapes[0] = XR_LIR_TYPE_INVALID;
+        result = XR_LIR_ARRAY; break;
     default: XR_CHECK(false, "Array catalog admits only declared operations"); break;
     }
     *entry = (XrLirIntrinsic){id, parameters, arity, result, true, 0};
@@ -252,6 +258,7 @@ static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra)
     enum { operations = XR_LIR_ARRAY_OP_REPEAT, base_catalog = XR_LIR_ARRAY_FAMILY_COUNT * operations,
         reference_end = base_catalog + XR_LIR_ARRAY_FAMILY_COUNT * 2,
         display_end = reference_end + XR_LIR_ARRAY_FAMILY_COUNT,
+        capacity_end = display_end + XR_LIR_ARRAY_FAMILY_COUNT * 2,
         catalog = XR_LIR_ARRAY_CATALOG_COUNT };
     uint32_t count = extra ? extra->count : 0;
     if (!m || m->intrinsic_count || m->function_count || (count && !extra->entries) || count > UINT32_MAX - catalog - 1 ||
@@ -297,9 +304,12 @@ static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra)
         } else if (i < display_end) {
             family = i - reference_end;
             operation = XR_LIR_ARRAY_OP_DISPLAY;
-        } else {
+        } else if (i < capacity_end) {
             family = (i - display_end) / 2;
             operation = (XrLirArrayOperation)(XR_LIR_ARRAY_OP_CAPACITY + (i - display_end) % 2);
+        } else {
+            family = i - capacity_end;
+            operation = XR_LIR_ARRAY_OP_WITH_CAPACITY;
         }
         lir_array_catalog_signature(&parts[i], &entries[count + i], next, lir_array_elements[family], operation, reference);
     }

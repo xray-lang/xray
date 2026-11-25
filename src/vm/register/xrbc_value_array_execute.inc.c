@@ -228,7 +228,7 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     if (access.operation!=XR_RBC_VALUE_ARRAY) return rbc_value_binding_step(module,stack,activation,access,source);
     const uint32_t *args=access.count ? activation->code->arguments+access.first : NULL;
     bool create=access.index==XR_LIR_ARRAY_OP_NEW || access.index==XR_LIR_ARRAY_OP_REPEAT ||
-        access.index==XR_LIR_ARRAY_OP_COPY_STRING_BYTES;
+        access.index==XR_LIR_ARRAY_OP_COPY_STRING_BYTES || access.index==XR_LIR_ARRAY_OP_WITH_CAPACITY;
     XrtValueKind value_kind=rbc_value_kind(module,activation->code,create ? access.result : args[0]);
     if (value_kind==XRT_VALUE_ARRAY_INLINE) return rbc_value_array_inline(module,stack,activation,access,args);
     XrtBackingArrayKind kind=(XrtBackingArrayKind)(value_kind-XRT_VALUE_ARRAY_I64);
@@ -262,6 +262,13 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
             status = rbc_value_string_borrow(activation,args[0],&string);
             if (status==XRT_MANAGED_OK)
                 status=xrt_string_backing_copy_bytes_create(activation->frame,result->temporary_first_owner,types,string);
+        } else if (access.index==XR_LIR_ARRAY_OP_WITH_CAPACITY) {
+            XrRbcRegister *capacity=rbc_value_register(stack,activation,args[0]);
+            if (!capacity) return XRT_MANAGED_ARGUMENT;
+            int64_t rows; memcpy(&rows,&capacity->bits,sizeof(rows));
+            xrt_native_array_with_capacity(activation->frame,result->temporary_first_owner,kind,rows,source);
+            activation->backings_ready=true;
+            return rbc_value_publish_leaf(activation,access.result);
         } else {
             XrRbcRegister *length=rbc_value_register(stack,activation,args[0]); XrtArrayItem item;
             if (!length) return XRT_MANAGED_ARGUMENT;
