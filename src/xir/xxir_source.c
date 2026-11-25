@@ -2227,11 +2227,11 @@ static bool expression_structural_body(SourceContext *ctx, AstNode *node, Source
             return source_fail(ctx, node, XR_XIR_BAD_VALUE, "name is not an initialized value");
         if (!source_query_reference(ctx, node, symbol, symbol, XR_XIR_SOURCE_READ)) return false;
         if (symbol->kind == SOURCE_UNIT_LOCAL)return source_binding_read(ctx,symbol,value);
-        if (symbol->kind == SOURCE_LOCAL) {
-            if (symbol->construction) {
-                if (xr_xir_type_is_class(&ctx->types,symbol->type)) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class this cannot escape before constructor completion");
-                return source_constructor_value(ctx,value);
-            }
+        if (symbol->kind == SOURCE_LOCAL && symbol->construction) {
+            if (xr_xir_type_is_class(&ctx->types,symbol->type)) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class this cannot escape before constructor completion");
+            return source_constructor_value(ctx,value);
+        }
+        if (source_fact_subject(ctx,symbol)) {
             SourceValue read;
             if (!source_binding_read(ctx, symbol, &read)) return false;
             SourceExpressionPlan *plan=ctx->active_expression;

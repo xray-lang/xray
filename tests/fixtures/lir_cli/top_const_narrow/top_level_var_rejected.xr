@@ -1,0 +1,13 @@
+// Spec 2.13 N-1: a top-level var never narrows, because any called function
+// can assign it. The null check here keeps the declared type.
+var value: string? = "abc"
+
+fn reset() {
+    value = null
+}
+
+if (value != null) {
+    reset()
+    const text: string = value
+    print(text)
+}

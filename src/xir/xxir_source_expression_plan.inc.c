@@ -95,7 +95,7 @@ static bool source_plan_collect_header(SourceContext *ctx,AstNode *node,SourceEx
             plan->binding = source_builtin_value(ctx, node, node->as.variable.name);
         if (source_name_ready(plan->binding)) {
             plan->type_ready=true;plan->ground_type=source_symbol_type(ctx,plan->binding);
-            if (plan->binding->kind==SOURCE_LOCAL) {
+            if (source_fact_subject(ctx,plan->binding)) {
                 plan->read_binding=plan->binding;plan->read_declared=plan->binding->type;
                 plan->read_prefix=source_fact_depth(ctx,plan->binding);plan->read_claims=plan->read_prefix;
                 plan->read_epoch=source_epoch(ctx,ctx->epochs,plan->binding);

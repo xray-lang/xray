@@ -1638,11 +1638,11 @@ Rules `N-1` … `N-13` in this section are normative. Each has a conformance cas
 
 #### 2.13.1 Narrowable Subjects
 
-**N-1** Only **simple bindings** narrow: local `var` / `const` bindings and bare parameter identifiers.
+**N-1** Only **simple bindings** narrow, named by a bare identifier: local `var` / `const` bindings, parameters, and a top-level `const` of the current module. A top-level `var` never narrows, because any called function can assign it. A `const` imported from another module never narrows; extract a local binding (N-3) when one is needed.
 
 **N-2** The following positions **never narrow**, even after a null check or an `is` check: field access `p.f`, `this.f`, index `a[i]`, tuple component `t.0`, call results `f()`, and any other non-identifier expression. A check on such a position determines the type of the check expression itself only; it does not affect later accesses spelled the same way.
 
-> Rationale: only a simple binding has all of its write sites statically enumerable within the function. Fields and elements can change through an alias, another coroutine, or a method call; narrowing them would require place equivalence plus alias invalidation analysis, whose cost and uncertainty exceed the benefit.
+> Rationale: only a simple binding has all of its write sites statically enumerable; a top-level `const` has none after its initialization. Fields and elements can change through an alias, another coroutine, or a method call; narrowing them would require place equivalence plus alias invalidation analysis, whose cost and uncertainty exceed the benefit.
 
 **N-3** To get flow sensitivity for a non-narrowable position, extract a local binding first:
 

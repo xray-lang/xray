@@ -1,0 +1,39 @@
+// Spec 2.13 N-1: a top-level const narrows at the top level and in functions.
+fn number(flag: bool) -> i64? {
+    if (flag) {
+        return 4
+    }
+    return null
+}
+
+fn text(flag: bool) -> string? {
+    if (flag) {
+        return "abc"
+    }
+    return null
+}
+
+const v = number(true)
+const none = number(false)
+const s = text(true)
+
+fn readConst() -> i64 {
+    if (v == null) {
+        return 0
+    }
+    return v * 3
+}
+
+if (v != null) {
+    print(v + 1)
+}
+if (none == null) {
+    print("none")
+} else {
+    print(none + 1)
+}
+if (s != null && v != null) {
+    print(len(s) + v)
+}
+print(v != null ? v * 2 : 0)
+print(readConst())

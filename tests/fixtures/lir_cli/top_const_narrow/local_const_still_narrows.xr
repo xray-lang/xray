@@ -1,0 +1,17 @@
+// A local const keeps narrowing exactly as before the top-level subject
+// was admitted: the rule widened one subject, it did not replace the others.
+fn number(flag: bool) -> i64? {
+    if (flag) {
+        return 4
+    }
+    return null
+}
+
+fn main() {
+    const local = number(true)
+    if (local != null) {
+        print(local + 1)
+    }
+}
+
+main()

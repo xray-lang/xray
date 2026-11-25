@@ -1,0 +1,13 @@
+// Spec 2.13 N-1 and N-11.1: a top-level var never narrows, not even inside a
+// function that checks it itself.
+var value: string? = "abc"
+
+fn read() -> string {
+    if (value != null) {
+        const text: string = value
+        return text
+    }
+    return ""
+}
+
+print(read())

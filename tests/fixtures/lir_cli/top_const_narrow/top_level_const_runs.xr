@@ -1,0 +1,30 @@
+// Spec 2.13 N-1: a top-level const of this module narrows, at the top level
+// and inside a function that checks it again.
+fn number(flag: bool) -> i64? {
+    if (flag) {
+        return 4
+    }
+    return null
+}
+
+const top = number(true)
+const absent = number(false)
+
+fn read() -> i64 {
+    if (top == null) {
+        return 0
+    }
+    return top * 2
+}
+
+fn main() {
+    if (top != null) {
+        print(top + 1)
+    }
+    if (absent == null) {
+        print("absent")
+    }
+    print(read())
+}
+
+main()

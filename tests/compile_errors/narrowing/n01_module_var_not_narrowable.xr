@@ -1,0 +1,12 @@
+// Spec 2.13 N-1: a top-level var never narrows, because a called function
+// can assign it. The check does not survive the call.
+var value: string? = "abc"
+
+fn reset() {
+    value = null
+}
+
+if (value != null) {
+    reset()
+    print(len(value))
+}

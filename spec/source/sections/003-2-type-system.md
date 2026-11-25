@@ -895,11 +895,11 @@ Xray 默认只保留最小类型身份层：
 
 #### 2.13.1 可收窄主体
 
-**N-1** 只有**简单绑定**可被收窄：局部 `var` / `const` 绑定，以及函数参数的裸标识符。
+**N-1** 只有**简单绑定**可被收窄，且须以裸标识符书写：局部 `var` / `const` 绑定、函数参数，以及当前模块的顶层 `const`。顶层 `var` 不可收窄，因为任何被调用的函数都可能给它赋值。从其他模块导入的 `const` 不可收窄，需要时按 N-3 先提取局部绑定。
 
 **N-2** 以下位置**不可收窄**，即使对其做了空检查或 `is` 检查：字段访问 `p.f`、`this.f`、索引 `a[i]`、元组分量 `t.0`、调用结果 `f()`，以及任何其它非标识符表达式。对这些位置的检查只决定该检查表达式自身的类型，不影响后续对同一写法的访问。
 
-> 理由：只有简单绑定的全部写入点可在函数内被静态枚举。字段与元素可经别名、其它协程或方法调用改变；收窄它们需要引入位置（place）等价与别名失效分析，其代价与不确定性超过收益。
+> 理由：只有简单绑定的全部写入点可被静态枚举；顶层 `const` 初始化之后没有写入点。字段与元素可经别名、其它协程或方法调用改变；收窄它们需要引入位置（place）等价与别名失效分析，其代价与不确定性超过收益。
 
 **N-3** 需要对不可收窄位置做流敏感处理时，先提取一个局部绑定：
 
@@ -2075,11 +2075,11 @@ Rules `N-1` … `N-13` in this section are normative. Each has a conformance cas
 
 #### 2.13.1 Narrowable Subjects
 
-**N-1** Only **simple bindings** narrow: local `var` / `const` bindings and bare parameter identifiers.
+**N-1** Only **simple bindings** narrow, named by a bare identifier: local `var` / `const` bindings, parameters, and a top-level `const` of the current module. A top-level `var` never narrows, because any called function can assign it. A `const` imported from another module never narrows; extract a local binding (N-3) when one is needed.
 
 **N-2** The following positions **never narrow**, even after a null check or an `is` check: field access `p.f`, `this.f`, index `a[i]`, tuple component `t.0`, call results `f()`, and any other non-identifier expression. A check on such a position determines the type of the check expression itself only; it does not affect later accesses spelled the same way.
 
-> Rationale: only a simple binding has all of its write sites statically enumerable within the function. Fields and elements can change through an alias, another coroutine, or a method call; narrowing them would require place equivalence plus alias invalidation analysis, whose cost and uncertainty exceed the benefit.
+> Rationale: only a simple binding has all of its write sites statically enumerable; a top-level `const` has none after its initialization. Fields and elements can change through an alias, another coroutine, or a method call; narrowing them would require place equivalence plus alias invalidation analysis, whose cost and uncertainty exceed the benefit.
 
 **N-3** To get flow sensitivity for a non-narrowable position, extract a local binding first:
 

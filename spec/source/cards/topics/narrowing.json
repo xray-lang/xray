@@ -17,7 +17,7 @@
   "sections": [
     {
       "heading": "What can be narrowed (N-1, N-2)",
-      "markdown": "Only **simple bindings** narrow: local `var` / `const` bindings and bare parameter identifiers.\n\nNever narrowed, even after a null check: `p.f`, `this.f`, `a[i]`, `t.0`, `f()`, and any other non-identifier expression. Extract a local binding first (N-3).",
+      "markdown": "Only **simple bindings** narrow, named by a bare identifier: local `var` / `const` bindings, parameters, and a top-level `const` of the current module. A top-level `var` never narrows, because any called function can assign it; a `const` imported from another module never narrows.\n\nNever narrowed, even after a null check: `p.f`, `this.f`, `a[i]`, `t.0`, `f()`, and any other non-identifier expression. Extract a local binding first (N-3).",
       "fences": [
         "narrowing-extract-binding"
       ]

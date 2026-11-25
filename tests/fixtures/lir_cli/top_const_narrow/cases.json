@@ -1,0 +1,18 @@
+{
+  "local_const_still_narrows": {
+    "exit": 0,
+    "stdout": "5\n",
+    "stderr": ""
+  },
+  "top_level_const_runs": {
+    "exit": 0,
+    "stdout": "5\nabsent\n8\n",
+    "stderr": ""
+  },
+  "top_level_var_rejected": {
+    "source_error": ":11:26: error: expression cannot satisfy its declared type"
+  },
+  "var_in_function_rejected": {
+    "source_error": ":7:30: error: expression cannot satisfy its declared type"
+  }
+}

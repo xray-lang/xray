@@ -4,12 +4,20 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_source_flow.inc.c - Flow-sensitive null narrowing of simple local bindings
+ * xxir_source_flow.inc.c - Flow-sensitive null narrowing of simple bindings
  *
  * KEY CONCEPT:
  *   A narrowed binding is still its declared Nullable storage; each read of a binding known
  *   to hold a value unwraps it, and any assignment, ref argument or loop write forgets the fact.
+ *   A const of the current module is also a subject: nothing can rewrite it after initialization.
  */
+/* N-1: locals and parameters, plus a const of the module being compiled. A
+ * module var stays out because any callee can assign it, and a const imported
+ * from another module is not a bare identifier of this module. */
+static bool source_fact_subject(const SourceContext *ctx,const SourceName *symbol) {
+    return symbol && (symbol->kind==SOURCE_LOCAL || (symbol->kind==SOURCE_SLOT && !symbol->mutable &&
+        symbol->module==ctx->bodies[ctx->function].module));
+}
 static bool source_null_syntax(SourceContext *ctx,const AstNode *node);
 static uint32_t source_fact_depth(SourceContext *ctx,const SourceName *binding);
 static bool source_unwrap_value(SourceContext *ctx, AstNode *node, SourceValue nullable, SourceValue *value);
@@ -180,8 +188,10 @@ static bool source_local_borrowed_storage(SourceContext *ctx,const SourceName *s
 /* N-11.4: a binding assigned inside any closure never narrows anywhere in its function. */
 static bool source_narrowable(SourceContext *ctx, SourceName *symbol, bool *narrowable) {
     *narrowable = false;
-    if (!symbol || symbol->kind != SOURCE_LOCAL || symbol->construction || !xr_xir_type_is_nullable(&ctx->types, symbol->type))
+    if (!source_fact_subject(ctx, symbol) || symbol->construction || !xr_xir_type_is_nullable(&ctx->types, symbol->type))
         return true;
+    /* A module const has no writer to find. */
+    if (symbol->kind == SOURCE_SLOT) { *narrowable = true; return true; }
     /* The function's own declaration is not a closure of itself, so scan its body block. */
     AstNode *owner = ctx->bodies[ctx->function].node, *body = NULL;
     if (owner && owner->type == AST_FUNCTION_DECL) body = owner->as.function_decl.body;
@@ -235,7 +245,7 @@ static bool source_fact_push(SourceContext *ctx,SourceName *binding,uint32_t pre
 }
 static XrXirType source_symbol_type(SourceContext *ctx,const SourceName *symbol) {
     XrXirType type=symbol?symbol->type:XR_XIR_UNIT;
-    uint32_t prefix=symbol && symbol->kind==SOURCE_LOCAL?source_fact_depth(ctx,symbol):0;
+    uint32_t prefix=source_fact_subject(ctx,symbol)?source_fact_depth(ctx,symbol):0;
     for (uint32_t layer=0;layer<prefix;++layer) {
         if (!((ctx)->diagnostic.status == XR_XIR_OK)) return XR_XIR_UNIT;
         if (!xr_xir_type_is_nullable(&ctx->types,type)) {
