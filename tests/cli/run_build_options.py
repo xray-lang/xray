@@ -74,13 +74,17 @@ def main() -> int:
             arguments.insert(0, "--verbose")
         emitted = invoke("emit-" + label, arguments, 0)
         assert emitted.stdout == ("Generated: " + str(output) + "\n").encode()
-        assert b"XR_BUILD: Source " in emitted.stderr and b"XR_BUILD: C projection " in emitted.stderr
-        assert b"xray_app" in output.read_bytes()
+        # --c-only never selects a native compiler, so --verbose reports nothing here.
+        assert not emitted.stderr
+        assert b"int64_t xray_lir_entry(void)" in output.read_bytes()
     assert (work / "long.c").read_bytes() == (work / "short.c").read_bytes() == (work / "global.c").read_bytes()
+    verbose = invoke("verbose-native", ["build", "--verbose", source, "-o", work / "verbose-native.exe"], 0)
+    assert verbose.stdout == ("Built: " + str(work / "verbose-native.exe") + "\n").encode()
+    assert b"C compiler " in verbose.stderr
     invalid = invoke("compiler-with-c-only", ["build", "-c", "--cc", "unused-cl.exe", source, "-o", protected], 1)
-    assert b"unsupported Source build option --cc" in invalid.stderr and protected.read_bytes() == sentinel
+    assert b"unsupported build option --cc" in invalid.stderr and protected.read_bytes() == sentinel
     missing = invoke("missing-explicit-compiler", ["build", "--native", "--cc", work / "missing-cl.exe", source, "-o", protected], 1)
-    assert b"XR_BUILD_6006" in missing.stderr and protected.read_bytes() == sentinel
+    assert b"host compiler discovery failed" in missing.stderr and protected.read_bytes() == sentinel
     for name in ("output", "cc"):
         invoke("missing-" + name, ["build", source, "--" + name], 2)
     if os.name != "nt":

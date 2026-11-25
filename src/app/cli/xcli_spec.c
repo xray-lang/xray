@@ -75,7 +75,7 @@ static const XrCliOptionSpec build_options[] = {
     {"c-only", 'c', XR_CLI_VALUE_NONE, false, false, NULL, "Emit portable C11 source instead of a native executable"},
     {"cc", 'C', XR_CLI_VALUE_STRING, false, false, "CC", "Native compiler path; incompatible with --c-only"},
     {"native", 'N', XR_CLI_VALUE_NONE, false, false, NULL, "Select native output (default); --c-only emits its C source"},
-    {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Report source projection and selected native compiler"},
+    {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Report the selected native compiler"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec deps_options[] = {
