@@ -702,6 +702,10 @@ static bool c_values_instruction(LirC *c, const XrLirInstructionView *v, uint32_
     }
     if (v->op == XR_LIR_STRING_ORDER) {
         static const char *const symbols[] = {"< 0", "<= 0", "> 0", ">= 0"};
+        if (v->predicate < XR_LIR_LT || v->predicate > XR_LIR_GE) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "ordered String comparison has an invalid predicate");
+            return false;
+        }
         uint32_t symbol = (uint32_t)(v->predicate - XR_LIR_LT);
         c_format(c, "    v%" PRIu32 " = xrt_native_string_order((const XrtStringBacking *)", v->result);
         c_value(c, v->operands[0]);
