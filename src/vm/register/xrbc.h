@@ -381,7 +381,8 @@ typedef enum {
     XR_RBC_VALUE_FAILURE,
     XR_RBC_MESSAGE_PANIC,
     XR_RBC_TRY_ASSERT,
-    XR_RBC_UNCAUGHT_ERROR
+    XR_RBC_UNCAUGHT_ERROR,
+    XR_RBC_TEMP_FAILURE
 } XrRbcStatus;
 
 // Failure leaves the output untouched. Register 255 is reserved; every
@@ -431,6 +432,9 @@ XR_FUNC XrRbcStatus xr_rbc_owned_function_prepare(const XrtFunction *, const uin
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution);
 /* Borrow the host's control only until this single-use owned execution returns. */
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run_controlled(XrRbcExecution *, const XrtHostExecutionControl *);
+/* A receiving caller accepts responsibility for a temporary-directory owner
+ * and must take it before discarding a failure outcome. */
+XR_FUNC XrRbcOutcome *xr_rbc_execution_run_receiving_temp(XrRbcExecution *);
 XR_FUNC void xr_rbc_execution_enable_try_trace(XrRbcExecution *);
 /* Success consumes *execution. A failed native close preserves the retired
  * execution for another free attempt and cannot restart the guest. */
@@ -471,7 +475,11 @@ XR_FUNC bool xr_rbc_outcome_null_unwrap(const XrRbcOutcome *outcome,
     uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_host_clock_failure(const XrRbcOutcome *outcome,
     XrtHostClockFailure *facts, const XrtLocationOwner **borrowed_locations);
-XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome);
+XR_FUNC bool xr_rbc_outcome_take_temp(XrRbcOutcome *, XrtTempFailure *empty);
+/* Borrow the original source through the live outcome, even after take. */
+XR_FUNC const XrtSourceLocation *xr_rbc_outcome_temp_location(const XrRbcOutcome *);
+/* An unclaimed temporary-directory owner leaves the entire outcome intact. */
+XR_FUNC bool xr_rbc_outcome_free(XrRbcOutcome **outcome);
 /* The failure owns its error payload and source through outcome destruction. */
 XR_FUNC const XrtTryAssertFailure *xr_rbc_outcome_try_assert(const XrRbcOutcome *);
 XR_FUNC const XrtErrorSnapshot *xr_rbc_outcome_uncaught_error(const XrRbcOutcome *);

@@ -113,6 +113,7 @@ struct XrRbcOutcome {
     XrRbcRegister value;
     XrRbcRegisterKind result_kind;
     XrtExecutionFailure failure;
+    XrtTempFailure temp;
     XrtLocationOwner *locations;
     uint32_t *try_callers;
     size_t try_caller_count;
@@ -780,17 +781,16 @@ static void xr_rbc_try_trace(XrRbcExecution *execution,XrRbcOutcome *outcome) {
     }
 }
 
-XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
-    return xr_rbc_execution_run_controlled(execution, NULL);
-}
-
-XR_FUNC XrRbcOutcome *xr_rbc_execution_run_controlled(XrRbcExecution *execution,
-    const XrtHostExecutionControl *control) {
+static XrRbcOutcome *rbc_execution_run(XrRbcExecution *execution,
+    const XrtHostExecutionControl *control, bool receives_temp) {
     if (!execution || execution->consumed || (control && !control->current)) return NULL;
     execution->consumed = true;
     XrRbcOutcome *outcome = execution->pending;
-    XrtExecutionStatus status = xrt_run_embedded_owned_controlled(outcome->locations, &outcome->failure,
-        xr_rbc_root, execution, &execution->values, control);
+    XrtExecutionStatus status = receives_temp ?
+        xrt_run_embedded_receiving_temp(outcome->locations, &outcome->failure, xr_rbc_root, execution,
+            &execution->values, &outcome->temp) :
+        xrt_run_embedded_owned_controlled(outcome->locations, &outcome->failure, xr_rbc_root, execution,
+            &execution->values, control);
     if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_OUTPUT)
         outcome->status = XR_RBC_OUTPUT_FAILURE;
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_TYPED_PANIC)
@@ -809,6 +809,8 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run_controlled(XrRbcExecution *execution,
     }
     else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_UNCAUGHT_ERROR)
         outcome->status = XR_RBC_UNCAUGHT_ERROR;
+    else if (status == XRT_EXECUTION_FAILURE && outcome->failure.kind == XRT_FAILURE_TEMP)
+        outcome->status = XR_RBC_TEMP_FAILURE;
     else {
         if (status != XRT_EXECUTION_COMPLETED) outcome->status = XR_RBC_INVALID;
         xrt_locations_release(outcome->locations);
@@ -820,6 +822,19 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run_controlled(XrRbcExecution *execution,
     xrt_module_state_drop(&execution->state);
     execution->pending = NULL;
     return outcome;
+}
+
+XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
+    return rbc_execution_run(execution, NULL, false);
+}
+
+XR_FUNC XrRbcOutcome *xr_rbc_execution_run_controlled(XrRbcExecution *execution,
+    const XrtHostExecutionControl *control) {
+    return rbc_execution_run(execution, control, false);
+}
+
+XR_FUNC XrRbcOutcome *xr_rbc_execution_run_receiving_temp(XrRbcExecution *execution) {
+    return rbc_execution_run(execution, NULL, true);
 }
 
 XR_FUNC XrOsIoStatus xr_rbc_execution_free(XrRbcExecution **execution) {
@@ -997,9 +1012,19 @@ XR_FUNC const XrtSourceLocation *xr_rbc_outcome_try_trace_at(const XrRbcOutcome 
     return xrt_locations_get(outcome->locations,outcome->try_callers[index-1]);
 }
 
-XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
-    if (!outcome || !*outcome) return;
+XR_FUNC bool xr_rbc_outcome_take_temp(XrRbcOutcome *outcome, XrtTempFailure *empty) {
+    return outcome && outcome->status == XR_RBC_TEMP_FAILURE &&
+        xrt_temp_failure_take(&outcome->temp, empty);
+}
+XR_FUNC const XrtSourceLocation *xr_rbc_outcome_temp_location(const XrRbcOutcome *outcome) {
+    return outcome && outcome->status == XR_RBC_TEMP_FAILURE ?
+        xrt_locations_get(outcome->locations, outcome->temp.source_id) : NULL;
+}
+
+XR_FUNC bool xr_rbc_outcome_free(XrRbcOutcome **outcome) {
+    if (!outcome || !*outcome) return true;
     XrRbcOutcome *owned = *outcome;
+    if (owned->temp.owner) return false;
     xr_free(owned->try_callers);
     *outcome = NULL;
     xrt_execution_failure_drop(&owned->failure);
@@ -1011,6 +1036,7 @@ XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
     xrt_managed_drop(owned->function.owner);
     xrt_locations_release(owned->locations);
     xr_free(owned);
+    return true;
 }
 
 XR_FUNC const char *xr_rbc_dispatch_name(void) {

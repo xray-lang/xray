@@ -12,6 +12,7 @@
  */
 #include "../os_file_temp.h"
 #include "../../base/xio_policy.inc.h"
+XR_FUNC bool xr_os_io_temp_available(void) { return false; }
 static XrOsIoStatus file_temp_unavailable(const XrOsFileTempRequest *request,
     XrOsFileTempOwner *owner,bool *created) {
     if(!request || !owner || owner->state || !created || !request->prepare ||

@@ -25,4 +25,16 @@ XR_FUNC XrtManagedStatus xrt_place_replacement_begin(XrtPlace, XrtManagedFrame *
     XrtPlaceReplacement *empty);
 XR_FUNC XrtManagedStatus xrt_place_replacement_publish(XrtPlaceReplacement *);
 XR_FUNC XrtManagedStatus xrt_place_replacement_end(XrtPlaceReplacement *);
+
+/* A private synchronous move between two nullable slots in one frame.
+ * Begin resolves and locks both owner fields. End writes the already verified
+ * presence byte along with the owner, or leaves both values alone if tag is
+ * null. It always unlocks and transfers the retired owner to the caller.
+ * No guest or Frame operation can intervene. */
+typedef struct XrtPlaceStagedMove {
+    XrtManagedSlotLocation destination, source;
+} XrtPlaceStagedMove;
+XR_FUNC XrtManagedStatus xrt_place_staged_move_begin(XrtManagedFrame *, size_t destination,
+    size_t source, XrtPlaceStagedMove *empty);
+XR_FUNC XrtManagedHeader *xrt_place_staged_move_end(XrtPlaceStagedMove *, uint8_t *tag, bool present);
 #endif // XNATIVE_PLACE_H

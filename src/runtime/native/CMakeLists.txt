@@ -13,10 +13,12 @@ add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c xnat
     xnative_array_backing.c xnative_array_ops.c xnative_array_slice.c xnative_map_backing.c xnative_set_backing.c xnative_value_plan.c xnative_value_image.c xnative_capture_backing.c
     xnative_class_array.c xnative_host_path.c xnative_host_file.c xnative_host_file_publish.c
     xnative_host_nullable.c xnative_host_environment.c xnative_host_stat.c
+    xnative_host_temp.c
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_mutation_${native_filesystem_platform}.c"
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_metadata_${native_filesystem_platform}.c"
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_links_${native_filesystem_platform}.c"
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_owned_${native_filesystem_platform}.c"
+    "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_temp_${native_filesystem_platform}.c"
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/proc_self_${native_filesystem_platform}.c"
     "${native_output_platform}" "${native_clock_platform}")
 add_dependencies(xray_native_runtime gen-native-type-defs gen-target-query-registry)
@@ -38,6 +40,7 @@ else()
     target_compile_options(xray_native_runtime PRIVATE -Wall -Wextra -Werror -pedantic -ffp-contract=off)
 endif()
 if(WIN32)
+    target_sources(xray_native_runtime PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/random_win.c")
     target_link_libraries(xray_native_runtime PRIVATE advapi32 userenv)
 else()
     find_package(Threads REQUIRED)

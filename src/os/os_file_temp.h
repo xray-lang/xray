@@ -23,6 +23,9 @@ typedef struct XrOsFileTempRequest {
     XrOsIoStatus (*prepare)(void *context,const char *candidate,size_t length);
 } XrOsFileTempRequest;
 
+/* Capability check performs no allocation, callback, or filesystem change. */
+XR_FUNC bool xr_os_io_temp_available(void);
+
 /* Policy context is the stable allocation owner, not the synchronous request
  * context. It must remain live until finish discharges every owned byte.
  * Prepare synchronously copies each candidate into an unpublished result; it

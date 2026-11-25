@@ -19,6 +19,8 @@
  * no managed frame, backing setup or guest value is created. Failure leaves
  * *empty unchanged. The caller drains this root if later setup fails. */
 XR_FUNC XrtManagedStatus xrt_native_values_prepare(XrtValueRoot *, XrtBillingOwner **empty);
+/* The execution has already created any frame presented for publication. */
+XR_FUNC XrtManagedRoot *xrt_native_values_existing_root(const XrtValueRoot *);
 /* Borrow the one cold setup owned by this execution context. All values keep
  * their own Ops leases; the context remains the caller's actual outer owner.
  * Failure preserves output and no frame or guest value is created here. */

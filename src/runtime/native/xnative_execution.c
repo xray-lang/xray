@@ -35,6 +35,7 @@ typedef struct XrtExecutionBinding {
     XrtExecutionFailure *failure;
     XrtValueRoot *strings;
     const XrtHostExecutionControl *host_control;
+    XrtTempFailure *temp;
 } XrtExecutionBinding;
 
 static XR_THREAD_LOCAL const XrtExecutionBinding *current_execution;
@@ -217,6 +218,30 @@ XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *failure) {
         xrt_billing_owner_drop(billing);
     }
 }
+XR_FUNC bool xrt_temp_failure_take(XrtTempFailure *received, XrtTempFailure *empty) {
+    if (!received || !received->owner || !empty || empty->owner) return false;
+    *empty = *received;
+    received->owner = NULL;
+    return true;
+}
+XR_FUNC XrtHostTempResult xrt_execution_temp_admission(uint32_t source_id) {
+    const XrtExecutionBinding *binding = current_execution;
+    if (!binding || !binding->temp) return (XrtHostTempResult){.host=XR_OS_IO_UNSUPPORTED};
+    if (source_id > binding->map.count || binding->temp->owner)
+        return (XrtHostTempResult){.managed=XRT_MANAGED_ARGUMENT};
+    return (XrtHostTempResult){0};
+}
+XR_FUNC XR_NORET void xrt_execution_temp_failure_take(XrtTempFailure *owned) {
+    const XrtExecutionBinding *binding = current_execution;
+    XR_CHECK(binding && binding->temp && !binding->temp->owner &&
+        owned && owned->owner && !owned->result.present && owned->result.rollback != XR_OS_IO_OK &&
+        owned->source_id <= binding->map.count,
+        "the synchronous temporary-directory leaf transfers to its admitted receiving binding");
+    *binding->temp = *owned;
+    owned->owner = NULL;
+    *binding->failure = (XrtExecutionFailure){.kind=XRT_FAILURE_TEMP};
+    longjmp(*binding->target, 1);
+}
 XR_FUNC XR_NORET void xrt_message_panic_take(XrtManagedHeader **owned, uint32_t code, uint32_t source_id) {
     const XrtExecutionBinding *binding = current_execution;
     XR_CHECK(binding && binding->target && (code == 434 || code == 445) && source_id <= binding->map.count && owned && *owned,
@@ -242,6 +267,7 @@ XRAY_API_NORET void xrt_fixed_array_bounds(uint32_t source_id) {
 typedef struct XrtExecutionHooks {
     XrtMetadataCloser close_metadata;
     const XrtHostExecutionControl *control;
+    XrtTempFailure *temp;
 } XrtExecutionHooks;
 
 /* Mutable managed-value state belongs to the caller of this setjmp function. */
@@ -249,7 +275,8 @@ static XrtExecutionStatus run_bound(const XrtSourceMap *map, XrtExecutionFailure
     XrtSynchronousRoot root, void *context, XrtValueRoot *strings, XrtExecutionHooks hooks) {
     jmp_buf target;
     const XrtExecutionBinding binding = {.map = *map, .previous = current_execution,
-        .target = &target, .failure = failure, .strings = strings, .host_control = hooks.control};
+        .target = &target, .failure = failure, .strings = strings,
+        .host_control = hooks.control, .temp = hooks.temp};
     current_execution = &binding;
     const XrtValueBinding previous_strings = xrt_value_root_bind((XrtValueBinding){strings, map->count});
     XrtExecutionStatus result;
@@ -349,10 +376,12 @@ static XrtExecutionStatus run_embedded_owned(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings,
     XrtExecutionHooks hooks) {
     if (!locations || !failure || !root || !strings || !hooks.close_metadata ||
-        (hooks.control && !hooks.control->current) || !xrt_native_values_prepared(strings))
+        (hooks.control && !hooks.control->current) || (hooks.temp && hooks.temp->owner) ||
+        !xrt_native_values_prepared(strings))
         return XRT_EXECUTION_INVALID;
     for (const XrtExecutionBinding *active = current_execution; active; active = active->previous)
-        if (active->strings == strings) return XRT_EXECUTION_INVALID;
+        if (active->strings == strings || (hooks.temp && active->temp == hooks.temp))
+            return XRT_EXECUTION_INVALID;
     XrtSourceMap map = {xrt_locations_get(locations, 1), xrt_locations_count(locations)};
     return run_bound(&map, failure, root, context, strings, hooks);
 }
@@ -366,6 +395,14 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_with_metadata_close(const XrtL
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings,
     XrtMetadataCloser close_metadata) {
     const XrtExecutionHooks hooks = {.close_metadata=close_metadata};
+    return run_embedded_owned(locations, failure, root, context, strings, hooks);
+}
+XR_FUNC XrtExecutionStatus xrt_run_embedded_receiving_temp(const XrtLocationOwner *locations,
+    XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings,
+    XrtTempFailure *receiver) {
+    if (!receiver) return XRT_EXECUTION_INVALID;
+    const XrtExecutionHooks hooks = {.close_metadata=xr_os_io_file_metadata_close,
+        .temp=receiver};
     return run_embedded_owned(locations, failure, root, context, strings, hooks);
 }
 

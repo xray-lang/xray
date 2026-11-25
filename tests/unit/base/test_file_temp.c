@@ -15,6 +15,7 @@
 #undef main
 #include "os/os_file_temp.h"
 #include "os/os_random.h"
+#include "xray_native_managed.h"
 static char *temp_prepared;
 static char temp_candidate[65536];
 static unsigned temp_prepare_mode;
@@ -39,18 +40,29 @@ static XrOsIoStatus temp_prepare(void *context,const char *text,size_t length) {
 typedef NTSTATUS (NTAPI *TempActualCreate)(PHANDLE,ACCESS_MASK,POBJECT_ATTRIBUTES,
     PIO_STATUS_BLOCK,PLARGE_INTEGER,ULONG,ULONG,ULONG,ULONG,PVOID,ULONG);
 static TempActualCreate temp_actual_create;
-static unsigned temp_entropy_mode,temp_entropy_calls;
+static unsigned temp_entropy_mode,temp_entropy_calls,temp_create_calls,temp_fail_delete;
 static HANDLE temp_parent,temp_child,temp_fail_close;
-static bool temp_cancel_created,temp_fail_delete,temp_missing_api;
+static bool temp_cancel_created,temp_fail_parent_on_create,temp_missing_api;
+static XrtBillingOwner *temp_fail_preparation;
+static DWORD temp_disposition_error;
+static void (*temp_created_fixture)(void);
+static wchar_t temp_cancelled_path[32768];
 static wchar_t temp_long_root_path[32768];
 static bool temp_long_root_created;
 static NTSTATUS NTAPI temp_observed_create(PHANDLE handle,ACCESS_MASK access,POBJECT_ATTRIBUTES attributes,
     PIO_STATUS_BLOCK status,PLARGE_INTEGER allocation,ULONG flags,ULONG share,ULONG disposition,
     ULONG options,PVOID ea,ULONG ea_length) {
+    ++temp_create_calls;
     NTSTATUS result=temp_actual_create(handle,access,attributes,status,allocation,flags,share,disposition,options,ea,ea_length);
     if(result>=0 && *handle && status->Information==FILE_CREATED) {
         temp_parent=attributes->RootDirectory;temp_child=*handle;
-        if(temp_cancel_created)metadata_memory.cancelled=true;
+        if(temp_created_fixture)temp_created_fixture();
+        if(temp_fail_parent_on_create)temp_fail_close=temp_parent;
+        if(temp_cancel_created) {
+            DWORD length=GetFinalPathNameByHandleW(temp_child,temp_cancelled_path,32768,FILE_NAME_NORMALIZED);
+            if(!length || length>=32768)temp_cancelled_path[0]=0;
+            metadata_memory.cancelled=true;
+        }
     }
     return result;
 }
@@ -68,12 +80,15 @@ static BOOL WINAPI temp_close(HANDLE handle) {
     return CloseHandle(handle);
 }
 static BOOL WINAPI temp_disposition(HANDLE handle,FILE_INFO_BY_HANDLE_CLASS kind,LPVOID data,DWORD length) {
-    if(temp_fail_delete && kind==FileDispositionInfo){temp_fail_delete=false;SetLastError(ERROR_ACCESS_DENIED);return FALSE;}
-    return SetFileInformationByHandle(handle,kind,data,length);
+    if(temp_fail_delete && kind==FileDispositionInfo){--temp_fail_delete;SetLastError(ERROR_ACCESS_DENIED);return FALSE;}
+    BOOL ok = SetFileInformationByHandle(handle,kind,data,length);
+    temp_disposition_error = ok ? 0 : GetLastError();
+    return ok;
 }
 static void temp_entropy(unsigned char *bytes,size_t length) {
     if(temp_entropy_mode==2 || (temp_entropy_mode==1 && temp_entropy_calls++==0))memset(bytes,0,length);
     else xr_random_bytes(bytes,length);
+    if(temp_fail_preparation)xrt_billing_owner_fail_after(temp_fail_preparation,0);
 }
 #define GetProcAddress temp_lookup
 #define CloseHandle temp_close
@@ -211,12 +226,16 @@ static int temp_drive_relative(void) {
     CHECK(SetCurrentDirectoryW(previous));
     return 1;
 }
+#include "file_temp_managed.inc.c"
+#include "file_temp_transport_win.inc.c"
 int main(void) {
     reset_memory();int passed=setup_paths();char root[65536];
     if(passed)passed=xr_win_utf16_to_utf8(paths.child,wcslen(paths.child),root,sizeof(root));
     for(unsigned directory=0;directory<2&&passed;++directory)
         passed=temp_visible(root,directory!=0)&&temp_faults(root,directory!=0)&&temp_collisions(root,directory!=0);
     if(passed)passed=temp_long_positive()&&temp_drive_relative();
+    if(passed)passed=temp_managed_windows(root);
+    if(passed)passed=temp_transport_embedded(root)&&temp_transport_rbc(root);
     if(temp_long_root_created) {
         bool removed=directory_operation(temp_long_root_path,false)!=0;
         if(removed)temp_long_root_created=false;
@@ -229,12 +248,14 @@ int main(void) {
 }
 #else
 #include "os/unix/file_temp_unix.c"
+#include "file_temp_managed.inc.c"
 int main(void) {
     reset_memory();XrOsIoPolicy policy=test_policy();XrOsFileTempOwner owner={0};bool created=true;
     XrOsFileTempRequest request={&policy,{"/tmp",4},&metadata_memory,test_current,temp_prepare};
     int passed=xr_os_io_temp_file(&request,&owner,&created)==XR_OS_IO_UNSUPPORTED&&created&&!owner.state&&
         xr_os_io_temp_directory(&request,&owner,&created)==XR_OS_IO_UNSUPPORTED&&created&&!owner.state&&
-        xr_os_io_temp_finish(&policy,&owner,false)==XR_OS_IO_OK&&!temp_prepared&&!metadata_memory.live&&!metadata_memory.held;
+        xr_os_io_temp_finish(&policy,&owner,false)==XR_OS_IO_OK&&!temp_prepared&&!metadata_memory.live&&!metadata_memory.held&&
+        temp_managed_unix();
     if(passed)puts("file temp: Unix unsupported boundary only; no creation qualification");
     return passed?0:1;
 }

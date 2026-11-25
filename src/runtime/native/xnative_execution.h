@@ -13,6 +13,7 @@
 #ifndef XNATIVE_EXECUTION_H
 #define XNATIVE_EXECUTION_H
 #include "xnative_locations.h"
+#include "xnative_host_temp.h"
 #include "os/os_native_output.h"
 #include "xnative_value.h"
 #include "xnative_managed.h"
@@ -44,8 +45,15 @@ typedef enum XrtExecutionFailureKind {
     XRT_FAILURE_NULL_UNWRAP,
     XRT_FAILURE_MESSAGE_PANIC,
     XRT_FAILURE_TRY_ASSERT,
-    XRT_FAILURE_UNCAUGHT_ERROR
+    XRT_FAILURE_UNCAUGHT_ERROR,
+    XRT_FAILURE_TEMP
 } XrtExecutionFailureKind;
+
+typedef struct XrtTempFailure {
+    XrtHostTempResult result;
+    uint32_t source_id;
+    XrtHostTempRetry *owner;
+} XrtTempFailure;
 
 typedef struct XrtErrorSnapshot XrtErrorSnapshot;
 typedef XrtErrorSnapshot XrtTryAssertFailure;
@@ -65,6 +73,7 @@ typedef struct XrtExecutionFailure {
  * snapshot independently of execution retirement. Clear the owner before
  * drop callbacks. A receiver must drop or transfer it before reusing failure. */
 XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *);
+XR_FUNC bool xrt_temp_failure_take(XrtTempFailure *received, XrtTempFailure *empty);
 /* Consume an independently owned fixed String, publish it to preowned failure
  * storage, then leave the active execution. Duplicate-key code 434 and
  * assertion code 445 are admitted. Transfer allocates and looks up no owner. */
@@ -107,6 +116,18 @@ XR_FUNC const XrtHostExecutionControl *xrt_execution_host_control(void);
 /* The closer is borrowed through the one drain at execution exit. */
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_with_metadata_close(const XrtLocationOwner *, XrtExecutionFailure *,
     XrtSynchronousRoot, void *context, XrtValueRoot *, XrtMetadataCloser);
+/* The initialized receiver is separate from ordinary failure storage. It must
+ * be empty and may not be shared with an active ancestor. A temporary effect
+ * can never attach an owner to the ordinary failure, which is reusable after
+ * observing the error. No installed startup entry enables this effect. */
+XR_FUNC XrtExecutionStatus xrt_run_embedded_receiving_temp(const XrtLocationOwner *,
+    XrtExecutionFailure *, XrtSynchronousRoot, void *context, XrtValueRoot *, XrtTempFailure *receiver);
+/* The receiving binding is required before any host effect. If rollback stays
+ * pending, transfer the actual owner to the outer failure before leaving. */
+XR_FUNC XrtHostTempResult xrt_execution_temp_directory(const XrtHostNullableSlots *,
+    const XrtManagedHeader *root, bool (*current)(void *), void *context, uint32_t source_id);
+XR_FUNC XrtHostTempResult xrt_execution_temp_admission(uint32_t source_id);
+XR_FUNC XR_NORET void xrt_execution_temp_failure_take(XrtTempFailure *owned);
 
 // I/O helpers have already restored their OS state before this transfer.
 XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,

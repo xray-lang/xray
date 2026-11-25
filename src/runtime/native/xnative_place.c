@@ -61,6 +61,39 @@ static void place_unlock_pair(PlaceLocation destination, PlaceLocation source) {
     if (!xrt_managed_domain_same(destination.slot, source.slot)) xrt_managed_domain_leave(source.slot);
     xrt_managed_domain_leave(destination.slot);
 }
+XR_FUNC XrtManagedStatus xrt_place_staged_move_begin(XrtManagedFrame *frame, size_t destination,
+    size_t source, XrtPlaceStagedMove *output) {
+    if (!output || output->destination.owner || destination == source) return XRT_MANAGED_ARGUMENT;
+    PlaceLocation to = {0}, from = {0};
+    XrtManagedStatus status = place_location((XrtPlace){.frame=frame,.slot=destination,
+        .nulls=XRT_PLACE_NULLABLE}, &to);
+    if (status == XRT_MANAGED_OK) status = place_location((XrtPlace){.frame=frame,.slot=source,
+        .nulls=XRT_PLACE_NULLABLE}, &from);
+    if (status != XRT_MANAGED_OK) return status;
+    if (to.slot.owner == from.slot.owner) return XRT_MANAGED_ARGUMENT;
+    status = place_lock_pair(to, from);
+    if (status != XRT_MANAGED_OK) return status;
+    status = place_check(to, XRT_PLACE_REPLACE);
+    if (status == XRT_MANAGED_OK) status = place_check(from, XRT_PLACE_MOVE_FROM);
+    if (status == XRT_MANAGED_OK) *output = (XrtPlaceStagedMove){to.slot, from.slot};
+    else place_unlock_pair(to, from);
+    return status;
+}
+
+XR_FUNC XrtManagedHeader *xrt_place_staged_move_end(XrtPlaceStagedMove *move, uint8_t *tag, bool present) {
+    const PlaceLocation to = {.slot=move->destination}, from = {.slot=move->source};
+    *move = (XrtPlaceStagedMove){0};
+    XrtManagedHeader *retired = NULL;
+    if (tag) {
+        retired = *to.slot.owner;
+        *to.slot.owner = *from.slot.owner;
+        *from.slot.owner = NULL;
+        *tag = present;
+    }
+    place_unlock_pair(to, from);
+    return retired;
+}
+
 XR_FUNCDEF XrtManagedStatus xrt_place_replacement_begin(XrtPlace binding, XrtManagedFrame *frame,
     size_t index, XrtPlaceReplacement *output) {
     if (!output || output->root) return XRT_MANAGED_ARGUMENT;

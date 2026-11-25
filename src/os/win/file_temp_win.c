@@ -168,6 +168,10 @@ static XrOsIoStatus file_temp_create(const XrOsFileTempRequest *request,
     if(status==XR_OS_IO_OK)*output=false;
     return status;
 }
+XR_FUNC bool xr_os_io_temp_available(void) {
+    FileTempApi api={0};
+    return file_temp_api(&api);
+}
 XR_FUNC XrOsIoStatus xr_os_io_temp_directory(const XrOsFileTempRequest *request,XrOsFileTempOwner *owner,bool *created) {
     return file_temp_create(request,owner,created,true);
 }

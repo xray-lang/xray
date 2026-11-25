@@ -148,6 +148,9 @@ static struct XrtNativeValues *native_values(uint32_t source_id) {
 XRAY_API XrtManagedRoot *xrt_native_managed_root(uint32_t source_id) {
     return native_values(source_id)->root;
 }
+XR_FUNC XrtManagedRoot *xrt_native_values_existing_root(const XrtValueRoot *owner) {
+    return owner && owner->managed ? owner->managed->root : NULL;
+}
 
 XR_FUNCDEF void xrt_native_values_use_state(XrtValueRoot *root, const XrtModuleState *state,
     const XrtValueImage *image) {
