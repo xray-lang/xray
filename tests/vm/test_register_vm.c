@@ -13,6 +13,7 @@
  */
 
 #include "register_vm_programs.h"
+#include "vm/register/xrbc_internal.h"
 #include "shared/xr_time_offset.h"
 #include "f64_family_vectors.h"
 #include <fenv.h>
@@ -791,7 +792,7 @@ static void test_arithmetic_panic_terminator(void) {
         .code = &code, .code_count = 1, .register_count = 1,
         .source_ids = &source_id, .source_id_count = 1,
     };
-    XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
+    XrRbcModule module = {.functions = &function, .function_count = 1};
     const XrtSourceLocation sources[] = {
         {"other.xr", 8, 1, 1, 0, 0},
         {"panic.xr", 8, 27, 9, 27, 14},
