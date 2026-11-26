@@ -31,7 +31,7 @@ static uint32_t nominal_storage_declared_alignment(const XrXirTypes *types, uint
     return xr_xir_nominal_alignment(flags);
 }
 static XrXirStatus nominal_storage_walk(const XrXirTypes *types,
-    XrXirCompileContext *budget, NominalStorageNode *nodes, uint32_t *stack, uint32_t root_index) {
+    XrXirCompileContext *budget, NominalStorageNode *nodes, uint32_t *stack, uint32_t root_index, uint32_t *too_small) {
     uint32_t depth = 1;
     XrXirStatus status = XR_XIR_OK;
     stack[0] = root_index;
@@ -86,7 +86,8 @@ static XrXirStatus nominal_storage_walk(const XrXirTypes *types,
             if (!nullable) {
                 uint32_t explicit_alignment = nominal_storage_declared_alignment(types, nominal->declaration);
                 if (explicit_alignment && explicit_alignment < current->layout.alignment) {
-                    status = XR_XIR_BAD_LAYOUT; break;
+                    if (too_small) *too_small = nominal->declaration;
+                    status = too_small ? XR_XIR_BAD_TYPE : XR_XIR_BAD_LAYOUT; break;
                 }
                 if (explicit_alignment > current->layout.alignment) {
                     current->layout.alignment = explicit_alignment;
@@ -171,7 +172,7 @@ static XrXirStatus inline_layout_query(const XrXirTypes *types, XrXirType type,
     uint32_t *stack = (uint32_t *) (nodes + types->count), *offsets = stack + types->count;
     uint32_t root_index = (uint32_t) type - XR_XIR_CONSTRUCTED_TYPE_BASE;
     nodes[root_index].offsets = field_count ? offsets : NULL;
-    status = nominal_storage_walk(types, &budget, nodes, stack, root_index);
+    status = nominal_storage_walk(types, &budget, nodes, stack, root_index, NULL);
 
     if (status == XR_XIR_OK) {
         *layout = nodes[root_index].layout;

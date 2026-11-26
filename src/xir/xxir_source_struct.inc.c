@@ -203,38 +203,67 @@ static bool source_struct_alignment(SourceContext *ctx,AstNode *node,uint32_t al
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"explicit struct alignment exceeds the supported maximum");
     return true;
 }
-/* align(N) may raise a record above its fields, never below them. Each concrete
- * declaration is checked after every field row exists, used or not, and the
- * clause is cleared for the one query so the shared layout walk reports what the
- * actual fields require. A generic declaration is re-checked per instance. */
-static bool source_struct_alignment_natural(SourceContext *ctx) {
-    for (uint32_t m = 0; m < (uint32_t) ctx->graph->spec_count; ++m) {
-        for (SourceName *symbol = ctx->names[m]; symbol; symbol = symbol->next) {
-            if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
-            if (symbol->kind != SOURCE_NOMINAL || symbol->checked_library || !symbol->node ||
-                symbol->node->type != AST_STRUCT_DECL) continue;
-            ClassDeclNode *syntax = &symbol->node->as.struct_decl;
-            XrXirNominalDeclaration *declaration =
-                (XrXirNominalDeclaration *)&ctx->nominals.declarations[symbol->index];
-            if (!(declaration->flags & XR_XIR_NOMINAL_ALIGN_MASK) || declaration->parameter_count) continue;
-            uint32_t count = declaration->field_count;
-            uint32_t *offsets = count ? source_alloc(ctx,count,sizeof(*offsets)) : NULL;
-            if (count && !offsets) return false;
-            uint32_t saved = declaration->flags;
-            declaration->flags &= ~XR_XIR_NOMINAL_ALIGN_MASK;
-            XrXirLayout natural = {0};
-            XrXirStatus status = xr_xir_compile_nominal_layout(&ctx->compile,&ctx->types,(XrXirType)symbol->type,
-                &ctx->target,&natural,offsets,count);
-            declaration->flags = saved;
-            if (status != XR_XIR_OK)
-                return source_fail(ctx,symbol->node,XR_XIR_BAD_LAYOUT,
-                    "record alignment needs a complete field layout");
-            if (syntax->explicit_align < natural.alignment)
-                return source_fail(ctx,symbol->node,XR_XIR_BAD_TYPE,
-                    "explicit struct alignment is below the alignment its fields require");
-        }
+static bool source_closed_nominal_fields(SourceContext *, AstNode *, XrXirType);
+/* Layout follows inline fields through records and optionals. Closing one
+ * generic field can intern more types, so keep indices across substitutions. */
+typedef struct SourceLayoutQueue {
+    uint32_t *links;
+    uint32_t capacity, head;
+} SourceLayoutQueue;
+static bool source_layout_enqueue(SourceContext *ctx, SourceLayoutQueue *queue, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(&ctx->types, type);
+    if (!node || (node->kind != XR_XIR_TYPE_NULLABLE &&
+        (node->kind != XR_XIR_TYPE_NOMINAL || xr_xir_type_is_class(&ctx->types,type)))) return true;
+    uint32_t index = (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE;
+    if (index >= queue->capacity) {
+        uint32_t capacity = ctx->type_capacity;
+        uint32_t *links = source_alloc(ctx, capacity, sizeof(*links));
+        if (!links) return false;
+        if (queue->capacity) memcpy(links, queue->links, queue->capacity * sizeof(*links));
+        source_retire_array(ctx, queue->links);
+        queue->links = links;
+        queue->capacity = capacity;
+    }
+    if (!queue->links[index]) {
+        queue->links[index] = queue->head;
+        queue->head = index + 1;
     }
     return true;
+}
+static bool source_check_record_alignments(SourceContext *ctx) {
+    SourceLayoutQueue queue = {.head = UINT32_MAX};
+    for (uint32_t i = 0; i < ctx->types.count; ++i) {
+        const XrXirTypeNode *node = &ctx->types.nodes[i];
+        if (node->kind == XR_XIR_TYPE_NOMINAL && !node->parameter_span &&
+            (ctx->nominals.declarations[node->nominal.declaration].flags & XR_XIR_NOMINAL_ALIGN_MASK) &&
+            !source_layout_enqueue(ctx, &queue, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + i))) return false;
+    }
+    if (!queue.links) return true;
+    while (queue.head != UINT32_MAX) {
+        uint32_t i = queue.head - 1;
+        queue.head = queue.links[i];
+        XrXirType type = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + i);
+        const XrXirTypeNode *node = &ctx->types.nodes[i];
+        if (node->kind == XR_XIR_TYPE_NULLABLE) {
+            if (!source_layout_enqueue(ctx, &queue, node->element)) return false;
+            continue;
+        }
+        uint32_t d = node->nominal.declaration;
+        if (node->nominal.field_count != ctx->nominals.declarations[d].field_count &&
+            !source_closed_nominal_fields(ctx, ctx->nominal_sources[d]->node, type)) return false;
+        XrXirNominalType nominal = ctx->types.nodes[i].nominal;
+        for (uint32_t f = 0; f < nominal.field_count; ++f)
+            if (!source_layout_enqueue(ctx, &queue, nominal.fields[f])) return false;
+    }
+    source_retire_array(ctx, queue.links);
+    uint32_t declaration;
+    XrXirStatus status = xr_xir_check_record_alignments(&ctx->compile, &ctx->types, &declaration);
+    if (status == XR_XIR_OK) return true;
+    SourceName *symbol = declaration < ctx->nominals.count ? ctx->nominal_sources[declaration] : NULL;
+    if (symbol) ctx->module = symbol->module;
+    return source_fail(ctx, symbol ? symbol->node : NULL, status,
+        status == XR_XIR_BAD_TYPE ? "explicit struct alignment is below the alignment its fields require" :
+        "record alignment needs a complete field layout");
 }
 static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.struct_decl;
@@ -296,7 +325,7 @@ static bool source_struct_fields(SourceContext *ctx) {
                 (symbol->node->type!=AST_STRUCT_DECL && symbol->node->type!=AST_CLASS_DECL))continue;
             if(!source_nominal_fields(ctx,symbol,state,stack,count))return false;
         }
-    return source_struct_alignment_natural(ctx);
+    return true;
 }
 static bool source_nominal_function_scope(SourceContext *ctx, uint32_t index, SourceName *symbol) {
     const XrXirNominalDeclaration *nominal = &ctx->nominals.declarations[symbol->index];

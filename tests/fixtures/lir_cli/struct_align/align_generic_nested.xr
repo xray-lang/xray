@@ -1,0 +1,4 @@
+struct Inner<T> { value: T }
+struct Outer<T> align(32) { inner: Inner<T> }
+fn read(x: Outer<i64>) -> i64 { return x.inner.value }
+print(read(Outer<i64>{inner: Inner<i64>{value: 42}}))

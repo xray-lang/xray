@@ -152,7 +152,8 @@ static XrtManagedStatus rbc_value_runtime(XrRbcStack *stack, uint32_t source) {
     return XRT_MANAGED_OK;
 }
 static bool rbc_value_capacities(const XrRbcValueCode *code, const XrtValueImage *image,
-    size_t *leaves, size_t *rows, size_t *snapshots) {
+    size_t *leaves, size_t *rows, size_t *snapshots, size_t *alignment) {
+    *alignment = 8;
     *leaves = 0; *rows = 1; *snapshots = 8;
     const XrLirValueHomes *homes = code->homes;
     if (homes) for (size_t v = 1; v <= (size_t)homes->value_count; ++v) {
@@ -167,7 +168,9 @@ static bool rbc_value_capacities(const XrRbcValueCode *code, const XrtValueImage
             if (!image || !image->types || !home || !home->type || home->type>image->type_count) return false;
             const XrtValueImageType *type=&image->types[home->type-1];
             if (type->kind!=XRT_VALUE_CLASS || !type->element || type->element>=home->type) return false;
-            size_t bytes=image->types[type->element-1].size;
+            const XrtValueImageType *row = &image->types[type->element-1];
+            if (row->alignment > *alignment) *alignment = row->alignment;
+            size_t bytes = row->size;
             if (bytes>*snapshots) *snapshots=bytes;
         }
         if (access.operation == XR_RBC_VALUE_MAP_LITERAL) {
@@ -195,7 +198,9 @@ static bool rbc_value_capacities(const XrRbcValueCode *code, const XrtValueImage
                 const XrtValueImageType *array=&image->types[home->type-1];
                 if (array->kind==XRT_VALUE_ARRAY_INLINE) {
                     if (!array->element || array->element>=home->type) return false;
-                    stride=image->types[array->element-1].size;
+                    const XrtValueImageType *element = &image->types[array->element-1];
+                    if (element->alignment > *alignment) *alignment = element->alignment;
+                    stride = element->size;
                 }
             }
             if (!stride || count>SIZE_MAX/stride) return false;
@@ -244,7 +249,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
     XrRbcValueRuntime *runtime = stack->values;
     if (runtime->top && runtime->top->depth == stack->depth) return XR_RBC_INVALID;
-    size_t leaves, rows, snapshots, bytes = sizeof(RbcValueActivation);
+    size_t leaves, rows, snapshots, snapshot_alignment, bytes = sizeof(RbcValueActivation);
     /* A borrowed raw description can still use the ordinary typed receiver.
      * Only the exact immutable executable owner supplies the closed window. */
     size_t regions=xr_rbc_module_code_owner(module) && code->array_region_runtime ?
@@ -260,12 +265,13 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
         code->homes->frame.payload_size : 0;
     if (payload_bytes && !rbc_value_extent(&payload_bytes,payload_alignment - 1,1))
         xrt_native_managed_failure(XRT_MANAGED_OVERFLOW,source);
-    if (!rbc_value_capacities(code,image,&leaves,&rows,&snapshots) ||
+    if (!rbc_value_capacities(code,image,&leaves,&rows,&snapshots,&snapshot_alignment) ||
+        snapshots > SIZE_MAX - (snapshot_alignment - 8) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(const uint8_t *)) ||
         !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcParameterStorage)) ||
         !rbc_value_extent(&bytes,leaves,sizeof(XrtPlaceEdge)) ||
-        !rbc_value_extent(&bytes,rows,sizeof(RbcValuePublication)) || !rbc_value_extent(&bytes,snapshots,1) ||
+        !rbc_value_extent(&bytes,rows,sizeof(RbcValuePublication)) || !rbc_value_extent(&bytes,snapshots + snapshot_alignment - 8,1) ||
         !rbc_value_extent(&bytes,regions,sizeof(RbcArrayRegionState)) ||
         !rbc_value_extent(&bytes,payload_bytes,1))
         xrt_native_managed_failure(XRT_MANAGED_OVERFLOW,source);
@@ -285,7 +291,10 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     RBC_VALUE_PART(parameter_storage,code->parameter_count,RbcParameterStorage);
     RBC_VALUE_PART(edges,leaves,XrtPlaceEdge);
     RBC_VALUE_PART(publications,rows,RbcValuePublication);
-    RBC_VALUE_PART(snapshots,snapshots,uint8_t);
+    uintptr_t snapshot_start = (uintptr_t)memory + offset;
+    offset += (-snapshot_start) & (snapshot_alignment - 1);
+    activation->snapshots = (uint8_t *)memory + offset;
+    offset += snapshots;
     if (regions) {
         RBC_VALUE_PART(array_regions,regions,RbcArrayRegionState);
         memset(activation->array_regions,0,regions*sizeof(RbcArrayRegionState));

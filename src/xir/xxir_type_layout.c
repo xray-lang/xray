@@ -100,6 +100,33 @@ XrXirStatus xr_xir_compile_layout(const XrXirCompileContext *compile_context,
 
 #include "xxir_nominal_storage.inc.c"
 
+/* Check only concrete aligned records. Their dependencies share the same
+ * layout walk, including records reached through multiple instantiations. */
+XR_FUNC XrXirStatus xr_xir_check_record_alignments(const XrXirCompileContext *context,
+    const XrXirTypes *types, uint32_t *declaration) {
+    if (!xir_compile_context_valid(context) || !types || !declaration) return XR_XIR_BAD_STRUCTURE;
+    *declaration = UINT32_MAX;
+    XrXirCompileContext budget = *context;
+    NominalStorageNode *nodes = NULL;
+    XrXirStatus status = xr_xir_compile_types_structure_verify(&budget, types);
+    for (uint32_t i = 0; i < types->count && status == XR_XIR_OK; ++i) {
+        const XrXirTypeNode *type = &types->nodes[i];
+        if (type->kind != XR_XIR_TYPE_NOMINAL || type->parameter_span ||
+            !nominal_storage_declared_alignment(types, type->nominal.declaration)) continue;
+        if (!nodes) {
+            nodes = xir_compile_calloc(&budget, types->count, sizeof(*nodes) + sizeof(uint32_t), &status);
+            if (!nodes) break;
+        }
+        if (nodes[i].state) continue;
+        uint32_t *stack = (uint32_t *)(nodes + types->count);
+        status = nominal_storage_walk(types, &budget, nodes, stack, i, declaration);
+        if (status != XR_XIR_OK && *declaration == UINT32_MAX)
+            *declaration = type->nominal.declaration;
+    }
+    xr_compile_resources_free(nodes);
+    return status;
+}
+
 static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirStorageLayout *layouts, uint32_t count) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
@@ -135,7 +162,7 @@ static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_conte
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t i = 0; i < count && status == XR_XIR_OK; ++i) {
         if (types->nodes[i].kind != XR_XIR_TYPE_NOMINAL && types->nodes[i].kind != XR_XIR_TYPE_NULLABLE) continue;
-        if (!nodes[i].state) status = nominal_storage_walk(types, &budget, nodes, stack, i);
+        if (!nodes[i].state) status = nominal_storage_walk(types, &budget, nodes, stack, i, NULL);
         if (status == XR_XIR_OK) {
             layouts[i].value = nodes[i].layout;
             layouts[i].depth = nodes[i].depth;

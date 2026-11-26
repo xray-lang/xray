@@ -44,5 +44,18 @@
     "exit": 0,
     "stdout": "on=true\n",
     "stderr": ""
+  },
+  "align_heap": {
+    "exit": 0,
+    "stdout": "second\n42\n",
+    "stderr": ""
+  },
+  "align_generic_low": {
+    "source_error": ":1:8: error: explicit struct alignment is below the alignment its fields require"
+  },
+  "align_generic_nested": {
+    "exit": 0,
+    "stdout": "42\n",
+    "stderr": ""
   }
 }

@@ -1,0 +1,16 @@
+struct Row align(64) {
+    name: string
+    n: i64
+}
+final class Box {
+    private const value: Row
+    init(value: Row) { this.value = value }
+    get() -> Row { return this.value }
+}
+fn check(n: i64) {
+    const rows: Array<Row> = [Row{name: "first", n: 1}, Row{name: "second", n: n}]
+    const saved = Box(rows[1]).get()
+    print(saved.name)
+    print(saved.n)
+}
+check(42)

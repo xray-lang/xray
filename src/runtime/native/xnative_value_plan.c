@@ -498,16 +498,19 @@ static void plan_lease_drop(void *plan) { xrt_value_plan_drop(plan); }
 XR_FUNCDEF XrtManagedLease xrt_value_plan_lease(XrtValuePlan *plan) {
     return plan ? (XrtManagedLease){plan, plan_lease_retain, plan_lease_drop} : (XrtManagedLease){0};
 }
+static size_t class_payload_offset(const XrtValuePlanSpec *row) {
+    return (sizeof(XrtManagedHeader) + row->alignment - 1) & ~(row->alignment - 1);
+}
 static XrtManagedStatus inline_payload_backing_bind(XrtBillingOwner *billing,
     const XrtValuePlanSpec *payload, size_t trailing, size_t *shifted_offsets, XrtManagedLease code, XrtManagedOps **empty) {
     if (!billing || !payload || !empty || *empty || !payload->alignment ||
-        sizeof(XrtManagedHeader) % payload->alignment ||
         (payload->owned_count && (!payload->owned_offsets || !shifted_offsets)))
         return XRT_MANAGED_ARGUMENT;
-    size_t bytes = sizeof(XrtManagedHeader);
+    size_t prefix = class_payload_offset(payload);
+    size_t bytes = prefix;
     if (!extent_add(&bytes, payload->size, 1) || !extent_add(&bytes, trailing, 1)) return XRT_MANAGED_OVERFLOW;
     for (size_t i = 0; i < payload->owned_count; ++i)
-        shifted_offsets[i] = sizeof(XrtManagedHeader) + payload->owned_offsets[i];
+        shifted_offsets[i] = prefix + payload->owned_offsets[i];
     size_t alignment = payload->alignment > alignof(XrtManagedHeader) ? payload->alignment : alignof(XrtManagedHeader);
     XrtRuntimeTypeSpec physical = {.fixed_size=bytes, .alignment=alignment,
         .capacity_offset=SIZE_MAX, .child_offsets=payload->owned_count ? shifted_offsets : NULL,
@@ -520,6 +523,7 @@ static XrtManagedStatus inline_payload_backing_bind(XrtBillingOwner *billing,
 }
 XR_FUNCDEF XrtManagedStatus xrt_inline_payload_backing_bind(XrtBillingOwner *billing,
     const XrtValuePlanSpec *payload, size_t *shifted_offsets, XrtManagedLease code, XrtManagedOps **empty) {
+    if (!payload || !payload->alignment || sizeof(XrtManagedHeader) % payload->alignment) return XRT_MANAGED_ARGUMENT;
     return inline_payload_backing_bind(billing, payload, 0, shifted_offsets, code, empty);
 }
 static XrtManagedHeader *payload_child(const void *payload, size_t offset);
@@ -564,11 +568,12 @@ typedef struct ClassConstruction {
 static XrtManagedStatus class_initialize(XrtManagedHeader *pending, void *context) {
     const ClassConstruction *construction = context;
     const XrtValuePlanSpec *payload = &construction->payload->view;
+    unsigned char *row = (unsigned char *)pending + class_payload_offset(payload);
     if (class_has_guards(payload)) {
-        bool *guards = (bool *)((unsigned char *)(pending + 1) + payload->size);
+        bool *guards = (bool *)(row + payload->size);
         for (size_t i = 0; i < payload->field_count; ++i) guards[i] = false;
     }
-    return xrt_value_copy_empty(construction->payload, construction->row, pending + 1);
+    return xrt_value_copy_empty(construction->payload, construction->row, row);
 }
 static void class_finish(void *context) {
     /* Inputs borrow existing owners and need no retirement. */
@@ -705,7 +710,7 @@ XR_FUNCDEF XrtManagedStatus xrt_class_field_borrow(const XrtManagedHeader *owner
     if (status != XRT_MANAGED_OK) return status;
     if ((slot->flags & XRT_VALUE_FIELD_MUTABLE) && !writable_class_scalar(&slot->type->view))
         return XRT_MANAGED_ARGUMENT;
-    const void *payload = (const unsigned char *)(owner + 1) + slot->offset;
+    const void *payload = (const unsigned char *)owner + class_payload_offset(&expected->view.element->view) + slot->offset;
     if (payloadless_sum(&slot->type->view) && !class_enum_tag_valid(&slot->type->view, payload))
         return XRT_MANAGED_ARGUMENT;
     *empty_type = slot->type;
@@ -723,7 +728,7 @@ XR_FUNCDEF XrtManagedStatus xrt_class_scalar_field_write(XrtManagedHeader *owner
         return XRT_MANAGED_ARGUMENT;
     if (payloadless_sum(type) && !class_enum_tag_valid(type, bytes)) return XRT_MANAGED_ARGUMENT;
     /* These values have no owners and the class is executor-confined. */
-    unsigned char *destination = (unsigned char *)(owner + 1) + slot->offset;
+    unsigned char *destination = (unsigned char *)owner + class_payload_offset(&expected->view.element->view) + slot->offset;
     if (optional_i64(type)) {
         const unsigned char *input = bytes;
         uint8_t present = input[type->nullable.tag_offset];
@@ -758,7 +763,7 @@ XR_FUNCDEF XrtManagedStatus xrt_class_array_binding(const XrtClassFieldAccess *a
     const XrtValueSlotSpec *field = &row->fields[access->index];
     XrtBackingArrayKind field_kind = writable_class_array_kind(field->type->view.kind);
     if (!(field->flags & XRT_VALUE_FIELD_MUTABLE) || field_kind == XRT_BACKING_ARRAY_COUNT) return XRT_MANAGED_ARGUMENT;
-    unsigned char *payload = (unsigned char *)(access->instance + 1);
+    unsigned char *payload = (unsigned char *)access->instance + class_payload_offset(row);
     XrtManagedHeader **slot = (XrtManagedHeader **)(payload + field->offset);
     bool *guards = (bool *)(payload + row->size);
     *output = (XrtExternalOwner){.owner=slot, .busy=&guards[access->index],

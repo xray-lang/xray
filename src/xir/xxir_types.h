@@ -180,6 +180,9 @@ XR_FUNC XrXirStatus xr_xir_compile_types_parameter_count(const XrXirCompileConte
  * releases initialized children and preserves the caller's output. */
 XR_FUNC XrXirStatus xr_xir_compile_types_clone(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrCompileRequestControl *control, XrXirTypes **output);
 XR_FUNC void xr_xir_compile_types_free(XrXirTypes *types);
+/* Identify a concrete record whose declared alignment cannot hold its fields. */
+XR_FUNC XrXirStatus xr_xir_check_record_alignments(const XrXirCompileContext *context,
+    const XrXirTypes *types, uint32_t *declaration);
 /* Complete inline field storage; output offsets publish only after success. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_layout(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType type, const XrXirTarget *target, XrXirLayout *layout, uint32_t *field_offsets, uint32_t field_count);
 XR_FUNC XrXirType xr_xir_operand_type(const XrXirFunction *function, uint32_t value);

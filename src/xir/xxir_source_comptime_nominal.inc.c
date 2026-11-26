@@ -52,7 +52,7 @@ static bool source_comptime_nominal_admit(SourceContext *ctx,AstNode *node,XrXir
 }
 
 typedef struct SourceComptimeNominalShape { uint32_t count,begin,variant; } SourceComptimeNominalShape;
-static bool source_comptime_nominal_fields(SourceContext *ctx,AstNode *node,XrXirType type) {
+static bool source_closed_nominal_fields(SourceContext *ctx,AstNode *node,XrXirType type) {
     if (!((ctx)->diagnostic.status == XR_XIR_OK)) return false;
     const XrXirTypeNode *found=xr_xir_type_node(&ctx->types,type);
     if (!found || found->kind!=XR_XIR_TYPE_NOMINAL || found->parameter_span || found->nominal.declaration>=ctx->nominals.count)
@@ -81,7 +81,7 @@ static bool source_comptime_nominal_fields(SourceContext *ctx,AstNode *node,XrXi
 }
 static bool source_comptime_nominal_shape(SourceContext *ctx,AstNode *node,const XrXirValue *value,
     XrXirType target,SourceComptimeNominalShape *output) {
-    if (!source_comptime_nominal_fields(ctx,node,target) || !source_comptime_nominal_admit(ctx,node,target)) return false;
+    if (!source_closed_nominal_fields(ctx,node,target) || !source_comptime_nominal_admit(ctx,node,target)) return false;
     const XrXirTypeArena *arena=xr_xir_value_arena(value);const XrXirTypes *source=xr_xir_compile_type_arena_types(arena);
     XrHirNominalView received={0},expected={0};
     XrXirStatus status=xr_hir_nominal_view(source,(XrXirType)value->type,ctx->request,&received,NULL);

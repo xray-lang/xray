@@ -1,0 +1,3 @@
+struct Box<T> align(1) { value: T }
+const bad: Box<i64> = Box<i64>{value: 42}
+print(bad.value)

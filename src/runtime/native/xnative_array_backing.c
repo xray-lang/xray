@@ -42,9 +42,9 @@ static XrtManagedStatus array_fill(XrtArrayBacking *array, ArrayInput input, siz
     }
     return XRT_MANAGED_OK;
 }
-static size_t array_bytes(size_t stride, size_t capacity) {
-    return capacity <= (SIZE_MAX - sizeof(XrtArrayBacking)) / stride
-        ? sizeof(XrtArrayBacking) + capacity * stride : 0;
+static size_t array_bytes(size_t prefix, size_t stride, size_t capacity) {
+    return capacity <= (SIZE_MAX - prefix) / stride
+        ? prefix + capacity * stride : 0;
 }
 static XrtManagedStatus array_prepare(XrtManagedFrame *frame, size_t slot,
     XrtManagedOps *ops, size_t bytes, size_t capacity, XrtManagedHeader **payload) {
@@ -68,7 +68,7 @@ static XrtManagedStatus array_create(XrtManagedFrame *frame, size_t slot,
     size_t stride = xrt_backing_array_stride(input.kind);
     if (!types || !stride || !types->arrays[input.kind] || input.count > input.capacity ||
         (!input.copy && input.count && !input.values)) return XRT_MANAGED_ARGUMENT;
-    size_t bytes = array_bytes(stride, input.capacity);
+    size_t bytes = array_bytes(sizeof(XrtArrayBacking), stride, input.capacity);
     if (!bytes) return XRT_MANAGED_OVERFLOW;
     if (input.kind == XRT_BACKING_ARRAY_STRING && !input.copy) {
         XrtStringBacking *const *strings = input.values;
@@ -120,12 +120,11 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_bind(XrtBillingOwner *billi
     const XrtValuePlan *element, XrtManagedOps **empty) {
     XrtValuePlanSpec shape;
     if (!billing || !empty || *empty || xrt_value_plan_view(element, &shape) != XRT_MANAGED_OK ||
-        !xrt_value_inline_array_element_supported(shape.kind, shape.class_storage) || !shape.size ||
-        sizeof(XrtArrayBacking) % shape.alignment)
+        !xrt_value_inline_array_element_supported(shape.kind, shape.class_storage) || !shape.size)
         return XRT_MANAGED_ARGUMENT;
     size_t alignment = shape.alignment > alignof(XrtArrayBacking) ? shape.alignment : alignof(XrtArrayBacking);
     XrtRuntimeTypeSpec spec = {
-        .fixed_size = sizeof(XrtArrayBacking), .alignment = alignment,
+        .fixed_size = (sizeof(XrtArrayBacking) + alignment - 1) & ~(alignment - 1), .alignment = alignment,
         .capacity_offset = offsetof(XrtArrayBacking, capacity), .stride = shape.size,
         .code = {(void *)element, array_element_retain, array_element_drop},
         .tail_child_offsets = shape.owned_offsets, .tail_child_count = shape.owned_count
@@ -146,7 +145,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_create(XrtManagedFrame *fra
     status = xrt_value_plan_view(spec->code.context, &element);
     XR_CHECK(status == XRT_MANAGED_OK, "Array Ops keeps the bound element plan alive");
     if (count > capacity || (count && (!rows || (uintptr_t)rows % element.alignment))) return XRT_MANAGED_ARGUMENT;
-    size_t bytes = array_bytes(spec->stride, capacity);
+    size_t bytes = array_bytes(spec->fixed_size, spec->stride, capacity);
     if (!bytes) return XRT_MANAGED_OVERFLOW;
     if (element.kind == XRT_VALUE_CLASS) {
         /* Class rows own the same object under the Array's exact class plan. */
@@ -162,7 +161,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_create(XrtManagedFrame *fra
     XrtArrayBacking *array = (XrtArrayBacking *)payload;
     for (size_t row = 0; row < count && status == XRT_MANAGED_OK; ++row) {
         size_t offset = row * spec->stride;
-        status = xrt_value_copy_empty(spec->code.context, (const unsigned char *)rows + offset, array->elements + offset);
+        status = xrt_value_copy_empty(spec->code.context, (const unsigned char *)rows + offset, (unsigned char *)array + spec->fixed_size + offset);
     }
     return array_finish(frame, slot, array, count, status);
 }
@@ -182,7 +181,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_at(const XrtArrayBacking *a
     const XrtRuntimeTypeSpec *spec = array_inline_spec(&array->managed, element);
     if (!spec || array->length > array->capacity) return XRT_MANAGED_ARGUMENT;
     if (index < 0 || (uint64_t)index >= array->length) return XRT_MANAGED_BOUNDS;
-    *empty_borrow = array->elements + (size_t)index * spec->stride;
+    *empty_borrow = (const unsigned char *)array + spec->fixed_size + (size_t)index * spec->stride;
     return XRT_MANAGED_OK;
 }
 
