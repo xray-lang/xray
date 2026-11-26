@@ -419,7 +419,7 @@ static void directory_next_requires_exact_successors(void) {
     enum { COMPLETE, NO_FRAME, WRONG_SOURCE, WRONG_CAPTURE, WRONG_PRIMARY };
     const XrLirSource read = {"cleanup.xr", 10, 8, 12, 8, 12};
     const XrLirSource close = {"cleanup.xr", 10, 5, 9, 5, 9};
-    const XrLirSource exit = {"cleanup.xr", 10, 8, 5, 8, 25};
+    const XrLirSource returned = {"cleanup.xr", 10, 8, 5, 8, 25};
     for (unsigned fault = COMPLETE; fault <= WRONG_PRIMARY; ++fault) {
         XrLirModule *m = NULL;
         OK(xr_lir_module_create(NULL, &m));
@@ -462,9 +462,9 @@ static void directory_next_requires_exact_successors(void) {
         OK(xr_lir_emit_value(m, normal, &step, &success[1]));
         OK(xr_lir_emit_value(m, failure, &step, &failed[1]));
         OK(xr_lir_emit_effect(m, normal, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,
-            .type=XR_LIR_UNIT,.operands=success,.operand_count=2,.source=exit}));
+            .type=XR_LIR_UNIT,.operands=success,.operand_count=2,.source=returned}));
         OK(xr_lir_set_terminator(m, normal, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
-            .operands=success,.operand_count=1,.source=exit}));
+            .operands=success,.operand_count=1,.source=returned}));
         if (fault == WRONG_PRIMARY) failed[0] = failed[1];
         OK(xr_lir_set_terminator(m, failure, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_FAIL,
             .type=XR_LIR_UNIT,.operands=failed,.operand_count=2,.source=read}));

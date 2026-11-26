@@ -240,12 +240,12 @@ static bool rbc_lir_value_invoke(RbcLirCompiler *c,const XrLirInstructionView *i
         rbc_lir_jump(c,i->edges[0].target);
 }
 static bool rbc_lir_directory_next(RbcLirCompiler *c, const XrLirInstructionView *i) {
-    XrLirBlockView normal, failure;
+    XrLirBlockView normal, failed_block;
     xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[0].target},&normal);
-    xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[1].target},&failure);
+    xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[1].target},&failed_block);
     uint32_t origin = (uint32_t)c->value_code->access_count;
     XrRbcValueAccess next = {.operation=XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED,.source=i->operands[0],
-        .result=normal.parameters[0],.other=failure.parameters[0],.window=c->register_count-1};
+        .result=normal.parameters[0],.other=failed_block.parameters[0],.window=c->register_count-1};
     XrRbcValueAccess failed = {.operation=XR_RBC_VALUE_HOST_DIRECTORY_NEXT_ERROR,.index=origin,.result=next.other};
     XrRbcValueAccess returned = {.operation=XR_RBC_VALUE_HOST_DIRECTORY_NEXT_RESULT,.index=origin,.result=next.result};
     c->invoke_edges = true;
