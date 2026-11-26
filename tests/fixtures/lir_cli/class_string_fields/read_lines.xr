@@ -1,0 +1,21 @@
+import io
+import path
+
+fn examine() {
+    const file = path.Path("read-lines-field-test.bin")
+    const bytes: Array<u8> = [65, 13, 10, 13, 10, 255, 10, 90]
+    assert(io.writeFileBytes(file, bytes))
+    const lines = io.readLines(file)
+    print(len(lines))
+    print(lines[0])
+    print(lines[1] == "")
+    print(lines[2])
+    print(lines[3])
+
+    const empty = path.Path("read-lines-empty-field-test.txt")
+    assert(io.writeFile(empty, ""))
+    print(len(io.readLines(empty)))
+    print(len(io.readLines(path.Path("read-lines-missing-field-test.txt"))))
+}
+
+examine()

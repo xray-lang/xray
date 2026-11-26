@@ -9,5 +9,10 @@
   },
   "immutable": {
     "source_error": ":7:0: error: field access is not permitted"
+  },
+  "read_lines": {
+    "exit": 0,
+    "stdout": "4\nA\ntrue\n�\nZ\n0\n0\n",
+    "stderr": ""
   }
 }
