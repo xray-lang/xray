@@ -16,7 +16,7 @@ static bool c_record_point(const XrLirInstructionView *v) {
         v->op == XR_LIR_CLASS_ADOPT ||
         v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE ||
         v->op == XR_LIR_HOST_PATH_CLASS || v->op == XR_LIR_HOST_FILE_READ || v->op == XR_LIR_HOST_ENV_GET ||
-        v->op == XR_LIR_HOST_TEXT_RESULT ||
+        v->op == XR_LIR_HOST_TEXT_RESULT || v->op == XR_LIR_HOST_DIRECTORY ||
         v->op == XR_LIR_CLASS_SCALAR_WRITE || v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
 }
@@ -134,7 +134,41 @@ static void c_host_text_result(LirC *c, const XrLirInstructionView *v, uint32_t 
     c_value(c, v->operands[0]);
     c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
 }
+static void c_host_directory(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->bits == XR_NATIVE_CALLABLE_IO_DIR_OPEN) {
+        c_format(c, "    v%" PRIu32 " = xrt_native_host_directory_open((const XrtManagedHeader *)", v->result);
+        c_value(c, v->operands[0]);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        return;
+    }
+    if (v->bits == XR_NATIVE_CALLABLE_IO_DIR_CLOSE) {
+        c_format(c, "    v%" PRIu32 " = xrt_native_host_directory_close(", v->result);
+        c_value(c, v->operands[0]);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        return;
+    }
+    XR_CHECK(v->bits == XR_NATIVE_CALLABLE_IO_DIR_NEXT, "verified directory operation has a known callable");
+    const XrLirValueHome *home = &c->homes->values[v->result];
+    const XrtValueImage *image = xr_lir_value_image_view(c->value_image);
+    const XrtValueImageType *optional = &image->types[home->type - 1];
+    XR_CHECK(optional->kind == XRT_VALUE_NULLABLE && home->temporary_offset != SIZE_MAX &&
+        optional->nullable_payload <= SIZE_MAX - home->temporary_offset,
+        "verified directory next has a stable nullable owner offset");
+    c_values_ensure(c, source);
+    c_format(c, "    xrt_native_host_directory_next(&(XrtNativeDirectoryNext){"
+        ".frame=xrl_frame, .destination=%zu, .temporary=%zu, .offset=%zu, .temporary_owner_offset=%zu, "
+        ".image=&xrl_value_image, .result_type=UINT32_C(%" PRIu32 "), .token=",
+        home->first_owner, home->temporary_first_owner, home->offset,
+        home->temporary_offset + optional->nullable_payload, home->type);
+    c_value(c, v->operands[0]);
+    c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
+}
+
 static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_HOST_DIRECTORY) {
+        c_host_directory(c, v, source);
+        return;
+    }
     if (v->op == XR_LIR_HOST_ENV_GET) {
         c_host_environment_get(c, v, source);
         return;

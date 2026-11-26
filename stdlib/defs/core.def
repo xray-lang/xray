@@ -1330,6 +1330,7 @@ module io {
   fn __dirOpen {
     signature: "(path: Path): i64"
     doc: "Open a directory iterator and return an opaque handle token, or 0 on failure"
+    host_leaf: "blocking-directory"
     vm: "io_dirOpen"
     aot: "xrt_io_dir_open"
     argc: 1
@@ -1343,6 +1344,7 @@ module io {
   fn __dirNext {
     signature: "(handle: i64): string?"
     doc: "Read the next directory entry name, or null at end of iteration"
+    host_leaf: "blocking-directory"
     vm: "io_dirNext"
     aot: "xrt_io_dir_next"
     argc: 1
@@ -1357,6 +1359,7 @@ module io {
   fn __dirClose {
     signature: "(handle: i64): bool"
     doc: "Close an owned directory iterator handle"
+    host_leaf: "blocking-directory"
     vm: "io_dirClose"
     aot: "xrt_io_dir_close"
     argc: 1

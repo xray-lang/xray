@@ -1,0 +1,3 @@
+import { __dirNext } from io
+
+print(__dirNext(0) == null)

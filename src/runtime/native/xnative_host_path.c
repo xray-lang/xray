@@ -119,7 +119,9 @@ static bool host_path_bool(uint32_t callable, const XrtStringBacking *text,
 #define XR_NATIVE_BLOCKING_FILE_READ(id)
 #define XR_NATIVE_BLOCKING_FILE_WRITE(id, kind)
 #define XR_NATIVE_BLOCKING_TEXT_RESULT(id)
+#define XR_NATIVE_BLOCKING_DIRECTORY(id)
 #include "shared/xnative_host_leaves.inc.h"
+#undef XR_NATIVE_BLOCKING_DIRECTORY
 #undef XR_NATIVE_FILE_STAT_FIELDS
 #undef XR_NATIVE_BLOCKING_TEXT_RESULT
 #undef XR_NATIVE_BLOCKING_FILE_WRITE

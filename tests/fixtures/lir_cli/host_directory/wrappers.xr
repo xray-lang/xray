@@ -1,0 +1,3 @@
+export fn directoryProbeOpen(directory: Path) -> i64 { return __dirOpen(directory) }
+export fn directoryProbeNext(token: i64) -> string? { return __dirNext(token) }
+export fn directoryProbeClose(token: i64) -> bool { return __dirClose(token) }

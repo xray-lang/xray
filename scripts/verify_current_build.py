@@ -37,6 +37,7 @@ REQUIRED = (
     "test_lir_cli_invoke_init_root",
     "test_lir_cli_string_byte_length",
     "test_lir_cli_host_path", "test_lir_cli_host_file_write", "test_lir_cli_target_platform",
+    "test_lir_cli_host_directory", "native_host_directory", "os_directory_owned",
     "test_lir_cli_host_environment", "test_lir_host_stat_control",
     "test_lir_host_remove_control",
     "test_lir_cli_string_slice",

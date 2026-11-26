@@ -1381,6 +1381,11 @@ def parse_def_metadata(
                 "blocking-file-read": {"__fileRead": "(file: __FileStorage, maxBytes: i64): Array<u8>?"},
                 "blocking-file-write-bytes": {"__fileWrite": "(file: __FileStorage, data: Array<u8>, offset: i64): i64"},
                 "blocking-file-write-string": {"__fileWriteStr": "(file: __FileStorage, data: string, offset: i64): i64"},
+                "blocking-directory": {
+                    "__dirOpen": "(path: Path): i64",
+                    "__dirNext": "(handle: i64): string?",
+                    "__dirClose": "(handle: i64): bool",
+                },
                 "blocking-text-result": {
                     "__makeTempDir": "(root: string): string?",
                     "__makeTempFile": "(root: string): string?",

@@ -1,0 +1,17 @@
+import io
+import path
+
+const token = io.directoryProbeOpen(path.Path("one"))
+assert(token > 0)
+const retained = io.directoryProbeNext(token)
+assert(retained != null)
+assert(io.directoryProbeNext(token) == null)
+assert(io.directoryProbeNext(token) == null)
+assert(io.directoryProbeClose(token))
+print(retained!)
+
+const empty = io.directoryProbeOpen(path.Path("empty"))
+assert(empty > 0)
+assert(io.directoryProbeNext(empty) == null)
+assert(io.directoryProbeClose(empty))
+print(io.directoryProbeOpen(path.Path("missing")) == 0)

@@ -753,6 +753,21 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_TEXT_RESULT &&
             rbc_value_string(module, code, a.source, false) &&
             rbc_value_host_nullable_backing(module, code, a.result, XRT_VALUE_STRING);
+    case XR_RBC_VALUE_HOST_DIRECTORY:
+        if (a.other || xr_native_host_shape(a.index) != XR_NATIVE_HOST_DIRECTORY ||
+            !xr_rbc_module_code_owner(module)) return false;
+        switch (a.index) {
+        case XR_NATIVE_CALLABLE_IO_DIR_OPEN:
+            return rbc_value_string(module, code, a.source, false) &&
+                rbc_value_scalar(code, function, a.result, XR_RBC_BITS);
+        case XR_NATIVE_CALLABLE_IO_DIR_NEXT:
+            return rbc_value_scalar(code, function, a.source, XR_RBC_BITS) &&
+                rbc_value_host_nullable_backing(module, code, a.result, XRT_VALUE_STRING);
+        case XR_NATIVE_CALLABLE_IO_DIR_CLOSE:
+            return rbc_value_scalar(code, function, a.source, XR_RBC_BITS) &&
+                rbc_value_scalar(code, function, a.result, XR_RBC_BITS);
+        default: return false;
+        }
     case XR_RBC_VALUE_HOST_FILE_CLOSE:
         return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_CLOSE &&
             rbc_value_file_storage(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);

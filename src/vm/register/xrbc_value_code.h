@@ -62,6 +62,8 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_HOST_PATH_CLASS, XR_RBC_VALUE_HOST_FILE_READ, XR_RBC_VALUE_HOST_ENV_GET,
     /* A textual leaf: the callable in index selects creation or path query. */
     XR_RBC_VALUE_HOST_TEXT_RESULT,
+    /* Directory uses a checked callable id and a scalar or managed home. */
+    XR_RBC_VALUE_HOST_DIRECTORY,
     XR_RBC_VALUE_STRING_SLICE,
     /* STRING_REPLACE borrows source/other/index; first selects all matches. */
     XR_RBC_VALUE_STRING_REPLACE,

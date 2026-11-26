@@ -198,7 +198,7 @@ static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrL
         else if (v->op == XR_LIR_HOST_PATH_BOOL || v->op == XR_LIR_HOST_FILE_OPEN_WRITE ||
             v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE ||
             v->op == XR_LIR_HOST_PATH_CLASS || v->op == XR_LIR_HOST_FILE_READ || v->op == XR_LIR_HOST_ENV_GET ||
-            v->op == XR_LIR_HOST_TEXT_RESULT) {
+            v->op == XR_LIR_HOST_TEXT_RESULT || v->op == XR_LIR_HOST_DIRECTORY) {
             lir_print_format(p, "#%" PRIu64 ", ", v->bits);
             lir_print_values(p, v->operands, v->operand_count);
         }

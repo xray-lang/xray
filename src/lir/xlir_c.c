@@ -21,6 +21,7 @@
 #include "xlir_state.h"
 #include "xlir_state_projection.h"
 #include "xlir_pod.h"
+#include "shared/xnative_declaration.h"
 #include "xlir_value_layout.h"
 #include "xlir_value_homes.h"
 #include "xlir_array_region_binding.h"
@@ -78,7 +79,7 @@ typedef struct LirC {
     uint32_t location_count, location_cursor;
     bool runtime, runtime_header, f64, state, arrays, views, displays, tuple_displays, maps, sets, i64_refs;
     bool string_values, inline_values, callables, cells, header_edges, binding_forwarding;
-    bool array_local, array_local_runtime, host_path_pair, host_text_result;
+    bool array_local, array_local_runtime, host_path_pair, host_text_result, host_directory;
     XrLirStateLayout state_layout;
     XrtBillingOwner *value_billing;
     XrLirValueLayouts *value_layouts;
@@ -558,7 +559,10 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         return;
     }
     if (xr_lir_range_point(c->request->module, v)) return;
-    if (c_record_point(v)) return;
+    if (c_record_point(v)) {
+        c->host_directory |= v->op == XR_LIR_HOST_DIRECTORY;
+        return;
+    }
     if (c_sum_point(v)) return;
     if (c_map_point(c, v)) {
         c->maps = true;
@@ -1384,7 +1388,8 @@ static void c_emit(LirC *c, XrLirType root_result) {
     if (c->callables) c_text(c,"#include \"xray_native_function.h\"\n");
     if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
-    if (c->string_values || c->arrays || c->maps || c->sets || c->inline_values || c->views || c->cells) c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
+    if (c->string_values || c->arrays || c->maps || c->sets || c->inline_values || c->views || c->cells || c->host_directory)
+        c_text(c, "#include <string.h>\n#include \"xray_native_values.h\"\n#include \"xray_native_place.h\"\n\n");
     else if (c->value_types) c_text(c, "typedef struct XrtManagedHeader XrtManagedHeader;\n");
     if (c->value_types) c_text(c, "#include \"xray_native_value_image.h\"\n\n");
     if (c->state || c->i64_refs) c_text(c, "#include \"xray_native_state.h\"\n\n");

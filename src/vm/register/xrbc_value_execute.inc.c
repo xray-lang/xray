@@ -1368,6 +1368,37 @@ static XrtManagedStatus rbc_value_host_text_result(RbcValueActivation *activatio
     return result.managed;
 }
 
+static XrtManagedStatus rbc_value_host_directory(const XrRbcModule *module, XrRbcStack *stack,
+    RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
+    if (access.index == XR_NATIVE_CALLABLE_IO_DIR_OPEN) {
+        XrRbcRegister *result = rbc_value_register(stack, activation, access.result);
+        if (!result) return XRT_MANAGED_ARGUMENT;
+        const XrtStringBacking *path = NULL;
+        XrtManagedStatus status = rbc_value_string_borrow(activation, access.source, &path);
+        if (status == XRT_MANAGED_OK)
+            result->bits = (uint64_t)xrt_native_host_directory_open((const XrtManagedHeader *)path, source);
+        return status;
+    }
+    const XrRbcRegister *operand = rbc_value_register(stack, activation, access.source);
+    if (!operand) return XRT_MANAGED_ARGUMENT;
+    int64_t token;
+    memcpy(&token, &operand->bits, sizeof(token));
+    if (access.index == XR_NATIVE_CALLABLE_IO_DIR_CLOSE) {
+        XrRbcRegister *result = rbc_value_register(stack, activation, access.result);
+        if (!result) return XRT_MANAGED_ARGUMENT;
+        result->bits = xrt_native_host_directory_close(token, source);
+        return XRT_MANAGED_OK;
+    }
+    if (access.index != XR_NATIVE_CALLABLE_IO_DIR_NEXT) return XRT_MANAGED_ARGUMENT;
+    const XrLirValueHome *home = rbc_value_home(activation->code, access.result);
+    const XrtNativeDirectoryNext next = {.frame=activation->frame, .destination=home->first_owner,
+        .temporary=home->temporary_first_owner, .offset=home->offset,
+        .temporary_owner_offset=home->temporary_offset + offsetof(XrtHostNullableOwner, owner),
+        .image=xr_rbc_module_value_image(module), .result_type=home->type, .token=token};
+    xrt_native_host_directory_next(&next, source);
+    return XRT_MANAGED_OK;
+}
+
 static XrtHostFileStagedResult rbc_value_file_destination(RbcValueActivation *activation, uint32_t value) {
     const XrLirValueHome *home = rbc_value_home(activation->code, value);
     return (XrtHostFileStagedResult){
@@ -1640,6 +1671,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         status = rbc_value_host_environment_get(activation, access, source);
     } else if (access.operation==XR_RBC_VALUE_HOST_TEXT_RESULT) {
         status = rbc_value_host_text_result(activation, access, source);
+    } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY) {
+        status = rbc_value_host_directory(module, stack, activation, access, source);
     } else if (access.operation==XR_RBC_VALUE_HOST_PATH_BOOL) {
         const XrtStringBacking *path = NULL, *destination = NULL;
         status = rbc_value_string_borrow(activation, access.source, &path);

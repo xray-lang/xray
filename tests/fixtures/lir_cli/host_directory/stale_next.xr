@@ -1,0 +1,9 @@
+import io
+import path
+
+const old = io.directoryProbeOpen(path.Path("one"))
+assert(old > 0)
+assert(io.directoryProbeClose(old))
+const current = io.directoryProbeOpen(path.Path("one"))
+assert(current > 0 && current != old)
+print(io.directoryProbeNext(old) == null)

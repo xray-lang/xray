@@ -1,0 +1,5 @@
+fn __dirClose(token: i64) -> bool {
+    return token == 0
+}
+
+print(__dirClose(0))

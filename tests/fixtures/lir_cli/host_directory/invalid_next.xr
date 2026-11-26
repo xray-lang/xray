@@ -1,0 +1,3 @@
+import io
+
+print(io.directoryProbeNext(-1) == null)

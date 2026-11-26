@@ -1586,6 +1586,7 @@ static uint32_t lower_host_path_count(uint32_t callable, XrNativeHostShape shape
     case XR_NATIVE_HOST_PATH_BOOL: case XR_NATIVE_HOST_FILE_OPEN_WRITE:
     case XR_NATIVE_HOST_FILE_OPEN_READ: case XR_NATIVE_HOST_FILE_STAT: return 1;
     case XR_NATIVE_HOST_PATH_PAIR_BOOL: return 2;
+    case XR_NATIVE_HOST_DIRECTORY: return callable == XR_NATIVE_CALLABLE_IO_DIR_OPEN ? 1u : 0u;
     /* Only the two path queries consume a Path argument; the exclusive
      * creations take the caller's plain text root. */
     case XR_NATIVE_HOST_TEXT_RESULT:
@@ -3545,6 +3546,7 @@ static bool lower_host_function(Lower *c, uint32_t index) {
     case XR_NATIVE_HOST_FILE_READ: operation = XR_LIR_HOST_FILE_READ; break;
     case XR_NATIVE_HOST_ENV_GET: operation = XR_LIR_HOST_ENV_GET; break;
     case XR_NATIVE_HOST_TEXT_RESULT: operation = XR_LIR_HOST_TEXT_RESULT; break;
+    case XR_NATIVE_HOST_DIRECTORY: operation = XR_LIR_HOST_DIRECTORY; break;
     case XR_NATIVE_HOST_FILE_CLOSE: operation = XR_LIR_HOST_FILE_CLOSE; break;
     case XR_NATIVE_HOST_FILE_WRITE_BYTES: case XR_NATIVE_HOST_FILE_WRITE_STRING:
         operation = XR_LIR_HOST_FILE_WRITE; break;
