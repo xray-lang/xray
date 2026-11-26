@@ -278,7 +278,8 @@ enum {
     WORKSPACE_DISPOSITION = 7,
     WORKSPACE_RECHECK_DISPOSITION = 11,
     WORKSPACE_FILE_DISPOSITION_INFORMATION = 13,
-    WORKSPACE_MAX_DISPOSITION_RETRIES = 5
+    WORKSPACE_MAX_DISPOSITION_RETRIES = 5,
+    WORKSPACE_MAX_DELETE_PENDING_RETRIES = 8
 };
 typedef struct WorkspaceFileDisposition { BOOLEAN delete_file; } WorkspaceFileDisposition;
 
@@ -336,6 +337,13 @@ static XtcXirWorkspaceStatus workspace_walk_step(XtcXirWorkspace *owner) {
             /* STATUS_SHARING_VIOLATION on a regular child's relative open.
              * Keep the open parent and the enumerated name and identity. */
             return XTC_XIR_WORKSPACE_SHARING_RETRY;
+        }
+        if ((ULONG)status == 0xc0000056UL && frame->fixed < 0 &&
+            owner->delete_pending_retries < WORKSPACE_MAX_DELETE_PENDING_RETRIES) {
+            /* STATUS_DELETE_PENDING still occupies this name until the last handle closes.
+             * Keep the parent pin and the enumerated identity for the next relative open. */
+            ++owner->delete_pending_retries;
+            return XTC_XIR_WORKSPACE_DELETE_PENDING_RETRY;
         }
         if (status < 0) return workspace_nt_error(owner, status);
         frame->state = 1; return XTC_XIR_WORKSPACE_PENDING;

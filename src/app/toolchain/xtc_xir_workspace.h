@@ -16,7 +16,8 @@ typedef enum XtcXirWorkspaceStatus {
     XTC_XIR_WORKSPACE_UNSUPPORTED, XTC_XIR_WORKSPACE_BUDGET, XTC_XIR_WORKSPACE_OUT_OF_MEMORY,
     XTC_XIR_WORKSPACE_IO, XTC_XIR_WORKSPACE_IDENTITY_MISMATCH, XTC_XIR_WORKSPACE_REPARSE,
     XTC_XIR_WORKSPACE_PENDING, XTC_XIR_WORKSPACE_MEMORY_LIMIT, XTC_XIR_WORKSPACE_OVERFLOW,
-    XTC_XIR_WORKSPACE_SHARING_RETRY, XTC_XIR_WORKSPACE_DISPOSITION_RETRY
+    XTC_XIR_WORKSPACE_SHARING_RETRY, XTC_XIR_WORKSPACE_DISPOSITION_RETRY,
+    XTC_XIR_WORKSPACE_DELETE_PENDING_RETRY
 } XtcXirWorkspaceStatus;
 typedef struct XtcXirWorkspaceLimits { uint32_t path_bytes, depth, enum_bytes; } XtcXirWorkspaceLimits;
 typedef struct XtcXirWorkspaceRequest {
@@ -57,9 +58,10 @@ XR_FUNC const XtcXirWorkspaceDiagnostic *xtc_xir_workspace_diagnostic(const XtcX
  * is indivisible. A positive finite step_limit is not a real-time deadline.
  * Non-OK results retain all remaining responsibility. PENDING resumes the
  * step budget. SHARING_RETRY preserves an enumerated Windows file for a later
- * identity-checked open. DISPOSITION_RETRY preserves the exact open deletion
- * handle after a writable regular file could not be deleted. Both leave the
- * sticky diagnostic intact. OK frees/nulls;
+ * identity-checked open. DELETE_PENDING_RETRY preserves a named child for a
+ * later relative open while its deletion is still pending. DISPOSITION_RETRY
+ * preserves the exact open deletion handle after a writable regular file
+ * could not be deleted. Retries leave the sticky diagnostic intact. OK frees/nulls;
  * read the sticky first hard error before closing. NULL is already closed. */
 XR_FUNC XtcXirWorkspaceStatus xtc_xir_workspace_close(XtcXirWorkspace **owner, uint32_t step_limit);
 #endif // XTC_XIR_WORKSPACE_H

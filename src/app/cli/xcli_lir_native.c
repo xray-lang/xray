@@ -354,7 +354,7 @@ XR_FUNC bool xr_cli_lir_workspace_close(XtcXirWorkspace **workspace, const char 
     XtcXirWorkspaceStatus status = XTC_XIR_WORKSPACE_OK;
 #if XR_OS_WINDOWS
     unsigned sharing_retries = 0;
-    uint64_t disposition_delay = 1;
+    uint64_t disposition_delay = 1, delete_pending_delay = 1;
 #endif
     for (unsigned attempt = 0; attempt < 8;) {
         status = xtc_xir_workspace_close(workspace, 1024);
@@ -372,6 +372,12 @@ XR_FUNC bool xr_cli_lir_workspace_close(XtcXirWorkspace **workspace, const char 
             /* The workspace bounds the number of retries for its original handle. */
             xr_time_sleep_ms(disposition_delay);
             disposition_delay *= 2;
+            continue;
+        }
+        if (status == XTC_XIR_WORKSPACE_DELETE_PENDING_RETRY) {
+            /* The workspace bounds retries across the entire cleanup. */
+            xr_time_sleep_ms(delete_pending_delay);
+            delete_pending_delay *= 2;
             continue;
         }
         if (status == XTC_XIR_WORKSPACE_SHARING_RETRY) {

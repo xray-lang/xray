@@ -133,6 +133,55 @@ static void busy_regular_file(const char *parent) {
     puts("real Windows reader blocks an enumerated file until its handle closes PASS");
 }
 
+static void delete_pending_child(const char *parent, bool directory, bool exhaust_retries) {
+    XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
+    XtcXirWorkspaceRequest request = request_for(parent);
+    XtcXirWorkspace *owner = NULL;
+    CHECK(xtc_xir_workspace_new(resources, &request, &owner) == XTC_XIR_WORKSPACE_OK);
+    CHECK(xtc_xir_workspace_create(owner) == XTC_XIR_WORKSPACE_OK);
+    char root[8192], path[8192];
+    const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(owner);
+    CHECK(!strcpy_s(root, sizeof(root), paths->root));
+    path_join(path, sizeof(path), paths->output, "delete-pending");
+    if (directory) CHECK(CreateDirectoryA(path, NULL));
+    else write_file(path, "kept alive by a reader after deletion is requested\n");
+
+    const DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    const DWORD flags = directory ? FILE_FLAG_BACKUP_SEMANTICS : FILE_ATTRIBUTE_NORMAL;
+    HANDLE reader = CreateFileA(path, FILE_READ_ATTRIBUTES, share, NULL, OPEN_EXISTING, flags, NULL);
+    CHECK(reader != INVALID_HANDLE_VALUE);
+    HANDLE deleter = CreateFileA(path, DELETE, share, NULL, OPEN_EXISTING, flags, NULL);
+    CHECK(deleter != INVALID_HANDLE_VALUE);
+    FILE_DISPOSITION_INFO disposition = {TRUE};
+    CHECK(SetFileInformationByHandle(deleter, FileDispositionInfo, &disposition, sizeof(disposition)));
+    CHECK(CloseHandle(deleter));
+    FILE_STANDARD_INFO info = {0};
+    CHECK(GetFileInformationByHandleEx(reader, FileStandardInfo, &info, sizeof(info)) && info.DeletePending);
+
+    CHECK(xtc_xir_workspace_close(&owner, 1024) == XTC_XIR_WORKSPACE_DELETE_PENDING_RETRY && owner);
+    const XtcXirWorkspaceDiagnostic *diagnostic = xtc_xir_workspace_diagnostic(owner);
+    CHECK(diagnostic->status == XTC_XIR_WORKSPACE_OK);
+    if (exhaust_retries) {
+        for (unsigned attempt = 1; attempt < 8; ++attempt) {
+            CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_DELETE_PENDING_RETRY && owner);
+            CHECK(diagnostic->status == XTC_XIR_WORKSPACE_OK);
+        }
+        CHECK(xtc_xir_workspace_close(&owner, 1) == XTC_XIR_WORKSPACE_IO && owner);
+        CHECK(diagnostic->status == XTC_XIR_WORKSPACE_IO && diagnostic->os_error == ERROR_ACCESS_DENIED);
+        CHECK(diagnostic->nt_status == 0xc0000056UL && diagnostic->during_cleanup &&
+            diagnostic->cleanup_phase == 3 && diagnostic->cleanup_step == 0 && diagnostic->cleanup_depth == 3);
+    }
+    CHECK(GetFileAttributesA(root) != INVALID_FILE_ATTRIBUTES);
+    CHECK(CloseHandle(reader));
+    drain(&owner, 1);
+    CHECK(GetFileAttributesA(root) == INVALID_FILE_ATTRIBUTES);
+    xr_compile_resources_release(resources);
+    CHECK(!runtime_live && !runtime_bytes);
+#ifndef WORKSPACE_PRODUCTION
+    CHECK(!owner_handle_count);
+#endif
+}
+
 static void compiler_transaction(const char *parent) {
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited); XtcXirWorkspace *owner = NULL;
     XtcXirWorkspaceRequest request = request_for(parent); char path[8192];
@@ -654,6 +703,10 @@ int main(int argc, char **argv) {
     printf("initial handles=%lu\n", before);
     basics(argv[1]); printf("after basics handles=%lu\n", handle_count());
     busy_regular_file(argv[1]);
+    delete_pending_child(argv[1], false, false);
+    delete_pending_child(argv[1], true, false);
+    delete_pending_child(argv[1], false, true);
+    puts("real file and directory delete-pending reap, exact exhaustion diagnostic and zero ownership PASS");
     arguments_and_depth(argv[1]); memory_owner_reuse(argv[1]);
     resources_matrix(argv[1]);
     printf("after resources handles=%lu\n", handle_count());

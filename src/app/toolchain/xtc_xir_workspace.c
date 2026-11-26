@@ -65,7 +65,7 @@ struct XtcXirWorkspace {
     WorkspaceNode nodes[3];
     WorkspaceFrame *frames;
     uint32_t close_phase, close_index, close_substage, frame_count;
-    uint8_t disposition_retries;
+    uint8_t disposition_retries, delete_pending_retries;
 #else
     XtcXirFileLease *parent_lease, *leases[3];
     WorkspaceFrame *frames;
