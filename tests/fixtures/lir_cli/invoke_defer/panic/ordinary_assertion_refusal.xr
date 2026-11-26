@@ -1,0 +1,7 @@
+fn work(value: i64) {
+    defer { print(71) }
+    print(11)
+    assert(value > 0)
+}
+
+work(0)

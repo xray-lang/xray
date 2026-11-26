@@ -1,0 +1,12 @@
+fn calculate(numerator: i64, divisor: i64) -> i64 {
+    defer { print(1) }
+    {
+        defer { print(2) }
+        const answer = numerator / divisor
+        defer { print(answer) }
+        return answer
+    }
+}
+
+print(calculate(84, 0))
+print(98)

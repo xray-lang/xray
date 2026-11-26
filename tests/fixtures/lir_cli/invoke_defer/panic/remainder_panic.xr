@@ -1,0 +1,10 @@
+fn calculate(divisor: i64) -> i64 {
+    defer { print(1) }
+    defer { print(2) }
+    const remainder = 84 % divisor
+    print(99)
+    return remainder
+}
+
+print(calculate(0))
+print(98)

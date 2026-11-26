@@ -1,0 +1,11 @@
+fn calculate(numerator: i64, divisor: i64) -> i64 {
+    defer { print(1) }
+    defer { print(2) }
+    const quotient = numerator / divisor
+    const remainder = numerator % divisor
+    print(remainder)
+    return quotient
+}
+
+print(calculate(84, 2))
+print(calculate(-9223372036854775808, -1))

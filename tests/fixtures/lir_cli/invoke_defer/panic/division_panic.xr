@@ -1,0 +1,10 @@
+fn calculate(divisor: i64) -> i64 {
+    defer { print(1) }
+    defer { print(2) }
+    const quotient = 84 / divisor
+    print(99)
+    return quotient
+}
+
+print(calculate(0))
+print(98)

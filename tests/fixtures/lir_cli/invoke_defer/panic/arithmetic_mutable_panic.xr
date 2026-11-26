@@ -1,0 +1,9 @@
+fn calculate(seed: i64, divisor: i64) -> i64 {
+    var observed = seed
+    defer { print(observed) }
+    observed = 3
+    return 84 / divisor
+}
+
+print(calculate(1, 0))
+print(98)

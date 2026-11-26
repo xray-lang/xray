@@ -11,5 +11,46 @@
   },
   "callee_may_panic": {
     "lowering_error": ":13:5: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
+  },
+  "arithmetic_loop": {
+    "exit": 0,
+    "stdout": "1\n4\n",
+    "stderr": ""
+  },
+  "arithmetic_mutable_panic": {
+    "exit": 1,
+    "stdout": "3\n",
+    "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  },
+  "arithmetic_success": {
+    "exit": 0,
+    "stdout": "0\n2\n1\n42\n0\n2\n1\n-9223372036854775808\n",
+    "stderr": ""
+  },
+  "callee_with_cleanup_may_panic": {
+    "lowering_error": ":12:5: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
+  },
+  "division_panic": {
+    "exit": 1,
+    "stdout": "2\n1\n",
+    "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  },
+  "ordinary_assertion_refusal": {
+    "lowering_error": ":4:5: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
+  },
+  "registration_after_division": {
+    "exit": 0,
+    "stdout": "42\n2\n1\n42\n",
+    "stderr": ""
+  },
+  "registration_after_division_panic": {
+    "exit": 1,
+    "stdout": "2\n1\n",
+    "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  },
+  "remainder_panic": {
+    "exit": 1,
+    "stdout": "2\n1\n",
+    "stderr": "[Uncaught Panic] E0421: modulo by zero\n"
   }
 }

@@ -1,0 +1,12 @@
+fn accumulate(start: i64, divisor: i64) -> i64 {
+    defer { print(1) }
+    var value = start
+    var sum = 0
+    while (value > 0) {
+        sum = sum + value / divisor + value % divisor
+        value -= 1
+    }
+    return sum
+}
+
+print(accumulate(3, 2))

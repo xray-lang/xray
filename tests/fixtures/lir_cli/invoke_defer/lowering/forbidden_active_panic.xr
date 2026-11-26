@@ -1,7 +1,10 @@
 fn work(divisor: i64) -> i64 {
-    defer { print(71) }
+    defer {
+        const numerator = 22
+        print(numerator / divisor)
+    }
     print(11)
-    return 22 / divisor
+    return 22
 }
 
 print(work(0))
