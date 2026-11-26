@@ -588,10 +588,15 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     bool slice_operation = i->op == XR_LIR_CALL_INTRINSIC &&
         xr_lir_slice_intrinsic_view(input, i->intrinsic, &slice) == XR_LIR_OK && slice.id;
     XrLirArrayIntrinsic array = {0};
-    bool array_new = i->op == XR_LIR_CALL_INTRINSIC && i->type == XR_LIR_ARRAY &&
-        xr_lir_array_intrinsic_view(input,i->intrinsic,&array) == XR_LIR_OK &&
-        array.operation == XR_LIR_ARRAY_OP_NEW && xr_lir_inline_array_ordinal(input,array.result_element);
-    if (xr_lir_constructed_type_count(input) && !slice_operation && !array_new &&
+    bool array_operation = i->op == XR_LIR_CALL_INTRINSIC &&
+        xr_lir_array_intrinsic_view(input, i->intrinsic, &array) == XR_LIR_OK && array.id;
+    bool inline_array_operation = array_operation &&
+        ((array.operation == XR_LIR_ARRAY_OP_NEW && i->type == XR_LIR_ARRAY &&
+            xr_lir_inline_array_ordinal(input, array.result_element)) ||
+         (array.operation == XR_LIR_ARRAY_OP_PUSH && i->type == XR_LIR_UNIT && i->operand_count == 2 &&
+            array.parameter_count == 2 && array.parameter_elements &&
+            xr_lir_class_array_push_element(input, array.parameter_elements[0])));
+    if (xr_lir_constructed_type_count(input) && !slice_operation && !inline_array_operation &&
         !rbc_lir_aggregate_point(i) && !xr_lir_display_point(input, i) &&
         !rbc_lir_aggregate_state(input, function, i) && i->op != XR_LIR_CALL && i->op != XR_LIR_RET &&
         i->op != XR_LIR_FUNCTION_REF && i->op != XR_LIR_CALL_INDIRECT && i->op != XR_LIR_FUNCTION_WEAKEN &&
@@ -632,14 +637,9 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     }
     case XR_LIR_CALL_INDIRECT: case XR_LIR_FUNCTION_WEAKEN: return true;
     case XR_LIR_FUNCTION_SCOPE_ENTER: case XR_LIR_FUNCTION_SCOPE_LEAVE: case XR_LIR_FUNCTION_BIND: return true;
-    case XR_LIR_CALL_INTRINSIC: {
-        XrLirArrayIntrinsic shape = {0};
-        if (string_role) return true;
-        if (slice_operation) return true;
-        if (rbc_lir_map_role(input,i)) return true;
-        if (xr_lir_array_intrinsic_view(input,i->intrinsic,&shape) == XR_LIR_OK && shape.id) return true;
-        return xr_lir_range_point(input,i) || xr_lir_display_point(input,i);
-    }
+    case XR_LIR_CALL_INTRINSIC:
+        if (string_role || slice_operation || rbc_lir_map_role(input, i) || array_operation) return true;
+        return xr_lir_range_point(input, i) || xr_lir_display_point(input, i);
     case XR_LIR_MAP_LITERAL_NEW:
         return i->type == XR_LIR_MAP_STRING_I64 && i->bits && i->bits <= xr_lir_map_literal_count(input);
     case XR_LIR_MAP_RETAIN: case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
