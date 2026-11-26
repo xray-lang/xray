@@ -57,7 +57,8 @@ XR_FUNC bool xr_lir_internal_terminal(XrLirOp op) {
     return op == XR_LIR_BR || op == XR_LIR_CONDBR || op == XR_LIR_RET ||
         op == XR_LIR_INVOKE || op == XR_LIR_RETURN_ERROR || op == XR_LIR_PANIC_ERROR ||
         op == XR_LIR_UNCAUGHT_ERROR || op == XR_LIR_ARITHMETIC_PANIC ||
-        op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED || op == XR_LIR_HOST_DIRECTORY_FAIL;
+        op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED || op == XR_LIR_HOST_DIRECTORY_FAIL ||
+        op == XR_LIR_CHECKED_EMPTY_ARRAY || op == XR_LIR_MANAGED_FAILURE;
 }
 
 static bool lir_directory_string_result(const XrLirModule *m, XrLirType type) {
@@ -470,6 +471,8 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 v->source.line && v->source.column &&
                 (v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ? f->cleanup_owner && a == XR_LIR_I64 :
                     !f->cleanup_owner);
+        case XR_LIR_CHECKED_EMPTY_ARRAY: return v->type == XR_LIR_ARRAY;
+        case XR_LIR_MANAGED_FAILURE: return v->type == XR_LIR_UNIT && a == XR_LIR_U64;
         case XR_LIR_HOST_DIRECTORY_FRAME: return v->type == XR_LIR_UNIT;
         case XR_LIR_HOST_DIRECTORY_NEXT_CHECKED: return a == XR_LIR_I64 && v->type == f->result;
         case XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED:
@@ -573,17 +576,22 @@ static bool lir_edges_valid(const XrLirModule *m, const XrLirFunctionData *f, co
     if (v->op == XR_LIR_INVOKE && (!callee || !callee->error || v->edges[0].target == v->edges[1].target))
         return false;
     bool directory = v->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED;
-    if (directory && v->edges[0].target == v->edges[1].target) return false;
+    bool allocation = v->op == XR_LIR_CHECKED_EMPTY_ARRAY;
+    const XrLirArrayIntrinsic *array = allocation && v->bits <= UINT32_MAX
+        ? xr_lir_internal_array_intrinsic(m, (uint32_t)v->bits) : NULL;
+    if (allocation && (!array || array->operation != XR_LIR_ARRAY_OP_NEW)) return false;
+    if ((directory || allocation) && v->edges[0].target == v->edges[1].target) return false;
     for (uint32_t e = 0; e < v->edge_count; ++e) {
         const XrLirEdgeView *edge = &v->edges[e];
         if (!edge->target || edge->target > f->block_count ||
             (edge->argument_count && !edge->arguments))
             return false;
         const XrLirBlockData *target = &f->blocks[edge->target - 1];
-        if (directory) {
+        if (directory || allocation) {
             uint32_t parameter = target->parameter_count == 1 && target->parameters ? target->parameters[0] : 0;
             if (edge->argument_count || !parameter || parameter > f->value_count ||
-                f->values[parameter - 1].type != (e ? XR_LIR_U64 : v->type)) return false;
+                f->values[parameter - 1].type != (e ? XR_LIR_U64 : v->type) ||
+                (allocation && !e && f->values[parameter - 1].array_element != array->result_element)) return false;
             continue;
         }
         if (callee) {
@@ -670,7 +678,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_HOST_FILE_OPEN_WRITE && v->op != XR_LIR_HOST_FILE_CLOSE && v->op != XR_LIR_HOST_FILE_WRITE &&
         v->op != XR_LIR_HOST_PATH_CLASS && v->op != XR_LIR_HOST_FILE_READ && v->op != XR_LIR_HOST_ENV_GET &&
         v->op != XR_LIR_HOST_TEXT_RESULT && v->op != XR_LIR_HOST_DIRECTORY &&
-        v->op != XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED &&
+        v->op != XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED && v->op != XR_LIR_CHECKED_EMPTY_ARRAY &&
         v->op != XR_LIR_CLASS_SCALAR_WRITE && v->op != XR_LIR_CLASS_STRING_WRITE &&
         v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
@@ -686,7 +694,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (v->type != XR_LIR_UNIT || v->edge_count || v->result || !target) goto invalid;
         return XR_LIR_OK;
     }
-    bool branching = v->op == XR_LIR_CONDBR || v->op == XR_LIR_INVOKE || v->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED;
+    bool branching = v->op == XR_LIR_CONDBR || v->op == XR_LIR_INVOKE ||
+        v->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED || v->op == XR_LIR_CHECKED_EMPTY_ARRAY;
     uint32_t edges = v->op == XR_LIR_BR ? 1 : branching ? 2 : 0;
     if (v->edge_count != edges || !lir_edges_valid(m, f, v)) {
         message = "control flow edge target or parameter signature mismatch";
@@ -728,6 +737,9 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     if (v->op >= XR_LIR_HOST_DIRECTORY_FRAME && v->op <= XR_LIR_HOST_DIRECTORY_FAIL &&
         (f->cleanup_owner || f->error || !lir_directory_string_result(m, f->result) ||
          !v->source.path || !v->source.path_length || !v->source.line || !v->source.column)) goto invalid;
+    if ((v->op == XR_LIR_CHECKED_EMPTY_ARRAY || v->op == XR_LIR_MANAGED_FAILURE) &&
+        (f->cleanup_owner || f->error || !v->source.path || !v->source.path_length ||
+         !v->source.line || !v->source.column)) goto invalid;
     if (v->op==XR_LIR_RETURN_ERROR || v->op==XR_LIR_PANIC_ERROR || v->op==XR_LIR_UNCAUGHT_ERROR) {
         XrLirRecordIdentity identity={0};
         XrLirType error=f->values[v->operands[0]-1].type;
@@ -931,6 +943,9 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
             if ((v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
                  (v->op >= XR_LIR_HOST_DIRECTORY_FRAME && v->op <= XR_LIR_HOST_DIRECTORY_FAIL)) && !f->has_cleanups)
                 return xr_lir_internal_error(d, "directory cancellation check requires a cleanup owner",
+                    index + 1, b + 1, i + 1, &v->source);
+            if ((v->op == XR_LIR_CHECKED_EMPTY_ARRAY || v->op == XR_LIR_MANAGED_FAILURE) && !f->has_cleanups)
+                return xr_lir_internal_error(d, "checked allocation requires a cleanup owner",
                     index + 1, b + 1, i + 1, &v->source);
             XrLirStatus status = xr_lir_internal_instruction_check(m, index + 1, v, d);
             if (status != XR_LIR_OK) {

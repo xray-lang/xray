@@ -348,6 +348,87 @@ static bool lir_directory_chain(const XrLirModule *m, const XrLirFunctionData *f
         lir_cleanup_same_source(&ret->source, &exit->source);
 }
 
+
+static const XrLirInstructionView *lir_allocation_cleanup_print(const XrLirModule *m,
+    const XrLirFunctionData *role) {
+    if (!role->cleanup_owner || role->has_cleanups || role->error || role->result != XR_LIR_UNIT ||
+        role->block_count != 1 || !role->blocks || role->parameter_count > 1 ||
+        (role->parameter_count && (!role->parameters || !role->parameter_types))) return NULL;
+    const XrLirBlockData *body = &role->blocks[0];
+    if (!body->instructions || body->instruction_count < 2 || body->instruction_count > 3) return NULL;
+    const XrLirInstructionView *print = &body->instructions[body->instruction_count - 2].view;
+    const XrLirInstructionView *ret = &body->instructions[body->instruction_count - 1].view;
+    if (ret->op != XR_LIR_RET || ret->operand_count || print->op != XR_LIR_CALL || !print->callee ||
+        print->callee > m->function_count || print->operand_count != 1 || !print->operands) return NULL;
+    const XrLirFunctionData *output = &m->functions[print->callee - 1];
+    if (output->kind != XR_LIR_FUNCTION_EXTERNAL || output->extern_kind != XR_LIR_EXTERN_PRINT_I64)
+        return NULL;
+    return print;
+}
+
+static bool lir_allocation_cleanup_chain(const XrLirModule *m, const XrLirFunctionData *f,
+    uint32_t owner, uint32_t frontier, const XrLirInstructionView *allocation) {
+    const XrLirBlockData *block = &f->blocks[allocation->edges[1].target - 1];
+    if (block->cleanup || block->parameter_count != 1) return false;
+    uint32_t position = 0;
+    while (frontier) {
+        const XrLirCleanupBlock *registration = lir_cleanup_registration(m, owner, frontier);
+        if (!registration || (registration->capture_count && !registration->captures)) return false;
+        const XrLirFunctionData *role = &m->functions[frontier - 1];
+        if (registration->capture_count != role->parameter_count) return false;
+        const XrLirInstructionView *print = lir_allocation_cleanup_print(m, role);
+        if (!print) return false;
+        uint32_t input = registration->capture_count ? registration->captures[0] : 0;
+        const XrLirBlockData *body = &role->blocks[0];
+        if (body->instruction_count == 3) {
+            const XrLirInstructionView *original = &body->instructions[0].view;
+            if (position >= block->instruction_count || original->result != print->operands[0] ||
+                original->type != XR_LIR_I64) return false;
+            const XrLirInstructionView *copy = &block->instructions[position++].view;
+            if (copy->op != original->op || copy->type != XR_LIR_I64 ||
+                !lir_cleanup_same_source(&copy->source, &original->source)) return false;
+            if (original->op == XR_LIR_CONST) {
+                if (input || copy->bits != original->bits) return false;
+            } else if (original->op == XR_LIR_CELL_READ) {
+                if (!input || role->parameter_types[0] != XR_LIR_I64_REF || original->operand_count != 1 ||
+                    !original->operands || original->operands[0] != role->parameters[0] ||
+                    !copy->operands || copy->operands[0] != input) return false;
+            } else return false;
+            input = copy->result;
+        } else if (!input || role->parameter_types[0] != XR_LIR_I64 ||
+            print->operands[0] != role->parameters[0]) return false;
+        if (!input || position >= block->instruction_count) return false;
+        const XrLirInstructionView *copy = &block->instructions[position++].view;
+        if (copy->op != XR_LIR_CALL || copy->callee != print->callee ||
+            copy->operand_count != 1 || copy->operands[0] != input ||
+            !lir_cleanup_same_source(&copy->source, &print->source)) return false;
+        frontier = registration->frontier;
+    }
+    if (position + 1 != block->instruction_count) return false;
+    const XrLirInstructionView *exit = &block->instructions[position].view;
+    return exit->op == XR_LIR_MANAGED_FAILURE && exit->operands[0] == block->parameters[0] &&
+        lir_cleanup_same_source(&exit->source, &allocation->source);
+}
+
+/* The cleanup suffix owns no slot before allocation. Non-scalar values
+ * must be supplied on the normal edge or be defined after its receiver. */
+static bool lir_allocation_cleanup_frame(const XrLirFunctionData *f, const LirGraph *g,
+    const XrLirInstructionView *allocation) {
+    uint32_t normal = f->blocks[allocation->edges[0].target - 1].parameters[0];
+    uint32_t status = f->blocks[allocation->edges[1].target - 1].parameters[0];
+    if (f->error || f->cleanup_owner || f->closure.callable) return false;
+    for (uint32_t i = 0; i < f->value_count; ++i) {
+        const XrLirValueData *value = &f->values[i];
+        if (lir_cleanup_scalar(value->type) || i + 1 == normal || i + 1 == status) continue;
+        const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, i + 1);
+        if (value->type == XR_LIR_I64_CELL && definition && definition->op == XR_LIR_CELL_NEW) continue;
+        if ((value->type == XR_LIR_ARRAY || value->type == XR_LIR_ARRAY_CELL) && value->block &&
+            lir_dominates_use(f, g, normal, value->block - 1, value->instruction)) continue;
+        return false;
+    }
+    return true;
+}
+
 static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
     uint32_t owner, const LirGraph *g) {
     if (!f->has_cleanups && !f->cleanup_owner) return true;
@@ -389,6 +470,21 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
                 !lir_directory_chain(m, f, owner, from, term, 0) || !lir_directory_chain(m, f, owner, from, term, 1))
                 return false;
             frame_source |= lir_cleanup_same_source(&entry->source, &term->source);
+            continue;
+        }
+        if (term->op == XR_LIR_CHECKED_EMPTY_ARRAY) {
+            if (!from || remaining != from ||
+                !lir_cleanup_one_predecessor(g, term->edges[0].target - 1) ||
+                !lir_cleanup_one_predecessor(g, term->edges[1].target - 1) ||
+                lir_cleanup_frontier(f, term->edges[0].target) != from ||
+                !lir_allocation_cleanup_frame(f, g, term) ||
+                !lir_allocation_cleanup_chain(m, f, owner, from, term)) return false;
+            continue;
+        }
+        if (term->op == XR_LIR_MANAGED_FAILURE) {
+            if (!lir_cleanup_one_predecessor(g, b)) return false;
+            const XrLirInstructionView *origin = lir_terminator(f, g->predecessors[g->offsets[b]]);
+            if (origin->op != XR_LIR_CHECKED_EMPTY_ARRAY || origin->edges[1].target != b + 1) return false;
             continue;
         }
         if (term->op == XR_LIR_HOST_DIRECTORY_FAIL) return false;
