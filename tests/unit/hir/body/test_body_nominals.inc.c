@@ -122,11 +122,14 @@ static void nominal_retired_identity(void) {
     XrXirNominalIdentity identity={.module={"m",1},.name={"Record",6},.kind=XR_XIR_NOMINAL_STRUCT};
     XrXirNominalTable table={.declarations=&declaration,.count=1};XrXirTypes types={.nominals=&table};
     CHECK(xr_xir_compile_nominal_structure_verify(&compile,&table,&types)==XR_XIR_OK);
-    declaration.flags=4u;
+    /* An explicit alignment rides in the flag word, so a supported value such as
+     * align(1) is a valid declaration; only one past the admitted maximum is the
+     * rejection this case is about. */
+    declaration.flags=xr_xir_nominal_alignment_flags(XR_XIR_NOMINAL_ALIGN_LIMIT*2u);
     CHECK(xr_xir_compile_nominal_structure_verify(&compile,&table,&types)==XR_XIR_BAD_STRUCTURE);
-    table.declarations=NULL;table.identities=&identity;
+    declaration.flags=0u;table.declarations=NULL;table.identities=&identity;
     CHECK(xr_xir_compile_nominal_structure_verify(&compile,&table,&types)==XR_XIR_OK);
-    identity.flags=4u;
+    identity.flags=xr_xir_nominal_alignment_flags(XR_XIR_NOMINAL_ALIGN_LIMIT*2u);
     CHECK(xr_xir_compile_nominal_structure_verify(&compile,&table,&types)==XR_XIR_BAD_STRUCTURE);
     xr_compile_resources_release(resources);CHECK(!physical_live && !physical_bytes);
 }

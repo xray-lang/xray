@@ -247,7 +247,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         entries = inventory.collect_native_types(ROOT)
         cases = (("Map", 10, 13, "struct"), ("Set", 11, 15, "struct"),
                  ("i64", 12, 29, "class"), ("f64", 13, 12, "class"),
-                 ("bool", 14, 1, "class"), ("rune", 15, 6, "class"))
+                 ("bool", 14, 2, "class"), ("rune", 15, 6, "class"))
         for name, identity, member_count, kind in cases:
             with self.subTest(name=name):
                 rows = [row for row in entries if row["namespace"] == name]

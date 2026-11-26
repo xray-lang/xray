@@ -465,7 +465,7 @@ class StringBuilder {
                     self.assertNotEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
 
     def test_scalar_complete_contracts_and_fail_closed_mutations(self):
-        for stem, identity, total, admitted in [('f64',13,12,8),('bool',14,1,1),('rune',15,6,3)]:
+        for stem, identity, total, admitted in [('f64',13,12,8),('bool',14,2,2),('rune',15,6,3)]:
             source = (ROOT / 'stdlib/types' / (stem+'.xr')).read_text(encoding='utf-8')
             header, members = schema.parse_source(source, self.prelude)
             self.assertEqual((identity,stem,()),header[:3])
