@@ -1,0 +1,23 @@
+fn decode(bytes: Slice<u8>) -> string {
+    return string.fromUtf8Lossy(bytes)
+}
+
+fn run() {
+    var valid: Array<u8> = [255, 65, 0, 195, 169, 255]
+    var continuation: Array<u8> = [226, 40, 161]
+    var truncated: Array<u8> = [240, 159, 146]
+    var invalid: Array<u8> = [192, 128, 237, 160, 128, 244, 144, 128, 128]
+    print(decode(valid[1:5]))
+    print(decode(valid[3:3]))
+    print(decode(continuation[:]))
+    print(string.fromUtf8Lossy(truncated[:]))
+    print(string.fromUtf8Lossy(invalid[:]))
+}
+
+fn copyAndRelease() -> string {
+    var source: Array<u8> = [255, 65, 0, 195, 169, 255]
+    return string.fromUtf8Lossy(source[1:5])
+}
+
+run()
+print(copyAndRelease())

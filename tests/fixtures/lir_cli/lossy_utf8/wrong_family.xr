@@ -1,0 +1,5 @@
+fn wrong() -> string {
+    var values: Array<i64> = [42]
+    return string.fromUtf8Lossy(values[:])
+}
+print(wrong())

@@ -1,0 +1,18 @@
+{
+  "decode_windows": {
+    "exit": 0,
+    "stdout": "A\u0000é\n\n�(�\n�\n���������\nA\u0000é\n",
+    "stderr": ""
+  },
+  "read_lines": {
+    "exit": 0,
+    "stdout": "true\na\ntrue\nb\ntrue\ntrue\ntrue\nA�Z\n�\ntrue\ntrue\n",
+    "stderr": ""
+  },
+  "wrong_family": {
+    "source_error": ":3:0: error: view element differs from its exact root element"
+  },
+  "wrong_arity": {
+    "source_error": ":1:14: error: lossy UTF-8 conversion requires its canonical static signature"
+  }
+}

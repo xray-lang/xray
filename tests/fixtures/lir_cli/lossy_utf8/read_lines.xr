@@ -1,0 +1,29 @@
+import io
+import { BufReader } from io
+import path
+
+fn run() {
+    const valid = path.Path("lossy-valid.txt")
+    print(io.writeFile(valid, "a\r\n\r\nb\n"))
+    const first = BufReader.open(valid, 2)
+    assert(first != null)
+    const text = first!
+    print(text.readLine() ?? "missing")
+    print((text.readLine() ?? "missing") == "")
+    print(text.readLine() ?? "missing")
+    print(text.readLine() == null)
+    print(text.close())
+
+    const invalid = path.Path("lossy-invalid.bin")
+    const bytes: Array<u8> = [65, 255, 90, 13, 10, 240, 159, 10]
+    print(io.writeFileBytes(invalid, bytes))
+    const second = BufReader.open(invalid, 2)
+    assert(second != null)
+    const raw = second!
+    print(raw.readLine() ?? "missing")
+    print(raw.readLine() ?? "missing")
+    print(raw.readLine() == null)
+    print(raw.close())
+}
+
+run()
