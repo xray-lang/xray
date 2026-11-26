@@ -47,18 +47,30 @@ static bool lower_selected_edge(LowerFunction *f, uint32_t from, uint32_t ordina
     Lower *c = f->owner;
     XrLirEdge *edge = &term->edges[ordinal];
     uint32_t count = owners->count;
-    XrLirType *types = lower_alloc(c, count, sizeof(*types));
+    bool invoke = term->op == XR_LIR_INVOKE;
+    const XrXirInstruction *call = invoke ? lower_term(c, f->source, from) : NULL;
+    uint32_t target = invoke ? call->targets[ordinal] : 0;
+    XrLirType produced = !invoke ? XR_LIR_UNIT :
+        ordinal ? lower_type(c,c->source->functions[call->immediate].error_type) : term->type;
+    uint32_t offset = produced != XR_LIR_UNIT;
+    uint32_t forwarded = invoke && lower_invoke_parameter(f,target) != XR_LIR_TYPE_INVALID;
+    if (count > UINT32_MAX - offset || edge->argument_count > UINT32_MAX - forwarded)
+        return lower_unsupported(c, "selected edge parameter capacity");
+    XrLirType *types = lower_alloc(c, (size_t)count + offset, sizeof(*types));
     XrLirValue *parameters = lower_alloc(c, count, sizeof(*parameters));
-    XrLirValue *arguments = lower_alloc(c, edge->argument_count, sizeof(*arguments));
+    XrLirValue *arguments = lower_alloc(c, (size_t)edge->argument_count + forwarded, sizeof(*arguments));
     XrLirValue *incoming = lower_alloc(c, count, sizeof(*incoming));
     uint8_t *transferred = lower_alloc(c, count, 1);
-    bool good = (!count || (types && parameters && incoming && transferred)) && (!edge->argument_count || arguments);
+    bool good = (!(count + offset) || types) &&
+        (!count || (parameters && incoming && transferred)) &&
+        (!(edge->argument_count + forwarded) || arguments);
     XrLirBlock block = {0};
+    if (good && offset) types[0] = produced;
     for (uint32_t i = 0; i < count && good; ++i) {
-        types[i] = lower_value_type(f, owners->values[i]);
+        types[i + offset] = lower_value_type(f, owners->values[i]);
         incoming[i] = owners->values[i];
     }
-    if (good) good = lower_build(c, xr_lir_add_block(c->module, f->function, types, count, &block));
+    if (good) good = lower_build(c, xr_lir_add_block(c->module, f->function, types, count + offset, &block));
     uint32_t frontier = f->source->blocks[from].frontier;
     if (good && frontier) {
         /* Splitting a conditional edge leaves its registered cleanups active. */
@@ -66,27 +78,41 @@ static bool lower_selected_edge(LowerFunction *f, uint32_t from, uint32_t ordina
         uint32_t cleanup = lower_cleanup_target(f, registration).id;
         good = lower_build(c, xr_lir_internal_cleanup_block(c->module, block, cleanup, 0, NULL, 0));
     }
+    XrLirValue result = {0};
+    if (good && offset) {
+        good = lower_build(c, xr_lir_block_parameter(c->module, block, 0, &result));
+        if (good && produced == XR_LIR_ARRAY) {
+            XrLirArrayShape shape = {lower_array_element(c,call->type)};
+            good = lower_build(c, xr_lir_set_array_shape(c->module, result, &shape));
+        }
+        if (good && forwarded) arguments[0] = result;
+        if (good && !forwarded && lower_managed_type(c,produced)) {
+            XrLirInstruction drop = {.op=lower_drop_operation(produced), .type=XR_LIR_UNIT,
+                .operands=&result, .operand_count=1, .source=term->source};
+            good = lower_build(c,xr_lir_emit_effect(c->module,block,&drop));
+        }
+    }
     for (uint32_t i = 0; i < count && good; ++i) {
-        good = lower_build(c, xr_lir_block_parameter(c->module, block, i, &parameters[i]));
-        if (good && types[i] == XR_LIR_ARRAY) {
+        good = lower_build(c, xr_lir_block_parameter(c->module, block, i + offset, &parameters[i]));
+        if (good && types[i + offset] == XR_LIR_ARRAY) {
             XrLirArrayShape shape = {c->module->functions[f->function.id - 1].values[owners->values[i].id - 1].array_element};
             good = lower_build(c, xr_lir_set_array_shape(c->module, parameters[i], &shape));
         }
     }
     if (good) good = lower_array_cells_release(f, from, term, ordinal, block);
     for (uint32_t a = 0; a < edge->argument_count && good; ++a) {
-        arguments[a] = edge->arguments[a];
-        uint32_t position = owners->positions[arguments[a].id - 1];
+        arguments[a + forwarded] = edge->arguments[a];
+        uint32_t position = owners->positions[arguments[a + forwarded].id - 1];
         if (position) {
-            arguments[a] = parameters[position - 1];
+            arguments[a + forwarded] = parameters[position - 1];
             transferred[position - 1] = 1;
         }
     }
-    XrLirEdge selected = {edge->target, arguments, edge->argument_count};
+    XrLirEdge selected = {edge->target, arguments, edge->argument_count + forwarded};
     if (good) good = lower_edge_owners(f, block, &selected);
     for (uint32_t i = 0; i < count && good; ++i) {
         if (!transferred[i]) {
-            XrLirInstruction drop = {.op = lower_drop_operation(types[i]),
+            XrLirInstruction drop = {.op = lower_drop_operation(types[i + offset]),
                 .type = XR_LIR_UNIT, .operands = &parameters[i], .operand_count = 1, .source = lower_source(c)};
             good = lower_build(c, xr_lir_emit_effect(c->module, block, &drop));
         }
@@ -107,34 +133,52 @@ static bool lower_selected_edges(LowerFunction *f, uint32_t b, XrLirInstruction 
     if (term->edge_count < 2)
         return !term->edge_count || lower_edge_owners(f, f->blocks[b], &term->edges[0]);
     Lower *c = f->owner;
-    bool managed = false, cells = false;
+    bool invoke = term->op == XR_LIR_INVOKE;
+    bool managed = invoke, cells = false;
     for (uint32_t e = 0; e < term->edge_count; ++e)
         cells |= lower_array_cells_edge(f, b, e);
     for (uint32_t e = 0; e < term->edge_count; ++e)
         for (uint32_t a = 0; a < term->edges[e].argument_count; ++a)
             managed |= lower_managed_type(f->owner, lower_value_type(f, term->edges[e].arguments[a]));
     if (!managed && !cells) return true;
+    if (invoke && cells) return lower_unsupported(c, "managed Cell retirement across invoke successor");
     size_t capacity = (size_t)term->edges[0].argument_count + term->edges[1].argument_count;
-    if (capacity < term->edges[0].argument_count) {
+    if (capacity < term->edges[0].argument_count ||
+        (invoke && term->operand_count > SIZE_MAX - capacity)) {
         lower_error(c, XR_LIR_OUT_OF_MEMORY, "selected edge owner count overflow"); return false;
     }
+    if (invoke) capacity += term->operand_count;
     XrLirValue *owners = lower_alloc(c, capacity, sizeof(*owners));
     uint32_t values = c->module->functions[f->function.id - 1].value_count;
     uint32_t *positions = lower_alloc(c, values, sizeof(*positions));
     if ((capacity && !owners) || (values && !positions)) { xr_free(owners); xr_free(positions); return false; }
     uint32_t count = 0;
-    for (uint32_t e = 0; e < term->edge_count; ++e)
+    if (invoke)
+        for (uint32_t a = 0; a < term->operand_count; ++a) {
+            XrLirValue id = term->operands[a];
+            const XrLirValueData *value = &c->module->functions[f->function.id - 1].values[id.id - 1];
+            if (value->type == XR_LIR_STRING && (!value->parameter || value->block) && !positions[id.id - 1]) {
+                owners[count] = id;
+                positions[id.id - 1] = ++count;
+            }
+        }
+    bool good = !invoke || count;
+    if (!good) lower_unsupported(c,"invoke has no local String owner");
+    for (uint32_t e = 0; good && e < term->edge_count; ++e)
         for (uint32_t a = 0; a < term->edges[e].argument_count; ++a) {
             XrLirValue id = term->edges[e].arguments[a];
             const XrLirValueData *value = &c->module->functions[f->function.id - 1].values[id.id - 1];
             if (!lower_managed_type(f->owner, value->type)) continue;
+            if (invoke && value->type != XR_LIR_STRING) {
+                good = lower_unsupported(c,"non-String state across invoke successor");
+                break;
+            }
             if (value->parameter && !value->block) continue;
             if (!positions[id.id - 1]) {
                 owners[count] = id;
                 positions[id.id - 1] = ++count;
             }
         }
-    bool good = true;
     LowerEdgeOwners map = {owners, positions, count};
     for (uint32_t e = 0; e < term->edge_count && good; ++e)
         if (managed || lower_array_cells_edge(f, b, e))

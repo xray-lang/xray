@@ -283,8 +283,9 @@ static void lir_slice_successors(const XrLirFunctionData *f, uint32_t b, LirSlic
         const XrLirBlockData *target = &f->blocks[edge->target - 1];
         memcpy(flow->edge, flow->scratch, flow->count);
         memcpy(flow->edge_roots, flow->roots, flow->count * sizeof(*flow->edge_roots));
+        uint32_t offset = xr_lir_edge_parameter_offset(term, e);
         for (uint32_t a = 0; a < edge->argument_count; ++a) {
-            uint32_t row = flow->values[target->parameters[a]];
+            uint32_t row = flow->values[target->parameters[a + offset]];
             if (row) {
                 flow->edge[row - 1] = flow->scratch[flow->values[edge->arguments[a]] - 1];
                 flow->edge_roots[row - 1] = flow->roots[flow->values[edge->arguments[a]] - 1];

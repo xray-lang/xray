@@ -1,0 +1,3 @@
+import encoding
+const bytes = try! encoding.hexDecode("a")
+print(bytes[0])

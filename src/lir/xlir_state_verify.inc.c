@@ -171,8 +171,9 @@ static XrLirStatus lir_state_function(const XrLirModule *m, uint32_t index,
         for (uint32_t e = 0; e < term->edge_count; ++e) {
             const XrLirEdgeView *edge = &term->edges[e];
             const XrLirBlockData *target = &f->blocks[edge->target - 1];
+            uint32_t offset = xr_lir_edge_parameter_offset(term, e);
             for (uint32_t a = 0; a < edge->argument_count; ++a) {
-                uint32_t source = edge->arguments[a] - 1, parameter = target->parameters[a] - 1;
+                uint32_t source = edge->arguments[a] - 1, parameter = target->parameters[a + offset] - 1;
                 XrLirType type = f->values[source].type;
                 if (type != XR_LIR_STATE && type != XR_LIR_STATE_REF) continue;
                 if (type == XR_LIR_STATE_REF && !lir_state_shape_equal(

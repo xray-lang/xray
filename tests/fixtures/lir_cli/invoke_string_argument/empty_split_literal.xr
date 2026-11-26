@@ -1,0 +1,1 @@
+print(len(try! "a:b".split("")))

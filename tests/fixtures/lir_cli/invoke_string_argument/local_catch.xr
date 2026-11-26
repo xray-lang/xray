@@ -1,0 +1,20 @@
+enum ReadError { Invalid { count: i64 } }
+fn read(value: string, same: string, ok: bool) throws(ReadError) -> i64 {
+    if (!ok) { throw ReadError.Invalid { count: len(same) } }
+    return len(value) + len(same)
+}
+
+fn probe(ok: bool) {
+    const local = "猫\0" + "x"
+    try {
+        print(try read(local, local, ok))
+        print(len(local))
+    } catch (error: ReadError) {
+        print(match (error) { ReadError.Invalid { count } => count })
+        print(len(local))
+    }
+    print(len(local))
+}
+
+probe(true)
+probe(false)

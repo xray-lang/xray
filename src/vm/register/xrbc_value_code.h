@@ -84,7 +84,8 @@ typedef struct XrRbcValueAccess {
     uint32_t result, source, other;
     /* Literal/module-slot/callee/selected-home-edge ordinal, according to op.
      * CALL arguments are SSA ids in the immutable arguments span; window is
-     * its ordinary physical call window. A Slice result also uses other for
+     * its ordinary physical call window. INVOKE uses source as a flag for
+     * a selected-edge transfer following each receiver. A Slice result also uses other for
      * its one-based common HomeCall, including the proven actual origin and
      * caller landing. RETURN source names its SSA result and Slice index its
      * one-based common RETURN_TRANSFER event.

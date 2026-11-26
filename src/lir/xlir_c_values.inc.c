@@ -424,7 +424,8 @@ static void c_values_helpers(LirC *c) {
     }
     c->homes = NULL;
 }
-static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected, uint32_t source) {
+static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected,
+    uint32_t source, uint32_t offset) {
     if (!c->homes) return false;
     const XrLirHomeEdge *home = NULL;
     while (c->home_edge_cursor < c->homes->edge_count) {
@@ -462,9 +463,9 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected,
             if (!c->homes->values[edge->arguments[a]].type) {
                 if (!first) c_text(c, ", ");
                 first = false;
-                c_text(c, "&"); c_value(c, target.parameters[a]); c_text(c, ", "); c_value(c, edge->arguments[a]);
+                c_text(c, "&"); c_value(c, target.parameters[a + offset]); c_text(c, ", "); c_value(c, edge->arguments[a]);
                 if (c_value_type(c, edge->arguments[a]) == XR_LIR_STATE_REF)
-                    c_format(c, ", &xrl_access%" PRIu32 ", xrl_access%" PRIu32, target.parameters[a], edge->arguments[a]);
+                    c_format(c, ", &xrl_access%" PRIu32 ", xrl_access%" PRIu32, target.parameters[a + offset], edge->arguments[a]);
             }
         c_text(c, "};\n");
         c_format(c, "    XrtPlacePublication scalar_publication = {xrl_scalars_%" PRIu32 "_%" PRIu32 "_%" PRIu32 ", &values};\n", c->function.id, c->block, selected);
@@ -489,7 +490,7 @@ static bool c_values_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected,
          * only now publish the private, already snapshotted scalar values. */
         for (uint32_t a = 0; a < edge->argument_count && c_request_poll(c); ++a)
             if (!c->homes->values[edge->arguments[a]].type) {
-                c_text(c,"    "); c_value(c,target.parameters[a]);
+                c_text(c,"    "); c_value(c,target.parameters[a + offset]);
                 c_format(c," = xrl_phi_%" PRIu32 ";\n",a);
             }
     }

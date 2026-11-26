@@ -808,37 +808,38 @@ static bool lir_home_positions(LirHomeBuilder *b, const XrLirHomeEvent *const *s
                 XrLirEdgeView edge = instruction.edges[e]; XrLirBlockView target;
                 xr_lir_block_view(c->input, (XrLirBlock){c->input, c->function.id, edge.target}, &target);
                 XrLirHomeEdge row = {.block=id.id,.edge=e + 1,.target_block=edge.target,.first=b->transfers.count};
+                uint32_t offset = xr_lir_edge_parameter_offset(&instruction, e);
                 for (uint32_t p = 0; p < edge.argument_count; ++p) {
                     const XrLirHomeEvent *event = position < selected_count ? selected[position] : NULL;
                     bool matched = event && event->block == id.id && event->edge == e + 1 && event->argument == p;
                     if (matched) {
-                        if (event->source != edge.arguments[p] || event->target != target.parameters[p] ||
+                        if (event->source != edge.arguments[p] || event->target != target.parameters[p + offset] ||
                             event->target_block != edge.target || event->instruction != n + 1)
                             return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "selected transfer lost its verified source or target");
                         ++position;
                     }
-                    if (values[target.parameters[p]].type == 0) continue;
-                    if (values[edge.arguments[p]].type != values[target.parameters[p]].type ||
-                        values[target.parameters[p]].temporary_offset == SIZE_MAX)
+                    if (values[target.parameters[p + offset]].type == 0) continue;
+                    if (values[edge.arguments[p]].type != values[target.parameters[p + offset]].type ||
+                        values[target.parameters[p + offset]].temporary_offset == SIZE_MAX)
                         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "selected edge lost its exact receiving homes");
-                    if (values[target.parameters[p]].owner_count && !matched)
+                    if (values[target.parameters[p + offset]].owner_count && !matched)
                         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "owned edge has no verified transfer event");
-                    if (xr_lir_home_stationary_edge(b->homes, edge.arguments[p], target.parameters[p])) {
+                    if (xr_lir_home_stationary_edge(b->homes, edge.arguments[p], target.parameters[p + offset])) {
                         if (!matched || event->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)
                             return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary owner requires its original MOVE");
                         continue;
                     }
-                    bool slice = values[target.parameters[p]].view_storage != XR_LIR_SLICE_STORAGE_NONE;
+                    bool slice = values[target.parameters[p + offset]].view_storage != XR_LIR_SLICE_STORAGE_NONE;
                     if (slice && (!matched || !values[edge.arguments[p]].view_storage ||
                         event->view_storage != values[edge.arguments[p]].view_storage ||
                         event->transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
                         event->hold_transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_COPY))
                         return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "Slice edge lost its verified loan keeper copy");
-                    XrLirHomeTransfer transfer = {.source=edge.arguments[p],.target=target.parameters[p],
+                    XrLirHomeTransfer transfer = {.source=edge.arguments[p],.target=target.parameters[p + offset],
                         .transfer_mode=matched ? event->transfer_mode : XR_LIR_OWNERSHIP_TRANSFER_NONE,
                         .hold_transfer_mode=matched ? event->hold_transfer_mode : XR_LIR_OWNERSHIP_TRANSFER_NONE,
                         .source_workspace=slice ? values[edge.arguments[p]].view_workspace : 0,
-                        .target_workspace=slice ? values[target.parameters[p]].view_workspace : 0,
+                        .target_workspace=slice ? values[target.parameters[p + offset]].view_workspace : 0,
                         .borrowed_owner_workspace=SIZE_MAX,
                         .source_storage=slice ? values[edge.arguments[p]].view_storage : XR_LIR_SLICE_STORAGE_NONE};
                     if (!lir_home_cell_stage(b,&values[transfer.source],&values[transfer.target],

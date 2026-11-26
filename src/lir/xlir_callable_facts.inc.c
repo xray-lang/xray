@@ -179,9 +179,10 @@ static XrLirStatus lir_callable_transports(const XrLirFunctionData *f, XrLirCall
         for (uint32_t e = 0; e < end->edge_count; ++e) {
             const XrLirEdgeView *edge = &end->edges[e];
             const XrLirBlockData *target = &f->blocks[edge->target - 1];
+            uint32_t offset = xr_lir_edge_parameter_offset(end, e);
             for (uint32_t p = 0; p < edge->argument_count; ++p)
-                if (rows[target->parameters[p]].kind == XR_LIR_SCOPED_VALUE_FUNCTION)
-                    lir_callable_flow_edge(flow,&used,heads,edge->arguments[p],target->parameters[p]);
+                if (rows[target->parameters[p + offset]].kind == XR_LIR_SCOPED_VALUE_FUNCTION)
+                    lir_callable_flow_edge(flow,&used,heads,edge->arguments[p],target->parameters[p + offset]);
         }
     }
     while (waiting) {

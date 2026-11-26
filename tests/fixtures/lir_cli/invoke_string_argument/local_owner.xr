@@ -5,8 +5,9 @@ fn read(value: string) throws(ReadError) -> i64 {
 }
 
 fn probe() {
-    const local = "owned"
+    var local = "ow" + "ned"
     print(try! read(local))
+    print(local)
 }
 
 probe()

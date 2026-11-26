@@ -1,0 +1,18 @@
+enum ReadError { Empty }
+fn read(value: string) throws(ReadError) {
+    if (len(value) == 0) { throw ReadError.Empty }
+}
+
+fn probe(input: string) {
+    const local = input + ""
+    try {
+        try read(local)
+        print(11)
+    } catch (error: ReadError) {
+        print(22)
+    }
+    print(len(local))
+}
+
+probe("ok")
+probe("")

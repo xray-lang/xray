@@ -153,9 +153,10 @@ static void rbc_lir_coalesce(RbcLirCompiler *c, RbcLirRegisters *r) {
             XrLirBlockView target;
             xr_lir_block_view(c->input,
                 (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
+            uint32_t offset = xr_lir_edge_parameter_offset(&end, e);
             for (uint32_t p = 0; p < edge.argument_count; ++p)
                 if (!c->aggregate_home || c->aggregate_home[edge.arguments[p]] == UINT32_MAX)
-                    rbc_lir_join(r, target.parameters[p], edge.arguments[p]);
+                    rbc_lir_join(r, target.parameters[p + offset], edge.arguments[p]);
         }
     }
     for (uint32_t v = 0; v <= c->view.value_count; ++v)
@@ -321,7 +322,7 @@ static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordin
     xr_lir_block_view(c->input,
         (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
     if (c->typed_values && !rbc_lir_scalar_edge(c, edge, &target))
-        return !emit || rbc_lir_value_edge(c, edge, ordinal);
+        return !emit || rbc_lir_value_edge(c, edge, ordinal, 0);
     if (!c->typed_values && emit && !rbc_lir_aggregate_edge(c, edge)) return false;
     bool spilled = c->typed_spills && rbc_lir_spilled_edge(c, edge, &target);
     if (spilled && emit && !rbc_lir_edge_spill_copy(c, edge, &target, false)) return false;

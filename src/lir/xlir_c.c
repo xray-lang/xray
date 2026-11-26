@@ -117,7 +117,7 @@ static void c_values_helpers(LirC *);
 static void c_values_landing_types(LirC *);
 static bool c_values_signature(LirC *, bool);
 static void c_values_root(LirC *);
-static bool c_values_edge(LirC *, const XrLirEdgeView *, uint32_t, uint32_t);
+static bool c_values_edge(LirC *, const XrLirEdgeView *, uint32_t, uint32_t, uint32_t);
 static void c_values_ensure(LirC *, uint32_t);
 static void c_values_call_landing(LirC *, uint32_t, uint32_t);
 static void c_values_replace_begin(LirC *, uint32_t, uint32_t);
@@ -990,21 +990,22 @@ static void c_float_conversion(LirC *c, const XrLirInstructionView *v) {
         c_format(c, " = xrt_f64_to_i64(xrl_bits, UINT32_C(%" PRIu32 "));\n    }\n", source);
     }
 }
-static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected, uint32_t source) {
-    if (c_values_edge(c, edge, selected, source)) return;
+static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected,
+    uint32_t source, uint32_t offset) {
+    if (c_values_edge(c, edge, selected, source, offset)) return;
     XrLirBlock target = {c->request->module, c->function.id, edge->target};
     XrLirBlockView block;
     xr_lir_block_view(c->request->module, target, &block);
-    XR_DCHECK(block.parameter_count == edge->argument_count, "validated edge matches its target");
+    XR_DCHECK(block.parameter_count == edge->argument_count + offset, "validated edge matches its target");
     for (uint32_t a = 0; a < edge->argument_count; ++a)
         if (c_managed_leaf(c_value_type(c, edge->arguments[a])) &&
-            !xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) {
+            !xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a + offset])) {
             c_error(c, XR_LIR_C_INVALID_LIR, "owned edge lost its common transfer");
             return;
         }
     c_text(c, "    {\n");
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
-        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
+        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a + offset])) continue;
         uint64_t temp = (uint64_t) c->scratch + 1 + a;
         if (temp >= UINT32_C(8388608)) {
             c_error(c, XR_LIR_C_UNSUPPORTED, "C edge temporary index exceeds the W4 limit");
@@ -1018,12 +1019,12 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected, uint32
                 " = xrl_access%" PRIu32 ";\n", a, edge->arguments[a]);
     }
     for (uint32_t a = 0; a < edge->argument_count && c->status == XR_LIR_C_OK; ++a) {
-        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a])) continue;
-        c_format(c, "        v%" PRIu32 " = v%" PRIu32 ";\n", block.parameters[a],
+        if (xr_lir_home_stationary_edge(c->homes, edge->arguments[a], block.parameters[a + offset])) continue;
+        c_format(c, "        v%" PRIu32 " = v%" PRIu32 ";\n", block.parameters[a + offset],
                  c->scratch + 1 + a);
         if (c_value_type(c, edge->arguments[a]) == XR_LIR_STATE_REF)
             c_format(c, "        xrl_access%" PRIu32 " = xrl_edge_access%" PRIu32 ";\n",
-                block.parameters[a], a);
+                block.parameters[a + offset], a);
     }
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);
 }
@@ -1070,7 +1071,7 @@ static void c_invoke(LirC *c,const XrLirInstructionView *v,uint32_t source) {
     if (owned) c_values_ensure(c,source);
     /* The callee writes one output. Initialize the private receivers because
      * C compilers cannot correlate the volatile status with those writes. */
-    if (normal.parameter_count && !owned)
+    if (callee.result != XR_LIR_UNIT && !owned)
         c_format(c,"    v%" PRIu32 " = (%s){0};\n",normal.parameters[0],c_type(c,callee.result));
     c_format(c,"    v%" PRIu32 " = (%s){0};\n",failure.parameters[0],c_type(c,callee.error));
     /* Like a guarded division, keep both verified guest continuations
@@ -1086,13 +1087,21 @@ static void c_invoke(LirC *c,const XrLirInstructionView *v,uint32_t source) {
         c_call_argument(c,callee.parameter_types[a],v->operands[a]);
         c_text(c,", ");
     }
-    if (normal.parameter_count && !owned) c_format(c,"&v%" PRIu32 ", ",normal.parameters[0]);
+    if (callee.result != XR_LIR_UNIT && !owned) c_format(c,"&v%" PRIu32 ", ",normal.parameters[0]);
     c_format(c,"&v%" PRIu32, failure.parameters[0]);
     if (c_strict_utf8_function(c, v->callee)) c_format(c, ", UINT32_C(%" PRIu32 ")", source);
-    c_format(c, ");\n"
-        "        if (xrl_status == UINT8_C(0)) goto bb%" PRIu32 ";\n"
-        "        goto bb%" PRIu32 ";\n    }\n",
-        v->edges[0].target,v->edges[1].target);
+    if (!v->edges[0].argument_count) {
+        c_format(c, ");\n"
+            "        if (xrl_status == UINT8_C(0)) goto bb%" PRIu32 ";\n"
+            "        goto bb%" PRIu32 ";\n    }\n",
+            v->edges[0].target, v->edges[1].target);
+        return;
+    }
+    c_text(c, ");\n        if (xrl_status == UINT8_C(0)) {\n");
+    c_edge(c, &v->edges[0], 1, source, xr_lir_edge_parameter_offset(v, 0));
+    c_text(c, "        }\n");
+    c_edge(c, &v->edges[1], 2, source, xr_lir_edge_parameter_offset(v, 1));
+    c_text(c, "    }\n");
 }
 
 static void c_instruction(LirC *c, const XrLirInstructionView *v) {
@@ -1252,7 +1261,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         }
         case XR_LIR_BR:
-            c_edge(c, &v->edges[0], 1, string_source);
+            c_edge(c, &v->edges[0], 1, string_source, 0);
             break;
         case XR_LIR_INVOKE:
             c_invoke(c,v,string_source);
@@ -1280,9 +1289,9 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c, "    if (");
             c_value(c, v->operands[0]);
             c_text(c, ") {\n");
-            c_edge(c, &v->edges[0], 1, 0);
+            c_edge(c, &v->edges[0], 1, 0, 0);
             c_text(c, "    } else {\n");
-            c_edge(c, &v->edges[1], 2, 0);
+            c_edge(c, &v->edges[1], 2, 0, 0);
             c_text(c, "    }\n");
             break;
         case XR_LIR_RET:

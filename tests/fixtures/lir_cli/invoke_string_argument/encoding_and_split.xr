@@ -1,0 +1,18 @@
+import encoding
+
+fn hex() {
+    const input = "48" + "69"
+    const bytes = try! encoding.hexDecode(input)
+    print(bytes[0])
+    print(bytes[1])
+    print(input)
+}
+
+fn split() {
+    const input = "a:b"
+    print(len(try! input.split(":")))
+    print(input)
+}
+
+hex()
+split()

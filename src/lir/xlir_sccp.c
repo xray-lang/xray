@@ -32,7 +32,12 @@ typedef struct {
     size_t first, incoming;
     bool executable;
 } SccpBlock;
-typedef struct { XrLirEdgeView view; size_t next; bool executable; } SccpEdge;
+typedef struct {
+    XrLirEdgeView view;
+    size_t next;
+    uint32_t offset;
+    bool executable;
+} SccpEdge;
 typedef struct {
     const XrLirModule *input;
     XrLirFunction function;
@@ -129,10 +134,11 @@ static void sccp_index(Sccp *c) {
             for (uint32_t e = 0; e < v.edge_count; ++e) {
                 size_t index = (size_t)b * 2 + e;
                 SccpBlock *target = &c->blocks[v.edges[e].target];
-                c->edges[index] = (SccpEdge){v.edges[e], target->incoming, false};
+                uint32_t offset = xr_lir_edge_parameter_offset(&v, e);
+                c->edges[index] = (SccpEdge){v.edges[e], target->incoming, offset, false};
                 target->incoming = index + 1;
                 for (uint32_t p = 0; p < v.edges[e].argument_count; ++p)
-                    sccp_use(c, v.edges[e].arguments[p], target->first + p);
+                    sccp_use(c, v.edges[e].arguments[p], target->first + p + offset);
             }
         }
     }
@@ -182,7 +188,12 @@ static void sccp_parameter(Sccp *c, const SccpNode *node) {
     SccpCell value = {.type = c->cells[id].type};
     for (size_t e = block->incoming; e; e = c->edges[e - 1].next) {
         const SccpEdge *edge = &c->edges[e - 1];
-        if (edge->executable) value = sccp_join(value, c->cells[edge->view.arguments[node->ordinal]]);
+        if (edge->executable) {
+            SccpCell incoming = node->ordinal < edge->offset ?
+                (SccpCell){.kind = SCCP_OVERDEFINED, .type = value.type} :
+                c->cells[edge->view.arguments[node->ordinal - edge->offset]];
+            value = sccp_join(value, incoming);
+        }
     }
     sccp_update(c, id, value);
 }

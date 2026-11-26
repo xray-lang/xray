@@ -1249,6 +1249,15 @@ static const XrXirInstruction *lower_invoke_landing_exit(const XrXirFunction *f,
 #include "xlir_lower_catch.inc.c"
 #include "xlir_cleanup_lower.inc.c"
 
+static bool lower_invoke_local_string(const Lower *c, const XrXirFunction *f,
+    const XrXirInstruction *call) {
+    const XrXirFunction *callee = &c->source->functions[call->immediate];
+    for (uint32_t a = 0; a < callee->parameter_count; ++a)
+        if (callee->parameters[a] == XR_XIR_STRING &&
+            f->operands[call->args[0] + a] >= f->parameter_count) return true;
+    return false;
+}
+
 /* Closed XIR verifies each marker's unique predecessor and recoverable error. */
 static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirInstruction *call) {
     if (call->immediate < 0 || (uint64_t)call->immediate >= c->source->function_count ||
@@ -1266,11 +1275,11 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
         if (type == XR_XIR_STRING) {
             uint32_t argument = f->operands[call->args[0] + a];
             const XrXirTypes *types = c->source->types;
-            if (argument >= f->parameter_count || f->parameters[argument] != XR_XIR_STRING ||
+            if (xr_xir_operand_type(f, argument) != XR_XIR_STRING ||
                 xr_xir_declared_parameter_mode(types,type,callee->consume_parameters,
-                    callee->consume_parameter_count,a) != XR_PARAM_READ ||
-                xr_xir_declared_parameter_mode(types,type,f->consume_parameters,
-                    f->consume_parameter_count,argument) != XR_PARAM_READ) return false;
+                    callee->consume_parameter_count,a) != XR_PARAM_READ) return false;
+            if (argument < f->parameter_count && xr_xir_declared_parameter_mode(types,type,
+                f->consume_parameters,f->consume_parameter_count,argument) != XR_PARAM_READ) return false;
             continue;
         }
         const XrXirTypeNode *node = xr_xir_type_node(c->source->types,type);
@@ -1278,6 +1287,9 @@ static bool lower_invoke_contract(Lower *c, const XrXirFunction *f, const XrXirI
     }
     if (!lower_term(c,f,call->targets[0]) || !lower_term(c,f,call->targets[1])) return false;
     const XrXirBlock *normal = &f->blocks[call->targets[0]], *failure = &f->blocks[call->targets[1]];
+    if (lower_invoke_local_string(c, f, call) &&
+        (lower_empty_error(callee->error_type) || normal->frontier || failure->frontier || normal->panic ||
+            lower_optional_error_predecessor(c, call->targets[1]))) return false;
     uint32_t origin = (uint32_t)(call - f->instructions);
     const XrXirInstruction *first = &f->instructions[normal->first];
     if (call->type != XR_XIR_UNIT &&
@@ -2107,6 +2119,17 @@ static XrLirType lower_invoke_parameter(const LowerFunction *f, uint32_t block) 
     return lower_type(f->owner,f->owner->source->functions[invoke->immediate].error_type);
 }
 
+static bool lower_block_state_parameter(const LowerFunction *f, uint32_t block, uint32_t cell) {
+    if (!f->live[(size_t)block * f->cell_count + cell]) return false;
+    const Lower *c = f->owner;
+    const XrXirFunction *source = f->source;
+    uint32_t predecessor = lower_invoke_failure_predecessor(c, source, block);
+    if (!predecessor) return true;
+    if (f->cell_types[cell] != XR_LIR_STRING) return false;
+    const XrXirInstruction *call = lower_term(f->owner, source, predecessor - 1);
+    return call && lower_invoke_local_string(c, source, call);
+}
+
 static bool lower_blocks(LowerFunction *f) {
     Lower *c = f->owner;
     const XrXirFunction *source = f->source;
@@ -2121,9 +2144,8 @@ static bool lower_blocks(LowerFunction *f) {
             XrLirType produced = lower_invoke_parameter(f,b);
             uint32_t offset = produced != XR_LIR_TYPE_INVALID;
             count = phis + offset;
-            bool state_parameters = !lower_invoke_failure_predecessor(c,source,b);
-            for (uint32_t cell = 0; state_parameters && cell < f->cell_count; ++cell)
-                if (f->live[(size_t) b * f->cell_count + cell]) {
+            for (uint32_t cell = 0; cell < f->cell_count; ++cell)
+                if (lower_block_state_parameter(f,b,cell)) {
                     if (count == UINT32_MAX) {
                         lower_error(c, XR_LIR_UNSUPPORTED, "block parameter capacity exceeded");
                         return false;
@@ -2138,8 +2160,8 @@ static bool lower_blocks(LowerFunction *f) {
                 types[offset+p] = lower_type(c,lower_error_operand(c,source,
                     source->parameter_count + block->first + p));
             uint32_t position = phis + offset;
-            for (uint32_t cell = 0; state_parameters && cell < f->cell_count; ++cell)
-                if (f->live[(size_t) b * f->cell_count + cell])
+            for (uint32_t cell = 0; cell < f->cell_count; ++cell)
+                if (lower_block_state_parameter(f,b,cell))
                     types[position++] = f->cell_types[cell];
             XR_DCHECK(position == count, "block parameter order matches the live-in inventory");
             bool good = lower_build(
@@ -2166,8 +2188,8 @@ static bool lower_blocks(LowerFunction *f) {
                 }
             }
             position = phis + offset;
-            for (uint32_t cell = 0; state_parameters && cell < f->cell_count; ++cell)
-                if (f->live[(size_t)b * f->cell_count + cell]) {
+            for (uint32_t cell = 0; cell < f->cell_count; ++cell)
+                if (lower_block_state_parameter(f,b,cell)) {
                     if (f->cell_types[cell] == XR_LIR_ARRAY) {
                         XrLirValue parameter = {0};
                         XrLirArrayShape shape = {f->cell_elements[cell]};
@@ -3031,11 +3053,11 @@ static bool lower_managed_copy(LowerFunction *, uint32_t, XrLirValue, XrLirValue
 static bool lower_body_cell(LowerFunction *f,uint32_t block,uint32_t cell,uint32_t *position) {
     Lower *c=f->owner;
     uint32_t predecessor=lower_invoke_failure_predecessor(c,f->source,block);
-    if (!predecessor)
+    if (lower_block_state_parameter(f,block,cell))
         return lower_build(c,xr_lir_block_parameter(c->module,f->blocks[block],(*position)++,
             &f->current[cell]));
-    /* The INVOKE result is the only physical block parameter. The Checked
-     * predecessor dominates this empty landing and already owns its scalars. */
+    /* The Checked invoke predecessor dominates its exclusive landing.
+     * Scalars in the landing can still reuse that dominating SSA value. */
     XR_DCHECK(f->next[predecessor-1]<f->next[block], "the invoke precedes its exclusive landing");
     XrLirValue state=f->states[(size_t)(predecessor-1)*f->cell_count+cell];
     if (!state.id || lir_pod_scalar(f->cell_types[cell])>=XR_POD_SCALAR_COUNT)
@@ -3150,7 +3172,7 @@ static bool lower_edge(LowerFunction *f, uint32_t from, uint32_t target, XrLirEd
     const XrXirBlock *block = &f->source->blocks[target];
     uint32_t count = f->phis[target];
     for (uint32_t cell = 0; cell < f->cell_count; ++cell)
-        if (f->live[(size_t) target * f->cell_count + cell])
+        if (lower_block_state_parameter(f,target,cell))
             ++count;
     XrLirValue *arguments = lower_alloc(c, count, sizeof(*arguments));
     if (count && !arguments)
@@ -3178,7 +3200,7 @@ static bool lower_edge(LowerFunction *f, uint32_t from, uint32_t target, XrLirEd
     }
     uint32_t position = f->phis[target];
     for (uint32_t cell = 0; cell < f->cell_count; ++cell)
-        if (f->live[(size_t) target * f->cell_count + cell]) {
+        if (lower_block_state_parameter(f,target,cell)) {
             XrLirValue state = f->states[(size_t) from * f->cell_count + cell];
             if (!state.id) {
                 lower_error(c, XR_LIR_VERIFY_ERROR, "Cell edge has no SSA state");
@@ -3303,9 +3325,10 @@ static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstr
     for (uint32_t a = 0; a < term->args[1] && good; ++a) {
         uint32_t argument = f->source->operands[term->args[0] + a];
         if (c->source->functions[callee].parameters[a] == XR_XIR_STRING) {
-            /* The incoming argument remains live throughout this activation.
-             * A block-local retained copy would need cleanup on both successors. */
-            good = lower_build(c, xr_lir_function_parameter(c->module,f->function,argument,&arguments[a]));
+            if (argument < f->source->parameter_count)
+                good = lower_build(c, xr_lir_function_parameter(c->module,f->function,argument,&arguments[a]));
+            else
+                good = lower_value(f,argument,&arguments[a]);
         } else {
             good = lower_slice_source(f,argument,&arguments[a]);
         }
@@ -3319,6 +3342,20 @@ static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstr
     XrLirBlock normal=f->blocks[b];
     bool typed=!lower_empty_error(c->source->functions[callee].error_type);
     bool owned_result=lower_managed_type(c,result);
+    if (good && typed && lower_invoke_local_string(c,f->source,term)) {
+        /* The synchronous call borrows its operands. A receiver for each
+         * possible return then transfers still-live owners or retires them. */
+        call.op=XR_LIR_INVOKE;
+        call.edge_count=2;
+        for (uint32_t e=0; e<2 && good; ++e)
+            good=lower_edge(f,b,term->targets[e],&call.edges[e]);
+        if (good) good=lower_selected_edges(f,b,&call) &&
+            lower_managed_release_block(f,b,&call) && lower_lexical_terminator(f,b,NULL) &&
+            lower_build(c,xr_lir_set_terminator(c->module,f->blocks[b],&call));
+        for (uint32_t e=0; e<2; ++e) xr_free((void *)call.edges[e].arguments);
+        xr_free(arguments);
+        return good;
+    }
     if (good && typed) {
         good=lower_build(c,xr_lir_add_block(c->module,f->function,result==XR_LIR_UNIT ? NULL : &result,
                 result==XR_LIR_UNIT ? 0u : 1u,&normal)) &&

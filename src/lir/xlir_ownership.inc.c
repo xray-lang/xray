@@ -275,7 +275,8 @@ static XrLirStatus lir_plan_callable_events(XrLirOwnershipPlan *plan, const XrLi
                 if (!lir_plan_callable_row(&facts,value)) continue;
                 if (!lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,
                     .function=function,.block=b + 1,.instruction=block->instruction_count,.value=value,.argument=p,
-                    .edge=e + 1,.target_block=edge->target,.target_value=f->blocks[edge->target - 1].parameters[p],
+                    .edge=e + 1,.target_block=edge->target,
+                    .target_value=f->blocks[edge->target - 1].parameters[p + xr_lir_edge_parameter_offset(end, e)],
                     .type=f->values[value - 1].type,.callable_transport=facts.values[value].transport,
                     .transfer_mode=lir_plan_callable_mode(facts.values[value].transport,
                         XR_LIR_OWNERSHIP_TRANSFER_COPY,XR_LIR_OWNERSHIP_TRANSFER_BORROW)})) return XR_LIR_OUT_OF_MEMORY;
@@ -467,13 +468,14 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
             const XrLirInstructionView *term = lir_terminator(f,b);
             for (uint32_t e = 0; e < term->edge_count; ++e) {
                 const XrLirEdgeView *edge = &term->edges[e];
+                uint32_t offset = xr_lir_edge_parameter_offset(term, e);
                 for (uint32_t a = 0; a < edge->argument_count; ++a) {
                     uint32_t id = edge->arguments[a];
                     if (xr_lir_internal_slice_type(m, f->values[id - 1].type) &&
                         !lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,
                             .function=function,.block=b + 1,.instruction=block->instruction_count,.value=id,
                             .argument=a,.edge=e + 1,.target_block=edge->target,
-                            .target_value=f->blocks[edge->target - 1].parameters[a],.type=f->values[id - 1].type,
+                            .target_value=f->blocks[edge->target - 1].parameters[a + offset],.type=f->values[id - 1].type,
                             .view_storage=lir_plan_slice_storage(f,id),
                             .view_parameter=f->values[id - 1].parameter && !f->values[id - 1].block ?
                                 f->values[id - 1].instruction : UINT32_MAX,
@@ -483,7 +485,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                         !lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,
                             .function=function,.block=b + 1,.instruction=block->instruction_count,.value=id,
                             .argument=a,.edge=e + 1,.target_block=edge->target,
-                            .target_value=f->blocks[edge->target - 1].parameters[a],
+                            .target_value=f->blocks[edge->target - 1].parameters[a + offset],
                             .type=f->values[id - 1].type,.array_element=f->values[id - 1].array_element,
                             .transfer_mode=lir_borrowed_set_formal(f,id) ?
                                 XR_LIR_OWNERSHIP_TRANSFER_COPY : XR_LIR_OWNERSHIP_TRANSFER_MOVE}))

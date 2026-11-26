@@ -189,7 +189,7 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     }
     return true;
 }
-static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal) {
+static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal, uint32_t offset) {
     XrRbcValueAccess access = {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX};
     if (c->value_edges) access.index = c->value_edges[((size_t)c->diagnostic->block - 1) * 2 + ordinal - 1];
     XrLirBlockView target;
@@ -200,7 +200,7 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
     if (!rbc_lir_value_arguments(c,NULL,0,&first)) return false;
     access.first = first;
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
-        uint32_t pair[] = {edge.arguments[p],target.parameters[p]};
+        uint32_t pair[] = {edge.arguments[p],target.parameters[p + offset]};
         if (xr_lir_home_stationary_edge(c->homes, pair[0], pair[1])) continue;
         if (!rbc_lir_value_arguments(c,pair,2,&first)) return false;
         ++access.count;
@@ -217,8 +217,9 @@ static bool rbc_lir_value_invoke(RbcLirCompiler *c,const XrLirInstructionView *i
     xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[0].target},&normal);
     xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[1].target},&error);
     uint32_t origin=(uint32_t)c->value_code->access_count;
-    XrRbcValueAccess access={.operation=XR_RBC_VALUE_INVOKE,
-        .index=c->functions[i->callee-1]-1,.result=normal.parameter_count ? normal.parameters[0] : 0,
+    bool forwards=i->edges[0].argument_count!=0;
+    XrRbcValueAccess access={.operation=XR_RBC_VALUE_INVOKE,.source=forwards,
+        .index=c->functions[i->callee-1]-1,.result=i->type!=XR_LIR_UNIT ? normal.parameters[0] : 0,
         .other=error.parameters[0],.count=i->operand_count,
         .window=c->register_count-rbc_lir_scalar_arguments(c->input,i)-1};
     XrRbcValueAccess failed={.operation=XR_RBC_VALUE_INVOKE_ERROR,.index=origin,.result=access.other};
@@ -227,9 +228,13 @@ static bool rbc_lir_value_invoke(RbcLirCompiler *c,const XrLirInstructionView *i
     return rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first) &&
         rbc_lir_value_append(c,access) &&
         rbc_lir_emit(c,XR_RBC_EQI,access.window,0,0,0) &&
-        rbc_lir_emit(c,XR_RBC_JMP,0,0,0,2) &&
-        rbc_lir_value_append(c,failed) && rbc_lir_jump(c,i->edges[1].target) &&
-        rbc_lir_value_append(c,returned) && rbc_lir_jump(c,i->edges[0].target);
+        rbc_lir_emit(c,XR_RBC_JMP,0,0,0,forwards ? 3 : 2) &&
+        rbc_lir_value_append(c,failed) &&
+        (!forwards || rbc_lir_value_edge(c,i->edges[1],2,1)) &&
+        rbc_lir_jump(c,i->edges[1].target) &&
+        rbc_lir_value_append(c,returned) &&
+        (!forwards || rbc_lir_value_edge(c,i->edges[0],1,xr_lir_edge_parameter_offset(i,0))) &&
+        rbc_lir_jump(c,i->edges[0].target);
 }
 static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *i,XrRbcValueAccess *access) {
     XrLirType type=rbc_lir_value_type(c,i->operands[0]);

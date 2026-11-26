@@ -108,7 +108,8 @@ static XrLirStatus lir_plan_cell_events(XrLirOwnershipPlan *plan, const XrLirFun
                     fact.kind = XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER; fact.block = b + 1;
                     fact.instruction = n + 1; fact.edge = e + 1; fact.argument = p;
                     fact.target_block = v->edges[e].target;
-                    fact.target_value = f->blocks[fact.target_block - 1].parameters[p];
+                    uint32_t offset = xr_lir_edge_parameter_offset(v, e);
+                    fact.target_value = f->blocks[fact.target_block - 1].parameters[p + offset];
                     fact.transfer_mode = XR_LIR_OWNERSHIP_TRANSFER_COPY;
                     if (!lir_plan_add(plan,fact)) return XR_LIR_OUT_OF_MEMORY;
                 }

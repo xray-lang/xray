@@ -587,16 +587,23 @@ static bool rbc_invoke_result_home(const XrRbcModule *module,const XrRbcFunction
 
 static bool rbc_invoke_receivers(const XrRbcFunction *function,const XrRbcValueCode *code,size_t pc,
     uint32_t ordinal,XrRbcValueAccess access) {
-    if (function->code_count-pc<7 ||
+    uint32_t stride=2+access.source;
+    if (access.source>1 || function->code_count-pc<3+2*stride ||
         function->code[pc+1] != (XR_RBC_EQI | (access.window<<8)) ||
-        function->code[pc+2] != (XR_RBC_JMP | (2u<<8)) ||
-        (function->code[pc+4]&255u)!=XR_RBC_JMP || (function->code[pc+6]&255u)!=XR_RBC_JMP) return false;
+        function->code[pc+2] != (XR_RBC_JMP | (stride<<8))) return false;
     for (uint32_t n=0;n<2;++n) {
-        uint32_t word=function->code[pc+3+2*n];
-        if ((word&65535u)!=XR_RBC_VALUE_ACCESS || (word>>16)>=code->access_count) return false;
+        size_t site=pc+3+stride*n;
+        uint32_t word=function->code[site];
+        if ((word&65535u)!=XR_RBC_VALUE_ACCESS || (word>>16)>=code->access_count ||
+            (function->code[site+stride-1]&255u)!=XR_RBC_JMP) return false;
         XrRbcValueAccess receiver=code->accesses[word>>16];
         if (receiver.operation!=(n ? XR_RBC_VALUE_INVOKE_RESULT : XR_RBC_VALUE_INVOKE_ERROR) ||
             receiver.index!=ordinal || receiver.result!=(n ? access.result : access.other)) return false;
+        if (access.source) {
+            uint32_t transfer=function->code[site+1];
+            if ((transfer&65535u)!=XR_RBC_VALUE_ACCESS || (transfer>>16)>=code->access_count ||
+                code->accesses[transfer>>16].operation!=XR_RBC_VALUE_EDGE) return false;
+        }
     }
     return true;
 }
@@ -824,7 +831,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             }
         }
         if (invoke)
-            return !a.source && a.result!=a.other && rbc_register_kind(function,a.window)==XR_RBC_CALL_WINDOW &&
+            return a.result!=a.other && rbc_register_kind(function,a.window)==XR_RBC_CALL_WINDOW &&
                 rbc_error_home(module,code,a.other,callee->error_type,true) &&
                 rbc_invoke_result_home(module,function,code,target,callee,a.result) &&
                 rbc_invoke_receivers(function,code,pc,(uint32_t)index,a);
@@ -845,11 +852,12 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     }
     case XR_RBC_VALUE_INVOKE_RESULT: case XR_RBC_VALUE_INVOKE_ERROR: {
         bool failed=a.operation==XR_RBC_VALUE_INVOKE_ERROR;
-        size_t distance=failed ? 3u : 5u;
-        if (a.source || a.other || a.index>=code->access_count || pc<distance ||
-            function->code[pc-distance] != (XR_RBC_VALUE_ACCESS | (a.index<<16))) return false;
+        if (a.source || a.other || a.index>=code->access_count) return false;
         XrRbcValueAccess origin=code->accesses[a.index];
-        return origin.operation==XR_RBC_VALUE_INVOKE && a.result==(failed ? origin.other : origin.result) &&
+        if (origin.operation!=XR_RBC_VALUE_INVOKE || origin.source>1) return false;
+        size_t distance=failed ? 3u : 5u+origin.source;
+        if (pc<distance || function->code[pc-distance]!=(XR_RBC_VALUE_ACCESS | (a.index<<16))) return false;
+        return a.result==(failed ? origin.other : origin.result) &&
             rbc_invoke_receivers(function,code,pc-distance,a.index,origin);
     }
     case XR_RBC_VALUE_RETURN_ERROR:

@@ -10,6 +10,33 @@
     "stderr": "[Uncaught Panic] E0446: try! failed: ReadError.Invalid(-19)\n"
   },
   "local_owner": {
-    "lowering_error": ":9:5: INVOKE is not supported by LIR lowering yet"
+    "exit": 0,
+    "stdout": "1\nowned\n",
+    "stderr": ""
+  },
+  "local_catch": {
+    "exit": 0,
+    "stdout": "6\n3\n3\n3\n3\n3\n",
+    "stderr": ""
+  },
+  "encoding_and_split": {
+    "exit": 0,
+    "stdout": "72\n105\n4869\n2\na:b\n",
+    "stderr": ""
+  },
+  "invalid_hex_literal": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "[Uncaught Panic] E0446: try! failed: HexError.OddLength(1)\n"
+  },
+  "empty_split_literal": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "[Uncaught Panic] E0446: try! failed: StringPatternError.EmptyPattern\n"
+  },
+  "local_unit": {
+    "exit": 0,
+    "stdout": "11\n2\n22\n0\n",
+    "stderr": ""
   }
 }

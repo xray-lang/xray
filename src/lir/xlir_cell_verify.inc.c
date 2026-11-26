@@ -75,9 +75,10 @@ static XrLirStatus lir_scoped_cell_dependencies(LirScopedCellFlow *flow) {
         for (uint32_t e = 0; e < end->edge_count; ++e) {
             const XrLirEdgeView *edge = &end->edges[e];
             const XrLirBlockData *target = &f->blocks[edge->target - 1];
+            uint32_t offset = xr_lir_edge_parameter_offset(end, e);
             for (uint32_t p = 0; p < edge->argument_count; ++p)
-                if (lir_scoped_cell_frame(flow,target->parameters[p]))
-                    lir_callable_flow_edge(edges,&used,heads,edge->arguments[p],target->parameters[p]);
+                if (lir_scoped_cell_frame(flow,target->parameters[p + offset]))
+                    lir_callable_flow_edge(edges,&used,heads,edge->arguments[p],target->parameters[p + offset]);
         }
     }
     while (waiting) {
