@@ -149,6 +149,9 @@ static bool writable_class_string(const XrtValuePlanSpec *spec) {
     return spec->kind == XRT_VALUE_STRING || (spec->kind == XRT_VALUE_NULLABLE &&
         spec->nullable.element->view.kind == XRT_VALUE_STRING);
 }
+static bool class_string_value_valid(const XrtManagedHeader *owner, uint8_t present) {
+    return present == 1 ? xrt_backing_string_matches(owner) : !present && !owner;
+}
 static bool plan_has_class_only_fields(const XrtValuePlanSpec *spec) {
     if (spec->kind != XRT_VALUE_RECORD) return false;
     for (size_t i = 0; i < spec->field_count; ++i)
@@ -672,6 +675,12 @@ static XrtManagedStatus class_create(XrtManagedFrame *frame, size_t slot,
         const XrtValueSlotSpec *field = &payload->view.fields[i];
         const XrtValuePlanSpec *member = &field->type->view;
         const unsigned char *bytes = (const unsigned char *)row + field->offset;
+        if ((field->flags & XRT_VALUE_FIELD_MUTABLE) && writable_class_string(member)) {
+            uint8_t present = member->kind == XRT_VALUE_NULLABLE ? bytes[member->nullable.tag_offset] : 1;
+            if (!class_string_value_valid(payload_child(bytes, member->owned_offsets[0]), present))
+                return XRT_MANAGED_ARGUMENT;
+            continue;
+        }
         if (!member->owned_count) {
             if (optional_i64(member) && bytes[member->nullable.tag_offset] > 1) return XRT_MANAGED_ARGUMENT;
             if (payloadless_sum(member) && !class_enum_tag_valid(member, bytes)) return XRT_MANAGED_ARGUMENT;
@@ -772,10 +781,6 @@ static XrtManagedStatus class_string_field(const XrtClassFieldAccess *access, bo
         .location={.owner=(XrtManagedHeader **)(bytes + type->owned_offsets[0]), .busy=&guards[access->index]},
         .tag=nullable ? bytes + type->nullable.tag_offset : NULL};
     return XRT_MANAGED_OK;
-}
-
-static bool class_string_value_valid(const XrtManagedHeader *owner, uint8_t present) {
-    return present == 1 ? xrt_backing_string_matches(owner) : !present && !owner;
 }
 
 static uint8_t *class_string_destination_tag(XrtManagedFrame *frame, size_t offset,
