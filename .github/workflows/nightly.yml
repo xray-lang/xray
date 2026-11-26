@@ -4,9 +4,9 @@ name: Nightly
 # would inflate PR latency if gated synchronously:
 #   - mem-stress           : repeated memory-heavy regressions
 #   - linux-msan          : MemorySanitizer (track-origins=2)
-#   - windows-msvc-release: MSVC Release CRT with the four Win11
-#                           coroutine scenarios that exposed
-#                           STATUS_HEAP_CORRUPTION in May 2026
+#   - windows-msvc-release: MSVC Release CRT burn-in for coroutine teardown
+#                           scenarios that exposed STATUS_HEAP_CORRUPTION
+#                           on Win11 in May 2026
 #   - fuzz-smoke          : short coverage-guided libFuzzer runs of the
 #                           four tests/fuzz harnesses
 #
@@ -118,14 +118,18 @@ jobs:
         run: cmake --build build -j
 
       - name: Run memory-heavy regression tests 10 times
+        id: mem-stress-run
         env:
           XRAY_BIN: ./build/xray
-        # run_mem_stress.py selects the memory-heavy regression set (1205 /
-        # 1206 / 1207). Failure tails for any crashed iteration land in
-        # tests/tmp/mem_stress_failures.log which the artifact upload
-        # below would pick up if added in a follow-up.
         run: |
           python3 ./scripts/run_mem_stress.py 10
+
+      - name: Upload memory stress failure log
+        if: failure() && steps.mem-stress-run.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mem-stress-failures-${{ matrix.short_name }}-attempt-${{ github.run_attempt }}
+          path: tests/tmp/mem_stress_failures.log
 
   # ---------------------------------------------------------------------------
   # 2. Linux MSan
@@ -173,7 +177,7 @@ jobs:
           XRAY_BUILD_DIR: ./build
 
   # ---------------------------------------------------------------------------
-  # 3. Windows MSVC Release + Win11 coroutine 4 cases
+  # 3. Windows MSVC Release + Win11 coroutine burn-in
   # ---------------------------------------------------------------------------
   windows-msvc-release:
     runs-on: windows-2022
@@ -196,16 +200,22 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Run Win11 coroutine 4 cases 5x
+      - name: Run Win11 coroutine 3 cases 5x
+        id: win11-coro-run
         shell: bash
         env:
           XRAY_BIN: ./build/xray.exe
-        # repro_win11_coro_burn.py pins the same four cases that
-        # exposed STATUS_HEAP_CORRUPTION in May 2026 (1115 cancel,
-        # 1109 await_any, 1127 priority, 1128 yield) and writes
-        # failure tails to tests/tmp/win11_coro_failures.log.
+        # Replays the cancel, await_any and yield cases for the May 2026
+        # coroutine teardown heap corruption.
         run: |
           python3 ./scripts/repro_win11_coro_burn.py 5
+
+      - name: Upload Win11 coroutine failure log
+        if: failure() && steps.win11-coro-run.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: win11-coro-failures-attempt-${{ github.run_attempt }}
+          path: tests/tmp/win11_coro/failures.log
 
   # ---------------------------------------------------------------------------
   # 4. libFuzzer smoke (lexer / parser / stdlib data / XTP decoder)
