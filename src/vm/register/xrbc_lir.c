@@ -561,7 +561,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     uint32_t string_role = xr_lir_string_role(input,i);
     if (string_role >= XR_LIR_STRING_OP_END) return false;
     if (i->op == XR_LIR_RECORD_NEW || i->op == XR_LIR_RECORD_FIELD ||
-        i->op == XR_LIR_CLASS_NEW || i->op == XR_LIR_CLASS_FIELD || i->op == XR_LIR_CLASS_SCALAR_WRITE || i->op == XR_LIR_CLASS_ARRAY_WRITE ||
+        i->op == XR_LIR_CLASS_NEW || i->op == XR_LIR_CLASS_FIELD || i->op == XR_LIR_CLASS_SCALAR_WRITE ||
+        i->op == XR_LIR_CLASS_STRING_WRITE || i->op == XR_LIR_CLASS_ARRAY_WRITE ||
         i->op == XR_LIR_CLASS_ARRAY_PUSH || i->op == XR_LIR_VALUE_RETAIN || i->op == XR_LIR_VALUE_DROP ||
         i->op == XR_LIR_CLASS_ADOPT || i->op == XR_LIR_CLASS_IS ||
         i->op == XR_LIR_SUM_NEW || i->op == XR_LIR_SUM_TAG || i->op == XR_LIR_SUM_GET ||

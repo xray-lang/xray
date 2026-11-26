@@ -29,11 +29,29 @@ static XrtManagedStatus rbc_value_inline_extract(const XrRbcModule *module,XrRbc
     XrRbcRegister *output=rbc_value_register(stack,activation,value);
     return output && rbc_state_scalar_load(activation->image->types[type-1].kind,bytes,&output->bits) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
 }
+static XrtManagedStatus rbc_class_string_replace(const XrRbcModule *module, XrRbcStack *stack,
+    RbcValueActivation *activation, uint32_t value, const XrtValueImageType *type,
+    const XrtClassFieldAccess *field) {
+    if (type->kind==XRT_VALUE_STRING) {
+        const XrtStringBacking *incoming=NULL;
+        XrtManagedStatus status=rbc_value_string_borrow(activation,value,&incoming);
+        return status==XRT_MANAGED_OK ?
+            xrt_class_string_field_replace(field,(const XrtManagedHeader *)incoming,1,false) : status;
+    }
+    RbcValuePayload input;
+    XrtManagedStatus status=rbc_value_payload(module,stack,rbc_value_origin(activation,value),&input);
+    if (status!=XRT_MANAGED_OK) return status;
+    XrtHostNullableOwner incoming;
+    if (input.size!=sizeof(incoming) || input.lanes || !input.address) return XRT_MANAGED_ARGUMENT;
+    memcpy(&incoming,input.address,sizeof(incoming));
+    return xrt_class_string_field_replace(field,incoming.owner,incoming.present,true);
+}
 static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     bool class_new=access.operation==XR_RBC_VALUE_CLASS_NEW, class_field=access.operation==XR_RBC_VALUE_CLASS_FIELD;
     bool class_push=access.operation==XR_RBC_VALUE_CLASS_ARRAY_PUSH, class_write=access.operation==XR_RBC_VALUE_CLASS_ARRAY_WRITE;
     bool scalar_write=access.operation==XR_RBC_VALUE_CLASS_SCALAR_WRITE;
+    bool string_write=access.operation==XR_RBC_VALUE_CLASS_STRING_WRITE;
     bool create=class_new || access.operation==XR_RBC_VALUE_RECORD_NEW ||
         access.operation==XR_RBC_VALUE_SUM_NEW ||
         access.operation==XR_RBC_VALUE_NULLABLE_NONE || access.operation==XR_RBC_VALUE_NULLABLE_SOME;
@@ -104,7 +122,7 @@ static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcSta
             (RbcValueOrigin){activation,access.result},snapshot);
     }
     XrtBoundClass binding={0};
-    if (class_new || class_field || class_push || class_write || scalar_write) {
+    if (class_new || class_field || class_push || class_write || scalar_write || string_write) {
         XrtManagedStatus status=rbc_value_plan_set(module,stack);
         if (status==XRT_MANAGED_OK) status=stack->layout ? xrt_module_layout_class(stack->layout,home->type,&binding) :
             xrt_value_image_class(stack->values->plans,home->type,&binding);
@@ -132,6 +150,8 @@ static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcSta
             }
             XrtValueImageSlot slot=activation->image->slots[type->first_field+access.index];
             const XrtValueImageType *field_type=&activation->image->types[slot.type-1];
+            if (string_write)
+                return rbc_class_string_replace(module,stack,activation,access.other,field_type,&field_access);
             if (scalar_write) {
                 uint8_t bytes[2 * sizeof(uint64_t)];
                 if (field_type->size>sizeof(bytes)) return XRT_MANAGED_ARGUMENT;
@@ -141,6 +161,12 @@ static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcSta
             }
             if ((slot.flags & XRT_VALUE_FIELD_MUTABLE) && !rbc_writable_class_scalar(activation->image,field_type)) {
                 const XrLirValueHome *destination=rbc_value_home(activation->code,access.result);
+                if (rbc_writable_class_string(activation->image,field_type)) {
+                    size_t nullable_offset=field_type->kind==XRT_VALUE_NULLABLE ? destination->offset : SIZE_MAX;
+                    return xrt_class_string_field_copy(&field_access,activation->frame,
+                        destination->first_owner,nullable_offset);
+                }
+                if (!rbc_writable_class_array(field_type->kind)) return XRT_MANAGED_ARGUMENT;
                 status=xrt_class_array_field_copy(&field_access,activation->frame,destination->temporary_first_owner);
                 return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
             }

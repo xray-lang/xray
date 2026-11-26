@@ -75,7 +75,8 @@ typedef enum XrRbcValueOperation {
     /* One predicate over two String borrows: index is the runtime test ordinal. */
     XR_RBC_VALUE_STRING_TEST,
     XR_RBC_VALUE_INVOKE, XR_RBC_VALUE_INVOKE_RESULT, XR_RBC_VALUE_INVOKE_ERROR,
-    XR_RBC_VALUE_RETURN_ERROR, XR_RBC_VALUE_PANIC_ERROR, XR_RBC_VALUE_UNCAUGHT_ERROR
+    XR_RBC_VALUE_RETURN_ERROR, XR_RBC_VALUE_PANIC_ERROR, XR_RBC_VALUE_UNCAUGHT_ERROR,
+    XR_RBC_VALUE_CLASS_STRING_WRITE
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
