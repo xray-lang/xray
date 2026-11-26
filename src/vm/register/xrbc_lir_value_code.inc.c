@@ -306,7 +306,10 @@ static bool rbc_lir_array_local_metadata(RbcLirCompiler *c,XrRbcValueAccess *acc
     const XrLirHomeBinding *binding=c->homes->bindings ? &c->homes->bindings[receiver] : NULL;
     const XrtValueImage *image=xr_lir_value_image_view(c->literals->program->value_image);
     if (!binding || binding->kind!=XR_LIR_HOME_BINDING_LOCAL || !binding->type || !image ||
-        binding->type>image->type_count || image->types[binding->type-1].kind!=XRT_VALUE_ARRAY_I64) return true;
+        binding->type>image->type_count) return true;
+    XrtValueKind kind = image->types[binding->type - 1].kind;
+    if (kind != XRT_VALUE_ARRAY_I64 &&
+        (kind != XRT_VALUE_ARRAY_INLINE || access->index != XR_LIR_ARRAY_OP_PUSH)) return true;
     while (c->array_local_cursor<c->homes->event_count) {
         size_t n=c->array_local_cursor++;
         const XrLirHomeEvent *event=&c->homes->events[n];

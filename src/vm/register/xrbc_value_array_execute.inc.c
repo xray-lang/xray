@@ -179,6 +179,28 @@ static bool rbc_value_array_local_update(XrRbcStack *stack,RbcValueActivation *a
         &activation->code->homes->frame,(XrtArrayI64LocalGeometry){binding->first_owner,binding->offset,
             workspace->first_owner,workspace->offset},&view) && xrt_array_i64_try_update_local(&view,update);
 }
+static XrtManagedStatus rbc_value_inline_class_push(const XrRbcModule *module, XrRbcStack *stack,
+    RbcValueActivation *activation, XrRbcValueAccess access, const uint32_t *args) {
+    const XrLirHomeBinding *receiver = rbc_value_binding(activation->code, args[0]);
+    const XrLirHomeWorkspace *workspace = &activation->code->homes->workspaces[access.window];
+    XrtBoundInlineArray array = {0};
+    XrtManagedStatus status = rbc_value_plan_set(module, stack);
+    if (status == XRT_MANAGED_OK)
+        status = stack->layout ? xrt_module_layout_inline_array(stack->layout, receiver->type, &array) :
+            xrt_value_image_inline_array(stack->values->plans, receiver->type, &array);
+    if (status != XRT_MANAGED_OK) return status;
+
+    RbcValueOrigin origin = rbc_value_origin(activation, args[1]);
+    const XrLirValueHome *home = origin.activation ? rbc_value_home(origin.activation->code, origin.value) : NULL;
+    const XrtManagedHeader *item = NULL;
+    status = rbc_value_borrow_header(origin, home, &item);
+    if (status != XRT_MANAGED_OK) return status;
+
+    XrtPlace binding = {.frame = activation->frame, .slot = receiver->first_owner, .nulls = XRT_PLACE_NONNULL};
+    return xrt_array_backing_inline_class_append(binding, workspace->first_owner, array.ops,
+        array.element, (XrtManagedHeader *)item);
+}
+
 static XrtManagedStatus rbc_value_array_inline(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,const uint32_t *args) {
     bool create=access.index==XR_LIR_ARRAY_OP_NEW;
@@ -230,7 +252,11 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     bool create=access.index==XR_LIR_ARRAY_OP_NEW || access.index==XR_LIR_ARRAY_OP_REPEAT ||
         access.index==XR_LIR_ARRAY_OP_COPY_STRING_BYTES || access.index==XR_LIR_ARRAY_OP_WITH_CAPACITY;
     XrtValueKind value_kind=rbc_value_kind(module,activation->code,create ? access.result : args[0]);
-    if (value_kind==XRT_VALUE_ARRAY_INLINE) return rbc_value_array_inline(module,stack,activation,access,args);
+    if (value_kind == XRT_VALUE_ARRAY_INLINE) {
+        if (access.index == XR_LIR_ARRAY_OP_PUSH)
+            return rbc_value_inline_class_push(module, stack, activation, access, args);
+        return rbc_value_array_inline(module, stack, activation, access, args);
+    }
     XrtBackingArrayKind kind=(XrtBackingArrayKind)(value_kind-XRT_VALUE_ARRAY_I64);
     if ((unsigned)kind>=XRT_BACKING_ARRAY_COUNT) return XRT_MANAGED_ARGUMENT;
     if (access.other && rbc_value_array_local_update(stack,activation,access)) return XRT_MANAGED_OK;

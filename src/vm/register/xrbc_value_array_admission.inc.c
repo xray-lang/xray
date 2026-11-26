@@ -9,15 +9,27 @@
 static bool rbc_value_binding_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,uint32_t value) {
     const XrLirHomeBinding *binding=rbc_value_binding(code,value); XrtValueKind kind=rbc_value_kind(module,code,value);
-    if (!binding || (kind!=XRT_VALUE_STRING && kind!=XRT_VALUE_MAP_STRING_I64 && kind!=XRT_VALUE_SET_I64 &&
-            (kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64))) return false;
-    if ((kind==XRT_VALUE_STRING || kind==XRT_VALUE_MAP_STRING_I64 || kind==XRT_VALUE_SET_I64) && !xr_rbc_module_code_owner(module)) return false;
-    if (kind==XRT_VALUE_STRING || kind==XRT_VALUE_MAP_STRING_I64 || kind==XRT_VALUE_SET_I64) {
-        const XrtValueImage *image=xr_rbc_module_value_image(module);
-        const XrtValueImageType *type=&image->types[binding->type-1];
-        if (type->size!=sizeof(XrtManagedHeader *) || type->alignment!=_Alignof(XrtManagedHeader *) ||
-            type->owned_count!=1 || type->first_owned>=image->owned_count || !image->owned_offsets ||
+    bool inline_array = kind == XRT_VALUE_ARRAY_INLINE;
+    bool owned_shape = inline_array || kind == XRT_VALUE_STRING || kind == XRT_VALUE_MAP_STRING_I64 ||
+        kind == XRT_VALUE_SET_I64;
+    if (!binding || (!owned_shape && (kind < XRT_VALUE_ARRAY_I64 || kind > XRT_VALUE_ARRAY_U64))) return false;
+    if (owned_shape) {
+        const XrRbcCodeOwner *owner = xr_rbc_module_code_owner(module);
+        if (!owner) return false;
+        const XrtValueImage *image = xr_rbc_module_value_image(module);
+        const XrtValueImageType *type = &image->types[binding->type - 1];
+        if (type->size != sizeof(XrtManagedHeader *) || type->alignment != _Alignof(XrtManagedHeader *) ||
+            type->owned_count != 1 || type->first_owned >= image->owned_count || !image->owned_offsets ||
             image->owned_offsets[type->first_owned]) return false;
+        if (inline_array) {
+            size_t ordinal = (size_t)(function - module->functions);
+            if (binding->kind != XR_LIR_HOME_BINDING_LOCAL || !type->element || type->element >= binding->type ||
+                ordinal >= owner->function_count || !owner->value_homes || !owner->value_codes ||
+                owner->value_homes[ordinal] != code->homes || owner->value_codes[ordinal] != code ||
+                owner->values != image) return false;
+            const XrtValueImageType *element = &image->types[type->element - 1];
+            if (element->kind != XRT_VALUE_CLASS || element->class_storage) return false;
+        }
     }
     bool state_cap=binding->kind==XR_LIR_HOME_BINDING_STATE_BORROW && binding->source==value;
     if (state_cap) {
@@ -235,7 +247,7 @@ static bool rbc_value_array_item_valid(const XrRbcModule *module,const XrRbcValu
     return kind==XRT_VALUE_ARRAY_STRING ? rbc_value_string(module,code,value,false) : rbc_value_scalar(code,function,value,XR_RBC_BITS);
 }
 static bool rbc_value_array_local_valid(const XrRbcModule *module,const XrRbcValueCode *code,
-    const XrRbcFunction *function,XrRbcValueAccess access) {
+    const XrRbcFunction *function,XrRbcValueAccess access,XrtValueKind kind) {
     const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
     const XrLirValueHomes *homes=code->homes;
     size_t ordinal=(size_t)(function-module->functions);
@@ -252,7 +264,7 @@ static bool rbc_value_array_local_valid(const XrRbcModule *module,const XrRbcVal
         !image || owner->values!=image || !image->types || !binding->type || binding->type>image->type_count ||
         code->locations[args[0]].kind!=XR_RBC_VALUE_NOWHERE) return false;
     const XrtValueImageType *type=&image->types[binding->type-1];
-    if (type->kind!=XRT_VALUE_ARRAY_I64 || type->size!=sizeof(XrtManagedHeader *) ||
+    if (type->kind!=kind || type->size!=sizeof(XrtManagedHeader *) ||
         type->alignment!=_Alignof(XrtManagedHeader *) || type->owned_count!=1 ||
         type->first_owned>=image->owned_count || !image->owned_offsets || image->owned_offsets[type->first_owned]) return false;
     const XrtManagedFrameSpec *frame=&homes->frame;
@@ -272,6 +284,34 @@ static bool rbc_value_array_local_valid(const XrRbcModule *module,const XrRbcVal
         event->block && event->instruction && event->operation==access.index &&
         !event->forwarding_mode && !event->forwarding_drop && rbc_value_binding_forwarding_event_plain(&plain);
 }
+
+static bool rbc_value_inline_class_push_valid(const XrRbcModule *module, const XrRbcValueCode *code,
+    const XrRbcFunction *function, XrRbcValueAccess access, const uint32_t *args) {
+    if (access.result || access.count != 2 ||
+        !rbc_value_binding_valid(module, code, function, args[0]) ||
+        !rbc_value_array_local_valid(module, code, function, access, XRT_VALUE_ARRAY_INLINE)) return false;
+    const XrLirHomeBinding *binding = rbc_value_binding(code, args[0]);
+    const XrtValueImage *image = xr_rbc_module_value_image(module);
+    uint32_t element = image->types[binding->type - 1].element;
+    if (!rbc_value_exact_home(module, code, args[1], element, false)) return false;
+    const XrLirValueHomes *homes = code->homes;
+    const XrLirValueHome *item = rbc_value_home(code, args[1]);
+    const XrLirHomeWorkspace *workspace = &homes->workspaces[access.window];
+    if (workspace->first_owner == item->first_owner || workspace->first_owner == item->temporary_first_owner)
+        return false;
+
+    const XrLirHomeEvent *operation = &homes->events[access.other - 1];
+    /* Common operand facts precede the Array operation at this instruction. */
+    for (size_t n = access.other - 1; n; --n) {
+        const XrLirHomeEvent *operand = &homes->events[n - 1];
+        if (operand->block != operation->block || operand->instruction != operation->instruction) break;
+        if (operand->kind == XR_LIR_OWNERSHIP_OPERAND_BORROW && operand->argument == 1 &&
+            operand->source == args[1] && !operand->target && !operand->edge && !operand->target_block &&
+            operand->transfer_mode == XR_LIR_OWNERSHIP_TRANSFER_BORROW) return true;
+    }
+    return false;
+}
+
 static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
     if (a.source || a.first>code->argument_count || a.count>code->argument_count-a.first ||
@@ -284,6 +324,7 @@ static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcVa
     XrtValueKind kind=rbc_value_kind(module,code,array);
     if (!xrt_value_kind_is_array(kind)) return false;
     if (kind == XRT_VALUE_ARRAY_INLINE) {
+        if (a.index == XR_LIR_ARRAY_OP_PUSH) return rbc_value_inline_class_push_valid(module, code, function, a, args);
         if (a.other || a.window != UINT32_MAX || a.index > XR_LIR_ARRAY_OP_GET ||
             !rbc_value_array(module,code,array,create)) return false;
         const XrtValueImage *image = xr_rbc_module_value_image(module);
@@ -311,7 +352,7 @@ static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcVa
         const XrLirHomeBinding *binding=rbc_value_binding(code,args[0]);
         const XrLirHomeWorkspace *workspace=&code->homes->workspaces[a.window];
         bool local=kind==XRT_VALUE_ARRAY_I64 && binding->kind==XR_LIR_HOME_BINDING_LOCAL;
-        if (a.other && (!local || !rbc_value_array_local_valid(module,code,function,a))) return false;
+        if (a.other && (!local || !rbc_value_array_local_valid(module,code,function,a,XRT_VALUE_ARRAY_I64))) return false;
         return workspace->type==binding->type && workspace->first_owner<code->homes->frame.slot_count &&
             code->homes->frame.owned_offsets[workspace->first_owner]==workspace->offset &&
             (a.index!=XR_LIR_ARRAY_OP_SET || rbc_value_scalar(code,function,args[1],XR_RBC_BITS)) &&
