@@ -178,6 +178,14 @@ static bool lower_view_instruction(LowerFunction *f, uint32_t block, uint32_t in
         uint32_t consumer = f->source->parameter_count + byte_lengths[index].consumer - 1;
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[block], &length, &f->values[consumer]));
     }
+    if (op->op == XR_XIR_CALL && c->lossy_utf8 && xir_lossy_utf8_callable(c->source, (uint32_t)op->immediate)) {
+        XR_CHECK(op->args[1] == 1 && op->args[0] < f->source->operand_count,
+            "the admitted lossy decoder reads one Slice");
+        XrLirValue bytes = {0};
+        *handled = true;
+        return lower_slice_source(f, f->source->operands[op->args[0]], &bytes) &&
+            lower_slice_call(f, block, XR_LIR_SLICE_OP_LOSSY_UTF8, XR_LIR_U8, &bytes, 1, &f->values[result]);
+    }
     if (op->op == XR_XIR_VIEW_CLEANUP) { *handled = true; return lower_view_cleanup(f, block, op); }
     if (!lower_view_local(f, block, index, handled)) return false;
     if (*handled) return true;

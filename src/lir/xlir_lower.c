@@ -2787,13 +2787,6 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked call argument range");
         return false;
     }
-    if (op->op == XR_XIR_CALL && xir_lossy_utf8_callable(c->source, (uint32_t)op->immediate)) {
-        XR_CHECK(op->args[1] == 1, "the admitted lossy decoder reads one Slice");
-        XrLirValue bytes = {0};
-        return lower_slice_source(f, f->source->operands[op->args[0]], &bytes) &&
-            lower_slice_call(f, b, XR_LIR_SLICE_OP_LOSSY_UTF8, XR_LIR_U8, &bytes, 1,
-                &f->values[f->source->parameter_count + i]);
-    }
     if (op->op == XR_XIR_PRINT && op->args[1] == 1) {
         uint32_t value = f->source->operands[op->args[0]];
         if (xr_xir_operand_type(f->source, value) != XR_XIR_U8 &&
