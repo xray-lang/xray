@@ -1040,6 +1040,29 @@ static void c_edge(LirC *c, const XrLirEdgeView *edge, uint32_t selected,
     }
     c_format(c, "        goto bb%" PRIu32 ";\n    }\n", edge->target);
 }
+static void c_conditional(LirC *c, const XrLirInstructionView *v) {
+    const XrLirFunctionData *function = &c->request->module->functions[c->function.id - 1];
+    const XrLirBlockData *failure = &function->blocks[v->edges[1].target - 1];
+    bool arithmetic = function->has_cleanups &&
+        failure->instructions[failure->instruction_count - 1].view.op == XR_LIR_ARITHMETIC_PANIC;
+    c_array_push_before_branch(c);
+    if (arithmetic) {
+        /* Preserve the guest branch when a host compiler can see a caller's
+         * constant zero and the failure target's nonreturning reporter. */
+        c_text(c, "    { volatile _Bool xrl_arithmetic_guard = ");
+        c_value(c, v->operands[0]);
+        c_text(c, ";\n");
+    }
+    c_text(c, "    if (");
+    if (arithmetic) c_text(c, "xrl_arithmetic_guard");
+    else c_value(c, v->operands[0]);
+    c_text(c, ") {\n");
+    c_edge(c, &v->edges[0], 1, 0, 0);
+    c_text(c, "    } else {\n");
+    c_edge(c, &v->edges[1], 2, 0, 0);
+    c_text(c, arithmetic ? "    } }\n" : "    }\n");
+}
+
 static void c_division(LirC *c, const XrLirInstructionView *v) {
     bool guarded = c_arithmetic_point(c, v);
     if (guarded) {
@@ -1301,14 +1324,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c,";\n    return UINT8_C(1);\n");
             break;
         case XR_LIR_CONDBR:
-            c_array_push_before_branch(c);
-            c_text(c, "    if (");
-            c_value(c, v->operands[0]);
-            c_text(c, ") {\n");
-            c_edge(c, &v->edges[0], 1, 0, 0);
-            c_text(c, "    } else {\n");
-            c_edge(c, &v->edges[1], 2, 0, 0);
-            c_text(c, "    }\n");
+            c_conditional(c, v);
             break;
         case XR_LIR_RET:
             if (c->view.error) {
