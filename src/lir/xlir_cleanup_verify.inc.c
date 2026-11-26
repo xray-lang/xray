@@ -129,8 +129,11 @@ static bool lir_cleanup_captures(const XrLirFunctionData *f, const LirGraph *g,
     return true;
 }
 
+static bool lir_cleanup_scalar_frame(const XrLirFunctionData *f);
+
 static bool lir_cleanup_calls(const XrLirModule *m, const XrLirFunctionData *f,
-    uint32_t owner, const XrLirBlockData *block, uint32_t *frontier, bool guarded_arithmetic) {
+    uint32_t owner, const XrLirBlockData *block, uint32_t *frontier, bool guarded_arithmetic,
+    bool *scalar_frame) {
     enum { BODY, CLEANUPS, RETIREMENT } phase = BODY;
     bool guarded = *frontier || f->cleanup_owner;
     bool directory_closed = false;
@@ -144,10 +147,10 @@ static bool lir_cleanup_calls(const XrLirModule *m, const XrLirFunctionData *f,
         }
         if (call->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL) {
             XrLirOp exit = block->instructions[block->instruction_count - 1].view.op;
-            return i + 2 == block->instruction_count && directory_closed && !ordinary_cleanup &&
-                !*frontier && !f->cleanup_owner &&
-                (f->result == XR_LIR_UNIT || lir_cleanup_scalar(f->result)) &&
-                (exit == XR_LIR_RET || exit == XR_LIR_BR);
+            if (i + 2 != block->instruction_count || !directory_closed || ordinary_cleanup ||
+                *frontier || f->cleanup_owner || (exit != XR_LIR_RET && exit != XR_LIR_BR)) return false;
+            if (!*scalar_frame) *scalar_frame = lir_cleanup_scalar_frame(f);
+            return *scalar_frame;
         }
         if (call->op != XR_LIR_CALL || !m->functions[call->callee - 1].cleanup_owner) {
             if (phase != BODY) {
@@ -264,7 +267,7 @@ static bool lir_cleanup_arithmetic_landing(const XrLirModule *m, const XrLirFunc
     return true;
 }
 
-static bool lir_cleanup_arithmetic_frame(const XrLirFunctionData *f) {
+static bool lir_cleanup_scalar_frame(const XrLirFunctionData *f) {
     if (f->error || f->closure.callable || (f->result != XR_LIR_UNIT && !lir_cleanup_scalar(f->result))) return false;
     for (uint32_t v = 0; v < f->value_count; ++v) {
         XrLirType type = f->values[v].type;
@@ -294,10 +297,10 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
         bool guarded_arithmetic = from && lir_cleanup_arithmetic_code(block->instructions[0].view.op);
         if (guarded_arithmetic && !lir_cleanup_arithmetic_pair(f, g, b, from)) return false;
         if (term->op == XR_LIR_ARITHMETIC_PANIC) {
-            if (!scalar_frame) scalar_frame = lir_cleanup_arithmetic_frame(f);
+            if (!scalar_frame) scalar_frame = lir_cleanup_scalar_frame(f);
             if (!scalar_frame || !lir_cleanup_arithmetic_landing(m, f, g, b, from)) return false;
         }
-        if (!lir_cleanup_calls(m, f, owner, block, &remaining, guarded_arithmetic)) return false;
+        if (!lir_cleanup_calls(m, f, owner, block, &remaining, guarded_arithmetic, &scalar_frame)) return false;
         if (meta && meta->registration) {
             uint32_t target = meta->registration;
             if (lir_cleanup_registration(m, owner, target) != meta || target == from ||

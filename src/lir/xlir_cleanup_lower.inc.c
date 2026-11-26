@@ -121,8 +121,12 @@ static bool lower_cleanup_direct_leaf(Lower *c, uint32_t function) {
     for (uint32_t b = 0; b < f->block_count && safe; ++b) {
         const XrXirBlock *block = &f->blocks[b];
         safe = !block->panic;
-        for (uint32_t i = block->first; i < block->first + block->count && safe; ++i)
-            safe = lower_cleanup_safe(c, f, &f->instructions[i], &literal_uses);
+        for (uint32_t i = block->first; i < block->first + block->count && safe; ++i) {
+            const XrXirInstruction *op = &f->instructions[i];
+            safe = lower_cleanup_safe(c, f, op, &literal_uses) &&
+                !(op->op == XR_XIR_CLEANUP_REGISTER &&
+                  lower_directory_cleanup_call(c, (uint32_t)op->immediate));
+        }
     }
     xr_free(literal_uses);
     *proof = safe ? SAFE : UNSAFE;
@@ -228,6 +232,22 @@ static bool lower_cleanup_unwind(LowerFunction *f, XrLirBlock block, uint32_t fr
     return true;
 }
 
+static bool lower_cleanup_frame_type(const Lower *c, XrXirType type) {
+    return type == XR_XIR_UNIT || lower_cleanup_scalar(type) || lower_cleanup_cell(c, type);
+}
+
+/* Physical failure may leave this activation after its defer callbacks. Keep
+ * frames with owners, loans or callable scopes on the existing refusal path
+ * until they can retire those obligations on the new successor. */
+static bool lower_cleanup_scalar_frame(const Lower *c, const XrXirFunction *f) {
+    if (!lower_empty_error(f->error_type) || !lower_cleanup_frame_type(c, f->result)) return false;
+    for (uint32_t p = 0; p < f->parameter_count; ++p)
+        if (!lower_cleanup_scalar(f->parameters[p])) return false;
+    for (uint32_t i = 0; i < f->instruction_count; ++i)
+        if (!lower_cleanup_frame_type(c, f->instructions[i].type)) return false;
+    return true;
+}
+
 static bool lower_cleanup_exit(LowerFunction *f, uint32_t block, const XrXirInstruction *term,
     bool *directory_closed) {
     uint32_t frontier = f->source->blocks[block].frontier;
@@ -236,29 +256,16 @@ static bool lower_cleanup_exit(LowerFunction *f, uint32_t block, const XrXirInst
     if (term->op == XR_XIR_CLEANUP_LEAVE || term->op == XR_XIR_CLEANUP_ERROR)
         target = (uint32_t)term->immediate;
     else if (term->op != XR_XIR_RETURN && term->op != XR_XIR_THROW && term->op != XR_XIR_PANIC_ERROR) return true;
-    bool normal = (term->op == XR_XIR_RETURN || term->op == XR_XIR_CLEANUP_LEAVE) && !target &&
-        (f->source->result == XR_XIR_UNIT || lower_cleanup_scalar(f->source->result));
-    return lower_cleanup_unwind(f, f->blocks[block], frontier, target, normal ? directory_closed : NULL);
+    bool normal = (term->op == XR_XIR_RETURN || term->op == XR_XIR_CLEANUP_LEAVE) && !target;
+    if (!lower_cleanup_unwind(f, f->blocks[block], frontier, target, normal ? directory_closed : NULL))
+        return false;
+    if (!*directory_closed || f->directory_scalar_frame) return true;
+    f->directory_scalar_frame = lower_cleanup_scalar_frame(f->owner, f->source);
+    return f->directory_scalar_frame || lower_unsupported(f->owner, "directory cleanup requires a scalar frame");
 }
 
 static bool lower_cleanup_arithmetic(const XrXirInstruction *op) {
     return (op->op == XR_XIR_DIV_INT || op->op == XR_XIR_REM_INT) && op->type == XR_XIR_I64;
-}
-
-static bool lower_cleanup_frame_type(const Lower *c, XrXirType type) {
-    return type == XR_XIR_UNIT || lower_cleanup_scalar(type) || lower_cleanup_cell(c, type);
-}
-
-/* Physical panic may leave this activation after its defer callbacks. Keep
- * frames with owners, loans or callable scopes on the existing refusal path
- * until they can retire those obligations on the new successor. */
-static bool lower_cleanup_arithmetic_frame(const Lower *c, const XrXirFunction *f) {
-    if (!lower_empty_error(f->error_type) || !lower_cleanup_frame_type(c, f->result)) return false;
-    for (uint32_t p = 0; p < f->parameter_count; ++p)
-        if (!lower_cleanup_scalar(f->parameters[p])) return false;
-    for (uint32_t i = 0; i < f->instruction_count; ++i)
-        if (!lower_cleanup_frame_type(c, f->instructions[i].type)) return false;
-    return true;
 }
 
 static bool lower_cleanup_arithmetic_edge(LowerFunction *f, uint32_t b, const XrXirInstruction *op) {

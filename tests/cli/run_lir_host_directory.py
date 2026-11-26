@@ -27,9 +27,9 @@ def main() -> None:
         shutil.copytree(root / "stdlib", stdlib)
         with (stdlib / "io/io.xr").open("ab") as source:
             source.write(b"\n" + (fixtures / "wrappers.xr").read_bytes())
-        inner_close = next(number for number, line in enumerate(
-            (stdlib / "io/io.xr").read_text(encoding="utf-8").splitlines(), 1)
-            if "// innermost close" in line)
+        io_lines = (stdlib / "io/io.xr").read_text(encoding="utf-8").splitlines()
+        inner_close = next(number for number, line in enumerate(io_lines, 1) if "// innermost close" in line)
+        cross_frame = next(number for number, line in enumerate(io_lines, 1) if "// cross-frame cleanup call" in line)
         env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR="1")
 
         def run(command, cwd, label):
@@ -48,6 +48,8 @@ def main() -> None:
         rejections = {
             "private_leaf": b"import requires an exported declaration",
             "cleanup_partial": b"directory cleanup requires a complete normal exit",
+            "cleanup_managed_exit": b"directory cleanup requires a scalar frame",
+            "cleanup_cross_frame": b"operation needs a panic landing with active cleanup",
         }
         for case in (*successes, *faults, *rejections):
             vm_dir, native_dir = work / (case + "-vm"), work / (case + "-native")
@@ -62,6 +64,8 @@ def main() -> None:
             if case in rejections:
                 assert vm == built and vm[0] == 1 and not vm[1] and not executable.exists(), (case, vm, built)
                 assert rejections[case] in vm[2], (case, vm)
+                if case == "cleanup_cross_frame":
+                    assert f"io.xr:{cross_frame}:".encode() in vm[2], (case, vm)
             else:
                 assert built[0] == 0 and not built[2] and executable.is_file(), (case, built)
                 native = run([executable], native_dir, "run")

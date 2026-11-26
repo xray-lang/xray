@@ -28,3 +28,25 @@ export fn directoryProbeCleanupPartial(first: i64, second: i64) -> i64 {
     }
     return 19
 }
+
+export fn directoryProbeCleanupManaged(token: i64, input: string) -> i64 {
+    var count = 0
+    {
+        defer { __dirClose(token) }
+        count = 1
+    }
+    return count + len(input)
+}
+
+enum DirectoryProbeError { Invalid }
+
+fn _directoryProbeFallibleCleanup(token: i64) throws(DirectoryProbeError) -> i64 {
+    if (token < 0) { throw DirectoryProbeError.Invalid }
+    defer { __dirClose(token) }
+    return 23
+}
+
+export fn directoryProbeCleanupCaller(token: i64) -> i64 {
+    defer { print(71) }
+    return try! _directoryProbeFallibleCleanup(token) // cross-frame cleanup call
+}

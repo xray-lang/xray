@@ -357,7 +357,7 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
 }
 
 static void directory_cleanup_requires_a_complete_exit(void) {
-    enum { EXACT, OMITTED_POLL, EARLY_POLL, OTHER_TOKEN, CASE_COUNT };
+    enum { EXACT, OMITTED_POLL, EARLY_POLL, OTHER_TOKEN, MANAGED_EDGE, CASE_COUNT };
     for (unsigned mode = EXACT; mode < CASE_COUNT; ++mode) {
         XrLirModule *module = NULL;
         OK(xr_lir_module_create(NULL, &module));
@@ -378,11 +378,20 @@ static void directory_cleanup_requires_a_complete_exit(void) {
         test_return(module, body, (XrLirValue){0});
 
         XrLirBlock registration = test_block(module, owner, NULL, 0);
-        XrLirBlock active = test_block(module, owner, NULL, 0);
+        XrLirType string = XR_LIR_STRING;
+        bool managed = mode == MANAGED_EDGE;
+        XrLirBlock active = test_block(module, owner, managed ? &string : NULL, managed);
         OK(xr_lir_set_entry(module, owner, registration));
         XrLirValue capture = test_constant(module, registration, scalar, 17);
         OK(xr_lir_internal_cleanup_block(module, registration, 0, cleanup.id, &capture, 1));
-        test_branch(module, registration, active, NULL, 0);
+        XrLirValue live = {0};
+        if (managed) {
+            XrLirLiteral literal = {0};
+            OK(xr_lir_add_literal(module, "held", 4, &literal));
+            XrLirInstruction construct = {.op=XR_LIR_STRING_LITERAL, .type=string, .bits=literal.id};
+            OK(xr_lir_emit_value(module, registration, &construct, &live));
+        }
+        test_branch(module, registration, active, managed ? &live : NULL, managed);
         OK(xr_lir_internal_cleanup_block(module, active, cleanup.id, 0, NULL, 0));
         XrLirInstruction run = {.op=XR_LIR_CALL, .type=XR_LIR_UNIT, .callee=cleanup,
             .operands=&capture, .operand_count=1};
@@ -391,7 +400,16 @@ static void directory_cleanup_requires_a_complete_exit(void) {
         if (mode == EARLY_POLL) OK(xr_lir_emit_effect(module, active, &poll));
         OK(xr_lir_emit_effect(module, active, &run));
         if (mode != EARLY_POLL && mode != OMITTED_POLL) OK(xr_lir_emit_effect(module, active, &poll));
-        test_return(module, active, (XrLirValue){0});
+        if (managed) {
+            XrLirBlock next = test_block(module, owner, &string, 1);
+            OK(xr_lir_block_parameter(module, active, 0, &live));
+            test_branch(module, active, next, &live, 1);
+            OK(xr_lir_block_parameter(module, next, 0, &live));
+            XrLirInstruction drop = {.op=XR_LIR_STRING_DROP, .type=XR_LIR_UNIT,
+                .operands=&live, .operand_count=1};
+            OK(xr_lir_emit_effect(module, next, &drop));
+            test_return(module, next, (XrLirValue){0});
+        } else test_return(module, active, (XrLirValue){0});
         CHECK(xr_lir_module_finish(module, NULL) == (mode == EXACT ? XR_LIR_OK : XR_LIR_VERIFY_ERROR));
         xr_lir_module_destroy(module);
     }

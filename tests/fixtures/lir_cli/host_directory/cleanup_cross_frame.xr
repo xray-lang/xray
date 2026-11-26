@@ -1,0 +1,5 @@
+import io
+import path
+
+const token = io.directoryProbeOpen(path.Path("one"))
+print(io.directoryProbeCleanupCaller(token))

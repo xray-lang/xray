@@ -142,6 +142,7 @@ typedef struct LowerFunction {
     LowerArrayCells array_cells;
     LowerLexical lexical;
     LowerViews views;
+    bool directory_scalar_frame;
 } LowerFunction;
 
 static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
@@ -1761,7 +1762,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             }
             bool guarded_arithmetic = !cleanup_body && block->frontier && lower_cleanup_arithmetic(instruction);
             if (guarded_arithmetic && arithmetic == ARITHMETIC_UNKNOWN)
-                arithmetic = lower_cleanup_arithmetic_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
+                arithmetic = lower_cleanup_scalar_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
             if ((block->frontier || cleanup_body) && !(guarded_arithmetic && arithmetic == ARITHMETIC_ALLOWED) &&
                 !lower_cleanup_instruction(c, f, b, instruction, cleanup_body, &literal_uses)) {
                 good = lower_unsupported(c, "operation needs a panic landing with active cleanup");
