@@ -474,6 +474,26 @@ static void checked_read_prepare_failure(void *context) {
     xrt_native_host_directory_cleanup_fail(test->failure, 0);
 }
 
+static void checked_read_prepare_retry(void *context) {
+    const DirectoryNames *names = context;
+    XrtHostNullableOwner *destination = NULL;
+    XrtNativeDirectoryNext call = checked_receiving_frame(&destination);
+    call.token = open_directory_path(names->path);
+    XrtBillingOwner *billing = checked_billing();
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    unsigned queries = directory_queries;
+    xrt_billing_owner_fail_after(billing, 1); /* Allocate the cache node, then fail to bind the image. */
+    CHECK(xrt_native_host_directory_next_checked(&call, NEXT_SOURCE));
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    CHECK(directory_queries == queries && !destination->present && !destination->owner);
+    checked_empty_staging(&call);
+    XrtBillingStats after = xrt_billing_owner_stats(billing);
+    CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE) && destination->present && destination->owner);
+    CHECK(after.blocks == before.blocks && after.bytes == before.bytes);
+    checked_empty_staging(&call);
+    CHECK(!xrt_native_host_directory_cleanup_close_checked(call.token, CLOSE_SOURCE) && !live_handles);
+}
+
 static void checked_read_backing_failure(void *context) {
     CheckedRead *test = context;
     XrtHostNullableOwner *destination = NULL;
@@ -507,6 +527,49 @@ static void checked_read_backing_failure(void *context) {
     checked_empty_staging(&call);
     CHECK(!xrt_native_host_directory_cleanup_close_checked(call.token, CLOSE_SOURCE) && !live_handles);
     xrt_native_host_directory_cleanup_fail(test->failure, 0);
+}
+
+typedef struct CheckedPublication {
+    const DirectoryNames *names;
+    XrtManagedFrame *arm;
+    XrtManagedOps *ops;
+    bool injected;
+} CheckedPublication;
+
+static bool checked_publish_pending(void *context) {
+    CheckedPublication *test = context;
+    if (test->arm) {
+        XrtManagedHeader *pending = NULL;
+        /* Corrupt only the destination after preflight. The directory leaf
+         * still exclusively owns the staging slot when publication refuses. */
+        CHECK(xrt_managed_slot_prepare(test->arm, RESULT_SLOT, test->ops,
+            sizeof(XrtStringBacking) + 2, &pending) == XRT_MANAGED_OK && pending);
+        test->arm = NULL;
+        test->injected = true;
+    }
+    return true;
+}
+
+static void checked_read_publish_failure(void *context) {
+    CheckedPublication *test = context;
+    XrtHostNullableOwner *destination = NULL;
+    XrtNativeDirectoryNext call = checked_receiving_frame(&destination);
+    call.token = open_directory_path(test->names->path);
+    CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE) && destination->present && destination->owner);
+    XrtManagedHeader *old = destination->owner;
+    XrtBillingOwner *billing = checked_billing();
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    const XrtBackingTypes *types = NULL;
+    CHECK(xrt_native_values_backings(xrt_value_root_active(), &types) == XRT_MANAGED_OK && types->string == old->ops);
+    test->arm = call.frame;
+    test->ops = types->string;
+    CHECK(xrt_native_host_directory_next_checked(&call, NEXT_SOURCE) && test->injected);
+    CHECK(destination->present == 1 && destination->owner == old);
+    checked_empty_staging(&call);
+    CHECK(xrt_managed_slot_abort(call.frame, call.destination) == XRT_MANAGED_OK);
+    XrtBillingStats after = xrt_billing_owner_stats(billing);
+    CHECK(before.blocks == after.blocks && before.bytes == after.bytes);
+    CHECK(!xrt_native_host_directory_cleanup_close_checked(call.token, CLOSE_SOURCE) && !live_handles);
 }
 
 static void checked_read_close_failure(void *context) {
@@ -624,6 +687,14 @@ static void exercise_next(void) {
     CHECK(xrt_run_embedded_owned(locations, &failure, next_allocation_failure, &names, &values) ==
         XRT_EXECUTION_COMPLETED);
     CHECK(xrt_value_root_empty(&values) && !live_handles);
+    CHECK(xrt_run_embedded_owned(locations, &failure, checked_read_prepare_retry, &names, &values) ==
+        XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&values) && !live_handles);
+    CheckedPublication publish = {.names=&names};
+    const XrtHostExecutionControl publication = {checked_publish_pending,&publish};
+    CHECK(xrt_run_embedded_owned_controlled(locations, &failure, checked_read_publish_failure, &publish,
+        &values, &publication) == XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&values) && !live_handles);
     exercise_checked_reads(&names);
     directory_files(root, unicode, false);
     CHECK(xrt_run_embedded_owned_controlled(locations, &failure, cancel_next_at_end, &names, &values, &control) ==
@@ -731,8 +802,18 @@ static void unix_directory(void *context) {
     XrtHostDirectoryName stale = {0};
     CHECK(xrt_host_directory_next(token, &stale) == XR_OS_IO_BAD_ARGUMENT && empty_name(&stale));
     CHECK(xrt_host_directory_close(token, &closed) == XR_OS_IO_BAD_ARGUMENT && closed);
-    int64_t retired = 0;
-    CHECK(xrt_host_directory_open(current_path, &retired) == XR_OS_IO_OK && retired > token);
+    XrtHostNullableOwner *destination = NULL;
+    XrtNativeDirectoryNext call = checked_receiving_frame(&destination);
+    CHECK(xrt_host_directory_open(current_path, &call.token) == XR_OS_IO_OK && call.token > token);
+    CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE) && destination->present && destination->owner);
+    const XrtStringBacking *first = (const XrtStringBacking *)destination->owner;
+    CHECK(first->length == length && !strcmp(first->bytes, test->expected));
+    do {
+        checked_empty_staging(&call);
+        CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE));
+    } while (destination->present);
+    CHECK(!destination->owner);
+    checked_empty_staging(&call);
     CHECK(!xrt_value_root_empty(xrt_value_root_active()));
 }
 #else

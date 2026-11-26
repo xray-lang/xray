@@ -40,7 +40,6 @@ typedef struct NativeEnvironmentImage {
     const XrtValueImage *source;
     XrtManagedLease code;
     XrtValueImagePlans *plans;
-    bool code_owned;
 } NativeEnvironmentImage;
 typedef struct NativeEnvironmentType {
     struct NativeEnvironmentType *next;
@@ -180,16 +179,21 @@ static XrtManagedStatus native_image_plans(struct XrtNativeValues *values,
         XrtManagedStatus status = xrt_managed_metadata_allocate(values->billing,sizeof(*image),&memory);
         if (status != XRT_MANAGED_OK) return status;
         image = memory;
-        *image = (NativeEnvironmentImage){.next=values->images,.source=source,.code=code};
-        values->images = image;
+        *image = (NativeEnvironmentImage){.source=source,.code=code};
         /* A Cell-only image need not leave any Code lease in its plans. Keep
          * the cache's raw identity alive independently until this node retires. */
-        if (code.context) {
-            if (!code.retain(code.context)) return XRT_MANAGED_REFCOUNT;
-            image->code_owned = true;
+        bool retained = code.context && code.retain(code.context);
+        status = code.context && !retained ? XRT_MANAGED_REFCOUNT :
+            xrt_value_image_bind(values->billing,source,code,&image->plans);
+        if (status != XRT_MANAGED_OK) {
+            xrt_managed_metadata_free(values->billing,image,sizeof(*image));
+            if (retained) code.drop(code.context);
+            return status;
         }
-        status = xrt_value_image_bind(values->billing,source,code,&image->plans);
-        if (status != XRT_MANAGED_OK) return status;
+        /* A checked caller can continue after preparation fails. Publish
+         * only complete cache entries so a later attempt can bind normally. */
+        image->next = values->images;
+        values->images = image;
     }
     *output = image->plans;
     return XRT_MANAGED_OK;
@@ -1057,10 +1061,9 @@ static void native_values_retire_managed(struct XrtNativeValues *values) {
         NativeEnvironmentImage *image = values->images;
         values->images = image->next;
         XrtManagedLease code = image->code;
-        bool code_owned = image->code_owned;
         xrt_value_image_drop(&image->plans);
         xrt_managed_metadata_free(values->billing,image,sizeof(*image));
-        if (code_owned) code.drop(code.context);
+        if (code.context) code.drop(code.context);
     }
     xrt_backing_types_drop(&values->backings);
     values->state = NULL;
