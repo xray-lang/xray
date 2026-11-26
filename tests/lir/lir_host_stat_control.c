@@ -18,12 +18,18 @@ typedef enum HostStatPhase {
     HOST_STAT_STAGED
 } HostStatPhase;
 
+typedef enum HostStatMode {
+    HOST_STAT_RUN,
+    HOST_STAT_CANCEL_STAGED,
+    HOST_STAT_FAIL_ALLOCATION
+} HostStatMode;
+
 typedef struct HostRequest {
     XrtHostExecutionControl control;
     XrtBillingOwner *billing;
     size_t baseline;
     HostStatPhase phase;
-    bool cancel_on_staged;
+    HostStatMode mode;
 } HostRequest;
 
 static bool request_current(void *context) {
@@ -46,8 +52,10 @@ static bool request_current(void *context) {
     } else if (request->phase == HOST_STAT_SCRATCH_RELEASED) {
         CHECK(blocks == request->baseline + 1);
         request->phase = HOST_STAT_STAGED;
+        if (request->mode == HOST_STAT_FAIL_ALLOCATION)
+            xrt_billing_owner_fail_after(request->billing, 0);
     }
-    return !request->cancel_on_staged || request->phase != HOST_STAT_STAGED;
+    return request->mode != HOST_STAT_CANCEL_STAGED || request->phase != HOST_STAT_STAGED;
 }
 
 #if defined(XR_TEST_NATIVE_STAT)
@@ -144,15 +152,20 @@ static XrXirValueStatus run_program(const char *path, const char *stdlib_path, H
 
 int main(int argc, char **argv) {
     CHECK(argc == 4);
-    CHECK(strcmp(argv[3], "run") == 0 || strcmp(argv[3], "cancel") == 0);
-    HostRequest request = {.cancel_on_staged = strcmp(argv[3], "cancel") == 0};
+    HostStatMode mode = HOST_STAT_RUN;
+    if (strcmp(argv[3], "cancel") == 0) mode = HOST_STAT_CANCEL_STAGED;
+    else if (strcmp(argv[3], "fail-allocation") == 0) mode = HOST_STAT_FAIL_ALLOCATION;
+    else CHECK(strcmp(argv[3], "run") == 0);
+    HostRequest request = {.mode = mode};
     request.control = (XrtHostExecutionControl){request_current, &request};
     XrXirValueStatus status = run_program(argv[1], argv[2], &request);
     CHECK(!xrt_execution_host_control() && !xrt_value_root_active());
     CHECK(request.billing && xrt_billing_owner_stats(request.billing).blocks == 1);
     xrt_billing_owner_drop(request.billing);
-    CHECK(status == (request.cancel_on_staged ? XR_XIR_VALUE_CANCELLED : XR_XIR_VALUE_OK));
+    const XrXirValueStatus expected = mode == HOST_STAT_CANCEL_STAGED ? XR_XIR_VALUE_CANCELLED :
+        (mode == HOST_STAT_FAIL_ALLOCATION ? XR_XIR_VALUE_OOM : XR_XIR_VALUE_OK);
+    CHECK(status == expected);
     CHECK(request.phase >= HOST_STAT_SCRATCH_RELEASED);
-    CHECK(!request.cancel_on_staged || request.phase == HOST_STAT_STAGED);
-    return request.cancel_on_staged ? 1 : 0;
+    CHECK(mode == HOST_STAT_RUN || request.phase == HOST_STAT_STAGED);
+    return status == XR_XIR_VALUE_OK ? 0 : 1;
 }

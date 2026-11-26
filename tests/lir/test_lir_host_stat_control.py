@@ -14,6 +14,35 @@ def invoke(work, command, expected=0, *, env=None):
     return process.stdout, process.stderr
 
 
+def compile_native(args, tests, work, source, stdlib):
+    generated = work / 'generated.c'
+    env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR='1')
+    invoke(work, [args.binary, 'build', '--c-only', source, '-o', generated], env=env)
+    native = work / ('host-native.exe' if os.name == 'nt' else 'host-native')
+    command = compile_command(args, tests / 'lir_host_stat_control.c', native)
+    # Match the runtime's UBSan settings, including UBSan-only builds.
+    if args.kind == 'msvc':
+        options = ['/DXR_TEST_NATIVE_STAT', '/D_CRT_SECURE_NO_WARNINGS', '/I' + str(work)]
+        if args.ubsan:
+            if not args.asan:
+                options.append('/clang:-fsanitize=undefined')
+            options.append('/clang:-fno-sanitize=function')
+        if args.ubsan_runtime:
+            command.append(args.ubsan_runtime)
+        if args.lld_no_tail_merge:
+            command.append('/OPT:NOLLDTAILMERGE')
+    else:
+        options = ['-DXR_TEST_NATIVE_STAT', '-I' + str(work)]
+        if args.ubsan:
+            if not args.asan:
+                options.append('-fsanitize=undefined')
+            options.append('-fno-sanitize=function')
+    command[1:1] = options
+    invoke(work, command)
+
+    return native
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('binary', 'driver', 'compiler', 'include', 'source-root', 'work'):
@@ -34,30 +63,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='stat-', dir=args.work) as directory:
         work = Path(directory).resolve()
         (work / 'file.txt').write_bytes(b'measure')
-        generated = work / 'generated.c'
-        env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR='1')
-        invoke(work, [args.binary, 'build', '--c-only', source, '-o', generated], env=env)
-        native = work / ('host-native.exe' if os.name == 'nt' else 'host-native')
-        command = compile_command(args, tests / 'lir_host_stat_control.c', native)
-        # Match the runtime's UBSan settings, including UBSan-only builds.
-        if args.kind == 'msvc':
-            options = ['/DXR_TEST_NATIVE_STAT', '/D_CRT_SECURE_NO_WARNINGS', '/I' + str(work)]
-            if args.ubsan:
-                if not args.asan:
-                    options.append('/clang:-fsanitize=undefined')
-                options.append('/clang:-fno-sanitize=function')
-            if args.ubsan_runtime:
-                command.append(args.ubsan_runtime)
-            if args.lld_no_tail_merge:
-                command.append('/OPT:NOLLDTAILMERGE')
-        else:
-            options = ['-DXR_TEST_NATIVE_STAT', '-I' + str(work)]
-            if args.ubsan:
-                if not args.asan:
-                    options.append('-fsanitize=undefined')
-                options.append('-fno-sanitize=function')
-        command[1:1] = options
-        invoke(work, command)
+        native = compile_native(args, tests, work, source, stdlib)
 
         for driver in (args.driver, native):
             ordinary = invoke(work, [driver, source, stdlib, 'run'])
@@ -65,6 +71,24 @@ def main():
             cancelled = invoke(work, [driver, source, stdlib, 'cancel'], expected=1)
             assert cancelled == (b'11\n', b'[Uncaught Cancellation] at unknown source\n'), (driver, cancelled)
         print('RBC and emitted C agree on file size and cancellation before class publication')
+
+    array_source = tests / 'programs' / 'managed-array-cleanup.xr'
+    with tempfile.TemporaryDirectory(prefix='array-cleanup-', dir=args.work) as directory:
+        work = Path(directory).resolve()
+        (work / 'file.txt').write_bytes(b'measure')
+        native = compile_native(args, tests, work, array_source, stdlib)
+        failures = []
+        for driver in (args.driver, native):
+            ordinary = invoke(work, [driver, array_source, stdlib, 'run'])
+            assert ordinary == (b'7\n0\n71\n22\n', b''), (driver, ordinary)
+            failed = invoke(work, [driver, array_source, stdlib, 'fail-allocation'], expected=1)
+            assert failed[0] == b'7\n71\n', (driver, failed)
+            assert failed[1].startswith(b'XR_RUN_6002: value operation rejected (status 3) at '), (driver, failed)
+            assert failed[1].endswith(b'managed-array-cleanup.xr:6:9-6:34\n'), (driver, failed)
+            failures.append(failed)
+        assert failures[0] == failures[1], failures
+        print('RBC and emitted C execute the same cleanup before reporting empty array allocation failure')
+
 
 
 if __name__ == '__main__':
