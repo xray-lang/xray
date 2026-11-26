@@ -356,6 +356,107 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
     }
 }
 
+static void cleanup_arithmetic_requires_the_actual_guard(void) {
+    enum { EXACT, WRONG_DIVISOR, WRONG_CODE, WRONG_SPAN, MISSING_CLEANUP,
+        EXTRA_PREDECESSOR, REGISTER_ON_PANIC, NO_FRONTIER, CASE_COUNT };
+    const XrLirType parameters[] = {XR_LIR_I64, XR_LIR_I64};
+    const XrLirSource source = {"cleanup.xr", 10, 12, 7, 12, 13};
+    for (unsigned mode = EXACT; mode < CASE_COUNT; ++mode) {
+        XrLirModule *module = NULL;
+        OK(xr_lir_module_create(NULL, &module));
+        XrLirFunction owner = test_function(module, "owner", parameters, 2, XR_LIR_I64);
+        XrLirBlock entry = test_block(module, owner, NULL, 0);
+        OK(xr_lir_set_entry(module, owner, entry));
+        XrLirInstruction panic = {.op = XR_LIR_ARITHMETIC_PANIC, .type = XR_LIR_UNIT,
+            .bits = mode == WRONG_CODE ? 421 : 420, .source = source};
+        if (mode == NO_FRONTIER) {
+            CHECK(xr_lir_set_terminator(module, entry, &panic) == XR_LIR_VERIFY_ERROR);
+            xr_lir_module_destroy(module);
+            continue;
+        }
+        XrLirFunction cleanup = {0};
+        XrLirFunctionSpec spec = {.name = "cleanup", .name_length = 7,
+            .result = XR_LIR_UNIT, .cleanup_owner = owner.id};
+        OK(xr_lir_declare_function(module, &spec, &cleanup));
+        OK(xr_lir_define_function(module, cleanup));
+        XrLirBlock cleanup_entry = test_block(module, cleanup, NULL, 0);
+        OK(xr_lir_set_entry(module, cleanup, cleanup_entry));
+        test_return(module, cleanup_entry, (XrLirValue){0});
+        XrLirBlock check = test_block(module, owner, NULL, 0);
+        XrLirBlock nonzero = test_block(module, owner, NULL, 0);
+        XrLirBlock zero = test_block(module, owner, NULL, 0);
+        XrLirValue operands[2] = {{0}}, result = {0}, condition = {0};
+        OK(xr_lir_function_parameter(module, owner, 0, &operands[0]));
+        OK(xr_lir_function_parameter(module, owner, 1, &operands[1]));
+        if (mode == EXTRA_PREDECESSOR) {
+            XrLirBlock split = test_block(module, owner, NULL, 0);
+            OK(xr_lir_internal_cleanup_block(module, split, cleanup.id, 0, NULL, 0));
+            OK(xr_lir_internal_cleanup_block(module, entry, 0, cleanup.id, NULL, 0));
+            test_branch(module, entry, split, NULL, 0);
+            XrLirValue choose = test_constant(module, split, XR_LIR_I1, 1);
+            XrLirInstruction branch = {.op = XR_LIR_CONDBR, .type = XR_LIR_UNIT, .operands = &choose,
+                .operand_count = 1, .edge_count = 2, .edges = {{.target = check}, {.target = nonzero}}};
+            OK(xr_lir_set_terminator(module, split, &branch));
+        } else {
+            OK(xr_lir_internal_cleanup_block(module, entry, 0, cleanup.id, NULL, 0));
+            test_branch(module, entry, check, NULL, 0);
+        }
+        uint32_t registration = 0;
+        if (mode == REGISTER_ON_PANIC) {
+            XrLirFunction later = {0};
+            spec.name = "later"; spec.name_length = 5;
+            OK(xr_lir_declare_function(module, &spec, &later));
+            OK(xr_lir_define_function(module, later));
+            XrLirBlock body = test_block(module, later, NULL, 0);
+            OK(xr_lir_set_entry(module, later, body));
+            test_return(module, body, (XrLirValue){0});
+            registration = later.id;
+        }
+        OK(xr_lir_internal_cleanup_block(module, check, cleanup.id, 0, NULL, 0));
+        OK(xr_lir_internal_cleanup_block(module, nonzero, cleanup.id, 0, NULL, 0));
+        OK(xr_lir_internal_cleanup_block(module, zero, cleanup.id, registration, NULL, 0));
+        XrLirValue tested[] = {operands[mode == WRONG_DIVISOR ? 0 : 1],
+            test_constant(module, check, XR_LIR_I64, 0)};
+        XrLirInstruction compare = {.op = XR_LIR_ICMP, .type = XR_LIR_I1, .predicate = XR_LIR_NE,
+            .operands = tested, .operand_count = 2, .source = source};
+        OK(xr_lir_emit_value(module, check, &compare, &condition));
+        XrLirInstruction branch = {.op = XR_LIR_CONDBR, .type = XR_LIR_UNIT, .operands = &condition,
+            .operand_count = 1, .edge_count = 2, .edges = {{.target = nonzero}, {.target = zero}}, .source = source};
+        OK(xr_lir_set_terminator(module, check, &branch));
+        XrLirInstruction divide = {.op = XR_LIR_DIV, .type = XR_LIR_I64,
+            .operands = operands, .operand_count = 2, .source = source};
+        OK(xr_lir_emit_value(module, nonzero, &divide, &result));
+        XrLirInstruction run = {.op = XR_LIR_CALL, .type = XR_LIR_UNIT, .callee = cleanup};
+        OK(xr_lir_emit_effect(module, nonzero, &run));
+        test_return(module, nonzero, result);
+        if (mode != MISSING_CLEANUP) OK(xr_lir_emit_effect(module, zero, &run));
+        if (mode == WRONG_SPAN) --panic.source.column;
+        OK(xr_lir_set_terminator(module, zero, &panic));
+        XrLirDiagnostic diagnostic = {0};
+        XrLirStatus status = xr_lir_module_finish(module, &diagnostic);
+        if (mode == EXACT) {
+            CHECK(status == XR_LIR_OK);
+            XrLirModule *copy = NULL;
+            XrLirStatus (*const rebuild[])(const XrLirModule *, XrLirModule **) = {
+                xr_lir_rebuild, xr_lir_inline, xr_lir_sccp};
+            for (unsigned i = 0; i < sizeof(rebuild) / sizeof(*rebuild); ++i) {
+                OK(rebuild[i](module, &copy));
+                OK(xr_lir_verify(copy, NULL));
+                const XrLirBlockData *landing = &copy->functions[owner.id - 1].blocks[zero.id - 1];
+                CHECK(landing->instruction_count == 2);
+                const XrLirInstructionView *exit = &landing->instructions[1].view;
+                CHECK(exit->op == XR_LIR_ARITHMETIC_PANIC && exit->bits == 420 &&
+                    exit->source.line == source.line && exit->source.column == source.column);
+                xr_lir_module_destroy(copy);
+                copy = NULL;
+            }
+        } else {
+            CHECK(status == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "cleanup frontier"));
+        }
+        xr_lir_module_destroy(module);
+    }
+}
+
 static void cleanup_callback_cannot_assert(void) {
     enum { DIRECT_ASSERTION, NESTED_RETURN, NESTED_ASSERTION, MODE_COUNT };
     for (unsigned mode = DIRECT_ASSERTION; mode < MODE_COUNT; ++mode) {
@@ -1625,6 +1726,7 @@ int main(void) {
     cleanup_requires_a_registered_exit();
     cleanup_suffix_precedes_retirement();
     cleanup_invoke_checks_the_complete_callee();
+    cleanup_arithmetic_requires_the_actual_guard();
     cleanup_callback_cannot_assert();
     startup_error_requires_an_initialized_origin();
     discarded_invoke_error_cannot_be_observed();
