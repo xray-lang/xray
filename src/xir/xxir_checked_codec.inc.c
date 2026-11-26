@@ -188,7 +188,16 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
             uint64_t bits = checked_integer(c, (uint64_t) in.immediate, 8);
             in.immediate = bits <= INT64_MAX ? (int64_t) bits : -1 - (int64_t) (UINT64_MAX - bits);
             for (unsigned j = 0; j < 2; ++j) in.type_arguments[j] = checked_u32(c, in.type_arguments[j]);
-            if (c->reading) instructions[i] = in;
+            if (c->reading) {
+                /* Contract 130 briefly interchanged these two ordinals. Their
+                 * result types are disjoint. Full operand and type verification
+                 * still applies to the decoded instruction. */
+                if (in.op == XR_XIR_BOOL_TRY_PARSE && in.type == XR_XIR_BOOL)
+                    in.op = XR_XIR_DATA_UNION_IS;
+                else if (in.op == XR_XIR_DATA_UNION_IS && in.type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
+                    in.op = XR_XIR_BOOL_TRY_PARSE;
+                instructions[i] = in;
+            }
         }
     }
     f->operand_count = checked_u32(c, f->operand_count);

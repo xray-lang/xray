@@ -343,6 +343,56 @@ static void literal_output_source_facts(void) {
     xr_xir_compile_artifact_free(closed);
 }
 
+/* A short-lived writer assigned these two instructions each other's ordinal.
+ * Their result types distinguish the wire forms on every host target. */
+static void checked_boolean_opcode_compatibility(void) {
+    _Static_assert(XR_XIR_DATA_UNION_IS == 235 && XR_XIR_BOOL_TRY_PARSE == 236,
+        "published Checked instruction ordinals must remain stable");
+    XrXirSourceResult source = compile_text(
+        "final class A {}\nfinal class B {}\n"
+        "fn isA(v: A | B) -> bool { return v is A }\n"
+        "fn parse(s:string) -> bool? { return bool.tryParse(s) }\n");
+    XrXirCheckedPacket canonical = {0}, restored = {0};
+    XIR_OK(xr_xir_compile_checked_write(source.checked, &canonical, NULL));
+    const XrXirModule *module = xr_xir_compile_artifact_module(source.checked);
+    uint8_t *legacy = xr_malloc(canonical.length);
+    CHECK(legacy);
+    memcpy(legacy, canonical.bytes, canonical.length);
+    unsigned changed = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *fn = &module->functions[f];
+        for (uint32_t i = 0; i < fn->instruction_count; ++i) {
+            const XrXirInstruction *op = &fn->instructions[i];
+            if (op->op != XR_XIR_DATA_UNION_IS && op->op != XR_XIR_BOOL_TRY_PARSE) continue;
+            uint8_t prefix[8] = {(uint8_t)op->op};
+            for (unsigned b = 0; b < 4; ++b) prefix[4+b] = (uint8_t)((uint32_t)op->type >> (8*b));
+            unsigned matches = 0;
+            for (size_t pos = 64; pos + 40 <= canonical.length; ++pos) {
+                if (memcmp(canonical.bytes + pos, prefix, sizeof(prefix))) continue;
+                legacy[pos] = op->op == XR_XIR_DATA_UNION_IS ? 236 : 235;
+                ++matches;
+            }
+            CHECK(matches == 1);
+            ++changed;
+        }
+    }
+    CHECK(changed == 2);
+    XrSHA256Context sha;
+    xr_sha256_init(&sha);
+    xr_sha256_update(&sha, legacy, 32);
+    xr_sha256_update(&sha, legacy + 64, canonical.length - 64);
+    xr_sha256_final(&sha, legacy + 32);
+    XrXirArtifact *decoded = NULL;
+    XIR_OK(xr_xir_compile_checked_read(&source.checked->context, legacy, canonical.length, &decoded, NULL));
+    XIR_OK(xr_xir_compile_checked_write(decoded, &restored, NULL));
+    CHECK(restored.length == canonical.length && !memcmp(restored.bytes, canonical.bytes, canonical.length));
+    xr_xir_compile_checked_packet_free(&restored);
+    xr_xir_compile_artifact_free(decoded);
+    xr_xir_compile_checked_packet_free(&canonical);
+    xr_free(legacy);
+    xr_xir_compile_source_result_free(&source);
+}
+
 static void integer_parse_checked_roundtrip(void) {
     XrXirSourceResult source = compile_text(
         "fn parse(text:string)->i64? { return i64.tryParse(text) }\n"
@@ -585,6 +635,7 @@ int main(int argc, char **argv) {
     scalar_input_facts();
     literal_output_source_facts();
     builtin_loader_identity();
+    checked_boolean_opcode_compatibility();
     integer_parse_checked_roundtrip();
     specialization_origins();
     lowered_origin_rejected();
