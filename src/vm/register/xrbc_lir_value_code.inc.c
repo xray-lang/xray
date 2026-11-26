@@ -622,6 +622,10 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         break;
     case XR_LIR_HOST_DIRECTORY_RETURN_GUARD:
         access.operation = XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD;
+        if (i->operand_count == 1) {
+            access.other = access.source;
+            access.source = 0;
+        }
         break;
     case XR_LIR_HOST_DIRECTORY_FAIL:
         access.operation = XR_RBC_VALUE_HOST_DIRECTORY_FAIL;

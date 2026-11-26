@@ -527,14 +527,16 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
             remaining = target;
         }
         if (term->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED) {
+            bool matching_source = lir_cleanup_same_source(&entry->source, &term->source);
             if (!directory || !from || remaining != from ||
+                (directory_loop && (frame_source || !matching_source)) ||
                 !lir_cleanup_one_predecessor(g, term->edges[0].target - 1) ||
                 !lir_cleanup_one_predecessor(g, term->edges[1].target - 1) ||
                 !(directory_loop ? lir_directory_loop_receiver(f, from, term) :
                     lir_directory_chain(m, f, owner, from, term, 0)) ||
                 !lir_directory_chain(m, f, owner, from, term, 1))
                 return false;
-            frame_source |= lir_cleanup_same_source(&entry->source, &term->source);
+            frame_source |= matching_source;
             continue;
         }
         if (term->op == XR_LIR_CHECKED_EMPTY_ARRAY) {

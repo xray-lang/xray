@@ -1509,8 +1509,11 @@ static XrtManagedStatus rbc_value_checked_directory(const XrRbcModule *module, X
         XrtNativeDirectoryStatus fault = previous->bits;
         if (!fault) fault = xrt_native_host_directory_cleanup_poll_checked(source);
         if (!fault) return XRT_MANAGED_OK;
-        XrtManagedStatus retired = rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.source},NULL);
-        if (retired != XRT_MANAGED_OK) return retired;
+        if (access.source) {
+            XrtManagedStatus retired = rbc_value_inline_replace(module,stack,
+                (RbcValueOrigin){activation,access.source},NULL);
+            if (retired != XRT_MANAGED_OK) return retired;
+        }
         xrt_native_host_directory_cleanup_fail(fault,0);
     }
     case XR_RBC_VALUE_HOST_DIRECTORY_FAIL: {
@@ -1678,8 +1681,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         XrRbcFrame *frame = &stack->frames[stack->depth - 1];
         uint32_t function = (uint32_t)frame->function;
         const XrRbcValueCode *code = xr_rbc_module_value_code(module,function);
-        if (!code || index >= code->access_count || code->directory_frame_source) return XR_RBC_INVALID;
+        if (!code || index >= code->access_count) return XR_RBC_INVALID;
         XrRbcValueAccess operation = code->accesses[index];
+        /* An ordinary scalar call can enter a directory count. Only its
+         * authenticated first word may establish the owning activation. */
+        if (code->directory_frame_source && (pc != 1 || index || source != code->directory_frame_source ||
+            operation.operation != XR_RBC_VALUE_HOST_DIRECTORY_FRAME)) return XR_RBC_INVALID;
         if (operation.operation == XR_RBC_VALUE_MANAGED_FAILURE)
             return rbc_value_report_managed_failure(stack,frame,code,operation.source,source);
         /* Only this failure chain can run with no typed activation. Its

@@ -305,7 +305,8 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
             (!access.other || rbc_value_flow_bits(state,code,access.other)) &&
             rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
     case XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD:
-        return rbc_value_flow_read(state,code,access.source,&incoming) && rbc_value_flow_bits(state,code,access.other);
+        return (!access.source || rbc_value_flow_read(state,code,access.source,&incoming)) &&
+            rbc_value_flow_bits(state,code,access.other);
     case XR_RBC_VALUE_HOST_DIRECTORY_FAIL:
         return !rbc_scope_current(state) && rbc_value_flow_bits(state,code,access.source) &&
             rbc_value_flow_bits(state,code,access.other);

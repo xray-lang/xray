@@ -417,11 +417,11 @@ static void directory_cleanup_requires_a_complete_exit(void) {
 
 static void directory_next_requires_exact_successors(void) {
     enum { COMPLETE, NO_FRAME, WRONG_SOURCE, WRONG_CAPTURE, WRONG_PRIMARY, LOOP,
-        LOOP_NOT_RETIRED, LOOP_EXIT_WRONG_SOURCE };
+        LOOP_NOT_RETIRED, LOOP_EXIT_WRONG_SOURCE, LOOP_SECOND_NEXT };
     const XrLirSource read = {"cleanup.xr", 10, 8, 12, 8, 12};
     const XrLirSource close = {"cleanup.xr", 10, 5, 9, 5, 9};
     const XrLirSource returned = {"cleanup.xr", 10, 8, 5, 8, 25};
-    for (unsigned fault = COMPLETE; fault <= LOOP_EXIT_WRONG_SOURCE; ++fault) {
+    for (unsigned fault = COMPLETE; fault <= LOOP_SECOND_NEXT; ++fault) {
         bool loop = fault >= LOOP;
         XrLirModule *m = NULL;
         OK(xr_lir_module_create(NULL, &m));
@@ -472,8 +472,32 @@ static void directory_next_requires_exact_successors(void) {
             if (fault != LOOP_NOT_RETIRED)
                 OK(xr_lir_emit_effect(m, normal, &(XrLirInstruction){.op=XR_LIR_VALUE_DROP,
                     .type=XR_LIR_UNIT,.operands=success,.operand_count=1,.source=read}));
+            XrLirBlock some = active;
+            if (fault == LOOP_SECOND_NEXT) {
+                const XrLirSource second_read = {"cleanup.xr", 10, 9, 12, 9, 12};
+                some = test_block(m, owner, NULL, 0);
+                XrLirBlock second = test_block(m, owner, &optional, 1);
+                XrLirBlock second_failure = test_block(m, owner, &status, 1);
+                OK(xr_lir_internal_cleanup_block(m, some, callback.id, 0, NULL, 0));
+                OK(xr_lir_internal_cleanup_block(m, second, callback.id, 0, NULL, 0));
+                OK(xr_lir_set_terminator(m, some, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_NEXT_CHECKED,
+                    .type=optional,.operands=&capture,.operand_count=1,.edge_count=2,
+                    .edges={{.target=second},{.target=second_failure}},.source=second_read}));
+                XrLirValue name = {0}, present = {0}, fault_status[2] = {{0}};
+                OK(xr_lir_block_parameter(m, second, 0, &name));
+                OK(xr_lir_emit_value(m, second, &(XrLirInstruction){.op=XR_LIR_NULLABLE_IS_SOME,
+                    .type=XR_LIR_I1,.operands=&name,.operand_count=1,.source=second_read}, &present));
+                OK(xr_lir_emit_effect(m, second, &(XrLirInstruction){.op=XR_LIR_VALUE_DROP,
+                    .type=XR_LIR_UNIT,.operands=&name,.operand_count=1,.source=second_read}));
+                OK(xr_lir_set_terminator(m, second, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+                    .operands=&present,.operand_count=1,.edge_count=2,.edges={{.target=active},{.target=eof}}}));
+                OK(xr_lir_block_parameter(m, second_failure, 0, &fault_status[0]));
+                OK(xr_lir_emit_value(m, second_failure, &step, &fault_status[1]));
+                OK(xr_lir_set_terminator(m, second_failure, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_FAIL,
+                    .type=XR_LIR_UNIT,.operands=fault_status,.operand_count=2,.source=second_read}));
+            }
             OK(xr_lir_set_terminator(m, normal, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
-                .operands=&tested,.operand_count=1,.edge_count=2,.edges={{.target=active},{.target=eof}}}));
+                .operands=&tested,.operand_count=1,.edge_count=2,.edges={{.target=some},{.target=eof}}}));
             if (fault == LOOP_EXIT_WRONG_SOURCE) step.source = read;
             OK(xr_lir_emit_value(m, eof, &step, &success[1]));
             OK(xr_lir_emit_effect(m, eof, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,

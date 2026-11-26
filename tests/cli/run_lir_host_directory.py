@@ -49,6 +49,7 @@ def main() -> None:
             "roundtrip": f"{name}\ntrue\n".encode(), "same_spelling": b"true\n",
             "cleanup_late": f"{name}\n".encode(), "cleanup_pair": b"17\n",
             "cleanup_next": f"{name}\ntrue\n".encode(),
+            "cleanup_loop": b"3\n0\n", "cleanup_loop_late_control": b"7\n3\n",
         }
         faults = ("invalid_close", "invalid_next", "stale_next", "cleanup_lifo_failure",
                   "cleanup_next_read_failure", "cleanup_next_dual_failure", "cleanup_next_close_failure")
@@ -59,6 +60,8 @@ def main() -> None:
             "cleanup_cross_frame": b"operation needs a panic landing with active cleanup",
             "cleanup_next_non_tail": b"operation needs a panic landing with active cleanup",
             "cleanup_next_cross_frame": b"operation needs a panic landing with active cleanup",
+            "cleanup_loop_write": b"operation needs a panic landing with active cleanup",
+            "cleanup_loop_escape": b"operation needs a panic landing with active cleanup",
         }
         for case in (*successes, *faults, *rejections):
             vm_dir, native_dir = work / (case + "-vm"), work / (case + "-native")
@@ -66,6 +69,11 @@ def main() -> None:
                 (cwd / "one").mkdir(parents=True)
                 (cwd / "one" / name).write_bytes(b"entry")
                 (cwd / "empty").mkdir()
+                if case in ("cleanup_loop", "cleanup_loop_late_control"):
+                    (cwd / "other").mkdir()
+                    (cwd / "directory").mkdir()
+                    for entry in ("Zulu", name, "alpha"):
+                        (cwd / "directory" / entry).write_bytes(b"entry")
             source = fixtures / (case + ".xr")
             executable = native_dir / ("program.exe" if os.name == "nt" else "program")
             vm = run([binary, "run", source], vm_dir, "run")
