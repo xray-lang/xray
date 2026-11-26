@@ -10,7 +10,7 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
     XrLirStatus status = lir_writable(m);
     if (status != XR_LIR_OK) return status;
     enum { string_count = sizeof(lir_string_signatures) / sizeof(*lir_string_signatures), library_id_base = 512 };
-    XrLirIntrinsic local[string_count + 3 + LIR_SLICE_CATALOG_COUNT] = {{0}};
+    XrLirIntrinsic local[string_count + 4 + LIR_SLICE_CATALOG_COUNT] = {{0}};
     XrLirIntrinsic *entries = local;
     if (flags & LIR_LIBRARY_MAP) {
         entries = xr_malloc((sizeof(local) / sizeof(*local) + LIR_MAP_CATALOG_COUNT) * sizeof(*entries));
@@ -53,6 +53,12 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
         if (status != XR_LIR_OK) { if (entries != local) xr_free(entries); return status; }
         entries[count++] = (XrLirIntrinsic){LIR_SLICE_ID_BASE + LIR_SLICE_STRICT_UTF8,
             &bytes, 1, decoded, true, LIR_SLICE_OPERATION_BASE + LIR_SLICE_STRICT_UTF8};
+    }
+    if (flags & LIR_LIBRARY_LOSSY_UTF8) {
+        status = xr_lir_slice_type(m, XR_LIR_U8, &bytes);
+        if (status != XR_LIR_OK) { if (entries != local) xr_free(entries); return status; }
+        entries[count++] = (XrLirIntrinsic){LIR_SLICE_ID_BASE + LIR_SLICE_LOSSY_UTF8,
+            &bytes, 1, XR_LIR_STRING, true, LIR_SLICE_OPERATION_BASE + LIR_SLICE_LOSSY_UTF8};
     }
     if (flags & LIR_LIBRARY_DISPLAY)
         entries[count++] = (XrLirIntrinsic){library_id_base,

@@ -196,4 +196,12 @@ static inline bool xir_strict_utf8_callable(const XrXirModule *module, uint32_t 
         !identity->capture_owner && !identity->capture_count &&
         xir_native_callable_verify(module, index) == XR_XIR_OK;
 }
+static inline bool xir_lossy_utf8_callable(const XrXirModule *module, uint32_t index) {
+    if (!module || !module->declarations || !module->declarations->functions ||
+        index >= module->function_count) return false;
+    const XrXirFunctionIdentity *identity = &module->declarations->functions[index];
+    return identity->native_callable == XR_NATIVE_CALLABLE_STRING_FROM_UTF8_LOSSY &&
+        !identity->capture_owner && !identity->capture_count &&
+        xir_native_callable_verify(module, index) == XR_XIR_OK;
+}
 #endif

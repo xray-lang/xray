@@ -88,7 +88,8 @@ typedef struct Lower {
     XrLirStateLayout state_layout;
     uint32_t *state_slots, **module_cells;
     uint8_t *state_required;
-    bool prints, string_prints, arrays, views, displays, string_appends, ranges, scalar_bindings, maps, strict_utf8;
+    bool prints, string_prints, arrays, views, displays, string_appends, ranges, scalar_bindings, maps;
+    bool strict_utf8, lossy_utf8;
     uint8_t clock_kinds;
 } Lower;
 typedef struct LowerArrayCells {
@@ -1563,6 +1564,12 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             return lower_unsupported(c, "module call authority");
         if (op->op == XR_XIR_CALL && !lower_empty_error(c->source->functions[callee].error_type))
             return lower_unsupported(c,"error-capable CALL without INVOKE");
+        if (op->op == XR_XIR_CALL && xir_lossy_utf8_callable(c->source, callee)) {
+            if (op->args[1] != 1 || op->args[0] >= f->operand_count)
+                return lower_unsupported(c, "lossy UTF-8 call argument shape");
+            c->views = c->lossy_utf8 = true;
+            return lower_receive_type(c, c->source->functions[callee].parameters[0]);
+        }
         return lower_mark(c, callee);
     }
     if (op->op == XR_XIR_PRINT) {
@@ -2780,6 +2787,13 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked call argument range");
         return false;
     }
+    if (op->op == XR_XIR_CALL && xir_lossy_utf8_callable(c->source, (uint32_t)op->immediate)) {
+        XR_CHECK(op->args[1] == 1, "the admitted lossy decoder reads one Slice");
+        XrLirValue bytes = {0};
+        return lower_slice_source(f, f->source->operands[op->args[0]], &bytes) &&
+            lower_slice_call(f, b, XR_LIR_SLICE_OP_LOSSY_UTF8, XR_LIR_U8, &bytes, 1,
+                &f->values[f->source->parameter_count + i]);
+    }
     if (op->op == XR_XIR_PRINT && op->args[1] == 1) {
         uint32_t value = f->source->operands[op->args[0]];
         if (xr_xir_operand_type(f->source, value) != XR_XIR_U8 &&
@@ -3900,7 +3914,8 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         uint32_t flags = (c.displays ? XR_LIR_SLICE_LIBRARY_DISPLAY : 0) |
             (c.string_appends ? XR_LIR_SLICE_LIBRARY_STRING : 0) |
             (c.ranges ? XR_LIR_SLICE_LIBRARY_RANGE : 0) | (c.maps ? XR_LIR_SLICE_LIBRARY_MAP : 0) |
-            (c.strict_utf8 ? XR_LIR_SLICE_LIBRARY_STRICT_UTF8 : 0);
+            (c.strict_utf8 ? XR_LIR_SLICE_LIBRARY_STRICT_UTF8 : 0) |
+            (c.lossy_utf8 ? XR_LIR_SLICE_LIBRARY_LOSSY_UTF8 : 0);
         good = lower_build(&c, xr_lir_slice_library_catalog_install(c.module, flags));
     } else if (good && c.maps)
         good = lower_build(&c, xr_lir_map_catalog_install(c.module, c.views, c.arrays, c.displays, c.string_appends, c.ranges));

@@ -9,7 +9,8 @@
 enum { LIR_SLICE_OPERATION_BASE = 65536, LIR_SLICE_ID_BASE = 1024, LIR_SLICE_CATALOG_COUNT = 19,
     LIR_SLICE_ROLE_STRIDE = XR_LIR_SLICE_OP_CLEANUP,
     LIR_SLICE_STRICT_UTF8 = 6 * LIR_SLICE_ROLE_STRIDE,
-    LIR_SLICE_STRING_BYTES = LIR_SLICE_STRICT_UTF8 + 1 };
+    LIR_SLICE_STRING_BYTES = LIR_SLICE_STRICT_UTF8 + 1,
+    LIR_SLICE_LOSSY_UTF8 = LIR_SLICE_STRING_BYTES + 1 };
 XR_FUNC bool xr_lir_internal_slice_type(const XrLirModule *m, XrLirType type) {
     return m && type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < m->type_count &&
         m->types[type - XR_LIR_TYPE_COUNT].shape.kind == XR_LIR_TYPE_SLICE;
@@ -19,6 +20,10 @@ static bool lir_slice_decode(uint32_t operation, XrLirSliceIntrinsic *output) {
     uint32_t encoded = operation - LIR_SLICE_OPERATION_BASE;
     if (encoded == LIR_SLICE_STRICT_UTF8) {
         *output = (XrLirSliceIntrinsic){.operation=XR_LIR_SLICE_OP_STRICT_UTF8, .element=XR_LIR_U8};
+        return true;
+    }
+    if (encoded == LIR_SLICE_LOSSY_UTF8) {
+        *output = (XrLirSliceIntrinsic){.operation=XR_LIR_SLICE_OP_LOSSY_UTF8, .element=XR_LIR_U8};
         return true;
     }
     if (encoded == LIR_SLICE_STRING_BYTES) {
@@ -54,6 +59,7 @@ static uint32_t lir_slice_signature(XrLirSliceIntrinsic shape, XrLirType slice,
     case XR_LIR_SLICE_OP_LEN: *result = XR_LIR_I64; return 1;
     case XR_LIR_SLICE_OP_GET: *result = shape.element; parameters[1] = XR_LIR_I64; return 2;
     case XR_LIR_SLICE_OP_COPY: *result = XR_LIR_ARRAY; return 1;
+    case XR_LIR_SLICE_OP_LOSSY_UTF8: *result = XR_LIR_STRING; return 1;
     case XR_LIR_SLICE_OP_END: *result = XR_LIR_UNIT; return 1;
     default: return 0;
     }
@@ -100,13 +106,15 @@ XR_FUNC XrLirStatus xr_lir_slice_operation(const XrLirModule *m, XrLirSliceOpera
 }
 XR_FUNC XrLirStatus xr_lir_slice_library_catalog_install(XrLirModule *m, uint32_t flags) {
     if (flags & ~(XR_LIR_SLICE_LIBRARY_DISPLAY | XR_LIR_SLICE_LIBRARY_STRING |
-            XR_LIR_SLICE_LIBRARY_RANGE | XR_LIR_SLICE_LIBRARY_MAP | XR_LIR_SLICE_LIBRARY_STRICT_UTF8)) return XR_LIR_INVALID_ARGUMENT;
+            XR_LIR_SLICE_LIBRARY_RANGE | XR_LIR_SLICE_LIBRARY_MAP | XR_LIR_SLICE_LIBRARY_STRICT_UTF8 |
+            XR_LIR_SLICE_LIBRARY_LOSSY_UTF8)) return XR_LIR_INVALID_ARGUMENT;
     uint32_t catalog = LIR_LIBRARY_SLICE | LIR_LIBRARY_ARRAY;
     if (flags & XR_LIR_SLICE_LIBRARY_DISPLAY) catalog |= LIR_LIBRARY_DISPLAY;
     if (flags & XR_LIR_SLICE_LIBRARY_STRING) catalog |= LIR_LIBRARY_STRING;
     if (flags & XR_LIR_SLICE_LIBRARY_RANGE) catalog |= LIR_LIBRARY_RANGE;
     if (flags & XR_LIR_SLICE_LIBRARY_MAP) catalog |= LIR_LIBRARY_MAP;
     if (flags & XR_LIR_SLICE_LIBRARY_STRICT_UTF8) catalog |= LIR_LIBRARY_STRICT_UTF8;
+    if (flags & XR_LIR_SLICE_LIBRARY_LOSSY_UTF8) catalog |= LIR_LIBRARY_LOSSY_UTF8;
     return lir_library_catalog(m, catalog);
 }
 XR_FUNC XrLirStatus xr_lir_slice_catalog_install(XrLirModule *m) {

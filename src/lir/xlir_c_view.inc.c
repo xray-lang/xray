@@ -262,6 +262,22 @@ static void c_view_instruction(LirC *c, const XrLirInstructionView *v, uint32_t 
         c_text(c, ");\n    }\n");
         return;
     }
+    if (shape.operation == XR_LIR_SLICE_OP_LOSSY_UTF8) {
+        const XrLirValueHome *result = &c->homes->values[v->result];
+        if (result->owner_count != 1 || result->temporary_first_owner == SIZE_MAX) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "lossy decoding has no String result staging");
+            return;
+        }
+        c_values_ensure(c, source);
+        c_format(c, "    { XrtManagedStatus status = xrt_window_lossy_utf8(xrl_frame, %zu, &",
+            result->temporary_first_owner);
+        c_value(c, value);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        c_array_require(c, source);
+        c_text(c, "    }\n");
+        c_values_publish_leaf(c, v->result, source);
+        return;
+    }
     if (shape.operation == XR_LIR_SLICE_OP_COPY) {
         const XrLirValueHome *result = &c->homes->values[v->result];
         if (result->owner_count != 1 || result->temporary_first_owner == SIZE_MAX) {
