@@ -61,6 +61,109 @@ static XrLirValue block_parameter(XrLirModule *m, XrLirBlock b, uint32_t index) 
     return value;
 }
 
+static void test_directory_frame_after_entry_jump(void) {
+    const XrLirSource read = {"count.xr", 8, 12, 7, 12, 7};
+    const XrLirSource close = {"count.xr", 8, 9, 5, 9, 5};
+    const XrLirSource returned = {"count.xr", 8, 15, 9, 15, 9};
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirType scalar = XR_LIR_I64, status = XR_LIR_U64, optional = XR_LIR_TYPE_INVALID;
+    OK(xr_lir_nullable_type(m, XR_LIR_STRING, &optional));
+    XrLirFunction caller = test_function(m, "caller", NULL, 0, scalar);
+    XrLirFunction count = test_function(m, "count", NULL, 0, scalar), cleanup = {0};
+    OK(xr_lir_declare_function(m, &(XrLirFunctionSpec){.name="cleanup",.name_length=7,
+        .parameters=&scalar,.parameter_count=1,.result=XR_LIR_UNIT,.cleanup_owner=count.id}, &cleanup));
+    OK(xr_lir_define_function(m, cleanup));
+    XrLirBlock body = test_block(m, cleanup, NULL, 0);
+    OK(xr_lir_set_entry(m, cleanup, body));
+    XrLirValue formal = parameter(m, cleanup, 0);
+    OK(xr_lir_emit_effect(m, body, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE,
+        .type=XR_LIR_UNIT,.operands=&formal,.operand_count=1,.source=close}));
+    test_return(m, body, (XrLirValue){0});
+
+    XrLirBlock normal = test_block(m, count, &optional, 1);
+    XrLirBlock failure = test_block(m, count, &status, 1);
+    XrLirBlock active = test_block(m, count, NULL, 0), eof = test_block(m, count, NULL, 0);
+    XrLirBlock entry = test_block(m, count, NULL, 0);
+    OK(xr_lir_set_entry(m, count, entry));
+    OK(xr_lir_emit_effect(m, entry, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_FRAME,
+        .type=XR_LIR_UNIT,.source=read}));
+    XrLirValue token = test_constant(m, entry, scalar, 0);
+    OK(xr_lir_internal_cleanup_block(m, entry, 0, cleanup.id, &token, 1));
+    test_branch(m, entry, active, NULL, 0);
+    OK(xr_lir_internal_cleanup_block(m, active, cleanup.id, 0, NULL, 0));
+    OK(xr_lir_set_terminator(m, active, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_NEXT_CHECKED,
+        .type=optional,.operands=&token,.operand_count=1,.edge_count=2,
+        .edges={{.target=normal},{.target=failure}},.source=read}));
+
+    OK(xr_lir_internal_cleanup_block(m, normal, cleanup.id, 0, NULL, 0));
+    XrLirValue name = block_parameter(m, normal, 0), some = {0};
+    OK(xr_lir_emit_value(m, normal, &(XrLirInstruction){.op=XR_LIR_NULLABLE_IS_SOME,
+        .type=XR_LIR_I1,.operands=&name,.operand_count=1,.source=read}, &some));
+    OK(xr_lir_emit_effect(m, normal, &(XrLirInstruction){.op=XR_LIR_VALUE_DROP,
+        .type=XR_LIR_UNIT,.operands=&name,.operand_count=1,.source=read}));
+    OK(xr_lir_set_terminator(m, normal, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+        .operands=&some,.operand_count=1,.edge_count=2,.edges={{.target=active},{.target=eof}}}));
+
+    XrLirInstruction retire = {.op=XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED,.type=status,
+        .bits=cleanup.id,.operands=&token,.operand_count=1,.source=close};
+    OK(xr_lir_internal_cleanup_block(m, eof, cleanup.id, 0, NULL, 0));
+    XrLirValue closed = {0};
+    OK(xr_lir_emit_value(m, eof, &retire, &closed));
+    OK(xr_lir_emit_effect(m, eof, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,
+        .type=XR_LIR_UNIT,.operands=&closed,.operand_count=1,.source=returned}));
+    OK(xr_lir_set_terminator(m, eof, &(XrLirInstruction){.op=XR_LIR_RET,
+        .type=XR_LIR_UNIT,.operands=&token,.operand_count=1,.source=returned}));
+    XrLirValue failed[2] = {block_parameter(m, failure, 0), {0}};
+    OK(xr_lir_emit_value(m, failure, &retire, &failed[1]));
+    OK(xr_lir_set_terminator(m, failure, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_FAIL,
+        .type=XR_LIR_UNIT,.operands=failed,.operand_count=2,.source=read}));
+
+    XrLirBlock call = test_block(m, caller, NULL, 0);
+    OK(xr_lir_set_entry(m, caller, call));
+    XrLirValue value = {0};
+    OK(xr_lir_emit_value(m, call, &(XrLirInstruction){.op=XR_LIR_CALL,
+        .type=scalar,.callee=count}, &value));
+    test_return(m, call, value);
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = compile(m, caller);
+    xr_lir_module_destroy(m);
+
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    const XrRbcFunction *count_code = NULL;
+    for (uint32_t n = 0; n < module->function_count; ++n) {
+        const XrRbcValueCode *values = xr_rbc_module_value_code(module, n);
+        if (values && values->directory_frame_source) count_code = &module->functions[n];
+    }
+    CHECK(count_code && (count_code->code[0] & 255u) == XR_RBC_JMP);
+    size_t marker = 1 + (count_code->code[0] >> 8);
+    CHECK(marker > 1 && xr_rbc_value_instruction_valid(module, count_code, marker));
+    uint32_t *words = (uint32_t *)(void *)count_code->code;
+    uint32_t original = words[0];
+    const uint32_t wrong_entries[] = {XR_RBC_RET0, XR_RBC_JMP,
+        XR_RBC_JMP | ((uint32_t)XR_RBC_JUMP_MAX << 8), XR_RBC_JMP | UINT32_C(0xfffffe00)};
+    for (size_t n = 0; n < sizeof(wrong_entries) / sizeof(*wrong_entries); ++n) {
+        words[0] = wrong_entries[n];
+        CHECK(!xr_rbc_value_instruction_valid(module, count_code, marker));
+    }
+    words[0] = original;
+    CHECK(xr_rbc_value_instruction_valid(module, count_code, marker));
+
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    XrXirValueStatus fault = XR_XIR_VALUE_OK;
+    uint32_t source = 0;
+    const XrtLocationOwner *locations = NULL;
+    CHECK(xr_rbc_outcome_value_failure(outcome, &fault, &source, &locations));
+    const XrtSourceLocation *location = xrt_locations_get(locations, source);
+    CHECK(fault == XR_XIR_VALUE_BAD_ARGUMENT && location &&
+        location->line == read.line && location->column == read.column);
+    CHECK(xr_rbc_execution_free(&execution) == XR_OS_IO_OK);
+    xr_rbc_outcome_free(&outcome);
+    xr_rbc_program_destroy(program);
+}
+
 static void test_raw_typed_error_rejected(void) {
     XrtLocationOwner *locations=NULL;
     CHECK(xrt_locations_create(NULL,0,&locations)==XRT_LOCATION_OK);
@@ -2230,6 +2333,7 @@ int main(void) {
     test_edge_moves();
     test_owned_arithmetic_panics();
     test_raw_typed_error_rejected();
+    test_directory_frame_after_entry_jump();
     test_cleanup_root_authority(false);
     test_cleanup_root_authority(true);
     test_owned_try_assert();

@@ -1684,9 +1684,10 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         if (!code || index >= code->access_count) return XR_RBC_INVALID;
         XrRbcValueAccess operation = code->accesses[index];
         /* An ordinary scalar call can enter a directory count. Only its
-         * authenticated first word may establish the owning activation. */
-        if (code->directory_frame_source && (pc != 1 || index || source != code->directory_frame_source ||
-            operation.operation != XR_RBC_VALUE_HOST_DIRECTORY_FRAME)) return XR_RBC_INVALID;
+         * authenticated entry marker may establish the owning activation. */
+        if (code->directory_frame_source &&
+            (operation.operation != XR_RBC_VALUE_HOST_DIRECTORY_FRAME || source != code->directory_frame_source ||
+             !pc || !rbc_directory_frame_entry(&module->functions[function],pc - 1))) return XR_RBC_INVALID;
         if (operation.operation == XR_RBC_VALUE_MANAGED_FAILURE)
             return rbc_value_report_managed_failure(stack,frame,code,operation.source,source);
         /* Only this failure chain can run with no typed activation. Its

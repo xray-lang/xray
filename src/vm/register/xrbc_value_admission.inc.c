@@ -622,6 +622,13 @@ static bool rbc_checked_array_home(const XrRbcModule *module, const XrRbcValueCo
         home->first_owner != home->temporary_first_owner && frame->owned_offsets[home->first_owner] == home->offset;
 }
 
+/* Block order need not match the semantic entry. The entry prefix may
+ * contain only the compiler's direct jump to that initial instruction. */
+static bool rbc_directory_frame_entry(const XrRbcFunction *function, size_t pc) {
+    return !pc || (pc < function->code_count && pc - 1 <= XR_RBC_JUMP_MAX &&
+        (function->code[0] & 255u) == XR_RBC_JMP && (function->code[0] >> 8) == pc - 1);
+}
+
 XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     const XrRbcFunction *function, size_t pc) {
     if (!module || !function || !function->code || pc>=function->code_count) return false;
@@ -797,7 +804,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             (a.operation == XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE ?
                 rbc_value_scalar(code, function, a.source, XR_RBC_BITS) : !a.source);
     case XR_RBC_VALUE_HOST_DIRECTORY_FRAME:
-        return !index && !a.index && !a.result && !a.source && !a.other &&
+        return rbc_directory_frame_entry(function,pc) && !a.index && !a.result && !a.source && !a.other &&
             function->source_ids[pc] == code->directory_frame_source;
     case XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED:
     case XR_RBC_VALUE_CHECKED_EMPTY_ARRAY:
