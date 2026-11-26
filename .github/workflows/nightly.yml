@@ -62,7 +62,7 @@ jobs:
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
     - name: Configure
-      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+      run: cmake --preset default
 
     - name: Run tier t3
       run: python3 ./scripts/t.py t3
