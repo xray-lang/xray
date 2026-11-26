@@ -317,7 +317,7 @@ static bool sum_valid(const XrtValuePlanSpec *spec) {
     return spec->owned_count == 0;
 }
 static bool spec_valid(const XrtValuePlanSpec *spec) {
-    if (!spec->alignment || spec->alignment > alignof(XrMaxAlignment) || (spec->alignment & (spec->alignment - 1)) ||
+    if (!spec->alignment || spec->alignment > XR_ALIGNMENT_LIMIT || (spec->alignment & (spec->alignment - 1)) ||
         spec->size % spec->alignment || !lease_valid(spec->code) ||
         (!xrt_value_kind_has_fields(spec->kind) && spec->kind != XRT_VALUE_SUM && spec->field_count) ||
         (spec->kind != XRT_VALUE_ENVIRONMENT && (spec->capture_count || spec->entry.signature || spec->entry.ordinal)) ||

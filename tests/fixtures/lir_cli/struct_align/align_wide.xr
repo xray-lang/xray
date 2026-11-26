@@ -1,10 +1,23 @@
-// Sixteen is beyond the alignment every supported platform can promise.
+// An explicit alignment above the platform's fundamental one is a supported
+// declaration promise: the record is padded to it and both backends store it
+// inline with the same stride.
 struct Wide align(16) {
-    value: bool
+    value: i64
+}
+
+struct Neighbour {
+    wide: Wide
+    n: i64
+}
+
+fn show(label: string, w: Wide, n: i64) {
+    print(label + "=" + string(w.value) + "," + string(n))
 }
 
 fn main() {
-    print(1)
+    show("a", Wide{value: 7}, 41)
+    var pair = Neighbour{wide: Wide{value: -3}, n: 9}
+    print("b=" + string(pair.wide.value) + "," + string(pair.n))
 }
 
 main()

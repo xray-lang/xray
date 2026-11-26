@@ -292,8 +292,11 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     }
     if (code->homes && !code->homes->owned_frame_needed && code->homes->frame.payload_size) {
         /* The one inline payload region starts on its own alignment, not the
-         * eight-byte part alignment used by the metadata around it. */
-        offset = (offset + payload_alignment - 1) & ~(payload_alignment - 1);
+         * eight-byte part alignment used by the metadata around it. The block
+         * itself only promises the fundamental alignment, so the offset follows
+         * the allocated address and the reserved padding covers that shift. */
+        uintptr_t start = (uintptr_t)memory + offset;
+        offset += (payload_alignment - start % payload_alignment) % payload_alignment;
         activation->payload = (uint8_t *)memory + offset;
         offset += code->homes->frame.payload_size;
         memset(activation->payload,0,code->homes->frame.payload_size);

@@ -1,0 +1,23 @@
+// The largest admitted promise: a 64-byte aligned record, used as a field of a
+// neighbouring record and passed by value. The generated C static assertions pin
+// its sizeof and alignof; both backends must print the same values.
+struct CachePadded align(64) {
+    tag: i64
+}
+
+struct Holder {
+    padded: CachePadded
+    n: i64
+}
+
+fn read(p: CachePadded) -> i64 {
+    return p.tag
+}
+
+fn main() {
+    var h = Holder{padded: CachePadded{tag: 5}, n: 6}
+    print("tag=" + string(h.padded.tag) + "," + string(h.n))
+    print("read=" + string(read(CachePadded{tag: 11})))
+}
+
+main()

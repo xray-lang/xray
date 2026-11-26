@@ -198,6 +198,16 @@ XRAY_API void xrt_managed_metadata_free(XrtBillingOwner *owner, void *memory, si
     XR_CHECK(owner && memory && bytes, "metadata free consumes its exact allocation under a live billing reference");
     billing_free(owner, memory, bytes);
 }
+XRAY_API XrtManagedStatus xrt_managed_metadata_allocate_aligned(XrtBillingOwner *owner, size_t bytes,
+    size_t alignment, void **empty) {
+    if (!owner || !bytes || !empty || *empty) return XRT_MANAGED_ARGUMENT;
+    return billing_allocate_aligned(owner, bytes, alignment, empty);
+}
+XRAY_API void xrt_managed_metadata_free_aligned(XrtBillingOwner *owner, void *memory, size_t bytes,
+    size_t alignment) {
+    XR_CHECK(owner && memory && bytes, "metadata free consumes its exact allocation under a live billing reference");
+    billing_free_aligned(owner, memory, bytes, alignment);
+}
 
 static bool type_spec_valid(const XrtRuntimeTypeSpec *spec) {
     if (!spec || spec->fixed_size < sizeof(XrtManagedHeader) || spec->alignment < alignof(XrtManagedHeader) ||

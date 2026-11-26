@@ -92,6 +92,10 @@ XRAY_API XrtBillingStats xrt_billing_owner_stats(const XrtBillingOwner *);
  * callbacks run outside the reservation lock and must return normally. */
 XRAY_API XrtManagedStatus xrt_managed_metadata_allocate(XrtBillingOwner *, size_t, void **empty);
 XRAY_API void xrt_managed_metadata_free(XrtBillingOwner *, void *, size_t);
+/* An owned metadata block whose base must honour an explicit alignment above
+ * the fundamental one; the release mirrors the same alignment. */
+XRAY_API XrtManagedStatus xrt_managed_metadata_allocate_aligned(XrtBillingOwner *, size_t, size_t, void **empty);
+XRAY_API void xrt_managed_metadata_free_aligned(XrtBillingOwner *, void *, size_t, size_t);
 
 /* This leaf physical schema contains sorted, nonoverlapping owned child pointer
  * fields in its fixed prefix and in each capacity row after fixed_size. A row

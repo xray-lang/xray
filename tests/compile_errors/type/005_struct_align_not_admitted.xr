@@ -1,11 +1,11 @@
-// An alignment beyond the portable maximum is refused at the declaration.
+// An alignment beyond what every supported C provider can pass by value is
+// refused at the declaration.
 //
-// `align(N)` is carried through the value plan up to one portable allocation
-// alignment; a larger promise cannot be kept on every supported platform, so
-// the declaration is rejected instead of silently running at the natural
-// alignment. Positive coverage for the admitted range lives in the alignment
-// lowering fixture, so opening this gate further needs that range raised first.
-struct Aligned16 align(16) {
+// `align(N)` is carried through the value plan up to 64; a larger promise cannot
+// be carried in every storage position on every supported platform yet, so the
+// declaration is rejected instead of being broken at a call site. Positive
+// coverage for the admitted range lives in the structure-alignment gate.
+struct Aligned128 align(128) {
     value: i64
 }
 print(1)

@@ -1,0 +1,11 @@
+// 128 is beyond what every supported C provider can pass by value, so the
+// declaration is refused rather than promised and then broken at a call site.
+struct CachePadded align(128) {
+    tag: i64
+}
+
+fn main() {
+    print(1)
+}
+
+main()

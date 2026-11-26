@@ -40,10 +40,13 @@ typedef struct XrXirNominalField {
 #define XR_XIR_NOMINAL_ALIGN_SHIFT 2u
 #define XR_XIR_NOMINAL_ALIGN_BITS 6u
 #define XR_XIR_NOMINAL_ALIGN_MASK (((1u << XR_XIR_NOMINAL_ALIGN_BITS) - 1u) << XR_XIR_NOMINAL_ALIGN_SHIFT)
-/* One alignment promise must hold on every platform this language runs on, so
- * the admitted maximum is the portable allocation alignment rather than the
- * host C library's. Raising it needs a per-plan over-aligned allocator first. */
-#define XR_XIR_NOMINAL_ALIGN_LIMIT 8u
+/* The admitted maximum follows what every supported C provider can carry in
+ * every storage position, including a by-value parameter: 128-byte aligned
+ * aggregates are honoured in fields, locals and returns, but MSVC refuses to
+ * pass one by value (C2719), so the language limit stops at 64 until generated
+ * C passes over-aligned aggregates by pointer. The managed allocator and frame
+ * payload placement can already place up to XR_ALIGNMENT_LIMIT. */
+#define XR_XIR_NOMINAL_ALIGN_LIMIT 64u
 static inline uint32_t xr_xir_nominal_alignment(uint32_t flags) {
     uint32_t encoded = (flags & XR_XIR_NOMINAL_ALIGN_MASK) >> XR_XIR_NOMINAL_ALIGN_SHIFT;
     return encoded ? 1u << ((encoded - 1u) & 31u) : 0;

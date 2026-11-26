@@ -288,8 +288,8 @@ static bool module_state_storage(XrtModuleState *state, const XrtModuleLayout *l
 } while (0)
     size_t payload = layout->view.payload_size ? layout->view.payload_size : 1;
     size_t scratch = layout->scratch_size ? layout->scratch_size : 1;
-    MODULE_PART(payload, payload, uint8_t, alignof(XrMaxAlignment));
-    MODULE_PART(scratch, scratch, uint8_t, alignof(XrMaxAlignment));
+    MODULE_PART(payload, payload, uint8_t, layout->view.payload_alignment);
+    MODULE_PART(scratch, scratch, uint8_t, layout->view.payload_alignment);
     MODULE_PART(flags, layout->view.slot_count, uint8_t, alignof(uint8_t));
     MODULE_PART(modules, layout->view.module_count, uint8_t, alignof(uint8_t));
     MODULE_PART(construction, layout->view.slot_count, uint32_t, alignof(uint32_t));
@@ -312,7 +312,8 @@ XRAY_API XrtModuleStatus xrt_module_state_new(XrtModuleLayout *layout, XrtBillin
     if (!xrt_module_layout_retain(layout)) return XRT_MANAGED_REFCOUNT;
     if (!xrt_billing_owner_retain(billing)) { xrt_module_layout_drop(&layout); return XRT_MANAGED_REFCOUNT; }
     void *memory = NULL;
-    XrtManagedStatus status = xrt_managed_metadata_allocate(billing, bytes, &memory);
+    XrtManagedStatus status = xrt_managed_metadata_allocate_aligned(
+        billing, bytes, layout->view.payload_alignment, &memory);
     if (status != XRT_MANAGED_OK) {
         xrt_module_layout_drop(&layout); xrt_billing_owner_drop(billing); return status;
     }
@@ -364,9 +365,10 @@ XRAY_API void xrt_module_state_drop(XrtModuleState **owner) {
     state->busy = true;
     XrtBillingOwner *billing = state->billing;
     size_t bytes = state->bytes;
+    size_t alignment = state->layout->view.payload_alignment;
     xrt_managed_root_destroy(&state->temporary_root);
     xrt_module_layout_drop(&state->layout);
-    xrt_managed_metadata_free(billing, state, bytes);
+    xrt_managed_metadata_free_aligned(billing, state, bytes, alignment);
     xrt_billing_owner_drop(billing);
 }
 XRAY_API XrtModuleStatus xrt_module_begin(XrtModuleState *state, uint32_t module) {

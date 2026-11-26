@@ -9,6 +9,16 @@
     "stdout": "w=9\n",
     "stderr": ""
   },
+  "align_wide": {
+    "exit": 0,
+    "stdout": "a=7,41\nb=-3,9\n",
+    "stderr": ""
+  },
+  "align_high": {
+    "exit": 0,
+    "stdout": "tag=5,6\nread=11\n",
+    "stderr": ""
+  },
   "align_below": {
     "source_error": ":2:8: error: explicit struct alignment is below the alignment its fields require"
   },
@@ -18,10 +28,13 @@
   "align_odd": {
     "source_error": ":2:19: error: align requires a positive power of two"
   },
-  "align_limit": {
+  "align_128": {
+    "source_error": ":3:8: error: explicit struct alignment exceeds the supported maximum"
+  },
+  "align_over": {
     "source_error": ":2:8: error: explicit struct alignment exceeds the supported maximum"
   },
-  "align_wide": {
+  "align_limit": {
     "source_error": ":2:8: error: explicit struct alignment exceeds the supported maximum"
   },
   "align_one": {

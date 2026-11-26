@@ -567,7 +567,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F09",
-        "first_diagnostic": "stdlib/simd/simd.xr:6:15: error: explicit struct alignment exceeds the supported maximum"
+        "first_diagnostic": "stdlib/simd/simd.xr:823:15: error: this fixed array element is not yet supported by the compiler"
       }
     },
     {
@@ -1108,7 +1108,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F09",
-        "first_diagnostic": "stdlib/simd/simd.xr:6:15: error: explicit struct alignment exceeds the supported maximum"
+        "first_diagnostic": "stdlib/simd/simd.xr:823:15: error: this fixed array element is not yet supported by the compiler"
       }
     },
     {

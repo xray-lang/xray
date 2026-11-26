@@ -16,9 +16,20 @@ fn pair(label: string, on: bool, n: i64) {
     print(label + "=" + string(p.flag.on) + "," + string(p.n))
 }
 
+struct Padded align(16) {
+    tag: i64
+}
+
+struct Holder {
+    padded: Padded
+    n: i64
+}
+
 fn main() {
     pair("a", true, 41)
     pair("b", false, -7)
+    var held = Holder{padded: Padded{tag: 5}, n: 6}
+    print("high=" + string(held.padded.tag) + "," + string(held.n))
     var same = Flag{on: true}
     var again = Flag{on: true}
     print("same=" + string(same.on == again.on))

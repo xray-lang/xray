@@ -30,7 +30,7 @@ static bool module_layout_shape(const XrtModuleLayoutSpec *spec) {
     if (!spec || !spec->values || !spec->module_count || !spec->modules ||
         (spec->slot_count != 0) != (spec->slots != NULL) ||
         (spec->dependency_count != 0) != (spec->dependencies != NULL) ||
-        !spec->payload_alignment || spec->payload_alignment > alignof(XrMaxAlignment) ||
+        !spec->payload_alignment || spec->payload_alignment > XR_ALIGNMENT_LIMIT ||
         (spec->payload_alignment & (spec->payload_alignment - 1)) ||
         spec->payload_size % spec->payload_alignment) return false;
     uint32_t first = 0;

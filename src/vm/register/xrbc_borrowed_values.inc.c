@@ -6,6 +6,7 @@
  *
  * xrbc_borrowed_values.inc.c - Complete receiving checks for owner-free raw Fn homes
  */
+#include "base/xmax_align.h"
 typedef struct RbcBorrowedRange { size_t begin,end; } RbcBorrowedRange;
 static int rbc_borrowed_range_compare(const void *left,const void *right) {
     const RbcBorrowedRange *a=left,*b=right;
@@ -76,7 +77,10 @@ static XrRbcStatus rbc_borrowed_home_admit(const XrRbcModule *module,const XrRbc
     if (homes->result_type && image->types[homes->result_type-1].kind==XRT_VALUE_FUNCTION) return XR_RBC_INVALID;
     if (homes->value_count!=code->value_count || !homes->values || homes->frame.slot_count ||
         homes->owned_frame_needed || homes->workspace_count ||
-        (homes->frame.payload_size && homes->frame.payload_alignment!=_Alignof(XrtFunction)) ||
+        (homes->frame.payload_size && (!homes->frame.payload_alignment ||
+            homes->frame.payload_alignment < _Alignof(XrtFunction) ||
+            (homes->frame.payload_alignment & (homes->frame.payload_alignment - 1)) ||
+            homes->frame.payload_alignment > XR_ALIGNMENT_LIMIT)) ||
         (homes->event_count && !homes->events) || (homes->byte_count && !homes->bytes) ||
         (homes->edge_count && !homes->edges) || (homes->transfer_count && !homes->transfers)) return XR_RBC_INVALID;
     size_t count=(size_t)code->value_count+1;

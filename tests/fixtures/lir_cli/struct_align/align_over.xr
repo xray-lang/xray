@@ -1,0 +1,10 @@
+// Twice the shared limit is refused at the declaration, not silently clamped.
+struct TooWide align(256) {
+    value: bool
+}
+
+fn main() {
+    print(1)
+}
+
+main()

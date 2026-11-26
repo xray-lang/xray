@@ -65,8 +65,8 @@ enum {
  * base-2 exponent occupies the same flags above the kind-specific bits. */
 #define XR_LIR_RECORD_ALIGN_SHIFT 2u
 #define XR_LIR_RECORD_ALIGN_MASK (63u << XR_LIR_RECORD_ALIGN_SHIFT)
-/* The admitted maximum is the portable one; see the Checked declaration limit. */
-#define XR_LIR_RECORD_ALIGN_LIMIT 8u
+/* The admitted maximum matches the Checked declaration and the runtime allocator. */
+#define XR_LIR_RECORD_ALIGN_LIMIT 64u
 static inline uint32_t xr_lir_record_alignment(uint32_t flags) {
     uint32_t encoded = (flags & XR_LIR_RECORD_ALIGN_MASK) >> XR_LIR_RECORD_ALIGN_SHIFT;
     return encoded ? 1u << ((encoded - 1u) & 31u) : 0;
