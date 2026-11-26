@@ -141,21 +141,36 @@ XR_FUNC XrtManagedStatus xrt_native_values_backings(XrtValueRoot *owner, const X
     return status;
 }
 
-static struct XrtNativeValues *native_values(uint32_t source_id) {
-    XrtValueRoot *owner = xrt_value_root_current(source_id);
+static XrtManagedStatus native_values_prepare_root(XrtValueRoot *owner, struct XrtNativeValues **output) {
     XrtBillingOwner *billing = NULL;
     XrtManagedStatus status = xrt_native_values_prepare(owner, &billing);
-    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+    if (status != XRT_MANAGED_OK) return status;
     struct XrtNativeValues *values = owner->managed;
     if (!values->root) {
         status = xrt_managed_root_new(billing, &values->root);
-        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+        if (status != XRT_MANAGED_OK) return status;
     }
+    *output = values;
+    return XRT_MANAGED_OK;
+}
+
+static struct XrtNativeValues *native_values(uint32_t source_id) {
+    struct XrtNativeValues *values = NULL;
+    XrtManagedStatus status = native_values_prepare_root(xrt_value_root_current(source_id), &values);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
     return values;
 }
 
 XRAY_API XrtManagedRoot *xrt_native_managed_root(uint32_t source_id) {
     return native_values(source_id)->root;
+}
+XRAY_API XrtManagedStatus xrt_native_managed_root_checked(XrtManagedRoot **empty) {
+    XrtValueRoot *owner = xrt_value_root_active();
+    if (!empty || *empty || !owner || owner->implicit) return XRT_MANAGED_ARGUMENT;
+    struct XrtNativeValues *values = NULL;
+    XrtManagedStatus status = native_values_prepare_root(owner, &values);
+    if (status == XRT_MANAGED_OK) *empty = values->root;
+    return status;
 }
 XR_FUNC XrtManagedRoot *xrt_native_values_existing_root(const XrtValueRoot *owner) {
     return owner && owner->managed ? owner->managed->root : NULL;
@@ -206,20 +221,55 @@ static XrtManagedStatus native_capture_plan(struct XrtNativeValues *values,
     XrtManagedStatus status = native_image_plans(values, source, code, &plans);
     return status == XRT_MANAGED_OK ? xrt_value_image_get(plans, type_id, output) : status;
 }
-static XrtBoundInlineArray native_inline_array(const XrtValueImage *image, uint32_t type, uint32_t source) {
-    struct XrtNativeValues *values = native_values(source);
-    XrtBoundInlineArray binding = {0};
-    XrtManagedStatus status;
+static XrtManagedStatus native_inline_array_lookup(struct XrtNativeValues *values,
+    const XrtValueImage *image, uint32_t type, XrtBoundInlineArray *binding) {
     if (values->state && values->state_image == image)
-        status = xrt_module_state_inline_array(values->state, type, &binding);
-    else {
-        const XrtValueImagePlans *plans = NULL;
-        status = native_image_plans(values, image, (XrtManagedLease){0}, &plans);
-        if (status == XRT_MANAGED_OK) status = xrt_value_image_inline_array(plans, type, &binding);
-    }
-    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+        return xrt_module_state_inline_array(values->state, type, binding);
+    const XrtValueImagePlans *plans = NULL;
+    XrtManagedStatus status = native_image_plans(values, image, (XrtManagedLease){0}, &plans);
+    return status == XRT_MANAGED_OK ? xrt_value_image_inline_array(plans, type, binding) : status;
+}
+
+static XrtBoundInlineArray native_inline_array(const XrtValueImage *image, uint32_t type, uint32_t source) {
+    XrtBoundInlineArray binding = {0};
+    XrtManagedStatus status = native_inline_array_lookup(native_values(source), image, type, &binding);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
     return binding;
 }
+
+static XrtValueRoot *native_array_execution(XrtManagedFrame *frame) {
+    XrtValueRoot *owner = xrt_value_root_active();
+    if (!owner || owner->implicit || !native_values_accepts_work(owner)) return NULL;
+    XrtManagedRoot *root = xrt_native_values_existing_root(owner);
+    return root && xrt_managed_frame_root(frame) == root ? owner : NULL;
+}
+
+/* Run after the cold plan setup. No call can observe or change the private
+ * destination between this inspection and the backing worker's own guard. */
+static XrtManagedStatus native_array_empty_slot(XrtManagedFrame *frame, size_t slot) {
+    XrtManagedSlotLocation location = {0};
+    XrtManagedStatus status = xrt_managed_slot_location(frame, slot, &location);
+    if (status != XRT_MANAGED_OK) return status;
+    status = xrt_managed_domain_enter(location);
+    if (status != XRT_MANAGED_OK) return status;
+    if (*location.owner || location.pending->value || location.pending->allocation_bytes)
+        status = XRT_MANAGED_ARGUMENT;
+    xrt_managed_domain_leave(location);
+    return status;
+}
+
+XRAY_API XrtManagedStatus xrt_native_array_inline_empty_checked(XrtManagedFrame *frame, size_t slot,
+    const XrtValueImage *image, uint32_t type) {
+    XrtValueRoot *owner = native_array_execution(frame);
+    if (!owner) return XRT_MANAGED_ARGUMENT;
+    XrtBoundInlineArray binding = {0};
+    XrtManagedStatus status = native_inline_array_lookup(owner->managed, image, type, &binding);
+    if (status != XRT_MANAGED_OK) return status;
+    status = native_array_empty_slot(frame, slot);
+    if (status != XRT_MANAGED_OK) return status;
+    return xrt_array_backing_inline_create(frame, slot, binding.ops, NULL, 0, 0);
+}
+
 XRAY_API void xrt_native_array_inline_create(XrtManagedFrame *frame, size_t slot,
     const XrtValueImage *image, uint32_t type, const void *rows, size_t count, uint32_t source) {
     XrtBoundInlineArray binding = native_inline_array(image,type,source);
@@ -840,6 +890,19 @@ XRAY_API void xrt_native_array_create(XrtManagedFrame *frame, size_t slot,
     }
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
 }
+
+XRAY_API XrtManagedStatus xrt_native_array_empty_checked(XrtManagedFrame *frame, size_t slot,
+    XrtBackingArrayKind kind) {
+    XrtValueRoot *owner = native_array_execution(frame);
+    if (!owner || (unsigned)kind >= XRT_BACKING_ARRAY_COUNT) return XRT_MANAGED_ARGUMENT;
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(owner, &types);
+    if (status != XRT_MANAGED_OK) return status;
+    status = native_array_empty_slot(frame, slot);
+    if (status != XRT_MANAGED_OK) return status;
+    return xrt_array_backing_with_capacity_create(frame, slot, types, kind, 0);
+}
+
 XRAY_API void xrt_native_array_repeat(XrtManagedFrame *frame, size_t slot,
     const XrtArrayItem *item, int64_t length, uint32_t source_id) {
     const XrtBackingTypes *types = NULL;

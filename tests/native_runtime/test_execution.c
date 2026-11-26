@@ -1276,8 +1276,95 @@ static void standalone_state_string(void) {
     xrt_run_standalone_state(&map,state_string_root,&completed,&spec);
     CHECK(completed == 1 && !xrt_value_root_active());
 }
+
+static void checked_empty_array_root(void *context) {
+    XrtBillingOwner *billing = context;
+    XrtManagedRoot *root = NULL;
+    xrt_billing_owner_fail_after(billing, 0);
+    CHECK(xrt_native_managed_root_checked(&root) == XRT_MANAGED_OOM && !root);
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    managed_require(xrt_native_managed_root_checked(&root));
+    CHECK(root && root == xrt_native_managed_root(1));
+    CHECK(xrt_native_managed_root_checked(&root) == XRT_MANAGED_ARGUMENT);
+
+    XrtManagedFrame *frame = NULL;
+    managed_require(xrt_managed_frame_enter(root, 1, &frame));
+    XrtManagedRoot *foreign = NULL;
+    XrtManagedFrame *foreign_frame = NULL;
+    managed_require(xrt_managed_root_new(billing, &foreign));
+    managed_require(xrt_managed_frame_enter(foreign, 1, &foreign_frame));
+    CHECK(xrt_native_array_empty_checked(foreign_frame, 0, XRT_BACKING_ARRAY_I64) == XRT_MANAGED_ARGUMENT);
+    managed_require(xrt_managed_root_destroy(&foreign));
+
+    const XrtBackingTypes *backings = NULL;
+    managed_require(xrt_native_values_backings(xrt_value_root_active(), &backings));
+    CHECK(backings);
+    for (unsigned k = 0; k < XRT_BACKING_ARRAY_COUNT; ++k) {
+        XrtBackingArrayKind kind = (XrtBackingArrayKind)k;
+        XrtBillingStats before = xrt_billing_owner_stats(billing);
+        XrtManagedHeader *owner = NULL;
+        xrt_billing_owner_fail_after(billing, 0);
+        CHECK(xrt_native_array_empty_checked(frame, 0, kind) == XRT_MANAGED_OOM);
+        managed_require(xrt_managed_slot_borrow(frame, 0, &owner));
+        CHECK(!owner && xrt_billing_owner_stats(billing).bytes == before.bytes);
+        xrt_billing_owner_fail_after(billing, SIZE_MAX);
+        managed_require(xrt_native_array_empty_checked(frame, 0, kind));
+        managed_require(xrt_managed_slot_borrow(frame, 0, &owner));
+        CHECK(xrt_backing_array_matches(owner, kind));
+        const XrtArrayBacking *array = (const XrtArrayBacking *)owner;
+        CHECK(!array->length && !array->capacity);
+        CHECK(xrt_native_array_empty_checked(frame, 0, kind) == XRT_MANAGED_ARGUMENT);
+        XrtManagedHeader *unchanged = NULL;
+        managed_require(xrt_managed_slot_borrow(frame, 0, &unchanged));
+        CHECK(unchanged == owner);
+        managed_require(xrt_managed_slot_drop(frame, 0));
+        CHECK(xrt_billing_owner_stats(billing).bytes == before.bytes);
+    }
+
+    static const size_t offsets[] = {0};
+    static const XrtValueImageSlot fields[] = {{.type=1}};
+    static const XrtValueImageType types[] = {
+        {.kind=XRT_VALUE_STRING,.size=8,.alignment=8,.owned_count=1},
+        {.kind=XRT_VALUE_TUPLE,.size=8,.alignment=8,.owned_count=1,.field_count=1},
+        {.kind=XRT_VALUE_ARRAY_INLINE,.size=8,.alignment=8,.owned_count=1,.element=2}
+    };
+    static const XrtValueImage image = {.types=types,.type_count=3,.slots=fields,.slot_count=1,
+        .owned_offsets=offsets,.owned_count=1};
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    xrt_billing_owner_fail_after(billing, 1);
+    CHECK(xrt_native_array_inline_empty_checked(frame, 0, &image, 3) == XRT_MANAGED_OOM);
+    XrtManagedHeader *owner = NULL;
+    managed_require(xrt_managed_slot_borrow(frame, 0, &owner));
+    CHECK(!owner && xrt_billing_owner_stats(billing).bytes == before.bytes);
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    managed_require(xrt_native_array_inline_empty_checked(frame, 0, &image, 3));
+    managed_require(xrt_managed_slot_borrow(frame, 0, &owner));
+    CHECK(owner);
+    const XrtArrayBacking *array = (const XrtArrayBacking *)owner;
+    CHECK(!array->length && !array->capacity);
+    CHECK(xrt_native_array_inline_empty_checked(frame, 0, &image, 1) == XRT_MANAGED_ARGUMENT);
+    managed_require(xrt_managed_frame_leave(root, frame));
+}
+
+static void managed_checked_empty_arrays(void) {
+    XrtManagedRoot *unbound = NULL;
+    CHECK(xrt_native_managed_root_checked(&unbound) == XRT_MANAGED_ARGUMENT && !unbound);
+    XrtLocationOwner *source = locations("array-empty.xr");
+    XrtExecutionFailure failure = {0};
+    XrtValueRoot value_root = {0};
+    XrtBillingOwner *billing = NULL;
+    managed_require(xrt_native_values_prepare(&value_root, &billing));
+    CHECK(xrt_billing_owner_retain(billing));
+    CHECK(xrt_run_embedded_owned(source, &failure, checked_empty_array_root, billing, &value_root) ==
+        XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&value_root) && !xrt_value_root_active());
+    CHECK(xrt_billing_owner_stats(billing).blocks == 1);
+    xrt_billing_owner_drop(billing);
+    xrt_locations_release(source);
+}
 int main(void) {
     managed_scopes();
+    managed_checked_empty_arrays();
     managed_host_path_scratch();
     managed_metadata_retirement();
     managed_host_stat_control();

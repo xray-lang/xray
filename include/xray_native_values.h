@@ -27,6 +27,9 @@ extern "C" {
  * scalar and POD-only code does not call this function or allocate a root.
  * The execution owns all frames before entering fallible generated code. */
 XRAY_API XrtManagedRoot *xrt_native_managed_root(uint32_t source_id);
+/* Borrow the root of the active, explicit execution. Failure preserves the
+ * null receiver and returns the original preparation status to its caller. */
+XRAY_API XrtManagedStatus xrt_native_managed_root_checked(XrtManagedRoot **empty);
 /* Call only after the failing kernel operation has returned and released its
  * exclusive guard. Status must be a non-OK managed status, never a diagnostic
  * enum cast. Recovery aborts pending allocations before committed owners.

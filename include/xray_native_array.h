@@ -70,6 +70,13 @@ XRAY_API void xrt_native_array_create(XrtManagedFrame *, size_t slot,
  * A successful read borrows the row while the caller keeps the Array live. */
 XRAY_API void xrt_native_array_inline_create(XrtManagedFrame *, size_t slot,
     const XrtValueImage *, uint32_t type, const void *rows, size_t count, uint32_t source_id);
+/* Allocate the actual zero-capacity backing in a private empty slot of the
+ * active execution. An error leaves the destination unchanged and does not
+ * transfer control. Inline arrays use the receiver's exact image binding. */
+XRAY_API XrtManagedStatus xrt_native_array_empty_checked(XrtManagedFrame *, size_t slot,
+    XrtBackingArrayKind kind);
+XRAY_API XrtManagedStatus xrt_native_array_inline_empty_checked(XrtManagedFrame *, size_t slot,
+    const XrtValueImage *, uint32_t type);
 /* Append through a verified local binding in the active execution frame. */
 XRAY_API void xrt_native_array_inline_class_append(XrtPlace, size_t temporary,
     const XrtValueImage *, uint32_t type, XrtManagedHeader *item, uint32_t source_id);
