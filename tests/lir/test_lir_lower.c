@@ -16,6 +16,8 @@
 #include "lir/xlir_lower.h"
 #include "lir/xlir_source.h"
 #include "lir/xlir_builder.h"
+#include "lir/xlir_internal.h"
+#include "lir/xlir_rebuild.h"
 #include "lir/xlir_verify.h"
 #include "lir/xlir_print.h"
 #include "lir/xlir_state.h"
@@ -1415,6 +1417,72 @@ static void class_method_state_control(void) {
 #include "lir_lower_array_cases.h"
 #include "lir_fixed_lower_cases.h"
 #include "lir_view_lower_cases.h"
+
+static void checked_empty_array_contract(void) {
+    SourceFixture fixture = source_fixture(
+        "fn construct(first: i64, second: i64) {\n"
+        "    defer { print(first) }\n"
+        "    const names: Array<string> = []\n"
+        "    print(len(names))\n"
+        "    print(second)\n"
+        "}\n"
+        "construct(7, 13)\n");
+    XrLirLowerRequest request = {fixture.closed, fixture.source.snapshot, false};
+    XrLirLowered lowered = {0};
+    OK(xr_lir_lower_program_checked(&request, &lowered, NULL));
+    source_fixture_free(&fixture);
+
+    XrLirModule *module = lowered.module;
+    XrLirInstructionView *site = NULL;
+    XrLirFunctionData *activation = NULL;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        XrLirFunctionData *function = &module->functions[f];
+        for (uint32_t b = 0; b < function->block_count; ++b) {
+            XrLirBlockData *block = &function->blocks[b];
+            XrLirInstructionView *last = &block->instructions[block->instruction_count - 1].view;
+            if (last->op != XR_LIR_CHECKED_EMPTY_ARRAY) continue;
+            CHECK(!site);
+            site = last;
+            activation = function;
+        }
+    }
+    CHECK(site && activation && activation->parameter_count == 2);
+    XrLirBlockData *failure = &activation->blocks[site->edges[1].target - 1];
+    CHECK(failure->instruction_count == 2);
+    XrLirInstructionView *print = &failure->instructions[0].view;
+    XrLirInstructionView *terminate = &failure->instructions[1].view;
+    CHECK(print->op == XR_LIR_CALL && print->operand_count == 1 &&
+        print->operands[0] == activation->parameters[0] && terminate->op == XR_LIR_MANAGED_FAILURE);
+
+    uint64_t family = site->bits;
+    uint32_t incompatible = 0;
+    OK(xr_lir_array_operation(module, XR_LIR_I64, XR_LIR_ARRAY_OP_NEW, &incompatible));
+    CHECK(incompatible != family);
+    site->bits = incompatible;
+    XrLirDiagnostic diagnostic = {0};
+    CHECK(xr_lir_verify(module, &diagnostic) == XR_LIR_VERIFY_ERROR &&
+        strstr(diagnostic.message, "edge"));
+    site->bits = family;
+
+    const uint32_t *capture = print->operands;
+    print->operands = &activation->parameters[1];
+    CHECK(xr_lir_verify(module, &diagnostic) == XR_LIR_VERIFY_ERROR);
+    print->operands = capture;
+
+    XrLirSource original = terminate->source;
+    ++terminate->source.line;
+    ++terminate->source.end_line;
+    CHECK(xr_lir_verify(module, &diagnostic) == XR_LIR_VERIFY_ERROR);
+    terminate->source = original;
+
+    OK(xr_lir_verify(module, NULL));
+    XrLirModule *copy = NULL;
+    OK(xr_lir_rebuild(module, &copy));
+    OK(xr_lir_verify(copy, NULL));
+    xr_lir_module_destroy(copy);
+    xr_lir_lowered_free(&lowered);
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 3);
     callable_source();
@@ -1428,6 +1496,7 @@ int main(int argc, char **argv) {
     view_cold_checked_sources(argv[1]);
     fixed_sources();
     array_sources();
+    checked_empty_array_contract();
     offset_sources();
     imported_time(argv[1]);
     clock_sources(argv[1]);

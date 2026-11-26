@@ -72,23 +72,28 @@ def main():
             assert cancelled == (b'11\n', b'[Uncaught Cancellation] at unknown source\n'), (driver, cancelled)
         print('RBC and emitted C agree on file size and cancellation before class publication')
 
-    array_source = tests / 'programs' / 'managed-array-cleanup.xr'
-    with tempfile.TemporaryDirectory(prefix='array-cleanup-', dir=args.work) as directory:
-        work = Path(directory).resolve()
-        (work / 'file.txt').write_bytes(b'measure')
-        native = compile_native(args, tests, work, array_source, stdlib)
-        failures = []
-        for driver in (args.driver, native):
-            ordinary = invoke(work, [driver, array_source, stdlib, 'run'])
-            assert ordinary == (b'7\n0\n71\n22\n', b''), (driver, ordinary)
-            failures.append(invoke(work, [driver, array_source, stdlib, 'fail-allocation'], expected=1))
-        assert failures[0] == failures[1], failures
-        output, diagnostic = failures[0]
-        assert output == b'7\n71\n', failures
-        assert diagnostic.startswith(b'XR_RUN_6002: value operation rejected (status 3) at '), failures
-        assert diagnostic.endswith(b'managed-array-cleanup.xr:6:9-6:34\n'), failures
-        print('RBC and emitted C execute the same cleanup before reporting empty array allocation failure')
-
+    array_cases = (
+        ('managed-array-cleanup.xr', b'7\n0\n71\n22\n', b'7\n71\n', b'6:9-6:34'),
+        ('managed-inline-array-cleanup.xr', b'7\n69\n0\n23\n77\n22\n',
+         b'7\n69\n23\n77\n', b'19:11-19:37'),
+    )
+    for name, expected_normal, expected_failure, location in array_cases:
+        array_source = tests / 'programs' / name
+        with tempfile.TemporaryDirectory(prefix='array-cleanup-', dir=args.work) as directory:
+            work = Path(directory).resolve()
+            (work / 'file.txt').write_bytes(b'measure')
+            native = compile_native(args, tests, work, array_source, stdlib)
+            failures = []
+            for driver in (args.driver, native):
+                ordinary = invoke(work, [driver, array_source, stdlib, 'run'])
+                assert ordinary == (expected_normal, b''), (name, driver, ordinary)
+                failures.append(invoke(work, [driver, array_source, stdlib, 'fail-allocation'], expected=1))
+            assert failures[0] == failures[1], (name, failures)
+            output, diagnostic = failures[0]
+            assert output == expected_failure, (name, failures)
+            assert diagnostic.startswith(b'XR_RUN_6002: value operation rejected (status 3) at '), (name, failures)
+            assert diagnostic.endswith(name.encode() + b':' + location + b'\n'), (name, failures)
+        print(f'RBC and emitted C agree on managed allocation cleanup for {name}')
 
 
 if __name__ == '__main__':

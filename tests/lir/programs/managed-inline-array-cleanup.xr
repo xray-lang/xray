@@ -1,0 +1,24 @@
+import io
+import path
+
+struct Entry {
+    label: string
+}
+
+fn prepareFault() {
+    print(io.fileSize(path.from("file.txt")))
+}
+
+fn construct() {
+    prepareFault()
+    var number: i64 = 11
+    defer { print(number) }
+    defer { print(23) }
+    number = 77
+    print(69)
+    const entries: Array<Entry> = []
+    print(len(entries))
+}
+
+construct()
+print(22)
