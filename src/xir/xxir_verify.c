@@ -132,6 +132,11 @@ static uint32_t operand_count(const XrXirFunction *function,const XrXirInstructi
         xr_xir_function_is_generator(module,(uint32_t)(function-module->functions)),op);
 }
 
+XR_FUNC uint32_t xir_instruction_operand_count(const XrXirFunction *function,
+    const XrXirInstruction *op, const XrXirModule *module) {
+    return operand_count(function,op,module);
+}
+
 #include "xxir_cell_provenance.inc.c"
 
 static XrXirStatus declaration_instruction(const XrXirFunction *function,

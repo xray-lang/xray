@@ -26,6 +26,9 @@
 #include "../xir/xxir_data_union.h"
 #include "../xir/xxir_type_description.h"
 #include "../xir/xxir_class_cycles.h"
+#include "../xir/xxir_class_method_internal.h"
+#include "../xir/xxir_compile_memory.h"
+#include "../xir/xxir_effect_contract_internal.h"
 #include "../xir/xxir_class_hierarchy_internal.h"
 #include "../xir/xxir_map.h"
 #include "../xir/xxir_operand_roles.h"
@@ -59,6 +62,15 @@ typedef struct LowerCatchPlan {
     XrXirInstruction *branches;
     uint32_t *predecessors;
 } LowerCatchPlan;
+typedef struct LowerClassCall {
+    uint32_t callee, receiver;
+} LowerClassCall;
+
+typedef struct LowerClassCallPlan {
+    LowerClassCall *calls;
+    bool planned;
+} LowerClassCallPlan;
+
 typedef struct Lower {
     const XrLirLowerRequest *request;
     const XrXirModule *source;
@@ -67,6 +79,9 @@ typedef struct Lower {
     uint8_t *error_types;
     LowerRecordFrame *constructed_frames;
     XrXirClassCycles *class_cycles;
+    XirClassMethodIndex *class_method_index;
+    LowerClassCallPlan *class_calls;
+    bool allow_class_calls;
     XrXirType *class_types;
     XrLirType *closure_types;
     uint8_t **owned_bindings;
@@ -717,6 +732,9 @@ static bool lower_known(const XrXirInstruction *instruction) {
     }
 }
 
+static bool lower_empty_error(XrXirType);
+#include "xlir_lower_class_calls.inc.c"
+
 typedef struct LowerStorageCall { uint32_t caller; size_t next; } LowerStorageCall;
 
 static bool lower_storage_call(const Lower *c, const XrXirFunction *f,
@@ -740,6 +758,18 @@ static bool lower_storage_call(const Lower *c, const XrXirFunction *f,
     return true;
 }
 
+static bool lower_storage_target(const Lower *c, uint32_t caller, uint32_t instruction, uint32_t *target) {
+    const LowerClassCall *method = lower_class_call(c,caller,instruction);
+    if (method) {
+        *target = method->callee - 1;
+        return true;
+    }
+    const XrXirFunction *body = &c->source->functions[caller];
+    const XrXirInstruction *op = &body->instructions[instruction];
+    return (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE || op->op == XR_XIR_FUNCTION_REF) &&
+        lower_storage_call(c,body,op,target);
+}
+
 /* One trailing capability follows the reverse call and code-reference graph. Local SSA
  * Cells do not require module storage, and storage-free helpers keep their ABI. */
 static bool lower_storage_closures(Lower *c) {
@@ -753,6 +783,10 @@ static bool lower_storage_closures(Lower *c) {
     if (!good) goto done;
     for (uint32_t f = 0; f < count; ++f) {
         heads[f] = SIZE_MAX;
+        if (c->active_modules[c->source->declarations->functions[f].module] && !lower_class_calls_plan(c,f)) {
+            good = false;
+            goto done;
+        }
         const XrXirFunction *body = &c->source->functions[f];
         for (uint32_t i = 0; i < body->instruction_count; ++i) {
             const XrXirInstruction *op = &body->instructions[i];
@@ -760,8 +794,7 @@ static bool lower_storage_closures(Lower *c) {
                 op->op == XR_XIR_SLOT_PLACE)
                 c->state_required[f] = 1;
             uint32_t target;
-            if ((op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE || op->op == XR_XIR_FUNCTION_REF) &&
-                lower_storage_call(c, body, op, &target)) {
+            if (lower_storage_target(c,f,i,&target)) {
                 if (edges == SIZE_MAX) {
                     lower_error(c, XR_LIR_OUT_OF_MEMORY, "module call edge count overflow");
                     good = false;
@@ -778,10 +811,8 @@ static bool lower_storage_closures(Lower *c) {
         const XrXirFunction *body = &c->source->functions[f];
         if (c->state_required[f]) queue[queued++] = f;
         for (uint32_t i = 0; i < body->instruction_count; ++i) {
-            const XrXirInstruction *op = &body->instructions[i];
             uint32_t target;
-            if ((op->op != XR_XIR_CALL && op->op != XR_XIR_INVOKE && op->op != XR_XIR_FUNCTION_REF) ||
-                !lower_storage_call(c, body, op, &target)) continue;
+            if (!lower_storage_target(c,f,i,&target)) continue;
             XR_DCHECK(at < edges, "the immutable call graph retains its counted edges");
             calls[at] = (LowerStorageCall){f, heads[target]};
             heads[target] = at++;
@@ -826,6 +857,7 @@ static uint32_t lower_module_cell(const Lower *c, uint32_t function, uint32_t va
 }
 
 static void lower_modules_free(Lower *c) {
+    lower_class_calls_free(c);
     xr_free(c->error_types);
     xr_xir_class_cycles_free(c->class_cycles);
     xr_free(c->class_types);
@@ -1372,7 +1404,27 @@ static bool lower_cleanup_instruction(Lower *c, const XrXirFunction *f, uint32_t
     }
 }
 
+static bool lower_direct_call_valid(Lower *c, uint32_t callee, bool invoke) {
+    const XrXirDeclarations *d = c->source->declarations;
+    uint32_t owner = d->functions[c->function].module;
+    uint32_t target = d->functions[callee].module;
+    if (c->initializer_owner[callee] != UINT32_MAX)
+        return lower_unsupported(c, "call back to module initializer");
+    if (owner >= d->module_count || target >= d->module_count ||
+        !c->active_modules[target] || !xr_xir_module_imports(d,owner,target))
+        return lower_unsupported(c, "module call authority");
+    if (!invoke && !lower_empty_error(c->source->functions[callee].error_type))
+        return lower_unsupported(c,"error-capable CALL without INVOKE");
+    return true;
+}
+
 static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
+    if (op->op == XR_XIR_CLASS_METHOD_REF) {
+        const LowerClassCall *method = lower_class_call(c,c->function,c->instruction + 1);
+        if (!method) return lower_unsupported(c,xr_xir_op_name(op->op));
+        return lower_receive_type(c,xr_xir_operand_type(f,method->receiver)) &&
+            lower_direct_call_valid(c,method->callee - 1,false) && lower_mark(c,method->callee - 1);
+    }
     if (op->op == XR_XIR_CLEANUP_REGISTER) return lower_cleanup_admit(c, f, op);
     if (op->op == XR_XIR_CLEANUP_LEAVE) return true;
     if (op->op == XR_XIR_CLEANUP_ERROR)
@@ -1576,24 +1628,15 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
             return lower_unsupported(c,xr_xir_op_name(op->op));
         if (op->immediate < 0 || (uint64_t) op->immediate >= c->source->function_count)
             return lower_unsupported(c, "unresolved direct call");
-        const XrXirDeclarations *d = c->source->declarations;
         uint32_t callee = (uint32_t)op->immediate;
-        uint32_t owner = d->functions[c->function].module;
-        uint32_t target = d->functions[callee].module;
-        if (c->initializer_owner[callee] != UINT32_MAX)
-            return lower_unsupported(c, "call back to module initializer");
-        if (owner >= d->module_count || target >= d->module_count ||
-            !c->active_modules[target] || !xr_xir_module_imports(d, owner, target))
-            return lower_unsupported(c, "module call authority");
-        if (op->op == XR_XIR_CALL && !lower_empty_error(c->source->functions[callee].error_type))
-            return lower_unsupported(c,"error-capable CALL without INVOKE");
+        if (!lower_direct_call_valid(c,callee,op->op == XR_XIR_INVOKE)) return false;
         if (op->op == XR_XIR_CALL && xir_lossy_utf8_callable(c->source, callee)) {
             if (op->args[1] != 1 || op->args[0] >= f->operand_count)
                 return lower_unsupported(c, "lossy UTF-8 call argument shape");
             c->views = c->lossy_utf8 = true;
             return lower_receive_type(c, c->source->functions[callee].parameters[0]);
         }
-        return lower_mark(c, callee);
+        return lower_mark(c,callee);
     }
     if (op->op == XR_XIR_PRINT) {
         if (op->args[1] != 1 || op->args[0] >= f->operand_count)
@@ -1667,7 +1710,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     c->instruction = UINT32_MAX;
     const XrXirFunction *f = &c->source->functions[function];
     XR_DCHECK(c->active[function], "only executable functions enter admission");
-    if (!lower_receive_type(c, f->result)) return false;
+    if (!lower_class_calls_plan(c,function) || !lower_receive_type(c, f->result)) return false;
     if (lower_function_error(c,function)) {
         XrLirRecordIdentity identity = {0};
         if (!xr_lir_internal_invoke_result_type(c->module,lower_type(c,f->result)))
@@ -2872,24 +2915,29 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
             return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &call));
         }
     }
-    bool indirect = op->op == XR_XIR_CALL_INDIRECT;
-    uint32_t hidden = op->op == XR_XIR_PRINT || indirect ? 0 : lower_hidden_state(c, (uint32_t)op->immediate);
-    if (hidden > UINT32_MAX - op->args[1]) return lower_unsupported(c, "module argument count");
-    if (indirect && op->args[1] == UINT32_MAX) return lower_unsupported(c, "indirect argument count");
-    uint32_t count = op->args[1] + hidden + indirect;
+    const LowerClassCall *method = lower_class_call(c,c->function,i);
+    bool indirect = op->op == XR_XIR_CALL_INDIRECT && !method;
+    bool direct = op->op == XR_XIR_CALL || method;
+    uint32_t callee_index = method ? method->callee - 1 : (uint32_t)op->immediate;
+    uint32_t parameters = method ? 1u : op->args[1];
+    uint32_t hidden = direct ? lower_hidden_state(c,callee_index) : 0;
+    if (hidden > UINT32_MAX - parameters) return lower_unsupported(c, "module argument count");
+    if (indirect && parameters == UINT32_MAX) return lower_unsupported(c, "indirect argument count");
+    uint32_t count = parameters + hidden + indirect;
     XrLirValue *arguments = lower_alloc(c, count, sizeof(*arguments));
     if (count && !arguments)
         return false;
     bool good = true;
-    if (indirect) good = lower_value(f, (uint32_t)op->immediate, &arguments[0]);
+    if (method) good = lower_value(f,method->receiver,&arguments[0]);
+    else if (indirect) good = lower_value(f, (uint32_t)op->immediate, &arguments[0]);
     for (uint32_t a = 0; a < op->args[1]; ++a)
         if (!lower_value(f, f->source->operands[op->args[0] + a], &arguments[a + indirect])) {
             good = false;
             break;
         }
-    if (good && op->op == XR_XIR_CALL) {
-        const XrLirFunctionData *callee = &c->module->functions[c->functions[(uint32_t)op->immediate].id - 1];
-        for (uint32_t a = 0; a < op->args[1] && good; ++a)
+    if (good && direct) {
+        const XrLirFunctionData *callee = &c->module->functions[c->functions[callee_index].id - 1];
+        for (uint32_t a = 0; a < parameters && good; ++a)
             if (callee->parameter_types[a] == XR_LIR_ARRAY_REF)
                 good = lower_array_borrow(f, b, &arguments[a]);
             else if(callee->parameter_types[a]==XR_LIR_SET_I64_REF)
@@ -2900,7 +2948,7 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
                 good = lower_string_borrow(f, b, &arguments[a]);
     }
     if (hidden && good) {
-        arguments[op->args[1]] = f->state;
+        arguments[parameters] = f->state;
         if (!f->state.id) {
             lower_error(c, XR_LIR_VERIFY_ERROR, "stateful call lacks its execution capability");
             good = false;
@@ -2912,7 +2960,7 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         .operands = arguments,
         .operand_count = count,
         .source = lower_source(c),
-        .callee = indirect ? (XrLirFunction){0} : op->op == XR_XIR_PRINT ? c->print : c->functions[(uint32_t) op->immediate]};
+        .callee = indirect ? (XrLirFunction){0} : op->op == XR_XIR_PRINT ? c->print : c->functions[callee_index]};
     if (op->op == XR_XIR_CALL && lower_core_builtin(c,(uint32_t)op->immediate)==XR_CORE_BUILTIN_ASSERT_EQUAL) {
         const XrXirFunction *target=&c->source->functions[op->immediate];
         if (count!=3 || !target->instruction_count || target->instructions[0].op!=XR_XIR_EQUAL) {
@@ -2938,7 +2986,7 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         call.op = XR_LIR_ASSERT_CONDITION;
         call.callee = (XrLirFunction){0};
     }
-    if (op->op==XR_XIR_CALL && call.op==XR_LIR_CALL) call.source=lower_source_at(c,true);
+    if (direct && call.op == XR_LIR_CALL) call.source = lower_source_at(c,true);
     if (good)
         good = lower_build(c, call.type == XR_LIR_UNIT
                                   ? xr_lir_emit_effect(c->module, f->blocks[b], &call)
@@ -3143,6 +3191,12 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         if (f->lexical.count && !lower_lexical_events(f, b, f->lexical.before[i])) return false;
         const XrXirInstruction *op = &f->source->instructions[i];
         uint32_t result = f->source->parameter_count + i;
+        if (op->op == XR_XIR_CLASS_METHOD_REF) {
+            if (!lower_class_call(c,c->function,i + 1))
+                return lower_unsupported(c,xr_xir_op_name(op->op));
+            if (f->lexical.count && !lower_lexical_events(f,b,f->lexical.after[i])) return false;
+            continue;
+        }
         if (block->frontier && lower_cleanup_arithmetic(op) && !lower_cleanup_arithmetic_edge(f, b, op))
             return false;
         if (op->op == XR_XIR_INVOKE_RESULT || op->op == XR_XIR_INVOKE_ERROR || op->op == XR_XIR_INVOKE_DISCARD) {
@@ -3913,6 +3967,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         !source->declarations)
         return lower_error(&c, XR_LIR_INVALID_ARGUMENT,
                            "source-backed Closed Checked program required");
+    c.allow_class_calls = !local && xir_effect_evidence_is_instance(source);
     const XrXirDeclarations *d = source->declarations;
     c.function = d->modules && d->module_count ? d->modules[0].initializer : d->entry_function;
     if (request->overflow_checks)

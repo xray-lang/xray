@@ -125,6 +125,12 @@ static inline uint32_t xr_xir_atomic_required_operands(XrXirOp op) {
     if (op == XR_XIR_ATOMIC_STORE || (op >= XR_XIR_ATOMIC_ADD && op <= XR_XIR_ATOMIC_SWAP)) return 2;
     return 1;
 }
+/* Semantic operand arity for an instruction of a verified function in module.
+ * PHI table entries alternate predecessor and value. An indirect callee is a
+ * separate SSA use in immediate. Owner-slot metadata contributes no operands. */
+XR_FUNC uint32_t xir_instruction_operand_count(const XrXirFunction *, const XrXirInstruction *,
+    const XrXirModule *);
+
 static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
     if (op==XR_XIR_PTR_STORE || op==XR_XIR_PTR_COPY || op==XR_XIR_BYTE_ARRAY_REPEAT) return true;
     if (op == XR_XIR_CALL_INTRINSIC) return true;
