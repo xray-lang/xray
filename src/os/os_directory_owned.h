@@ -36,11 +36,11 @@ XR_FUNC XrOsIoStatus xr_os_io_directory_open(const XrOsDirectoryRequest *request
  * close, so failed publication cannot silently skip an entry on a retry. */
 XR_FUNC XrOsIoStatus xr_os_io_directory_next(XrOsDirectoryOwner *owner,
     void *context,bool (*current)(void *context),XrOsDirectoryText *output);
-/* One synchronous native close attempt. Success clears/frees owner; failure
- * retains the real handle and all allocation responsibility for a later
- * close-only retry. A closing cursor cannot enumerate again. Empty is OK.
- * Close uses no request control, allocation, path lookup or guest callback.
- * Windows uses ordinary directory handles, never FindFirst search handles.
- * Unix ownership/failed-close consumption is not implemented by this API. */
+/* One synchronous native close attempt. Owner state is cleared if the OS
+ * consumes its handle, even if close reports an error. A retained owner can
+ * only retry close. Empty is OK. Close uses no request control, allocation,
+ * path lookup or guest callback. Windows uses ordinary directory handles,
+ * never FindFirst search handles.
+ * Linux and Darwin close errors can consume the descriptor. */
 XR_FUNC XrOsIoStatus xr_os_io_directory_close(XrOsDirectoryOwner *owner);
 #endif // XR_OS_DIRECTORY_OWNED_H

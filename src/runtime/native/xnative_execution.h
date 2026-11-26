@@ -101,8 +101,8 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded(const XrtLocationOwner *locations,
 /* An outer owner is either empty or contains constructor-produced cold billing
  * setup only. An active ancestor's owner cannot be reused by a nested execution.
  * Both successful and failed execution drain the supplied outer owner. If a
- * close fails, the first execution failure is preserved and the supplied
- * owner remains live for close-only retry via xrt_value_root_drain. */
+ * close fails, the first execution failure is preserved. Any remaining
+ * handle stays in the owner for close-only retry via xrt_value_root_drain. */
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings);
 /* The host owns a stable descriptor and live context for the synchronous

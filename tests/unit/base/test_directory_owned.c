@@ -178,6 +178,252 @@ static int directory_windows(void){
  CHECK(!directory_handles&&!directory_memory_state.live&&!directory_memory_state.held);
  puts("Owned directory: real long Unicode names, EOF, retained text and close-only retry; provider faults isolated");return 1;
 }
+#elif defined(XR_OS_LINUX) || defined(XR_OS_MACOS)
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#if defined(XR_OS_LINUX)
+#include <dirent.h>
+#else
+#include <sys/attr.h>
+#endif
+
+static unsigned directory_reads;
+static unsigned directory_closes;
+static bool directory_consumed_error;
+static int directory_read_error;
+static TestDirectoryQuery *directory_cancel_read;
+
+static int directory_test_close(int descriptor) {
+    ++directory_closes;
+    int status = close(descriptor);
+    if (status == 0 && directory_consumed_error) {
+        directory_consumed_error = false;
+        errno = EIO;
+        return -1;
+    }
+    return status;
+}
+
+#if defined(XR_OS_LINUX)
+static ssize_t directory_test_read(int descriptor, void *buffer, size_t bytes) {
+    ++directory_reads;
+    if (directory_read_error) { errno = directory_read_error; return -1; }
+    ssize_t status = getdents64(descriptor, buffer, bytes);
+    if (status >= 0 && directory_cancel_read) directory_cancel_read->cancelled = true;
+    return status;
+}
+#define getdents64 directory_test_read
+#else
+static int directory_test_read(int descriptor, struct attrlist *attributes,
+    void *buffer, size_t bytes, uint64_t options) {
+    ++directory_reads;
+    if (directory_read_error) { errno = directory_read_error; return -1; }
+    int status = getattrlistbulk(descriptor, attributes, buffer, bytes, options);
+    if (status >= 0 && directory_cancel_read) directory_cancel_read->cancelled = true;
+    return status;
+}
+#define getattrlistbulk directory_test_read
+#endif
+#define close directory_test_close
+#include "os/unix/directory_owned_unix.c"
+#undef close
+#if defined(XR_OS_LINUX)
+#undef getdents64
+#else
+#undef getattrlistbulk
+#endif
+
+enum { UNIX_DIRECTORY_NAMES = 160 };
+
+static void directory_entry_name(char *buffer, size_t capacity, unsigned number) {
+    int size = snprintf(buffer, capacity, "entry-%03u-abcdefghijklmnopqrstuvwxyz", number);
+    if (size < 0 || (size_t)size >= capacity) abort();
+}
+
+static void directory_entry_path(char *buffer, size_t capacity, const char *root, const char *name) {
+    int size = snprintf(buffer, capacity, "%s/%s", root, name);
+    if (size < 0 || (size_t)size >= capacity) abort();
+}
+
+static int directory_open_real(const char *path, XrOsDirectoryOwner *owner) {
+    XrOsIoPolicy policy = directory_policy();
+    TestDirectoryQuery query = {true, false};
+    XrOsDirectoryRequest request = {&policy, {path, strlen(path)}, &query, test_directory_current};
+    bool opened = false;
+    CHECK(xr_os_io_directory_open(&request, owner, &opened) == XR_OS_IO_OK && opened && owner->state);
+    return 1;
+}
+
+static int directory_unix_names(const char *path, const char *unicode) {
+    XrOsDirectoryOwner owner = {0};
+    XrOsIoPolicy policy = directory_policy();
+    TestDirectoryQuery query = {true, false};
+    CHECK(directory_open_real(path, &owner));
+
+    unsigned before = directory_reads;
+    bool seen[UNIX_DIRECTORY_NAMES] = {0};
+    XrOsDirectoryText retained = {0};
+    size_t read = 0;
+    for (;;) {
+        XrOsDirectoryText name = {0};
+        XrOsIoStatus status = xr_os_io_directory_next(&owner, &query, test_directory_current, &name);
+        if (status == XR_OS_IO_END) break;
+        CHECK(status == XR_OS_IO_OK && name.bytes && name.length == strlen(name.bytes));
+        ++read;
+        if (!strcmp(name.bytes, unicode)) {
+            CHECK(!retained.bytes);
+            retained = name;
+        } else {
+            unsigned number;
+            char expected[64];
+            CHECK(sscanf(name.bytes, "entry-%u", &number) == 1 && number < UNIX_DIRECTORY_NAMES);
+            directory_entry_name(expected, sizeof(expected), number);
+            CHECK(!strcmp(name.bytes, expected) && !seen[number]);
+            seen[number] = true;
+            policy.free(policy.context, name.bytes);
+        }
+    }
+    CHECK(read == UNIX_DIRECTORY_NAMES + 1 && directory_reads >= before + 3);
+    XrOsDirectoryText empty = {0};
+    before = directory_reads;
+    CHECK(xr_os_io_directory_next(&owner, &query, test_directory_current, &empty) == XR_OS_IO_END &&
+        directory_reads == before && !empty.bytes);
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_OK && !owner.state);
+    CHECK(retained.bytes && retained.length == strlen(unicode) && !strcmp(retained.bytes, unicode));
+    policy.free(policy.context, retained.bytes);
+    directory_reset();
+    return 1;
+}
+
+static int directory_unix_faults(const char *path) {
+    XrOsDirectoryOwner owner = {0};
+    XrOsDirectoryText name = {0};
+    TestDirectoryQuery query = {true, false};
+    CHECK(directory_open_real(path, &owner));
+    directory_read_error = EIO;
+    CHECK(xr_os_io_directory_next(&owner, &query, test_directory_current, &name) == XR_OS_IO_IO &&
+        !name.bytes && !name.length);
+    directory_read_error = 0;
+    unsigned before = directory_reads;
+    CHECK(xr_os_io_directory_next(&owner, &query, test_directory_current, &name) == XR_OS_IO_IO &&
+        directory_reads == before);
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_OK);
+    directory_reset();
+
+    CHECK(directory_open_real(path, &owner));
+    directory_memory_state.fail_at = directory_memory_state.attempts + 1;
+    CHECK(xr_os_io_directory_next(&owner, &query, test_directory_current, &name) == XR_OS_IO_OUT_OF_MEMORY &&
+        !name.bytes && !name.length);
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_OK);
+    directory_reset();
+
+    CHECK(directory_open_real(path, &owner));
+    directory_memory_state.limit = directory_memory_state.held;
+    CHECK(xr_os_io_directory_next(&owner, &query, test_directory_current, &name) == XR_OS_IO_MEMORY_LIMIT &&
+        !name.bytes && !name.length);
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_OK);
+    directory_reset();
+
+    CHECK(directory_open_real(path, &owner));
+    directory_cancel_read = &query;
+    CHECK(xr_os_io_directory_next(&owner, &query, test_directory_current, &name) == XR_OS_IO_CANCELLED &&
+        !name.bytes && !name.length);
+    directory_cancel_read = NULL;
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_OK);
+    directory_reset();
+
+    CHECK(directory_open_real(path, &owner));
+    int retired = ((DirectoryOwned *)owner.state)->descriptor;
+    before = directory_closes;
+    directory_consumed_error = true;
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_IO && !owner.state && directory_closes == before + 1);
+    int replacement = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    CHECK(replacement == retired);
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_OK && directory_closes == before + 1);
+    CHECK(fcntl(replacement, F_GETFD) >= 0 && close(replacement) == 0);
+    directory_reset();
+    return 1;
+}
+
+static int directory_unix_edges(const char *root) {
+    XrOsDirectoryOwner owner = {0};
+    XrOsIoPolicy policy = directory_policy();
+    TestDirectoryQuery query = {true, false};
+    char path[1024];
+    directory_entry_path(path, sizeof(path), root, "empty");
+    CHECK(mkdir(path, 0700) == 0);
+    CHECK(directory_open_real(path, &owner));
+    XrOsDirectoryText name = {0};
+    CHECK(xr_os_io_directory_next(&owner, &query, test_directory_current, &name) == XR_OS_IO_END &&
+        !name.bytes && !name.length);
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_OK && rmdir(path) == 0);
+    XrOsDirectoryRequest request = {&policy, {path, strlen(path)}, &query, test_directory_current};
+    bool opened = true;
+    CHECK(xr_os_io_directory_open(&request, &owner, &opened) == XR_OS_IO_OK && !opened && !owner.state);
+
+    char entry[64];
+    directory_entry_name(entry, sizeof(entry), 0);
+    directory_entry_path(path, sizeof(path), root, entry);
+    request.path = (XrOsPathSpan){path, strlen(path)};
+    opened = true;
+    CHECK(xr_os_io_directory_open(&request, &owner, &opened) == XR_OS_IO_OK && !opened && !owner.state);
+    request.path = (XrOsPathSpan){"x\0y", 3};
+    opened = true;
+    CHECK(xr_os_io_directory_open(&request, &owner, &opened) == XR_OS_IO_BAD_ARGUMENT && opened && !owner.state);
+    directory_reset();
+
+#if defined(XR_OS_LINUX)
+    directory_entry_path(path, sizeof(path), root, "removed");
+    CHECK(mkdir(path, 0700) == 0 && directory_open_real(path, &owner) && rmdir(path) == 0);
+    CHECK(xr_os_io_directory_next(&owner, &query, test_directory_current, &name) == XR_OS_IO_NOT_FOUND &&
+        !name.bytes && !name.length);
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_OK);
+    directory_reset();
+
+    directory_entry_path(path, sizeof(path), root, "invalid-utf8");
+    CHECK(mkdir(path, 0700) == 0);
+    char invalid[1024];
+    directory_entry_path(invalid, sizeof(invalid), path, "file-\377");
+    int file = open(invalid, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+    CHECK(file >= 0 && close(file) == 0 && directory_open_real(path, &owner));
+    CHECK(xr_os_io_directory_next(&owner, &query, test_directory_current, &name) == XR_OS_IO_BAD_ARGUMENT &&
+        !name.bytes && !name.length);
+    CHECK(xr_os_io_directory_close(&owner) == XR_OS_IO_OK && unlink(invalid) == 0 && rmdir(path) == 0);
+    directory_reset();
+#endif
+    return 1;
+}
+
+static int directory_unix(void) {
+    char root[] = "/tmp/xray-owned-directory-XXXXXX";
+    CHECK(mkdtemp(root) != NULL);
+    char path[1024];
+    char unicode[226] = {0};
+    for (size_t i = 0; i < 75; ++i) memcpy(unicode + i * 3, "\xE4\xB8\xAD", 3);
+    directory_entry_path(path, sizeof(path), root, unicode);
+    int file = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+    CHECK(file >= 0 && close(file) == 0);
+    for (unsigned i = 0; i < UNIX_DIRECTORY_NAMES; ++i) {
+        char name[64];
+        directory_entry_name(name, sizeof(name), i);
+        directory_entry_path(path, sizeof(path), root, name);
+        file = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        CHECK(file >= 0 && close(file) == 0);
+    }
+    CHECK(directory_unix_names(root, unicode) && directory_unix_faults(root) && directory_unix_edges(root));
+    for (unsigned i = 0; i < UNIX_DIRECTORY_NAMES; ++i) {
+        char name[64];
+        directory_entry_name(name, sizeof(name), i);
+        directory_entry_path(path, sizeof(path), root, name);
+        CHECK(unlink(path) == 0);
+    }
+    directory_entry_path(path, sizeof(path), root, unicode);
+    CHECK(unlink(path) == 0 && rmdir(root) == 0);
+    puts("Owned directory: real Unicode names, multiple batches, EOF, retained text and consumed close errors");
+    return 1;
+}
 #else
 #include "os/unix/directory_owned_unix.c"
 static int directory_unix_boundary(void){
@@ -193,6 +439,8 @@ int main(void){
  directory_reset();
 #if defined(XR_OS_WINDOWS)
  return directory_windows()?0:1;
+#elif defined(XR_OS_LINUX) || defined(XR_OS_MACOS)
+ return directory_unix()?0:1;
 #else
  return directory_unix_boundary()?0:1;
 #endif

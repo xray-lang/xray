@@ -18,6 +18,7 @@
 #include "xnative_array_ops.h"
 #include "xnative_class_array.h"
 #include "xnative_host_environment.h"
+#include "xnative_host_directory.h"
 #include "xnative_host_file.h"
 #include "xnative_host_stat.h"
 #include "xnative_host_io.h"
@@ -54,6 +55,7 @@ struct XrtNativeValues {
     const XrtModuleState *state;
     const XrtValueImage *state_image;
     XrOsFileMetadataOwner metadata;
+    XrtHostDirectory *directories;
     bool retired;
 };
 static XR_THREAD_LOCAL XrtValueBinding value_binding;
@@ -117,7 +119,12 @@ XR_FUNC XrtManagedStatus xrt_native_values_stat_prepare(XrtValueRoot *owner, Xrt
 XR_FUNC bool xrt_native_values_prepared(const XrtValueRoot *owner) {
     return native_values_accepts_work(owner) &&
         (!owner->managed || (!owner->managed->root && !owner->managed->backings.string &&
-            !owner->managed->images && !owner->managed->environments));
+            !owner->managed->images && !owner->managed->environments && !owner->managed->directories));
+}
+XR_FUNC XrtHostDirectory **xrt_native_values_directories(XrtValueRoot *owner, XrtBillingOwner **billing) {
+    if (!native_values_accepts_work(owner) || owner->implicit || !owner->managed) return NULL;
+    if (billing) *billing = owner->managed->billing;
+    return &owner->managed->directories;
 }
 XR_FUNC XrtManagedStatus xrt_native_values_backings(XrtValueRoot *owner, const XrtBackingTypes **output) {
     if (!native_values_accepts_work(owner) || !output || *output) return XRT_MANAGED_ARGUMENT;
@@ -356,6 +363,57 @@ XRAY_API void xrt_native_host_text_result(uint32_t callable, const XrtNativeHost
     if (result.host == XR_OS_IO_UNSUPPORTED) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
     if (result.host == XR_OS_IO_OUT_OF_MEMORY || result.host == XR_OS_IO_MEMORY_LIMIT)
         xrt_value_failure(xrt_host_io_failure(result.host), source);
+}
+
+XRAY_API int64_t xrt_native_host_directory_open(const XrtManagedHeader *path, uint32_t source) {
+    if (!xrt_backing_string_matches(path)) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    const XrtStringBacking *text = (const XrtStringBacking *)path;
+    int64_t token = 0;
+    XrOsIoStatus status = xrt_host_directory_open((XrOsPathSpan){text->bytes, text->length}, &token);
+    if (status != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(status), source);
+    return token;
+}
+
+XRAY_API void xrt_native_host_directory_next(const XrtNativeDirectoryNext *call, uint32_t source) {
+    if (!call) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    XrtValuePlanSpec element;
+    if (xrt_value_plan_view(native_host_optional_element(call->image, call->result_type, source), &element) != XRT_MANAGED_OK ||
+        element.kind != XRT_VALUE_STRING)
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    XrtValueRoot *execution = xrt_value_root_current(source);
+    XrtManagedRoot *root = xrt_native_values_existing_root(execution);
+    if (!root) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    const XrtHostNullableSlots output = {call->frame, call->destination, call->temporary, call->offset,
+        call->temporary_owner_offset};
+    XrtHostNullablePlaces places;
+    XrtManagedStatus status = xrt_host_nullable_prepare(&output, root, &places);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    if (places.current && !xrt_backing_string_matches(places.current))
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    const XrtBackingTypes *types = NULL;
+    status = xrt_native_values_backings(execution, &types);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+
+    XrtHostDirectoryName name = {0};
+    XrOsIoStatus host = xrt_host_directory_next(call->token, &name);
+    if (host != XR_OS_IO_OK && host != XR_OS_IO_END)
+        xrt_value_failure(xrt_host_io_failure(host), source);
+    const bool present = host == XR_OS_IO_OK;
+    if (present) {
+        status = xrt_string_backing_create(places.temporary.frame, places.temporary.slot,
+            types, name.text.bytes, name.text.length, 0);
+        xrt_host_directory_name_drop(&name);
+        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    }
+    status = xrt_host_nullable_publish(&places, present);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+}
+
+XRAY_API bool xrt_native_host_directory_close(int64_t token, uint32_t source) {
+    bool closed = false;
+    XrOsIoStatus status = xrt_host_directory_close(token, &closed);
+    if (status != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(status), source);
+    return closed;
 }
 
 XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage *image, uint32_t type,
@@ -915,11 +973,16 @@ XR_FUNC XrOsIoStatus xrt_value_root_drain_with(XrtValueRoot *owner, XrtMetadataC
         }
     }
     XrtBillingOwner *billing = values->billing;
+    XrOsIoStatus directory_status = xrt_host_directory_drain(&values->directories, billing);
+    if (values->directories) {
+        owner->draining = false;
+        return directory_status;
+    }
     owner->managed = NULL;
     xrt_managed_metadata_free(billing, values, sizeof(*values));
     xrt_billing_owner_drop(billing);
     owner->draining = false;
-    return XR_OS_IO_OK;
+    return directory_status;
 }
 
 XR_FUNC XrOsIoStatus xrt_value_root_drain(XrtValueRoot *owner) {

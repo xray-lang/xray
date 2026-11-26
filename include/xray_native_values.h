@@ -133,6 +133,18 @@ typedef struct XrtNativeHostTextResult {
  * The callable decides which primitive runs; the operand is the borrowed text
  * argument that primitive consumes. */
 XRAY_API void xrt_native_host_text_result(uint32_t callable, const XrtNativeHostTextResult *, uint32_t source_id);
+typedef struct XrtNativeDirectoryNext {
+    XrtManagedFrame *frame;
+    size_t destination, temporary, offset, temporary_owner_offset;
+    const XrtValueImage *image;
+    uint32_t result_type;
+    int64_t token;
+} XrtNativeDirectoryNext;
+/* The directory token belongs to the current execution root. Only actual
+ * end-of-stream publishes the empty optional. */
+XRAY_API int64_t xrt_native_host_directory_open(const XrtManagedHeader *path, uint32_t source_id);
+XRAY_API void xrt_native_host_directory_next(const XrtNativeDirectoryNext *, uint32_t source_id);
+XRAY_API bool xrt_native_host_directory_close(int64_t token, uint32_t source_id);
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */
