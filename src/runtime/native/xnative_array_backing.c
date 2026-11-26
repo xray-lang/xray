@@ -11,6 +11,7 @@
  *   for the common iterative ownership walker to retire.
  */
 #include "xnative_array_backing.h"
+#include "xnative_place.h"
 #include "base/xchecks.h"
 #include <stdalign.h>
 #include <string.h>
@@ -45,6 +46,24 @@ static XrtManagedStatus array_fill(XrtArrayBacking *array, ArrayInput input, siz
 static size_t array_bytes(size_t prefix, size_t stride, size_t capacity) {
     return capacity <= (SIZE_MAX - prefix) / stride
         ? prefix + capacity * stride : 0;
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_growth_capacity(size_t prefix, size_t current,
+    size_t required, size_t stride, size_t *output) {
+    if (!stride || !output) return XRT_MANAGED_ARGUMENT;
+    size_t maximum = (SIZE_MAX - prefix) / stride;
+    if (maximum > INT64_MAX) maximum = INT64_MAX;
+    if (required > maximum) return XRT_MANAGED_OVERFLOW;
+    size_t capacity = current;
+    if (capacity < required) {
+        capacity = required ? 4 : 0;
+        while (capacity < required) {
+            if (capacity > maximum / 2) { capacity = required; break; }
+            capacity *= 2;
+        }
+    }
+    if (capacity > maximum) return XRT_MANAGED_OVERFLOW;
+    *output = capacity;
+    return XRT_MANAGED_OK;
 }
 static XrtManagedStatus array_prepare(XrtManagedFrame *frame, size_t slot,
     XrtManagedOps *ops, size_t bytes, size_t capacity, XrtManagedHeader **payload) {
@@ -183,6 +202,91 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_at(const XrtArrayBacking *a
     if (index < 0 || (uint64_t)index >= array->length) return XRT_MANAGED_BOUNDS;
     *empty_borrow = (const unsigned char *)array + spec->fixed_size + (size_t)index * spec->stride;
     return XRT_MANAGED_OK;
+}
+
+typedef struct InlineClassAppend {
+    const XrtRuntimeTypeSpec *layout;
+    XrtManagedHeader *item;
+    XrtArrayBacking *source;
+    bool applied;
+} InlineClassAppend;
+
+static XrtManagedStatus inline_class_append_try(XrtManagedHeader *owner, void *context) {
+    InlineClassAppend *edit = context;
+    const XrtRuntimeTypeSpec *layout = array_inline_spec(owner, edit->layout->code.context);
+    if (!layout || layout->fixed_size != edit->layout->fixed_size ||
+        layout->stride != edit->layout->stride) return XRT_MANAGED_ARGUMENT;
+    XrtArrayBacking *array = (XrtArrayBacking *)owner;
+    if (array->length > array->capacity || array->capacity > INT64_MAX ||
+        !array_bytes(layout->fixed_size, layout->stride, array->capacity))
+        return XRT_MANAGED_ARGUMENT;
+    if (array->length == INT64_MAX) return XRT_MANAGED_OVERFLOW;
+    edit->source = array;
+
+    int32_t references = xr_signed_rc_read(&owner->references);
+    if ((references != 1 && references != -1) || array->length == array->capacity)
+        return XRT_MANAGED_OK;
+    if (!xrt_managed_retain(edit->item)) return XRT_MANAGED_REFCOUNT;
+    if (!xr_signed_rc_unique(&owner->references)) {
+        xrt_managed_drop(edit->item);
+        return XRT_MANAGED_OK;
+    }
+    unsigned char *tail = (unsigned char *)array + layout->fixed_size;
+    memcpy(tail + array->length * layout->stride, &edit->item, sizeof(edit->item));
+    ++array->length;
+    edit->applied = true;
+    return XRT_MANAGED_OK;
+}
+
+static XrtManagedStatus inline_class_append_create(const XrtPlaceReplacement *replacement,
+    XrtManagedOps *ops, const InlineClassAppend *edit) {
+    const XrtRuntimeTypeSpec *layout = edit->layout;
+    const XrtArrayBacking *source = edit->source;
+    size_t length = source->length + 1, capacity = 0;
+    XrtManagedStatus status = xrt_array_backing_growth_capacity(layout->fixed_size,
+        source->capacity, length, layout->stride, &capacity);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtManagedHeader *pending = NULL;
+    status = xrt_managed_slot_reserved_prepare(replacement, ops,
+        array_bytes(layout->fixed_size, layout->stride, capacity), &pending);
+    if (status != XRT_MANAGED_OK) return status;
+
+    XrtArrayBacking *array = (XrtArrayBacking *)pending;
+    XR_CHECK(array->capacity == capacity, "the checked tail extent fixes inline Array capacity");
+    const unsigned char *input = (const unsigned char *)source + layout->fixed_size;
+    unsigned char *output = (unsigned char *)array + layout->fixed_size;
+    for (size_t row = 0; row < length; ++row) {
+        size_t offset = row * layout->stride;
+        const void *element = row < source->length ? input + offset : (const void *)&edit->item;
+        status = xrt_value_copy_empty(layout->code.context, element, output + offset);
+        if (status != XRT_MANAGED_OK) return status;
+        array->length = row + 1;
+    }
+    return xrt_managed_slot_reserved_commit(replacement);
+}
+
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_class_append(XrtPlace binding,
+    size_t temporary, XrtManagedOps *ops, const XrtValuePlan *element, XrtManagedHeader *item) {
+    if (!binding.frame || binding.external || binding.nulls != XRT_PLACE_NONNULL)
+        return XRT_MANAGED_ARGUMENT;
+    const XrtRuntimeTypeSpec *layout = NULL;
+    XrtManagedStatus status = xrt_managed_ops_producer_borrow(ops, array_element_retain, array_element_drop, &layout);
+    if (status != XRT_MANAGED_OK) return status;
+    if (layout->code.context != element || layout->stride != sizeof(item) ||
+        !xrt_class_backing_matches(item, element)) return XRT_MANAGED_ARGUMENT;
+
+    XrtPlaceReplacement replacement = {0};
+    status = xrt_place_replacement_begin(binding, binding.frame, temporary, &replacement);
+    if (status != XRT_MANAGED_OK) return status;
+    InlineClassAppend edit = {.layout=layout, .item=item};
+    status = xrt_managed_slot_reserved_apply(&replacement, inline_class_append_try, &edit);
+    if (status == XRT_MANAGED_OK && !edit.applied) {
+        status = inline_class_append_create(&replacement, ops, &edit);
+        if (status == XRT_MANAGED_OK) status = xrt_place_replacement_publish(&replacement);
+    }
+    XR_CHECK(xrt_place_replacement_end(&replacement) == XRT_MANAGED_OK,
+        "every inline Class append releases its real domains after cleanup");
+    return status;
 }
 
 XR_FUNCDEF XrtManagedStatus xrt_array_backing_copy_create(XrtManagedFrame *frame, size_t slot,

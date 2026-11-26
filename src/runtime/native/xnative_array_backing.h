@@ -16,6 +16,7 @@
 #include "xnative_value_plan.h"
 
 #include "xray_native_array.h"
+#include "xray_native_place.h"
 
 /* Capacity counts elements and is derived by prepare from the actual extent.
  * Typed factories select only their setup's descriptor. Inputs remain borrowed;
@@ -49,6 +50,12 @@ XR_FUNC bool xrt_array_backing_inline_matches(const XrtManagedHeader *, const Xr
  * an independent result through the ordinary owned inline destination. */
 XR_FUNC XrtManagedStatus xrt_array_backing_inline_at(const XrtArrayBacking *,
     const XrtValuePlan *element, int64_t index, const void **empty_borrow);
+/* Appends a borrowed Class to a local slot using its verified inline Array
+ * producer and a distinct empty slot in the same frame. */
+XR_FUNC XrtManagedStatus xrt_array_backing_inline_class_append(XrtPlace, size_t temporary,
+    XrtManagedOps *, const XrtValuePlan *element, XrtManagedHeader *item);
+XR_FUNC XrtManagedStatus xrt_array_backing_growth_capacity(size_t prefix, size_t current,
+    size_t required, size_t stride, size_t *output);
 
 /* The admitted caller supplies the source's exact kind. This constructs a new
  * same-kind COW candidate and does not modify the source or any of its owners. */

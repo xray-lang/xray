@@ -47,22 +47,6 @@ static void array_store_scalar(unsigned char *destination, const XrtArrayItem *i
     default: XR_CHECK(false, "only an admitted scalar item reaches scalar storage"); break;
     }
 }
-static XrtManagedStatus array_capacity(size_t current, size_t required, size_t stride, size_t *output) {
-    size_t maximum = (SIZE_MAX - sizeof(XrtArrayBacking)) / stride;
-    if (maximum > INT64_MAX) maximum = INT64_MAX;
-    if (required > maximum) return XRT_MANAGED_OVERFLOW;
-    size_t capacity = current;
-    if (capacity < required) {
-        capacity = required ? 4 : 0;
-        while (capacity < required) {
-            if (capacity > maximum / 2) { capacity = required; break; }
-            capacity *= 2;
-        }
-    }
-    if (capacity > maximum) return XRT_MANAGED_OVERFLOW;
-    *output = capacity;
-    return XRT_MANAGED_OK;
-}
 static XrtManagedStatus array_finish(XrtManagedFrame *frame, size_t slot, XrtManagedStatus status) {
     if (status == XRT_MANAGED_OK) status = xrt_managed_slot_commit(frame, slot);
     if (status != XRT_MANAGED_OK)
@@ -99,7 +83,7 @@ static XrtManagedStatus array_update_create(XrtManagedFrame *frame, size_t slot,
     if (status != XRT_MANAGED_OK) return status;
     size_t stride = xrt_backing_array_stride(update->item.kind);
     if (!types || !types->arrays[update->item.kind]) return XRT_MANAGED_ARGUMENT;
-    status = array_capacity(source->capacity, length, stride, &capacity);
+    status = xrt_array_backing_growth_capacity(sizeof(XrtArrayBacking), source->capacity, length, stride, &capacity);
     if (status != XRT_MANAGED_OK) return status;
     XrtManagedHeader *payload = NULL;
     size_t bytes=sizeof(XrtArrayBacking)+capacity*stride;
@@ -149,7 +133,8 @@ static XrtManagedStatus array_binding_try(XrtManagedHeader *value, void *context
 static XrtManagedStatus array_grow_local_i64(const XrtManagedSlotReservation *reservation,
     const XrtBackingTypes *types, ArrayBindingUpdate *edit) {
     size_t length = edit->source->length, capacity = 0;
-    XrtManagedStatus status = array_capacity(edit->source->capacity, length + 1, sizeof(int64_t), &capacity);
+    XrtManagedStatus status = xrt_array_backing_growth_capacity(sizeof(XrtArrayBacking),
+        edit->source->capacity, length + 1, sizeof(int64_t), &capacity);
     if (status != XRT_MANAGED_OK) return status;
     XrtManagedHeader *grown = NULL;
     status = xrt_managed_slot_reserved_grow_scalar_tail(reservation, types->arrays[XRT_BACKING_ARRAY_I64],
@@ -217,7 +202,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_repeat_create(XrtManagedFrame *fra
     const XrtBackingTypes *types, const XrtArrayItem *fill, int64_t count) {
     if (!types || !array_item_valid(fill) || !types->arrays[fill->kind] || count < 0) return XRT_MANAGED_ARGUMENT;
     size_t stride = xrt_backing_array_stride(fill->kind), capacity = 0;
-    XrtManagedStatus status = array_capacity(0, (size_t)count, stride, &capacity);
+    XrtManagedStatus status = xrt_array_backing_growth_capacity(sizeof(XrtArrayBacking), 0, (size_t)count, stride, &capacity);
     if (status != XRT_MANAGED_OK) return status;
     XrtManagedHeader *payload = NULL;
     status = xrt_managed_slot_prepare(frame, slot, types->arrays[fill->kind],

@@ -15,6 +15,8 @@
  *   image and construction path generated C uses, with no source compilation.
  */
 #include "runtime/native/xnative_value.h"
+#include "runtime/native/xnative_array_backing.h"
+#include "runtime/native/xnative_place.h"
 #include "runtime/native/xnative_value_image.h"
 #include "runtime/native/xnative_class_array.h"
 #include "runtime/native/xnative_host_nullable.h"
@@ -393,7 +395,111 @@ static void string_field_transactions(void) {
     puts("class String fields: guarded snapshots, failure-atomic replacement and receiver retirement verified");
 }
 
+static XrtManagedHeader *slot_owner(XrtManagedFrame *frame, size_t slot) {
+    XrtManagedHeader *owner = NULL;
+    OK(xrt_managed_slot_borrow(frame, slot, &owner));
+    return owner;
+}
+
+static void check_inline_class_row(const XrtArrayBacking *array, const XrtValuePlan *element,
+    int64_t index, const XrtManagedHeader *expected) {
+    const void *row = NULL;
+    OK(xrt_array_backing_inline_at(array, element, index, &row));
+    XrtManagedHeader *actual = NULL;
+    memcpy(&actual, row, sizeof(actual));
+    CHECK(actual == expected);
+}
+
+static void inline_class_append(void) {
+    enum { FIRST, SECOND, OTHER, ARRAY, STAGING, ALIAS, SLOT_COUNT };
+    const size_t limit = 65536;
+    XrtBillingOwner *billing = NULL;
+    XrtValueImagePlans *plans = NULL;
+    XrtManagedOps *array_ops = NULL;
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    XrtBoundClass base = {0}, other = {0};
+    OK(xrt_billing_owner_new(NULL, limit, &billing));
+    const XrtBillingStats empty = xrt_billing_owner_stats(billing);
+    OK(xrt_value_image_bind(billing, &image, (XrtManagedLease){0}, &plans));
+    OK(xrt_value_image_class(plans, ROW_BASE, &base));
+    OK(xrt_value_image_class(plans, ROW_DERIVED, &other));
+    OK(xrt_array_backing_inline_bind(billing, base.plan, &array_ops));
+    OK(xrt_managed_root_new(billing, &root));
+    OK(xrt_managed_frame_enter(root, SLOT_COUNT, &frame));
+
+    const Payload one = {1}, two = {2}, three = {3};
+    OK(xrt_class_create(frame, FIRST, base.ops, &one));
+    OK(xrt_class_create(frame, SECOND, base.ops, &two));
+    OK(xrt_class_create(frame, OTHER, other.ops, &three));
+    XrtManagedHeader *first = slot_owner(frame, FIRST);
+    XrtManagedHeader *second = slot_owner(frame, SECOND);
+    XrtManagedHeader *wrong = slot_owner(frame, OTHER);
+    XrtManagedHeader *rows_to_copy[] = {first, second};
+    OK(xrt_array_backing_inline_create(frame, ARRAY, array_ops, rows_to_copy, 2, 4));
+    XrtArrayBacking *old = (XrtArrayBacking *)slot_owner(frame, ARRAY);
+    XrtPlace binding = {.frame=frame, .slot=ARRAY, .nulls=XRT_PLACE_NONNULL};
+    CHECK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, wrong)
+        == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_array_backing_inline_class_append(binding, ARRAY, array_ops, base.plan, first)
+        != XRT_MANAGED_OK);
+    CHECK(old->length == 2 && slot_owner(frame, STAGING) == NULL);
+
+    XrtPlaceReplacement occupied = {0};
+    OK(xrt_place_replacement_begin(binding, frame, STAGING, &occupied));
+    CHECK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, first)
+        != XRT_MANAGED_OK);
+    OK(xrt_place_replacement_end(&occupied));
+    OK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, first));
+    CHECK(slot_owner(frame, ARRAY) == &old->managed && old->length == 3 && old->capacity == 4);
+    check_inline_class_row(old, base.plan, 2, first);
+    CHECK(xrt_managed_retain(&old->managed));
+    XrtManagedHeader *snapshot = &old->managed;
+    OK(xrt_managed_slot_adopt(frame, ALIAS, &snapshot));
+    CHECK(snapshot == NULL);
+
+    const XrtBillingStats before = xrt_billing_owner_stats(billing);
+    int32_t first_count = xr_signed_rc_read(&first->references);
+    int32_t second_count = xr_signed_rc_read(&second->references);
+    atomic_store_explicit(&second->references, INT32_MAX, memory_order_relaxed);
+    CHECK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, first)
+        == XRT_MANAGED_REFCOUNT);
+    atomic_store_explicit(&second->references, second_count, memory_order_relaxed);
+    CHECK(xr_signed_rc_read(&first->references) == first_count);
+    CHECK(xrt_billing_owner_stats(billing).bytes == before.bytes &&
+        xrt_billing_owner_stats(billing).blocks == before.blocks);
+    CHECK(slot_owner(frame, ARRAY) == &old->managed && slot_owner(frame, ALIAS) == &old->managed &&
+        old->length == 3 && slot_owner(frame, STAGING) == NULL);
+    check_inline_class_row(old, base.plan, 1, second);
+
+    void *filler = NULL;
+    CHECK(before.bytes < limit);
+    OK(xrt_managed_metadata_allocate(billing, limit - before.bytes, &filler));
+    CHECK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, second)
+        == XRT_MANAGED_LIMIT);
+    CHECK(xrt_billing_owner_stats(billing).bytes == limit);
+    xrt_managed_metadata_free(billing, filler, limit - before.bytes);
+    CHECK(slot_owner(frame, ARRAY) == &old->managed && old->length == 3 && slot_owner(frame, STAGING) == NULL);
+
+    OK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, second));
+    XrtArrayBacking *copy = (XrtArrayBacking *)slot_owner(frame, ARRAY);
+    CHECK(copy != old && copy->length == 4 && old->length == 3);
+    check_inline_class_row(copy, base.plan, 3, second);
+    OK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, first));
+    XrtArrayBacking *grown = (XrtArrayBacking *)slot_owner(frame, ARRAY);
+    CHECK(grown->length == 5 && grown->capacity == 8 && old->length == 3);
+    check_inline_class_row(grown, base.plan, 4, first);
+
+    OK(xrt_managed_root_destroy(&root));
+    xrt_managed_ops_drop(array_ops);
+    xrt_value_image_drop(&plans);
+    const XrtBillingStats remaining = xrt_billing_owner_stats(billing);
+    CHECK(remaining.bytes == empty.bytes && remaining.blocks == empty.blocks);
+    xrt_billing_owner_drop(billing);
+}
+
 int main(void) {
+    inline_class_append();
     file_stat_payload_facts();
     string_field_transactions();
     XrtValueRoot owner = {0};
