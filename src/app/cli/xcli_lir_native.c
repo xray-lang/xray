@@ -273,6 +273,12 @@ static bool native_compile(NativeCommand *command, const XtcHostToolchainView *h
 #if XRT_NATIVE_UBSAN
     if (okay) okay = native_arg(command, "-fsanitize=undefined");
 #endif
+#if defined(XR_BUILD_MSAN) && XR_BUILD_MSAN
+    if (okay) okay = native_arg(command, "-fsanitize=memory") &&
+        native_arg(command, "-fsanitize-memory-track-origins=2") &&
+        native_arg(command, "-fPIE") && native_arg(command, "-fno-omit-frame-pointer") &&
+        native_arg(command, "-fno-optimize-sibling-calls");
+#endif
 #endif
     return native_command_run(command, "compile", okay);
 }
@@ -327,6 +333,9 @@ static bool native_link(NativeCommand *command, const XtcHostToolchainView *host
 #endif
 #if XRT_NATIVE_UBSAN
     if (okay) okay = native_arg(command, "-fsanitize=undefined");
+#endif
+#if defined(XR_BUILD_MSAN) && XR_BUILD_MSAN
+    if (okay) okay = native_arg(command, "-fsanitize=memory") && native_arg(command, "-pie");
 #endif
 #endif
     return native_command_run(command, "link", okay);
@@ -423,7 +432,8 @@ XR_FUNC int xr_cli_lir_native(XrCompileResources *resources, const XrCliNativeOp
         goto cleanup;
     }
     request.compiler = choice.compiler;
-#if !XR_OS_WINDOWS && (XRT_NATIVE_ASAN || XRT_NATIVE_UBSAN)
+#if !XR_OS_WINDOWS && (XRT_NATIVE_ASAN || XRT_NATIVE_UBSAN || \
+    (defined(XR_BUILD_MSAN) && XR_BUILD_MSAN))
     /* Instrumented runtime archives use the configured compiler by default.
      * Explicit provider and compiler preferences keep their selected driver. */
     if (!request.compiler && choice.selector == XR_TOOLCHAIN_SELECTOR_AUTO)
