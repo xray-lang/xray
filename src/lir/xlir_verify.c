@@ -457,6 +457,12 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             default: return false;
             }
         }
+        case XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE:
+        case XR_LIR_HOST_DIRECTORY_CLEANUP_POLL:
+            return v->type == XR_LIR_UNIT && v->source.path && v->source.path_length &&
+                v->source.line && v->source.column &&
+                (v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ? f->cleanup_owner && a == XR_LIR_I64 :
+                    !f->cleanup_owner);
         case XR_LIR_HOST_FILE_CLOSE:
             return v->type == XR_LIR_I1 && xr_lir_class_storage(m, a) == XR_NATIVE_DECLARATION_FILE_STORAGE &&
                 v->bits <= UINT32_MAX && xr_native_host_shape((uint32_t)v->bits) == XR_NATIVE_HOST_FILE_CLOSE;
@@ -891,6 +897,9 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
             if (v->op == XR_LIR_ARITHMETIC_PANIC &&
                 (!f->has_cleanups || !block->cleanup || !block->cleanup->frontier))
                 return xr_lir_internal_error(d, "arithmetic panic requires an active cleanup frontier",
+                    index + 1, b + 1, i + 1, &v->source);
+            if (v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL && !f->has_cleanups)
+                return xr_lir_internal_error(d, "directory cancellation check requires a cleanup owner",
                     index + 1, b + 1, i + 1, &v->source);
             XrLirStatus status = xr_lir_internal_instruction_check(m, index + 1, v, d);
             if (status != XR_LIR_OK) {

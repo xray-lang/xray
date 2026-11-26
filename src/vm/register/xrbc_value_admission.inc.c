@@ -768,6 +768,13 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
                 rbc_value_scalar(code, function, a.result, XR_RBC_BITS);
         default: return false;
         }
+    case XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE:
+    case XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL:
+        return xr_rbc_module_code_owner(module) && function->source_ids &&
+            function->source_id_count == function->code_count && function->source_ids[pc] &&
+            !a.result && !a.other && !a.index &&
+            (a.operation == XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE ?
+                rbc_value_scalar(code, function, a.source, XR_RBC_BITS) : !a.source);
     case XR_RBC_VALUE_HOST_FILE_CLOSE:
         return !a.other && xr_native_host_shape(a.index) == XR_NATIVE_HOST_FILE_CLOSE &&
             rbc_value_file_storage(module,code,a.source,false) && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);

@@ -269,18 +269,32 @@ static XrLirSource lower_range_source(const Lower *c, XrXirSourceRange range) {
     return result;
 }
 
-static XrLirSource lower_source_at(const Lower *c,bool call) {
-    XrLirSource result = {0};
+static const XrXirSourceDebugFunction *lower_debug_body(const Lower *c) {
     const XrXirSourceDebugView *debug = xr_xir_compile_source_snapshot_debug(c->request->snapshot);
-    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(c->request->snapshot);
     uint32_t origin = UINT32_MAX;
-    if (!debug || !view ||
+    if (!debug ||
         xr_xir_compile_specialization_origin(c->request->closed, c->function, &origin) !=
             XR_XIR_OK ||
         origin >= debug->function_count)
-        return result;
+        return NULL;
     const XrXirSourceDebugFunction *function = &debug->functions[origin];
     XR_DCHECK(function->function == origin, "source debug functions use their source ordinal");
+    return function;
+}
+
+static XrLirSource lower_call_point(const Lower *c) {
+    const XrXirSourceDebugFunction *function = lower_debug_body(c);
+    if (!function || !function->points || c->instruction >= function->instruction_count)
+        return (XrLirSource){0};
+    const XrXirSourceDebugPoint *point = &function->points[c->instruction];
+    return lower_range_source(c, (XrXirSourceRange){point->range.module,
+        point->call_line, point->call_column, 0, 0});
+}
+
+static XrLirSource lower_source_at(const Lower *c,bool call) {
+    const XrXirSourceDebugFunction *function = lower_debug_body(c);
+    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(c->request->snapshot);
+    if (!function || !view) return (XrLirSource){0};
     XrXirSourceRange range = {0};
     if (c->instruction < function->instruction_count && function->points) {
         const XrXirSourceDebugPoint *point=&function->points[c->instruction];
@@ -997,6 +1011,8 @@ static bool lower_state_constructors(Lower *c) {
     return good && lower_storage_closures(c);
 }
 
+static const XrXirInstruction *lower_directory_cleanup_call(const Lower *, uint32_t function);
+
 /* Reuse the bounded function worklist without changing the retained root set.
  * The second visit bit belongs only to this structural local-call walk. */
 static bool lower_local_pure(Lower *c, uint32_t selected) {
@@ -1019,7 +1035,9 @@ static bool lower_local_pure(Lower *c, uint32_t selected) {
                 const XrXirInstruction *op = &f->instructions[i];
                 if (op->op == XR_XIR_PRINT || op->op == XR_XIR_ASSERT_CONDITION || op->op == XR_XIR_CLOCK_NANOS ||
                     op->op == XR_XIR_INVOKE || op->op == XR_XIR_PANIC_ERROR || op->op == XR_XIR_THROW ||
-                    op->op == XR_XIR_UTC_OFFSET_AT || !lower_known(op))
+                    op->op == XR_XIR_UTC_OFFSET_AT || !lower_known(op) ||
+                    (op->op == XR_XIR_CLEANUP_REGISTER &&
+                     lower_directory_cleanup_call(c, (uint32_t)op->immediate)))
                     return lower_unsupported(c, "effect in local function closure");
                 if (op->op != XR_XIR_CALL)
                     continue;
@@ -1252,6 +1270,7 @@ static const XrXirInstruction *lower_invoke_landing_exit(const XrXirFunction *f,
 
 #include "xlir_lower_optional_error.inc.c"
 #include "xlir_lower_catch.inc.c"
+static XrNativeHostShape lower_host_abi(const Lower *, uint32_t, uint32_t fields[2]);
 #include "xlir_cleanup_lower.inc.c"
 
 static bool lower_invoke_local_string(const Lower *c, const XrXirFunction *f,
@@ -1715,6 +1734,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     uint8_t *literal_uses = NULL;
     bool good = true;
     bool cleanup_body = c->source->declarations->functions[function].cleanup_owner != 0;
+    const XrXirInstruction *directory_close = lower_directory_cleanup_call(c, function);
     enum { ARITHMETIC_UNKNOWN, ARITHMETIC_ALLOWED, ARITHMETIC_REFUSED } arithmetic = ARITHMETIC_UNKNOWN;
     for (uint32_t at = 0; at < count && good; ++at) {
         uint32_t b = queue[at];
@@ -1732,6 +1752,13 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             c->instruction = i;
             const XrXirInstruction *instruction = &f->instructions[i];
+            if (instruction == directory_close) {
+                if (!lower_call_point(c).path) {
+                    good = lower_unsupported(c, "directory cleanup call without an exact source");
+                    break;
+                }
+                continue;
+            }
             bool guarded_arithmetic = !cleanup_body && block->frontier && lower_cleanup_arithmetic(instruction);
             if (guarded_arithmetic && arithmetic == ARITHMETIC_UNKNOWN)
                 arithmetic = lower_cleanup_arithmetic_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
@@ -3091,6 +3118,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
     Lower *c = f->owner;
     XR_DCHECK(f->reachable[b] && f->blocks[b].id, "only created reachable blocks receive bodies");
     const XrXirBlock *block = &f->source->blocks[b];
+    const XrXirInstruction *directory_close = lower_directory_cleanup_call(c, c->function);
     c->block = b;
     if (!lower_lexical_block(f, b)) return false;
     uint32_t position = f->phis[b] + (lower_invoke_parameter(f,b) != XR_LIR_TYPE_INVALID);
@@ -3172,6 +3200,12 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
                     if (!lower_managed_copy(f, b, input, &f->current[cell])) return false;
                 } else f->current[cell] = input;
             }
+        } else if (!handled && op == directory_close) {
+            XrLirValue token = {0};
+            if (!lower_value(f, f->source->operands[op->args[0]], &token)) return false;
+            XrLirInstruction close = {.op=XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE, .type=XR_LIR_UNIT,
+                .operands=&token, .operand_count=1, .source=lower_call_point(c)};
+            if (!lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &close))) return false;
         } else if (!handled && (op->op == XR_XIR_CALL || op->op == XR_XIR_PRINT || op->op == XR_XIR_CALL_INDIRECT)) {
             if (!lower_call(f, b, i)) return false;
         } else if (!handled && !lower_emit_scalar(f, b, i)) return false;
@@ -3439,7 +3473,8 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     const XrXirInstruction *term = lower_term(c, f->source, b);
     if (!term)
         return false;
-    if (!lower_cleanup_block(f, b, term) || !lower_cleanup_exit(f, b, term)) return false;
+    bool directory_closed = false;
+    if (!lower_cleanup_block(f, b, term) || !lower_cleanup_exit(f, b, term, &directory_closed)) return false;
     if (term->op == XR_XIR_INVOKE) return lower_invoke_terminator(f,b,term);
     XrLirOp op = lower_checked_terminator_op(c, term->op);
     if (op == XR_LIR_OP_INVALID) return false;
@@ -3480,6 +3515,11 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     if (good) good = lower_managed_release_block(f, b, &instruction);
     if (good) good = lower_lexical_terminator(f, b,
         op == XR_LIR_RET && lower_callable_type(f, f->source->result) ? &value : NULL);
+    if (good && directory_closed) {
+        XrLirInstruction poll = {.op=XR_LIR_HOST_DIRECTORY_CLEANUP_POLL, .type=XR_LIR_UNIT,
+            .source=instruction.source};
+        good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &poll));
+    }
     if (good)
         good = lower_build(c, xr_lir_set_terminator(c->module, f->blocks[b], &instruction));
     for (uint32_t e = 0; e < 2; ++e)

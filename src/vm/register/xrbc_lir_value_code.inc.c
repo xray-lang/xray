@@ -83,7 +83,8 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
         xr_lir_block_at(c->input,c->function,b,&block); xr_lir_block_view(c->input,block,&view);
         for (uint32_t n = 0; n < view.instruction_count; ++n) {
             XrLirInstructionView instruction; xr_lir_instruction_view(c->input,block,n,&instruction);
-            if (instruction.op == XR_LIR_HOST_DIRECTORY || rbc_lir_scalar_ref_call(c,&instruction)) return true;
+            if (instruction.op == XR_LIR_HOST_DIRECTORY || instruction.op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ||
+                instruction.op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL || rbc_lir_scalar_ref_call(c,&instruction)) return true;
             if ((instruction.op == XR_LIR_STATE_CONSTRUCT || instruction.op == XR_LIR_STATE_INITIALIZE) &&
                 rbc_lir_value_string_slot(c,instruction.bits)) return true;
         }
@@ -562,6 +563,12 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
     case XR_LIR_HOST_DIRECTORY:
         access.operation = XR_RBC_VALUE_HOST_DIRECTORY;
         access.index = (uint32_t)i->bits;
+        break;
+    case XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE:
+        access.operation = XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE;
+        break;
+    case XR_LIR_HOST_DIRECTORY_CLEANUP_POLL:
+        access.operation = XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL;
         break;
     case XR_LIR_HOST_FILE_WRITE:
         access.operation = XR_RBC_VALUE_HOST_FILE_WRITE;

@@ -1,3 +1,30 @@
 export fn directoryProbeOpen(directory: Path) -> i64 { return __dirOpen(directory) }
 export fn directoryProbeNext(token: i64) -> string? { return __dirNext(token) }
 export fn directoryProbeClose(token: i64) -> bool { return __dirClose(token) }
+
+export fn directoryProbeCleanupLate(first: i64, second: i64) -> i64 {
+    var token = first
+    defer {
+        __dirClose(token)
+    }
+    token = second
+    return first
+}
+
+export fn directoryProbeCleanupPair(first: i64, second: i64) -> i64 {
+    defer {
+        __dirClose(first)
+    }
+    defer {
+        __dirClose(second) // innermost close
+    }
+    return 17
+}
+
+export fn directoryProbeCleanupPartial(first: i64, second: i64) -> i64 {
+    defer { __dirClose(first) }
+    {
+        defer { __dirClose(second) }
+    }
+    return 19
+}

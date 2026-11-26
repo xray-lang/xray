@@ -154,6 +154,8 @@ typedef struct XrtNativeDirectoryNext {
 XRAY_API int64_t xrt_native_host_directory_open(const XrtManagedHeader *path, uint32_t source_id);
 XRAY_API void xrt_native_host_directory_next(const XrtNativeDirectoryNext *, uint32_t source_id);
 XRAY_API bool xrt_native_host_directory_close(int64_t token, uint32_t source_id);
+XRAY_API void xrt_native_host_directory_cleanup_close(int64_t token, uint32_t source_id);
+XRAY_API void xrt_native_host_directory_cleanup_poll(uint32_t source_id);
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

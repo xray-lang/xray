@@ -417,6 +417,18 @@ XRAY_API bool xrt_native_host_directory_close(int64_t token, uint32_t source) {
     return closed;
 }
 
+XRAY_API void xrt_native_host_directory_cleanup_close(int64_t token, uint32_t source) {
+    bool closed = false;
+    XrOsIoStatus status = xrt_host_directory_cleanup_close(token, &closed);
+    if (status != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(status), source);
+}
+
+XRAY_API void xrt_native_host_directory_cleanup_poll(uint32_t source) {
+    const XrtHostExecutionControl *control = xrt_execution_host_control();
+    if (control && !control->current(control->context))
+        xrt_value_failure(XR_XIR_VALUE_CANCELLED, source);
+}
+
 XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage *image, uint32_t type,
     const XrtManagedHeader *owner, uint32_t source) {
     if (xr_native_host_shape(callable) != XR_NATIVE_HOST_FILE_CLOSE)

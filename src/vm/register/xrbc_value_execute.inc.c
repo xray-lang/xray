@@ -1673,6 +1673,16 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         status = rbc_value_host_text_result(activation, access, source);
     } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY) {
         status = rbc_value_host_directory(module, stack, activation, access, source);
+    } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE) {
+        const XrRbcRegister *operand = rbc_value_register(stack, activation, access.source);
+        if (!operand) status = XRT_MANAGED_ARGUMENT;
+        else {
+            int64_t token;
+            memcpy(&token, &operand->bits, sizeof(token));
+            xrt_native_host_directory_cleanup_close(token, source);
+        }
+    } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL) {
+        xrt_native_host_directory_cleanup_poll(source);
     } else if (access.operation==XR_RBC_VALUE_HOST_PATH_BOOL) {
         const XrtStringBacking *path = NULL, *destination = NULL;
         status = rbc_value_string_borrow(activation, access.source, &path);

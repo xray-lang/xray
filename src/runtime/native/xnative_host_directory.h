@@ -27,6 +27,9 @@ XR_FUNC XrOsIoStatus xrt_host_directory_open(XrOsPathSpan, int64_t *token);
 XR_FUNC XrOsIoStatus xrt_host_directory_next(int64_t token, XrtHostDirectoryName *output);
 XR_FUNC void xrt_host_directory_name_drop(XrtHostDirectoryName *);
 XR_FUNC XrOsIoStatus xrt_host_directory_close(int64_t token, bool *closed);
+/* Static cleanup calls need the same token and owner validation. Cancellation
+ * is observed by the caller after the complete cleanup frontier has exited. */
+XR_FUNC XrOsIoStatus xrt_host_directory_cleanup_close(int64_t token, bool *closed);
 
 /* The private list belongs to the current generation of its value root.
  * This lookup never creates a billing owner or adopts a cursor. */

@@ -124,7 +124,7 @@ XR_FUNC XrOsIoStatus xrt_host_directory_open(XrOsPathSpan path, int64_t *token) 
 #endif
 }
 
-XR_FUNC XrOsIoStatus xrt_host_directory_close(int64_t token, bool *closed) {
+static XrOsIoStatus directory_close(int64_t token, bool *closed, const XrtHostExecutionControl *control) {
     if (!closed || token <= 0) return XR_OS_IO_BAD_ARGUMENT;
     XrtBillingOwner *billing = NULL;
     XrtHostDirectory **first = xrt_native_values_directories(xrt_value_root_active(), &billing);
@@ -135,7 +135,6 @@ XR_FUNC XrOsIoStatus xrt_host_directory_close(int64_t token, bool *closed) {
     /* Host callbacks may change other entries. Only the busy owner and the
      * root's list head stay live across those calls. */
     entry->busy = true;
-    const XrtHostExecutionControl *control = xrt_execution_host_control();
     if (control && !control->current(control->context)) {
         entry->busy = false;
         return XR_OS_IO_CANCELLED;
@@ -145,6 +144,14 @@ XR_FUNC XrOsIoStatus xrt_host_directory_close(int64_t token, bool *closed) {
     if (control && !control->current(control->context)) return XR_OS_IO_CANCELLED;
     *closed = result.status == XR_OS_IO_OK;
     return XR_OS_IO_OK;
+}
+
+XR_FUNC XrOsIoStatus xrt_host_directory_close(int64_t token, bool *closed) {
+    return directory_close(token, closed, xrt_execution_host_control());
+}
+
+XR_FUNC XrOsIoStatus xrt_host_directory_cleanup_close(int64_t token, bool *closed) {
+    return directory_close(token, closed, NULL);
 }
 
 XR_FUNC XrOsIoStatus xrt_host_directory_next(int64_t token, XrtHostDirectoryName *output) {

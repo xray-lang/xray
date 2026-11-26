@@ -1,0 +1,7 @@
+import io
+import path
+
+const first = io.directoryProbeOpen(path.Path("one"))
+const second = io.directoryProbeOpen(path.Path("empty"))
+assert(first > 0 && second > 0 && first != second)
+print(io.directoryProbeCleanupPair(first, second))

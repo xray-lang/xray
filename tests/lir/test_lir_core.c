@@ -356,6 +356,47 @@ static void cleanup_invoke_checks_the_complete_callee(void) {
     }
 }
 
+static void directory_cleanup_requires_a_complete_exit(void) {
+    enum { EXACT, OMITTED_POLL, EARLY_POLL, OTHER_TOKEN, CASE_COUNT };
+    for (unsigned mode = EXACT; mode < CASE_COUNT; ++mode) {
+        XrLirModule *module = NULL;
+        OK(xr_lir_module_create(NULL, &module));
+        XrLirType scalar = XR_LIR_I64;
+        XrLirFunction owner = test_function(module, "owner", NULL, 0, XR_LIR_UNIT), cleanup = {0};
+        XrLirFunctionSpec spec = {.name="close", .name_length=5, .parameters=&scalar,
+            .parameter_count=1, .result=XR_LIR_UNIT, .cleanup_owner=owner.id};
+        OK(xr_lir_declare_function(module, &spec, &cleanup));
+        OK(xr_lir_define_function(module, cleanup));
+        XrLirBlock body = test_block(module, cleanup, NULL, 0);
+        OK(xr_lir_set_entry(module, cleanup, body));
+        XrLirValue token = {0};
+        OK(xr_lir_function_parameter(module, cleanup, 0, &token));
+        if (mode == OTHER_TOKEN) token = test_constant(module, body, scalar, 15);
+        XrLirInstruction close = {.op=XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE, .type=XR_LIR_UNIT,
+            .operands=&token, .operand_count=1, .source={"cleanup.xr", 10, 3, 9, 3, 9}};
+        OK(xr_lir_emit_effect(module, body, &close));
+        test_return(module, body, (XrLirValue){0});
+
+        XrLirBlock registration = test_block(module, owner, NULL, 0);
+        XrLirBlock active = test_block(module, owner, NULL, 0);
+        OK(xr_lir_set_entry(module, owner, registration));
+        XrLirValue capture = test_constant(module, registration, scalar, 17);
+        OK(xr_lir_internal_cleanup_block(module, registration, 0, cleanup.id, &capture, 1));
+        test_branch(module, registration, active, NULL, 0);
+        OK(xr_lir_internal_cleanup_block(module, active, cleanup.id, 0, NULL, 0));
+        XrLirInstruction run = {.op=XR_LIR_CALL, .type=XR_LIR_UNIT, .callee=cleanup,
+            .operands=&capture, .operand_count=1};
+        XrLirInstruction poll = {.op=XR_LIR_HOST_DIRECTORY_CLEANUP_POLL, .type=XR_LIR_UNIT,
+            .source={"cleanup.xr", 10, 5, 5, 5, 5}};
+        if (mode == EARLY_POLL) OK(xr_lir_emit_effect(module, active, &poll));
+        OK(xr_lir_emit_effect(module, active, &run));
+        if (mode != EARLY_POLL && mode != OMITTED_POLL) OK(xr_lir_emit_effect(module, active, &poll));
+        test_return(module, active, (XrLirValue){0});
+        CHECK(xr_lir_module_finish(module, NULL) == (mode == EXACT ? XR_LIR_OK : XR_LIR_VERIFY_ERROR));
+        xr_lir_module_destroy(module);
+    }
+}
+
 static void cleanup_arithmetic_requires_the_actual_guard(void) {
     enum { EXACT, WRONG_DIVISOR, WRONG_CODE, WRONG_SPAN, MISSING_CLEANUP,
         EXTRA_PREDECESSOR, REGISTER_ON_PANIC, NO_FRONTIER, CASE_COUNT };
@@ -1729,6 +1770,7 @@ int main(void) {
     cleanup_requires_a_registered_exit();
     cleanup_suffix_precedes_retirement();
     cleanup_invoke_checks_the_complete_callee();
+    directory_cleanup_requires_a_complete_exit();
     cleanup_arithmetic_requires_the_actual_guard();
     cleanup_callback_cannot_assert();
     startup_error_requires_an_initialized_origin();

@@ -171,3 +171,7 @@ XR_LIR_OP(SHR, "shr", 2)
 XR_LIR_OP(ARITHMETIC_PANIC, "arithmetic_panic", 0)
 /* Replaces one mutable String or Nullable<String> class field by ordinal. */
 XR_LIR_OP(CLASS_STRING_WRITE, "class_string_write", 2)
+/* One certified cleanup callback closes its captured directory token. The
+ * frontier owner observes cancellation after the complete normal exit. */
+XR_LIR_OP(HOST_DIRECTORY_CLEANUP_CLOSE, "host_directory_cleanup_close", 1)
+XR_LIR_OP(HOST_DIRECTORY_CLEANUP_POLL, "host_directory_cleanup_poll", 0)

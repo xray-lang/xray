@@ -15,6 +15,31 @@ static bool lower_cleanup_cell(const Lower *c, XrXirType type) {
     return xr_xir_cell_element(c->source->types, type) == XR_XIR_I64;
 }
 
+/* A captured binding is read in the callback, after all intervening stores. */
+static const XrXirInstruction *lower_directory_cleanup_call(const Lower *c, uint32_t function) {
+    const XrXirFunctionIdentity *ids = c->source->declarations->functions;
+    if (function >= c->source->function_count || !ids[function].cleanup_owner) return NULL;
+    const XrXirFunction *body = &c->source->functions[function];
+    if (body->block_count != 1 || body->blocks[0].frontier || body->blocks[0].panic ||
+        body->parameter_count != 1 || body->result != XR_XIR_UNIT || !lower_empty_error(body->error_type))
+        return NULL;
+    bool read = lower_cleanup_cell(c, body->parameters[0]);
+    if ((!read && body->parameters[0] != XR_XIR_I64) || body->instruction_count != 2u + read ||
+        body->operand_count != 1 || body->operands[0] != (uint32_t)read)
+        return NULL;
+    const XrXirInstruction *op = &body->instructions[read];
+    if ((read && (body->instructions[0].op != XR_XIR_CELL_READ || body->instructions[0].args[0] ||
+                    body->instructions[0].type != XR_XIR_I64)) ||
+        op[1].op != XR_XIR_RETURN || op->op != XR_XIR_CALL || op->type != XR_XIR_BOOL ||
+        op->args[0] || op->args[1] != 1 || op->immediate < 0 ||
+        (uint64_t)op->immediate >= c->source->function_count)
+        return NULL;
+    uint32_t callee = (uint32_t)op->immediate;
+    uint32_t fields[2];
+    return ids[callee].native_callable == XR_NATIVE_CALLABLE_IO_DIR_CLOSE &&
+        lower_host_abi(c, callee, fields) == XR_NATIVE_HOST_DIRECTORY ? op : NULL;
+}
+
 static bool lower_cleanup_literal(Lower *c, const XrXirFunction *f,
     const XrXirInstruction *literal, uint8_t **uses) {
     if (!literal || literal->op != XR_XIR_CONST_STRING) return false;
@@ -180,25 +205,40 @@ static bool lower_cleanup_call(LowerFunction *f, XrLirBlock block, uint32_t fron
     return good;
 }
 
-static bool lower_cleanup_unwind(LowerFunction *f, XrLirBlock block, uint32_t frontier, uint32_t target) {
+static bool lower_cleanup_unwind(LowerFunction *f, XrLirBlock block, uint32_t frontier, uint32_t target,
+    bool *directory_closed) {
+    bool ordinary_cleanup = false;
     while (frontier != target) {
         uint32_t parent, handler;
         if (xr_xir_cleanup_frontier(f->source, frontier, &parent, &handler) != XR_XIR_OK || handler)
             return lower_unsupported(f->owner, "invalid synchronous cleanup frontier");
+        const XrXirInstruction *registration = &f->source->instructions[frontier - 1];
+        if (lower_directory_cleanup_call(f->owner, (uint32_t)registration->immediate)) {
+            if (!directory_closed || ordinary_cleanup)
+                return lower_unsupported(f->owner, "directory cleanup requires a complete normal exit");
+            *directory_closed = true;
+        } else {
+            if (directory_closed && *directory_closed)
+                return lower_unsupported(f->owner, "mixed directory cleanup frontier");
+            ordinary_cleanup = true;
+        }
         if (!lower_cleanup_call(f, block, frontier)) return false;
         frontier = parent;
     }
     return true;
 }
 
-static bool lower_cleanup_exit(LowerFunction *f, uint32_t block, const XrXirInstruction *term) {
+static bool lower_cleanup_exit(LowerFunction *f, uint32_t block, const XrXirInstruction *term,
+    bool *directory_closed) {
     uint32_t frontier = f->source->blocks[block].frontier;
     if (!frontier) return true;
     uint32_t target = 0;
     if (term->op == XR_XIR_CLEANUP_LEAVE || term->op == XR_XIR_CLEANUP_ERROR)
         target = (uint32_t)term->immediate;
     else if (term->op != XR_XIR_RETURN && term->op != XR_XIR_THROW && term->op != XR_XIR_PANIC_ERROR) return true;
-    return lower_cleanup_unwind(f, f->blocks[block], frontier, target);
+    bool normal = (term->op == XR_XIR_RETURN || term->op == XR_XIR_CLEANUP_LEAVE) && !target &&
+        (f->source->result == XR_XIR_UNIT || lower_cleanup_scalar(f->source->result));
+    return lower_cleanup_unwind(f, f->blocks[block], frontier, target, normal ? directory_closed : NULL);
 }
 
 static bool lower_cleanup_arithmetic(const XrXirInstruction *op) {
@@ -247,7 +287,7 @@ static bool lower_cleanup_arithmetic_edge(LowerFunction *f, uint32_t b, const Xr
     XrLirInstruction panic = {.op = XR_LIR_ARITHMETIC_PANIC, .type = XR_LIR_UNIT,
         .bits = op->op == XR_XIR_DIV_INT ? 420 : 421, .source = source};
     if (!lower_build(c, xr_lir_set_terminator(c->module, check, &branch)) ||
-        !lower_cleanup_unwind(f, zero, frontier, 0) ||
+        !lower_cleanup_unwind(f, zero, frontier, 0, NULL) ||
         !lower_build(c, xr_lir_set_terminator(c->module, zero, &panic))) return false;
     f->blocks[b] = nonzero;
     return true;

@@ -37,6 +37,28 @@ static bool lir_cleanup_scalar(XrLirType type) {
     return type == XR_LIR_I64 || type == XR_LIR_I1;
 }
 
+static const XrLirInstructionView *lir_cleanup_directory_close(const XrLirFunctionData *f) {
+    if (!f->cleanup_owner || f->has_cleanups || f->block_count != 1 || !f->blocks ||
+        f->parameter_count != 1 || !f->parameter_types || !f->parameters ||
+        f->result != XR_LIR_UNIT || f->error)
+        return NULL;
+    const XrLirBlockData *block = &f->blocks[0];
+    bool read = f->parameter_types[0] == XR_LIR_I64_REF;
+    if ((!read && f->parameter_types[0] != XR_LIR_I64) ||
+        block->instruction_count != 2u + read || !block->instructions)
+        return NULL;
+    const XrLirInstructionView *load = &block->instructions[0].view;
+    const XrLirInstructionView *close = &block->instructions[read].view;
+    if ((read && (load->op != XR_LIR_CELL_READ || load->operand_count != 1 ||
+                    !load->operands || load->operands[0] != f->parameters[0])) ||
+        close->op != XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ||
+        close->operand_count != 1 || !close->operands ||
+        close->operands[0] != (read ? load->result : f->parameters[0]) ||
+        block->instructions[read + 1].view.op != XR_LIR_RET)
+        return NULL;
+    return close;
+}
+
 static bool lir_cleanup_nopanic(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *op) {
     switch (op->op) {
@@ -111,9 +133,22 @@ static bool lir_cleanup_calls(const XrLirModule *m, const XrLirFunctionData *f,
     uint32_t owner, const XrLirBlockData *block, uint32_t *frontier, bool guarded_arithmetic) {
     enum { BODY, CLEANUPS, RETIREMENT } phase = BODY;
     bool guarded = *frontier || f->cleanup_owner;
+    bool directory_closed = false;
+    bool ordinary_cleanup = false;
     for (uint32_t i = 0; i + 1 < block->instruction_count; ++i) {
         const XrLirInstructionView *call = &block->instructions[i].view;
         if (!i && guarded_arithmetic) continue;
+        if (call->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE) {
+            if (call != lir_cleanup_directory_close(f)) return false;
+            continue;
+        }
+        if (call->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL) {
+            XrLirOp exit = block->instructions[block->instruction_count - 1].view.op;
+            return i + 2 == block->instruction_count && directory_closed && !ordinary_cleanup &&
+                !*frontier && !f->cleanup_owner &&
+                (f->result == XR_LIR_UNIT || lir_cleanup_scalar(f->result)) &&
+                (exit == XR_LIR_RET || exit == XR_LIR_BR);
+        }
         if (call->op != XR_LIR_CALL || !m->functions[call->callee - 1].cleanup_owner) {
             if (phase != BODY) {
                 if (!lir_cleanup_retirement(call->op)) return false;
@@ -126,10 +161,12 @@ static bool lir_cleanup_calls(const XrLirModule *m, const XrLirFunctionData *f,
         if (!registration || call->operand_count != registration->capture_count) return false;
         for (uint32_t a = 0; a < call->operand_count; ++a)
             if (call->operands[a] != registration->captures[a]) return false;
+        if (lir_cleanup_directory_close(&m->functions[call->callee - 1])) directory_closed = true;
+        else ordinary_cleanup = true;
         *frontier = registration->frontier;
         phase = CLEANUPS;
     }
-    return true;
+    return !directory_closed;
 }
 
 static uint32_t lir_cleanup_frontier(const XrLirFunctionData *f, uint32_t target) {

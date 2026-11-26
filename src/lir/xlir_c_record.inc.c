@@ -17,6 +17,7 @@ static bool c_record_point(const XrLirInstructionView *v) {
         v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE ||
         v->op == XR_LIR_HOST_PATH_CLASS || v->op == XR_LIR_HOST_FILE_READ || v->op == XR_LIR_HOST_ENV_GET ||
         v->op == XR_LIR_HOST_TEXT_RESULT || v->op == XR_LIR_HOST_DIRECTORY ||
+        v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE || v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
         v->op == XR_LIR_CLASS_SCALAR_WRITE || v->op == XR_LIR_CLASS_STRING_WRITE ||
         v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
@@ -195,6 +196,16 @@ static void c_host_directory(LirC *c, const XrLirInstructionView *v, uint32_t so
 static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (v->op == XR_LIR_HOST_DIRECTORY) {
         c_host_directory(c, v, source);
+        return;
+    }
+    if (v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE) {
+        c_text(c, "    xrt_native_host_directory_cleanup_close(");
+        c_value(c, v->operands[0]);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        return;
+    }
+    if (v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL) {
+        c_format(c, "    xrt_native_host_directory_cleanup_poll(UINT32_C(%" PRIu32 "));\n", source);
         return;
     }
     if (v->op == XR_LIR_HOST_ENV_GET) {

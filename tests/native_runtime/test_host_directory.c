@@ -8,6 +8,7 @@
  */
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_host_directory.h"
+#include "xray_native_values.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +33,7 @@ static bool cancel_after_batch, cancel_after_end;
 static unsigned opened_handles, live_handles, close_calls, failed_closes, polls;
 static unsigned directory_queries, successful_batches, completed_queries;
 static HANDLE failed_handle;
+static int64_t busy_cleanup_token;
 static XrOsPathSpan executable_path;
 
 static HANDLE WINAPI tracked_open(LPCWSTR path, DWORD access, DWORD share,
@@ -47,6 +49,14 @@ static HANDLE WINAPI tracked_open(LPCWSTR path, DWORD access, DWORD share,
 
 static BOOL WINAPI tracked_close(HANDLE handle) {
     ++close_calls;
+    if (busy_cleanup_token) {
+        int64_t token = busy_cleanup_token;
+        busy_cleanup_token = 0;
+        unsigned attempts = close_calls;
+        bool closed = true;
+        CHECK(xrt_host_directory_cleanup_close(token, &closed) == XR_OS_IO_BAD_ARGUMENT && closed);
+        CHECK(close_calls == attempts);
+    }
     if (failed_handle) CHECK(failed_handle == handle);
     if (failed_closes) {
         --failed_closes;
@@ -107,6 +117,7 @@ static void invalid_token(int64_t token) {
     unsigned attempts = close_calls;
     unsigned queries = directory_queries;
     CHECK(xrt_host_directory_close(token, &closed) == XR_OS_IO_BAD_ARGUMENT && closed);
+    CHECK(xrt_host_directory_cleanup_close(token, &closed) == XR_OS_IO_BAD_ARGUMENT && closed);
     CHECK(xrt_host_directory_next(token, &name) == XR_OS_IO_BAD_ARGUMENT && empty_name(&name));
     CHECK(close_calls == attempts);
     CHECK(directory_queries == queries);
@@ -208,6 +219,40 @@ static void cancel_before_close(void *context) {
     cancelled = false;
     CHECK(xrt_host_directory_close(token, &closed) == XR_OS_IO_OK && closed);
     CHECK(!live_handles && close_calls == attempts + 1);
+}
+
+typedef struct CleanupCancellation {
+    bool before_close;
+    unsigned polls_before_cleanup;
+} CleanupCancellation;
+
+static void cleanup_cancel(void *context) {
+    CleanupCancellation *test = context;
+    int64_t first = open_directory();
+    int64_t second = open_directory();
+    CHECK(first != second && live_handles == 2);
+    test->polls_before_cleanup = polls;
+    unsigned attempts = close_calls;
+    cancelled = test->before_close;
+    cancel_after_close = !test->before_close;
+    busy_cleanup_token = second;
+    xrt_native_host_directory_cleanup_close(second, 0);
+    CHECK(cancelled && !busy_cleanup_token && polls == test->polls_before_cleanup && live_handles == 1);
+    xrt_native_host_directory_cleanup_close(first, 0);
+    CHECK(polls == test->polls_before_cleanup && !live_handles && close_calls == attempts + 2);
+    xrt_native_host_directory_cleanup_poll(0);
+    CHECK(false);
+}
+
+static void cleanup_os_refusal(void *context) {
+    (void)context;
+    int64_t token = open_directory();
+    failed_closes = 1;
+    unsigned attempts = close_calls, previous_polls = polls;
+    xrt_native_host_directory_cleanup_close(token, 0);
+    CHECK(live_handles == 1 && failed_handle && close_calls == attempts + 1 && polls == previous_polls);
+    xrt_native_host_directory_cleanup_poll(0);
+    CHECK(polls == previous_polls + 1 && close_calls == attempts + 1);
 }
 
 typedef struct CloseOrder {
@@ -457,6 +502,20 @@ static void exercises(void) {
     CHECK(xrt_value_root_empty(&root) && !live_handles && close_calls == attempts + 1);
     xrt_execution_failure_drop(&failure);
     cancel_after_close = cancelled = false;
+
+    for (unsigned moment = 0; moment < 2; ++moment) {
+        CleanupCancellation test = {.before_close=moment != 0};
+        CHECK(xrt_run_embedded_owned_controlled(locations, &failure, cleanup_cancel, &test,
+            &root, &control) == XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_CANCELLED);
+        CHECK(polls == test.polls_before_cleanup + 1 && !live_handles && xrt_value_root_empty(&root));
+        xrt_execution_failure_drop(&failure);
+        cancel_after_close = cancelled = false;
+    }
+    attempts = close_calls;
+    CHECK(xrt_run_embedded_owned_controlled(locations, &failure, cleanup_os_refusal, NULL,
+        &root, &control) == XRT_EXECUTION_COMPLETED);
+    CHECK(close_calls == attempts + 2 && !live_handles && !failed_handle && xrt_value_root_empty(&root));
 
     CloseOrder order = {0};
     const XrtHostExecutionControl reorder = {open_during_poll, &order};
