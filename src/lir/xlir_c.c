@@ -576,7 +576,8 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (xr_lir_range_point(c->request->module, v)) return;
     if (c_record_point(v)) {
         c->host_directory |= v->op == XR_LIR_HOST_DIRECTORY || v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ||
-            v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL;
+            v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
+            (v->op >= XR_LIR_HOST_DIRECTORY_FRAME && v->op <= XR_LIR_HOST_DIRECTORY_FAIL);
         return;
     }
     if (c_sum_point(v)) return;

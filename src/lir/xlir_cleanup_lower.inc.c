@@ -236,6 +236,114 @@ static bool lower_cleanup_frame_type(const Lower *c, XrXirType type) {
     return type == XR_XIR_UNIT || lower_cleanup_scalar(type) || lower_cleanup_cell(c, type);
 }
 
+static const XrXirInstruction *lower_directory_tail(const Lower *c, const XrXirFunction *f, uint32_t b) {
+    const XrXirBlock *block = &f->blocks[b];
+    if (!block->frontier || block->panic || block->count < 2 ||
+        xr_xir_nullable_element(c->source->types, f->result) != XR_XIR_STRING) return NULL;
+    uint32_t at = block->first + block->count - 2;
+    const XrXirInstruction *call = &f->instructions[at];
+    if (call[1].op != XR_XIR_RETURN || call[1].args[0] != f->parameter_count + at ||
+        call->op != XR_XIR_CALL || call->type != f->result || call->args[1] != 1 ||
+        call->args[0] >= f->operand_count || call->immediate < 0 ||
+        (uint64_t)call->immediate >= c->source->function_count) return NULL;
+    uint32_t callee = (uint32_t)call->immediate, fields[2];
+    if (c->source->declarations->functions[callee].native_callable != XR_NATIVE_CALLABLE_IO_DIR_NEXT ||
+        lower_host_abi(c, callee, fields) != XR_NATIVE_HOST_DIRECTORY ||
+        xr_xir_operand_type(f, f->operands[call->args[0]]) != XR_XIR_I64) return NULL;
+    for (uint32_t frontier = block->frontier; frontier;) {
+        uint32_t parent, handler;
+        if (xr_xir_cleanup_frontier(f, frontier, &parent, &handler) != XR_XIR_OK || handler ||
+            !lower_directory_cleanup_call(c, (uint32_t)f->instructions[frontier - 1].immediate)) return NULL;
+        frontier = parent;
+    }
+    return call;
+}
+
+static const XrXirInstruction *lower_directory_tail_frame(const Lower *c, const XrXirFunction *f) {
+    if (!lower_empty_error(f->error_type) ||
+        xr_xir_nullable_element(c->source->types, f->result) != XR_XIR_STRING) return NULL;
+    for (uint32_t p = 0; p < f->parameter_count; ++p)
+        if (!lower_cleanup_scalar(f->parameters[p])) return NULL;
+    const XrXirInstruction *first_tail = NULL;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrXirBlock *block = &f->blocks[b];
+        const XrXirInstruction *tail = lower_directory_tail(c, f, b);
+        if (block->panic || !block->count ||
+            (f->instructions[block->first + block->count - 1].op == XR_XIR_RETURN && !tail)) return NULL;
+        for (uint32_t i = block->first; i < block->first + block->count; ++i)
+            if (&f->instructions[i] != tail && !lower_cleanup_frame_type(c, f->instructions[i].type)) return NULL;
+        if (!first_tail) first_tail = tail;
+    }
+    return first_tail;
+}
+
+static XrLirSource lower_directory_source(Lower *c, uint32_t function, const XrXirInstruction *call) {
+    uint32_t owner = c->function, at = c->instruction;
+    c->function = function;
+    c->instruction = (uint32_t)(call - c->source->functions[function].instructions);
+    XrLirSource source = lower_call_point(c);
+    c->instruction = at;
+    c->function = owner;
+    return source;
+}
+
+static bool lower_directory_close_chain(LowerFunction *f, XrLirBlock block, uint32_t frontier,
+    XrLirValue *status) {
+    Lower *c = f->owner;
+    while (frontier) {
+        const XrXirInstruction *registration = &f->source->instructions[frontier - 1];
+        uint32_t role = (uint32_t)registration->immediate;
+        const XrXirInstruction *close = lower_directory_cleanup_call(c, role);
+        XrLirValue input[2] = {{0}, *status};
+        uint32_t capture = f->source->operands[registration->args[0]];
+        if (!close || !lower_value(f, capture, &input[0])) return false;
+        XrLirSource source = lower_directory_source(c, role, close);
+        if (lower_cleanup_cell(c, c->source->functions[role].parameters[0])) {
+            XrLirInstruction load = {.op=XR_LIR_CELL_READ,.type=XR_LIR_I64,
+                .operands=input,.operand_count=1,.source=source};
+            XrLirValue loaded = {0};
+            if (!lower_build(c, xr_lir_emit_value(c->module, block, &load, &loaded))) return false;
+            input[0] = loaded;
+        }
+        XrLirInstruction step = {.op=XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED,.type=XR_LIR_U64,
+            .bits=lower_cleanup_target(f, registration).id,.operands=input,
+            .operand_count=status->id ? 2u : 1u,.source=source};
+        if (!lower_build(c, xr_lir_emit_value(c->module, block, &step, status))) return false;
+        uint32_t parent, handler;
+        if (xr_xir_cleanup_frontier(f->source, frontier, &parent, &handler) != XR_XIR_OK || handler) return false;
+        frontier = parent;
+    }
+    return true;
+}
+
+static bool lower_directory_next(LowerFunction *f, uint32_t b, const XrXirInstruction *call) {
+    Lower *c = f->owner;
+    XrLirSource source = lower_directory_source(c, c->function, call);
+    XrLirSource exit = lower_source(c);
+    XrLirType type = lower_type(c, f->source->result), status = XR_LIR_U64;
+    XrLirBlock normal = {0}, failure = {0};
+    XrLirValue token = {0}, success[2] = {{0}}, failed[2] = {{0}};
+    if (!lower_value(f, f->source->operands[call->args[0]], &token) ||
+        !lower_build(c, xr_lir_add_block(c->module, f->function, &type, 1, &normal)) ||
+        !lower_build(c, xr_lir_add_block(c->module, f->function, &status, 1, &failure)) ||
+        !lower_build(c, xr_lir_block_parameter(c->module, normal, 0, &success[0])) ||
+        !lower_build(c, xr_lir_block_parameter(c->module, failure, 0, &failed[0]))) return false;
+    uint32_t frontier = f->source->blocks[b].frontier;
+    if (!lower_directory_close_chain(f, normal, frontier, &success[1]) ||
+        !lower_directory_close_chain(f, failure, frontier, &failed[1])) return false;
+    XrLirInstruction next = {.op=XR_LIR_HOST_DIRECTORY_NEXT_CHECKED,.type=type,.operands=&token,
+        .operand_count=1,.edge_count=2,.edges={{.target=normal},{.target=failure}},.source=source};
+    XrLirInstruction guard = {.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,.type=XR_LIR_UNIT,
+        .operands=success,.operand_count=2,.source=exit};
+    XrLirInstruction ret = {.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=success,.operand_count=1,.source=exit};
+    XrLirInstruction fail = {.op=XR_LIR_HOST_DIRECTORY_FAIL,.type=XR_LIR_UNIT,
+        .operands=failed,.operand_count=2,.source=source};
+    return lower_build(c, xr_lir_set_terminator(c->module, f->blocks[b], &next)) &&
+        lower_build(c, xr_lir_emit_effect(c->module, normal, &guard)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, normal, &ret)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, failure, &fail));
+}
+
 /* Physical failure may leave this activation after its defer callbacks. Keep
  * frames with owners, loans or callable scopes on the existing refusal path
  * until they can retire those obligations on the new successor. */

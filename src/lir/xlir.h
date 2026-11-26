@@ -184,11 +184,12 @@ typedef struct XrLirInstructionView {
     XrLirSource source;
 } XrLirInstructionView;
 
-/* INVOKE produces the first receiver parameter on either selected edge.
+/* Checked calls produce the first receiver parameter on either selected edge.
  * An ordinary forwarded argument starts after that value. */
 static inline uint32_t xr_lir_edge_parameter_offset(const XrLirInstructionView *term,
     uint32_t edge) {
-    return term->op == XR_LIR_INVOKE && (edge || term->type != XR_LIR_UNIT);
+    return term->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED ||
+        (term->op == XR_LIR_INVOKE && (edge || term->type != XR_LIR_UNIT));
 }
 
 /* Queries require a finished module. Out-of-range queries preserve no view.

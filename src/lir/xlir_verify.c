@@ -56,7 +56,14 @@ XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *m, XrLirType type, bo
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op) {
     return op == XR_LIR_BR || op == XR_LIR_CONDBR || op == XR_LIR_RET ||
         op == XR_LIR_INVOKE || op == XR_LIR_RETURN_ERROR || op == XR_LIR_PANIC_ERROR ||
-        op == XR_LIR_UNCAUGHT_ERROR || op == XR_LIR_ARITHMETIC_PANIC;
+        op == XR_LIR_UNCAUGHT_ERROR || op == XR_LIR_ARITHMETIC_PANIC ||
+        op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED || op == XR_LIR_HOST_DIRECTORY_FAIL;
+}
+
+static bool lir_directory_string_result(const XrLirModule *m, XrLirType type) {
+    XrLirTypeView shape;
+    return xr_lir_type_view(m, type, &shape) == XR_LIR_OK &&
+        shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_STRING;
 }
 XR_FUNC XrLirStatus xr_lir_internal_error(XrLirDiagnostic *d, const char *message,
                                           uint32_t function, uint32_t block, uint32_t instruction,
@@ -463,6 +470,16 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 v->source.line && v->source.column &&
                 (v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ? f->cleanup_owner && a == XR_LIR_I64 :
                     !f->cleanup_owner);
+        case XR_LIR_HOST_DIRECTORY_FRAME: return v->type == XR_LIR_UNIT;
+        case XR_LIR_HOST_DIRECTORY_NEXT_CHECKED: return a == XR_LIR_I64 && v->type == f->result;
+        case XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED:
+            return v->type == XR_LIR_U64 && a == XR_LIR_I64 &&
+                (v->operand_count == 1 || (v->operand_count == 2 && b == XR_LIR_U64)) &&
+                v->bits && v->bits <= m->function_count;
+        case XR_LIR_HOST_DIRECTORY_RETURN_GUARD:
+            return v->type == XR_LIR_UNIT && a == f->result && b == XR_LIR_U64;
+        case XR_LIR_HOST_DIRECTORY_FAIL:
+            return v->type == XR_LIR_UNIT && a == XR_LIR_U64 && b == XR_LIR_U64;
         case XR_LIR_HOST_FILE_CLOSE:
             return v->type == XR_LIR_I1 && xr_lir_class_storage(m, a) == XR_NATIVE_DECLARATION_FILE_STORAGE &&
                 v->bits <= UINT32_MAX && xr_native_host_shape((uint32_t)v->bits) == XR_NATIVE_HOST_FILE_CLOSE;
@@ -555,12 +572,20 @@ static bool lir_edges_valid(const XrLirModule *m, const XrLirFunctionData *f, co
         &m->functions[v->callee - 1] : NULL;
     if (v->op == XR_LIR_INVOKE && (!callee || !callee->error || v->edges[0].target == v->edges[1].target))
         return false;
+    bool directory = v->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED;
+    if (directory && v->edges[0].target == v->edges[1].target) return false;
     for (uint32_t e = 0; e < v->edge_count; ++e) {
         const XrLirEdgeView *edge = &v->edges[e];
         if (!edge->target || edge->target > f->block_count ||
             (edge->argument_count && !edge->arguments))
             return false;
         const XrLirBlockData *target = &f->blocks[edge->target - 1];
+        if (directory) {
+            uint32_t parameter = target->parameter_count == 1 && target->parameters ? target->parameters[0] : 0;
+            if (edge->argument_count || !parameter || parameter > f->value_count ||
+                f->values[parameter - 1].type != (e ? XR_LIR_U64 : v->type)) return false;
+            continue;
+        }
         if (callee) {
             XrLirType produced = e ? callee->error : callee->result;
             uint32_t parameter = target->parameter_count && target->parameters ? target->parameters[0] : 0;
@@ -645,6 +670,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_HOST_FILE_OPEN_WRITE && v->op != XR_LIR_HOST_FILE_CLOSE && v->op != XR_LIR_HOST_FILE_WRITE &&
         v->op != XR_LIR_HOST_PATH_CLASS && v->op != XR_LIR_HOST_FILE_READ && v->op != XR_LIR_HOST_ENV_GET &&
         v->op != XR_LIR_HOST_TEXT_RESULT && v->op != XR_LIR_HOST_DIRECTORY &&
+        v->op != XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED &&
         v->op != XR_LIR_CLASS_SCALAR_WRITE && v->op != XR_LIR_CLASS_STRING_WRITE &&
         v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
@@ -660,7 +686,8 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         if (v->type != XR_LIR_UNIT || v->edge_count || v->result || !target) goto invalid;
         return XR_LIR_OK;
     }
-    uint32_t edges = v->op == XR_LIR_BR ? 1 : (v->op == XR_LIR_CONDBR || v->op == XR_LIR_INVOKE ? 2 : 0);
+    bool branching = v->op == XR_LIR_CONDBR || v->op == XR_LIR_INVOKE || v->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED;
+    uint32_t edges = v->op == XR_LIR_BR ? 1 : branching ? 2 : 0;
     if (v->edge_count != edges || !lir_edges_valid(m, f, v)) {
         message = "control flow edge target or parameter signature mismatch";
         goto invalid;
@@ -698,6 +725,9 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             !v->source.path || !v->source.path_length || !v->source.line || !v->source.column) goto invalid;
         return XR_LIR_OK;
     }
+    if (v->op >= XR_LIR_HOST_DIRECTORY_FRAME && v->op <= XR_LIR_HOST_DIRECTORY_FAIL &&
+        (!f->has_cleanups || f->cleanup_owner || f->error || !lir_directory_string_result(m, f->result) ||
+         !v->source.path || !v->source.path_length || !v->source.line || !v->source.column)) goto invalid;
     if (v->op==XR_LIR_RETURN_ERROR || v->op==XR_LIR_PANIC_ERROR || v->op==XR_LIR_UNCAUGHT_ERROR) {
         XrLirRecordIdentity identity={0};
         XrLirType error=f->values[v->operands[0]-1].type;

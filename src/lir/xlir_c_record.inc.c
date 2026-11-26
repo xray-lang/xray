@@ -18,6 +18,7 @@ static bool c_record_point(const XrLirInstructionView *v) {
         v->op == XR_LIR_HOST_PATH_CLASS || v->op == XR_LIR_HOST_FILE_READ || v->op == XR_LIR_HOST_ENV_GET ||
         v->op == XR_LIR_HOST_TEXT_RESULT || v->op == XR_LIR_HOST_DIRECTORY ||
         v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE || v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
+        (v->op >= XR_LIR_HOST_DIRECTORY_FRAME && v->op <= XR_LIR_HOST_DIRECTORY_FAIL) ||
         v->op == XR_LIR_CLASS_SCALAR_WRITE || v->op == XR_LIR_CLASS_STRING_WRITE ||
         v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
@@ -163,6 +164,22 @@ static void c_host_text_result(LirC *c, const XrLirInstructionView *v, uint32_t 
     c_value(c, v->operands[0]);
     c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
 }
+static void c_host_directory_destination(LirC *c, uint32_t destination, uint32_t token, uint32_t source) {
+    const XrLirValueHome *home = &c->homes->values[destination];
+    const XrtValueImage *image = xr_lir_value_image_view(c->value_image);
+    const XrtValueImageType *optional = &image->types[home->type - 1];
+    XR_CHECK(optional->kind == XRT_VALUE_NULLABLE && home->temporary_offset != SIZE_MAX &&
+        optional->nullable_payload <= SIZE_MAX - home->temporary_offset,
+        "verified directory next has a stable nullable owner offset");
+    c_format(c, "&(XrtNativeDirectoryNext){"
+        ".frame=xrl_frame, .destination=%zu, .temporary=%zu, .offset=%zu, .temporary_owner_offset=%zu, "
+        ".image=&xrl_value_image, .result_type=UINT32_C(%" PRIu32 "), .token=",
+        home->first_owner, home->temporary_first_owner, home->offset,
+        home->temporary_offset + optional->nullable_payload, home->type);
+    c_value(c, token);
+    c_format(c, "}, UINT32_C(%" PRIu32 ")", source);
+}
+
 static void c_host_directory(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (v->bits == XR_NATIVE_CALLABLE_IO_DIR_OPEN) {
         c_format(c, "    v%" PRIu32 " = xrt_native_host_directory_open((const XrtManagedHeader *)", v->result);
@@ -177,23 +194,68 @@ static void c_host_directory(LirC *c, const XrLirInstructionView *v, uint32_t so
         return;
     }
     XR_CHECK(v->bits == XR_NATIVE_CALLABLE_IO_DIR_NEXT, "verified directory operation has a known callable");
-    const XrLirValueHome *home = &c->homes->values[v->result];
-    const XrtValueImage *image = xr_lir_value_image_view(c->value_image);
-    const XrtValueImageType *optional = &image->types[home->type - 1];
-    XR_CHECK(optional->kind == XRT_VALUE_NULLABLE && home->temporary_offset != SIZE_MAX &&
-        optional->nullable_payload <= SIZE_MAX - home->temporary_offset,
-        "verified directory next has a stable nullable owner offset");
     c_values_ensure(c, source);
-    c_format(c, "    xrt_native_host_directory_next(&(XrtNativeDirectoryNext){"
-        ".frame=xrl_frame, .destination=%zu, .temporary=%zu, .offset=%zu, .temporary_owner_offset=%zu, "
-        ".image=&xrl_value_image, .result_type=UINT32_C(%" PRIu32 "), .token=",
-        home->first_owner, home->temporary_first_owner, home->offset,
-        home->temporary_offset + optional->nullable_payload, home->type);
-    c_value(c, v->operands[0]);
-    c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
+    c_text(c, "    xrt_native_host_directory_next(");
+    c_host_directory_destination(c, v->result, v->operands[0], source);
+    c_text(c, ");\n");
+}
+
+static void c_checked_directory(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    switch (v->op) {
+    case XR_LIR_HOST_DIRECTORY_FRAME:
+        c_values_ensure(c, source);
+        return;
+    case XR_LIR_HOST_DIRECTORY_NEXT_CHECKED: {
+        const XrLirModule *m = c->request->module;
+        XrLirBlockView normal, failure;
+        xr_lir_block_view(m, (XrLirBlock){m, c->function.id, v->edges[0].target}, &normal);
+        xr_lir_block_view(m, (XrLirBlock){m, c->function.id, v->edges[1].target}, &failure);
+        c_format(c, "    v%" PRIu32 " = xrt_native_host_directory_next_checked(", failure.parameters[0]);
+        c_host_directory_destination(c, normal.parameters[0], v->operands[0], source);
+        c_format(c, ");\n    if (v%" PRIu32 ") goto bb%" PRIu32 ";\n    goto bb%" PRIu32 ";\n",
+            failure.parameters[0], v->edges[1].target, v->edges[0].target);
+        return;
+    }
+    case XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED:
+        c_format(c, "    v%" PRIu32 " = ", v->result);
+        if (v->operand_count == 2) {
+            c_value(c, v->operands[1]);
+            c_text(c, " ? ");
+            c_value(c, v->operands[1]);
+            c_text(c, " : ");
+        }
+        c_text(c, "xrt_native_host_directory_cleanup_close_checked(");
+        c_value(c, v->operands[0]);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        return;
+    case XR_LIR_HOST_DIRECTORY_RETURN_GUARD:
+        c_text(c, "    { XrtNativeDirectoryStatus xrl_directory_status = ");
+        c_value(c, v->operands[1]);
+        c_format(c, ";\n        if (!xrl_directory_status) xrl_directory_status = "
+            "xrt_native_host_directory_cleanup_poll_checked(UINT32_C(%" PRIu32 "));\n"
+            "        if (xrl_directory_status) {\n", source);
+        c_values_replace_begin(c, v->operands[0], source);
+        c_text(c, "NULL");
+        c_values_replace_end(c, source);
+        c_text(c, "            xrt_native_host_directory_cleanup_fail(xrl_directory_status, 0);\n        }\n    }\n");
+        return;
+    case XR_LIR_HOST_DIRECTORY_FAIL:
+        c_text(c, "    xrt_native_host_directory_cleanup_fail(");
+        c_value(c, v->operands[0]);
+        c_text(c, ", ");
+        c_value(c, v->operands[1]);
+        c_text(c, ");\n");
+        return;
+    default:
+        XR_CHECK(false, "a checked directory step has a known operation");
+    }
 }
 
 static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op >= XR_LIR_HOST_DIRECTORY_FRAME && v->op <= XR_LIR_HOST_DIRECTORY_FAIL) {
+        c_checked_directory(c, v, source);
+        return;
+    }
     if (v->op == XR_LIR_HOST_DIRECTORY) {
         c_host_directory(c, v, source);
         return;

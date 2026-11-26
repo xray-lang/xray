@@ -158,6 +158,7 @@ typedef struct LowerFunction {
     LowerLexical lexical;
     LowerViews views;
     bool directory_scalar_frame;
+    const XrXirInstruction *directory_first_tail;
 } LowerFunction;
 
 static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
@@ -1779,6 +1780,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     bool good = true;
     bool cleanup_body = c->source->declarations->functions[function].cleanup_owner != 0;
     const XrXirInstruction *directory_close = lower_directory_cleanup_call(c, function);
+    const XrXirInstruction *directory_frame = cleanup_body ? NULL : lower_directory_tail_frame(c, f);
     enum { ARITHMETIC_UNKNOWN, ARITHMETIC_ALLOWED, ARITHMETIC_REFUSED } arithmetic = ARITHMETIC_UNKNOWN;
     for (uint32_t at = 0; at < count && good; ++at) {
         uint32_t b = queue[at];
@@ -1789,6 +1791,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             break;
         }
         const XrXirBlock *block = &f->blocks[b];
+        const XrXirInstruction *directory_tail = directory_frame ? lower_directory_tail(c, f, b) : NULL;
         if (block->panic) {
             good = lower_unsupported(c, "panic or cleanup frontier");
             break;
@@ -1796,13 +1799,14 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             c->instruction = i;
             const XrXirInstruction *instruction = &f->instructions[i];
-            if (instruction == directory_close) {
+            if (instruction == directory_close || instruction == directory_tail) {
                 if (!lower_call_point(c).path) {
                     good = lower_unsupported(c, "directory cleanup call without an exact source");
                     break;
                 }
                 continue;
             }
+            if (directory_tail && instruction == term) continue;
             bool guarded_arithmetic = !cleanup_body && block->frontier && lower_cleanup_arithmetic(instruction);
             if (guarded_arithmetic && arithmetic == ARITHMETIC_UNKNOWN)
                 arithmetic = lower_cleanup_scalar_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
@@ -3186,10 +3190,12 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         for (uint32_t p = 0; p < f->source->parameter_count; ++p)
             if (f->array_values[p] != UINT32_MAX) f->current[f->array_values[p]] = f->values[p];
     uint32_t first = block->first + f->phis[b] + lower_optional_error_join(c,b);
+    const XrXirInstruction *directory_tail = f->directory_first_tail ? lower_directory_tail(c, f->source, b) : NULL;
     for (uint32_t i = first; i < block->first + block->count - 1; ++i) {
         c->instruction = i;
         if (f->lexical.count && !lower_lexical_events(f, b, f->lexical.before[i])) return false;
         const XrXirInstruction *op = &f->source->instructions[i];
+        if (op == directory_tail) continue;
         uint32_t result = f->source->parameter_count + i;
         if (op->op == XR_XIR_CLASS_METHOD_REF) {
             if (!lower_class_call(c,c->function,i + 1))
@@ -3529,7 +3535,10 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     if (!term)
         return false;
     bool directory_closed = false;
-    if (!lower_cleanup_block(f, b, term) || !lower_cleanup_exit(f, b, term, &directory_closed)) return false;
+    if (!lower_cleanup_block(f, b, term)) return false;
+    const XrXirInstruction *directory_tail = f->directory_first_tail ? lower_directory_tail(c, f->source, b) : NULL;
+    if (directory_tail) return lower_directory_next(f, b, directory_tail);
+    if (!lower_cleanup_exit(f, b, term, &directory_closed)) return false;
     if (term->op == XR_XIR_INVOKE) return lower_invoke_terminator(f,b,term);
     XrLirOp op = lower_checked_terminator_op(c, term->op);
     if (op == XR_LIR_OP_INVALID) return false;
@@ -3707,6 +3716,7 @@ static bool lower_function(Lower *c, uint32_t index) {
     if (!c->source->functions[index].block_count) return lower_host_function(c, index);
     LowerFunction f = {
         .owner = c, .source = &c->source->functions[index], .function = c->functions[index]};
+    f.directory_first_tail = lower_directory_tail_frame(c, f.source);
     f.literal_uses = lower_literal_uses(c, f.source);
     bool good = f.literal_uses && lower_build(c, xr_lir_define_function(c->module, f.function)) && lower_order(&f) &&
                 lower_cell_inventory(&f) && lower_lexical_inventory(&f) && lower_string_updates(&f) &&
@@ -3716,6 +3726,11 @@ static bool lower_function(Lower *c, uint32_t index) {
     if (lower_hidden_state(c, index) && good)
         good = lower_build(c, xr_lir_function_parameter(c->module, f.function,
             f.source->parameter_count, &f.state));
+    if (good && f.directory_first_tail) {
+        XrLirInstruction frame = {.op=XR_LIR_HOST_DIRECTORY_FRAME,.type=XR_LIR_UNIT,
+            .source=lower_directory_source(c, index, f.directory_first_tail)};
+        good = lower_build(c, xr_lir_emit_effect(c->module, f.blocks[0], &frame));
+    }
     for (uint32_t p = 0; p < f.source->parameter_count && good; ++p)
         if (f.source->parameters[p] == XR_XIR_STRING || xr_lir_boxed_type(c->module, lower_type(c, f.source->parameters[p]))) {
             XrLirValue retained = {0};
