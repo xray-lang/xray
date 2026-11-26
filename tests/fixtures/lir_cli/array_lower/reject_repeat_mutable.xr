@@ -1,0 +1,2 @@
+var n=4
+const values:[u8;4]=[7;n]

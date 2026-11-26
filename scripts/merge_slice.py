@@ -6,7 +6,6 @@ refers to closed runner receipts. SAN approval covers the exact patch.
 """
 
 import argparse
-import ast
 from datetime import datetime, timedelta
 import hashlib
 import json
@@ -19,6 +18,7 @@ import xml.etree.ElementTree as ET
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
+from current_gate_inventory import gate_tests
 import xray_progress
 from xray_slot import Lease, save_json
 from xray_process import RecoveryRequired
@@ -161,7 +161,8 @@ def review_scope(root: Path, base: str, candidate: str, review: dict) -> dict:
             core.add(path)
         elif path.startswith(("src/base/", "src/shared/", "src/core/", "include/", ".github/workflows/")) or path in (
             "AGENTS.md", "CMakeLists.txt", "scripts/merge_slice.py", "scripts/merge-slice.ps1",
-            "scripts/verify_current_build.py", "scripts/xray_slot.py", "scripts/xray-slot.ps1",
+            "scripts/verify_current_build.py", "scripts/current_gate_inventory.py",
+            "scripts/current_gate_tests.json", "scripts/xray_slot.py", "scripts/xray-slot.ps1",
             "scripts/xray_process.py", "scripts/xray_progress.py", "tests/tools/test_merge_slice.py",
               *METADATA_OWNERSHIP_FILES,
             "tests/smoke/run_smoke.py", "tests/smoke/smoke.cmake", "tests/smoke/cases.json",
@@ -216,16 +217,13 @@ def junit_outcomes(content: bytes) -> dict[str, str]:
     return results
 
 
-def current_gate_tests(root: Path, candidate: str) -> set[str]:
-    source = git(root, "show", f"{candidate}:scripts/verify_current_build.py")
-    for item in ast.parse(source).body:
-        if isinstance(item, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "REQUIRED"
-                                               for target in item.targets):
-            tests = ast.literal_eval(item.value)
-            if (isinstance(tests, tuple) and all(isinstance(name, str) for name in tests) and CURRENT_CORE <= set(tests)
-                    and len(set(tests)) == len(tests)):
-                return set(tests)
-    raise ValueError("Candidate has no canonical list of current tests")
+def current_gate_tests(root: Path, candidate: str, host: str) -> set[str]:
+    content = git(root, "show", f"{candidate}:scripts/current_gate_tests.json")
+    system, machine = HOST_TARGETS[host][0].split("-", 1)
+    tests = set(gate_tests(content, system, machine, execution64=True))
+    if not CURRENT_CORE <= tests:
+        raise ValueError("Candidate lacks required core gates")
+    return tests
 
 
 def verify_identity(content: bytes, candidate: str, host: str, profile: str) -> str:
@@ -566,16 +564,16 @@ def verify_task339(root: Path, candidate: str, review: dict, logs: Path, log: di
         return matches[0]
 
     run_artifacts = official_run_artifacts(run_id, logs, log)
-    required = current_gate_tests(root, candidate)
     for host, title in HOST_JOBS.items():
         kind = "Windows" if host == "windows-2022" else "Unix"
         steps = [f"Configure {kind} Ninja Release", f"Build {kind} all without exclusions",
                  f"Independently rebuild {kind} CLI", f"Verify {kind} current gates"]
         with verified_ci_package(run, official_job(title), ci["artifacts"][host], "current-" + host,
                                  steps, run_artifacts, logs, log) as package:
-            verify_current(package, host, candidate, required, logs, log)
+            verify_current(package, host, candidate, current_gate_tests(root, candidate, host), logs, log)
     log["gates"]["L1"] = "PASS"
 
+    required = current_gate_tests(root, candidate, "ubuntu-24.04")
     steps = ["Configure combined sanitizers", "Build current products and kernels", "Verify exact CLI and current gates"]
     with verified_ci_package(run, official_job(SAN_JOB), ci["artifacts"]["san"], "current-sanitizers",
                              steps, run_artifacts, logs, log) as package:

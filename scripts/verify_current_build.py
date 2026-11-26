@@ -15,74 +15,15 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 
+from current_gate_inventory import gate_tests
+
 ROOT = Path(__file__).resolve().parents[1]
-REQUIRED = (
-    "test_api_inventory_predicates",
-    "test_lir_core", "test_lir_carriers", "test_lir_source_input", "test_lir_lower", "test_lir_c",
-    "test_lir_c_faults", "test_lir_c_native", "test_cgen_verify_output",
-    "register_vm", "register_vm_native_print", "register_vm_alloc",
-    "lir_bytecode", "lir_bytecode_alloc", "lir_bytecode_source",
-    "lir_vm_source", "lir_vm_output", "skeleton_diff", "smoke", "test_lir_cli_effects",
-    # Preserve written Bool/String evaluation order, retained messages and real
-    # callsite locations through valid LIR and Source on both execution backends.
-    "lir_assertion", "test_lir_cli_assertions", "test_lir_cli_invoke_try_assert",
-    "test_lir_cli_invoke_try_propagate", "test_lir_cli_invoke_try_optional",
-    "test_lir_cli_invoke_managed_string", "test_lir_cli_invoke_catch",
-    "test_lir_cli_invoke_catch_local",
-    "test_lir_cli_invoke_borrowed_slice", "test_lir_cli_invoke_strict_utf8", "test_lir_cli_lossy_utf8",
-    "test_lir_cli_class_optional_i64", "test_lir_cli_class_string_fields", "test_lir_cli_class_method_calls",
-    "test_lir_cli_defer_sync", "test_lir_cli_defer_lowering", "test_lir_cli_defer_source",
-    "test_lir_cli_defer_propagation",
-    "test_lir_cli_defer_panic", "test_lir_cli_defer_caught",
-    "test_lir_cli_invoke_init_root",
-    "test_lir_cli_string_byte_length",
-    "test_lir_cli_host_path", "test_lir_cli_host_file_write", "test_lir_cli_target_platform",
-    "test_lir_cli_host_directory", "native_host_directory", "os_directory_owned",
-    "test_lir_cli_host_environment", "test_lir_host_stat_control",
-    "test_lir_host_remove_control",
-    "test_lir_cli_string_slice",
-    "test_lir_cli_string_index_of", "test_lir_cli_f64_try_parse", "test_lir_cli_bool_try_parse", "test_lir_cli_string_test", "test_lir_cli_string_last_index_of", "test_lir_cli_string_order", "test_lir_cli_string_replace", "test_lir_cli_literal_uses", "test_lir_cli_array_capacity", "test_lir_cli_struct_align", "test_lir_cli_top_const_narrow",
-    "test_lir_cli_host_method_import", "test_cli_method_import_visibility", "test_lir_cli_class_enum_field", "test_lir_cli_enum_equality",
-    # Cross-module ownership and capability transport need real native execution.
-    "test_lir_state", "native_module_state_owner", "test_lir_cli_module_state",
-    # Exercise Array ownership, failure cleanup and complete Source/native parity.
-    "test_lir_array",
-    "test_lir_array_faults", "test_lir_array_native", "test_lir_cli_array_native",
-    "test_lir_cli_inline_class_array_push",
-    # Fixed receiving layouts, independent images and constructor facts replace
-    # retired owner-bank tests; these retain metadata and failure cleanup checks.
-    "lir_value_layout", "lir_value_image", "lir_binding_homes", "lir_callable_facts", "lir_callable_bytecode",
-    # Loop consumers rely on fresh ownership facts and failure-atomic proofs.
-    "test_lir_ownership", "test_lir_ownership_faults",
-    # Physical metadata, allocator and foreign-thread owner retirement.
-    "native_managed_kernel", "native_managed_root", "native_backing", "native_string_backing_ops",
-    "native_place", "native_value_plan", "native_managed_status", "native_capture_backing", "rbc_code_owner",
-    # A real allocator can clear State before or after a Slice keeper is published.
-    "native_array_slice",
-    # Shared scalar decoding and text must retain independent native/RBC witnesses.
-    "native_f64_i64_conversion", "native_f64_text",
-    "test_lexer", "test_parser_recoverable", "test_parser_arrow_syntax",
-    "test_fmt_roundtrip", "test_value_arrow_syntax", "spec_snippets_cn", "spec_snippets_en",
-)
-# Product execution is registered only where XIR can run: 64-bit little-endian
-# hosts own the command gates, and native executables are published on Windows
-# x86_64 and on macOS/Linux x86_64 and arm64. Every other host emits C only.
-if struct.calcsize("P") == 8 and sys.byteorder == "little":
-    REQUIRED = REQUIRED + (
-        # A product option nobody implements must be refused, never ignored: the
-        # VM command and a program built by `xray build` each own a verdict.
-        "test_cli_resource_profiles_vm", "test_cli_resource_profiles_large",
-        "test_cli_resource_profiles_test_role",
-    )
-_MACHINE = platform.machine().lower()
-if (os.name == "nt" and _MACHINE in ("amd64", "x86_64")) or (
-        sys.platform in ("darwin", "linux")
-        and _MACHINE in ("x86_64", "amd64", "arm64", "aarch64")):
-    REQUIRED = REQUIRED + ("test_cli_resource_profiles_native",)
-# The temporary-path transports exist only on Windows today.
-if os.name == "nt":
-    REQUIRED = REQUIRED + ("test_lir_cli_host_temp_directory", "test_lir_cli_host_temp_file",
-                          "test_lir_cli_host_links")
+
+
+def host_gates():
+    system = {"win32": "windows", "darwin": "macos"}.get(sys.platform, sys.platform)
+    return gate_tests((ROOT / "scripts/current_gate_tests.json").read_text(encoding="utf-8"),
+                      system, platform.machine().lower(), struct.calcsize("P") == 8 and sys.byteorder == "little")
 
 
 def require(condition: bool, message: str) -> None:
@@ -132,21 +73,22 @@ def main() -> None:
     require(listing["seconds"] <= 5, "Complete CTest listing exceeded 5 seconds")
     registry = json.loads((args.evidence / "ctest-list.stdout").read_text(encoding="utf-8"))
     names = [test["name"] for test in registry["tests"]]
-    for name in REQUIRED:
+    required = host_gates()
+    for name in required:
         require(names.count(name) == 1, "Missing or duplicate current gate: " + name)
 
-    pattern = "^(" + "|".join(map(re.escape, REQUIRED)) + ")$"
+    pattern = "^(" + "|".join(map(re.escape, required)) + ")$"
     junit = args.evidence / "current.xml"
     run("current-tests", ["ctest", "--test-dir", args.build, "--output-on-failure",
                           "--no-tests=error", "-j", "2", "-R", pattern,
                           "--output-junit", junit])
     result = ET.parse(junit).getroot()
     cases = list(result.iter("testcase"))
-    require(sorted(case.attrib["name"] for case in cases) == sorted(REQUIRED),
+    require(sorted(case.attrib["name"] for case in cases) == sorted(required),
             "Requested and executed tests differ")
     require(not list(result.iter("skipped")) and not list(result.iter("failure"))
             and not list(result.iter("error")), "Current gates contain non-passing cases")
-    print(f"Current verification passed: exact CLI, full registration, {len(REQUIRED)} tests.", flush=True)
+    print(f"Current verification passed: exact CLI, full registration, {len(required)} tests.", flush=True)
 
 
 if __name__ == "__main__":

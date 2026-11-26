@@ -29,7 +29,9 @@
     "source_error": ":2:19: error: align requires a positive power of two"
   },
   "align_128": {
-    "source_error": ":3:8: error: explicit struct alignment exceeds the supported maximum"
+    "exit": 0,
+    "stdout": "second\n42\n",
+    "stderr": ""
   },
   "align_over": {
     "source_error": ":2:8: error: explicit struct alignment exceeds the supported maximum"
@@ -56,6 +58,29 @@
   "align_generic_nested": {
     "exit": 0,
     "stdout": "42\n",
+    "stderr": ""
+  },
+  "generic_call_bad": {
+    "source_error": ":1:8: error: explicit struct alignment is below the alignment its fields require"
+  },
+  "generic_call_ok": {
+    "exit": 0,
+    "stdout": "true\n",
+    "stderr": ""
+  },
+  "sync_padded": {
+    "exit": 0,
+    "stdout": "42\n",
+    "stderr": ""
+  },
+  "align_pod": {
+    "exit": 0,
+    "stdout": "42\n",
+    "stderr": ""
+  },
+  "align_comptime": {
+    "exit": 0,
+    "stdout": "true\n42\n",
     "stderr": ""
   }
 }

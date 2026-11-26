@@ -1,0 +1,4 @@
+struct Row align(128) { value: i64 }
+fn identity(r: Row) -> Row { return r }
+fn read(r: Row) -> i64 { return identity(r).value }
+print(read(Row{value:42}))

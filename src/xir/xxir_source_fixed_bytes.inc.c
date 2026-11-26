@@ -10,6 +10,7 @@
  * KEY CONCEPT:
  *   Literal bytes are real u8 operands; construction does not substitute an Array.
  */
+#include "xxir_source_fixed_count.inc.c"
 static bool source_fixed_type(SourceContext *ctx,AstNode *node,XrXirType element,
     uint32_t count,XrXirType *output) {
     if(!count || count>65535)
@@ -18,18 +19,16 @@ static bool source_fixed_type(SourceContext *ctx,AstNode *node,XrXirType element
         .element=element,.parameter_count=count},output);
 }
 static bool source_fixed_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *output) {
-    if(ref->nchildren!=1 || !ref->children || !ref->children[0] || ctx->depth>=128 ||
-        ref->fixed_length<=0 || ref->fixed_length>65535 ||
-        (ref->fixed_length_expr && (ref->fixed_length_expr->type!=AST_LITERAL_INT ||
-        ref->fixed_length_expr->as.literal.int_overflows_i64 ||
-        ref->fixed_length_expr->as.literal.int_bits!=(uint64_t)ref->fixed_length)))
+    if(ref->nchildren!=1 || !ref->children || !ref->children[0] || ctx->depth>=128)
         return source_fail_feature(ctx,NULL,XR_XIR_BAD_TYPE,"this fixed array annotation");
+    uint32_t count = (uint32_t)ref->fixed_length;
+    if (ref->fixed_length_expr && !source_fixed_count(ctx, ref->fixed_length_expr, &count)) return false;
     XrXirType element=XR_XIR_UNIT;++ctx->depth;
     bool valid=source_type(ctx,ref->children[0],&element);--ctx->depth;
     if(!valid)return false;
     if(!xr_xir_fixed_array_element_admitted(element))
         return source_fail_feature(ctx,NULL,XR_XIR_BAD_TYPE,"this fixed array element");
-    return source_fixed_type(ctx,NULL,element,(uint32_t)ref->fixed_length,output);
+    return source_fixed_type(ctx,NULL,element,count,output);
 }
 static bool source_fixed_literal_type(SourceContext *ctx,AstNode *node,XrXirType *output) {
     const FixedBytesLiteralNode *literal=&node->as.fixed_bytes_literal;

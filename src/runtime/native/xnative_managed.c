@@ -201,6 +201,7 @@ XRAY_API void xrt_managed_metadata_free(XrtBillingOwner *owner, void *memory, si
 XRAY_API XrtManagedStatus xrt_managed_metadata_allocate_aligned(XrtBillingOwner *owner, size_t bytes,
     size_t alignment, void **empty) {
     if (!owner || !bytes || !empty || *empty) return XRT_MANAGED_ARGUMENT;
+    if (!alignment || (alignment & (alignment - 1))) return XRT_MANAGED_ARGUMENT;
     return billing_allocate_aligned(owner, bytes, alignment, empty);
 }
 XRAY_API void xrt_managed_metadata_free_aligned(XrtBillingOwner *owner, void *memory, size_t bytes,

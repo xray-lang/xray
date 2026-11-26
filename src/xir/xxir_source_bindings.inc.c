@@ -34,9 +34,13 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     }
 
     XrXirConstantKey constant={0};
+    SourceLengthInteger integer = {0};
+    bool has_length_integer = false;
     if(decl->is_const && decl->initializer) {
         XrXirConstantKey borrowed={0};
         if(!source_collection_key(ctx,decl->initializer,initial,&borrowed) || !source_collection_key_copy(ctx,borrowed,&constant))return false;
+        if (!constant.kind && xr_xir_type_is_integer(initial.type))
+            has_length_integer = source_fold_length(ctx, decl->initializer, initial.type, &integer);
     }
     SourceName *symbol;
     bool initial_some = false;
@@ -44,6 +48,8 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
         symbol = find_name(ctx, ctx->names[ctx->module], decl->name);
         if (!symbol || symbol->kind != SOURCE_SLOT) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "binding declaration missing");
         symbol->constant_key=constant;
+        symbol->has_length_integer=has_length_integer;
+        symbol->length_integer=integer.value;
         symbol->inferred=!decl->type_annotation;symbol->annotation=annotation;symbol->has_annotation=decl->type_annotation!=NULL;
         if (symbol->inferred && !source_root_join_record(ctx,&initial)) return false;
         if (!source_binding_prepare(ctx, symbol, &initial)) return false;
@@ -64,7 +70,8 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     *symbol=(SourceName){.node=node,.kind=logical_type==XR_XIR_UNIT&&decl->is_const?SOURCE_UNIT_LOCAL:SOURCE_LOCAL,
         /* owned: This AST loan ends with Source construction; HIR/history copy the name. */
         .name=decl->name,.type=logical_type,.module=ctx->module,.mutable=!decl->is_const,.inferred=!decl->type_annotation,
-        .annotation=annotation,.has_annotation=decl->type_annotation!=NULL,.constant_key=constant};
+        .annotation=annotation,.has_annotation=decl->type_annotation!=NULL,.constant_key=constant,
+        .has_length_integer=has_length_integer,.length_integer=integer.value};
     bool direct_borrowed=false;
     if(!decl->is_const&&!source_local_borrowed_storage(ctx,symbol,&direct_borrowed))return false;
     symbol->direct_borrowed=direct_borrowed;

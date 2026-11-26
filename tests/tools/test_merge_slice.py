@@ -61,7 +61,8 @@ class QueueTests(unittest.TestCase):
         smoke = {"cases": [{"id": "seed", "expect": "pass"}]}
         files = {
             "version.py": "fixture root",
-            "scripts/verify_current_build.py": "REQUIRED = " + repr(tuple(sorted(FIXTURE_TESTS))) + "\n",
+            "scripts/current_gate_tests.json": json.dumps({"common": sorted(FIXTURE_TESTS), "execution64": [],
+                                                          "native": [], "windows": ["windows_only"]}),
             "scripts/check_meta_ownership.py": "print('ownership inventory passed')\n",
             "tests/smoke/cases.json": json.dumps(smoke),
             "tests/smoke/original-baseline.json": "{}",
@@ -202,14 +203,15 @@ class QueueTests(unittest.TestCase):
         build = source + "/build"
         exe = "xray.exe" if host == "windows-2022" else "xray"
         folder = "sanitizer-evidence" if profile == "Debug" else "current-evidence"
+        tests = FIXTURE_TESTS | ({"windows_only"} if host == "windows-2022" else set())
         commands = []
         with ZipFile(path, "w") as zipfile:
             zipfile.writestr("build/CMakeCache.txt", self.cache(source, profile))
             for name, argv, payload in (
                 ("identity", [build + "/" + exe, "--version", "--json"], json.dumps(self.identity(host, sha, profile))),
-                ("ctest-list", ["ctest", "--test-dir", build, "--show-only=json-v1"], json.dumps(registry(FULL_TESTS))),
+                ("ctest-list", ["ctest", "--test-dir", build, "--show-only=json-v1"], json.dumps(registry(FULL_TESTS | tests))),
                 ("current-tests", ["ctest", "--test-dir", build, "--output-on-failure", "--no-tests=error",
-                                   "-j", "2", "-R", "^(" + "|".join(sorted(FIXTURE_TESTS)) + ")$",
+                                   "-j", "2", "-R", "^(" + "|".join(sorted(tests)) + ")$",
                                    "--output-junit", f"{source}/{folder}/current.xml"], "fixture terminal CTest output"),
             ):
                 zipfile.writestr(f"{folder}/{name}.stdout", payload)
@@ -217,7 +219,7 @@ class QueueTests(unittest.TestCase):
                 commands.append({"name": name, "command": argv, "exit": 0, "seconds": 0.1,
                                  "stdoutSha256": self.digest(payload.encode()), "stderrSha256": self.digest(b"")})
             zipfile.writestr(f"{folder}/commands.json", json.dumps(commands))
-            zipfile.writestr(f"{folder}/current.xml", junit(dict.fromkeys(FIXTURE_TESTS, "run")))
+            zipfile.writestr(f"{folder}/current.xml", junit(dict.fromkeys(tests, "run")))
 
     def release_evidence(self, directory, side, host, host_identity, sha):
         source = self.source_path(host, side)

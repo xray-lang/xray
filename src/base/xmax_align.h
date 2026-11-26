@@ -35,4 +35,10 @@ typedef max_align_t XrMaxAlignment;
  * same number, so a declaration the compiler admits is one the runtime can
  * physically place. */
 #define XR_ALIGNMENT_LIMIT 128u
+/* Zero is an absent promise. Exponents that cannot be represented must
+ * exceed the admission limit, including those from untrusted artifacts. */
+static inline uint32_t xr_decode_alignment(uint32_t encoded) {
+    if (!encoded) return 0;
+    return encoded <= 32 ? UINT32_C(1) << (encoded - 1) : UINT32_MAX;
+}
 #endif // XMAX_ALIGN_H

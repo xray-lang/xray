@@ -49,9 +49,9 @@ static XrRbcStatus xr_rbc_nullable_step(const XrRbcModule *module, XrRbcStack *s
             xr_rbc_aggregate_value(stack, frame, f->aggregate_values[access.source]), bytes + payload.alignment);
         else if (payload.size) {
             uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, access.result)->bits;
-            if ((type.element == XR_POD_BOOL && bits > 1) ||
-                (payload.size < 8 && bits >> (payload.size * 8))) return XR_RBC_INVALID;
-            memcpy(bytes + payload.alignment, &bits, payload.size);
+            XrtValueKind kind;
+            if (!xr_pod_value_kind((XrPodScalar)type.element, &kind) ||
+                !rbc_state_scalar_store(kind, bits, bytes + payload.alignment)) return XR_RBC_INVALID;
         }
         bytes[0] = 1;
         return XR_RBC_OK;
@@ -65,9 +65,10 @@ static XrRbcStatus xr_rbc_nullable_step(const XrRbcModule *module, XrRbcStack *s
     if (aggregate) xr_rbc_aggregate_unpack(child, bytes + payload.alignment,
         xr_rbc_aggregate_value(stack, frame, f->aggregate_values[access.destination]));
     else if (payload.size) {
-        uint64_t bits = 0;
-        memcpy(&bits, bytes + payload.alignment, payload.size);
-        xr_rbc_aggregate_scalar(stack, frame, access.result)->bits = bits;
+        XrtValueKind kind;
+        if (!xr_pod_value_kind((XrPodScalar)type.element, &kind) ||
+            !rbc_state_scalar_load(kind, bytes + payload.alignment,
+                &xr_rbc_aggregate_scalar(stack, frame, access.result)->bits)) return XR_RBC_INVALID;
     }
     return XR_RBC_OK;
 }

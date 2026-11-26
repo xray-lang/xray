@@ -1,0 +1,25 @@
+const g: i8 = -2
+fn check_i8(x: i8) -> bool {
+    const value: i8? = x
+    const a = value!
+    return a < 0 && a == x && (a >> 1) == -1
+}
+print(check_i8(-2))
+fn check_i16(x: i16) -> bool {
+    const value: i16? = x
+    const a = value!
+    return a < 0 && a == x && (a >> 1) == -1
+}
+print(check_i16(-2))
+fn check_i32(x: i32) -> bool {
+    const value: i32? = x
+    const a = value!
+    return a < 0 && a == x && (a >> 1) == -1
+}
+print(check_i32(-2))
+print(g < 0)
+fn branch(a: i8, b: i8) -> i64 {
+    if (a < b) { return 42 }
+    return 17
+}
+print(branch(-2, 0))

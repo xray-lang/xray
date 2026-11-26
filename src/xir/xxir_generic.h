@@ -13,6 +13,8 @@
 #define XXIR_GENERIC_H
 #include "xxir.h"
 XR_FUNC XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control);
+XR_FUNC XrXirStatus xr_xir_check_instance_alignments(const XrXirArtifact *checked,
+    uint32_t *declaration, XrCompileRequestControl *control);
 /* Observe the original Checked function ordinal without exposing provenance.
  * The artifact must be live and Checked. Failure preserves output. This is
  * metadata correspondence, not permission to execute or specialize a body. */

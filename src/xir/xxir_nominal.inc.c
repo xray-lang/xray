@@ -68,7 +68,7 @@ static bool nominal_flags_valid(uint32_t kind, uint32_t flags) {
         uint32_t declared = xr_xir_nominal_alignment(flags);
         uint32_t rest = flags & ~XR_XIR_NOMINAL_ALIGN_MASK;
         return (rest == XR_XIR_NOMINAL_MODULE_LITERAL || rest == 0) &&
-            declared <= XR_XIR_NOMINAL_ALIGN_LIMIT;
+            declared <= XR_ALIGNMENT_LIMIT;
     }
     return flags == 0;
 }

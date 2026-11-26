@@ -757,8 +757,9 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
 #include "xxir_pending_prepare.inc.c"
 static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     XrXirDiagnostic *diagnostic,SpecPendingPoint *pending,XirEvaluationRoot *evaluation,const XrXirSpecializationReceiver *receiver,
-    XrCompileRequestControl *control) {
-    if (!checked || !output || *output || (receiver && (!receiver->receive || pending || evaluation))) {
+    uint32_t *layout_declaration, XrCompileRequestControl *control) {
+    if (!checked || (layout_declaration ? output != NULL : (!output || *output)) ||
+        (receiver && (!receiver->receive || pending || evaluation))) {
         if (diagnostic) *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
             UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
         return XR_XIR_BAD_STRUCTURE;
@@ -798,6 +799,11 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     }
 #endif
     if (xir_effect_evidence_is_instance(c.source)) {
+        if (layout_declaration) {
+            if (c.source->types)
+                c.diagnostic.status = xr_xir_check_record_alignments(&limits, c.source->types, layout_declaration);
+            goto done;
+        }
         c.diagnostic.status=xr_xir_compile_recheck_v2(&limits, c.source, &checked->target, checked->construction, &built, &c.diagnostic, control); goto done;
     }
     if (pending && c.source->types) {
@@ -813,6 +819,10 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
         if (c.diagnostic.status == XR_XIR_OK)
             c.diagnostic.status = xr_xir_compile_nominal_field_graph_verify(&c.remaining,&c.types);
         if (c.diagnostic.status != XR_XIR_OK) goto done;
+        if (layout_declaration) {
+            c.diagnostic.status = xr_xir_check_record_alignments(&limits, &c.types, layout_declaration);
+            goto done;
+        }
         XrXirModule specialized = *c.source;
         if (c.types.nominals) specialized.types = &c.types;
         c.diagnostic.status = xr_xir_compile_recheck_v2(&limits, &specialized, &checked->target, checked->construction, &built, &c.diagnostic, control);
@@ -852,6 +862,10 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
         for(;completed_hashable_types<c.types.count;++completed_hashable_types)
             if(!spec_hashable_type(&c,completed_hashable_types))goto done;
     } while(completed_calls<c.count || c.nominal_fields_next<c.types.count);
+    if (layout_declaration) {
+        c.diagnostic.status = xr_xir_check_record_alignments(&limits, &c.types, layout_declaration);
+        goto done;
+    }
     c.diagnostic.status=xir_hashable_witnesses_sort(&c.remaining,&c.types,c.hashable_witnesses,
         c.hashable_witness_count,c.control);
     if(c.diagnostic.status!=XR_XIR_OK)goto done;
@@ -894,7 +908,7 @@ done:
         }
     }
     if (c.diagnostic.status==XR_XIR_OK) c.diagnostic.status=xir_receive_poll(control);
-    if (c.diagnostic.status == XR_XIR_OK) { *output = built; built = NULL; }
+    if (c.diagnostic.status == XR_XIR_OK && output) { *output = built; built = NULL; }
     xr_xir_compile_artifact_free(built);
     xir_source_facts_release(c.source_facts);
     xr_xir_compile_effects_free(c.verification_effects);
@@ -902,9 +916,15 @@ done:
     if (diagnostic) *diagnostic = c.diagnostic;
     return c.diagnostic.status;
 }
+XR_FUNC XrXirStatus xr_xir_check_instance_alignments(const XrXirArtifact *checked,
+    uint32_t *declaration, XrCompileRequestControl *control) {
+    if (!declaration) return XR_XIR_BAD_STRUCTURE;
+    *declaration = UINT32_MAX;
+    return spec_run(checked, NULL, NULL, NULL, NULL, NULL, declaration, control);
+}
 XR_FUNC XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
-    return spec_run(checked,output,diagnostic,NULL,NULL,NULL,control);
+    return spec_run(checked,output,diagnostic,NULL,NULL,NULL,NULL,control);
 }
 XR_FUNC XrXirStatus xr_xir_compile_specialize_receive(const XrXirArtifact *checked,
     const XrXirSpecializationReceiver *receiver, XrXirArtifact **output, XrXirDiagnostic *diagnostic, XrCompileRequestControl *control) {
@@ -912,7 +932,7 @@ XR_FUNC XrXirStatus xr_xir_compile_specialize_receive(const XrXirArtifact *check
         if (diagnostic) *diagnostic=(XrXirDiagnostic){.status=XR_XIR_BAD_STRUCTURE};
         return XR_XIR_BAD_STRUCTURE;
     }
-    return spec_run(checked,output,diagnostic,NULL,NULL,receiver,control);
+    return spec_run(checked,output,diagnostic,NULL,NULL,receiver,NULL,control);
 }
 XR_FUNC XrXirStatus xr_xir_compile_specialization_origin(const XrXirArtifact *artifact,
     uint32_t function, uint32_t *output) {

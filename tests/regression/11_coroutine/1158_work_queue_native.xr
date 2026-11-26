@@ -1,4 +1,4 @@
-import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup, pushRange } from sync
 const q: WorkQueue<i64> = WorkQueue<i64>(4, 2)
 
 @test
@@ -28,7 +28,7 @@ fn test_native_work_queue() {
     assert(!(empty_ok))
     assertEqual(len(q), 0)
 
-    assertEqual(q.pushRange(10, 6, 0), 6)
+    assertEqual(pushRange(q, 10, 6, 0), 6)
     assertEqual(len(q), 6)
     var (r0, r0_ok) = q.tryPop(0)
     assert(r0_ok)
@@ -53,5 +53,5 @@ fn test_native_work_queue() {
     q.close()
     assert(q.isClosed())
     assert(!(q.push(9, 0)))
-    assertEqual(q.pushRange(20, 2, 0), 0)
+    assertEqual(pushRange(q, 20, 2, 0), 0)
 }

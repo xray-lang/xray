@@ -610,6 +610,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_simd_symbols[] = {
 
 // sync module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
+    {"pushRange", XLSP_SYM_FUNCTION, "fn(queue: WorkQueue<i64>, start: i64, count: i64, shardStart?: i64): i64", "", NULL, 0},
     {"fence", XLSP_SYM_FUNCTION, "fn(order: Ordering): ()", "standalone memory fence in Ordering-enum form. The enum's backing", NULL, 0},
     {"Semaphore", XLSP_SYM_CLASS, "type Semaphore", "Class type", NULL, 0},
     {"CountdownLatch", XLSP_SYM_CLASS, "type CountdownLatch", "Class type", NULL, 0},
@@ -623,7 +624,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_sync_symbols[] = {
     {"Barrier", XLSP_SYM_CLASS, "type Barrier", "N parties rendezvous; every party blocks until all have arrived.", NULL, 0},
     {"Condvar", XLSP_SYM_CLASS, "type Condvar", "a monitor condition variable. Callers hold the monitor lock, then", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT 12
+#define GEN_XLSP_STDLIB_SYNC_SYMBOL_COUNT 13
 
 // sys module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {

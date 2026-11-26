@@ -213,6 +213,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     else {
         source_comptime_receive(&ctx, &result);
         if (instances) source_instance_receive(&ctx,&result,instances->request,instances->providers);
+        if (ctx.diagnostic.status == XR_XIR_OK) source_check_instance_alignments(&ctx, result.checked);
     }
 done:
     /* A comptime receiver has already copied the complete final query from its

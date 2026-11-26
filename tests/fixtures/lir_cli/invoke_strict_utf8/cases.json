@@ -26,5 +26,14 @@
     "exit": 0,
     "stdout": "A\u0000é\nrejected\n",
     "stderr": ""
+  },
+  "ws_message": {
+    "stdlib_class": [
+      "ws",
+      "WsMessage"
+    ],
+    "exit": 0,
+    "stdout": "true\nA\ntrue\n",
+    "stderr": ""
   }
 }

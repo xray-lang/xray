@@ -26,5 +26,10 @@
     "exit": 0,
     "stdout": "true\ntrue\n",
     "stderr": ""
+  },
+  "negative_narrow": {
+    "exit": 0,
+    "stdout": "true\ntrue\ntrue\ntrue\n42\n",
+    "stderr": ""
   }
 }

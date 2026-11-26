@@ -794,8 +794,10 @@ export final class WsMessage {
     }
 
     text() -> string? {
-        if (this.data == null) { return null }
-        return try! string.fromUtf8(this.data![:])
+        const payload = this.data
+        if (payload == null) { return null }
+        const bytes = payload!
+        return try? string.fromUtf8(bytes[:])
     }
 }
 

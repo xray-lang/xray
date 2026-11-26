@@ -93,6 +93,16 @@ def main() -> None:
     for source, variants in by_source.items():
         label = source.stem
         first_name, first_case = variants[0]
+        if "stdlib_class" in first_case:
+            # Exercise the shipped declaration when its transport dependencies
+            # require providers outside the current execution profile.
+            module, class_name = first_case["stdlib_class"]
+            text = (root / "stdlib" / module / f"{module}.xr").read_text(encoding="utf-8")
+            start = text.index(f"export final class {class_name} {{")
+            end = text.index("\n}", start) + 2
+            program = text[start:end] + "\n" + source.read_text(encoding="utf-8")
+            source = work / source.name
+            source.write_text(program, encoding="utf-8")
         lowering_error = first_case.get("lowering_error")
         products = work
         if lowering_error is not None:
@@ -100,6 +110,15 @@ def main() -> None:
             products.mkdir()
         generated = products / f"{label}.c"
         executable = products / (label + (".exe" if os.name == "nt" else ""))
+        if "directory_link" in first_case:
+            target, link = first_case["directory_link"]
+            (work / target).mkdir()
+            if os.name == "nt":
+                result = proc.run(["cmd", "/c", "mklink", "/J", link, target], cwd=work, env=environment, timeout=30)
+                if result.returncode:
+                    raise RuntimeError(f"Could not create fixture junction: {result.stderr!r}")
+            else:
+                (work / link).symlink_to(target, target_is_directory=True)
         for index, command in enumerate(first_case.get("setup", [])):
             setup = proc.run([str(part) for part in command], cwd=work, env=environment, timeout=30)
             (work / f"{label}-setup-{index}.json").write_text(

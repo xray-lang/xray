@@ -212,7 +212,7 @@ def main(argv):
     cmake, ctest = (shutil.which(tool) for tool in ("cmake", "ctest"))
     if not all((cmake, ctest)):
         parser.error("CMake and CTest must be available")
-    required = current_gate_tests(repository, args.candidate)
+    required = current_gate_tests(repository, args.candidate, args.host)
     output = args.output.resolve()
     workspace = output.with_name(output.name + "-workspace")
     output.mkdir()

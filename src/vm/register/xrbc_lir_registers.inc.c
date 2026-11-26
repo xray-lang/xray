@@ -107,10 +107,6 @@ static void rbc_lir_interference(RbcLirCompiler *c, RbcLirRegisters *r) {
             if (i.op == XR_LIR_ICMP)
                 for (uint32_t a = 0; a < i.operand_count; ++a)
                     rbc_lir_conflict(r, i.result, i.operands[a]);
-            /* Narrow signed SHR writes the extended left operand before
-             * reading the shift count. Keep that count out of its result. */
-            if (i.op == XR_LIR_SHR && i.type >= XR_LIR_I8 && i.type < XR_LIR_I64)
-                rbc_lir_conflict(r, i.result, i.operands[1]);
             rbc_lir_live_instruction(&live, &i);
         }
         for (uint32_t p = 0; p < view.parameter_count; ++p) {

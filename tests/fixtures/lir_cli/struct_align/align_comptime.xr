@@ -1,0 +1,5 @@
+struct Box<T> align(1) { value: T }
+fn make<T>() -> i64 { return comptime { const v: Array<T> = []; len(v) + 42 } }
+fn box<T>(x:T) -> T { const b = Box<T>{value:x}; return b.value }
+print(box<bool>(true))
+print(make<i8>())

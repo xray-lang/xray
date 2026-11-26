@@ -504,8 +504,10 @@ static bool c_values_signature(LirC *c, bool definition) {
     c_text(c, c->view.error ? "static uint8_t " : "static void ");
     c_function_name(c, c->function.id);
     c_format(c, "(XrlLanding_%" PRIu32 " xrl_result", c->function.id);
-    for (uint32_t p = 0; p < c->view.parameter_count && c_request_poll(c); ++p)
-        c_format(c, ", %s p%" PRIu32, c_type(c, c->view.parameter_types[p]), p);
+    for (uint32_t p = 0; p < c->view.parameter_count && c_request_poll(c); ++p) {
+        c_text(c, ", ");
+        c_parameter(c, p);
+    }
     if (c->view.error)
         c_format(c, ", %s *xrl_error", c_type(c, c->view.error));
     if (c_strict_utf8_function(c, c->function.id)) c_text(c, ", uint32_t xrl_call_source");

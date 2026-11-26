@@ -109,6 +109,8 @@ typedef struct SourceName {
     XrXirType annotation;
     bool has_annotation,is_parameter;
     XrXirConstantKey constant_key;
+    int64_t length_integer;
+    bool has_length_integer;
 } SourceName;
 /* SOURCE_UNIT_LOCAL is an initialized logical declaration with no runtime
  * payload. Its index is never an executable value or a capture ordinal.

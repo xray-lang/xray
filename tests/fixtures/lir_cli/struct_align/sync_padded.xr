@@ -1,0 +1,7 @@
+import { CachePadded } from sync
+fn read(p: CachePadded<i64>) -> i64 { return p.value }
+fn main() {
+    const rows: Array<CachePadded<i64>> = [CachePadded<i64>{value: 7}, CachePadded<i64>{value: 42}]
+    print(read(rows[1]))
+}
+main()

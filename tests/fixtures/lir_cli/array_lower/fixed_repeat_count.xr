@@ -1,0 +1,35 @@
+fn sizes(a: [u8; GLOBAL]) -> i64 { return len(a) }
+const GLOBAL = 4
+fn fill() -> u64 { print(17); return 7 }
+fn probe() {
+    const N = 2 + 2
+    const a: [u64; (2 + 2)] = [7; GLOBAL]
+    const b: [u64; N] = [7; (1 << 2)]
+    const c = [fill(); N]
+    print(a[3])
+    print(b[2])
+    print(c[1])
+}
+probe()
+const A: u8 = 255
+const B: u8 = 2
+const U: u64 = 9223372036854775808
+fn widths() {
+    const a: [u8; 1] = [7; A + B]
+    const b: [u8; 1] = [9; U >> 63]
+    print(a[0])
+    print(b[0])
+}
+widths()
+print(sizes([42; 2 * 2]))
+const ONE: u64 = 1
+const MIN: i8 = -128
+fn extremes() {
+    const a: [u8; 1] = [31; 18446744073709551615 & ONE]
+    const b: [u8; 1] = [32; (-128 - MIN) + 1]
+    const c: [u8; 1] = [33; ((-9223372036854775808 >> 63) + 2)]
+    print(a[0])
+    print(b[0])
+    print(c[0])
+}
+extremes()

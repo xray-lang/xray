@@ -1,0 +1,7 @@
+struct Box<T> align(1) { value: T }
+fn box<T>(x: T) -> T {
+    const b = Box<T>{value: x}
+    return b.value
+}
+fn wrap<T>(x: T) -> T { return box<T>(x) }
+print(wrap<bool>(true))

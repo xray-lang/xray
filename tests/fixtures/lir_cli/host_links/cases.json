@@ -3,9 +3,9 @@
     "exit": 0,
     "stdout": "resolved=true\nabsolute=true\nstable=true\nmissing=true\nplain=true\nmissinglink=true\nlink=true\ntarget=true\nfollow=true\n",
     "stderr": "",
-    "setup": [
-      ["cmd", "/c", "mkdir", "probe-target"],
-      ["cmd", "/c", "mklink", "/J", "probe-link", "probe-target"]
+    "directory_link": [
+      "probe-target",
+      "probe-link"
     ]
   }
 }

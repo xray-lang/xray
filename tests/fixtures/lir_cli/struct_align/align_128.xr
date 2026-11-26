@@ -1,11 +1,16 @@
-// 128 is beyond what every supported C provider can pass by value, so the
-// declaration is refused rather than promised and then broken at a call site.
-struct CachePadded align(128) {
-    tag: i64
+struct Row align(128) {
+    name: string
+    n: i64
 }
-
-fn main() {
-    print(1)
+final class Box {
+    private const value: Row
+    init(value: Row) { this.value = value }
+    get() -> Row { return this.value }
 }
-
-main()
+fn check(n: i64) {
+    const rows: Array<Row> = [Row{name: "first", n: 1}, Row{name: "second", n: n}]
+    const saved = Box(rows[1]).get()
+    print(saved.name)
+    print(saved.n)
+}
+check(42)

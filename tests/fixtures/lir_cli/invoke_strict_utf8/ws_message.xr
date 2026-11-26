@@ -1,0 +1,8 @@
+fn probe() {
+    const bad: Array<u8> = [255]
+    const good: Array<u8> = [65]
+    print(WsMessage(bad, true).text() == null)
+    print(WsMessage(good, true).text()!)
+    print(WsMessage().text() == null)
+}
+probe()

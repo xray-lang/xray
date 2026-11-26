@@ -403,6 +403,9 @@ static void failures_and_admission(void) {
     fields[0]=(XrtValueSlotSpec){text,0,large_name,16000,0}; record.code=(XrtManagedLease){code,code_retain,code_drop};
     STATUS(xrt_value_plan_new(f.billing,&record,&empty),XRT_MANAGED_LIMIT); CHECK(!empty); xr_free(large_name); same_bill(&f,before);
     void *memory=NULL; STATUS(xrt_managed_metadata_allocate(f.billing,0,&memory),XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_managed_metadata_allocate_aligned(f.billing,31,0,&memory),XRT_MANAGED_ARGUMENT);
+    STATUS(xrt_managed_metadata_allocate_aligned(f.billing,31,3,&memory),XRT_MANAGED_ARGUMENT);
+    CHECK(!memory); same_bill(&f,before);
     OK(xrt_managed_metadata_allocate(f.billing,31,&memory)); CHECK(memory);
     void *occupied=memory; STATUS(xrt_managed_metadata_allocate(f.billing,1,&occupied),XRT_MANAGED_ARGUMENT); CHECK(occupied==memory);
     xrt_managed_metadata_free(f.billing,memory,31); same_bill(&f,before);

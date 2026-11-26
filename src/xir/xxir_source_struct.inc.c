@@ -199,7 +199,7 @@ static bool source_struct_alignment(SourceContext *ctx,AstNode *node,uint32_t al
     if (!alignment) return true;
     if (alignment & (alignment - 1))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"explicit struct alignment must be a power of two");
-    if (alignment > XR_XIR_NOMINAL_ALIGN_LIMIT)
+    if (alignment > XR_ALIGNMENT_LIMIT)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"explicit struct alignment exceeds the supported maximum");
     return true;
 }
@@ -227,6 +227,26 @@ static bool source_layout_enqueue(SourceContext *ctx, SourceLayoutQueue *queue, 
     if (!queue->links[index]) {
         queue->links[index] = queue->head;
         queue->head = index + 1;
+    }
+    return true;
+}
+static bool source_alignment_failure(SourceContext *ctx, XrXirStatus status, uint32_t declaration) {
+    SourceName *symbol = declaration < ctx->nominals.count ? ctx->nominal_sources[declaration] : NULL;
+    if (symbol) ctx->module = symbol->module;
+    return source_fail(ctx, symbol ? symbol->node : NULL, status,
+        status == XR_XIR_BAD_TYPE ? "explicit struct alignment is below the alignment its fields require" :
+        "record alignment needs a complete field layout");
+}
+static bool source_check_instance_alignments(SourceContext *ctx, const XrXirArtifact *checked) {
+    if (ctx->linkage_kind != XR_XIR_PROGRAM) return true;
+    for (uint32_t d = 0; d < ctx->nominals.count; ++d) {
+        const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[d];
+        if (!decl->parameter_count || !(decl->flags & XR_XIR_NOMINAL_ALIGN_MASK)) continue;
+        uint32_t failed;
+        XrXirStatus status = xr_xir_check_instance_alignments(checked, &failed, ctx->request);
+        if (status == XR_XIR_OK) return true;
+        if (failed != UINT32_MAX) return source_alignment_failure(ctx, status, failed);
+        return source_fail(ctx, NULL, status, "could not resolve generic record layouts");
     }
     return true;
 }
@@ -259,11 +279,7 @@ static bool source_check_record_alignments(SourceContext *ctx) {
     uint32_t declaration;
     XrXirStatus status = xr_xir_check_record_alignments(&ctx->compile, &ctx->types, &declaration);
     if (status == XR_XIR_OK) return true;
-    SourceName *symbol = declaration < ctx->nominals.count ? ctx->nominal_sources[declaration] : NULL;
-    if (symbol) ctx->module = symbol->module;
-    return source_fail(ctx, symbol ? symbol->node : NULL, status,
-        status == XR_XIR_BAD_TYPE ? "explicit struct alignment is below the alignment its fields require" :
-        "record alignment needs a complete field layout");
+    return source_alignment_failure(ctx, status, declaration);
 }
 static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.struct_decl;

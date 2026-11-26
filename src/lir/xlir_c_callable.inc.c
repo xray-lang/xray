@@ -177,7 +177,9 @@ static void c_callable_parameters(LirC *c, XrLirCallableType signature, bool nam
     for (uint32_t p = 0; p < signature.parameter_count && c_request_poll(c); ++p) {
         const char *type = c_callable_parameter_type(c, signature.parameters[p]);
         if (!type) { c_error(c, XR_LIR_C_UNSUPPORTED, "callable parameter has no native type"); return; }
-        c_format(c, ", %s", type);
+        bool indirect = signature.parameters[p].mode != XR_PARAM_REF &&
+            c_indirect_parameter(c, signature.parameters[p].type);
+        c_format(c, indirect ? ", const %s *" : ", %s", type);
         if (names) c_format(c, " a%" PRIu32, p);
     }
     if (xr_lir_callable_invocation_source(&signature))
@@ -249,7 +251,10 @@ static void c_callable_entries(LirC *c) {
         if (owned) c_text(c,"landing");
         for (uint32_t p = 0; p < target.parameter_count; ++p) {
             if (p || owned) c_text(c,", ");
-            if (p < closure.capture_count) c_format(c,"env->c%" PRIu32,p);
+            if (p < closure.capture_count) {
+                if (c_indirect_parameter(c, target.parameter_types[p])) c_text(c, "&");
+                c_format(c,"env->c%" PRIu32,p);
+            }
             else if (closure.state_capture && p + 1 == target.parameter_count) c_format(c,"env->c%" PRIu32,closure.capture_count);
             else c_format(c,"a%" PRIu32,p-closure.capture_count);
         }
@@ -310,7 +315,11 @@ static void c_callable_instruction(LirC *c, const XrLirInstructionView *v, uint3
             c_format(c,"        (void *)((unsigned char *)xrl_payload + %zu), (void *)((unsigned char *)xrl_payload + %zu)}",
                 home->offset,home->temporary_offset);
         }
-        for (uint32_t p=1;p<v->operand_count;++p) { c_text(c,", "); c_value(c,v->operands[p]); }
+        for (uint32_t p = 1; p < v->operand_count; ++p) {
+            c_text(c, ", ");
+            if (c_indirect_parameter(c, c_value_type(c, v->operands[p]))) c_text(c, "&");
+            c_value(c, v->operands[p]);
+        }
         XrLirCallableType signature;
         if (c_callable_type(c, c_value_type(c, v->operands[0]), &signature) &&
             xr_lir_callable_invocation_source(&signature))

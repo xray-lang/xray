@@ -1,4 +1,4 @@
-// The largest admitted promise: a 64-byte aligned record, used as a field of a
+// A 64-byte aligned record, used as a field of a
 // neighbouring record and passed by value. The generated C static assertions pin
 // its sizeof and alignof; both backends must print the same values.
 struct CachePadded align(64) {

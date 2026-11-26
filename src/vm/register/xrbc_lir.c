@@ -10,6 +10,7 @@
  *   Permanent SSA slots stay below edge scratch and the top call window.
  *   Callee growth therefore cannot overwrite a caller's live SSA values.
  */
+#include "shared/xr_integer_conversion_core.h"
 #include "xrbc_lir.h"
 #include "xrbc_internal.h"
 #include "lir/xlir_string.h"
@@ -881,7 +882,7 @@ static bool rbc_lir_value_edge(RbcLirCompiler *, XrLirEdgeView, uint32_t, uint32
 
 static unsigned rbc_lir_narrow_shift_width(const XrLirInstructionView *i) {
     if (i->op != XR_LIR_SHL && i->op != XR_LIR_SHR) return 0;
-    if (i->type >= XR_LIR_I8 && i->type < XR_LIR_I64)
+    if (i->op == XR_LIR_SHL && i->type >= XR_LIR_I8 && i->type < XR_LIR_I64)
         return 8u << (unsigned)(i->type - XR_LIR_I8);
     return i->type == XR_LIR_U8 ? 8u : 0;
 }
@@ -1104,18 +1105,15 @@ static bool rbc_lir_shift(RbcLirCompiler *c, const XrLirInstructionView *i, uint
     if (!width) return rbc_lir_emit(c, shift, result, left, right, 0);
 
     uint32_t temporary = rbc_lir_arithmetic_temporary(c);
-    if (shift == XR_RBC_SHR) {
-        /* Narrow values occupy packed bits. Move the real sign bit to the
-         * register sign position, then extend it before shifting. */
-        if (!rbc_lir_constant(c, temporary, 64u - width) ||
-            !rbc_lir_emit(c, XR_RBC_SHL, result, left, temporary, 0) ||
-            !rbc_lir_emit(c, XR_RBC_SHR, result, result, temporary, 0))
-            return false;
-        left = result;
-    }
-    return rbc_lir_emit(c, shift, result, left, right, 0) &&
-        rbc_lir_constant(c, temporary, (UINT64_C(1) << width) - 1) &&
-        rbc_lir_emit(c, XR_RBC_AND, result, result, temporary, 0);
+    if (!rbc_lir_emit(c, shift, result, left, right, 0)) return false;
+    if (i->type == XR_LIR_U8)
+        return rbc_lir_constant(c, temporary, UINT8_MAX) &&
+            rbc_lir_emit(c, XR_RBC_AND, result, result, temporary, 0);
+    /* Signed lanes carry their mathematical value. Right shift preserves it;
+     * a left shift must narrow and sign-extend the declared-width result. */
+    return rbc_lir_constant(c, temporary, 64u - width) &&
+        rbc_lir_emit(c, XR_RBC_SHL, result, result, temporary, 0) &&
+        rbc_lir_emit(c, XR_RBC_SHR, result, result, temporary, 0);
 }
 
 static bool rbc_lir_predicate(RbcLirCompiler *c, const XrLirInstructionView *i) {
@@ -1233,6 +1231,10 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         if (c->immediates[i->result].pooled)
             return rbc_lir_emit(c, XR_RBC_LOADK, result, 0, 0,
                 c->immediates[i->result].constant);
+        if (i->type >= XR_LIR_I8 && i->type < XR_LIR_I64) {
+            uint8_t width = (uint8_t)(8u << (unsigned)(i->type - XR_LIR_I8));
+            return rbc_lir_constant(c, result, xr_integer_convert_bits(i->bits, width, true, 64, true));
+        }
         return c->output.lengths[i->result] || rbc_lir_constant(c, result, i->bits);
     case XR_LIR_LITERAL_ADDR:
         return true;

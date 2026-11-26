@@ -104,8 +104,16 @@ def test_role_cases(binary: Path, directory: Path, short_timeout: float) -> list
     file is discovered, its single test is counted, nothing runs, and the
     command fails instead of reporting an invented outcome."""
     tests = source(directory, "profile_test.xr", TEST_SOURCE)
-    return [Case("test-discovery-small", [binary, "test", tests], short_timeout,
-                 exit_code=1, stdout=b"", stderr=TEST_ROLE_REPORT)]
+    name = "test_" + "a" * 245 + "_after_marker"
+    long_test = source(directory, "long_test.xr", f"@test\nfn {name}() {{ assert(true) }}\n")
+    report = (f"  test        {name}\nxray test: {long_test}: 1 test(s), 0 skipped, 0 hook(s)\n"
+              .encode() + TEST_ROLE_REPORT)
+    return [
+        Case("test-discovery-small", [binary, "test", tests], short_timeout,
+             exit_code=1, stdout=b"", stderr=TEST_ROLE_REPORT),
+        Case("test-filter-full-name", [binary, "test", "--filter", "after_marker", "--verbose", long_test],
+             short_timeout, exit_code=1, stdout=b"", stderr=report),
+    ]
 
 
 def native_cases(binary: Path, directory: Path, short_timeout: float,

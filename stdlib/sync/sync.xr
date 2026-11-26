@@ -140,7 +140,7 @@ export class WorkQueue<T> {
 
     init(shards: i64 = 1, capacity: i64 = 256) {
         this._lock = _SpinLock()
-        this._items = Array.withCapacity(capacity > 0 ? capacity : 1)
+        this._items = Array<T>.withCapacity(capacity > 0 ? capacity : 1)
         this._shards = shards > 0 ? shards : 1
         this._closed = Atomic<bool>(false)
     }
@@ -156,15 +156,6 @@ export class WorkQueue<T> {
         if (this.isClosed()) { return false }
         this._items.push(value)
         return true
-    }
-
-    pushRange(start: i64, count: i64, shardStart: i64 = -1) -> i64 {
-        var accepted = 0
-        for (var offset = 0; offset < count; offset++) {
-            if (!this.push((start + offset) as T, shardStart + offset)) { break }
-            accepted = accepted + 1
-        }
-        return accepted
     }
 
     tryPop(workerId: i64 = -1) -> (T?, bool) {
@@ -185,6 +176,15 @@ export class WorkQueue<T> {
     }
 
     close() { this._closed.store(true, Ordering.Release) }
+}
+
+export fn pushRange(queue: WorkQueue<i64>, start: i64, count: i64, shardStart: i64 = -1) -> i64 {
+    var accepted = 0
+    for (var offset = 0; offset < count; offset++) {
+        if (!queue.push(start + offset, shardStart + offset)) { break }
+        accepted = accepted + 1
+    }
+    return accepted
 }
 
 export class ResultGroup {

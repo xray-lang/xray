@@ -1,11 +1,5 @@
-// An alignment beyond what every supported C provider can pass by value is
-// refused at the declaration.
-//
-// `align(N)` is carried through the value plan up to 64; a larger promise cannot
-// be carried in every storage position on every supported platform yet, so the
-// declaration is rejected instead of being broken at a call site. Positive
-// coverage for the admitted range lives in the structure-alignment gate.
-struct Aligned128 align(128) {
+// The value allocator admits explicit alignment up to 128 bytes.
+struct Aligned256 align(256) {
     value: i64
 }
 print(1)

@@ -19,6 +19,7 @@
  *   build and check already do, so their text is identical on every host.
  */
 #include "xcli.h"
+#include "shared/xr_string_core.h"
 #include "xcli_fs.h"
 #include "../../api/xsource_compile.h"
 #include "../../api/xsource_paths.h"
@@ -52,16 +53,6 @@ static const char *test_role_name(uint32_t role) {
     }
 }
 
-static size_t test_function_name(const XrXirFunction *function, char *buffer, size_t capacity) {
-    size_t length = 0;
-    if (function->name && capacity > 1) {
-        length = function->name_length < capacity - 1 ? function->name_length : capacity - 1;
-        memcpy(buffer, function->name, length);
-    }
-    buffer[length] = '\0';
-    return length;
-}
-
 /* Imported modules never run their tests, so only the entry module's roles count. */
 static bool test_discover(const XrXirModule *module, const XrCliTestDiscoverOpts *opts,
     XrCliTestTally *tally) {
@@ -70,20 +61,22 @@ static bool test_discover(const XrXirModule *module, const XrCliTestDiscoverOpts
     uint32_t entry_identity = module->declarations->entry_function;
     if (entry_identity >= module->function_count) return false;
     uint32_t entry_module = module->declarations->functions[entry_identity].module;
+    size_t filter_length = opts->filter ? strlen(opts->filter) : 0;
     *tally = (XrCliTestTally) {0};
     for (uint32_t i = 0; i < module->function_count; ++i) {
         const XrXirFunctionIdentity *identity = &module->declarations->functions[i];
         if (identity->module != entry_module || !identity->test_role) continue;
         bool is_test = identity->test_role == XR_XIR_TEST_ROLE_TEST
             || identity->test_role == XR_XIR_TEST_ROLE_SKIP;
-        char name[256];
-        test_function_name(&module->functions[i], name, sizeof(name));
-        if (is_test && opts->filter && !strstr(name, opts->filter)) continue;
+        const XrXirFunction *function = &module->functions[i];
+        if (is_test && opts->filter && !xr_string_core_contains(function->name,
+                function->name_length, opts->filter, filter_length)) continue;
         if (!is_test) ++tally->hooks;
         else if (identity->test_role == XR_XIR_TEST_ROLE_SKIP) ++tally->skipped;
         else ++tally->tests;
         if (!opts->verbose) continue;
-        fprintf(opts->report, "  %-11s %s", test_role_name(identity->test_role), name);
+        fprintf(opts->report, "  %-11s ", test_role_name(identity->test_role));
+        if (function->name_length) fwrite(function->name, 1, function->name_length, opts->report);
         if (identity->test_timeout_milliseconds)
             fprintf(opts->report, " timeout=%u", identity->test_timeout_milliseconds);
         fprintf(opts->report, "\n");

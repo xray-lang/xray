@@ -13,6 +13,7 @@
 #ifndef XLIR_TYPES_H
 #define XLIR_TYPES_H
 #include "xlir.h"
+#include "base/xmax_align.h"
 
 typedef enum XrLirTypeKind {
     XR_LIR_TYPE_BUILTIN,
@@ -65,11 +66,9 @@ enum {
  * base-2 exponent occupies the same flags above the kind-specific bits. */
 #define XR_LIR_RECORD_ALIGN_SHIFT 2u
 #define XR_LIR_RECORD_ALIGN_MASK (63u << XR_LIR_RECORD_ALIGN_SHIFT)
-/* The admitted maximum matches the Checked declaration and the runtime allocator. */
-#define XR_LIR_RECORD_ALIGN_LIMIT 64u
 static inline uint32_t xr_lir_record_alignment(uint32_t flags) {
     uint32_t encoded = (flags & XR_LIR_RECORD_ALIGN_MASK) >> XR_LIR_RECORD_ALIGN_SHIFT;
-    return encoded ? 1u << ((encoded - 1u) & 31u) : 0;
+    return xr_decode_alignment(encoded);
 }
 
 typedef struct XrLirRecordArgument {

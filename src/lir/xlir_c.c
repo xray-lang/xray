@@ -292,7 +292,14 @@ static XrLirType c_value_type(LirC *c, uint32_t id) {
     XR_CHECK(status == XR_LIR_OK, "validated C operand has a type");
     return type;
 }
+/* MSVC accepts at most 64-byte alignment on by-value parameters. Use the
+ * same pointer ABI on every host and snapshot the argument at function entry. */
+static bool c_indirect_parameter(const LirC *c, XrLirType type) {
+    return type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < c->constructed_count &&
+        c->constructed_types[type - XR_LIR_TYPE_COUNT].layout.alignment > 64;
+}
 static void c_call_argument(LirC *c, XrLirType formal, uint32_t actual) {
+    if (c_indirect_parameter(c, formal)) c_text(c, "&");
     if (formal != XR_LIR_I64_REF || c_value_type(c,actual) == XR_LIR_I64_REF) {
         c_value(c,actual); return;
     }
@@ -323,6 +330,13 @@ static bool c_cell_point(LirC *c, const XrLirInstructionView *v) {
         c_cell_type(c,c_value_type(c,v->operands[0]),NULL);
 }
 #include "xlir_c_fixed.inc.c"
+static void c_parameter(LirC *c, uint32_t p) {
+    XrLirType type = c->view.parameter_types[p];
+    if (c_indirect_parameter(c, type))
+        c_format(c, "const %s *arg%" PRIu32, c_type(c, type), p);
+    else
+        c_format(c, "%s p%" PRIu32, c_type(c, type), p);
+}
 #include "xlir_c_nullable.inc.c"
 #include "xlir_c_callable.inc.c"
 static bool c_scalar(LirC *c, XrLirType type) {
@@ -837,7 +851,7 @@ static void c_signature(LirC *c, bool definition) {
     for (uint32_t p = 0; p < c->view.parameter_count && c->status == XR_LIR_C_OK; ++p) {
         if (p)
             c_text(c, ", ");
-        c_format(c, "%s p%" PRIu32, c_type(c, c->view.parameter_types[p]), p);
+        c_parameter(c, p);
     }
     if (c->view.error) {
         if (c->view.parameter_count) c_text(c,", ");
@@ -1467,6 +1481,11 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_callable_events_prepare(c);
         c_cell_events_prepare(c);
         c_signature(c, true);
+        for (uint32_t p = 0; p < c->view.parameter_count && c_request_poll(c); ++p) {
+            XrLirType type = c->view.parameter_types[p];
+            if (c_indirect_parameter(c, type))
+                c_format(c, "    %s p%" PRIu32 " = *arg%" PRIu32 ";\n", c_type(c, type), p, p);
+        }
         c_declarations(c);
         c_format(c, "    goto bb%" PRIu32 ";\n", c->view.entry);
         for (uint32_t b = 0; b < c->view.block_count && c->status == XR_LIR_C_OK; ++b) {

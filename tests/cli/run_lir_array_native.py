@@ -121,7 +121,7 @@ def main() -> None:
              "ref_borrow", "ref_cfg", "ref_mixed", "ref_global_alias", "repeat_values", "repeat_strings", "panic_repeat_negative",
              "panic_repeat_string_negative", "unsigned_values", "unsigned_large_byte", "unsigned_large_word",
              "panic_bounds", "panic_get_i64_negative", "panic_get_u8_length", "panic_get_u64_huge", "panic_get_inline_length",
-             "panic_unpublished", "panic_len_unpublished_inline", "fixed_values", "fixed_flow", "fixed_length_effects",
+             "panic_unpublished", "panic_len_unpublished_inline", "fixed_values", "fixed_flow", "fixed_length_effects", "fixed_repeat_count",
              "fixed_large", "fixed_unused", "panic_fixed_bounds", "panic_fixed_negative", "panic_fixed_unpublished_length",
              "nullable_scalar", "i64_try_parse", "nullable_nested", "nullable_fixed", "nullable_unit", "nullable_lazy",
              "nullable_default", "nullable_imports", "panic_nullable_unwrap", "panic_nullable_inner", "panic_nullable_unit",
@@ -151,6 +151,10 @@ def main() -> None:
     if os.name == "nt":
         environment["PATH"] = str(binary.parent) + os.pathsep + environment.get("PATH", "")
     rejected_sources = {
+        "reject_repeat_mutable": b"fixed array length must be a constant integer",
+        "reject_repeat_zero": b"fixed array length must be a constant integer",
+        "reject_repeat_limit": b"fixed array length must be a constant integer",
+        "reject_repeat_mismatch": b"fixed array repeat length does not match",
         "reject_i64_try_parse_type": b"expression cannot satisfy its declared type",
         "reject_i64_try_parse_shadow": b"'i64' is a keyword and cannot be used as an identifier",
         "reject_callable_inline_array_mismatch": b"callback argument requires exact shape and an admitted advertised bound",

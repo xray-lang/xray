@@ -34,7 +34,7 @@ static bool lir_record_identity_valid(const XrLirModule *m, const XrLirRecordIde
     if (!identity || !lir_record_text_valid(identity->module, identity->module_length) ||
         !lir_record_text_valid(identity->name, identity->name_length) || identity->exported > 1 ||
         (identity->flags & ~(XR_LIR_RECORD_MODULE_LITERAL | XR_LIR_RECORD_ALIGN_MASK)) ||
-        (xr_lir_record_alignment(identity->flags) > XR_LIR_RECORD_ALIGN_LIMIT) ||
+        (xr_lir_record_alignment(identity->flags) > XR_ALIGNMENT_LIMIT) ||
         ((identity->argument_count != 0) != (identity->arguments != NULL))) return false;
     if (identity->native_id) {
         static const char module[] = "stdlib-module-v1:module=2:io:path=8:io/io.xr";
