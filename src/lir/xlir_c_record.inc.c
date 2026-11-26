@@ -17,7 +17,8 @@ static bool c_record_point(const XrLirInstructionView *v) {
         v->op == XR_LIR_HOST_FILE_OPEN_WRITE || v->op == XR_LIR_HOST_FILE_CLOSE || v->op == XR_LIR_HOST_FILE_WRITE ||
         v->op == XR_LIR_HOST_PATH_CLASS || v->op == XR_LIR_HOST_FILE_READ || v->op == XR_LIR_HOST_ENV_GET ||
         v->op == XR_LIR_HOST_TEXT_RESULT || v->op == XR_LIR_HOST_DIRECTORY ||
-        v->op == XR_LIR_CLASS_SCALAR_WRITE || v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
+        v->op == XR_LIR_CLASS_SCALAR_WRITE || v->op == XR_LIR_CLASS_STRING_WRITE ||
+        v->op == XR_LIR_CLASS_ARRAY_WRITE || v->op == XR_LIR_CLASS_ARRAY_PUSH ||
         v->op == XR_LIR_VALUE_RETAIN || v->op == XR_LIR_VALUE_DROP;
 }
 static void c_host_file_read_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
@@ -100,6 +101,33 @@ static void c_class_array_field(LirC *c, const XrLirInstructionView *v, uint32_t
     if (!read) { c_text(c,", "); c_value(c,v->operands[1]); }
     c_format(c,", UINT32_C(%" PRIu32 "));\n",source);
     if (read) c_values_publish_leaf(c,v->result,source);
+}
+static void c_class_string_field(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    bool read = v->op == XR_LIR_CLASS_FIELD;
+    XrLirType type = read ? v->type : c_value_type(c, v->operands[1]);
+    bool nullable = type != XR_LIR_STRING;
+    const XrLirValueHome *object = &c->homes->values[v->operands[0]];
+    if (read) c_values_ensure(c, source);
+    c_format(c, "    xrt_native_class_string_field_%s(&(XrtNativeClassField){", read ? "copy" : "replace");
+    c_value(c, v->operands[0]);
+    c_format(c, ", &xrl_value_image, UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu64 ")}", object->type, v->bits);
+    if (read) {
+        const XrLirValueHome *home = &c->homes->values[v->result];
+        XR_CHECK(home->owner_count == 1 && home->offset != SIZE_MAX,
+            "verified String field snapshot has one stable inline owner");
+        c_format(c, ", xrl_frame, %zu, ", home->first_owner);
+        if (nullable) c_format(c, "%zu", home->offset);
+        else c_text(c, "SIZE_MAX");
+    } else {
+        c_text(c, ", (const XrtManagedHeader *)");
+        c_value(c, v->operands[1]);
+        if (nullable) {
+            c_text(c, ".payload, ");
+            c_value(c, v->operands[1]);
+            c_text(c, ".tag, true");
+        } else c_text(c, ", UINT8_C(1), false");
+    }
+    c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
 }
 static void c_host_environment_get(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     const XrLirValueHome *home = &c->homes->values[v->result];
@@ -186,6 +214,10 @@ static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         c_class_array_field(c,v,source);
         return;
     }
+    if (v->op == XR_LIR_CLASS_STRING_WRITE) {
+        c_class_string_field(c, v, source);
+        return;
+    }
     if (v->op == XR_LIR_CLASS_SCALAR_WRITE) {
         const XrLirValueHome *object = &c->homes->values[v->operands[0]];
         c_format(c, "    { const %s input = ", c_type(c,c_value_type(c,v->operands[1])));
@@ -230,9 +262,15 @@ static void c_record_instruction(LirC *c, const XrLirInstructionView *v, uint32_
         const XrtValueImage *image = xr_lir_value_image_view(c->value_image);
         const XrtValueImageType *class_type = &image->types[object->type-1];
         const XrtValueImageType *row = &image->types[class_type->element-1];
-        if (v->type == XR_LIR_ARRAY && (image->slots[row->first_field+v->bits].flags & XRT_VALUE_FIELD_MUTABLE)) {
-            c_class_array_field(c,v,source);
-            return;
+        if (image->slots[row->first_field + v->bits].flags & XRT_VALUE_FIELD_MUTABLE) {
+            if (v->type == XR_LIR_ARRAY) {
+                c_class_array_field(c, v, source);
+                return;
+            }
+            if (xr_lir_class_string_field_supported(c->request->module, v->type)) {
+                c_class_string_field(c, v, source);
+                return;
+            }
         }
         if (owned) c_values_ensure(c, source);
         c_text(c, "    { const void *field = xrt_native_class_field("); c_value(c, v->operands[0]);

@@ -294,6 +294,12 @@ static inline bool xr_lir_class_scalar_field_supported(const XrLirModule *m, XrL
     return type == XR_LIR_I1 || type == XR_LIR_I64 || type == XR_LIR_F64 ||
         xr_lir_internal_class_only_field(m, type);
 }
+static inline bool xr_lir_class_string_field_supported(const XrLirModule *m, XrLirType type) {
+    XrLirTypeView shape;
+    return type == XR_LIR_STRING ||
+        (xr_lir_type_view(m, type, &shape) == XR_LIR_OK &&
+            shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_STRING);
+}
 XR_FUNC bool xr_lir_internal_map_literals_valid(const XrLirModule *);
 XR_FUNC bool xr_lir_internal_closure_target_valid(const XrLirModule *, const XrLirFunctionData *);
 XR_FUNC bool xr_lir_internal_callable_parameters_valid(const XrLirModule *, const XrLirType *, uint32_t,

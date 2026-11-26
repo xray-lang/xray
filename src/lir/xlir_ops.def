@@ -169,3 +169,5 @@ XR_LIR_OP(SHL, "shl", 2)
 XR_LIR_OP(SHR, "shr", 2)
 /* A proved zero divisor has drained its active synchronous cleanup frontier. */
 XR_LIR_OP(ARITHMETIC_PANIC, "arithmetic_panic", 0)
+/* Replaces one mutable String or Nullable<String> class field by ordinal. */
+XR_LIR_OP(CLASS_STRING_WRITE, "class_string_write", 2)

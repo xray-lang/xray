@@ -1192,15 +1192,18 @@ static const XrXirInstruction *lower_class_place_root(const XrXirFunction *f, ui
     return root && root->op == XR_XIR_OBJECT_PLACE ? root : NULL;
 }
 
-static bool lower_writable_class_field(Lower *c, XrXirType type, uint64_t index, bool scalar) {
+static bool lower_writable_class_field(Lower *c, XrXirType type, uint64_t index, bool whole) {
     XrLirType payload;
     const XrLirRecordField *fields;
     uint32_t count;
-    return xr_lir_class_payload(c->module,lower_type(c,type),&payload) &&
-        xr_lir_aggregate_fields(c->module,payload,&fields,&count) == XR_LIR_OK && index < count &&
-        (fields[index].flags & XR_LIR_RECORD_MUTABLE) &&
-        ((scalar && xr_lir_class_scalar_field_supported(c->module, fields[index].type)) ||
-            (fields[index].type == XR_LIR_ARRAY && xr_lir_class_array_element_supported(fields[index].array_element)));
+    if (!xr_lir_class_payload(c->module, lower_type(c, type), &payload) ||
+        xr_lir_aggregate_fields(c->module, payload, &fields, &count) != XR_LIR_OK || index >= count)
+        return false;
+    const XrLirRecordField *field = &fields[index];
+    return (field->flags & XR_LIR_RECORD_MUTABLE) &&
+        ((whole && (xr_lir_class_scalar_field_supported(c->module, field->type) ||
+            xr_lir_class_string_field_supported(c->module, field->type))) ||
+            (field->type == XR_LIR_ARRAY && xr_lir_class_array_element_supported(field->array_element)));
 }
 
 /* Narrow scalars (i8/i16/i32/u16/u32/f32) are transport-only. Their physical

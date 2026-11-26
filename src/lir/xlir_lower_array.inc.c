@@ -47,8 +47,11 @@ static bool lower_class_field_instruction(LowerFunction *f, uint32_t b, uint32_t
         (!read && !lower_value(f,op->args[1],&args[1]))) return false;
     XrLirOp operation = read ? XR_LIR_CLASS_FIELD : XR_LIR_CLASS_ARRAY_WRITE;
     if (op->op == XR_XIR_ARRAY_PUSH) operation = XR_LIR_CLASS_ARRAY_PUSH;
-    if (whole && xr_lir_class_scalar_field_supported(c->module, lower_value_type(f,args[1])))
-        operation = XR_LIR_CLASS_SCALAR_WRITE;
+    if (whole) {
+        XrLirType type = lower_value_type(f, args[1]);
+        if (xr_lir_class_scalar_field_supported(c->module, type)) operation = XR_LIR_CLASS_SCALAR_WRITE;
+        if (xr_lir_class_string_field_supported(c->module, type)) operation = XR_LIR_CLASS_STRING_WRITE;
+    }
     XrLirInstruction lowered = {.op=operation,.type=read ? XR_LIR_ARRAY : XR_LIR_UNIT,
         .operands=args,.operand_count=read ? 1u : 2u,.bits=(uint64_t)field->immediate,.source=lower_source(c)};
     return lower_build(c,read ? xr_lir_emit_value(c->module,f->blocks[b],&lowered,
