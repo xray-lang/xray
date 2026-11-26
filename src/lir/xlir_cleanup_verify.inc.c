@@ -132,13 +132,13 @@ static bool lir_cleanup_captures(const XrLirFunctionData *f, const LirGraph *g,
 static bool lir_cleanup_scalar_frame(const XrLirFunctionData *f);
 
 static bool lir_cleanup_calls(const XrLirModule *m, const XrLirFunctionData *f,
-    uint32_t owner, const XrLirBlockData *block, uint32_t *frontier, bool guarded_arithmetic,
-    bool *scalar_frame) {
+    uint32_t owner, const XrLirBlockData *block, uint32_t count, uint32_t *frontier,
+    bool guarded_arithmetic, bool *scalar_frame) {
     enum { BODY, CLEANUPS, RETIREMENT } phase = BODY;
     bool guarded = *frontier || f->cleanup_owner;
     bool directory_closed = false;
     bool ordinary_cleanup = false;
-    for (uint32_t i = 0; i + 1 < block->instruction_count; ++i) {
+    for (uint32_t i = 0; i < count; ++i) {
         const XrLirInstructionView *call = &block->instructions[i].view;
         if (!i && guarded_arithmetic) continue;
         if (call->op == XR_LIR_HOST_DIRECTORY_FRAME) {
@@ -292,14 +292,15 @@ static bool lir_directory_predecessor(const XrLirFunctionData *f, const LirGraph
     return next->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED && next->edges[edge].target == b + 1;
 }
 
-static bool lir_directory_frame(const XrLirFunctionData *f, const LirGraph *g) {
+static bool lir_directory_frame(const XrLirModule *m, const XrLirFunctionData *f, const LirGraph *g) {
     if (f->cleanup_owner || f->error || f->closure.callable) return false;
     for (uint32_t v = 0; v < f->value_count; ++v) {
         const XrLirValueData *value = &f->values[v];
         if (lir_cleanup_scalar(value->type)) continue;
         if (value->parameter) {
             if (!value->block) return false;
-            if ((value->type == f->result && lir_directory_predecessor(f, g, value->block - 1, 0)) ||
+            if ((lir_directory_string_result(m, value->type) &&
+                 lir_directory_predecessor(f, g, value->block - 1, 0)) ||
                 (value->type == XR_LIR_U64 && lir_directory_predecessor(f, g, value->block - 1, 1))) continue;
             return false;
         }
@@ -310,11 +311,9 @@ static bool lir_directory_frame(const XrLirFunctionData *f, const LirGraph *g) {
     return true;
 }
 
-static bool lir_directory_chain(const XrLirModule *m, const XrLirFunctionData *f,
-    uint32_t owner, uint32_t frontier, const XrLirInstructionView *next, uint32_t edge) {
-    const XrLirBlockData *block = &f->blocks[next->edges[edge].target - 1];
-    if (block->cleanup || block->parameter_count != 1) return false;
-    uint32_t position = 0, previous = 0;
+static bool lir_directory_steps(const XrLirModule *m, uint32_t owner, uint32_t frontier,
+    const XrLirBlockData *block, uint32_t *at, uint32_t *status) {
+    uint32_t position = *at, previous = 0;
     while (frontier) {
         const XrLirCleanupBlock *role = lir_cleanup_registration(m, owner, frontier);
         if (!role || role->capture_count != 1 || !role->captures) return false;
@@ -337,10 +336,22 @@ static bool lir_directory_chain(const XrLirModule *m, const XrLirFunctionData *f
         previous = step->result;
         frontier = role->frontier;
     }
-    if (position >= block->instruction_count) return false;
+    *at = position;
+    *status = previous;
+    return true;
+}
+
+static bool lir_directory_chain(const XrLirModule *m, const XrLirFunctionData *f,
+    uint32_t owner, uint32_t frontier, const XrLirInstructionView *next, uint32_t edge) {
+    const XrLirBlockData *block = &f->blocks[next->edges[edge].target - 1];
+    uint32_t position = 0, previous = 0;
+    if (block->cleanup || block->parameter_count != 1 ||
+        !lir_directory_steps(m, owner, frontier, block, &position, &previous) ||
+        position >= block->instruction_count) return false;
     const XrLirInstructionView *exit = &block->instructions[position++].view;
     if (exit->op != (edge ? XR_LIR_HOST_DIRECTORY_FAIL : XR_LIR_HOST_DIRECTORY_RETURN_GUARD) ||
-        exit->operands[0] != block->parameters[0] || exit->operands[1] != previous) return false;
+        exit->operand_count != 2 || exit->operands[0] != block->parameters[0] ||
+        exit->operands[1] != previous) return false;
     if (edge) return position == block->instruction_count && lir_cleanup_same_source(&exit->source, &next->source);
     if (position + 1 != block->instruction_count) return false;
     const XrLirInstructionView *ret = &block->instructions[position].view;
@@ -348,6 +359,52 @@ static bool lir_directory_chain(const XrLirModule *m, const XrLirFunctionData *f
         lir_cleanup_same_source(&ret->source, &exit->source);
 }
 
+
+/* The sole name home is retired in the receiver, before either branch or
+ * any later iteration can observe it. No ordinary edge conveys the owner. */
+static bool lir_directory_loop_receiver(const XrLirFunctionData *f, uint32_t frontier,
+    const XrLirInstructionView *next) {
+    uint32_t target = next->edges[0].target;
+    const XrLirBlockData *block = &f->blocks[target - 1];
+    if (lir_cleanup_frontier(f, target) != frontier || block->cleanup->registration ||
+        block->parameter_count != 1 || block->instruction_count != 3) return false;
+    const XrLirInstructionView *test = &block->instructions[0].view;
+    const XrLirInstructionView *drop = &block->instructions[1].view;
+    const XrLirInstructionView *branch = &block->instructions[2].view;
+    if (test->op != XR_LIR_NULLABLE_IS_SOME || test->operands[0] != block->parameters[0] ||
+        drop->op != XR_LIR_VALUE_DROP || drop->operands[0] != block->parameters[0] ||
+        branch->op != XR_LIR_CONDBR || branch->operands[0] != test->result) return false;
+    for (uint32_t e = 0; e < branch->edge_count; ++e) {
+        const XrLirEdgeView *edge = &branch->edges[e];
+        if (lir_cleanup_frontier(f, edge->target) != frontier) return false;
+        for (uint32_t a = 0; a < edge->argument_count; ++a)
+            if (!lir_cleanup_scalar(f->values[edge->arguments[a] - 1].type)) return false;
+    }
+    return true;
+}
+
+static bool lir_directory_loop_exit(const XrLirModule *m, const XrLirFunctionData *f,
+    uint32_t owner, uint32_t frontier, const XrLirBlockData *block, bool *scalar_frame) {
+    if (block->cleanup->registration || block->instruction_count < 3) return false;
+    uint32_t guard_index = block->instruction_count - 2, start = guard_index;
+    const XrLirInstructionView *guard = &block->instructions[guard_index].view;
+    const XrLirInstructionView *ret = &block->instructions[guard_index + 1].view;
+    if (guard->op != XR_LIR_HOST_DIRECTORY_RETURN_GUARD || guard->operand_count != 1 ||
+        !lir_cleanup_same_source(&guard->source, &ret->source)) return false;
+    for (uint32_t role = frontier; role;) {
+        const XrLirCleanupBlock *registration = lir_cleanup_registration(m, owner, role);
+        if (!registration || !lir_cleanup_directory_close(&m->functions[role - 1])) return false;
+        uint32_t steps = m->functions[role - 1].parameter_types[0] == XR_LIR_I64_REF ? 2u : 1u;
+        if (start < steps) return false;
+        start -= steps;
+        role = registration->frontier;
+    }
+    uint32_t at = start, status = 0, remaining = frontier;
+    return lir_directory_steps(m, owner, frontier, block, &at, &status) &&
+        at == guard_index && status == guard->operands[0] &&
+        lir_cleanup_calls(m, f, owner, block, start, &remaining, false, scalar_frame) &&
+        remaining == frontier;
+}
 
 static const XrLirInstructionView *lir_allocation_cleanup_print(const XrLirModule *m,
     const XrLirFunctionData *role) {
@@ -435,7 +492,8 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
     if (lir_cleanup_frontier(f, f->entry)) return false;
     const XrLirInstructionView *entry = &f->blocks[f->entry - 1].instructions[0].view;
     bool directory = entry->op == XR_LIR_HOST_DIRECTORY_FRAME, frame_source = false;
-    if (directory && !lir_directory_frame(f, g)) return false;
+    bool directory_loop = directory && f->result == XR_LIR_I64;
+    if (directory && !lir_directory_frame(m, f, g)) return false;
     bool scalar_frame = false;
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrLirBlockData *block = &f->blocks[b];
@@ -445,6 +503,10 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
             continue;
         uint32_t from = meta ? meta->frontier : 0, remaining = from;
         if (from && !lir_cleanup_registration(m, owner, from)) return false;
+        if (directory_loop && from && term->op == XR_LIR_RET) {
+            if (!lir_directory_loop_exit(m, f, owner, from, block, &scalar_frame)) return false;
+            continue;
+        }
         /* A callback is already unwinding its owner's frontier and must
          * complete normally even when it registers its own cleanup. */
         if (f->cleanup_owner && (term->op == XR_LIR_INVOKE || term->op == XR_LIR_PANIC_ERROR))
@@ -455,7 +517,8 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
             if (!scalar_frame) scalar_frame = lir_cleanup_scalar_frame(f);
             if (!scalar_frame || !lir_cleanup_arithmetic_landing(m, f, g, b, from)) return false;
         }
-        if (!lir_cleanup_calls(m, f, owner, block, &remaining, guarded_arithmetic, &scalar_frame)) return false;
+        if (!lir_cleanup_calls(m, f, owner, block, block->instruction_count - 1,
+                &remaining, guarded_arithmetic, &scalar_frame)) return false;
         if (meta && meta->registration) {
             uint32_t target = meta->registration;
             if (lir_cleanup_registration(m, owner, target) != meta || target == from ||
@@ -467,7 +530,9 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
             if (!directory || !from || remaining != from ||
                 !lir_cleanup_one_predecessor(g, term->edges[0].target - 1) ||
                 !lir_cleanup_one_predecessor(g, term->edges[1].target - 1) ||
-                !lir_directory_chain(m, f, owner, from, term, 0) || !lir_directory_chain(m, f, owner, from, term, 1))
+                !(directory_loop ? lir_directory_loop_receiver(f, from, term) :
+                    lir_directory_chain(m, f, owner, from, term, 0)) ||
+                !lir_directory_chain(m, f, owner, from, term, 1))
                 return false;
             frame_source |= lir_cleanup_same_source(&entry->source, &term->source);
             continue;

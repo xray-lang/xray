@@ -381,27 +381,36 @@ static bool lower_checked_empty_array(LowerFunction *f, uint32_t b, uint32_t res
     return true;
 }
 
+static bool lower_directory_read(const Lower *c, const XrXirFunction *f, const XrXirInstruction *call) {
+    if (call->op != XR_XIR_CALL ||
+        xr_xir_nullable_element(c->source->types, call->type) != XR_XIR_STRING ||
+        call->args[1] != 1 || call->args[0] >= f->operand_count || call->immediate < 0 ||
+        (uint64_t)call->immediate >= c->source->function_count) return false;
+    uint32_t callee = (uint32_t)call->immediate, fields[2];
+    return c->source->declarations->functions[callee].native_callable == XR_NATIVE_CALLABLE_IO_DIR_NEXT &&
+        lower_host_abi(c, callee, fields) == XR_NATIVE_HOST_DIRECTORY &&
+        xr_xir_operand_type(f, f->operands[call->args[0]]) == XR_XIR_I64;
+}
+
+static bool lower_directory_frontier(const Lower *c, const XrXirFunction *f, uint32_t frontier) {
+    while (frontier) {
+        uint32_t parent, handler;
+        if (xr_xir_cleanup_frontier(f, frontier, &parent, &handler) != XR_XIR_OK || handler ||
+            !lower_directory_cleanup_call(c, (uint32_t)f->instructions[frontier - 1].immediate)) return false;
+        frontier = parent;
+    }
+    return true;
+}
+
 static const XrXirInstruction *lower_directory_tail(const Lower *c, const XrXirFunction *f, uint32_t b) {
     const XrXirBlock *block = &f->blocks[b];
     if (!block->frontier || block->panic || block->count < 2 ||
         xr_xir_nullable_element(c->source->types, f->result) != XR_XIR_STRING) return NULL;
     uint32_t at = block->first + block->count - 2;
     const XrXirInstruction *call = &f->instructions[at];
-    if (call[1].op != XR_XIR_RETURN || call[1].args[0] != f->parameter_count + at ||
-        call->op != XR_XIR_CALL || call->type != f->result || call->args[1] != 1 ||
-        call->args[0] >= f->operand_count || call->immediate < 0 ||
-        (uint64_t)call->immediate >= c->source->function_count) return NULL;
-    uint32_t callee = (uint32_t)call->immediate, fields[2];
-    if (c->source->declarations->functions[callee].native_callable != XR_NATIVE_CALLABLE_IO_DIR_NEXT ||
-        lower_host_abi(c, callee, fields) != XR_NATIVE_HOST_DIRECTORY ||
-        xr_xir_operand_type(f, f->operands[call->args[0]]) != XR_XIR_I64) return NULL;
-    for (uint32_t frontier = block->frontier; frontier;) {
-        uint32_t parent, handler;
-        if (xr_xir_cleanup_frontier(f, frontier, &parent, &handler) != XR_XIR_OK || handler ||
-            !lower_directory_cleanup_call(c, (uint32_t)f->instructions[frontier - 1].immediate)) return NULL;
-        frontier = parent;
-    }
-    return call;
+    return call[1].op == XR_XIR_RETURN && call[1].args[0] == f->parameter_count + at &&
+        call->type == f->result && lower_directory_read(c, f, call) &&
+        lower_directory_frontier(c, f, block->frontier) ? call : NULL;
 }
 
 static const XrXirInstruction *lower_directory_tail_frame(const Lower *c, const XrXirFunction *f) {
@@ -420,6 +429,104 @@ static const XrXirInstruction *lower_directory_tail_frame(const Lower *c, const 
         if (!first_tail) first_tail = tail;
     }
     return first_tail;
+}
+
+static bool lower_directory_loop_value(LowerDirectoryLoop loop, const XrXirInstruction *op) {
+    return loop.call && op >= loop.call && op <= loop.tag;
+}
+
+static const XrXirInstruction *lower_directory_tag_call(const Lower *c, const XrXirFunction *f,
+    const XrXirBlock *block, uint32_t tag_index) {
+    const XrXirInstruction *tag = &f->instructions[tag_index];
+    uint32_t value = f->parameter_count + tag_index;
+    if (tag->op != XR_XIR_NULLABLE_IS_SOME || (tag->immediate != 0 && tag->immediate != 1) ||
+        tag->args[0] != value - 1 || tag[1].op != XR_XIR_BRANCH || tag[1].args[0] != value) return NULL;
+    const XrXirInstruction *call = tag - 1;
+    if (call->op == XR_XIR_CELL_READ) {
+        if (tag_index - block->first < 3 || call->args[0] != value - 2 ||
+            call[-1].op != XR_XIR_CELL_NEW || call[-1].args[0] != value - 3 ||
+            xr_xir_cell_element(c->source->types, call[-1].type) != call->type ||
+            call[-2].type != call->type) return NULL;
+        call -= 2;
+    }
+    return lower_directory_read(c, f, call) ? call : NULL;
+}
+
+static bool lower_directory_loop_repeats(Lower *c, const XrXirFunction *f, LowerDirectoryLoop site) {
+    uint32_t start = site.tag[1].targets[site.tag->immediate != 0];
+    uint32_t frontier = f->blocks[site.block].frontier;
+    if (f->blocks[start].frontier != frontier) return false;
+    uint8_t *seen = lower_alloc(c, f->block_count, 1);
+    uint32_t *pending = lower_alloc(c, f->block_count, sizeof(*pending));
+    bool repeats = false;
+    if (seen && pending) {
+        uint32_t count = 1;
+        pending[0] = start;
+        seen[start] = 1;
+        for (uint32_t at = 0; at < count && !repeats; ++at) {
+            uint32_t b = pending[at];
+            repeats = b == site.block;
+            const XrXirBlock *block = &f->blocks[b];
+            const XrXirInstruction *term = &f->instructions[block->first + block->count - 1];
+            uint32_t edges = term->op == XR_XIR_JUMP ? 1u : term->op == XR_XIR_BRANCH ? 2u : 0u;
+            for (uint32_t e = 0; e < edges; ++e) {
+                uint32_t target = term->targets[e];
+                if (seen[target] || f->blocks[target].frontier != frontier) continue;
+                seen[target] = 1;
+                pending[count++] = target;
+            }
+        }
+    }
+    xr_free(pending);
+    xr_free(seen);
+    return repeats;
+}
+
+/* Only the next/tag pair (and its single local Cell round-trip) may
+ * produce or consume the directory name. The tag itself is used by the
+ * immediately following branch. No value from this sequence crosses it. */
+static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f) {
+    LowerDirectoryLoop site = {0}, absent = {0};
+    if (f->result != XR_XIR_I64 || !lower_empty_error(f->error_type)) return absent;
+    for (uint32_t p = 0; p < f->parameter_count; ++p)
+        if (!lower_cleanup_scalar(f->parameters[p])) return absent;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrXirBlock *block = &f->blocks[b];
+        if (block->panic || !block->count) return absent;
+        if (!block->frontier || block->count < 3) continue;
+        uint32_t tag = block->first + block->count - 2;
+        const XrXirInstruction *call = lower_directory_tag_call(c, f, block, tag);
+        if (!call) continue;
+        if (site.call || !lower_directory_frontier(c, f, block->frontier)) return absent;
+        site = (LowerDirectoryLoop){call, &f->instructions[tag], b};
+    }
+    if (!site.call) return absent;
+    uint32_t first = f->parameter_count + (uint32_t)(site.call - f->instructions);
+    uint32_t last = f->parameter_count + (uint32_t)(site.tag - f->instructions);
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrXirBlock *block = &f->blocks[b];
+        const XrXirInstruction *term = &f->instructions[block->first + block->count - 1];
+        if (term->op == XR_XIR_CLEANUP_LEAVE ||
+            (term->op == XR_XIR_CLEANUP_REGISTER &&
+             !lower_directory_cleanup_call(c, (uint32_t)term->immediate))) return absent;
+        for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+            const XrXirInstruction *op = &f->instructions[i];
+            if (lower_directory_loop_value(site, op)) continue;
+            if (!lower_cleanup_frame_type(c, op->type) ||
+                op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) return absent;
+            if (op == site.tag + 1) continue;
+            uint32_t count = xir_instruction_operand_count(f, op, c->source);
+            const uint32_t *operands = op->args;
+            if (xr_xir_op_uses_operand_table(op->op) && count) {
+                if (op->args[0] > f->operand_count || count > f->operand_count - op->args[0]) return absent;
+                operands = &f->operands[op->args[0]];
+            }
+            uint32_t step = op->op == XR_XIR_PHI ? 2u : 1u;
+            for (uint32_t a = step - 1; a < count; a += step)
+                if (operands[a] >= first && operands[a] <= last) return absent;
+        }
+    }
+    return lower_directory_loop_repeats(c, f, site) ? site : absent;
 }
 
 static XrLirSource lower_directory_source(Lower *c, uint32_t function, const XrXirInstruction *call) {
@@ -461,32 +568,40 @@ static bool lower_directory_close_chain(LowerFunction *f, XrLirBlock block, uint
     return true;
 }
 
-static bool lower_directory_next(LowerFunction *f, uint32_t b, const XrXirInstruction *call) {
+static bool lower_directory_split(LowerFunction *f, uint32_t b, const XrXirInstruction *call,
+    XrLirBlock *normal, XrLirValue *result) {
     Lower *c = f->owner;
     XrLirSource source = lower_directory_source(c, c->function, call);
-    XrLirSource exit = lower_source(c);
-    XrLirType type = lower_type(c, f->source->result), status = XR_LIR_U64;
-    XrLirBlock normal = {0}, failure = {0};
-    XrLirValue token = {0}, success[2] = {{0}}, failed[2] = {{0}};
-    if (!lower_value(f, f->source->operands[call->args[0]], &token) ||
-        !lower_build(c, xr_lir_add_block(c->module, f->function, &type, 1, &normal)) ||
+    XrLirType type = 0, status = XR_LIR_U64;
+    XrLirBlock failure = {0};
+    XrLirValue token = {0}, failed[2] = {{0}};
+    if (!lower_build(c, xr_lir_nullable_type(c->module, XR_LIR_STRING, &type)) ||
+        !lower_value(f, f->source->operands[call->args[0]], &token) ||
+        !lower_build(c, xr_lir_add_block(c->module, f->function, &type, 1, normal)) ||
         !lower_build(c, xr_lir_add_block(c->module, f->function, &status, 1, &failure)) ||
-        !lower_build(c, xr_lir_block_parameter(c->module, normal, 0, &success[0])) ||
-        !lower_build(c, xr_lir_block_parameter(c->module, failure, 0, &failed[0]))) return false;
-    uint32_t frontier = f->source->blocks[b].frontier;
-    if (!lower_directory_close_chain(f, normal, frontier, &success[1]) ||
-        !lower_directory_close_chain(f, failure, frontier, &failed[1])) return false;
+        !lower_build(c, xr_lir_block_parameter(c->module, *normal, 0, result)) ||
+        !lower_build(c, xr_lir_block_parameter(c->module, failure, 0, &failed[0])) ||
+        !lower_directory_close_chain(f, failure, f->source->blocks[b].frontier, &failed[1])) return false;
     XrLirInstruction next = {.op=XR_LIR_HOST_DIRECTORY_NEXT_CHECKED,.type=type,.operands=&token,
-        .operand_count=1,.edge_count=2,.edges={{.target=normal},{.target=failure}},.source=source};
-    XrLirInstruction guard = {.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,.type=XR_LIR_UNIT,
-        .operands=success,.operand_count=2,.source=exit};
-    XrLirInstruction ret = {.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=success,.operand_count=1,.source=exit};
+        .operand_count=1,.edge_count=2,.edges={{.target=*normal},{.target=failure}},.source=source};
     XrLirInstruction fail = {.op=XR_LIR_HOST_DIRECTORY_FAIL,.type=XR_LIR_UNIT,
         .operands=failed,.operand_count=2,.source=source};
     return lower_build(c, xr_lir_set_terminator(c->module, f->blocks[b], &next)) &&
-        lower_build(c, xr_lir_emit_effect(c->module, normal, &guard)) &&
-        lower_build(c, xr_lir_set_terminator(c->module, normal, &ret)) &&
         lower_build(c, xr_lir_set_terminator(c->module, failure, &fail));
+}
+
+static bool lower_directory_next(LowerFunction *f, uint32_t b, const XrXirInstruction *call) {
+    Lower *c = f->owner;
+    XrLirSource exit = lower_source(c);
+    XrLirBlock normal = {0};
+    XrLirValue success[2] = {{0}};
+    if (!lower_directory_split(f, b, call, &normal, &success[0]) ||
+        !lower_directory_close_chain(f, normal, f->source->blocks[b].frontier, &success[1])) return false;
+    XrLirInstruction guard = {.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,.type=XR_LIR_UNIT,
+        .operands=success,.operand_count=2,.source=exit};
+    XrLirInstruction ret = {.op=XR_LIR_RET,.type=XR_LIR_UNIT,.operands=success,.operand_count=1,.source=exit};
+    return lower_build(c, xr_lir_emit_effect(c->module, normal, &guard)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, normal, &ret));
 }
 
 /* Physical failure may leave this activation after its defer callbacks. Keep

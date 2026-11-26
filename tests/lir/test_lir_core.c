@@ -416,16 +416,18 @@ static void directory_cleanup_requires_a_complete_exit(void) {
 }
 
 static void directory_next_requires_exact_successors(void) {
-    enum { COMPLETE, NO_FRAME, WRONG_SOURCE, WRONG_CAPTURE, WRONG_PRIMARY };
+    enum { COMPLETE, NO_FRAME, WRONG_SOURCE, WRONG_CAPTURE, WRONG_PRIMARY, LOOP,
+        LOOP_NOT_RETIRED, LOOP_EXIT_WRONG_SOURCE };
     const XrLirSource read = {"cleanup.xr", 10, 8, 12, 8, 12};
     const XrLirSource close = {"cleanup.xr", 10, 5, 9, 5, 9};
     const XrLirSource returned = {"cleanup.xr", 10, 8, 5, 8, 25};
-    for (unsigned fault = COMPLETE; fault <= WRONG_PRIMARY; ++fault) {
+    for (unsigned fault = COMPLETE; fault <= LOOP_EXIT_WRONG_SOURCE; ++fault) {
+        bool loop = fault >= LOOP;
         XrLirModule *m = NULL;
         OK(xr_lir_module_create(NULL, &m));
         XrLirType optional = XR_LIR_TYPE_INVALID, scalar = XR_LIR_I64, status = XR_LIR_U64;
         OK(xr_lir_nullable_type(m, XR_LIR_STRING, &optional));
-        XrLirFunction owner = test_function(m, "owner", NULL, 0, optional), callback = {0};
+        XrLirFunction owner = test_function(m, "owner", NULL, 0, loop ? scalar : optional), callback = {0};
         OK(xr_lir_declare_function(m, &(XrLirFunctionSpec){.name="callback",.name_length=8,
             .parameters=&scalar,.parameter_count=1,.result=XR_LIR_UNIT,.cleanup_owner=owner.id}, &callback));
         OK(xr_lir_define_function(m, callback));
@@ -459,20 +461,41 @@ static void directory_next_requires_exact_successors(void) {
         XrLirInstruction step = {.op=XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED,.type=status,
             .operands=fault == WRONG_CAPTURE ? &wrong : &capture,.operand_count=1,
             .bits=callback.id,.source=fault == WRONG_SOURCE ? read : close};
-        OK(xr_lir_emit_value(m, normal, &step, &success[1]));
         OK(xr_lir_emit_value(m, failure, &step, &failed[1]));
-        OK(xr_lir_emit_effect(m, normal, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,
-            .type=XR_LIR_UNIT,.operands=success,.operand_count=2,.source=returned}));
-        OK(xr_lir_set_terminator(m, normal, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
-            .operands=success,.operand_count=1,.source=returned}));
+        if (loop) {
+            XrLirBlock eof = test_block(m, owner, NULL, 0);
+            OK(xr_lir_internal_cleanup_block(m, normal, callback.id, 0, NULL, 0));
+            OK(xr_lir_internal_cleanup_block(m, eof, callback.id, 0, NULL, 0));
+            XrLirValue tested = {0};
+            OK(xr_lir_emit_value(m, normal, &(XrLirInstruction){.op=XR_LIR_NULLABLE_IS_SOME,
+                .type=XR_LIR_I1,.operands=success,.operand_count=1,.source=read}, &tested));
+            if (fault != LOOP_NOT_RETIRED)
+                OK(xr_lir_emit_effect(m, normal, &(XrLirInstruction){.op=XR_LIR_VALUE_DROP,
+                    .type=XR_LIR_UNIT,.operands=success,.operand_count=1,.source=read}));
+            OK(xr_lir_set_terminator(m, normal, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+                .operands=&tested,.operand_count=1,.edge_count=2,.edges={{.target=active},{.target=eof}}}));
+            if (fault == LOOP_EXIT_WRONG_SOURCE) step.source = read;
+            OK(xr_lir_emit_value(m, eof, &step, &success[1]));
+            OK(xr_lir_emit_effect(m, eof, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,
+                .type=XR_LIR_UNIT,.operands=&success[1],.operand_count=1,.source=returned}));
+            OK(xr_lir_set_terminator(m, eof, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+                .operands=&wrong,.operand_count=1,.source=returned}));
+        } else {
+            OK(xr_lir_emit_value(m, normal, &step, &success[1]));
+            OK(xr_lir_emit_effect(m, normal, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,
+                .type=XR_LIR_UNIT,.operands=success,.operand_count=2,.source=returned}));
+            OK(xr_lir_set_terminator(m, normal, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+                .operands=success,.operand_count=1,.source=returned}));
+        }
         if (fault == WRONG_PRIMARY) failed[0] = failed[1];
         OK(xr_lir_set_terminator(m, failure, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_FAIL,
             .type=XR_LIR_UNIT,.operands=failed,.operand_count=2,.source=read}));
 
         XrLirDiagnostic diagnostic = {0};
         XrLirStatus verified = xr_lir_module_finish(m, &diagnostic);
-        if (fault == COMPLETE) CHECK(verified == XR_LIR_OK);
-        else CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "cleanup frontier"));
+        if (fault == COMPLETE || fault == LOOP) CHECK(verified == XR_LIR_OK);
+        else CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,
+            fault == LOOP_NOT_RETIRED ? "Managed owner is not released" : "cleanup frontier"));
         xr_lir_module_destroy(m);
     }
 }

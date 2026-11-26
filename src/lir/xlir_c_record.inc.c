@@ -230,13 +230,15 @@ static void c_checked_directory(LirC *c, const XrLirInstructionView *v, uint32_t
         return;
     case XR_LIR_HOST_DIRECTORY_RETURN_GUARD:
         c_text(c, "    { XrtNativeDirectoryStatus xrl_directory_status = ");
-        c_value(c, v->operands[1]);
+        c_value(c, v->operands[v->operand_count - 1]);
         c_format(c, ";\n        if (!xrl_directory_status) xrl_directory_status = "
             "xrt_native_host_directory_cleanup_poll_checked(UINT32_C(%" PRIu32 "));\n"
             "        if (xrl_directory_status) {\n", source);
-        c_values_replace_begin(c, v->operands[0], source);
-        c_text(c, "NULL");
-        c_values_replace_end(c, source);
+        if (v->operand_count == 2) {
+            c_values_replace_begin(c, v->operands[0], source);
+            c_text(c, "NULL");
+            c_values_replace_end(c, source);
+        }
         c_text(c, "            xrt_native_host_directory_cleanup_fail(xrl_directory_status, 0);\n        }\n    }\n");
         return;
     case XR_LIR_HOST_DIRECTORY_FAIL:

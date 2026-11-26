@@ -1,0 +1,6 @@
+import io
+import path
+
+print(7)
+print(io.directoryProbeLoopLate(io.directoryProbeOpen(path.Path("other")),
+    io.directoryProbeOpen(path.Path("directory"))))
