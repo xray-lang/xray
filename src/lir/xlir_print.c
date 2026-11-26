@@ -175,6 +175,8 @@ static void lir_print_instruction(LirPrinter *p, const XrLirModule *m, const XrL
                 lir_print_text(p, ", ");
             lir_print_edge(p, &v->edges[e]);
         }
+    } else if (v->op == XR_LIR_ARITHMETIC_PANIC) {
+        lir_print_format(p, " E%04" PRIu64, v->bits);
     } else if (v->op == XR_LIR_RET || v->op == XR_LIR_RETURN_ERROR ||
                v->op == XR_LIR_PANIC_ERROR || v->op == XR_LIR_UNCAUGHT_ERROR) {
         if (v->operand_count) {

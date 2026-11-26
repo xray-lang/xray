@@ -56,7 +56,7 @@ XR_FUNC bool xr_lir_internal_type_valid(const XrLirModule *m, XrLirType type, bo
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op) {
     return op == XR_LIR_BR || op == XR_LIR_CONDBR || op == XR_LIR_RET ||
         op == XR_LIR_INVOKE || op == XR_LIR_RETURN_ERROR || op == XR_LIR_PANIC_ERROR ||
-        op == XR_LIR_UNCAUGHT_ERROR;
+        op == XR_LIR_UNCAUGHT_ERROR || op == XR_LIR_ARITHMETIC_PANIC;
 }
 XR_FUNC XrLirStatus xr_lir_internal_error(XrLirDiagnostic *d, const char *message,
                                           uint32_t function, uint32_t block, uint32_t instruction,
@@ -630,6 +630,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_RECORD_FIELD && v->op != XR_LIR_CLASS_FIELD &&
         v->op != XR_LIR_CLASS_IS &&
         v->op != XR_LIR_PANIC_ERROR && v->op != XR_LIR_UNCAUGHT_ERROR &&
+        v->op != XR_LIR_ARITHMETIC_PANIC &&
         v->op != XR_LIR_SUM_NEW && v->op != XR_LIR_SUM_GET && v->op != XR_LIR_HOST_PATH_BOOL &&
         v->op != XR_LIR_HOST_FILE_OPEN_WRITE && v->op != XR_LIR_HOST_FILE_CLOSE && v->op != XR_LIR_HOST_FILE_WRITE &&
         v->op != XR_LIR_HOST_PATH_CLASS && v->op != XR_LIR_HOST_FILE_READ && v->op != XR_LIR_HOST_ENV_GET &&
@@ -678,6 +679,12 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             (v->op==XR_LIR_FUNCTION_REF && v->callee && v->callee<=m->function_count &&
              m->functions[v->callee-1].cleanup_owner) ||
             !xr_lir_internal_callable_instruction(m, f, v)) goto invalid;
+        return XR_LIR_OK;
+    }
+    if (v->op == XR_LIR_ARITHMETIC_PANIC) {
+        if (!f->has_cleanups || f->cleanup_owner || v->type != XR_LIR_UNIT || v->result ||
+            (v->bits != 420 && v->bits != 421) ||
+            !v->source.path || !v->source.path_length || !v->source.line || !v->source.column) goto invalid;
         return XR_LIR_OK;
     }
     if (v->op==XR_LIR_RETURN_ERROR || v->op==XR_LIR_PANIC_ERROR || v->op==XR_LIR_UNCAUGHT_ERROR) {

@@ -167,3 +167,5 @@ XR_LIR_OP(BIT_OR, "bit_or", 2)
 XR_LIR_OP(BIT_XOR, "bit_xor", 2)
 XR_LIR_OP(SHL, "shl", 2)
 XR_LIR_OP(SHR, "shr", 2)
+/* A proved zero divisor has drained its active synchronous cleanup frontier. */
+XR_LIR_OP(ARITHMETIC_PANIC, "arithmetic_panic", 0)

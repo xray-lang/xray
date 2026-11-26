@@ -492,7 +492,8 @@ static void c_prepare_divisors(LirC *c) {
     }
 }
 static bool c_arithmetic_point(const LirC *c, const XrLirInstructionView *v) {
-    return v->op == XR_LIR_FTOI || ((v->op == XR_LIR_DIV || v->op == XR_LIR_REM) &&
+    return v->op == XR_LIR_ARITHMETIC_PANIC || v->op == XR_LIR_FTOI ||
+        ((v->op == XR_LIR_DIV || v->op == XR_LIR_REM) &&
         c->fixed_divisors && !c->fixed_divisors[v->operands[1]]);
 }
 static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
@@ -624,6 +625,13 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
                     c_error(c,XR_LIR_C_OVERFLOW,"C source inventory overflows");
                 else ++c->location_count;
             }
+            break;
+        case XR_LIR_ARITHMETIC_PANIC:
+            c->runtime = true;
+            if (c->location_count == UINT32_MAX)
+                c_error(c, XR_LIR_C_OVERFLOW, "source location count exceeds 32 bits");
+            else
+                ++c->location_count;
             break;
         case XR_LIR_DIV: case XR_LIR_REM:
             if (v->type != XR_LIR_I64)
@@ -1269,6 +1277,10 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             break;
         case XR_LIR_INVOKE:
             c_invoke(c,v,string_source);
+            break;
+        case XR_LIR_ARITHMETIC_PANIC:
+            c_format(c, "    xrt_arithmetic_panic(UINT32_C(%" PRIu64 "), UINT32_C(%" PRIu32 "));\n",
+                v->bits, ++c->location_cursor);
             break;
         case XR_LIR_PANIC_ERROR: case XR_LIR_UNCAUGHT_ERROR: {
             const XrLirLiteralData *metadata=&c->request->module->literals[v->bits-1];

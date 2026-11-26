@@ -127,7 +127,8 @@ typedef struct LowerFunction {
     Lower *owner;
     const XrXirFunction *source;
     XrLirFunction function;
-    XrLirBlock *blocks;
+    XrLirBlock *blocks, *exits;
+    XrLirBlock active_entry;
     XrLirValue *values, *states, *current, *frame_cells;
     uint8_t *cell_retired, *promoted_arrays, *retired_values, *frame_bindings;
     uint32_t *array_values, *array_places, *value_blocks;
@@ -1703,6 +1704,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     seen[0] = 1;
     bool good = true;
     bool cleanup_body = c->source->declarations->functions[function].cleanup_owner != 0;
+    enum { ARITHMETIC_UNKNOWN, ARITHMETIC_ALLOWED, ARITHMETIC_REFUSED } arithmetic = ARITHMETIC_UNKNOWN;
     for (uint32_t at = 0; at < count && good; ++at) {
         uint32_t b = queue[at];
         c->block = b;
@@ -1719,7 +1721,11 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             c->instruction = i;
             const XrXirInstruction *instruction = &f->instructions[i];
-            if ((block->frontier || cleanup_body) && !lower_cleanup_instruction(c, f, b, instruction, cleanup_body)) {
+            bool guarded_arithmetic = !cleanup_body && block->frontier && lower_cleanup_arithmetic(instruction);
+            if (guarded_arithmetic && arithmetic == ARITHMETIC_UNKNOWN)
+                arithmetic = lower_cleanup_arithmetic_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
+            if ((block->frontier || cleanup_body) && !(guarded_arithmetic && arithmetic == ARITHMETIC_ALLOWED) &&
+                !lower_cleanup_instruction(c, f, b, instruction, cleanup_body)) {
                 good = lower_unsupported(c, "operation needs a panic landing with active cleanup");
                 break;
             }
@@ -1892,6 +1898,7 @@ static void lower_function_free(LowerFunction *f) {
     xr_free(f->cell_elements);
     xr_free(f->cell_retired);
     xr_free(f->retired_values);
+    xr_free(f->exits);
     xr_free(f->blocks);
     xr_free(f->values);
     xr_free(f->states);
@@ -3095,6 +3102,8 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         if (f->lexical.count && !lower_lexical_events(f, b, f->lexical.before[i])) return false;
         const XrXirInstruction *op = &f->source->instructions[i];
         uint32_t result = f->source->parameter_count + i;
+        if (block->frontier && lower_cleanup_arithmetic(op) && !lower_cleanup_arithmetic_edge(f, b, op))
+            return false;
         if (op->op == XR_XIR_INVOKE_RESULT || op->op == XR_XIR_INVOKE_ERROR || op->op == XR_XIR_INVOKE_DISCARD) {
             if (op->op == XR_XIR_INVOKE_RESULT && f->array_values && f->array_values[result] != UINT32_MAX)
                 f->current[f->array_values[result]] = f->values[result];
@@ -3178,7 +3187,8 @@ static bool lower_edge(LowerFunction *f, uint32_t from, uint32_t target, XrLirEd
     XrLirValue *arguments = lower_alloc(c, count, sizeof(*arguments));
     if (count && !arguments)
         return false;
-    *edge = (XrLirEdge) {f->blocks[target], arguments, count};
+    // A split can move this block's terminator, but a backedge still enters its original block.
+    *edge = (XrLirEdge) {target == from ? f->active_entry : f->blocks[target], arguments, count};
     for (uint32_t p = 0; p < f->phis[target]; ++p) {
         const XrXirInstruction *phi = &f->source->instructions[block->first + p];
         if (phi->args[0] > f->source->operand_count ||
@@ -3605,13 +3615,22 @@ static bool lower_function(Lower *c, uint32_t index) {
             good = lower_managed_copy(&f, 0, f.values[p], &retained);
             f.values[p] = retained;
         }
-    for (uint32_t n = 0; n < f.ordered && good; ++n)
-        good = lower_body(&f, f.order[n]);
+    for (uint32_t n = 0; n < f.ordered && good; ++n) {
+        uint32_t b = f.order[n];
+        XrLirBlock entry = f.blocks[b];
+        good = lower_body(&f, b);
+        if (f.exits) f.exits[b] = f.blocks[b];
+        f.blocks[b] = entry;
+    }
     if (good) good = lower_view_cleanups_finish(&f);
     if (good) good = lower_frame_cells(&f);
-    for (uint32_t b = 0; b < f.source->block_count && good; ++b)
-        if (f.reachable[b])
-            good = lower_terminator(&f, b);
+    for (uint32_t b = 0; b < f.source->block_count && good; ++b) {
+        if (!f.reachable[b]) continue;
+        f.active_entry = f.blocks[b];
+        if (f.exits && f.exits[b].id) f.blocks[b] = f.exits[b];
+        good = lower_terminator(&f, b);
+        f.blocks[b] = f.active_entry;
+    }
     lower_function_free(&f);
     return good;
 }

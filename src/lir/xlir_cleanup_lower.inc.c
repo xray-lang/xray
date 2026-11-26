@@ -147,7 +147,7 @@ static bool lower_cleanup_block(LowerFunction *f, uint32_t block, const XrXirIns
     return good;
 }
 
-static bool lower_cleanup_call(LowerFunction *f, uint32_t block, uint32_t frontier) {
+static bool lower_cleanup_call(LowerFunction *f, XrLirBlock block, uint32_t frontier) {
     Lower *c = f->owner;
     const XrXirInstruction *registration = &f->source->instructions[frontier - 1];
     XrLirValue *arguments = NULL;
@@ -157,10 +157,21 @@ static bool lower_cleanup_call(LowerFunction *f, uint32_t block, uint32_t fronti
     XrLirInstruction invoke = {.op = XR_LIR_CALL, .type = XR_LIR_UNIT,
         .callee = lower_cleanup_target(f, registration), .operands = arguments,
         .operand_count = registration->args[1], .source = lower_source(c)};
-    bool good = lower_build(c, xr_lir_emit_effect(c->module, f->blocks[block], &invoke));
+    bool good = lower_build(c, xr_lir_emit_effect(c->module, block, &invoke));
     c->instruction = at;
     xr_free(arguments);
     return good;
+}
+
+static bool lower_cleanup_unwind(LowerFunction *f, XrLirBlock block, uint32_t frontier, uint32_t target) {
+    while (frontier != target) {
+        uint32_t parent, handler;
+        if (xr_xir_cleanup_frontier(f->source, frontier, &parent, &handler) != XR_XIR_OK || handler)
+            return lower_unsupported(f->owner, "invalid synchronous cleanup frontier");
+        if (!lower_cleanup_call(f, block, frontier)) return false;
+        frontier = parent;
+    }
+    return true;
 }
 
 static bool lower_cleanup_exit(LowerFunction *f, uint32_t block, const XrXirInstruction *term) {
@@ -170,12 +181,57 @@ static bool lower_cleanup_exit(LowerFunction *f, uint32_t block, const XrXirInst
     if (term->op == XR_XIR_CLEANUP_LEAVE || term->op == XR_XIR_CLEANUP_ERROR)
         target = (uint32_t)term->immediate;
     else if (term->op != XR_XIR_RETURN && term->op != XR_XIR_THROW && term->op != XR_XIR_PANIC_ERROR) return true;
-    while (frontier != target) {
-        uint32_t parent, handler;
-        if (xr_xir_cleanup_frontier(f->source, frontier, &parent, &handler) != XR_XIR_OK || handler)
-            return lower_unsupported(f->owner, "invalid synchronous cleanup frontier");
-        if (!lower_cleanup_call(f, block, frontier)) return false;
-        frontier = parent;
+    return lower_cleanup_unwind(f, f->blocks[block], frontier, target);
+}
+
+static bool lower_cleanup_arithmetic(const XrXirInstruction *op) {
+    return (op->op == XR_XIR_DIV_INT || op->op == XR_XIR_REM_INT) && op->type == XR_XIR_I64;
+}
+
+static bool lower_cleanup_frame_type(const Lower *c, XrXirType type) {
+    return type == XR_XIR_UNIT || lower_cleanup_scalar(type) || lower_cleanup_cell(c, type);
+}
+
+/* Physical panic may leave this activation after its defer callbacks. Keep
+ * frames with owners, loans or callable scopes on the existing refusal path
+ * until they can retire those obligations on the new successor. */
+static bool lower_cleanup_arithmetic_frame(const Lower *c, const XrXirFunction *f) {
+    if (!lower_empty_error(f->error_type) || !lower_cleanup_frame_type(c, f->result)) return false;
+    for (uint32_t p = 0; p < f->parameter_count; ++p)
+        if (!lower_cleanup_frame_type(c, f->parameters[p])) return false;
+    for (uint32_t i = 0; i < f->instruction_count; ++i)
+        if (!lower_cleanup_frame_type(c, f->instructions[i].type)) return false;
+    return true;
+}
+
+static bool lower_cleanup_arithmetic_edge(LowerFunction *f, uint32_t b, const XrXirInstruction *op) {
+    Lower *c = f->owner;
+    const uint32_t frontier = f->source->blocks[b].frontier;
+    const uint32_t role = lower_cleanup_role(f, frontier);
+    XrLirSource source = lower_source(c);
+    XrLirBlock check = f->blocks[b], nonzero = {0}, zero = {0};
+    XrLirValue arguments[2] = {{0}}, condition = {0};
+    if (!f->exits) {
+        f->exits = lower_alloc(c, f->source->block_count, sizeof(*f->exits));
+        if (!f->exits) return false;
     }
+    XrLirInstruction constant = {.op = XR_LIR_CONST, .type = XR_LIR_I64, .source = source};
+    XrLirInstruction compare = {.op = XR_LIR_ICMP, .type = XR_LIR_I1, .predicate = XR_LIR_NE,
+        .operands = arguments, .operand_count = 2, .source = source};
+    if (!lower_value(f, op->args[1], &arguments[0]) ||
+        !lower_build(c, xr_lir_emit_value(c->module, check, &constant, &arguments[1])) ||
+        !lower_build(c, xr_lir_emit_value(c->module, check, &compare, &condition)) ||
+        !lower_build(c, xr_lir_add_block(c->module, f->function, NULL, 0, &nonzero)) ||
+        !lower_build(c, xr_lir_add_block(c->module, f->function, NULL, 0, &zero)) ||
+        !lower_build(c, xr_lir_internal_cleanup_block(c->module, check, role, 0, NULL, 0)) ||
+        !lower_build(c, xr_lir_internal_cleanup_block(c->module, zero, role, 0, NULL, 0))) return false;
+    XrLirInstruction branch = {.op = XR_LIR_CONDBR, .type = XR_LIR_UNIT, .operands = &condition,
+        .operand_count = 1, .edge_count = 2, .edges = {{.target = nonzero}, {.target = zero}}, .source = source};
+    XrLirInstruction panic = {.op = XR_LIR_ARITHMETIC_PANIC, .type = XR_LIR_UNIT,
+        .bits = op->op == XR_XIR_DIV_INT ? 420 : 421, .source = source};
+    if (!lower_build(c, xr_lir_set_terminator(c->module, check, &branch)) ||
+        !lower_cleanup_unwind(f, zero, frontier, 0) ||
+        !lower_build(c, xr_lir_set_terminator(c->module, zero, &panic))) return false;
+    f->blocks[b] = nonzero;
     return true;
 }
