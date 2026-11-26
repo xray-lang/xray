@@ -194,7 +194,7 @@ static void checked_function(CheckedCursor *c, XrXirFunction *f) {
                  * still applies to the decoded instruction. */
                 if (in.op == XR_XIR_BOOL_TRY_PARSE && in.type == XR_XIR_BOOL)
                     in.op = XR_XIR_DATA_UNION_IS;
-                else if (in.op == XR_XIR_DATA_UNION_IS && in.type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
+                else if (in.op == XR_XIR_DATA_UNION_IS && (uint32_t)in.type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
                     in.op = XR_XIR_BOOL_TRY_PARSE;
                 instructions[i] = in;
             }
