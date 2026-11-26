@@ -67,7 +67,7 @@ static bool type_subtypes(TypeWork *w) {
     /* Verified nominal classes are roots in this table. Source rejects class
      * inheritance before publication; no AST parent inference is available. */
     if(w->selected.kind!=XR_XIR_SOURCE_TYPE_INTERFACE)return true;
-    for(size_t root=0;root<w->request->count;++root){TypeSymbol selected;bool found=false;
+    for(size_t root=0;root<w->request->count;++root){TypeSymbol selected = {0};bool found=false;
         if(!type_local_selected(w,root,&selected,&found))return false;
         if(!found)continue;
         const XrXirSourceView *view=type_view(w,root);const XrXirInterfaceTable *table=view->types->interfaces;
