@@ -46,6 +46,7 @@ XR_FUNC XrLirStatus xr_lir_array_module_create(const XrLirRegistry *, XrLirModul
 XR_FUNC XrLirStatus xr_lir_array_catalog_install(XrLirModule *);
 /* A nonzero index names a required exact inline element in this module. */
 XR_FUNC uint32_t xr_lir_inline_array_ordinal(const XrLirModule *, XrLirType element);
+XR_FUNC bool xr_lir_class_array_push_element(const XrLirModule *, XrLirType element);
 XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *, XrLirType element,
     XrLirArrayOperation, uint32_t *id);
 /* SET and PUSH have exact ARRAY_CELL and ARRAY_REF receiver signatures.

@@ -10,11 +10,19 @@ static bool lir_array_function_shape(const XrLirModule *m, const XrLirFunctionDa
     if (f->result == XR_LIR_ARRAY_CELL || f->result == XR_LIR_ARRAY_REF || (f->result == XR_LIR_ARRAY ?
         !xr_lir_internal_array_element(m, f->array_result) : f->array_result != XR_LIR_TYPE_INVALID))
         return false;
-    for (uint32_t v = 0; v < f->value_count; ++v)
-        if (xr_lir_internal_array_type(f->values[v].type) ?
-            (!xr_lir_internal_array_element(m, f->values[v].array_element) ||
-             (f->values[v].type != XR_LIR_ARRAY && xr_lir_inline_array_ordinal(m, f->values[v].array_element))) :
-            f->values[v].array_element != XR_LIR_TYPE_INVALID) return false;
+    for (uint32_t v = 0; v < f->value_count; ++v) {
+        const XrLirValueData *value = &f->values[v];
+        if (!xr_lir_internal_array_type(value->type)) {
+            if (value->array_element != XR_LIR_TYPE_INVALID) return false;
+            continue;
+        }
+        if (!xr_lir_internal_array_element(m, value->array_element)) return false;
+        if (value->type == XR_LIR_ARRAY || !xr_lir_inline_array_ordinal(m, value->array_element))
+            continue;
+        const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v + 1);
+        if (value->type != XR_LIR_ARRAY_CELL || !xr_lir_class_array_push_element(m, value->array_element) ||
+            value->parameter || !definition || definition->op != XR_LIR_CELL_NEW) return false;
+    }
     if (f->kind == XR_LIR_FUNCTION_EXTERNAL) {
         if (f->result == XR_LIR_ARRAY) return false;
         for (uint32_t p = 0; p < f->parameter_count; ++p)

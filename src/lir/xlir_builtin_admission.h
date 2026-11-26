@@ -70,7 +70,8 @@ static inline bool lir_definition_cell_captures(const XrLirModule *module,
 }
 
 static inline bool lir_definition_array_element(const XrLirModule *module, XrLirType type, XrLirType element) {
-    return element < XR_LIR_TYPE_COUNT || (type == XR_LIR_ARRAY && xr_lir_inline_array_ordinal(module,element));
+    return element < XR_LIR_TYPE_COUNT || (type == XR_LIR_ARRAY && xr_lir_inline_array_ordinal(module, element)) ||
+        (type == XR_LIR_ARRAY_CELL && xr_lir_class_array_push_element(module, element));
 }
 
 /* Definitions and State use the owned Fixed projection. Intrinsic and external
@@ -91,6 +92,10 @@ static inline bool lir_module_has_builtin_abi(const XrLirModule *module) {
                 continue;
             if (array.operation == XR_LIR_ARRAY_OP_GET && array.parameter_count == 2 && array.parameter_elements &&
                 xr_lir_inline_array_ordinal(module,array.parameter_elements[0])) continue;
+            if (array.operation == XR_LIR_ARRAY_OP_PUSH &&
+                signature.parameter_count == 2 && signature.parameters[0] == XR_LIR_ARRAY_CELL &&
+                array.parameter_count == 2 && array.parameter_elements &&
+                xr_lir_class_array_push_element(module, array.parameter_elements[0])) continue;
         }
         return false;
     }

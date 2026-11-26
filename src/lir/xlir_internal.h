@@ -117,7 +117,7 @@ typedef struct XrLirTypeData {
     XrLirRecordIdentity record;
     uint32_t *record_names, record_name_capacity;
     uint32_t inline_array_ordinal;
-    uint32_t inline_array_operations[XR_LIR_ARRAY_OP_GET];
+    uint32_t inline_array_operations[XR_LIR_ARRAY_OP_PUSH];
     bool inline_display;
     bool class_payload_only; /* A row with immutable inline optional integer fields. */
 } XrLirTypeData;
