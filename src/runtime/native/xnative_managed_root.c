@@ -13,6 +13,7 @@
 #include "base/xchecks.h"
 #include "base/xmax_align.h"
 #include <stdalign.h>
+#include <stdint.h>
 
 _Static_assert(offsetof(XrtManagedSlot,pending) == sizeof(XrtManagedHeader *) &&
     offsetof(XrtManagedSlot,owner_offset) == sizeof(XrtManagedHeader *) + sizeof(XrtManagedPending) &&
@@ -186,18 +187,29 @@ XRAY_API XrtManagedStatus xrt_managed_root_destroy(XrtManagedRoot **owned) {
     xrt_managed_drop(&root->header);
     return XRT_MANAGED_OK;
 }
+/* A payload above the fundamental alignment cannot be placed from a static
+ * offset: the frame block only promises the fundamental alignment. The extent
+ * reserves the worst-case padding for that case and the offset is computed from
+ * the actual base afterwards. Fundamental alignments keep their exact static
+ * offset, because every power of two below the limit divides the base address. */
+static size_t frame_payload_offset(uintptr_t base, size_t start, size_t alignment) {
+    return start + (alignment - (base + start) % alignment) % alignment;
+}
 static XrtManagedStatus frame_extent(const XrtManagedFrameSpec *spec,
-    size_t *payload_offset, size_t *bytes) {
+    size_t *start_out, size_t *reserve) {
     if (!spec || (!spec->slot_count && !spec->payload_size) ||
         (!spec->slot_count && spec->owned_offsets) || !spec->payload_alignment ||
-        spec->payload_alignment > alignof(XrMaxAlignment) ||
+        spec->payload_alignment > XR_ALIGNMENT_LIMIT ||
         (spec->payload_alignment & (spec->payload_alignment - 1))) return XRT_MANAGED_ARGUMENT;
     if (spec->slot_count > (SIZE_MAX - sizeof(XrtManagedFrame)) / sizeof(XrtManagedSlot))
         return XRT_MANAGED_OVERFLOW;
     size_t start = sizeof(XrtManagedFrame) + spec->slot_count * sizeof(XrtManagedSlot);
-    size_t padding = (spec->payload_alignment - start % spec->payload_alignment) % spec->payload_alignment;
-    if (start > SIZE_MAX - padding || spec->payload_size > SIZE_MAX - start - padding)
+    size_t slack = spec->payload_alignment > alignof(XrMaxAlignment) ? spec->payload_alignment - 1 :
+        (spec->payload_alignment - start % spec->payload_alignment) % spec->payload_alignment;
+    if (start > SIZE_MAX - slack || spec->payload_size > SIZE_MAX - start - slack)
         return XRT_MANAGED_OVERFLOW;
+    *start_out = start;
+    *reserve = start + slack + spec->payload_size;
     size_t previous_end = 0;
     for (size_t i = 0; i < spec->slot_count; ++i) {
         size_t offset = spec->owned_offsets ? spec->owned_offsets[i] : SIZE_MAX;
@@ -208,21 +220,25 @@ static XrtManagedStatus frame_extent(const XrtManagedFrameSpec *spec,
             return XRT_MANAGED_ARGUMENT;
         previous_end = offset + sizeof(XrtManagedHeader *);
     }
-    *payload_offset = start + padding;
-    *bytes = *payload_offset + spec->payload_size;
     return XRT_MANAGED_OK;
 }
 XRAY_API XrtManagedStatus xrt_managed_frame_enter_layout(XrtManagedRoot *root,
     const XrtManagedFrameSpec *spec, XrtManagedFrame **output) {
     if (!output || *output) return XRT_MANAGED_ARGUMENT;
-    size_t payload_offset = 0, bytes = 0;
-    XrtManagedStatus status = frame_extent(spec, &payload_offset, &bytes);
+    size_t start = 0, bytes = 0;
+    XrtManagedStatus status = frame_extent(spec, &start, &bytes);
     if (status != XRT_MANAGED_OK) return status;
     if (!root_begin(root)) return XRT_MANAGED_ARGUMENT;
     XrtManagedPending pending = {0};
     status = xrt_managed_prepare(root->frame_ops, bytes, &pending);
     if (status == XRT_MANAGED_OK) {
         XrtManagedFrame *frame = (XrtManagedFrame *)pending.value;
+        size_t payload_offset = frame_payload_offset((uintptr_t)frame, start, spec->payload_alignment);
+        if (payload_offset > bytes || spec->payload_size > bytes - payload_offset) {
+            xrt_managed_abort(&pending);
+            root->busy = false;
+            return XRT_MANAGED_OVERFLOW;
+        }
         frame->root = root;
         frame->previous = root->top;
         frame->slot_count = spec->slot_count;

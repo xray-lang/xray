@@ -605,7 +605,9 @@ static void inline_payload_rejection(void) {
     BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
     spec.payload_alignment = 3;
     BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
-    spec.payload_alignment = alignof(XrMaxAlignment) * 2;
+    /* An explicit payload alignment above the fundamental one is admitted up to
+     * the shared limit; only a request past that limit is refused here. */
+    spec.payload_alignment = XR_ALIGNMENT_LIMIT * 2;
     BAD(xrt_managed_frame_enter_layout(root, &spec, &frame));
     spec = (XrtManagedFrameSpec){SIZE_MAX, 0, 1, NULL};
     CHECK(xrt_managed_frame_enter_layout(root, &spec, &frame) == XRT_MANAGED_OVERFLOW);
@@ -822,6 +824,34 @@ static void fixed_execution_boundary(void) {
 }
 #include "managed_frame_locations_cases.h"
 #include "managed_frame_forwarding_cases.h"
+/* A payload above the fundamental alignment is placed from the actual frame
+ * address rather than a static offset, while fundamental alignments keep their
+ * exact static placement. The shared limit refuses anything larger. */
+static void explicit_payload_alignment(void) {
+    Fixture fixture;
+    fixture_init(&fixture);
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    XrtManagedRoot *root = NULL;
+    OK(xrt_managed_root_new(fixture.billing, &root));
+    XrtManagedFrameSpec spec = {1, 128, 128, NULL};
+    XrtManagedFrame *frame = NULL;
+    void *payload = NULL;
+    OK(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload));
+    CHECK(payload && ((uintptr_t)payload % 128) == 0);
+    memset(payload, 0xA5, 128);
+    OK(xrt_managed_frame_leave(root, frame));
+    frame = NULL;
+    spec = (XrtManagedFrameSpec){1, 16, 16, NULL};
+    spec = (XrtManagedFrameSpec){1, XR_ALIGNMENT_LIMIT * 2, XR_ALIGNMENT_LIMIT * 2, NULL};
+    CHECK(xrt_managed_frame_enter_layout(root, &spec, &frame) == XRT_MANAGED_ARGUMENT && !frame);
+    spec = (XrtManagedFrameSpec){1, 48, 96, NULL};
+    CHECK(xrt_managed_frame_enter_layout(root, &spec, &frame) == XRT_MANAGED_ARGUMENT && !frame);
+    OK(xrt_managed_root_destroy(&root));
+    same_storage(baseline, xrt_billing_owner_stats(fixture.billing));
+    fixture_finish(&fixture);
+    puts("explicit frame payload alignment PASS");
+}
+
 int main(void) {
     aliases_and_return();
     independent_taken_owner();
@@ -837,6 +867,7 @@ int main(void) {
     managed_frame_forwarding();
     inline_payload_rejection();
     inline_payload_jump();
+    explicit_payload_alignment();
     fixed_execution_boundary();
     fixed_cold_setup();
     puts("Stable managed Root/Frame: real aliases, publication, extent rollback and longjmp drain PASS");
