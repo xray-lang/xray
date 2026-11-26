@@ -55,7 +55,8 @@ static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcVa
         (access.source && (access.index!=XR_LIR_SLICE_OP_NEW ||
             (access.source!=XR_LIR_STATE_REF && access.source!=XR_LIR_STRING_CELL))) ||
         access.index<=XR_LIR_SLICE_OP_NONE ||
-        (access.index>XR_LIR_SLICE_OP_CLEANUP && access.index!=XR_LIR_SLICE_OP_STRICT_UTF8)) return false;
+        (access.index>XR_LIR_SLICE_OP_CLEANUP && access.index!=XR_LIR_SLICE_OP_STRICT_UTF8 &&
+            access.index!=XR_LIR_SLICE_OP_LOSSY_UTF8)) return false;
     if (access.index==XR_LIR_SLICE_OP_CLEANUP) {
         if (access.result || access.first || access.count || !code->homes || !code->homes->events ||
             !access.window || access.window>code->homes->event_count) return false;
@@ -113,10 +114,12 @@ static bool rbc_value_slice_access_valid(const XrRbcModule *module,const XrRbcVa
     if (access.index==XR_LIR_SLICE_OP_STRICT_UTF8)
         return code->strict_utf8 && code->parameter_count==1 && args[0]==code->parameters[0] &&
             kind==XRT_VALUE_SLICE_U8 && rbc_value_host_nullable_backing(module,code,access.result,XRT_VALUE_STRING);
+    if (access.index==XR_LIR_SLICE_OP_LOSSY_UTF8)
+        return kind==XRT_VALUE_SLICE_U8 && rbc_value_string_destination(module,code,access.result,false);
     if (access.index==XR_LIR_SLICE_OP_COPY)
         return rbc_value_array(module,code,access.result,true) && rbc_value_kind(module,code,access.result)==
             (kind==XRT_VALUE_SLICE_I64 ? XRT_VALUE_ARRAY_I64 : XRT_VALUE_ARRAY_U8);
-    return access.index!=XR_LIR_SLICE_OP_END || !access.result;
+    return access.index==XR_LIR_SLICE_OP_BIND || (access.index==XR_LIR_SLICE_OP_END && !access.result);
 }
 
 static const XrLirHomeWorkspace *rbc_value_slice_stage(const XrRbcValueCode *code,XrLirHomeTransfer transfer) {

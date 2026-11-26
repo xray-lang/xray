@@ -77,6 +77,11 @@ static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStac
         return xrt_window_strict_utf8(activation->frame,home->first_owner,home->temporary_first_owner,
             home->offset,home->temporary_offset + offsetof(XrtHostNullableOwner, owner),&slice,source);
     }
+    if (access.index==XR_LIR_SLICE_OP_LOSSY_UTF8) {
+        const XrLirValueHome *home=rbc_value_home(activation->code,access.result);
+        status=xrt_window_lossy_utf8(activation->frame,home->temporary_first_owner,&slice,source);
+        return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
+    }
     if (access.index==XR_LIR_SLICE_OP_COPY) {
         const XrtBackingTypes *types=NULL;
         status=xrt_native_values_backings(xrt_value_root_current(source),&types);
@@ -91,8 +96,9 @@ static XrtManagedStatus rbc_value_slice_step(const XrRbcModule *module,XrRbcStac
         if (status==XRT_MANAGED_OK) memcpy(&output->bits,&length,8);
         return status;
     }
+    if (access.index!=XR_LIR_SLICE_OP_GET) return XRT_MANAGED_ARGUMENT;
     XrRbcRegister *index=rbc_value_register(stack,activation,args[1]);
-    if (access.index!=XR_LIR_SLICE_OP_GET || !index) return XRT_MANAGED_ARGUMENT;
+    if (!index) return XRT_MANAGED_ARGUMENT;
     int64_t at; memcpy(&at,&index->bits,8);
     return xrt_window_read_bits(&slice,kind,at,&output->bits);
 }

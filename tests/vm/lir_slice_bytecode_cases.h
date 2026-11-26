@@ -151,3 +151,70 @@ static void slice_bytecode_retirement(void) {
     }
     puts("readonly Slice: I64/U8 windows, copied Arrays, duplicate keeper edges and retired creators passed");
 }
+
+static void slice_bytecode_lossy_utf8(void) {
+    static const uint8_t bytes[]={'!',0xf0,0x90,0x80,0,0xc3,0xa9,'?'};
+    static const uint8_t expected[]={0xef,0xbf,0xbd,0,0xc3,0xa9};
+    static const char path[]="decode.xr";
+    SliceBytecodeFixture c={.element=XR_LIR_U8};
+    OK(xr_lir_module_create(NULL,&c.module));
+    OK(xr_lir_slice_library_catalog_install(c.module,XR_LIR_SLICE_LIBRARY_LOSSY_UTF8));
+    OK(xr_lir_slice_type(c.module,c.element,&c.slice));
+    XrLirFunction root={0};
+    XrLirFunctionSpec spec={.name="decode",.name_length=6,.result=XR_LIR_STRING};
+    OK(xr_lir_declare_function(c.module,&spec,&root));
+    OK(xr_lir_define_function(c.module,root));
+    OK(xr_lir_add_block(c.module,root,NULL,0,&c.block));
+    OK(xr_lir_set_entry(c.module,root,c.block));
+    XrLirValue items[sizeof(bytes)];
+    for (uint32_t n=0;n<sizeof(bytes);++n)
+        items[n]=managed_state_value(c.module,c.block,XR_LIR_CONST,c.element,NULL,0,bytes[n]);
+    XrLirValue array=slice_bytecode_array(&c,XR_LIR_ARRAY_OP_NEW,XR_LIR_ARRAY,items,sizeof(bytes));
+    XrLirValue cell=managed_state_value(c.module,c.block,XR_LIR_CELL_NEW,XR_LIR_ARRAY_CELL,&array,1,0);
+    managed_state_effect(c.module,c.block,XR_LIR_ARRAY_DROP,&array,1,0);
+    XrLirValue start=managed_state_value(c.module,c.block,XR_LIR_CONST,XR_LIR_I64,NULL,0,1);
+    XrLirValue end=managed_state_value(c.module,c.block,XR_LIR_CONST,XR_LIR_I64,NULL,0,7);
+    XrLirValue range[]={cell,start,end};
+    XrLirValue window=slice_bytecode_role(&c,XR_LIR_SLICE_OP_NEW,c.slice,range,3);
+    uint32_t id=0;
+    OK(xr_lir_slice_operation(c.module,XR_LIR_SLICE_OP_LOSSY_UTF8,c.element,0,&id));
+    XrLirValue decoded={0};
+    OK(xr_lir_emit_value(c.module,c.block,&(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,.type=XR_LIR_STRING,
+        .intrinsic=id,.operands=&window,.operand_count=1,.source={path,sizeof(path)-1,3,5,3,12}},&decoded));
+    (void)slice_bytecode_role(&c,XR_LIR_SLICE_OP_END,XR_LIR_UNIT,&window,1);
+    managed_state_effect(c.module,c.block,XR_LIR_ARRAY_CELL_DROP,&cell,1,0);
+    OK(xr_lir_set_terminator(c.module,c.block,&(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+        .operands=&decoded,.operand_count=1}));
+    OK(xr_lir_module_finish(c.module,NULL));
+    XrRbcProgram *program=compile(c.module,root);
+    xr_lir_module_destroy(c.module);
+    check_receiving(program);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
+    const XrRbcFunction *function=&module->functions[0];
+    size_t decodes=0;
+    for (size_t pc=0;pc<function->code_count;++pc) {
+        uint32_t word=function->code[pc];
+        if ((word&255)!=XR_RBC_VALUE_ACCESS) continue;
+        XrRbcValueAccess access=code->accesses[word>>16];
+        if (access.operation!=XR_RBC_VALUE_SLICE || access.index!=XR_LIR_SLICE_OP_LOSSY_UTF8) continue;
+        CHECK(access.count==1 && !access.source && !access.other && !access.window);
+        CHECK(function->source_ids && pc<function->source_id_count);
+        const XrtSourceLocation *source=xrt_locations_get(xr_rbc_program_locations(program),function->source_ids[pc]);
+        CHECK(source && source->path_length==sizeof(path)-1 && !memcmp(source->path,path,sizeof(path)-1) &&
+            source->line==3 && source->column==5 && source->end_line==3 && source->end_column==12);
+        ++decodes;
+    }
+    CHECK(decodes==1);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    xr_rbc_program_destroy(program);
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    xr_rbc_execution_free(&execution);
+    const XrtManagedHeader *owner=NULL;
+    CHECK(xr_rbc_outcome_string(outcome,&owner) && owner);
+    const XrtStringBacking *text=(const XrtStringBacking *)owner;
+    CHECK(text->length==sizeof(expected) && text->runes==3 && !memcmp(text->bytes,expected,sizeof(expected)));
+    xr_rbc_outcome_free(&outcome);
+    CHECK(!compiler_live_allocations);
+}
