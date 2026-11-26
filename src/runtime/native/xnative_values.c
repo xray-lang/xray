@@ -222,6 +222,16 @@ XRAY_API void xrt_native_array_inline_create(XrtManagedFrame *frame, size_t slot
     XrtManagedStatus status = xrt_array_backing_inline_create(frame,slot,binding.ops,rows,count,count);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
 }
+XRAY_API void xrt_native_array_inline_class_append(XrtPlace place, size_t temporary,
+    const XrtValueImage *image, uint32_t type, XrtManagedHeader *item, uint32_t source) {
+    XrtManagedRoot *root = xrt_native_values_existing_root(xrt_value_root_current(source));
+    if (!root || xrt_managed_frame_root(place.frame) != root)
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    XrtBoundInlineArray binding = native_inline_array(image, type, source);
+    XrtManagedStatus status = xrt_array_backing_inline_class_append(place, temporary,
+        binding.ops, binding.element, item);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+}
 XRAY_API const void *xrt_native_array_inline_at(const XrtManagedHeader *owner, const XrtValueImage *image,
     uint32_t type, int64_t index, uint32_t source) {
     XrtBoundInlineArray binding = native_inline_array(image,type,source);

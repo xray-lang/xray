@@ -129,6 +129,24 @@ static void c_array_inline(LirC *c, const XrLirInstructionView *v, const XrLirAr
         c_values_publish_leaf(c,v->result,source);
         return;
     }
+    if (shape->operation == XR_LIR_ARRAY_OP_PUSH) {
+        const XrLirHomeWorkspace *workspace = c_array_workspace(c);
+        if (!workspace) return;
+        const XrLirHomeBinding *binding = &c->homes->bindings[v->operands[0]];
+        XR_CHECK(binding->kind == XR_LIR_HOME_BINDING_LOCAL && workspace->type == binding->type &&
+            workspace->kind == XR_LIR_HOME_WORKSPACE_VALUE &&
+            workspace->first_owner < c->homes->frame.slot_count &&
+            binding->first_owner < c->homes->frame.slot_count &&
+            workspace->first_owner != binding->first_owner,
+            "verified local Class Array append has an exact distinct pending home");
+        c_text(c, "    xrt_native_array_inline_class_append(");
+        c_value(c, v->operands[0]);
+        c_format(c, ", %zu, &xrl_value_image, UINT32_C(%" PRIu32 "), (XrtManagedHeader *)",
+            workspace->first_owner, binding->type);
+        c_value(c, v->operands[1]);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        return;
+    }
     if (shape->operation != XR_LIR_ARRAY_OP_GET) {
         c_error(c,XR_LIR_C_UNSUPPORTED,"inline Array operation has no target receiver"); return;
     }

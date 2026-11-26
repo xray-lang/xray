@@ -70,6 +70,9 @@ XRAY_API void xrt_native_array_create(XrtManagedFrame *, size_t slot,
  * A successful read borrows the row while the caller keeps the Array live. */
 XRAY_API void xrt_native_array_inline_create(XrtManagedFrame *, size_t slot,
     const XrtValueImage *, uint32_t type, const void *rows, size_t count, uint32_t source_id);
+/* Append through a verified local binding in the active execution frame. */
+XRAY_API void xrt_native_array_inline_class_append(XrtPlace, size_t temporary,
+    const XrtValueImage *, uint32_t type, XrtManagedHeader *item, uint32_t source_id);
 XRAY_API const void *xrt_native_array_inline_at(const XrtManagedHeader *, const XrtValueImage *,
     uint32_t type, int64_t index, uint32_t source_id);
 XRAY_API void xrt_native_array_repeat(XrtManagedFrame *, size_t slot,
