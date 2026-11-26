@@ -91,6 +91,17 @@ XR_FUNC void xrt_value_failure_report(XrXirValueStatus status, const XrtSourceLo
     diagnostic_text("\n");
 }
 
+XR_FUNC void xrt_value_failure_report_with_directory_close(XrXirValueStatus status, const XrtSourceLocation *primary,
+    const XrtSourceLocation *close) {
+    xrt_value_failure_report(status, primary);
+    if (close) {
+        XrtSourceMap map = {close, 1};
+        diagnostic_text("note: directory cleanup rejected its token at ");
+        diagnostic_location(&map, 1);
+        diagnostic_text("\n");
+    }
+}
+
 XR_FUNC void xrt_null_unwrap_report(const XrtSourceLocation *source) {
     XrtSourceMap map = {source, source ? 1u : 0u};
     diagnostic_text("[Uncaught Panic] E0413: null value unwrapped at ");

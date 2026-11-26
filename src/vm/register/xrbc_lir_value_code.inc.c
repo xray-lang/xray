@@ -84,7 +84,9 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
         for (uint32_t n = 0; n < view.instruction_count; ++n) {
             XrLirInstructionView instruction; xr_lir_instruction_view(c->input,block,n,&instruction);
             if (instruction.op == XR_LIR_HOST_DIRECTORY || instruction.op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ||
-                instruction.op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL || rbc_lir_scalar_ref_call(c,&instruction)) return true;
+                instruction.op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
+                (instruction.op >= XR_LIR_HOST_DIRECTORY_FRAME && instruction.op <= XR_LIR_HOST_DIRECTORY_FAIL) ||
+                rbc_lir_scalar_ref_call(c,&instruction)) return true;
             if ((instruction.op == XR_LIR_STATE_CONSTRUCT || instruction.op == XR_LIR_STATE_INITIALIZE) &&
                 rbc_lir_value_string_slot(c,instruction.bits)) return true;
         }
@@ -236,6 +238,21 @@ static bool rbc_lir_value_invoke(RbcLirCompiler *c,const XrLirInstructionView *i
         rbc_lir_value_append(c,returned) &&
         (!forwards || rbc_lir_value_edge(c,i->edges[0],1,xr_lir_edge_parameter_offset(i,0))) &&
         rbc_lir_jump(c,i->edges[0].target);
+}
+static bool rbc_lir_directory_next(RbcLirCompiler *c, const XrLirInstructionView *i) {
+    XrLirBlockView normal, failure;
+    xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[0].target},&normal);
+    xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[1].target},&failure);
+    uint32_t origin = (uint32_t)c->value_code->access_count;
+    XrRbcValueAccess next = {.operation=XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED,.source=i->operands[0],
+        .result=normal.parameters[0],.other=failure.parameters[0],.window=c->register_count-1};
+    XrRbcValueAccess failed = {.operation=XR_RBC_VALUE_HOST_DIRECTORY_NEXT_ERROR,.index=origin,.result=next.other};
+    XrRbcValueAccess returned = {.operation=XR_RBC_VALUE_HOST_DIRECTORY_NEXT_RESULT,.index=origin,.result=next.result};
+    c->invoke_edges = true;
+    return rbc_lir_value_append(c,next) &&
+        rbc_lir_emit(c,XR_RBC_EQI,next.window,0,0,0) && rbc_lir_emit(c,XR_RBC_JMP,0,0,0,2) &&
+        rbc_lir_value_append(c,failed) && rbc_lir_jump(c,i->edges[1].target) &&
+        rbc_lir_value_append(c,returned) && rbc_lir_jump(c,i->edges[0].target);
 }
 static bool rbc_lir_value_display(RbcLirCompiler *c,const XrLirInstructionView *i,XrRbcValueAccess *access) {
     XrLirType type=rbc_lir_value_type(c,i->operands[0]);
@@ -572,6 +589,22 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         break;
     case XR_LIR_HOST_DIRECTORY_CLEANUP_POLL:
         access.operation = XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL;
+        break;
+    case XR_LIR_HOST_DIRECTORY_FRAME:
+        access.operation = XR_RBC_VALUE_HOST_DIRECTORY_FRAME;
+        c->value_code->directory_frame_source = c->current_source_id;
+        break;
+    case XR_LIR_HOST_DIRECTORY_NEXT_CHECKED:
+        *handled = true;
+        return rbc_lir_directory_next(c,i);
+    case XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED:
+        access.operation = XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED;
+        break;
+    case XR_LIR_HOST_DIRECTORY_RETURN_GUARD:
+        access.operation = XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD;
+        break;
+    case XR_LIR_HOST_DIRECTORY_FAIL:
+        access.operation = XR_RBC_VALUE_HOST_DIRECTORY_FAIL;
         break;
     case XR_LIR_HOST_FILE_WRITE:
         access.operation = XR_RBC_VALUE_HOST_FILE_WRITE;

@@ -245,6 +245,7 @@ static XrRbcStatus xr_rbc_values_begin(const XrRbcModule *module, XrRbcStack *st
     if (!code) return XR_RBC_OK;
     if (!stack->depth || function >= module->function_count || stack->frames[stack->depth - 1].function != function)
         return XR_RBC_INVALID;
+    if (code->directory_frame_source) source = code->directory_frame_source;
     XrtManagedStatus status = rbc_value_runtime(stack,source);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
     XrRbcValueRuntime *runtime = stack->values;
@@ -1368,7 +1369,16 @@ static XrtManagedStatus rbc_value_host_text_result(RbcValueActivation *activatio
     return result.managed;
 }
 
-static XrtManagedStatus rbc_value_host_directory(const XrRbcModule *module, XrRbcStack *stack,
+static XrtNativeDirectoryNext rbc_value_directory_destination(RbcValueActivation *activation, uint32_t value,
+    int64_t token) {
+    const XrLirValueHome *home = rbc_value_home(activation->code, value);
+    return (XrtNativeDirectoryNext){.frame=activation->frame, .destination=home->first_owner,
+        .temporary=home->temporary_first_owner, .offset=home->offset,
+        .temporary_owner_offset=home->temporary_offset + offsetof(XrtHostNullableOwner, owner),
+        .image=activation->image, .result_type=home->type, .token=token};
+}
+
+static XrtManagedStatus rbc_value_host_directory(XrRbcStack *stack,
     RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
     if (access.index == XR_NATIVE_CALLABLE_IO_DIR_OPEN) {
         XrRbcRegister *result = rbc_value_register(stack, activation, access.result);
@@ -1390,13 +1400,70 @@ static XrtManagedStatus rbc_value_host_directory(const XrRbcModule *module, XrRb
         return XRT_MANAGED_OK;
     }
     if (access.index != XR_NATIVE_CALLABLE_IO_DIR_NEXT) return XRT_MANAGED_ARGUMENT;
-    const XrLirValueHome *home = rbc_value_home(activation->code, access.result);
-    const XrtNativeDirectoryNext next = {.frame=activation->frame, .destination=home->first_owner,
-        .temporary=home->temporary_first_owner, .offset=home->offset,
-        .temporary_owner_offset=home->temporary_offset + offsetof(XrtHostNullableOwner, owner),
-        .image=xr_rbc_module_value_image(module), .result_type=home->type, .token=token};
+    const XrtNativeDirectoryNext next = rbc_value_directory_destination(activation,access.result,token);
     xrt_native_host_directory_next(&next, source);
     return XRT_MANAGED_OK;
+}
+
+static XrtManagedStatus rbc_value_checked_directory(const XrRbcModule *module, XrRbcStack *stack,
+    RbcValueActivation *activation, XrRbcValueAccess access, uint32_t source) {
+    if (!activation->frame || !activation->owned_code) return XRT_MANAGED_ARGUMENT;
+    XrRbcFrame *frame = &stack->frames[activation->depth - 1];
+    switch (access.operation) {
+    case XR_RBC_VALUE_HOST_DIRECTORY_FRAME:
+        return XRT_MANAGED_OK;
+    case XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED: {
+        const XrRbcRegister *operand = rbc_value_register(stack,activation,access.source);
+        if (!operand) return XRT_MANAGED_ARGUMENT;
+        int64_t token;
+        memcpy(&token, &operand->bits, sizeof(token));
+        const XrtNativeDirectoryNext call = rbc_value_directory_destination(activation,access.result,token);
+        stack->slots[frame->base + access.window].bits = xrt_native_host_directory_next_checked(&call,source);
+        return XRT_MANAGED_OK;
+    }
+    case XR_RBC_VALUE_HOST_DIRECTORY_NEXT_ERROR:
+    case XR_RBC_VALUE_HOST_DIRECTORY_NEXT_RESULT: {
+        XrRbcValueAccess next = activation->code->accesses[access.index];
+        XrRbcRegister *window = &stack->slots[frame->base + next.window];
+        bool failed = access.operation == XR_RBC_VALUE_HOST_DIRECTORY_NEXT_ERROR;
+        if (failed != (window->bits != 0)) return XRT_MANAGED_ARGUMENT;
+        if (failed) {
+            XrRbcRegister *output = rbc_value_register(stack,activation,access.result);
+            if (!output) return XRT_MANAGED_ARGUMENT;
+            output->bits = window->bits;
+        }
+        window->bits = 0;
+        return XRT_MANAGED_OK;
+    }
+    case XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED: {
+        const XrRbcRegister *operand = rbc_value_register(stack,activation,access.source);
+        const XrRbcRegister *previous = access.other ? rbc_value_register(stack,activation,access.other) : NULL;
+        XrRbcRegister *output = rbc_value_register(stack,activation,access.result);
+        if (!operand || !output || (access.other && !previous)) return XRT_MANAGED_ARGUMENT;
+        int64_t token;
+        memcpy(&token, &operand->bits, sizeof(token));
+        output->bits = previous && previous->bits ? previous->bits :
+            xrt_native_host_directory_cleanup_close_checked(token,source);
+        return XRT_MANAGED_OK;
+    }
+    case XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD: {
+        const XrRbcRegister *previous = rbc_value_register(stack,activation,access.other);
+        if (!previous) return XRT_MANAGED_ARGUMENT;
+        XrtNativeDirectoryStatus fault = previous->bits;
+        if (!fault) fault = xrt_native_host_directory_cleanup_poll_checked(source);
+        if (!fault) return XRT_MANAGED_OK;
+        XrtManagedStatus retired = rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.source},NULL);
+        if (retired != XRT_MANAGED_OK) return retired;
+        xrt_native_host_directory_cleanup_fail(fault,0);
+    }
+    case XR_RBC_VALUE_HOST_DIRECTORY_FAIL: {
+        const XrRbcRegister *primary = rbc_value_register(stack,activation,access.source);
+        const XrRbcRegister *secondary = rbc_value_register(stack,activation,access.other);
+        if (!primary || !secondary) return XRT_MANAGED_ARGUMENT;
+        xrt_native_host_directory_cleanup_fail(primary->bits,secondary->bits);
+    }
+    default: return XRT_MANAGED_ARGUMENT;
+    }
 }
 
 static XrtHostFileStagedResult rbc_value_file_destination(RbcValueActivation *activation, uint32_t value) {
@@ -1551,7 +1618,10 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     uint32_t index, size_t pc, uint32_t source) {
     RbcValueActivation *activation=stack->values ? stack->values->top : NULL;
     if ((!activation || activation->depth!=stack->depth) && stack->depth) {
-        XrRbcStatus status=xr_rbc_values_begin(module,stack,(uint32_t)stack->frames[stack->depth-1].function,source);
+        uint32_t function = (uint32_t)stack->frames[stack->depth-1].function;
+        const XrRbcValueCode *code = xr_rbc_module_value_code(module,function);
+        if (code && code->directory_frame_source) return XR_RBC_INVALID;
+        XrRbcStatus status=xr_rbc_values_begin(module,stack,function,source);
         if (status!=XR_RBC_OK) return status;
         activation=stack->values ? stack->values->top : NULL;
     }
@@ -1672,7 +1742,9 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     } else if (access.operation==XR_RBC_VALUE_HOST_TEXT_RESULT) {
         status = rbc_value_host_text_result(activation, access, source);
     } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY) {
-        status = rbc_value_host_directory(module, stack, activation, access, source);
+        status = rbc_value_host_directory(stack, activation, access, source);
+    } else if (access.operation >= XR_RBC_VALUE_HOST_DIRECTORY_FRAME && access.operation <= XR_RBC_VALUE_HOST_DIRECTORY_FAIL) {
+        status = rbc_value_checked_directory(module,stack,activation,access,source);
     } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE) {
         const XrRbcRegister *operand = rbc_value_register(stack, activation, access.source);
         if (!operand) status = XRT_MANAGED_ARGUMENT;

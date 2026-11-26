@@ -150,6 +150,8 @@ XR_FUNC XR_NORET void xrt_output_exit(const XrtSourceMap *map, XrtIoResult failu
     XrtOutputOperation operation, uint32_t source_id);
 XR_FUNC XR_NORET void xrt_clock_exit(const XrtSourceMap *map, XrtHostClockFailure failure);
 XR_FUNC void xrt_value_failure_report(XrXirValueStatus, const XrtSourceLocation *);
+XR_FUNC void xrt_value_failure_report_with_directory_close(XrXirValueStatus, const XrtSourceLocation *primary,
+    const XrtSourceLocation *close);
 XR_FUNC void xrt_null_unwrap_report(const XrtSourceLocation *);
 /* Both hosted backends render the same exact message bytes, with the source
  * presented separately for assertions rather than embedded in the message. */

@@ -949,6 +949,10 @@ XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
     return true;
 }
 
+XR_FUNC uint32_t xr_rbc_outcome_directory_close_source(const XrRbcOutcome *outcome) {
+    return outcome && outcome->status == XR_RBC_VALUE_FAILURE ? outcome->failure.detail.value.directory_close_source_id : 0;
+}
+
 XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations) {
     if (!outcome || outcome->status != XR_RBC_OUTPUT_FAILURE || !facts || !borrowed_locations)

@@ -73,7 +73,9 @@ static int run_report(const XrRbcOutcome *outcome, XrRbcStatus status) {
                 source ? source->path : "unknown source", source ? source->line : 0,
                 source ? source->column : 0);
         } else if (xr_rbc_outcome_value_failure(outcome, &value_status, &source_id, &locations)) {
-            xrt_value_failure_report(value_status, xrt_locations_get(locations, source_id));
+            uint32_t close_id = xr_rbc_outcome_directory_close_source(outcome);
+            xrt_value_failure_report_with_directory_close(value_status,
+                xrt_locations_get(locations, source_id), xrt_locations_get(locations, close_id));
         } else if (xr_rbc_outcome_take_temp(outcome, &temp)) {
             xrt_temp_failure_report(xr_rbc_outcome_temp_location(outcome));
         } else fprintf(stderr, "register VM execution failed (%u)\n", (unsigned)status);

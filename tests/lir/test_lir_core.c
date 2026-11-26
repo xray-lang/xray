@@ -415,6 +415,68 @@ static void directory_cleanup_requires_a_complete_exit(void) {
     }
 }
 
+static void directory_next_requires_exact_successors(void) {
+    enum { COMPLETE, NO_FRAME, WRONG_SOURCE, WRONG_CAPTURE, WRONG_PRIMARY };
+    const XrLirSource read = {"cleanup.xr", 10, 8, 12, 8, 12};
+    const XrLirSource close = {"cleanup.xr", 10, 5, 9, 5, 9};
+    const XrLirSource exit = {"cleanup.xr", 10, 8, 5, 8, 25};
+    for (unsigned fault = COMPLETE; fault <= WRONG_PRIMARY; ++fault) {
+        XrLirModule *m = NULL;
+        OK(xr_lir_module_create(NULL, &m));
+        XrLirType optional = XR_LIR_TYPE_INVALID, scalar = XR_LIR_I64, status = XR_LIR_U64;
+        OK(xr_lir_nullable_type(m, XR_LIR_STRING, &optional));
+        XrLirFunction owner = test_function(m, "owner", NULL, 0, optional), callback = {0};
+        OK(xr_lir_declare_function(m, &(XrLirFunctionSpec){.name="callback",.name_length=8,
+            .parameters=&scalar,.parameter_count=1,.result=XR_LIR_UNIT,.cleanup_owner=owner.id}, &callback));
+        OK(xr_lir_define_function(m, callback));
+        XrLirBlock callback_body = test_block(m, callback, NULL, 0);
+        OK(xr_lir_set_entry(m, callback, callback_body));
+        XrLirValue formal = {0};
+        OK(xr_lir_function_parameter(m, callback, 0, &formal));
+        OK(xr_lir_emit_effect(m, callback_body, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE,
+            .type=XR_LIR_UNIT,.operands=&formal,.operand_count=1,.source=close}));
+        test_return(m, callback_body, (XrLirValue){0});
+
+        XrLirBlock entry = test_block(m, owner, NULL, 0), active = test_block(m, owner, NULL, 0);
+        XrLirBlock normal = test_block(m, owner, &optional, 1), failure = test_block(m, owner, &status, 1);
+        OK(xr_lir_set_entry(m, owner, entry));
+        if (fault != NO_FRAME)
+            OK(xr_lir_emit_effect(m, entry, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_FRAME,
+                .type=XR_LIR_UNIT,.source=read}));
+        XrLirValue capture = {0}, wrong = {0};
+        OK(xr_lir_emit_value(m, entry, &(XrLirInstruction){.op=XR_LIR_CONST,.type=scalar,.bits=1}, &capture));
+        OK(xr_lir_emit_value(m, entry, &(XrLirInstruction){.op=XR_LIR_CONST,.type=scalar,.bits=2}, &wrong));
+        OK(xr_lir_internal_cleanup_block(m, entry, 0, callback.id, &capture, 1));
+        OK(xr_lir_set_terminator(m, entry, &(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+            .edge_count=1,.edges={{.target=active}}}));
+        OK(xr_lir_internal_cleanup_block(m, active, callback.id, 0, NULL, 0));
+        OK(xr_lir_set_terminator(m, active, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_NEXT_CHECKED,
+            .type=optional,.operands=&capture,.operand_count=1,.edge_count=2,
+            .edges={{.target=normal},{.target=failure}},.source=read}));
+        XrLirValue success[2] = {{0}}, failed[2] = {{0}};
+        OK(xr_lir_block_parameter(m, normal, 0, &success[0]));
+        OK(xr_lir_block_parameter(m, failure, 0, &failed[0]));
+        XrLirInstruction step = {.op=XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED,.type=status,
+            .operands=fault == WRONG_CAPTURE ? &wrong : &capture,.operand_count=1,
+            .bits=callback.id,.source=fault == WRONG_SOURCE ? read : close};
+        OK(xr_lir_emit_value(m, normal, &step, &success[1]));
+        OK(xr_lir_emit_value(m, failure, &step, &failed[1]));
+        OK(xr_lir_emit_effect(m, normal, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,
+            .type=XR_LIR_UNIT,.operands=success,.operand_count=2,.source=exit}));
+        OK(xr_lir_set_terminator(m, normal, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
+            .operands=success,.operand_count=1,.source=exit}));
+        if (fault == WRONG_PRIMARY) failed[0] = failed[1];
+        OK(xr_lir_set_terminator(m, failure, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_FAIL,
+            .type=XR_LIR_UNIT,.operands=failed,.operand_count=2,.source=read}));
+
+        XrLirDiagnostic diagnostic = {0};
+        XrLirStatus verified = xr_lir_module_finish(m, &diagnostic);
+        if (fault == COMPLETE) CHECK(verified == XR_LIR_OK);
+        else CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message, "cleanup frontier"));
+        xr_lir_module_destroy(m);
+    }
+}
+
 static void cleanup_arithmetic_requires_the_actual_guard(void) {
     enum { EXACT, WRONG_DIVISOR, WRONG_CODE, WRONG_SPAN, MISSING_CLEANUP,
         EXTRA_PREDECESSOR, REGISTER_ON_PANIC, NO_FRONTIER, CASE_COUNT };
@@ -1789,6 +1851,7 @@ int main(void) {
     cleanup_suffix_precedes_retirement();
     cleanup_invoke_checks_the_complete_callee();
     directory_cleanup_requires_a_complete_exit();
+    directory_next_requires_exact_successors();
     cleanup_arithmetic_requires_the_actual_guard();
     cleanup_callback_cannot_assert();
     startup_error_requires_an_initialized_origin();

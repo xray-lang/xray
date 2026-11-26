@@ -726,7 +726,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         return XR_LIR_OK;
     }
     if (v->op >= XR_LIR_HOST_DIRECTORY_FRAME && v->op <= XR_LIR_HOST_DIRECTORY_FAIL &&
-        (!f->has_cleanups || f->cleanup_owner || f->error || !lir_directory_string_result(m, f->result) ||
+        (f->cleanup_owner || f->error || !lir_directory_string_result(m, f->result) ||
          !v->source.path || !v->source.path_length || !v->source.line || !v->source.column)) goto invalid;
     if (v->op==XR_LIR_RETURN_ERROR || v->op==XR_LIR_PANIC_ERROR || v->op==XR_LIR_UNCAUGHT_ERROR) {
         XrLirRecordIdentity identity={0};
@@ -928,7 +928,8 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
                 (!f->has_cleanups || !block->cleanup || !block->cleanup->frontier))
                 return xr_lir_internal_error(d, "arithmetic panic requires an active cleanup frontier",
                     index + 1, b + 1, i + 1, &v->source);
-            if (v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL && !f->has_cleanups)
+            if ((v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
+                 (v->op >= XR_LIR_HOST_DIRECTORY_FRAME && v->op <= XR_LIR_HOST_DIRECTORY_FAIL)) && !f->has_cleanups)
                 return xr_lir_internal_error(d, "directory cancellation check requires a cleanup owner",
                     index + 1, b + 1, i + 1, &v->source);
             XrLirStatus status = xr_lir_internal_instruction_check(m, index + 1, v, d);

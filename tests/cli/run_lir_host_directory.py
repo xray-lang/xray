@@ -14,7 +14,10 @@ def main() -> None:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--compiler", type=Path, help="Absolute path to the host C compiler")
     args = parser.parse_args()
+    if args.compiler and (not args.compiler.is_absolute() or not args.compiler.is_file()):
+        parser.error("--compiler must name an existing absolute compiler path")
     binary, root, output = args.binary.resolve(), args.root.resolve(), args.output.resolve()
     sys.path.insert(0, str(root / "scripts"))
     from xray_process import run_child
@@ -30,6 +33,8 @@ def main() -> None:
         io_lines = (stdlib / "io/io.xr").read_text(encoding="utf-8").splitlines()
         inner_close = next(number for number, line in enumerate(io_lines, 1) if "// innermost close" in line)
         cross_frame = next(number for number, line in enumerate(io_lines, 1) if "// cross-frame cleanup call" in line)
+        read_source = next(number for number, line in enumerate(io_lines, 1) if "// checked read" in line)
+        close_source = next(number for number, line in enumerate(io_lines, 1) if "// checked innermost close" in line)
         env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR="1")
 
         def run(command, cwd, label):
@@ -43,13 +48,17 @@ def main() -> None:
         successes = {
             "roundtrip": f"{name}\ntrue\n".encode(), "same_spelling": b"true\n",
             "cleanup_late": f"{name}\n".encode(), "cleanup_pair": b"17\n",
+            "cleanup_next": f"{name}\ntrue\n".encode(),
         }
-        faults = ("invalid_close", "invalid_next", "stale_next", "cleanup_lifo_failure")
+        faults = ("invalid_close", "invalid_next", "stale_next", "cleanup_lifo_failure",
+                  "cleanup_next_read_failure", "cleanup_next_dual_failure", "cleanup_next_close_failure")
         rejections = {
             "private_leaf": b"import requires an exported declaration",
             "cleanup_partial": b"directory cleanup requires a complete normal exit",
             "cleanup_managed_exit": b"directory cleanup requires a scalar frame",
             "cleanup_cross_frame": b"operation needs a panic landing with active cleanup",
+            "cleanup_next_non_tail": b"operation needs a panic landing with active cleanup",
+            "cleanup_next_cross_frame": b"operation needs a panic landing with active cleanup",
         }
         for case in (*successes, *faults, *rejections):
             vm_dir, native_dir = work / (case + "-vm"), work / (case + "-native")
@@ -60,7 +69,10 @@ def main() -> None:
             source = fixtures / (case + ".xr")
             executable = native_dir / ("program.exe" if os.name == "nt" else "program")
             vm = run([binary, "run", source], vm_dir, "run")
-            built = run([binary, "build", "--native", "-o", executable, source], native_dir, "build")
+            build = [binary, "build", "--native", "-o", executable, source]
+            if args.compiler:
+                build += ["--cc", args.compiler]
+            built = run(build, native_dir, "build")
             if case in rejections:
                 assert vm == built and vm[0] == 1 and not vm[1] and not executable.exists(), (case, vm, built)
                 assert rejections[case] in vm[2], (case, vm)
@@ -77,6 +89,16 @@ def main() -> None:
                     assert b"XR_RUN_6002: value operation rejected (status 1)" in vm[2], (case, vm)
                     if case == "cleanup_lifo_failure":
                         assert f"io.xr:{inner_close}:9".encode() in vm[2], (case, vm)
+                    if case.startswith("cleanup_next_"):
+                        lines = vm[2].splitlines()
+                        primary = close_source if case == "cleanup_next_close_failure" else read_source
+                        column = 9 if case == "cleanup_next_close_failure" else 12
+                        assert f"io.xr:{primary}:{column}".encode() in lines[0], (case, vm)
+                        if case == "cleanup_next_dual_failure":
+                            assert len(lines) == 2 and lines[1].startswith(b"note: directory cleanup rejected its token at "), (case, vm)
+                            assert f"io.xr:{close_source}:9".encode() in lines[1], (case, vm)
+                        else:
+                            assert len(lines) == 1, (case, vm)
             print(f"{case}: VM and native agree on the directory contract")
 
 

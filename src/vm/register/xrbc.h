@@ -478,6 +478,7 @@ XR_FUNC bool xr_rbc_outcome_function(const XrRbcOutcome *, const XrtFunction **b
 XR_FUNC bool xr_rbc_outcome_take_function(XrRbcOutcome *, XrtFunction *empty);
 XR_FUNC bool xr_rbc_outcome_value_failure(const XrRbcOutcome *outcome,
     XrXirValueStatus *status, uint32_t *source_id, const XrtLocationOwner **borrowed_locations);
+XR_FUNC uint32_t xr_rbc_outcome_directory_close_source(const XrRbcOutcome *outcome);
 XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
     XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations);
 XR_FUNC bool xr_rbc_outcome_arithmetic_panic(const XrRbcOutcome *outcome,

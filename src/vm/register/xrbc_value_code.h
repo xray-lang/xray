@@ -77,7 +77,11 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_INVOKE, XR_RBC_VALUE_INVOKE_RESULT, XR_RBC_VALUE_INVOKE_ERROR,
     XR_RBC_VALUE_RETURN_ERROR, XR_RBC_VALUE_PANIC_ERROR, XR_RBC_VALUE_UNCAUGHT_ERROR,
     XR_RBC_VALUE_CLASS_STRING_WRITE,
-    XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE, XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL
+    XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE, XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL,
+    XR_RBC_VALUE_HOST_DIRECTORY_FRAME, XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED,
+    XR_RBC_VALUE_HOST_DIRECTORY_NEXT_RESULT, XR_RBC_VALUE_HOST_DIRECTORY_NEXT_ERROR,
+    XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED, XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD,
+    XR_RBC_VALUE_HOST_DIRECTORY_FAIL
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -154,6 +158,7 @@ typedef struct XrRbcValueCode {
     const uint32_t *parameters; /* Logical LIR parameter SSA ids, in order. */
     uint32_t parameter_count;
     uint32_t error_type; /* Exact one-based value image row for a business error. */
+    uint32_t directory_frame_source; /* Eager owned frame source before any guest cleanup registration. */
     bool error_unit, strict_utf8;
     /* Common String bindings need cold setup before any checked operand borrow.
      * The compiler projects this bit once; ordinary scalar functions never

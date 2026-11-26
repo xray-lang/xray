@@ -291,7 +291,23 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     case XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE:
         return rbc_value_flow_bits(state, code, access.source);
     case XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL:
+    case XR_RBC_VALUE_HOST_DIRECTORY_FRAME:
         return true;
+    case XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED:
+        if (!rbc_value_flow_bits(state,code,access.source) || access.window >= state->function->register_count ||
+            !rbc_bits_destination(state,access.window)) return false;
+        state->state[access.window] = RBC_BITS;
+        state->origin[access.window] = index + 1;
+        return true;
+    case XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED:
+        return rbc_value_flow_bits(state,code,access.source) &&
+            (!access.other || rbc_value_flow_bits(state,code,access.other)) &&
+            rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
+    case XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD:
+        return rbc_value_flow_read(state,code,access.source,&incoming) && rbc_value_flow_bits(state,code,access.other);
+    case XR_RBC_VALUE_HOST_DIRECTORY_FAIL:
+        return !rbc_scope_current(state) && rbc_value_flow_bits(state,code,access.source) &&
+            rbc_value_flow_bits(state,code,access.other);
     case XR_RBC_VALUE_HOST_PATH_BOOL: case XR_RBC_VALUE_HOST_FILE_CLOSE:
         return rbc_value_flow_read(state,code,access.source,&incoming) &&
             (!access.other || rbc_value_flow_read(state,code,access.other,&incoming)) &&
@@ -339,7 +355,8 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
         return rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS},
             .scope=rbc_value_function(state->module,code,access.result,false) ? 2u : 0u});
     }
-    case XR_RBC_VALUE_INVOKE_RESULT: case XR_RBC_VALUE_INVOKE_ERROR: {
+    case XR_RBC_VALUE_INVOKE_RESULT: case XR_RBC_VALUE_INVOKE_ERROR:
+    case XR_RBC_VALUE_HOST_DIRECTORY_NEXT_RESULT: case XR_RBC_VALUE_HOST_DIRECTORY_NEXT_ERROR: {
         XrRbcValueAccess call=code->accesses[access.index];
         if (call.window>=state->function->register_count || state->state[call.window]!=RBC_BITS ||
             state->origin[call.window]!=access.index+1) return false;

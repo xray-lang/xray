@@ -578,7 +578,9 @@ static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFa
     if (failure->kind == XRT_FAILURE_VALUE) {
         uint32_t id = failure->detail.value.source_id;
         const XrtSourceLocation *source = id && id <= map->count ? &map->locations[id - 1] : NULL;
-        xrt_value_failure_report(failure->detail.value.status, source);
+        uint32_t close_id = failure->detail.value.directory_close_source_id;
+        const XrtSourceLocation *close = close_id && close_id <= map->count ? &map->locations[close_id - 1] : NULL;
+        xrt_value_failure_report_with_directory_close(failure->detail.value.status, source, close);
         _Exit(1);
     }
     if (failure->kind==XRT_FAILURE_TRY_ASSERT) {

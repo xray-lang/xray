@@ -50,3 +50,33 @@ export fn directoryProbeCleanupCaller(token: i64) -> i64 {
     defer { print(71) }
     return try! _directoryProbeFallibleCleanup(token) // cross-frame cleanup call
 }
+
+export fn directoryProbeNextLate(first: i64, second: i64, read: i64, late: bool) -> string? {
+    var token = first
+    defer { __dirClose(first) }
+    if (late) {
+        defer { __dirClose(token) }
+        token = second
+        return __dirNext(read)
+    }
+    return __dirNext(read)
+}
+
+export fn directoryProbeNextPair(first: i64, second: i64, read: i64) -> string? {
+    defer { __dirClose(first) }
+    defer {
+        __dirClose(second) // checked innermost close
+    }
+    return __dirNext(read) // checked read
+}
+
+export fn directoryProbeNextNonTail(token: i64) -> string? {
+    defer { __dirClose(token) }
+    var result = __dirNext(token)
+    return result
+}
+
+export fn directoryProbeNextAcross(token: i64) -> string? {
+    defer { __dirClose(token) }
+    return directoryProbeNextPair(token, token, token)
+}
