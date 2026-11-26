@@ -37,7 +37,8 @@ static void c_array_admit_shapes(LirC *c) {
 }
 static bool c_array_point(LirC *c, const XrLirInstructionView *v) {
     XrLirArrayIntrinsic shape = {0};
-    return c_array_intrinsic(c, v, &shape) || v->op == XR_LIR_ARRAY_RETAIN ||
+    return v->op == XR_LIR_CHECKED_EMPTY_ARRAY || v->op == XR_LIR_MANAGED_FAILURE ||
+        c_array_intrinsic(c, v, &shape) || v->op == XR_LIR_ARRAY_RETAIN ||
         v->op == XR_LIR_ARRAY_BORROW || v->op == XR_LIR_ARRAY_REF_READ || v->op == XR_LIR_ARRAY_REF_WRITE ||
         (v->op == XR_LIR_CELL_NEW && v->type == XR_LIR_ARRAY_CELL) ||
         (v->op == XR_LIR_CELL_READ && v->type == XR_LIR_ARRAY) ||
@@ -266,7 +267,73 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
     default: c_error(c,XR_LIR_C_UNSUPPORTED,"Array operation has no target receiver"); return;
     }
 }
+
+static void c_checked_empty_array(LirC *c, const XrLirInstructionView *instruction) {
+    const XrLirModule *module = c->request->module;
+    XrLirBlockView normal, failure;
+    xr_lir_block_view(module, (XrLirBlock){module,c->function.id,instruction->edges[0].target}, &normal);
+    xr_lir_block_view(module, (XrLirBlock){module,c->function.id,instruction->edges[1].target}, &failure);
+    XrLirArrayIntrinsic shape = {0};
+    if (xr_lir_array_intrinsic_view(module, (uint32_t)instruction->bits, &shape) != XR_LIR_OK ||
+        shape.operation != XR_LIR_ARRAY_OP_NEW) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "checked empty Array has no exact constructor");
+        return;
+    }
+    const XrLirValueHome *home = &c->homes->values[normal.parameters[0]];
+    if (!c->homes->owned_frame_needed || home->owner_count != 1 || home->first_owner >= c->homes->frame.slot_count ||
+        (c->seen[c->function.id - 1] & LIR_C_FUNCTION_STRING_BINDING)) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "checked empty Array has no private receiving home");
+        return;
+    }
+    const char *kind = c_array_kind(shape.result_element);
+    bool inline_element = xr_lir_inline_array_ordinal(module, shape.result_element) != 0;
+    if (!kind && !inline_element) {
+        c_error(c, XR_LIR_C_INVALID_LIR, "checked empty Array has no physical array family");
+        return;
+    }
+    bool locations = c->header_edges || c->binding_forwarding || c->array_local ||
+        c_array_region_present(c) || c_array_push_present(c);
+    c_text(c, "    { XrtManagedStatus status = XRT_MANAGED_OK;\n"
+        "      if (!xrl_frame) {\n"
+        "        status = xrt_native_managed_root_checked(&xrl_root);\n"
+        "        if (status == XRT_MANAGED_OK) {\n");
+    if (locations) {
+        c_format(c, "          status = xrt_managed_frame_enter_locations(xrl_root, &xrl_frame_%" PRIu32
+            ", &xrl_frame_locations);\n"
+            "          if (status == XRT_MANAGED_OK) {\n"
+            "            xrl_frame = xrl_frame_locations.frame; xrl_payload = xrl_frame_locations.payload;\n",
+            c->function.id);
+        if (c->array_local)
+            c_format(c,"            xrl_array_local_prepare_%" PRIu32
+                "(xrl_frame, xrl_payload, &xrl_frame_locations, &xrl_array_locals);\n", c->function.id);
+        c_text(c, "          }\n");
+    } else
+        c_format(c, "          status = xrt_managed_frame_enter_payload(xrl_root, &xrl_frame_%" PRIu32
+            ", &xrl_frame, &xrl_payload);\n", c->function.id);
+    c_text(c, "        }\n      }\n      if (status == XRT_MANAGED_OK)\n");
+    if (inline_element)
+        c_format(c, "        status = xrt_native_array_inline_empty_checked(xrl_frame, %zu, &xrl_value_image,"
+            " UINT32_C(%" PRIu32 "));\n", home->first_owner, home->type);
+    else
+        c_format(c, "        status = xrt_native_array_empty_checked(xrl_frame, %zu, %s);\n",
+            home->first_owner, kind);
+    c_format(c, "      if (status != XRT_MANAGED_OK) { v%" PRIu32 " = (uint64_t)status; goto bb%" PRIu32
+        "; }\n", failure.parameters[0], instruction->edges[1].target);
+    c_array_local_ready(c);
+    c_format(c, "      goto bb%" PRIu32 ";\n    }\n", instruction->edges[0].target);
+}
+
 static void c_array_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
+    if (v->op == XR_LIR_CHECKED_EMPTY_ARRAY) {
+        c_checked_empty_array(c, v);
+        return;
+    }
+    if (v->op == XR_LIR_MANAGED_FAILURE) {
+        c_text(c, "    xrt_native_managed_failure((XrtManagedStatus)");
+        c_value(c, v->operands[0]);
+        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        return;
+    }
     XrLirArrayIntrinsic shape={0};
     if (c_array_intrinsic(c,v,&shape)) { c_array_call(c,v,&shape,source); return; }
     bool binding_copy=v->op==XR_LIR_CELL_NEW || v->op==XR_LIR_CELL_WRITE || v->op==XR_LIR_ARRAY_REF_WRITE;

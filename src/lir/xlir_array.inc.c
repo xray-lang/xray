@@ -424,6 +424,11 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
         if (xr_lir_callable_type_view(m, input->type, &signature) == XR_LIR_OK)
             return signature.result_element;
     }
+    if (v->op == XR_LIR_CHECKED_EMPTY_ARRAY) {
+        const XrLirArrayIntrinsic *shape = v->bits <= UINT32_MAX
+            ? xr_lir_internal_array_intrinsic(m, (uint32_t)v->bits) : NULL;
+        return shape && shape->operation == XR_LIR_ARRAY_OP_NEW ? shape->result_element : XR_LIR_TYPE_INVALID;
+    }
     if (v->op == XR_LIR_CALL_INTRINSIC) {
         XrLirSliceIntrinsic slice;
         if (xr_lir_slice_intrinsic_view(m, v->intrinsic, &slice) == XR_LIR_OK &&

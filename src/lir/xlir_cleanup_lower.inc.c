@@ -354,6 +354,10 @@ static bool lower_checked_empty_array(LowerFunction *f, uint32_t b, uint32_t res
     XrLirType element, uint32_t intrinsic) {
     Lower *c = f->owner;
     uint32_t frontier = f->source->blocks[b].frontier;
+    if (!f->exits) {
+        f->exits = lower_alloc(c, f->source->block_count, sizeof(*f->exits));
+        if (!f->exits) return false;
+    }
     XrLirBlock check = f->blocks[b], normal = {0}, failure = {0};
     XrLirType array_type = XR_LIR_ARRAY, failure_type = XR_LIR_U64;
     XrLirValue status = {0};
