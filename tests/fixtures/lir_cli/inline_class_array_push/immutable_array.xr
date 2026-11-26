@@ -1,0 +1,4 @@
+import { Path } from path
+
+const paths: Array<Path> = [Path("before")]
+paths.push(Path("false"))

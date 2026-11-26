@@ -1,0 +1,20 @@
+import { Path } from path
+
+fn collect(names: Array<string>) -> Array<Path> {
+    var paths: Array<Path> = []
+    paths.push(Path("first"))
+    const saved = paths
+    for (var i = 0; i < len(names); i++) {
+        const path = Path(names[i])
+        paths.push(path)
+    }
+    print(len(saved))
+    print(saved[0].raw)
+    return paths
+}
+
+const names: Array<string> = ["a", "b", "c", "d", "e", "目录项"]
+const result = collect(names)
+print(len(result))
+print(result[0].raw)
+print(result[6].raw)

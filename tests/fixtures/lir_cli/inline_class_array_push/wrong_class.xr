@@ -1,0 +1,9 @@
+import { Path } from path
+
+final class Unrelated {
+    raw: string
+    init(raw: string) { this.raw = raw }
+}
+
+var paths: Array<Path> = []
+paths.push(Unrelated("false"))

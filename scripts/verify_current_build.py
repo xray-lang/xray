@@ -48,6 +48,7 @@ REQUIRED = (
     # Exercise Array ownership, failure cleanup and complete Source/native parity.
     "test_lir_array",
     "test_lir_array_faults", "test_lir_array_native", "test_lir_cli_array_native",
+    "test_lir_cli_inline_class_array_push",
     # Fixed receiving layouts, independent images and constructor facts replace
     # retired owner-bank tests; these retain metadata and failure cleanup checks.
     "lir_value_layout", "lir_value_image", "lir_binding_homes", "lir_callable_facts", "lir_callable_bytecode",

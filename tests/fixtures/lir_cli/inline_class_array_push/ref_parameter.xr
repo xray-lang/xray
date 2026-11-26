@@ -1,0 +1,7 @@
+import { Path } from path
+fn add(out: ref Array<Path>, item: Path) {
+    out.push(item)
+}
+var paths: Array<Path> = []
+add(ref paths, Path("ref"))
+print(len(paths))

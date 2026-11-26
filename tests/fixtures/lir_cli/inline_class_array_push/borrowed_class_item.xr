@@ -1,0 +1,13 @@
+import { Path } from path
+
+fn appendBoth(item: Path) -> Array<Path> {
+    var values: Array<Path> = []
+    values.push(item)
+    values.push(item)
+    return values
+}
+
+const result = appendBoth(Path("borrowed"))
+print(len(result))
+print(result[0].raw)
+print(result[1].raw)

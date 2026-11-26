@@ -1,0 +1,21 @@
+{
+  "append_paths": {
+    "exit": 0,
+    "stdout": "1\nfirst\n7\nfirst\n目录项\n",
+    "stderr": ""
+  },
+  "borrowed_class_item": {
+    "exit": 0,
+    "stdout": "2\nborrowed\nborrowed\n",
+    "stderr": ""
+  },
+  "wrong_class": {
+    "source_error": ":9:12: error: expression cannot satisfy its declared type"
+  },
+  "immutable_array": {
+    "source_error": ":4:1: error: value mutation requires a mutable named root"
+  },
+  "ref_parameter": {
+    "lowering_error": ":2:4: function parameter type is not supported by LIR lowering yet"
+  }
+}
