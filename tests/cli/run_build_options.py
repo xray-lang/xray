@@ -90,9 +90,8 @@ def main() -> int:
     if os.name != "nt":
         # macOS and Linux probe the one discovered C driver end to end.
         probe = json.loads(invoke("probe-native", ["toolchain", "probe", "--json"], 0).stdout)
-        assert probe["selection"]["ready"] and probe["selection"]["provider"] in ("clang", "gcc"), probe
-        assert all(probe["capabilities"][name] == "ok" for name in ("cCompile", "sdkCompile", "runtimeLink", "nativeRun"))
-        assert not probe["diagnostics"], probe
+        assert probe["ready"] is True and probe["stage"] == "complete", probe
+        assert probe["target"] and probe["compilerRequest"] is None, probe
         invoke("probe-unsupported-provider", ["toolchain", "probe", "--provider", "msvc", "--json"], 3)
     assert source.read_bytes() == b"print(42)\n" and not (config_root / "Xray/toolchains.toml").exists()
     assert not (config_root / "xray/toolchains.toml").exists()
