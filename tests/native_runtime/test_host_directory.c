@@ -8,6 +8,7 @@
  */
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_host_directory.h"
+#include "runtime/native/xnative_values.h"
 #include "xray_native_values.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +25,68 @@ static const XrOsPathSpan current_path = {".", 1};
 static bool empty_name(const XrtHostDirectoryName *name) {
     return !name->text.bytes && !name->text.length && !name->billing;
 }
+
+#if defined(XR_OS_WINDOWS) || defined(XR_OS_LINUX) || defined(XR_OS_MACOS)
+enum { NEXT_SOURCE = 1, CLOSE_SOURCE, POLL_SOURCE };
+enum { RESULT_SLOT, STAGE_SLOT, SLOT_COUNT };
+
+static XrtNativeDirectoryNext checked_receiving_frame(XrtHostNullableOwner **destination) {
+    static const size_t owner = offsetof(XrtHostNullableOwner, owner);
+    static const size_t owned[] = {0, offsetof(XrtHostNullableOwner, owner)};
+    static const XrtValueImageType types[] = {
+        {.kind=XRT_VALUE_STRING,.size=sizeof(void *),.alignment=_Alignof(void *),.owned_count=1},
+        {.kind=XRT_VALUE_NULLABLE,.size=sizeof(XrtHostNullableOwner),.alignment=_Alignof(XrtHostNullableOwner),
+            .owned_count=1,.first_owned=1,.nullable_element=1,.nullable_payload=offsetof(XrtHostNullableOwner, owner)}
+    };
+    static const XrtValueImage image = {.types=types,.type_count=2,.owned_offsets=owned,.owned_count=2};
+    size_t offsets[] = {owner, sizeof(XrtHostNullableOwner)};
+    const XrtManagedFrameSpec spec = {SLOT_COUNT, sizeof(XrtHostNullableOwner) + sizeof(XrtManagedHeader *),
+        _Alignof(XrtHostNullableOwner), offsets};
+    XrtManagedRoot *root = xrt_native_managed_root(NEXT_SOURCE);
+    XrtManagedFrame *frame = NULL;
+    void *payload = NULL;
+    CHECK(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload) == XRT_MANAGED_OK);
+    *destination = payload;
+    return (XrtNativeDirectoryNext){frame, RESULT_SLOT, STAGE_SLOT, 0, offsets[STAGE_SLOT], &image, 2, 0};
+}
+
+static void checked_empty_staging(const XrtNativeDirectoryNext *call) {
+    XrtManagedHeader *staged = NULL;
+    CHECK(xrt_managed_slot_borrow(call->frame, call->temporary, &staged) == XRT_MANAGED_OK && !staged);
+}
+
+typedef struct CheckedFailure {
+    XrtNativeDirectoryStatus primary, secondary;
+} CheckedFailure;
+
+static void checked_invalid_read(void *context) {
+    CheckedFailure *test = context;
+    XrtHostNullableOwner *destination = NULL;
+    XrtNativeDirectoryNext call = checked_receiving_frame(&destination);
+    int64_t alive = 0;
+    CHECK(xrt_host_directory_open(current_path, &alive) == XR_OS_IO_OK && alive > 0);
+    test->primary = xrt_native_host_directory_next_checked(&call, NEXT_SOURCE);
+    CHECK(test->primary && !destination->present && !destination->owner);
+    checked_empty_staging(&call);
+    CHECK(!xrt_native_host_directory_cleanup_close_checked(alive, CLOSE_SOURCE));
+    test->secondary = xrt_native_host_directory_cleanup_close_checked(alive, CLOSE_SOURCE);
+    CHECK(test->secondary);
+    xrt_native_host_directory_cleanup_fail(test->primary, test->secondary);
+}
+
+static void exercise_checked_failures(void) {
+    XrtValueRoot values = {0};
+    XrtExecutionFailure failure = {0};
+    CheckedFailure test = {0};
+    CHECK(xrt_run_embedded_owned(locations, &failure, checked_invalid_read, &test, &values) == XRT_EXECUTION_FAILURE);
+    CHECK(xrt_value_root_empty(&values) && failure.kind == XRT_FAILURE_VALUE);
+    const XrtValueFailure *value = &failure.detail.value;
+    CHECK(value->status == XR_XIR_VALUE_BAD_ARGUMENT && value->source_id == NEXT_SOURCE &&
+        value->directory_close_source_id == CLOSE_SOURCE && value->directory_primary == test.primary &&
+        value->directory_secondary == test.secondary);
+    xrt_execution_failure_drop(&failure);
+}
+#endif
 
 #if defined(XR_OS_WINDOWS)
 #include "base/xwindows_utf8.h"
@@ -249,7 +312,7 @@ static void cleanup_os_refusal(void *context) {
     int64_t token = open_directory();
     failed_closes = 1;
     unsigned attempts = close_calls, previous_polls = polls;
-    xrt_native_host_directory_cleanup_close(token, 0);
+    CHECK(!xrt_native_host_directory_cleanup_close_checked(token, CLOSE_SOURCE));
     CHECK(live_handles == 1 && failed_handle && close_calls == attempts + 1 && polls == previous_polls);
     xrt_native_host_directory_cleanup_poll(0);
     CHECK(polls == previous_polls + 1 && close_calls == attempts + 1);
@@ -384,6 +447,127 @@ static void next_allocation_failure(void *context) {
     CHECK(directory_queries == queries && live_handles == 1);
 }
 
+typedef struct CheckedRead {
+    const DirectoryNames *names;
+    XrtNativeDirectoryStatus failure;
+} CheckedRead;
+
+static XrtBillingOwner *checked_billing(void) {
+    XrtBillingOwner *billing = NULL;
+    CHECK(xrt_native_values_prepare(xrt_value_root_active(), &billing) == XRT_MANAGED_OK && billing);
+    return billing;
+}
+
+static void checked_read_prepare_failure(void *context) {
+    CheckedRead *test = context;
+    XrtHostNullableOwner *destination = NULL;
+    XrtNativeDirectoryNext call = checked_receiving_frame(&destination);
+    call.token = open_directory_path(test->names->path);
+    XrtBillingOwner *billing = checked_billing();
+    unsigned queries = directory_queries;
+    xrt_billing_owner_fail_after(billing, 0);
+    test->failure = xrt_native_host_directory_next_checked(&call, NEXT_SOURCE);
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    CHECK(test->failure && directory_queries == queries && !destination->present && !destination->owner);
+    checked_empty_staging(&call);
+    CHECK(!xrt_native_host_directory_cleanup_close_checked(call.token, CLOSE_SOURCE) && !live_handles);
+    xrt_native_host_directory_cleanup_fail(test->failure, 0);
+}
+
+static void checked_read_backing_failure(void *context) {
+    CheckedRead *test = context;
+    XrtHostNullableOwner *destination = NULL;
+    XrtNativeDirectoryNext call = checked_receiving_frame(&destination);
+    call.token = open_directory_path(test->names->path);
+    CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE) && destination->present == 1);
+    XrtManagedHeader *first = destination->owner;
+    CHECK(first);
+    checked_empty_staging(&call);
+    XrtBillingOwner *billing = checked_billing();
+    XrtBillingStats before = xrt_billing_owner_stats(billing);
+    unsigned queries = directory_queries;
+    XrtNativeDirectoryNext wrong_stage = call;
+    wrong_stage.temporary_owner_offset = offsetof(XrtHostNullableOwner, owner);
+    CHECK(xrt_native_host_directory_next_checked(&wrong_stage, NEXT_SOURCE) && directory_queries == queries);
+    CHECK(destination->present == 1 && destination->owner == first);
+    xrt_billing_owner_fail_after(billing, 1); /* The warm provider allocates the name first. */
+    test->failure = xrt_native_host_directory_next_checked(&call, NEXT_SOURCE);
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    CHECK(test->failure && directory_queries == queries && destination->present == 1 && destination->owner == first);
+    checked_empty_staging(&call);
+    XrtBillingStats after = xrt_billing_owner_stats(billing);
+    CHECK(after.blocks == before.blocks && after.bytes == before.bytes);
+    unsigned remaining = 0;
+    for (;;) {
+        CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE));
+        if (!destination->present) break;
+        CHECK(destination->owner && ++remaining <= directory_file_count + 1);
+    }
+    CHECK(remaining == directory_file_count - 1 && !destination->owner); /* Two entries were consumed. */
+    checked_empty_staging(&call);
+    CHECK(!xrt_native_host_directory_cleanup_close_checked(call.token, CLOSE_SOURCE) && !live_handles);
+    xrt_native_host_directory_cleanup_fail(test->failure, 0);
+}
+
+static void checked_read_close_failure(void *context) {
+    CheckedRead *test = context;
+    XrtHostNullableOwner *destination = NULL;
+    XrtNativeDirectoryNext call = checked_receiving_frame(&destination);
+    call.token = open_directory_path(test->names->path);
+    CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE) && destination->present && destination->owner);
+    CHECK(!xrt_native_host_directory_cleanup_close_checked(call.token, CLOSE_SOURCE) && !live_handles);
+    test->failure = xrt_native_host_directory_cleanup_close_checked(call.token, CLOSE_SOURCE);
+    CHECK(test->failure);
+    CHECK(xrt_managed_slot_drop(call.frame, call.destination) == XRT_MANAGED_OK && !destination->owner);
+    destination->present = 0;
+    xrt_native_host_directory_cleanup_fail(test->failure, 0);
+}
+
+static void checked_read_poll_failure(void *context) {
+    CheckedRead *test = context;
+    XrtHostNullableOwner *destination = NULL;
+    XrtNativeDirectoryNext call = checked_receiving_frame(&destination);
+    int64_t first = open_directory_path(test->names->path);
+    call.token = open_directory_path(test->names->path);
+    CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE) && destination->present && destination->owner);
+    unsigned before = polls;
+    cancel_after_close = true;
+    CHECK(!xrt_native_host_directory_cleanup_close_checked(call.token, CLOSE_SOURCE) && cancelled && live_handles == 1);
+    cancel_after_close = false;
+    CHECK(!xrt_native_host_directory_cleanup_close_checked(first, CLOSE_SOURCE) && !live_handles && polls == before);
+    test->failure = xrt_native_host_directory_cleanup_poll_checked(POLL_SOURCE);
+    CHECK(test->failure && polls == before + 1);
+    CHECK(xrt_managed_slot_drop(call.frame, call.destination) == XRT_MANAGED_OK && !destination->owner);
+    destination->present = 0;
+    xrt_native_host_directory_cleanup_fail(test->failure, 0);
+}
+
+static void exercise_checked_reads(const DirectoryNames *names) {
+    static const struct { XrtSynchronousRoot invoke; XrXirValueStatus status; uint32_t source; } cases[] = {
+        {checked_read_prepare_failure, XR_XIR_VALUE_OOM, NEXT_SOURCE},
+        {checked_read_backing_failure, XR_XIR_VALUE_OOM, NEXT_SOURCE},
+        {checked_read_close_failure, XR_XIR_VALUE_BAD_ARGUMENT, CLOSE_SOURCE},
+        {checked_read_poll_failure, XR_XIR_VALUE_CANCELLED, POLL_SOURCE}
+    };
+    XrtNativeDirectoryStatus prepare_failure = 0;
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        XrtValueRoot values = {0};
+        XrtExecutionFailure failure = {0};
+        CheckedRead test = {.names=names};
+        const XrtHostExecutionControl control = {request_current, NULL};
+        CHECK(xrt_run_embedded_owned_controlled(locations, &failure, cases[i].invoke, &test, &values, &control) ==
+            XRT_EXECUTION_FAILURE);
+        const XrtValueFailure *value = &failure.detail.value;
+        CHECK(xrt_value_root_empty(&values) && !live_handles && failure.kind == XRT_FAILURE_VALUE &&
+            value->status == cases[i].status && value->source_id == cases[i].source &&
+            test.failure && value->directory_primary == test.failure && !value->directory_secondary);
+        if (i == 0) prepare_failure = test.failure;
+        else CHECK(test.failure != prepare_failure);
+        cancelled = false;
+        xrt_execution_failure_drop(&failure);
+    }
+}
+
 static void directory_files(const wchar_t *root, const wchar_t *unicode, bool create) {
     for (unsigned index = 0; index <= directory_file_count; ++index) {
         wchar_t item[16];
@@ -440,6 +624,7 @@ static void exercise_next(void) {
     CHECK(xrt_run_embedded_owned(locations, &failure, next_allocation_failure, &names, &values) ==
         XRT_EXECUTION_COMPLETED);
     CHECK(xrt_value_root_empty(&values) && !live_handles);
+    exercise_checked_reads(&names);
     directory_files(root, unicode, false);
     CHECK(xrt_run_embedded_owned_controlled(locations, &failure, cancel_next_at_end, &names, &values, &control) ==
         XRT_EXECUTION_COMPLETED);
@@ -565,7 +750,12 @@ static void unsupported(void *context) {
 
 int main(int argc, char **argv) {
     CHECK(argc >= 1);
-    CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK);
+    const XrtSourceLocation source[] = {
+        {"directory.xr", 12, 2, 8, 0, 0},
+        {"directory.xr", 12, 5, 9, 0, 0},
+        {"directory.xr", 12, 6, 1, 0, 0}
+    };
+    CHECK(xrt_locations_create(source, sizeof(source) / sizeof(source[0]), &locations) == XRT_LOCATION_OK);
     int64_t token = -1;
     CHECK(xrt_host_directory_open(current_path, &token) == XR_OS_IO_BAD_ARGUMENT && token == -1);
 #if defined(XR_OS_WINDOWS)
@@ -591,6 +781,9 @@ int main(int argc, char **argv) {
     CHECK(xrt_run_embedded_owned(locations, &failure, unsupported, NULL, &root) == XRT_EXECUTION_COMPLETED);
     CHECK(xrt_value_root_empty(&root));
     puts("Directory tokens: unsupported Unix open creates no owner");
+#endif
+#if defined(XR_OS_WINDOWS) || defined(XR_OS_LINUX) || defined(XR_OS_MACOS)
+    exercise_checked_failures();
 #endif
     xrt_locations_release(locations);
     return 0;

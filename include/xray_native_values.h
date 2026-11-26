@@ -156,6 +156,23 @@ XRAY_API void xrt_native_host_directory_next(const XrtNativeDirectoryNext *, uin
 XRAY_API bool xrt_native_host_directory_close(int64_t token, uint32_t source_id);
 XRAY_API void xrt_native_host_directory_cleanup_close(int64_t token, uint32_t source_id);
 XRAY_API void xrt_native_host_directory_cleanup_poll(uint32_t source_id);
+/* Generated cleanup paths transport these statuses without inspecting them.
+ * Zero means success. Checked next requires a frame entered before cleanup
+ * registration. Only success changes the destination owner and presence. */
+typedef uint64_t XrtNativeDirectoryStatus;
+XRAY_API XrtNativeDirectoryStatus xrt_native_host_directory_next_checked(const XrtNativeDirectoryNext *,
+    uint32_t source_id);
+XRAY_API XrtNativeDirectoryStatus xrt_native_host_directory_cleanup_close_checked(int64_t token, uint32_t source_id);
+XRAY_API XrtNativeDirectoryStatus xrt_native_host_directory_cleanup_poll_checked(uint32_t source_id);
+/* Close is secondary only when next was already failing. The caller has
+ * retired any unreturned name before publishing a close or poll failure. */
+#ifdef __cplusplus
+[[noreturn]] XRAY_API void xrt_native_host_directory_cleanup_fail(XrtNativeDirectoryStatus primary,
+    XrtNativeDirectoryStatus secondary);
+#else
+_Noreturn XRAY_API void xrt_native_host_directory_cleanup_fail(XrtNativeDirectoryStatus primary,
+    XrtNativeDirectoryStatus secondary);
+#endif
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

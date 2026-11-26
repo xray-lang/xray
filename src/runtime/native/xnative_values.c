@@ -271,20 +271,28 @@ static XrtBoundClass native_file_class(const XrtValueImage *image, uint32_t type
     return binding;
 }
 
-static const XrtValuePlan *native_host_optional_element(const XrtValueImage *image, uint32_t type, uint32_t source) {
-    struct XrtNativeValues *values = native_values(source);
+static XrtManagedStatus native_host_optional_element_status(struct XrtNativeValues *values,
+    const XrtValueImage *image, uint32_t type, const XrtValuePlan **element) {
     const XrtModuleState *state = image == values->state_image ? values->state : NULL;
     const XrtValuePlan *plan = NULL;
     XrtManagedStatus status = native_capture_plan(values, image, state, (XrtManagedLease){0}, type, &plan);
-    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    if (status != XRT_MANAGED_OK) return status;
     XrtValuePlanSpec spec;
     const size_t owner = offsetof(XrtHostNullableOwner, owner);
     if (xrt_value_plan_view(plan, &spec) != XRT_MANAGED_OK || spec.kind != XRT_VALUE_NULLABLE ||
         spec.size != sizeof(XrtHostNullableOwner) || spec.alignment != _Alignof(XrtHostNullableOwner) ||
         spec.owned_count != 1 || spec.owned_offsets[0] != owner ||
         spec.nullable.tag_offset != offsetof(XrtHostNullableOwner, present) || spec.nullable.payload_offset != owner)
-        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
-    return spec.nullable.element;
+        return XRT_MANAGED_ARGUMENT;
+    *element = spec.nullable.element;
+    return XRT_MANAGED_OK;
+}
+
+static const XrtValuePlan *native_host_optional_element(const XrtValueImage *image, uint32_t type, uint32_t source) {
+    const XrtValuePlan *element = NULL;
+    XrtManagedStatus status = native_host_optional_element_status(native_values(source), image, type, &element);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    return element;
 }
 
 XRAY_API void xrt_native_host_file_open_read(uint32_t callable, const XrtNativeFileOpenRead *call, uint32_t source) {
@@ -385,39 +393,87 @@ XRAY_API int64_t xrt_native_host_directory_open(const XrtManagedHeader *path, ui
     return token;
 }
 
-XRAY_API void xrt_native_host_directory_next(const XrtNativeDirectoryNext *call, uint32_t source) {
-    if (!call) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
-    XrtValuePlanSpec element;
-    if (xrt_value_plan_view(native_host_optional_element(call->image, call->result_type, source), &element) != XRT_MANAGED_OK ||
-        element.kind != XRT_VALUE_STRING)
-        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
-    XrtValueRoot *execution = xrt_value_root_current(source);
+typedef enum NativeDirectoryFailureKind {
+    NATIVE_DIRECTORY_PREPARE = 1, NATIVE_DIRECTORY_NEXT, NATIVE_DIRECTORY_CLOSE, NATIVE_DIRECTORY_POLL
+} NativeDirectoryFailureKind;
+_Static_assert(XR_OS_IO_CLOCK_FAILURE <= UINT8_MAX && XRT_MANAGED_DUPLICATE_KEY <= UINT8_MAX,
+    "directory status preserves both complete status domains");
+
+static XrtNativeDirectoryStatus directory_status(uint32_t source, NativeDirectoryFailureKind kind,
+    XrOsIoStatus host, XrtManagedStatus managed) {
+    return (uint64_t)kind << 48 | (uint64_t)managed << 40 | (uint64_t)host << 32 | source;
+}
+
+static NativeDirectoryFailureKind directory_status_kind(XrtNativeDirectoryStatus status) {
+    return (NativeDirectoryFailureKind)(status >> 48);
+}
+
+static XrXirValueStatus directory_diagnostic(XrtNativeDirectoryStatus status) {
+    NativeDirectoryFailureKind kind = directory_status_kind(status);
+    XrOsIoStatus host = (XrOsIoStatus)((status >> 32) & 0xffu);
+    XrtManagedStatus managed = (XrtManagedStatus)((status >> 40) & 0xffu);
+    XR_CHECK(host <= XR_OS_IO_CLOCK_FAILURE && managed <= XRT_MANAGED_DUPLICATE_KEY &&
+        ((kind == NATIVE_DIRECTORY_PREPARE && host == XR_OS_IO_OK && managed != XRT_MANAGED_OK) ||
+         (kind == NATIVE_DIRECTORY_NEXT && ((host == XR_OS_IO_OK || host == XR_OS_IO_END) == (managed != XRT_MANAGED_OK))) ||
+         (kind == NATIVE_DIRECTORY_CLOSE && host == XR_OS_IO_BAD_ARGUMENT && managed == XRT_MANAGED_OK) ||
+         (kind == NATIVE_DIRECTORY_POLL && host == XR_OS_IO_CANCELLED && managed == XRT_MANAGED_OK)),
+        "directory diagnostics use a real operation failure");
+    return managed == XRT_MANAGED_OK ? xrt_host_io_failure(host) : xrt_managed_value_status(managed);
+}
+
+static XrtManagedStatus directory_next_prepare(XrtValueRoot *execution, const XrtNativeDirectoryNext *call,
+    XrtHostNullablePlaces *places, const XrtBackingTypes **types) {
     XrtManagedRoot *root = xrt_native_values_existing_root(execution);
-    if (!root) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    if (!call || !root) return XRT_MANAGED_ARGUMENT;
+    const XrtValuePlan *element = NULL;
+    XrtManagedStatus status = native_host_optional_element_status(execution->managed, call->image,
+        call->result_type, &element);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtValuePlanSpec spec;
+    if (xrt_value_plan_view(element, &spec) != XRT_MANAGED_OK || spec.kind != XRT_VALUE_STRING)
+        return XRT_MANAGED_ARGUMENT;
     const XrtHostNullableSlots output = {call->frame, call->destination, call->temporary, call->offset,
         call->temporary_owner_offset};
+    status = xrt_host_nullable_prepare(&output, root, places);
+    if (status != XRT_MANAGED_OK) return status;
+    if (places->current && !xrt_backing_string_matches(places->current)) return XRT_MANAGED_ARGUMENT;
+    return xrt_native_values_backings(execution, types);
+}
+
+XRAY_API XrtNativeDirectoryStatus xrt_native_host_directory_next_checked(const XrtNativeDirectoryNext *call,
+    uint32_t source) {
     XrtHostNullablePlaces places;
-    XrtManagedStatus status = xrt_host_nullable_prepare(&output, root, &places);
-    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
-    if (places.current && !xrt_backing_string_matches(places.current))
-        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
     const XrtBackingTypes *types = NULL;
-    status = xrt_native_values_backings(execution, &types);
-    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    XrtManagedStatus status = directory_next_prepare(xrt_value_root_current(source), call, &places, &types);
+    if (status != XRT_MANAGED_OK) return directory_status(source, NATIVE_DIRECTORY_PREPARE, XR_OS_IO_OK, status);
 
     XrtHostDirectoryName name = {0};
     XrOsIoStatus host = xrt_host_directory_next(call->token, &name);
     if (host != XR_OS_IO_OK && host != XR_OS_IO_END)
-        xrt_value_failure(xrt_host_io_failure(host), source);
+        return directory_status(source, NATIVE_DIRECTORY_NEXT, host, XRT_MANAGED_OK);
     const bool present = host == XR_OS_IO_OK;
     if (present) {
         status = xrt_string_backing_create(places.temporary.frame, places.temporary.slot,
             types, name.text.bytes, name.text.length, 0);
         xrt_host_directory_name_drop(&name);
-        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+        if (status != XRT_MANAGED_OK) return directory_status(source, NATIVE_DIRECTORY_NEXT, host, status);
     }
     status = xrt_host_nullable_publish(&places, present);
-    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    if (status == XRT_MANAGED_OK) return 0;
+    /* A rejected move has not changed either owner. This unaliased slot has
+     * held only the fully committed String from this invocation. */
+    if (present) {
+        XrtManagedStatus retired = xrt_managed_slot_drop(places.temporary.frame, places.temporary.slot);
+        XR_CHECK(retired == XRT_MANAGED_OK, "a directory result retires its private committed staging owner");
+    }
+    return directory_status(source, NATIVE_DIRECTORY_NEXT, host, status);
+}
+
+XRAY_API void xrt_native_host_directory_next(const XrtNativeDirectoryNext *call, uint32_t source) {
+    if (!call) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    (void)native_values(source);
+    XrtNativeDirectoryStatus status = xrt_native_host_directory_next_checked(call, source);
+    if (status) xrt_value_failure(directory_diagnostic(status), source);
 }
 
 XRAY_API bool xrt_native_host_directory_close(int64_t token, uint32_t source) {
@@ -427,16 +483,37 @@ XRAY_API bool xrt_native_host_directory_close(int64_t token, uint32_t source) {
     return closed;
 }
 
-XRAY_API void xrt_native_host_directory_cleanup_close(int64_t token, uint32_t source) {
+XRAY_API XrtNativeDirectoryStatus xrt_native_host_directory_cleanup_close_checked(int64_t token, uint32_t source) {
     bool closed = false;
     XrOsIoStatus status = xrt_host_directory_cleanup_close(token, &closed);
-    if (status != XR_OS_IO_OK) xrt_value_failure(xrt_host_io_failure(status), source);
+    return status == XR_OS_IO_OK ? 0 : directory_status(source, NATIVE_DIRECTORY_CLOSE, status, XRT_MANAGED_OK);
+}
+
+XRAY_API XrtNativeDirectoryStatus xrt_native_host_directory_cleanup_poll_checked(uint32_t source) {
+    const XrtHostExecutionControl *control = xrt_execution_host_control();
+    return control && !control->current(control->context) ?
+        directory_status(source, NATIVE_DIRECTORY_POLL, XR_OS_IO_CANCELLED, XRT_MANAGED_OK) : 0;
+}
+
+XRAY_API void xrt_native_host_directory_cleanup_close(int64_t token, uint32_t source) {
+    XrtNativeDirectoryStatus status = xrt_native_host_directory_cleanup_close_checked(token, source);
+    if (status) xrt_value_failure(directory_diagnostic(status), source);
 }
 
 XRAY_API void xrt_native_host_directory_cleanup_poll(uint32_t source) {
-    const XrtHostExecutionControl *control = xrt_execution_host_control();
-    if (control && !control->current(control->context))
-        xrt_value_failure(XR_XIR_VALUE_CANCELLED, source);
+    XrtNativeDirectoryStatus status = xrt_native_host_directory_cleanup_poll_checked(source);
+    if (status) xrt_value_failure(directory_diagnostic(status), source);
+}
+
+XRAY_API_NORET void xrt_native_host_directory_cleanup_fail(XrtNativeDirectoryStatus primary,
+    XrtNativeDirectoryStatus secondary) {
+    uint32_t source = (uint32_t)primary, close_source = (uint32_t)secondary;
+    XR_CHECK(source && (!secondary || (close_source && directory_status_kind(secondary) == NATIVE_DIRECTORY_CLOSE &&
+        (directory_status_kind(primary) == NATIVE_DIRECTORY_PREPARE || directory_status_kind(primary) == NATIVE_DIRECTORY_NEXT))),
+        "only an in-flight directory read can carry a secondary close failure");
+    if (secondary) (void)directory_diagnostic(secondary);
+    xrt_value_failure_publish((XrtValueFailure){.status=directory_diagnostic(primary),.source_id=source,
+        .directory_close_source_id=close_source,.directory_primary=primary,.directory_secondary=secondary});
 }
 
 XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage *image, uint32_t type,

@@ -193,14 +193,16 @@ XRAY_API_NORET void xrt_uncaught_error(const uint8_t *metadata,size_t metadata_s
     longjmp(*binding->target,1);
 }
 
-XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source_id) {
+XR_FUNC XR_NORET void xrt_value_failure_publish(XrtValueFailure failure) {
     const XrtExecutionBinding *binding = current_execution;
-    XR_CHECK(binding && binding->target && status != XR_XIR_VALUE_OK &&
-        source_id <= binding->map.count, "Value failure retains the actual root status and source id");
-    binding->failure->kind = XRT_FAILURE_VALUE;
-    binding->failure->detail.value.status = status;
-    binding->failure->detail.value.source_id = source_id;
+    XR_CHECK(binding && binding->target && failure.status != XR_XIR_VALUE_OK &&
+        failure.source_id <= binding->map.count && failure.directory_close_source_id <= binding->map.count,
+        "Value failure retains the actual root status and source ids");
+    *binding->failure = (XrtExecutionFailure){.kind=XRT_FAILURE_VALUE,.detail.value=failure};
     longjmp(*binding->target, 1);
+}
+XR_FUNC XR_NORET void xrt_value_failure(XrXirValueStatus status, uint32_t source_id) {
+    xrt_value_failure_publish((XrtValueFailure){.status=status,.source_id=source_id});
 }
 static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFailure *failure);
 XR_FUNC void xrt_execution_failure_drop(XrtExecutionFailure *failure) {

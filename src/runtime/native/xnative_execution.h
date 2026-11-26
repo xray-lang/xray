@@ -58,6 +58,12 @@ typedef struct XrtTempFailure {
 
 typedef struct XrtErrorSnapshot XrtErrorSnapshot;
 typedef XrtErrorSnapshot XrtTryAssertFailure;
+typedef struct XrtValueFailure {
+    XrXirValueStatus status;
+    uint32_t source_id;
+    uint32_t directory_close_source_id;
+    uint64_t directory_primary, directory_secondary;
+} XrtValueFailure;
 typedef struct XrtExecutionFailure {
     /* Present for XRT_FAILURE_TEMP: the leaf that could not roll back. */
     uint32_t temp_source;
@@ -66,12 +72,13 @@ typedef struct XrtExecutionFailure {
         XrtOutputFailure output;
         XrtArithmeticPanic panic;
         XrtHostClockFailure clock;
-        struct { XrXirValueStatus status; uint32_t source_id; } value;
+        XrtValueFailure value;
         struct { uint32_t code, source_id; XrtManagedHeader *message; } message;
         XrtTryAssertFailure *assertion;
         XrtErrorSnapshot *error;
     } detail;
 } XrtExecutionFailure;
+XR_FUNC XR_NORET void xrt_value_failure_publish(XrtValueFailure);
 /* A message failure owns one fixed String and a typed error owns its
  * snapshot independently of execution retirement. Clear the owner before
  * drop callbacks. A receiver must drop or transfer it before reusing failure. */
