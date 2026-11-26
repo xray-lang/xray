@@ -19,6 +19,7 @@
 #include "runtime/native/xnative_host_file.h"
 #include "runtime/native/xnative_host_io.h"
 #include "runtime/native/xnative_host_stat.h"
+#include "runtime/native/xnative_managed_root.h"
 #include "runtime/native/xnative_values.h"
 #include "runtime/native/xnative_string_backing_ops.h"
 #include "xray_native_values.h"
@@ -1343,6 +1344,26 @@ static void checked_empty_array_root(void *context) {
     const XrtArrayBacking *array = (const XrtArrayBacking *)owner;
     CHECK(!array->length && !array->capacity);
     CHECK(xrt_native_array_inline_empty_checked(frame, 0, &image, 1) == XRT_MANAGED_ARGUMENT);
+    managed_require(xrt_managed_slot_drop(frame, 0));
+
+    XrtManagedSlotLocation destination = {0};
+    managed_require(xrt_managed_slot_location(frame, 0, &destination));
+    managed_require(xrt_managed_domain_enter(destination));
+    CHECK(xrt_native_array_empty_checked(frame, 0, XRT_BACKING_ARRAY_U8) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_native_array_inline_empty_checked(frame, 0, &image, 3) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_managed_domain_held(destination) && !*destination.owner);
+    xrt_managed_domain_leave(destination);
+
+    XrtManagedHeader *pending = NULL;
+    managed_require(xrt_managed_slot_prepare(frame, 0, backings->arrays[XRT_BACKING_ARRAY_U8],
+        sizeof(XrtArrayBacking), &pending));
+    size_t bytes = destination.pending->allocation_bytes;
+    CHECK(pending && bytes);
+    CHECK(xrt_native_array_empty_checked(frame, 0, XRT_BACKING_ARRAY_U8) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_native_array_inline_empty_checked(frame, 0, &image, 3) == XRT_MANAGED_ARGUMENT);
+    CHECK(!*destination.owner && destination.pending->value == pending &&
+        destination.pending->allocation_bytes == bytes);
+    managed_require(xrt_managed_slot_abort(frame, 0));
     managed_require(xrt_managed_frame_leave(root, frame));
 }
 

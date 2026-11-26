@@ -81,12 +81,12 @@ def main():
         for driver in (args.driver, native):
             ordinary = invoke(work, [driver, array_source, stdlib, 'run'])
             assert ordinary == (b'7\n0\n71\n22\n', b''), (driver, ordinary)
-            failed = invoke(work, [driver, array_source, stdlib, 'fail-allocation'], expected=1)
-            assert failed[0] == b'7\n71\n', (driver, failed)
-            assert failed[1].startswith(b'XR_RUN_6002: value operation rejected (status 3) at '), (driver, failed)
-            assert failed[1].endswith(b'managed-array-cleanup.xr:6:9-6:34\n'), (driver, failed)
-            failures.append(failed)
+            failures.append(invoke(work, [driver, array_source, stdlib, 'fail-allocation'], expected=1))
         assert failures[0] == failures[1], failures
+        output, diagnostic = failures[0]
+        assert output == b'7\n71\n', failures
+        assert diagnostic.startswith(b'XR_RUN_6002: value operation rejected (status 3) at '), failures
+        assert diagnostic.endswith(b'managed-array-cleanup.xr:6:9-6:34\n'), failures
         print('RBC and emitted C execute the same cleanup before reporting empty array allocation failure')
 
 
