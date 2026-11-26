@@ -1,0 +1,7 @@
+final class Payload {
+    next: string?
+    init(next: string?) { this.next = next }
+}
+
+const box = Payload(null)
+box.next = 42

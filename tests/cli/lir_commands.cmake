@@ -151,6 +151,14 @@ add_test(NAME test_lir_cli_class_optional_i64
 set_tests_properties(test_lir_cli_class_optional_i64 PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
 
+add_test(NAME test_lir_cli_class_string_fields
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --fixtures tests/fixtures/lir_cli/class_string_fields --compiler "${CMAKE_C_COMPILER}"
+        --output ${PROJECT_BINARY_DIR}/lir-cli-class-string-fields)
+set_tests_properties(test_lir_cli_class_string_fields PROPERTIES
+    TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;ownership")
+
 add_test(NAME test_lir_cli_f64_try_parse
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}

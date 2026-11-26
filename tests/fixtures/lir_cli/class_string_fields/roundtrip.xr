@@ -1,0 +1,30 @@
+final class Payload {
+    label: string
+    next: string?
+    init(label: string, next: string?) {
+        this.label = label
+        this.next = next
+    }
+}
+
+fn exercise(text: string) -> string? {
+    const box = Payload("initial", null)
+    const alias = box
+    print(box.next == null)
+    alias.next = text + "/old"
+    const saved = box.next
+    box.next = text + "/new"
+    alias.next = box.next
+    print(box.next ?? "missing")
+    box.next = null
+    print(alias.next == null)
+
+    const oldLabel = box.label
+    alias.label = text + "/label"
+    box.label = alias.label
+    print(box.label)
+    print(oldLabel)
+    return saved
+}
+
+print(exercise("雪") ?? "missing")

@@ -1,0 +1,7 @@
+final class Payload {
+    const label: string
+    init(label: string) { this.label = label }
+}
+
+const box = Payload("kept")
+box.label = "wrong"

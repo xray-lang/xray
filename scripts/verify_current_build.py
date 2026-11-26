@@ -30,7 +30,7 @@ REQUIRED = (
     "test_lir_cli_invoke_managed_string", "test_lir_cli_invoke_catch",
     "test_lir_cli_invoke_catch_local",
     "test_lir_cli_invoke_borrowed_slice", "test_lir_cli_invoke_strict_utf8", "test_lir_cli_lossy_utf8",
-    "test_lir_cli_class_optional_i64",
+    "test_lir_cli_class_optional_i64", "test_lir_cli_class_string_fields",
     "test_lir_cli_defer_sync", "test_lir_cli_defer_lowering", "test_lir_cli_defer_source",
     "test_lir_cli_defer_propagation",
     "test_lir_cli_defer_panic", "test_lir_cli_defer_caught",
