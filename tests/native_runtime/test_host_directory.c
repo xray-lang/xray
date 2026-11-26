@@ -806,13 +806,15 @@ static void unix_directory(void *context) {
     XrtNativeDirectoryNext call = checked_receiving_frame(&destination);
     CHECK(xrt_host_directory_open(current_path, &call.token) == XR_OS_IO_OK && call.token > token);
     CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE) && destination->present && destination->owner);
-    const XrtStringBacking *first = (const XrtStringBacking *)destination->owner;
-    CHECK(first->length == length && !strcmp(first->bytes, test->expected));
+    bool found = false;
     do {
+        const XrtStringBacking *name = (const XrtStringBacking *)destination->owner;
+        CHECK(name && name->length);
+        found = found || (name->length == length && !memcmp(name->bytes, test->expected, length));
         checked_empty_staging(&call);
         CHECK(!xrt_native_host_directory_next_checked(&call, NEXT_SOURCE));
     } while (destination->present);
-    CHECK(!destination->owner);
+    CHECK(found && !destination->owner);
     checked_empty_staging(&call);
     CHECK(!xrt_value_root_empty(xrt_value_root_active()));
 }
