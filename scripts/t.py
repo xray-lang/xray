@@ -27,8 +27,9 @@ claim it -- and every run prints what it did not cover, so a green t0 is never
 mistaken for a green suite. XR_SHARDS can trade corpus coverage for speed, but
 it is opt-in, it says so on every run, and t3 refuses it.
 
-The build step builds exactly the targets the selected tests need -- a full
-build's correctness without a full build's ~195 links.
+Focused builds resolve selected test names to build targets. The complete t3
+suite builds all targets because CTest names can differ from their executables
+or name scripts that consume targets with other names.
 
 USAGE                                          measured, warm tree, 18 cores
     scripts/t.py t0      after an edit         exact bounded smoke inventory
@@ -575,50 +576,51 @@ def build_selected(build_dir: Path, selected: Sequence[str], jobs: int,
                    include_xray: bool = True,
                    required_targets: Sequence[str] = (),
                    allow_no_targets: bool = False,
-                   explain_targets: bool = False) -> bool:
+                   explain_targets: bool = False,
+                   build_all: bool = False) -> bool:
     """Build exactly what this run needs.
 
-    Every tier needs current binaries; running a tier against a stale one is
-    worse than not running it at all. Building everything fixes that but links
-    ~195 executables on every iteration, so resolve the selected test names to
-    build targets and build only those. Broad tiers also build `xray`, which
-    their script-driven tests invoke. A named profile may opt out when its exact
-    inventory contains no product-CLI test.
+    Complete t3 builds Ninja's all target to supply executables and script
+    dependencies whose targets differ from CTest names. Other runs build the
+    matching targets and `xray` for script-driven tests. An exact profile may
+    opt out when its inventory contains no product-CLI test.
     """
-    targets: List[str] = ["xray"] if include_xray else []
-    known = proc.run(["ninja", "-C", str(build_dir), "-t", "targets", "all"])
-    if known.ok:
-        available = {match.group(1)
-                     for match in (NINJA_TARGET_RE.match(line) for line in
-                                   known.stdout.decode("utf-8", "replace").splitlines())
-                     if match}
-        missing_targets = sorted(set(required_targets) - available)
-        if missing_targets:
-            print(f"{RED}BUILD PROFILE INVALID{NC}: required Ninja target(s) missing")
-            for target in missing_targets:
-                print(f"    {target}")
-            return False
-        targets.extend(required_targets)
-        targets.extend(sorted(set(selected) & available))
-        targets = list(dict.fromkeys(targets))
-        if not targets and allow_no_targets:
-            print(f"{BLUE}==>{NC} building 0 targets (script-only exact profile)")
-            return True
+    if build_all:
+        targets = ["all"]
     else:
-        # No target list available: fall back to a full build rather than
-        # silently under-building and testing stale binaries.
-        targets = []
+        targets: List[str] = ["xray"] if include_xray else []
+        known = proc.run(["ninja", "-C", str(build_dir), "-t", "targets", "all"])
+        if known.ok:
+            available = {match.group(1)
+                         for match in (NINJA_TARGET_RE.match(line) for line in
+                                       known.stdout.decode("utf-8", "replace").splitlines())
+                         if match}
+            missing_targets = sorted(set(required_targets) - available)
+            if missing_targets:
+                print(f"{RED}BUILD PROFILE INVALID{NC}: required Ninja target(s) missing")
+                for target in missing_targets:
+                    print(f"    {target}")
+                return False
+            targets.extend(required_targets)
+            targets.extend(sorted(set(selected) & available))
+            targets = list(dict.fromkeys(targets))
+            if not targets and allow_no_targets:
+                print(f"{BLUE}==>{NC} building 0 targets (script-only exact profile)")
+                return True
+        else:
+            # No target list available: fall back to a full build rather than
+            # silently under-building and testing stale binaries.
+            targets = []
 
-    if targets:
+    if targets and not build_all:
         print(f"{BLUE}==>{NC} building {len(targets)} target(s)")
         if explain_targets:
             print_exact_inventory("build targets", targets)
-        argv = ["cmake", "--build", str(build_dir), "-j", str(jobs)]
-        for target in targets:
-            argv += ["--target", target]
     else:
         print(f"{BLUE}==>{NC} building (all targets)")
-        argv = ["cmake", "--build", str(build_dir), "-j", str(jobs)]
+    argv = ["cmake", "--build", str(build_dir), "-j", str(jobs)]
+    for target in targets:
+        argv += ["--target", target]
 
     log = build_dir / ".t-build.log"
     result = proc.run(argv)
@@ -799,6 +801,7 @@ def _run_main(argv: List[str]) -> int:
             return 1
         print_exact_inventory("CTest names", selected)
 
+    build_all = tier == "t3" and not focused_selection
     if not platform.env_flag("XR_NO_BUILD"):
         if not build_selected(
             build_dir,
@@ -808,6 +811,7 @@ def _run_main(argv: List[str]) -> int:
             required_targets=required_targets,
             allow_no_targets=allow_no_targets,
             explain_targets=bool(exact_expected),
+            build_all=build_all,
         ):
             return 1
         refreshed = ctest_names(build_dir, ctest_args + extra)
@@ -828,6 +832,7 @@ def _run_main(argv: List[str]) -> int:
                 required_targets=required_targets,
                 allow_no_targets=allow_no_targets,
                 explain_targets=bool(exact_expected),
+                build_all=build_all,
             ):
                 return 1
         if exact_expected and not validate_exact_inventory(

@@ -197,6 +197,31 @@ class FocusedSelectionTest(unittest.TestCase):
             self.assertFalse(runner.build_selected(
                 build, [], 1, include_xray=False, required_targets=("missing_target",)))
 
+    def test_full_build_supplies_executables_with_different_ctest_names(self):
+        with tempfile.TemporaryDirectory(prefix="xray t3 targets ") as directory:
+            source = Path(directory)
+            build = source / "build"
+            (source / "CMakeLists.txt").write_text(
+                "cmake_minimum_required(VERSION 3.20)\n"
+                "project(target_inventory C)\n"
+                "enable_testing()\n"
+                "add_executable(xray main.c)\n"
+                "add_executable(case_driver main.c)\n"
+                "add_test(NAME registered_case COMMAND case_driver)\n", encoding="utf-8")
+            (source / "main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            configured = runner.proc.run(["cmake", "-G", "Ninja", "-S", source, "-B", build])
+            self.assertTrue(configured.ok, configured.combined_text())
+
+            selected = runner.ctest_names(build, [])
+            self.assertEqual(selected, ["registered_case"])
+            self.assertTrue(runner.build_selected(build, selected, 1))
+            self.assertFalse((build / runner.platform.exe_name("case_driver")).exists())
+
+            self.assertTrue(runner.build_selected(build, selected, 1, build_all=True))
+            executed = runner.proc.run(["ctest", "--test-dir", build,
+                                        "--output-on-failure", "--no-tests=error"])
+            self.assertTrue(executed.ok, executed.combined_text())
+
 
 class ProductionBuildPreflightTest(unittest.TestCase):
     def setUp(self):
@@ -478,7 +503,7 @@ class ExactExecutionInventoryTest(unittest.TestCase):
 
 class EmptySelectionTest(unittest.TestCase):
     def run_selection(self, inventories, *, tier="t0", extra=(), no_build=False,
-                      ctest_code=0):
+                      ctest_code=0, expect_corpus=False):
         output = io.StringIO()
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             stack.enter_context(redirect_stdout(output))
@@ -504,11 +529,15 @@ class EmptySelectionTest(unittest.TestCase):
                                                          return_value=True))
             ctest = stack.enter_context(mock.patch.object(runner.subprocess, "call",
                                                          return_value=ctest_code))
-            corpus = stack.enter_context(mock.patch.object(runner, "run_regression_corpus"))
+            corpus = stack.enter_context(mock.patch.object(
+                runner, "run_regression_corpus", return_value=True))
             process = stack.enter_context(mock.patch.object(runner.proc, "run"))
             result = runner.main(["t.py", tier, *extra])
             manifest.assert_called_once()
-            corpus.assert_not_called()
+            if expect_corpus:
+                corpus.assert_called_once_with(Path(directory).resolve())
+            else:
+                corpus.assert_not_called()
             process.assert_not_called()
         return result, output.getvalue(), build, ctest
 
@@ -524,6 +553,39 @@ class EmptySelectionTest(unittest.TestCase):
                       runner.canonical_profile.T0_BUILD_TARGETS)
         self.assertLess(len(build.call_args.kwargs["required_targets"]),
                         len(runner.canonical_profile.BUILD_TARGETS))
+        ctest.assert_called_once()
+
+    def test_complete_t3_builds_all_targets_after_inventory_refresh(self):
+        initial = ["lir_c_value_transfers"]
+        refreshed = initial + ["lir_assertion"]
+        result, output, build, ctest = self.run_selection(
+            [initial, initial, refreshed, refreshed], tier="t3", ctest_code=8,
+            expect_corpus=True)
+        self.assertEqual(result, 8, output)
+        self.assertEqual([call.args[1] for call in build.call_args_list],
+                         [initial, refreshed])
+        self.assertTrue(all(call.kwargs["build_all"] for call in build.call_args_list))
+        ctest.assert_called_once()
+        command = ctest.call_args.args[0]
+        self.assertEqual(command[command.index("-E") + 1],
+                         runner.exact_ctest_regex((runner.XI_GENERATOR_FAST,)))
+
+    def test_focused_t3_builds_selected_targets(self):
+        names = ["lir_assertion"]
+        result, output, build, ctest = self.run_selection(
+            [names, names, names], tier="t3", extra=["-R", "^lir_assertion$"])
+        self.assertEqual(result, 0, output)
+        build.assert_called_once()
+        self.assertFalse(build.call_args.kwargs["build_all"])
+        self.assertEqual(build.call_args.args[1], names)
+        ctest.assert_called_once()
+
+    def test_complete_t3_preserves_explicit_no_build(self):
+        names = ["lir_assertion"]
+        result, output, build, ctest = self.run_selection(
+            [names, names], tier="t3", no_build=True, expect_corpus=True)
+        self.assertEqual(result, 0, output)
+        build.assert_not_called()
         ctest.assert_called_once()
 
     def test_empty_selection_fails_before_build_or_test_for_every_tier(self):
