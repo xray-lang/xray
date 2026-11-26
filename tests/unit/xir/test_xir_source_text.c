@@ -1,5 +1,11 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
 #include "xir/xxir_compile_memory.h"
+#include "xir/xxir_class_method_internal.h"
+#include "xir/xxir_comptime_pending_internal.h"
+#include "xir/xxir_construction_internal.h"
+#include "xir/xxir_generic.h"
+#include "xir/xxir_internal.h"
+#include "xir/xxir_types.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
@@ -137,6 +143,114 @@ static void text_null_descriptor(const XrXirSourceRequest *prototype) {
     CHECK(source_fixture_compile_attempts==attempts&&source_fixture_compile_live==live&&source_fixture_compile_bytes==bytes);
     xr_compile_session_free(session);xr_compile_resources_release(context.resources);text_physical_zero();
 }
+
+static void class_method_index_allocations(const XrXirArtifact *closed) {
+    size_t live = source_fixture_compile_live, bytes = source_fixture_compile_bytes;
+    size_t before = source_fixture_compile_attempts;
+    XirClassMethodIndex *index = NULL;
+    CHECK(xir_compile_class_method_index_build(closed, &index, NULL) == XR_XIR_OK && index);
+    size_t attempts = source_fixture_compile_attempts - before;
+    xir_compile_class_method_index_free(index);
+    CHECK(attempts && source_fixture_compile_live == live && source_fixture_compile_bytes == bytes);
+    for (size_t n = 0; n < attempts; ++n) {
+        index = NULL;
+        source_fixture_compile_injected = false;
+        source_fixture_compile_fail_at = source_fixture_compile_attempts + n;
+        CHECK(xir_compile_class_method_index_build(closed, &index, NULL) == XR_XIR_OUT_OF_MEMORY);
+        CHECK(source_fixture_compile_injected && !index);
+        CHECK(source_fixture_compile_live == live && source_fixture_compile_bytes == bytes);
+    }
+    source_fixture_compile_fail_at = SIZE_MAX;
+    source_fixture_compile_injected = false;
+}
+
+static void class_method_index_program(const XrXirSourceRequest *request, bool child) {
+    static const char definitions[] =
+        "class Box { value:i64; init(value:i64){this.value=value}\n"
+        " first()->i64{return this.value} second()->i64{return 1} }\n"
+        "class Other { value:i64; init(value:i64){this.value=value}\n"
+        " first()->i64{return this.value} }\n"
+        "fn run(value:Box)->i64{return value.first()+value.second()}\n";
+    static const char subclass[] = "class Child extends Box { init(value:i64){super(value)} }\n";
+    char text[sizeof(definitions) + sizeof(subclass)];
+    int length = snprintf(text,sizeof(text),"%s%s",definitions,child ? subclass : "");
+    CHECK(length > 0 && (size_t)length < sizeof(text));
+
+    XrXirSourceResult source = {0};
+    CHECK(text_check(request,NULL,text,(size_t)length,text_limits(),&source) == XR_XIR_OK);
+    XirClassMethodIndex *index = NULL;
+    CHECK(xir_compile_class_method_index_build(source.checked,&index,NULL) == XR_XIR_BAD_STAGE && !index);
+    XrXirArtifact *closed = NULL, *other = NULL;
+    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(source.checked,&other,NULL,NULL) == XR_XIR_OK);
+    if (!child) class_method_index_allocations(closed);
+
+    CHECK(xir_compile_class_method_index_build(closed,&index,NULL) == XR_XIR_OK && index);
+    const XrXirModule *module = xr_xir_compile_artifact_module(closed);
+    uint32_t sites = 0;
+    for (uint32_t f = 0; f < module->function_count; ++f) {
+        const XrXirFunction *body = &module->functions[f];
+        for (uint32_t i = 0; i < body->instruction_count; ++i) {
+            const XrXirInstruction *op = &body->instructions[i];
+            if (op->op != XR_XIR_CLASS_METHOD_REF) continue;
+            ++sites;
+            XrXirType receiver = xr_xir_operand_type(body,op->args[0]);
+            XirClassMethodTarget selected = {0}, result = {0};
+            CHECK(xir_compile_class_method_site(module,f,i,receiver,&selected,NULL) == XR_XIR_OK);
+            CHECK(selected.function == (uint32_t)op->immediate && selected.receiver_type == receiver);
+            CHECK(xir_compile_class_method_index_target(index,other,f,i,&result,NULL) == XR_XIR_BAD_STRUCTURE);
+            CHECK(xir_compile_class_method_index_target(index,closed,f,body->instruction_count,&result,NULL) ==
+                XR_XIR_BAD_STRUCTURE);
+            CHECK(xir_compile_class_method_index_target(index,closed,f,i,&result,NULL) ==
+                (child ? XR_XIR_UNRESOLVED : XR_XIR_OK));
+            if (child) CHECK(!result.function && !result.receiver_type);
+            else CHECK(result.function == selected.function && result.receiver_type == receiver);
+        }
+    }
+    CHECK(sites == 2);
+    xir_compile_class_method_index_free(index);
+    xr_xir_compile_artifact_free(other);
+    xr_xir_compile_artifact_free(closed);
+    xr_xir_compile_source_result_free(&source);
+    text_physical_zero();
+}
+
+static void class_method_index_evaluation(const XrXirSourceRequest *request) {
+    static const char text[] =
+        "fn make<T>()->i64{return comptime {const v:Array<T>=[];len(v)+42}}\n"
+        "export fn run()->i64{return make<i8>()+make<string>()-42}\n";
+    XrXirSourceResult source = {0};
+    CHECK(text_check(request,NULL,text,sizeof(text)-1,text_limits(),&source) == XR_XIR_OK);
+    const XrXirConstruction *original = source.checked->construction;
+    XrXirComptimeTable table = *xr_xir_compile_construction_comptime(original);
+    CHECK(table.binding_count > 1);
+    --table.binding_count;
+    XrXirConstructionSpec spec = {original->rows,original->count,
+        original->materializations,original->materialization_count,&table,NULL};
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(source.checked);
+    XrXirModule built = source.checked->module;
+    built.stage = XR_XIR_BUILT;
+    XrXirConstruction *construction = NULL;
+    CHECK(xr_xir_compile_construction_new_v6(context,built.types,&spec,
+        xr_xir_compile_construction_slots(original),&construction,NULL) == XR_XIR_OK);
+    XrXirArtifact *unresolved = NULL, *evaluation = NULL;
+    CHECK(xr_xir_compile_check_v2(context,&built,construction,&unresolved,NULL) == XR_XIR_OK);
+    xr_xir_compile_construction_free(construction);
+    XirComptimePending *pending = NULL;
+    CHECK(xr_xir_compile_comptime_pending(unresolved,&pending,NULL,NULL) == XR_XIR_OK && pending);
+    CHECK(xr_xir_compile_comptime_pending_specialize(pending,&evaluation,NULL,NULL) == XR_XIR_OK);
+    const XrXirModule *module = xr_xir_compile_artifact_module(evaluation);
+    CHECK(module && module->stage == XR_XIR_CHECKED && module->linkage_kind == XR_XIR_PROGRAM);
+    CHECK(module->provenance && module->provenance->kind == XR_XIR_EVIDENCE_EVALUATION);
+    XirClassMethodIndex *index = NULL;
+    CHECK(xir_compile_class_method_index_build(evaluation,&index,NULL) == XR_XIR_BAD_STAGE && !index);
+    xr_xir_compile_artifact_free(evaluation);
+    xr_xir_compile_comptime_pending_free(pending);
+    xr_xir_compile_artifact_free(unresolved);
+    xr_xir_compile_source_result_free(&source);
+    text_physical_zero();
+}
+
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--facts")));
     XrXirSourceResult absent = {0}; XrXirSourceDiagnostic diagnostic = {0};
@@ -184,6 +298,11 @@ int main(int argc,char **argv) {
     memory_request.entry_path = NULL;
     CHECK(text_check(&memory_request, "root.xr", entry_text, sizeof(entry_text)-1, text_limits(), &result) == XR_XIR_BAD_STRUCTURE);
     CHECK(!result.checked && !result.snapshot); text_physical_zero();
+    if (argc == 1) {
+        class_method_index_program(&memory_request,false);
+        class_method_index_program(&memory_request,true);
+        class_method_index_evaluation(&memory_request);
+    }
     CHECK(xr_test_rmdir(directory) == 0);
     puts("Entry bytes: fixed bindings/ranges, disk shadow, absent entry, producer death and failures passed");
     return 0;

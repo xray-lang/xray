@@ -29,6 +29,19 @@ XR_FUNC XrXirStatus xir_compile_class_method_candidates(const XrXirModule *modul
     XrXirType static_receiver,uint32_t slot,XirClassMethodVisitor visit,
     void *owner,XrCompileRequestControl *control);
 
+typedef struct XirClassMethodIndex XirClassMethodIndex;
+
+/* The index borrows one owned Checked Program instance through disposal.
+ * A successful query identifies the producer's own slot in a class without
+ * descendants. Call shape, lifetime and execution permission are separate. */
+XR_FUNC XrXirStatus xir_compile_class_method_index_build(const XrXirArtifact *,
+    XirClassMethodIndex **output, XrCompileRequestControl *control);
+XR_FUNC XrXirStatus xir_compile_class_method_index_target(const XirClassMethodIndex *,
+    const XrXirArtifact *, uint32_t caller, uint32_t instruction, XirClassMethodTarget *output,
+    XrCompileRequestControl *control);
+XR_FUNC void xir_compile_class_method_index_free(XirClassMethodIndex *);
+
+
 XR_FUNC XrXirStatus xir_compile_class_declarations_verify(const XrXirModule *module,
     XrXirDiagnostic *location,XrCompileRequestControl *control);
 

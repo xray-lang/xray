@@ -10,6 +10,8 @@
  * KEY CONCEPT:
  *   The actual receiver chooses a target only inside a verified declaration chain.
  */
+#include "../base/xhash.h"
+
 static uint32_t class_method_parent(const XrXirNominalTable *table,uint32_t owner) {
     return table->declarations?table->declarations[owner].parent:table->identities[owner].parent;
 }
@@ -136,10 +138,13 @@ XR_FUNC XrXirStatus xir_compile_class_method_candidates(const XrXirModule *modul
     XirClassMethodRead input={&domain,module,class_method_module_header};
     return xir_compile_class_method_candidates_read(&input,static_receiver,slot,visit,owner,control);
 }
-XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
-    uint32_t caller,uint32_t instruction,XrXirType actual_receiver,XirClassMethodTarget *output,XrCompileRequestControl *control) {
-    if(!output)return XR_XIR_BAD_STRUCTURE;
-    *output=(XirClassMethodTarget){0};
+typedef struct ClassMethodSite {
+    uint32_t slot;
+    XrXirType receiver, anchor_receiver;
+} ClassMethodSite;
+
+static XrXirStatus class_method_site(const XrXirModule *module, uint32_t caller, uint32_t instruction,
+    ClassMethodSite *site, XrCompileRequestControl *control) {
     XrXirStatus status=xir_receive_poll(control);if(status!=XR_XIR_OK)return status;
     if(!module || !module->functions || caller>=module->function_count)return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *function=&module->functions[caller];
@@ -154,7 +159,7 @@ XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
     XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
     const XrXirTypeNode *signature=xr_xir_callable_signature(module->types,op->type);
     if(!xr_xir_class_is_subtype(module->types,receiver,anchor.parameters[0]) ||
-        !xr_xir_class_is_subtype(module->types,actual_receiver,receiver) || !signature ||
+        !signature ||
         signature->parameter_count!=anchor.parameter_count-1 || signature->result!=anchor.result ||
         signature->element!=anchor.error_type || (signature->flags&XR_XIR_CALLABLE_REST) ||
         ((signature->flags&XR_XIR_CALLABLE_NO_SUSPEND) && !(domain.declarations->functions[slot].promises&XR_XIR_FUNCTION_NO_SUSPEND)))return XR_XIR_BAD_TYPE;
@@ -169,7 +174,132 @@ XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
     if(from->module>=scope->module_count || target->module>=scope->module_count ||
         (!xr_xir_module_same_scope(scope,from->module,target->module) && !target->exported) ||
         !xr_xir_module_imports(scope,from->module,target->module))return XR_XIR_BAD_TYPE;
-    return xir_compile_class_method_select_read(&input,slot,actual_receiver,output,control);
+    *site = (ClassMethodSite){slot,receiver,anchor.parameters[0]};
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
+    uint32_t caller,uint32_t instruction,XrXirType actual_receiver,XirClassMethodTarget *output,XrCompileRequestControl *control) {
+    if(!output)return XR_XIR_BAD_STRUCTURE;
+    *output=(XirClassMethodTarget){0};
+    ClassMethodSite site = {0};
+    XrXirStatus status = class_method_site(module,caller,instruction,&site,control);
+    if (status != XR_XIR_OK) return status;
+    if (!xr_xir_class_is_subtype(module->types,actual_receiver,site.receiver)) return XR_XIR_BAD_TYPE;
+    XirMetadataDomain domain = xir_metadata_domain_from_module(module);
+    XirClassMethodRead input = {&domain,module,class_method_module_header};
+    return xir_compile_class_method_select_read(&input,site.slot,actual_receiver,output,control);
+}
+
+struct XirClassMethodIndex {
+    const XrXirArtifact *artifact;
+    uint8_t *has_child, *unique_member;
+};
+
+static XrXirStatus class_method_index_members(const XrXirCompileContext *context,
+    const XrXirModule *module, uint32_t nominal_count, XirClassMethodIndex *index, XrCompileRequestControl *control) {
+    XrXirStatus status = XR_XIR_OK;
+    size_t count = module->function_count;
+    if (count > (SIZE_MAX - 1) / 2) return XR_XIR_OVERFLOW;
+    size_t capacity = count * 2 + 1;
+    uint32_t *slots = xir_compile_calloc(context,capacity,sizeof(*slots),&status);
+    uint32_t steps = 0;
+    for (uint32_t f = 0; f < module->function_count && status == XR_XIR_OK; ++f) {
+        status = xir_receive_step(control,&steps);
+        if (status != XR_XIR_OK) break;
+        const XrXirFunction *method = &module->functions[f];
+        uint32_t owner = module->declarations->functions[f].nominal_owner;
+        if (!owner) continue;
+        if (owner > nominal_count || !method->name || !method->name_length) {
+            status = XR_XIR_BAD_STRUCTURE;
+            break;
+        }
+        uint32_t hash = xr_hash_bytes_update(xr_hash_int(owner),method->name,method->name_length);
+        size_t at = hash % capacity;
+        while (slots[at]) {
+            status = xir_receive_step(control,&steps);
+            if (status != XR_XIR_OK) break;
+            uint32_t candidate = slots[at] - 1;
+            const XrXirFunction *other = &module->functions[candidate];
+            if (module->declarations->functions[candidate].nominal_owner == owner &&
+                method->name_length == other->name_length &&
+                !memcmp(method->name,other->name,method->name_length)) {
+                index->unique_member[candidate] = 0;
+                break;
+            }
+            if (++at == capacity) at = 0;
+        }
+        if (status == XR_XIR_OK && !slots[at]) {
+            slots[at] = f + 1;
+            index->unique_member[f] = 1;
+        }
+    }
+    xr_compile_resources_free(slots);
+    return status;
+}
+
+XR_FUNC void xir_compile_class_method_index_free(XirClassMethodIndex *index) {
+    if (!index) return;
+    xr_compile_resources_free(index->has_child);
+    xr_compile_resources_free(index->unique_member);
+    xr_compile_resources_free(index);
+}
+
+XR_FUNC XrXirStatus xir_compile_class_method_index_build(const XrXirArtifact *artifact,
+    XirClassMethodIndex **output, XrCompileRequestControl *control) {
+    if (!artifact || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    if (module->stage != XR_XIR_CHECKED || module->linkage_kind != XR_XIR_PROGRAM ||
+        !xir_effect_evidence_is_instance(module)) return XR_XIR_BAD_STAGE;
+    if (!module->declarations || !module->declarations->functions || !module->functions)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(artifact);
+    const XrXirNominalTable *table = module->types ? module->types->nominals : NULL;
+    if (table && (!!table->declarations == !!table->identities || !table->count))
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = xir_receive_poll(control);
+    XirClassMethodIndex *index = xir_compile_calloc(context,1,sizeof(*index),&status);
+    if (table && index) {
+        index->has_child = xir_compile_calloc(context,table->count,1,&status);
+        index->unique_member = xir_compile_calloc(context,module->function_count,1,&status);
+        uint32_t steps = 0;
+        for (uint32_t n = 0; n < table->count && status == XR_XIR_OK; ++n) {
+            uint32_t parent = class_method_parent(table,n);
+            if (parent > table->count) {
+                status = XR_XIR_BAD_STRUCTURE;
+                break;
+            }
+            if (parent) index->has_child[parent - 1] = 1;
+            status = xir_receive_step(control,&steps);
+        }
+        if (status == XR_XIR_OK) status = class_method_index_members(context,module,table->count,index,control);
+    }
+    if (status == XR_XIR_OK) status = xir_receive_poll(control);
+    if (status == XR_XIR_OK) {
+        index->artifact = artifact;
+        *output = index;
+    } else {
+        xir_compile_class_method_index_free(index);
+    }
+    return status;
+}
+
+XR_FUNC XrXirStatus xir_compile_class_method_index_target(const XirClassMethodIndex *index,
+    const XrXirArtifact *artifact, uint32_t caller, uint32_t instruction, XirClassMethodTarget *output,
+    XrCompileRequestControl *control) {
+    if (!index || index->artifact != artifact || !output) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    ClassMethodSite site = {0};
+    XrXirStatus status = class_method_site(module,caller,instruction,&site,control);
+    if (status != XR_XIR_OK) return status;
+    uint32_t owner = module->declarations->functions[site.slot].nominal_owner;
+    /* For the exact declaring receiver with no descendants, the normal
+     * selector can only visit its own class. The anchor must be its sole
+     * same-name declaration for that selection to succeed. */
+    if (site.receiver != site.anchor_receiver || index->has_child[owner - 1] ||
+        !index->unique_member[site.slot]) return XR_XIR_UNRESOLVED;
+    *output = (XirClassMethodTarget){site.slot,site.receiver};
+    return XR_XIR_OK;
 }
 
 static uint32_t class_declaration_module(const XrXirModule *module,uint32_t declaration) {
