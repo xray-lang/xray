@@ -10,6 +10,7 @@
 #include "base/xmalloc.h"
 #include "os/os_thread.h"
 #include <stdalign.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -781,6 +782,55 @@ static void tail_admission_and_oom(void) {
     puts("owned-tail admission, provider OOM and partial abort passed");
 }
 
+/* An explicit alignment above the fundamental one is honoured by over-allocating
+ * a block and remembering the provider pointer in front of the returned address.
+ * Billing still counts the requested bytes, so the slack never changes a limit
+ * decision, and the release path mirrors the reservation exactly. */
+static void explicit_alignment_retirement(void) {
+    XrtBillingOwner *owner = NULL;
+    OK(xrt_billing_owner_new(NULL, SIZE_MAX, &owner));
+    XrtRuntimeTypeSpec spec = {.fixed_size = 128, .alignment = 128, .capacity_offset = SIZE_MAX};
+    XrtRuntimeTypePlan *plan = NULL;
+    OK(xrt_runtime_type_plan_new(owner, &spec, &plan));
+    XrtManagedOps *ops = NULL;
+    OK(xrt_managed_ops_bind(owner, plan, &ops));
+    XrtBillingStats baseline = xrt_billing_owner_stats(owner);
+    XrtManagedPending pending = {0};
+    OK(xrt_managed_prepare(ops, 128, &pending));
+    CHECK(((uintptr_t)pending.value % 128) == 0);
+    XrtManagedHeader *value = NULL;
+    OK(xrt_managed_commit(&pending, &value));
+    CHECK(((uintptr_t)value % 128) == 0);
+    CHECK(xrt_billing_owner_stats(owner).bytes == baseline.bytes + 128 &&
+        xrt_billing_owner_stats(owner).blocks == baseline.blocks + 1);
+    xrt_managed_drop(value);
+    CHECK(xrt_billing_owner_stats(owner).bytes == baseline.bytes &&
+        xrt_billing_owner_stats(owner).blocks == baseline.blocks);
+    /* The shared limit refuses anything larger, and a non-power-of-two before it. */
+    XrtRuntimeTypeSpec too_large = {.fixed_size = 256, .alignment = 256, .capacity_offset = SIZE_MAX};
+    XrtRuntimeTypePlan *refused = NULL;
+    CHECK(xrt_runtime_type_plan_new(owner, &too_large, &refused) == XRT_MANAGED_ARGUMENT && !refused);
+    XrtRuntimeTypeSpec odd = {.fixed_size = 96, .alignment = 48, .capacity_offset = SIZE_MAX};
+    CHECK(xrt_runtime_type_plan_new(owner, &odd, &refused) == XRT_MANAGED_ARGUMENT && !refused);
+    /* A fundamental alignment keeps the plain allocation path and its billing. */
+    XrtRuntimeTypeSpec plain = {.fixed_size = 64, .alignment = 8, .capacity_offset = SIZE_MAX};
+    XrtRuntimeTypePlan *plain_plan = NULL;
+    OK(xrt_runtime_type_plan_new(owner, &plain, &plain_plan));
+    XrtManagedOps *plain_ops = NULL;
+    OK(xrt_managed_ops_bind(owner, plain_plan, &plain_ops));
+    XrtManagedPending plain_pending = {0};
+    OK(xrt_managed_prepare(plain_ops, 64, &plain_pending));
+    XrtManagedHeader *plain_value = NULL;
+    OK(xrt_managed_commit(&plain_pending, &plain_value));
+    xrt_managed_drop(plain_value);
+    xrt_managed_ops_drop(plain_ops);
+    xrt_runtime_type_plan_drop(plain_plan);
+    xrt_managed_ops_drop(ops);
+    xrt_runtime_type_plan_drop(plan);
+    xrt_billing_owner_drop(owner);
+    puts("explicit alignment allocation passed");
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "deep-chain")) {
         deep_chain_retirement();
@@ -798,6 +848,7 @@ int main(int argc, char **argv) {
     deep_branch_retirement(true);
     repeated_tail_dag();
     tail_admission_and_oom();
+    explicit_alignment_retirement();
     deep_tail_retirement(false);
     deep_tail_retirement(true);
     puts("managed kernel passed");

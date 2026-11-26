@@ -150,6 +150,45 @@ static void billing_free(XrtBillingOwner *owner, void *memory, size_t bytes) {
     owner->allocator.deallocate(owner->allocator.context, memory, bytes);
     billing_refund(owner, bytes);
 }
+/* Explicit alignment above the provider's fundamental alignment reserves one
+ * slack span and stores the provider pointer in the word in front of the
+ * returned address. Billing still counts the requested bytes, so the physical
+ * slack never changes a limit decision; only the provider sees the larger
+ * block, and it gets the same length back on release. */
+static bool aligned_allocation_bytes(size_t bytes, size_t alignment, size_t *physical) {
+    if (!alignment || (alignment & (alignment - 1)) || alignment > XR_ALIGNMENT_LIMIT ||
+        bytes > SIZE_MAX - alignment - sizeof(void *)) return false;
+    *physical = bytes + alignment - 1 + sizeof(void *);
+    return true;
+}
+static XrtManagedStatus billing_allocate_aligned(XrtBillingOwner *owner, size_t bytes,
+    size_t alignment, void **out) {
+    if (alignment <= alignof(XrMaxAlignment)) return billing_allocate(owner, bytes, out);
+    size_t physical;
+    if (!aligned_allocation_bytes(bytes, alignment, &physical)) return XRT_MANAGED_ARGUMENT;
+    XrtManagedStatus status = billing_reserve(owner, bytes);
+    if (status != XRT_MANAGED_OK) return status;
+    void *base = owner->allocator.allocate(owner->allocator.context, physical);
+    if (!base) {
+        billing_failed_allocation(owner, bytes);
+        return XRT_MANAGED_OOM;
+    }
+    uintptr_t start = (uintptr_t)base + sizeof(void *);
+    uintptr_t aligned = (start + alignment - 1) & ~(uintptr_t)(alignment - 1);
+    ((void **)aligned)[-1] = base;
+    *out = (void *)aligned;
+    return XRT_MANAGED_OK;
+}
+static void billing_free_aligned(XrtBillingOwner *owner, void *memory, size_t bytes,
+    size_t alignment) {
+    if (alignment <= alignof(XrMaxAlignment)) { billing_free(owner, memory, bytes); return; }
+    size_t physical;
+    XR_CHECK(aligned_allocation_bytes(bytes, alignment, &physical),
+        "an over-aligned release mirrors its admitted allocation");
+    void *base = ((void **)memory)[-1];
+    owner->allocator.deallocate(owner->allocator.context, base, physical);
+    billing_refund(owner, bytes);
+}
 
 XRAY_API XrtManagedStatus xrt_managed_metadata_allocate(XrtBillingOwner *owner, size_t bytes, void **empty) {
     if (!owner || !bytes || !empty || *empty) return XRT_MANAGED_ARGUMENT;
@@ -162,7 +201,7 @@ XRAY_API void xrt_managed_metadata_free(XrtBillingOwner *owner, void *memory, si
 
 static bool type_spec_valid(const XrtRuntimeTypeSpec *spec) {
     if (!spec || spec->fixed_size < sizeof(XrtManagedHeader) || spec->alignment < alignof(XrtManagedHeader) ||
-        spec->alignment > alignof(XrMaxAlignment) || (spec->alignment & (spec->alignment - 1)) ||
+        spec->alignment > XR_ALIGNMENT_LIMIT || (spec->alignment & (spec->alignment - 1)) ||
         !lease_valid(spec->code) || (spec->child_count && !spec->child_offsets) ||
         (spec->tail_child_count && !spec->tail_child_offsets) ||
         spec->child_count > (SIZE_MAX - sizeof(XrtRuntimeTypePlan)) / sizeof(size_t) ||
@@ -380,6 +419,7 @@ XR_FUNCDEF XrtManagedStatus xrt_managed_grow_unique_scalar_tail(XrtManagedHeader
     const XrtRuntimeTypeSpec *spec = &expected->plan->spec;
     size_t previous, children;
     if (!spec->stride || spec->child_count || spec->tail_child_count || spec->drop_payload ||
+        spec->alignment > alignof(XrMaxAlignment) ||
         !allocation_extent(expected->plan, value, &previous) || previous >= bytes ||
         !allocation_children(spec, bytes, &children)) return XRT_MANAGED_ARGUMENT;
 
@@ -487,7 +527,7 @@ static XrtManagedHeader *retirement_finish(XrtManagedHeader *value, XrtManagedHe
         memcpy((unsigned char *)value + plan->spec.capacity_offset, &capacity, sizeof(capacity));
     }
     if (plan->spec.drop_payload) plan->spec.drop_payload(value, plan->spec.code.context);
-    billing_free(owner, value, bytes);
+    billing_free_aligned(owner, value, bytes, plan->spec.alignment);
     xrt_managed_ops_drop(ops);
     xrt_billing_owner_drop(owner);
     return parent;
@@ -527,7 +567,7 @@ static XrtManagedStatus managed_prepare(XrtManagedOps *ops, size_t bytes, bool c
     if (!xrt_managed_ops_retain(ops)) return XRT_MANAGED_REFCOUNT;
     if (!xrt_billing_owner_retain(ops->billing)) { xrt_managed_ops_drop(ops); return XRT_MANAGED_REFCOUNT; }
     void *memory = NULL;
-    XrtManagedStatus status = billing_allocate(ops->billing, bytes, &memory);
+    XrtManagedStatus status = billing_allocate_aligned(ops->billing, bytes, spec->alignment, &memory);
     if (status != XRT_MANAGED_OK) {
         xrt_billing_owner_drop(ops->billing); xrt_managed_ops_drop(ops); return status;
     }

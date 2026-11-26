@@ -26,4 +26,13 @@ typedef union XrMaxAlignment {
 #else
 typedef max_align_t XrMaxAlignment;
 #endif
+
+/* An explicit alignment promise can exceed what one plain allocation returns.
+ * The managed allocator honours requests up to this limit by over-allocating a
+ * block and remembering the provider pointer in front of the returned address;
+ * everything above the fundamental alignment therefore needs no new provider
+ * entry point. The language-side admission limit and this runtime limit are the
+ * same number, so a declaration the compiler admits is one the runtime can
+ * physically place. */
+#define XR_ALIGNMENT_LIMIT 128u
 #endif // XMAX_ALIGN_H
