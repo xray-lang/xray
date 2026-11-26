@@ -54,6 +54,11 @@ XRAY_API void xrt_native_window_copy(XrtManagedFrame *, size_t,
 XRAY_API XrtManagedStatus xrt_window_strict_utf8(XrtManagedFrame *, size_t destination,
     size_t temporary, size_t offset, size_t temporary_owner_offset,
     const XrtReadonlyWindow *, uint32_t source_id);
+/* The live window keeps its bytes immutable through this call. Success owns a
+ * fresh String in the execution's destination slot. Failure preserves the
+ * source and the slot's committed owner. */
+XRAY_API XrtManagedStatus xrt_window_lossy_utf8(XrtManagedFrame *, size_t destination,
+    const XrtReadonlyWindow *, uint32_t source_id);
 #ifdef __cplusplus
 }
 #endif

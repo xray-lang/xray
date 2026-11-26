@@ -9,6 +9,7 @@
 #include "xnative_array_slice.h"
 #include "xnative_values.h"
 #include "xnative_host_nullable.h"
+#include "xnative_managed_root.h"
 #include "base/xchecks.h"
 #include "xray_native_values.h"
 #include <string.h>
@@ -160,6 +161,26 @@ XRAY_API XrtManagedStatus xrt_window_strict_utf8(XrtManagedFrame *frame, size_t 
     XR_CHECK(xrt_host_nullable_publish(&places, status == XRT_MANAGED_OK) == XRT_MANAGED_OK,
         "strict decoding keeps its preflighted nullable home");
     return XRT_MANAGED_OK;
+}
+
+XRAY_API XrtManagedStatus xrt_window_lossy_utf8(XrtManagedFrame *frame, size_t destination,
+    const XrtReadonlyWindow *bytes, uint32_t source) {
+    const unsigned char *data = NULL;
+    XrtManagedStatus status = slice_span(bytes, XRT_BACKING_ARRAY_U8, &data);
+    if (status != XRT_MANAGED_OK) return status;
+
+    XrtValueRoot *execution = xrt_value_root_current(source);
+    XrtManagedRoot *root = xrt_native_values_existing_root(execution);
+    if (!root || xrt_managed_frame_root(frame) != root) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *previous = NULL;
+    status = xrt_managed_slot_borrow(frame, destination, &previous);
+    if (status != XRT_MANAGED_OK) return status;
+    if (previous && !xrt_backing_string_matches(previous)) return XRT_MANAGED_ARGUMENT;
+
+    const XrtBackingTypes *types = NULL;
+    status = xrt_native_values_backings(execution, &types);
+    if (status != XRT_MANAGED_OK) return status;
+    return xrt_string_backing_lossy_create(frame, destination, types, data, bytes->count);
 }
 
 XRAY_API XrtManagedStatus xrt_array_slice_bind(const XrtInlineValueHome *home,

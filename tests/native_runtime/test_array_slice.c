@@ -355,8 +355,135 @@ static void strict_utf8_output(void) {
     xrt_execution_failure_drop(&failure);
     xrt_locations_release(locations);
 }
+typedef struct LossyUtf8Storage {
+    XrtReadonlyWindowBundle input, temporary;
+} LossyUtf8Storage;
+
+static XrtManagedHeader *lossy_slot(XrtManagedFrame *frame, size_t slot) {
+    XrtManagedHeader *owner = NULL;
+    OK(xrt_managed_slot_borrow(frame, slot, &owner));
+    CHECK(owner);
+    return owner;
+}
+
+static void lossy_text(const XrtManagedHeader *owner, const void *bytes, size_t length, size_t runes) {
+    CHECK(xrt_backing_string_matches(owner));
+    const XrtStringBacking *text = (const XrtStringBacking *)owner;
+    CHECK(text->length == length && text->runes == runes && text->bytes[length] == 0);
+    CHECK(!memcmp(text->bytes, bytes, length));
+}
+
+static void lossy_utf8_transaction(void *context) {
+    XrtValueRoot *execution = context;
+    XrtBillingOwner *billing = NULL;
+    const XrtBackingTypes *types = NULL;
+    OK(xrt_native_values_prepare(execution, &billing));
+    OK(xrt_native_values_backings(execution, &types));
+    enum { destination, copy, input, wrong_kind, keeper, temporary, slot_count };
+    const size_t offsets[] = {SIZE_MAX, SIZE_MAX, SIZE_MAX, SIZE_MAX,
+        offsetof(LossyUtf8Storage, input.hold), offsetof(LossyUtf8Storage, temporary.hold)};
+    const XrtManagedFrameSpec spec = {slot_count, sizeof(LossyUtf8Storage), _Alignof(LossyUtf8Storage), offsets};
+    XrtManagedRoot *root = xrt_native_managed_root(0);
+    XrtManagedFrame *frame = NULL;
+    void *payload = NULL;
+    OK(xrt_managed_frame_enter_payload(root, &spec, &frame, &payload));
+    LossyUtf8Storage *storage = payload;
+    const XrtInlineValueHome home = {frame, &storage->input, &storage->temporary, keeper, temporary};
+
+    static const uint8_t content[] = {255, 'A', 0, 195, 169, 'Z', 255};
+    const int64_t integers[] = {65};
+    OK(xrt_array_backing_u8_create(frame, input, types, content, sizeof(content), sizeof(content)));
+    OK(xrt_array_backing_i64_create(frame, wrong_kind, types, integers, 1, 1));
+    OK(xrt_string_backing_create(frame, destination, types, "old", 3, 0));
+    XrtManagedHeader *source = lossy_slot(frame, input);
+    XrtManagedHeader *integer = lossy_slot(frame, wrong_kind);
+    const XrtManagedHeader *old = lossy_slot(frame, destination);
+    OK(xrt_window_range_bind(&home, XRT_BACKING_ARRAY_U8, source, 1, 6));
+    const XrtReadonlyWindow *window = &storage->input.value;
+    XrtManagedRoot *foreign_root = NULL;
+    XrtManagedFrame *foreign_frame = NULL;
+    OK(xrt_managed_root_new(billing, &foreign_root));
+    OK(xrt_managed_frame_enter(foreign_root, 1, &foreign_frame));
+    OK(xrt_string_backing_create(foreign_frame, 0, types, "foreign", 7, 0));
+    CHECK(xrt_window_lossy_utf8(foreign_frame, 0, window, 0) == XRT_MANAGED_ARGUMENT);
+    lossy_text(lossy_slot(foreign_frame, 0), "foreign", 7, 7);
+    OK(xrt_managed_frame_leave(foreign_root, foreign_frame));
+    OK(xrt_managed_root_destroy(&foreign_root));
+
+    const XrtBillingStats before = xrt_billing_owner_stats(billing);
+    CHECK(xrt_window_lossy_utf8(frame, destination, NULL, 0) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_window_lossy_utf8(frame, destination, &(XrtReadonlyWindow){integer, 0, 1}, 0) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_window_lossy_utf8(frame, destination, &(XrtReadonlyWindow){source, 2, SIZE_MAX}, 0) == XRT_MANAGED_BOUNDS);
+    CHECK(xrt_window_lossy_utf8(NULL, destination, window, 0) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_window_lossy_utf8(frame, slot_count, window, 0) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_window_lossy_utf8(frame, wrong_kind, window, 0) == XRT_MANAGED_ARGUMENT);
+    CHECK(lossy_slot(frame, wrong_kind) == integer);
+    CHECK(xrt_billing_owner_stats(billing).allocations == before.allocations);
+
+    xrt_billing_owner_fail_after(billing, 0);
+    CHECK(xrt_window_lossy_utf8(frame, destination, window, 0) == XRT_MANAGED_OOM);
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    CHECK(lossy_slot(frame, destination) == old && storage->input.hold == source);
+
+    const size_t remaining = (size_t)execution->byte_limit - before.bytes;
+    void *reservation = NULL;
+    OK(xrt_managed_metadata_allocate(billing, remaining, &reservation));
+    CHECK(xrt_window_lossy_utf8(frame, destination, window, 0) == XRT_MANAGED_LIMIT);
+    xrt_managed_metadata_free(billing, reservation, remaining);
+    const XrtBillingStats after = xrt_billing_owner_stats(billing);
+    CHECK(after.bytes == before.bytes && after.blocks == before.blocks);
+    CHECK(lossy_slot(frame, destination) == old && storage->input.hold == source && !storage->temporary.hold);
+    lossy_text(old, "old", 3, 3);
+    CHECK(lossy_slot(frame, input) == source &&
+        !memcmp(((const XrtArrayBacking *)source)->elements, content, sizeof(content)));
+
+    OK(xrt_window_lossy_utf8(frame, copy, window, 0));
+    const XrtManagedHeader *valid = lossy_slot(frame, copy);
+    OK(xrt_managed_slot_drop(frame, input));
+    OK(xrt_managed_slot_drop(frame, keeper));
+    lossy_text(valid, content + 1, 5, 4);
+    OK(xrt_string_bytes_bind(&home, valid));
+    OK(xrt_window_lossy_utf8(frame, destination, &storage->input.value, 0));
+    CHECK(lossy_slot(frame, destination) != valid);
+    OK(xrt_managed_slot_drop(frame, copy));
+    OK(xrt_managed_slot_drop(frame, keeper));
+    lossy_text(lossy_slot(frame, destination), content + 1, 5, 4);
+
+    static const struct { uint8_t bytes[4]; size_t length, replacements; } malformed[] = {
+        {{0xe2, 0x82}, 2, 1},
+        {{0xc0, 0xaf}, 2, 2},
+        {{0xed, 0xa0, 0x80}, 3, 3},
+        {{0xf4, 0x90, 0x80, 0x80}, 4, 4},
+    };
+    static const char replacement[] = "\xef\xbf\xbd\xef\xbf\xbd\xef\xbf\xbd\xef\xbf\xbd";
+    for (size_t i = 0; i < sizeof(malformed) / sizeof(malformed[0]); ++i) {
+        size_t length = malformed[i].length, runes = malformed[i].replacements;
+        OK(xrt_array_backing_u8_create(frame, input, types, malformed[i].bytes, length, length));
+        XrtManagedHeader *owner = lossy_slot(frame, input);
+        const XrtReadonlyWindow invalid = {owner, 0, length};
+        OK(xrt_window_lossy_utf8(frame, destination, &invalid, 0));
+        lossy_text(lossy_slot(frame, destination), replacement, 3 * runes, runes);
+    }
+    const XrtReadonlyWindow empty = {lossy_slot(frame, input), malformed[3].length, 0};
+    OK(xrt_window_lossy_utf8(frame, destination, &empty, 0));
+    lossy_text(lossy_slot(frame, destination), "", 0, 0);
+    OK(xrt_managed_frame_leave(root, frame));
+}
+
+static void lossy_utf8_output(void) {
+    XrtLocationOwner *locations = NULL;
+    XrtExecutionFailure failure = {0};
+    XrtValueRoot root = {.byte_limit=65536};
+    CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK);
+    CHECK(xrt_run_embedded_owned(locations, &failure, lossy_utf8_transaction, &root, &root) == XRT_EXECUTION_COMPLETED);
+    CHECK(xrt_value_root_empty(&root));
+    xrt_execution_failure_drop(&failure);
+    xrt_locations_release(locations);
+}
+
 int main(void) {
     strict_utf8_output();
+    lossy_utf8_output();
     string_window();
     XrtInlineValueSpec spec = xrt_array_slice_bundle_spec();
     CHECK(spec.size == sizeof(XrtArraySliceBundle) && spec.owned_count == 1 &&

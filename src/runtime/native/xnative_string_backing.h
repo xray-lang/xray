@@ -49,6 +49,8 @@ static inline uint64_t xrt_string_backing_hash(const XrtStringBacking *text) {
  * the old committed owner. Success leaves one complete owner in the slot. */
 XR_FUNC XrtManagedStatus xrt_string_backing_create(XrtManagedFrame *, size_t slot,
     const XrtBackingTypes *, const char *bytes, size_t length, size_t reserve);
+XR_FUNC XrtManagedStatus xrt_string_backing_lossy_create(XrtManagedFrame *, size_t slot,
+    const XrtBackingTypes *, const uint8_t *bytes, size_t length);
 XR_FUNC XrtManagedStatus xrt_string_backing_concat_create(XrtManagedFrame *, size_t slot,
     const XrtBackingTypes *, const XrtStringBacking *, const XrtStringBacking *, size_t reserve);
 /* The adapter must keep every formatted borrow stable through allocation. */

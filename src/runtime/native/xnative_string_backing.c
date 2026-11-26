@@ -47,6 +47,26 @@ XR_FUNCDEF XrtManagedStatus xrt_string_backing_create(XrtManagedFrame *frame, si
     string->runes = scan.rune_count;
     return string_finish(frame, slot);
 }
+XR_FUNCDEF XrtManagedStatus xrt_string_backing_lossy_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const uint8_t *bytes, size_t length) {
+    if (!types || !types->string || (length && !bytes)) return XRT_MANAGED_ARGUMENT;
+    XrUtf8LossyPlan plan = xr_utf8_core_lossy_plan(bytes, length);
+    if (plan.overflow) return XRT_MANAGED_OVERFLOW;
+    size_t extent = 0;
+    XrtManagedStatus status = string_extent(plan.output_length, 0, &extent);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtStringBacking *string = NULL;
+    status = xrt_string_backing_prepare(frame, slot, types->string, extent, &string);
+    if (status != XRT_MANAGED_OK) return status;
+    XR_CHECK(string->capacity > plan.output_length, "lossy decoding has room for its checked extent");
+    const size_t written = xr_utf8_core_lossy_write(string->bytes, bytes, length);
+    XR_CHECK(written == plan.output_length, "the stable input produces exactly its measured extent");
+    string->bytes[written] = 0;
+    string->length = written;
+    string->runes = plan.rune_count;
+    return string_finish(frame, slot);
+}
+
 XR_FUNCDEF XrtManagedStatus xrt_string_backing_concat_create(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, const XrtStringBacking *left, const XrtStringBacking *right,
     size_t reserve) {
