@@ -15,14 +15,25 @@ static bool lower_cleanup_cell(const Lower *c, XrXirType type) {
     return xr_xir_cell_element(c->source->types, type) == XR_XIR_I64;
 }
 
-/* This subset has no guest panic port. In particular, a Never error bound
- * proves nothing about panic. Output here uses the scalar host sink. */
-static bool lower_cleanup_safe(const Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {
+static bool lower_cleanup_literal(Lower *c, const XrXirFunction *f,
+    const XrXirInstruction *literal, uint8_t **uses) {
+    if (!literal || literal->op != XR_XIR_CONST_STRING) return false;
+    if (!*uses) *uses = lower_literal_uses(c, f);
+    uint32_t index = (uint32_t)(literal - f->instructions);
+    return *uses && (*uses)[index] == 1 && lower_literal_valid(c, f, index);
+}
+
+/* This subset has no guest panic port. The two admitted output forms share
+ * the host failure policy and direct literal output creates no String owner. */
+static bool lower_cleanup_safe(Lower *c, const XrXirFunction *f, const XrXirInstruction *op,
+    uint8_t **literal_uses) {
     uint32_t function = (uint32_t)(f - c->source->functions);
     switch (op->op) {
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_PHI:
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
         return lower_cleanup_scalar(op->type);
+    case XR_XIR_CONST_STRING:
+        return lower_cleanup_literal(c, f, op, literal_uses);
     case XR_XIR_SCALAR_COPY: case XR_XIR_COPY:
         return lower_cleanup_scalar(op->type) || lower_cleanup_cell(c, op->type);
     case XR_XIR_ARRAY_NEW:
@@ -49,8 +60,12 @@ static bool lower_cleanup_safe(const Lower *c, const XrXirFunction *f, const XrX
         return lower_cleanup_scalar(xr_xir_operand_type(f, op->args[0]));
     case XR_XIR_ENUM_NEW:
         return op->type == lower_error_bound(c, function) && lower_is_plain_error_enum(c, op->type);
-    case XR_XIR_PRINT:
-        return op->args[1] == 1 && xr_xir_operand_type(f, f->operands[op->args[0]]) == XR_XIR_I64;
+    case XR_XIR_PRINT: {
+        if (op->args[1] != 1 || op->args[0] >= f->operand_count) return false;
+        uint32_t value = f->operands[op->args[0]];
+        return xr_xir_operand_type(f, value) == XR_XIR_I64 ||
+            lower_cleanup_literal(c, f, lower_place_definition(f, value), literal_uses);
+    }
     case XR_XIR_RETURN:
         return f->result == XR_XIR_UNIT || lower_cleanup_scalar(f->result);
     case XR_XIR_THROW:
@@ -76,15 +91,17 @@ static bool lower_cleanup_direct_leaf(Lower *c, uint32_t function) {
     uint8_t *proof = &c->cleanup_leaves[function];
     if (*proof != UNKNOWN) return *proof == SAFE;
     const XrXirFunction *f = &c->source->functions[function];
-    *proof = UNSAFE;
-    for (uint32_t b = 0; b < f->block_count; ++b) {
+    uint8_t *literal_uses = NULL;
+    bool safe = true;
+    for (uint32_t b = 0; b < f->block_count && safe; ++b) {
         const XrXirBlock *block = &f->blocks[b];
-        if (block->panic) return false;
-        for (uint32_t i = block->first; i < block->first + block->count; ++i)
-            if (!lower_cleanup_safe(c, f, &f->instructions[i])) return false;
+        safe = !block->panic;
+        for (uint32_t i = block->first; i < block->first + block->count && safe; ++i)
+            safe = lower_cleanup_safe(c, f, &f->instructions[i], &literal_uses);
     }
-    *proof = SAFE;
-    return true;
+    xr_free(literal_uses);
+    *proof = safe ? SAFE : UNSAFE;
+    return safe;
 }
 
 static bool lower_cleanup_admit(Lower *c, const XrXirFunction *f, const XrXirInstruction *op) {

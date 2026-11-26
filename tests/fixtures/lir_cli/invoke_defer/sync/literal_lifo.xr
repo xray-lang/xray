@@ -1,0 +1,12 @@
+fn run() {
+    defer { print("last") }
+    print("active")
+    {
+        defer { print("中\0Ω") }
+        defer { print("") }
+        print("body")
+    }
+    print("after")
+}
+
+run()

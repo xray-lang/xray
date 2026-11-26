@@ -1,0 +1,5 @@
+fn run(n: i64) {
+    defer { print("dynamic ${n}") }
+}
+
+run(7)

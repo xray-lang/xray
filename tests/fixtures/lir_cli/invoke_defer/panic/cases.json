@@ -4,6 +4,11 @@
     "stdout": "1\n301\n302\n",
     "stderr": "[Uncaught Panic] E0446: try! failed: Refusal.Failed(29)\n"
   },
+  "assertion_literal_panic": {
+    "exit": 1,
+    "stdout": "active\nleaf\nleaf cleanup\ncaller cleanup\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: Refusal.Failed(29)\n"
+  },
   "assertion_success": {
     "exit": 0,
     "stdout": "1\n301\n30\n303\n302\n31\n",

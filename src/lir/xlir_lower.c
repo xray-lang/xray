@@ -1329,8 +1329,8 @@ static const XrXirInstruction *lower_invoke_origin(Lower *c, const XrXirFunction
 }
 
 static bool lower_cleanup_instruction(Lower *c, const XrXirFunction *f, uint32_t block,
-    const XrXirInstruction *op, bool cleanup_body) {
-    if (lower_cleanup_safe(c, f, op)) return true;
+    const XrXirInstruction *op, bool cleanup_body, uint8_t **literal_uses) {
+    if (lower_cleanup_safe(c, f, op, literal_uses)) return true;
     if (cleanup_body) return false;
     switch (op->op) {
     case XR_XIR_INVOKE:
@@ -1712,6 +1712,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     uint32_t count = 1;
     queue[0] = 0;
     seen[0] = 1;
+    uint8_t *literal_uses = NULL;
     bool good = true;
     bool cleanup_body = c->source->declarations->functions[function].cleanup_owner != 0;
     enum { ARITHMETIC_UNKNOWN, ARITHMETIC_ALLOWED, ARITHMETIC_REFUSED } arithmetic = ARITHMETIC_UNKNOWN;
@@ -1735,7 +1736,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             if (guarded_arithmetic && arithmetic == ARITHMETIC_UNKNOWN)
                 arithmetic = lower_cleanup_arithmetic_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
             if ((block->frontier || cleanup_body) && !(guarded_arithmetic && arithmetic == ARITHMETIC_ALLOWED) &&
-                !lower_cleanup_instruction(c, f, b, instruction, cleanup_body)) {
+                !lower_cleanup_instruction(c, f, b, instruction, cleanup_body, &literal_uses)) {
                 good = lower_unsupported(c, "operation needs a panic landing with active cleanup");
                 break;
             }
@@ -1763,6 +1764,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     }
     xr_free(seen);
     xr_free(queue);
+    xr_free(literal_uses);
     return good;
 }
 

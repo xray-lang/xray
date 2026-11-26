@@ -40,8 +40,13 @@ static bool lir_cleanup_scalar(XrLirType type) {
 static bool lir_cleanup_nopanic(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *op) {
     switch (op->op) {
-    case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
+    case XR_LIR_CONST:
+        return lir_cleanup_scalar(op->type) || op->type == XR_LIR_U64;
+    case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
         return lir_cleanup_scalar(op->type);
+    case XR_LIR_LITERAL_ADDR:
+        /* The ordinary verifier restricts this address to one direct print. */
+        return true;
     case XR_LIR_ICMP:
         return lir_cleanup_scalar(f->values[op->operands[0] - 1].type);
     case XR_LIR_CALL_INTRINSIC: {
@@ -75,9 +80,12 @@ static bool lir_cleanup_nopanic(const XrLirModule *m, const XrLirFunctionData *f
             if (lir_pod_scalar(fields[i].type) >= XR_POD_SCALAR_COUNT) return false;
         return true;
     }
-    case XR_LIR_CALL:
-        return m->functions[op->callee - 1].kind == XR_LIR_FUNCTION_EXTERNAL &&
-            m->functions[op->callee - 1].extern_kind == XR_LIR_EXTERN_PRINT_I64;
+    case XR_LIR_CALL: {
+        const XrLirFunctionData *callee = &m->functions[op->callee - 1];
+        return callee->kind == XR_LIR_FUNCTION_EXTERNAL &&
+            (callee->extern_kind == XR_LIR_EXTERN_PRINT_I64 ||
+             (callee->extern_kind == XR_LIR_EXTERN_PRINT_STRING && lir_literal_call(m, f, op)));
+    }
     default:
         return false;
     }
@@ -281,8 +289,8 @@ static bool lir_cleanup_paths(const XrLirModule *m, const XrLirFunctionData *f,
 
 /* Called after every function's instructions, registrations and whole CFG
  * have been verified. A direct leaf can call its own proved cleanups and the
- * scalar output sink. Its entire body, including the prefix before its own
- * registrations, must exclude every other operation that can panic. */
+ * scalar and direct literal output sinks. The entire body must exclude other
+ * operations that can panic, including before its own registrations. */
 static bool lir_cleanup_direct_leaf(const XrLirModule *m, uint32_t function) {
     const XrLirFunctionData *f = &m->functions[function - 1];
     if (f->kind != XR_LIR_FUNCTION_DEFINITION || !f->error || f->closure.callable) return false;

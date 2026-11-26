@@ -1,0 +1,9 @@
+fn run() {
+    defer {
+        const text = "reused"
+        print(text)
+        print(text)
+    }
+}
+
+run()
