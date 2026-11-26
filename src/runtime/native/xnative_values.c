@@ -17,6 +17,7 @@
 #include "xnative_string_backing_ops.h"
 #include "xnative_array_ops.h"
 #include "xnative_class_array.h"
+#include "xnative_managed_root.h"
 #include "xnative_host_environment.h"
 #include "xnative_host_directory.h"
 #include "xnative_host_file.h"
@@ -486,6 +487,20 @@ XRAY_API void xrt_native_class_scalar_field_write(const XrtNativeClassField *fie
     XrtClassFieldAccess access=native_class_field(field,source);
     XrtManagedStatus status=xrt_class_scalar_field_write(access.instance,access.plan,access.index,bytes,size);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
+}
+XRAY_API void xrt_native_class_string_field_copy(const XrtNativeClassField *field,
+    XrtManagedFrame *frame, size_t destination, size_t nullable_offset, uint32_t source) {
+    XrtManagedRoot *root = xrt_native_values_existing_root(xrt_value_root_current(source));
+    if (!root || xrt_managed_frame_root(frame) != root) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source);
+    XrtClassFieldAccess access = native_class_field(field, source);
+    XrtManagedStatus status = xrt_class_string_field_copy(&access, frame, destination, nullable_offset);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+}
+XRAY_API void xrt_native_class_string_field_replace(const XrtNativeClassField *field,
+    const XrtManagedHeader *incoming, uint8_t present, bool nullable, uint32_t source) {
+    XrtClassFieldAccess access = native_class_field(field, source);
+    XrtManagedStatus status = xrt_class_string_field_replace(&access, incoming, present, nullable);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
 }
 XRAY_API void xrt_native_class_array_field_copy(const XrtNativeClassField *field,
     XrtManagedFrame *frame, size_t destination, uint32_t source) {

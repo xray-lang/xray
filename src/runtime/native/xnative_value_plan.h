@@ -132,6 +132,11 @@ XR_FUNC XrtManagedStatus xrt_class_field_borrow(const XrtManagedHeader *,
     const void **empty_payload);
 XR_FUNC XrtManagedStatus xrt_class_scalar_field_write(XrtManagedHeader *,
     const XrtValuePlan *expected, size_t index, const void *bytes, size_t size);
+struct XrtClassFieldAccess;
+XR_FUNC XrtManagedStatus xrt_class_string_field_copy(const struct XrtClassFieldAccess *,
+    XrtManagedFrame *, size_t destination, size_t nullable_offset);
+XR_FUNC XrtManagedStatus xrt_class_string_field_replace(const struct XrtClassFieldAccess *,
+    const XrtManagedHeader *incoming, uint8_t present, bool nullable);
 
 /* Payload memory has the plan's size/alignment and a real active lifetime.
  * Zero is only for storage without live owners; it initializes every owned

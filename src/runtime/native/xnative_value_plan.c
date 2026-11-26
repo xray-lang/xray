@@ -145,6 +145,10 @@ static bool class_only_field(const XrtValuePlanSpec *spec) {
 static bool writable_class_scalar(const XrtValuePlanSpec *spec) {
     return xrt_class_scalar_field_supported(spec->kind) || class_only_field(spec);
 }
+static bool writable_class_string(const XrtValuePlanSpec *spec) {
+    return spec->kind == XRT_VALUE_STRING || (spec->kind == XRT_VALUE_NULLABLE &&
+        spec->nullable.element->view.kind == XRT_VALUE_STRING);
+}
 static bool plan_has_class_only_fields(const XrtValuePlanSpec *spec) {
     if (spec->kind != XRT_VALUE_RECORD) return false;
     for (size_t i = 0; i < spec->field_count; ++i)
@@ -180,7 +184,8 @@ static bool layout_slots(const XrtValuePlanSpec *spec, const XrtValueSlotSpec *s
             !capture_type(field.type))) return false;
         const XrtValuePlanSpec *type = &field.type->view;
         if (field.flags && (!named || field.flags != XRT_VALUE_FIELD_MUTABLE ||
-            (writable_class_array_kind(type->kind) == XRT_BACKING_ARRAY_COUNT && !writable_class_scalar(type))))
+            (writable_class_array_kind(type->kind) == XRT_BACKING_ARRAY_COUNT &&
+                !writable_class_scalar(type) && !writable_class_string(type))))
             return false;
         if (type->alignment > alignment) alignment = type->alignment;
         if (end > SIZE_MAX - (type->alignment - 1)) return false;
@@ -743,6 +748,107 @@ XR_FUNCDEF XrtManagedStatus xrt_class_scalar_field_write(XrtManagedHeader *owner
     }
     return XRT_MANAGED_OK;
 }
+
+typedef struct ClassStringField {
+    const XrtValuePlanSpec *type;
+    XrtManagedSlotLocation location;
+    uint8_t *tag;
+} ClassStringField;
+
+static XrtManagedStatus class_string_field(const XrtClassFieldAccess *access, bool nullable,
+    ClassStringField *output) {
+    if (!access) return XRT_MANAGED_ARGUMENT;
+    const XrtValueSlotSpec *slot;
+    XrtManagedStatus status = class_field_slot(access->instance, access->plan, access->index, &slot);
+    if (status != XRT_MANAGED_OK) return status;
+    const XrtValuePlanSpec *type = &slot->type->view;
+    if (!(slot->flags & XRT_VALUE_FIELD_MUTABLE) || !writable_class_string(type) ||
+        nullable != (type->kind == XRT_VALUE_NULLABLE)) return XRT_MANAGED_ARGUMENT;
+    const XrtValuePlanSpec *row = &access->plan->view.element->view;
+    unsigned char *payload = (unsigned char *)access->instance + class_payload_offset(row);
+    unsigned char *bytes = payload + slot->offset;
+    bool *guards = (bool *)(payload + row->size);
+    *output = (ClassStringField){.type=type,
+        .location={.owner=(XrtManagedHeader **)(bytes + type->owned_offsets[0]), .busy=&guards[access->index]},
+        .tag=nullable ? bytes + type->nullable.tag_offset : NULL};
+    return XRT_MANAGED_OK;
+}
+
+static bool class_string_value_valid(const XrtManagedHeader *owner, uint8_t present) {
+    return present == 1 ? xrt_backing_string_matches(owner) : !present && !owner;
+}
+
+static uint8_t *class_string_destination_tag(XrtManagedFrame *frame, size_t offset,
+    XrtManagedSlotLocation destination, const XrtValuePlanSpec *type) {
+    void *payload = NULL;
+    size_t extent = 0;
+    if (xrt_managed_frame_payload(frame, &payload, &extent) != XRT_MANAGED_OK ||
+        offset > extent || type->size > extent - offset) return NULL;
+    uint8_t *bytes = (uint8_t *)payload + offset;
+    if ((uintptr_t)bytes % type->alignment ||
+        (uint8_t *)destination.owner != bytes + type->nullable.payload_offset) return NULL;
+    return xrt_managed_frame_scalar_byte(frame, offset + type->nullable.tag_offset);
+}
+
+XR_FUNCDEF XrtManagedStatus xrt_class_string_field_copy(const XrtClassFieldAccess *access,
+    XrtManagedFrame *frame, size_t destination, size_t nullable_offset) {
+    bool nullable = nullable_offset != SIZE_MAX;
+    ClassStringField source;
+    XrtManagedStatus status = class_string_field(access, nullable, &source);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtManagedSlotLocation target;
+    status = xrt_managed_slot_location(frame, destination, &target);
+    if (status != XRT_MANAGED_OK) return status;
+    uint8_t *tag = nullable ? class_string_destination_tag(frame, nullable_offset, target, source.type) : NULL;
+    if (nullable && !tag) return XRT_MANAGED_ARGUMENT;
+    status = xrt_managed_domain_enter(target);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtManagedHeader *retired = NULL;
+    status = xrt_managed_domain_enter(source.location);
+    if (status == XRT_MANAGED_OK) {
+        XrtManagedHeader *value = *source.location.owner;
+        uint8_t present = nullable ? *source.tag : 1;
+        if (target.pending->value || target.pending->allocation_bytes ||
+            !class_string_value_valid(value, present) || (tag && !class_string_value_valid(*target.owner, *tag)))
+            status = XRT_MANAGED_ARGUMENT;
+        else if (value && !xrt_managed_retain(value)) status = XRT_MANAGED_REFCOUNT;
+        else {
+            retired = *target.owner;
+            *target.owner = value;
+            if (tag) *tag = present;
+        }
+        xrt_managed_domain_leave(source.location);
+    }
+    /* A reused result slot can have the receiver's last reference. Release
+     * its interior guard before retiring it, while the frame still rejects
+     * reentrant ownership changes. */
+    xrt_managed_drop(retired);
+    xrt_managed_domain_leave(target);
+    return status;
+}
+
+XR_FUNCDEF XrtManagedStatus xrt_class_string_field_replace(const XrtClassFieldAccess *access,
+    const XrtManagedHeader *incoming, uint8_t present, bool nullable) {
+    ClassStringField field;
+    XrtManagedStatus status = class_string_field(access, nullable, &field);
+    if (status != XRT_MANAGED_OK) return status;
+    if ((!nullable && present != 1) || !class_string_value_valid(incoming, present)) return XRT_MANAGED_ARGUMENT;
+    status = xrt_managed_domain_enter(field.location);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtManagedHeader *replacement = (XrtManagedHeader *)incoming;
+    XrtManagedHeader *retired = NULL;
+    if (!class_string_value_valid(*field.location.owner, nullable ? *field.tag : 1)) status = XRT_MANAGED_ARGUMENT;
+    else if (replacement && !xrt_managed_retain(replacement)) status = XRT_MANAGED_REFCOUNT;
+    else {
+        retired = *field.location.owner;
+        *field.location.owner = replacement;
+        if (nullable) *field.tag = present;
+    }
+    xrt_managed_domain_leave(field.location);
+    xrt_managed_drop(retired);
+    return status;
+}
+
 static XrtManagedStatus class_array_i64_preflight(void *context, XrtPlaceAction action) {
     (void)action;
     XrtManagedHeader *const *field = context;

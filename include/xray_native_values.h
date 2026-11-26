@@ -55,6 +55,15 @@ typedef struct XrtNativeClassField {
 } XrtNativeClassField;
 XRAY_API void xrt_native_class_scalar_field_write(const XrtNativeClassField *,
     const void *bytes, size_t size, uint32_t source_id);
+/* Copies an independently owned field snapshot into a slot in the active
+ * frame root. SIZE_MAX selects String. Otherwise nullable_offset names the
+ * start of the canonical Nullable<String> containing that slot's owner. */
+XRAY_API void xrt_native_class_string_field_copy(const XrtNativeClassField *,
+    XrtManagedFrame *, size_t destination, size_t nullable_offset, uint32_t source_id);
+/* String uses present=1 and nullable=false. Nullable<String> supplies its
+ * original byte tag and matching owner. The incoming owner is borrowed. */
+XRAY_API void xrt_native_class_string_field_replace(const XrtNativeClassField *,
+    const XrtManagedHeader *incoming, uint8_t present, bool nullable, uint32_t source_id);
 XRAY_API void xrt_native_class_array_field_copy(const XrtNativeClassField *,
     XrtManagedFrame *, size_t destination, uint32_t source_id);
 XRAY_API void xrt_native_class_array_field_replace(const XrtNativeClassField *,
