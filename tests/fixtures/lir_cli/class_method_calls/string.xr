@@ -1,0 +1,13 @@
+class PathLike {
+    raw: string
+    init(raw: string) { this.raw = raw }
+    method() -> string { return this.raw + "-method" }
+    field() -> string { return this.raw }
+}
+
+fn project(value: PathLike) -> string { return value.method() }
+fn retainField(value: PathLike) -> string { return value.field() }
+fn owned(prefix: string) -> string { return retainField(PathLike(prefix + "-retained")) }
+
+print(project(PathLike("route")))
+print(owned("route"))

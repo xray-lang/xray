@@ -1,0 +1,8 @@
+import path
+class Redirect extends path.Path {
+    init(raw: string) { super(raw) }
+    override toString() -> string { return "override-result" }
+}
+fn project(value: path.Path) -> string { return value.toString() }
+print(project(path.Path("raw-route")))
+print(Redirect("other").raw)

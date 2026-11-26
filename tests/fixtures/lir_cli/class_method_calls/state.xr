@@ -1,0 +1,10 @@
+var offset:i64=2
+class Counter {
+    raw:i64
+    init(raw:i64) { this.raw=raw }
+    total() -> i64 { return this.raw + offset }
+}
+fn project(value:Counter) -> i64 { return value.total() }
+print(project(Counter(40)))
+offset=3
+print(project(Counter(40)))

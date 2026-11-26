@@ -1,0 +1,7 @@
+import path
+class Inherited extends path.Path {
+    init(raw: string) { super(raw) }
+}
+fn project(value: path.Path) -> string { return value.toString() }
+print(project(path.Path("raw-route")))
+print(Inherited("other").raw)

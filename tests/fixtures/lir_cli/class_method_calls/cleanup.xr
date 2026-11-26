@@ -1,0 +1,10 @@
+class Probe {
+    n:i64
+    init(n:i64) { this.n=n }
+    method() -> i64 { return this.n }
+}
+fn run(value:Probe) -> i64 {
+    defer { print("cleanup") }
+    return value.method()
+}
+print(run(Probe(42)))

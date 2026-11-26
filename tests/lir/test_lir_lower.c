@@ -8,6 +8,9 @@
  */
 #include "lir_source_fixture.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_comptime_pending_internal.h"
+#include "xir/xxir_construction_internal.h"
+#include "xir/xxir_internal.h"
 #include "xir/xxir_type_description.h"
 #include "base/xmalloc.h"
 #include "lir/xlir_lower.h"
@@ -1285,6 +1288,130 @@ static void assertion_declaration_and_scope_sources(const char *programs) {
         xr_lir_lowered_free(&output);
     }
 }
+static uint32_t class_method_checked_function(const XrXirModule *module, const char *name) {
+    for (uint32_t f=0; f<module->function_count; ++f)
+        if (module->functions[f].name_length==strlen(name) &&
+            !memcmp(module->functions[f].name,name,strlen(name))) return f;
+    CHECK(false);
+    return 0;
+}
+
+static uint32_t class_method_site_count(const XrXirModule *module) {
+    uint32_t sites = 0;
+    for (uint32_t f=0; f<module->function_count; ++f)
+        for (uint32_t i=0; i<module->functions[f].instruction_count; ++i)
+            sites += module->functions[f].instructions[i].op == XR_XIR_CLASS_METHOD_REF;
+    return sites;
+}
+
+static bool class_method_lir_name(const XrLirFunctionView *view, const char *suffix) {
+    size_t length = strlen(suffix);
+    return length < view->name_length && view->name[view->name_length - length - 1] == '_' &&
+        !memcmp(view->name + view->name_length - length,suffix,length);
+}
+
+static void class_method_local_control(void) {
+    SourceFixture f = source_fixture("class Probe{n:i64;init(n:i64){this.n=n} method()->i64{return this.n}}\n"
+        "fn read(v:Probe)->i64{return v.method()}\nprint(read(Probe(42)))\n");
+    XrLirLowerRequest request = {f.closed, f.source.snapshot, false};
+    XrLirLowered output = {0};
+    XrLirLowerFailure failure = {0};
+    const XrXirModule *module = xr_xir_compile_artifact_module(f.closed);
+    uint32_t function = class_method_checked_function(module,"read");
+    CHECK(class_method_site_count(module) == 1);
+    OK(xr_lir_lower_program_checked(&request,&output,NULL));
+    xr_lir_lowered_free(&output);
+    XrLirStatus status = xr_lir_lower_local_checked(&request,function,&output,&failure);
+    CHECK(status==XR_LIR_UNSUPPORTED && !output.module && !output.entry.id);
+    CHECK(strstr(failure.diagnostic.message,"CLASS_METHOD_REF"));
+    xr_free(failure.owned_path);
+    source_fixture_free(&f);
+}
+
+static void class_method_evaluation_control(void) {
+    SourceFixture f = source_fixture(
+        "class Probe{n:i64;init(n:i64){this.n=n} method()->i64{return this.n}}\n"
+        "fn read(v:Probe)->i64{return v.method()}\n"
+        "fn make<T>()->i64{return comptime {const v:Array<T>=[];len(v)+42}}\n"
+        "export fn run()->i64{return make<i8>()+make<string>()-42+read(Probe(40))}\n"
+        "print(run())\n");
+    const XrXirConstruction *original = f.source.checked->construction;
+    XrXirComptimeTable table = *xr_xir_compile_construction_comptime(original);
+    CHECK(table.binding_count > 1);
+    --table.binding_count;
+    XrXirConstructionSpec spec = {original->rows,original->count,
+        original->materializations,original->materialization_count,&table,NULL};
+    const XrXirCompileContext *context = xr_xir_compile_artifact_context(f.source.checked);
+    XrXirModule built = f.source.checked->module;
+    built.stage = XR_XIR_BUILT;
+    XrXirConstruction *construction = NULL;
+    CHECK(xr_xir_compile_construction_new_v6(context,built.types,&spec,
+        xr_xir_compile_construction_slots(original),&construction,NULL)==XR_XIR_OK);
+    XrXirArtifact *unresolved = NULL, *evaluation = NULL;
+    CHECK(xr_xir_compile_check_v2(context,&built,construction,&unresolved,NULL)==XR_XIR_OK);
+    xr_xir_compile_construction_free(construction);
+    XirComptimePending *pending = NULL;
+    CHECK(xr_xir_compile_comptime_pending(unresolved,&pending,NULL,NULL)==XR_XIR_OK && pending);
+    CHECK(xr_xir_compile_comptime_pending_specialize(pending,&evaluation,NULL,NULL)==XR_XIR_OK);
+    const XrXirModule *module = xr_xir_compile_artifact_module(evaluation);
+    CHECK(module->stage==XR_XIR_CHECKED && module->linkage_kind==XR_XIR_PROGRAM);
+    CHECK(module->provenance->kind==XR_XIR_EVIDENCE_EVALUATION && class_method_site_count(module)>0);
+    XrLirLowerRequest request = {evaluation,f.source.snapshot,false};
+    XrLirLowered output = {0};
+    XrLirLowerFailure failure = {0};
+    XrLirStatus status = xr_lir_lower_program_checked(&request,&output,&failure);
+    CHECK(status==XR_LIR_VERIFY_ERROR && !output.module && !output.entry.id);
+    xr_free(failure.owned_path);
+    xr_xir_compile_artifact_free(evaluation);
+    xr_xir_compile_comptime_pending_free(pending);
+    xr_xir_compile_artifact_free(unresolved);
+    source_fixture_free(&f);
+}
+
+static void class_method_state_control(void) {
+    SourceFixture f = source_fixture(
+        "var offset:i64=2\n"
+        "class Counter{raw:i64;init(raw:i64){this.raw=raw} total()->i64{return this.raw+offset}}\n"
+        "fn project(value:Counter)->i64{return value.total()}\n"
+        "print(project(Counter(40)))\noffset=3\nprint(project(Counter(40)))\n");
+    XrLirLowerRequest request = {f.closed,f.source.snapshot,false};
+    XrLirLowered output = {0};
+    OK(xr_lir_lower_program_checked(&request,&output,NULL));
+    unsigned calls = 0;
+    for (uint32_t d=0; d<xr_lir_function_count(output.module); ++d) {
+        XrLirFunction function = {0};
+        XrLirFunctionView view = {0};
+        OK(xr_lir_function_at(output.module,d,&function));
+        OK(xr_lir_function_view(output.module,function,&view));
+        if (!class_method_lir_name(&view,"project")) continue;
+        CHECK(view.parameter_count==2);
+        uint32_t receiver = 0;
+        for (uint32_t b=0; b<view.block_count; ++b) {
+            XrLirBlock block = {0};
+            XrLirBlockView body = {0};
+            OK(xr_lir_block_at(output.module,function,b,&block));
+            OK(xr_lir_block_view(output.module,block,&body));
+            for (uint32_t i=0; i<body.instruction_count; ++i) {
+                XrLirInstructionView op = {0};
+                OK(xr_lir_instruction_view(output.module,block,i,&op));
+                CHECK(op.op!=XR_LIR_CALL_INDIRECT && op.op!=XR_LIR_FUNCTION_REF);
+                if (op.op==XR_LIR_VALUE_RETAIN && op.operand_count==1 && op.operands[0]==view.parameters[0]) receiver=op.result;
+                if (op.op!=XR_LIR_CALL) continue;
+                XrLirFunctionView callee = {0};
+                OK(xr_lir_function_view(output.module,(XrLirFunction){output.module,op.callee},&callee));
+                CHECK(class_method_lir_name(&callee,"total") && callee.parameter_count==2 && op.operand_count==2);
+                CHECK(receiver && op.operands[0]==receiver && op.operands[1]==view.parameters[1]);
+                CHECK(callee.parameter_types[0]==view.parameter_types[0] &&
+                      callee.parameter_types[1]==view.parameter_types[1]);
+                ++calls;
+            }
+        }
+    }
+    CHECK(calls==1);
+    xr_lir_lowered_free(&output);
+    source_fixture_free(&f);
+}
+
 #include "lir_lower_array_cases.h"
 #include "lir_fixed_lower_cases.h"
 #include "lir_view_lower_cases.h"
@@ -1293,6 +1420,9 @@ int main(int argc, char **argv) {
     callable_source();
     assertion_declaration_and_scope_sources(argv[1]);
     class_layout_sources();
+    class_method_local_control();
+    class_method_evaluation_control();
+    class_method_state_control();
     inherited_class_layout_sources();
     module_i64_groups();
     view_cold_checked_sources(argv[1]);

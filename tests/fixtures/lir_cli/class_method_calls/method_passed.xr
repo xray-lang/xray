@@ -1,0 +1,4 @@
+import path
+fn consume(get: fn() -> string) -> string { return get() }
+fn project(value: path.Path) -> string { return consume(value.toString) }
+print(project(path.Path("route")))

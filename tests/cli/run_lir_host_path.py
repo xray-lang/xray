@@ -117,7 +117,7 @@ def main() -> None:
         work = Path(directory)
         stdlib = observer_stdlib(work, root, fixtures)
         private_types = ("file_storage_private", "file_stat_private")
-        for name in ("mkdir", "nul_path", "rename", "rename_nul_source", "rename_nul_destination",
+        for name in ("mkdir", "mkdirp", "nul_path", "rename", "rename_nul_source", "rename_nul_destination",
                      "remove", "remove_nul", "rmdir", "rmdir_nul", "unregistered",
                      "file_open_write", "file_open_refused", "file_stat", "file_stat_nul",
                      "file_stat_public", *private_types):
@@ -127,7 +127,9 @@ def main() -> None:
             for cwd in (vm_dir, native_dir):
                 cwd.mkdir()
                 (cwd / "file").write_bytes(b"keep")
-                if name == "rename":
+                if name == "mkdirp":
+                    (cwd / "occupied").write_bytes(b"sentinel")
+                elif name == "rename":
                     (cwd / "起点.txt").write_bytes(b"old\x00bytes")
                     (cwd / "source").write_bytes(b"new")
                     (cwd / "occupied").write_bytes(b"existing")
@@ -166,6 +168,12 @@ def main() -> None:
                     assert vm == (0, b"true\ntrue\nfalse\nfalse\n", b""), vm
                     assert all((cwd / "目录").is_dir() and not (cwd / "missing").exists()
                                for cwd in (vm_dir, native_dir)), name
+                elif name == "mkdirp":
+                    assert vm == (0, b"true\ntrue\nfalse\n", b""), vm
+                    for cwd in (vm_dir, native_dir):
+                        assert (cwd / "probe-root" / "child" / "grandchild").is_dir(), name
+                        assert (cwd / "occupied").read_bytes() == b"sentinel", name
+                        assert not (cwd / "occupied" / "child").exists(), name
                 elif name in ("nul_path", "file_stat_nul"):
                     assert vm[0] == 1 and not vm[1] and b"XR_RUN_6002: value operation rejected (status 1)" in vm[2], vm
                     assert all(not (cwd / "must-not-exist").exists() for cwd in (vm_dir, native_dir)), name

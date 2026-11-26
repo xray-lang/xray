@@ -1,0 +1,5 @@
+import io
+import path
+print(io.mkdirp(path.Path("probe-root/child/grandchild")))
+print(io.mkdirp(path.Path("probe-root/child/grandchild")))
+print(io.mkdirp(path.Path("occupied/child/grandchild")))

@@ -1,0 +1,8 @@
+enum Refusal { Failed }
+class Probe {
+    n:i64
+    init(n:i64) { this.n=n }
+    method() throws(Refusal) -> i64 { throw Refusal.Failed }
+}
+fn run(value:Probe) -> i64 { return try! value.method() }
+print(run(Probe(42)))

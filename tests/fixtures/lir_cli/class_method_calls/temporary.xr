@@ -1,0 +1,6 @@
+class Probe {
+    payload:string
+    init(payload:string) { this.payload=payload; print("constructed") }
+    method() -> string { return this.payload + "-method" }
+}
+print(Probe("temporary").method())

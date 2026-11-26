@@ -1,0 +1,6 @@
+import path
+fn project() -> fn() -> string {
+    const value = path.Path("route")
+    return value.toString
+}
+print(project()())

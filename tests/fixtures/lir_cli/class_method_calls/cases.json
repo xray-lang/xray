@@ -1,0 +1,38 @@
+{
+  "string": {
+    "exit": 0,
+    "stdout": "route-method\nroute-retained\n",
+    "stderr": ""
+  },
+  "temporary": {
+    "exit": 0,
+    "stdout": "constructed\ntemporary-method\n",
+    "stderr": ""
+  },
+  "state": {
+    "exit": 0,
+    "stdout": "42\n43\n",
+    "stderr": ""
+  },
+  "method_named": {
+    "lowering_error": ":3:11: CLASS_METHOD_REF is not supported by LIR lowering yet"
+  },
+  "path_override_present": {
+    "lowering_error": ":6:42: CLASS_METHOD_REF is not supported by LIR lowering yet"
+  },
+  "path_inherited_present": {
+    "lowering_error": ":5:42: CLASS_METHOD_REF is not supported by LIR lowering yet"
+  },
+  "method_returned": {
+    "lowering_error": ":4:5: CLASS_METHOD_REF is not supported by LIR lowering yet"
+  },
+  "method_passed": {
+    "lowering_error": ":3:42: CLASS_METHOD_REF is not supported by LIR lowering yet"
+  },
+  "typed_error": {
+    "lowering_error": ":7:30: CLASS_METHOD_REF is not supported by LIR lowering yet"
+  },
+  "cleanup": {
+    "lowering_error": ":8:5: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
+  }
+}
