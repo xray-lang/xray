@@ -236,6 +236,147 @@ static bool lower_cleanup_frame_type(const Lower *c, XrXirType type) {
     return type == XR_XIR_UNIT || lower_cleanup_scalar(type) || lower_cleanup_cell(c, type);
 }
 
+
+/* The first checked Array site has no earlier owning input to retire. A
+ * forward-only body with one producer cannot bring a previous Array back
+ * to the split. All non-scalar values belong to this result and its local
+ * binding. The failure suffix can therefore run in the current activation. */
+static const XrXirInstruction *lower_empty_array_site(const Lower *c, const XrXirFunction *f) {
+    uint32_t function = (uint32_t)(f - c->source->functions);
+    if ((c->closure_types && c->closure_types[function]) ||
+        c->source->declarations->functions[function].cleanup_owner ||
+        !lower_empty_error(f->error_type) || !lower_cleanup_frame_type(c, f->result))
+        return NULL;
+    for (uint32_t p = 0; p < f->parameter_count; ++p)
+        if (!lower_cleanup_scalar(f->parameters[p])) return NULL;
+
+    const XrXirInstruction *site = NULL;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrXirBlock *block = &f->blocks[b];
+        if (block->panic || !block->count) return NULL;
+        const XrXirInstruction *term = &f->instructions[block->first + block->count - 1];
+        for (uint32_t e = 0; e < lower_edge_count(c, term); ++e)
+            if (term->targets[e] <= b) return NULL;
+        for (const XrXirInstruction *op = &f->instructions[block->first]; op < term; ++op) {
+            if (op->op != XR_XIR_ARRAY_NEW) continue;
+            if (site || op->args[1] || !block->frontier) return NULL;
+            site = op;
+        }
+    }
+    if (!site || !lower_array_element(c, site->type)) return NULL;
+    for (uint32_t i = 0; i < f->instruction_count; ++i) {
+        const XrXirInstruction *op = &f->instructions[i];
+        if (op == site || lower_cleanup_frame_type(c, op->type)) continue;
+        if (op->op == XR_XIR_CELL_NEW &&
+            xr_xir_cell_element(c->source->types, op->type) == site->type) continue;
+        if ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_PLACE) && op->type == site->type)
+            continue;
+        return NULL;
+    }
+    return site;
+}
+
+static const XrXirInstruction *lower_allocation_cleanup_print(const Lower *c, uint32_t role) {
+    if (role >= c->source->function_count || !c->source->declarations->functions[role].cleanup_owner)
+        return NULL;
+    const XrXirFunction *body = &c->source->functions[role];
+    if (body->block_count != 1 || body->blocks[0].frontier || body->blocks[0].panic ||
+        body->parameter_count > 1 || body->result != XR_XIR_UNIT || !lower_empty_error(body->error_type) ||
+        body->instruction_count < 2 || body->instruction_count > 3 || body->operand_count != 1)
+        return NULL;
+    const XrXirInstruction *first = body->instructions;
+    const XrXirInstruction *print = first + (body->instruction_count - 2);
+    if (print->op != XR_XIR_PRINT || print->args[0] || print->args[1] != 1 || print[1].op != XR_XIR_RETURN)
+        return NULL;
+    if (print == first)
+        return body->parameter_count == 1 && body->parameters[0] == XR_XIR_I64 &&
+            !body->operands[0] ? print : NULL;
+    if (first->type != XR_XIR_I64 || body->operands[0] != body->parameter_count) return NULL;
+    if (first->op == XR_XIR_CONST_INT) return body->parameter_count ? NULL : print;
+    return first->op == XR_XIR_CELL_READ && !first->args[0] && body->parameter_count == 1 &&
+        lower_cleanup_cell(c, body->parameters[0]) ? print : NULL;
+}
+
+static bool lower_allocation_cleanup_shape(const Lower *c, const XrXirFunction *f, uint32_t frontier) {
+    while (frontier) {
+        uint32_t parent, handler;
+        if (xr_xir_cleanup_frontier(f, frontier, &parent, &handler) != XR_XIR_OK || handler ||
+            !lower_allocation_cleanup_print(c, (uint32_t)f->instructions[frontier - 1].immediate)) return false;
+        frontier = parent;
+    }
+    return true;
+}
+
+static bool lower_allocation_cleanup_chain(LowerFunction *f, XrLirBlock block, uint32_t frontier) {
+    Lower *c = f->owner;
+    while (frontier) {
+        const XrXirInstruction *registration = &f->source->instructions[frontier - 1];
+        uint32_t role = (uint32_t)registration->immediate;
+        const XrXirInstruction *print = lower_allocation_cleanup_print(c, role);
+        if (!print) return false;
+        const XrXirFunction *body = &c->source->functions[role];
+        const XrXirInstruction *first = body->instructions;
+        uint32_t function = c->function, instruction = c->instruction;
+        c->function = role;
+        c->instruction = 0;
+        XrLirSource source = lower_source(c);
+        c->instruction = (uint32_t)(print - first);
+        XrLirSource print_source = lower_source(c);
+        c->function = function;
+        c->instruction = instruction;
+
+        XrLirValue value = {0};
+        if (body->parameter_count &&
+            !lower_value(f, f->source->operands[registration->args[0]], &value)) return false;
+        if (print != first) {
+            XrLirInstruction input = {.op=XR_LIR_CONST,.type=XR_LIR_I64,.source=source};
+            if (first->op == XR_XIR_CELL_READ) {
+                input.op = XR_LIR_CELL_READ;
+                input.operands = &value;
+                input.operand_count = 1;
+            } else input.bits = (uint64_t)first->immediate;
+            XrLirValue evaluated = {0};
+            if (!lower_build(c, xr_lir_emit_value(c->module, block, &input, &evaluated))) return false;
+            value = evaluated;
+        }
+        XrLirInstruction output = {.op=XR_LIR_CALL,.type=XR_LIR_UNIT,.callee=c->print,
+            .operands=&value,.operand_count=1,.source=print_source};
+        if (!lower_build(c, xr_lir_emit_effect(c->module, block, &output))) return false;
+        uint32_t parent, handler;
+        if (xr_xir_cleanup_frontier(f->source, frontier, &parent, &handler) != XR_XIR_OK || handler)
+            return false;
+        frontier = parent;
+    }
+    return true;
+}
+
+static bool lower_checked_empty_array(LowerFunction *f, uint32_t b, uint32_t result,
+    XrLirType element, uint32_t intrinsic) {
+    Lower *c = f->owner;
+    uint32_t frontier = f->source->blocks[b].frontier;
+    XrLirBlock check = f->blocks[b], normal = {0}, failure = {0};
+    XrLirType array_type = XR_LIR_ARRAY, failure_type = XR_LIR_U64;
+    XrLirValue status = {0};
+    XrLirArrayShape shape = {element};
+    XrLirSource source = lower_source(c);
+    if (!lower_build(c, xr_lir_add_block(c->module, f->function, &array_type, 1, &normal)) ||
+        !lower_build(c, xr_lir_add_block(c->module, f->function, &failure_type, 1, &failure)) ||
+        !lower_build(c, xr_lir_block_parameter(c->module, normal, 0, &f->values[result])) ||
+        !lower_build(c, xr_lir_set_array_shape(c->module, f->values[result], &shape)) ||
+        !lower_build(c, xr_lir_block_parameter(c->module, failure, 0, &status)) ||
+        !lower_build(c, xr_lir_internal_cleanup_block(c->module, check, lower_cleanup_role(f, frontier),
+            0, NULL, 0))) return false;
+    XrLirInstruction construct = {.op=XR_LIR_CHECKED_EMPTY_ARRAY,.type=array_type,.bits=intrinsic,
+        .edge_count=2,.edges={{.target=normal},{.target=failure}},.source=source};
+    XrLirInstruction fail = {.op=XR_LIR_MANAGED_FAILURE,.type=XR_LIR_UNIT,
+        .operands=&status,.operand_count=1,.source=source};
+    if (!lower_build(c, xr_lir_set_terminator(c->module, check, &construct)) ||
+        !lower_allocation_cleanup_chain(f, failure, frontier) ||
+        !lower_build(c, xr_lir_set_terminator(c->module, failure, &fail))) return false;
+    f->blocks[b] = normal;
+    return true;
+}
+
 static const XrXirInstruction *lower_directory_tail(const Lower *c, const XrXirFunction *f, uint32_t b) {
     const XrXirBlock *block = &f->blocks[b];
     if (!block->frontier || block->panic || block->count < 2 ||

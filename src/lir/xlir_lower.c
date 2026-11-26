@@ -158,7 +158,7 @@ typedef struct LowerFunction {
     LowerLexical lexical;
     LowerViews views;
     bool directory_scalar_frame;
-    const XrXirInstruction *directory_first_tail;
+    const XrXirInstruction *directory_first_tail, *checked_empty_array;
 } LowerFunction;
 
 static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
@@ -3717,6 +3717,7 @@ static bool lower_function(Lower *c, uint32_t index) {
     LowerFunction f = {
         .owner = c, .source = &c->source->functions[index], .function = c->functions[index]};
     f.directory_first_tail = lower_directory_tail_frame(c, f.source);
+    if (!f.directory_first_tail) f.checked_empty_array = lower_empty_array_site(c, f.source);
     f.literal_uses = lower_literal_uses(c, f.source);
     bool good = f.literal_uses && lower_build(c, xr_lir_define_function(c->module, f.function)) && lower_order(&f) &&
                 lower_cell_inventory(&f) && lower_lexical_inventory(&f) && lower_string_updates(&f) &&

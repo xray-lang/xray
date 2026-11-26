@@ -188,7 +188,7 @@ typedef struct XrLirInstructionView {
  * An ordinary forwarded argument starts after that value. */
 static inline uint32_t xr_lir_edge_parameter_offset(const XrLirInstructionView *term,
     uint32_t edge) {
-    return term->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED ||
+    return term->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED || term->op == XR_LIR_CHECKED_EMPTY_ARRAY ||
         (term->op == XR_LIR_INVOKE && (edge || term->type != XR_LIR_UNIT));
 }
 

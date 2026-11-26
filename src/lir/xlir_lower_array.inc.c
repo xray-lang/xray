@@ -160,6 +160,11 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
             good = lower_unsupported(c, "Array.withCapacity for an inline element");
         else good = lower_build(c, query);
     }
+    if (good && op == f->checked_empty_array &&
+        lower_allocation_cleanup_shape(c, f->source, f->source->blocks[b].frontier)) {
+        xr_free(args);
+        return lower_checked_empty_array(f, b, result, lower_array_element(c, array), intrinsic);
+    }
     XrLirInstruction call = {.op = XR_LIR_CALL_INTRINSIC, .type = lower_type(c, op->type),
         .intrinsic = intrinsic, .operands = args, .operand_count = count, .source = lower_source(c)};
     if (good) good = lower_build(c, call.type == XR_LIR_UNIT
