@@ -370,7 +370,10 @@ static void cleanup_arithmetic_requires_the_actual_guard(void) {
         XrLirInstruction panic = {.op = XR_LIR_ARITHMETIC_PANIC, .type = XR_LIR_UNIT,
             .bits = mode == WRONG_CODE ? 421 : 420, .source = source};
         if (mode == NO_FRONTIER) {
-            CHECK(xr_lir_set_terminator(module, entry, &panic) == XR_LIR_VERIFY_ERROR);
+            OK(xr_lir_set_terminator(module, entry, &panic));
+            XrLirDiagnostic diagnostic = {0};
+            CHECK(xr_lir_module_finish(module, &diagnostic) == XR_LIR_VERIFY_ERROR &&
+                strstr(diagnostic.message, "active cleanup frontier"));
             xr_lir_module_destroy(module);
             continue;
         }
@@ -444,9 +447,9 @@ static void cleanup_arithmetic_requires_the_actual_guard(void) {
                 OK(xr_lir_verify(copy, NULL));
                 const XrLirBlockData *landing = &copy->functions[owner.id - 1].blocks[zero.id - 1];
                 CHECK(landing->instruction_count == 2);
-                const XrLirInstructionView *exit = &landing->instructions[1].view;
-                CHECK(exit->op == XR_LIR_ARITHMETIC_PANIC && exit->bits == 420 &&
-                    exit->source.line == source.line && exit->source.column == source.column);
+                const XrLirInstructionView *terminal = &landing->instructions[1].view;
+                CHECK(terminal->op == XR_LIR_ARITHMETIC_PANIC && terminal->bits == 420 &&
+                    terminal->source.line == source.line && terminal->source.column == source.column);
                 xr_lir_module_destroy(copy);
                 copy = NULL;
             }

@@ -198,7 +198,7 @@ static bool lower_cleanup_frame_type(const Lower *c, XrXirType type) {
 static bool lower_cleanup_arithmetic_frame(const Lower *c, const XrXirFunction *f) {
     if (!lower_empty_error(f->error_type) || !lower_cleanup_frame_type(c, f->result)) return false;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
-        if (!lower_cleanup_frame_type(c, f->parameters[p])) return false;
+        if (!lower_cleanup_scalar(f->parameters[p])) return false;
     for (uint32_t i = 0; i < f->instruction_count; ++i)
         if (!lower_cleanup_frame_type(c, f->instructions[i].type)) return false;
     return true;

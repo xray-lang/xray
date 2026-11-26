@@ -682,7 +682,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         return XR_LIR_OK;
     }
     if (v->op == XR_LIR_ARITHMETIC_PANIC) {
-        if (!f->has_cleanups || f->cleanup_owner || v->type != XR_LIR_UNIT || v->result ||
+        if (f->cleanup_owner || v->type != XR_LIR_UNIT || v->result ||
             (v->bits != 420 && v->bits != 421) ||
             !v->source.path || !v->source.path_length || !v->source.line || !v->source.column) goto invalid;
         return XR_LIR_OK;
@@ -883,6 +883,10 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
             if (terminal != (i == block->instruction_count - 1))
                 return xr_lir_internal_error(d, "terminator must be the final instruction",
                                              index + 1, b + 1, i + 1, &v->source);
+            if (v->op == XR_LIR_ARITHMETIC_PANIC &&
+                (!f->has_cleanups || !block->cleanup || !block->cleanup->frontier))
+                return xr_lir_internal_error(d, "arithmetic panic requires an active cleanup frontier",
+                    index + 1, b + 1, i + 1, &v->source);
             XrLirStatus status = xr_lir_internal_instruction_check(m, index + 1, v, d);
             if (status != XR_LIR_OK) {
                 if (d) {

@@ -1,0 +1,6 @@
+fn divide(value: ref i64, divisor: i64) -> i64 {
+    defer { print(1) }
+    return value / divisor
+}
+var answer: i64 = 42
+print(divide(ref answer, 0))

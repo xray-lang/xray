@@ -223,7 +223,10 @@ static bool lir_cleanup_arithmetic_frame(const XrLirFunctionData *f) {
     if (f->error || f->closure.callable || (f->result != XR_LIR_UNIT && !lir_cleanup_scalar(f->result))) return false;
     for (uint32_t v = 0; v < f->value_count; ++v) {
         XrLirType type = f->values[v].type;
-        if (!lir_cleanup_scalar(type) && type != XR_LIR_I64_CELL && type != XR_LIR_I64_REF) return false;
+        if (lir_cleanup_scalar(type)) continue;
+        if (type != XR_LIR_I64_CELL) return false;
+        const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v + 1);
+        if (!definition || definition->op != XR_LIR_CELL_NEW) return false;
     }
     return true;
 }

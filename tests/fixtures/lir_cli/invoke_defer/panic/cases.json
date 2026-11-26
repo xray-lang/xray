@@ -27,6 +27,9 @@
     "stdout": "0\n2\n1\n42\n0\n2\n1\n-9223372036854775808\n",
     "stderr": ""
   },
+  "borrowed_scalar_refusal": {
+    "lowering_error": ":3:5: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
+  },
   "callee_with_cleanup_may_panic": {
     "lowering_error": ":12:5: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
   },
