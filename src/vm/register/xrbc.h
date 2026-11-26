@@ -97,7 +97,8 @@
     X(MAP_READ, ABX) \
     X(STRING_LITERAL_BORROW, ABX) \
     X(STRING_LITERAL_MAP_READ, ABX) \
-    X(MAP_EDIT, ABX)
+    X(MAP_EDIT, ABX) \
+    X(ARITHMETIC_PANIC, ABX)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
@@ -105,6 +106,14 @@ typedef enum {
 #undef XR_RBC_ENUM
     XR_RBC_OP_COUNT
 } XrRbcOp;
+
+static inline bool xr_rbc_op_is_exit(uint32_t op) {
+    return op == XR_RBC_RET || op == XR_RBC_RET0 || op == XR_RBC_ARITHMETIC_PANIC;
+}
+
+static inline bool xr_rbc_arithmetic_panic_code(uint64_t code) {
+    return code == 420 || code == 421;
+}
 
 /* A comparison owns the branch pair that follows it, so every pass that walks
  * bytecode must agree on the set. Signed and unsigned ordered compares are

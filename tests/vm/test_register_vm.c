@@ -83,6 +83,12 @@ static void test_encoding(void) {
         {XR_RBC_JMP, 0, 0, 0, XR_RBC_JUMP_MAX + 1},
         {XR_RBC_JMP, 0, 0, 0, XR_RBC_JUMP_MIN - 1},
         {XR_RBC_RET0, 1, 0, 0, 0},
+        {XR_RBC_ARITHMETIC_PANIC, 1, 0, 0, 420},
+        {XR_RBC_ARITHMETIC_PANIC, 0, 1, 0, 420},
+        {XR_RBC_ARITHMETIC_PANIC, 0, 0, 1, 420},
+        {XR_RBC_ARITHMETIC_PANIC, 0, 0, 0, 419},
+        {XR_RBC_ARITHMETIC_PANIC, 0, 0, 0, 422},
+        {XR_RBC_ARITHMETIC_PANIC, 0, 0, 0, 65536 + 420},
         {XR_RBC_MOV, 0, 0, 1, 0},
         {XR_RBC_FLEK, 255, 0, 0, 0},
         {XR_RBC_FLEK, 0, 255, 0, 0},
@@ -778,6 +784,58 @@ static void test_unknown_arithmetic_panic(void) {
     }
 }
 
+static void test_arithmetic_panic_terminator(void) {
+    uint32_t code;
+    uint32_t source_id = 2;
+    XrRbcFunction function = {
+        .code = &code, .code_count = 1, .register_count = 1,
+        .source_ids = &source_id, .source_id_count = 1,
+    };
+    XrRbcModule module = {&function, 1, NULL, 0, NULL, 0};
+    const XrtSourceLocation sources[] = {
+        {"other.xr", 8, 1, 1, 0, 0},
+        {"panic.xr", 8, 27, 9, 27, 14},
+    };
+    XrtLocationOwner *owner = NULL;
+    CHECK(xrt_locations_create(sources, 2, &owner) == XRT_LOCATION_OK);
+    for (uint32_t fault = 420; fault <= 421; ++fault) {
+        CHECK(xr_rbc_encode(&code, (XrRbcOperands){XR_RBC_ARITHMETIC_PANIC, 0, 0, 0, fault}));
+        CHECK(code == ((fault << 16) | XR_RBC_ARITHMETIC_PANIC));
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_module_prepare(&module, 0, NULL, 0, owner, &execution) == XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        xr_rbc_execution_free(&execution);
+        XrtArithmeticPanic facts;
+        const XrtLocationOwner *borrowed = NULL;
+        CHECK(xr_rbc_outcome_arithmetic_panic(outcome, &facts, &borrowed));
+        CHECK(facts.code == fault && facts.source_id == 2 && borrowed == owner);
+        const XrtSourceLocation *loc = xrt_locations_get(borrowed, facts.source_id);
+        CHECK(loc && loc->path_length == 8 && !memcmp(loc->path, "panic.xr", 8));
+        CHECK(loc->line == 27 && loc->column == 9 && loc->end_line == 27 && loc->end_column == 14);
+        xr_rbc_outcome_free(&outcome);
+    }
+    const uint32_t invalid_words[] = {
+        (420u << 16) | (1u << 8) | XR_RBC_ARITHMETIC_PANIC,
+        (419u << 16) | XR_RBC_ARITHMETIC_PANIC,
+        (422u << 16) | XR_RBC_ARITHMETIC_PANIC,
+    };
+    for (size_t i = 0; i < sizeof(invalid_words) / sizeof(invalid_words[0]); ++i) {
+        code = invalid_words[i];
+        CHECK(xr_rbc_module_admit(&module, owner) == XR_RBC_INVALID);
+    }
+    immediate(&code, 0, XR_RBC_ARITHMETIC_PANIC, 0, 420);
+    source_id = 0;
+    CHECK(xr_rbc_module_admit(&module, owner) == XR_RBC_INVALID);
+    source_id = 3;
+    CHECK(xr_rbc_module_admit(&module, owner) == XR_RBC_INVALID);
+    source_id = 2;
+    function.source_id_count = 0;
+    CHECK(xr_rbc_module_admit(&module, owner) == XR_RBC_INVALID);
+    function.source_ids = NULL;
+    CHECK(xr_rbc_module_admit(&module, owner) == XR_RBC_INVALID);
+    xrt_locations_release(owner);
+}
+
 static void test_source_maps(void) {
     uint32_t caller[5], callee[2], ids[5] = {0}, callee_ids[] = {1, 0}, bad_ids[] = {2, 0};
     immediate(caller, 0, XR_RBC_LOADI, 1, 17);
@@ -1208,6 +1266,7 @@ int main(int argc, char **argv) {
     test_owned_execution();
     test_source_maps();
     test_unknown_arithmetic_panic();
+    test_arithmetic_panic_terminator();
     test_workloads(argc == 2 && strcmp(argv[1], "--timing") == 0);
     printf("register_vm: passed (%s)\n", xr_rbc_dispatch_name());
     return 0;

@@ -360,6 +360,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
                 module->natives[index] == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u) >= registers)
             return false;
         break;
+    case XR_RBC_ARITHMETIC_PANIC:
+        return !a && xr_rbc_arithmetic_panic_code(index) && function->source_ids &&
+            function->source_id_count == function->code_count && function->source_ids[pc] != 0;
     case XR_RBC_RET: case XR_RBC_RET0: {
         const XrRbcValueCode *value_code = rbc_value_code(module, function);
         const XrtValueImage *image = xr_rbc_module_value_image(module);

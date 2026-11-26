@@ -661,6 +661,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
     case XR_LIR_SHL: case XR_LIR_SHR:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:
     case XR_LIR_CALL: case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
+    case XR_LIR_ARITHMETIC_PANIC:
     case XR_LIR_INVOKE: case XR_LIR_RETURN_ERROR: case XR_LIR_PANIC_ERROR: case XR_LIR_UNCAUGHT_ERROR:
     case XR_LIR_CELL_NEW: case XR_LIR_CELL_READ: case XR_LIR_CELL_WRITE:
     case XR_LIR_STRING_LITERAL: case XR_LIR_STRING_I64: case XR_LIR_STRING_F64: case XR_LIR_STRING_CONCAT:
@@ -1278,6 +1279,10 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     case XR_LIR_ICMP: return rbc_lir_comparison(c, i);
     case XR_LIR_BR: return rbc_lir_edge(c, i->edges[0],1);
     case XR_LIR_CONDBR: return rbc_lir_conditional(c, i);
+    case XR_LIR_ARITHMETIC_PANIC:
+        if (!c->current_source_id || !xr_rbc_arithmetic_panic_code(i->bits))
+            return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "arithmetic panic lacks a verified fault and source");
+        return rbc_lir_emit(c, XR_RBC_ARITHMETIC_PANIC, 0, 0, 0, (int64_t)i->bits);
     case XR_LIR_RET:
         {
             XrLirClosureTarget target = {0};
@@ -1517,7 +1522,7 @@ static bool rbc_lir_compact_jumps(RbcLirCompiler *c) {
         uint32_t op = c->code[pc] & 255;
         if (op == XR_RBC_JMP) {
             successors[successors_count++] = rbc_lir_jump_target(c, pc);
-        } else if (op != XR_RBC_RET && op != XR_RBC_RET0 &&
+        } else if (!xr_rbc_op_is_exit(op) &&
             !(op == XR_RBC_VALUE_ACCESS && c->value_code && (c->code[pc] >> 16) < c->value_code->access_count &&
                 c->value_code->accesses[c->code[pc] >> 16].operation == XR_RBC_VALUE_RETURN) &&
             !xr_rbc_aggregate_return_word(c->aggregate_accesses, c->aggregate_access_count, c->code[pc])) {
@@ -1549,7 +1554,7 @@ static bool rbc_lir_compact_jumps(RbcLirCompiler *c) {
         next = pc;
         ++retained;
     }
-    XR_DCHECK(retained, "reachable return or jump cycle survives compaction");
+    XR_DCHECK(retained, "reachable exit or jump cycle survives compaction");
     size_t output = retained;
     for (size_t pc = count; pc-- > 0;) {
         if (flags[pc] & RETAIN) --output;

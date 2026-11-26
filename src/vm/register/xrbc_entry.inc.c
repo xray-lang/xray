@@ -94,7 +94,7 @@ static void xr_rbc_entry_instruction(const XrRbcModule *module, const XrRbcFunct
         for (uint32_t p = 1; p <= count; ++p) xr_rbc_entry_read(state, a + p);
         break;
     }
-    case XR_RBC_JMP: case XR_RBC_RET0: case XR_RBC_PRINT_LITERAL:
+    case XR_RBC_JMP: case XR_RBC_RET0: case XR_RBC_ARITHMETIC_PANIC: case XR_RBC_PRINT_LITERAL:
         break;
     default:
         memset(state->clear, 1, sizeof(state->clear));
@@ -122,7 +122,7 @@ static bool xr_rbc_entries(const XrRbcModule *module, XrRbcEntry *entries) {
                 targets[pc + 1 + (size_t)offset] = 1;
             }
             if (xr_rbc_op_is_comparison(op)) targets[pc + 2] = 1;
-            if ((op == XR_RBC_JMP || op == XR_RBC_RET || op == XR_RBC_RET0) &&
+            if ((op == XR_RBC_JMP || xr_rbc_op_is_exit(op)) &&
                 pc + 1 < function->code_count) targets[pc + 1] = 1;
         }
         for (uint32_t r = function->parameter_count; r < function->register_count; ++r)

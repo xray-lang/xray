@@ -225,9 +225,17 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
     if (callee->result_kind == XR_RBC_FUNCTION) rbc_scope_define(s, v.a, rbc_scope_current(s));
     return true;
 }
+static bool rbc_string_exit(const RbcStringAdmission *s) {
+    if (rbc_scope_current(s)) return false;
+    for (uint32_t r = 0; r < s->function->register_count; ++r)
+        if (s->state[r] == RBC_STRING_OWNED || s->state[r] == RBC_CELL_OWNED ||
+            s->state[r] == RBC_VIEW_FRAME || s->state[r] == RBC_VIEW_CELL ||
+            s->state[r] == RBC_VIEW_SLICE || s->state[r] == RBC_VIEW_RETURNED) return false;
+    return true;
+}
+
 static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
-    if ((v.op == XR_RBC_RET || v.op == XR_RBC_RET0) && rbc_scope_current(s)) return false;
         switch (v.op) {
         case XR_RBC_STRING_LITERAL_MAP_READ:
         case XR_RBC_STRING_LITERAL_BORROW:
@@ -262,11 +270,9 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
                     rbc_register_kind(f, v.a) != XR_RBC_SLICE_I64) return false;
                 s->state[v.a] = RBC_EMPTY;
             } else if (v.op == XR_RBC_RET && s->state[v.a] != RBC_BITS) return false;
-            for (uint32_t r = 0; r < f->register_count; ++r)
-                if (s->state[r] == RBC_STRING_OWNED || s->state[r] == RBC_CELL_OWNED ||
-                    s->state[r] == RBC_VIEW_FRAME || s->state[r] == RBC_VIEW_CELL ||
-                    s->state[r] == RBC_VIEW_SLICE || s->state[r] == RBC_VIEW_RETURNED) return false;
-            break;
+            return rbc_string_exit(s);
+        case XR_RBC_ARITHMETIC_PANIC:
+            return rbc_string_exit(s);
         case XR_RBC_LOADK: case XR_RBC_LOADI:
             if (!rbc_bits_destination(s, v.a)) return false;
             s->state[v.a] = RBC_BITS; break;
@@ -672,7 +678,7 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
             bool valid = v.op==XR_RBC_SPILL || v.op==XR_RBC_RELOAD ?
                 rbc_spill_transfer(&g->work,v) : rbc_string_step(&g->work,v);
             if (!valid) return false;
-            if (v.op == XR_RBC_RET || v.op == XR_RBC_RET0 ||
+            if (xr_rbc_op_is_exit(v.op) ||
                 xr_rbc_value_return_word(g->work.module, f, word) ||
                 xr_rbc_aggregate_return_word(f->aggregate_accesses, f->aggregate_access_count, f->code[pc])) {
                 for (uint32_t i=0; i<f->reference_spill_count; ++i)

@@ -40,6 +40,8 @@ XR_FUNC bool xr_rbc_encode(uint32_t *out, XrRbcOperands o) {
         (o.immediate<0 || (uint64_t)o.immediate>=XR_RBC_SPILL_COUNT_MAX)) return false;
     if (!out || (unsigned) o.op >= XR_RBC_OP_COUNT)
         return false;
+    if (o.op == XR_RBC_ARITHMETIC_PANIC &&
+        (o.a || !xr_rbc_arithmetic_panic_code((uint64_t)o.immediate))) return false;
     XrRbcFormat format = xr_rbc_formats[o.op];
     uint32_t payload = 0;
     if (format == XR_FMT_SJ) {

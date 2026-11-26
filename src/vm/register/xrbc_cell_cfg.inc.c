@@ -29,7 +29,7 @@ static bool rbc_cell_successors(RbcStringGraph *g, RbcCellBlock *nodes) {
                 node->edges[node->edge_count++]=g->indices[pc+1];
                 node->edges[node->edge_count++]=g->indices[pc+2]; terminal=true; break;
             }
-            if (op==XR_RBC_RET || op==XR_RBC_RET0 ||
+            if (xr_rbc_op_is_exit(op) ||
                 xr_rbc_value_return_word(g->work.module,f,word) ||
                 xr_rbc_aggregate_return_word(f->aggregate_accesses,f->aggregate_access_count,word)) {
                 terminal=true; break;

@@ -273,6 +273,9 @@ XR_RBC_CASE(REMI) {
         XR_RBC_REG(XR_RBC_A()) = (uint64_t) (op == XR_RBC_DIV ? lhs / rhs : lhs % rhs);
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(ARITHMETIC_PANIC) {
+    xrt_arithmetic_panic(instruction >> 16, XR_RBC_SOURCE());
+}
 XR_RBC_CASE(AND) {
     XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) & XR_RBC_REG(XR_RBC_C()));
     XR_RBC_NEXT();
