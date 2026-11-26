@@ -129,15 +129,14 @@ XR_FUNC bool xtc_find_executable(const char *program, char *out, size_t out_size
     const char *path_env = getenv("PATH");
     if (!path_env || !path_env[0])
         return false;
+#ifdef XR_OS_WINDOWS
+    const char path_separator = ';';
+#else
+    const char path_separator = ':';
+#endif
     const char *cur = path_env;
     while (*cur) {
-        const char *sep = strchr(cur,
-#ifdef XR_OS_WINDOWS
-                                 ';'
-#else
-                                 ':'
-#endif
-        );
+        const char *sep = strchr(cur, path_separator);
         size_t len = sep ? (size_t) (sep - cur) : strlen(cur);
         if (len > 0 && xtc_candidate_in_dir(cur, len, program, out, out_size))
             return true;
