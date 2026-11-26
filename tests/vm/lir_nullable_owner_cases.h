@@ -30,8 +30,8 @@ static void test_nullable_outcome_owner(void) {
             ++depth;
         }
         CHECK(depth == 128 && type.element == (leaf ? XR_POD_I64 : XR_POD_UNIT));
-        type.kind = XR_POD_FIXED_U8;
-        CHECK(!xr_rbc_outcome_aggregate_type(outcome, 128, &type) && type.kind == XR_POD_FIXED_U8);
+        type.kind = XR_POD_FIXED_INT;
+        CHECK(!xr_rbc_outcome_aggregate_type(outcome, 128, &type) && type.kind == XR_POD_FIXED_INT);
         xr_rbc_outcome_free(&outcome);
     }
 }

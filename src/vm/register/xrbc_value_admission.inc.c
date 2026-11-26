@@ -281,7 +281,7 @@ static bool rbc_value_pod(const XrRbcModule *module,const XrRbcValueCode *code,
         code->locations[value].kind!=XR_RBC_VALUE_AGGREGATE) return false;
     XrtValueKind kind=image->types[home->type-1].kind;
     XrRbcAggregateValue aggregate=function->aggregate_values[code->locations[value].index];
-    return aggregate.type==result-1 && (kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FIXED_U8) &&
+    return aggregate.type==result-1 && (kind==XRT_VALUE_NULLABLE || kind==XRT_VALUE_FIXED_INT) &&
         home->size==module->aggregate_types[result-1].physical.size;
 }
 static bool rbc_value_inline_operand(const XrRbcModule *, const XrRbcValueCode *,

@@ -141,9 +141,47 @@ static void fixed_instructions(const XrXirCompileContext *context) {
         xr_xir_compile_artifact_free(output);memcpy(code,saved,sizeof(code));
     }
 }
+static void fixed_element_widths(const XrXirCompileContext *context) {
+    /* Storage repeats its declared element, so a u64 extent and alignment
+     * follow that width instead of a single byte-only rule. */
+    const XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_FIXED_ARRAY,.element=XR_XIR_U64,.parameter_count=3}};
+    const XrXirTypes types={nodes,1,NULL,NULL};XrXirTypeArena *arena=NULL;
+    CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_OK);
+    CHECK(xr_xir_compile_type_arena_new(context,&types,&arena)==XR_XIR_VALUE_OK);
+    const XrXirTypes *owned=xr_xir_compile_type_arena_types(arena);
+    CHECK(owned && xr_xir_fixed_array_element(owned,(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE)==XR_XIR_U64);
+    XrXirType fixed=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
+    CHECK(xr_xir_fixed_array_bytes(owned,fixed)==24);
+    const XrXirStorageLayout *storage=xr_xir_compile_type_arena_storage(arena,fixed);
+    CHECK(storage && storage->value.size==24 && storage->value.alignment==8 && !storage->owned_depth);
+    XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+    XrXirValueAdmission admission={arena,domain,NULL,NULL,100000,65536};
+    XrXirValue elements[3]={{XR_XIR_U64,0,11},{XR_XIR_U64,0,4000000000},{XR_XIR_U64,0,INT64_MAX}};
+    XrXirValue value={0},out={0};XrXirFaultDetail fault={0};
+    CHECK(xr_xir_fixed_array_new(fixed,elements,3,&admission,&value)==XR_XIR_VALUE_OK);
+    for(uint32_t i=0;i<3;++i) {
+        CHECK(xr_xir_fixed_array_get(&value,(int64_t)i,&out,&fault)==XR_XIR_VALUE_OK &&
+            out.type==XR_XIR_U64 && out.payload==elements[i].payload);
+        xr_xir_value_drop(&out);
+    }
+    const uint64_t raw[3]={1,2,UINT64_C(0x8000000000000000)};
+    xr_xir_value_drop(&value);
+    CHECK(xr_xir_fixed_array_from_bytes(fixed,(const uint8_t *)raw,3,&admission,&value)==XR_XIR_VALUE_OK);
+    for(uint32_t i=0;i<3;++i) {
+        CHECK(xr_xir_fixed_array_get(&value,(int64_t)i,&out,&fault)==XR_XIR_VALUE_OK &&
+            out.type==XR_XIR_U64 && out.payload==(int64_t)raw[i]);
+        xr_xir_value_drop(&out);
+    }
+    elements[1].type=XR_XIR_U8;
+    CHECK(xr_xir_fixed_array_new(fixed,elements,3,&admission,&out)==XR_XIR_VALUE_BAD_ARGUMENT && !out.type);
+    elements[1].type=XR_XIR_U64;
+    xr_xir_value_drop(&value);
+    xr_xir_domain_drop(domain);xr_xir_compile_type_arena_drop(arena);
+}
 int main(void) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
     fixed_shapes(&owner.context);fixed_values(&owner.context);fixed_instructions(&owner.context);
+    fixed_element_widths(&owner.context);
     source_fixture_owner_free(&owner);
     puts("fixed bytes: scalar lengths, exact storage, retirement and refusals");return 0;
 }

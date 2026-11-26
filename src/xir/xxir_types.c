@@ -238,6 +238,15 @@ XR_FUNC uint32_t xr_xir_fixed_array_length(const XrXirTypes *types,XrXirType typ
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     return node && node->kind==XR_XIR_TYPE_FIXED_ARRAY ? node->parameter_count : 0;
 }
+XR_FUNC XrXirType xr_xir_fixed_array_element(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    return node && node->kind==XR_XIR_TYPE_FIXED_ARRAY ? node->element : XR_XIR_UNIT;
+}
+XR_FUNC uint64_t xr_xir_fixed_array_bytes(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    if (!node || node->kind != XR_XIR_TYPE_FIXED_ARRAY || !node->parameter_count) return 0;
+    return (uint64_t)node->parameter_count * xr_xir_fixed_array_element_size(node->element);
+}
 const XrXirTypeNode *xr_xir_callable_signature(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && node->kind == XR_XIR_TYPE_CALLABLE ? node : NULL;
@@ -348,8 +357,9 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             if (component > span) span = component;
         }
     } else if (node->kind == XR_XIR_TYPE_FIXED_ARRAY) {
-        if(node->element!=XR_XIR_U8 || !node->parameter_count || node->parameter_count>65535 ||
-            node->parameters || node->result!=XR_XIR_UNIT || node->flags) return XR_XIR_BAD_TYPE;
+        if(!xr_xir_fixed_array_element_admitted(node->element) || !node->parameter_count ||
+            node->parameter_count>65535 || node->parameters || node->result!=XR_XIR_UNIT || node->flags)
+            return XR_XIR_BAD_TYPE;
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->element != XR_XIR_UNIT || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;

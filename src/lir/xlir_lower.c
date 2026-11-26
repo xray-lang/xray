@@ -2311,13 +2311,19 @@ static bool lower_fixed_instruction(LowerFunction *f, uint32_t b, uint32_t i) {
     if (op->op == XR_XIR_FIXED_ARRAY_GET) {
         if (!lower_value(f, op->args[0], &operands[0]) ||
             !lower_value(f, op->args[1], &operands[1])) return false;
-        XrLirInstruction get = {.op=XR_LIR_FIXED_ARRAY_GET, .type=XR_LIR_U8,
+        XrXirType element = xr_xir_fixed_array_element(c->source->types,
+            xr_xir_operand_type(f->source, op->args[0]));
+        if (!xr_xir_fixed_array_element_admitted(element)) {
+            lower_error(c, XR_LIR_VERIFY_ERROR, "fixed array read lost its admitted element");
+            return false;
+        }
+        XrLirInstruction get = {.op=XR_LIR_FIXED_ARRAY_GET, .type=lower_type(c, element),
             .operands=operands, .operand_count=2, .source=lower_source(c)};
         return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &get, result));
     }
     if (op->args[0] > f->source->operand_count ||
         op->args[1] > f->source->operand_count - op->args[0]) {
-        lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked fixed byte operand range");
+        lower_error(c, XR_LIR_VERIFY_ERROR, "invalid Checked fixed array operand range");
         return false;
     }
     XrLirValue *elements = lower_alloc(c, op->args[1], sizeof(*elements));

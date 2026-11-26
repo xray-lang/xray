@@ -181,7 +181,12 @@ static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLir
             for (uint32_t p = 0; p < signature.parameter_count && status == XR_LIR_VALUE_LAYOUT_OK; ++p)
                 status = need_shaped_type(set, signature.parameters[p].type, signature.parameters[p].array_element, type);
             if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
-        } else if (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_SLICE)
+        } else if (shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
+            /* The element is a plain scalar row, so the fixed plan's size and
+             * alignment are read from it instead of being restated here. */
+            XrLirValueLayoutStatus status = need_type(set, shape.element, type);
+            if (status != XR_LIR_VALUE_LAYOUT_OK) return status;
+        } else if (shape.kind != XR_LIR_TYPE_SLICE)
             return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
     }
     return XR_LIR_VALUE_LAYOUT_OK;
@@ -305,9 +310,15 @@ static XrLirValueLayoutStatus composite_spec(const XrLirModule *module, XrLirVal
         return XR_LIR_VALUE_LAYOUT_OK;
     }
     if (shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
-        if (!shape.count || shape.element != XR_LIR_U8) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
-        spec->kind = XRT_VALUE_FIXED_U8;
-        spec->count = spec->size = shape.count; spec->alignment = 1;
+        if (!shape.count || !xr_lir_fixed_element_size(shape.element)) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        XrtValuePlanSpec element;
+        const XrtValuePlan *plan = dependency(set, shape.element);
+        if (xrt_value_plan_view(plan, &element) != XRT_MANAGED_OK) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
+        spec->kind = XRT_VALUE_FIXED_INT;
+        spec->count = shape.count;
+        spec->element = plan;
+        spec->alignment = element.alignment;
+        spec->size = (size_t)shape.count * element.size;
         return XR_LIR_VALUE_LAYOUT_OK;
     }
     if (shape.kind == XR_LIR_TYPE_NULLABLE) {

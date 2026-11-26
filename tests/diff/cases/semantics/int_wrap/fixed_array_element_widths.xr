@@ -1,0 +1,24 @@
+// anchor: fixed-array-element-widths
+// Fixed storage repeats the element named by its annotation. A u64 element
+// keeps eight bytes and a u8 element keeps one, so reads, explicit literals,
+// repeat literals and by-value parameters must agree on both backends.
+fn total(xs: [u64; 4]) -> u64 {
+    return xs[0] + xs[1] + xs[2] + xs[3]
+}
+
+fn main() {
+    var lanes: [u64; 4] = [11, 12, 13, 14]
+    print("len=" + string(len(lanes) as i64))
+    print("total=" + string(total(lanes) as i64))
+    print("lane2=" + string(lanes[2] as i64))
+    var index = 3
+    print("dyn=" + string(lanes[index] as i64))
+    var wide: u64 = 9007199254740993
+    var mixed: [u64; 2] = [wide, 1]
+    print("wide=" + string(mixed[0] as i64) + "," + string(mixed[1] as i64))
+    var repeat: [u64; 3] = [7; 3]
+    print("repeat=" + string(repeat[0] as i64) + "," + string(repeat[2] as i64))
+    var bytes: [u8; 3] = [250, 251, 252]
+    print("bytes=" + string(bytes[0] as i64) + "," + string(bytes[2] as i64))
+}
+main()

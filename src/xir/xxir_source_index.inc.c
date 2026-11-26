@@ -18,9 +18,9 @@ static bool source_index_get(SourceContext *ctx, AstNode *node, SourceValue *val
     if (!source_array_receiver(ctx, receiver, index, false, &container)) return false;
     if(xr_xir_type_is_fixed_array(&ctx->types,container.type)) {
         if(!source_plan_expression(ctx,index,(SourceExpectedType){true,XR_XIR_I64,false,false},&key))return false;
-        if(key.type!=XR_XIR_I64)return source_fail(ctx,index,XR_XIR_BAD_TYPE,"fixed byte index requires exact i64");
+        if(key.type!=XR_XIR_I64)return source_fail(ctx,index,XR_XIR_BAD_TYPE,"fixed array index requires exact i64");
         return source_recipe_record(ctx,(XrXirInstruction){.op=XR_XIR_FIXED_ARRAY_GET,
-            .type=XR_XIR_U8,.args={container.id,key.id}},value);
+            .type=xr_xir_fixed_array_element(&ctx->types,container.type),.args={container.id,key.id}},value);
     }
     if (xr_xir_type_is_pointer(&ctx->types,container.type)) {
         return source_pointer_access(ctx,node,container.type,false) &&

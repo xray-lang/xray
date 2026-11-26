@@ -540,7 +540,7 @@ static void aggregate_call_failures(void) {
 }
 
 static void aggregate_bank_failures(void) {
-    XrPodType type = xr_rbc_fixed_type(17);
+    XrPodType type = xr_rbc_fixed_type(17, XR_POD_U8);
     XrRbcAggregateValue home = {0, 0};
     XrRbcArrayLocation operands[18] = {{0}};
     operands[17].index = 2;

@@ -7,24 +7,26 @@
  * xrbc_nullable_execute.inc.c - Inline typed values in indexed aggregate homes
  */
 static void xr_rbc_aggregate_pack(XrPodType type, const uint8_t *home, uint8_t *bytes) {
-    if (type.kind != XR_POD_FIXED_U8 || type.count > XR_RBC_AGGREGATE_INLINE_SCALARS) {
+    uint32_t width = xr_rbc_pod_scalar_size(type.element);
+    if (type.kind != XR_POD_FIXED_INT || type.count > XR_RBC_AGGREGATE_INLINE_SCALARS || !width) {
         memcpy(bytes, home, type.physical.size);
         return;
     }
     for (uint32_t n = 0; n < type.count; ++n) {
         uint64_t bits;
         memcpy(&bits, home + (size_t)n * sizeof(bits), sizeof(bits));
-        bytes[n] = (uint8_t)bits;
+        xr_rbc_fixed_store(bytes + (size_t)n * width, width, bits);
     }
 }
 
 static void xr_rbc_aggregate_unpack(XrPodType type, const uint8_t *bytes, uint8_t *home) {
-    if (type.kind != XR_POD_FIXED_U8 || type.count > XR_RBC_AGGREGATE_INLINE_SCALARS) {
+    uint32_t width = xr_rbc_pod_scalar_size(type.element);
+    if (type.kind != XR_POD_FIXED_INT || type.count > XR_RBC_AGGREGATE_INLINE_SCALARS || !width) {
         memcpy(home, bytes, type.physical.size);
         return;
     }
     for (uint32_t n = 0; n < type.count; ++n) {
-        uint64_t bits = bytes[n];
+        uint64_t bits = xr_rbc_fixed_load(bytes + (size_t)n * width, width);
         memcpy(home + (size_t)n * sizeof(bits), &bits, sizeof(bits));
     }
 }

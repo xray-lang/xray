@@ -123,7 +123,7 @@ tests/diff/cases/semantics/coro/task_transfer_return_map_set.xr  # module slot p
 tests/diff/cases/semantics/coro/task_transfer_return_native_class.xr  # error: constructed XIR failed checking without a recorded position (status 3)
 tests/diff/cases/semantics/coro/work_queue_native_methods.xr  # error: struct declaration contract is not admitted
 tests/diff/cases/semantics/default_params/explicit_null_does_not_use_default.xr  # instruction type or signature mismatch
-tests/diff/cases/semantics/destructure/tuple_fixed_width_unsigned.xr  # error: this fixed array element is not yet supported by the compiler
+tests/diff/cases/semantics/destructure/tuple_fixed_width_unsigned.xr  # error: integer member has no admitted value-operation contract
 tests/diff/cases/semantics/evaluation_order/e2_call_argument_order.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/evaluation_order/e4_short_circuit_points.xr  # error: expression cannot satisfy its declared type
 tests/diff/cases/semantics/evaluation_order/e5_e6_assignment_order.xr  # error: value mutation requires a mutable named root
@@ -198,7 +198,7 @@ tests/diff/cases/semantics/int/contextual_numeric_conversion.xr  # module slot p
 tests/diff/cases/semantics/int/enum_ordinal_conversion.xr  # error: numeric cast requires a concrete numeric operand
 tests/diff/cases/semantics/int/wrapping_fixed_width.xr  # module slot payload type is not supported by LIR lowering yet
 tests/diff/cases/semantics/int_wrap/exact_integer_bit_intrinsics.xr  # error: integer operation requires its exact ordinary declaration
-tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr  # error: this fixed array element is not yet supported by the compiler
+tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr  # error: indexed writable receiver is not an Array or Map
 tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr  # error: null requires an exact nullable context
 tests/diff/cases/semantics/int_wrap/int_as_truncation.xr  # module slot payload type is not supported by LIR lowering yet
 tests/diff/cases/semantics/int_wrap/int_safe_methods.xr  # XOR_INT is not supported by LIR lowering yet
@@ -250,7 +250,7 @@ tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr  # error: na
 tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr  # error: omitted field requires an accessible declaration default
 tests/diff/cases/semantics/oop/class_field_copy_ref_local.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/oop/class_field_default_initializers.xr  # error: a derived class requires an explicit constructor
-tests/diff/cases/semantics/oop/class_fixed_array_field_storage.xr  # error: this fixed array element is not yet supported by the compiler
+tests/diff/cases/semantics/oop/class_fixed_array_field_storage.xr  # error: class field carrier is not implemented
 tests/diff/cases/semantics/oop/class_method_self_signature.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/oop/class_native_heap_instance.xr  # error: method declaration contract is not admitted
 tests/diff/cases/semantics/oop/class_native_receiver_as_value.xr  # error: method declaration contract is not admitted

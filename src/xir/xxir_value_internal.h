@@ -106,6 +106,7 @@ typedef struct XirTuple {
 } XirTuple;
 typedef struct XirFixedArray {
     XirObject object;
+    /* Element count; the owned extent is length * element width bytes. */
     uint32_t length;
     uint8_t *bytes;
 } XirFixedArray;

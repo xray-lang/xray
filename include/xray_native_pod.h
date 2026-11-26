@@ -19,7 +19,9 @@ typedef enum XrPodScalar {
     XR_POD_F32, XR_POD_F64, XR_POD_SCALAR_COUNT
 } XrPodScalar;
 typedef struct XrPodLayout { uint32_t size, alignment, scalar_count; } XrPodLayout;
-typedef enum XrPodTypeKind { XR_POD_FIXED_U8 = 1, XR_POD_NULLABLE } XrPodTypeKind;
+/* XR_POD_FIXED_INT repeats count scalar elements of width physical.alignment;
+ * element is the scalar ID, never a constructed aggregate ordinal. */
+typedef enum XrPodTypeKind { XR_POD_FIXED_INT = 1, XR_POD_NULLABLE } XrPodTypeKind;
 typedef struct XrPodType {
     XrPodTypeKind kind;
     uint32_t count;

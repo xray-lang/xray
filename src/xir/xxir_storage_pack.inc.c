@@ -31,12 +31,15 @@ static XrXirValueStatus storage_pack_leaf(StoragePack *pack,
     if(xr_xir_type_is_fixed_array(types,type)) {
         if(!bytes || !xr_xir_value_argument(value,pack->admission->arena,type))return XR_XIR_VALUE_BAD_ARGUMENT;
         const XirFixedArray *fixed=(const XirFixedArray *)object_pointer(value);
+        uint32_t width=xr_xir_fixed_array_element_size(xr_xir_fixed_array_element(types,type));
+        uint64_t extent=(uint64_t)fixed->length*width;
+        if(!width || !extent || extent>SIZE_MAX)return XR_XIR_VALUE_BAD_ARGUMENT;
         if(!admission_is_compile(pack->admission)) {
-            if(fixed->length>pack->admission->work || !xr_xir_domain_work(pack->admission->domain,fixed->length))
+            if(extent>pack->admission->work || !xr_xir_domain_work(pack->admission->domain,extent))
                 return XR_XIR_VALUE_LIMIT;
-            pack->admission->work-=fixed->length;
+            pack->admission->work-=extent;
         }
-        memcpy(bytes,fixed->bytes,fixed->length);return XR_XIR_VALUE_OK;
+        memcpy(bytes,fixed->bytes,(size_t)extent);return XR_XIR_VALUE_OK;
     }
     if (!xr_xir_compile_type_arena_layout(pack->admission->arena,type,&layout) ||
         layout.size > sizeof(value->payload) || (layout.size && !bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;

@@ -14,8 +14,12 @@ static uint32_t fixed_raw_word(XrRbcOp op, uint32_t a, uint32_t b, int64_t immed
     return word;
 }
 
-static void test_raw_fixed_values(uint32_t count, bool spills) {
-    XrPodType type = xr_rbc_fixed_type(count);
+static void test_raw_fixed_values(uint32_t count, uint32_t element, bool spills) {
+    XrPodType type = xr_rbc_fixed_type(count, element);
+    /* Every element keeps only its declared width; a value with bits above a
+     * byte proves the store and the read agree on the wider element. */
+    const uint64_t value = element == XR_POD_U64 ? UINT64_C(0x100000001) :
+        element == XR_POD_U32 ? UINT64_C(0x10001) : 37;
     XrRbcAggregateLayout layout = {0};
     CHECK(xr_rbc_aggregate_layout(type, &layout));
     XrRbcAggregateValue homes[] = {{0, 0}, {0, layout.size}};
@@ -31,7 +35,7 @@ static void test_raw_fixed_values(uint32_t count, bool spills) {
     };
     uint32_t code[12];
     size_t size = 0;
-    code[size++] = fixed_raw_word(XR_RBC_LOADI, 0, 0, 37);
+    code[size++] = fixed_raw_word(XR_RBC_LOADK, 0, 0, 0);
     if (spills) code[size++] = fixed_raw_word(XR_RBC_SPILL, 0, 0, 0);
     code[size++] = fixed_raw_word(XR_RBC_AGGREGATE_ACCESS, 0, 0, 0);
     code[size++] = fixed_raw_word(XR_RBC_AGGREGATE_ACCESS, 0, 0, 1);
@@ -39,27 +43,27 @@ static void test_raw_fixed_values(uint32_t count, bool spills) {
     if (spills) code[size++] = fixed_raw_word(XR_RBC_SPILL, 0, 0, 0);
     code[size++] = fixed_raw_word(XR_RBC_AGGREGATE_ACCESS, 0, 0, 0);
     code[size++] = count <= INT16_MAX ? fixed_raw_word(XR_RBC_LOADI, 1, 0, count - 1) :
-        fixed_raw_word(XR_RBC_LOADK, 1, 0, 0);
+        fixed_raw_word(XR_RBC_LOADK, 1, 0, 1);
     if (spills) code[size++] = fixed_raw_word(XR_RBC_SPILL, 1, 0, 1);
     code[size++] = fixed_raw_word(XR_RBC_AGGREGATE_ACCESS, 0, 0, 2);
     if (spills) code[size++] = fixed_raw_word(XR_RBC_RELOAD, 2, 0, 0);
     code[size++] = fixed_raw_word(XR_RBC_RET, 2, 0, 0);
     CHECK(size <= sizeof(code) / sizeof(*code));
-    uint64_t index = count - 1;
+    uint64_t constants[2] = {value, count - 1};
     XrRbcFunction function = {.code = code, .code_count = size, .register_count = 3,
-        .constants = &index, .constant_count = 1, .spill_count = spills ? 2u : 0u,
+        .constants = constants, .constant_count = 2, .spill_count = spills ? 2u : 0u,
         .aggregate_values = homes, .aggregate_value_count = 2, .aggregate_size = (size_t)layout.size * 2,
         .aggregate_accesses = accesses, .aggregate_access_count = 3,
         .aggregate_operands = operands, .aggregate_operand_count = (size_t)count + 1};
     XrRbcModule module = {.functions = &function, .function_count = 1,
         .aggregate_types = &type, .aggregate_type_count = 1};
     uint64_t bits = 0;
-    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_OK && bits == 37);
+    CHECK(execute(&module, 0, NULL, 0, &bits) == XR_RBC_OK && bits == value);
     xr_free(operands);
 }
 
 static void test_raw_fixed_failures(void) {
-    XrPodType type = xr_rbc_fixed_type(1);
+    XrPodType type = xr_rbc_fixed_type(1, XR_POD_U8);
     XrRbcAggregateValue home = {0, 0};
     XrRbcArrayLocation operands[] = {{0, false}, {1, false}};
     XrRbcAggregateAccess accesses[] = {
@@ -119,7 +123,7 @@ static void test_raw_fixed_failures(void) {
 }
 
 static void test_raw_fixed_selected_edges(void) {
-    XrPodType type = xr_rbc_fixed_type(17);
+    XrPodType type = xr_rbc_fixed_type(17, XR_POD_U8);
     XrRbcAggregateValue homes[] = {{0, 0}, {0, 17}, {0, 34}};
     XrRbcArrayLocation operands[18];
     for (uint32_t n = 0; n < 18; ++n) operands[n] = (XrRbcArrayLocation){1, false};
@@ -157,7 +161,7 @@ static void test_raw_fixed_selected_edges(void) {
 }
 
 static void test_raw_fixed_callee_growth(void) {
-    XrPodType type = xr_rbc_fixed_type(256);
+    XrPodType type = xr_rbc_fixed_type(256, XR_POD_U8);
     XrRbcAggregateValue home = {0, 0};
     XrRbcArrayLocation operands[257] = {{0}};
     operands[256].index = 1;
@@ -193,10 +197,14 @@ static void test_raw_fixed_callee_growth(void) {
 
 static void test_raw_fixed_aggregate_execution(void) {
     const uint32_t counts[] = {1, 11, 16, 17, 256, 65535};
-    for (size_t n = 0; n < sizeof(counts) / sizeof(*counts); ++n) {
-        test_raw_fixed_values(counts[n], false);
-        test_raw_fixed_values(counts[n], true);
-    }
+    /* Every admitted element width runs the same lane and packed paths, so a
+     * wider element cannot silently keep a byte-only store. */
+    const uint32_t elements[] = {XR_POD_U8, XR_POD_U32, XR_POD_U64};
+    for (size_t e = 0; e < sizeof(elements) / sizeof(*elements); ++e)
+        for (size_t n = 0; n < sizeof(counts) / sizeof(*counts); ++n) {
+            test_raw_fixed_values(counts[n], elements[e], false);
+            test_raw_fixed_values(counts[n], elements[e], true);
+        }
     test_raw_fixed_failures();
     test_raw_fixed_selected_edges();
     test_raw_fixed_callee_growth();

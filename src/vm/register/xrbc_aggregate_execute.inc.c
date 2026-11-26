@@ -56,8 +56,11 @@ static XrRbcStatus xr_rbc_aggregate_state_step(const XrRbcModule *module, XrRbcS
     XrRbcAggregateValue value = f->aggregate_values[read ? access.destination : access.source];
     XrPodType type = module->aggregate_types[value.type];
     uint8_t *bytes = xr_rbc_aggregate_value(stack, frame, value);
-    uint8_t lanes[XR_RBC_AGGREGATE_INLINE_SCALARS];
-    bool packed = type.kind == XR_POD_FIXED_U8 && type.count <= XR_RBC_AGGREGATE_INLINE_SCALARS;
+    /* One lane is one eight-byte scalar. A wider element repeats inside the
+     * same lane count, so the physical scratch spans the whole extent and the
+     * State kernel's alignment check sees an eight-byte-aligned buffer. */
+    _Alignas(8) uint8_t lanes[XR_RBC_AGGREGATE_INLINE_SCALARS * sizeof(uint64_t)];
+    bool packed = type.kind == XR_POD_FIXED_INT && type.count <= XR_RBC_AGGREGATE_INLINE_SCALARS;
     void *payload = packed ? lanes : bytes;
     if (read) {
         /* Admission and capability flow prove this is a POD-only plan. The
@@ -113,16 +116,18 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, 
     XR_CHECK(xr_rbc_aggregate_layout(type, &layout), "prepared aggregate has an exact physical layout");
     uint8_t *bytes = xr_rbc_aggregate_value(stack, frame, value);
     if (access.operation == XR_RBC_AGGREGATE_NEW) {
-        for (uint32_t n = 0; type.kind == XR_POD_FIXED_U8 && n < access.count; ++n) {
+        uint32_t width = xr_rbc_pod_scalar_size(type.element);
+        for (uint32_t n = 0; type.kind == XR_POD_FIXED_INT && n < access.count; ++n) {
             XrRbcArrayLocation operand = f->aggregate_operands[access.first + n];
-            if (xr_rbc_aggregate_scalar(stack, frame, operand)->bits > UINT8_MAX)
+            if (width < 8 && xr_rbc_aggregate_scalar(stack, frame, operand)->bits >=
+                (UINT64_C(1) << (width * 8)))
                 xrt_native_managed_failure(XRT_MANAGED_ARGUMENT,source);
         }
         for (uint32_t n = 0; n < access.count; ++n) {
             uint64_t bits = xr_rbc_aggregate_scalar(stack, frame, f->aggregate_operands[access.first + n])->bits;
             if (layout.scalar_slots)
                 memcpy(bytes + (size_t)n * sizeof(bits), &bits, sizeof(bits));
-            else bytes[n] = (uint8_t)bits;
+            else xr_rbc_fixed_store(bytes + (size_t)n * width, width, bits);
         }
     } else if (access.operation == XR_RBC_AGGREGATE_GET) {
         uint64_t offset = xr_rbc_aggregate_scalar(stack, frame, f->aggregate_operands[access.first])->bits;
@@ -130,7 +135,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_aggregate_step(const XrRbcModule *module, 
         uint64_t bits = 0;
         if (layout.scalar_slots)
             memcpy(&bits, bytes + (size_t)offset * sizeof(bits), sizeof(bits));
-        else bits = bytes[(size_t)offset];
+        else bits = xr_rbc_fixed_load(bytes + (size_t)offset * xr_rbc_pod_scalar_size(type.element),
+            xr_rbc_pod_scalar_size(type.element));
         xr_rbc_aggregate_scalar(stack, frame, access.result)->bits = bits;
     } else {
         uint8_t *original = xr_rbc_aggregate_value(stack, frame, f->aggregate_values[access.source]);

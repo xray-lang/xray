@@ -181,9 +181,10 @@ static bool library_catalog_state_slot(const XrXirTypes *types,const XrXirDeclar
     const XrXirSlot *slot=&declarations->slots[ordinal];
     const XrXirTypeNode *node=xr_xir_type_node(types,slot->type);
     if (node && node->kind==XR_XIR_TYPE_FIXED_ARRAY) {
-        if (node->element!=XR_XIR_U8 || !node->parameter_count || node->parameter_count>65535 ||
-            node->parameters || node->result!=XR_XIR_UNIT || node->flags || node->parameter_span ||
-            node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
+        if (!xr_xir_fixed_array_element_admitted(node->element) || !node->parameter_count ||
+            node->parameter_count>65535 || node->parameters || node->result!=XR_XIR_UNIT ||
+            node->flags || node->parameter_span || node->nominal.declaration ||
+            node->nominal.arguments || node->nominal.argument_count ||
             node->nominal.fields || node->nominal.field_count) return false;
     } else if (slot->type!=XR_XIR_F32 && slot->type!=XR_XIR_F64)
         return library_catalog_state_type(types,slot->type);

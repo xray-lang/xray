@@ -15,7 +15,7 @@
 #include "xlir_record_identity.inc.c"
 
 static bool lir_fixed_shape(XrLirTypeView shape) {
-    return shape.kind == XR_LIR_TYPE_FIXED_ARRAY && shape.element == XR_LIR_U8 &&
+    return shape.kind == XR_LIR_TYPE_FIXED_ARRAY && xr_lir_fixed_element_size(shape.element) &&
         shape.count && shape.count <= 65535;
 }
 
@@ -239,7 +239,8 @@ static bool lir_shape_layout(const XrLirModule *m, XrLirTypeView shape, const Xr
         return true;
     }
     if (lir_fixed_shape(shape)) {
-        *output = (XrLirTypeLayout){shape.count, 1, shape.count, false};
+        uint32_t width = xr_lir_fixed_element_size(shape.element);
+        *output = (XrLirTypeLayout){shape.count * width, width, shape.count, false};
         return true;
     }
     if (shape.kind == XR_LIR_TYPE_SUM) return lir_sum_shape(m, shape, fields, variants, ordinal, output);
@@ -794,7 +795,8 @@ XR_FUNC XrLirStatus xr_lir_type_scalar(const XrLirModule *m, XrLirType type,
     while (type >= XR_LIR_TYPE_COUNT) {
         XrLirTypeView shape = m->types[type - XR_LIR_TYPE_COUNT].shape;
         if (shape.kind == XR_LIR_TYPE_FIXED_ARRAY) {
-            *output = (XrLirScalarPart){XR_LIR_U8, offset + ordinal};
+            *output = (XrLirScalarPart){shape.element,
+                offset + (uint64_t)ordinal * xr_lir_fixed_element_size(shape.element)};
             return XR_LIR_OK;
         }
         if (!ordinal) { *output = (XrLirScalarPart){XR_LIR_U8, offset}; return XR_LIR_OK; }

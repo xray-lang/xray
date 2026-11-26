@@ -179,8 +179,54 @@ static bool source_array_class_context(SourceContext *ctx,ArrayLiteralNode *lite
     if(literal->count)*output=(SourceExpectedType){true,common,false,true};
     return true;
 }
+/* A fixed array owns its length in the type, so a literal either repeats one
+ * value exactly length times or lists exactly length elements. Both spellings
+ * evaluate every element against the element type before one construction. */
+static bool source_fixed_array_literal(SourceContext *ctx, AstNode *node,
+    SourceExpectedType expected, SourceValue *value) {
+    ArrayLiteralNode *literal = &node->as.array_literal;
+    uint32_t length = xr_xir_fixed_array_length(&ctx->types, expected.type);
+    XrXirType element = xr_xir_fixed_array_element(&ctx->types, expected.type);
+    if (!length || !xr_xir_fixed_array_element_admitted(element))
+        return source_fail_feature(ctx, node, XR_XIR_BAD_TYPE, "this fixed array element");
+    SourceExpectedType element_type = {true, element, false, expected.inferred};
+    if (literal->is_repeat) {
+        SourceInteger repeat = {0};
+        if (!literal->repeat_value || !literal->repeat_count ||
+            !source_direct_integer(ctx, literal->repeat_count, &repeat))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "fixed array repeat needs one counted value");
+        if (!repeat.present || repeat.negative || repeat.magnitude != length)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "fixed array repeat length does not match its type");
+        SourceValue fill = {0};
+        if (!source_collection_expression(ctx, literal->repeat_value, element_type, expected.inferred, &fill))
+            return false;
+        if (fill.type != element)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "fixed array repeat value must have the element type");
+        SourceValue *elements = source_alloc(ctx, length, sizeof(*elements));
+        if (!elements) return false;
+        for (uint32_t i = 0; i < length; ++i) elements[i] = fill;
+        return source_recipe_group(ctx, (XrXirInstruction){.op = XR_XIR_FIXED_ARRAY_NEW,
+            .type = expected.type}, elements, length, value);
+    }
+    if (literal->count < 0 || (literal->count && !literal->elements))
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "fixed array literal needs an admitted element list");
+    if ((uint32_t)literal->count != length)
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "fixed array literal element count does not match its length");
+    SourceValue *elements = source_alloc(ctx, length, sizeof(*elements));
+    if (!elements) return false;
+    for (uint32_t i = 0; i < length; ++i) {
+        if (!source_collection_expression(ctx, literal->elements[i], element_type, expected.inferred, &elements[i]))
+            return false;
+        if (elements[i].type != element)
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "fixed array literal element must have the element type");
+    }
+    return source_recipe_group(ctx, (XrXirInstruction){.op = XR_XIR_FIXED_ARRAY_NEW,
+        .type = expected.type}, elements, length, value);
+}
 static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     ArrayLiteralNode *literal = &node->as.array_literal;
+    if (expected.present && xr_xir_type_is_fixed_array(&ctx->types, expected.type))
+        return source_fixed_array_literal(ctx, node, expected, value);
     if (literal->is_repeat || literal->count < 0 ||
         (literal->count && !literal->elements))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal needs an admitted explicit element list");

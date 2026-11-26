@@ -219,7 +219,7 @@ static bool nullable_valid(const XrtValuePlanSpec *spec) {
     XrtValueKind kind = element->view.kind;
     size_t scalar_size, scalar_alignment;
     if (!scalar_layout(kind, &scalar_size, &scalar_alignment) && kind != XRT_VALUE_STRING && !xrt_value_kind_has_fields(kind) &&
-        kind != XRT_VALUE_CLASS && kind != XRT_VALUE_NULLABLE && kind != XRT_VALUE_FIXED_U8 &&
+        kind != XRT_VALUE_CLASS && kind != XRT_VALUE_NULLABLE && kind != XRT_VALUE_FIXED_INT &&
         !nullable_array_kind(kind)) return false;
     size_t end = spec->nullable.payload_offset + element->view.size;
     if (end > SIZE_MAX - (spec->alignment - 1) ||
@@ -316,6 +316,16 @@ static bool sum_valid(const XrtValuePlanSpec *spec) {
      * the common zero/copy/drop paths may treat the whole value as bytes. */
     return spec->owned_count == 0;
 }
+/* Fixed storage repeats one unsigned scalar element. Its extent and alignment
+ * are the element's, so a wider element never restates a second layout rule. */
+static bool fixed_int_valid(const XrtValuePlanSpec *spec) {
+    XrtValuePlanSpec element;
+    if (!spec->element || !spec->count || spec->count > 65535 ||
+        xrt_value_plan_view(spec->element, &element) != XRT_MANAGED_OK) return false;
+    return xrt_value_kind_is_fixed_element(element.kind) && !element.owned_count &&
+        element.size && element.size <= 8 &&
+        spec->size == spec->count * element.size && spec->alignment == element.alignment;
+}
 static bool spec_valid(const XrtValuePlanSpec *spec) {
     if (!spec->alignment || spec->alignment > XR_ALIGNMENT_LIMIT || (spec->alignment & (spec->alignment - 1)) ||
         spec->size % spec->alignment || !lease_valid(spec->code) ||
@@ -326,9 +336,9 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
         (spec->kind != XRT_VALUE_SUM && (spec->sum.variants || spec->sum.variant_count ||
             spec->sum.tag_offset || spec->sum.tag_size || spec->sum.payload_offset)) ||
         (spec->kind != XRT_VALUE_CELL && spec->kind != XRT_VALUE_ARRAY_INLINE &&
-            spec->kind != XRT_VALUE_CLASS && spec->element) ||
+            spec->kind != XRT_VALUE_CLASS && spec->kind != XRT_VALUE_FIXED_INT && spec->element) ||
         (spec->kind != XRT_VALUE_CLASS && (spec->class_parent || spec->class_storage)) ||
-        (spec->kind != XRT_VALUE_FIXED_U8 && spec->count)) return false;
+        (spec->kind != XRT_VALUE_FIXED_INT && spec->count)) return false;
     for (size_t i = 0; i < spec->owned_count; ++i) {
         size_t offset = spec->owned_offsets[i];
         if (spec->alignment < alignof(XrtManagedHeader *) || offset % alignof(XrtManagedHeader *) ||
@@ -358,8 +368,7 @@ static bool spec_valid(const XrtValuePlanSpec *spec) {
     if (spec->owned_count) return false;
     if (spec->kind == XRT_VALUE_SLICE_I64 || spec->kind == XRT_VALUE_SLICE_U8)
         return spec->size == sizeof(XrtReadonlyArraySlice) && spec->alignment == alignof(XrtReadonlyArraySlice);
-    if (spec->kind == XRT_VALUE_FIXED_U8) return spec->count && spec->count <= 65535 &&
-        spec->size == spec->count && spec->alignment == 1;
+    if (spec->kind == XRT_VALUE_FIXED_INT) return fixed_int_valid(spec);
     size_t size = 0, alignment = 0;
     return scalar_layout(spec->kind, &size, &alignment) && spec->size == size && spec->alignment == alignment;
 }

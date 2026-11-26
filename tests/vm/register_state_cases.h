@@ -228,10 +228,11 @@ static void test_raw_state_fused_read_entries(void) {
 }
 
 static void test_raw_fixed_state_frontier(void) {
-    XrtValueImageType type = {.kind=XRT_VALUE_FIXED_U8,.count=17,.size=17,.alignment=1};
-    XrtValueImage values = {.types=&type,.type_count=1};
+    XrtValueImageType types[2] = {{.kind=XRT_VALUE_U8,.size=1,.alignment=1},
+        {.kind=XRT_VALUE_FIXED_INT,.count=17,.size=17,.alignment=1,.element=1}};
+    XrtValueImage values = {.types=types,.type_count=2};
     XrtModuleSpec owner = {0};
-    XrtModuleSlotSpec slot = {.type=1,.size=17, .alignment=1};
+    XrtModuleSlotSpec slot = {.type=2,.size=17, .alignment=1};
     XrtModuleLayoutSpec spec = {.values=&values, .modules=&owner,
         .module_count=1, .slots=&slot, .slot_count=1, .payload_size=17,
         .payload_alignment=1};
@@ -251,7 +252,7 @@ static void test_raw_fixed_state_frontier(void) {
     function.code_count = 4;
     immediate(code, 0, XR_RBC_MODULE_BEGIN, 0, 0);
     immediate(code, 1, XR_RBC_STATE_REFERENCE, 2, 0);
-    emit(code, 2, XR_RBC_STATE_READ, 1, 2, XRT_VALUE_FIXED_U8);
+    emit(code, 2, XR_RBC_STATE_READ, 1, 2, XRT_VALUE_FIXED_INT);
     emit(code, 3, XR_RBC_RET, 1, 0, 0);
     reject_prepare(&module, 0, NULL, 0);
 }

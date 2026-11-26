@@ -48,10 +48,11 @@ static const XrtValueImageType types[] = {
         .nullable_element=11,.nullable_payload=8},
     {.kind=XRT_VALUE_RECORD,.size=1,.alignment=1},
     {.kind=XRT_VALUE_NULLABLE,.size=2,.alignment=1,.nullable_element=13,.nullable_payload=1},
-    {.kind=XRT_VALUE_FIXED_U8,.size=3,.alignment=1,.count=3},
+    {.kind=XRT_VALUE_U8,.size=1,.alignment=1},
+    {.kind=XRT_VALUE_FIXED_INT,.size=3,.alignment=1,.count=3,.element=15},
     {.kind=XRT_VALUE_TUPLE,.size=16,.alignment=8,.first_field=3,.field_count=2}
 };
-static const XrtValueImage image = {types,16,fields,5,NULL,0,owned,11,"leftrightscore",14,NULL,0};
+static const XrtValueImage image = {types,17,fields,5,NULL,0,owned,11,"leftrightscore",14,NULL,0};
 typedef struct Audit {
     size_t leases, bytes, blocks, calls, observed, fail_at;
     void *watched[2];
@@ -442,7 +443,7 @@ static void allocation_failures(void) {
 }
 static void scalar_admission(void) {
     Audit audit = {0}; XrtBillingOwner *billing = billing_new(&audit,SIZE_MAX);
-    XrtModuleLayout *layout = layout_new(billing,(uint32_t[]){3,4,14,15,16},5,false);
+    XrtModuleLayout *layout = layout_new(billing,(uint32_t[]){3,4,14,16,17},5,false);
     XrtModuleState *state = NULL; OK(xrt_module_state_new(layout,billing,&state)); OK(xrt_module_begin(state,0));
     uint8_t bad = 2; BAD(xrt_module_initialize(state,0,&bad)); bad = 1; OK(xrt_module_initialize(state,0,&bad));
     int64_t rune = 0xd800; BAD(xrt_module_initialize(state,1,&rune)); rune = 0x10ffff; OK(xrt_module_initialize(state,1,&rune));

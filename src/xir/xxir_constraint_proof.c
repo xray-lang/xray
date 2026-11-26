@@ -208,7 +208,8 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
              * transfer proof. A kind tag alone does not authenticate storage. */
             if (node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
                 node->nominal.fields || node->nominal.field_count) return XR_XIR_BAD_STRUCTURE;
-            if (node->element != XR_XIR_U8 || !node->parameter_count || node->parameter_count > 65535 ||
+            if (!xr_xir_fixed_array_element_admitted(node->element) || !node->parameter_count ||
+                node->parameter_count > 65535 ||
                 node->parameters || node->result != XR_XIR_UNIT || node->flags || node->parameter_span)
                 return XR_XIR_BAD_TYPE;
         }

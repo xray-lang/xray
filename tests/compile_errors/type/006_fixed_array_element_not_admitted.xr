@@ -1,0 +1,8 @@
+// Fixed storage repeats one admitted unsigned element. An i64 element is not
+// one of them, so the annotation is refused at the type instead of being
+// silently widened or lowered as bytes.
+//
+// Positive coverage for the admitted u8/u32/u64 elements lives in the
+// differential cases and the fixed-array LIR, VM and XIR suites.
+var lanes: [i64; 2] = [1, 2]
+print(lanes[0])

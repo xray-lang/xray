@@ -315,8 +315,12 @@ typedef struct XrRbcFunctionCallableParameters {
     uint32_t count;
 } XrRbcFunctionCallableParameters;
 
-static inline XrPodType xr_rbc_fixed_type(uint32_t count) {
-    return (XrPodType){XR_POD_FIXED_U8, count, 0, {count, 1, count}};
+static inline XrPodType xr_rbc_fixed_type(uint32_t count, uint32_t element) {
+    XrPodLayout scalar;
+    uint32_t width = element < XR_POD_SCALAR_COUNT &&
+        xr_pod_scalar_layout((XrPodScalar)element, &scalar) ? scalar.size : 0;
+    return (XrPodType){XR_POD_FIXED_INT, count, element,
+        {count * width, width ? width : 1, count}};
 }
 
 typedef struct XrRbcCodeLease {

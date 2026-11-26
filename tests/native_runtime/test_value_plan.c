@@ -188,12 +188,15 @@ static void retain_failure_and_alias(void) {
     xrt_value_drop(plan, &empty);
     CHECK(atomic_load(&f.audit.calls) == calls);
     CHECK(xrt_billing_owner_stats(f.billing).bytes < before.bytes);
-    XrtValuePlan *pod = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_FIXED_U8,.size=8,.alignment=1,.count=8});
+    XrtValuePlan *octet = scalar(&f,XRT_VALUE_U8,1,1);
+    XrtValuePlan *pod = new_plan(&f,(XrtValuePlanSpec){.kind=XRT_VALUE_FIXED_INT,.size=8,.alignment=1,
+        .count=8,.element=octet});
     unsigned char overlapping[16]; memset(overlapping, 0x5a, sizeof(overlapping));
     STATUS(xrt_value_copy_empty(pod, overlapping, overlapping+1), XRT_MANAGED_ARGUMENT);
     STATUS(xrt_value_move_empty(pod, overlapping+1, overlapping), XRT_MANAGED_ARGUMENT);
     for (size_t i = 0; i < sizeof(overlapping); ++i) CHECK(overlapping[i] == 0x5a);
-    xrt_value_plan_drop(pod); xrt_value_plan_drop(plan); fixture_done(&f);
+    xrt_value_plan_drop(pod); xrt_value_plan_drop(octet);
+    xrt_value_plan_drop(plan); fixture_done(&f);
     puts("inline partial retain rollback, duplicate real owners and overlap rejection passed");
 }
 static void nullable_values(void) {
@@ -340,6 +343,7 @@ static void function_shape_admission(void) {
 static void failures_and_admission(void) {
     Fixture f; fixture_init(&f,8192,false);
     XrtValuePlan *integer=scalar(&f,XRT_VALUE_I64,8,8), *text=reference(&f,XRT_VALUE_STRING);
+    XrtValuePlan *octet=scalar(&f,XRT_VALUE_U8,1,1);
     XrtValuePlan *array=reference(&f,XRT_VALUE_ARRAY_I64);
     XrtBillingStats before=xrt_billing_owner_stats(f.billing);
     CodeAudit audit={0}; CodeOwner *code=code_new(&audit);
@@ -392,7 +396,8 @@ static void failures_and_admission(void) {
     overflow=record; fields[0].name_length=SIZE_MAX;
     STATUS(xrt_value_plan_new(f.billing,&overflow,&empty),XRT_MANAGED_OVERFLOW); fields[0].name_length=5;
     same_bill(&f,before);
-    plain=(XrtValuePlanSpec){.kind=XRT_VALUE_FIXED_U8,.size=16000,.alignment=1,.count=16000,.code={code,code_retain,code_drop}};
+    plain=(XrtValuePlanSpec){.kind=XRT_VALUE_FIXED_INT,.size=16000,.alignment=1,.count=16000,
+        .element=octet,.code={code,code_retain,code_drop}};
     /* Names consume actual metadata bytes; the inline payload itself is not allocated. */
     char *large_name=xr_malloc(16000); CHECK(large_name); memset(large_name,'a',16000);
     fields[0]=(XrtValueSlotSpec){text,0,large_name,16000,0}; record.code=(XrtManagedLease){code,code_retain,code_drop};
@@ -404,7 +409,8 @@ static void failures_and_admission(void) {
     xrt_billing_owner_close(f.billing);
     STATUS(xrt_value_plan_new(f.billing,&plain,&empty),XRT_MANAGED_CLOSED); CHECK(!empty); same_bill(&f,before);
     code_drop(code); CHECK(atomic_load(&audit.finalized)==1);
-    xrt_value_plan_drop(array); xrt_value_plan_drop(text); xrt_value_plan_drop(integer); fixture_done(&f);
+    xrt_value_plan_drop(array); xrt_value_plan_drop(text); xrt_value_plan_drop(integer);
+    xrt_value_plan_drop(octet); fixture_done(&f);
     puts("metadata admission, allocation/quota/lease failures and exact cold refunds passed");
 }
 static void deep_metadata(void) {

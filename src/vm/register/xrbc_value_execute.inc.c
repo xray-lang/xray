@@ -512,7 +512,7 @@ static XrtManagedStatus rbc_value_payload(const XrRbcModule *module, XrRbcStack 
         const XrRbcFunction *function=&module->functions[activation->function];
         XrRbcAggregateValue value=function->aggregate_values[location.index];
         output->packed=module->aggregate_types[value.type];
-        output->lanes=output->packed.kind==XR_POD_FIXED_U8 && output->packed.count<=XR_RBC_AGGREGATE_INLINE_SCALARS;
+        output->lanes=output->packed.kind==XR_POD_FIXED_INT && output->packed.count<=XR_RBC_AGGREGATE_INLINE_SCALARS;
         output->address=xr_rbc_aggregate_value(stack,&stack->frames[activation->depth-1],value);
     }
     return XRT_MANAGED_OK;

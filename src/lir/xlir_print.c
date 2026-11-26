@@ -130,7 +130,8 @@ static void lir_print_type(LirPrinter *p, const XrLirModule *m, XrLirType type) 
         ++depth;
         type = view.element;
     }
-    if (view.kind == XR_LIR_TYPE_FIXED_ARRAY) lir_print_format(p, "[u8;%" PRIu32 "]", view.count);
+    if (view.kind == XR_LIR_TYPE_FIXED_ARRAY) lir_print_format(p, "[%s;%" PRIu32 "]",
+        view.element == XR_LIR_U32 ? "u32" : view.element == XR_LIR_U64 ? "u64" : "u8", view.count);
     else if (view.kind == XR_LIR_TYPE_CALLABLE) lir_print_format(p, "fn#%" PRIu32, type);
     else if (view.kind == XR_LIR_TYPE_CELL) lir_print_format(p, "cell#%" PRIu32, type);
     else if (view.kind == XR_LIR_TYPE_SUM) lir_print_format(p, "sum#%" PRIu32, type);

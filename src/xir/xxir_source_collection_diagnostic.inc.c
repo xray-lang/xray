@@ -26,7 +26,8 @@ static bool source_collection_type_text(SourceContext *ctx,XrValueFormatSink sin
         return xr_value_format_text(sink,">")!=0;
     }
     if(node.kind==XR_XIR_TYPE_FIXED_ARRAY) {
-        char text[40];int length=snprintf(text,sizeof(text),"[u8; %u]",node.parameter_count);
+        const char *element=node.element==XR_XIR_U32?"u32":node.element==XR_XIR_U64?"u64":"u8";
+        char text[40];int length=snprintf(text,sizeof(text),"[%s; %u]",element,node.parameter_count);
         return length>0 && (size_t)length<sizeof(text) && xr_value_format_write(sink,text,(size_t)length);
     }
     if(node.kind==XR_XIR_TYPE_NULLABLE)return source_collection_type_text(ctx,sink,node.element,depth+1) && xr_value_format_text(sink,"?");

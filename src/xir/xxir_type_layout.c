@@ -68,10 +68,11 @@ static XrXirStatus value_layout(const XrXirCompileContext *compile_context,
     }
     if (node->kind == XR_XIR_TYPE_UNION || node->kind == XR_XIR_TYPE_DATA_UNION) return XR_XIR_BAD_LAYOUT;
     if(node->kind==XR_XIR_TYPE_FIXED_ARRAY && context==XR_XIR_LAYOUT_STORAGE) {
-        if(node->element!=XR_XIR_U8 || !node->parameter_count ||
+        uint32_t width=xr_xir_fixed_array_element_size(node->element);
+        if(!width || !node->parameter_count ||
             node->parameters || node->result!=XR_XIR_UNIT || node->flags || node->parameter_span)
             return XR_XIR_BAD_LAYOUT;
-        *layout=(XrXirLayout){node->parameter_count,1};return XR_XIR_OK;
+        *layout=(XrXirLayout){node->parameter_count*width,width};return XR_XIR_OK;
     }
     if (!xr_xir_type_is_owned(types, type) || xr_xir_type_span(types, type) ||
         (xr_xir_type_is_nominal(types, type) && !xr_xir_type_is_class(types, type) &&

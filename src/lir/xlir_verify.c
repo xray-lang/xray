@@ -261,8 +261,8 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         }
         case XR_LIR_FIXED_ARRAY_GET: {
             XrLirTypeView shape;
-            return v->type == XR_LIR_U8 && b == XR_LIR_I64 &&
-                xr_lir_type_view(m, a, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_FIXED_ARRAY;
+            return b == XR_LIR_I64 && xr_lir_type_view(m, a, &shape) == XR_LIR_OK &&
+                shape.kind == XR_LIR_TYPE_FIXED_ARRAY && v->type == shape.element;
         }
         case XR_LIR_SUM_NEW: {
             const XrLirRecordField *fields = NULL; uint32_t field_count = 0;

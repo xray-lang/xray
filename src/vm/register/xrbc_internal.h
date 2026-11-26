@@ -11,6 +11,8 @@
 
 #include "xrbc.h"
 #include "xray_native_function.h"
+#include "base/xchecks.h"
+#include <string.h>
 enum { XR_RBC_FUNCTION_LANES = sizeof(XrtFunction) / sizeof(uint64_t) };
 _Static_assert(sizeof(XrtFunction) % sizeof(uint64_t) == 0 &&
     _Alignof(XrtFunction) <= _Alignof(uint64_t), "indexed callable storage fits complete register lanes");
@@ -29,6 +31,28 @@ static inline XrRbcFunctionScopes rbc_function_scopes(const XrRbcModule *module,
 
 enum { XR_RBC_ARRAY_FAMILY_COUNT = 4 };
 enum { XR_RBC_AGGREGATE_INLINE_SCALARS = 16 };
+
+/* One fixed element keeps its own natural width inside the aggregate bytes,
+ * exactly as the compiled aggregate and the runtime plan place it. */
+static inline uint32_t xr_rbc_pod_scalar_size(uint32_t element) {
+    XrPodLayout scalar;
+    return element < XR_POD_SCALAR_COUNT && xr_pod_scalar_layout((XrPodScalar)element, &scalar) ?
+        scalar.size : 0;
+}
+static inline void xr_rbc_fixed_store(uint8_t *at, uint32_t width, uint64_t bits) {
+    XR_CHECK(at && (width == 1 || width == 4 || width == 8),
+        "admitted fixed storage stores one admitted element width");
+    if (width == 1) { at[0] = (uint8_t)bits; return; }
+    if (width == 4) { uint32_t element = (uint32_t)bits; memcpy(at, &element, sizeof element); return; }
+    uint64_t element = bits; memcpy(at, &element, sizeof element);
+}
+static inline uint64_t xr_rbc_fixed_load(const uint8_t *at, uint32_t width) {
+    XR_CHECK(at && (width == 1 || width == 4 || width == 8),
+        "admitted fixed storage loads one admitted element width");
+    if (width == 1) return at[0];
+    if (width == 4) { uint32_t element = 0; memcpy(&element, at, sizeof element); return element; }
+    uint64_t element = 0; memcpy(&element, at, sizeof element); return element;
+}
 
 static inline bool xr_rbc_activation_size(const XrRbcFunction *function, size_t *environment,
     size_t *total) {
@@ -53,10 +77,10 @@ typedef struct XrRbcAggregateLayout {
 } XrRbcAggregateLayout;
 
 static inline bool xr_rbc_aggregate_layout(XrPodType type, XrRbcAggregateLayout *output) {
-    if (!output || (type.kind != XR_POD_FIXED_U8 && type.kind != XR_POD_NULLABLE) ||
+    if (!output || (type.kind != XR_POD_FIXED_INT && type.kind != XR_POD_NULLABLE) ||
         !type.physical.size || !type.physical.alignment || type.physical.alignment > 8 ||
         (type.physical.alignment & (type.physical.alignment - 1))) return false;
-    bool lanes = type.kind == XR_POD_FIXED_U8 && type.count <= XR_RBC_AGGREGATE_INLINE_SCALARS;
+    bool lanes = type.kind == XR_POD_FIXED_INT && type.count <= XR_RBC_AGGREGATE_INLINE_SCALARS;
     *output = (XrRbcAggregateLayout){lanes ? type.count * 8u : type.physical.size,
         lanes ? 8u : type.physical.alignment, lanes ? type.count : 0u};
     return true;
@@ -65,9 +89,13 @@ static inline bool xr_rbc_aggregate_layout(XrPodType type, XrRbcAggregateLayout 
 static inline bool xr_rbc_aggregate_type_valid(const XrRbcModule *module, uint32_t ordinal) {
     XrPodType type = module->aggregate_types[ordinal];
     XrPodLayout expected;
-    if (type.kind == XR_POD_FIXED_U8) {
-        if (!type.count || type.count > 65535 || type.element) return false;
-        expected = (XrPodLayout){type.count, 1, type.count};
+    if (type.kind == XR_POD_FIXED_INT) {
+        XrtValueKind kind;
+        uint32_t width = xr_rbc_pod_scalar_size(type.element);
+        if (!type.count || type.count > 65535 || !width ||
+            !xr_pod_value_kind((XrPodScalar)type.element, &kind) ||
+            !xrt_value_kind_is_fixed_element(kind)) return false;
+        expected = (XrPodLayout){(uint32_t)(type.count * width), width, type.count};
     } else if (type.kind == XR_POD_NULLABLE && !type.count) {
         XrPodLayout payload;
         if (type.element < XR_POD_SCALAR_COUNT) {

@@ -1215,7 +1215,8 @@ static void release_pending(XirObject *pending) {
             class_storage_deallocate((XirClassObject *)object, false, 0, XR_XIR_VALUE_OK);
         } else if(object->kind==XR_XIR_TYPE_FIXED_ARRAY) {
             XirFixedArray *fixed=(XirFixedArray *)object;
-            xr_xir_domain_deallocate(domain,fixed,sizeof(*fixed)+(size_t)fixed->length);
+            xr_xir_domain_deallocate(domain,fixed,sizeof(*fixed)+(size_t)
+                xr_xir_fixed_array_bytes(xr_xir_compile_type_arena_types(object->arena),object->type));
         } else if (object->kind == XR_XIR_TYPE_TUPLE) {
             XirTuple *tuple=(XirTuple *)object;
             for (uint32_t i=object->graph_dead ? 0 : tuple->count;i;--i) queue_release(&tuple->fields[i-1],&pending);

@@ -58,9 +58,10 @@ XR_FUNC XrLirStatus xr_lir_pod_type(const XrLirModule *m, XrLirType type, XrPodT
         (shape.kind != XR_LIR_TYPE_FIXED_ARRAY && shape.kind != XR_LIR_TYPE_NULLABLE) ||
         xr_lir_inline_aggregate_type(m, type))
         return XR_LIR_UNSUPPORTED;
-    uint32_t element = shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? 0 : shape.element >= XR_LIR_TYPE_COUNT ?
-        XR_POD_SCALAR_COUNT + shape.element - XR_LIR_TYPE_COUNT : (uint32_t)lir_pod_scalar(shape.element);
-    *output = (XrPodType){shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? XR_POD_FIXED_U8 : XR_POD_NULLABLE,
+    uint32_t element = shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? (uint32_t)lir_pod_scalar(shape.element) :
+        shape.element >= XR_LIR_TYPE_COUNT ? XR_POD_SCALAR_COUNT + shape.element - XR_LIR_TYPE_COUNT :
+        (uint32_t)lir_pod_scalar(shape.element);
+    *output = (XrPodType){shape.kind == XR_LIR_TYPE_FIXED_ARRAY ? XR_POD_FIXED_INT : XR_POD_NULLABLE,
         shape.count, element, {(uint32_t)layout.size, layout.alignment, layout.scalar_count}};
     return XR_LIR_OK;
 }

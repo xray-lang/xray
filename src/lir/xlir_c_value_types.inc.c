@@ -150,8 +150,17 @@ static void c_value_type_declaration(LirC *c, const LirCValueTypes *types, size_
                 size_t child = c_value_dependency(c,types,spec->captures[i].type,ordinal);
                 c_format(c,"    XrlValue_%zu c%zu;\n",child + 1,i);
             }
-        } else if (spec->kind == XRT_VALUE_FIXED_U8) {
-            c_format(c, "    uint8_t bytes[%zu];\n", spec->count);
+        } else if (spec->kind == XRT_VALUE_FIXED_INT) {
+            XrtValuePlanSpec element = {0};
+            const char *name = spec->element &&
+                xrt_value_plan_view(spec->element, &element) == XRT_MANAGED_OK ?
+                (element.kind == XRT_VALUE_U8 ? "uint8_t" : element.kind == XRT_VALUE_U32 ? "uint32_t" :
+                 element.kind == XRT_VALUE_U64 ? "uint64_t" : NULL) : NULL;
+            if (!name) {
+                c_error(c, XR_LIR_C_UNSUPPORTED, "fixed storage requires its admitted element width");
+                return;
+            }
+            c_format(c, "    %s bytes[%zu];\n", name, spec->count);
         } else {
             c_error(c, XR_LIR_C_UNSUPPORTED, "C value type requires a dedicated callable or capability ABI");
         }

@@ -1,0 +1,18 @@
+// anchor: fixed-array-module-state
+// A module-level fixed array is published through the module state image. Its
+// element width decides the physical extent, so one read must copy exactly the
+// declared bytes and both backends must print the same values.
+const TABLE: [u64; 8] = [11, 12, 13, 14, 15, 16, 17, 18]
+const BYTES: [u8; 4] = [250, 251, 252, 253]
+
+fn total() -> u64 {
+    return TABLE[0] + TABLE[4] + TABLE[7]
+}
+
+fn main() {
+    print("len=" + string(len(TABLE) as i64))
+    print("total=" + string(total() as i64))
+    print("lane=" + string(TABLE[7] as i64))
+    print("bytes=" + string(BYTES[0] as i64) + "," + string(BYTES[3] as i64))
+}
+main()

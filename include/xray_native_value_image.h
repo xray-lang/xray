@@ -22,7 +22,9 @@ typedef enum XrtValueKind {
     XRT_VALUE_U8, XRT_VALUE_U16, XRT_VALUE_U32, XRT_VALUE_U64,
     XRT_VALUE_F32, XRT_VALUE_F64, XRT_VALUE_STRING,
     XRT_VALUE_ARRAY_I64, XRT_VALUE_ARRAY_STRING, XRT_VALUE_ARRAY_U8, XRT_VALUE_ARRAY_U64,
-    XRT_VALUE_MAP_STRING_I64, XRT_VALUE_FIXED_U8, XRT_VALUE_TUPLE,
+    /* Fixed storage repeats one unsigned scalar element. count is the element
+     * count; element names the earlier scalar row, so size/alignment follow it. */
+    XRT_VALUE_MAP_STRING_I64, XRT_VALUE_FIXED_INT, XRT_VALUE_TUPLE,
     XRT_VALUE_RECORD, XRT_VALUE_NULLABLE, XRT_VALUE_FUNCTION, XRT_VALUE_CELL,
     XRT_VALUE_ENVIRONMENT, XRT_VALUE_SLICE_I64, XRT_VALUE_SLICE_U8, XRT_VALUE_SET_I64,
     XRT_VALUE_ARRAY_INLINE,
@@ -40,6 +42,10 @@ static inline int xrt_value_kind_has_fields(XrtValueKind kind) {
 }
 static inline int xrt_value_inline_array_element_supported(XrtValueKind kind, uint32_t class_storage) {
     return xrt_value_kind_has_fields(kind) || (kind == XRT_VALUE_CLASS && !class_storage);
+}
+/* Fixed storage repeats one unsigned scalar of exactly these widths. */
+static inline int xrt_value_kind_is_fixed_element(XrtValueKind kind) {
+    return kind == XRT_VALUE_U8 || kind == XRT_VALUE_U32 || kind == XRT_VALUE_U64;
 }
 static inline int xrt_value_kind_is_array(XrtValueKind kind) {
     return (kind >= XRT_VALUE_ARRAY_I64 && kind <= XRT_VALUE_ARRAY_U64) || kind == XRT_VALUE_ARRAY_INLINE;

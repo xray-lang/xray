@@ -112,6 +112,18 @@ static inline uint32_t xr_xir_type_parameter_slots(const XrXirTypeNode *node) {
 }
 XR_FUNC bool xr_xir_type_is_fixed_array(const XrXirTypes *types, XrXirType type);
 XR_FUNC uint32_t xr_xir_fixed_array_length(const XrXirTypes *types, XrXirType type);
+/* Fixed storage admits exactly the unsigned scalar elements u8, u32 and u64.
+ * The type owns the element count; the byte extent follows the element width. */
+static inline bool xr_xir_fixed_array_element_admitted(XrXirType element) {
+    return element == XR_XIR_U8 || element == XR_XIR_U32 || element == XR_XIR_U64;
+}
+static inline uint32_t xr_xir_fixed_array_element_size(XrXirType element) {
+    return xr_xir_fixed_array_element_admitted(element) ? xr_xir_integer_bits(element) / 8 : 0;
+}
+/* The element type an admitted fixed array stores; Unit when it stores none. */
+XR_FUNC XrXirType xr_xir_fixed_array_element(const XrXirTypes *types, XrXirType type);
+/* Exact byte extent of the one owner; zero for a type without admitted storage. */
+XR_FUNC uint64_t xr_xir_fixed_array_bytes(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_nullable(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirType xr_xir_nullable_element(const XrXirTypes *types, XrXirType type);
 /* Bounded closed class storage capability; grants no access or generic proof. */
