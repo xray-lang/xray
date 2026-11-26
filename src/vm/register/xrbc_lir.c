@@ -272,7 +272,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_INVOKE: case XR_LIR_CALL_INDIRECT: case XR_LIR_CALL_INTRINSIC:
     case XR_LIR_BR: case XR_LIR_RET:
     case XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED: case XR_LIR_HOST_DIRECTORY_RETURN_GUARD:
-    case XR_LIR_HOST_DIRECTORY_FAIL: return true;
+    case XR_LIR_HOST_DIRECTORY_FAIL: case XR_LIR_MANAGED_FAILURE: return true;
     case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG: return i->type == XR_LIR_U64;
     case XR_LIR_BIT_AND: case XR_LIR_BIT_OR: case XR_LIR_BIT_XOR:
     case XR_LIR_SHL: case XR_LIR_SHR: return true;
@@ -575,7 +575,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         i->op == XR_LIR_HOST_PATH_CLASS || i->op == XR_LIR_HOST_FILE_READ || i->op == XR_LIR_HOST_ENV_GET ||
         i->op == XR_LIR_HOST_TEXT_RESULT || i->op == XR_LIR_HOST_DIRECTORY ||
         i->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE || i->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
-        (i->op >= XR_LIR_HOST_DIRECTORY_FRAME && i->op <= XR_LIR_HOST_DIRECTORY_FAIL)) return true;
+        (i->op >= XR_LIR_HOST_DIRECTORY_FRAME && i->op <= XR_LIR_HOST_DIRECTORY_FAIL) ||
+        i->op == XR_LIR_CHECKED_EMPTY_ARRAY || i->op == XR_LIR_MANAGED_FAILURE) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST &&
         i->op != XR_LIR_FIXED_ARRAY_NEW && i->op != XR_LIR_FIXED_ARRAY_GET) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return true;
@@ -962,7 +963,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 if(c->temporary_arrays[a]<arrays[a])c->temporary_arrays[a]=(uint32_t)arrays[a];
             }
             if(i.op==XR_LIR_CONDBR)c->control_scratch=true;
-            if (i.op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED && !window) window = 1;
+            if ((i.op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED || i.op == XR_LIR_CHECKED_EMPTY_ARRAY) && !window) window = 1;
             if (i.op == XR_LIR_CALL_INDIRECT && window < i.operand_count) window = i.operand_count;
             if((i.op==XR_LIR_CALL || i.op==XR_LIR_INVOKE) && c->functions[i.callee-1]!=RBC_LIR_PRINT_STRING) {
                 uint32_t mapped=c->functions[i.callee-1];
@@ -998,7 +999,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             if (rbc_lir_arithmetic_scratch(&i) && !c->scratch_count) c->scratch_count = 1;
             for (uint32_t e = 0; e < i.edge_count; ++e) {
                 bool scratch = false;
-                if (i.op != XR_LIR_INVOKE && i.op != XR_LIR_HOST_DIRECTORY_NEXT_CHECKED &&
+                if (!xr_lir_edge_parameter_offset(&i,e) && i.op != XR_LIR_INVOKE &&
                     !rbc_lir_copies(c,i.edges[e],e+1,false,&scratch)) return false;
                 if (scratch) {
                     uint32_t count = c->state_ref_scratch ? 4u : c->state_scratch ? 3u : c->string_scratch ? 2u : 1u;

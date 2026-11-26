@@ -79,9 +79,10 @@ typedef enum XrRbcValueOperation {
     XR_RBC_VALUE_CLASS_STRING_WRITE,
     XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE, XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL,
     XR_RBC_VALUE_HOST_DIRECTORY_FRAME, XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED,
-    XR_RBC_VALUE_HOST_DIRECTORY_NEXT_RESULT, XR_RBC_VALUE_HOST_DIRECTORY_NEXT_ERROR,
+    XR_RBC_VALUE_CHECKED_RESULT, XR_RBC_VALUE_CHECKED_ERROR,
     XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED, XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD,
-    XR_RBC_VALUE_HOST_DIRECTORY_FAIL
+    XR_RBC_VALUE_HOST_DIRECTORY_FAIL,
+    XR_RBC_VALUE_CHECKED_EMPTY_ARRAY, XR_RBC_VALUE_MANAGED_FAILURE
 } XrRbcValueOperation;
 
 typedef struct XrRbcValueAccess {
@@ -128,9 +129,15 @@ typedef struct XrRbcValueAccess {
      * for a physical scope capability; operation hooks keep their normal SSA
      * operands. Scope exit and RELEASE never read retired natural bytes. */
     /* HOST_FILE_WRITE takes the byte offset from one ordinary argument row. */
+    /* CHECKED_EMPTY_ARRAY carries the exact Array image row in index. The
+     * common checked receivers use index to name their producing access. */
     uint32_t index, first, count, window;
 } XrRbcValueAccess;
 XR_STATIC_ASSERT(sizeof(XrRbcValueAccess)==32,"ordinary typed access rows occupy thirty-two bytes");
+
+static inline bool rbc_value_checked_primitive(XrRbcValueOperation operation) {
+    return operation == XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED || operation == XR_RBC_VALUE_CHECKED_EMPTY_ARRAY;
+}
 
 /* Numeric roles belong only to code with projected Array slots. Stable access
  * ordinals survive compaction; ordinary operation rows keep their own ABI. */

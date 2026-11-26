@@ -86,6 +86,7 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
             if (instruction.op == XR_LIR_HOST_DIRECTORY || instruction.op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ||
                 instruction.op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
                 (instruction.op >= XR_LIR_HOST_DIRECTORY_FRAME && instruction.op <= XR_LIR_HOST_DIRECTORY_FAIL) ||
+                instruction.op == XR_LIR_CHECKED_EMPTY_ARRAY || instruction.op == XR_LIR_MANAGED_FAILURE ||
                 rbc_lir_scalar_ref_call(c,&instruction)) return true;
             if ((instruction.op == XR_LIR_STATE_CONSTRUCT || instruction.op == XR_LIR_STATE_INITIALIZE) &&
                 rbc_lir_value_string_slot(c,instruction.bits)) return true;
@@ -239,18 +240,31 @@ static bool rbc_lir_value_invoke(RbcLirCompiler *c,const XrLirInstructionView *i
         (!forwards || rbc_lir_value_edge(c,i->edges[0],1,xr_lir_edge_parameter_offset(i,0))) &&
         rbc_lir_jump(c,i->edges[0].target);
 }
-static bool rbc_lir_directory_next(RbcLirCompiler *c, const XrLirInstructionView *i) {
+static bool rbc_lir_checked_primitive(RbcLirCompiler *c, const XrLirInstructionView *i,
+    XrRbcValueAccess access) {
     XrLirBlockView normal, failed_block;
     xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[0].target},&normal);
     xr_lir_block_view(c->input,(XrLirBlock){c->input,c->function.id,i->edges[1].target},&failed_block);
     uint32_t origin = (uint32_t)c->value_code->access_count;
-    XrRbcValueAccess next = {.operation=XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED,.source=i->operands[0],
-        .result=normal.parameters[0],.other=failed_block.parameters[0],.window=c->register_count-1};
-    XrRbcValueAccess failed = {.operation=XR_RBC_VALUE_HOST_DIRECTORY_NEXT_ERROR,.index=origin,.result=next.other};
-    XrRbcValueAccess returned = {.operation=XR_RBC_VALUE_HOST_DIRECTORY_NEXT_RESULT,.index=origin,.result=next.result};
+    access.result = normal.parameters[0];
+    access.other = failed_block.parameters[0];
+    access.window = c->register_count - 1;
+    if (access.operation == XR_RBC_VALUE_CHECKED_EMPTY_ARRAY) {
+        XrLirArrayIntrinsic constructor;
+        XrLirArrayShape shape;
+        XrLirValue result = {c->input, c->function.id, access.result};
+        if (i->bits > UINT32_MAX || !c->homes || !c->homes->values[access.result].type ||
+            xr_lir_array_intrinsic_view(c->input,(uint32_t)i->bits,&constructor)!=XR_LIR_OK ||
+            constructor.operation!=XR_LIR_ARRAY_OP_NEW ||
+            xr_lir_array_shape_view(c->input,result,&shape)!=XR_LIR_OK || shape.element!=constructor.result_element)
+            return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"checked empty Array requires its exact result home");
+        access.index = c->homes->values[access.result].type;
+    }
+    XrRbcValueAccess failed = {.operation=XR_RBC_VALUE_CHECKED_ERROR,.index=origin,.result=access.other};
+    XrRbcValueAccess returned = {.operation=XR_RBC_VALUE_CHECKED_RESULT,.index=origin,.result=access.result};
     c->invoke_edges = true;
-    return rbc_lir_value_append(c,next) &&
-        rbc_lir_emit(c,XR_RBC_EQI,next.window,0,0,0) && rbc_lir_emit(c,XR_RBC_JMP,0,0,0,2) &&
+    return rbc_lir_value_append(c,access) &&
+        rbc_lir_emit(c,XR_RBC_EQI,access.window,0,0,0) && rbc_lir_emit(c,XR_RBC_JMP,0,0,0,2) &&
         rbc_lir_value_append(c,failed) && rbc_lir_jump(c,i->edges[1].target) &&
         rbc_lir_value_append(c,returned) && rbc_lir_jump(c,i->edges[0].target);
 }
@@ -595,8 +609,14 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         c->value_code->directory_frame_source = c->current_source_id;
         break;
     case XR_LIR_HOST_DIRECTORY_NEXT_CHECKED:
+    case XR_LIR_CHECKED_EMPTY_ARRAY:
         *handled = true;
-        return rbc_lir_directory_next(c,i);
+        access.operation = i->op == XR_LIR_CHECKED_EMPTY_ARRAY ?
+            XR_RBC_VALUE_CHECKED_EMPTY_ARRAY : XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED;
+        return rbc_lir_checked_primitive(c,i,access);
+    case XR_LIR_MANAGED_FAILURE:
+        access.operation = XR_RBC_VALUE_MANAGED_FAILURE;
+        break;
     case XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED:
         access.operation = XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED;
         break;
