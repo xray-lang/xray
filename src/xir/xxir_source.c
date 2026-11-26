@@ -2647,7 +2647,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
         }
         /* A ref parameter is the caller's mutable cell: reads and writes in the body reach the
          * caller's binding through it, exactly as a captured mutable variable does. */
-        if (by_reference && !source_cell_type(ctx, body->parameters[i], &body->parameters[i])) return false;
+        if (by_reference && !source_ref_parameter_type(ctx, param, body->parameters[i], &body->parameters[i])) return false;
     }
     if (!source_move_parameters(ctx,index,decl->params,(uint32_t)decl->param_count,0) ||
         !source_generator_declaration(ctx,node,index,&identity,0)) return false;

@@ -50,7 +50,7 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t)i;
         symbol->type=type;symbol->mutable=by_reference||mode==XR_PARAM_MOVE;symbol->declared_mode=mode;
         XrXirType physical=type;
-        if(by_reference&&!source_cell_type(ctx,type,&physical))return false;
+        if (by_reference && !source_ref_parameter_type(ctx, param, type, &physical)) return false;
         body->parameters[symbol->index]=physical;
         XrXirSourceRange range = {ctx->module, param->line, param->column, param->line, 0};
         if (param->column > 0 && source_text_size(ctx, param->name) <= (size_t)(INT_MAX - param->column))

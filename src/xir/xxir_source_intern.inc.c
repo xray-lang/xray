@@ -266,6 +266,19 @@ static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *t
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CELL, element,
         NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
 }
+static bool source_ref_parameter_type(SourceContext *ctx, const XrParamNode *parameter,
+    XrXirType element, XrXirType *physical) {
+    const XrXirTypeNode *node = xr_xir_type_node(&ctx->types, element);
+    if (node && (node->kind == XR_XIR_TYPE_SLICE || node->kind == XR_XIR_TYPE_MUT_SLICE)) {
+        if (ctx->diagnostic.status == XR_XIR_OK) {
+            source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "ref parameter storage does not support a borrowed slice");
+            ctx->diagnostic.line = parameter->line;
+            ctx->diagnostic.column = parameter->column;
+        }
+        return false;
+    }
+    return source_cell_type(ctx, element, physical);
+}
 static bool source_nullable_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
     if (xr_xir_type_is_cell(&ctx->types,element))
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"nullable element must be an ordinary value type");

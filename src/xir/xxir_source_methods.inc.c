@@ -425,7 +425,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                     !source_type(ctx, param->type, &body->parameters[i + offset]) ||
                     (body->parameters[i + offset] == XR_XIR_UNIT && !parameter_reference))
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method parameter contract is not admitted");
-                if (parameter_reference && !source_cell_type(ctx, body->parameters[i + offset], &body->parameters[i + offset]))
+                if (parameter_reference && !source_ref_parameter_type(ctx, param, body->parameters[i + offset], &body->parameters[i + offset]))
                     return false;
             }
             if (!source_move_parameters(ctx,index,method->params,(uint32_t)method->param_count,offset) ||
