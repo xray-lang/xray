@@ -277,3 +277,38 @@ export fn directoryProbeLoopCheckedArrayPriorOwner(directory: Path) -> i64 {
     }
     return -1
 }
+
+export fn directoryProbeOptionalArray(directory: Path) -> Array<string>? {
+    var token = __dirOpen(directory)
+    if (token == 0) { return null }
+    defer { __dirClose(token) }
+    var names: Array<string> = []
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return names }
+    }
+    return null
+}
+
+export fn directoryProbePrefilledOptionalArray(token: i64) -> Array<string>? {
+    var names: Array<string> = ["marker"]
+    defer { __dirClose(token) }
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return names }
+    }
+    return null
+}
+
+export fn directoryProbeOptionalArrayCloseFailure(directory: Path, stale: i64) -> Array<string>? {
+    var token = __dirOpen(directory)
+    if (token == 0) { return null }
+    defer { __dirClose(stale) } // optional Array close failure
+    defer { __dirClose(token) }
+    var names: Array<string> = []
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return names }
+    }
+    return null
+}

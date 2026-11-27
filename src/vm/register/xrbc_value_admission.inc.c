@@ -850,11 +850,23 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         return !a.index && rbc_value_scalar(code,function,a.result,XR_RBC_BITS) &&
             rbc_value_scalar(code,function,a.source,XR_RBC_BITS) &&
             (!a.other || rbc_value_scalar(code,function,a.other,XR_RBC_BITS));
-    case XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD:
-        return !a.index && !a.result && rbc_value_scalar(code,function,a.other,XR_RBC_BITS) &&
-            (a.source ? rbc_value_host_nullable_backing(module,code,a.source,XRT_VALUE_STRING) :
-                function->result_kind == XR_RBC_BITS &&
-                rbc_image_value_kind(xr_rbc_module_value_image(module),rbc_result_value_type(code)) == XRT_VALUE_I64);
+    case XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD: {
+        if (a.index || a.result || !rbc_value_scalar(code,function,a.other,XR_RBC_BITS)) return false;
+        const XrtValueImage *image = xr_rbc_module_value_image(module);
+        uint32_t result = rbc_result_value_type(code);
+        XrtValueKind kind = rbc_image_value_kind(image,result);
+        if (kind == XRT_VALUE_I64) return !a.source && function->result_kind == XR_RBC_BITS;
+        if (kind != XRT_VALUE_NULLABLE) return false;
+        XrtValueKind element = rbc_image_value_kind(image,image->types[result - 1].nullable_element);
+        if (element == XRT_VALUE_STRING)
+            return rbc_value_host_nullable_backing(module,code,a.source,XRT_VALUE_STRING);
+        if (element != XRT_VALUE_ARRAY_STRING) return false;
+        if (!a.source) return true;
+        const XrLirHomeBinding *binding = rbc_value_binding(code,a.source);
+        return binding && binding->kind == XR_LIR_HOME_BINDING_LOCAL &&
+            binding->first_owner < code->homes->frame.slot_count &&
+            rbc_value_kind(module,code,a.source) == XRT_VALUE_ARRAY_STRING;
+    }
     case XR_RBC_VALUE_HOST_DIRECTORY_FAIL:
         return !a.index && !a.result && rbc_value_scalar(code,function,a.source,XR_RBC_BITS) &&
             rbc_value_scalar(code,function,a.other,XR_RBC_BITS);

@@ -51,6 +51,7 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
     lir_array_cell_input(flow, block);
     for (uint32_t i = 0; i < body->instruction_count; ++i) {
         const XrLirInstructionView *v = &body->instructions[i].view;
+        uint32_t directory_owner = 0;
         for (uint32_t a = 0; a < v->operand_count; ++a) {
             uint32_t id = v->operands[a];
             XrLirType type = f->values[id - 1].type;
@@ -59,6 +60,12 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
             if (owner && flow->current[owner - 1] != LIR_ARRAY_CELL_OWNED)
                 return xr_lir_internal_error(d, "Managed Cell use follows release or precedes initialization",
                     function, block + 1, i + 1, &v->source);
+            if (v->op == XR_LIR_HOST_DIRECTORY_RETURN_GUARD && a == 0 &&
+                type == XR_LIR_ARRAY_CELL && owner) {
+                /* The guard drops this one owner only on its terminating failure path. */
+                directory_owner = owner;
+                continue;
+            }
             bool allowed = lir_cfg_reference(type) ?
                 v->op == XR_LIR_ARRAY_REF_READ || v->op == XR_LIR_ARRAY_REF_WRITE ||
                 v->op == XR_LIR_MAP_REF_READ || v->op == XR_LIR_MAP_REF_WRITE ||
@@ -94,7 +101,7 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
                         function, block + 1, i + 1, &v->source);
         if (v->op == XR_LIR_HOST_DIRECTORY_FAIL || v->op == XR_LIR_HOST_DIRECTORY_RETURN_GUARD)
             for (uint32_t c = 0; c < flow->count; ++c)
-                if (flow->current[c] != LIR_ARRAY_CELL_EMPTY)
+                if (c + 1 != directory_owner && flow->current[c] != LIR_ARRAY_CELL_EMPTY)
                     return xr_lir_internal_error(d, "directory exit requires retired Managed Cells",
                         function, block + 1, i + 1, &v->source);
         if (v->op == XR_LIR_RET)

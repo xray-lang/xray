@@ -77,6 +77,10 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
      * alias keeps the original binding for its synchronous borrower. */
     for (uint32_t b = 0; b < source->block_count; ++b) if (f->reachable[b]) {
         const XrXirBlock *block = &source->blocks[b];
+        const XrXirInstruction *array_return = f->directory_loop.call && block->frontier ?
+            lower_directory_array_return(c, source, block) : NULL;
+        if (array_return && array_return->op == XR_XIR_CELL_READ)
+            f->promoted_arrays[array_return->args[0]] = 0;
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             const XrXirInstruction *op = &source->instructions[i];
             if (f->directory_loop.call && block->frontier && op->op == XR_XIR_CELL_PLACE &&

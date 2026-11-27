@@ -569,11 +569,51 @@ static bool lower_directory_open_formal(const Lower *c, const XrXirFunction *f, 
     return opened;
 }
 
+static bool lower_directory_array_result(const Lower *c, const XrXirFunction *f) {
+    return lower_array_element(c, xr_xir_nullable_element(c->source->types, f->result)) == XR_LIR_STRING;
+}
+
+/* The directory cleanup can only touch its token. Materialize the value of
+ * this local Array after closing, so its retain cannot bypass the cleanup. */
+static const XrXirInstruction *lower_directory_array_return(const Lower *c, const XrXirFunction *f,
+    const XrXirBlock *block) {
+    if (!lower_directory_array_result(c, f) || block->count < 2) return NULL;
+    uint32_t index = block->first + block->count - 2;
+    const XrXirInstruction *optional = &f->instructions[index], *ret = optional + 1;
+    if (ret->op != XR_XIR_RETURN || ret->args[0] != f->parameter_count + index ||
+        optional->type != f->result) return NULL;
+    if (optional->op == XR_XIR_NULLABLE_NONE) return optional;
+    if (optional->op != XR_XIR_NULLABLE_SOME || block->count < 3 ||
+        optional->args[0] != f->parameter_count + index - 1) return NULL;
+    XrXirType element = xr_xir_nullable_element(c->source->types, f->result);
+    const XrXirInstruction *read = optional - 1;
+    return read->op == XR_XIR_CELL_READ && read->type == element &&
+        xr_xir_cell_element(c->source->types, xr_xir_operand_type(f, read->args[0])) == element ?
+        read : NULL;
+}
+
+static bool lower_directory_array_return_guard(LowerFunction *f, uint32_t b, const XrXirInstruction *tail) {
+    Lower *c = f->owner;
+    const XrXirBlock *block = &f->source->blocks[b];
+    uint32_t at = c->instruction;
+    c->instruction = block->first + block->count - 1;
+    bool present = tail->op == XR_XIR_CELL_READ;
+    XrLirValue inputs[2] = {{0}};
+    XrLirInstruction guard = {.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,.type=XR_LIR_UNIT,
+        .operands=inputs,.operand_count=present ? 2u : 1u,.source=lower_source(c)};
+    bool good = (!present || lower_value(f, tail->args[0], &inputs[0])) &&
+        lower_directory_close_chain(f, f->blocks[b], block->frontier, &inputs[present]) &&
+        lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &guard));
+    c->instruction = at;
+    return good;
+}
+
 /* The tag controls the immediately following branch. An immutable result may
  * supply a length on its present path before that iteration retires it. */
 static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f) {
     LowerDirectoryLoop site = {0}, absent = {0};
-    if (f->result != XR_XIR_I64 || !lower_empty_error(f->error_type)) return absent;
+    bool returns_array = lower_directory_array_result(c, f);
+    if ((!returns_array && f->result != XR_XIR_I64) || !lower_empty_error(f->error_type)) return absent;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
         if (!lower_cleanup_scalar(f->parameters[p]) && !lower_directory_open_formal(c, f, p)) return absent;
     for (uint32_t b = 0; b < f->block_count; ++b) {
@@ -607,12 +647,15 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrXirBlock *block = &f->blocks[b];
         const XrXirInstruction *term = &f->instructions[block->first + block->count - 1];
+        const XrXirInstruction *array_return = returns_array ? lower_directory_array_return(c, f, block) : NULL;
         if (term->op == XR_XIR_CLEANUP_LEAVE ||
+            (returns_array && term->op == XR_XIR_RETURN && !array_return) ||
             (term->op == XR_XIR_CLEANUP_REGISTER &&
              !lower_directory_cleanup_call(c, (uint32_t)term->immediate))) return absent;
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             const XrXirInstruction *op = &f->instructions[i];
-            if (lower_directory_loop_value(site, op) || op == site.allocation) continue;
+            if (lower_directory_loop_value(site, op) || op == site.allocation ||
+                (array_return && op >= array_return)) continue;
             if (op->op == XR_XIR_NULLABLE_UNWRAP && op->type == XR_XIR_STRING &&
                 op->args[0] == first && site.tag->args[0] == first) {
                 if (site.unwrap || b == site.block) return absent;

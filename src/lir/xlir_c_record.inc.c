@@ -234,7 +234,12 @@ static void c_checked_directory(LirC *c, const XrLirInstructionView *v, uint32_t
         c_format(c, ";\n        if (!xrl_directory_status) xrl_directory_status = "
             "xrt_native_host_directory_cleanup_poll_checked(UINT32_C(%" PRIu32 "));\n"
             "        if (xrl_directory_status) {\n", source);
-        if (v->operand_count == 2) {
+        if (v->operand_count == 2 && c->homes->bindings &&
+            c->homes->bindings[v->operands[0]].kind == XR_LIR_HOME_BINDING_LOCAL) {
+            size_t owner = c->homes->bindings[v->operands[0]].first_owner;
+            c_format(c, "            XrtManagedStatus status=xrt_managed_slot_drop(xrl_frame, %zu);\n", owner);
+            c_array_require(c, source);
+        } else if (v->operand_count == 2) {
             c_values_replace_begin(c, v->operands[0], source);
             c_text(c, "NULL");
             c_values_replace_end(c, source);

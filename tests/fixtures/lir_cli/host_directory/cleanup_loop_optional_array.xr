@@ -1,0 +1,13 @@
+import io
+import path
+
+var nonempty = io.directoryProbeOptionalArray(path.Path("one"))
+print(nonempty != null)
+print(len(nonempty!))
+var empty = io.directoryProbeOptionalArray(path.Path("empty"))
+print(empty != null)
+print(len(empty!))
+print(io.directoryProbeOptionalArray(path.Path("missing")) == null)
+var prefilled = io.directoryProbePrefilledOptionalArray(io.directoryProbeOpen(path.Path("one")))
+print(len(prefilled!))
+print(prefilled![0])

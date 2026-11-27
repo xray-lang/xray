@@ -1517,8 +1517,9 @@ static XrtManagedStatus rbc_value_checked_directory(const XrRbcModule *module, X
         if (!fault) fault = xrt_native_host_directory_cleanup_poll_checked(source);
         if (!fault) return XRT_MANAGED_OK;
         if (access.source) {
-            XrtManagedStatus retired = rbc_value_inline_replace(module,stack,
-                (RbcValueOrigin){activation,access.source},NULL);
+            const XrLirHomeBinding *binding = rbc_value_binding(activation->code,access.source);
+            XrtManagedStatus retired = binding ? xrt_managed_slot_drop(activation->frame,binding->first_owner) :
+                rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.source},NULL);
             if (retired != XRT_MANAGED_OK) return retired;
         }
         xrt_native_host_directory_cleanup_fail(fault,0);

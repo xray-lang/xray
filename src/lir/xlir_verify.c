@@ -66,6 +66,14 @@ static bool lir_directory_string_result(const XrLirModule *m, XrLirType type) {
     return xr_lir_type_view(m, type, &shape) == XR_LIR_OK &&
         shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_STRING;
 }
+static bool lir_directory_array_result(const XrLirModule *m, XrLirType type) {
+    return xr_lir_nullable_array_element(m, type) == XR_LIR_STRING;
+}
+
+static bool lir_directory_loop_result(const XrLirModule *m, XrLirType type) {
+    return type == XR_LIR_I64 || lir_directory_array_result(m, type);
+}
+
 XR_FUNC XrLirStatus xr_lir_internal_error(XrLirDiagnostic *d, const char *message,
                                           uint32_t function, uint32_t block, uint32_t instruction,
                                           const XrLirSource *source) {
@@ -479,15 +487,18 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
         case XR_LIR_HOST_DIRECTORY_FRAME: return v->type == XR_LIR_UNIT;
         case XR_LIR_HOST_DIRECTORY_NEXT_CHECKED:
             return a == XR_LIR_I64 && lir_directory_string_result(m, v->type) &&
-                (f->result == XR_LIR_I64 || v->type == f->result);
+                (lir_directory_loop_result(m, f->result) || v->type == f->result);
         case XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED:
             return v->type == XR_LIR_U64 && a == XR_LIR_I64 &&
                 (v->operand_count == 1 || (v->operand_count == 2 && b == XR_LIR_U64)) &&
                 v->bits && v->bits <= m->function_count;
         case XR_LIR_HOST_DIRECTORY_RETURN_GUARD:
-            return v->type == XR_LIR_UNIT && (f->result == XR_LIR_I64 ?
-                v->operand_count == 1 && a == XR_LIR_U64 :
-                v->operand_count == 2 && a == f->result && b == XR_LIR_U64);
+            if (v->type != XR_LIR_UNIT) return false;
+            if (v->operand_count == 1) return lir_directory_loop_result(m, f->result) && a == XR_LIR_U64;
+            return v->operand_count == 2 && b == XR_LIR_U64 &&
+                (lir_directory_array_result(m, f->result) ?
+                    a == XR_LIR_ARRAY_CELL && f->values[v->operands[0] - 1].array_element == XR_LIR_STRING :
+                    a == f->result);
         case XR_LIR_HOST_DIRECTORY_FAIL:
             return v->type == XR_LIR_UNIT && a == XR_LIR_U64 && b == XR_LIR_U64;
         case XR_LIR_HOST_FILE_CLOSE:
@@ -743,7 +754,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
     }
     if (v->op >= XR_LIR_HOST_DIRECTORY_FRAME && v->op <= XR_LIR_HOST_DIRECTORY_FAIL &&
         (f->cleanup_owner || f->error ||
-         (f->result != XR_LIR_I64 && !lir_directory_string_result(m, f->result)) ||
+         (!lir_directory_loop_result(m, f->result) && !lir_directory_string_result(m, f->result)) ||
          !v->source.path || !v->source.path_length || !v->source.line || !v->source.column)) goto invalid;
     if ((v->op == XR_LIR_CHECKED_EMPTY_ARRAY || v->op == XR_LIR_MANAGED_FAILURE) &&
         (f->cleanup_owner || f->error || !v->source.path || !v->source.path_length ||

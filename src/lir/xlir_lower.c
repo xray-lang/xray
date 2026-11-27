@@ -1845,6 +1845,8 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         }
         const XrXirBlock *block = &f->blocks[b];
         const XrXirInstruction *directory_tail = directory_frame ? lower_directory_tail(c, f, b) : NULL;
+        const XrXirInstruction *array_return = directory_loop.call ?
+            lower_directory_array_return(c, f, block) : NULL;
         if (block->panic) {
             good = lower_unsupported(c, "panic or cleanup frontier");
             break;
@@ -1861,10 +1863,11 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             }
             if (lower_directory_projected_value(directory_tail, directory_loop, instruction)) continue;
             bool guarded_arithmetic = !cleanup_body && block->frontier && lower_cleanup_arithmetic(instruction);
-            bool directory_name = instruction == directory_loop.unwrap || instruction == directory_loop.length;
+            bool directory_operation = instruction == directory_loop.unwrap || instruction == directory_loop.length ||
+                (array_return && instruction >= array_return);
             if (guarded_arithmetic && arithmetic == ARITHMETIC_UNKNOWN)
                 arithmetic = lower_cleanup_scalar_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
-            if ((block->frontier || cleanup_body) && !directory_name && !(guarded_arithmetic && arithmetic == ARITHMETIC_ALLOWED) &&
+            if ((block->frontier || cleanup_body) && !directory_operation && !(guarded_arithmetic && arithmetic == ARITHMETIC_ALLOWED) &&
                 !lower_cleanup_instruction(c, f, b, instruction, cleanup_body, &literal_uses)) {
                 good = lower_unsupported(c, "operation needs a panic landing with active cleanup");
                 break;
@@ -3360,11 +3363,14 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
             if (f->array_values[p] != UINT32_MAX) f->current[f->array_values[p]] = f->values[p];
     uint32_t first = block->first + f->phis[b] + lower_optional_error_join(c,b);
     const XrXirInstruction *directory_tail = f->directory_first_tail ? lower_directory_tail(c, f->source, b) : NULL;
+    const XrXirInstruction *array_return = f->directory_loop.call && block->frontier ?
+        lower_directory_array_return(c, f->source, block) : NULL;
     for (uint32_t i = first; i < block->first + block->count - 1; ++i) {
         c->instruction = i;
         if (f->lexical.count && !lower_lexical_events(f, b, f->lexical.before[i])) return false;
         const XrXirInstruction *op = &f->source->instructions[i];
         if (lower_directory_projected_value(directory_tail, f->directory_loop, op)) continue;
+        if (op == array_return && !lower_directory_array_return_guard(f, b, op)) return false;
         uint32_t result = f->source->parameter_count + i;
         if (op->op == XR_XIR_CLASS_METHOD_REF) {
             if (!lower_class_call(c,c->function,i + 1))
@@ -3772,6 +3778,7 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     if (f->directory_loop.call && f->directory_loop.block == b)
         return lower_directory_loop_branch(f, b, term);
     bool directory_exit = f->directory_loop.call && block->frontier && term->op == XR_XIR_RETURN;
+    bool array_exit = directory_exit && lower_directory_array_return(c, f->source, block);
     if (!directory_exit && !lower_cleanup_exit(f, b, term, &directory_closed)) return false;
     if (term->op == XR_XIR_INVOKE) return lower_invoke_terminator(f,b,term);
     XrLirOp op = lower_checked_terminator_op(c, term->op);
@@ -3782,7 +3789,7 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     if (op == XR_LIR_RET) {
         if (f->source->result != XR_XIR_UNIT) {
             good = lower_value(f, term->args[0], &value);
-            if (good && lower_managed_type(f->owner, lower_type(c, f->source->result))) {
+            if (good && !array_exit && lower_managed_type(f->owner, lower_type(c, f->source->result))) {
                 XrLirValue result = {0};
                 good = lower_managed_copy(f, b, value, &result);
                 value = result;
@@ -3810,7 +3817,7 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
             good = lower_edge(f, b, term->targets[e], &instruction.edges[e]);
     }
     if (good) good = lower_selected_edges(f, b, &instruction);
-    if (good) good = directory_exit ? lower_directory_loop_exit(f, b, &instruction) :
+    if (good) good = directory_exit && !array_exit ? lower_directory_loop_exit(f, b, &instruction) :
         lower_managed_release_block(f, b, &instruction);
     if (good) good = lower_lexical_terminator(f, b,
         op == XR_LIR_RET && lower_callable_type(f, f->source->result) ? &value : NULL);
