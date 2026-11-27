@@ -1,0 +1,6 @@
+import io
+import path
+
+const stale = io.directoryProbeOpen(path.Path("one"))
+assert(stale > 0 && io.directoryProbeClose(stale))
+io.directoryProbeLoopLiveArray(stale)

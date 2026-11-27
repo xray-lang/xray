@@ -364,6 +364,9 @@ static bool lir_directory_frame(const XrLirModule *m, const XrLirFunctionData *f
         if (definition && f->result == XR_LIR_I64 && !lir_cleanup_frontier(f, value->block) &&
             (value->type == XR_LIR_STRING || value->type == XR_LIR_ARRAY ||
              (value->type == XR_LIR_ARRAY_CELL && definition->op == XR_LIR_CELL_NEW))) continue;
+        if (definition && f->result == XR_LIR_I64 && value->type == XR_LIR_ARRAY &&
+            value->array_element == XR_LIR_STRING && definition->op == XR_LIR_CELL_READ &&
+            f->values[definition->operands[0] - 1].type == XR_LIR_ARRAY_CELL) continue;
         if (definition && value->type == XR_LIR_STRING && definition->op == XR_LIR_NULLABLE_UNWRAP &&
             lir_directory_nopanic_name(m, f, names, value->block - 1, definition)) continue;
         if (!definition || !((value->type == XR_LIR_I64_CELL && definition->op == XR_LIR_CELL_NEW) ||
@@ -407,8 +410,11 @@ static bool lir_directory_chain(const XrLirModule *m, const XrLirFunctionData *f
     const XrLirBlockData *block = &f->blocks[next->edges[edge].target - 1];
     uint32_t position = 0, previous = 0;
     if (block->cleanup || block->parameter_count != 1 ||
-        !lir_directory_steps(m, owner, frontier, block, &position, &previous) ||
-        position >= block->instruction_count) return false;
+        !lir_directory_steps(m, owner, frontier, block, &position, &previous)) return false;
+    if (edge && f->result == XR_LIR_I64)
+        while (position < block->instruction_count &&
+               block->instructions[position].view.op == XR_LIR_ARRAY_CELL_DROP) ++position;
+    if (position >= block->instruction_count) return false;
     const XrLirInstructionView *exit = &block->instructions[position++].view;
     if (exit->op != (edge ? XR_LIR_HOST_DIRECTORY_FAIL : XR_LIR_HOST_DIRECTORY_RETURN_GUARD) ||
         exit->operand_count != 2 || exit->operands[0] != block->parameters[0] ||
@@ -457,6 +463,8 @@ static bool lir_directory_loop_exit(const XrLirModule *m, const XrLirFunctionDat
     const XrLirInstructionView *ret = &block->instructions[guard_index + 1].view;
     if (guard->op != XR_LIR_HOST_DIRECTORY_RETURN_GUARD || guard->operand_count != 1 ||
         !lir_cleanup_same_source(&guard->source, &ret->source)) return false;
+    while (start && lir_cleanup_retirement(block->instructions[start - 1].view.op)) --start;
+    uint32_t retired = start;
     for (uint32_t role = frontier; role;) {
         const XrLirCleanupBlock *registration = lir_cleanup_registration(m, owner, role);
         if (!registration || !lir_cleanup_directory_close(&m->functions[role - 1])) return false;
@@ -467,7 +475,7 @@ static bool lir_directory_loop_exit(const XrLirModule *m, const XrLirFunctionDat
     }
     uint32_t at = start, status = 0, remaining = frontier;
     return lir_directory_steps(m, owner, frontier, block, &at, &status) &&
-        at == guard_index && status == guard->operands[0] &&
+        at == retired && status == guard->operands[0] &&
         lir_cleanup_calls(m, f, names, owner, block, start, &remaining, false, scalar_frame) &&
         remaining == frontier;
 }

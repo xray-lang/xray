@@ -172,6 +172,7 @@ static bool lower_string_borrow(LowerFunction *, uint32_t, XrLirValue *);
 static bool lower_map_borrow(LowerFunction *, uint32_t, XrLirValue *);
 static bool lower_view_store(LowerFunction *, uint32_t, XrLirValue);
 static bool lower_value(LowerFunction *, uint32_t, XrLirValue *);
+static bool lower_directory_cells(LowerFunction *, uint32_t, XrLirBlock, XrLirSource);
 
 static XrLirType lower_constructed_type(const Lower *c, XrXirType type) {
     uint32_t id = (uint32_t)type;
@@ -3567,19 +3568,25 @@ static bool lower_directory_loop_branch(LowerFunction *f, uint32_t b, const XrXi
     }
     bool good = lower_build(c, xr_lir_emit_value(c->module, normal, &test, &present)) &&
         (forwards || lower_build(c, xr_lir_emit_effect(c->module, normal, &drop))) &&
-        lower_edge(f, b, term->targets[invert], &branch.edges[0]) &&
-        lower_edge(f, b, term->targets[1 - invert], &branch.edges[1]) &&
-        (!forwards || lower_selected_edges(f, b, &branch)) &&
-        lower_build(c, xr_lir_set_terminator(c->module, normal, &branch));
+        lower_edge(f, b, term->targets[0], &branch.edges[0]) &&
+        lower_edge(f, b, term->targets[1], &branch.edges[1]) &&
+        lower_selected_edges(f, b, &branch);
+    if (good && invert) {
+        XrLirEdge present_edge = branch.edges[1];
+        branch.edges[1] = branch.edges[0];
+        branch.edges[0] = present_edge;
+    }
+    if (good) good = lower_build(c, xr_lir_set_terminator(c->module, normal, &branch));
     xr_free((void *)branch.edges[0].arguments);
     xr_free((void *)branch.edges[1].arguments);
     return good;
 }
 
-static bool lower_directory_loop_exit(LowerFunction *f, uint32_t b) {
+static bool lower_directory_loop_exit(LowerFunction *f, uint32_t b, const XrLirInstruction *ret) {
     Lower *c = f->owner;
     XrLirValue status = {0};
-    if (!lower_directory_close_chain(f, f->blocks[b], f->source->blocks[b].frontier, &status))
+    if (!lower_directory_close_chain(f, f->blocks[b], f->source->blocks[b].frontier, &status) ||
+        !lower_managed_release_block(f, b, ret))
         return false;
     XrLirInstruction guard = {.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,.type=XR_LIR_UNIT,
         .operands=&status,.operand_count=1,.source=lower_source(c)};
@@ -3603,9 +3610,8 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     if (directory_tail) return lower_directory_next(f, b, directory_tail);
     if (f->directory_loop.call && f->directory_loop.block == b)
         return lower_directory_loop_branch(f, b, term);
-    if (f->directory_loop.call && block->frontier && term->op == XR_XIR_RETURN) {
-        if (!lower_directory_loop_exit(f, b)) return false;
-    } else if (!lower_cleanup_exit(f, b, term, &directory_closed)) return false;
+    bool directory_exit = f->directory_loop.call && block->frontier && term->op == XR_XIR_RETURN;
+    if (!directory_exit && !lower_cleanup_exit(f, b, term, &directory_closed)) return false;
     if (term->op == XR_XIR_INVOKE) return lower_invoke_terminator(f,b,term);
     XrLirOp op = lower_checked_terminator_op(c, term->op);
     if (op == XR_LIR_OP_INVALID) return false;
@@ -3643,7 +3649,8 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
             good = lower_edge(f, b, term->targets[e], &instruction.edges[e]);
     }
     if (good) good = lower_selected_edges(f, b, &instruction);
-    if (good) good = lower_managed_release_block(f, b, &instruction);
+    if (good) good = directory_exit ? lower_directory_loop_exit(f, b, &instruction) :
+        lower_managed_release_block(f, b, &instruction);
     if (good) good = lower_lexical_terminator(f, b,
         op == XR_LIR_RET && lower_callable_type(f, f->source->result) ? &value : NULL);
     if (good && directory_closed) {

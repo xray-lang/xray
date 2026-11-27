@@ -134,10 +134,10 @@ export fn directoryProbeLoopRetiredArray(token: i64, includeSeed: bool) -> i64 {
 
 export fn directoryProbeLoopLiveArray(token: i64) -> i64 {
     var names: Array<string> = ["marker"]
-    defer { __dirClose(token) }
+    defer { __dirClose(token) } // live Array close
     var count = 0
     while (true) {
-        const name = __dirNext(token)
+        const name = __dirNext(token) // live Array read
         if (name == null) { return count + len(names) }
         count = count + 1
     }

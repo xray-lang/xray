@@ -78,6 +78,11 @@ static bool lower_array_flow_inventory(LowerFunction *f) {
         const XrXirBlock *block = &source->blocks[b];
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             const XrXirInstruction *op = &source->instructions[i];
+            if (f->directory_loop.call && block->frontier && op->op == XR_XIR_CELL_PLACE &&
+                lower_array_element(c, op->type) == XR_LIR_STRING) {
+                /* The checked host failure successor retires this binding in place. */
+                f->promoted_arrays[op->args[0]] = 0;
+            }
             uint32_t count = lower_operand_count(source, op);
             for (uint32_t a = op->op == XR_XIR_PHI ? 1u : 0u; a < count;
                  a += op->op == XR_XIR_PHI ? 2u : 1u) {

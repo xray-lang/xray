@@ -37,6 +37,10 @@ def main() -> None:
         close_source = next(number for number, line in enumerate(io_lines, 1) if "// checked innermost close" in line)
         bound_read = next((number, line.index("__dirNext") + 1) for number, line in enumerate(io_lines, 1)
                           if "// checked bound read" in line)
+        live_read = next((number, line.index("__dirNext") + 1) for number, line in enumerate(io_lines, 1)
+                         if "// live Array read" in line)
+        live_close = next((number, line.index("__dirClose") + 1) for number, line in enumerate(io_lines, 1)
+                          if "// live Array close" in line)
         env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR="1")
 
         def run(command, cwd, label):
@@ -53,11 +57,12 @@ def main() -> None:
             "cleanup_next": f"{name}\ntrue\n".encode(), "cleanup_next_non_tail": f"{name}\ntrue\n".encode(),
             "cleanup_loop": b"3\n0\n", "cleanup_loop_late_control": b"7\n3\n",
             "cleanup_loop_retired": b"2\n0\n",
+            "cleanup_loop_live_owner": b"2\n1\n",
             "cleanup_loop_present_name": b"7\n0\n",
         }
         faults = ("invalid_close", "invalid_next", "stale_next", "cleanup_lifo_failure",
                   "cleanup_next_read_failure", "cleanup_next_dual_failure", "cleanup_next_close_failure",
-                  "cleanup_next_bound_read_failure")
+                  "cleanup_next_bound_read_failure", "cleanup_loop_live_owner_failure")
         rejections = {
             "private_leaf": b"import requires an exported declaration",
             "cleanup_partial": b"directory cleanup requires a complete normal exit",
@@ -67,7 +72,6 @@ def main() -> None:
             "cleanup_next_cross_frame": b"operation needs a panic landing with active cleanup",
             "cleanup_loop_write": b"operation needs a panic landing with active cleanup",
             "cleanup_loop_escape": b"operation needs a panic landing with active cleanup",
-            "cleanup_loop_live_owner": b"operation needs a panic landing with active cleanup",
             "cleanup_loop_unguarded_name": b"operation needs a panic landing with active cleanup",
         }
         for case in (*successes, *faults, *rejections):
@@ -104,6 +108,11 @@ def main() -> None:
                     assert b"XR_RUN_6002: value operation rejected (status 1)" in vm[2], (case, vm)
                     if case == "cleanup_lifo_failure":
                         assert f"io.xr:{inner_close}:9".encode() in vm[2], (case, vm)
+                    if case == "cleanup_loop_live_owner_failure":
+                        primary, secondary = vm[2].splitlines()
+                        assert f"io.xr:{live_read[0]}:{live_read[1]}".encode() in primary, (case, vm)
+                        assert secondary.startswith(b"note: directory cleanup rejected its token at "), (case, vm)
+                        assert f"io.xr:{live_close[0]}:{live_close[1]}".encode() in secondary, (case, vm)
                     if case.startswith("cleanup_next_"):
                         lines = vm[2].splitlines()
                         primary = close_source if case == "cleanup_next_close_failure" else read_source

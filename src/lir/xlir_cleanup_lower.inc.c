@@ -498,8 +498,7 @@ static bool lower_directory_loop_repeats(Lower *c, const XrXirFunction *f, Lower
     return repeats;
 }
 
-/* The ordinary Cell flow verifies that owners produced before registration
- * have retired when the checked directory read is reached. */
+/* Constructing the array still requires an inactive cleanup frontier. */
 static bool lower_directory_prefix_value(const Lower *c, const XrXirBlock *block, XrXirType type) {
     if (block->frontier) return false;
     if (type == XR_XIR_STRING || lower_array_element(c, type) == XR_LIR_STRING) return true;
@@ -576,7 +575,11 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
                 if (site.length || b != name_block) return absent;
                 site.length = op;
             }
-            if ((!lower_cleanup_frame_type(c, op->type) && !lower_directory_prefix_value(c, block, op->type)) ||
+            bool place = b != site.block && op->op == XR_XIR_CELL_PLACE &&
+                lower_array_element(c, op->type) == XR_LIR_STRING &&
+                lower_type(c, xr_xir_operand_type(f, op->args[0])) == XR_LIR_ARRAY_CELL;
+            if ((!lower_cleanup_frame_type(c, op->type) && !lower_directory_prefix_value(c, block, op->type) &&
+                 !place) ||
                 op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) return absent;
             if (op == site.tag + 1) continue;
             uint32_t count = xir_instruction_operand_count(f, op, c->source);
@@ -654,7 +657,8 @@ static bool lower_directory_split(LowerFunction *f, uint32_t b, const XrXirInstr
         !lower_build(c, xr_lir_add_block(c->module, f->function, &status, 1, &failure)) ||
         !lower_build(c, xr_lir_block_parameter(c->module, *normal, 0, result)) ||
         !lower_build(c, xr_lir_block_parameter(c->module, failure, 0, &failed[0])) ||
-        !lower_directory_close_chain(f, failure, f->source->blocks[b].frontier, &failed[1])) return false;
+        !lower_directory_close_chain(f, failure, f->source->blocks[b].frontier, &failed[1]) ||
+        (f->directory_loop.call && !lower_directory_cells(f, b, failure, source))) return false;
     XrLirInstruction next = {.op=XR_LIR_HOST_DIRECTORY_NEXT_CHECKED,.type=type,.operands=&token,
         .operand_count=1,.edge_count=2,.edges={{.target=*normal},{.target=failure}},.source=source};
     XrLirInstruction fail = {.op=XR_LIR_HOST_DIRECTORY_FAIL,.type=XR_LIR_UNIT,

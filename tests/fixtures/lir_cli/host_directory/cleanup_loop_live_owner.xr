@@ -2,3 +2,4 @@ import io
 import path
 
 print(io.directoryProbeLoopLiveArray(io.directoryProbeOpen(path.Path("one"))))
+print(io.directoryProbeLoopLiveArray(io.directoryProbeOpen(path.Path("empty"))))

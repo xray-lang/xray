@@ -101,6 +101,27 @@ static bool lower_array_cells_edge(const LowerFunction *f, uint32_t block, uint3
         if (lower_array_cell_drop_edge(f, block, term, edge, owner)) return true;
     return false;
 }
+
+static bool lower_directory_cells(LowerFunction *f, uint32_t b, XrLirBlock failure, XrLirSource source) {
+    const LowerArrayCells *cells = &f->array_cells;
+    if (!cells->count) return true;
+    const XrXirInstruction *term = lower_term(f->owner, f->source, b);
+    if (!term) return false;
+    for (uint32_t n = cells->count; n; --n) {
+        uint32_t owner = n - 1;
+        size_t at = (size_t)b * cells->count + owner;
+        if (!cells->live[at] && !cells->define[at]) continue;
+        XrLirValue value = cells->owners[owner];
+        if (lower_value_type(f, value) != XR_LIR_ARRAY_CELL)
+            return lower_unsupported(f->owner, "checked directory read requires local Array cells");
+        XrLirBlock release = lower_array_cell_drop_edge(f, b, term, UINT32_MAX, owner) ? f->blocks[b] : failure;
+        XrLirInstruction drop = {.op=XR_LIR_ARRAY_CELL_DROP,.type=XR_LIR_UNIT,
+            .operands=&value,.operand_count=1,.source=source};
+        if (!lower_build(f->owner, xr_lir_emit_effect(f->owner->module, release, &drop))) return false;
+    }
+    return true;
+}
+
 static bool lower_array_cells_release(LowerFunction *f, uint32_t from,
     const XrLirInstruction *term, uint32_t edge, XrLirBlock block) {
     if (!f->array_cells.count) return true;

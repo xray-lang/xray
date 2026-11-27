@@ -418,14 +418,15 @@ static void directory_cleanup_requires_a_complete_exit(void) {
 static void directory_next_requires_exact_successors(void) {
     enum { COMPLETE, NO_FRAME, WRONG_SOURCE, WRONG_CAPTURE, WRONG_PRIMARY, LOOP,
         LOOP_NOT_RETIRED, LOOP_EXIT_WRONG_SOURCE, LOOP_SECOND_NEXT, LOOP_RETIRED_CELL, LOOP_LIVE_CELL,
-        LOOP_NAME, LOOP_NAME_ON_EOF };
+        LOOP_CELL_CLEANUP, LOOP_NAME, LOOP_NAME_ON_EOF };
     const XrLirSource read = {"cleanup.xr", 10, 8, 12, 8, 12};
     const XrLirSource close = {"cleanup.xr", 10, 5, 9, 5, 9};
     const XrLirSource returned = {"cleanup.xr", 10, 8, 5, 8, 25};
     for (unsigned fault = COMPLETE; fault <= LOOP_NAME_ON_EOF; ++fault) {
         bool loop = fault >= LOOP;
+        bool cell_test = fault == LOOP_RETIRED_CELL || fault == LOOP_LIVE_CELL || fault == LOOP_CELL_CLEANUP;
         XrLirModule *m = NULL;
-        if (fault == LOOP_RETIRED_CELL || fault == LOOP_LIVE_CELL) OK(xr_lir_array_module_create(NULL, &m));
+        if (cell_test) OK(xr_lir_array_module_create(NULL, &m));
         else OK(xr_lir_module_create(NULL, &m));
         XrLirType optional = XR_LIR_TYPE_INVALID, scalar = XR_LIR_I64, status = XR_LIR_U64;
         OK(xr_lir_nullable_type(m, XR_LIR_STRING, &optional));
@@ -452,7 +453,7 @@ static void directory_next_requires_exact_successors(void) {
         OK(xr_lir_emit_value(m, entry, &(XrLirInstruction){.op=XR_LIR_CONST,.type=scalar,.bits=2}, &wrong));
         XrLirValue cell = {0};
         XrLirInstruction drop = {.op=XR_LIR_ARRAY_CELL_DROP,.type=XR_LIR_UNIT,.operands=&cell,.operand_count=1};
-        if (fault == LOOP_RETIRED_CELL || fault == LOOP_LIVE_CELL) {
+        if (cell_test) {
             uint32_t intrinsic = 0;
             XrLirValue array = {0};
             OK(xr_lir_array_operation(m, XR_LIR_STRING, XR_LIR_ARRAY_OP_NEW, &intrinsic));
@@ -539,8 +540,8 @@ static void directory_next_requires_exact_successors(void) {
                 .operands=&tested,.operand_count=1,.edge_count=2,
                 .edges={{some,forwards ? success : NULL,forwards},{eof,forwards ? success : NULL,forwards}}}));
             if (fault == LOOP_EXIT_WRONG_SOURCE) step.source = read;
-            if (fault == LOOP_LIVE_CELL) OK(xr_lir_emit_effect(m, eof, &drop));
             OK(xr_lir_emit_value(m, eof, &step, &success[1]));
+            if (fault == LOOP_LIVE_CELL || fault == LOOP_CELL_CLEANUP) OK(xr_lir_emit_effect(m, eof, &drop));
             OK(xr_lir_emit_effect(m, eof, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,
                 .type=XR_LIR_UNIT,.operands=&success[1],.operand_count=1,.source=returned}));
             OK(xr_lir_set_terminator(m, eof, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
@@ -553,15 +554,17 @@ static void directory_next_requires_exact_successors(void) {
                 .operands=success,.operand_count=1,.source=returned}));
         }
         if (fault == WRONG_PRIMARY) failed[0] = failed[1];
+        if (fault == LOOP_CELL_CLEANUP) OK(xr_lir_emit_effect(m, failure, &drop));
         OK(xr_lir_set_terminator(m, failure, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_FAIL,
             .type=XR_LIR_UNIT,.operands=failed,.operand_count=2,.source=read}));
 
         XrLirDiagnostic diagnostic = {0};
         XrLirStatus verified = xr_lir_module_finish(m, &diagnostic);
-        if (fault == COMPLETE || fault == LOOP || fault == LOOP_RETIRED_CELL || fault == LOOP_NAME)
+        if (fault == COMPLETE || fault == LOOP || fault == LOOP_RETIRED_CELL ||
+            fault == LOOP_CELL_CLEANUP || fault == LOOP_NAME)
             CHECK(verified == XR_LIR_OK);
         else if (fault == LOOP_LIVE_CELL) CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,
-            "checked directory read requires retired Managed Cells"));
+            "directory exit requires retired Managed Cells"));
         else CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,
             fault == LOOP_NOT_RETIRED ? "Managed owner is not released" : "cleanup frontier"));
         xr_lir_module_destroy(m);
