@@ -108,8 +108,21 @@ typedef enum XrLirExternKind {
     XR_LIR_EXTERN_CLOCK_MONOTONIC,
     XR_LIR_EXTERN_UTC_OFFSET_AT,
     XR_LIR_EXTERN_ASSERT_CONDITION,
-    XR_LIR_EXTERN_STDLIB_MATH_LERP
+    XR_LIR_EXTERN_STDLIB_MATH_LERP,
+    XR_LIR_EXTERN_MATH_SIN,
+    XR_LIR_EXTERN_MATH_COS,
+    XR_LIR_EXTERN_MATH_SQRT,
+    XR_LIR_EXTERN_MATH_HYPOT
 } XrLirExternKind;
+
+typedef struct XrLirMathExternal {
+    const char *name;
+    uint32_t parameter_count;
+} XrLirMathExternal;
+
+XR_FUNC XrLirMathExternal xr_lir_math_external(XrLirExternKind kind);
+XR_FUNC bool xr_lir_math_external_signature(XrLirMathExternal, const char *, size_t,
+    const XrLirType *, uint32_t, XrLirType);
 
 /* The linked scalar leaf has a single admitted symbol and signature. */
 XR_FUNC bool xr_lir_math_lerp_external_signature(const char *, size_t,

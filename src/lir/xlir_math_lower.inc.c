@@ -11,7 +11,7 @@
  */
 #include "../shared/xr_numeric_conversion_core.h"
 
-static uint32_t lower_math_unary_id(const Lower *c, uint32_t index) {
+static uint32_t lower_math_native_id(const Lower *c, uint32_t index) {
     const XrXirFunctionIdentity *identity = &c->source->declarations->functions[index];
     switch (identity->native_callable) {
     case XR_NATIVE_CALLABLE_MATH_ABS:
@@ -19,6 +19,10 @@ static uint32_t lower_math_unary_id(const Lower *c, uint32_t index) {
     case XR_NATIVE_CALLABLE_MATH_CEIL:
     case XR_NATIVE_CALLABLE_MATH_ROUND:
     case XR_NATIVE_CALLABLE_MATH_TRUNC:
+    case XR_NATIVE_CALLABLE_MATH_SIN:
+    case XR_NATIVE_CALLABLE_MATH_COS:
+    case XR_NATIVE_CALLABLE_MATH_SQRT:
+    case XR_NATIVE_CALLABLE_MATH_HYPOT:
         return !identity->capture_owner && !identity->capture_count &&
             xir_native_callable_verify(c->source, index) == XR_XIR_OK ? identity->native_callable : 0;
     default:
@@ -36,6 +40,35 @@ static bool lower_math_unary_entry(Lower *c, XrLirFunction function, XrLirBlock 
 static bool lower_math_return(Lower *c, XrLirBlock block, XrLirValue result) {
     XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
     return lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
+}
+
+static XrLirExternKind lower_math_external_kind(uint32_t id) {
+    switch (id) {
+    case XR_NATIVE_CALLABLE_MATH_SIN: return XR_LIR_EXTERN_MATH_SIN;
+    case XR_NATIVE_CALLABLE_MATH_COS: return XR_LIR_EXTERN_MATH_COS;
+    case XR_NATIVE_CALLABLE_MATH_SQRT: return XR_LIR_EXTERN_MATH_SQRT;
+    case XR_NATIVE_CALLABLE_MATH_HYPOT: return XR_LIR_EXTERN_MATH_HYPOT;
+    default: return XR_LIR_EXTERN_NONE;
+    }
+}
+
+static bool lower_math_external_body(Lower *c, XrLirFunction function, XrLirExternKind kind) {
+    XrLirMathExternal shape = xr_lir_math_external(kind);
+    const XrLirType types[] = {XR_LIR_F64, XR_LIR_F64};
+    XrLirFunction target = {0};
+    XrLirBlock entry = {0};
+    XrLirValue arguments[2] = {{0}}, result = {0};
+    XrLirFunctionSpec spec = {.name=shape.name, .name_length=strlen(shape.name), .parameters=types,
+        .parameter_count=shape.parameter_count, .result=XR_LIR_F64,
+        .kind=XR_LIR_FUNCTION_EXTERNAL, .extern_kind=kind};
+    if (!lower_build(c, xr_lir_declare_function(c->module, &spec, &target)) ||
+        !lower_math_unary_entry(c, function, &entry, &arguments[0]) ||
+        (shape.parameter_count == 2 && !lower_build(c,
+            xr_lir_function_parameter(c->module, function, 1, &arguments[1])))) return false;
+    XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_F64, .callee=target,
+        .operand_count=shape.parameter_count, .operands=arguments, .source=lower_source(c)};
+    return lower_build(c, xr_lir_emit_value(c->module, entry, &call, &result)) &&
+        lower_math_return(c, entry, result);
 }
 
 static bool lower_math_round_adjust(Lower *c, XrLirBlock block, XrLirValue integral, XrLirOp op) {

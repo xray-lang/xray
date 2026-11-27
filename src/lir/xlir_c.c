@@ -406,7 +406,7 @@ static const char *c_external_name(XrLirExternKind kind) {
     case XR_LIR_EXTERN_CLOCK_MONOTONIC: return "xrt_clock_monotonic_nanos";
     case XR_LIR_EXTERN_UTC_OFFSET_AT: return "xrt_clock_utc_offset_at";
     case XR_LIR_EXTERN_ASSERT_CONDITION: return "xrt_assert_condition";
-    default: return NULL;
+    default: return xr_lir_math_external(kind).name;
     }
 }
 static bool c_display_point(LirC *, const XrLirInstructionView *);

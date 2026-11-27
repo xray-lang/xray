@@ -1,0 +1,2 @@
+import {__sqrt} from math
+print(__sqrt(81.0))

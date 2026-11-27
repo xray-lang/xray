@@ -59,6 +59,10 @@ XRAY_API int32_t xrt_f64_compare(uint64_t left, uint64_t right);
 // end it with numeric conversion panic 422 at the supplied source id.
 XRAY_API uint64_t xrt_i64_to_f64(int64_t value);
 XRAY_API int64_t xrt_f64_to_i64(uint64_t bits, uint32_t source_id);
+XRAY_API double xrt_f64_sin(double value, uint32_t source_id);
+XRAY_API double xrt_f64_cos(double value, uint32_t source_id);
+XRAY_API double xrt_f64_sqrt(double value, uint32_t source_id);
+XRAY_API double xrt_f64_hypot(double left, double right, uint32_t source_id);
 
 // Define this strong external symbol once in the standalone program. The
 // descriptor, locations and path bytes remain immutable and image-owned.

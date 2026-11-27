@@ -15,6 +15,7 @@
 #include "base/xchecks.h"
 #include <float.h>
 #include <limits.h>
+#include <math.h>
 #include <string.h>
 
 #if defined(_M_FP_FAST) || defined(__FAST_MATH__) || \
@@ -60,4 +61,24 @@ XRAY_API int64_t xrt_f64_to_i64(uint64_t bits, uint32_t source_id) {
     if (!(value >= -9223372036854775808.0 && value < 9223372036854775808.0))
         xrt_arithmetic_panic(422, source_id);
     return (int64_t)value;
+}
+
+XRAY_API double xrt_f64_sin(double value, uint32_t source_id) {
+    (void)source_id;
+    return sin(value);
+}
+
+XRAY_API double xrt_f64_cos(double value, uint32_t source_id) {
+    (void)source_id;
+    return cos(value);
+}
+
+XRAY_API double xrt_f64_sqrt(double value, uint32_t source_id) {
+    (void)source_id;
+    return sqrt(value);
+}
+
+XRAY_API double xrt_f64_hypot(double left, double right, uint32_t source_id) {
+    (void)source_id;
+    return hypot(left, right);
 }

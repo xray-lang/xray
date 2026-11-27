@@ -337,6 +337,24 @@ XR_FUNC bool xr_lir_math_lerp_external_signature(const char *name, size_t length
         parameters[0] == XR_LIR_F64 && parameters[1] == XR_LIR_F64 && parameters[2] == XR_LIR_F64;
 }
 
+XR_FUNC XrLirMathExternal xr_lir_math_external(XrLirExternKind kind) {
+    switch (kind) {
+    case XR_LIR_EXTERN_MATH_SIN: return (XrLirMathExternal){"xrt_f64_sin", 1};
+    case XR_LIR_EXTERN_MATH_COS: return (XrLirMathExternal){"xrt_f64_cos", 1};
+    case XR_LIR_EXTERN_MATH_SQRT: return (XrLirMathExternal){"xrt_f64_sqrt", 1};
+    case XR_LIR_EXTERN_MATH_HYPOT: return (XrLirMathExternal){"xrt_f64_hypot", 2};
+    default: return (XrLirMathExternal){0};
+    }
+}
+
+XR_FUNC bool xr_lir_math_external_signature(XrLirMathExternal shape, const char *name, size_t length,
+    const XrLirType *parameters, uint32_t count, XrLirType result) {
+    return shape.name && name && length == strlen(shape.name) && !memcmp(name, shape.name, length) &&
+        parameters && count == shape.parameter_count && result == XR_LIR_F64 &&
+        (count == 1 || count == 2) && parameters[0] == XR_LIR_F64 &&
+        (count == 1 || parameters[1] == XR_LIR_F64);
+}
+
 static const char *clock_external_name(XrLirExternKind kind) {
     switch (kind) {
     case XR_LIR_EXTERN_CLOCK_REALTIME: return "xrt_clock_realtime_nanos";
@@ -396,6 +414,9 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
     if (spec->extern_kind == XR_LIR_EXTERN_STDLIB_MATH_LERP)
         return xr_lir_math_lerp_external_signature(spec->name, spec->name_length,
             spec->parameters, spec->parameter_count, spec->result);
+    XrLirMathExternal math = xr_lir_math_external(spec->extern_kind);
+    if (math.name) return xr_lir_math_external_signature(math, spec->name, spec->name_length,
+        spec->parameters, spec->parameter_count, spec->result);
     const char *clock = clock_external_name(spec->extern_kind);
     if (clock) return spec->result == XR_LIR_I64 &&
         spec->parameter_count == (spec->extern_kind == XR_LIR_EXTERN_UTC_OFFSET_AT ? 1u : 0u) &&

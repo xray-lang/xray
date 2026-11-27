@@ -1807,7 +1807,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             return true;
         }
         uint32_t fields[2];
-        return lower_crypto_random_bytes(c, function) || lower_math_unary_id(c, function) ||
+        return lower_crypto_random_bytes(c, function) || lower_math_native_id(c, function) ||
             lower_os_platform(c, function) ||
             lower_host_abi(c, function, fields) != XR_NATIVE_HOST_NONE ||
             lower_unsupported(c, "function without a scalar body");
@@ -3926,7 +3926,9 @@ static bool lower_host_function(Lower *c, uint32_t index) {
     if (lower_crypto_random_bytes(c, index)) return lower_crypto_random_bytes_body(c, c->functions[index]);
     if (xir_strict_utf8_callable(c->source, index)) return lower_strict_utf8_body(c, index);
     if (lower_os_platform(c, index)) return lower_os_platform_body(c, c->functions[index]);
-    uint32_t math = lower_math_unary_id(c, index);
+    uint32_t math = lower_math_native_id(c, index);
+    XrLirExternKind math_external = lower_math_external_kind(math);
+    if (math_external) return lower_math_external_body(c, c->functions[index], math_external);
     if (math == XR_NATIVE_CALLABLE_MATH_ABS) return lower_math_abs_body(c, c->functions[index]);
     if (math) return lower_math_rounding_body(c, c->functions[index], math);
     uint32_t fields[2] = {0};

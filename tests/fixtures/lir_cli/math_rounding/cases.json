@@ -27,6 +27,14 @@
     "stdout": "0.0\n0.0\n5e-324\n5e-324\ninf\ninf\nnan\nnan\n42.0\n42.0\ninf\n8.0\n17.0\n",
     "stderr": ""
   },
+  "transcendental": {
+    "exit": 0,
+    "stdout": "{\"case\":\"transcendental-parity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n-0.0\n-0.0\n5.0\nnan\ninf\n",
+    "stderr": ""
+  },
+  "private_sqrt": {
+    "source_error": ":1:1: error: import requires an exported declaration"
+  },
   "private_abs": {
     "source_error": ":1:1: error: import requires an exported declaration"
   }

@@ -29,6 +29,10 @@ static inline XrRbcNativeShape xr_rbc_native_shape(XrRbcNativeKind kind) {
         [XR_RBC_NATIVE_CLOCK_CPU] = {.window_inputs = 1, .writes_result = true},
         [XR_RBC_NATIVE_CLOCK_MONOTONIC] = {.window_inputs = 1, .writes_result = true},
         [XR_RBC_NATIVE_UTC_OFFSET_AT] = {.window_inputs = 2, .writes_result = true},
+        [XR_RBC_NATIVE_MATH_SIN] = {.window_inputs = 2, .writes_result = true, .requires_typed_window = true},
+        [XR_RBC_NATIVE_MATH_COS] = {.window_inputs = 2, .writes_result = true, .requires_typed_window = true},
+        [XR_RBC_NATIVE_MATH_SQRT] = {.window_inputs = 2, .writes_result = true, .requires_typed_window = true},
+        [XR_RBC_NATIVE_MATH_HYPOT] = {.window_inputs = 3, .writes_result = true, .requires_typed_window = true},
 #if defined(XR_RBC_LINKED_MATH_LERP)
         [XR_RBC_NATIVE_MATH_LERP] = {.window_inputs = 4, .writes_result = true,
             .requires_typed_window = true},

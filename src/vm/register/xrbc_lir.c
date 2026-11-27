@@ -74,9 +74,19 @@ struct XrRbcProgram {
 
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
 #define RBC_LIR_ASSERT_ENTRY (UINT32_MAX - 2)
-#define RBC_LIR_NATIVE_BASE (UINT32_MAX - 8)
+#define RBC_LIR_NATIVE_BASE (RBC_LIR_ASSERT_ENTRY - XR_RBC_NATIVE_COUNT)
 XR_STATIC_ASSERT(RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_COUNT <= RBC_LIR_ASSERT_ENTRY,
     "native mappings do not overlap the special call entries");
+
+static XrRbcNativeKind rbc_lir_math_native(XrLirExternKind kind) {
+    switch (kind) {
+    case XR_LIR_EXTERN_MATH_SIN: return XR_RBC_NATIVE_MATH_SIN;
+    case XR_LIR_EXTERN_MATH_COS: return XR_RBC_NATIVE_MATH_COS;
+    case XR_LIR_EXTERN_MATH_SQRT: return XR_RBC_NATIVE_MATH_SQRT;
+    case XR_LIR_EXTERN_MATH_HYPOT: return XR_RBC_NATIVE_MATH_HYPOT;
+    default: return XR_RBC_NATIVE_COUNT;
+    }
+}
 
 static bool rbc_lir_native(uint32_t mapping) {
     return mapping >= RBC_LIR_NATIVE_BASE && mapping < RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_COUNT;
@@ -799,6 +809,12 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                             mapping[i.callee - 1] = RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_MATH_LERP;
                             continue;
                         }
+                        XrRbcNativeKind math = rbc_lir_math_native(callee.extern_kind);
+                        if (callee.kind == XR_LIR_FUNCTION_EXTERNAL && i.op == XR_LIR_CALL &&
+                            math != XR_RBC_NATIVE_COUNT) {
+                            mapping[i.callee - 1] = RBC_LIR_NATIVE_BASE + math;
+                            continue;
+                        }
                         if (callee.kind != XR_LIR_FUNCTION_EXTERNAL ||
                             (callee.extern_kind < XR_LIR_EXTERN_PRINT_I64 ||
                              callee.extern_kind > XR_LIR_EXTERN_UTC_OFFSET_AT)) {
@@ -1325,6 +1341,12 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         }
         if (rbc_lir_native(c->functions[i->callee - 1])) {
             XrRbcNativeKind kind = (XrRbcNativeKind)(c->functions[i->callee - 1] - RBC_LIR_NATIVE_BASE);
+            const XrRbcProgram *program = c->literals->program;
+            uint32_t target = 0;
+            while (target < program->module.native_count && program->natives[target] != kind)
+                ++target;
+            if (target == program->module.native_count)
+                return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "native call is absent from the executable directory");
             uint32_t inputs = xr_rbc_native_shape(kind).window_inputs;
             if (inputs != i->operand_count + 1u || inputs >= c->register_count)
                 return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "registered native call window differs from the signature");
@@ -1333,7 +1355,7 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
                 if (!rbc_lir_emit(c, XR_RBC_MOV, destination + a + 1, c->slots[i->operands[a]], 0, 0))
                     return false;
             if (!rbc_lir_constant(c, destination + inputs, i->source.path_length ? c->source_id : 0) ||
-                !rbc_lir_emit(c, XR_RBC_CALLN, destination, 0, 0, kind)) return false;
+                !rbc_lir_emit(c, XR_RBC_CALLN, destination, 0, 0, target)) return false;
             return !i->result || rbc_lir_emit(c, XR_RBC_MOV, result, destination, 0, 0);
         }
         uint32_t destination = c->register_count - i->operand_count - 1;
@@ -2188,10 +2210,10 @@ static XrRbcCompileStatus rbc_compile(const XrLirModule *input, XrLirFunction en
     if (status != XR_RBC_COMPILE_OK) goto done;
     for (size_t i = 0; i < all; ++i) {
         if (!rbc_lir_native(mapping[i])) continue;
-        for (uint32_t kind=0; kind<XR_RBC_NATIVE_COUNT; ++kind)
-            p->natives[kind] = (XrRbcNativeKind)kind;
+        for (uint32_t kind = 0; kind < XR_RBC_NATIVE_COUNT; ++kind)
+            if (xr_rbc_native_shape((XrRbcNativeKind)kind).window_inputs)
+                p->natives[p->module.native_count++] = (XrRbcNativeKind)kind;
         p->module.natives = p->natives;
-        p->module.native_count = XR_RBC_NATIVE_COUNT;
         break;
     }
     status = XR_RBC_COMPILE_OUT_OF_MEMORY;

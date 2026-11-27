@@ -1350,6 +1350,9 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
         if (f->extern_kind == XR_LIR_EXTERN_STDLIB_MATH_LERP)
             return xr_lir_math_lerp_external_signature(f->name, f->name_length,
                 f->parameter_types, f->parameter_count, f->result);
+        XrLirMathExternal math = xr_lir_math_external(f->extern_kind);
+        if (math.name) return xr_lir_math_external_signature(math, f->name, f->name_length,
+            f->parameter_types, f->parameter_count, f->result);
         const char *clock = clock_external_name(f->extern_kind);
         if (clock) return f->result == XR_LIR_I64 &&
             f->parameter_count == (f->extern_kind == XR_LIR_EXTERN_UTC_OFFSET_AT ? 1u : 0u) &&
