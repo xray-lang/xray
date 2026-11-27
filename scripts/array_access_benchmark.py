@@ -320,7 +320,10 @@ def compiler_flags(compiler: Path, header: str, version: bytes) -> tuple[list, s
 
 def runtime_compile_commands(rows: list, root: Path, build: Path, compiler: Path) -> list:
     """Select real target objects, excluding test copies of the same sources."""
-    directory = (build / "src/runtime/native/CMakeFiles/xray_native_runtime.dir").resolve()
+    base_directory = build / "src/runtime/native/CMakeFiles"
+    directories = [(base_directory / (name + ".dir")).resolve()
+                   for name in ("xray_native_runtime", "xray_native_runtime_objects")]
+    owner = None
     names = ("xnative_array_backing.c", "xnative_array_ops.c", "xnative_array_slice.c")
     expected = {(root / "src/runtime/native" / name).resolve(): name for name in names}
     selected = {}
@@ -334,8 +337,12 @@ def runtime_compile_commands(rows: list, root: Path, build: Path, compiler: Path
             raise ValueError("Array compiler command is missing its real object target")
         output = Path(row["output"])
         output = (output if output.is_absolute() else base / output).resolve()
-        if not output.is_relative_to(directory):
+        directory = next((path for path in directories if output.is_relative_to(path)), None)
+        if directory is None:
             continue
+        if owner is not None and directory != owner:
+            raise ValueError("Array runtime compiler commands span multiple production targets")
+        owner = directory
         name = expected[source]
         if name in selected:
             raise ValueError("Duplicate effective Array runtime compiler command: " + name)
@@ -599,7 +606,7 @@ def assert_result(args) -> int:
 def self_test_runtime_commands(work: Path) -> list:
     root = Path(__file__).resolve().parents[1]
     build = work / "compiler-controls"
-    target = build / "src/runtime/native/CMakeFiles/xray_native_runtime.dir"
+    target = build / "src/runtime/native/CMakeFiles/xray_native_runtime_objects.dir"
     compiler = Path(sys.executable).resolve()
     owned = []
     for name in ("xnative_array_backing.c", "xnative_array_ops.c", "xnative_array_slice.c"):
@@ -612,10 +619,15 @@ def self_test_runtime_commands(work: Path) -> list:
     complete = [*owned, whitebox]
     if runtime_compile_commands(complete, root, build, compiler) != owned:
         raise RuntimeError("A whitebox object replaced an effective runtime producer")
+    old_target = target.with_name("xray_native_runtime.dir")
+    old = [dict(row, output=str(old_target / Path(row["output"]).name)) for row in owned]
+    if runtime_compile_commands([*old, whitebox], root, build, compiler) != old:
+        raise RuntimeError("The original runtime target can no longer be compared")
     wrong_compiler = work / "different-compiler"
     wrong_compiler.write_bytes(b"different provider")
     controls = {
         "missing-effective-producer": complete[1:],
+        "mixed-runtime-targets": [old[0], *complete[1:]],
         "duplicate-effective-producer": [*complete, dict(owned[0], output=str(target / "duplicate.obj"))],
         "different-actual-provider": [owned[0], dict(owned[1], arguments=[str(wrong_compiler)]), owned[2], whitebox],
         "missing-object-identity": [dict(owned[0], output=""), *complete[1:]],
@@ -626,7 +638,7 @@ def self_test_runtime_commands(work: Path) -> list:
         except ValueError:
             continue
         raise RuntimeError("Malformed runtime compiler identity was accepted: " + name)
-    return ["owned-target-with-whitebox-copy", *controls]
+    return ["owned-target-with-whitebox-copy", "original-owned-target", *controls]
 
 
 def self_test(args) -> None:

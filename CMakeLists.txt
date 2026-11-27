@@ -1402,8 +1402,9 @@ if(_XRAY_STDLIB_PRODUCER_RUNNABLE)
         VERBATIM)
     add_library(xray_stdlib_scalar_export STATIC ${_XRAY_STDLIB_SCALAR_EXPORT_SOURCES}
         $<TARGET_OBJECTS:xray_native_runtime_objects>)
+    set_target_properties(xray_native_runtime PROPERTIES OUTPUT_NAME xray_native_runtime_bootstrap)
     set_target_properties(xray_stdlib_scalar_export PROPERTIES OUTPUT_NAME xray_native_runtime
-        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/native-program-runtime")
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/src/runtime/native")
     target_compile_definitions(xray_lir_c PRIVATE XR_LIR_C_HAS_STDLIB_MATH=1)
     target_include_directories(xray_stdlib_scalar_export PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     set_target_properties(xray_stdlib_scalar_export PROPERTIES
