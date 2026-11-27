@@ -241,8 +241,6 @@ tests/diff/cases/semantics/modules/xmod_inherit_lib_subclass.xr  # CLASS_METHOD_
 tests/diff/cases/semantics/modules/xmod_namespace_generic.xr  # error: closure parameter requires an annotation or complete callable context
 tests/diff/cases/semantics/modules/xmod_nested_class_field.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
 tests/diff/cases/semantics/modules/xmod_ptr_offset_imported_const.xr  # error: this function declaration syntax is not yet supported by the compiler
-tests/diff/cases/semantics/modules/xmod_same_name_methods.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
-tests/diff/cases/semantics/modules/xmod_static.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/narrowing/narrowed_types_reach_codegen.xr  # error: len receiver family is not admitted
 tests/diff/cases/semantics/object/object_destructure.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
 tests/diff/cases/semantics/object/object_static_index_get_set.xr  # non-container place is not supported by LIR lowering yet
@@ -280,7 +278,6 @@ tests/diff/cases/semantics/oop/polymorphic_dispatch_runtime.xr  # CLASS_METHOD_R
 tests/diff/cases/semantics/oop/repr_c_struct.xr  # error: equality requires its declaration predicate
 tests/diff/cases/semantics/oop/repr_c_struct_aggregate_param.xr  # error: source declaration type structure is invalid
 tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr  # error: struct declaration contract is not admitted
-tests/diff/cases/semantics/oop/static_methods.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr  # error: this statement syntax is not yet supported by the compiler
 tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr  # error: this statement syntax is not yet supported by the compiler
 tests/diff/cases/semantics/optimizer/break_labeled_outer_induction_bound.xr  # error: labelled loops are not admitted
