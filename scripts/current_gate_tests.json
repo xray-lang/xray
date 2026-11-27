@@ -17,6 +17,7 @@
     "lir_bytecode_source",
     "lir_vm_source",
     "lir_vm_output",
+    "test_lir_test_role_startup",
     "skeleton_diff",
     "smoke",
     "test_lir_cli_effects",
