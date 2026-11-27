@@ -97,7 +97,7 @@ def main() -> None:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compiler", action="append", default=[])
-    parser.add_argument("--case", action="append", default=[])
+    parser.add_argument("--case", action="append", default=[], help="run only this fixture (repeatable)")
     args = parser.parse_args()
     cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose", "callable_compose_weaken",
              "callable_inline_array_parameter", "callable_inline_array_result",
@@ -135,21 +135,6 @@ def main() -> None:
              "map_stationary_reads", "map_mixed_scalar_cycle", "map_local_forwarding", "map_edit_lifetime",
              "map_key_mutation", "map_borrowed_literal_key",
              "set_values")
-    unknown = sorted(set(args.case) - set(cases))
-    if unknown:
-        parser.error("unknown cases: " + ", ".join(unknown))
-    root, binary = args.root.resolve(), args.binary.resolve()
-    sys.path.insert(0, str(root / "tests/lib"))
-    from xraytest.artifacts import complete_native_artifacts
-    sys.path.insert(0, str(root / "scripts"))
-    from xray_process import RecoveryRequired, run_child
-
-    args.output.mkdir(parents=True, exist_ok=True)
-    attempt = Path(tempfile.mkdtemp(prefix="array-native-", dir=args.output.resolve()))
-    fixtures = root / "tests/fixtures/lir_cli/array_lower"
-    environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
-    if os.name == "nt":
-        environment["PATH"] = str(binary.parent) + os.pathsep + environment.get("PATH", "")
     rejected_sources = {
         "reject_repeat_mutable": b"fixed array length must be a constant integer",
         "reject_repeat_zero": b"fixed array length must be a constant integer",
@@ -211,11 +196,31 @@ def main() -> None:
         "reject_nullable_array_cfn": b"nullable Array callable requires the Xray ABI",
     }
     callback_names = ("check_view_state_indirect_callback_read", "check_view_callback_declaration", "check_view_callback_derived")
-    cases = ([("ordinary", name, None) for name in cases
-              if (not args.case or name in args.case) and name not in ("ref_global_alias", "string_append_ref")]
+    cases = ([("ordinary", name, None) for name in cases if name not in rejected_sources]
              + [("lower", name, diagnostic) for name, diagnostic in lower_refusals.items()]
              + [("callback", name, None) for name in callback_names]
              + [("rejected", name, diagnostic) for name, diagnostic in rejected_sources.items()])
+    names = {name for _, name, _ in cases}
+    assert len(names) == len(cases), "Each fixture must have one classification"
+    selected = set(args.case)
+    unknown = sorted(selected - names)
+    if unknown:
+        parser.error("unknown cases: " + ", ".join(unknown))
+    if selected:
+        cases = [case for case in cases if case[1] in selected]
+
+    root, binary = args.root.resolve(), args.binary.resolve()
+    sys.path.insert(0, str(root / "tests/lib"))
+    from xraytest.artifacts import complete_native_artifacts
+    sys.path.insert(0, str(root / "scripts"))
+    from xray_process import RecoveryRequired, run_child
+
+    args.output.mkdir(parents=True, exist_ok=True)
+    attempt = Path(tempfile.mkdtemp(prefix="array-native-", dir=args.output.resolve()))
+    fixtures = root / "tests/fixtures/lir_cli/array_lower"
+    environment = dict(os.environ, XRAY_STDLIB_PATH=str(root / "stdlib"), NO_COLOR="1")
+    if os.name == "nt":
+        environment["PATH"] = str(binary.parent) + os.pathsep + environment.get("PATH", "")
     gate = SpawnGate()
 
     def run_ordinary(name, work, run, failures):
