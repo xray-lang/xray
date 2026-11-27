@@ -41,9 +41,7 @@ export class TomlFloat {
         if (len(text) > 0) {
             this.text = text
         } else {
-            var s = JSON.stringify(value)
-            if (!s.contains(".") && !s.contains("e") && !s.contains("E")) { s = s + ".0" }
-            this.text = s
+            this.text = string(value)
         }
     }
 
@@ -682,7 +680,7 @@ class TomlParser {
             }
             this.advance()
             this.skipWs()
-            this.setNestedValue(ref obj, keys, this.parseValue())
+            this.setNestedValue(obj, keys, this.parseValue())
             this.skipWs()
             if (this.peek() == "}") {
                 this.advance()
@@ -733,7 +731,7 @@ class TomlParser {
         return TomlValue.String("")
     }
 
-    setNestedValue(rootObj: ref TomlTable, keys: Array<string>, value: TomlValue) {
+    setNestedValue(rootObj: TomlTable, keys: Array<string>, value: TomlValue) {
         var current = rootObj
         if (len(keys) == 0) { return }
         for (var i = 0; i < len(keys) - 1; i++) {
@@ -879,7 +877,7 @@ class TomlParser {
             this.advance()
             this.skipWs()
             var value = this.parseValue()
-            this.setNestedValue(ref this.current, keys, value)
+            this.setNestedValue(this.current, keys, value)
             this.skipToEol()
         }
         return this.root

@@ -630,13 +630,9 @@
       "id": "stdlib/toml/toml.xr",
       "path": "stdlib/toml/toml.xr",
       "mode": "run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/toml/toml.xr:882:42: error: projected Class ref requires its own object borrow owner"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "stdlib/url/url.xr",
@@ -1119,13 +1115,9 @@
       "id": "native:stdlib/toml/toml.xr",
       "path": "stdlib/toml/toml.xr",
       "mode": "build-run",
-      "expect": "gap",
-      "exit_code": 1,
-      "stdout": "tests/smoke/expected/empty.txt",
-      "gap": {
-        "feature": "Task339 M4",
-        "first_diagnostic": "stdlib/toml/toml.xr:882:42: error: projected Class ref requires its own object borrow owner"
-      }
+      "expect": "pass",
+      "exit_code": 0,
+      "stdout": "tests/smoke/expected/one.txt"
     },
     {
       "id": "native:stdlib/ws/ws.xr",
