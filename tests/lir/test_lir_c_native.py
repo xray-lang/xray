@@ -5,16 +5,17 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 
 def run(arguments, *, expected_exit=0, **kwargs):
     print('$ ' + json.dumps([str(value) for value in arguments]), flush=True)
     completed = subprocess.run([str(value) for value in arguments], capture_output=True, timeout=30, **kwargs)
-    if completed.stdout:
-        print(completed.stdout.decode('utf-8', errors='replace'), end='', flush=True)
-    if completed.stderr:
-        print(completed.stderr.decode('utf-8', errors='replace'), end='', flush=True)
+    if completed.stdout or completed.stderr:
+        sys.stdout.buffer.write(completed.stdout)
+        sys.stdout.buffer.write(completed.stderr)
+        sys.stdout.buffer.flush()
     if completed.returncode != expected_exit:
         raise RuntimeError(f'command failed with exit {completed.returncode}')
     return completed
