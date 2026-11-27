@@ -1,0 +1,3 @@
+fn reportInit() -> i64 { print(30); return 30 }
+const observation: i64 = reportInit()
+export fn z() -> i64 { return 3 }

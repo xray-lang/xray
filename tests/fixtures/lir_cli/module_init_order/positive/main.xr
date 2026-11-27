@@ -1,0 +1,4 @@
+import {z} from "./z"
+import {a} from "./a"
+import {b} from "./b"
+print(z() + a() + b())

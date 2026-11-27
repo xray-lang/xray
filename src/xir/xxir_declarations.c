@@ -104,7 +104,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
 }
 static int module_name_compare(const XrXirSourceModule *a, const XrXirSourceModule *b) {
     uint32_t count = a->name_length < b->name_length ? a->name_length : b->name_length;
-    int order = memcmp(a->name, b->name, count);
+    int order = count ? memcmp(a->name, b->name, count) : 0;
     return order ? order : a->name_length < b->name_length ? -1 : a->name_length != b->name_length;
 }
 XR_FUNC bool xr_xir_module_same_scope(const XrXirDeclarations *d, uint32_t from, uint32_t target) {
@@ -145,49 +145,142 @@ bool xr_xir_module_imports(const XrXirDeclarations *d, uint32_t from, uint32_t t
     return false;
 }
 #include "xxir_nominal_access.inc.c"
-XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile_context, const XrXirDeclarations *d, uint32_t *order) {
-    XrXirStatus allocation_status = XR_XIR_OK;
-    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
-    if (!d || !order || !d->module_count || !d->modules) return XR_XIR_BAD_STRUCTURE;
-    uint32_t *result = xir_compile_calloc(compile_context, d->module_count, sizeof(*result), &allocation_status);
-    uint8_t *done = xir_compile_calloc(compile_context, d->module_count, 1, &allocation_status);
-    if (!done) { xr_compile_resources_free(result); return allocation_status; }
-    XrXirStatus status = XR_XIR_OK;
-    for (uint32_t step = 0; step < d->module_count; ++step) {
-        uint32_t best = UINT32_MAX;
-        for (uint32_t m = 0; m < d->module_count; ++m) {
+typedef struct ModuleOrderNode {
+    size_t first_user;
+    uint32_t remaining;
+} ModuleOrderNode;
+typedef struct ModuleOrderEdge {
+    size_t next;
+    uint32_t user;
+} ModuleOrderEdge;
+typedef struct ModuleReadyQueue {
+    const XrXirSourceModule *modules;
+    uint32_t *items;
+    uint32_t count;
+} ModuleReadyQueue;
 
-            if (done[m]) continue;
-            bool ready = true;
-            const XrXirSourceModule *module = &d->modules[m];
-            if((module->name_length && !module->name) || module->dependency_count>d->module_count ||
-                (module->dependency_count && !module->dependencies)){status=XR_XIR_BAD_STRUCTURE;goto finish;}
-            for (uint32_t i = 0; i < module->dependency_count; ++i) {
-
-                uint32_t dependency=module->dependencies[i];
-                if(dependency>=d->module_count){status=XR_XIR_BAD_STRUCTURE;goto finish;}
-                if (!done[dependency]) ready = false;
-            }
-            if (ready) {
-
-                if (best == UINT32_MAX || module_name_compare(module, &d->modules[best]) < 0) best = m;
-            }
+/* The next initializer is the smallest ready byte name, with the original
+ * ordinal breaking ties for callers that use ordering before verification. */
+static bool module_ready_before(const ModuleReadyQueue *ready, uint32_t a, uint32_t b) {
+    int comparison = module_name_compare(&ready->modules[a], &ready->modules[b]);
+    return comparison < 0 || (comparison == 0 && a < b);
+}
+static void module_ready_push(ModuleReadyQueue *ready, uint32_t module) {
+    uint32_t child = ready->count++;
+    while (child) {
+        uint32_t parent = (child - 1) / 2;
+        if (!module_ready_before(ready, module, ready->items[parent])) break;
+        ready->items[child] = ready->items[parent];
+        child = parent;
+    }
+    ready->items[child] = module;
+}
+static uint32_t module_ready_pop(ModuleReadyQueue *ready) {
+    XR_DCHECK(ready->count, "Ready queue contains a module");
+    uint32_t first = ready->items[0];
+    uint32_t last = ready->items[--ready->count];
+    uint32_t parent = 0;
+    while (parent < ready->count / 2) {
+        uint32_t child = parent * 2 + 1;
+        if (child + 1 < ready->count && module_ready_before(ready, ready->items[child + 1], ready->items[child]))
+            ++child;
+        if (!module_ready_before(ready, ready->items[child], last)) break;
+        ready->items[parent] = ready->items[child];
+        parent = child;
+    }
+    ready->items[parent] = last;
+    return first;
+}
+static XrXirStatus module_order_edge_count(const XrXirDeclarations *d,
+    XrCompileRequestControl *control, size_t *output) {
+    size_t count = 0;
+    uint32_t rows = 0;
+    for (uint32_t m = 0; m < d->module_count; ++m) {
+        XrXirStatus status = xir_receive_step(control, &rows);
+        if (status != XR_XIR_OK) return status;
+        const XrXirSourceModule *module = &d->modules[m];
+        if ((module->name_length && !module->name) || module->dependency_count > d->module_count ||
+            (module->dependency_count && !module->dependencies)) return XR_XIR_BAD_STRUCTURE;
+        if (module->dependency_count > SIZE_MAX - count) return XR_XIR_BUDGET;
+        count += module->dependency_count;
+    }
+    *output = count;
+    return XR_XIR_OK;
+}
+static XrXirStatus module_order_index(const XrXirDeclarations *d, ModuleOrderNode *nodes,
+    ModuleOrderEdge *edges, ModuleReadyQueue *ready, XrCompileRequestControl *control) {
+    size_t next_edge = 0;
+    uint32_t rows = 0;
+    for (uint32_t m = 0; m < d->module_count; ++m) {
+        XrXirStatus status = xir_receive_step(control, &rows);
+        if (status != XR_XIR_OK) return status;
+        const XrXirSourceModule *module = &d->modules[m];
+        nodes[m].remaining = module->dependency_count;
+        if (!module->dependency_count) module_ready_push(ready, m);
+        for (uint32_t i = 0; i < module->dependency_count; ++i) {
+            status = xir_receive_step(control, &rows);
+            if (status != XR_XIR_OK) return status;
+            uint32_t dep = module->dependencies[i];
+            if (dep >= d->module_count) return XR_XIR_BAD_STRUCTURE;
+            edges[next_edge] = (ModuleOrderEdge){nodes[dep].first_user, m};
+            nodes[dep].first_user = ++next_edge;
         }
-        if (best == UINT32_MAX) { status = XR_XIR_BAD_STRUCTURE; goto finish; }
-        done[best] = 1;
-        result[step] = best;
     }
- finish:
-    if (status == XR_XIR_OK) {
-        size_t bytes = (size_t)d->module_count * sizeof(*result);
-        memcpy(order, result, bytes);
+    return XR_XIR_OK;
+}
+static XrXirStatus declaration_module_order(const XrXirCompileContext *context,
+    const XrXirDeclarations *d, uint32_t *order, XrCompileRequestControl *control) {
+    XrXirStatus status = xir_receive_poll(control);
+    if (status != XR_XIR_OK) return status;
+    size_t edge_count = 0;
+    status = module_order_edge_count(d, control, &edge_count);
+    if (status != XR_XIR_OK) return status;
+    if (d->module_count == 1) {
+        if (edge_count) return XR_XIR_BAD_STRUCTURE;
+        if (order) order[0] = 0;
+        return XR_XIR_OK;
     }
+    ModuleOrderNode *nodes = xir_compile_calloc(context, d->module_count, sizeof(*nodes), &status);
+    ModuleOrderEdge *edges = xir_compile_calloc(context, edge_count, sizeof(*edges), &status);
+    ModuleReadyQueue ready = {d->modules, xir_compile_calloc(context, d->module_count, sizeof(*ready.items), &status), 0};
+    uint32_t *result = order ? xir_compile_calloc(context, d->module_count, sizeof(*result), &status) : NULL;
+    if (status == XR_XIR_OK) status = module_order_index(d, nodes, edges, &ready, control);
+    uint32_t rows = 0;
+    for (uint32_t step = 0; step < d->module_count && status == XR_XIR_OK; ++step) {
+        if (!ready.count) { status = XR_XIR_BAD_STRUCTURE; break; }
+        status = xir_receive_step(control, &rows);
+        if (status != XR_XIR_OK) break;
+        uint32_t module = module_ready_pop(&ready);
+        if (result) result[step] = module;
+        for (size_t link = nodes[module].first_user; link; link = edges[link - 1].next) {
+            status = xir_receive_step(control, &rows);
+            if (status != XR_XIR_OK) break;
+            uint32_t user = edges[link - 1].user;
+            XR_DCHECK(nodes[user].remaining, "Each reverse edge retires once");
+            if (!--nodes[user].remaining) module_ready_push(&ready, user);
+        }
+    }
+    if (status == XR_XIR_OK) status = xir_receive_poll(control);
+    if (status == XR_XIR_OK && result)
+        memcpy(order, result, (size_t)d->module_count * sizeof(*result));
     xr_compile_resources_free(result);
-    xr_compile_resources_free(done);
+    xr_compile_resources_free(ready.items);
+    xr_compile_resources_free(edges);
+    xr_compile_resources_free(nodes);
     return status;
 }
-static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t functions) {
+XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile_context,
+    const XrXirDeclarations *d, uint32_t *order) {
+    if (!xir_compile_context_valid(compile_context) || !d || !order || !d->module_count || !d->modules)
+        return XR_XIR_BAD_STRUCTURE;
+    return declaration_module_order(compile_context, d, order, NULL);
+}
+static XrXirStatus declaration_module_shape(const XrXirDeclarations *d, uint32_t functions,
+    XrCompileRequestControl *control) {
+    uint32_t rows = 0;
     for (uint32_t m = 0; m < d->module_count; ++m) {
+        XrXirStatus status = xir_receive_step(control, &rows);
+        if (status != XR_XIR_OK) return status;
         const XrXirSourceModule *module = &d->modules[m];
         if (!(module->name_length + (uint64_t) module->dependency_count * 4 <= SIZE_MAX))
             return XR_XIR_BUDGET;
@@ -203,25 +296,52 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
             d->functions[module->initializer].test_role ||
             (d->functions[module->initializer].promises & XR_XIR_FUNCTION_GENERATOR) ||
             d->functions[module->initializer].nominal_owner || module->initializer == d->entry_function) return XR_XIR_BAD_STRUCTURE;
-        for (uint32_t p = 0; p < m; ++p) {
-
-            if (module_name_compare(module, &d->modules[p]) == 0) return XR_XIR_BAD_STRUCTURE;
-        }
-        for (uint32_t i = 0; i < module->dependency_count; ++i) {
-            uint32_t target = module->dependencies[i];
-            if (target >= d->module_count || target == m) return XR_XIR_BAD_STRUCTURE;
-            for (uint32_t p = 0; p < i; ++p) {
-
-                if (module->dependencies[p] == target) return XR_XIR_BAD_STRUCTURE;
-            }
-        }
     }
     return XR_XIR_OK;
+}
+static XrXirStatus declaration_modules(const XrXirCompileContext *context,
+    const XrXirDeclarations *d, uint32_t functions, XrCompileRequestControl *control) {
+    XrXirStatus status = declaration_module_shape(d, functions, control);
+    if (status != XR_XIR_OK || d->module_count == 1) return status;
+    ModuleReadyQueue names = {d->modules, xir_compile_calloc(context, d->module_count, sizeof(*names.items), &status), 0};
+    /* The one-based owner distinguishes this adjacency list without clearing
+     * the target index for every module. */
+    uint32_t *last_owner = xir_compile_calloc(context, d->module_count, sizeof(*last_owner), &status);
+    uint32_t rows = 0;
+    for (uint32_t m = 0; m < d->module_count && status == XR_XIR_OK; ++m) {
+        status = xir_receive_step(control, &rows);
+        if (status != XR_XIR_OK) break;
+        module_ready_push(&names, m);
+        const XrXirSourceModule *module = &d->modules[m];
+        for (uint32_t i = 0; i < module->dependency_count && status == XR_XIR_OK; ++i) {
+            status = xir_receive_step(control, &rows);
+            if (status != XR_XIR_OK) break;
+            uint32_t target = module->dependencies[i];
+            if (target >= d->module_count || target == m || last_owner[target] == m + 1) {
+                status = XR_XIR_BAD_STRUCTURE;
+                break;
+            }
+            last_owner[target] = m + 1;
+        }
+    }
+    if (status == XR_XIR_OK) {
+        uint32_t previous = module_ready_pop(&names);
+        while (names.count && status == XR_XIR_OK) {
+            status = xir_receive_step(control, &rows);
+            if (status != XR_XIR_OK) break;
+            uint32_t current = module_ready_pop(&names);
+            if (module_name_compare(&d->modules[previous], &d->modules[current]) == 0)
+                status = XR_XIR_BAD_STRUCTURE;
+            previous = current;
+        }
+    }
+    xr_compile_resources_free(last_owner);
+    xr_compile_resources_free(names.items);
+    return status;
 }
 #include "xxir_map_literal_declarations.inc.c"
 #include "xxir_parameter_names.inc.c"
 XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compile_context, const XrXirDeclarations *d, const XrXirTypes *types, uint32_t functions, XrXirLinkageKind kind, XrCompileRequestControl *control) {
-    XrXirStatus allocation_status = XR_XIR_OK;
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
@@ -260,7 +380,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     if (kind == XR_XIR_PROGRAM && (d->functions[d->entry_function].module != d->root_module ||
         d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role ||
         (d->functions[d->entry_function].promises & XR_XIR_FUNCTION_GENERATOR))) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = declaration_modules(d, functions);
+    XrXirStatus status = declaration_modules(work, d, functions, control);
     if(status==XR_XIR_OK)status=declaration_map_literals_verify(compile_context,d);
     if(status==XR_XIR_OK)status=declaration_parameter_names_verify(compile_context,d,functions,types,true,control);
     if(status==XR_XIR_OK)status=xir_hashable_witnesses_shape(compile_context,types,d,functions,control);
@@ -331,15 +451,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
             xr_utf8_core_scan_strict((const uint8_t *) literal->bytes, literal->length).error != XR_UTF8_OK)
             return XR_XIR_BAD_STRUCTURE;
     }
-    /* The temporary order and the traversal's done bitmap overlap. */
-    uint64_t scratch = (uint64_t)d->module_count * (sizeof(uint32_t) + 1);
-    if (scratch > SIZE_MAX) return XR_XIR_BUDGET;
-
-    uint32_t *order = xir_compile_calloc(compile_context, d->module_count, sizeof(*order), &allocation_status);
-    if (!order) {  return allocation_status; }
-    status = xr_xir_compile_declarations_order(work, d, order);
-    xr_compile_resources_free(order);
-    return status;
+    return declaration_module_order(work, d, NULL, control);
 }
 static XrXirStatus declaration_poll(XrCompileRequestControl *control) {
     return control ? xir_compile_resource_status(xr_compile_request_control_poll(control)) : XR_XIR_OK;

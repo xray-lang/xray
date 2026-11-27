@@ -66,6 +66,33 @@ def main() -> None:
                 assert native.stderr == vm.stderr, (name, vm.stderr, native.stderr)
             else:
                 assert not native.stderr, (name, native.stderr)
+
+    order_fixtures = fixtures / "module_init_order"
+    source = order_fixtures / "positive" / "main.xr"
+    expected = source.with_suffix(".out").read_text(encoding="ascii").encode("ascii")
+    executable = work / ("module_order.exe" if os.name == "nt" else "module_order")
+    for mode, argv in (
+        ("vm", [str(binary), "run", str(source)]),
+        ("build", [str(binary), "build", str(source), "-o", str(executable)]),
+        ("native", [str(executable)]),
+    ):
+        result = run("module_order-" + mode, argv, 0)
+        assert not result.stderr, (mode, result.stderr)
+        if mode != "build":
+            assert result.stdout == expected, (mode, result.stdout, expected)
+
+    source = order_fixtures / "cycle" / "main.xr"
+    executable = work / ("module_cycle.exe" if os.name == "nt" else "module_cycle")
+    for mode in ("check", "run", "build"):
+        argv = [str(binary), mode, str(source)]
+        if mode == "build":
+            argv += ["-o", str(executable)]
+        refused = run("module_cycle-" + mode, argv, 1)
+        assert refused.stdout == b"" and b"module graph ordering failed" in refused.stderr, (
+            mode, refused.stdout, refused.stderr
+        )
+        assert not executable.exists()
+
     complete_native_artifacts(work)
     print(f"{len(records)} module-state commands passed")
 

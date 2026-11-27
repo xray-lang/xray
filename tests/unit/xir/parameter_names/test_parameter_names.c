@@ -101,6 +101,105 @@ static void namespace_shapes(const XrXirCompileContext *compile) {
         CHECK(physical_live==live && physical_bytes==bytes);
     }
 }
+static XrXirStatus module_order_expect(const XrXirCompileContext *compile,
+    const XrXirDeclarations *declarations, const uint32_t *expected) {
+    uint32_t order[7];
+    uint32_t sentinel[7];
+    for (size_t i = 0; i < sizeof(order) / sizeof(*order); ++i) order[i] = sentinel[i] = UINT32_MAX;
+    CHECK(declarations->module_count == sizeof(order) / sizeof(*order));
+    XrXirStatus status = xr_xir_compile_declarations_order(compile, declarations, order);
+    CHECK((status == XR_XIR_OK) == (expected != NULL));
+    CHECK(!memcmp(order, expected ? expected : sentinel, sizeof(order)));
+    return status;
+}
+static void declaration_module_order_cases(const XrXirCompileContext *compile) {
+    uint32_t deps[] = {0, 0};
+    XrXirSourceModule modules[] = {
+        {.name = "z", .name_length = 1, .initializer = 0},
+        {.name = "a", .name_length = 1, .initializer = 1, .dependencies = deps, .dependency_count = 1},
+        {.name = "b", .name_length = 1, .initializer = 2},
+        {.name = "a", .name_length = 1, .initializer = 3},
+        {.name = "aa", .name_length = 2, .initializer = 4},
+        {.name = "\xc3\xa9", .name_length = 2, .initializer = 5},
+        {.name = "a", .name_length = 1, .initializer = 6},
+    };
+    XrXirFunctionIdentity functions[] = {
+        {0}, {.module = 1}, {.module = 2}, {.module = 3}, {.module = 4}, {.module = 5}, {.module = 6}, {0},
+    };
+    XrXirDeclarations declarations = {
+        .modules = modules, .module_count = 7, .functions = functions, .entry_function = 7,
+    };
+    const uint32_t duplicate_names[] = {3, 6, 4, 2, 0, 1, 5};
+    CHECK(module_order_expect(compile, &declarations, duplicate_names) == XR_XIR_OK);
+    CHECK(xr_xir_compile_declarations_verify(compile, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_BAD_STRUCTURE);
+    modules[3].name = "ab";
+    modules[3].name_length = 2;
+    modules[6].name = "ac";
+    modules[6].name_length = 2;
+    const uint32_t ordered[] = {4, 3, 6, 2, 0, 1, 5};
+    CHECK(module_order_expect(compile, &declarations, ordered) == XR_XIR_OK);
+    CHECK(xr_xir_compile_declarations_verify(compile, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_OK);
+
+    modules[0].name = NULL;
+    CHECK(module_order_expect(compile, &declarations, NULL) == XR_XIR_BAD_STRUCTURE);
+    modules[0].name_length = 0;
+    const uint32_t empty_name[] = {0, 1, 4, 3, 6, 2, 5};
+    CHECK(module_order_expect(compile, &declarations, empty_name) == XR_XIR_OK);
+    CHECK(xr_xir_compile_declarations_verify(compile, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_BAD_STRUCTURE);
+    modules[0].name = "z";
+    modules[0].name_length = 1;
+
+    modules[1].dependency_count = 2;
+    CHECK(module_order_expect(compile, &declarations, ordered) == XR_XIR_OK);
+    CHECK(xr_xir_compile_declarations_verify(compile, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_BAD_STRUCTURE);
+    modules[1].dependency_count = 1;
+    deps[0] = 7;
+    CHECK(module_order_expect(compile, &declarations, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_declarations_verify(compile, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_BAD_STRUCTURE);
+    deps[0] = 0;
+    modules[1].dependencies = NULL;
+    CHECK(module_order_expect(compile, &declarations, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_declarations_verify(compile, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_BAD_STRUCTURE);
+    modules[1].dependencies = deps;
+    uint32_t back = 1;
+    modules[0].dependencies = &back;
+    modules[0].dependency_count = 1;
+    CHECK(module_order_expect(compile, &declarations, NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_declarations_verify(compile, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_BAD_STRUCTURE);
+    modules[0].dependencies = NULL;
+    modules[0].dependency_count = 0;
+
+    size_t live = physical_live, bytes = physical_bytes;
+    size_t first = physical_attempts;
+    CHECK(module_order_expect(compile, &declarations, ordered) == XR_XIR_OK);
+    size_t order_sites = physical_attempts - first;
+    first = physical_attempts;
+    CHECK(xr_xir_compile_declarations_verify(compile, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_OK);
+    size_t verify_sites = physical_attempts - first;
+    CHECK(order_sites && verify_sites);
+    for (size_t point = 0; point < order_sites; ++point) {
+        physical_fail = physical_attempts + point;
+        CHECK(module_order_expect(compile, &declarations, NULL) == XR_XIR_OUT_OF_MEMORY);
+        physical_fail = SIZE_MAX;
+        CHECK(physical_live == live && physical_bytes == bytes);
+    }
+    for (size_t point = 0; point < verify_sites; ++point) {
+        physical_fail = physical_attempts + point;
+        CHECK(xr_xir_compile_declarations_verify(compile, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_OUT_OF_MEMORY);
+        physical_fail = SIZE_MAX;
+        CHECK(physical_live == live && physical_bytes == bytes);
+    }
+    XrCompileResourceStats stats = {0};
+    CHECK(xr_compile_resources_stats(compile->resources, &stats) == XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_FINITE, stats.held_bytes, false};
+    XrCompileResources *restricted = NULL;
+    CHECK(xr_compile_resources_new(&limits, &restricted) == XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext bounded = {restricted, compile->limits};
+    CHECK(module_order_expect(&bounded, &declarations, NULL) == XR_XIR_MEMORY_LIMIT);
+    CHECK(xr_xir_compile_declarations_verify(&bounded, &declarations, NULL, 8, XR_XIR_PROGRAM, NULL) == XR_XIR_MEMORY_LIMIT);
+    xr_compile_resources_release(restricted);
+    CHECK(physical_live == live && physical_bytes == bytes);
+}
 static XrXirStatus map_key_source_failure(const XrXirCompileContext *compile,const char *text,
     XrXirSourceFailure *failure) {
     XrCompilerSession *session=NULL;
@@ -154,6 +253,7 @@ int main(void) {
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrXirCompileContext compile={resources,xr_xir_compile_default_limits()};
     namespace_shapes(&compile);
+    declaration_module_order_cases(&compile);
     map_key_diagnostic_case(&compile,false);
     map_key_diagnostic_case(&compile,true);
     const char producer[]="export interface Join { join(left:i64,right:i64)->i64 }\n"

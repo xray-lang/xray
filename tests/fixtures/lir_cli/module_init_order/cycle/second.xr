@@ -1,0 +1,2 @@
+import {first} from "./first"
+export fn second() -> i64 { return first() }

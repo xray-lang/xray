@@ -1,0 +1,4 @@
+import {z} from "./z"
+fn reportInit() -> i64 { print(40); return 40 }
+const observation: i64 = reportInit()
+export fn a() -> i64 { return z() }
