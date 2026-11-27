@@ -16,6 +16,9 @@
 #include "xir/xxir_source.h"
 #include <stdio.h>
 #include <string.h>
+#ifdef XR_OS_WINDOWS
+#include "base/xwindows_utf8.h"
+#endif
 
 static const char module_name[] = "math";
 static const char module_path[] = "math/math.xr";
@@ -87,15 +90,23 @@ static bool closed_effects(const XrXirArtifact *artifact, uint32_t selected) {
         facts.control.throws == XR_XIR_EFFECT_NONE && !facts.root.requires_root && !facts.root.unresolved;
 }
 
-static bool write_output(const char *path, const XrLirCOutput *output) {
+static bool write_output(XrCompileResources *resources, const char *path, const XrLirCOutput *output) {
+#ifdef XR_OS_WINDOWS
+    XrOsIoPolicy policy = xr_compile_io_policy(resources);
+    wchar_t *wide_path = NULL;
+    if (xr_win_utf8_path_owned(&policy, path, &wide_path) != XR_OS_IO_OK) return false;
+    FILE *file = _wfopen(wide_path, L"wb");
+    xr_compile_resources_free(wide_path);
+#else
+    (void) resources;
     FILE *file = fopen(path, "wb");
+#endif
     if (!file) return false;
     bool written = fwrite(output->bytes, 1, output->length, file) == output->length;
     return fclose(file) == 0 && written;
 }
 
-int main(int argc, char **argv) {
-    if (argc != 3) return 2;
+static int produce(const char *stdlib, const char *destination) {
     XrCompileResourceLimits limits = XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     XrCompileResources *resources = NULL;
     XrModuleId module = {0};
@@ -111,10 +122,10 @@ int main(int argc, char **argv) {
         xr_compile_session_new(resources, &session) != XR_COMPILE_RESOURCE_OK) goto done;
 
     error = "resolve canonical standard library source";
-    if (!resolve_source(resources, argv[1], &module)) goto done;
+    if (!resolve_source(resources, stdlib, &module)) goto done;
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
     XrXirSourceRequest request = {.session = session, .entry_path = module.source_path,
-        .authority = &module.authority, .context = &context, .stdlib_path = argv[1],
+        .authority = &module.authority, .context = &context, .stdlib_path = stdlib,
         .linkage_kind = XR_XIR_PROGRAM, .target = xr_xir_target_host()};
     XrXirSourceDiagnostic check = {0};
     error = "check standard library source";
@@ -154,7 +165,7 @@ int main(int argc, char **argv) {
         goto done;
     }
     error = "write the generated scalar export";
-    if (write_output(argv[2], &output)) result = 0;
+    if (write_output(resources, destination, &output)) result = 0;
 
 done:
     if (result) fprintf(stderr, "stdlib scalar export %s.%s: cannot %s\n", module_name, export_name, error);
@@ -168,3 +179,22 @@ done:
     xr_compile_resources_release(resources);
     return result;
 }
+
+#ifdef XR_OS_WINDOWS
+int wmain(int argc, wchar_t **wide_argv) {
+    if (argc != 3) return 2;
+    XrWinPathStatus status;
+    char **argv = xr_win_utf16_arguments(argc, wide_argv, &status);
+    if (!argv) {
+        fputs("stdlib scalar export: invalid Windows arguments or argument allocation failed\n", stderr);
+        return 1;
+    }
+    int result = produce(argv[1], argv[2]);
+    xr_win_utf8_arguments_free(argc, argv);
+    return result;
+}
+#else
+int main(int argc, char **argv) {
+    return argc == 3 ? produce(argv[1], argv[2]) : 2;
+}
+#endif

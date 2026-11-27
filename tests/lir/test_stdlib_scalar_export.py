@@ -8,6 +8,53 @@ import tempfile
 from test_lir_c_native import run
 
 
+def private_dependency(args, root):
+    build = args.generated.parents[2]
+    if (build / "build.ninja").is_file():
+        cache = (build / "CMakeCache.txt").read_text(encoding="utf-8")
+        ninja = next(line.split("=", 1)[1] for line in cache.splitlines()
+                     if line.startswith("CMAKE_MAKE_PROGRAM:"))
+        command = [ninja]
+        config = build / f"build-{args.generated.parent.name}.ninja"
+        if config.is_file():
+            command += ["-f", config.name]
+        graph = subprocess.check_output(
+            [*command, "-t", "query", args.generated.relative_to(build).as_posix()],
+            cwd=build, encoding="utf-8", timeout=10,
+        )
+        dependencies = {os.path.normcase(line.strip()) for line in graph.splitlines()}
+        lexical_source = args.stdlib / "path/_lexical.xr"
+        assert os.path.normcase(str(lexical_source)) in dependencies
+
+    stdlib = root / "模块 🧪"
+    math = stdlib / "math"
+    private = math / "_private"
+    private.mkdir(parents=True)
+    (math / "math.xr").write_text(
+        'import "std/math/_private/blend" as privateBlend\n'
+        'export fn lerp(a: f64, b: f64, t: f64) -> f64 { return privateBlend.blend(a, b, t) }\n',
+        encoding="utf-8",
+    )
+    leaf = private / "blend.xr"
+    output = root / "产物 🧪.c"
+    leaf.write_text('export fn blend(a: f64, b: f64, t: f64) -> f64 { return a * (b + t) }\n',
+                    encoding="utf-8")
+    run([args.producer, stdlib, output], cwd=root)
+    before = output.read_bytes()
+    leaf.write_text('export fn blend(a: f64, b: f64, t: f64) -> f64 { return a + (b * t) }\n',
+                    encoding="utf-8")
+    run([args.producer, stdlib, output], cwd=root)
+    after = output.read_bytes()
+    assert before != after
+    assert b"double xray_stdlib_math_lerp(double p0, double p1, double p2)" in before
+    assert b"double xray_stdlib_math_lerp(double p0, double p1, double p2)" in after
+
+    missing = root / "缺少目录 🧪" / "output.c"
+    failure = run([args.producer, stdlib, missing], cwd=root, expected_exit=1)
+    assert b"cannot write the generated scalar export" in failure.stderr
+    assert not missing.exists()
+
+
 def authority_cases(args, root):
     repeated = root / "regenerated.c"
     run([args.producer, args.stdlib, repeated], cwd=root)
@@ -113,6 +160,7 @@ def main():
     args.work.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix="stdlib-export-", dir=args.work))
     empty = authority_cases(args, root)
+    private_dependency(args, root)
     link_archive(args, root, empty)
     print(f"Same-build standard library archive and authority checks passed: {root}", flush=True)
     subprocess.run(args.native_test[1:], check=True)

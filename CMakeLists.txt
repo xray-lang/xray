@@ -147,12 +147,16 @@ if(APPLE AND CMAKE_OSX_ARCHITECTURES)
 else()
     set(_XRAY_RELEASE_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
 endif()
-string(TOLOWER "${_XRAY_RELEASE_PROCESSOR}" _XRAY_RELEASE_ARCH)
-if(_XRAY_RELEASE_ARCH MATCHES "^(aarch64|arm64)$")
-    set(_XRAY_RELEASE_ARCH "arm64")
-elseif(_XRAY_RELEASE_ARCH MATCHES "^(amd64|x86_64)$")
-    set(_XRAY_RELEASE_ARCH "x86_64")
-endif()
+function(_xray_normalize_architecture processor output)
+    string(TOLOWER "${processor}" architecture)
+    if(architecture MATCHES "^(aarch64|arm64)$")
+        set(architecture "arm64")
+    elseif(architecture MATCHES "^(amd64|x64|x86_64)$")
+        set(architecture "x86_64")
+    endif()
+    set(${output} "${architecture}" PARENT_SCOPE)
+endfunction()
+_xray_normalize_architecture("${_XRAY_RELEASE_PROCESSOR}" _XRAY_RELEASE_ARCH)
 if(APPLE)
     set(XRAY_RELEASE_TARGET "macos-${_XRAY_RELEASE_ARCH}")
     if(_XRAY_RELEASE_ARCH STREQUAL "arm64")
@@ -1312,7 +1316,22 @@ add_subdirectory(src/xir)
 # enters this build's artifact with the same compiler and target settings.
 # Target-only builds continue to use the regular SDK build without running a
 # target executable on the build machine.
-if(NOT CMAKE_CROSSCOMPILING)
+set(_XRAY_STDLIB_PRODUCER_RUNNABLE ON)
+if(CMAKE_CROSSCOMPILING)
+    set(_XRAY_STDLIB_PRODUCER_RUNNABLE OFF)
+elseif(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    # An architecture-only Darwin cross build does not set CMAKE_CROSSCOMPILING.
+    _xray_normalize_architecture("${CMAKE_HOST_SYSTEM_PROCESSOR}" _XRAY_BUILD_ARCH)
+    set(_XRAY_STDLIB_PRODUCER_RUNNABLE OFF)
+    foreach(processor IN LISTS CMAKE_OSX_ARCHITECTURES)
+        _xray_normalize_architecture("${processor}" architecture)
+        if(architecture STREQUAL _XRAY_BUILD_ARCH)
+            set(_XRAY_STDLIB_PRODUCER_RUNNABLE ON)
+            break()
+        endif()
+    endforeach()
+endif()
+if(_XRAY_STDLIB_PRODUCER_RUNNABLE)
     add_executable(xray_stdlib_scalar_producer tools/stdlibgen/stdlib_scalar_export.c)
     target_link_libraries(xray_stdlib_scalar_producer PRIVATE xray_lir_lower xray_lir_c)
     target_compile_features(xray_stdlib_scalar_producer PRIVATE c_std_11)
@@ -1324,7 +1343,12 @@ if(NOT CMAKE_CROSSCOMPILING)
     else()
         target_compile_options(xray_stdlib_scalar_producer PRIVATE -Wall -Wextra -Werror -pedantic)
     endif()
+    if(MINGW)
+        target_link_options(xray_stdlib_scalar_producer PRIVATE -municode)
+    endif()
 
+    # The compiler can reach private modules that the public entry table omits.
+    file(GLOB_RECURSE XRAY_STDLIB_SOURCE_DEPENDENCIES CONFIGURE_DEPENDS "stdlib/*.xr")
     set(XRAY_STDLIB_SCALAR_EXPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
     set(XRAY_STDLIB_SCALAR_EXPORT_C "${XRAY_STDLIB_SCALAR_EXPORT_DIR}/stdlib_scalar_math_lerp.c")
     add_custom_command(
@@ -1333,7 +1357,7 @@ if(NOT CMAKE_CROSSCOMPILING)
         COMMAND xray_stdlib_scalar_producer "${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
                 "${XRAY_STDLIB_SCALAR_EXPORT_C}.pending"
         COMMAND ${CMAKE_COMMAND} -E rename "${XRAY_STDLIB_SCALAR_EXPORT_C}.pending" "${XRAY_STDLIB_SCALAR_EXPORT_C}"
-        DEPENDS xray_stdlib_scalar_producer ${XRAY_STDLIB_SCRIPT_SOURCES}
+        DEPENDS xray_stdlib_scalar_producer ${XRAY_STDLIB_SOURCE_DEPENDENCIES}
         COMMENT "Compiling the built-in standard library scalar export"
         VERBATIM)
     add_library(xray_stdlib_scalar_export STATIC "${XRAY_STDLIB_SCALAR_EXPORT_C}")
