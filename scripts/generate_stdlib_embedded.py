@@ -65,7 +65,8 @@ def collect_entries(root: Path, sources: list[Path]) -> list[tuple[str, Path, by
 def collect_submodules(root: Path, sources: list[Path], owners: set[str]) -> list[tuple[str, bytes]]:
     entries: dict[str, bytes] = {}
     for source in sources:
-        relative = source.resolve().relative_to(root / "stdlib")
+        path = source.resolve()
+        relative = path.relative_to(root / "stdlib")
         parts = relative.with_suffix("").parts
         if (relative.suffix != ".xr" or len(parts) < 2 or parts[0] not in owners
                 or (len(parts) == 2 and parts[0] == parts[1])
@@ -74,7 +75,7 @@ def collect_submodules(root: Path, sources: list[Path], owners: set[str]) -> lis
         logical = relative.as_posix()
         if logical in entries:
             raise RuntimeError(f"duplicate embedded stdlib submodule: {logical}")
-        data = source.read_bytes()
+        data = path.read_bytes()
         if b"\0" in data:
             raise RuntimeError(f"NUL in embedded stdlib submodule: {logical}")
         entries[logical] = data

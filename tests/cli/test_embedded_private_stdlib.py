@@ -32,7 +32,7 @@ def main():
         fixture = fixtures / "path.xr"
         suffix = ".exe" if os.name == "nt" else ""
         for label, stdlib, expected in (("embedded", empty, b"embedded.xr\n"), ("disk", disk, b"disk.xr\n")):
-            native = root / (label + suffix)
+            native = root / ("program-" + label + suffix)
             vm = run(stdlib, [binary, "run", fixture])
             run(stdlib, [binary, "build", fixture, "-o", native])
             assert run(stdlib, [native]) == vm == (expected, b"")

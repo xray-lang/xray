@@ -4,6 +4,7 @@
     "test_lir_core",
     "test_lir_carriers",
     "test_lir_source_input",
+    "stdlib_embedded_generator_self_test",
     "test_lir_lower",
     "test_lir_c",
     "test_lir_c_faults",
@@ -113,7 +114,8 @@
   ],
   "native": [
     "test_cli_resource_profiles_native",
-    "test_lir_cli_host_links"
+    "test_lir_cli_host_links",
+    "stdlib_embedded_private_source"
   ],
   "windows": [
     "test_lir_cli_host_temp_directory",
