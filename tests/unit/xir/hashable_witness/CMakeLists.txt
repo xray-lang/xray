@@ -1,5 +1,7 @@
 add_executable(test_hashable_witness test_hashable_witness.c)
 target_link_libraries(test_hashable_witness PRIVATE xray_xir_source)
+# The overlay supplies the files after the resolver canonicalizes its root directory.
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/native_stdlib")
 target_compile_definitions(test_hashable_witness PRIVATE HASHABLE_LIBRARY_ROOT="${CMAKE_CURRENT_BINARY_DIR}")
 set_target_properties(test_hashable_witness PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
