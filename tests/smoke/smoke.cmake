@@ -1,6 +1,7 @@
 add_test(NAME smoke
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/smoke/run_smoke.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --crypto-native-plan $<TARGET_FILE:lir_c_run>
         --output ${CMAKE_BINARY_DIR}/smoke)
 set_tests_properties(smoke PROPERTIES
     TIMEOUT 600 PROCESSORS 1 LABELS "cli;usability;L1")

@@ -196,7 +196,7 @@ static void array_sources(void) {
             continue;
         }
         XrLirLowered output = lower_text(cases[i]);
-        CHECK(xr_lir_intrinsic_count(output.module) == 4 * (XR_LIR_ARRAY_OP_RESERVE + 3) + 1);
+        CHECK(xr_lir_intrinsic_count(output.module) == 4 * (XR_LIR_ARRAY_OP_RESERVE + 3) + 2);
         XrLirModule *copy = NULL;
         OK(xr_lir_rebuild(output.module, &copy));
         xr_lir_lowered_free(&output);
@@ -205,6 +205,21 @@ static void array_sources(void) {
     }
     XrLirLowered flow = lower_text("fn nested(a:bool,b:bool)->i64{if(a){var xs=[7,8]\n"
         "const saved=xs\nif(b){xs.push(9)}else{xs[0]=2}\nreturn saved[0]*10+xs[0]}\nreturn 0}\nprint(nested(true,false))\n");
+    uint32_t entropy = 0;
+    OK(xr_lir_array_mutator(flow.module, XR_LIR_U8, XR_LIR_ARRAY_REF,
+                            XR_LIR_ARRAY_OP_RANDOM_BYTES, &entropy));
+    XrLirIntrinsic signature = {0};
+    XrLirArrayIntrinsic array = {0};
+    OK(xr_lir_intrinsic_view(flow.module, entropy, &signature));
+    OK(xr_lir_array_intrinsic_view(flow.module, entropy, &array));
+    CHECK(signature.parameter_count == 1 && signature.parameters[0] == XR_LIR_ARRAY_REF &&
+          signature.result == XR_LIR_UNIT);
+    CHECK(array.operation == XR_LIR_ARRAY_OP_RANDOM_BYTES && array.parameter_count == 1 &&
+          array.parameter_elements[0] == XR_LIR_U8 && !array.variadic);
+    CHECK(xr_lir_array_mutator(flow.module, XR_LIR_U8, XR_LIR_ARRAY_CELL,
+                              XR_LIR_ARRAY_OP_RANDOM_BYTES, &entropy) == XR_LIR_UNSUPPORTED && !entropy);
+    CHECK(xr_lir_array_mutator(flow.module, XR_LIR_I64, XR_LIR_ARRAY_REF,
+                              XR_LIR_ARRAY_OP_RANDOM_BYTES, &entropy) == XR_LIR_UNSUPPORTED && !entropy);
     xr_lir_lowered_free(&flow);
     char large[8192];
     size_t used = (size_t)snprintf(large, sizeof(large), "const xs=[");

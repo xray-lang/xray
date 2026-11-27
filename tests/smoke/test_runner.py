@@ -95,6 +95,114 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(len(smoke.verify_pairs([self.case,native],rows)),2)
 
 
+class CryptoGapTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(__file__).resolve().parents[2]
+        self.manifest = self.root / "tests/smoke/cases.json"
+        self.sources = smoke.discover(self.root)
+        self.cases = [case for case in smoke.load_cases(self.manifest, self.root, self.sources)
+                      if case.get("gap", {}).get("stage") == "crypto-suite"]
+        self.assertEqual(len(self.cases), 2)
+        self.vm = next(case for case in self.cases if case["mode"] == "run")
+        self.native = next(case for case in self.cases if case["mode"] == "build-run")
+        self.expected = (self.root / self.vm["stdout"]).read_bytes()
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.directory = Path(self.temp.name)
+        self.xray = self.directory / "xray"
+        self.driver = self.directory / "lir_c_run"
+        self.driver.touch()
+
+    def execute_gap(self, case, *, demo=None, suite=None, driver=True, emit=False):
+        mode = case["mode"]
+        work = Path(tempfile.mkdtemp(dir=self.directory))
+        logs = work / "logs"
+        logs.mkdir()
+        demo = demo if demo is not None else result(stdout=self.expected)
+        gap = case["gap"]
+        key = "native_first_diagnostic" if mode == "build-run" else "first_diagnostic"
+        suite = suite if suite is not None else result(1, b"", gap[key].encode() + b"\n")
+        suite_source = self.root / gap["source"]
+
+        def invoke(argv, **kwargs):
+            if argv[:2] == [self.xray, "build"]:
+                self.assertEqual(argv[2], self.root / case["path"])
+                Path(argv[-1]).touch()
+                return result(stdout=b"")
+            if argv[:2] == [self.xray, "test"]:
+                self.assertEqual(argv, [self.xray, "test", suite_source])
+                return suite
+            if argv[0] == self.driver:
+                generated = work / "crypto-test-plan.c"
+                self.assertEqual(argv, [self.driver, suite_source, generated, "--stdlib",
+                                        self.root / "stdlib", "--test-plan"])
+                if emit:
+                    generated.touch()
+                return suite
+            return demo
+
+        with patch.object(smoke.proc, "run", side_effect=invoke):
+            return smoke.execute(case, self.sources[case["path"]], self.xray, self.root, work, logs, 30,
+                                 crypto_native_plan=self.driver if driver else None)
+
+    def test_sealed_suite_is_checked_after_both_original_demos(self):
+        vm = self.execute_gap(self.vm)
+        native = self.execute_gap(self.native)
+        for row, stages in ((vm, ["run", "crypto-suite"]), (native, ["build", "run", "crypto-suite"])):
+            self.assertEqual(row["status"], "gap")
+            self.assertEqual([command["stage"] for command in row["commands"]], stages)
+            self.assertEqual(row["exit_code"], 1)
+        self.assertEqual(vm["first_diagnostic"], self.vm["gap"]["first_diagnostic"])
+        self.assertEqual(native["first_diagnostic"], self.native["gap"]["native_first_diagnostic"])
+        self.assertEqual(smoke.verify_pairs([self.vm, self.native], [vm, native]), [])
+        self.assertEqual(vm["trace_pair"], native["trace_pair"])
+        (Path(native["log_directory"]) / "run.stdout").write_bytes(b"changed")
+        self.assertEqual(len(smoke.verify_pairs([self.vm, self.native], [vm, native])), 2)
+
+    def test_crypto_gap_rejects_bad_demo_or_nonmatching_suite(self):
+        diagnostic = self.vm["gap"]["first_diagnostic"].encode()
+        cases = (
+            ("demo output", {"demo": result(stdout=b"unexpected")}, "initializer changed"),
+            ("demo stderr", {"demo": result(stdout=self.expected, stderr=b"unexpected")}, "initializer changed"),
+            ("demo rejection", {"demo": result(1, b"", diagnostic)}, "demo failure"),
+            ("wrong diagnostic", {"suite": result(1, b"", b"other")}, "first diagnostic changed"),
+            ("missing diagnostic", {"suite": result(1, b"")}, "first diagnostic changed"),
+            ("suite timeout", {"suite": result(1, b"", timed_out=True)}, "timed out"),
+            ("suite stdout", {"suite": result(1, b"partial", diagnostic)}, "produced stdout"),
+            ("suite succeeded", {"suite": result(0, b"")}, "gap unexpectedly passed"),
+        )
+        for name, options, message in cases:
+            with self.subTest(name=name):
+                row = self.execute_gap(self.vm, **options)
+                self.assertEqual(row["status"], "fail")
+                self.assertIn(message, row["reason"])
+        row = self.execute_gap(self.native, driver=False)
+        self.assertEqual(row["status"], "fail")
+        self.assertIn("real native test plan executable", row["reason"])
+        row = self.execute_gap(self.native, emit=True)
+        self.assertEqual(row["status"], "fail")
+        self.assertIn("produced native C", row["reason"])
+
+        row = self.execute_gap(self.native, suite=result(0, b""), emit=True)
+        self.assertEqual(row["status"], "fail")
+        self.assertIn("gap unexpectedly passed", row["reason"])
+
+    def test_manifest_rejects_unsealed_sources_and_missing_catalog(self):
+        for edit in ("source", "catalog"):
+            with self.subTest(edit=edit):
+                manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+                for case in manifest["cases"]:
+                    if case.get("gap", {}).get("stage") == "crypto-suite":
+                        if edit == "source":
+                            case["gap"]["source"] = smoke.CRYPTO_SOURCE
+                        else:
+                            del case["crypto_suite"]
+                path = self.directory / "cases.json"
+                path.write_text(json.dumps(manifest), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "crypto suite gap requires a sealed source"):
+                    smoke.load_cases(path, self.root, self.sources)
+
+
 class InventoryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

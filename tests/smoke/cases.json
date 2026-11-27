@@ -278,7 +278,10 @@
       },
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
+        "stage": "crypto-suite",
+        "source": "tests/regression/10_stdlib/1401_crypto_hmac.xr",
+        "first_diagnostic": "tests/regression/10_stdlib/1401_crypto_hmac.xr:102:5: instruction type or signature mismatch",
+        "native_first_diagnostic": "lowering: instruction type or signature mismatch"
       }
     },
     {
@@ -828,7 +831,10 @@
       },
       "gap": {
         "feature": "Task339 M2",
-        "first_diagnostic": "demos/07-advanced/crypto_entropy.xr:0:0: function without a scalar body is not supported by LIR lowering yet"
+        "stage": "crypto-suite",
+        "source": "tests/regression/10_stdlib/1401_crypto_hmac.xr",
+        "first_diagnostic": "tests/regression/10_stdlib/1401_crypto_hmac.xr:102:5: instruction type or signature mismatch",
+        "native_first_diagnostic": "lowering: instruction type or signature mismatch"
       }
     },
     {

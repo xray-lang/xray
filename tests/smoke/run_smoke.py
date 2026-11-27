@@ -17,7 +17,7 @@ from xraytest import proc
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from xray_progress import fixed_metrics
 from suite_catalog import SOURCE as TESTING_SOURCE, SuiteCommands, expected_catalog
-from xray_crypto_suite import CryptoCommands, expected_catalog as expected_crypto_catalog
+from xray_crypto_suite import SOURCE as CRYPTO_SOURCE, CryptoCommands, expected_catalog as expected_crypto_catalog
 from trace_oracle import ChannelTrace, expected_channels, expected_traces, verify_pairs
 
 
@@ -112,7 +112,7 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
         if traces is not None and rooted_file(root, case["stdout"]).read_bytes() not in traces:
             raise ValueError(f"{name}: stdout oracle is absent from the complete trace set")
         expected_catalog(case, root)
-        expected_crypto_catalog(case, root)
+        crypto_catalog = expected_crypto_catalog(case, root)
         if case["expect"] == "pass":
             if case["exit_code"] != 0 or "gap" in case:
                 raise ValueError(f"{name}: pass must exit zero without a gap allowance")
@@ -125,7 +125,15 @@ def load_cases(manifest: Path, root: Path, sources: dict[str, Source]) -> list[d
             feature = gap.get("feature", "")
             if not re.fullmatch(r"F\d{2}|Task339 M[1-5]", feature):
                 raise ValueError(f"{name}: gap requires a feature or target milestone")
-            if gap.get("stage") is not None and (gap["stage"] != "suite" or
+            if gap.get("stage") == "crypto-suite":
+                failed_source = gap.get("source")
+                if (case["path"] != CRYPTO_SOURCE or crypto_catalog is None or
+                        not isinstance(failed_source, str) or
+                        failed_source not in {suite["source"] for suite in crypto_catalog["suites"]} or
+                        not isinstance(gap.get("native_first_diagnostic"), str) or
+                        not gap["native_first_diagnostic"]):
+                    raise ValueError(f"{name}: crypto suite gap requires a sealed source and its native diagnostic")
+            elif gap.get("stage") is not None and (gap["stage"] != "suite" or
                     case["path"] != TESTING_SOURCE or case.get("suite") is None):
                 raise ValueError(f"{name}: suite gaps require the original testing catalog")
         else:
@@ -174,10 +182,16 @@ def classify(case: dict, result: proc.ProcResult, diagnostic: str,
             return "fail", f"{stage} exit {result.returncode}, expected {case['exit_code']}"
         if case["gap"].get("stage") == "suite" and stage != "suite":
             return "fail", "suite gap changed to an initializer failure"
-        required_stage = "suite" if case["gap"].get("stage") == "suite" else "build"
+        gap = case["gap"]
+        if gap.get("stage") == "crypto-suite" and stage != "crypto-suite":
+            return "fail", "crypto suite gap changed to a demo failure"
+        required_stage = gap.get("stage") or "build"
         if case["mode"] == "build-run" and stage != required_stage:
             return "fail", "native build gap changed to an execution failure"
-        if diagnostic != case["gap"]["first_diagnostic"]:
+        diagnostic_key = "first_diagnostic"
+        if stage == "crypto-suite" and case["mode"] == "build-run":
+            diagnostic_key = "native_first_diagnostic"
+        if diagnostic != gap[diagnostic_key]:
             return "fail", f"first diagnostic changed: {diagnostic!r}"
         if result.stdout:
             return "fail", "known rejection unexpectedly produced stdout"
@@ -197,7 +211,8 @@ def classify(case: dict, result: proc.ProcResult, diagnostic: str,
 
 def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
             logs: Path, timeout: float, suites: SuiteCommands | None = None,
-            crypto_suites: CryptoCommands | None = None) -> dict:
+            crypto_suites: CryptoCommands | None = None,
+            crypto_native_plan: Path | None = None) -> dict:
     source = root / spec.path
     if spec.text is not None:
         source = work / "source.xr"
@@ -233,15 +248,33 @@ def execute(case: dict, spec: Source, binary: Path, root: Path, work: Path,
         # Historical check labels remain part of the fixed denominator only.
         stage = "run"
         result = invoke(stage, [binary, stage, source])
-    if case.get("gap", {}).get("stage") == "suite" and result.ok:
-        expected = rooted_file(root, case["stdout"]).read_bytes()
-        if result.stdout != expected or result.stderr:
-            return {"id": case["id"], "group": "native" if case["mode"] == "build-run" else spec.group,
-                    "status": "fail", "reason": "initializer changed before the known suite gap",
-                    "executed": True, "commands": commands, "log_directory": str(logs)}
-        stage = "suite"
-        result = invoke(stage, [binary, "test", source])
-    diagnostic = first_diagnostic(result.stderr, root, source, spec.path)
+    gap = case.get("gap", {})
+    gap_stage = gap.get("stage")
+    label = spec.path
+    if gap_stage in ("suite", "crypto-suite") and result.ok:
+        group = "native" if case["mode"] == "build-run" else spec.group
+        failure = {"id": case["id"], "group": group, "status": "fail", "executed": True,
+                   "commands": commands, "log_directory": str(logs)}
+        original_stdout = rooted_file(root, case["stdout"]).read_bytes()
+        if result.stdout != original_stdout or result.stderr:
+            return dict(failure, reason="initializer changed before the known suite gap")
+        stage = gap_stage
+        if stage == "suite":
+            result = invoke(stage, [binary, "test", source])
+        else:
+            label = gap["source"]
+            source = rooted_file(root, label)
+            if group == "native":
+                if crypto_native_plan is None or not crypto_native_plan.is_file():
+                    return dict(failure, reason="crypto suite gap requires its real native test plan executable")
+                generated = work / "crypto-test-plan.c"
+                result = invoke(stage, [crypto_native_plan, source, generated, "--stdlib",
+                                        root / "stdlib", "--test-plan"])
+                if not result.ok and generated.exists():
+                    return dict(failure, reason="known crypto suite rejection produced native C")
+            else:
+                result = invoke(stage, [binary, "test", source])
+    diagnostic = first_diagnostic(result.stderr, root, source, label)
     expected = expected_traces(case, root) or expected_channels(case, root) or rooted_file(root, case["stdout"]).read_bytes()
     status, reason = classify(case, result, diagnostic, expected, stage)
     suite = None
@@ -288,6 +321,7 @@ def main() -> int:
     parser.add_argument("--crypto-suite-vm", type=Path)
     parser.add_argument("--crypto-suite-native", type=Path)
     parser.add_argument("--crypto-suite-generated-dir", type=Path)
+    parser.add_argument("--crypto-native-plan", type=Path)
     args = parser.parse_args()
     root, binary, output = args.root.resolve(), args.binary.resolve(), args.output.resolve()
     if not 0 < args.timeout <= 30:
@@ -314,11 +348,15 @@ def main() -> int:
     results = []
     suites = SuiteCommands(args.suite_vm, args.suite_native, args.suite_generated_c)
     crypto_suites = CryptoCommands(args.crypto_suite_vm, args.crypto_suite_native, args.crypto_suite_generated_dir)
+    plan_name = "lir_c_run.exe" if os.name == "nt" else "lir_c_run"
+    crypto_native_plan = (args.crypto_native_plan.resolve() if args.crypto_native_plan else
+                          binary.parent / "tests/lir" / plan_name)
     for index, case in enumerate(cases):
         logs = log_root / f"{index:03d}"
         logs.mkdir()
         with tempfile.TemporaryDirectory(prefix="case-", dir=output) as directory:
-            row = execute(case, sources[case["path"]], binary, root, Path(directory), logs, args.timeout, suites, crypto_suites)
+            row = execute(case, sources[case["path"]], binary, root, Path(directory), logs,
+                          args.timeout, suites, crypto_suites, crypto_native_plan)
         results.append(row)
         print(f"{row['status'].upper()} {row['id']}: {row['reason']}", flush=True)
     for row in verify_pairs(cases, results):

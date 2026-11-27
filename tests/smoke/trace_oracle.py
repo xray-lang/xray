@@ -131,12 +131,13 @@ def verify_pairs(cases: list[dict], rows: list[dict]) -> list[dict]:
             reason = "both engines must actually execute"
         elif any(row["status"] == "fail" for row in actual) or actual[0]["status"] != actual[1]["status"]:
             reason = "VM/native companion verdicts differ or one failed"
-        elif actual[0]["status"] == "gap":
+        elif actual[0]["status"] == "gap" and pair[0].get("gap", {}).get("stage") != "crypto-suite":
             if (actual[0].get("exit_code"), actual[0].get("first_diagnostic")) != (
                     actual[1].get("exit_code"), actual[1].get("first_diagnostic")):
                 reason = "VM/native first diagnostics differ"
         else:
             try:
+                # Crypto suite gaps check each engine's own diagnostic before pairing demo output.
                 outputs = [(Path(row["log_directory"]) / "run.stdout").read_bytes() for row in actual]
                 if outputs[0] != outputs[1]:
                     reason = "VM/native complete trace bytes differ"
