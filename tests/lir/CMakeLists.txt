@@ -211,12 +211,18 @@ if(ENABLE_ASAN AND NOT MSVC AND CMAKE_C_COMPILER_ID MATCHES "^(Apple)?Clang$")
     # Keep symbolized sanitizer locations without full debug records for spill fixtures.
     list(APPEND lir_array_native_options --line-tables-only)
 endif()
+set(lir_array_native_processors 1)
+if(WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "MSVC" AND CMAKE_BUILD_TYPE STREQUAL "Release"
+   AND NOT (ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN OR ENABLE_SANITIZERS))
+    set(lir_array_native_processors 2)
+    list(APPEND lir_array_native_options --jobs 2)
+endif()
 add_test(NAME test_lir_array_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_array_native.py"
     --driver $<TARGET_FILE:test_lir_array> --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
     --include "${PROJECT_SOURCE_DIR}/include" --library ${XRAY_NATIVE_RUNTIME_LINK_INPUTS}
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --work "${CMAKE_CURRENT_BINARY_DIR}/array-native" ${lir_array_native_options})
-set_tests_properties(test_lir_array_native PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 120)
+set_tests_properties(test_lir_array_native PROPERTIES LABELS "unit;lir;native;ownership" TIMEOUT 120 PROCESSORS ${lir_array_native_processors})
 add_test(NAME test_lir_c_runtime COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_runtime.py"
     --driver $<TARGET_FILE:lir_c_run> --fixture-driver $<TARGET_FILE:test_lir_c>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
