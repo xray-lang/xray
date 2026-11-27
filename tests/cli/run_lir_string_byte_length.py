@@ -24,6 +24,7 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     positives = {
         "byte_length": b"0\n9\n4\n9\n8\n5\n",
+        "byte_view_generic_inference": b"ok\n",
         "other_method": b"9\n2\n",
         "array_view": b"10\n",
         "byte_view_encoding": b"true\nfalse\ntrue\nfalse\nfalse\n",
@@ -40,6 +41,7 @@ def main() -> None:
         "byte_view_temporary_nested_len": b"String bytes cannot borrow a temporary receiver",
         "byte_view_write": b"indexed view assignment requires an admitted MutSlice",
         "byte_view_wrong_element": b"expression cannot satisfy its declared type",
+        "byte_view_generic_overflow": b"integer literal is outside its contextual type",
     }
     runtime_failures = {"byte_view_bounds": b"value operation rejected (status 6)"}
 

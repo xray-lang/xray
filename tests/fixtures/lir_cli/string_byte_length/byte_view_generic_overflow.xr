@@ -1,0 +1,6 @@
+fn verify() {
+    var text = "A"
+    assertEqual(text.bytes()[0], 256)
+}
+
+verify()

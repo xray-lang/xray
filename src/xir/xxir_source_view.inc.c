@@ -9,23 +9,34 @@
  * KEY CONCEPT:
  *   A source root remains a real Cell operand; a view never becomes an Array.
  */
+static bool source_string_bytes_contract(SourceContext *ctx,AstNode *node,XrXirType receiver,
+    const XrNativeMemberDeclaration *member) {
+    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
+    const CallExprNode *call=&node->as.call_expr;
+    return receiver==XR_XIR_STRING && native && native->id==2 && member &&
+        member==xr_native_declaration_member(native,"bytes") && member->id==18 &&
+        member->is_method && member->is_public && !member->is_static && member->lowered &&
+        member->receiver==XR_NATIVE_RECEIVER_READ && !member->parameter_count &&
+        member->operation==XR_NATIVE_OPERATION_NONE && member->result==XR_NATIVE_TERM_SLICE_U8 &&
+        !call->arg_count && !call->type_arg_count && !call->default_arg_count &&
+        source_text_same(ctx,node,member->signature,"() -> Slice<u8>") &&
+        source_text_same(ctx,node,member->result_text,"Slice < u8 >");
+}
+
+static bool source_string_bytes_type(SourceContext *ctx,XrXirType *result) {
+    return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_U8},result);
+}
+
 /* The fixed lowered declaration grants only this real readonly view recipe.
  * A writable binding keeps its actual Cell root; other immutable String values
  * are retained in a local Cell whose lifetime is checked and normalized. */
 static bool source_string_bytes_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value) {
-    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
     const CallExprNode *call=&node->as.call_expr;
-    if (!native || native->id!=2 || !member || member!=xr_native_declaration_member(native,"bytes") ||
-        member->id!=18 || !member->is_method || !member->is_public || member->is_static ||
-        !member->lowered || member->receiver!=XR_NATIVE_RECEIVER_READ || member->parameter_count ||
-        member->operation!=XR_NATIVE_OPERATION_NONE || member->result!=XR_NATIVE_TERM_SLICE_U8 ||
-        !source_text_same(ctx,node,member->signature,"() -> Slice<u8>") ||
-        !source_text_same(ctx,node,member->result_text,"Slice < u8 >") ||
-        receiver.type!=XR_XIR_STRING || call->arg_count || call->type_arg_count || call->default_arg_count)
+    if (!source_string_bytes_contract(ctx,node,receiver.type,member))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"bytes requires its exact lowered readonly String declaration");
     XrXirType result,cell;
-    if (!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_U8},&result) ||
+    if (!source_string_bytes_type(ctx,&result) ||
         !source_string_value_reference(ctx,call->callee,member,result)) return false;
     AstNode *syntax=call->callee->as.member_access.object;
     while (syntax && syntax->type==AST_GROUPING) syntax=syntax->as.grouping;

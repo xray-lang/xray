@@ -1,0 +1,9 @@
+fn verify() {
+    var text = "Aé"
+    assertEqual(text.bytes()[0], 65)
+    assertEqual(195, (text.bytes())[1])
+    assertEqual(text.bytes()[2], 169)
+    print("ok")
+}
+
+verify()

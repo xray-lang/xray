@@ -134,6 +134,16 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     }
     SourceExpectedType receiver;
     if (!source_ground_type(ctx,member->as.member_access.object,depth+1,&receiver)) return false;
+    if (call && receiver.present && receiver.type==XR_XIR_STRING) {
+        const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
+        const XrNativeMemberDeclaration *method=source_native_member(ctx,native,member->as.member_access.name);
+        if (source_string_bytes_contract(ctx,node,receiver.type,method)) {
+            if (!source_string_bytes_type(ctx,&output->type)) return false;
+            output->present=true;
+            return true;
+        }
+        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+    }
     if (call && receiver.present && xr_xir_type_is_pointer(&ctx->types,receiver.type)) {
         const char *name=member->as.member_access.name;
         if (source_text_same(ctx,node,name,"offset")) *output=receiver;
