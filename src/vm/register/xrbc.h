@@ -291,6 +291,8 @@ typedef enum XrRbcNativeKind {
 #define XR_MATH_RBC_NATIVE(tag, name, arity) XR_RBC_NATIVE_MATH_##tag,
     XR_MATH_HOST_OPERATIONS(XR_MATH_RBC_NATIVE)
 #undef XR_MATH_RBC_NATIVE
+    XR_RBC_NATIVE_MATH_RANDOM,
+    XR_RBC_NATIVE_MATH_RANDOM_INT,
     XR_RBC_NATIVE_COUNT
 } XrRbcNativeKind;
 

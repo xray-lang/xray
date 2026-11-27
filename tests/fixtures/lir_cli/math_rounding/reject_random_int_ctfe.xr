@@ -1,0 +1,3 @@
+import math
+const result = comptime (math.randomInt(7, 7))
+print(result)

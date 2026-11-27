@@ -76,6 +76,8 @@ XRAY_API double xrt_f64_exp(double value, uint32_t source_id);
 XRAY_API double xrt_f64_sinh(double value, uint32_t source_id);
 XRAY_API double xrt_f64_cosh(double value, uint32_t source_id);
 XRAY_API double xrt_f64_tanh(double value, uint32_t source_id);
+XRAY_API double xrt_math_random(uint32_t source_id);
+XRAY_API int64_t xrt_math_random_int(int64_t minimum, int64_t maximum, uint32_t source_id);
 XRAY_API double xrt_f64_cbrt(double value, uint32_t source_id);
 XRAY_API double xrt_f64_fmod(double left, double right, uint32_t source_id);
 XRAY_API double xrt_f64_log1p(double value, uint32_t source_id);

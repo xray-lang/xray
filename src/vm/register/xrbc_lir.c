@@ -84,6 +84,8 @@ static XrRbcNativeKind rbc_lir_math_native(XrLirExternKind kind) {
     case XR_LIR_EXTERN_MATH_##tag: return XR_RBC_NATIVE_MATH_##tag;
     XR_MATH_HOST_OPERATIONS(XR_MATH_RBC_EXTERN)
 #undef XR_MATH_RBC_EXTERN
+    case XR_LIR_EXTERN_MATH_RANDOM: return XR_RBC_NATIVE_MATH_RANDOM;
+    case XR_LIR_EXTERN_MATH_RANDOM_INT: return XR_RBC_NATIVE_MATH_RANDOM_INT;
     default: return XR_RBC_NATIVE_COUNT;
     }
 }

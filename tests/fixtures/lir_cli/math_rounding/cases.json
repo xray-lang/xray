@@ -56,6 +56,17 @@
   "private_tan": {
     "source_error": ":1:1: error: import requires an exported declaration"
   },
+  "runtime_random": {
+    "exit": 0,
+    "stdout": "true\ntrue\n-7\ntrue\n",
+    "stderr": ""
+  },
+  "private_random_int": {
+    "source_error": ":1:1: error: import requires an exported declaration"
+  },
+  "reject_random_int_ctfe": {
+    "source_error": ":2:16: error: comptime requires an admitted deterministic closed-value call closure"
+  },
   "reject_random_ctfe": {
     "source_error": ":2:16: error: comptime requires an admitted deterministic closed-value call closure"
   }

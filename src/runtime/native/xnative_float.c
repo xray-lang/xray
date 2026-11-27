@@ -13,6 +13,8 @@
  */
 #include "xray_native_runtime.h"
 #include "base/xchecks.h"
+#include "os/os_random.h"
+#include "shared/xr_math_core.h"
 #include "shared/xr_math_host_ops.h"
 #include <float.h>
 #include <limits.h>
@@ -79,3 +81,13 @@ XR_MATH_HOST_OPERATIONS(XR_MATH_HOST_BODY)
 #undef XR_MATH_HOST_BODY
 #undef XR_MATH_HOST_BODY_2
 #undef XR_MATH_HOST_BODY_1
+
+XRAY_API double xrt_math_random(uint32_t source_id) {
+    (void)source_id;
+    return xr_math_core_random_f64(xr_random_bytes_callback, NULL);
+}
+
+XRAY_API int64_t xrt_math_random_int(int64_t minimum, int64_t maximum, uint32_t source_id) {
+    (void)source_id;
+    return xr_math_core_random_i64(xr_random_bytes_callback, NULL, minimum, maximum);
+}

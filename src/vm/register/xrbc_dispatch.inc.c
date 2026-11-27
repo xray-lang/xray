@@ -419,6 +419,16 @@ XR_RBC_CASE(CALLN) {
 #undef XR_MATH_RBC_INVOKE
 #undef XR_MATH_RBC_INVOKE_2
 #undef XR_MATH_RBC_INVOKE_1
+    case XR_RBC_NATIVE_MATH_RANDOM:
+        XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(xrt_math_random((uint32_t)id));
+        break;
+    case XR_RBC_NATIVE_MATH_RANDOM_INT: {
+        uint32_t base = XR_RBC_A();
+        int64_t minimum = xr_rbc_signed(XR_RBC_REG(base + 1));
+        int64_t maximum = xr_rbc_signed(XR_RBC_REG(base + 2));
+        XR_RBC_REG(base) = (uint64_t)xrt_math_random_int(minimum, maximum, (uint32_t)id);
+        break;
+    }
 #if defined(XR_RBC_LINKED_MATH_LERP)
     case XR_RBC_NATIVE_MATH_LERP: {
         uint32_t base = XR_RBC_A();

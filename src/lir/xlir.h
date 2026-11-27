@@ -113,11 +113,15 @@ typedef enum XrLirExternKind {
 #define XR_MATH_LIR_EXTERN(tag, name, arity) XR_LIR_EXTERN_MATH_##tag,
     XR_MATH_HOST_OPERATIONS(XR_MATH_LIR_EXTERN)
 #undef XR_MATH_LIR_EXTERN
+    XR_LIR_EXTERN_MATH_RANDOM,
+    XR_LIR_EXTERN_MATH_RANDOM_INT
 } XrLirExternKind;
 
 typedef struct XrLirMathExternal {
     const char *name;
     uint32_t parameter_count;
+    XrLirType parameter_type;
+    XrLirType result_type;
 } XrLirMathExternal;
 
 XR_FUNC XrLirMathExternal xr_lir_math_external(XrLirExternKind kind);

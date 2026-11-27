@@ -1,0 +1,9 @@
+import math
+
+var fraction = math.random()
+print(fraction >= 0.0 && fraction < 1.0)
+var reversed = math.randomInt(13, 9)
+print(reversed >= 9 && reversed <= 13)
+print(math.randomInt(-7, -7))
+var extreme = math.randomInt(-9223372036854775808, 9223372036854775807)
+print(extreme >= -9223372036854775808 && extreme <= 9223372036854775807)

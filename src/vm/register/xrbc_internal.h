@@ -34,6 +34,10 @@ static inline XrRbcNativeShape xr_rbc_native_shape(XrRbcNativeKind kind) {
         [XR_RBC_NATIVE_MATH_##tag] = {.window_inputs = (arity) + 1, .writes_result = true, .requires_typed_window = true},
         XR_MATH_HOST_OPERATIONS(XR_MATH_RBC_SHAPE)
 #undef XR_MATH_RBC_SHAPE
+        [XR_RBC_NATIVE_MATH_RANDOM] = {.window_inputs = 1, .writes_result = true,
+            .requires_typed_window = true},
+        [XR_RBC_NATIVE_MATH_RANDOM_INT] = {.window_inputs = 3, .writes_result = true,
+            .requires_typed_window = true},
 #if defined(XR_RBC_LINKED_MATH_LERP)
         [XR_RBC_NATIVE_MATH_LERP] = {.window_inputs = 4, .writes_result = true,
             .requires_typed_window = true},

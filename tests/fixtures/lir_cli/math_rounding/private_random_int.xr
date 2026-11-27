@@ -1,0 +1,2 @@
+import { __randomInt } from math
+print(__randomInt(0, 7))

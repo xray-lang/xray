@@ -340,19 +340,25 @@ XR_FUNC bool xr_lir_math_lerp_external_signature(const char *name, size_t length
 XR_FUNC XrLirMathExternal xr_lir_math_external(XrLirExternKind kind) {
     switch (kind) {
 #define XR_MATH_LIR_SHAPE(tag, name, arity) \
-    case XR_LIR_EXTERN_MATH_##tag: return (XrLirMathExternal){"xrt_f64_" #name, arity};
+    case XR_LIR_EXTERN_MATH_##tag: return (XrLirMathExternal){"xrt_f64_" #name, arity, XR_LIR_F64, XR_LIR_F64};
     XR_MATH_HOST_OPERATIONS(XR_MATH_LIR_SHAPE)
 #undef XR_MATH_LIR_SHAPE
+    case XR_LIR_EXTERN_MATH_RANDOM:
+        return (XrLirMathExternal){"xrt_math_random", 0, XR_LIR_TYPE_INVALID, XR_LIR_F64};
+    case XR_LIR_EXTERN_MATH_RANDOM_INT:
+        return (XrLirMathExternal){"xrt_math_random_int", 2, XR_LIR_I64, XR_LIR_I64};
     default: return (XrLirMathExternal){0};
     }
 }
 
 XR_FUNC bool xr_lir_math_external_signature(XrLirMathExternal shape, const char *name, size_t length,
     const XrLirType *parameters, uint32_t count, XrLirType result) {
-    return shape.name && name && length == strlen(shape.name) && !memcmp(name, shape.name, length) &&
-        parameters && count == shape.parameter_count && result == XR_LIR_F64 &&
-        (count == 1 || count == 2) && parameters[0] == XR_LIR_F64 &&
-        (count == 1 || parameters[1] == XR_LIR_F64);
+    if (!shape.name || !name || length != strlen(shape.name) || memcmp(name, shape.name, length) ||
+        count != shape.parameter_count || result != shape.result_type || (count && !parameters))
+        return false;
+    for (uint32_t p = 0; p < count; ++p)
+        if (parameters[p] != shape.parameter_type) return false;
+    return true;
 }
 
 static const char *clock_external_name(XrLirExternKind kind) {
