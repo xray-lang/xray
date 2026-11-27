@@ -3977,10 +3977,29 @@ static bool lower_host_function(Lower *c, uint32_t index) {
     return lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
 }
 
+static bool lower_math_lerp_callable(Lower *c, XrLirFunction function) {
+    XrLirBlock block = {0};
+    XrLirValue arguments[3] = {{0}}, result = {0};
+    if (!lower_build(c, xr_lir_define_function(c->module, function)) ||
+        !lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &block)) ||
+        !lower_build(c, xr_lir_set_entry(c->module, function, block)))
+        return false;
+    for (uint32_t p = 0; p < 3; ++p)
+        if (!lower_build(c, xr_lir_function_parameter(c->module, function, p, &arguments[p])))
+            return false;
+    XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_F64, .callee=c->math_lerp,
+        .operands=arguments, .operand_count=3, .source=lower_source(c)};
+    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
+    return lower_build(c, xr_lir_emit_value(c->module, block, &call, &result)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
+}
+
 static bool lower_function(Lower *c, uint32_t index) {
     c->function = index;
     c->block = 0;
     c->instruction = UINT32_MAX;
+    if (c->math_lerp.id && index + 1 == c->math_lerp_source)
+        return lower_math_lerp_callable(c, c->functions[index]);
     if (!c->source->functions[index].block_count) return lower_host_function(c, index);
     LowerFunction f = {
         .owner = c, .source = &c->source->functions[index], .function = c->functions[index]};

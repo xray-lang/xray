@@ -50,7 +50,8 @@ typedef struct XrLirTestBinding {
 XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *, XrLirLowered *,
                                                  XrLirLowerFailure *);
 /* The source compiler proves the optional one-based Closed ordinal of the
- * archived Math leaf before lowering. Function values keep their source body. */
+ * archived Math leaf. Function values retain their ordinary callable identity
+ * and forward to the archive through a typed body. */
 XR_FUNC XrLirStatus xr_lir_lower_program_with_archive(const XrLirLowerRequest *,
     uint32_t math_lerp, XrLirLowered *, XrLirLowerFailure *);
 /* Run the ordinary module initializers before one verified root @test. The

@@ -1,0 +1,8 @@
+import {lerp} from math
+
+fn invokeSelected(interpolate: fn(f64, f64, f64) -> f64) -> f64 {
+    return interpolate(5.0, -3.0, 1.5)
+}
+
+const selected = lerp
+print(invokeSelected(selected))

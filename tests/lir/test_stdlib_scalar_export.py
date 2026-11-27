@@ -442,7 +442,8 @@ def ordinary_import_binding(args, root):
     math.write_bytes(contents.replace(expression, expression + b" + 17.0"))
 
     for name, program, stdlib, expected, bindings in (
-        ("canonical", "canonical.xr", args.stdlib, b"4.0\n-7.0\n", 2 if args.interface else 0),
+        ("canonical", "canonical.xr", args.stdlib, b"4.0\n-7.0\n", 3 if args.interface else 0),
+        ("indirect-only", "indirect_only.xr", args.stdlib, b"-7.0\n", 2 if args.interface else 0),
         ("shadow", "shadow.xr", args.stdlib, b"35.0\n24.0\n", 0),
         ("changed", "canonical.xr", altered, b"21.0\n10.0\n", 0),
     ):
@@ -452,8 +453,8 @@ def ordinary_import_binding(args, root):
         env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR="1")
         vm = run([args.xray, "run", source], cwd=root, env=env)
         run([args.xray, "build", "-c", source, "-o", generated], cwd=root, env=env)
-        # The prototype and the ordinary direct call each name the archive
-        # symbol once. The indirect call still runs the source function value.
+        # Count the prototype and the calls in each reachable body. Even
+        # without a direct call, the callable body must reference the archive.
         text = generated.read_bytes()
         assert text.count(b"xray_stdlib_math_lerp(") == bindings, (name, generated)
         run([args.xray, "build", source, "-o", native], cwd=root, env=env)
