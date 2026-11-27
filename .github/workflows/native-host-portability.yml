@@ -153,7 +153,7 @@ jobs:
           "Restored Windows object cache key: $env:CACHE_RESTORED_KEY"
           @("XRAY_WINDOWS_CCACHE=$env:XRAY_WINDOWS_CCACHE", "CCACHE_CONFIGPATH=$env:CCACHE_CONFIGPATH", "CCACHE_DIR=$env:CCACHE_DIR") >> $env:GITHUB_ENV
       - name: Cache Unix compiler objects
-        if: runner.os != 'Windows'
+        if: runner.os == 'Linux'
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/xray-ccache
@@ -161,7 +161,7 @@ jobs:
           restore-keys: |
             target-compiler-${{ runner.os }}-${{ runner.arch }}-
       - name: Prepare Unix compiler cache
-        if: runner.os != 'Windows'
+        if: runner.os == 'Linux'
         env:
           CCACHE_DIR: ${{ runner.temp }}/xray-ccache
           CCACHE_BASEDIR: ${{ github.workspace }}
@@ -175,6 +175,73 @@ jobs:
           else
             echo "Compiler cache unavailable. Compiling directly."
           fi
+      - name: Resolve a macOS compiler cache provider
+        id: macos-cache-provider
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        run: |
+          cache_tool="$(command -v ccache || true)"
+          provider=runner
+          directory="$RUNNER_TEMP/xray-macos-ccache-provider"
+          mkdir -p "$directory" current-evidence
+          if [ -z "$cache_tool" ] || ! "$cache_tool" --version >/dev/null 2>&1; then
+            provider=release
+            version=4.14.3
+            package="ccache-$version-darwin"
+            archive="$directory/$package.tar.gz"
+            sha256=764dd2a8100ff83e6bbd7b9a1e2016cc401be34bee8a70ea99698186622c34d5
+            curl --fail --silent --show-error --location --connect-timeout 10 --max-time 30 \
+              --output "$archive" "https://github.com/ccache/ccache/releases/download/v$version/$package.tar.gz"
+            printf '%s  %s\n' "$sha256" "$archive" | shasum -a 256 -c -
+            tar -xzf "$archive" -C "$directory" "$package/ccache"
+            cache_tool="$directory/$package/ccache"
+          fi
+          configuration="$directory/ccache.conf"
+          printf '%s\n' 'max_size = 512M' 'compiler_check = content' > "$configuration"
+          manifest=current-evidence/macos-cache-toolchain.log
+          {
+            printf 'provider=%s\nimage=%s\nworkspace=%s\n' "$provider" "${ImageVersion:-}" "$GITHUB_WORKSPACE"
+            "$cache_tool" --version
+            shasum -a 256 < "$cache_tool"
+            cat "$configuration"
+            command -v cc c++
+            cc --version
+            c++ --version
+            sw_vers -buildVersion
+            xcrun --sdk macosx --show-sdk-path
+            xcrun --sdk macosx --show-sdk-version
+            printf 'deployment_target=%s\nsdkroot=%s\n' "${MACOSX_DEPLOYMENT_TARGET:-}" "${SDKROOT:-}"
+          } > "$manifest"
+          digest="$(shasum -a 256 < "$manifest")"
+          printf 'fingerprint=%s\nexecutable=%s\nconfiguration=%s\n' "${digest%% *}" "$cache_tool" "$configuration" >> "$GITHUB_OUTPUT"
+      - name: Restore matching macOS compiler objects
+        id: macos-cache-restore
+        if: runner.os == 'macOS' && steps.macos-cache-provider.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/xray-macos-ccache-objects
+          key: xray-macos-objects-v1-${{ runner.arch }}-${{ steps.macos-cache-provider.outputs.fingerprint }}-${{ github.sha }}
+          restore-keys: |
+            xray-macos-objects-v1-${{ runner.arch }}-${{ steps.macos-cache-provider.outputs.fingerprint }}-
+      - name: Enable the macOS compiler cache for this build
+        id: macos-cache-start
+        if: runner.os == 'macOS' && steps.macos-cache-restore.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          CACHE_RESTORED_KEY: ${{ steps.macos-cache-restore.outputs.cache-matched-key }}
+          XRAY_MACOS_CCACHE: ${{ steps.macos-cache-provider.outputs.executable }}
+          CCACHE_CONFIGPATH: ${{ steps.macos-cache-provider.outputs.configuration }}
+          CCACHE_DIR: ${{ runner.temp }}/xray-macos-ccache-objects
+          CCACHE_BASEDIR: ${{ github.workspace }}
+        run: |
+          "$XRAY_MACOS_CCACHE" --print-stats --format=json >/dev/null
+          "$XRAY_MACOS_CCACHE" --zero-stats
+          printf 'macOS compiler cache: %s (restored key: %s)\n' "$XRAY_MACOS_CCACHE" "${CACHE_RESTORED_KEY:-cold}"
+          printf 'XRAY_MACOS_CCACHE=%s\nCCACHE_CONFIGPATH=%s\nCCACHE_DIR=%s\nCCACHE_BASEDIR=%s\n' \
+            "$XRAY_MACOS_CCACHE" "$CCACHE_CONFIGPATH" "$CCACHE_DIR" "$CCACHE_BASEDIR" >> "$GITHUB_ENV"
       - name: Configure Windows Ninja Release
         if: runner.os == 'Windows'
         shell: cmd
@@ -188,8 +255,18 @@ jobs:
           )
           exit /b %errorlevel%
       - name: Configure Unix Ninja Release
-        if: runner.os != 'Windows'
+        if: runner.os == 'Linux'
         run: python scripts/ci_build_log.py --log current-evidence/configure.log -- cmake --preset default
+      - name: Configure macOS Ninja Release
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if [ -n "${XRAY_MACOS_CCACHE:-}" ]; then
+            python scripts/ci_build_log.py --log current-evidence/configure.log -- cmake --preset default "-DXRAY_COMPILER_CACHE=$XRAY_MACOS_CCACHE"
+          else
+            echo "macOS compiler cache unavailable. Building directly."
+            python scripts/ci_build_log.py --log current-evidence/configure.log -- cmake --preset default -DXRAY_USE_COMPILER_CACHE=OFF
+          fi
       - name: Build Windows all without exclusions
         if: runner.os == 'Windows'
         shell: cmd
@@ -207,8 +284,22 @@ jobs:
           $stats = ($statistics -join "`n") | ConvertFrom-Json
           "Windows MSVC objects: $($stats.direct_cache_hit) direct hits, $($stats.preprocessed_cache_hit) preprocessed hits, $($stats.cache_miss) misses"
       - name: Build Unix all without exclusions
-        if: runner.os != 'Windows'
+        if: runner.os == 'Linux'
         run: python scripts/ci_build_log.py --log current-evidence/build-all.log -- cmake --build build --parallel 4 --target all -- -k 0
+      - name: Build macOS all without exclusions
+        if: runner.os == 'macOS'
+        run: >-
+          python scripts/ci_build_log.py --log current-evidence/build-all.log --
+          /usr/bin/time -p cmake --build build --parallel 4 --target all -- -k 0
+      - name: Record macOS compiler cache statistics
+        id: macos-cache-profile
+        if: ${{ !cancelled() && runner.os == 'macOS' && steps.macos-cache-start.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          "$XRAY_MACOS_CCACHE" --print-stats --format=json > current-evidence/macos-cache-stats.json
+          "$XRAY_MACOS_CCACHE" --show-stats
+          grep -F -m 1 -- "$XRAY_MACOS_CCACHE" build/CMakeFiles/rules.ninja build/build.ninja > current-evidence/macos-cache-launcher.log
       - name: Independently rebuild Windows CLI
         if: runner.os == 'Windows'
         shell: cmd
@@ -299,6 +390,13 @@ jobs:
           subprocess.run([sys.executable, 'scripts/new_path_baseline.py', '--root', '.',
                           '--build', 'build', '--work', 'build/string-performance',
                           '--cc', os.environ['NATIVE_CC'], '--samples', '6', '--gate-string'], check=True)
+      - name: Save verified macOS compiler objects
+        if: runner.os == 'macOS' && steps.macos-cache-profile.outcome == 'success' && steps.macos-cache-restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/xray-macos-ccache-objects
+          key: ${{ steps.macos-cache-restore.outputs.cache-primary-key }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
