@@ -61,6 +61,7 @@ class Case:
     stderr: bytes | None = b""
     stderr_lines: tuple[Line, ...] | None = None
     artifact: Path | None = None
+    test_report: tuple[Path, dict] | None = None
 
 
 def usage_line(executable: Path) -> tuple[bytes, ...]:
@@ -102,6 +103,7 @@ def test_role_cases(binary: Path, directory: Path, root: Path, short_timeout: fl
     report = (f"  test        {name}\nxray test: {long_test}: 1 test(s), 0 skipped, 0 hook(s)\n"
               .encode() + TEST_ROLE_REPORT)
     selected = root / "tests/lir/programs/test-role-session-selected.xr"
+    selected_report = directory / "selected-test-report.json"
     return [
         Case("test-run-small", [binary, "test", tests], short_timeout,
              stdout=b"", stderr=TEST_ROLE_REPORT),
@@ -113,6 +115,17 @@ def test_role_cases(binary: Path, directory: Path, root: Path, short_timeout: fl
         Case("test-unmatched-filter-skips-initializer", [binary, "test", "--filter", "absent", selected],
              short_timeout, exit_code=1, stdout=b"",
              stderr=b"xray test: 0 tests executed\nxray test: 0 passed, 0 failed, 4 skipped\n"),
+        Case("test-report-filtered-state-and-hooks",
+             [binary, "test", "--filter", "kept", "--report", selected_report, selected],
+             short_timeout, stdout=b"40\n43\n45\n46\n", test_report=(selected_report, {
+                 "path": str(selected), "tests": 4, "passed": 2, "failed": 0, "errors": 0,
+                 "timeouts": 0, "skipped": 2, "cases": [
+                     {"name": "kept_first", "status": "passed"},
+                     {"name": "excluded_deadline", "status": "skipped"},
+                     {"name": "kept_explicit_skip", "status": "skipped"},
+                     {"name": "kept_second", "status": "passed"},
+                 ],
+             })),
     ]
 
 
@@ -178,6 +191,15 @@ def verdict(case: Case, result: proc.ProcResult) -> list[str]:
     if case.artifact is not None and (
             not case.artifact.is_file() or case.artifact.stat().st_size == 0):
         failures.append("successful native build did not produce a nonempty executable")
+    if case.test_report is not None:
+        path, expected = case.test_report
+        try:
+            report = json.loads(path.read_bytes())
+            duration = report.pop("duration_ms")
+            if type(duration) is not int or duration < 0 or report != {"schema": 1, "files": [expected]}:
+                failures.append(f"test report differs: {report!r}, duration {duration!r}")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+            failures.append(f"cannot read schema-1 test report: {error}")
     return failures
 
 

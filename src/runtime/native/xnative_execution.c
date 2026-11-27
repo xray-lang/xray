@@ -695,15 +695,19 @@ XR_FUNC bool xrt_try_assert_field(const XrtTryAssertFailure *failure,uint32_t fi
     return true;
 }
 
-XR_FUNC bool xrt_try_assert_report(const XrtTryAssertFailure *failure) {
+XR_FUNC bool xrt_try_assert_format(const XrtTryAssertFailure *failure, const XrValueFormatSink *sink) {
     XrValueFormatReader reader={failure,error_snapshot_read,error_snapshot_child};
-    return failure && xr_value_format_try_assert(reader,(XrValueFormatNode){failure,0},
-        (XrValueFormatSink){NULL,panic_write});
+    return failure && sink && xr_value_format_try_assert(reader,(XrValueFormatNode){failure,0},*sink);
+}
+XR_FUNC bool xrt_uncaught_error_format(const XrtErrorSnapshot *failure, const XrValueFormatSink *sink) {
+    XrValueFormatReader reader={failure,error_snapshot_read,error_snapshot_child};
+    return failure && sink && xr_value_format_uncaught(reader,(XrValueFormatNode){failure,0},*sink,0,0);
+}
+XR_FUNC bool xrt_try_assert_report(const XrtTryAssertFailure *failure) {
+    return xrt_try_assert_format(failure,&(XrValueFormatSink){NULL,panic_write});
 }
 XR_FUNC bool xrt_uncaught_error_report(const XrtErrorSnapshot *failure) {
-    XrValueFormatReader reader={failure,error_snapshot_read,error_snapshot_child};
-    return failure && xr_value_format_uncaught(reader,(XrValueFormatNode){failure,0},
-        (XrValueFormatSink){NULL,panic_write},0,0);
+    return xrt_uncaught_error_format(failure,&(XrValueFormatSink){NULL,panic_write});
 }
 XR_FUNC bool xrt_message_panic_report(uint32_t code, const char *message, size_t length,
     const XrtSourceLocation *source) {

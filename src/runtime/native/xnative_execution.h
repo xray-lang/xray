@@ -197,6 +197,10 @@ typedef struct XrtTryAssertValue {
  * failure is dropped, even after the original execution and code retire. */
 XR_FUNC bool xrt_try_assert_value(const XrtTryAssertFailure *,XrtTryAssertValue *);
 XR_FUNC bool xrt_try_assert_field(const XrtTryAssertFailure *,uint32_t field,uint32_t *scalar,uint64_t *bits);
+struct XrValueFormatSink;
+/* Format the owned cause synchronously without changing its lifetime or output stream. */
+XR_FUNC bool xrt_try_assert_format(const XrtTryAssertFailure *, const struct XrValueFormatSink *);
+XR_FUNC bool xrt_uncaught_error_format(const XrtErrorSnapshot *, const struct XrValueFormatSink *);
 XR_FUNC bool xrt_try_assert_report(const XrtTryAssertFailure *);
 XR_FUNC bool xrt_uncaught_error_report(const XrtErrorSnapshot *);
 #endif // XNATIVE_EXECUTION_H

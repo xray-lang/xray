@@ -1,0 +1,5 @@
+@test
+fn hold_report_open() {
+    print("report guest started")
+    while (true) {}
+}

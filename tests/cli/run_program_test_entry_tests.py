@@ -1,6 +1,8 @@
 """Exercise the actual test command and its shared Program execution owner."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -234,15 +236,16 @@ fn selected() { print("test ran") }
 '''}
         with tempfile.TemporaryDirectory(prefix="xray-test-report-") as directory:
             report = Path(directory) / "test-results.json"
+            report.write_bytes(b"prior report")
             for expected, options, diagnosis in (
                 (2, ("--jobs", "0"), "parallel jobs must be at least one"),
                 (2, ("--jobs", "2"), "parallel test execution is temporarily unavailable"),
                 (1, ("--sandbox",), "sandbox execution is temporarily unavailable"),
-                (2, ("--report", str(report)), "test outcome reports are temporarily unavailable"),
             ):
                 with self.subTest(options=options):
-                    self.assertEqual(self.invoke(files, expected, *options, contains=(diagnosis,)), "")
-            self.assertFalse(report.exists())
+                    self.assertEqual(self.invoke(files, expected, *options, "--report", str(report),
+                                                 contains=(diagnosis,)), "")
+                    self.assertEqual(report.read_bytes(), b"prior report")
 
     def test_quiet_preserves_guest_output(self):
         self.assertEqual(self.invoke({"main_test.xr": '''
@@ -252,6 +255,163 @@ fn selected() { print("guest output"); assert(false, "hidden runner diagnostic")
 fn teardown() { print("guest teardown") }
 '''}, 1, "--quiet", "--verbose",
             absent=("hidden runner diagnostic", "xray test:")), "guest output\nguest teardown\n")
+
+    def test_report_preserves_owned_runtime_and_source_causes(self):
+        with tempfile.TemporaryDirectory(prefix="xray-report-owned-") as directory:
+            root = Path(directory)
+            report = root / "report.json"
+            report.write_bytes(b"prior report")
+            actions = root / "a-actions.xr"
+            actions.write_text(r'''
+enum Failure { Detail { code: i64 } }
+fn rejected() throws(Failure) { throw Failure.Detail { code: 42 } }
+@test
+fn succeeds() { print(17) }
+@test(skip)
+fn skipped() { assert(false) }
+@test
+fn panics() { assert(false, "first\n\"例\"\\") }
+@test
+fn asserts_error() { try! rejected() }
+@after_all
+fn teardown() { print(23); assert(false, "teardown cause") }
+''', encoding="utf-8")
+            invalid = root / "b-诊断.xr"
+            invalid.write_text('fn duplicate(a: i64, a: i64) {}\n', encoding="utf-8")
+            result = subprocess.run([XRAY, "test", invalid, actions, "--quiet", "--report", report],
+                                    cwd=ROOT, capture_output=True, timeout=15)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (1, b"17\n23\n", b""))
+            data = json.loads(report.read_bytes())
+            self.assertEqual(set(data), {"schema", "files", "duration_ms"})
+            self.assertEqual(data["schema"], 1)
+            self.assertGreaterEqual(data["duration_ms"], 0)
+            outcome, diagnostic = data["files"]
+            self.assertEqual(Path(outcome["path"]), actions)
+            self.assertEqual(tuple(outcome[key] for key in
+                ("tests", "passed", "failed", "errors", "timeouts", "skipped")), (4, 1, 2, 1, 0, 1))
+            self.assertEqual(outcome["cases"], [
+                {"name": "succeeds", "status": "passed"},
+                {"name": "skipped", "status": "skipped"},
+                {"name": "panics", "status": "failed", "message": '[Uncaught Panic] E0445: first\n"例"\\'},
+                {"name": "asserts_error", "status": "failed",
+                 "message": "[Uncaught Panic] E0446: try! failed: Failure.Detail(42)"},
+            ])
+            self.assertIn("teardown cause", outcome["error"])
+            self.assertEqual(Path(diagnostic["path"]), invalid)
+            self.assertEqual((diagnostic["sourceStatus"], diagnostic["sourceStage"], diagnostic["errors"],
+                              diagnostic["cases"]), ("source-rejected", 4, 1, []))
+            invalid.unlink()
+            self.assertIn("duplicate parameter name", diagnostic["error"])
+            self.assertIn("first declaration is here", diagnostic["error"])
+            self.assertIn("b-诊断.xr", diagnostic["error"])
+
+    def test_report_keeps_unstarted_cases_and_early_errors_distinct(self):
+        with tempfile.TemporaryDirectory(prefix="xray-report-stages-") as directory:
+            root = Path(directory)
+            report = root / "report.json"
+            fixture = ROOT / "tests/lir/programs/test-role-session-selected.xr"
+            result = subprocess.run([XRAY, "test", fixture, "--filter", "excluded_deadline", "--report", report],
+                                    cwd=ROOT, capture_output=True, timeout=15)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (1, b"", b""))
+            row = json.loads(report.read_bytes())["files"][0]
+            self.assertEqual((row["passed"], row["failed"], row["errors"], row["timeouts"], row["cases"]),
+                             (0, 0, 1, 0, []))
+            self.assertIn("test-role startup with a deadline is not supported", row["error"])
+            self.assertNotIn("sourceStatus", row)
+
+            source = root / "stopped.xr"
+            source.write_text('''
+@test
+fn first() { assert(false, "stopped") }
+@test
+fn later() { print(99) }
+@after_all
+fn cleanup() { print(17) }
+''', encoding="utf-8")
+            result = subprocess.run([XRAY, "test", source, "--fail-fast", "--report", report],
+                                    cwd=ROOT, capture_output=True, timeout=15)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (1, b"17\n", b""))
+            row = json.loads(report.read_bytes())["files"][0]
+            self.assertEqual((row["tests"], row["failed"], row["skipped"]), (2, 1, 0))
+            self.assertEqual(row["cases"],
+                             [{"name": "first", "status": "failed", "message": "[Uncaught Panic] E0445: stopped"}])
+
+            source.write_text('''
+print("initialization")
+assert(false, "sticky initializer cause")
+@test
+fn blocked() { print(99) }
+@after_all
+fn cleanup() { print(17) }
+''', encoding="utf-8")
+            result = subprocess.run([XRAY, "test", source, "--report", report],
+                                    cwd=ROOT, capture_output=True, timeout=15)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (1, b"initialization\n", b""))
+            row = json.loads(report.read_bytes())["files"][0]
+            self.assertEqual((row["tests"], row["failed"], row["errors"], row["cases"]), (1, 0, 1, []))
+            self.assertIn("module initialization failed", row["error"])
+            self.assertIn("sticky initializer cause", row["error"])
+
+    def test_report_publication_failure_is_explicit(self):
+        with tempfile.TemporaryDirectory(prefix="xray-report-write-") as directory:
+            root = Path(directory)
+            source = root / "case.xr"
+            source.write_text('@test\nfn selected() { print(17) }\n', encoding="utf-8")
+            target = root / "missing/report.json"
+            result = subprocess.run([XRAY, "test", source, "--report", target],
+                                    cwd=ROOT, capture_output=True, timeout=15)
+            self.assertEqual((result.returncode, result.stdout), (1, b"17\n"))
+            self.assertIn(b"output publication failed", result.stderr)
+            self.assertEqual(sorted(root.iterdir()), [source])
+
+    def test_report_distinguishes_invalid_source_from_semantic_rejection(self):
+        with tempfile.TemporaryDirectory(prefix="xray-report-source-status-") as directory:
+            root = Path(directory)
+            report = root / "report.json"
+            for label, text, status, diagnostic in (
+                ("syntax", b"fn broken() return\n", "invalid", "function body must use braces { }"),
+                ("input", b"fn ordinary() {}\n\x00", "invalid", "source text contains an embedded NUL"),
+                ("semantic", b"fn duplicate(a: i64, a: i64) {}\n", "source-rejected", "duplicate parameter name"),
+            ):
+                with self.subTest(label=label):
+                    source = root / f"{label}.xr"
+                    source.write_bytes(text)
+                    plain = subprocess.run([XRAY, "test", source], cwd=ROOT, capture_output=True, timeout=15)
+                    result = subprocess.run([XRAY, "test", source, "--report", report],
+                                            cwd=ROOT, capture_output=True, timeout=15)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), (1, b"", b""))
+                    row = json.loads(report.read_bytes())["files"][0]
+                    self.assertEqual((row["sourceStatus"], row["sourceStage"], row["errors"], row["cases"]),
+                                     (status, 4, 1, []))
+                    self.assertIn(diagnostic, row["error"])
+                    self.assertEqual(plain.stderr, row["error"].encode("utf-8") +
+                                     b"xray test: 0 passed, 1 failed, 0 skipped\n")
+
+    def test_interrupted_report_keeps_prior_bytes(self):
+        fixture = ROOT / "tests/lir/programs/test-role-report-interrupt.xr"
+        with tempfile.TemporaryDirectory(prefix="xray-report-interrupt-") as directory:
+            root = Path(directory)
+            report = root / "report.json"
+            report.write_bytes(b"prior report")
+            completed = root / "a-completed.xr"
+            completed.write_text('@test\nfn ran() { print("first file completed") }\n', encoding="utf-8")
+            held = root / "b-held.xr"
+            held.write_bytes(fixture.read_bytes())
+            with subprocess.Popen([XRAY, "test", held, completed, "--report", report], cwd=ROOT,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child:
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    try:
+                        for expected in (b"first file completed\n", b"report guest started\n"):
+                            marker = executor.submit(child.stdout.readline)
+                            self.assertEqual(marker.result(timeout=15), expected)
+                        self.assertIsNone(child.poll())
+                    finally:
+                        if child.poll() is None:
+                            child.kill()
+                remaining, errors = child.communicate(timeout=5)
+            self.assertEqual((remaining, errors), (b"", b""))
+            self.assertEqual(report.read_bytes(), b"prior report")
+            self.assertEqual(sorted(root.iterdir()), [completed, held, report])
 
 
 if __name__ == "__main__":

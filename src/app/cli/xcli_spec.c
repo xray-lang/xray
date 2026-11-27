@@ -38,7 +38,7 @@ static const XrCliOptionSpec test_options[] = {
     {"quiet", 'q', XR_CLI_VALUE_NONE, false, false, NULL, "Suppress the runner's results and diagnostics"},
     {"jobs", 'j', XR_CLI_VALUE_INT, false, false, "N", "Number of test jobs (currently 1)"},
     {"report", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
-     "Temporarily unavailable"},
+     "Write serial test outcomes as JSON to FILE"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec check_options[] = {

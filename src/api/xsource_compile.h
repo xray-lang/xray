@@ -80,6 +80,10 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_check(
     XrSourceCompileDiagnostic *diagnostic);
 XR_FUNC void xr_source_compile_diagnostic_free(XrSourceCompileDiagnostic *diagnostic);
 XR_FUNC const char *xr_source_compile_status_name(XrSourceCompileStatus status);
+/* Normalize stage-owned failures for consumers of the Source diagnostic protocol. */
+XR_FUNC XrSourceCompileStatus xr_source_compile_from_resource(XrCompileResourceStatus);
+XR_FUNC XrSourceCompileStatus xr_source_compile_from_manifest(XrManifestStatus);
+XR_FUNC XrSourceCompileStatus xr_source_compile_from_xir(XrXirStatus, XrXirSourceDiagnosticOrigin);
 /* Consumes the immediate manifest producer fact before its scratch expires. */
 XR_FUNC XrCompileResourceStatus xr_source_compile_manifest_report(
     XrSourceCompileDiagnostic *,XrCompileResources *,const XrManifestDiagnostic *);

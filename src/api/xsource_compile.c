@@ -28,7 +28,7 @@ XR_FUNC XrTomlParseLimits xr_source_compile_default_manifest_limits(void) {
     return (XrTomlParseLimits){UINT64_C(1) << 20, 64};
 }
 
-static XrSourceCompileStatus source_resource_status(XrCompileResourceStatus status) {
+XR_FUNC XrSourceCompileStatus xr_source_compile_from_resource(XrCompileResourceStatus status) {
     switch(status) {
     case XR_COMPILE_RESOURCE_OK:return XR_SOURCE_COMPILE_OK;
     case XR_COMPILE_RESOURCE_MEMORY_LIMIT:return XR_SOURCE_COMPILE_MEMORY_LIMIT;
@@ -55,7 +55,7 @@ static XrSourceCompileStatus source_io_status(XrOsIoStatus status) {
     default: return XR_SOURCE_COMPILE_IO;
     }
 }
-static XrSourceCompileStatus source_manifest_status(XrManifestStatus status) {
+XR_FUNC XrSourceCompileStatus xr_source_compile_from_manifest(XrManifestStatus status) {
     switch (status) {
     case XR_MANIFEST_OK: return XR_SOURCE_COMPILE_OK;
     case XR_MANIFEST_NOT_FOUND: return XR_SOURCE_COMPILE_NOT_FOUND;
@@ -70,7 +70,8 @@ static XrSourceCompileStatus source_manifest_status(XrManifestStatus status) {
     default: return XR_SOURCE_COMPILE_INVALID;
     }
 }
-static XrSourceCompileStatus source_xir_status(XrXirStatus status) {
+XR_FUNC XrSourceCompileStatus xr_source_compile_from_xir(XrXirStatus status,
+    XrXirSourceDiagnosticOrigin origin) {
     switch (status) {
     case XR_XIR_OK: return XR_SOURCE_COMPILE_OK;
     case XR_XIR_BUDGET: return XR_SOURCE_COMPILE_BUDGET;
@@ -82,6 +83,9 @@ static XrSourceCompileStatus source_xir_status(XrXirStatus status) {
     case XR_XIR_CLOCK_FAILURE: return XR_SOURCE_COMPILE_CLOCK_FAILURE;
     case XR_XIR_IO: return XR_SOURCE_COMPILE_IO;
     case XR_XIR_UNRESOLVED: return XR_SOURCE_COMPILE_NOT_FOUND;
+    case XR_XIR_BAD_STRUCTURE:
+        return origin == XR_XIR_SOURCE_DIAGNOSTIC_PARSE || origin == XR_XIR_SOURCE_DIAGNOSTIC_INPUT
+            ? XR_SOURCE_COMPILE_INVALID : XR_SOURCE_COMPILE_REJECTED;
     default: return XR_SOURCE_COMPILE_REJECTED;
     }
 }
@@ -171,13 +175,13 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_check(
         detail.authority_status = xr_source_authority_open(request->context, entry,
             request->libraries, &request->manifest_limits, &authority, &authority_fact);
         (void)xr_source_compile_manifest_report(&detail, request->context->resources, &authority_fact);
-        status = source_manifest_status(detail.authority_status);
+        status = xr_source_compile_from_manifest(detail.authority_status);
     }
     if (status == XR_SOURCE_COMPILE_OK) {
         detail.stage = XR_SOURCE_COMPILE_SESSION;
         detail.session_status = owns_session ? xr_compile_session_new(request->context->resources, &session) :
             xr_compile_session_resource_status(session);
-        status = source_resource_status(detail.session_status);
+        status = xr_source_compile_from_resource(detail.session_status);
     }
     if (status == XR_SOURCE_COMPILE_OK) {
         detail.stage = XR_SOURCE_COMPILE_CHECK;
@@ -187,11 +191,7 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_check(
             .linkage_kind = XR_XIR_PROGRAM, .libraries = request->libraries, .target = request->target};
         detail.source.status = xr_xir_compile_source_check(&input, &source,
             &detail.source.diagnostic, &detail.source.failure);
-        status = source_xir_status(detail.source.status);
-        if (detail.source.status == XR_XIR_BAD_STRUCTURE &&
-            (detail.source.failure.origin == XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
-             detail.source.failure.origin == XR_XIR_SOURCE_DIAGNOSTIC_INPUT))
-            status = XR_SOURCE_COMPILE_INVALID;
+        status = xr_source_compile_from_xir(detail.source.status, detail.source.failure.origin);
     }
     if (owns_session) xr_compile_session_free(session);
     xr_source_authority_close(authority);
@@ -217,14 +217,14 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_diagnostic_render(
             located|=root.primary.path&&*root.primary.path&&(root.primary.flags&XR_FRONTEND_LOCATION_LINE);
         }
         char *rendered=NULL;
-        XrSourceCompileStatus status=source_resource_status(xr_frontend_report_render(d->source.failure.report,&rendered));
+        XrSourceCompileStatus status=xr_source_compile_from_resource(xr_frontend_report_render(d->source.failure.report,&rendered));
         if(status!=XR_SOURCE_COMPILE_OK)return status;
         if(located){*output=rendered;return XR_SOURCE_COMPILE_OK;}
         int prefix=snprintf(NULL,0,"source build failed (stage=%u status=%s)\n",
             (unsigned)d->stage,xr_source_compile_status_name(d->status));
         size_t length=strlen(rendered);
         if(prefix<0 || length>SIZE_MAX-(size_t)prefix-1){xr_compile_resources_free(rendered);return XR_SOURCE_COMPILE_OVERFLOW;}
-        char *text=NULL;status=source_resource_status(xr_compile_resources_alloc(resources,(size_t)prefix+length+1,(void **)&text));
+        char *text=NULL;status=xr_source_compile_from_resource(xr_compile_resources_alloc(resources,(size_t)prefix+length+1,(void **)&text));
         if(status==XR_SOURCE_COMPILE_OK) {
             /* An unavailable location must not hide the actual first root. */
             memcpy(text,rendered,length);
@@ -237,7 +237,7 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_diagnostic_render(
     int size=snprintf(NULL,0,"source build failed (stage=%u status=%s)\n",
         (unsigned)d->stage,xr_source_compile_status_name(d->status));
     if(size<0)return XR_SOURCE_COMPILE_BAD_ARGUMENT;
-    char *text=NULL;XrSourceCompileStatus status=source_resource_status(xr_compile_resources_alloc(resources,(size_t)size+1,(void **)&text));
+    char *text=NULL;XrSourceCompileStatus status=xr_source_compile_from_resource(xr_compile_resources_alloc(resources,(size_t)size+1,(void **)&text));
     if(status!=XR_SOURCE_COMPILE_OK)return status;
     (void)snprintf(text,(size_t)size+1,"source build failed (stage=%u status=%s)\n",
         (unsigned)d->stage,xr_source_compile_status_name(d->status));
