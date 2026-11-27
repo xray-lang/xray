@@ -22,6 +22,17 @@ typedef struct XrLirTestPlanRole {
     XrLirFunction function;
 } XrLirTestPlanRole;
 
+typedef struct XrLirTestCatalogEntry {
+    uint32_t closed_function;
+    uint32_t timeout_milliseconds;
+} XrLirTestCatalogEntry;
+
+typedef struct XrLirTestCatalogView {
+    XrFingerprint source_sha256;
+    const XrLirTestCatalogEntry *entries;
+    uint32_t count;
+} XrLirTestCatalogView;
+
 /* One verified module owns an initialization-only entry and all enabled root
  * roles. Rows follow source declaration order. Skipped rows have no function
  * handle. Views and handles borrow the plan; no role is executed here. */
@@ -32,6 +43,12 @@ XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan(const XrLirSourceRequest *,
  * function. If no test is selected, there is no initializer to execute. */
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan_selected(const XrLirSourceRequest *,
     const char *filter, XrLirTestPlan **, XrLirSourceFailure *);
+/* Compile the complete suite and retain the same-operation raw digest and
+ * Closed identities. The catalog follows the role inventory, including skips.
+ * Catalog IDs carry no execution authority. */
+XR_FUNC XrLirSourceStatus xr_lir_compile_test_catalog(const XrLirSourceRequest *,
+    XrLirTestPlan **, XrLirSourceFailure *);
+XR_FUNC bool xr_lir_test_plan_catalog(const XrLirTestPlan *, XrLirTestCatalogView *);
 XR_FUNC XrLirFunction xr_lir_test_plan_initializer(const XrLirTestPlan *);
 XR_FUNC uint32_t xr_lir_test_plan_role_count(const XrLirTestPlan *);
 XR_FUNC XrLirStatus xr_lir_test_plan_role_at(const XrLirTestPlan *, uint32_t ordinal,

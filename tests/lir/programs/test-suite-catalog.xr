@@ -1,0 +1,23 @@
+import "./suite-catalog-helper" as helper
+
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+var state: i64 = identity(helper.initialValue())
+
+@test
+fn z_first_test() {
+    assert(state == 41, "suite initializer ran before the first case")
+    state = state + 1
+}
+
+@test(skip)
+fn skipped_test() {
+    assert(false, "the skipped case entered the guest")
+}
+
+@test(timeout: 0)
+fn a_second_test() {
+    assert(state == 42, "suite state did not persist")
+}

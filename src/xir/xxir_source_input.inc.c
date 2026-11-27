@@ -49,7 +49,26 @@ typedef struct SourceInput {
     const SourceInstanceOperation *instances;
     const SourceComptimeInstancesOperation *comptime_instances;
     SourceModuleInterfaceCapture *module_interface;
+    XrFingerprint *entry_sha256;
 } SourceInput;
+
+static void source_entry_sha256(SourceContext *ctx, XrFingerprint *output) {
+    const XrModuleSpec *entry = &ctx->graph->specs[ctx->graph->entry_index];
+    if (!entry->source_text) {
+        source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "entry source bytes are unavailable");
+        return;
+    }
+    XrSHA256Context hash;
+    xr_sha256_init(&hash);
+    for (size_t offset = 0; offset < entry->source_length;) {
+        if (!source_request_poll(ctx, NULL)) return;
+        size_t count = entry->source_length - offset;
+        if (count > 4096) count = 4096;
+        xr_sha256_update(&hash, (const uint8_t *)entry->source_text + offset, count);
+        offset += count;
+    }
+    xr_sha256_final(&hash, output->bytes);
+}
 static void source_input_nul(SourceContext *ctx,const char *path,size_t line,size_t column,XrXirSourceFailure *failure) {
     if(line>INT_MAX || column>INT_MAX) {
         source_fail(ctx,NULL,XR_XIR_BUDGET,"source location is not representable");return;
@@ -226,6 +245,9 @@ done:
     /* A comptime receiver has already copied the complete final query from its
      * own construction. The original context publishes only its own result. */
     if (!comptime_instances && !result.snapshot) source_query_publish(&ctx, &result);
+    XrFingerprint entry_sha256 = {0};
+    if (input.entry_sha256 && ctx.diagnostic.status == XR_XIR_OK)
+        source_entry_sha256(&ctx, &entry_sha256);
     if (input.module_interface && ctx.diagnostic.status == XR_XIR_OK) {
         SourceModuleInterfaceCapture *capture = input.module_interface;
         capture->status = xir_module_interface_project(ctx.graph, result.checked,
@@ -279,8 +301,10 @@ done:
     source_release_retired_arrays(&ctx);
     while (ctx.memory) { SourceMemory *next = ctx.memory->next; xr_compile_resources_free(ctx.memory); ctx.memory = next; }
     xr_compile_module_graph_free(ctx.graph); xr_compile_module_resolver_free(resolver);
-    if (ctx.diagnostic.status == XR_XIR_OK && !comptime_instances) *output = result;
-    else xr_xir_compile_source_result_free(&result);
+    if (ctx.diagnostic.status == XR_XIR_OK && !comptime_instances) {
+        *output = result;
+        if (input.entry_sha256) *input.entry_sha256 = entry_sha256;
+    } else xr_xir_compile_source_result_free(&result);
     if (diagnostic) *diagnostic = ctx.diagnostic;
     return ctx.diagnostic.status;
 }
@@ -288,6 +312,12 @@ done:
 XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     return source_check_input(request, (SourceInput){0}, output, diagnostic, failure);
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_check_entry_sha256(const XrXirSourceRequest *request,
+    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure,
+    XrFingerprint *sha256) {
+    if (!sha256) return XR_XIR_BAD_STRUCTURE;
+    return source_check_input(request, (SourceInput){.entry_sha256=sha256}, output, diagnostic, failure);
 }
 XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *request,
     const XrXirSourceText *text,

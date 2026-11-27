@@ -19,6 +19,7 @@
 #include "shared/xr_string_core.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_source_query_internal.h"
 #include "xir/xxir_specialization_bindings.h"
 #include <string.h>
 
@@ -86,10 +87,14 @@ struct XrLirTestPlan {
     XrLirLowered lowered;
     uint32_t role_count;
     XrLirTestBinding *roles;
+    XrLirTestCatalogEntry *catalog;
+    XrFingerprint source_sha256;
 };
 
 _Static_assert(_Alignof(XrLirTestPlan) >= _Alignof(XrLirTestBinding),
     "test role records follow their plan at natural alignment");
+_Static_assert(_Alignof(XrLirTestBinding) >= _Alignof(XrLirTestCatalogEntry),
+    "catalog entries follow role records at natural alignment");
 
 static bool source_root_role(const XrXirDeclarations *declarations, uint32_t function) {
     const XrXirFunctionIdentity *identity = &declarations->functions[function];
@@ -97,18 +102,19 @@ static bool source_root_role(const XrXirDeclarations *declarations, uint32_t fun
         identity->test_role != XR_XIR_TEST_ROLE_NONE;
 }
 
-static XrLirTestPlan *source_test_plan(const XrXirArtifact *checked, XrCompileResources *resources) {
+static XrLirTestPlan *source_test_plan(const XrXirArtifact *checked, XrCompileResources *resources,
+    const XrFingerprint *source_sha256) {
     const XrXirModule *module = xr_xir_compile_artifact_module(checked);
     if (!module || !module->declarations || !module->declarations->functions) return NULL;
     const XrXirDeclarations *declarations = module->declarations;
     uint32_t count = 0;
     size_t size = sizeof(XrLirTestPlan);
+    size_t row_size = sizeof(XrLirTestBinding) + (source_sha256 ? sizeof(XrLirTestCatalogEntry) : 0);
     for (uint32_t f = 0; f < module->function_count; ++f) {
         if (!source_root_role(declarations, f)) continue;
         size_t length = module->functions[f].name_length;
-        if (SIZE_MAX - size < sizeof(XrLirTestBinding) ||
-            SIZE_MAX - size - sizeof(XrLirTestBinding) <= length) return NULL;
-        size += sizeof(XrLirTestBinding) + length + 1;
+        if (SIZE_MAX - size < row_size || SIZE_MAX - size - row_size <= length) return NULL;
+        size += row_size + length + 1;
         ++count;
     }
     XrLirTestPlan *plan = NULL;
@@ -116,6 +122,11 @@ static XrLirTestPlan *source_test_plan(const XrXirArtifact *checked, XrCompileRe
         return NULL;
     *plan = (XrLirTestPlan){.role_count = count, .roles = (void *)(plan + 1)};
     char *name = (char *)(plan->roles + count);
+    if (source_sha256) {
+        plan->catalog = (void *)name;
+        plan->source_sha256 = *source_sha256;
+        name = (char *)(plan->catalog + count);
+    }
     uint32_t row = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         if (!source_root_role(declarations, f)) continue;
@@ -123,8 +134,11 @@ static XrLirTestPlan *source_test_plan(const XrXirArtifact *checked, XrCompileRe
         size_t length = function->name_length;
         memcpy(name, function->name, length);
         name[length] = 0;
-        plan->roles[row++] = (XrLirTestBinding){(XrXirTestRole)declarations->functions[f].test_role,
-            f, name, length};
+        const XrXirFunctionIdentity *identity = &declarations->functions[f];
+        plan->roles[row] = (XrLirTestBinding){(XrXirTestRole)identity->test_role, f, name, length};
+        if (plan->catalog) plan->catalog[row] = (XrLirTestCatalogEntry){UINT32_MAX,
+            identity->test_timeout_milliseconds};
+        ++row;
         name += length + 1;
     }
     return plan;
@@ -132,11 +146,25 @@ static XrLirTestPlan *source_test_plan(const XrXirArtifact *checked, XrCompileRe
 
 static XrXirStatus source_receive_test_plan(void *context, const XrXirSpecializationMapView *map) {
     XrLirTestPlan *plan = context;
+    const XrXirModule *closed = plan->catalog ? xr_xir_compile_artifact_module(map->closed) : NULL;
+    if (plan->catalog && (!closed || !closed->declarations || !closed->declarations->functions))
+        return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < plan->role_count; ++i) {
         XrLirTestBinding *role = &plan->roles[i];
         if (role->function == UINT32_MAX) continue;
         XrXirStatus status = source_map_function(map, role->function, &role->function);
         if (status != XR_XIR_OK) return status;
+        if (plan->catalog) {
+            if (role->function >= closed->function_count) return XR_XIR_BAD_STRUCTURE;
+            const XrXirFunctionIdentity *identity = &closed->declarations->functions[role->function];
+            const XrXirFunction *function = &closed->functions[role->function];
+            if (identity->module != closed->declarations->root_module ||
+                (XrXirTestRole)identity->test_role != role->role ||
+                identity->test_timeout_milliseconds != plan->catalog[i].timeout_milliseconds ||
+                function->name_length != role->name_length ||
+                memcmp(function->name, role->name, role->name_length)) return XR_XIR_BAD_STRUCTURE;
+            plan->catalog[i].closed_function = role->function;
+        }
     }
     return XR_XIR_OK;
 }
@@ -179,7 +207,7 @@ static XrLirStatus source_lower_selected(const XrLirLowerRequest *request, XrLir
 
 static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const char *test_name,
     XrLirLowered *output, XrLirTestPlan **plan_output, const SourceRoleFilter *filter,
-    XrLirSourceFailure *failure) {
+    bool catalog, XrLirSourceFailure *failure) {
     if (!request || !request->resources || !request->entry_path || !request->entry_path[0] ||
         (plan_output ? *plan_output != NULL :
             !output || output->module || output->entry.module || output->entry.id) || !failure ||
@@ -210,8 +238,12 @@ static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const
         .context = &context, .stdlib_path = request->stdlib_path, .lockfile = request->lockfile,
         .linkage_kind = XR_XIR_PROGRAM, .target = request->target};
     status = XR_LIR_SOURCE_CHECK_FAILED;
-    if (xr_xir_compile_source_check(&input, &source, &failure->source,
-            &failure->source_failure) != XR_XIR_OK)
+    XrFingerprint source_sha256;
+    XrXirStatus checked = catalog
+        ? xr_xir_compile_source_check_entry_sha256(&input, &source, &failure->source,
+            &failure->source_failure, &source_sha256)
+        : xr_xir_compile_source_check(&input, &source, &failure->source, &failure->source_failure);
+    if (checked != XR_XIR_OK)
         goto cleanup;
 
     SourceTestSelection test = {UINT32_MAX, UINT32_MAX};
@@ -222,7 +254,7 @@ static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const
     }
     if (plan_output) {
         status = XR_LIR_SOURCE_PREPARATION_FAILED;
-        plan = source_test_plan(source.checked, request->resources);
+        plan = source_test_plan(source.checked, request->resources, catalog ? &source_sha256 : NULL);
         if (!plan) goto cleanup;
         if (filter) {
             active_count = source_select_roles(plan, *filter);
@@ -292,26 +324,38 @@ cleanup:
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *request,
     XrLirLowered *output, XrLirSourceFailure *failure) {
-    return source_compile(request, NULL, output, NULL, NULL, failure);
+    return source_compile(request, NULL, output, NULL, NULL, false, failure);
 }
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_source(const XrLirSourceRequest *request,
     const char *test_name, XrLirLowered *output, XrLirSourceFailure *failure) {
     if (!test_name || !test_name[0]) return XR_LIR_SOURCE_BAD_ARGUMENT;
-    return source_compile(request, test_name, output, NULL, NULL, failure);
+    return source_compile(request, test_name, output, NULL, NULL, false, failure);
 }
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan(const XrLirSourceRequest *request,
     XrLirTestPlan **output, XrLirSourceFailure *failure) {
     if (!output) return XR_LIR_SOURCE_BAD_ARGUMENT;
-    return source_compile(request, NULL, NULL, output, NULL, failure);
+    return source_compile(request, NULL, NULL, output, NULL, false, failure);
 }
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan_selected(const XrLirSourceRequest *request,
     const char *filter, XrLirTestPlan **output, XrLirSourceFailure *failure) {
     if (!output) return XR_LIR_SOURCE_BAD_ARGUMENT;
     const SourceRoleFilter selection = {filter};
-    return source_compile(request, NULL, NULL, output, &selection, failure);
+    return source_compile(request, NULL, NULL, output, &selection, false, failure);
+}
+
+XR_FUNC XrLirSourceStatus xr_lir_compile_test_catalog(const XrLirSourceRequest *request,
+    XrLirTestPlan **output, XrLirSourceFailure *failure) {
+    if (!output) return XR_LIR_SOURCE_BAD_ARGUMENT;
+    return source_compile(request, NULL, NULL, output, NULL, true, failure);
+}
+
+XR_FUNC bool xr_lir_test_plan_catalog(const XrLirTestPlan *plan, XrLirTestCatalogView *output) {
+    if (!plan || !plan->catalog || !output) return false;
+    *output = (XrLirTestCatalogView){plan->source_sha256, plan->catalog, plan->role_count};
+    return true;
 }
 
 XR_FUNC XrLirFunction xr_lir_test_plan_initializer(const XrLirTestPlan *plan) {

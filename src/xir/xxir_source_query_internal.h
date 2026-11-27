@@ -16,6 +16,12 @@
 #include "xxir_source_calls.h"
 #include "xxir_source_type_facts.h"
 #include "xxir_source_builtin.h"
+struct XrXirSourceRequest;
+/* Check a file and copy the SHA-256 of the original bytes of its admitted
+ * root from the same Source operation. Both outputs remain untouched on failure. */
+XR_FUNC XrXirStatus xr_xir_compile_source_check_entry_sha256(
+    const struct XrXirSourceRequest *, XrXirSourceResult *, XrXirSourceDiagnostic *,
+    XrXirSourceFailure *, XrFingerprint *);
 /* Only the Core Source loader publishes this executable binding. The supplied
  * Checked owner and debug function must retain the same numerical identity. */
 XR_FUNC XrXirStatus xr_xir_compile_source_builtin_bind(XrXirSourceSnapshot *,
