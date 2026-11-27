@@ -241,7 +241,8 @@ def expected_interface(source):
 def link_archive(args, root, empty):
     consumer = root / "consumer.c"
     consumer.write_text(
-        r'''#include <stdint.h>
+        r'''#include "xray_native_runtime.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #if defined(_WIN32)
@@ -381,6 +382,8 @@ int main(void) {
     Ternary blend = xray_stdlib_math_lerp;
 #endif
     if (check_abs(absolute)) return 1;
+    uint64_t one = UINT64_C(0x3ff0000000000000);
+    if (xrt_f64_add(one, one) != UINT64_C(0x4000000000000000)) return 1;
     double a = blend(2.0, 10.0, 0.25);
     double b = blend(5.0, -3.0, 1.5);
     return printf("%.1f\n%.1f\n", a, b) < 0;
@@ -389,14 +392,16 @@ int main(void) {
         encoding="ascii",
     )
     binary = root / ("consumer.exe" if os.name == "nt" else "consumer")
+    public_include = args.internal_include.parent / "include"
     if args.kind == "msvc":
         crt = {"MultiThreaded": "/MT", "MultiThreadedDebug": "/MTd",
                "MultiThreadedDLL": "/MD", "MultiThreadedDebugDLL": "/MDd"}
         command = [args.compiler, "/nologo", "/std:c11", "/W4", "/WX",
-                   crt[args.msvc_runtime], consumer, args.archive, "/Fe:" + str(binary)]
+                   crt[args.msvc_runtime], "/I" + str(public_include),
+                   consumer, args.archive, "advapi32.lib", "userenv.lib", "/Fe:" + str(binary)]
         if args.interface:
             command += ["/DXRAY_TEST_MATH_INTERFACE", "/D_CRT_SECURE_NO_WARNINGS",
-                        "/I" + str(args.internal_include), "/I" + str(args.internal_include.parent / "include")]
+                        "/I" + str(args.internal_include)]
         if args.asan:
             command += ["/fsanitize=address", "/Zi"]
         if args.ubsan and "clang" in args.compiler.name.lower():
@@ -405,10 +410,10 @@ int main(void) {
             command += ["/link", "/INCREMENTAL:NO"]
     else:
         command = [args.compiler, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
-                   consumer, args.archive, "-o", binary]
+                   "-I" + str(public_include), consumer, args.archive, "-o", binary]
+        command += ["-ladvapi32", "-luserenv"] if os.name == "nt" else ["-lm", "-pthread"]
         if args.interface:
-            command += ["-DXRAY_TEST_MATH_INTERFACE", "-I" + str(args.internal_include),
-                        "-I" + str(args.internal_include.parent / "include")]
+            command += ["-DXRAY_TEST_MATH_INTERFACE", "-I" + str(args.internal_include)]
         if args.asan:
             command.append("-fsanitize=address")
         if args.ubsan:

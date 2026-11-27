@@ -391,7 +391,8 @@ static bool c_runtime_call(LirC *c, const XrLirInstructionView *v) {
     XrLirFunction callee = {c->request->module, v->callee};
     XrLirFunctionView view;
     xr_lir_function_view(c->request->module, callee, &view);
-    return view.kind == XR_LIR_FUNCTION_EXTERNAL;
+    return view.kind == XR_LIR_FUNCTION_EXTERNAL &&
+        view.extern_kind != XR_LIR_EXTERN_STDLIB_MATH_LERP;
 }
 /* One runtime entry per registered external kind. Every entry also receives
  * the trailing source-location id the call emitter appends; a kind without an
@@ -780,6 +781,12 @@ static void c_admit(LirC *c) {
             return;
         }
         if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL) {
+            if (c->view.extern_kind == XR_LIR_EXTERN_STDLIB_MATH_LERP) {
+#if !defined(XR_LIR_C_HAS_STDLIB_MATH)
+                c_error(c, XR_LIR_C_UNSUPPORTED, "Math archive is unavailable for this build");
+#endif
+                continue;
+            }
             c->runtime = true;
             continue;
         }
@@ -1320,13 +1327,13 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
             c_text(c, "    ");
             if (v->result)
                 c_format(c, "v%" PRIu32 " = ", v->result);
-            bool string_output = false;
-            if (c_runtime_call(c, v)) {
-                XrLirFunctionView external;
-                xr_lir_function_view(c->request->module,
-                    (XrLirFunction){c->request->module, v->callee}, &external);
-                string_output = external.extern_kind == XR_LIR_EXTERN_PRINT_STRING;
-                const char *name = c_external_name(external.extern_kind);
+            const bool math_lerp = callee.kind == XR_LIR_FUNCTION_EXTERNAL &&
+                callee.extern_kind == XR_LIR_EXTERN_STDLIB_MATH_LERP;
+            const bool runtime = callee.kind == XR_LIR_FUNCTION_EXTERNAL && !math_lerp;
+            const bool string_output = runtime && callee.extern_kind == XR_LIR_EXTERN_PRINT_STRING;
+            if (math_lerp) c_text(c, "xray_stdlib_math_lerp");
+            else if (runtime) {
+                const char *name = c_external_name(callee.extern_kind);
                 if (!name) {
                     c_error(c, XR_LIR_C_UNSUPPORTED, "external function kind has no runtime entry");
                     return;
@@ -1342,7 +1349,7 @@ static void c_instruction(LirC *c, const XrLirInstructionView *v) {
                     c_text(c, "(const XrtStringBacking *)");
                 c_call_argument(c, callee.parameter_types[a], v->operands[a]);
             }
-            if (c_runtime_call(c, v)) {
+            if (runtime) {
                 uint32_t id = c_located(&v->source) ? ++c->location_cursor : 0;
                 c_format(c, "%sUINT32_C(%" PRIu32 ")", v->operand_count ? ", " : "", id);
             }
@@ -1504,8 +1511,11 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_values_function(c);
         if (!c_request_poll(c))
             return;
-        if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL)
+        if (c->view.kind == XR_LIR_FUNCTION_EXTERNAL) {
+            if (c->view.extern_kind == XR_LIR_EXTERN_STDLIB_MATH_LERP)
+                c_text(c, "extern double xray_stdlib_math_lerp(double, double, double);\n");
             continue;
+        }
         c_signature(c, false);
     }
     c_callable_entries(c);

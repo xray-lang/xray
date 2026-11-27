@@ -1400,7 +1400,11 @@ if(_XRAY_STDLIB_PRODUCER_RUNNABLE)
         DEPENDS xray_stdlib_scalar_producer "${_XRAY_STDLIB_SOURCE_INVENTORY}" ${XRAY_STDLIB_SOURCE_DEPENDENCIES}
         COMMENT "Compiling the built-in math bundle from one Checked module"
         VERBATIM)
-    add_library(xray_stdlib_scalar_export STATIC ${_XRAY_STDLIB_SCALAR_EXPORT_SOURCES})
+    add_library(xray_stdlib_scalar_export STATIC ${_XRAY_STDLIB_SCALAR_EXPORT_SOURCES}
+        $<TARGET_OBJECTS:xray_native_runtime_objects>)
+    set_target_properties(xray_stdlib_scalar_export PROPERTIES OUTPUT_NAME xray_native_runtime
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/native-program-runtime")
+    target_compile_definitions(xray_lir_c PRIVATE XR_LIR_C_HAS_STDLIB_MATH=1)
     target_include_directories(xray_stdlib_scalar_export PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     set_target_properties(xray_stdlib_scalar_export PROPERTIES
         C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
@@ -1414,8 +1418,8 @@ if(_XRAY_STDLIB_PRODUCER_RUNNABLE)
     else()
         target_compile_options(xray_stdlib_scalar_export PRIVATE -Wall -Wextra -Werror -pedantic -ffp-contract=off)
     endif()
-    # The producer uses the native runtime through the C emitter. Only the
-    # VM consumes this archive, with a Checked interface for its exact target.
+    # Both backends share the generated objects. The producer links only the core.
+    # The VM also needs the Checked interface for its exact target.
     if(XRAY_STDLIB_CHECKED_INTERFACE_C)
         target_link_libraries(xray_register_vm PRIVATE xray_stdlib_scalar_export)
         target_compile_definitions(xray_register_vm PUBLIC XR_RBC_LINKED_MATH_LERP=1)
@@ -1456,14 +1460,23 @@ else()
 endif()
 target_link_libraries(xray PRIVATE xray_cli_lir)
 
-set(_native_crt_name "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>")
+set(_native_link_target xray_native_runtime)
+if(TARGET xray_stdlib_scalar_export)
+    set(_native_link_target xray_stdlib_scalar_export)
+endif()
+# Direct generated-C clients and the CLI use the same runtime archive.
+set(XRAY_NATIVE_RUNTIME_LINK_INPUTS "$<TARGET_FILE:${_native_link_target}>")
+if(WIN32)
+    list(APPEND XRAY_NATIVE_RUNTIME_LINK_INPUTS advapi32.lib userenv.lib)
+endif()
+set(_native_crt_name "$<TARGET_GENEX_EVAL:xray_native_runtime_objects,$<TARGET_PROPERTY:xray_native_runtime_objects,MSVC_RUNTIME_LIBRARY>>")
 set(_native_crt "$<IF:$<STREQUAL:${_native_crt_name},MultiThreaded>,0,$<IF:$<STREQUAL:${_native_crt_name},MultiThreadedDebug>,1,$<IF:$<STREQUAL:${_native_crt_name},MultiThreadedDebugDLL>,3,2>>>")
 set(_native_link_header "#ifndef XRAY_NATIVE_LINK_PATHS_H\n#define XRAY_NATIVE_LINK_PATHS_H\n#define XRT_NATIVE_LIBRARY_COUNT 1\n")
 string(APPEND _native_link_header "#define XRT_NATIVE_CRT ${_native_crt}\n#define XRT_NATIVE_ASAN $<OR:$<BOOL:${ENABLE_ASAN}>,$<BOOL:${ENABLE_SANITIZERS}>>\n#define XRT_NATIVE_UBSAN $<OR:$<BOOL:${ENABLE_UBSAN}>,$<BOOL:${ENABLE_SANITIZERS}>>\n")
 file(TO_CMAKE_PATH "${CMAKE_C_COMPILER}" _native_build_compiler)
 string(APPEND _native_link_header "#define XRT_NATIVE_BUILD_COMPILER \"${_native_build_compiler}\"\n")
 string(APPEND _native_link_header "#define XRT_NATIVE_BUILD_EXECUTABLE \"$<TARGET_FILE:xray>\"\n")
-set(_native_link_targets xray_native_runtime)
+set(_native_link_targets ${_native_link_target})
 string(APPEND _native_link_header "static const char *const xrt_native_development_libraries[] = {\n")
 foreach(_native_target IN LISTS _native_link_targets)
     string(APPEND _native_link_header "    \"$<TARGET_FILE:${_native_target}>\",\n")
