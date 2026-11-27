@@ -150,6 +150,10 @@ XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirModule *m, const X
         return entry->parameter_count == 2 &&
             (entry->parameters[0] == XR_LIR_ARRAY_CELL || entry->parameters[0] == XR_LIR_ARRAY_REF) &&
             entry->parameters[1] == element && entry->result == XR_LIR_UNIT;
+    case XR_LIR_ARRAY_OP_TIMING_EQUAL:
+        return entry->parameter_count == 2 && entry->parameters[0] == XR_LIR_ARRAY &&
+            entry->parameters[1] == XR_LIR_ARRAY && entry->result == XR_LIR_I1 &&
+            element == XR_LIR_U8 && shape->parameter_elements[1] == XR_LIR_U8;
     case XR_LIR_ARRAY_OP_RANDOM_BYTES:
         return entry->parameter_count == 1 && entry->parameters[0] == XR_LIR_ARRAY_REF &&
             element == XR_LIR_U8 && entry->result == XR_LIR_UNIT;
@@ -172,6 +176,7 @@ XR_FUNC XrLirStatus xr_lir_set_array_intrinsic(XrLirModule *m,
     bool reference = m->intrinsics[index].parameter_count && m->intrinsics[index].parameters[0] == XR_LIR_ARRAY_REF;
     bool inline_array = family == UINT32_MAX;
     uint32_t *operation_id = input->operation == XR_LIR_ARRAY_OP_RANDOM_BYTES ? &m->array_ref_random_bytes :
+        input->operation == XR_LIR_ARRAY_OP_TIMING_EQUAL ? &m->array_u8_timing_equal :
         inline_array ? &m->types[element - XR_LIR_TYPE_COUNT].inline_array_operations[operation] :
         reference ? &m->array_ref_operations[family][(uint32_t)input->operation - XR_LIR_ARRAY_OP_SET] :
         &m->array_operations[family][operation];
@@ -195,8 +200,14 @@ XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *m, XrLirType eleme
     XrLirArrayOperation operation, uint32_t *id) {
     if (id) *id = 0;
     if (!id || !m || m->failure != XR_LIR_OK || !xr_lir_internal_array_element(m, element) ||
-        operation < XR_LIR_ARRAY_OP_NEW || operation > XR_LIR_ARRAY_OP_WITH_CAPACITY)
+        operation < XR_LIR_ARRAY_OP_NEW || (operation > XR_LIR_ARRAY_OP_WITH_CAPACITY &&
+            operation != XR_LIR_ARRAY_OP_TIMING_EQUAL))
         return XR_LIR_INVALID_ARGUMENT;
+    if (operation == XR_LIR_ARRAY_OP_TIMING_EQUAL) {
+        if (element != XR_LIR_U8) return XR_LIR_UNSUPPORTED;
+        *id = m->array_u8_timing_equal;
+        return *id ? XR_LIR_OK : XR_LIR_UNSUPPORTED;
+    }
     uint32_t family = xr_lir_internal_array_family(element);
     if (family == UINT32_MAX) {
         if (operation > XR_LIR_ARRAY_OP_GET &&
@@ -257,6 +268,8 @@ static void lir_array_catalog_signature(LirArrayCatalogRow *row, XrLirIntrinsic 
     case XR_LIR_ARRAY_OP_PUSH:
         arity = 2; parameters[0] = reference ? XR_LIR_ARRAY_REF : XR_LIR_ARRAY_CELL;
         parameters[1] = element; break;
+    case XR_LIR_ARRAY_OP_TIMING_EQUAL:
+        arity = 2; parameters[1] = XR_LIR_ARRAY; shapes[1] = element; result = XR_LIR_I1; break;
     case XR_LIR_ARRAY_OP_RANDOM_BYTES:
         parameters[0] = XR_LIR_ARRAY_REF; break;
     case XR_LIR_ARRAY_OP_REPEAT:
@@ -276,8 +289,8 @@ static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra)
     enum { operations = XR_LIR_ARRAY_OP_REPEAT, base_catalog = XR_LIR_ARRAY_FAMILY_COUNT * operations,
         reference_end = base_catalog + XR_LIR_ARRAY_FAMILY_COUNT * 2,
         display_end = reference_end + XR_LIR_ARRAY_FAMILY_COUNT,
-        capacity_end = display_end + XR_LIR_ARRAY_FAMILY_COUNT * 2,
-        catalog = XR_LIR_ARRAY_CATALOG_COUNT };
+        capacity_end = display_end + XR_LIR_ARRAY_FAMILY_COUNT * 2 };
+    uint32_t catalog = XR_LIR_ARRAY_CATALOG_COUNT + (m && m->needs_array_timing_equal);
     uint32_t count = extra ? extra->count : 0;
     if (!m || m->intrinsic_count || m->function_count || (count && !extra->entries) || count > UINT32_MAX - catalog - 1)
         return XR_LIR_INVALID_ARGUMENT;
@@ -293,7 +306,7 @@ static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra)
         return XR_LIR_INVALID_ARGUMENT;
     XrLirIntrinsic *entries = xr_malloc(entry_bytes);
     uint8_t *used = xr_malloc((size_t)total + 1);
-    LirArrayCatalogRow fixed[catalog];
+    LirArrayCatalogRow fixed[XR_LIR_ARRAY_CATALOG_COUNT + 1];
     LirArrayCatalogRow *parts = rows == catalog ? fixed : xr_malloc(row_bytes);
     if (!entries || !used || !parts) {
         xr_free(entries); xr_free(used);
@@ -308,9 +321,10 @@ static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra)
     for (uint32_t i = 0; i < catalog; ++i) {
         while (used[next]) ++next;
         used[next] = 1;
-        if (i >= catalog - 2) {
-            XrLirArrayOperation operation = i == catalog - 2 ?
-                XR_LIR_ARRAY_OP_COPY_STRING_BYTES : XR_LIR_ARRAY_OP_RANDOM_BYTES;
+        if (i >= XR_LIR_ARRAY_CATALOG_COUNT - 2) {
+            static const XrLirArrayOperation bytes[] = {XR_LIR_ARRAY_OP_COPY_STRING_BYTES,
+                XR_LIR_ARRAY_OP_RANDOM_BYTES, XR_LIR_ARRAY_OP_TIMING_EQUAL};
+            XrLirArrayOperation operation = bytes[i - (XR_LIR_ARRAY_CATALOG_COUNT - 2)];
             lir_array_catalog_signature(&parts[i], &entries[count + i], next, XR_LIR_U8, operation, false);
             continue;
         }

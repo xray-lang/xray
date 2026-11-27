@@ -315,7 +315,7 @@ static bool rbc_value_inline_class_push_valid(const XrRbcModule *module, const X
 static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
     if (a.source || a.first>code->argument_count || a.count>code->argument_count-a.first ||
-        (a.count && !code->arguments) || a.index<XR_LIR_ARRAY_OP_NEW || a.index>XR_LIR_ARRAY_OP_RANDOM_BYTES) return false;
+        (a.count && !code->arguments) || a.index<XR_LIR_ARRAY_OP_NEW || a.index>XR_LIR_ARRAY_OP_TIMING_EQUAL) return false;
     for (uint32_t p=0;p<a.count;++p) if (!rbc_value_id(code,code->arguments[a.first+p])) return false;
     const uint32_t *args=a.count ? code->arguments+a.first : NULL;
     bool create=a.index==XR_LIR_ARRAY_OP_NEW || a.index==XR_LIR_ARRAY_OP_REPEAT ||
@@ -384,6 +384,11 @@ static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcVa
         return true;
     }
     if (!a.count || !rbc_value_array(module,code,args[0],false)) return false;
+    if (a.index==XR_LIR_ARRAY_OP_TIMING_EQUAL)
+        return a.count==2 && kind==XRT_VALUE_ARRAY_U8 &&
+            rbc_value_kind(module,code,args[1])==XRT_VALUE_ARRAY_U8 &&
+            rbc_value_array(module,code,args[1],false) &&
+            rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     if (a.index==XR_LIR_ARRAY_OP_LEN || a.index==XR_LIR_ARRAY_OP_CAPACITY)
         return a.count==1 && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
     if (a.index==XR_LIR_ARRAY_OP_DISPLAY) return a.count==1 && rbc_value_string(module,code,a.result,true);

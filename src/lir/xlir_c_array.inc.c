@@ -176,6 +176,13 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
     }
     const char *kind=c_array_kind(element);
     if (!kind) { c_error(c,XR_LIR_C_UNSUPPORTED,"Array element has no target receiver"); return; }
+    if (shape->operation == XR_LIR_ARRAY_OP_TIMING_EQUAL) {
+        c_text(c,"    { bool equal = false; XrtManagedStatus status = xrt_native_array_timing_equal(");
+        c_value(c,v->operands[0]); c_text(c,", "); c_value(c,v->operands[1]); c_text(c,", &equal);\n");
+        c_format(c,"      if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n",source);
+        c_format(c,"      v%" PRIu32 " = equal; }\n",v->result);
+        return;
+    }
     if (shape->operation == XR_LIR_ARRAY_OP_CAPACITY) {
         c_format(c,"    v%" PRIu32 " = xrt_native_array_capacity(",v->result); c_value(c,v->operands[0]);
         c_format(c,", %s, UINT32_C(%" PRIu32 "));\n",kind,source); return;

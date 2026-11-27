@@ -137,7 +137,8 @@ struct XrLirModule {
     uint32_t inline_array_count;
     uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_WITH_CAPACITY];
     uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2];
-    uint32_t array_ref_random_bytes;
+    uint32_t array_ref_random_bytes, array_u8_timing_equal;
+    bool needs_array_timing_equal;
     XrLirStatus failure;
     XrLirDiagnostic failure_diagnostic;
     char *failure_path;

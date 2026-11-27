@@ -1648,7 +1648,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
         return lir_status_error(d,XR_LIR_VERIFY_ERROR,"Slice receiving summary is invalid");
     uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_WITH_CAPACITY] = {{0}};
     uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2] = {{0}};
-    uint32_t array_ref_random_bytes = 0;
+    uint32_t array_ref_random_bytes = 0, array_u8_timing_equal = 0;
     if (m->intrinsic_count && !m->intrinsics)
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "intrinsic registry is missing");
     for (uint32_t i = 0; i < m->intrinsic_count; ++i) {
@@ -1699,13 +1699,15 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
             }
             bool reference = entry->parameter_count && entry->parameters[0] == XR_LIR_ARRAY_REF;
             uint32_t *id = shape->operation == XR_LIR_ARRAY_OP_RANDOM_BYTES ? &array_ref_random_bytes :
+                shape->operation == XR_LIR_ARRAY_OP_TIMING_EQUAL ? &array_u8_timing_equal :
                 reference ? &array_ref_operations[family][(uint32_t)shape->operation - XR_LIR_ARRAY_OP_SET] :
                 &array_operations[family][(uint32_t)shape->operation - 1];
             if (*id) return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array operation is duplicated");
             *id = entry->id;
         }
     }
-    if (memcmp(array_operations, m->array_operations, sizeof(array_operations)))
+    if (array_u8_timing_equal != m->array_u8_timing_equal ||
+        memcmp(array_operations, m->array_operations, sizeof(array_operations)))
         return lir_status_error(d, XR_LIR_VERIFY_ERROR, "Array operation index is invalid");
     if (array_ref_random_bytes != m->array_ref_random_bytes ||
         memcmp(array_ref_operations, m->array_ref_operations, sizeof(array_ref_operations)))

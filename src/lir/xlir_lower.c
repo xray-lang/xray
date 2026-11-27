@@ -1723,6 +1723,13 @@ static bool lower_crypto_random_bytes(const Lower *c, uint32_t function) {
         xir_native_callable_verify(source, function) == XR_XIR_OK;
 }
 
+static bool lower_crypto_timing_equal(const Lower *c, uint32_t function) {
+    const XrXirModule *source = c->source;
+    return !source->functions[function].block_count &&
+        source->declarations->functions[function].native_callable == XR_NATIVE_CALLABLE_CRYPTO_TIMING_EQUAL &&
+        xir_native_callable_verify(source, function) == XR_XIR_OK;
+}
+
 static bool lower_admit_function(Lower *c, uint32_t function) {
     c->function = function;
     c->block = 0;
@@ -1777,6 +1784,11 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     if (!f->block_count || !f->blocks || !f->instructions) {
         if (xir_strict_utf8_callable(c->source, function)) {
             c->strict_utf8 = true;
+            return true;
+        }
+        if (lower_crypto_timing_equal(c, function)) {
+            c->module->needs_array_timing_equal = true;
+            c->arrays = true;
             return true;
         }
         uint32_t fields[2];
@@ -3874,7 +3886,25 @@ static bool lower_crypto_random_bytes_body(Lower *c, XrLirFunction function) {
         lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
 }
 
+static bool lower_crypto_timing_equal_body(Lower *c, XrLirFunction function) {
+    XrLirBlock block = {0};
+    XrLirValue arguments[2] = {{0}}, result = {0};
+    XrLirInstruction compare = {.op=XR_LIR_CALL_INTRINSIC, .type=XR_LIR_I1,
+        .operand_count=2, .operands=arguments};
+    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operand_count=1, .operands=&result};
+    return lower_build(c, xr_lir_array_operation(c->module,XR_LIR_U8,
+               XR_LIR_ARRAY_OP_TIMING_EQUAL,&compare.intrinsic)) &&
+        lower_build(c, xr_lir_define_function(c->module,function)) &&
+        lower_build(c, xr_lir_add_block(c->module,function,NULL,0,&block)) &&
+        lower_build(c, xr_lir_set_entry(c->module,function,block)) &&
+        lower_build(c, xr_lir_function_parameter(c->module,function,0,&arguments[0])) &&
+        lower_build(c, xr_lir_function_parameter(c->module,function,1,&arguments[1])) &&
+        lower_build(c, xr_lir_emit_value(c->module,block,&compare,&result)) &&
+        lower_build(c, xr_lir_set_terminator(c->module,block,&ret));
+}
+
 static bool lower_host_function(Lower *c, uint32_t index) {
+    if (lower_crypto_timing_equal(c,index)) return lower_crypto_timing_equal_body(c,c->functions[index]);
     if (lower_crypto_random_bytes(c, index)) return lower_crypto_random_bytes_body(c, c->functions[index]);
     if (xir_strict_utf8_callable(c->source, index)) return lower_strict_utf8_body(c, index);
     if (lower_os_platform(c, index)) return lower_os_platform_body(c, c->functions[index]);

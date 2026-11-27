@@ -17,6 +17,7 @@ CRYPTO_SOURCES = (
     "tests/regression/10_stdlib/1401_crypto_hmac.xr",
     "tests/regression/10_stdlib/1402_crypto_random.xr",
     "tests/regression/10_stdlib/1403_crypto_sha512.xr",
+    "tests/regression/10_stdlib/1405_crypto_utils.xr",
 )
 HELPER = b'''export fn initialValue() -> i64 {
     return 41

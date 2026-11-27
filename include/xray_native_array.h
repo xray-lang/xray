@@ -101,6 +101,10 @@ XRAY_API int64_t xrt_native_array_capacity(const XrtManagedHeader *, XrtBackingA
  * only after receiving the complete candidate. */
 XRAY_API void xrt_native_array_reserve(XrtManagedFrame *, size_t slot, const XrtManagedHeader *,
     XrtBackingArrayKind, int64_t capacity, uint32_t source_id);
+/* Borrow two admitted Array<u8> values and compare their logical byte spans.
+ * Failure leaves the output unchanged. No allocation or binding change. */
+XRAY_API XrtManagedStatus xrt_native_array_timing_equal(const XrtManagedHeader *,
+    const XrtManagedHeader *, bool *);
 /* String GET returns a synchronous borrow, not a new owner. */
 XRAY_API void xrt_native_array_get(const XrtManagedHeader *, XrtBackingArrayKind,
     int64_t index, XrtArrayItem *output, uint32_t source_id);

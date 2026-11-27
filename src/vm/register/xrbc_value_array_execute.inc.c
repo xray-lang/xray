@@ -324,6 +324,17 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
         if (array->length>INT64_MAX) return XRT_MANAGED_OVERFLOW;
         output->bits=(uint64_t)array->length; return XRT_MANAGED_OK;
     }
+    if (access.index==XR_LIR_ARRAY_OP_TIMING_EQUAL) {
+        if (!output) return XRT_MANAGED_ARGUMENT;
+        XrtPlace other;
+        const XrtManagedHeader *rhs = NULL;
+        bool equal = false;
+        status = rbc_value_place(rbc_value_origin(activation,args[1]),false,0,&other);
+        if (status == XRT_MANAGED_OK) status = xrt_place_borrow(other,&rhs);
+        if (status == XRT_MANAGED_OK) status = xrt_native_array_timing_equal(header,rhs,&equal);
+        if (status == XRT_MANAGED_OK) output->bits = equal;
+        return status;
+    }
     if (access.index==XR_LIR_ARRAY_OP_CAPACITY) {
         if (!output) return XRT_MANAGED_ARGUMENT;
         output->bits=(uint64_t)xrt_native_array_capacity(header,kind,source);

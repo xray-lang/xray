@@ -14,7 +14,23 @@
 #include "xnative_string_backing.h"
 #include "base/xchecks.h"
 #include "os/os_random.h"
+#include "shared/xr_byte_compare_core.h"
 #include <string.h>
+
+XRAY_API XrtManagedStatus xrt_native_array_timing_equal(const XrtManagedHeader *left,
+    const XrtManagedHeader *right, bool *equal) {
+    if (!equal) return XRT_MANAGED_ARGUMENT;
+    int64_t capacity = 0;
+    XrtManagedStatus status = xrt_array_backing_capacity(left, XRT_BACKING_ARRAY_U8, &capacity);
+    if (status != XRT_MANAGED_OK) return status;
+    status = xrt_array_backing_capacity(right, XRT_BACKING_ARRAY_U8, &capacity);
+    if (status != XRT_MANAGED_OK) return status;
+    const XrtArrayBacking *a = (const XrtArrayBacking *)left;
+    const XrtArrayBacking *b = (const XrtArrayBacking *)right;
+    *equal = xr_crypto_core_timing_safe_equal(a->elements, a->length, 1u,
+                                             b->elements, b->length, 1u);
+    return XRT_MANAGED_OK;
+}
 
 static bool array_item_valid(const XrtArrayItem *item) {
     return item && xrt_backing_array_stride(item->kind) &&
