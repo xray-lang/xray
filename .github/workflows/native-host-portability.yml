@@ -298,7 +298,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: windows-string-gate-${{ github.sha }}
+          name: windows-string-gate-${{ github.sha }}-${{ github.run_attempt }}
           path: string-gate/*.json
 
   managed-layout:
