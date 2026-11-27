@@ -3830,9 +3830,8 @@ static bool lower_startup_invoke(Lower *c,XrLirFunction wrapper,XrLirBlock *bloc
     return true;
 }
 
-static bool lower_wrapper(Lower *c, XrLirFunction *output) {
+static bool lower_wrapper(Lower *c, uint32_t entry, XrLirFunction *output) {
     const XrXirDeclarations *d = c->source->declarations;
-    uint32_t entry = d->entry_function;
     XrLirType capability = XR_LIR_STATE;
     bool stateful = c->state_layout.slot_count != 0;
     XrLirFunctionSpec spec = {.name = "main", .name_length = 4,
@@ -4018,7 +4017,13 @@ static bool lower_error_types(Lower *c) {
     return true;
 }
 
-static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t selected, bool local,
+typedef enum LowerRootKind {
+    LOWER_ROOT_PROGRAM,
+    LOWER_ROOT_LOCAL,
+    LOWER_ROOT_TEST
+} LowerRootKind;
+
+static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t selected, LowerRootKind root_kind,
                                XrLirLowered *output, XrLirLowerFailure *failure) {
     if (!request || !request->closed || !request->snapshot || !output || output->module ||
         output->entry.module || output->entry.id || (failure && failure->owned_path))
@@ -4034,6 +4039,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         !source->declarations)
         return lower_error(&c, XR_LIR_INVALID_ARGUMENT,
                            "source-backed Closed Checked program required");
+    bool local = root_kind == LOWER_ROOT_LOCAL;
     c.allow_class_calls = !local && xir_effect_evidence_is_instance(source);
     const XrXirDeclarations *d = source->declarations;
     c.function = d->modules && d->module_count ? d->modules[0].initializer : d->entry_function;
@@ -4046,6 +4052,21 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     if (d->entry_function >= source->function_count ||
         d->modules[0].initializer >= source->function_count)
         return lower_error(&c, XR_LIR_VERIFY_ERROR, "invalid Checked program entry");
+    uint32_t program_entry = d->entry_function;
+    if (root_kind == LOWER_ROOT_TEST) {
+        if (selected >= source->function_count || !d->functions ||
+            d->functions[selected].module != d->root_module ||
+            d->functions[selected].test_role != XR_XIR_TEST_ROLE_TEST)
+            return lower_error(&c, XR_LIR_INVALID_ARGUMENT, "expected a root-module @test declaration");
+        c.function = selected;
+        const XrXirFunction *test = &source->functions[selected];
+        if (d->functions[selected].test_timeout_milliseconds)
+            return lower_unsupported(&c, "test-role startup with a deadline"), c.status;
+        if (test->parameter_count || test->result != XR_XIR_UNIT || !test->block_count ||
+            !lower_empty_error(test->error_type))
+            return lower_unsupported(&c, "test-role startup signature or typed errors"), c.status;
+        program_entry = selected;
+    }
     if (!lower_build(&c, xr_lir_module_create(NULL, &c.module))) return c.status;
     if (!lower_map_literals(&c) || !lower_modules(&c) || !lower_initializer_errors(&c) ||
         (local && c.initializer_errors && !lower_unsupported(&c,"typed module startup in local evaluation")) ||
@@ -4061,7 +4082,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     bool good = c.functions && c.active && c.queue;
     for (uint32_t m = 0; m < c.initialization_count && good; ++m)
         good = lower_mark(&c, d->modules[c.module_order[m]].initializer);
-    if (good) good = lower_mark(&c, d->entry_function);
+    if (good) good = lower_mark(&c, program_entry);
     for (uint32_t at = 0; at < c.queued && good; ++at)
         good = lower_admit_function(&c, c.queue[at]);
     if (good) good = lower_owned_bindings(&c);
@@ -4124,7 +4145,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     XrLirFunction entry = {0};
     /* Slice contracts refer to the final function directory. Declare the
      * ordinary entry before receiving them; no source body is executed here. */
-    if (good && c.views && !local) good = lower_wrapper(&c, &entry);
+    if (good && c.views && !local) good = lower_wrapper(&c, program_entry, &entry);
     if (good) good = lower_slice_effects(&c);
     for (uint32_t f = 0; f < source->function_count && good; ++f)
         if (c.active[f] && !lower_core_assertion(&c, f))
@@ -4132,7 +4153,7 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     if (good && local)
         entry = c.functions[selected];
     else if (good && !entry.id)
-        good = lower_wrapper(&c, &entry);
+        good = lower_wrapper(&c, program_entry, &entry);
     if (good)
         good = lower_build(&c, xr_lir_module_finish(c.module, NULL));
     if (good)
@@ -4163,9 +4184,15 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
 
 XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *request,
                                                  XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, 0, false, output, failure);
+    return lower_checked(request, 0, LOWER_ROOT_PROGRAM, output, failure);
 }
+
+XR_FUNC XrLirStatus xr_lir_lower_test_checked(const XrLirLowerRequest *request, uint32_t selected,
+                                              XrLirLowered *output, XrLirLowerFailure *failure) {
+    return lower_checked(request, selected, LOWER_ROOT_TEST, output, failure);
+}
+
 XR_FUNC XrLirStatus xr_lir_lower_local_checked(const XrLirLowerRequest *request, uint32_t selected,
                                                XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, selected, true, output, failure);
+    return lower_checked(request, selected, LOWER_ROOT_LOCAL, output, failure);
 }

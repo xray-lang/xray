@@ -41,6 +41,10 @@ typedef struct XrLirLowerFailure {
  * actual reads retain their original control-flow positions. */
 XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *, XrLirLowered *,
                                                  XrLirLowerFailure *);
+/* Run the ordinary module initializers before one verified root @test. The
+ * selected ordinal is from this Closed artifact. Each startup owns fresh state. */
+XR_FUNC XrLirStatus xr_lir_lower_test_checked(const XrLirLowerRequest *, uint32_t closed_function,
+                                              XrLirLowered *, XrLirLowerFailure *);
 /* A local numerical observation skips initialization. The original program
  * must have no slots, and the retained selected function's transitive direct
  * calls must be scalar and effect-free. This is not a complete execution. */

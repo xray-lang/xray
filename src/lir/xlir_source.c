@@ -17,6 +17,7 @@
 #include "xlir_sccp.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_specialization_bindings.h"
 #include <string.h>
 
 static XrLirStatus source_optimize(XrLirLowered *lowered) {
@@ -35,7 +36,47 @@ static XrLirStatus source_optimize(XrLirLowered *lowered) {
     return XR_LIR_OK;
 }
 
-XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *request,
+static uint32_t source_find_test(const XrXirArtifact *checked, const char *name) {
+    const XrXirModule *module = xr_xir_compile_artifact_module(checked);
+    if (!module || !module->declarations || !module->declarations->functions)
+        return UINT32_MAX;
+    const XrXirDeclarations *declarations = module->declarations;
+    size_t name_length = strlen(name);
+    uint32_t selected = UINT32_MAX;
+    for (uint32_t i = 0; i < module->function_count; ++i) {
+        const XrXirFunctionIdentity *identity = &declarations->functions[i];
+        const XrXirFunction *function = &module->functions[i];
+        if (identity->module != declarations->root_module ||
+            identity->test_role != XR_XIR_TEST_ROLE_TEST ||
+            function->name_length != name_length || memcmp(function->name, name, name_length))
+            continue;
+        if (selected != UINT32_MAX) return UINT32_MAX;
+        selected = i;
+    }
+    return selected;
+}
+
+typedef struct SourceTestSelection {
+    uint32_t source_function;
+    uint32_t closed_function;
+} SourceTestSelection;
+
+static XrXirStatus source_receive_test(void *context, const XrXirSpecializationMapView *map) {
+    SourceTestSelection *selection = context;
+    uint32_t source = selection->source_function;
+    if (source >= map->function_count || (!map->identity && !map->functions))
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t closed = map->identity ? source : map->functions[source];
+    uint32_t origin;
+    if (closed == UINT32_MAX ||
+        xr_xir_compile_specialization_origin(map->closed, closed, &origin) != XR_XIR_OK ||
+        origin != source)
+        return XR_XIR_BAD_STRUCTURE;
+    selection->closed_function = closed;
+    return XR_XIR_OK;
+}
+
+static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const char *test_name,
     XrLirLowered *output, XrLirSourceFailure *failure) {
     if (!request || !request->resources || !request->entry_path || !request->entry_path[0] ||
         !output || output->module || output->entry.module || output->entry.id || !failure ||
@@ -67,16 +108,30 @@ XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *reques
             &failure->source_failure) != XR_XIR_OK)
         goto cleanup;
 
+    SourceTestSelection test = {UINT32_MAX, UINT32_MAX};
+    if (test_name) {
+        status = XR_LIR_SOURCE_TEST_SELECTION_FAILED;
+        test.source_function = source_find_test(source.checked, test_name);
+        if (test.source_function == UINT32_MAX) goto cleanup;
+    }
     status = XR_LIR_SOURCE_SPECIALIZATION_FAILED;
     XrXirDiagnostic specialization = {0};
-    failure->specialization_status = xr_xir_compile_specialize(source.checked, &closed,
-        &specialization, NULL);
+    if (test_name) {
+        XrXirSpecializationReceiver receiver = {&test, source_receive_test};
+        failure->specialization_status = xr_xir_compile_specialize_receive(source.checked, &receiver,
+            &closed, &specialization, NULL);
+    } else {
+        failure->specialization_status = xr_xir_compile_specialize(source.checked, &closed,
+            &specialization, NULL);
+    }
     if (failure->specialization_status != XR_XIR_OK) goto cleanup;
 
     status = XR_LIR_SOURCE_LOWER_FAILED;
     XrLirLowerRequest lower_request = {closed, source.snapshot, false};
-    if (xr_lir_lower_program_checked(&lower_request, &lowered, &failure->lower) != XR_LIR_OK)
-        goto cleanup;
+    XrLirStatus lower_status = test_name
+        ? xr_lir_lower_test_checked(&lower_request, test.closed_function, &lowered, &failure->lower)
+        : xr_lir_lower_program_checked(&lower_request, &lowered, &failure->lower);
+    if (lower_status != XR_LIR_OK) goto cleanup;
 
     status = XR_LIR_SOURCE_OK;
 
@@ -95,6 +150,17 @@ cleanup:
         failure->stage = status;
     }
     return status;
+}
+
+XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *request,
+    XrLirLowered *output, XrLirSourceFailure *failure) {
+    return source_compile(request, NULL, output, failure);
+}
+
+XR_FUNC XrLirSourceStatus xr_lir_compile_test_source(const XrLirSourceRequest *request,
+    const char *test_name, XrLirLowered *output, XrLirSourceFailure *failure) {
+    if (!test_name || !test_name[0]) return XR_LIR_SOURCE_BAD_ARGUMENT;
+    return source_compile(request, test_name, output, failure);
 }
 
 XR_FUNC void xr_lir_source_failure_free(XrLirSourceFailure *failure) {

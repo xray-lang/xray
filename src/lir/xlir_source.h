@@ -24,7 +24,8 @@ typedef enum XrLirSourceStatus {
     XR_LIR_SOURCE_CHECK_FAILED,
     XR_LIR_SOURCE_SPECIALIZATION_FAILED,
     XR_LIR_SOURCE_LOWER_FAILED,
-    XR_LIR_SOURCE_OPTIMIZATION_FAILED
+    XR_LIR_SOURCE_OPTIMIZATION_FAILED,
+    XR_LIR_SOURCE_TEST_SELECTION_FAILED
 } XrLirSourceStatus;
 
 typedef struct XrLirSourceRequest {
@@ -52,6 +53,10 @@ typedef struct XrLirSourceFailure {
  * is forwarded unchanged to module resolution. No executor is selected here. */
 XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *request,
     XrLirLowered *output, XrLirSourceFailure *failure);
+/* Compile one explicitly selected root @test with no explicit deadline
+ * through the same Source and Closed path. The caller owns scheduling. */
+XR_FUNC XrLirSourceStatus xr_lir_compile_test_source(const XrLirSourceRequest *request,
+    const char *test_name, XrLirLowered *output, XrLirSourceFailure *failure);
 XR_FUNC void xr_lir_source_failure_free(XrLirSourceFailure *failure);
 
 #endif // XLIR_SOURCE_H
