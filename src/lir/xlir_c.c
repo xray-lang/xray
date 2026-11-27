@@ -638,7 +638,7 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
         case XR_LIR_STRING_ORDER:
         case XR_LIR_I64_TRY_PARSE: case XR_LIR_F64_TRY_PARSE: case XR_LIR_BOOL_TRY_PARSE:
         case XR_LIR_ASSERT_CONDITION:
-        case XR_LIR_CHECKED_EMPTY_ARRAY: case XR_LIR_MANAGED_FAILURE:
+        case XR_LIR_CHECKED_EMPTY_ARRAY: case XR_LIR_CHECKED_ARRAY_PUSH: case XR_LIR_MANAGED_FAILURE:
         case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:
         case XR_LIR_ARRAY_BORROW: case XR_LIR_ARRAY_REF_READ: case XR_LIR_ARRAY_REF_WRITE:
         case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:

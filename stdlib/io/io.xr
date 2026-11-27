@@ -508,20 +508,27 @@ export fn realpath(path: Path) -> Path? {
     return Path(raw!)
 }
 
-fn _readDirNames(path: Path) -> Array<string>? {
+fn _scanDirNames(path: Path) -> Array<string>? {
     var handle = __dirOpen(path)
     if (handle == 0) { return null }
     defer { __dirClose(handle) }
     var names: Array<string> = []
     while (true) {
-        var name = __dirNext(handle)
-        if (name == null) {
-            names.sort()
-            return names
-        }
-        if (name! != "." && name! != "..") { names.push(name!) }
+        const name = __dirNext(handle)
+        if (name == null) { return names }
+        // The host cursor omits the two navigation entries and returns every other name.
+        names.push(name!)
     }
     return null
+}
+
+fn _readDirNames(path: Path) -> Array<string>? {
+    var read = _scanDirNames(path)
+    if (read == null) { return null }
+    // Release the host cursor before the in-memory sort.
+    var names = read!
+    names.sort()
+    return names
 }
 
 // A path that cannot be listed answers null rather than an empty array: an

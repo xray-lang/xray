@@ -668,6 +668,16 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
                 if (site.length || b != name_block) return absent;
                 site.length = op;
             }
+            if (returns_array && site.unwrap && op->op == XR_XIR_ARRAY_PUSH && op->args[1] == name) {
+                if (site.push || b != name_block || !block->frontier || term != op + 1 ||
+                    term->op != XR_XIR_JUMP || op->args[0] < f->parameter_count + block->first ||
+                    op->args[0] >= f->parameter_count + i) return absent;
+                const XrXirInstruction *receiver = &f->instructions[op->args[0] - f->parameter_count];
+                if (receiver->op != XR_XIR_CELL_PLACE || lower_array_element(c,receiver->type) != XR_LIR_STRING)
+                    return absent;
+                site.push = op;
+                site.push_block = b;
+            }
             bool place = b != site.block && op->op == XR_XIR_CELL_PLACE &&
                 lower_array_element(c, op->type) == XR_LIR_STRING &&
                 lower_type(c, xr_xir_operand_type(f, op->args[0])) == XR_LIR_ARRAY_CELL;
@@ -691,7 +701,7 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
         }
     }
     if (site.unwrap) {
-        if (!site.length || !lower_directory_name_path(c, f, site, name_block)) return absent;
+        if ((!site.length && !site.push) || !lower_directory_name_path(c,f,site,name_block)) return absent;
         uint8_t *uses = lower_alloc(c, f->instruction_count, 1);
         if (!uses) return absent;
         lower_count_operand_uses(c, f, uses);

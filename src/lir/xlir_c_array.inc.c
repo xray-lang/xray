@@ -36,6 +36,7 @@ static void c_array_admit_shapes(LirC *c) {
     }
 }
 static bool c_array_point(LirC *c, const XrLirInstructionView *v) {
+    if (v->op == XR_LIR_CHECKED_ARRAY_PUSH) return true;
     XrLirArrayIntrinsic shape = {0};
     return v->op == XR_LIR_CHECKED_EMPTY_ARRAY || v->op == XR_LIR_MANAGED_FAILURE ||
         c_array_intrinsic(c, v, &shape) || v->op == XR_LIR_ARRAY_RETAIN ||
@@ -356,6 +357,17 @@ static void c_checked_empty_array(LirC *c, const XrLirInstructionView *instructi
 static void c_array_instruction(LirC *c, const XrLirInstructionView *v, uint32_t source) {
     if (v->op == XR_LIR_CHECKED_EMPTY_ARRAY) {
         c_checked_empty_array(c, v);
+        return;
+    }
+    if (v->op == XR_LIR_CHECKED_ARRAY_PUSH) {
+        const XrLirHomeWorkspace *workspace = c_array_workspace(c);
+        if (!workspace) return;
+        c_format(c, "    v%" PRIu32 " = xrt_native_array_update_place_checked(", v->result);
+        c_value(c, v->operands[0]);
+        c_format(c, ", XRT_BACKING_ARRAY_STRING, xrl_frame, %zu, &(XrtArrayUpdate){XRT_ARRAY_UPDATE_PUSH, 0, ",
+            workspace->first_owner);
+        c_array_item(c, XR_LIR_STRING, v->operands[1]);
+        c_text(c, "});\n");
         return;
     }
     if (v->op == XR_LIR_MANAGED_FAILURE) {

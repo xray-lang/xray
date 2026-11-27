@@ -1,0 +1,9 @@
+import io
+import path
+
+var paths = io.readDir(path.Path("one"))!
+print(len(paths))
+for (var i = 0; i < len(paths); i++) { print(paths[i].toString()) }
+print(len(io.readDir(path.Path("empty"))!))
+print(io.readDir(path.Path("missing")) == null)
+print(io.readDir(path.Path("one/alpha")) == null)

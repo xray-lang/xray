@@ -88,6 +88,13 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
             .type = XR_LIR_UNIT, .operands = args, .operand_count = 2, .source = lower_source(c)};
         return lower_build(c, xr_lir_emit_effect(c->module, f->blocks[b], &write));
     }
+    if (op == f->directory_loop.push) {
+        XrLirValue inputs[2] = {{0}};
+        XrLirInstruction push = {.op=XR_LIR_CHECKED_ARRAY_PUSH,.type=XR_LIR_U64,.operands=inputs,
+            .operand_count=2,.source=lower_source(c)};
+        return lower_value(f,op->args[0],&inputs[0]) && lower_value(f,op->args[1],&inputs[1]) &&
+            lower_build(c,xr_lir_emit_value(c->module,f->blocks[b],&push,&f->values[result]));
+    }
     XrLirArrayOperation operation;
     switch (op->op) {
         case XR_XIR_ARRAY_NEW: operation = XR_LIR_ARRAY_OP_NEW; break;

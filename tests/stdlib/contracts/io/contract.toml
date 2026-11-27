@@ -18,7 +18,7 @@ intentional_semantic_changes = [
   "future net/io buffer convergence must keep text and binary entry points distinct",
   "path ownership remains Path-based rather than reintroducing string path overloads",
   "cwd composes the os module's sole working-directory query instead of duplicating the host ABI",
-  "directory aggregation, deterministic name sorting, dot-entry filtering, and lexical iterator cleanup are implemented in io.xr over open-next-close host leaves",
+  "io.xr aggregates names and sorts them deterministically after lexical iterator cleanup; the shared host cursor supplies names with dot entries omitted",
   "recursive removal deletes dangling symlinks directly when following-stat metadata is unavailable"
 ]
 known_legacy_bugs = [

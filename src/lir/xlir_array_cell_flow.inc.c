@@ -73,7 +73,8 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
                 v->op == XR_LIR_SET_ADD || v->op == XR_LIR_SET_REMOVE || v->op == XR_LIR_SET_CLEAR ||
                 v->op == XR_LIR_CALL || v->op == XR_LIR_CALL_INTRINSIC :
                 v->op == XR_LIR_CELL_READ || v->op == XR_LIR_CELL_WRITE || v->op == XR_LIR_CALL ||
-                v->op == XR_LIR_CALL_INTRINSIC || v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_ARRAY_BORROW ||
+                v->op == XR_LIR_CALL_INTRINSIC || v->op == XR_LIR_CHECKED_ARRAY_PUSH ||
+                v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_ARRAY_BORROW ||
                 v->op == XR_LIR_MAP_CELL_DROP || v->op == XR_LIR_SET_CELL_DROP || v->op == XR_LIR_MAP_BORROW || v->op == XR_LIR_SET_BORROW ||
                 v->op == XR_LIR_SET_ADD || v->op == XR_LIR_SET_REMOVE || v->op == XR_LIR_SET_CLEAR;
             if (!allowed)
@@ -99,7 +100,8 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
                     lir_cfg_reference(f->values[v->edges[e].arguments[a] - 1].type))
                     return xr_lir_internal_error(d, "Managed Cell handle cannot transfer on an edge",
                         function, block + 1, i + 1, &v->source);
-        if (v->op == XR_LIR_HOST_DIRECTORY_FAIL || v->op == XR_LIR_HOST_DIRECTORY_RETURN_GUARD)
+        if (v->op == XR_LIR_HOST_DIRECTORY_FAIL || v->op == XR_LIR_HOST_DIRECTORY_RETURN_GUARD ||
+            v->op == XR_LIR_MANAGED_FAILURE)
             for (uint32_t c = 0; c < flow->count; ++c)
                 if (c + 1 != directory_owner && flow->current[c] != LIR_ARRAY_CELL_EMPTY)
                     return xr_lir_internal_error(d, "directory exit requires retired Managed Cells",

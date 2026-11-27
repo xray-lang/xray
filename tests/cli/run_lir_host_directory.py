@@ -48,6 +48,8 @@ def main() -> None:
                                if "// live Array close-only failure" in line)
         optional_close = next((number, line.index("__dirClose") + 1) for number, line in enumerate(io_lines, 1)
                               if "// optional Array close failure" in line)
+        appended_close = next((number, line.index("__dirClose") + 1) for number, line in enumerate(io_lines, 1)
+                              if "// appended Array close failure" in line)
         env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR="1")
         gate = SpawnGate()
         progress = threading.Lock()
@@ -74,11 +76,13 @@ def main() -> None:
             "cleanup_loop_path_formal": b"1\n1\n0\n-1\n",
             "cleanup_loop_checked_array": b"1\n1\n0\n-1\n",
             "cleanup_loop_optional_array": b"true\n0\ntrue\n0\ntrue\n1\nmarker\n",
+            "read_dir_real_names": f"4\n.hidden\nalpha\nzeta\n{name}\n0\ntrue\ntrue\n".encode(),
         }
         faults = ("invalid_close", "invalid_next", "stale_next", "cleanup_lifo_failure",
                   "cleanup_next_read_failure", "cleanup_next_dual_failure", "cleanup_next_close_failure",
                   "cleanup_next_bound_read_failure", "cleanup_loop_live_owner_failure",
-                  "cleanup_loop_live_owner_close_failure", "cleanup_loop_optional_array_close_failure")
+                  "cleanup_loop_live_owner_close_failure", "cleanup_loop_optional_array_close_failure",
+                  "cleanup_loop_checked_append_close_failure")
         rejections = {
             "private_leaf": b"import requires an exported declaration",
             "cleanup_partial": b"directory cleanup requires a complete normal exit",
@@ -99,6 +103,9 @@ def main() -> None:
                 (cwd / "one").mkdir(parents=True)
                 (cwd / "one" / name).write_bytes(b"entry")
                 (cwd / "empty").mkdir()
+                if case == "read_dir_real_names":
+                    for path in ("zeta", "alpha", ".hidden"):
+                        (cwd / "one" / path).write_bytes(b"entry")
                 if case in ("cleanup_loop", "cleanup_loop_late_control"):
                     (cwd / "other").mkdir()
                     (cwd / "directory").mkdir()
@@ -138,6 +145,9 @@ def main() -> None:
                     if case == "cleanup_loop_optional_array_close_failure":
                         primary, = vm[2].splitlines()
                         assert f"io.xr:{optional_close[0]}:{optional_close[1]}".encode() in primary, (case, vm)
+                    if case == "cleanup_loop_checked_append_close_failure":
+                        primary, = vm[2].splitlines()
+                        assert f"io.xr:{appended_close[0]}:{appended_close[1]}".encode() in primary, (case, vm)
                     if case.startswith("cleanup_next_"):
                         lines = vm[2].splitlines()
                         primary = close_source if case == "cleanup_next_close_failure" else read_source

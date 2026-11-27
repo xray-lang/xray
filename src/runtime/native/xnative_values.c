@@ -976,12 +976,25 @@ XRAY_API void xrt_native_array_display(XrtManagedFrame *frame, size_t slot,
     if (status==XRT_MANAGED_OK) status=xrt_array_backing_display_create(frame,slot,types,(const XrtArrayBacking *)array,kind);
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
 }
+static XrtManagedStatus native_array_update_place(XrtValueRoot *owner, XrtPlace binding,
+    XrtBackingArrayKind kind, XrtManagedFrame *frame, size_t workspace, const XrtArrayUpdate *update) {
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(owner, &types);
+    return status == XRT_MANAGED_OK ? xrt_array_update_place(binding, kind, frame, workspace, types, update) : status;
+}
+
 XRAY_API void xrt_native_array_update_place(XrtPlace binding, XrtBackingArrayKind kind,
     XrtManagedFrame *frame, size_t workspace, const XrtArrayUpdate *update, uint32_t source_id) {
-    const XrtBackingTypes *types=NULL;
-    XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source_id),&types);
-    if (status==XRT_MANAGED_OK) status=xrt_array_update_place(binding,kind,frame,workspace,types,update);
-    if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source_id);
+    XrtManagedStatus status = native_array_update_place(xrt_value_root_current(source_id), binding, kind,
+        frame, workspace, update);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+}
+
+XRAY_API XrtManagedStatus xrt_native_array_update_place_checked(XrtPlace binding, XrtBackingArrayKind kind,
+    XrtManagedFrame *frame, size_t workspace, const XrtArrayUpdate *update) {
+    XrtValueRoot *owner = native_array_execution(frame);
+    if (!owner || binding.frame != frame || binding.external) return XRT_MANAGED_ARGUMENT;
+    return native_array_update_place(owner, binding, kind, frame, workspace, update);
 }
 XRAY_API void xrt_native_array_push_local_i64(XrtPlace binding, size_t workspace, int64_t item, uint32_t source_id) {
     const XrtBackingTypes *types = NULL;

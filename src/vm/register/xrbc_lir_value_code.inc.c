@@ -87,7 +87,8 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
             if (instruction.op == XR_LIR_HOST_DIRECTORY || instruction.op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ||
                 instruction.op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
                 (instruction.op >= XR_LIR_HOST_DIRECTORY_FRAME && instruction.op <= XR_LIR_HOST_DIRECTORY_FAIL) ||
-                instruction.op == XR_LIR_CHECKED_EMPTY_ARRAY || instruction.op == XR_LIR_MANAGED_FAILURE ||
+                instruction.op == XR_LIR_CHECKED_EMPTY_ARRAY || instruction.op == XR_LIR_CHECKED_ARRAY_PUSH ||
+                instruction.op == XR_LIR_MANAGED_FAILURE ||
                 rbc_lir_scalar_ref_call(c,&instruction)) return true;
             if ((instruction.op == XR_LIR_STATE_CONSTRUCT || instruction.op == XR_LIR_STATE_INITIALIZE) &&
                 rbc_lir_value_string_slot(c,instruction.bits)) return true;
@@ -690,6 +691,7 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
             i->op==XR_LIR_CELL_READ ? XR_RBC_VALUE_BINDING_READ : XR_RBC_VALUE_BINDING_WRITE;
         break;
     }
+    case XR_LIR_CHECKED_ARRAY_PUSH:
     case XR_LIR_CALL_INTRINSIC: {
         uint32_t string_role=xr_lir_string_role(c->input,i);
         if (string_role && string_role!=XR_LIR_STRING_OP_APPEND_OWNED) {
@@ -715,9 +717,12 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
             break;
         }
         XrLirArrayIntrinsic shape={0};
-        uint32_t map=rbc_lir_map_role(c->input,i);
-        if (!map && (xr_lir_array_intrinsic_view(c->input,i->intrinsic,&shape)!=XR_LIR_OK || !shape.id)) return true;
-        access.operation=map ? XR_RBC_VALUE_MAP : XR_RBC_VALUE_ARRAY;
+        bool checked = i->op == XR_LIR_CHECKED_ARRAY_PUSH;
+        uint32_t map = checked ? 0 : rbc_lir_map_role(c->input,i);
+        if (checked) shape.operation = XR_LIR_ARRAY_OP_PUSH;
+        else if (!map && (xr_lir_array_intrinsic_view(c->input,i->intrinsic,&shape)!=XR_LIR_OK || !shape.id)) return true;
+        access.operation = checked ? XR_RBC_VALUE_CHECKED_ARRAY_PUSH :
+            map ? XR_RBC_VALUE_MAP : XR_RBC_VALUE_ARRAY;
         access.index=map ? map : (uint32_t)shape.operation;
         access.source=access.other=0; access.count=i->operand_count; access.window=UINT32_MAX;
         if (!rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first)) return false;
@@ -734,7 +739,7 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
             if (!map && shape.operation==XR_LIR_ARRAY_OP_RANDOM_BYTES) {
                 access.other=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_ARRAY_OPERATION,i->operands[0]);
                 if (!access.other) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"random byte fill lost its common operation");
-            } else if (!map && !rbc_lir_array_local_metadata(c,&access,i->operands[0])) return false;
+            } else if (!map && !checked && !rbc_lir_array_local_metadata(c,&access,i->operands[0])) return false;
             if (map == XR_LIR_MAP_OP_SET || map == XR_LIR_MAP_OP_REMOVE) {
                 access.source = rbc_local_map_binding_slot(c->homes, i->operands[0]);
                 if (access.source) access.other = rbc_local_borrow_slot(c->homes, i->operands[1]);

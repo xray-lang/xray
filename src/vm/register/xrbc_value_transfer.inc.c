@@ -318,13 +318,17 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     case XR_RBC_VALUE_HOST_DIRECTORY_FAIL:
         return !rbc_scope_current(state) && rbc_value_flow_bits(state,code,access.source) &&
             rbc_value_flow_bits(state,code,access.other);
+    case XR_RBC_VALUE_CHECKED_ARRAY_PUSH:
+        return rbc_value_array_transfer(state,code,access) &&
+            rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={index+1,RBC_BITS}});
     case XR_RBC_VALUE_MANAGED_FAILURE: {
         if (rbc_scope_current(state) || !rbc_value_flow_read(state,code,access.source,&incoming) ||
             incoming.value.state!=RBC_BITS) return false;
         if (!access.other) return true;
         uint32_t primary=incoming.value.origin;
         if (!primary || primary>code->access_count ||
-            code->accesses[primary-1].operation!=XR_RBC_VALUE_CHECKED_ERROR ||
+            (code->accesses[primary-1].operation!=XR_RBC_VALUE_CHECKED_ERROR &&
+             code->accesses[primary-1].operation!=XR_RBC_VALUE_CHECKED_ARRAY_PUSH) ||
             code->accesses[primary-1].result!=access.source) return false;
         if (!rbc_value_flow_read(state,code,access.other,&incoming) || incoming.value.state!=RBC_BITS)
             return false;

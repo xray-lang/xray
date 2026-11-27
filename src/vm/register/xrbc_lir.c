@@ -288,7 +288,7 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     case XR_LIR_CONST: case XR_LIR_CALL: case XR_LIR_INVOKE: case XR_LIR_CALL_INDIRECT: case XR_LIR_CALL_INTRINSIC:
     case XR_LIR_BR: case XR_LIR_RET:
     case XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED: case XR_LIR_HOST_DIRECTORY_RETURN_GUARD:
-    case XR_LIR_HOST_DIRECTORY_FAIL: case XR_LIR_MANAGED_FAILURE: return true;
+    case XR_LIR_HOST_DIRECTORY_FAIL: case XR_LIR_MANAGED_FAILURE: case XR_LIR_CHECKED_ARRAY_PUSH: return true;
     case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG: return i->type == XR_LIR_U64;
     case XR_LIR_BIT_AND: case XR_LIR_BIT_OR: case XR_LIR_BIT_XOR:
     case XR_LIR_SHL: case XR_LIR_SHR: return true;
@@ -592,7 +592,8 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         i->op == XR_LIR_HOST_TEXT_RESULT || i->op == XR_LIR_HOST_DIRECTORY ||
         i->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE || i->op == XR_LIR_HOST_DIRECTORY_CLEANUP_POLL ||
         (i->op >= XR_LIR_HOST_DIRECTORY_FRAME && i->op <= XR_LIR_HOST_DIRECTORY_FAIL) ||
-        i->op == XR_LIR_CHECKED_EMPTY_ARRAY || i->op == XR_LIR_MANAGED_FAILURE) return true;
+        i->op == XR_LIR_CHECKED_EMPTY_ARRAY || i->op == XR_LIR_CHECKED_ARRAY_PUSH ||
+        i->op == XR_LIR_MANAGED_FAILURE) return true;
     if (i->type == XR_LIR_U32 && i->op != XR_LIR_CONST &&
         i->op != XR_LIR_FIXED_ARRAY_NEW && i->op != XR_LIR_FIXED_ARRAY_GET) return false;
     if (rbc_lir_captured_cell_point(input, function, i)) return true;

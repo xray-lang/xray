@@ -143,8 +143,8 @@ typedef struct LowerViews {
 } LowerViews;
 typedef struct LowerDirectoryLoop {
     const XrXirInstruction *call, *tag;
-    const XrXirInstruction *unwrap, *length, *allocation;
-    uint32_t block;
+    const XrXirInstruction *unwrap, *length, *allocation, *push;
+    uint32_t block, push_block;
 } LowerDirectoryLoop;
 
 typedef struct LowerFunction {
@@ -1864,7 +1864,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             if (lower_directory_projected_value(directory_tail, directory_loop, instruction)) continue;
             bool guarded_arithmetic = !cleanup_body && block->frontier && lower_cleanup_arithmetic(instruction);
             bool directory_operation = instruction == directory_loop.unwrap || instruction == directory_loop.length ||
-                (array_return && instruction >= array_return);
+                instruction == directory_loop.push || (array_return && instruction >= array_return);
             if (guarded_arithmetic && arithmetic == ARITHMETIC_UNKNOWN)
                 arithmetic = lower_cleanup_scalar_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
             if ((block->frontier || cleanup_body) && !directory_operation && !(guarded_arithmetic && arithmetic == ARITHMETIC_ALLOWED) &&
@@ -3749,6 +3749,41 @@ static bool lower_directory_loop_branch(LowerFunction *f, uint32_t b, const XrXi
     return good;
 }
 
+static bool lower_directory_push_branch(LowerFunction *f, uint32_t b, const XrXirInstruction *term) {
+    Lower *c = f->owner;
+    const XrXirInstruction *push = f->directory_loop.push;
+    uint32_t index = (uint32_t)(push - f->source->instructions);
+    XrLirValue inputs[2] = {f->values[f->source->parameter_count + index], {0}};
+    XrLirValue test = {0}, failed[2] = {inputs[0], {0}}, cell = {0};
+    XrLirBlock block = f->blocks[b], fail = {0};
+    uint32_t at = c->instruction;
+    c->instruction = index;
+    XrLirSource source = lower_source(c);
+    c->instruction = at;
+    XrLirInstruction forward = {.op=XR_LIR_BR,.type=XR_LIR_UNIT,.edge_count=1,.source=source};
+    XrLirInstruction zero = {.op=XR_LIR_CONST,.type=XR_LIR_U64,.source=source};
+    XrLirInstruction compare = {.op=XR_LIR_ICMP,.type=XR_LIR_I1,
+        .operands=inputs,.operand_count=2,.predicate=XR_LIR_EQ,.source=source};
+    XrLirInstruction drop = {.op=XR_LIR_ARRAY_CELL_DROP,.type=XR_LIR_UNIT,
+        .operands=&cell,.operand_count=1,.source=source};
+    XrLirInstruction report = {.op=XR_LIR_MANAGED_FAILURE,.type=XR_LIR_UNIT,
+        .operands=failed,.operand_count=2,.source=source};
+    bool good = lower_value(f,push->args[0],&cell) &&
+        lower_edge(f,b,term->targets[0],&forward.edges[0]) && lower_selected_edges(f,b,&forward) &&
+        lower_managed_release_block(f,b,&forward) && lower_lexical_terminator(f,b,NULL) &&
+        lower_build(c,xr_lir_emit_value(c->module,block,&zero,&inputs[1])) &&
+        lower_build(c,xr_lir_emit_value(c->module,block,&compare,&test)) &&
+        lower_build(c,xr_lir_add_block(c->module,f->function,NULL,0,&fail)) &&
+        lower_directory_close_chain(f,fail,f->source->blocks[b].frontier,&failed[1]) &&
+        lower_build(c,xr_lir_emit_effect(c->module,fail,&drop)) &&
+        lower_build(c,xr_lir_set_terminator(c->module,fail,&report));
+    XrLirInstruction branch = {.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,.operands=&test,.operand_count=1,
+        .edge_count=2,.edges={forward.edges[0],{.target=fail}},.source=source};
+    if (good) good = lower_build(c,xr_lir_set_terminator(c->module,block,&branch));
+    xr_free((void *)forward.edges[0].arguments);
+    return good;
+}
+
 static bool lower_directory_loop_exit(LowerFunction *f, uint32_t b, const XrLirInstruction *ret) {
     Lower *c = f->owner;
     XrLirValue status = {0};
@@ -3777,6 +3812,8 @@ static bool lower_terminator(LowerFunction *f, uint32_t b) {
     if (directory_tail) return lower_directory_next(f, b, directory_tail);
     if (f->directory_loop.call && f->directory_loop.block == b)
         return lower_directory_loop_branch(f, b, term);
+    if (f->directory_loop.push && f->directory_loop.push_block == b)
+        return lower_directory_push_branch(f,b,term);
     bool directory_exit = f->directory_loop.call && block->frontier && term->op == XR_XIR_RETURN;
     bool array_exit = directory_exit && lower_directory_array_return(c, f->source, block);
     if (!directory_exit && !lower_cleanup_exit(f, b, term, &directory_closed)) return false;

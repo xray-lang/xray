@@ -1841,6 +1841,14 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         status = rbc_value_checked_receive(stack,&stack->frames[activation->depth - 1],activation->code,access);
     } else if (access.operation == XR_RBC_VALUE_CHECKED_EMPTY_ARRAY) {
         status = rbc_value_checked_empty_array(module,stack,activation,access);
+    } else if (access.operation == XR_RBC_VALUE_CHECKED_ARRAY_PUSH) {
+        XrRbcRegister *output = rbc_value_register(stack,activation,access.result);
+        if (!output) status = XRT_MANAGED_ARGUMENT;
+        else {
+            access.operation = XR_RBC_VALUE_ARRAY;
+            access.result = 0;
+            output->bits = rbc_value_array_step(module,stack,activation,access,source);
+        }
     } else if (access.operation == XR_RBC_VALUE_MANAGED_FAILURE) {
         return rbc_value_report_managed_failure(stack,&stack->frames[activation->depth - 1],activation->code,access,source);
     } else if (access.operation >= XR_RBC_VALUE_HOST_DIRECTORY_FRAME && access.operation <= XR_RBC_VALUE_HOST_DIRECTORY_FAIL) {

@@ -481,6 +481,9 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 (v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ? f->cleanup_owner && a == XR_LIR_I64 :
                     !f->cleanup_owner);
         case XR_LIR_CHECKED_EMPTY_ARRAY: return v->type == XR_LIR_ARRAY;
+        case XR_LIR_CHECKED_ARRAY_PUSH:
+            return v->type == XR_LIR_U64 && a == XR_LIR_ARRAY_CELL && b == XR_LIR_STRING &&
+                f->values[v->operands[0] - 1].array_element == XR_LIR_STRING;
         case XR_LIR_MANAGED_FAILURE:
             return v->type == XR_LIR_UNIT && a == XR_LIR_U64 &&
                 (v->operand_count == 1 || (v->operand_count == 2 && b == XR_LIR_U64));
@@ -756,7 +759,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         (f->cleanup_owner || f->error ||
          (!lir_directory_loop_result(m, f->result) && !lir_directory_string_result(m, f->result)) ||
          !v->source.path || !v->source.path_length || !v->source.line || !v->source.column)) goto invalid;
-    if ((v->op == XR_LIR_CHECKED_EMPTY_ARRAY || v->op == XR_LIR_MANAGED_FAILURE) &&
+    if (v->op == XR_LIR_CHECKED_ARRAY_PUSH && !lir_directory_loop_result(m, f->result))
+        goto invalid;
+    if ((v->op == XR_LIR_CHECKED_EMPTY_ARRAY || v->op == XR_LIR_CHECKED_ARRAY_PUSH ||
+         v->op == XR_LIR_MANAGED_FAILURE) &&
         (f->cleanup_owner || f->error || !v->source.path || !v->source.path_length ||
          !v->source.line || !v->source.column)) goto invalid;
     if (v->op==XR_LIR_RETURN_ERROR || v->op==XR_LIR_PANIC_ERROR || v->op==XR_LIR_UNCAUGHT_ERROR) {
@@ -969,6 +975,9 @@ static XrLirStatus lir_definitions(const XrLirModule *m, uint32_t index, uint8_t
                     index + 1, b + 1, i + 1, &v->source);
             if ((v->op == XR_LIR_CHECKED_EMPTY_ARRAY || v->op == XR_LIR_MANAGED_FAILURE) && !f->has_cleanups)
                 return xr_lir_internal_error(d, "checked allocation requires a cleanup owner",
+                    index + 1, b + 1, i + 1, &v->source);
+            if (v->op == XR_LIR_CHECKED_ARRAY_PUSH && (!block->cleanup || !block->cleanup->frontier))
+                return xr_lir_internal_error(d, "checked append requires an active cleanup frontier",
                     index + 1, b + 1, i + 1, &v->source);
             XrLirStatus status = xr_lir_internal_instruction_check(m, index + 1, v, d);
             if (status != XR_LIR_OK) {

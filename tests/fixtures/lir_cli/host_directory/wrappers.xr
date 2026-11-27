@@ -312,3 +312,17 @@ export fn directoryProbeOptionalArrayCloseFailure(directory: Path, stale: i64) -
     }
     return null
 }
+
+export fn directoryProbeAppendCloseFailure(directory: Path, stale: i64) -> Array<string>? {
+    var token = __dirOpen(directory)
+    if (token == 0) { return null }
+    defer { __dirClose(stale) } // appended Array close failure
+    defer { __dirClose(token) }
+    var names: Array<string> = []
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return names }
+        names.push(name!)
+    }
+    return null
+}

@@ -1341,6 +1341,41 @@ static void standalone_state_string(void) {
     CHECK(completed == 1 && !xrt_value_root_active());
 }
 
+static void checked_directory_name_append(XrtManagedRoot *root, XrtBillingOwner *billing,
+    const XrtBackingTypes *backings) {
+    enum { NAMES, WORKSPACE, NAME, SLOT_COUNT };
+    XrtManagedFrame *frame = NULL;
+    managed_require(xrt_managed_frame_enter(root, SLOT_COUNT, &frame));
+    managed_require(xrt_native_array_empty_checked(frame, NAMES, XRT_BACKING_ARRAY_STRING));
+    managed_require(xrt_string_backing_create(frame, NAME, backings, "entry", 5, 0));
+    XrtManagedHeader *before = NULL, *borrowed_name = NULL;
+    managed_require(xrt_managed_slot_borrow(frame, NAMES, &before));
+    managed_require(xrt_managed_slot_borrow(frame, NAME, &borrowed_name));
+    XrtPlace binding = {.frame=frame,.slot=NAMES,.nulls=XRT_PLACE_NONNULL};
+    XrtArrayUpdate push = {.operation=XRT_ARRAY_UPDATE_PUSH,
+        .item={.kind=XRT_BACKING_ARRAY_STRING,.value.string=(XrtStringBacking *)borrowed_name}};
+    XrtBillingStats bill = xrt_billing_owner_stats(billing);
+    xrt_billing_owner_fail_after(billing, 0);
+    CHECK(xrt_native_array_update_place_checked(binding, XRT_BACKING_ARRAY_STRING, frame, WORKSPACE, &push) ==
+        XRT_MANAGED_OOM);
+    xrt_billing_owner_fail_after(billing, SIZE_MAX);
+    XrtManagedHeader *same = NULL, *workspace = NULL;
+    managed_require(xrt_managed_slot_borrow(frame, NAMES, &same));
+    managed_require(xrt_managed_slot_borrow(frame, WORKSPACE, &workspace));
+    CHECK(same == before && !workspace && !((const XrtArrayBacking *)same)->length);
+    CHECK(xrt_billing_owner_stats(billing).bytes == bill.bytes);
+    managed_require(xrt_native_array_update_place_checked(binding, XRT_BACKING_ARRAY_STRING, frame, WORKSPACE, &push));
+    XrtManagedHeader *array = NULL;
+    managed_require(xrt_managed_slot_borrow(frame, NAMES, &array));
+    CHECK(((const XrtArrayBacking *)array)->length == 1);
+    XrtArrayItem item = {0};
+    xrt_native_array_get(array, XRT_BACKING_ARRAY_STRING, 0, &item, 1);
+    CHECK((XrtManagedHeader *)item.value.string == borrowed_name);
+    managed_require(xrt_managed_slot_borrow(frame, WORKSPACE, &workspace));
+    CHECK(!workspace);
+    managed_require(xrt_managed_frame_leave(root, frame));
+}
+
 static void checked_empty_array_root(void *context) {
     XrtBillingOwner *billing = context;
     XrtManagedRoot *root = NULL;
@@ -1428,6 +1463,7 @@ static void checked_empty_array_root(void *context) {
         destination.pending->allocation_bytes == bytes);
     managed_require(xrt_managed_slot_abort(frame, 0));
     managed_require(xrt_managed_frame_leave(root, frame));
+    checked_directory_name_append(root, billing, backings);
 }
 
 static void managed_checked_empty_arrays(void) {

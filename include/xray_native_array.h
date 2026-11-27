@@ -129,6 +129,10 @@ XRAY_API void xrt_native_array_display(XrtManagedFrame *, size_t slot,
  * The workspace is distinct and true-empty; no source retain forces COW. */
 XRAY_API void xrt_native_array_update_place(XrtPlace, XrtBackingArrayKind binding_kind,
     XrtManagedFrame *, size_t workspace, const XrtArrayUpdate *, uint32_t source_id);
+/* Checked generated code receives the operation status before leaving an
+ * active cleanup scope. The Frame and its binding belong to the active root. */
+XRAY_API XrtManagedStatus xrt_native_array_update_place_checked(XrtPlace, XrtBackingArrayKind binding_kind,
+    XrtManagedFrame *, size_t workspace, const XrtArrayUpdate *);
 /* Only generated code with an admitted local capacity window can call this
  * receiver. It may move the backing when growing. All old backing borrows have
  * ended, and the binding and empty workspace belong to the same live Frame. */
