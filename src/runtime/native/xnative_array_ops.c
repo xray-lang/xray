@@ -13,6 +13,7 @@
 #include "xnative_array_ops.h"
 #include "xnative_string_backing.h"
 #include "base/xchecks.h"
+#include "os/os_random.h"
 #include <string.h>
 
 static bool array_item_valid(const XrtArrayItem *item) {
@@ -21,7 +22,18 @@ static bool array_item_valid(const XrtArrayItem *item) {
 }
 static XrtManagedStatus array_update_check(const XrtArrayBacking *array,
     const XrtArrayUpdate *update, size_t *length) {
-    if (!array || !update || array->length > array->capacity || !array_item_valid(&update->item))
+    if (!array || !update) return XRT_MANAGED_ARGUMENT;
+    if (update->operation == XRT_ARRAY_UPDATE_RANDOM_BYTES) {
+        if (update->item.kind != XRT_BACKING_ARRAY_U8 || update->index != 0 ||
+            !xrt_backing_array_matches(&array->managed, XRT_BACKING_ARRAY_U8) ||
+            array->length > array->capacity)
+            return XRT_MANAGED_ARGUMENT;
+        if (array->capacity > (size_t)INT64_MAX || array->capacity > SIZE_MAX - sizeof(*array))
+            return XRT_MANAGED_OVERFLOW;
+        *length = array->length;
+        return XRT_MANAGED_OK;
+    }
+    if (array->length > array->capacity || !array_item_valid(&update->item))
         return XRT_MANAGED_ARGUMENT;
     if (update->operation == XRT_ARRAY_UPDATE_SET) {
         if (update->index < 0 || (uint64_t)update->index >= array->length) return XRT_MANAGED_BOUNDS;
@@ -60,6 +72,15 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_try_update(XrtArrayBacking *array,
     size_t length = 0;
     XrtManagedStatus status = array_update_check(array, update, &length);
     if (status != XRT_MANAGED_OK) return status;
+    if (update->operation == XRT_ARRAY_UPDATE_RANDOM_BYTES) {
+        if (!length) {
+            *applied = true;
+        } else if (xr_signed_rc_unique(&array->managed.references)) {
+            xr_random_bytes(array->elements, length);
+            *applied = true;
+        }
+        return XRT_MANAGED_OK;
+    }
     int32_t references = xr_signed_rc_read(&array->managed.references);
     if ((references != 1 && references != -1) || length > array->capacity) return XRT_MANAGED_OK;
     XrtManagedHeader *child = update->item.kind == XRT_BACKING_ARRAY_STRING ? &update->item.value.string->managed : NULL;
@@ -102,6 +123,8 @@ static XrtManagedStatus array_update_create(XrtManagedFrame *frame, size_t slot,
             memcpy(array->elements + i * stride, &child, sizeof(child));
             array->length = i + 1;
         }
+    } else if (update->operation == XRT_ARRAY_UPDATE_RANDOM_BYTES) {
+        if (length) xr_random_bytes(array->elements, length);
     } else {
         /* Both extents were bounded above. Only initialized scalar elements
          * cross to the still-private replacement. */

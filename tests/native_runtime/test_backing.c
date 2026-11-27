@@ -11,6 +11,7 @@
  *   value, guest registry or a linked product-family implementation.
  */
 #include "runtime/native/xnative_array_ops.h"
+#include "os/os_random.h"
 #include "runtime/native/xnative_map_backing.h"
 #include "base/xhash.h"
 #include "base/xmalloc.h"
@@ -476,6 +477,87 @@ static void scalar_updates(void) {
         next->length = 3; next->capacity = saved_capacity;
         fixture_done(&fixture);
     }
+}
+/* This standalone ownership test supplies a deterministic provider. The
+ * production archive links the platform implementation for generated C and VM. */
+static size_t entropy_calls, entropy_size;
+static uint8_t entropy_byte;
+void xr_random_bytes(unsigned char *bytes, size_t size) {
+    ++entropy_calls;
+    entropy_size = size;
+    memset(bytes, entropy_byte, size);
+}
+static void array_random_updates(void) {
+    Fixture caller, callee;
+    fixture_init(&caller, SIZE_MAX);
+    fixture_init(&callee, SIZE_MAX);
+    const uint8_t initial[] = {17, 23, 29};
+    const size_t capacity = 8;
+    const int64_t other_value = 71;
+    OK(xrt_array_backing_u8_create(caller.frame, 0, &caller.types, initial, sizeof(initial), capacity));
+    OK(xrt_array_backing_i64_create(caller.frame, 3, &caller.types, &other_value, 1, 1));
+    OK(xrt_array_backing_u8_create(caller.frame, 4, &caller.types, NULL, 0, capacity));
+    XrtArrayBacking *original = (XrtArrayBacking *)borrow(&caller, 0);
+    XrtArrayBacking *empty = (XrtArrayBacking *)borrow(&caller, 4);
+    memset(original->elements + sizeof(initial), 0xa5, capacity - sizeof(initial));
+    OK(xrt_backing_slot_copy(caller.frame, 5, &empty->managed));
+    const XrtPlace binding = {.frame=caller.frame, .slot=0, .nulls=XRT_PLACE_NONNULL};
+    const XrtArrayUpdate fill = {.operation=XRT_ARRAY_UPDATE_RANDOM_BYTES, .item={.kind=XRT_BACKING_ARRAY_U8}};
+    XrtBillingStats caller_before = xrt_billing_owner_stats(caller.billing);
+    XrtBillingStats callee_before = xrt_billing_owner_stats(callee.billing);
+    xrt_billing_owner_fail_after(callee.billing, 0);
+
+    entropy_byte = 0xd3;
+    OK(xrt_array_update_place(binding, XRT_BACKING_ARRAY_U8, callee.frame, 1, &callee.types, &fill));
+    CHECK(entropy_calls == 1 && entropy_size == sizeof(initial));
+    CHECK(borrow(&caller, 0) == &original->managed && !borrow(&callee, 1));
+    CHECK(original->length == sizeof(initial) && original->capacity == capacity);
+    const uint8_t filled[] = {0xd3, 0xd3, 0xd3, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5};
+    CHECK(!memcmp(original->elements, filled, capacity));
+    same_bill(caller.billing, caller_before);
+    same_bill(callee.billing, callee_before);
+    CHECK(xrt_billing_owner_stats(callee.billing).allocations == callee_before.allocations);
+
+    OK(xrt_backing_slot_copy(caller.frame, 2, &original->managed));
+    CHECK(xrt_array_update_place(binding, XRT_BACKING_ARRAY_U8, callee.frame, 1, &callee.types, &fill)
+        == XRT_MANAGED_OOM);
+    CHECK(entropy_calls == 1 && borrow(&caller, 0) == &original->managed &&
+        borrow(&caller, 2) == &original->managed && !borrow(&callee, 1));
+    CHECK(!memcmp(original->elements, filled, capacity));
+    same_bill(caller.billing, caller_before);
+    same_bill(callee.billing, callee_before);
+
+    XrtPlace other = binding;
+    other.slot = 3;
+    BAD(xrt_array_update_place(other, XRT_BACKING_ARRAY_U8, callee.frame, 1, &callee.types, &fill));
+    XrtArrayUpdate wrong = fill;
+    wrong.item.kind = XRT_BACKING_ARRAY_I64;
+    BAD(xrt_array_update_place(other, XRT_BACKING_ARRAY_I64, callee.frame, 1, &callee.types, &wrong));
+    CHECK(scalar_at((XrtArrayBacking *)borrow(&caller, 3), XRT_BACKING_ARRAY_I64, 0) == 71);
+    wrong = fill;
+    wrong.index = 1;
+    BAD(xrt_array_update_place(binding, XRT_BACKING_ARRAY_U8, callee.frame, 1, &callee.types, &wrong));
+    other.slot = 4;
+    OK(xrt_array_update_place(other, XRT_BACKING_ARRAY_U8, callee.frame, 1, &callee.types, &fill));
+    CHECK(entropy_calls == 1 && borrow(&caller, 4) == &empty->managed && !borrow(&callee, 1));
+    CHECK(!empty->length && empty->capacity == capacity);
+
+    xrt_billing_owner_fail_after(callee.billing, SIZE_MAX);
+    callee.audit.allocation_fill = 0xa5;
+    entropy_byte = 0x4c;
+    OK(xrt_array_update_place(binding, XRT_BACKING_ARRAY_U8, callee.frame, 1, &callee.types, &fill));
+    XrtArrayBacking *replacement = (XrtArrayBacking *)borrow(&caller, 0);
+    CHECK(replacement && replacement != original && replacement->length == sizeof(initial) &&
+        replacement->capacity == capacity && !borrow(&callee, 1));
+    CHECK(entropy_calls == 2 && entropy_size == sizeof(initial));
+    const uint8_t refilled[] = {0x4c, 0x4c, 0x4c, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5};
+    CHECK(!memcmp(replacement->elements, refilled, capacity));
+    CHECK(borrow(&caller, 2) == &original->managed && !memcmp(original->elements, filled, capacity));
+    CHECK(xrt_billing_owner_stats(callee.billing).allocations == callee_before.allocations + 1);
+    OK(xrt_managed_slot_drop(caller.frame, 0));
+    same_bill(callee.billing, callee_before);
+    fixture_done(&callee);
+    fixture_done(&caller);
 }
 static void local_i64_growth(void) {
     size_t full_bytes = 0;
@@ -1058,6 +1140,7 @@ int main(void) {
     nonlocal_retirement();
     independent_lifetimes();
     scalar_updates();
+    array_random_updates();
     local_i64_growth();
     array_local_updates();
     array_region_borrows();

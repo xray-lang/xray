@@ -21,6 +21,7 @@ add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c xnat
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/file_temp_${native_filesystem_platform}.c"
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/directory_owned_${native_filesystem_platform}.c"
     "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/proc_self_${native_filesystem_platform}.c"
+    "${PROJECT_SOURCE_DIR}/src/os/${native_filesystem_platform}/random_${native_filesystem_platform}.c"
     "${native_output_platform}" "${native_clock_platform}")
 add_dependencies(xray_native_runtime gen-native-type-defs gen-target-query-registry)
 target_include_directories(xray_native_runtime PUBLIC "${PROJECT_SOURCE_DIR}/include"
@@ -41,7 +42,6 @@ else()
     target_compile_options(xray_native_runtime PRIVATE -Wall -Wextra -Werror -pedantic -ffp-contract=off)
 endif()
 if(WIN32)
-    target_sources(xray_native_runtime PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/random_win.c")
     target_link_libraries(xray_native_runtime PRIVATE advapi32 userenv)
 else()
     find_package(Threads REQUIRED)
