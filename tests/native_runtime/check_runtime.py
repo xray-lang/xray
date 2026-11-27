@@ -141,7 +141,9 @@ int xray_header_values(void) {
                        object_file,
                        *archive_link_arguments(libraries, driver="msvc" if msvc else "gnu"), *system_libraries, '/Fe:' + str(executable), *link]
         else:
-            command = [compiler, *flags, '-std=' + language, '-x', 'c' if language == 'c11' else 'c++',
+            # The C++ driver supplies its ABI and sanitizer runtime at link time.
+            client_compiler = compiler if language == 'c11' else cache['CMAKE_CXX_COMPILER']
+            command = [client_compiler, *flags, '-std=' + language, '-x', 'c' if language == 'c11' else 'c++',
                        '-I' + str(include), client, '-x', 'none', object_file, *archive_link_arguments(libraries, driver="msvc" if msvc else "gnu"), *system_libraries, '-o', executable, *link]
         compiled = subprocess.run(command, cwd=logs, capture_output=True, timeout=30)
         compile_log = logs / (language.replace('+', 'x') + '-compile.log')
