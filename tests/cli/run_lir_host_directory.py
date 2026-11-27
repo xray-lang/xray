@@ -7,6 +7,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+
+from owned_case_workers import SpawnGate, run_ordered
 
 
 def main() -> None:
@@ -20,7 +23,7 @@ def main() -> None:
         parser.error("--compiler must name an existing absolute compiler path")
     binary, root, output = args.binary.resolve(), args.root.resolve(), args.output.resolve()
     sys.path.insert(0, str(root / "scripts"))
-    from xray_process import run_child
+    from xray_process import RecoveryRequired, run_child
 
     fixtures = root / "tests/fixtures/lir_cli/host_directory"
     output.mkdir(parents=True, exist_ok=True)
@@ -44,12 +47,17 @@ def main() -> None:
         live_close_only = next((number, line.index("__dirClose") + 1) for number, line in enumerate(io_lines, 1)
                                if "// live Array close-only failure" in line)
         env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR="1")
+        gate = SpawnGate()
+        progress = threading.Lock()
+        finished = {}
+        published = 0
 
         def run(command, cwd, label):
             out, err = cwd / (label + ".stdout"), cwd / (label + ".stderr")
             with out.open("xb") as stdout, err.open("xb") as stderr:
                 status = run_child(list(map(str, command)), cwd=cwd, env=env,
-                                   stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, timeout=30)
+                                   stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, timeout=30,
+                                   spawn_guard=gate.launch)
             return status, out.read_bytes(), err.read_bytes()
 
         name = "目录项.txt"
@@ -77,7 +85,8 @@ def main() -> None:
             "cleanup_loop_escape": b"operation needs a panic landing with active cleanup",
             "cleanup_loop_unguarded_name": b"operation needs a panic landing with active cleanup",
         }
-        for case in (*successes, *faults, *rejections):
+        def execute(index, case):
+            nonlocal published
             vm_dir, native_dir = work / (case + "-vm"), work / (case + "-native")
             for cwd in (vm_dir, native_dir):
                 (cwd / "one").mkdir(parents=True)
@@ -131,7 +140,14 @@ def main() -> None:
                             assert f"io.xr:{close_source}:9".encode() in lines[1], (case, vm)
                         else:
                             assert len(lines) == 1, (case, vm)
-            print(f"{case}: VM and native agree on the directory contract")
+            with progress:
+                finished[index] = case
+                while published in finished:
+                    completed = finished.pop(published)
+                    print(f"{completed}: VM and native agree on the directory contract", flush=True)
+                    published += 1
+
+        run_ordered((*successes, *faults, *rejections), execute, 2, gate, RecoveryRequired)
 
 
 if __name__ == "__main__":
