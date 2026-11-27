@@ -63,6 +63,12 @@ XR_FUNC XrLirStatus xr_lir_lower_test_plan_checked(const XrLirLowerRequest *,
  * calls must be scalar and effect-free. This is not a complete execution. */
 XR_FUNC XrLirStatus xr_lir_lower_local_checked(const XrLirLowerRequest *, uint32_t closed_function,
                                                XrLirLowered *, XrLirLowerFailure *);
+/* Lower the ordinary, nongeneric export already selected by the build
+ * producer from its canonical Checked standard library root. Retain the
+ * selected direct-call closure without constructing module storage or an
+ * executable wrapper. The scalar C emitter separately admits its ABI. */
+XR_FUNC XrLirStatus xr_lir_lower_stdlib_export_checked(const XrLirLowerRequest *,
+    uint32_t closed_function, XrLirLowered *, XrLirLowerFailure *);
 XR_FUNC void xr_lir_lowered_free(XrLirLowered *);
 XR_FUNC void xr_lir_lower_failure_free(XrLirLowerFailure *);
 

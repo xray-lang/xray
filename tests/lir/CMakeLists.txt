@@ -173,7 +173,26 @@ add_test(NAME lir_c_value_types_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_S
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
     --work "${CMAKE_CURRENT_BINARY_DIR}/value-types")
 set_tests_properties(lir_c_value_types_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 30)
-add_test(NAME test_lir_c_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_native.py"
+set(lir_c_native_command ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_native.py")
+if(TARGET xray_stdlib_scalar_export)
+    set(stdlib_export_sanitizers)
+    if(ENABLE_ASAN OR ENABLE_SANITIZERS)
+        list(APPEND stdlib_export_sanitizers --asan)
+    endif()
+    if(ENABLE_UBSAN OR ENABLE_SANITIZERS)
+        list(APPEND stdlib_export_sanitizers --ubsan)
+    endif()
+    set(lir_c_native_command ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_stdlib_scalar_export.py"
+        --producer $<TARGET_FILE:xray_stdlib_scalar_producer>
+        --archive $<TARGET_FILE:xray_stdlib_scalar_export>
+        --generated "${XRAY_STDLIB_SCALAR_EXPORT_C}"
+        --stdlib "${PROJECT_SOURCE_DIR}/stdlib"
+        --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
+        --msvc-runtime "$<TARGET_GENEX_EVAL:xray_stdlib_scalar_export,$<TARGET_PROPERTY:xray_stdlib_scalar_export,MSVC_RUNTIME_LIBRARY>>"
+        --work "${CMAKE_CURRENT_BINARY_DIR}/native" ${stdlib_export_sanitizers}
+        -- ${lir_c_native_command})
+endif()
+add_test(NAME test_lir_c_native COMMAND ${lir_c_native_command}
     --driver $<TARGET_FILE:test_lir_c> --faults $<TARGET_FILE:test_lir_c_faults>
     --source-driver $<TARGET_FILE:lir_c_run> --binary $<TARGET_FILE:xray>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"

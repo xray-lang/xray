@@ -4048,7 +4048,8 @@ typedef enum LowerRootKind {
     LOWER_ROOT_PROGRAM,
     LOWER_ROOT_LOCAL,
     LOWER_ROOT_TEST,
-    LOWER_ROOT_TEST_PLAN
+    LOWER_ROOT_TEST_PLAN,
+    LOWER_ROOT_STDLIB_EXPORT
 } LowerRootKind;
 
 static bool lower_test_role(Lower *c, uint32_t function, XrXirTestRole role) {
@@ -4089,7 +4090,8 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         return lower_error(&c, XR_LIR_INVALID_ARGUMENT,
                            "source-backed Closed Checked program required");
     bool local = root_kind == LOWER_ROOT_LOCAL;
-    c.allow_class_calls = !local && xir_effect_evidence_is_instance(source);
+    bool exporting = root_kind == LOWER_ROOT_STDLIB_EXPORT;
+    c.allow_class_calls = !local && !exporting && xir_effect_evidence_is_instance(source);
     const XrXirDeclarations *d = source->declarations;
     c.function = d->modules && d->module_count ? d->modules[0].initializer : d->entry_function;
     if (request->overflow_checks)
@@ -4113,10 +4115,21 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         c.function = d->modules[0].initializer;
         program_entry = UINT32_MAX;
     }
+    if (exporting && (selected >= source->function_count ||
+            d->functions[selected].module != d->root_module ||
+            !d->functions[selected].exported || d->functions[selected].method_kind != XR_XIR_NON_MEMBER ||
+            d->functions[selected].native_callable || d->functions[selected].cleanup_owner ||
+            d->functions[selected].capture_owner ||
+            (source->generics && source->generics[selected].parameter_count)))
+        return lower_unsupported(&c, "standard library export root"), c.status;
     if (!lower_build(&c, xr_lir_module_create(NULL, &c.module))) return c.status;
-    if (!lower_map_literals(&c) || !lower_modules(&c) || !lower_initializer_errors(&c) ||
+    /* The export uses the same import authority as a program. There is no
+     * module instance to construct or to receive slot references. */
+    if (!lower_map_literals(&c) || !lower_modules(&c) ||
+        (!exporting && !lower_initializer_errors(&c)) ||
         (local && c.initializer_errors && !lower_unsupported(&c,"typed module startup in local evaluation")) ||
-        !lower_error_types(&c) || !lower_state_layout(&c) || !lower_state_constructors(&c)) {
+        !lower_error_types(&c) ||
+        (!exporting && (!lower_state_layout(&c) || !lower_state_constructors(&c)))) {
         lower_free_error_plans(&c);
         lower_modules_free(&c);
         xr_lir_module_destroy(c.module);
@@ -4126,12 +4139,16 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     c.active = lower_alloc(&c, source->function_count, 1);
     c.queue = lower_alloc(&c, source->function_count, sizeof(*c.queue));
     bool good = c.functions && c.active && c.queue;
-    for (uint32_t m = 0; m < c.initialization_count && good; ++m)
-        good = lower_mark(&c, d->modules[c.module_order[m]].initializer);
-    if (good && program_entry != UINT32_MAX) good = lower_mark(&c, program_entry);
-    for (uint32_t i = 0; i < role_count && good; ++i)
-        if (roles[i].role != XR_XIR_TEST_ROLE_SKIP)
-            good = lower_mark(&c, roles[i].function);
+    if (exporting) {
+        good = good && lower_mark(&c, selected);
+    } else {
+        for (uint32_t m = 0; m < c.initialization_count && good; ++m)
+            good = lower_mark(&c, d->modules[c.module_order[m]].initializer);
+        if (good && program_entry != UINT32_MAX) good = lower_mark(&c, program_entry);
+        for (uint32_t i = 0; i < role_count && good; ++i)
+            if (roles[i].role != XR_XIR_TEST_ROLE_SKIP)
+                good = lower_mark(&c, roles[i].function);
+    }
     for (uint32_t at = 0; at < c.queued && good; ++at)
         good = lower_admit_function(&c, c.queue[at]);
     if (good) good = lower_owned_bindings(&c);
@@ -4194,12 +4211,12 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     XrLirFunction entry = {0};
     /* Slice contracts refer to the final function directory. Declare the
      * ordinary entry before receiving them; no source body is executed here. */
-    if (good && c.views && !local) good = lower_wrapper(&c, program_entry, &entry);
+    if (good && c.views && !local && !exporting) good = lower_wrapper(&c, program_entry, &entry);
     if (good) good = lower_slice_effects(&c);
     for (uint32_t f = 0; f < source->function_count && good; ++f)
         if (c.active[f] && !lower_core_assertion(&c, f))
             good = lower_function(&c, f);
-    if (good && local)
+    if (good && (local || exporting))
         entry = c.functions[selected];
     else if (good && !entry.id)
         good = lower_wrapper(&c, program_entry, &entry);
@@ -4253,4 +4270,9 @@ XR_FUNC XrLirStatus xr_lir_lower_test_plan_checked(const XrLirLowerRequest *requ
 XR_FUNC XrLirStatus xr_lir_lower_local_checked(const XrLirLowerRequest *request, uint32_t selected,
                                                XrLirLowered *output, XrLirLowerFailure *failure) {
     return lower_checked(request, selected, LOWER_ROOT_LOCAL, NULL, 0, output, failure);
+}
+
+XR_FUNC XrLirStatus xr_lir_lower_stdlib_export_checked(const XrLirLowerRequest *request,
+    uint32_t selected, XrLirLowered *output, XrLirLowerFailure *failure) {
+    return lower_checked(request, selected, LOWER_ROOT_STDLIB_EXPORT, NULL, 0, output, failure);
 }

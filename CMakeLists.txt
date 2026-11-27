@@ -1307,6 +1307,46 @@ add_subdirectory(src/runtime/native)
 add_subdirectory(src/vm/register)
 target_link_libraries(xray PRIVATE xray_compile_resources)
 add_subdirectory(src/xir)
+
+# Build-time executable linked only to compiler libraries. Its generated C
+# enters this build's artifact with the same compiler and target settings.
+# Target-only builds continue to use the regular SDK build without running a
+# target executable on the build machine.
+if(NOT CMAKE_CROSSCOMPILING)
+    add_executable(xray_stdlib_scalar_producer tools/stdlibgen/stdlib_scalar_export.c)
+    target_link_libraries(xray_stdlib_scalar_producer PRIVATE xray_lir_lower xray_lir_c)
+    target_compile_features(xray_stdlib_scalar_producer PRIVATE c_std_11)
+    set_target_properties(xray_stdlib_scalar_producer PROPERTIES C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    if(MSVC)
+        target_compile_options(xray_stdlib_scalar_producer PRIVATE /W4 /WX /utf-8)
+        target_compile_definitions(xray_stdlib_scalar_producer PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_link_options(xray_stdlib_scalar_producer PRIVATE "LINKER:/STACK:8388608")
+    else()
+        target_compile_options(xray_stdlib_scalar_producer PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+
+    set(XRAY_STDLIB_SCALAR_EXPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
+    set(XRAY_STDLIB_SCALAR_EXPORT_C "${XRAY_STDLIB_SCALAR_EXPORT_DIR}/stdlib_scalar_math_lerp.c")
+    add_custom_command(
+        OUTPUT "${XRAY_STDLIB_SCALAR_EXPORT_C}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_SCALAR_EXPORT_DIR}"
+        COMMAND xray_stdlib_scalar_producer "${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
+                "${XRAY_STDLIB_SCALAR_EXPORT_C}.pending"
+        COMMAND ${CMAKE_COMMAND} -E rename "${XRAY_STDLIB_SCALAR_EXPORT_C}.pending" "${XRAY_STDLIB_SCALAR_EXPORT_C}"
+        DEPENDS xray_stdlib_scalar_producer ${XRAY_STDLIB_SCRIPT_SOURCES}
+        COMMENT "Compiling the built-in standard library scalar export"
+        VERBATIM)
+    add_library(xray_stdlib_scalar_export STATIC "${XRAY_STDLIB_SCALAR_EXPORT_C}")
+    set_target_properties(xray_stdlib_scalar_export PROPERTIES
+        C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    if(MSVC)
+        target_compile_options(xray_stdlib_scalar_export PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(xray_stdlib_scalar_export PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+    add_dependencies(xray xray_stdlib_scalar_export)
+endif()
+
 include(src/frontend/format/xformatter.cmake)
 target_link_libraries(xray PRIVATE xray_frontend_format)
 include(src/api/xsource_compile.cmake)
