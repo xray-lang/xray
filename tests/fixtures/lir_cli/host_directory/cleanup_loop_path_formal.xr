@@ -1,0 +1,8 @@
+import io
+import path
+
+const one = path.Path("one")
+print(io.directoryProbeLoopPathFormal(one))
+print(io.directoryProbeLoopPathFormal(one))
+print(io.directoryProbeLoopPathFormal(path.Path("empty")))
+print(io.directoryProbeLoopPathFormal(path.Path("missing")))

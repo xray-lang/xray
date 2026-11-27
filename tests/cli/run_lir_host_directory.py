@@ -69,6 +69,7 @@ def main() -> None:
             "cleanup_loop_retired": b"2\n0\n",
             "cleanup_loop_live_owner": b"2\n1\n1\n0\n1\n0\n",
             "cleanup_loop_present_name": b"7\n0\n",
+            "cleanup_loop_path_formal": b"1\n1\n0\n-1\n",
         }
         faults = ("invalid_close", "invalid_next", "stale_next", "cleanup_lifo_failure",
                   "cleanup_next_read_failure", "cleanup_next_dual_failure", "cleanup_next_close_failure",
@@ -84,6 +85,7 @@ def main() -> None:
             "cleanup_loop_write": b"operation needs a panic landing with active cleanup",
             "cleanup_loop_escape": b"operation needs a panic landing with active cleanup",
             "cleanup_loop_unguarded_name": b"operation needs a panic landing with active cleanup",
+            "cleanup_loop_path_reused": b"operation needs a panic landing with active cleanup",
         }
         def execute(index, case):
             nonlocal published

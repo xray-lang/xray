@@ -533,13 +533,44 @@ static bool lower_directory_name_path(Lower *c, const XrXirFunction *f, LowerDir
     return known;
 }
 
+/* Directory opening borrows its Path before the first registration. The
+ * ordinary managed value flow retires the retained formal in that prefix. */
+static bool lower_directory_open_formal(const Lower *c, const XrXirFunction *f, uint32_t formal) {
+    if (!xr_xir_type_is_class(c->source->types, f->parameters[formal])) return false;
+    bool opened = false;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrXirBlock *block = &f->blocks[b];
+        for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+            const XrXirInstruction *op = &f->instructions[i];
+            if (xr_xir_op_uses_owner_slots(op->op)) continue;
+            uint32_t count = xir_instruction_operand_count(f, op, c->source);
+            const uint32_t *operands = op->args;
+            if (count && xr_xir_op_uses_operand_table(op->op)) {
+                if (op->args[0] > f->operand_count || count > f->operand_count - op->args[0]) return false;
+                operands = f->operands + op->args[0];
+            }
+            uint32_t step = op->op == XR_XIR_PHI ? 2u : 1u;
+            for (uint32_t a = step - 1; a < count; a += step) {
+                if (operands[a] != formal) continue;
+                if (block->frontier || opened || op->op != XR_XIR_CALL || op->args[1] != 1 ||
+                    op->immediate < 0 || (uint64_t)op->immediate >= c->source->function_count) return false;
+                uint32_t callee = (uint32_t)op->immediate, fields[2];
+                if (c->source->declarations->functions[callee].native_callable != XR_NATIVE_CALLABLE_IO_DIR_OPEN ||
+                    lower_host_abi(c, callee, fields) != XR_NATIVE_HOST_DIRECTORY) return false;
+                opened = true;
+            }
+        }
+    }
+    return opened;
+}
+
 /* The tag controls the immediately following branch. An immutable result may
  * supply a length on its present path before that iteration retires it. */
 static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f) {
     LowerDirectoryLoop site = {0}, absent = {0};
     if (f->result != XR_XIR_I64 || !lower_empty_error(f->error_type)) return absent;
     for (uint32_t p = 0; p < f->parameter_count; ++p)
-        if (!lower_cleanup_scalar(f->parameters[p])) return absent;
+        if (!lower_cleanup_scalar(f->parameters[p]) && !lower_directory_open_formal(c, f, p)) return absent;
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrXirBlock *block = &f->blocks[b];
         if (block->panic || !block->count) return absent;

@@ -346,12 +346,42 @@ static bool lir_directory_nopanic_name(const XrLirModule *m, const XrLirFunction
     return op->op == XR_LIR_VALUE_DROP ? names[input - 1] != 0 : names[input - 1] == LIR_DIRECTORY_PRESENT;
 }
 
+/* Class parameters and retained copies used only before registration are
+ * checked by the same value flow as the scalar and Array directory frame. */
+static bool lir_directory_prefix_class(const XrLirFunctionData *f, uint32_t id) {
+    const XrLirValueData *value = &f->values[id - 1];
+    if (value->parameter) {
+        if (value->block) return false;
+    } else {
+        if (lir_cleanup_frontier(f, value->block)) return false;
+        const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
+        if (!definition || definition->op != XR_LIR_VALUE_RETAIN) return false;
+        const XrLirValueData *formal = &f->values[definition->operands[0] - 1];
+        if (!formal->parameter || formal->block) return false;
+    }
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirBlockData *block = &f->blocks[b];
+        if (!lir_cleanup_frontier(f, b + 1)) continue;
+        for (uint32_t i = 0; i < block->instruction_count; ++i) {
+            const XrLirInstructionView *op = &block->instructions[i].view;
+            for (uint32_t a = 0; a < op->operand_count; ++a)
+                if (op->operands[a] == id) return false;
+            for (uint32_t e = 0; e < op->edge_count; ++e)
+                for (uint32_t a = 0; a < op->edges[e].argument_count; ++a)
+                    if (op->edges[e].arguments[a] == id) return false;
+        }
+    }
+    return true;
+}
+
 static bool lir_directory_frame(const XrLirModule *m, const XrLirFunctionData *f, const LirGraph *g,
     const uint8_t *names) {
     if (f->cleanup_owner || f->error || f->closure.callable) return false;
     for (uint32_t v = 0; v < f->value_count; ++v) {
         const XrLirValueData *value = &f->values[v];
         if (lir_cleanup_scalar(value->type)) continue;
+        if (f->result == XR_LIR_I64 && xr_lir_class_payload(m, value->type, NULL) &&
+            lir_directory_prefix_class(f, v + 1)) continue;
         if (value->parameter) {
             if (!value->block) return false;
             if ((lir_directory_string_result(m, value->type) &&

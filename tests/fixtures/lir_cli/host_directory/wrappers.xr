@@ -224,3 +224,27 @@ export fn directoryProbeLoopEscape(token: i64) -> i64 {
     }
     return -1
 }
+
+export fn directoryProbeLoopPathFormal(directory: Path) -> i64 {
+    var token = __dirOpen(directory)
+    if (token == 0) { return -1 }
+    defer { __dirClose(token) }
+    var count = 0
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return count }
+        count = count + 1
+    }
+    return -1
+}
+
+export fn directoryProbeLoopPathReused(directory: Path) -> i64 {
+    var token = __dirOpen(directory)
+    if (token == 0) { return -1 }
+    defer { __dirClose(token) }
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return len(directory.toString()) }
+    }
+    return -1
+}
