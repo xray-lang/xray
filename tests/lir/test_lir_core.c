@@ -417,11 +417,12 @@ static void directory_cleanup_requires_a_complete_exit(void) {
 
 static void directory_next_requires_exact_successors(void) {
     enum { COMPLETE, NO_FRAME, WRONG_SOURCE, WRONG_CAPTURE, WRONG_PRIMARY, LOOP,
-        LOOP_NOT_RETIRED, LOOP_EXIT_WRONG_SOURCE, LOOP_SECOND_NEXT, LOOP_RETIRED_CELL, LOOP_LIVE_CELL };
+        LOOP_NOT_RETIRED, LOOP_EXIT_WRONG_SOURCE, LOOP_SECOND_NEXT, LOOP_RETIRED_CELL, LOOP_LIVE_CELL,
+        LOOP_NAME, LOOP_NAME_ON_EOF };
     const XrLirSource read = {"cleanup.xr", 10, 8, 12, 8, 12};
     const XrLirSource close = {"cleanup.xr", 10, 5, 9, 5, 9};
     const XrLirSource returned = {"cleanup.xr", 10, 8, 5, 8, 25};
-    for (unsigned fault = COMPLETE; fault <= LOOP_LIVE_CELL; ++fault) {
+    for (unsigned fault = COMPLETE; fault <= LOOP_NAME_ON_EOF; ++fault) {
         bool loop = fault >= LOOP;
         XrLirModule *m = NULL;
         if (fault == LOOP_RETIRED_CELL || fault == LOOP_LIVE_CELL) OK(xr_lir_array_module_create(NULL, &m));
@@ -478,16 +479,39 @@ static void directory_next_requires_exact_successors(void) {
             .bits=callback.id,.source=fault == WRONG_SOURCE ? read : close};
         OK(xr_lir_emit_value(m, failure, &step, &failed[1]));
         if (loop) {
-            XrLirBlock eof = test_block(m, owner, NULL, 0);
+            bool forwards = fault == LOOP_NAME || fault == LOOP_NAME_ON_EOF;
+            XrLirBlock eof = test_block(m, owner, forwards ? &optional : NULL, forwards);
             OK(xr_lir_internal_cleanup_block(m, normal, callback.id, 0, NULL, 0));
             OK(xr_lir_internal_cleanup_block(m, eof, callback.id, 0, NULL, 0));
             XrLirValue tested = {0};
             OK(xr_lir_emit_value(m, normal, &(XrLirInstruction){.op=XR_LIR_NULLABLE_IS_SOME,
                 .type=XR_LIR_I1,.operands=success,.operand_count=1,.source=read}, &tested));
-            if (fault != LOOP_NOT_RETIRED)
+            if (fault != LOOP_NOT_RETIRED && !forwards)
                 OK(xr_lir_emit_effect(m, normal, &(XrLirInstruction){.op=XR_LIR_VALUE_DROP,
                     .type=XR_LIR_UNIT,.operands=success,.operand_count=1,.source=read}));
             XrLirBlock some = active;
+            if (forwards) {
+                some = test_block(m, owner, &optional, 1);
+                OK(xr_lir_internal_cleanup_block(m, some, callback.id, 0, NULL, 0));
+                XrLirBlock arms[] = {some, eof};
+                for (uint32_t arm = 0; arm < 2; ++arm) {
+                    XrLirValue received = {0};
+                    OK(xr_lir_block_parameter(m, arms[arm], 0, &received));
+                    if (arm == (uint32_t)(fault == LOOP_NAME_ON_EOF)) {
+                        XrLirValue name = {0}, length = {0};
+                        OK(xr_lir_emit_value(m, arms[arm], &(XrLirInstruction){.op=XR_LIR_NULLABLE_UNWRAP,
+                            .type=XR_LIR_STRING,.operands=&received,.operand_count=1,.source=read}, &name));
+                        OK(xr_lir_emit_value(m, arms[arm], &(XrLirInstruction){.op=XR_LIR_STRING_LEN,
+                            .type=XR_LIR_I64,.operands=&name,.operand_count=1,.source=read}, &length));
+                        OK(xr_lir_emit_effect(m, arms[arm], &(XrLirInstruction){.op=XR_LIR_STRING_DROP,
+                            .type=XR_LIR_UNIT,.operands=&name,.operand_count=1,.source=read}));
+                    }
+                    OK(xr_lir_emit_effect(m, arms[arm], &(XrLirInstruction){.op=XR_LIR_VALUE_DROP,
+                        .type=XR_LIR_UNIT,.operands=&received,.operand_count=1,.source=read}));
+                }
+                OK(xr_lir_set_terminator(m, some, &(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
+                    .edge_count=1,.edges={{.target=active}},.source=read}));
+            }
             if (fault == LOOP_SECOND_NEXT) {
                 const XrLirSource second_read = {"cleanup.xr", 10, 9, 12, 9, 12};
                 some = test_block(m, owner, NULL, 0);
@@ -512,7 +536,8 @@ static void directory_next_requires_exact_successors(void) {
                     .type=XR_LIR_UNIT,.operands=fault_status,.operand_count=2,.source=second_read}));
             }
             OK(xr_lir_set_terminator(m, normal, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
-                .operands=&tested,.operand_count=1,.edge_count=2,.edges={{.target=some},{.target=eof}}}));
+                .operands=&tested,.operand_count=1,.edge_count=2,
+                .edges={{some,forwards ? success : NULL,forwards},{eof,forwards ? success : NULL,forwards}}}));
             if (fault == LOOP_EXIT_WRONG_SOURCE) step.source = read;
             if (fault == LOOP_LIVE_CELL) OK(xr_lir_emit_effect(m, eof, &drop));
             OK(xr_lir_emit_value(m, eof, &step, &success[1]));
@@ -533,7 +558,8 @@ static void directory_next_requires_exact_successors(void) {
 
         XrLirDiagnostic diagnostic = {0};
         XrLirStatus verified = xr_lir_module_finish(m, &diagnostic);
-        if (fault == COMPLETE || fault == LOOP || fault == LOOP_RETIRED_CELL) CHECK(verified == XR_LIR_OK);
+        if (fault == COMPLETE || fault == LOOP || fault == LOOP_RETIRED_CELL || fault == LOOP_NAME)
+            CHECK(verified == XR_LIR_OK);
         else if (fault == LOOP_LIVE_CELL) CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,
             "checked directory read requires retired Managed Cells"));
         else CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,

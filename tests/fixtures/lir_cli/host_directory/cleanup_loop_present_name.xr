@@ -1,0 +1,5 @@
+import io
+import path
+
+print(io.directoryProbePresentName(io.directoryProbeOpen(path.Path("one"))))
+print(io.directoryProbePresentName(io.directoryProbeOpen(path.Path("empty"))))

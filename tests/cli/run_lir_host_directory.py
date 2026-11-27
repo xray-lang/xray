@@ -53,6 +53,7 @@ def main() -> None:
             "cleanup_next": f"{name}\ntrue\n".encode(), "cleanup_next_non_tail": f"{name}\ntrue\n".encode(),
             "cleanup_loop": b"3\n0\n", "cleanup_loop_late_control": b"7\n3\n",
             "cleanup_loop_retired": b"2\n0\n",
+            "cleanup_loop_present_name": b"7\n0\n",
         }
         faults = ("invalid_close", "invalid_next", "stale_next", "cleanup_lifo_failure",
                   "cleanup_next_read_failure", "cleanup_next_dual_failure", "cleanup_next_close_failure",
@@ -67,6 +68,7 @@ def main() -> None:
             "cleanup_loop_write": b"operation needs a panic landing with active cleanup",
             "cleanup_loop_escape": b"operation needs a panic landing with active cleanup",
             "cleanup_loop_live_owner": b"operation needs a panic landing with active cleanup",
+            "cleanup_loop_unguarded_name": b"operation needs a panic landing with active cleanup",
         }
         for case in (*successes, *faults, *rejections):
             vm_dir, native_dir = work / (case + "-vm"), work / (case + "-native")

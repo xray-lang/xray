@@ -141,6 +141,7 @@ typedef struct LowerViews {
 } LowerViews;
 typedef struct LowerDirectoryLoop {
     const XrXirInstruction *call, *tag;
+    const XrXirInstruction *unwrap, *length;
     uint32_t block;
 } LowerDirectoryLoop;
 
@@ -1815,9 +1816,10 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             }
             if (lower_directory_projected_value(directory_tail, directory_loop, instruction)) continue;
             bool guarded_arithmetic = !cleanup_body && block->frontier && lower_cleanup_arithmetic(instruction);
+            bool directory_name = instruction == directory_loop.unwrap || instruction == directory_loop.length;
             if (guarded_arithmetic && arithmetic == ARITHMETIC_UNKNOWN)
                 arithmetic = lower_cleanup_scalar_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
-            if ((block->frontier || cleanup_body) && !(guarded_arithmetic && arithmetic == ARITHMETIC_ALLOWED) &&
+            if ((block->frontier || cleanup_body) && !directory_name && !(guarded_arithmetic && arithmetic == ARITHMETIC_ALLOWED) &&
                 !lower_cleanup_instruction(c, f, b, instruction, cleanup_body, &literal_uses)) {
                 good = lower_unsupported(c, "operation needs a panic landing with active cleanup");
                 break;
@@ -2402,6 +2404,14 @@ static XrLirOp lower_operation(const LowerFunction *f, const XrXirInstruction *o
     }
 }
 static bool lower_value(LowerFunction *f, uint32_t id, XrLirValue *out) {
+    if (f->directory_loop.unwrap && id == f->source->parameter_count +
+        (uint32_t)(f->directory_loop.call - f->source->instructions)) {
+        uint32_t cell = f->array_values ? f->array_values[id] : UINT32_MAX;
+        if (cell != UINT32_MAX && f->current[cell].id) {
+            *out = f->current[cell];
+            return true;
+        }
+    }
     if (id >= f->value_count || !f->values[id].id) {
         lower_error(f->owner, XR_LIR_VERIFY_ERROR,
                     "Checked value is unavailable during SSA construction");
@@ -3548,10 +3558,18 @@ static bool lower_directory_loop_branch(LowerFunction *f, uint32_t b, const XrXi
     XrLirInstruction branch = {.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
         .operands=&present,.operand_count=1,.edge_count=2,.source=source};
     uint32_t invert = f->directory_loop.tag->immediate != 0;
+    bool forwards = f->directory_loop.unwrap != NULL;
+    if (forwards) {
+        uint32_t value = f->source->parameter_count + (uint32_t)(f->directory_loop.call - f->source->instructions);
+        uint32_t cell = f->array_values ? f->array_values[value] : UINT32_MAX;
+        if (cell == UINT32_MAX) return lower_unsupported(c, "directory name has no incoming owner");
+        f->states[(size_t)b * f->cell_count + cell] = result;
+    }
     bool good = lower_build(c, xr_lir_emit_value(c->module, normal, &test, &present)) &&
-        lower_build(c, xr_lir_emit_effect(c->module, normal, &drop)) &&
+        (forwards || lower_build(c, xr_lir_emit_effect(c->module, normal, &drop))) &&
         lower_edge(f, b, term->targets[invert], &branch.edges[0]) &&
         lower_edge(f, b, term->targets[1 - invert], &branch.edges[1]) &&
+        (!forwards || lower_selected_edges(f, b, &branch)) &&
         lower_build(c, xr_lir_set_terminator(c->module, normal, &branch));
     xr_free((void *)branch.edges[0].arguments);
     xr_free((void *)branch.edges[1].arguments);
@@ -3770,7 +3788,8 @@ static bool lower_function(Lower *c, uint32_t index) {
     const XrXirInstruction *directory_source = f.directory_first_tail ? f.directory_first_tail : f.directory_loop.call;
     if (!directory_source) f.checked_empty_array = lower_empty_array_site(c, f.source);
     f.literal_uses = lower_literal_uses(c, f.source);
-    bool good = f.literal_uses && lower_build(c, xr_lir_define_function(c->module, f.function)) && lower_order(&f) &&
+    bool good = f.literal_uses && (!f.directory_loop.unwrap || lower_receive_type(c, f.directory_loop.call->type)) &&
+                lower_build(c, xr_lir_define_function(c->module, f.function)) && lower_order(&f) &&
                 lower_cell_inventory(&f) && lower_lexical_inventory(&f) && lower_string_updates(&f) &&
                 lower_liveness(&f) && lower_blocks(&f);
     for (uint32_t p = 0; p < f.source->parameter_count && good; ++p)

@@ -156,6 +156,28 @@ export fn directoryProbeLoopWrite(token: i64) -> i64 {
     return -1
 }
 
+export fn directoryProbePresentName(token: i64) -> i64 {
+    defer { __dirClose(token) }
+    var total = 0
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return total }
+        total = total + len(name!)
+    }
+    return -1
+}
+
+export fn directoryProbeUnguardedName(token: i64) -> i64 {
+    defer { __dirClose(token) }
+    var total = 0
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return len(name!) }
+        total = total + 1
+    }
+    return -1
+}
+
 export fn directoryProbeLoopEscape(token: i64) -> i64 {
     defer { __dirClose(token) }
     var count = 0

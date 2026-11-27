@@ -507,9 +507,35 @@ static bool lower_directory_prefix_value(const Lower *c, const XrXirBlock *block
     return lower_array_element(c, element) == XR_LIR_STRING;
 }
 
-/* Only the next/tag pair (and its single local Cell round-trip) may
- * produce or consume the directory name. The tag itself is used by the
- * immediately following branch. No value from this sequence crosses it. */
+static bool lower_directory_name_path(Lower *c, const XrXirFunction *f, LowerDirectoryLoop site, uint32_t use) {
+    uint8_t *incoming = lower_alloc(c, f->block_count, 1);
+    if (!incoming) return false;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrXirBlock *block = &f->blocks[b];
+        const XrXirInstruction *term = &f->instructions[block->first + block->count - 1];
+        uint32_t edges = lower_edge_count(c, term);
+        for (uint32_t e = 0; e < edges; ++e) {
+            uint32_t target = term->targets[e];
+            if (incoming[target] < 2) ++incoming[target];
+        }
+    }
+    uint32_t frontier = f->blocks[site.block].frontier;
+    uint32_t b = site.tag[1].targets[site.tag->immediate != 0];
+    bool known = false;
+    for (uint32_t depth = 0; depth < f->block_count; ++depth) {
+        const XrXirBlock *block = &f->blocks[b];
+        if (incoming[b] != 1 || block->frontier != frontier) break;
+        if (b == use) { known = true; break; }
+        const XrXirInstruction *term = &f->instructions[block->first + block->count - 1];
+        if (term->op != XR_XIR_JUMP) break;
+        b = term->targets[0];
+    }
+    xr_free(incoming);
+    return known;
+}
+
+/* The tag controls the immediately following branch. An immutable result may
+ * supply a length on its present path before that iteration retires it. */
 static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f) {
     LowerDirectoryLoop site = {0}, absent = {0};
     if (f->result != XR_XIR_I64 || !lower_empty_error(f->error_type)) return absent;
@@ -523,11 +549,12 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
         const XrXirInstruction *call = lower_directory_tag_call(c, f, block, tag);
         if (!call) continue;
         if (site.call || !lower_directory_frontier(c, f, block->frontier)) return absent;
-        site = (LowerDirectoryLoop){call, &f->instructions[tag], b};
+        site = (LowerDirectoryLoop){.call=call,.tag=&f->instructions[tag],.block=b};
     }
     if (!site.call) return absent;
     uint32_t first = f->parameter_count + (uint32_t)(site.call - f->instructions);
     uint32_t last = f->parameter_count + (uint32_t)(site.tag - f->instructions);
+    uint32_t name = UINT32_MAX, name_block = UINT32_MAX;
     for (uint32_t b = 0; b < f->block_count; ++b) {
         const XrXirBlock *block = &f->blocks[b];
         const XrXirInstruction *term = &f->instructions[block->first + block->count - 1];
@@ -537,6 +564,18 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             const XrXirInstruction *op = &f->instructions[i];
             if (lower_directory_loop_value(site, op)) continue;
+            if (op->op == XR_XIR_NULLABLE_UNWRAP && op->type == XR_XIR_STRING &&
+                op->args[0] == first && site.tag->args[0] == first) {
+                if (site.unwrap || b == site.block) return absent;
+                site.unwrap = op;
+                name = f->parameter_count + i;
+                name_block = b;
+                continue;
+            }
+            if (site.unwrap && op->op == XR_XIR_STRING_LEN && op->args[0] == name) {
+                if (site.length || b != name_block) return absent;
+                site.length = op;
+            }
             if ((!lower_cleanup_frame_type(c, op->type) && !lower_directory_prefix_value(c, block, op->type)) ||
                 op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) return absent;
             if (op == site.tag + 1) continue;
@@ -550,6 +589,15 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
             for (uint32_t a = step - 1; a < count; a += step)
                 if (operands[a] >= first && operands[a] <= last) return absent;
         }
+    }
+    if (site.unwrap) {
+        if (!site.length || !lower_directory_name_path(c, f, site, name_block)) return absent;
+        uint8_t *uses = lower_alloc(c, f->instruction_count, 1);
+        if (!uses) return absent;
+        lower_count_operand_uses(c, f, uses);
+        bool one_use = uses[name - f->parameter_count] == 1;
+        xr_free(uses);
+        if (!one_use) return absent;
     }
     return lower_directory_loop_repeats(c, f, site) ? site : absent;
 }
