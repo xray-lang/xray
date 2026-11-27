@@ -3066,7 +3066,7 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
     bool indirect = op->op == XR_XIR_CALL_INDIRECT && !method;
     bool direct = op->op == XR_XIR_CALL || method;
     uint32_t callee_index = method ? method->callee - 1 : (uint32_t)op->immediate;
-    uint32_t parameters = method ? 1u : op->args[1];
+    uint32_t parameters = op->args[1] + (method ? 1u : 0u);
     uint32_t hidden = direct ? lower_hidden_state(c,callee_index) : 0;
     if (hidden > UINT32_MAX - parameters) return lower_unsupported(c, "module argument count");
     if (indirect && parameters == UINT32_MAX) return lower_unsupported(c, "indirect argument count");
@@ -3077,8 +3077,8 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
     bool good = true;
     if (method) good = lower_value(f,method->receiver,&arguments[0]);
     else if (indirect) good = lower_value(f, (uint32_t)op->immediate, &arguments[0]);
-    for (uint32_t a = 0; a < op->args[1]; ++a)
-        if (!lower_value(f, f->source->operands[op->args[0] + a], &arguments[a + indirect])) {
+    for (uint32_t a = 0; good && a < op->args[1]; ++a)
+        if (!lower_value(f, f->source->operands[op->args[0] + a], &arguments[a + (indirect || method)])) {
             good = false;
             break;
         }

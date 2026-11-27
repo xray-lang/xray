@@ -1,0 +1,34 @@
+class Reader {
+    value: i64
+    init(value: i64) { this.value = value }
+
+    describe(prefix: string, amount: i64, add: bool) -> string {
+        if (add) { return prefix + string(this.value + amount) }
+        return prefix + string(this.value - amount)
+    }
+
+    combine(other: Reader, prefix: string, amount: i64) -> string {
+        return prefix + string(this.value + other.value + amount)
+    }
+}
+
+fn prefix() -> string {
+    print("prefix")
+    return "r="
+}
+
+fn amount() -> i64 {
+    print("amount")
+    return 3
+}
+
+fn main() {
+    var reader = Reader(9)
+    var other = Reader(4)
+    print(reader.describe(prefix(), amount(), true))
+    print(reader.combine(other, prefix(), amount()))
+    print(reader.value)
+    print(other.value)
+}
+
+main()

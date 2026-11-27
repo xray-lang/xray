@@ -1,4 +1,9 @@
 {
+  "read_arguments": {
+    "exit": 0,
+    "stdout": "prefix\namount\nr=12\nprefix\namount\nr=16\n9\n4\n",
+    "stderr": ""
+  },
   "string": {
     "exit": 0,
     "stdout": "route-method\nroute-retained\n",

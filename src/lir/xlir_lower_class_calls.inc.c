@@ -67,7 +67,7 @@ static void lower_class_lexical_uses(const XrXirFunction *body, const XirLexical
 static bool lower_class_immediate_call(const XrXirFunction *body, uint32_t producer) {
     const XrXirInstruction *call = &body->instructions[producer + 1];
     return body->instructions[producer].op == XR_XIR_CLASS_METHOD_REF && call->op == XR_XIR_CALL_INDIRECT &&
-        call->immediate == (int64_t)body->parameter_count + producer && !call->args[1];
+        call->immediate == (int64_t)body->parameter_count + producer;
 }
 
 static bool lower_class_calls_plan(Lower *c, uint32_t function) {
@@ -116,12 +116,23 @@ static bool lower_class_calls_plan(Lower *c, uint32_t function) {
             const XrXirInstruction *call = &body->instructions[i + 1];
             const XrXirFunction *callee = &c->source->functions[target.function];
             const XrXirTypeNode *signature = xr_xir_callable_signature(c->source->types,ref->type);
-            if (!signature || signature->parameter_count || !lower_empty_error(signature->element) ||
-                !lower_empty_error(callee->error_type) || callee->parameter_count != 1 ||
+            if (!signature || !lower_empty_error(signature->element) || !lower_empty_error(callee->error_type) ||
+                signature->parameter_count != call->args[1] || signature->parameter_count == UINT32_MAX ||
+                callee->parameter_count != signature->parameter_count + 1 ||
                 callee->parameters[0] != target.receiver_type || call->type != callee->result ||
                 xr_xir_declared_parameter_mode(c->source->types,target.receiver_type,
                     callee->consume_parameters,callee->consume_parameter_count,0) != XR_PARAM_READ)
                 continue;
+            bool exact=true;
+            for (uint32_t p=0; p<signature->parameter_count && exact; ++p) {
+                XrXirType expected=callee->parameters[p+1];
+                exact=(expected==XR_XIR_I64 || expected==XR_XIR_BOOL || expected==XR_XIR_STRING || xr_xir_type_is_class(c->source->types,expected)) &&
+                    expected==signature->parameters[p].type &&
+                    expected==xr_xir_operand_type(body,body->operands[call->args[0]+p]) &&
+                    xr_xir_declared_parameter_mode(c->source->types,expected,
+                        callee->consume_parameters,callee->consume_parameter_count,p+1)==XR_PARAM_READ;
+            }
+            if (!exact) continue;
             if (!plan->calls)
                 plan->calls = xir_compile_calloc(context,body->instruction_count,sizeof(*plan->calls),&status);
             if (status == XR_XIR_OK)

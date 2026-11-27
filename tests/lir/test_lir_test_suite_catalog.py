@@ -236,6 +236,27 @@ def check_crypto_catalogs(args, root):
         assert native_report.read_bytes() == vm_report.read_bytes(), source
 
 
+def check_datetime_catalogs(args, root):
+    expected_counts = {"1421_datetime_format": 13, "1422_datetime_calc": 21}
+    for name, count in expected_counts.items():
+        source = f"tests/regression/10_stdlib/{name}.xr"
+        path = args.source_root / source
+        raw = path.read_bytes()
+        work = root / name
+        work.mkdir()
+        vm, generated, vm_report = vm_products(args, work, args.source_root, source)
+        assert vm[0] == 0 and not vm[2], (vm, source)
+        plan = catalog(vm_report, source, raw, (count, 0, 0))
+        assert all(row["role"] == 1 and row["timeout"] == 0 for row in plan["entries"]), source
+
+        binary = native_executable(args, work, generated, "suite", optimize=False)
+        native_report = work / "native.json"
+        native = invoke(work, "suite-native", [binary, native_report])
+        assert native[0] == 0 and not native[2], (native, source)
+        assert native_report.read_bytes() == vm_report.read_bytes(), source
+
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for option in ("vm-driver", "compiler", "include", "source-root", "work"):
@@ -282,6 +303,7 @@ def main():
     check_nullable_string_comparisons(args, root / "nullable-string-comparisons")
     check_invoke_string_owners(args, root / "invoke-string-owners")
     check_crypto_catalogs(args, root)
+    check_datetime_catalogs(args, root)
     print(f"Executed VM and generated C suite catalogs for LF, CRLF, a guest panic, and Crypto. Artifacts at {root}")
 
 
