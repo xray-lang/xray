@@ -144,14 +144,14 @@ static XrSourceCompileStatus source_compile(
     XrSourceCompileStatus status = XR_SOURCE_COMPILE_BAD_ARGUMENT;
     if (!request || !request->context || !request->context->resources ||
         (!validation_only && (!output || output->checked || output->snapshot)) || !request->absolute_entry_path ||
-        !request->absolute_stdlib_path || !source_catalog_matches(request) ||
+        !source_catalog_matches(request) ||
         (request->session && xr_compile_session_resources(request->session) != request->context->resources))
         goto rejected;
     XrOsIoPolicy policy = xr_compile_io_policy(request->context->resources);
     XrIoContext io = {&policy, XR_OS_IO_OK};
     detail.stage = XR_SOURCE_COMPILE_PATH;
     if (!source_absolute(&io, request->absolute_entry_path) ||
-        !source_absolute(&io, request->absolute_stdlib_path)) {
+        (request->absolute_stdlib_path && !source_absolute(&io, request->absolute_stdlib_path))) {
         status = io.status == XR_OS_IO_OK ? XR_SOURCE_COMPILE_BAD_ARGUMENT : source_io_status(io.status);
         goto rejected;
     }
@@ -162,9 +162,9 @@ static XrSourceCompileStatus source_compile(
     XrXirSourceResult source = {0};
     XrManifestDiagnostic authority_fact = {0};
     io_status(&io, xr_realpath_owned(&policy, request->absolute_entry_path, &entry));
-    if (io.status == XR_OS_IO_OK)
+    if (io.status == XR_OS_IO_OK && request->absolute_stdlib_path)
         io_status(&io, xr_realpath_owned(&policy, request->absolute_stdlib_path, &stdlib));
-    if (io.status == XR_OS_IO_OK) {
+    if (io.status == XR_OS_IO_OK && stdlib) {
         XrFsStat info = {0};
         io_status(&io, xr_os_io_stat(&policy, stdlib, &info));
         if (io.status == XR_OS_IO_OK && info.kind != XR_FS_DIR) io_status(&io, XR_OS_IO_BAD_ARGUMENT);

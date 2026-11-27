@@ -20,7 +20,8 @@ typedef enum XrSourcePathStage {
  * configured with XRAY_SOURCE_TREE_STDLIB, the checkout's own stdlib. */
 typedef enum XrStdlibOrigin {
     XR_STDLIB_ENVIRONMENT, XR_STDLIB_EXECUTABLE_DEVELOPMENT,
-    XR_STDLIB_EXECUTABLE_INSTALLED, XR_STDLIB_WORKING_DIRECTORY, XR_STDLIB_SOURCE_TREE
+    XR_STDLIB_EXECUTABLE_INSTALLED, XR_STDLIB_WORKING_DIRECTORY, XR_STDLIB_SOURCE_TREE,
+    XR_STDLIB_EMBEDDED
 } XrStdlibOrigin;
 typedef struct XrSourcePaths {
     char *entry, *stdlib;
@@ -46,8 +47,8 @@ typedef struct XrStdlibPath {
     XrStdlibOrigin origin;
 } XrStdlibPath;
 /* Select the real standard-library path independently of entry storage. This
- * uses exactly the file entry's environment/executable/cwd precedence. It
- * grants no source or Catalog authority; callers still load the actual
+ * uses the file entry's environment/executable/cwd precedence and requires a
+ * physical directory. Callers still load the actual
  * descriptor/Catalog and admit their file or owned text entry. No dummy file
  * path is accepted or probed. Failure preserves an initially empty output.
  * A diagnostic that still owns candidates is a bad argument and is untouched. */
@@ -58,7 +59,9 @@ XR_FUNC void xr_source_stdlib_path_free(XrStdlibPath *path);
 /* Output must be zero-initialized and changes only on success. Relative input
  * follows the process working directory. A nonempty XRAY_STDLIB_PATH is
  * mandatory when present; otherwise only absent candidates permit trying the
- * next layout. These paths locate inputs; they do not grant module authority.
+ * next layout. When every default directory is absent, the stdlib path is
+ * NULL and its origin is XR_STDLIB_EMBEDDED. These paths locate inputs; they
+ * do not grant module authority.
  * Both strings retain the caller ledger independently of its external owner.
  * A diagnostic that still owns candidates is a bad argument and is untouched. */
 XR_FUNC XrSourceCompileStatus xr_source_paths(XrCompileResources *resources,

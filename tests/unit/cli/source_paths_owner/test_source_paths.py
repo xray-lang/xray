@@ -2,7 +2,8 @@
 
 An optional second argument names the checkout stdlib that CMake injected as
 the last default candidate. Without it the binary is a package configuration
-and an empty layout must fail after naming every location it tried."""
+and an empty layout uses embedded source for a file while the independent
+physical path lookup still reports all rejected candidates."""
 from pathlib import Path
 import os
 import shutil
@@ -23,7 +24,7 @@ with tempfile.TemporaryDirectory(prefix="xray-source-paths-") as temporary:
     value = "中文 😀 value"
     count = 0
     def run(layout, mode, override, expected, origin=0, status=0, env_value=value, source="入口.xr",
-            tried=lambda home: []):
+            tried=lambda home: [], physical_status=None):
         global count
         count += 1
         home = base / f"layout{count}"
@@ -53,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix="xray-source-paths-") as temporary:
         # valid explicit stdlib override and deliberately invalid source files.
         entry_rejected = source in ("missing.xr", ".")
         selected_expected = override if entry_rejected else expected
-        selected_status = 0 if entry_rejected else status
+        selected_status = physical_status if physical_status is not None else (0 if entry_rejected else status)
         command = [str(executable), mode, source, str(expected or ""), str(origin), str(status), env_value or "", str(executable), str(selected_expected or ""), str(selected_status)]
         result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, timeout=100)
         print(f"case={count} layout={layout} mode={mode} status={status}")
@@ -64,16 +65,17 @@ with tempfile.TemporaryDirectory(prefix="xray-source-paths-") as temporary:
         # A failed selection owns exactly the rejected spellings, in probe order.
         locations = [] if entry_rejected else [str(path) for path in tried(home)]
         lines = stdout.splitlines()
-        for prefix in ("candidate=", "stdlib-candidate="):
+        for prefix, failure in (("candidate=", status), ("stdlib-candidate=", selected_status)):
             reported = [line[len(prefix):] for line in lines if line.startswith(prefix)]
-            assert reported == locations, (prefix, reported, locations)
+            expected_locations = locations if failure else []
+            assert reported == expected_locations, (prefix, reported, expected_locations)
     run("none", "matrix", outside, outside)
     run("development", "matrix", None, None, 1)
     run("installed", "normal", "", None, 2, env_value="")
     if source_tree:
         run("none", "matrix", None, source_tree, 4)
     else:
-        run("none", "normal", None, None, status=2, tried=lambda home: [
+        run("none", "normal", None, None, origin=5, physical_status=2, tried=lambda home: [
             home / "stdlib", home / "lib" / "xray" / "stdlib", cwd / "stdlib"])
     (cwd / "stdlib").mkdir()
     run("none", "absent", None, cwd / "stdlib", 3, env_value=None)

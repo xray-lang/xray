@@ -53,7 +53,9 @@ static XrSourceCompileStatus run_paths(const char *entry, const XrCompileResourc
     CHECK(stats->allocated_bytes == total && stats->held_bytes == live && stats->peak_bytes == peak);
     xr_compile_resources_release(r);
     if (status == XR_SOURCE_COMPILE_OK) {
-        expected_path(paths.stdlib, stdlib); CHECK((unsigned)paths.stdlib_origin == origin);
+        CHECK((unsigned)paths.stdlib_origin == origin);
+        if (paths.stdlib_origin == XR_STDLIB_EMBEDDED) CHECK(!paths.stdlib && !stdlib[0]);
+        else expected_path(paths.stdlib, stdlib);
         CHECK(paths.entry && paths.entry[0]);
     } else CHECK(!paths.entry && !paths.stdlib && !paths.stdlib_origin);
     candidates_check(status, &diagnostic, report);
@@ -178,7 +180,9 @@ int wmain(int argc, wchar_t **wide) {
     CHECK(run_paths(argv[2], &public_limits, SIZE_MAX, &stats, argv[3], origin, "candidate") == expected);
     XrSourceCompileStatus selected_expected=(XrSourceCompileStatus)strtoul(argv[9],NULL,10);
     CHECK(run_stdlib(&public_limits,SIZE_MAX,&stats,argv[8],origin,"stdlib-candidate")==selected_expected);
-    if (!strcmp(argv[1], "matrix")) { path_matrix(argv[2], argv[3], origin); stdlib_matrix(argv[8],origin); }
+    bool matrix = !strcmp(argv[1], "matrix");
+    if (matrix || origin == XR_STDLIB_EMBEDDED) path_matrix(argv[2], argv[3], origin);
+    if (matrix) stdlib_matrix(argv[8],origin);
     CHECK(handles() == baseline && !live);
     puts("owned queries, output preservation, producer death and exact handle delta zero PASS");
     for (int i = 0; i < argc; ++i) physical_free(argv[i]);

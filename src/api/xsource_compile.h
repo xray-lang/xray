@@ -18,7 +18,7 @@
 typedef struct XrSourceCompileRequest {
     const XrXirCompileContext *context;
     const char *absolute_entry_path;
-    const char *absolute_stdlib_path;
+    const char *absolute_stdlib_path; /* NULL selects only embedded standard-library modules. */
     const struct XrXirLibraryCatalog *libraries;
     XrTomlParseLimits manifest_limits;
     XrCompilerSession *session; /* NULL creates a temporary parser owner; otherwise borrows this exact ledger. */

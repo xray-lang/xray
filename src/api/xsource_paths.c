@@ -74,7 +74,7 @@ static const PathsLayout paths_layouts[] = {
  * It neither accepts nor probes a source entry. Authority admission remains the
  * caller's explicit file/text operation. Only NOT_FOUND permits a fallback. */
 static void paths_select_stdlib(XrIoContext *io,char **output,XrStdlibOrigin *origin,
-    XrSourcePathsDiagnostic *detail,bool *wrong_kind) {
+    XrSourcePathsDiagnostic *detail,bool *wrong_kind,bool allow_embedded) {
     char *override=NULL,*executable=NULL,*directory=NULL;
     detail->stage = XR_SOURCE_PATH_ENVIRONMENT;
     XrOsIoStatus queried = xr_os_io_environment_get(io->policy, "XRAY_STDLIB_PATH", &override);
@@ -105,7 +105,8 @@ static void paths_select_stdlib(XrIoContext *io,char **output,XrStdlibOrigin *or
         *origin = layout->origin;
         goto cleanup;
     }
-    io_status(io, XR_OS_IO_NOT_FOUND);
+    if (allow_embedded) *origin = XR_STDLIB_EMBEDDED;
+    else io_status(io, XR_OS_IO_NOT_FOUND);
 cleanup:
     io_free(io,directory);io_free(io,executable);io_free(io,override);
 }
@@ -126,7 +127,7 @@ XR_FUNC XrSourceCompileStatus xr_source_stdlib_path(XrCompileResources *resource
     if(!resources||!output||output->path||output->origin)goto done;
     XrOsIoPolicy policy=xr_compile_io_policy(resources);XrIoContext io={&policy,XR_OS_IO_OK};
     XrStdlibPath owned={0};bool wrong_kind=false;
-    paths_select_stdlib(&io,&owned.path,&owned.origin,&detail,&wrong_kind);
+    paths_select_stdlib(&io,&owned.path,&owned.origin,&detail,&wrong_kind,false);
     detail.io_status=io.status;
     detail.status=wrong_kind?XR_SOURCE_COMPILE_INVALID:paths_status(io.status);
     if(detail.status==XR_SOURCE_COMPILE_OK)*output=owned;
@@ -163,7 +164,7 @@ XR_FUNC XrSourceCompileStatus xr_source_paths(XrCompileResources *resources,
         }
     }
     if (io.status != XR_OS_IO_OK) goto cleanup;
-    paths_select_stdlib(&io,&owned.stdlib,&owned.stdlib_origin,&detail,&wrong_kind);
+    paths_select_stdlib(&io,&owned.stdlib,&owned.stdlib_origin,&detail,&wrong_kind,true);
 cleanup:
     detail.io_status = io.status;
     detail.status = wrong_kind ? XR_SOURCE_COMPILE_INVALID : paths_status(io.status);
