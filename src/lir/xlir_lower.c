@@ -1813,8 +1813,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
                 }
                 continue;
             }
-            if ((directory_tail && instruction == term) ||
-                lower_directory_loop_value(directory_loop, instruction)) continue;
+            if (lower_directory_projected_value(directory_tail, directory_loop, instruction)) continue;
             bool guarded_arithmetic = !cleanup_body && block->frontier && lower_cleanup_arithmetic(instruction);
             if (guarded_arithmetic && arithmetic == ARITHMETIC_UNKNOWN)
                 arithmetic = lower_cleanup_scalar_frame(c, f) ? ARITHMETIC_ALLOWED : ARITHMETIC_REFUSED;
@@ -2114,9 +2113,10 @@ static bool lower_cell_inventory(LowerFunction *f) {
     for (uint32_t b = 0; b < source->block_count; ++b)
         if (f->reachable[b]) {
             const XrXirBlock *block = &source->blocks[b];
+            const XrXirInstruction *tail = f->directory_first_tail ? lower_directory_tail(c, source, b) : NULL;
             for (uint32_t i = block->first; i < block->first + block->count; ++i) {
                 const XrXirInstruction *op = &source->instructions[i];
-                if (lower_state_new(op->op) && !lower_directory_loop_value(f->directory_loop, op) &&
+                if (lower_state_new(op->op) && !lower_directory_projected_value(tail, f->directory_loop, op) &&
                     !lower_binding_storage(f, op) &&
                     !lower_managed_storage(f, op) &&
                     lower_module_cell(c, c->function, source->parameter_count + i) == UINT32_MAX) {
@@ -2164,10 +2164,11 @@ static bool lower_liveness(LowerFunction *f) {
     for (uint32_t b = 0; b < source->block_count; ++b)
         if (f->reachable[b]) {
             const XrXirBlock *block = &source->blocks[b];
+            const XrXirInstruction *tail = f->directory_first_tail ? lower_directory_tail(c, source, b) : NULL;
             for (uint32_t i = block->first; i < block->first + block->count; ++i) {
                 const XrXirInstruction *op = &source->instructions[i];
                 lower_array_flow_liveness(f, b, i);
-                if (lower_directory_loop_value(f->directory_loop, op) ||
+                if (lower_directory_projected_value(tail, f->directory_loop, op) ||
                     lower_managed_storage(f, op) || lower_binding_storage(f, op)) continue;
                 if (lower_module_cell(c, c->function, lower_state_new(op->op)
                         ? source->parameter_count + i : op->args[0]) != UINT32_MAX) continue;
@@ -3204,7 +3205,7 @@ static bool lower_body(LowerFunction *f, uint32_t b) {
         c->instruction = i;
         if (f->lexical.count && !lower_lexical_events(f, b, f->lexical.before[i])) return false;
         const XrXirInstruction *op = &f->source->instructions[i];
-        if (op == directory_tail || lower_directory_loop_value(f->directory_loop, op)) continue;
+        if (lower_directory_projected_value(directory_tail, f->directory_loop, op)) continue;
         uint32_t result = f->source->parameter_count + i;
         if (op->op == XR_XIR_CLASS_METHOD_REF) {
             if (!lower_class_call(c,c->function,i + 1))

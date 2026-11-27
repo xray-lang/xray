@@ -1,3 +1,10 @@
 import io
+import path
 
-io.directoryProbeNextNonTail(0)
+const one = io.directoryProbeOpen(path.Path("one"))
+const empty = io.directoryProbeOpen(path.Path("empty"))
+assert(one > 0 && empty > 0 && one != empty)
+const name = io.directoryProbeNextNonTail(one, one)
+assert(name != null)
+print(name!)
+print(io.directoryProbeNextNonTail(empty, empty) == null)

@@ -402,14 +402,32 @@ static bool lower_directory_frontier(const Lower *c, const XrXirFunction *f, uin
     return true;
 }
 
+/* A directory result may pass through a local cell before its adjacent use.
+ * The consuming patterns verify that there are no other uses of that cell. */
+static const XrXirInstruction *lower_directory_operand(const Lower *c, const XrXirFunction *f,
+    const XrXirBlock *block, uint32_t index) {
+    const XrXirInstruction *use = &f->instructions[index];
+    uint32_t id = f->parameter_count + index;
+    if (index == block->first || use->args[0] != id - 1) return NULL;
+    const XrXirInstruction *call = use - 1;
+    if (call->op == XR_XIR_CELL_READ) {
+        if (index - block->first < 3 || call->args[0] != id - 2 ||
+            call[-1].op != XR_XIR_CELL_NEW || call[-1].args[0] != id - 3 ||
+            xr_xir_cell_element(c->source->types, call[-1].type) != call->type ||
+            call[-2].type != call->type) return NULL;
+        call -= 2;
+    }
+    return lower_directory_read(c, f, call) ? call : NULL;
+}
+
 static const XrXirInstruction *lower_directory_tail(const Lower *c, const XrXirFunction *f, uint32_t b) {
     const XrXirBlock *block = &f->blocks[b];
     if (!block->frontier || block->panic || block->count < 2 ||
         xr_xir_nullable_element(c->source->types, f->result) != XR_XIR_STRING) return NULL;
-    uint32_t at = block->first + block->count - 2;
-    const XrXirInstruction *call = &f->instructions[at];
-    return call[1].op == XR_XIR_RETURN && call[1].args[0] == f->parameter_count + at &&
-        call->type == f->result && lower_directory_read(c, f, call) &&
+    uint32_t at = block->first + block->count - 1;
+    if (f->instructions[at].op != XR_XIR_RETURN) return NULL;
+    const XrXirInstruction *call = lower_directory_operand(c, f, block, at);
+    return call && call->type == f->result &&
         lower_directory_frontier(c, f, block->frontier) ? call : NULL;
 }
 
@@ -425,7 +443,8 @@ static const XrXirInstruction *lower_directory_tail_frame(const Lower *c, const 
         if (block->panic || !block->count ||
             (f->instructions[block->first + block->count - 1].op == XR_XIR_RETURN && !tail)) return NULL;
         for (uint32_t i = block->first; i < block->first + block->count; ++i)
-            if (&f->instructions[i] != tail && !lower_cleanup_frame_type(c, f->instructions[i].type)) return NULL;
+            if ((!tail || &f->instructions[i] < tail) && !lower_cleanup_frame_type(c, f->instructions[i].type))
+                return NULL;
         if (!first_tail) first_tail = tail;
     }
     return first_tail;
@@ -435,21 +454,18 @@ static bool lower_directory_loop_value(LowerDirectoryLoop loop, const XrXirInstr
     return loop.call && op >= loop.call && op <= loop.tag;
 }
 
+static bool lower_directory_projected_value(const XrXirInstruction *tail, LowerDirectoryLoop loop,
+    const XrXirInstruction *op) {
+    return (tail && op >= tail) || lower_directory_loop_value(loop, op);
+}
+
 static const XrXirInstruction *lower_directory_tag_call(const Lower *c, const XrXirFunction *f,
     const XrXirBlock *block, uint32_t tag_index) {
     const XrXirInstruction *tag = &f->instructions[tag_index];
     uint32_t value = f->parameter_count + tag_index;
     if (tag->op != XR_XIR_NULLABLE_IS_SOME || (tag->immediate != 0 && tag->immediate != 1) ||
-        tag->args[0] != value - 1 || tag[1].op != XR_XIR_BRANCH || tag[1].args[0] != value) return NULL;
-    const XrXirInstruction *call = tag - 1;
-    if (call->op == XR_XIR_CELL_READ) {
-        if (tag_index - block->first < 3 || call->args[0] != value - 2 ||
-            call[-1].op != XR_XIR_CELL_NEW || call[-1].args[0] != value - 3 ||
-            xr_xir_cell_element(c->source->types, call[-1].type) != call->type ||
-            call[-2].type != call->type) return NULL;
-        call -= 2;
-    }
-    return lower_directory_read(c, f, call) ? call : NULL;
+        tag[1].op != XR_XIR_BRANCH || tag[1].args[0] != value) return NULL;
+    return lower_directory_operand(c, f, block, tag_index);
 }
 
 static bool lower_directory_loop_repeats(Lower *c, const XrXirFunction *f, LowerDirectoryLoop site) {

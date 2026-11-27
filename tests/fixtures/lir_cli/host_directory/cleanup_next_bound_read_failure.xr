@@ -1,0 +1,6 @@
+import io
+import path
+
+const one = io.directoryProbeOpen(path.Path("one"))
+assert(one > 0)
+io.directoryProbeNextNonTail(one, -1)

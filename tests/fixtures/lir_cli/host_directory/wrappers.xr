@@ -70,9 +70,16 @@ export fn directoryProbeNextPair(first: i64, second: i64, read: i64) -> string? 
     return __dirNext(read) // checked read
 }
 
-export fn directoryProbeNextNonTail(token: i64) -> string? {
+export fn directoryProbeNextNonTail(token: i64, read: i64) -> string? {
+    defer { __dirClose(token) }
+    var result = __dirNext(read) // checked bound read
+    return result
+}
+
+export fn directoryProbeNextReassigned(token: i64) -> string? {
     defer { __dirClose(token) }
     var result = __dirNext(token)
+    result = null
     return result
 }
 
