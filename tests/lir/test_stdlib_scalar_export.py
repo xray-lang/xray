@@ -178,6 +178,7 @@ def bundle_cases(args, root):
     assert [path.read_bytes() for path in pending] == prior
 
     if args.interface:
+        unrepresented_exports(args, root, stdlib, math_source, stock, pending)
         helper = math_source.with_name("_bundle_helper.xr")
         helper.write_text("export fn blend(a: f64, b: f64, t: f64) -> f64 { return a * (b + t) }\n",
                           encoding="utf-8")
@@ -187,6 +188,39 @@ def bundle_cases(args, root):
         run([args.producer, stdlib, "--bundle", *pending[:2]], cwd=root)
         assert pending[0].read_bytes() != prior[0]
         before = [path.read_bytes() for path in pending]
+        failure = run([args.producer, stdlib, "--bundle", *pending], cwd=root, expected_exit=1)
+        assert b"cannot project the complete dependency-free Checked interface" in failure.stderr
+        assert [path.read_bytes() for path in pending] == before
+
+
+def unrepresented_exports(args, root, stdlib, math_source, stock, pending):
+    fixtures = {
+        "enum": (
+            "export enum VerifiedMark { Ready }",
+            "import { VerifiedMark } from math\n"
+            "fn observed() -> i64 {\n"
+            "    const v = VerifiedMark.Ready\n"
+            "    if (v == VerifiedMark.Ready) { return 42 }\n"
+            "    return 0\n"
+            "}\n"
+            "print(observed())\n",
+        ),
+        "interface": (
+            "export interface FutureMathMode { mode(value: i64) -> i64 }",
+            "import { FutureMathMode } from math\nprint(42)\n",
+        ),
+    }
+    before = [path.read_bytes() for path in pending]
+    env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR="1")
+    for name, (declaration, guest) in fixtures.items():
+        math_source.write_text(f"{stock}\n{declaration}\n", encoding="utf-8")
+        entry = root / f"import-{name}.xr"
+        entry.write_text(guest, encoding="utf-8")
+        binary = root / f"import-{name}{'.exe' if os.name == 'nt' else ''}"
+        vm = run([args.xray, "run", entry], cwd=root, env=env)
+        run([args.xray, "build", entry, "-o", binary, "--cc", args.compiler], cwd=root, env=env)
+        native = run([binary], cwd=root, env=env)
+        assert vm.stdout == native.stdout == b"42\n" and not vm.stderr and not native.stderr
         failure = run([args.producer, stdlib, "--bundle", *pending], cwd=root, expected_exit=1)
         assert b"cannot project the complete dependency-free Checked interface" in failure.stderr
         assert [path.read_bytes() for path in pending] == before
@@ -394,6 +428,7 @@ int main(void) {
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--producer", type=Path, required=True)
+    parser.add_argument("--xray", type=Path, required=True)
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--generated", type=Path, required=True)
     parser.add_argument("--interface", type=Path)

@@ -190,6 +190,7 @@ if(TARGET xray_stdlib_scalar_export)
     endif()
     set(lir_c_native_command ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_stdlib_scalar_export.py"
         --producer $<TARGET_FILE:xray_stdlib_scalar_producer>
+        --xray $<TARGET_FILE:xray>
         --archive $<TARGET_FILE:xray_stdlib_scalar_export>
         --generated "${XRAY_STDLIB_SCALAR_EXPORT_C}"
         ${stdlib_export_interface} --internal-include "${PROJECT_SOURCE_DIR}/src"

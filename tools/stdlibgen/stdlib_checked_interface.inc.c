@@ -90,20 +90,61 @@ static bool interface_initializer(CheckedMathInterface *view) {
     return true;
 }
 
-static bool interface_source(const XrXirSourceSnapshot *snapshot, const XrXirSourceModule *root,
-    XrFingerprint *output) {
+static bool interface_checked_function(const CheckedMathInterface *view, const char *name) {
+    for (uint32_t i = 0; i < view->checked->function_count; ++i) {
+        const XrXirFunctionIdentity *identity = &view->checked->declarations->functions[i];
+        const XrXirFunction *function = &view->checked->functions[i];
+        if (identity->module == view->root && identity->exported &&
+            same_name(function->name, function->name_length, name)) return true;
+    }
+    return false;
+}
+
+static bool interface_checked_slot(const CheckedMathInterface *view, const XrXirSourceDeclaration *declaration) {
+    if (declaration->mutable || !declaration->type.known) return false;
+    for (uint32_t i = 0; i < view->slots->count; ++i) {
+        const XrXirSlotFact *fact = &view->slots->rows[i];
+        if (same_name(fact->name, fact->name_length, declaration->name))
+            return view->checked->declarations->slots[i].type == declaration->type.type;
+    }
+    return false;
+}
+
+static bool interface_source(const XrXirSourceSnapshot *snapshot, CheckedMathInterface *view) {
     const XrXirSourceView *source = xr_xir_compile_source_snapshot_view(snapshot);
     if (!source || !source->complete) return false;
-    bool found = false;
+    const XrXirSourceModule *root = &view->checked->declarations->modules[view->root];
+    uint32_t module = UINT32_MAX;
     const XrFingerprint empty = {0};
     for (uint32_t i = 0; i < source->module_count; ++i) {
         const XrXirSourceQueryModule *unit = &source->modules[i];
         if (!same_name(root->name, root->name_length, unit->identity)) continue;
-        if (found || !unit->path || !memcmp(&unit->fingerprint, &empty, sizeof(empty))) return false;
-        *output = unit->fingerprint;
-        found = true;
+        if (module != UINT32_MAX || !unit->path || !memcmp(&unit->fingerprint, &empty, sizeof(empty))) return false;
+        module = i;
     }
-    return found;
+    if (module == UINT32_MAX) return false;
+
+    /* The Source snapshot includes exported nominal and interface declarations
+     * that are absent from the Checked function and slot lists. */
+    uint32_t functions = 0, slots = 0;
+    for (uint32_t i = 0; i < source->declaration_count; ++i) {
+        const XrXirSourceDeclaration *declaration = &source->declarations[i];
+        if (declaration->range.module != module || !declaration->exported) continue;
+        if (declaration->parent || !declaration->name) return false;
+        switch (declaration->kind) {
+        case XR_XIR_SOURCE_FUNCTION:
+            if (++functions > view->functions || !interface_checked_function(view, declaration->name)) return false;
+            break;
+        case XR_XIR_SOURCE_BINDING:
+            if (++slots > view->slots->count || !interface_checked_slot(view, declaration)) return false;
+            break;
+        default:
+            return false;
+        }
+    }
+    if (functions != view->functions || slots != view->slots->count) return false;
+    view->source_fingerprint = source->modules[module].fingerprint;
+    return true;
 }
 
 static bool prepare_interface(const XrXirSourceResult *source, const ScalarOutput *exports, CheckedMathInterface *view) {
@@ -115,7 +156,6 @@ static bool prepare_interface(const XrXirSourceResult *source, const ScalarOutpu
     if (!view->slots || view->slots->count != declarations->slot_count ||
         (view->slots->count && !view->slots->rows) ||
         (checked->defaults && checked->defaults->count) || !interface_initializer(view) ||
-        !interface_source(source->snapshot, &declarations->modules[view->root], &view->source_fingerprint) ||
         xr_xir_compile_effects_analyze(source->checked, &view->effects) != XR_XIR_OK) return false;
 
     for (uint32_t i = 0; i < view->slots->count; ++i) {
@@ -137,7 +177,7 @@ static bool prepare_interface(const XrXirSourceResult *source, const ScalarOutpu
     }
     for (uint32_t binding = 0; binding < MATH_SCALAR_EXPORT_COUNT; ++binding)
         if (view->binding_rows[binding] >= view->functions) return false;
-    return true;
+    return interface_source(source->snapshot, view);
 }
 
 static void write_interface_name(FILE *file, XrXirLiteral name) {
