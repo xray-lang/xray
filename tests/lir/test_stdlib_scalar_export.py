@@ -1,7 +1,9 @@
 """Link the archive produced by the toolchain build and check export authority."""
 import argparse
+import hashlib
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -28,14 +30,24 @@ def private_dependency(args, root):
         if config.is_file():
             command += ["-f", config.name]
         lexical_source = args.stdlib / "path/_lexical.xr"
-        for generated in (args.generated, abs_generated(args)):
+        outputs = [args.generated, abs_generated(args)]
+        if args.interface:
+            outputs.append(args.interface)
+        targets = [path.relative_to(build).as_posix() for path in outputs]
+        for target in targets:
             graph = subprocess.check_output(
-                [*command, "-t", "query", generated.relative_to(build).as_posix()],
+                [*command, "-t", "query", target],
                 cwd=build, encoding="utf-8", timeout=10,
             )
             dependencies = {os.path.normcase(line.strip()) for line in graph.splitlines()}
             assert os.path.normcase(str(lexical_source)) in dependencies
             assert os.path.normcase(inventory.relative_to(build).as_posix()) in dependencies
+        invocations = subprocess.check_output(
+            [*command, "-t", "commands", *targets], cwd=build, encoding="utf-8", timeout=10,
+        ).splitlines()
+        bundle = [line for line in invocations if " --bundle " in line]
+        assert len(bundle) == 1 and all(path.name in bundle[0] for path in outputs), bundle
+        assert ("stdlib_checked_math_interface.c" in bundle[0]) == bool(args.interface)
 
     stdlib = root / "模块 🧪"
     math = stdlib / "math"
@@ -137,6 +149,61 @@ def authority_cases(args, root):
     return empty
 
 
+def bundle_cases(args, root):
+    published = [args.generated, abs_generated(args)]
+    if args.interface:
+        published.append(args.interface)
+    pending = [root / (path.name + ".pending") for path in published]
+    run([args.producer, args.stdlib, "--bundle", *pending], cwd=root)
+    assert [path.read_bytes() for path in pending] == [path.read_bytes() for path in published]
+
+    stdlib = root / "bundle-stdlib"
+    math_source = stdlib / "math/math.xr"
+    math_source.parent.mkdir(parents=True)
+    stock = (args.stdlib / "math/math.xr").read_text(encoding="utf-8")
+    prior = [path.read_bytes() for path in pending]
+
+    math_source.write_text(stock.replace("return __abs(x)", "return true"), encoding="utf-8")
+    failure = run([args.producer, stdlib, "--bundle", *pending], cwd=root, expected_exit=1)
+    assert len(re.findall(rb"math[\\/]math\.xr:\d+:\d+:", failure.stderr)) == 1
+    assert b"cannot check standard library source" in failure.stderr
+    assert [path.read_bytes() for path in pending] == prior
+
+    wrong = stock.replace("export fn abs(x: f64) -> f64 {\n    return __abs(x)",
+                          "export fn abs(x: i64) -> f64 {\n    return 17.0")
+    assert wrong != stock
+    math_source.write_text(wrong, encoding="utf-8")
+    failure = run([args.producer, stdlib, "--bundle", *pending], cwd=root, expected_exit=1)
+    assert b"math.abs: cannot validate the declared scalar ABI" in failure.stderr
+    assert [path.read_bytes() for path in pending] == prior
+
+    if args.interface:
+        helper = math_source.with_name("_bundle_helper.xr")
+        helper.write_text("export fn blend(a: f64, b: f64, t: f64) -> f64 { return a * (b + t) }\n",
+                          encoding="utf-8")
+        imported = 'import "std/math/_bundle_helper" as helper\n' + stock.replace(
+            "return a + (b - a) * t", "return helper.blend(a, b, t)")
+        math_source.write_text(imported, encoding="utf-8")
+        run([args.producer, stdlib, "--bundle", *pending[:2]], cwd=root)
+        assert pending[0].read_bytes() != prior[0]
+        before = [path.read_bytes() for path in pending]
+        failure = run([args.producer, stdlib, "--bundle", *pending], cwd=root, expected_exit=1)
+        assert b"cannot project the complete dependency-free Checked interface" in failure.stderr
+        assert [path.read_bytes() for path in pending] == before
+
+
+def expected_interface(source):
+    functions = re.findall(r"^export\s+fn\s+(\w+)\s*\(([^)]*)\)\s*->\s*(\w+)\s*\{", source, re.M)
+    slots = re.findall(r"^export\s+const\s+(\w+)\s*:\s*(\w+)\s*=", source, re.M)
+    assert (len(functions), len(slots)) == (37, 14)
+    result = []
+    for name, parameters, output in functions:
+        labels = ", ".join(item.strip() for item in parameters.split(",") if item.strip())
+        result.append(f"fn {name}({labels}) -> {output}")
+    result.extend(f"const {name} {type_name}" for name, type_name in slots)
+    return result
+
+
 def link_archive(args, root, empty):
     consumer = root / "consumer.c"
     consumer.write_text(
@@ -147,10 +214,101 @@ def link_archive(args, root, empty):
 #include <fcntl.h>
 #include <io.h>
 #endif
+#ifdef XRAY_TEST_MATH_INTERFACE
+#include "xir/xxir_builtin_stdlib.h"
+#include "xir/xxir_target.h"
+#include <assert.h>
+#endif
 extern double xray_stdlib_math_lerp(double, double, double);
 extern double xray_stdlib_math_abs(double);
 
-static int check_abs(void) {
+typedef double (*Unary)(double);
+typedef double (*Ternary)(double, double, double);
+
+#ifdef XRAY_TEST_MATH_INTERFACE
+static bool named(XrXirLiteral name, const char *s) {
+    return name.length == strlen(s) && !memcmp(name.bytes, s, name.length);
+}
+
+static const char *type_name(XrXirType type) {
+    switch (type) {
+    case XR_XIR_BOOL: return "bool";
+    case XR_XIR_I64: return "i64";
+    case XR_XIR_F64: return "f64";
+    default: assert(false); return "";
+    }
+}
+
+static void check_initializer(const XrXirBuiltinStdlibModule *module) {
+    assert(module->slot_count == 14 && module->initializer_count == 35);
+    assert(module->initializer_error == XR_XIR_ERROR &&
+           module->initializer[module->initializer_count - 1].op == XR_XIR_RETURN);
+    bool initialized[14] = {false};
+    for (uint32_t i = 0; i < module->initializer_count; ++i) {
+        const XrXirInstruction *op = module->initializer + i;
+        if (op->op != XR_XIR_SLOT_INIT) continue;
+        assert(op->immediate >= 0 && op->immediate < module->slot_count && op->args[0] < i);
+        uint32_t slot = (uint32_t)op->immediate;
+        assert(!initialized[slot]);
+        initialized[slot] = true;
+    }
+    for (uint32_t i = 0; i < module->slot_count; ++i) assert(initialized[i]);
+}
+
+static void load_bindings(Unary *absolute, Ternary *blend) {
+    const XrXirBuiltinStdlibModule *module = &xray_stdlib_math_interface;
+    assert(named(module->canonical, "stdlib-module-v1:module=4:math:path=12:math/math.xr"));
+    assert(named(module->logical_path, "math/math.xr"));
+    assert(xr_xir_target_is_host(&module->producer_target));
+    assert(module->function_count == 37 && module->binding_count == 2);
+    check_initializer(module);
+    for (uint32_t i = 0; i < module->binding_count; ++i) {
+        const XrXirBuiltinScalarBinding *binding = &module->bindings[i];
+        assert(binding->function_row < module->function_count);
+        const XrXirBuiltinFunction *function = &module->functions[binding->function_row];
+        assert(function->parameter_count == (uint32_t)binding->abi &&
+            function->result.scalar == XR_XIR_F64 && !function->result.array &&
+            function->control.suspend == XR_XIR_EFFECT_NONE && function->control.throws == XR_XIR_EFFECT_NONE &&
+            !function->root.requires_root && !function->root.unresolved);
+        for (uint32_t p = 0; p < function->parameter_count; ++p)
+            assert(function->parameters[p].mode == XR_PARAM_READ &&
+                function->parameters[p].type.scalar == XR_XIR_F64 && !function->parameters[p].type.array);
+        if (binding->abi == XR_XIR_BUILTIN_F64_UNARY) {
+            assert(!*absolute && named(function->name, "abs") && binding->entry.unary == xray_stdlib_math_abs);
+            *absolute = binding->entry.unary;
+        } else {
+            assert(binding->abi == XR_XIR_BUILTIN_F64_TERNARY && !*blend &&
+                named(function->name, "lerp") && binding->entry.ternary == xray_stdlib_math_lerp);
+            *blend = binding->entry.ternary;
+        }
+    }
+    assert(*absolute && *blend);
+    for (uint32_t i = 0; i < module->function_count; ++i) {
+        const XrXirBuiltinFunction *function = &module->functions[i];
+        bool rest = named(function->name, "min") || named(function->name, "max");
+        assert(function->error == XR_XIR_NEVER && !function->result.array);
+        assert(!!(function->promises & XR_XIR_FUNCTION_REST) == rest);
+        printf("fn %.*s(", (int)function->name.length, function->name.bytes);
+        for (uint32_t p = 0; p < function->parameter_count; ++p) {
+            const XrXirBuiltinParameter *parameter = &function->parameters[p];
+            assert(parameter->mode == XR_PARAM_READ && parameter->type.array == (rest && p + 1 == function->parameter_count));
+            printf("%s%s%.*s: %s", p ? ", " : "", parameter->type.array ? "..." : "",
+                (int)parameter->name.length, parameter->name.bytes, type_name(parameter->type.scalar));
+        }
+        printf(") -> %s\n", type_name(function->result.scalar));
+    }
+    for (uint32_t i = 0; i < module->slot_count; ++i) {
+        const XrXirBuiltinSlot *slot = &module->slots[i];
+        printf("const %.*s %s\n", (int)slot->name.length, slot->name.bytes, type_name(slot->type));
+    }
+    fputs("source ", stdout);
+    for (size_t i = 0; i < sizeof(module->source_fingerprint.bytes); ++i)
+        printf("%02x", (unsigned)module->source_fingerprint.bytes[i]);
+    putchar('\n');
+}
+#endif
+
+static int check_abs(Unary absolute) {
     static const uint64_t positive[][2] = {
         {UINT64_C(0), UINT64_C(0)},
         {UINT64_C(1), UINT64_C(1)},
@@ -165,7 +323,7 @@ static int check_abs(void) {
             uint64_t raw = positive[i][0] | ((uint64_t)negative << 63);
             double x;
             memcpy(&x, &raw, sizeof(x));
-            double result = xray_stdlib_math_abs(x);
+            double result = absolute(x);
             memcpy(&raw, &result, sizeof(raw));
             if (raw != positive[i][1]) {
                 fprintf(stderr, "math.abs returned unexpected bits for row %zu, sign %u\n", i, negative);
@@ -180,9 +338,17 @@ int main(void) {
 #if defined(_WIN32)
     if (_setmode(_fileno(stdout), _O_BINARY) == -1) return 1;
 #endif
-    if (check_abs()) return 1;
-    double a = xray_stdlib_math_lerp(2.0, 10.0, 0.25);
-    double b = xray_stdlib_math_lerp(5.0, -3.0, 1.5);
+#ifdef XRAY_TEST_MATH_INTERFACE
+    Unary absolute = NULL;
+    Ternary blend = NULL;
+    load_bindings(&absolute, &blend);
+#else
+    Unary absolute = xray_stdlib_math_abs;
+    Ternary blend = xray_stdlib_math_lerp;
+#endif
+    if (check_abs(absolute)) return 1;
+    double a = blend(2.0, 10.0, 0.25);
+    double b = blend(5.0, -3.0, 1.5);
     return printf("%.1f\n%.1f\n", a, b) < 0;
 }
 ''',
@@ -194,6 +360,9 @@ int main(void) {
                "MultiThreadedDLL": "/MD", "MultiThreadedDebugDLL": "/MDd"}
         command = [args.compiler, "/nologo", "/std:c11", "/W4", "/WX",
                    crt[args.msvc_runtime], consumer, args.archive, "/Fe:" + str(binary)]
+        if args.interface:
+            command += ["/DXRAY_TEST_MATH_INTERFACE", "/D_CRT_SECURE_NO_WARNINGS",
+                        "/I" + str(args.internal_include), "/I" + str(args.internal_include.parent / "include")]
         if args.asan:
             command += ["/fsanitize=address", "/Zi"]
         if args.ubsan and "clang" in args.compiler.name.lower():
@@ -203,13 +372,22 @@ int main(void) {
     else:
         command = [args.compiler, "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic",
                    consumer, args.archive, "-o", binary]
+        if args.interface:
+            command += ["-DXRAY_TEST_MATH_INTERFACE", "-I" + str(args.internal_include),
+                        "-I" + str(args.internal_include.parent / "include")]
         if args.asan:
             command.append("-fsanitize=address")
         if args.ubsan:
             command.append("-fsanitize=undefined")
     run(command, cwd=root)
     completed = run([binary], cwd=empty, env=dict(os.environ, XRAY_STDLIB_PATH=str(empty)))
-    assert completed.stdout == b"4.0\n-7.0\n" and completed.stderr == b""
+    wanted = b"4.0\n-7.0\n"
+    if args.interface:
+        source = (args.stdlib / "math/math.xr").read_bytes()
+        digest = hashlib.sha256(b"xray-module-source-v1\0" + len(source).to_bytes(8, "little") + source).hexdigest()
+        expected = expected_interface(source.decode("utf-8")) + [f"source {digest}"]
+        wanted = ("\n".join(expected) + "\n").encode("utf-8") + wanted
+    assert completed.stdout == wanted and completed.stderr == b"", (completed.stdout, wanted, completed.stderr)
     assert not list(empty.iterdir())
 
 
@@ -218,6 +396,8 @@ def main():
     parser.add_argument("--producer", type=Path, required=True)
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--generated", type=Path, required=True)
+    parser.add_argument("--interface", type=Path)
+    parser.add_argument("--internal-include", type=Path, required=True)
     parser.add_argument("--stdlib", type=Path, required=True)
     parser.add_argument("--compiler", type=Path, required=True)
     parser.add_argument("--kind", choices=["msvc", "gnu"], required=True)
@@ -231,6 +411,7 @@ def main():
     root = Path(tempfile.mkdtemp(prefix="stdlib-export-", dir=args.work))
     empty = authority_cases(args, root)
     private_dependency(args, root)
+    bundle_cases(args, root)
     link_archive(args, root, empty)
     print(f"Same-build standard library archive and authority checks passed: {root}", flush=True)
     subprocess.run(args.native_test[1:], check=True)

@@ -178,6 +178,10 @@ set_tests_properties(lir_c_value_types_native PROPERTIES LABELS "unit;lir;native
 set(lir_c_native_command ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_native.py")
 if(TARGET xray_stdlib_scalar_export)
     set(stdlib_export_sanitizers)
+    set(stdlib_export_interface)
+    if(XRAY_STDLIB_CHECKED_INTERFACE_C)
+        list(APPEND stdlib_export_interface --interface "${XRAY_STDLIB_CHECKED_INTERFACE_C}")
+    endif()
     if(ENABLE_ASAN OR ENABLE_SANITIZERS)
         list(APPEND stdlib_export_sanitizers --asan)
     endif()
@@ -188,6 +192,7 @@ if(TARGET xray_stdlib_scalar_export)
         --producer $<TARGET_FILE:xray_stdlib_scalar_producer>
         --archive $<TARGET_FILE:xray_stdlib_scalar_export>
         --generated "${XRAY_STDLIB_SCALAR_EXPORT_C}"
+        ${stdlib_export_interface} --internal-include "${PROJECT_SOURCE_DIR}/src"
         --stdlib "${PROJECT_SOURCE_DIR}/stdlib"
         --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
         --msvc-runtime "$<TARGET_GENEX_EVAL:xray_stdlib_scalar_export,$<TARGET_PROPERTY:xray_stdlib_scalar_export,MSVC_RUNTIME_LIBRARY>>"

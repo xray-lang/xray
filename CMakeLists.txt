@@ -1371,20 +1371,37 @@ if(_XRAY_STDLIB_PRODUCER_RUNNABLE)
         CONTENT "${_XRAY_STDLIB_SOURCE_LIST}\n" @ONLY NEWLINE_STYLE UNIX)
     set(XRAY_STDLIB_SCALAR_EXPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
     set(XRAY_STDLIB_SCALAR_EXPORT_C "${XRAY_STDLIB_SCALAR_EXPORT_DIR}/stdlib_scalar_math_lerp.c")
-    foreach(_XRAY_STDLIB_MATH_EXPORT IN ITEMS lerp abs)
-        set(_XRAY_STDLIB_EXPORT_OUTPUT "${XRAY_STDLIB_SCALAR_EXPORT_DIR}/stdlib_scalar_math_${_XRAY_STDLIB_MATH_EXPORT}.c")
-        add_custom_command(
-            OUTPUT "${_XRAY_STDLIB_EXPORT_OUTPUT}"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_SCALAR_EXPORT_DIR}"
-            COMMAND xray_stdlib_scalar_producer "${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
-                    "${_XRAY_STDLIB_EXPORT_OUTPUT}.pending" "${_XRAY_STDLIB_MATH_EXPORT}"
-            COMMAND ${CMAKE_COMMAND} -E rename "${_XRAY_STDLIB_EXPORT_OUTPUT}.pending" "${_XRAY_STDLIB_EXPORT_OUTPUT}"
-            DEPENDS xray_stdlib_scalar_producer "${_XRAY_STDLIB_SOURCE_INVENTORY}" ${XRAY_STDLIB_SOURCE_DEPENDENCIES}
-            COMMENT "Compiling the built-in standard library scalar math.${_XRAY_STDLIB_MATH_EXPORT}"
-            VERBATIM)
-        list(APPEND _XRAY_STDLIB_SCALAR_EXPORT_SOURCES "${_XRAY_STDLIB_EXPORT_OUTPUT}")
+    set(_XRAY_STDLIB_SCALAR_EXPORT_SOURCES "${XRAY_STDLIB_SCALAR_EXPORT_C}"
+        "${XRAY_STDLIB_SCALAR_EXPORT_DIR}/stdlib_scalar_math_abs.c")
+
+    # A runnable universal producer reports only the architecture it ran on.
+    # The scalar C is portable across slices. The Checked interface is target-specific.
+    set(_XRAY_STDLIB_ARCH_COUNT 1)
+    if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+        list(LENGTH CMAKE_OSX_ARCHITECTURES _XRAY_STDLIB_ARCH_COUNT)
+    endif()
+    if(_XRAY_STDLIB_ARCH_COUNT EQUAL 1)
+        set(XRAY_STDLIB_CHECKED_INTERFACE_C "${XRAY_STDLIB_SCALAR_EXPORT_DIR}/stdlib_checked_math_interface.c")
+        list(APPEND _XRAY_STDLIB_SCALAR_EXPORT_SOURCES "${XRAY_STDLIB_CHECKED_INTERFACE_C}")
+    endif()
+
+    set(_XRAY_STDLIB_PENDING)
+    set(_XRAY_STDLIB_PUBLISH)
+    foreach(generated IN LISTS _XRAY_STDLIB_SCALAR_EXPORT_SOURCES)
+        list(APPEND _XRAY_STDLIB_PENDING "${generated}.pending")
+        list(APPEND _XRAY_STDLIB_PUBLISH COMMAND ${CMAKE_COMMAND} -E rename "${generated}.pending" "${generated}")
     endforeach()
+    add_custom_command(
+        OUTPUT ${_XRAY_STDLIB_SCALAR_EXPORT_SOURCES}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_SCALAR_EXPORT_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${_XRAY_STDLIB_PENDING}
+        COMMAND xray_stdlib_scalar_producer "${CMAKE_CURRENT_SOURCE_DIR}/stdlib" --bundle ${_XRAY_STDLIB_PENDING}
+        ${_XRAY_STDLIB_PUBLISH}
+        DEPENDS xray_stdlib_scalar_producer "${_XRAY_STDLIB_SOURCE_INVENTORY}" ${XRAY_STDLIB_SOURCE_DEPENDENCIES}
+        COMMENT "Compiling the built-in math bundle from one Checked module"
+        VERBATIM)
     add_library(xray_stdlib_scalar_export STATIC ${_XRAY_STDLIB_SCALAR_EXPORT_SOURCES})
+    target_include_directories(xray_stdlib_scalar_export PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     set_target_properties(xray_stdlib_scalar_export PROPERTIES
         C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     if(MSVC)
