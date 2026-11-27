@@ -1,0 +1,4 @@
+fn leaf()->i64 { return 1 }
+const t = (leaf, 2)
+const f = t.0
+print(f())

@@ -1,0 +1,7 @@
+fn leaf()->i64 { return 1 }
+fn pair()->(fn()->i64, i64) { return (leaf, 2) }
+fn use()->i64 {
+    const t = pair()
+    return t.0()
+}
+print(use())

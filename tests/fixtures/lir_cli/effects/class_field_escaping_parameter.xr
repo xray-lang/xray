@@ -1,0 +1,7 @@
+fn leaf()->i64 { return 1 }
+class Holder {
+    run: fn()->i64
+    init(h: escaping fn()->i64) { this.run = h }
+}
+const holder = Holder(leaf)
+print(holder.run())

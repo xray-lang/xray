@@ -957,7 +957,9 @@ static bool effect_check_instruction_metadata(EffectCheckBuild *build, uint32_t 
     case XR_XIR_INVOKE_RESULT:
     case XR_XIR_SLOT_LOAD: case XR_XIR_ARRAY_GET: case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET:
     case XR_XIR_ENUM_GET: case XR_XIR_MAP_INDEX: case XR_XIR_MAP_VALUE_AT:
-    case XR_XIR_NULLABLE_UNWRAP:
+    case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_TUPLE_FIELD:
+        /* Aggregate and collection members were published under the escaping
+         * contract when stored; a Tuple field is a member like a struct field. */
         build->roots->node[value].storable_value = true;
         break;
     default: break;

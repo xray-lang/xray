@@ -110,7 +110,9 @@ def main() -> None:
                      "root_generic_identity_pure", "root_generic_forward_pure",
                      "root_generic_array_pure", "root_generic_tuple_pure",
                      "root_generic_scalar", "root_generic_generator", "defer_helper_pure",
-                     "nosuspend_helper_pure", "cfn_helper_pure", "compress_bound_receivers"):
+                     "nosuspend_helper_pure", "cfn_helper_pure", "compress_bound_receivers",
+                     "tuple_call_result", "tuple_module_binding",
+                     "class_field_named_function", "class_field_escaping_parameter"):
             checked = run(name + "-check", [binary, "check", effects / (name + ".xr")], 0)
             assert not checked.stdout and not checked.stderr, name
 
