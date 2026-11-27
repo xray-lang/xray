@@ -10,6 +10,7 @@
 #include "lir/xlir_lower.h"
 #include "lir/xlir_verify.h"
 #include "base/xchecks.h"
+#include <string.h>
 
 static void *allocations[512];
 static size_t attempts, live, fail_at = SIZE_MAX;
@@ -58,6 +59,10 @@ static XrLirStatus run(const SourceFixture *fixture) {
     } else {
         CHECK(!output.module && !output.entry.id);
         CHECK(failure.diagnostic.status == status && failure.diagnostic.message[0]);
+        if (status == XR_LIR_UNSUPPORTED) {
+            CHECK(strstr(failure.diagnostic.message, "module group requires I64 slot payloads"));
+            CHECK(failure.owned_path && failure.diagnostic.source.path == failure.owned_path);
+        }
     }
     xr_lir_lowered_free(&output);
     xr_lir_lower_failure_free(&failure);
@@ -83,6 +88,10 @@ int main(void) {
     source_fixture_free(&fixture);
 
     fixture = source_fixture("fn answer()->i64{return len(\"unsupported\")}\nprint(answer())\n");
+    OK(run(&fixture));
+    source_fixture_free(&fixture);
+
+    fixture = source_fixture("const[a,b]=[true,false]\nprint(a)\n");
     attempts = 0;
     CHECK(run(&fixture) == XR_LIR_UNSUPPORTED);
     size_t rejected_attempts = attempts;
