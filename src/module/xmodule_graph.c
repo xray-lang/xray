@@ -154,6 +154,9 @@ static void spec_add_dep(ModuleWork *work, XrModuleSpec *spec, int index) {
     }
     if ((work)->status == XR_MODULE_OK) spec->dep_indices[spec->dep_count++] = index;
 }
+static const char *graph_embedded_source(XrModuleKind kind, const char *name, const char *logical_path) {
+    return kind == XR_MOD_STDLIB ? xr_get_embedded_stdlib_source(logical_path) : xr_get_embedded_stdlib(name);
+}
 static void graph_resolve_dependency(ModuleWork *work, XrModuleGraph *graph, int from, const char *specifier) {
     if (!specifier) { module_status(work,XR_MODULE_INVALID); return; }
     XrModuleSpec *source = &graph->specs[from]; XrModuleId id = {0};
@@ -161,10 +164,15 @@ static void graph_resolve_dependency(ModuleWork *work, XrModuleGraph *graph, int
     if (work->status != XR_MODULE_OK) return;
     bool embedded = false;
     if (!id.source_path && (id.kind == XR_MOD_STDLIB || id.kind == XR_MOD_PACKAGE)) {
-        const char *text = NULL;
-        text=xr_get_embedded_stdlib(id.authority.namespace_id);
-        if (!text || work->status != XR_MODULE_OK) { xr_compile_module_id_cleanup(&id); return; }
-        id.source_path = module_format(work,GRAPH_EMBEDDED_STDLIB_PREFIX "%s/%s.xr",id.authority.namespace_id,id.authority.namespace_id);
+        if (!graph_embedded_source(id.kind, id.authority.namespace_id, id.logical_path)) {
+            xr_compile_module_id_cleanup(&id);
+            return;
+        }
+        if (id.kind == XR_MOD_STDLIB)
+            id.source_path = module_format(work, GRAPH_EMBEDDED_STDLIB_PREFIX "%s", id.logical_path);
+        else
+            id.source_path = module_format(work, GRAPH_EMBEDDED_STDLIB_PREFIX "%s/%s.xr",
+                id.authority.namespace_id, id.authority.namespace_id);
         embedded = true;
     }
     int target = -1;
@@ -399,7 +407,7 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
         }
         if ((!spec->source_path && !supplied) || spec->status >= XR_MODSPEC_RESOLVED) continue;
         if (!supplied && spec->embedded_source) {
-            text=xr_get_embedded_stdlib(spec->authority.namespace_id);
+            text = graph_embedded_source(spec->kind, spec->authority.namespace_id, spec->logical_path);
             if (!text) module_status(work,XR_MODULE_INVALID);
         } else if (!supplied) {
             module_status(work,read_status(xr_os_io_read_under_root(&policy,spec->authority.physical_root,spec->logical_path,SIZE_MAX-1,&bytes)));

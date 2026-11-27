@@ -18,6 +18,11 @@
 #include <stdint.h>
 #include <string.h>
 
+typedef struct {
+    const char *logical_path;
+    const char *text;
+} XrStdlibLogicalSource;
+
 #include <stdlib_embedded_sources.inc>
 
 XR_FUNC const XrStdlibSourceDescriptor *xr_stdlib_source_descriptor(const char *name) {
@@ -31,6 +36,15 @@ XR_FUNC const XrStdlibSourceDescriptor *xr_stdlib_source_descriptor(const char *
         found = entry;
     }
     return found;
+}
+
+XR_FUNC const char *xr_get_embedded_stdlib_source(const char *logical_path) {
+    if (!logical_path) return NULL;
+    for (size_t i = 0; i < sizeof(xr_stdlib_logical_sources) / sizeof(xr_stdlib_logical_sources[0]); ++i) {
+        const XrStdlibLogicalSource *source = &xr_stdlib_logical_sources[i];
+        if (!strcmp(source->logical_path, logical_path)) return source->text;
+    }
+    return NULL;
 }
 
 XR_FUNC const char *xr_get_embedded_stdlib(const char *module_name) {

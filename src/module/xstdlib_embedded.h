@@ -46,6 +46,9 @@ XR_FUNC const XrStdlibSourceDescriptor *xr_stdlib_source_descriptor(const char *
 // Returns NULL if module not found.
 XR_FUNC const char *xr_get_embedded_stdlib(const char *module_name);
 
+/* Resolve an exact logical source path without publishing a namespace entry. */
+XR_FUNC const char *xr_get_embedded_stdlib_source(const char *logical_path);
+
 // Install the generated native entries a module declares.
 // A module that declares none succeeds without adding exports.
 XR_FUNC bool xr_stdlib_module_install_native_entries(struct XrVMRuntime *isolate,

@@ -1,0 +1,2 @@
+import "std/path/missing_embedded_test" as missing
+print(42)

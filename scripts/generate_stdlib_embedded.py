@@ -2,7 +2,8 @@
 """Generate embedded standard-library source and native-entry metadata.
 
 Every script module has one canonical source at
-``stdlib/<module>/<module>.xr`` and one bare module name.
+``stdlib/<module>/<module>.xr`` and one bare module name. Explicit
+dependency sources are keyed by their complete logical paths.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -60,6 +62,25 @@ def collect_entries(root: Path, sources: list[Path]) -> list[tuple[str, Path, by
     return entries
 
 
+def collect_submodules(root: Path, sources: list[Path], owners: set[str]) -> list[tuple[str, bytes]]:
+    entries: dict[str, bytes] = {}
+    for source in sources:
+        relative = source.resolve().relative_to(root / "stdlib")
+        parts = relative.with_suffix("").parts
+        if (relative.suffix != ".xr" or len(parts) < 2 or parts[0] not in owners
+                or (len(parts) == 2 and parts[0] == parts[1])
+                or any(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", part) is None for part in parts)):
+            raise RuntimeError(f"invalid embedded stdlib submodule: {relative}")
+        logical = relative.as_posix()
+        if logical in entries:
+            raise RuntimeError(f"duplicate embedded stdlib submodule: {logical}")
+        data = source.read_bytes()
+        if b"\0" in data:
+            raise RuntimeError(f"NUL in embedded stdlib submodule: {logical}")
+        entries[logical] = data
+    return sorted(entries.items())
+
+
 def derive_binder_modules(root: Path) -> set[str]:
     """Ask stdlibgen which modules it emits a native-entry binder for."""
     generator_path = root / "tools" / "stdlibgen" / "stdlibgen.py"
@@ -94,7 +115,8 @@ def source_descriptors(
 
 
 def emit_sources(root: Path, entries: list[tuple[str, Path, bytes]],
-                 descriptors: list[tuple[str, str | None, bool]]) -> str:
+                 descriptors: list[tuple[str, str | None, bool]],
+                 submodules: list[tuple[str, bytes]]) -> str:
     out = ["/* Auto-generated source metadata. Do not edit by hand. */", ""]
     for idx, (name, path, data) in enumerate(entries):
         ident = c_ident(name)
@@ -105,6 +127,17 @@ def emit_sources(root: Path, entries: list[tuple[str, Path, bytes]],
         out.append(";")
         out.append("")
 
+    logical_sources = [(f"{name}/{name}.xr", symbol) for name, symbol, _bound in descriptors if symbol]
+    for index, (logical, data) in enumerate(submodules):
+        symbol = f"xr_stdlib_submodule_{index}"
+        out.extend([f"/* stdlib/{logical} */", f"static const char {symbol}[] =",
+                    c_string_bytes(data), ";", ""])
+        logical_sources.append((logical, symbol))
+
+    out.append("static const XrStdlibLogicalSource xr_stdlib_logical_sources[] = {")
+    for logical, symbol in sorted(logical_sources):
+        out.append(f'    {{"{logical}", {symbol}}},')
+    out.extend(["};", ""])
     out.append("static const XrStdlibSourceDescriptor xr_stdlib_source_descriptors[] = {")
     for name, source_symbol, bound in descriptors:
         out.append(f'    {{"{name}", {source_symbol or "NULL"}, {str(bound).lower()}}},')
@@ -165,7 +198,19 @@ def self_test() -> int:
         rows = source_descriptors(selected, ["native", "empty"], {"demo", "native", "not-selected"})
         assert rows == [("demo", "xr_stdlib_src_demo_0", True),
                         ("empty", None, False), ("native", None, True)]
-        source_text = emit_sources(root, selected, rows)
+        submodules = collect_submodules(root, [noncanonical_source], {"demo"})
+        assert submodules == [("demo/helper.xr", noncanonical_source.read_bytes())]
+        source_text = emit_sources(root, selected, rows, submodules)
+        assert '{"demo/helper.xr", xr_stdlib_submodule_0}' in source_text
+        assert '{"demo/demo.xr", xr_stdlib_src_demo_0}' in source_text
+        for sources, owners in (([noncanonical_source, noncanonical_source], {"demo"}),
+                                ([noncanonical_source], set()), ([canonical_source], {"demo"})):
+            try:
+                collect_submodules(root, sources, owners)
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError("invalid embedded submodule accepted")
         runtime_text = emit_runtime_bindings(rows)
         assert 'XrStdlibSourceDescriptor' in source_text
         assert 'xr_stdlib_vm_bind_' not in source_text
@@ -204,6 +249,7 @@ def main() -> int:
     parser.add_argument("--root", type=Path)
     parser.add_argument("--source-output", type=Path)
     parser.add_argument("--runtime-output", type=Path)
+    parser.add_argument("--submodule-source", action="append", type=Path, default=[])
     # Modules this build can load that have no .xr source of their own. The
     # build owns this list because it owns which module TUs are compiled, and a
     # binder that was not compiled must not be named by the descriptor table.
@@ -223,9 +269,10 @@ def main() -> int:
 
     try:
         descriptors = source_descriptors(entries, args.native_only_module, derive_binder_modules(root))
-        source_text = emit_sources(root, entries, descriptors)
+        submodules = collect_submodules(root, args.submodule_source, {name for name, _, _ in entries})
+        source_text = emit_sources(root, entries, descriptors, submodules)
         runtime_text = emit_runtime_bindings(descriptors)
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         print(f"generate_stdlib_embedded.py: {exc}", file=sys.stderr)
         return 1
 

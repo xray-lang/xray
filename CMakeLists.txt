@@ -974,8 +974,8 @@ else()
 endif()
 
 file(GLOB XRAY_STDLIB_SCRIPT_SOURCES CONFIGURE_DEPENDS "stdlib/*/*.xr")
-# The embedded entry table contains only namespace entry files. Source submodules
-# are resolved by exact logical path and are not independent native factories.
+# Namespace entries own public descriptors and native factories. Selected
+# dependency sources are embedded separately by exact logical path.
 foreach(XRAY_STDLIB_CANDIDATE IN LISTS XRAY_STDLIB_SCRIPT_SOURCES)
     get_filename_component(XRAY_STDLIB_CANDIDATE_DIR "${XRAY_STDLIB_CANDIDATE}" DIRECTORY)
     get_filename_component(XRAY_STDLIB_CANDIDATE_NAMESPACE "${XRAY_STDLIB_CANDIDATE_DIR}" NAME)
@@ -1020,6 +1020,7 @@ foreach(XRAY_SOURCELESS_MODULE ${XRAY_STDLIB_SOURCELESS_MODULES})
     list(APPEND XRAY_STDLIB_SOURCELESS_MODULE_ARGS
         "--native-only-module" "${XRAY_SOURCELESS_MODULE}")
 endforeach()
+set(XRAY_STDLIB_EMBEDDED_PATH_HELPER "${CMAKE_CURRENT_SOURCE_DIR}/stdlib/path/_lexical.xr")
 set(XRAY_STDLIB_EMBEDDED_SOURCE_INC
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_sources.inc")
 set(XRAY_STDLIB_EMBED_GENERATOR
@@ -1038,6 +1039,7 @@ add_custom_command(
             ${XRAY_STDLIB_EMBED_GENERATOR}
             --root ${CMAKE_CURRENT_SOURCE_DIR}
             --source-output ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
+            --submodule-source ${XRAY_STDLIB_EMBEDDED_PATH_HELPER}
             ${XRAY_STDLIB_SOURCELESS_MODULE_ARGS}
             ${XRAY_STDLIB_SCRIPT_SOURCES}
     DEPENDS
@@ -1046,6 +1048,7 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/stdlib/stdlib_boundary.toml"
         ${XRAY_STDLIB_DEF_FILES}
         ${XRAY_STDLIB_SCRIPT_SOURCES}
+        ${XRAY_STDLIB_EMBEDDED_PATH_HELPER}
     COMMENT "Generating embedded stdlib source table"
     VERBATIM
 )
@@ -1909,6 +1912,12 @@ if(BUILD_TESTS)
         PROCESSORS 1
         TIMEOUT 30
     )
+
+    add_test(NAME stdlib_embedded_private_source
+        COMMAND ${XRAY_PYTHON} -B ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/test_embedded_private_stdlib.py
+                $<TARGET_FILE:xray> ${CMAKE_CURRENT_SOURCE_DIR})
+    set_tests_properties(stdlib_embedded_private_source PROPERTIES
+        LABELS "vm;aot;stdlib;embed;regression" TIMEOUT 120)
 
     add_test(
         NAME test_stdlib_return_ownership_gate
