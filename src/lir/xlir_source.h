@@ -38,6 +38,8 @@ typedef struct XrLirSourceRequest {
     XrXirTarget target;
 } XrLirSourceRequest;
 
+typedef struct XrXirBuiltinStdlibModule XrXirBuiltinStdlibModule;
+
 typedef struct XrLirSourceFailure {
     XrLirSourceStatus stage;
     XrXirSourceDiagnostic source;
@@ -55,6 +57,10 @@ XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *reques
     XrLirLowered *output, XrLirSourceFailure *failure);
 /* Compile one explicitly selected root @test with no explicit deadline
  * through the same Source and Closed path. The caller owns scheduling. */
+/* Optional producer archive borrowed for this same source compilation. */
+XR_FUNC XrLirSourceStatus xr_lir_compile_source_with_archive(const XrLirSourceRequest *,
+    const XrXirBuiltinStdlibModule *, XrLirLowered *, XrLirSourceFailure *);
+
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_source(const XrLirSourceRequest *request,
     const char *test_name, XrLirLowered *output, XrLirSourceFailure *failure);
 XR_FUNC void xr_lir_source_failure_free(XrLirSourceFailure *failure);

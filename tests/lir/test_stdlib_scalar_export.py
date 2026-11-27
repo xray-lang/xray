@@ -4,6 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -430,6 +431,36 @@ int main(void) {
     assert not list(empty.iterdir())
 
 
+def ordinary_import_binding(args, root):
+    fixtures = args.internal_include.parent / "tests/fixtures/lir_cli/math_archive_binding"
+    altered = root / "altered-math"
+    shutil.copytree(args.stdlib, altered)
+    math = altered / "math/math.xr"
+    contents = math.read_bytes()
+    expression = b"return a + (b - a) * t"
+    assert contents.count(expression) == 1
+    math.write_bytes(contents.replace(expression, expression + b" + 17.0"))
+
+    for name, program, stdlib, expected, bindings in (
+        ("canonical", "canonical.xr", args.stdlib, b"4.0\n-7.0\n", 2 if args.interface else 0),
+        ("shadow", "shadow.xr", args.stdlib, b"35.0\n24.0\n", 0),
+        ("changed", "canonical.xr", altered, b"21.0\n10.0\n", 0),
+    ):
+        source = fixtures / program
+        generated = root / (name + ".c")
+        native = root / (name + (".exe" if os.name == "nt" else ""))
+        env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR="1")
+        vm = run([args.xray, "run", source], cwd=root, env=env)
+        run([args.xray, "build", "-c", source, "-o", generated], cwd=root, env=env)
+        # The prototype and the ordinary direct call each name the archive
+        # symbol once. The indirect call still runs the source function value.
+        text = generated.read_bytes()
+        assert text.count(b"xray_stdlib_math_lerp(") == bindings, (name, generated)
+        run([args.xray, "build", source, "-o", native], cwd=root, env=env)
+        aot = run([native], cwd=root, env=env)
+        assert vm.stdout == aot.stdout == expected and vm.stderr == aot.stderr == b"", name
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--producer", type=Path, required=True)
@@ -453,6 +484,7 @@ def main():
     private_dependency(args, root)
     bundle_cases(args, root)
     link_archive(args, root, empty)
+    ordinary_import_binding(args, root)
     print(f"Same-build standard library archive and authority checks passed: {root}", flush=True)
     subprocess.run(args.native_test[1:], check=True)
 

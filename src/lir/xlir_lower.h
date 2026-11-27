@@ -49,6 +49,10 @@ typedef struct XrLirTestBinding {
  * actual reads retain their original control-flow positions. */
 XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *, XrLirLowered *,
                                                  XrLirLowerFailure *);
+/* The source compiler proves the optional one-based Closed ordinal of the
+ * archived Math leaf before lowering. Function values keep their source body. */
+XR_FUNC XrLirStatus xr_lir_lower_program_with_archive(const XrLirLowerRequest *,
+    uint32_t math_lerp, XrLirLowered *, XrLirLowerFailure *);
 /* Run the ordinary module initializers before one verified root @test. The
  * selected ordinal is from this Closed artifact. Each startup owns fresh state. */
 XR_FUNC XrLirStatus xr_lir_lower_test_checked(const XrLirLowerRequest *, uint32_t closed_function,

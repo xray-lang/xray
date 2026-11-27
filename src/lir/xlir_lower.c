@@ -91,7 +91,8 @@ typedef struct Lower {
     uint8_t *cleanup_leaves;
     XrLirType owned_i64_cell, owned_map_cell;
     XrLirFunction *functions, print, print_string, clocks[4];
-    XrLirFunction nullable_string_equal;
+    XrLirFunction nullable_string_equal, math_lerp;
+    uint32_t math_lerp_source;
     uint8_t *active;
     uint32_t *queue, queued;
     uint32_t function, block, instruction;
@@ -3122,6 +3123,9 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         .operand_count = count,
         .source = lower_source(c),
         .callee = indirect ? (XrLirFunction){0} : op->op == XR_XIR_PRINT ? c->print : c->functions[callee_index]};
+    if (op->op == XR_XIR_CALL && c->math_lerp.id && !hidden &&
+        callee_index + 1 == c->math_lerp_source)
+        call.callee = c->math_lerp;
     if (op->op == XR_XIR_CALL && lower_core_builtin(c,(uint32_t)op->immediate)==XR_CORE_BUILTIN_ASSERT_EQUAL) {
         const XrXirFunction *target=&c->source->functions[op->immediate];
         if (count!=3 || !target->instruction_count || target->instructions[0].op!=XR_XIR_EQUAL) {
@@ -4263,7 +4267,7 @@ static bool lower_test_role(Lower *c, uint32_t function, XrXirTestRole role) {
 }
 
 static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t selected, LowerRootKind root_kind,
-                               XrLirTestBinding *roles, uint32_t role_count,
+                               XrLirTestBinding *roles, uint32_t role_count, uint32_t math_lerp,
                                XrLirLowered *output, XrLirLowerFailure *failure) {
     if (!request || !request->closed || !request->snapshot || !output || output->module ||
         output->entry.module || output->entry.id || (failure && failure->owned_path))
@@ -4273,12 +4277,15 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     Lower c = {.request = request,
                .source = xr_xir_compile_artifact_module(request->closed),
                .failure = failure,
+               .math_lerp_source = math_lerp,
                .instruction = UINT32_MAX};
     const XrXirModule *source = c.source;
     if (!source || source->stage != XR_XIR_CHECKED || source->linkage_kind != XR_XIR_PROGRAM ||
         !source->declarations)
         return lower_error(&c, XR_LIR_INVALID_ARGUMENT,
                            "source-backed Closed Checked program required");
+    if (math_lerp > source->function_count)
+        return lower_error(&c, XR_LIR_INVALID_ARGUMENT, "invalid Closed Math archive binding");
     bool local = root_kind == LOWER_ROOT_LOCAL;
     bool exporting = root_kind == LOWER_ROOT_STDLIB_EXPORT;
     c.allow_class_calls = !local && !exporting && xir_effect_evidence_is_instance(source);
@@ -4395,6 +4402,14 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
             .extern_kind=(XrLirExternKind)(XR_LIR_EXTERN_CLOCK_REALTIME + kind)};
         good = lower_build(&c, xr_lir_declare_function(c.module, &spec, &c.clocks[kind]));
     }
+    if (good && math_lerp && c.active[math_lerp - 1]) {
+        static const char symbol[] = "xray_stdlib_math_lerp";
+        static const XrLirType parameters[] = {XR_LIR_F64, XR_LIR_F64, XR_LIR_F64};
+        const XrLirFunctionSpec spec = {.name=symbol, .name_length=sizeof(symbol) - 1,
+            .parameters=parameters, .parameter_count=3, .result=XR_LIR_F64,
+            .kind=XR_LIR_FUNCTION_EXTERNAL, .extern_kind=XR_LIR_EXTERN_STDLIB_MATH_LERP};
+        good = lower_build(&c, xr_lir_declare_function(c.module, &spec, &c.math_lerp));
+    }
     for (uint32_t f = 0; f < source->function_count && good; ++f)
         if (c.active[f])
             good = lower_declare(&c, f);
@@ -4455,25 +4470,30 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
 
 XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *request,
                                                  XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, 0, LOWER_ROOT_PROGRAM, NULL, 0, output, failure);
+    return xr_lir_lower_program_with_archive(request, 0, output, failure);
+}
+
+XR_FUNC XrLirStatus xr_lir_lower_program_with_archive(const XrLirLowerRequest *request,
+    uint32_t math_lerp, XrLirLowered *output, XrLirLowerFailure *failure) {
+    return lower_checked(request, 0, LOWER_ROOT_PROGRAM, NULL, 0, math_lerp, output, failure);
 }
 
 XR_FUNC XrLirStatus xr_lir_lower_test_checked(const XrLirLowerRequest *request, uint32_t selected,
                                               XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, selected, LOWER_ROOT_TEST, NULL, 0, output, failure);
+    return lower_checked(request, selected, LOWER_ROOT_TEST, NULL, 0, 0, output, failure);
 }
 
 XR_FUNC XrLirStatus xr_lir_lower_test_plan_checked(const XrLirLowerRequest *request,
     XrLirTestBinding *roles, uint32_t count, XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, 0, LOWER_ROOT_TEST_PLAN, roles, count, output, failure);
+    return lower_checked(request, 0, LOWER_ROOT_TEST_PLAN, roles, count, 0, output, failure);
 }
 
 XR_FUNC XrLirStatus xr_lir_lower_local_checked(const XrLirLowerRequest *request, uint32_t selected,
                                                XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, selected, LOWER_ROOT_LOCAL, NULL, 0, output, failure);
+    return lower_checked(request, selected, LOWER_ROOT_LOCAL, NULL, 0, 0, output, failure);
 }
 
 XR_FUNC XrLirStatus xr_lir_lower_stdlib_export_checked(const XrLirLowerRequest *request,
     uint32_t selected, XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, selected, LOWER_ROOT_STDLIB_EXPORT, NULL, 0, output, failure);
+    return lower_checked(request, selected, LOWER_ROOT_STDLIB_EXPORT, NULL, 0, 0, output, failure);
 }

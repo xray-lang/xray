@@ -1,0 +1,1 @@
+export fn lerp(a: f64, b: f64, t: f64) -> f64 { return a + (b - a) * t + 31.0 }

@@ -18,6 +18,7 @@
 #include "xlir_test_plan.h"
 #include "shared/xr_string_core.h"
 #include "toolchain/xcompiler_session.h"
+#include "xir/xxir_builtin_stdlib.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_source_query_internal.h"
 #include "xir/xxir_specialization_bindings.h"
@@ -205,7 +206,87 @@ static XrLirStatus source_lower_selected(const XrLirLowerRequest *request, XrLir
     return XR_LIR_OK;
 }
 
+/* The archive's fingerprint covers its dependency-free module source. Use the
+ * Checked declaration owner before consulting that snapshot's bytes. Name or
+ * signature alone cannot identify code supplied by the installed archive. */
+static uint32_t source_math_archive_binding(const XrXirSourceResult *source,
+    const XrXirArtifact *closed, const XrXirBuiltinStdlibModule *archive) {
+    static const char name[] = "lerp";
+    const XrXirTarget *target = xr_xir_compile_artifact_target(source->checked);
+    if (!archive || !target || !xr_xir_target_equal(&archive->producer_target, target)) return 0;
+    const XrXirBuiltinFunction *exported = NULL;
+    for (uint32_t i = 0; i < archive->binding_count; ++i) {
+        const XrXirBuiltinScalarBinding *binding = &archive->bindings[i];
+        if (binding->abi != XR_XIR_BUILTIN_F64_TERNARY || !binding->entry.ternary ||
+            binding->function_row >= archive->function_count)
+            continue;
+        const XrXirBuiltinFunction *row = &archive->functions[binding->function_row];
+        if (row->name.length != sizeof(name) - 1 || memcmp(row->name.bytes, name, sizeof(name) - 1))
+            continue;
+        if (exported) return 0;
+        exported = row;
+    }
+    if (!exported || exported->parameter_count != 3 || exported->result.array ||
+        exported->result.scalar != XR_XIR_F64 || exported->error != XR_XIR_NEVER) return 0;
+    for (uint32_t i = 0; i < exported->parameter_count; ++i) {
+        const XrXirBuiltinParameter *parameter = &exported->parameters[i];
+        if (parameter->type.array || parameter->type.scalar != XR_XIR_F64 ||
+            parameter->mode != XR_PARAM_READ) return 0;
+    }
+
+    const XrXirModule *checked = xr_xir_compile_artifact_module(source->checked);
+    const XrXirDeclarations *declarations = checked->declarations;
+    const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(source->snapshot);
+    if (!declarations || !view) return 0;
+    const XrXirSourceQueryModule *module = NULL;
+    for (uint32_t i = 0; i < view->module_count; ++i) {
+        const XrXirSourceQueryModule *candidate = &view->modules[i];
+        if (!candidate->identity || strlen(candidate->identity) != archive->canonical.length ||
+            memcmp(candidate->identity, archive->canonical.bytes, archive->canonical.length))
+            continue;
+        if (module) return 0;
+        module = candidate;
+    }
+    if (!module || memcmp(module->fingerprint.bytes, archive->source_fingerprint.bytes,
+                          sizeof(module->fingerprint.bytes))) return 0;
+
+    uint32_t checked_lerp = UINT32_MAX;
+    for (uint32_t i = 0; i < checked->function_count; ++i) {
+        const XrXirFunction *function = &checked->functions[i];
+        const XrXirFunctionIdentity *identity = &declarations->functions[i];
+        if (!identity->exported || identity->module >= declarations->module_count ||
+            identity->method_kind != XR_XIR_NON_MEMBER || identity->native_callable ||
+            identity->capture_owner || identity->cleanup_owner ||
+            function->name_length != sizeof(name) - 1 ||
+            memcmp(function->name, name, sizeof(name) - 1)) continue;
+        const XrXirSourceModule *owner = &declarations->modules[identity->module];
+        if (owner->name_length != archive->canonical.length ||
+            memcmp(owner->name, archive->canonical.bytes, archive->canonical.length)) continue;
+        if (checked_lerp != UINT32_MAX || owner->dependency_count ||
+            function->parameter_count != 3 || function->result != XR_XIR_F64 ||
+            function->error_type != XR_XIR_NEVER || function->consume_parameter_count ||
+            function->escaping_parameter_count ||
+            (checked->generics && checked->generics[i].parameter_count)) return 0;
+        for (uint32_t p = 0; p < function->parameter_count; ++p)
+            if (function->parameters[p] != XR_XIR_F64) return 0;
+        checked_lerp = i;
+    }
+    if (checked_lerp == UINT32_MAX) return 0;
+    const XrXirModule *specialized = xr_xir_compile_artifact_module(closed);
+    uint32_t selected = 0;
+    for (uint32_t i = 0; i < specialized->function_count; ++i) {
+        uint32_t origin;
+        if (xr_xir_compile_specialization_origin(closed, i, &origin) == XR_XIR_OK &&
+            origin == checked_lerp) {
+            if (selected) return 0;
+            selected = i + 1;
+        }
+    }
+    return selected;
+}
+
 static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const char *test_name,
+    const XrXirBuiltinStdlibModule *archive,
     XrLirLowered *output, XrLirTestPlan **plan_output, const SourceRoleFilter *filter,
     bool catalog, XrLirSourceFailure *failure) {
     if (!request || !request->resources || !request->entry_path || !request->entry_path[0] ||
@@ -293,7 +374,8 @@ static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const
     else if (test_name)
         lower_status = xr_lir_lower_test_checked(&lower_request, test.closed_function, &lowered, &failure->lower);
     else
-        lower_status = xr_lir_lower_program_checked(&lower_request, &lowered, &failure->lower);
+        lower_status = xr_lir_lower_program_with_archive(&lower_request,
+            source_math_archive_binding(&source, closed, archive), &lowered, &failure->lower);
     if (lower_status != XR_LIR_OK) goto cleanup;
 
     status = XR_LIR_SOURCE_OK;
@@ -324,32 +406,37 @@ cleanup:
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *request,
     XrLirLowered *output, XrLirSourceFailure *failure) {
-    return source_compile(request, NULL, output, NULL, NULL, false, failure);
+    return xr_lir_compile_source_with_archive(request, NULL, output, failure);
+}
+
+XR_FUNC XrLirSourceStatus xr_lir_compile_source_with_archive(const XrLirSourceRequest *request,
+    const XrXirBuiltinStdlibModule *archive, XrLirLowered *output, XrLirSourceFailure *failure) {
+    return source_compile(request, NULL, archive, output, NULL, NULL, false, failure);
 }
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_source(const XrLirSourceRequest *request,
     const char *test_name, XrLirLowered *output, XrLirSourceFailure *failure) {
     if (!test_name || !test_name[0]) return XR_LIR_SOURCE_BAD_ARGUMENT;
-    return source_compile(request, test_name, output, NULL, NULL, false, failure);
+    return source_compile(request, test_name, NULL, output, NULL, NULL, false, failure);
 }
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan(const XrLirSourceRequest *request,
     XrLirTestPlan **output, XrLirSourceFailure *failure) {
     if (!output) return XR_LIR_SOURCE_BAD_ARGUMENT;
-    return source_compile(request, NULL, NULL, output, NULL, false, failure);
+    return source_compile(request, NULL, NULL, NULL, output, NULL, false, failure);
 }
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan_selected(const XrLirSourceRequest *request,
     const char *filter, XrLirTestPlan **output, XrLirSourceFailure *failure) {
     if (!output) return XR_LIR_SOURCE_BAD_ARGUMENT;
     const SourceRoleFilter selection = {filter};
-    return source_compile(request, NULL, NULL, output, &selection, false, failure);
+    return source_compile(request, NULL, NULL, NULL, output, &selection, false, failure);
 }
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_catalog(const XrLirSourceRequest *request,
     XrLirTestPlan **output, XrLirSourceFailure *failure) {
     if (!output) return XR_LIR_SOURCE_BAD_ARGUMENT;
-    return source_compile(request, NULL, NULL, output, NULL, true, failure);
+    return source_compile(request, NULL, NULL, NULL, output, NULL, true, failure);
 }
 
 XR_FUNC bool xr_lir_test_plan_catalog(const XrLirTestPlan *plan, XrLirTestCatalogView *output) {

@@ -8,6 +8,9 @@
  * xcli_lir.c - Project authority and owned LIR at command boundaries
  */
 #include "xcli_lir.h"
+#if defined(XR_LIR_CLI_HAS_MATH_ARCHIVE)
+#include "xir/xxir_builtin_stdlib.h"
+#endif
 #include "xcli.h"
 #include "api/xsource_authority.h"
 #include "api/xsource_paths.h"
@@ -114,8 +117,12 @@ static int cli_lir_compile(const char *input, XrCompileResources **output_resour
     }
     XrLirSourceRequest request = {resources, paths.entry, paths.stdlib, false,
         xr_source_authority_entry(authority), xr_source_authority_lockfile(authority), xr_xir_target_host()};
+    const XrXirBuiltinStdlibModule *archive = NULL;
+#if defined(XR_LIR_CLI_HAS_MATH_ARCHIVE)
+    archive = &xray_stdlib_math_interface;
+#endif
     XrLirSourceStatus compiled = plan ? xr_lir_compile_test_plan_selected(&request, filter, plan, &failure)
-        : xr_lir_compile_source(&request, output, &failure);
+        : xr_lir_compile_source_with_archive(&request, archive, output, &failure);
     if (compiled != XR_LIR_SOURCE_OK) {
         report_lowering(quiet, cause, &failure, paths.entry);
         goto cleanup;
