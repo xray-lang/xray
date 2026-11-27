@@ -12,6 +12,7 @@
  */
 #include "lir/xlir_source.h"
 #include "lir/xlir_test_plan.h"
+#define TEST_ROLE_SESSION_CLOSE_CONTROL 1
 #include "../lir/test_role_session_selection.h"
 #include "vm/register/xrbc_lir.h"
 #include "lir_vm_result_report.h"
@@ -19,7 +20,7 @@
 #include <string.h>
 
 static void compile_file(const char *path, bool optimize, const char *stdlib,
-    const char *test_name, bool test_plan, const char *session_name,
+    const char *test_name, bool test_plan, const char *session_name, bool defer_close,
     XrRbcProgram **program, XrRbcTestSession **session, uint32_t *action_count) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
@@ -62,9 +63,14 @@ static void compile_file(const char *path, bool optimize, const char *stdlib,
     } else {
         XrRbcCompileDiagnostic diagnostic = {0};
         XrLirFunction entry = plan ? xr_lir_test_plan_initializer(plan) : lowered.entry;
-        XrRbcCompileStatus compiled = session_name
-            ? xr_rbc_test_session_compile(entry.module, entry, actions, *action_count, session, &diagnostic)
-            : xr_rbc_compile(entry.module, entry, program, &diagnostic);
+        XrRbcCompileStatus compiled;
+        if (defer_close)
+            compiled = xr_rbc_test_session_compile_with_metadata_close(entry.module, entry, actions,
+                *action_count, session_close_attempt, session, &diagnostic);
+        else if (session_name)
+            compiled = xr_rbc_test_session_compile(entry.module, entry, actions, *action_count, session, &diagnostic);
+        else
+            compiled = xr_rbc_compile(entry.module, entry, program, &diagnostic);
         if (compiled != XR_RBC_COMPILE_OK) {
             fprintf(stderr, "lir_vm_run: bytecode %s:%u:%u: %s\n",
                 diagnostic.path[0] ? diagnostic.path : path,
@@ -90,12 +96,37 @@ static bool report_test_panic(const XrRbcOutcome *outcome) {
     return true;
 }
 
-static int run_test_session(XrRbcTestSession *session, uint32_t action_count, bool retry_first) {
+static bool run_deferred_close(XrRbcTestSession *session, SessionCloseControl *close, XrRbcOutcome **first) {
+    const XrtTestRetirementHook hook = {session_close_retire, close};
+    if (xr_rbc_test_session_run_with_retirement_hook(session, 0, &hook, first) != XR_RBC_MESSAGE_PANIC ||
+        close->attempts != 1 || !close->metadata || close->metadata->handle != 17) return false;
+    XrRbcOutcome *outcome = NULL;
+    XrXirValueStatus error;
+    uint32_t source;
+    const XrtLocationOwner *locations;
+    bool valid = xr_rbc_test_session_run(session, 1, &outcome) == XR_RBC_VALUE_FAILURE &&
+        xr_rbc_outcome_value_failure(outcome, &error, &source, &locations) &&
+        error == XR_XIR_VALUE_IO && source == 0 && locations &&
+        close->attempts == 2 && close->metadata->handle == 17;
+    xr_rbc_outcome_free(&outcome);
+    valid = valid && xr_rbc_test_session_run(session, 1, &outcome) == XR_RBC_OK &&
+        xr_rbc_outcome_status(outcome) == XR_RBC_OK && close->attempts == 3 && !xrt_value_root_active();
+    xr_rbc_outcome_free(&outcome);
+    return valid;
+}
+
+static int run_test_session(XrRbcTestSession *session, uint32_t action_count, bool retry_first, bool defer_close) {
     XrRbcOutcome *first = NULL;
     XrRbcStatus first_status = xr_rbc_test_session_run(session, action_count, &first);
     bool valid = first_status == XR_RBC_INVALID && !first;
-    bool failed = false;
-    for (uint32_t i = 0; valid && i < action_count; ++i) {
+    SessionCloseControl close = {0};
+    bool failed = defer_close;
+    if (defer_close) {
+        session_close_control = &close;
+        valid = valid && action_count == 2 && run_deferred_close(session, &close, &first);
+        first_status = XR_RBC_MESSAGE_PANIC;
+    }
+    for (uint32_t i = 0; valid && !defer_close && i < action_count; ++i) {
         XrRbcOutcome *outcome = NULL;
         XrRbcStatus status = xr_rbc_test_session_run(session, i, &outcome);
         if (status == XR_RBC_INVALID) valid = failed && !outcome;
@@ -117,11 +148,12 @@ static int run_test_session(XrRbcTestSession *session, uint32_t action_count, bo
     if (valid && failed)
         result = report_test_panic(first) ? 1 : lir_vm_result_report(first, first_status);
     xr_rbc_outcome_free(&first);
+    if (defer_close && !session_close_finish(&close)) result = 2;
     return result;
 }
 
 int main(int argc, char **argv) {
-    bool twice = false, optimize = false, test_plan = false, retry_first = false;
+    bool twice = false, optimize = false, test_plan = false, retry_first = false, defer_close = false;
     bool valid = argc >= 2 && argc <= 8;
     const char *stdlib = NULL, *test_name = NULL, *session_name = NULL;
     for (int i = 2; i < argc; ++i) {
@@ -133,19 +165,21 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--test-session") && !session_name && i + 1 < argc)
             session_name = argv[++i];
         else if (!strcmp(argv[i], "--retry-first") && !retry_first) retry_first = true;
+        else if (!strcmp(argv[i], "--defer-close") && !defer_close) defer_close = true;
         else valid = false;
     }
     if (!valid || (test_plan && test_name) || (session_name && (test_plan || test_name || twice)) ||
-        (retry_first && !session_name)) {
+        ((retry_first || defer_close) && !session_name) || (retry_first && defer_close)) {
         fputs("usage: lir_vm_run <source.xr> [--twice] [--optimize] [--stdlib <directory>] "
-            "[--test NAME | --test-plan | --test-session NAME [--retry-first]]\n", stderr);
+            "[--test NAME | --test-plan | --test-session NAME [--retry-first | --defer-close]]\n", stderr);
         return 2;
     }
     XrRbcProgram *program = NULL;
     XrRbcTestSession *session = NULL;
     uint32_t action_count = 0;
-    compile_file(argv[1], optimize, stdlib, test_name, test_plan, session_name, &program, &session, &action_count);
-    if (session) return run_test_session(session, action_count, retry_first);
+    compile_file(argv[1], optimize, stdlib, test_name, test_plan, session_name, defer_close,
+        &program, &session, &action_count);
+    if (session) return run_test_session(session, action_count, retry_first, defer_close);
     if (!program) return 1;
     int result = 0;
     for (unsigned i = 0; i < (twice ? 2u : 1u) && !result; ++i) {

@@ -1,0 +1,15 @@
+var state: i64 = 41
+print(17)
+
+@test
+fn selected_close() {
+    state = state + 1
+    print(state)
+    assert(false, "session close panic")
+}
+
+@after_each
+fn after_close() {
+    assert(state == 42)
+    print(43)
+}

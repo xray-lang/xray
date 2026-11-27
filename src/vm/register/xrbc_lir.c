@@ -14,6 +14,7 @@
 #include "xrbc_lir.h"
 #include "xrbc_internal.h"
 #include "runtime/native/xnative_execution.h"
+#include "os/os_file_metadata.h"
 #include "lir/xlir_string.h"
 #include "lir/xlir_range.h"
 #include "lir/xlir_verify.h"
@@ -2230,22 +2231,25 @@ struct XrRbcTestSession {
     XrtTestSession *owner;
     XrRbcProgram *program;
     XrRbcExecution *pending;
+    XrtMetadataCloser close_metadata;
     uint32_t *entries;
     uint32_t count;
 };
 
-XR_FUNC XrRbcCompileStatus xr_rbc_test_session_compile(const XrLirModule *input, XrLirFunction initializer,
-    const XrLirFunction *actions, uint32_t count, XrRbcTestSession **output, XrRbcCompileDiagnostic *diagnostic) {
+XR_FUNC XrRbcCompileStatus xr_rbc_test_session_compile_with_metadata_close(const XrLirModule *input,
+    XrLirFunction initializer, const XrLirFunction *actions, uint32_t count, XrtMetadataCloser close_metadata,
+    XrRbcTestSession **output, XrRbcCompileDiagnostic *diagnostic) {
     XrRbcCompileDiagnostic local = {0};
     XrRbcCompileDiagnostic *d = diagnostic ? diagnostic : &local;
     *d = (XrRbcCompileDiagnostic){0};
-    if (!output || *output || !actions || !count || count > xr_lir_function_count(input) ||
+    if (!output || *output || !close_metadata || !actions || !count || count > xr_lir_function_count(input) ||
         sizeof(uint32_t) > SIZE_MAX / count)
         return rbc_lir_error(d, XR_RBC_COMPILE_INVALID, "invalid test session output or roles",
             (XrLirSource){0});
     XrRbcTestSession *session = xr_calloc(1, sizeof(*session));
     if (!session)
         return rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot allocate test session", (XrLirSource){0});
+    session->close_metadata = close_metadata;
     session->entries = xr_malloc((size_t)count * sizeof(*session->entries));
     XrRbcCompileStatus status = session->entries
         ? rbc_compile(input, initializer, actions, count, session->entries, &session->program, d)
@@ -2271,31 +2275,40 @@ XR_FUNC XrRbcCompileStatus xr_rbc_test_session_compile(const XrLirModule *input,
     return XR_RBC_COMPILE_OK;
 }
 
+XR_FUNC XrRbcCompileStatus xr_rbc_test_session_compile(const XrLirModule *input, XrLirFunction initializer,
+    const XrLirFunction *actions, uint32_t count, XrRbcTestSession **output, XrRbcCompileDiagnostic *diagnostic) {
+    return xr_rbc_test_session_compile_with_metadata_close(input, initializer, actions, count,
+        xr_os_io_file_metadata_close, output, diagnostic);
+}
+
 typedef struct RbcTestAction {
     XrRbcTestSession *session;
     XrRbcStatus status;
     uint32_t action;
     XrRbcOutcome **output;
+    const XrtTestRetirementHook *hook;
 } RbcTestAction;
 
 static XrtExecutionStatus rbc_test_step(void *context, XrtModuleLayout *layout, XrtModuleState *state, bool initialize) {
     RbcTestAction *action = context;
     XrRbcTestSession *session = action->session;
-    if (xr_rbc_execution_free(&session->pending) != XR_OS_IO_OK) {
-        action->status = XR_RBC_VALUE_FAILURE;
+    const XrRbcProgram *program = session->program;
+    XrOsIoStatus closed = xr_rbc_test_action_free(&session->pending, session->close_metadata);
+    if (closed != XR_OS_IO_OK) {
+        action->status = xr_rbc_test_close_failure(closed, program->locations, action->output);
         return XRT_EXECUTION_FAILURE;
     }
-    const XrRbcProgram *program = session->program;
     uint32_t entry = initialize ? 0 : session->entries[action->action];
     action->status = xr_rbc_module_prepare_test_action(&program->module, entry,
         program->locations, layout, state, &session->pending);
     if (action->status != XR_RBC_OK) return XRT_EXECUTION_FAILURE;
-    XrRbcOutcome *outcome = xr_rbc_execution_run(session->pending);
+    XrRbcOutcome *outcome = xr_rbc_execution_run_test_action(session->pending,
+        initialize ? NULL : action->hook, session->close_metadata);
     action->status = xr_rbc_outcome_status(outcome);
-    if (xr_rbc_execution_free(&session->pending) != XR_OS_IO_OK && action->status == XR_RBC_OK) {
-        xr_rbc_outcome_free(&outcome);
-        action->status = XR_RBC_VALUE_FAILURE;
-    }
+    /* The bound action already tried closing its own handles. Keep a failed
+     * drain in this owner for the next request, before any guest dispatch. */
+    if (xr_rbc_execution_root_retired(session->pending))
+        xr_rbc_test_action_free(&session->pending, session->close_metadata);
     if (!initialize || action->status != XR_RBC_OK)
         *action->output = outcome;
     else
@@ -2304,8 +2317,13 @@ static XrtExecutionStatus rbc_test_step(void *context, XrtModuleLayout *layout, 
 }
 
 XR_FUNC XrRbcStatus xr_rbc_test_session_run(XrRbcTestSession *session, uint32_t action, XrRbcOutcome **output) {
+    return xr_rbc_test_session_run_with_retirement_hook(session, action, NULL, output);
+}
+
+XR_FUNC XrRbcStatus xr_rbc_test_session_run_with_retirement_hook(XrRbcTestSession *session, uint32_t action,
+    const XrtTestRetirementHook *hook, XrRbcOutcome **output) {
     if (!session || action >= session->count || !output || *output) return XR_RBC_INVALID;
-    RbcTestAction request = {session, XR_RBC_INVALID, action, output};
+    RbcTestAction request = {session, XR_RBC_INVALID, action, output, hook};
     xrt_test_session_run(session->owner, rbc_test_step, &request);
     return request.status;
 }
@@ -2314,7 +2332,7 @@ XR_FUNC XrOsIoStatus xr_rbc_test_session_free(XrRbcTestSession **owner) {
     if (!owner || !*owner) return XR_OS_IO_OK;
     XrRbcTestSession *session = *owner;
     if (xrt_test_session_active(session->owner)) return XR_OS_IO_BAD_ARGUMENT;
-    XrOsIoStatus status = xr_rbc_execution_free(&session->pending);
+    XrOsIoStatus status = xr_rbc_test_action_free(&session->pending, session->close_metadata);
     if (status == XR_OS_IO_OK) status = xrt_test_session_free(&session->owner);
     if (status != XR_OS_IO_OK) return status;
     *owner = NULL;

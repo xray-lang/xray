@@ -26,11 +26,10 @@ def invoke(root, name, command):
     return completed.returncode, completed.stdout, completed.stderr
 
 
-def run_entry(args, root, source, label, *options, session=False, retry_first=False):
+def run_entry(args, root, source, label, *options, session=False, run_options=()):
     selection = ["--stdlib", args.source_root / "stdlib", *options]
     generated = root / (label + ".c")
-    retry = ["--retry-first"] if retry_first else []
-    vm = invoke(root, label + "-vm", [args.vm_driver, source, *selection, *retry])
+    vm = invoke(root, label + "-vm", [args.vm_driver, source, *selection, *run_options])
     emission = invoke(root, label + "-emit", [args.driver, source, generated, *selection])
     assert emission == (0, b"", b""), (emission, root)
     assert b"({" not in generated.read_bytes(), (generated, root)
@@ -45,7 +44,7 @@ def run_entry(args, root, source, label, *options, session=False, retry_first=Fa
             command.insert(1, "/D_CRT_SECURE_NO_WARNINGS")
     compilation = invoke(root, label + "-compile", command)
     assert compilation[0] == 0, (compilation, root)
-    native = invoke(root, label + "-native", [binary, *retry])
+    native = invoke(root, label + "-native", [binary, *run_options])
     assert vm == native, (label, vm, native, root)
     return native
 
@@ -127,8 +126,12 @@ def main():
                            "--optimize", session=True), actions, b"17\n20\n22\n27\nseed!?\n",
                  b"selected inner panic")
     assert_panic(run_entry(args, root, initializer_failure, "file-sticky", "--test-session", "blocked_test",
-                           session=True, retry_first=True),
+                           session=True, run_options=("--retry-first",)),
                  initializer_failure, b"17\n", b"initializer failure")
+    pending = fixtures / "test-role-session-close.xr"
+    assert_panic(run_entry(args, root, pending, "file-close", "--test-session", "selected_close",
+                           session=True, run_options=("--defer-close",)),
+                 pending, b"17\n42\n43\n", b"session close panic")
     for name in ("skipped_action", "ordinary_action", "imported_session_test", "before_action", "missing"):
         assert_rejected(args, root, actions, "file-" + name, "--test-session", name)
     complete_native_artifacts(root)

@@ -7,11 +7,13 @@
  */
 #ifndef TEST_ROLE_SESSION_SELECTION_H
 #define TEST_ROLE_SESSION_SELECTION_H
-#include "lir/xlir_test_plan.h"
 #include <stdlib.h>
+
+#if !defined(TEST_ROLE_SESSION_HOST_ONLY)
+#include "lir/xlir_test_plan.h"
 #include <string.h>
 
-static bool select_session_actions(const XrLirTestPlan *plan, const char *name,
+static inline bool select_session_actions(const XrLirTestPlan *plan, const char *name,
     XrLirFunction **output, uint32_t *count) {
     uint32_t roles = xr_lir_test_plan_role_count(plan);
     uint32_t selected = UINT32_MAX;
@@ -45,4 +47,46 @@ reject:
     free(functions);
     return false;
 }
+#endif
+
+#if defined(TEST_ROLE_SESSION_CLOSE_CONTROL)
+#include "runtime/native/xnative_execution.h"
+#include "runtime/native/xnative_values.h"
+#include "os/os_file_metadata.h"
+
+typedef struct SessionCloseControl {
+    XrtBillingOwner *billing;
+    XrOsFileMetadataOwner *metadata;
+    unsigned attempts;
+} SessionCloseControl;
+
+static SessionCloseControl *session_close_control;
+
+static inline void session_close_retire(void *context) {
+    SessionCloseControl *control = context;
+    if (control != session_close_control || control->attempts ||
+        xrt_native_values_stat_prepare(xrt_value_root_active(), &control->billing, &control->metadata) !=
+            XRT_MANAGED_OK ||
+        !control->metadata || control->metadata->handle || !xrt_billing_owner_retain(control->billing))
+        abort();
+    /* Only the injected closer accepts this token. It is never sent to the OS. */
+    control->metadata->handle = 17;
+}
+
+static inline XrOsIoStatus session_close_attempt(XrOsFileMetadataOwner *metadata) {
+    SessionCloseControl *control = session_close_control;
+    if (!control || metadata != control->metadata || metadata->handle != 17) abort();
+    if (++control->attempts < 3) return XR_OS_IO_IO;
+    metadata->handle = 0;
+    return XR_OS_IO_OK;
+}
+
+static inline bool session_close_finish(SessionCloseControl *control) {
+    session_close_control = NULL;
+    bool retired = control->attempts == 3 && control->billing &&
+        xrt_billing_owner_stats(control->billing).blocks == 1;
+    if (control->billing) xrt_billing_owner_drop(control->billing);
+    return retired;
+}
+#endif
 #endif // TEST_ROLE_SESSION_SELECTION_H

@@ -283,6 +283,7 @@ typedef struct XrtExecutionHooks {
     XrtMetadataCloser close_metadata;
     const XrtHostExecutionControl *control;
     XrtTempFailure *temp;
+    const XrtTestRetirementHook *retirement;
 } XrtExecutionHooks;
 
 /* Mutable managed-value state belongs to the caller of this setjmp function. */
@@ -299,6 +300,8 @@ static XrtExecutionStatus run_bound(const XrtSourceMap *map, XrtExecutionFailure
         root(context);
         result = XRT_EXECUTION_COMPLETED;
     } else result = XRT_EXECUTION_FAILURE;
+    if (hooks.retirement && hooks.retirement->retiring)
+        hooks.retirement->retiring(hooks.retirement->context);
     XrOsIoStatus retired = xrt_value_root_drain_with(strings, hooks.close_metadata);
     current_execution = binding.previous;
     (void)xrt_value_root_bind(previous_strings);
@@ -455,6 +458,13 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_with_metadata_close(const XrtL
     return run_embedded_owned(locations, failure, root, context, strings, hooks);
 }
 
+XR_FUNC XrtExecutionStatus xrt_run_embedded_test_action(const XrtLocationOwner *locations,
+    XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings,
+    XrtMetadataCloser close_metadata, const XrtTestRetirementHook *retirement) {
+    const XrtExecutionHooks hooks = {.close_metadata=close_metadata, .retirement=retirement};
+    return run_embedded_owned(locations, failure, root, context, strings, hooks);
+}
+
 struct XrtTestSession {
     XrtModuleLayout *layout;
     XrtModuleState *state;
@@ -528,6 +538,7 @@ typedef struct XrtNativeTestAction {
     XrtTestSession *session;
     XrtExecutionFailure *failure;
     uint32_t action;
+    const XrtTestRetirementHook *hook;
 } XrtNativeTestAction;
 
 static XrtExecutionStatus native_test_step(void *context, XrtModuleLayout *layout,
@@ -553,8 +564,8 @@ static XrtExecutionStatus native_test_step(void *context, XrtModuleLayout *layou
     if (state) xrt_native_values_use_state(root, state, file->state->values);
     XrtStateInvocation invocation = {
         initialize ? file->initializer : file->actions[action->action], NULL, state};
-    return xrt_run_embedded_owned_with_metadata_close(session->locations, action->failure, state_root_invoke,
-        &invocation, root, session->close_metadata);
+    return xrt_run_embedded_test_action(session->locations, action->failure, state_root_invoke,
+        &invocation, root, session->close_metadata, initialize ? NULL : action->hook);
 }
 
 XR_FUNC XrtManagedStatus xrt_test_session_create_native_with_metadata_close(const XrtNativeTestFile *file,
@@ -587,10 +598,15 @@ XR_FUNC XrtLocationOwner *xrt_test_session_locations(const XrtTestSession *sessi
 
 XR_FUNC XrtExecutionStatus xrt_test_session_run_native(XrtTestSession *session, uint32_t action,
     XrtExecutionFailure *failure) {
+    return xrt_test_session_run_native_with_retirement_hook(session, action, NULL, failure);
+}
+
+XR_FUNC XrtExecutionStatus xrt_test_session_run_native_with_retirement_hook(XrtTestSession *session,
+    uint32_t action, const XrtTestRetirementHook *hook, XrtExecutionFailure *failure) {
     const XrtNativeTestFile *file = session ? session->native_file : NULL;
     if (!file || action >= file->action_count || !file->actions[action] || !failure)
         return XRT_EXECUTION_INVALID;
-    XrtNativeTestAction request = {session, failure, action};
+    XrtNativeTestAction request = {session, failure, action, hook};
     return xrt_test_session_run(session, native_test_step, &request);
 }
 XR_FUNC XrtExecutionStatus xrt_run_embedded_receiving_temp(const XrtLocationOwner *locations,

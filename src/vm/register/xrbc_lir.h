@@ -82,7 +82,12 @@ typedef struct XrRbcTestSession XrRbcTestSession;
  * The session owns one immutable image and preserves State across actions. */
 XR_FUNC XrRbcCompileStatus xr_rbc_test_session_compile(const XrLirModule *, XrLirFunction initializer,
     const XrLirFunction *actions, uint32_t count, XrRbcTestSession **, XrRbcCompileDiagnostic *);
+XR_FUNC XrRbcCompileStatus xr_rbc_test_session_compile_with_metadata_close(const XrLirModule *,
+    XrLirFunction initializer, const XrLirFunction *actions, uint32_t count, XrtMetadataCloser,
+    XrRbcTestSession **, XrRbcCompileDiagnostic *);
 XR_FUNC XrRbcStatus xr_rbc_test_session_run(XrRbcTestSession *, uint32_t action, XrRbcOutcome **);
+XR_FUNC XrRbcStatus xr_rbc_test_session_run_with_retirement_hook(XrRbcTestSession *, uint32_t action,
+    const XrtTestRetirementHook *, XrRbcOutcome **);
 XR_FUNC XrOsIoStatus xr_rbc_test_session_free(XrRbcTestSession **);
 
 #endif  // XRBC_LIR_H

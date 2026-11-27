@@ -147,6 +147,16 @@ XR_FUNC XrtManagedStatus xrt_test_session_create_native_with_metadata_close(cons
 XR_FUNC XrtLocationOwner *xrt_test_session_locations(const XrtTestSession *);
 XR_FUNC XrtExecutionStatus xrt_test_session_run_native(XrtTestSession *, uint32_t action,
     XrtExecutionFailure *);
+/* The host probe observes the active Root after the action ends and before
+ * its sole drain. It returns normally and is never called for a close retry. */
+typedef struct XrtTestRetirementHook {
+    XrtSynchronousRoot retiring;
+    void *context;
+} XrtTestRetirementHook;
+XR_FUNC XrtExecutionStatus xrt_run_embedded_test_action(const XrtLocationOwner *, XrtExecutionFailure *,
+    XrtSynchronousRoot, void *context, XrtValueRoot *, XrtMetadataCloser, const XrtTestRetirementHook *);
+XR_FUNC XrtExecutionStatus xrt_test_session_run_native_with_retirement_hook(XrtTestSession *, uint32_t,
+    const XrtTestRetirementHook *, XrtExecutionFailure *);
 /* The initialized receiver is separate from ordinary failure storage. It must
  * be empty and may not be shared with an active ancestor. A temporary effect
  * can never attach an owner to the ordinary failure, which is reusable after

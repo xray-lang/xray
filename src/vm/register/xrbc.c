@@ -809,11 +809,16 @@ static void xr_rbc_try_trace(XrRbcExecution *execution,XrRbcOutcome *outcome) {
 }
 
 static XrRbcOutcome *rbc_execution_run(XrRbcExecution *execution,
-    const XrtHostExecutionControl *control, bool receives_temp) {
+    const XrtHostExecutionControl *control, bool receives_temp, const XrtTestRetirementHook *hook,
+    XrtMetadataCloser test_close) {
     if (!execution || execution->consumed || (control && !control->current)) return NULL;
     execution->consumed = true;
     XrRbcOutcome *outcome = execution->pending;
-    XrtExecutionStatus status = receives_temp ?
+    XrtExecutionStatus status;
+    if (test_close) {
+        status = xrt_run_embedded_test_action(outcome->locations, &outcome->failure,
+            xr_rbc_root, execution, &execution->values, test_close, hook);
+    } else status = receives_temp ?
         xrt_run_embedded_receiving_temp(outcome->locations, &outcome->failure, xr_rbc_root, execution,
             &execution->values, &outcome->temp) :
         xrt_run_embedded_owned_controlled(outcome->locations, &outcome->failure, xr_rbc_root, execution,
@@ -852,25 +857,35 @@ static XrRbcOutcome *rbc_execution_run(XrRbcExecution *execution,
 }
 
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
-    return rbc_execution_run(execution, NULL, false);
+    return rbc_execution_run(execution, NULL, false, NULL, NULL);
 }
 
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run_controlled(XrRbcExecution *execution,
     const XrtHostExecutionControl *control) {
-    return rbc_execution_run(execution, control, false);
+    return rbc_execution_run(execution, control, false, NULL, NULL);
 }
 
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run_receiving_temp(XrRbcExecution *execution) {
-    return rbc_execution_run(execution, NULL, true);
+    return rbc_execution_run(execution, NULL, true, NULL, NULL);
 }
 
-XR_FUNC XrOsIoStatus xr_rbc_execution_free(XrRbcExecution **execution) {
+XR_FUNC XrRbcOutcome *xr_rbc_execution_run_test_action(XrRbcExecution *execution,
+    const XrtTestRetirementHook *hook, XrtMetadataCloser close_metadata) {
+    return close_metadata ? rbc_execution_run(execution, NULL, false, hook, close_metadata) : NULL;
+}
+
+XR_FUNC bool xr_rbc_execution_root_retired(const XrRbcExecution *execution) {
+    return execution && execution->consumed && xrt_value_root_empty(&execution->values);
+}
+
+static XrOsIoStatus rbc_execution_free(XrRbcExecution **execution, XrtMetadataCloser close_metadata) {
     if (!execution || !*execution) return XR_OS_IO_OK;
     XrRbcExecution *owned = *execution;
     owned->consumed = true;
     xr_rbc_stack_free(&owned->stack);
     xrt_module_state_drop(&owned->state);
-    XrOsIoStatus status = xrt_value_root_drain(&owned->values);
+    XrOsIoStatus status = close_metadata ? xrt_value_root_drain_with(&owned->values, close_metadata) :
+        xrt_value_root_drain(&owned->values);
     if (status != XR_OS_IO_OK) return status;
     *execution = NULL;
     xr_free(owned->entries);
@@ -880,6 +895,31 @@ XR_FUNC XrOsIoStatus xr_rbc_execution_free(XrRbcExecution **execution) {
     if (owned->code_lease.owner) owned->code_lease.release(owned->code_lease.owner);
     xr_free(owned);
     return XR_OS_IO_OK;
+}
+
+XR_FUNC XrOsIoStatus xr_rbc_execution_free(XrRbcExecution **execution) {
+    return rbc_execution_free(execution, NULL);
+}
+
+XR_FUNC XrOsIoStatus xr_rbc_test_action_free(XrRbcExecution **execution, XrtMetadataCloser close_metadata) {
+    return rbc_execution_free(execution, close_metadata);
+}
+
+XR_FUNC XrRbcStatus xr_rbc_test_close_failure(XrOsIoStatus status, XrtLocationOwner *locations,
+    XrRbcOutcome **output) {
+    if (!output || *output || !locations || status == XR_OS_IO_OK) return XR_RBC_INVALID;
+    XrRbcOutcome *outcome = xr_calloc(1, sizeof(*outcome));
+    if (!outcome) return XR_RBC_OUT_OF_MEMORY;
+    if (!xrt_locations_retain(locations)) {
+        xr_free(outcome);
+        return XR_RBC_VALUE_FAILURE;
+    }
+    outcome->locations = locations;
+    outcome->status = XR_RBC_VALUE_FAILURE;
+    outcome->failure = (XrtExecutionFailure){.kind=XRT_FAILURE_VALUE,
+        .detail.value={.status=xrt_host_io_failure(status)}};
+    *output = outcome;
+    return outcome->status;
 }
 
 XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome) {

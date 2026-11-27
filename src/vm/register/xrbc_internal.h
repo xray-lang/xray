@@ -152,5 +152,10 @@ XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *, uint32_t
 /* Only the synchronous test-session owner supplies this matching State pair. */
 XR_FUNC XrRbcStatus xr_rbc_module_prepare_test_action(const XrRbcModule *, uint32_t entry,
     XrtLocationOwner *, XrtModuleLayout *, XrtModuleState *, XrRbcExecution **);
+XR_FUNC XrRbcOutcome *xr_rbc_execution_run_test_action(XrRbcExecution *, const XrtTestRetirementHook *,
+    XrtMetadataCloser);
+XR_FUNC bool xr_rbc_execution_root_retired(const XrRbcExecution *);
+XR_FUNC XrOsIoStatus xr_rbc_test_action_free(XrRbcExecution **, XrtMetadataCloser);
+XR_FUNC XrRbcStatus xr_rbc_test_close_failure(XrOsIoStatus, XrtLocationOwner *, XrRbcOutcome **);
 
 #endif // XRBC_INTERNAL_H
