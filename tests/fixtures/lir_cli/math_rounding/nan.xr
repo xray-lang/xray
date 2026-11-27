@@ -1,0 +1,9 @@
+import math
+
+fn checkedRound(x: f64) -> i64 {
+    return math.round(x)
+}
+
+print(1)
+print(checkedRound(0.0 / 0.0))
+print(999)

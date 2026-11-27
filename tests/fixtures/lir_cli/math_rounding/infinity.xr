@@ -1,0 +1,9 @@
+import math
+
+fn checkedCeil(x: f64) -> i64 {
+    return math.ceil(x)
+}
+
+print(1)
+print(checkedCeil(-1.0 / 0.0))
+print(999)

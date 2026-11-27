@@ -1,0 +1,25 @@
+{
+  "rounding": {
+    "exit": 0,
+    "stdout": "0\n0\n0\n0\n0\n0\n0\n0\n0\n1\n0\n0\n-1\n0\n0\n0\n0\n1\n0\n0\n-1\n0\n0\n0\n0\n1\n1\n0\n-1\n0\n-1\n0\n-3\n-2\n-2\n-2\n-3\n-2\n-3\n-2\n9223372036854774784\n9223372036854774784\n9223372036854774784\n9223372036854774784\n-9223372036854775808\n-9223372036854775808\n-9223372036854775808\n-9223372036854775808\n-2\n17\n",
+    "stderr": ""
+  },
+  "upper": {
+    "exit": 1,
+    "stdout": "1\n",
+    "stderr": "[Uncaught Panic] E0422: numeric conversion is out of range\n"
+  },
+  "nan": {
+    "exit": 1,
+    "stdout": "1\n",
+    "stderr": "[Uncaught Panic] E0422: numeric conversion is out of range\n"
+  },
+  "infinity": {
+    "exit": 1,
+    "stdout": "1\n",
+    "stderr": "[Uncaught Panic] E0422: numeric conversion is out of range\n"
+  },
+  "private": {
+    "source_error": ":1:1: error: import requires an exported declaration"
+  }
+}

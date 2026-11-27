@@ -56,6 +56,7 @@
     "test_lir_cli_string_slice",
     "test_lir_cli_string_index_of",
     "test_lir_cli_f64_try_parse",
+    "test_lir_cli_math_rounding",
     "test_lir_cli_bool_try_parse",
     "test_lir_cli_string_test",
     "test_lir_cli_string_last_index_of",

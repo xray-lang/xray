@@ -1713,6 +1713,8 @@ static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint3
     return shape;
 }
 
+#include "xlir_math_lower.inc.c"
+
 static bool lower_admit_function(Lower *c, uint32_t function) {
     c->function = function;
     c->block = 0;
@@ -1770,7 +1772,8 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             return true;
         }
         uint32_t fields[2];
-        return lower_os_platform(c, function) || lower_host_abi(c, function, fields) != XR_NATIVE_HOST_NONE ||
+        return lower_math_rounding_id(c, function) || lower_os_platform(c, function) ||
+            lower_host_abi(c, function, fields) != XR_NATIVE_HOST_NONE ||
             lower_unsupported(c, "function without a scalar body");
     }
     if (!lower_byte_lengths(c, f) || !lower_optional_errors(c,f) || !lower_catch_errors(c,f)) return false;
@@ -3735,6 +3738,8 @@ static bool lower_strict_utf8_body(Lower *c, uint32_t index) {
 static bool lower_host_function(Lower *c, uint32_t index) {
     if (xir_strict_utf8_callable(c->source, index)) return lower_strict_utf8_body(c, index);
     if (lower_os_platform(c, index)) return lower_os_platform_body(c, c->functions[index]);
+    uint32_t rounding = lower_math_rounding_id(c, index);
+    if (rounding) return lower_math_rounding_body(c, c->functions[index], rounding);
     uint32_t fields[2] = {0};
     XrNativeHostShape shape = lower_host_abi(c, index, fields);
     XrLirOp operation;

@@ -1,0 +1,28 @@
+import math
+import { floor as namedFloor } from math
+
+fn row(x: f64) {
+    print(math.floor(x))
+    print(math.ceil(x))
+    print(math.round(x))
+    print(math.trunc(x))
+}
+
+fn __floor(x: f64) -> i64 {
+    return 17
+}
+
+row(0.0)
+row(-0.0)
+row(5e-324)
+row(-5e-324)
+row(0.49999999999999994)
+row(-0.49999999999999994)
+row(0.5)
+row(-0.5)
+row(-2.25)
+row(-2.5)
+row(9223372036854774784.0)
+row(-9223372036854775808.0)
+print(namedFloor(-1.25))
+print(__floor(-1.25))

@@ -1,0 +1,9 @@
+import math
+
+fn checkedTrunc(x: f64) -> i64 {
+    return math.trunc(x)
+}
+
+print(1)
+print(checkedTrunc(9223372036854775808.0))
+print(999)
