@@ -1,0 +1,10 @@
+var bias: i64 = 2
+var offset: i64 = 2
+
+export fn combine(left: i64, right: i64) -> i64 {
+    return left + right
+}
+
+export fn identity(value: bool) -> bool {
+    return value
+}

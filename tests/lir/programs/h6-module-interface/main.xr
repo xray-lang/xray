@@ -1,0 +1,3 @@
+import {apply} from "./adapter"
+
+print(apply(40))

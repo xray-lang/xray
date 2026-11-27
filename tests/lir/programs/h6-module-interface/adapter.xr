@@ -1,0 +1,5 @@
+import {combine} from "./leaf"
+
+export fn apply(value: i64) -> i64 {
+    return combine(value, 2)
+}

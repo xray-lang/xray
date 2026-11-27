@@ -17,6 +17,7 @@
 #include "xir/xxir_type_description.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_internal.h"
+#include "xir/xxir_module_interface.h"
 #include "xir/xxir_comptime_pending_internal.h"
 #include "xir/xxir_source_comptime_instances_internal.h"
 #include "xir/xxir_source_builtin.h"
@@ -629,6 +630,118 @@ static void file_stat_cycle_facts(const char *stdlib_path) {
     xr_compile_resources_release(context.resources);
 }
 
+static void module_interface_fingerprints(const char *stdlib_path) {
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrXirCompileContext context = {.limits = xr_xir_compile_default_limits()};
+    CHECK(xr_compile_resources_new(&limits, &context.resources) == XR_COMPILE_RESOURCE_OK);
+    XrOsIoPolicy policy = xr_compile_io_policy(context.resources);
+    char *fixtures = NULL, *root = NULL, *entry = NULL, *leaf = NULL, *unsupported = NULL;
+    CHECK(xr_path_join_owned(&policy, stdlib_path, "../tests/lir/programs/h6-module-interface", &fixtures) == XR_OS_IO_OK);
+    CHECK(xr_realpath_owned(&policy, fixtures, &root) == XR_OS_IO_OK);
+    CHECK(xr_path_join_owned(&policy, root, "main.xr", &entry) == XR_OS_IO_OK);
+    CHECK(xr_path_join_owned(&policy, root, "leaf.xr", &leaf) == XR_OS_IO_OK);
+    CHECK(xr_path_join_owned(&policy, root, "unsupported.xr", &unsupported) == XR_OS_IO_OK);
+    XrCompilerSession *session = NULL;
+    CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILE_RESOURCE_OK);
+    const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, root};
+    XrXirSourceRequest request = {.session = session, .entry_path = entry, .authority = &authority,
+        .context = &context, .stdlib_path = stdlib_path, .linkage_kind = XR_XIR_PROGRAM, .target = XR_XIR_HOST_TARGET};
+    char *leaf_id = NULL, *adapter_id = NULL, *unsupported_id = NULL, *missing_id = NULL;
+    CHECK(xr_compile_module_identity_from_logical(context.resources, &authority, "leaf.xr", &leaf_id) == XR_MODULE_OK);
+    CHECK(xr_compile_module_identity_from_logical(context.resources, &authority, "adapter.xr", &adapter_id) == XR_MODULE_OK);
+    CHECK(xr_compile_module_identity_from_logical(context.resources, &authority, "unsupported.xr", &unsupported_id) == XR_MODULE_OK);
+    CHECK(xr_compile_module_identity_from_logical(context.resources, &authority, "missing.xr", &missing_id) == XR_MODULE_OK);
+
+    XrFingerprint original = {0}, adapter = {0};
+    XIR_OK(xir_source_module_interface(&request, NULL, 0, leaf_id, &original, NULL));
+    XIR_OK(xir_source_module_interface(&request, NULL, 0, adapter_id, &adapter, NULL));
+    CHECK(memcmp(original.bytes, adapter.bytes, sizeof(original.bytes)) != 0);
+    request.entry_path = leaf;
+    XrFingerprint direct = {0};
+    XIR_OK(xir_source_module_interface(&request, NULL, 0, leaf_id, &direct, NULL));
+    CHECK(!memcmp(original.bytes, direct.bytes, sizeof(original.bytes)));
+    request.entry_path = entry;
+
+    enum { BODY_EDIT, EXPORT_ORDER, LABEL_ORDER, RESULT_TYPE, SLOT_READ, OTHER_SLOT_READ };
+    const struct { const char *source; bool same; } revisions[] = {
+        [BODY_EDIT] = {"var bias: i64 = 2\nvar offset: i64 = 2\n"
+         "export fn combine(left: i64, right: i64) -> i64 { return left + right + 1 }\n"
+         "export fn identity(value: bool) -> bool { return value }\n", true},
+        [EXPORT_ORDER] = {"var bias: i64 = 2\nvar offset: i64 = 2\n"
+         "export fn identity(value: bool) -> bool { return value }\n"
+         "export fn combine(left: i64, right: i64) -> i64 { return left + right }\n", true},
+        [LABEL_ORDER] = {"var bias: i64 = 2\nvar offset: i64 = 2\n"
+         "export fn combine(right: i64, left: i64) -> i64 { return left + right }\n"
+         "export fn identity(value: bool) -> bool { return value }\n", false},
+        [RESULT_TYPE] = {"var bias: i64 = 2\nvar offset: i64 = 2\n"
+         "export fn combine(left: i64, right: i64) -> i64 { return left + right }\n"
+         "export fn identity(value: bool) -> i64 { if (value) { return 1 }; return 0 }\n", false},
+        [SLOT_READ] = {"var bias: i64 = 2\nvar offset: i64 = 2\n"
+         "export fn combine(left: i64, right: i64) -> i64 { return left + bias }\n"
+         "export fn identity(value: bool) -> bool { return value }\n", false},
+        [OTHER_SLOT_READ] = {"var bias: i64 = 2\nvar offset: i64 = 2\n"
+         "export fn combine(left: i64, right: i64) -> i64 { return left + offset }\n"
+         "export fn identity(value: bool) -> bool { return value }\n", false},
+    };
+    XrFingerprint read_effect = {0};
+    for (size_t i = 0; i < sizeof(revisions) / sizeof(*revisions); ++i) {
+        XrModuleOverlayInput edit = {authority, "leaf.xr", leaf, revisions[i].source, strlen(revisions[i].source)};
+        XrFingerprint digest = {0};
+        XrXirSourceDiagnostic diagnostic = {0};
+        XrXirStatus status = xir_source_module_interface(&request, &edit, 1, leaf_id, &digest, &diagnostic);
+        if (status != XR_XIR_OK)
+            fprintf(stderr, "module revision %zu: %u:%d:%d: %s\n", i, status,
+                diagnostic.line, diagnostic.column, diagnostic.message);
+        XIR_OK(status);
+        CHECK((memcmp(original.bytes, digest.bytes, sizeof(original.bytes)) == 0) == revisions[i].same);
+        if (i == BODY_EDIT) {
+            XIR_OK(xir_source_module_interface(&request, &edit, 1, adapter_id, &digest, NULL));
+            CHECK(!memcmp(adapter.bytes, digest.bytes, sizeof(adapter.bytes)));
+        }
+        if (i == SLOT_READ) read_effect = digest;
+        if (i == OTHER_SLOT_READ) CHECK(memcmp(read_effect.bytes, digest.bytes, sizeof(digest.bytes)) != 0);
+    }
+
+    XrFingerprint preserved = original;
+    CHECK(xir_source_module_interface(&request, NULL, 0, missing_id, &preserved, NULL) == XR_XIR_UNRESOLVED);
+    CHECK(!memcmp(original.bytes, preserved.bytes, sizeof(original.bytes)));
+    const XrXirTarget host = request.target;
+    request.target.os = host.os == XR_TARGET_QUERY_VALUE_OS_WINDOWS ?
+        XR_TARGET_QUERY_VALUE_OS_LINUX : XR_TARGET_QUERY_VALUE_OS_WINDOWS;
+    CHECK(xir_source_module_interface(&request, NULL, 0, leaf_id, &preserved, NULL) == XR_XIR_UNSUPPORTED);
+    CHECK(!memcmp(original.bytes, preserved.bytes, sizeof(original.bytes)));
+    request.target = host;
+    request.entry_path = unsupported;
+    XrXirSourceResult accepted = {0};
+    XIR_OK(xr_xir_compile_source_check(&request, &accepted, NULL, NULL));
+    xr_xir_compile_source_result_free(&accepted);
+    CHECK(xir_source_module_interface(&request, NULL, 0, unsupported_id, &preserved, NULL) == XR_XIR_UNSUPPORTED);
+    CHECK(!memcmp(original.bytes, preserved.bytes, sizeof(original.bytes)));
+
+    const char *unsupported_exports[] = {"export fn value() -> string { return \"text\" }\n",
+        "export const value: i64 = 42\n", "export fn value(input: i64=42) -> i64 { return input }\n"};
+    for (size_t i = 0; i < sizeof(unsupported_exports) / sizeof(*unsupported_exports); ++i) {
+        const char *text = unsupported_exports[i];
+        XrModuleOverlayInput edit = {authority, "unsupported.xr", unsupported, text, strlen(text)};
+        XIR_OK(xr_xir_compile_source_check_overlay(&request, &edit, 1, &accepted, NULL, NULL));
+        xr_xir_compile_source_result_free(&accepted);
+        CHECK(xir_source_module_interface(&request, &edit, 1, unsupported_id, &preserved, NULL) == XR_XIR_UNSUPPORTED);
+        CHECK(!memcmp(original.bytes, preserved.bytes, sizeof(original.bytes)));
+    }
+    xr_compile_session_free(session);
+    xr_compile_resources_free(missing_id);
+    xr_compile_resources_free(unsupported_id);
+    xr_compile_resources_free(adapter_id);
+    xr_compile_resources_free(leaf_id);
+    xr_compile_resources_free(unsupported);
+    xr_compile_resources_free(leaf);
+    xr_compile_resources_free(entry);
+    xr_compile_resources_free(root);
+    xr_compile_resources_free(fixtures);
+    xr_compile_resources_release(context.resources);
+    puts("Scalar interface fingerprints preserve body edits and reject incomplete exports");
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     source_target_admission();
@@ -642,5 +755,6 @@ int main(int argc, char **argv) {
     evaluation_origin_rejected();
     class_cycle_facts();
     file_stat_cycle_facts(argv[1]);
+    module_interface_fingerprints(argv[1]);
     return 0;
 }

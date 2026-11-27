@@ -10,6 +10,7 @@
  *   Input selection precedes the same checked construction and owned publication.
  */
 #include "xxir_source_ast_owner.h"
+#include "xxir_module_interface.h"
 typedef struct SourceInputCapture {
     AstNode *ast;
     uint32_t module;
@@ -23,6 +24,11 @@ typedef struct SourceComptimeInstancesOperation {
     const XirSourceComptimeRequest *request;
     XirSourceComptimeInstances *output;
 } SourceComptimeInstancesOperation;
+typedef struct SourceModuleInterfaceCapture {
+    const char *canonical;
+    XrFingerprint digest;
+    XrXirStatus status;
+} SourceModuleInterfaceCapture;
 typedef struct SourceInput {
     bool supplied;
     bool call_observations;
@@ -42,6 +48,7 @@ typedef struct SourceInput {
     size_t included_count;
     const SourceInstanceOperation *instances;
     const SourceComptimeInstancesOperation *comptime_instances;
+    SourceModuleInterfaceCapture *module_interface;
 } SourceInput;
 static void source_input_nul(SourceContext *ctx,const char *path,size_t line,size_t column,XrXirSourceFailure *failure) {
     if(line>INT_MAX || column>INT_MAX) {
@@ -219,6 +226,11 @@ done:
     /* A comptime receiver has already copied the complete final query from its
      * own construction. The original context publishes only its own result. */
     if (!comptime_instances && !result.snapshot) source_query_publish(&ctx, &result);
+    if (input.module_interface && ctx.diagnostic.status == XR_XIR_OK) {
+        SourceModuleInterfaceCapture *capture = input.module_interface;
+        capture->status = xir_module_interface_project(ctx.graph, result.checked,
+            capture->canonical, &capture->digest);
+    }
     const XrModuleSourceDiagnostic *parse=ctx.graph?&ctx.graph->source_diagnostic:NULL;
     if (failure && (semantic_started||(parse&&parse->present)) && ctx.diagnostic.status != XR_XIR_OK &&
         ctx.diagnostic.line > 0 && ctx.graph &&
@@ -300,6 +312,23 @@ XrXirStatus xr_xir_compile_source_check_overlay(const XrXirSourceRequest *reques
     XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     SourceInput input = {.overlays=overlays, .overlay_count=count};
     return source_check_input(request, input, output, diagnostic, failure);
+}
+
+XR_FUNC XrXirStatus xir_source_module_interface(const XrXirSourceRequest *request,
+    const XrModuleOverlayInput *overlays, size_t count, const char *canonical, XrFingerprint *output,
+    XrXirSourceDiagnostic *diagnostic) {
+    if (!canonical || !*canonical || !output) return XR_XIR_BAD_STRUCTURE;
+    SourceModuleInterfaceCapture capture = {.canonical = canonical, .status = XR_XIR_BAD_STRUCTURE};
+    XrXirSourceResult source = {0};
+    SourceInput input = {.overlays = overlays, .overlay_count = count, .module_interface = &capture};
+    XrXirStatus status = source_check_input(request, input, &source, diagnostic, NULL);
+    xr_xir_compile_source_result_free(&source);
+    if (status == XR_XIR_OK) {
+        status = capture.status;
+        if (diagnostic) diagnostic->status = status;
+    }
+    if (status == XR_XIR_OK) *output = capture.digest;
+    return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_check_corpus(const XrXirSourceCorpusRequest *request,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {

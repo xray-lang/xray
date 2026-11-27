@@ -30,6 +30,7 @@ add_library(xray_xir_ctfe STATIC xxir_ctfe.c xxir_ctfe_instance.c)
 target_include_directories(xray_xir_ctfe PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir_ctfe PUBLIC xray_xir_scalar)
 add_library(xray_xir_source STATIC xxir_source.c xxir_source_query.c xxir_source_failure.c xxir_type_inference.c xxir_library_catalog.c
+    xxir_module_interface.c
     ../hir/xhir_body.c ../hir/xhir_items.c ../hir/xhir_diagnostics.c ../hir/xhir_literal.c ../hir/xhir_collection.c ../hir/xhir_conversion.c ../hir/xhir_binary.c ../hir/xhir_unary.c ../hir/xhir_boolean.c ../hir/xhir_cast.c ../hir/xhir_nullable.c)
 target_sources(xray_xir_source PRIVATE
     ../module/xmodule_graph.c ../module/xmodule_position.c ../module/xmodule_resolver.c ../module/xmodule_identity.c ../module/xmodule_overlay.c
