@@ -53,6 +53,30 @@ def benchmark_engines(counts):
     return {f"String append {count}": {name: [name, str(count)] for name in names} for count in counts}
 
 
+def windows_shard_receipts(commit, blocks=6):
+    sizes = (1, 1_000_000, *BASELINE.STRING_SIZES)
+    receipts = []
+    for shard in (1, 2, 3):
+        samples = []
+        for count in sizes:
+            stdout = hashlib.sha256(f"{count}\n".encode("ascii")).hexdigest()
+            for backend, reference, limit in GATE_BACKENDS:
+                for form in GATE_FORMS[shard - 1::3]:
+                    pair = paired_samples(count, backend + form, reference, [10 * limit] * (2 * blocks),
+                                          [10.0] * (2 * blocks))
+                    for row in pair:
+                        row.update(exit=0, timed_out=False, state="TERMINAL_DRAINED",
+                                   stdout_sha256=stdout, stderr_sha256=hashlib.sha256(b"").hexdigest())
+                    samples.extend(pair)
+        receipts.append({
+            "schema": 1, "shard": shard, "host": f"windows-{shard}", "blocks": blocks,
+            "identity": {"product": "xray-lang", "target": "windows-x86_64", "commit": commit,
+                         "dirty": False, "buildProfile": "Release"},
+            "compiler_sha256": "f" * 64, "python_version": "3.15.2", "samples": samples,
+        })
+    return receipts
+
+
 class StringBaselineTests(unittest.TestCase):
     def test_default_benchmarks_exclude_string(self):
         self.assertEqual(BASELINE.DEFAULT_BENCHES,
@@ -107,6 +131,65 @@ class StringBaselineTests(unittest.TestCase):
         for key, observed in samples.items():
             with self.subTest(pair=key):
                 self.assertEqual(observed, [0, 1, 2, 3])
+
+    def test_windows_shards_partition_the_complete_schedule(self):
+        engines = benchmark_engines((1, 1_000_000, *BASELINE.STRING_SIZES))
+        full = list(BASELINE.string_gate_jobs(engines, 6))
+        shards = [list(BASELINE.string_gate_jobs(engines, 6, shard)) for shard in (1, 2, 3)]
+        self.assertEqual([len(jobs) for jobs in shards], [480, 480, 480])
+        jobs = [(label, engine, tuple(command), sample, pair) for shard in shards
+                for label, engine, command, sample, pair in shard]
+        self.assertCountEqual(jobs, [(label, engine, tuple(command), sample, pair)
+                                     for label, engine, command, sample, pair in full])
+
+    def test_windows_shards_preserve_the_complete_ratio_gate(self):
+        commit = "a" * 40
+        receipts = windows_shard_receipts(commit)
+        merged = BASELINE.merged_string_gate(list(reversed(receipts)), commit, 6)
+        self.assertEqual(merged, BASELINE.string_performance_gate(passing_samples(6), 6))
+        self.assertEqual(merged["status"], "PASS")
+
+        engine = "Xray VM grouped"
+        label = f"String append {BASELINE.STRING_SIZES[0]}"
+        for row in receipts[2]["samples"]:
+            if row["label"] == label and row["engine"] == engine:
+                row["seconds"] = 15.0
+        with mock.patch("builtins.print"):
+            merged = BASELINE.merged_string_gate(receipts, commit, 6)
+        self.assertEqual(merged["status"], "FAIL")
+        self.assertEqual(gate_row(merged, BASELINE.STRING_SIZES[0], engine)["ratio"], 1.5)
+
+    def test_windows_shards_reject_incomplete_or_mismatched_receipts(self):
+        commit = "a" * 40
+        first, second, last = windows_shard_receipts(commit)
+        identity = first["identity"]
+        failures = {
+            "missing shard": [first, second],
+            "duplicate shard": [first, second, last, first],
+            "duplicate host": [first, second, dict(last, host=first["host"])],
+            "wrong SHA": [dict(first, identity=dict(identity, commit="b" * 40)), second, last],
+            "wrong target": [dict(first, identity=dict(identity, target="linux-x86_64")), second, last],
+            "dirty CLI": [dict(first, identity=dict(identity, dirty=True)), second, last],
+            "missing sample": [dict(first, samples=first["samples"][1:]), second, last],
+            "duplicate sample": [dict(first, samples=[first["samples"][0], *first["samples"]]), second, last],
+            "wrong order": [dict(first, samples=list(reversed(first["samples"]))), second, last],
+            "missing build compiler": [dict(first, compiler_sha256=None), second, last],
+        }
+        for name, receipts in failures.items():
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                BASELINE.merged_string_gate(receipts, commit, 6)
+
+    def test_windows_shards_reject_failed_or_inexact_functional_prechecks(self):
+        commit = "a" * 40
+        first, second, last = windows_shard_receipts(commit)
+        precheck = next(i for i, row in enumerate(first["samples"]) if row["label"] == "String append 1000000")
+        for index in (0, precheck):
+            for field, value in (("stdout_sha256", "0" * 64), ("stderr_sha256", "0" * 64),
+                                 ("exit", 1), ("status", "FAIL"), ("timed_out", True), ("seconds", float("nan"))):
+                samples = first["samples"].copy()
+                samples[index] = dict(samples[index], **{field: value})
+                with self.subTest(index=index, field=field), self.assertRaisesRegex(ValueError, "invalid sample"):
+                    BASELINE.merged_string_gate([dict(first, samples=samples), second, last], commit, 6)
 
     def test_balanced_block_median_rejects_independent_timing_bias(self):
         count = BASELINE.STRING_SIZES[0]

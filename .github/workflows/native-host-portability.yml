@@ -180,7 +180,7 @@ jobs:
         if: ${{ !cancelled() && steps.string-reference.outcome == 'success' }}
         run: python tests/tools/test_new_path_baseline.py
       - name: Enforce String append limits for equivalent spellings
-        if: ${{ !cancelled() && steps.string-reference.outcome == 'success' }}
+        if: ${{ runner.os != 'Windows' && !cancelled() && steps.string-reference.outcome == 'success' }}
         shell: python
         run: |
           import os, subprocess, sys
@@ -212,6 +212,94 @@ jobs:
             build/lir-cli-array-native/**/result.jsonl
             build/lir-cli-array-native/**/*.stdout
             build/lir-cli-array-native/**/*.stderr
+
+  windows-string-shard:
+    if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance
+    name: Windows String shard ${{ matrix.shard }}
+    runs-on: windows-2022
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      NO_COLOR: '1'
+      VSLANG: '1033'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build a clean Release CLI
+        shell: cmd
+        run: |
+          chcp 65001 >nul
+          python scripts/ci_build_log.py --log string-evidence/configure.log -- cmake --preset default
+          if errorlevel 1 exit /b 1
+          python scripts/ci_build_log.py --log string-evidence/cli.log -- cmake --build build --parallel 4 --target xray
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.15.2'
+      - name: Measure the Windows String shard
+        shell: python
+        run: |
+          import pathlib, re, subprocess, sys
+          cache = pathlib.Path('build/CMakeCache.txt').read_text(encoding='utf-8')
+          compiler = re.search(r'^CMAKE_C_COMPILER:FILEPATH=(.+)$', cache, re.M)
+          if not compiler:
+              raise RuntimeError('Missing explicit compiler identity in the fresh build')
+          subprocess.run([sys.executable, 'scripts/new_path_baseline.py', '--root', '.',
+                          '--build', 'build', '--work', 'string-evidence',
+                          '--cc', compiler[1].strip(), '--samples', '6',
+                          '--gate-string', '--string-gate-shard', '${{ matrix.shard }}'], check=True)
+      - name: Publish the completed shard receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-string-receipt-${{ github.sha }}-${{ matrix.shard }}
+          path: string-evidence/string-gate-shard.json
+          if-no-files-found: error
+          overwrite: true
+      - name: Preserve Windows String evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-string-evidence-${{ github.sha }}-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: |
+            string-evidence/**/*.log
+            string-evidence/**/*.json
+            string-evidence/**/*.jsonl
+            string-evidence/**/*.stdout
+            string-evidence/**/*.stderr
+
+  windows-string-gate:
+    name: Windows String gate
+    if: ${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.scalar_performance) }}
+    needs: windows-string-shard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: windows-string-receipt-${{ github.sha }}-*
+          path: string-receipts
+      - name: Enforce every Windows String ratio and output check
+        env:
+          SHARDS_RESULT: ${{ needs.windows-string-shard.result }}
+        run: |
+          test "$SHARDS_RESULT" = success
+          python3 scripts/new_path_baseline.py --root . --work string-gate --samples 6 \
+            --merge-string-gate-shards string-receipts/*/string-gate-shard.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-string-gate-${{ github.sha }}
+          path: string-gate/*.json
 
   managed-layout:
     if: github.event_name != 'workflow_dispatch' || !inputs.scalar_performance

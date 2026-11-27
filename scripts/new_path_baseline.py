@@ -82,6 +82,8 @@ BENCH_LABELS = {"fib": "fib(32)", "loop10m": "loop 10M", "loop100m": "loop 100M"
 DEFAULT_BENCHES = tuple(BENCH_LABELS.values())
 BENCH_LABELS["string-append"] = "String append"
 STRING_SIZES = (4_000_000, 8_000_000, 16_000_000)
+STRING_GATE_SIZES = (1, 1_000_000, *STRING_SIZES)
+STRING_GATE_SHARDS = (1, 2, 3)
 LIBS = (("src/runtime/native", "xray_native_runtime"), ("src/xir", "xray_xir_scalar"),
         ("src/xir", "xray_xir_declarations"), ("src/xir", "xray_xir_admission"),
         ("src/base", "xray_compile_resources"))
@@ -460,6 +462,10 @@ def string_bench_programs(args, root, env):
         paths = [work / (stem + suffix) for suffix in (".xr", "_ref.c", ".py")]
         templates = [STRING_APPEND_XR, STRING_APPEND_C, STRING_APPEND_PY]
         forms = STRING_APPEND_FORMS if args.append_forms else ()
+        shard = getattr(args, "string_gate_shard", None)
+        if shard is not None:
+            names = string_gate_forms(shard)
+            forms = tuple(form for form in forms if form[0] in names)
         for _, suffix, template in forms:
             paths.append(work / (stem + suffix + ".xr"))
             templates.append(template)
@@ -573,16 +579,20 @@ def bench_jobs(engines, sample_count):
                 yield label, engine, command, sample, None
 
 
-def string_gate_engines():
+def string_gate_forms(shard):
+    forms = ("", *(name for name, _, _ in STRING_APPEND_FORMS))
+    return forms if shard is None else forms[shard - 1::len(STRING_GATE_SHARDS)]
+
+
+def string_gate_engines(shard=None):
     for backend, reference, limit in (("Xray VM", "CPython", 1.0), ("Xray native", "C -O2", 1.3)):
-        yield backend, reference, limit
-        for name, _, _ in STRING_APPEND_FORMS:
-            yield f"{backend} {name}", reference, limit
+        for name in string_gate_forms(shard):
+            yield f"{backend} {name}" if name else backend, reference, limit
 
 
-def string_gate_jobs(engines, blocks):
+def string_gate_jobs(engines, blocks, shard=None):
     for label, row in engines.items():
-        for candidate, reference, _ in string_gate_engines():
+        for candidate, reference, _ in string_gate_engines(shard):
             for sample in range(2 * blocks):
                 order = (reference, candidate) if sample % 2 else (candidate, reference)
                 for engine in order:
@@ -606,7 +616,12 @@ def bench(args, root):
     outputs = collections.defaultdict(set)
     string_samples = []
     gated = getattr(args, "gate_string", False)
-    jobs = string_gate_jobs(engines, args.samples) if gated else bench_jobs(engines, args.samples)
+    shard = getattr(args, "string_gate_shard", None)
+    if shard is not None:
+        selected = {engine for pair in string_gate_engines(shard) for engine in pair[:2]}
+        engines = {label: {name: argv for name, argv in row.items() if name in selected}
+                   for label, row in engines.items()}
+    jobs = string_gate_jobs(engines, args.samples, shard) if gated else bench_jobs(engines, args.samples)
     for label, engine, command, sample, candidate in jobs:
         if label.startswith("String append "):
             name = f"sample-{sample}-{label.replace(' ', '-')}-{engine.replace(' ', '-')}"
@@ -759,6 +774,67 @@ def string_performance_gate(records, blocks):
     return report
 
 
+def string_gate_receipt(args, identity):
+    audit = args.string_bench
+    return {"schema": 1, "shard": args.string_gate_shard, "blocks": args.samples,
+            "identity": identity, "host": platform.node(), "python_version": audit["python_version"],
+            "compiler_sha256": audit["artifacts"][audit["compiler"]],
+            "samples": json.loads((args.work / "string-samples.json").read_text(encoding="utf-8"))}
+
+
+def merged_string_gate(receipts, commit, blocks):
+    """Reconstruct the full gate from three ordered Windows runner receipts."""
+    by_shard = {}
+    hosts = set()
+    for receipt in receipts:
+        if not isinstance(receipt, dict):
+            raise ValueError("invalid String gate receipt")
+        shard, host = receipt.get("shard"), receipt.get("host")
+        if type(shard) is not int or shard not in STRING_GATE_SHARDS or shard in by_shard:
+            raise ValueError(f"invalid or duplicate String gate shard: {shard!r}")
+        if not isinstance(host, str) or not host.strip() or host in hosts:
+            raise ValueError(f"missing or repeated Windows host in String gate shard {shard}")
+        identity = receipt.get("identity")
+        compiler = receipt.get("compiler_sha256")
+        python = receipt.get("python_version")
+        if (type(receipt.get("schema")) is not int or receipt["schema"] != 1 or
+                type(receipt.get("blocks")) is not int or receipt["blocks"] != blocks or
+                not isinstance(identity, dict) or identity.get("commit") != commit or
+                identity.get("product") != "xray-lang" or identity.get("target") != "windows-x86_64" or
+                identity.get("dirty") is not False or identity.get("buildProfile") != "Release" or
+                not isinstance(compiler, str) or not re.fullmatch(r"[0-9a-f]{64}", compiler) or
+                not isinstance(python, str) or not python.strip()):
+            raise ValueError(f"invalid build or toolchain identity for String gate shard {shard}")
+        by_shard[shard] = receipt
+        hosts.add(host)
+    if set(by_shard) != set(STRING_GATE_SHARDS):
+        raise ValueError("missing String gate shard")
+
+    records = []
+    stdout_digests = {f"String append {count}": hashlib.sha256(f"{count}\n".encode("ascii")).hexdigest()
+                      for count in STRING_GATE_SIZES}
+    empty_digest = hashlib.sha256(b"").hexdigest()
+    for shard in STRING_GATE_SHARDS:
+        programs = {engine: None for pair in string_gate_engines(shard) for engine in pair[:2]}
+        engines = dict.fromkeys(stdout_digests, programs)
+        schedule = list(string_gate_jobs(engines, blocks, shard))
+        samples = by_shard[shard].get("samples")
+        if not isinstance(samples, list) or len(samples) != len(schedule):
+            raise ValueError(f"incomplete or excess samples for String gate shard {shard}")
+        for index, (row, (label, engine, _, sample, candidate)) in enumerate(zip(samples, schedule, strict=True)):
+            if (not isinstance(row, dict) or row.get("label") != label or row.get("engine") != engine or
+                    row.get("pair_engine") != candidate or type(row.get("sample")) is not int or
+                    row["sample"] != sample or row.get("status") != "PASS" or
+                    type(row.get("exit")) is not int or row["exit"] != 0 or row.get("timed_out") is not False or
+                    row.get("state") != "TERMINAL_DRAINED" or
+                    row.get("stdout_sha256") != stdout_digests[label] or row.get("stderr_sha256") != empty_digest or
+                    type(row.get("seconds")) not in (int, float) or
+                    not math.isfinite(row["seconds"]) or row["seconds"] <= 0):
+                raise ValueError(f"invalid sample {index + 1} for String gate shard {shard}")
+        records.extend(samples)
+    return string_performance_gate(records, blocks)
+
+
 def compile_scale_command(command, env, prefix, timeout):
     """Observe the first program output, then drain and retain both streams."""
     first_output = []
@@ -877,7 +953,7 @@ def regex_compile_scale(args, root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", type=pathlib.Path, required=True)
-    parser.add_argument("--build", type=pathlib.Path, required=True)
+    parser.add_argument("--build", type=pathlib.Path)
     parser.add_argument("--work", type=pathlib.Path, required=True)
     parser.add_argument("--cc", default="clang")
     parser.add_argument("--samples", type=int, default=3,
@@ -899,6 +975,10 @@ def main():
                         help="compare equivalent String append spellings")
     parser.add_argument("--gate-string", action="store_true",
                         help="enforce the String append limits on all spellings in a clean Release build")
+    parser.add_argument("--string-gate-shard", type=int, choices=STRING_GATE_SHARDS,
+                        help="measure one Windows shard with --gate-string")
+    parser.add_argument("--merge-string-gate-shards", type=pathlib.Path, nargs="+",
+                        help="verify all Windows shard receipts for the current commit")
     preparation = parser.add_mutually_exclusive_group()
     preparation.add_argument("--prepare-only", action="store_true",
                              help="compile benchmark products and save commands without timing or census")
@@ -909,6 +989,24 @@ def main():
     args = parser.parse_args()
     if args.samples < 1 or args.timeout <= 0:
         parser.error("--samples and --timeout must be positive")
+    if args.merge_string_gate_shards:
+        if args.gate_string or args.string_gate_shard is not None or args.samples < 5:
+            parser.error("--merge-string-gate-shards requires at least five matched blocks and no measurement")
+        commit = subprocess.check_output(["git", "-C", str(args.root), "rev-parse", "HEAD"], text=True).strip()
+        try:
+            receipts = [json.loads(path.read_text(encoding="utf-8")) for path in args.merge_string_gate_shards]
+            gate = merged_string_gate(receipts, commit, args.samples)
+        except (OSError, ValueError) as error:
+            sys.exit(str(error))
+        args.work.mkdir(parents=True, exist_ok=True)
+        result = {"commit": commit, "string_gate": gate}
+        (args.work / "string-gate.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        print(f"Windows String gate: {gate['status']} ({len(gate['rows'])} ratios, {len(receipts)} shards)")
+        raise SystemExit(0 if gate["status"] == "PASS" else 1)
+    if args.build is None:
+        parser.error("--build is required for measurement")
+    if args.string_gate_shard is not None and (not args.gate_string or os.name != "nt"):
+        parser.error("--string-gate-shard requires --gate-string on Windows")
     if args.string_size and (len(set(args.string_size)) != len(args.string_size) or
                             any(value < 0 or value >= 2**63 for value in args.string_size)):
         parser.error("--string-size values must be distinct integers in 0..9223372036854775807")
@@ -920,7 +1018,7 @@ def main():
             parser.error("--gate-string requires a fresh dual-backend run at the default sizes with at least five matched blocks")
         args.append_forms = True
         args.no_census = True
-        args.string_size = (1, 1_000_000, *STRING_SIZES)
+        args.string_size = STRING_GATE_SIZES
     if args.append_forms:
         if args.no_bench or args.prepared_bench or (args.bench and "string-append" not in args.bench):
             parser.error("--append-forms requires a new String benchmark preparation")
@@ -947,14 +1045,17 @@ def main():
             result["prepared_bench"] = prepare_bench(args, args.root)
         else:
             result["bench"], result["bench_details"] = bench(args, args.root)
-            comparisons = string_ratios(result["bench"])
+            comparisons = string_ratios(result["bench"]) if args.string_gate_shard is None else {}
             if comparisons:
                 result["string_ratios"] = comparisons
         if getattr(args, "string_bench", None):
             result["string_bench"] = args.string_bench
     if args.compile_scale:
         result["compile_scale"] = regex_compile_scale(args, args.root)
-    if args.gate_string:
+    if args.string_gate_shard is not None:
+        receipt = string_gate_receipt(args, identity)
+        (args.work / "string-gate-shard.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    elif args.gate_string:
         samples = [sample for programs in result["bench_details"].values()
                    for engine in programs.values() for sample in engine.get("sample_records", ())]
         result["string_gate"] = string_performance_gate(samples, args.samples)
@@ -962,7 +1063,7 @@ def main():
     print("\nfull result:", args.work / "baseline.json")
     if args.compile_scale and result["compile_scale"]["sample_gate"] != "PASS":
         raise SystemExit(1)
-    if args.gate_string and result["string_gate"]["status"] != "PASS":
+    if "string_gate" in result and result["string_gate"]["status"] != "PASS":
         for row in result["string_gate"]["rows"]:
             if row["status"] == "FAIL":
                 print(f"String append {row['count']} {row['engine']}: {row['ratio']} vs {row['limit']} × {row['reference']}")
