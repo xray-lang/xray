@@ -1,4 +1,7 @@
 /* Exercise the real first receiving Frame's allocation callback. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_values.h"
 #include "xray_native_values.h"

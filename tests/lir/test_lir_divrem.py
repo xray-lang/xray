@@ -37,7 +37,7 @@ def invoke(root, name, command, status=0, output=None, diagnostic=None):
     record = {'command': command, 'exit': p.returncode,
               'stdoutSHA256': hashlib.sha256(p.stdout).hexdigest(),
               'stderrSHA256': hashlib.sha256(p.stderr).hexdigest()}
-    (root / (name + '.json')).write_text(json.dumps(record, indent=2) + '\n')
+    (root / (name + '.json')).write_text(json.dumps(record, indent=2) + '\n', encoding='ascii')
     assert p.returncode == status, (name, p.returncode, root)
     if output is not None:
         assert p.stdout == output, (name, p.stdout, output, root)
@@ -82,7 +82,10 @@ def adapter(generated, result, panic, location):
             text += 'if(!point||point->line!=' + str(line) + '||point->column!=' + str(column) + '||point->end_line!=' + str(end_line) + '||point->end_column!=' + str(end_column) + ')return 6;\n'
             text += 'if(point->path_length!=sizeof(' + escaped + ')-1||memcmp(point->path,' + escaped + ',point->path_length))return 7;\n'
         text += 'xrt_locations_release(owner);return 0;}\n'
-        text += 'if(atexit(on_exit))return 8;(void)xray_lir_entry();fputs("AFTER_ENTRY",stderr);return 9;}\n'
+        text += ('if(atexit(on_exit)){return 8;}\n'
+                 '(void)xray_lir_entry();\n'
+                 'fputs("AFTER_ENTRY",stderr);\n'
+                 'return 9;}\n')
     else:
         text += 'int main(void){return xray_lir_entry()==(' + str(result) + ')?0:1;}\n'
     return text
@@ -172,7 +175,7 @@ def main():
     result = {'state': 'PASS', 'rows': rows, 'nativeImages': len(rows),
               'smallOptimizedRbcPrograms': len(small_programs),
               'largeOptimizedRbc': 'PASS'}
-    (root / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+    (root / 'result.json').write_text(json.dumps(result, indent=2) + '\n', encoding='ascii')
     print('Dynamic division regression checks PASS, including complete optimized RBC matrix: ' + str(root), flush=True)
 
 
