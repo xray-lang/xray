@@ -1319,6 +1319,18 @@ add_subdirectory(src/xir)
 set(_XRAY_STDLIB_PRODUCER_RUNNABLE ON)
 if(CMAKE_CROSSCOMPILING)
     set(_XRAY_STDLIB_PRODUCER_RUNNABLE OFF)
+elseif(WIN32)
+    # An architecture-only Windows build can also leave CMAKE_CROSSCOMPILING false.
+    _xray_normalize_architecture("${CMAKE_HOST_SYSTEM_PROCESSOR}" _XRAY_BUILD_ARCH)
+    set(_XRAY_STDLIB_TARGET_PROCESSOR "${CMAKE_C_COMPILER_ARCHITECTURE_ID}")
+    if(CMAKE_C_COMPILER_TARGET)
+        string(REGEX MATCH "^[^-]+" _XRAY_STDLIB_TARGET_PROCESSOR "${CMAKE_C_COMPILER_TARGET}")
+    endif()
+    _xray_normalize_architecture("${_XRAY_STDLIB_TARGET_PROCESSOR}" _XRAY_STDLIB_TARGET_ARCH)
+    if(NOT _XRAY_BUILD_ARCH MATCHES "^(arm64|x86_64)$" OR
+        NOT _XRAY_STDLIB_TARGET_ARCH STREQUAL _XRAY_BUILD_ARCH)
+        set(_XRAY_STDLIB_PRODUCER_RUNNABLE OFF)
+    endif()
 elseif(APPLE AND CMAKE_OSX_ARCHITECTURES)
     # An architecture-only Darwin cross build does not set CMAKE_CROSSCOMPILING.
     _xray_normalize_architecture("${CMAKE_HOST_SYSTEM_PROCESSOR}" _XRAY_BUILD_ARCH)
@@ -1347,8 +1359,16 @@ if(_XRAY_STDLIB_PRODUCER_RUNNABLE)
         target_link_options(xray_stdlib_scalar_producer PRIVATE -municode)
     endif()
 
-    # The compiler can reach private modules that the public entry table omits.
-    file(GLOB_RECURSE XRAY_STDLIB_SOURCE_DEPENDENCIES CONFIGURE_DEPENDS "stdlib/*.xr")
+    # A changed path inventory invalidates outputs even when a dependency disappears.
+    file(GLOB_RECURSE _XRAY_STDLIB_SOURCE_PATHS CONFIGURE_DEPENDS
+        RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/stdlib" "${CMAKE_CURRENT_SOURCE_DIR}/stdlib/*.xr")
+    list(SORT _XRAY_STDLIB_SOURCE_PATHS)
+    list(JOIN _XRAY_STDLIB_SOURCE_PATHS "\n" _XRAY_STDLIB_SOURCE_LIST)
+    list(TRANSFORM _XRAY_STDLIB_SOURCE_PATHS PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/stdlib/"
+        OUTPUT_VARIABLE XRAY_STDLIB_SOURCE_DEPENDENCIES)
+    set(_XRAY_STDLIB_SOURCE_INVENTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_scalar_source_paths.txt")
+    file(CONFIGURE OUTPUT "${_XRAY_STDLIB_SOURCE_INVENTORY}"
+        CONTENT "${_XRAY_STDLIB_SOURCE_LIST}\n" @ONLY NEWLINE_STYLE UNIX)
     set(XRAY_STDLIB_SCALAR_EXPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
     set(XRAY_STDLIB_SCALAR_EXPORT_C "${XRAY_STDLIB_SCALAR_EXPORT_DIR}/stdlib_scalar_math_lerp.c")
     add_custom_command(
@@ -1357,7 +1377,7 @@ if(_XRAY_STDLIB_PRODUCER_RUNNABLE)
         COMMAND xray_stdlib_scalar_producer "${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
                 "${XRAY_STDLIB_SCALAR_EXPORT_C}.pending"
         COMMAND ${CMAKE_COMMAND} -E rename "${XRAY_STDLIB_SCALAR_EXPORT_C}.pending" "${XRAY_STDLIB_SCALAR_EXPORT_C}"
-        DEPENDS xray_stdlib_scalar_producer ${XRAY_STDLIB_SOURCE_DEPENDENCIES}
+        DEPENDS xray_stdlib_scalar_producer "${_XRAY_STDLIB_SOURCE_INVENTORY}" ${XRAY_STDLIB_SOURCE_DEPENDENCIES}
         COMMENT "Compiling the built-in standard library scalar export"
         VERBATIM)
     add_library(xray_stdlib_scalar_export STATIC "${XRAY_STDLIB_SCALAR_EXPORT_C}")

@@ -10,6 +10,11 @@ from test_lir_c_native import run
 
 def private_dependency(args, root):
     build = args.generated.parents[2]
+    inventory = build / "generated/stdlib_scalar_source_paths.txt"
+    expected = sorted(path.relative_to(args.stdlib).as_posix()
+                      for path in args.stdlib.rglob("*.xr") if path.is_file())
+    assert inventory.read_text(encoding="utf-8").splitlines() == expected
+
     if (build / "build.ninja").is_file():
         cache = (build / "CMakeCache.txt").read_text(encoding="utf-8")
         ninja = next(line.split("=", 1)[1] for line in cache.splitlines()
@@ -25,6 +30,7 @@ def private_dependency(args, root):
         dependencies = {os.path.normcase(line.strip()) for line in graph.splitlines()}
         lexical_source = args.stdlib / "path/_lexical.xr"
         assert os.path.normcase(str(lexical_source)) in dependencies
+        assert os.path.normcase(inventory.relative_to(build).as_posix()) in dependencies
 
     stdlib = root / "模块 🧪"
     math = stdlib / "math"
@@ -41,13 +47,21 @@ def private_dependency(args, root):
                     encoding="utf-8")
     run([args.producer, stdlib, output], cwd=root)
     before = output.read_bytes()
-    leaf.write_text('export fn blend(a: f64, b: f64, t: f64) -> f64 { return a + (b * t) }\n',
-                    encoding="utf-8")
+    updated = 'export fn blend(a: f64, b: f64, t: f64) -> f64 { return a + (b * t) }\n'
+    leaf.write_text(updated, encoding="utf-8")
     run([args.producer, stdlib, output], cwd=root)
     after = output.read_bytes()
     assert before != after
     assert b"double xray_stdlib_math_lerp(double p0, double p1, double p2)" in before
     assert b"double xray_stdlib_math_lerp(double p0, double p1, double p2)" in after
+
+    leaf.unlink()
+    failure = run([args.producer, stdlib, output], cwd=root, expected_exit=1)
+    assert b"module not found" in failure.stderr
+    assert output.read_bytes() == after
+    leaf.write_text(updated, encoding="utf-8")
+    run([args.producer, stdlib, output], cwd=root)
+    assert output.read_bytes() == after
 
     missing = root / "缺少目录 🧪" / "output.c"
     failure = run([args.producer, stdlib, missing], cwd=root, expected_exit=1)
