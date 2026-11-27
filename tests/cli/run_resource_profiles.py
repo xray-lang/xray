@@ -24,10 +24,7 @@ from xraytest import proc
 # the option instead of silently running unrestricted.
 RUN_SANDBOX_DIAGNOSTIC = b"xray run: sandbox execution is temporarily unavailable\n"
 TEST_SANDBOX_DIAGNOSTIC = b"xray test: sandbox execution is temporarily unavailable\n"
-TEST_ROLE_REPORT = (
-    b"xray test: running tests needs backend test-role startup; discovery only\n"
-    b"xray test: discovered 1 test(s), 0 skipped, 0 hook(s)\n"
-)
+TEST_ROLE_REPORT = b"xray test: 1 passed, 0 failed, 0 skipped\n"
 NATIVE_SANDBOX_DIAGNOSTIC = b"error: --sandbox is not available in a generated program"
 FIB_SOURCE = """fn fib(n: i64) -> i64 {
     if (n <= 1) { return n }
@@ -98,21 +95,24 @@ def vm_cases(binary: Path, directory: Path, short_timeout: float) -> list[Case]:
     ]
 
 
-def test_role_cases(binary: Path, directory: Path, short_timeout: float) -> list[Case]:
-    """Running a discovered test needs backend test-role startup; until it
-    exists this suite records that one remaining product gap by itself: the
-    file is discovered, its single test is counted, nothing runs, and the
-    command fails instead of reporting an invented outcome."""
+def test_role_cases(binary: Path, directory: Path, root: Path, short_timeout: float) -> list[Case]:
     tests = source(directory, "profile_test.xr", TEST_SOURCE)
     name = "test_" + "a" * 245 + "_after_marker"
     long_test = source(directory, "long_test.xr", f"@test\nfn {name}() {{ assert(true) }}\n")
     report = (f"  test        {name}\nxray test: {long_test}: 1 test(s), 0 skipped, 0 hook(s)\n"
               .encode() + TEST_ROLE_REPORT)
+    selected = root / "tests/lir/programs/test-role-session-selected.xr"
     return [
-        Case("test-discovery-small", [binary, "test", tests], short_timeout,
-             exit_code=1, stdout=b"", stderr=TEST_ROLE_REPORT),
+        Case("test-run-small", [binary, "test", tests], short_timeout,
+             stdout=b"", stderr=TEST_ROLE_REPORT),
         Case("test-filter-full-name", [binary, "test", "--filter", "after_marker", "--verbose", long_test],
-             short_timeout, exit_code=1, stdout=b"", stderr=report),
+             short_timeout, stdout=b"", stderr=report),
+        Case("test-run-filtered-state-and-hooks", [binary, "test", "--filter", "kept", selected],
+             short_timeout, stdout=b"40\n43\n45\n46\n",
+             stderr=b"xray test: 2 passed, 0 failed, 2 skipped\n"),
+        Case("test-unmatched-filter-skips-initializer", [binary, "test", "--filter", "absent", selected],
+             short_timeout, exit_code=1, stdout=b"",
+             stderr=b"xray test: 0 tests executed\nxray test: 0 passed, 0 failed, 4 skipped\n"),
     ]
 
 
@@ -248,7 +248,7 @@ def main() -> int:
         elif args.suite == "native":
             cases = native_cases(binary, directory, args.short_timeout, args.build_timeout)
         elif args.suite == "test-role":
-            cases = test_role_cases(binary, directory, args.short_timeout)
+            cases = test_role_cases(binary, directory, root, args.short_timeout)
         else:
             cases = large_cases(binary, directory, args.large_timeout, args.sandbox_timeout)
         report["planned_cases"] = [case.name for case in cases]

@@ -10,11 +10,13 @@
 #ifndef XCLI_LIR_H
 #define XCLI_LIR_H
 #include "app/toolchain/xtc_xir_workspace.h"
-#include "lir/xlir_source.h"
+#include "lir/xlir_test_plan.h"
 
 /* Both outputs must be empty. Success transfers independent owners. */
 XR_FUNC int xr_cli_lir_compile(const char *input, XrCompileResources **resources,
     XrLirLowered *output);
+XR_FUNC int xr_cli_lir_compile_test_plan(const char *input, const char *filter, bool quiet,
+    XrLirTestPlan **output);
 XR_FUNC int xr_cli_lir_publish(XrCompileResources *resources, const char *path,
     const void *bytes, size_t length, bool executable);
 typedef struct XrCliNativeOptions {

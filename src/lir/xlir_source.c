@@ -16,6 +16,7 @@
 #include "xlir_inline.h"
 #include "xlir_sccp.h"
 #include "xlir_test_plan.h"
+#include "shared/xr_string_core.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_specialization_bindings.h"
@@ -133,14 +134,52 @@ static XrXirStatus source_receive_test_plan(void *context, const XrXirSpecializa
     XrLirTestPlan *plan = context;
     for (uint32_t i = 0; i < plan->role_count; ++i) {
         XrLirTestBinding *role = &plan->roles[i];
+        if (role->function == UINT32_MAX) continue;
         XrXirStatus status = source_map_function(map, role->function, &role->function);
         if (status != XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
 
+typedef struct SourceRoleFilter {
+    const char *text;
+} SourceRoleFilter;
+
+static uint32_t source_select_roles(XrLirTestPlan *plan, SourceRoleFilter filter) {
+    size_t length = filter.text ? strlen(filter.text) : 0;
+    uint32_t tests = 0, active = 0;
+    for (uint32_t i = 0; i < plan->role_count; ++i) {
+        XrLirTestBinding *row = &plan->roles[i];
+        if (row->role == XR_XIR_TEST_ROLE_SKIP || (row->role == XR_XIR_TEST_ROLE_TEST &&
+            length && !xr_string_core_contains(row->name, row->name_length, filter.text, length))) {
+            row->function = UINT32_MAX;
+        } else {
+            ++active;
+            if (row->role == XR_XIR_TEST_ROLE_TEST) ++tests;
+        }
+    }
+    if (tests) return active;
+    for (uint32_t i = 0; i < plan->role_count; ++i)
+        plan->roles[i].function = UINT32_MAX;
+    return 0;
+}
+
+static XrLirStatus source_lower_selected(const XrLirLowerRequest *request, XrLirTestPlan *plan,
+    XrLirTestBinding *active, uint32_t count, XrLirLowered *lowered, XrLirLowerFailure *failure) {
+    uint32_t next = 0;
+    for (uint32_t i = 0; i < plan->role_count; ++i)
+        if (plan->roles[i].function != UINT32_MAX) active[next++] = plan->roles[i];
+    XrLirStatus status = xr_lir_lower_test_plan_checked(request, active, count, lowered, failure);
+    if (status != XR_LIR_OK) return status;
+    next = 0;
+    for (uint32_t i = 0; i < plan->role_count; ++i)
+        if (plan->roles[i].function != UINT32_MAX) plan->roles[i].function = active[next++].function;
+    return XR_LIR_OK;
+}
+
 static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const char *test_name,
-    XrLirLowered *output, XrLirTestPlan **plan_output, XrLirSourceFailure *failure) {
+    XrLirLowered *output, XrLirTestPlan **plan_output, const SourceRoleFilter *filter,
+    XrLirSourceFailure *failure) {
     if (!request || !request->resources || !request->entry_path || !request->entry_path[0] ||
         (plan_output ? *plan_output != NULL :
             !output || output->module || output->entry.module || output->entry.id) || !failure ||
@@ -155,6 +194,8 @@ static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const
     XrXirArtifact *closed = NULL;
     XrLirLowered lowered = {0};
     XrLirTestPlan *plan = NULL;
+    XrLirTestBinding *active = NULL;
+    uint32_t active_count = 0;
     XrLirSourceStatus status = XR_LIR_SOURCE_PREPARATION_FAILED;
     if (xr_compile_session_new(request->resources, &session) != XR_COMPILE_RESOURCE_OK)
         goto cleanup;
@@ -183,6 +224,15 @@ static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const
         status = XR_LIR_SOURCE_PREPARATION_FAILED;
         plan = source_test_plan(source.checked, request->resources);
         if (!plan) goto cleanup;
+        if (filter) {
+            active_count = source_select_roles(plan, *filter);
+            if (!active_count) {
+                status = XR_LIR_SOURCE_OK;
+                goto cleanup;
+            }
+            if (xr_compile_resources_calloc(request->resources, active_count, sizeof(*active),
+                    (void **)&active) != XR_COMPILE_RESOURCE_OK) goto cleanup;
+        }
     }
     status = XR_LIR_SOURCE_SPECIALIZATION_FAILED;
     XrXirDiagnostic specialization = {0};
@@ -203,7 +253,9 @@ static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const
     status = XR_LIR_SOURCE_LOWER_FAILED;
     XrLirLowerRequest lower_request = {closed, source.snapshot, false};
     XrLirStatus lower_status;
-    if (plan)
+    if (active)
+        lower_status = source_lower_selected(&lower_request, plan, active, active_count, &lowered, &failure->lower);
+    else if (plan)
         lower_status = xr_lir_lower_test_plan_checked(&lower_request, plan->roles, plan->role_count,
             &lowered, &failure->lower);
     else if (test_name)
@@ -215,11 +267,12 @@ static XrLirSourceStatus source_compile(const XrLirSourceRequest *request, const
     status = XR_LIR_SOURCE_OK;
 
 cleanup:
+    xr_compile_resources_free(active);
     xr_xir_compile_artifact_free(closed);
     xr_xir_compile_source_result_free(&source);
     xr_compile_session_free(session);
     xr_compile_resources_free(root);
-    if (status == XR_LIR_SOURCE_OK && request->optimize &&
+    if (status == XR_LIR_SOURCE_OK && lowered.module && request->optimize &&
         source_optimize(&lowered) != XR_LIR_OK)
         status = XR_LIR_SOURCE_OPTIMIZATION_FAILED;
     if (status == XR_LIR_SOURCE_OK) {
@@ -239,19 +292,26 @@ cleanup:
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_source(const XrLirSourceRequest *request,
     XrLirLowered *output, XrLirSourceFailure *failure) {
-    return source_compile(request, NULL, output, NULL, failure);
+    return source_compile(request, NULL, output, NULL, NULL, failure);
 }
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_source(const XrLirSourceRequest *request,
     const char *test_name, XrLirLowered *output, XrLirSourceFailure *failure) {
     if (!test_name || !test_name[0]) return XR_LIR_SOURCE_BAD_ARGUMENT;
-    return source_compile(request, test_name, output, NULL, failure);
+    return source_compile(request, test_name, output, NULL, NULL, failure);
 }
 
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan(const XrLirSourceRequest *request,
     XrLirTestPlan **output, XrLirSourceFailure *failure) {
     if (!output) return XR_LIR_SOURCE_BAD_ARGUMENT;
-    return source_compile(request, NULL, NULL, output, failure);
+    return source_compile(request, NULL, NULL, output, NULL, failure);
+}
+
+XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan_selected(const XrLirSourceRequest *request,
+    const char *filter, XrLirTestPlan **output, XrLirSourceFailure *failure) {
+    if (!output) return XR_LIR_SOURCE_BAD_ARGUMENT;
+    const SourceRoleFilter selection = {filter};
+    return source_compile(request, NULL, NULL, output, &selection, failure);
 }
 
 XR_FUNC XrLirFunction xr_lir_test_plan_initializer(const XrLirTestPlan *plan) {
@@ -267,7 +327,7 @@ XR_FUNC XrLirStatus xr_lir_test_plan_role_at(const XrLirTestPlan *plan, uint32_t
     if (!plan || ordinal >= plan->role_count || !output) return XR_LIR_INVALID_ARGUMENT;
     const XrLirTestBinding *role = &plan->roles[ordinal];
     XrLirTestPlanRole view = {role->role, role->name, role->name_length, {0}};
-    if (role->role != XR_XIR_TEST_ROLE_SKIP) {
+    if (role->function != UINT32_MAX && role->role != XR_XIR_TEST_ROLE_SKIP) {
         XrLirStatus status = xr_lir_function_at(plan->lowered.module, role->function, &view.function);
         if (status != XR_LIR_OK) return status;
     }

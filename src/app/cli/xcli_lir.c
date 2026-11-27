@@ -41,15 +41,12 @@ static void report_lowering(const XrLirSourceFailure *failure, const char *path)
     }
 }
 
-XR_FUNC int xr_cli_lir_compile(const char *input, XrCompileResources **output_resources,
-    XrLirLowered *output) {
-    if (!input || !output_resources || *output_resources || !output || output->module ||
-        output->entry.module || output->entry.id)
-        return XR_CLI_EXIT_INTERNAL;
+static int cli_lir_compile(const char *input, XrCompileResources **output_resources, XrLirLowered *output,
+    const char *filter, bool quiet, XrLirTestPlan **plan) {
     XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
     XrCompileResources *resources = NULL;
     if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK) {
-        fputs("cannot initialize compiler memory\n", stderr);
+        if (!quiet) fputs("cannot initialize compiler memory\n", stderr);
         return XR_CLI_EXIT_INTERNAL;
     }
     XrSourcePaths paths = {0};
@@ -59,9 +56,11 @@ XR_FUNC int xr_cli_lir_compile(const char *input, XrCompileResources **output_re
     XrManifestDiagnostic manifest = {0};
     int result = XR_CLI_EXIT_FAIL;
     if (xr_source_paths(resources, input, &paths, &path_diagnostic) != XR_SOURCE_COMPILE_OK) {
-        char text[4096];
-        xr_source_paths_diagnostic_format(&path_diagnostic, text, sizeof(text));
-        fprintf(stderr, "%s\n", text);
+        if (!quiet) {
+            char text[4096];
+            xr_source_paths_diagnostic_format(&path_diagnostic, text, sizeof(text));
+            fprintf(stderr, "%s\n", text);
+        }
         goto cleanup;
     }
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
@@ -71,19 +70,23 @@ XR_FUNC int xr_cli_lir_compile(const char *input, XrCompileResources **output_re
     XrManifestStatus status = xr_source_authority_open_input(&context, &entry, NULL,
         &manifest_limits, &authority, &diagnostics);
     if (status != XR_MANIFEST_OK) {
-        if (!report_frontend(&failure.source_failure))
+        if (!quiet && !report_frontend(&failure.source_failure))
             fprintf(stderr, "%s: source authority failed (%u): %s\n", paths.entry,
                 (unsigned)status, manifest.message);
         goto cleanup;
     }
     XrLirSourceRequest request = {resources, paths.entry, paths.stdlib, false,
         xr_source_authority_entry(authority), xr_source_authority_lockfile(authority), xr_xir_target_host()};
-    if (xr_lir_compile_source(&request, output, &failure) != XR_LIR_SOURCE_OK) {
-        report_lowering(&failure, paths.entry);
+    XrLirSourceStatus compiled = plan ? xr_lir_compile_test_plan_selected(&request, filter, plan, &failure)
+        : xr_lir_compile_source(&request, output, &failure);
+    if (compiled != XR_LIR_SOURCE_OK) {
+        if (!quiet) report_lowering(&failure, paths.entry);
         goto cleanup;
     }
-    *output_resources = resources;
-    resources = NULL;
+    if (output_resources) {
+        *output_resources = resources;
+        resources = NULL;
+    }
     result = XR_CLI_EXIT_OK;
 cleanup:
     xr_lir_source_failure_free(&failure);
@@ -92,4 +95,18 @@ cleanup:
     xr_source_paths_diagnostic_free(&path_diagnostic);
     xr_compile_resources_release(resources);
     return result;
+}
+
+XR_FUNC int xr_cli_lir_compile(const char *input, XrCompileResources **output_resources,
+    XrLirLowered *output) {
+    if (!input || !output_resources || *output_resources || !output || output->module ||
+        output->entry.module || output->entry.id)
+        return XR_CLI_EXIT_INTERNAL;
+    return cli_lir_compile(input, output_resources, output, NULL, false, NULL);
+}
+
+XR_FUNC int xr_cli_lir_compile_test_plan(const char *input, const char *filter, bool quiet,
+    XrLirTestPlan **plan) {
+    if (!input || !plan || *plan) return XR_CLI_EXIT_INTERNAL;
+    return cli_lir_compile(input, NULL, NULL, filter, quiet, plan);
 }

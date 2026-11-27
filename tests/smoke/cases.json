@@ -311,7 +311,7 @@
       "gap": {
         "feature": "Task339 M2",
         "stage": "suite",
-        "first_diagnostic": "xray test: running tests needs backend test-role startup; discovery only"
+        "first_diagnostic": "demos/07-advanced/testing.xr:63:4: test-role startup with a deadline is not supported by LIR lowering yet"
       }
     },
     {
@@ -756,7 +756,7 @@
       "gap": {
         "feature": "Task339 M2",
         "stage": "suite",
-        "first_diagnostic": "xray test: running tests needs backend test-role startup; discovery only"
+        "first_diagnostic": "demos/07-advanced/testing.xr:63:4: test-role startup with a deadline is not supported by LIR lowering yet"
       }
     },
     {

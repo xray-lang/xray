@@ -35,10 +35,10 @@ static const XrCliOptionSpec test_options[] = {
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     {"fail-fast", 'F', XR_CLI_VALUE_NONE, false, false, NULL, "Stop on first failure"},
     {"filter", 'f', XR_CLI_VALUE_STRING, false, false, "PATTERN", "Only run matching tests"},
-    {"quiet", 'q', XR_CLI_VALUE_NONE, false, false, NULL, "Quiet mode (exit code only)"},
-    {"jobs", 'j', XR_CLI_VALUE_INT, false, false, "N", "Parallel threads (default 1)"},
+    {"quiet", 'q', XR_CLI_VALUE_NONE, false, false, NULL, "Suppress the runner's results and diagnostics"},
+    {"jobs", 'j', XR_CLI_VALUE_INT, false, false, "N", "Number of test jobs (currently 1)"},
     {"report", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
-     "Write every test outcome as JSON to FILE"},
+     "Temporarily unavailable"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec check_options[] = {
@@ -138,8 +138,8 @@ static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
     {"run", "Run one exact .xr source entry", NULL, run_options, 1, 1, false, false, NULL, NULL, 0},
     {"repl", "Temporarily unavailable", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
-    {"test", "Discover the tests of each entry module",
-     "FILE|DIR... [-v] [-q] [-f PATTERN] [-F] [-j N]",
+    {"test", "Run selected tests serially in each entry module",
+     "FILE|DIR... [-v] [-q] [-f PATTERN] [-F] [-j 1]",
      test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},

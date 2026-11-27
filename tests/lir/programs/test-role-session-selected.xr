@@ -1,0 +1,45 @@
+var state: i64 = 40
+print(state)
+
+@before_all
+fn suite_setup() {
+    state = state + 1
+}
+
+@before_each
+fn case_setup() {
+    state = state + 1
+}
+
+@test
+fn kept_first() {
+    assert(state == 42)
+    state = state + 1
+    print(state)
+}
+
+@test(timeout: 17)
+fn excluded_deadline() {
+    print(999)
+}
+
+@test(skip)
+fn kept_explicit_skip() {
+    print(998)
+}
+
+@after_each
+fn case_teardown() {
+    state = state + 1
+}
+
+@test(timeout: 0)
+fn kept_second() {
+    assert(state == 45)
+    print(state)
+}
+
+@after_all
+fn suite_teardown() {
+    print(state)
+}

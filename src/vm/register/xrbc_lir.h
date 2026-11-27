@@ -88,6 +88,15 @@ XR_FUNC XrRbcCompileStatus xr_rbc_test_session_compile_with_metadata_close(const
 XR_FUNC XrRbcStatus xr_rbc_test_session_run(XrRbcTestSession *, uint32_t action, XrRbcOutcome **);
 XR_FUNC XrRbcStatus xr_rbc_test_session_run_with_retirement_hook(XrRbcTestSession *, uint32_t action,
     const XrtTestRetirementHook *, XrRbcOutcome **);
+typedef enum XrRbcTestActionStage {
+    XR_RBC_TEST_ACTION_REJECTED,
+    XR_RBC_TEST_ACTION_INITIALIZATION,
+    XR_RBC_TEST_ACTION_PREPARE,
+    XR_RBC_TEST_ACTION_INVOKE
+} XrRbcTestActionStage;
+/* Reports how far this request reached, including failures without an outcome. */
+XR_FUNC XrRbcStatus xr_rbc_test_session_run_detailed(XrRbcTestSession *, uint32_t action,
+    XrRbcOutcome **, XrRbcTestActionStage *);
 XR_FUNC XrOsIoStatus xr_rbc_test_session_free(XrRbcTestSession **);
 
 #endif  // XRBC_LIR_H

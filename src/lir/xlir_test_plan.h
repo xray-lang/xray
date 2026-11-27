@@ -27,6 +27,11 @@ typedef struct XrLirTestPlanRole {
  * handle. Views and handles borrow the plan; no role is executed here. */
 XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan(const XrLirSourceRequest *,
     XrLirTestPlan **, XrLirSourceFailure *);
+/* Check the whole file once, then admit only matching test roots and their
+ * hooks. Excluded rows still report their Checked name and role without a
+ * function. If no test is selected, there is no initializer to execute. */
+XR_FUNC XrLirSourceStatus xr_lir_compile_test_plan_selected(const XrLirSourceRequest *,
+    const char *filter, XrLirTestPlan **, XrLirSourceFailure *);
 XR_FUNC XrLirFunction xr_lir_test_plan_initializer(const XrLirTestPlan *);
 XR_FUNC uint32_t xr_lir_test_plan_role_count(const XrLirTestPlan *);
 XR_FUNC XrLirStatus xr_lir_test_plan_role_at(const XrLirTestPlan *, uint32_t ordinal,
