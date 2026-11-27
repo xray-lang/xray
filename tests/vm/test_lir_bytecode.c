@@ -569,7 +569,12 @@ static void test_unsupported_nullable_invoke_result(bool managed) {
     OK(xr_lir_module_create(NULL,&m));
     XrLirLiteral metadata={0};
     XrLirType error_type=test_nominal_error(m,&metadata),optional=0;
-    OK(xr_lir_nullable_type(m,managed ? XR_LIR_STRING : error_type,&optional));
+    XrLirType element=error_type;
+    if (managed) {
+        /* Exercise two presence layers with an owned payload. */
+        OK(xr_lir_nullable_type(m,XR_LIR_STRING,&element));
+    }
+    OK(xr_lir_nullable_type(m,element,&optional));
     XrLirTypeLayout layout={0};
     OK(xr_lir_type_layout(m,optional,&layout));
     CHECK(layout.size && layout.managed==managed);
