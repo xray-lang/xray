@@ -16,16 +16,17 @@
 #include <string.h>
 
 int main(int argc, char **argv) {
-    bool optimize = false, valid = argc >= 3 && argc <= 6;
-    const char *stdlib = NULL;
+    bool optimize = false, valid = argc >= 3 && argc <= 8;
+    const char *stdlib = NULL, *test_name = NULL;
     for (int i = 3; i < argc; ++i) {
         if (!strcmp(argv[i], "--optimize") && !optimize) optimize = true;
         else if (!strcmp(argv[i], "--stdlib") && !stdlib && i + 1 < argc) stdlib = argv[++i];
+        else if (!strcmp(argv[i], "--test") && !test_name && i + 1 < argc) test_name = argv[++i];
         else valid = false;
     }
     if (!valid) {
         fputs("usage: lir_c_run <absolute-source.xr> <output.c> [--optimize] "
-            "[--stdlib <directory>]\n", stderr);
+            "[--stdlib <directory>] [--test NAME]\n", stderr);
         return 2;
     }
     int result = 1;
@@ -39,10 +40,13 @@ int main(int argc, char **argv) {
         return 1;
     }
     XrLirSourceRequest input = {resources, argv[1], stdlib, optimize, NULL, NULL, XR_XIR_HOST_TARGET};
-    XrLirSourceStatus status = xr_lir_compile_source(&input, &lowered, &failure);
+    XrLirSourceStatus status = test_name ? xr_lir_compile_test_source(&input, test_name, &lowered, &failure) :
+        xr_lir_compile_source(&input, &lowered, &failure);
     if (status == XR_LIR_SOURCE_CHECK_FAILED) {
         fprintf(stderr, "source %d:%d: %s\n", failure.source.line,
             failure.source.column, failure.source.message);
+    } else if (status == XR_LIR_SOURCE_TEST_SELECTION_FAILED) {
+        fputs("no matching root-module @test declaration\n", stderr);
     } else if (status == XR_LIR_SOURCE_SPECIALIZATION_FAILED) {
         fputs("source specialization failed\n", stderr);
     } else if (status == XR_LIR_SOURCE_LOWER_FAILED) {
@@ -52,7 +56,9 @@ int main(int argc, char **argv) {
     } else {
         XrLirCRequest request = {lowered.module, lowered.entry, resources, argv[1], NULL};
         XrLirCDiagnostic diagnostic = {0};
-        if (xr_lir_emit_c(&request, &output, &diagnostic) != XR_LIR_C_OK) {
+        XrLirCStatus emission = test_name ? xr_lir_emit_c_standalone(&request, &output, &diagnostic) :
+            xr_lir_emit_c(&request, &output, &diagnostic);
+        if (emission != XR_LIR_C_OK) {
             fprintf(stderr, "C emission: %s\n", diagnostic.message);
         } else {
             xr_lir_lowered_free(&lowered);

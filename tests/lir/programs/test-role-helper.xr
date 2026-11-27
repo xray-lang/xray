@@ -1,0 +1,8 @@
+export fn initialValue() -> i64 {
+    return 41
+}
+
+@test
+fn imported_test() {
+    print(95)
+}

@@ -1,0 +1,41 @@
+import "./test-role-helper" as helper
+
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+var state: i64 = identity(helper.initialValue())
+print(state)
+
+@test
+fn chosen_test() {
+    assert(state == 41)
+    state = state + 1
+    print(state)
+}
+
+@test(skip)
+fn skipped_test() {
+    print(90)
+}
+
+@test
+fn failing_test() {
+    print(43)
+    assert(false, "selected test failure")
+    print(91)
+}
+
+@test
+fn other_test() {
+    print(92)
+}
+
+@before_each
+fn local_hook() {
+    print(93)
+}
+
+fn ordinary_helper() {
+    print(94)
+}

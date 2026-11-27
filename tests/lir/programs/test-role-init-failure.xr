@@ -1,0 +1,9 @@
+var state: i64 = 17
+print(state)
+assert(false, "initializer failure")
+
+@test
+fn blocked_test() {
+    state = 97
+    print(state)
+}
