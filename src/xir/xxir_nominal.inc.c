@@ -33,8 +33,93 @@ static XrXirStatus nominal_same_name(XrXirLiteral a, XrXirLiteral b, bool *same)
     *same = a.length == b.length && memcmp(a.bytes, b.bytes, a.length) == 0;
     return XR_XIR_OK;
 }
-static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *variants,
-    uint32_t count, uint32_t fields, XrCompileRequestControl *control) {
+/* Length first is sufficient to group equal names and avoids reading long
+ * prefixes when their lengths differ. memcmp orders bytes as unsigned. */
+static XrXirStatus nominal_variant_name_order(XrXirLiteral a, XrXirLiteral b,
+    XrCompileRequestControl *control, int *order) {
+    if (a.length != b.length) {
+        *order = a.length < b.length ? -1 : 1;
+        return nominal_control_poll(control);
+    }
+    *order = 0;
+    for (size_t offset = 0; offset < a.length && !*order;) {
+        XrXirStatus status = nominal_control_poll(control);
+        if (status != XR_XIR_OK) return status;
+        size_t chunk = a.length - offset;
+        if (control && chunk > 4096) chunk = 4096;
+        *order = memcmp(a.bytes + offset, b.bytes + offset, chunk);
+        offset += chunk;
+    }
+    return XR_XIR_OK;
+}
+
+static XrXirStatus nominal_variant_sift(const XrXirNominalVariant *variants,
+    uint32_t *order, uint32_t count, uint32_t root, XrCompileRequestControl *control) {
+    const uint32_t value = order[root];
+    while (root < count / 2) {
+        uint32_t child = root * 2 + 1;
+        int relation;
+        XrXirStatus status;
+        if (child + 1 < count) {
+            status = nominal_variant_name_order(variants[order[child]].name,
+                variants[order[child + 1]].name, control, &relation);
+            if (status != XR_XIR_OK) return status;
+            if (relation < 0) ++child;
+        }
+        status = nominal_variant_name_order(variants[value].name,
+            variants[order[child]].name, control, &relation);
+        if (status != XR_XIR_OK) return status;
+        if (relation >= 0) break;
+        order[root] = order[child];
+        root = child;
+    }
+    order[root] = value;
+    return XR_XIR_OK;
+}
+
+/* Keep declaration coordinates intact. Sorting indexes admits every distinct
+ * counted name, bounds the comparison count and owns only one scratch vector. */
+static XrXirStatus nominal_variant_names_unique(const XrXirCompileContext *context,
+    const XrXirNominalVariant *variants, uint32_t count, XrCompileRequestControl *control) {
+    uint32_t local[16];
+    XrXirStatus status = XR_XIR_OK;
+    uint32_t *order = count <= sizeof(local) / sizeof(*local) ? local :
+        xir_compile_alloc(context, (size_t)count * sizeof(*order), &status);
+    if (!order) return status;
+    for (uint32_t i = 0; i < count; ++i) {
+        status = xir_type_copy_rows(control, i);
+        if (status != XR_XIR_OK) goto done;
+        order[i] = i;
+    }
+    for (uint32_t i = count / 2; i; --i) {
+        status = nominal_variant_sift(variants, order, count, i - 1, control);
+        if (status != XR_XIR_OK) goto done;
+    }
+    for (uint32_t end = count - 1; end; --end) {
+        uint32_t last = order[end];
+        order[end] = order[0];
+        order[0] = last;
+        status = nominal_variant_sift(variants, order, end, 0, control);
+        if (status != XR_XIR_OK) goto done;
+    }
+    for (uint32_t i = 1; i < count; ++i) {
+        int relation;
+        status = nominal_variant_name_order(variants[order[i - 1]].name,
+            variants[order[i]].name, control, &relation);
+        if (status != XR_XIR_OK) goto done;
+        if (!relation) {
+            status = XR_XIR_BAD_STRUCTURE;
+            goto done;
+        }
+    }
+done:
+    if (order != local) xr_compile_resources_free(order);
+    return status;
+}
+
+static XrXirStatus nominal_variants(const XrXirCompileContext *context, uint32_t kind,
+    const XrXirNominalVariant *variants, uint32_t count, uint32_t fields,
+    XrCompileRequestControl *control) {
     if (kind > XR_XIR_NOMINAL_CLASS || (count != 0) != (variants != NULL) ||
         (kind == XR_XIR_NOMINAL_ENUM) != (count != 0)) return XR_XIR_BAD_STRUCTURE;
     if (!(((uint64_t) count * sizeof(*variants)) <= SIZE_MAX)) return XR_XIR_BUDGET;
@@ -46,20 +131,9 @@ static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *va
         end += v->field_count;
         XrXirStatus status = nominal_name(v->name,control);
         if (status != XR_XIR_OK) return status;
-        for (uint32_t j = 0; j < i; ++j) {
-            status=nominal_control_poll(control);if (status!=XR_XIR_OK) return status;
-            XrXirLiteral prior=variants[j].name;
-            bool same=v->name.length==prior.length;
-            for (size_t offset=0;same && offset<v->name.length;) {
-                status=nominal_control_poll(control);if (status!=XR_XIR_OK) return status;
-                size_t chunk=v->name.length-offset;
-                if (control && chunk>4096) chunk=4096;
-                same=!memcmp(v->name.bytes+offset,prior.bytes+offset,chunk);offset+=chunk;
-            }
-            if (same) return XR_XIR_BAD_STRUCTURE;
-        }
     }
-    return kind == XR_XIR_NOMINAL_ENUM && end != fields ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
+    if (kind == XR_XIR_NOMINAL_ENUM && end != fields) return XR_XIR_BAD_STRUCTURE;
+    return count > 1 ? nominal_variant_names_unique(context, variants, count, control) : XR_XIR_OK;
 }
 static bool nominal_flags_valid(uint32_t kind, uint32_t flags) {
     if (kind == XR_XIR_NOMINAL_CLASS)
@@ -148,7 +222,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
             if (status!=XR_XIR_OK) return status;
         }
     }
-    status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count,NULL);
+    status = nominal_variants(b, d->kind, d->variants, d->variant_count, d->field_count, NULL);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < d->parameter_count; ++p) {
         status = xr_xir_compile_constraint_structure(b, types, d->constraints[p], d->parameter_count);

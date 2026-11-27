@@ -36,7 +36,7 @@ static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrX
         if (!nominal_flags_valid(d->kind,d->flags)) return XR_XIR_BAD_STRUCTURE;
         status = nominal_native_verify( d);
         if (status != XR_XIR_OK) return status;
-        status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count,NULL);
+        status = nominal_variants(&b, d->kind, d->variants, d->variant_count, d->field_count, NULL);
         if (status != XR_XIR_OK) return status;
         for (uint32_t f = 0; f < d->field_count; ++f) {
             uint32_t flags = d->fields[f].flags;
@@ -130,7 +130,7 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_project(const XrXirCompileContext *co
         XrXirNominalIdentity native_identity = nominal_identity_header(table, i);
         XrXirStatus native_status = nominal_native_verify( &native_identity);
         if (native_status != XR_XIR_OK) return native_status;
-        XrXirStatus variant_status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count,control);
+        XrXirStatus variant_status = nominal_variants(&b, d->kind, d->variants, d->variant_count, d->field_count, control);
         if (variant_status != XR_XIR_OK) return variant_status;
         if (!(((uint64_t) d->field_count * sizeof(XrXirNominalFieldIdentity)) <= SIZE_MAX))
             return XR_XIR_BUDGET;

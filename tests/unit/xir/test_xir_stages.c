@@ -33,6 +33,18 @@ static const XrXirTarget fixture_target = XR_XIR_HOST_TARGET;
     } \
 } while (0)
 
+static bool stage_fail_next_allocation;
+
+static void *stage_test_malloc(size_t bytes) {
+    if (stage_fail_next_allocation) {
+        stage_fail_next_allocation = false;
+        return NULL;
+    }
+    return xr_malloc(bytes);
+}
+
+#undef xr_malloc
+#define xr_malloc(bytes) stage_test_malloc(bytes)
 #include "xir_stage_context_owner.h"
 
 typedef struct Fixture {
@@ -770,6 +782,99 @@ static void enum_metadata_cases(void) {
     CHECK(xr_xir_compile_types_structure_verify(&b, &types) == XR_XIR_OK);
 }
 
+typedef struct EnumValidationCancel {
+    const XrXirCompileContext *context;
+    XrCompileResourceStats before;
+    unsigned scratch_polls;
+} EnumValidationCancel;
+
+static bool cancel_enum_validation(const void *context) {
+    EnumValidationCancel *state = (EnumValidationCancel *)context;
+    XrCompileResourceStats stats = stage_stats(state->context);
+    return stats.held_bytes > state->before.held_bytes &&
+        stats.allocation_count == state->before.allocation_count + 1 && ++state->scratch_polls == 5;
+}
+
+static void enum_variant_name_validation(void) {
+    enum { VARIANTS = 40 };
+    EnumMetadataFixture fixture;
+    enum_metadata_fixture(&fixture);
+    XrXirNominalVariant variants[VARIANTS];
+    char names[VARIANTS][2];
+    memcpy(variants, fixture.variants, sizeof(fixture.variants));
+    for (uint32_t i = 3; i < VARIANTS; ++i) {
+        names[i][0] = '!';
+        names[i][1] = (char)(0xff - i);
+        variants[i] = (XrXirNominalVariant){{names[i], 2}, 2, 0};
+    }
+    variants[3].name.length = 1;
+    fixture.declaration.variants = variants;
+    fixture.declaration.variant_count = VARIANTS;
+
+    XrXirCompileContext budget = stage_context_default();
+    XrCompileResourceStats before = stage_stats(&budget);
+    CHECK(xr_xir_compile_nominal_structure_verify(&budget, &fixture.table, NULL) == XR_XIR_OK);
+    XrCompileResourceStats after = stage_stats(&budget);
+    CHECK(after.held_bytes == before.held_bytes && after.peak_bytes > before.held_bytes);
+    uint64_t peak = after.peak_bytes - before.held_bytes;
+    XrXirCompileContext exact = stage_context_limited(peak);
+    XrXirCompileContext tight = stage_context_limited(peak - 1);
+    CHECK(xr_xir_compile_nominal_structure_verify(&exact, &fixture.table, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_structure_verify(&tight, &fixture.table, NULL) == XR_XIR_MEMORY_LIMIT);
+
+    XrXirNominalTable *projected = NULL;
+    CHECK(xr_xir_compile_nominal_project(&budget, &fixture.table, NULL, &projected) == XR_XIR_OK);
+    CHECK(projected && projected->identities[0].variant_count == VARIANTS);
+    CHECK(xr_xir_compile_nominal_structure_verify(&budget, projected, NULL) == XR_XIR_OK);
+    for (uint32_t i = 0; i < VARIANTS; ++i) {
+        const XrXirNominalVariant *copy = &projected->identities[0].variants[i];
+        CHECK(copy->name.bytes != variants[i].name.bytes && copy->name.length == variants[i].name.length);
+        CHECK(!memcmp(copy->name.bytes, variants[i].name.bytes, copy->name.length));
+        CHECK(copy->field_begin == variants[i].field_begin && copy->field_count == variants[i].field_count);
+    }
+    XrXirNominalIdentity identity = projected->identities[0];
+    identity.variants = variants;
+    XrXirNominalTable identities = {.count = 1, .identities = &identity};
+    XrXirNominalTable *denied = NULL;
+    XrXirCompileContext empty_budget = stage_context_limited(0);
+    CHECK(xr_xir_compile_nominal_structure_verify(&empty_budget, &fixture.table, NULL) == XR_XIR_MEMORY_LIMIT);
+    CHECK(xr_xir_compile_nominal_structure_verify(&empty_budget, &identities, NULL) == XR_XIR_MEMORY_LIMIT);
+    CHECK(xr_xir_compile_nominal_project(&empty_budget, &fixture.table, NULL, &denied) == XR_XIR_MEMORY_LIMIT);
+    CHECK(!denied && stage_stats(&empty_budget).held_bytes == stage_owner_baseline.held_bytes);
+
+    before = stage_stats(&budget);
+    stage_fail_next_allocation = true;
+    CHECK(xr_xir_compile_nominal_structure_verify(&budget, &fixture.table, NULL) == XR_XIR_OUT_OF_MEMORY);
+    CHECK(!stage_fail_next_allocation);
+    stage_fail_next_allocation = true;
+    CHECK(xr_xir_compile_nominal_structure_verify(&budget, &identities, NULL) == XR_XIR_OUT_OF_MEMORY);
+    CHECK(!stage_fail_next_allocation);
+    stage_fail_next_allocation = true;
+    CHECK(xr_xir_compile_nominal_project(&budget, &fixture.table, NULL, &denied) == XR_XIR_OUT_OF_MEMORY);
+    CHECK(!stage_fail_next_allocation && !denied && stage_stats(&budget).held_bytes == before.held_bytes);
+
+    EnumValidationCancel cancel = {&budget, stage_stats(&budget), 0};
+    XrCompileRequestOptions options = {.cancel_poll = cancel_enum_validation, .cancel_context = &cancel};
+    XrCompileRequestControl control = {0};
+    CHECK(xr_compile_request_control_init(&options, &control) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_nominal_project(&budget, &fixture.table, &control, &denied) == XR_XIR_CANCELLED);
+    CHECK(!denied && cancel.scratch_polls == 5 && stage_stats(&budget).held_bytes == cancel.before.held_bytes);
+
+    char duplicate[2];
+    memcpy(duplicate, names[4], sizeof(duplicate));
+    XrXirLiteral rejected[] = {{duplicate, 2}, {NULL, 0}, {"!\0", 2}};
+    before = stage_stats(&budget);
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(*rejected); ++i) {
+        variants[VARIANTS - 1].name = rejected[i];
+        CHECK(xr_xir_compile_nominal_structure_verify(&budget, &fixture.table, NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_nominal_structure_verify(&budget, &identities, NULL) == XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_nominal_project(&budget, &fixture.table, NULL, &denied) == XR_XIR_BAD_STRUCTURE);
+        CHECK(!denied && stage_stats(&budget).held_bytes == before.held_bytes);
+    }
+    xr_xir_compile_nominal_free(projected);
+    CHECK(stage_stats(&budget).held_bytes == stage_owner_baseline.held_bytes);
+}
+
 static void stage_packet_word(uint8_t *bytes, uint32_t value) {
     for (unsigned i = 0; i < 4; ++i) bytes[i] = (uint8_t)(value >> (i * 8));
 }
@@ -1007,6 +1112,7 @@ int main(int argc, char **argv) {
     error_filter_guards();
     nominal_kind_boundaries();
     enum_metadata_cases();
+    enum_variant_name_validation();
     repeated_verification_memory();
     graph_scratch_function_boundaries();
     nominal_context_proofs();

@@ -319,6 +319,29 @@ add_test(NAME lir_sum_tag_width_wide COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOU
     --msvc-runtime "$<TARGET_GENEX_EVAL:xray_native_runtime,$<TARGET_PROPERTY:xray_native_runtime,MSVC_RUNTIME_LIBRARY>>"
     --source-root "${PROJECT_SOURCE_DIR}" --work "${CMAKE_CURRENT_BINARY_DIR}/sum-tag-width-wide" ${lir_c_native_options})
 set_tests_properties(lir_sum_tag_width_wide PROPERTIES LABELS "unit;lir;native" TIMEOUT 3600)
+add_test(NAME lir_enum_variant_duplicate COMMAND ${XRAY_PYTHON} -c [=[
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+binary, source, stdlib = sys.argv[1:]
+environment = dict(os.environ, XRAY_STDLIB_PATH=stdlib, NO_COLOR="1")
+with tempfile.TemporaryDirectory(prefix="enum-variant-duplicate-") as work:
+    generated = Path(work) / "invalid.c"
+    vm = subprocess.run([binary, "run", source], cwd=work, env=environment,
+                        capture_output=True, timeout=30)
+    native = subprocess.run([binary, "build", "--c-only", "-o", str(generated), source],
+                            cwd=work, env=environment, capture_output=True, timeout=30)
+    assert (vm.returncode, vm.stdout) == (1, b""), vm
+    assert (native.returncode, native.stdout) == (1, b""), native
+    assert vm.stderr == native.stderr, (vm.stderr, native.stderr)
+    assert b"source declaration type structure is invalid" in vm.stderr, vm.stderr
+    assert not generated.exists(), generated
+]=] $<TARGET_FILE:xray> "${CMAKE_CURRENT_SOURCE_DIR}/programs/enum_variant_duplicate.xr"
+    "${PROJECT_SOURCE_DIR}/stdlib")
+set_tests_properties(lir_enum_variant_duplicate PROPERTIES LABELS "unit;lir;native" TIMEOUT 120)
 # A data union is a compiler-synthesized enum: same-member-set identity,
 # same-family members, aliases, and the `is`/`match` variant tests. Every case
 # runs through the register VM and the generated native C program.
