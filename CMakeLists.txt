@@ -1371,16 +1371,20 @@ if(_XRAY_STDLIB_PRODUCER_RUNNABLE)
         CONTENT "${_XRAY_STDLIB_SOURCE_LIST}\n" @ONLY NEWLINE_STYLE UNIX)
     set(XRAY_STDLIB_SCALAR_EXPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>")
     set(XRAY_STDLIB_SCALAR_EXPORT_C "${XRAY_STDLIB_SCALAR_EXPORT_DIR}/stdlib_scalar_math_lerp.c")
-    add_custom_command(
-        OUTPUT "${XRAY_STDLIB_SCALAR_EXPORT_C}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_SCALAR_EXPORT_DIR}"
-        COMMAND xray_stdlib_scalar_producer "${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
-                "${XRAY_STDLIB_SCALAR_EXPORT_C}.pending"
-        COMMAND ${CMAKE_COMMAND} -E rename "${XRAY_STDLIB_SCALAR_EXPORT_C}.pending" "${XRAY_STDLIB_SCALAR_EXPORT_C}"
-        DEPENDS xray_stdlib_scalar_producer "${_XRAY_STDLIB_SOURCE_INVENTORY}" ${XRAY_STDLIB_SOURCE_DEPENDENCIES}
-        COMMENT "Compiling the built-in standard library scalar export"
-        VERBATIM)
-    add_library(xray_stdlib_scalar_export STATIC "${XRAY_STDLIB_SCALAR_EXPORT_C}")
+    foreach(_XRAY_STDLIB_MATH_EXPORT IN ITEMS lerp abs)
+        set(_XRAY_STDLIB_EXPORT_OUTPUT "${XRAY_STDLIB_SCALAR_EXPORT_DIR}/stdlib_scalar_math_${_XRAY_STDLIB_MATH_EXPORT}.c")
+        add_custom_command(
+            OUTPUT "${_XRAY_STDLIB_EXPORT_OUTPUT}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${XRAY_STDLIB_SCALAR_EXPORT_DIR}"
+            COMMAND xray_stdlib_scalar_producer "${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
+                    "${_XRAY_STDLIB_EXPORT_OUTPUT}.pending" "${_XRAY_STDLIB_MATH_EXPORT}"
+            COMMAND ${CMAKE_COMMAND} -E rename "${_XRAY_STDLIB_EXPORT_OUTPUT}.pending" "${_XRAY_STDLIB_EXPORT_OUTPUT}"
+            DEPENDS xray_stdlib_scalar_producer "${_XRAY_STDLIB_SOURCE_INVENTORY}" ${XRAY_STDLIB_SOURCE_DEPENDENCIES}
+            COMMENT "Compiling the built-in standard library scalar math.${_XRAY_STDLIB_MATH_EXPORT}"
+            VERBATIM)
+        list(APPEND _XRAY_STDLIB_SCALAR_EXPORT_SOURCES "${_XRAY_STDLIB_EXPORT_OUTPUT}")
+    endforeach()
+    add_library(xray_stdlib_scalar_export STATIC ${_XRAY_STDLIB_SCALAR_EXPORT_SOURCES})
     set_target_properties(xray_stdlib_scalar_export PROPERTIES
         C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     if(MSVC)

@@ -4,14 +4,17 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlir_math_lower.inc.c - Checked standard math conversion leaves
+ * xlir_math_lower.inc.c - Checked standard math scalar leaves
  *
  * KEY CONCEPT:
  *   Both execution targets use the verified scalar operations and range panic.
  */
-static uint32_t lower_math_rounding_id(const Lower *c, uint32_t index) {
+#include "../shared/xr_numeric_conversion_core.h"
+
+static uint32_t lower_math_unary_id(const Lower *c, uint32_t index) {
     const XrXirFunctionIdentity *identity = &c->source->declarations->functions[index];
     switch (identity->native_callable) {
+    case XR_NATIVE_CALLABLE_MATH_ABS:
     case XR_NATIVE_CALLABLE_MATH_FLOOR:
     case XR_NATIVE_CALLABLE_MATH_CEIL:
     case XR_NATIVE_CALLABLE_MATH_ROUND:
@@ -23,7 +26,14 @@ static uint32_t lower_math_rounding_id(const Lower *c, uint32_t index) {
     }
 }
 
-static bool lower_math_round_return(Lower *c, XrLirBlock block, XrLirValue result) {
+static bool lower_math_unary_entry(Lower *c, XrLirFunction function, XrLirBlock *entry, XrLirValue *input) {
+    return lower_build(c, xr_lir_define_function(c->module, function)) &&
+        lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, entry)) &&
+        lower_build(c, xr_lir_set_entry(c->module, function, *entry)) &&
+        lower_build(c, xr_lir_function_parameter(c->module, function, 0, input));
+}
+
+static bool lower_math_return(Lower *c, XrLirBlock block, XrLirValue result) {
     XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT, .operands=&result, .operand_count=1};
     return lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
 }
@@ -34,20 +44,54 @@ static bool lower_math_round_adjust(Lower *c, XrLirBlock block, XrLirValue integ
     XrLirInstruction adjust = {.op=op, .type=XR_LIR_I64, .operands=operands, .operand_count=2};
     return lower_build(c, xr_lir_emit_value(c->module, block, &one, &operands[1])) &&
         lower_build(c, xr_lir_emit_value(c->module, block, &adjust, &result)) &&
-        lower_math_round_return(c, block, result);
+        lower_math_return(c, block, result);
+}
+
+static bool lower_math_branch(Lower *c, XrLirBlock block, XrLirValue left, XrLirValue right,
+    XrLirPredicate predicate, XrLirBlock when_true, XrLirBlock otherwise) {
+    XrLirValue operands[2] = {left, right}, selected = {0};
+    XrLirInstruction compare = {.op=XR_LIR_FCMP, .type=XR_LIR_I1, .predicate=predicate,
+        .operands=operands, .operand_count=2};
+    XrLirInstruction branch = {.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT, .operands=&selected,
+        .operand_count=1, .edge_count=2, .edges={{.target=when_true}, {.target=otherwise}}};
+    return lower_build(c, xr_lir_emit_value(c->module, block, &compare, &selected)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, block, &branch));
 }
 
 static bool lower_math_round_branch(Lower *c, XrLirBlock block, XrLirValue fraction,
     uint64_t threshold, XrLirPredicate predicate, XrLirBlock adjust, XrLirBlock otherwise) {
-    XrLirValue operands[2] = {fraction, {0}}, selected = {0};
+    XrLirValue limit = {0};
     XrLirInstruction constant = {.op=XR_LIR_CONST, .type=XR_LIR_F64, .bits=threshold};
-    XrLirInstruction compare = {.op=XR_LIR_FCMP, .type=XR_LIR_I1, .predicate=predicate,
-        .operands=operands, .operand_count=2};
-    XrLirInstruction branch = {.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT, .operands=&selected,
-        .operand_count=1, .edge_count=2, .edges={{.target=adjust}, {.target=otherwise}}};
-    return lower_build(c, xr_lir_emit_value(c->module, block, &constant, &operands[1])) &&
-        lower_build(c, xr_lir_emit_value(c->module, block, &compare, &selected)) &&
-        lower_build(c, xr_lir_set_terminator(c->module, block, &branch));
+    return lower_build(c, xr_lir_emit_value(c->module, block, &constant, &limit)) &&
+        lower_math_branch(c, block, fraction, limit, predicate, adjust, otherwise);
+}
+
+static bool lower_math_abs_body(Lower *c, XrLirFunction function) {
+    XrLirBlock entry = {0}, positive = {0}, test_negative = {0}, negative = {0};
+    XrLirBlock test_zero = {0}, zero = {0}, unordered = {0};
+    XrLirValue input = {0}, positive_zero = {0}, magnitude = {0}, canonical_nan = {0};
+    XrLirInstruction zero_constant = {.op=XR_LIR_CONST, .type=XR_LIR_F64};
+    XrLirInstruction negate = {.op=XR_LIR_FNEG, .type=XR_LIR_F64, .operands=&input, .operand_count=1};
+    XrLirInstruction nan_constant = {.op=XR_LIR_CONST, .type=XR_LIR_F64, .bits=XR_NUMERIC_CANONICAL_F64_NAN};
+
+    /* Ordered comparisons separate both zero signs and NaNs from the two
+     * nonzero signs. The NaN result matches the checked math evaluator. */
+    return lower_math_unary_entry(c, function, &entry, &input) &&
+        lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &positive)) &&
+        lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &test_negative)) &&
+        lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &negative)) &&
+        lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &test_zero)) &&
+        lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &zero)) &&
+        lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &unordered)) &&
+        lower_build(c, xr_lir_emit_value(c->module, entry, &zero_constant, &positive_zero)) &&
+        lower_math_branch(c, entry, input, positive_zero, XR_LIR_GT, positive, test_negative) &&
+        lower_math_branch(c, test_negative, input, positive_zero, XR_LIR_LT, negative, test_zero) &&
+        lower_math_branch(c, test_zero, input, positive_zero, XR_LIR_EQ, zero, unordered) &&
+        lower_math_return(c, positive, input) && lower_math_return(c, zero, positive_zero) &&
+        lower_build(c, xr_lir_emit_value(c->module, negative, &negate, &magnitude)) &&
+        lower_math_return(c, negative, magnitude) &&
+        lower_build(c, xr_lir_emit_value(c->module, unordered, &nan_constant, &canonical_nan)) &&
+        lower_math_return(c, unordered, canonical_nan);
 }
 
 static bool lower_math_rounding_body(Lower *c, XrLirFunction function, uint32_t id) {
@@ -55,13 +99,10 @@ static bool lower_math_rounding_body(Lower *c, XrLirFunction function, uint32_t 
     XrLirValue input = {0}, integral = {0}, back = {0}, fraction = {0};
     XrLirInstruction to_int = {.op=XR_LIR_FTOI, .type=XR_LIR_I64, .source=lower_source(c),
         .operands=&input, .operand_count=1};
-    if (!lower_build(c, xr_lir_define_function(c->module, function)) ||
-        !lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &entry)) ||
-        !lower_build(c, xr_lir_set_entry(c->module, function, entry)) ||
-        !lower_build(c, xr_lir_function_parameter(c->module, function, 0, &input)) ||
+    if (!lower_math_unary_entry(c, function, &entry, &input) ||
         !lower_build(c, xr_lir_emit_value(c->module, entry, &to_int, &integral))) return false;
     if (id == XR_NATIVE_CALLABLE_MATH_TRUNC)
-        return lower_math_round_return(c, entry, integral);
+        return lower_math_return(c, entry, integral);
 
     /* Subtract the exact integral part before testing for a half. With a
      * nonzero fraction the magnitude is below 2^52, so the adjustment fits. */
@@ -73,7 +114,7 @@ static bool lower_math_rounding_body(Lower *c, XrLirFunction function, uint32_t 
     if (!lower_build(c, xr_lir_emit_value(c->module, entry, &subtract, &fraction)) ||
         !lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &unchanged)) ||
         !lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &adjust)) ||
-        !lower_math_round_return(c, unchanged, integral)) return false;
+        !lower_math_return(c, unchanged, integral)) return false;
 
     if (id != XR_NATIVE_CALLABLE_MATH_ROUND) {
         bool floor = id == XR_NATIVE_CALLABLE_MATH_FLOOR;

@@ -8,6 +8,10 @@ import tempfile
 from test_lir_c_native import run
 
 
+def abs_generated(args):
+    return args.generated.with_name("stdlib_scalar_math_abs.c")
+
+
 def private_dependency(args, root):
     build = args.generated.parents[2]
     inventory = build / "generated/stdlib_scalar_source_paths.txt"
@@ -23,14 +27,15 @@ def private_dependency(args, root):
         config = build / f"build-{args.generated.parent.name}.ninja"
         if config.is_file():
             command += ["-f", config.name]
-        graph = subprocess.check_output(
-            [*command, "-t", "query", args.generated.relative_to(build).as_posix()],
-            cwd=build, encoding="utf-8", timeout=10,
-        )
-        dependencies = {os.path.normcase(line.strip()) for line in graph.splitlines()}
         lexical_source = args.stdlib / "path/_lexical.xr"
-        assert os.path.normcase(str(lexical_source)) in dependencies
-        assert os.path.normcase(inventory.relative_to(build).as_posix()) in dependencies
+        for generated in (args.generated, abs_generated(args)):
+            graph = subprocess.check_output(
+                [*command, "-t", "query", generated.relative_to(build).as_posix()],
+                cwd=build, encoding="utf-8", timeout=10,
+            )
+            dependencies = {os.path.normcase(line.strip()) for line in graph.splitlines()}
+            assert os.path.normcase(str(lexical_source)) in dependencies
+            assert os.path.normcase(inventory.relative_to(build).as_posix()) in dependencies
 
     stdlib = root / "模块 🧪"
     math = stdlib / "math"
@@ -70,13 +75,18 @@ def private_dependency(args, root):
 
 
 def authority_cases(args, root):
-    repeated = root / "regenerated.c"
-    run([args.producer, args.stdlib, repeated], cwd=root)
-    generated = args.generated.read_bytes()
-    assert generated == repeated.read_bytes()
-    assert b"double xray_stdlib_math_lerp(double p0, double p1, double p2)" in generated
-    assert all(fragment not in generated for fragment in
-               (b"xray_lir_entry", b"xray_native_", b"xrt_", b"int main("))
+    exports = (
+        ("lerp", args.generated, b"double xray_stdlib_math_lerp(double p0, double p1, double p2)"),
+        ("abs", abs_generated(args), b"double xray_stdlib_math_abs(double p0)"),
+    )
+    for name, path, prototype in exports:
+        repeated = root / f"regenerated-{name}.c"
+        run([args.producer, args.stdlib, repeated, name], cwd=root)
+        generated = path.read_bytes()
+        assert generated == repeated.read_bytes()
+        assert prototype in generated
+        assert all(fragment not in generated for fragment in
+                   (b"xray_lir_entry", b"xray_native_", b"xrt_", b"int main("))
 
     rejected = root / "rejected.c"
     sentinel = b"preserve any prior output"
@@ -98,7 +108,7 @@ def authority_cases(args, root):
         encoding="utf-8",
     )
     failure = run([args.producer, alternate, rejected], cwd=root, expected_exit=1)
-    assert b"cannot select unique exported Checked math.lerp" in failure.stderr
+    assert b"math.lerp: cannot select the unique exported Checked declaration" in failure.stderr
     assert rejected.read_bytes() == sentinel
 
     math_source.write_text("export fn lerp(a: f64) -> f64 { return a }\n", encoding="utf-8")
@@ -115,21 +125,67 @@ def authority_cases(args, root):
     assert (b"cannot validate closed scalar effects" in failure.stderr or
             b"scalar export requires a runtime-free call closure" in failure.stderr)
     assert rejected.read_bytes() == sentinel
+
+    failure = run([args.producer, args.stdlib, rejected, "sqrt"], cwd=root, expected_exit=2)
+    assert b"unknown export selection" in failure.stderr
+    assert rejected.read_bytes() == sentinel
+
+    math_source.write_text("export fn abs(x: i64) -> f64 { return 17.0 }\n", encoding="utf-8")
+    failure = run([args.producer, alternate, rejected, "abs"], cwd=root, expected_exit=1)
+    assert b"math.abs: cannot validate the declared scalar ABI" in failure.stderr
+    assert rejected.read_bytes() == sentinel
     return empty
 
 
 def link_archive(args, root, empty):
     consumer = root / "consumer.c"
     consumer.write_text(
-        '#include <stdio.h>\n'
-        '#if defined(_WIN32)\n#include <fcntl.h>\n#include <io.h>\n#endif\n'
-        'extern double xray_stdlib_math_lerp(double, double, double);\n'
-        'int main(void) {\n'
-        '#if defined(_WIN32)\n    if (_setmode(_fileno(stdout), _O_BINARY) == -1) return 1;\n#endif\n'
-        '    double a = xray_stdlib_math_lerp(2.0, 10.0, 0.25);\n'
-        '    double b = xray_stdlib_math_lerp(5.0, -3.0, 1.5);\n'
-        '    return printf("%.1f\\n%.1f\\n", a, b) < 0;\n'
-        '}\n',
+        r'''#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
+#endif
+extern double xray_stdlib_math_lerp(double, double, double);
+extern double xray_stdlib_math_abs(double);
+
+static int check_abs(void) {
+    static const uint64_t positive[][2] = {
+        {UINT64_C(0), UINT64_C(0)},
+        {UINT64_C(1), UINT64_C(1)},
+        {UINT64_C(0x4045000000000000), UINT64_C(0x4045000000000000)},
+        {UINT64_C(0x7fefffffffffffff), UINT64_C(0x7fefffffffffffff)},
+        {UINT64_C(0x7ff0000000000000), UINT64_C(0x7ff0000000000000)},
+        {UINT64_C(0x7ff8123456789abc), UINT64_C(0x7ff8000000000000)},
+        {UINT64_C(0x7ff0000000000042), UINT64_C(0x7ff8000000000000)}
+    };
+    for (size_t i = 0; i < sizeof(positive) / sizeof(*positive); ++i) {
+        for (unsigned int negative = 0; negative <= 1; ++negative) {
+            uint64_t raw = positive[i][0] | ((uint64_t)negative << 63);
+            double x;
+            memcpy(&x, &raw, sizeof(x));
+            double result = xray_stdlib_math_abs(x);
+            memcpy(&raw, &result, sizeof(raw));
+            if (raw != positive[i][1]) {
+                fprintf(stderr, "math.abs returned unexpected bits for row %zu, sign %u\n", i, negative);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int main(void) {
+#if defined(_WIN32)
+    if (_setmode(_fileno(stdout), _O_BINARY) == -1) return 1;
+#endif
+    if (check_abs()) return 1;
+    double a = xray_stdlib_math_lerp(2.0, 10.0, 0.25);
+    double b = xray_stdlib_math_lerp(5.0, -3.0, 1.5);
+    return printf("%.1f\n%.1f\n", a, b) < 0;
+}
+''',
         encoding="ascii",
     )
     binary = root / ("consumer.exe" if os.name == "nt" else "consumer")

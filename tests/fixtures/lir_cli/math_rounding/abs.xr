@@ -1,0 +1,24 @@
+import math
+import { abs as namedAbs } from math
+
+fn row(x: f64) {
+    print(math.abs(x))
+}
+
+fn __abs(x: f64) -> f64 {
+    return 17.0
+}
+
+row(0.0)
+row(-0.0)
+row(5e-324)
+row(-5e-324)
+row(1.0 / 0.0)
+row(-1.0 / 0.0)
+row(0.0 / 0.0)
+row(-(0.0 / 0.0))
+row(42.0)
+print(math.abs(-42))
+print(1.0 / math.abs(-0.0))
+print(namedAbs(-8.0))
+print(__abs(-1.0))

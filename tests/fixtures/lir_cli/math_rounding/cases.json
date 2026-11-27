@@ -21,5 +21,13 @@
   },
   "private": {
     "source_error": ":1:1: error: import requires an exported declaration"
+  },
+  "abs": {
+    "exit": 0,
+    "stdout": "0.0\n0.0\n5e-324\n5e-324\ninf\ninf\nnan\nnan\n42.0\n42.0\ninf\n8.0\n17.0\n",
+    "stderr": ""
+  },
+  "private_abs": {
+    "source_error": ":1:1: error: import requires an exported declaration"
   }
 }

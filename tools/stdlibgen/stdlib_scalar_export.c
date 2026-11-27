@@ -22,8 +22,16 @@
 
 static const char module_name[] = "math";
 static const char module_path[] = "math/math.xr";
-static const char export_name[] = "lerp";
-static const char export_symbol[] = "xray_stdlib_math_lerp";
+
+typedef struct ScalarExport {
+    const char *name, *symbol;
+    uint32_t parameter_count;
+} ScalarExport;
+
+static const ScalarExport scalar_exports[] = {
+    {"lerp", "xray_stdlib_math_lerp", 3},
+    {"abs", "xray_stdlib_math_abs", 1}
+};
 
 static bool same_name(const char *bytes, size_t length, const char *expected) {
     return bytes && length == strlen(expected) && !memcmp(bytes, expected, length);
@@ -46,7 +54,7 @@ static bool resolve_source(XrCompileResources *resources, const char *stdlib, Xr
     return matches;
 }
 
-static uint32_t select_export(const XrXirArtifact *artifact, const XrModuleId *module) {
+static uint32_t select_export(const XrXirArtifact *artifact, const XrModuleId *module, const char *name) {
     const XrXirModule *view = xr_xir_compile_artifact_module(artifact);
     if (!view || !view->declarations || view->stage != XR_XIR_CHECKED ||
         !xr_xir_target_is_host(xr_xir_compile_artifact_target(artifact))) return UINT32_MAX;
@@ -60,7 +68,7 @@ static uint32_t select_export(const XrXirArtifact *artifact, const XrModuleId *m
         const XrXirFunctionIdentity *identity = &declarations->functions[i];
         const XrXirFunction *body = &view->functions[i];
         if (identity->module != root || !identity->exported || identity->method_kind != XR_XIR_NON_MEMBER ||
-            !same_name(body->name, body->name_length, export_name)) continue;
+            !same_name(body->name, body->name_length, name)) continue;
         if (selected != UINT32_MAX) return UINT32_MAX;
         selected = i;
     }
@@ -68,13 +76,14 @@ static uint32_t select_export(const XrXirArtifact *artifact, const XrModuleId *m
 }
 
 /* Match the build consumer's typed signature before any C name is assigned. */
-static bool scalar_abi(const XrXirArtifact *artifact, uint32_t selected) {
+static bool scalar_abi(const XrXirArtifact *artifact, uint32_t selected, const ScalarExport *spec) {
     const XrXirModule *view = xr_xir_compile_artifact_module(artifact);
     const XrXirFunction *body = &view->functions[selected];
     const XrXirFunctionIdentity *identity = &view->declarations->functions[selected];
-    return body->parameter_count == 3 && body->parameters[0] == XR_XIR_F64 &&
-        body->parameters[1] == XR_XIR_F64 && body->parameters[2] == XR_XIR_F64 &&
-        body->result == XR_XIR_F64 &&
+    if (body->parameter_count != spec->parameter_count) return false;
+    for (uint32_t p = 0; p < body->parameter_count; ++p)
+        if (body->parameters[p] != XR_XIR_F64) return false;
+    return body->result == XR_XIR_F64 &&
         (body->error_type == XR_XIR_NEVER || body->error_type == XR_XIR_UNIT) &&
         body->block_count && !body->consume_parameter_count && !body->escaping_parameter_count &&
         !identity->native_callable && !identity->cleanup_owner && !identity->capture_owner &&
@@ -106,7 +115,7 @@ static bool write_output(XrCompileResources *resources, const char *path, const 
     return fclose(file) == 0 && written;
 }
 
-static int produce(const char *stdlib, const char *destination) {
+static int produce(const char *stdlib, const char *destination, const ScalarExport *spec) {
     XrCompileResourceLimits limits = XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     XrCompileResources *resources = NULL;
     XrModuleId module = {0};
@@ -134,18 +143,18 @@ static int produce(const char *stdlib, const char *destination) {
         goto done;
     }
 
-    error = "select unique exported Checked math.lerp";
-    uint32_t declaration = select_export(source.checked, &module);
+    error = "select the unique exported Checked declaration";
+    uint32_t declaration = select_export(source.checked, &module, spec->name);
     if (declaration == UINT32_MAX) goto done;
     error = "validate the declared scalar ABI";
-    if (!scalar_abi(source.checked, declaration)) goto done;
+    if (!scalar_abi(source.checked, declaration, spec)) goto done;
 
     error = "specialize the Checked module";
     XrXirDiagnostic specialization = {0};
     if (xr_xir_compile_specialize(source.checked, &closed, &specialization, NULL) != XR_XIR_OK) goto done;
     error = "match the closed function to its original Checked declaration";
-    uint32_t selected = select_export(closed, &module), origin = UINT32_MAX;
-    if (selected == UINT32_MAX || !scalar_abi(closed, selected) ||
+    uint32_t selected = select_export(closed, &module, spec->name), origin = UINT32_MAX;
+    if (selected == UINT32_MAX || !scalar_abi(closed, selected, spec) ||
         xr_xir_compile_specialization_origin(closed, selected, &origin) != XR_XIR_OK ||
         origin != declaration) goto done;
     error = "validate closed scalar effects";
@@ -160,7 +169,7 @@ static int produce(const char *stdlib, const char *destination) {
     error = "emit the verified scalar export";
     XrLirCDiagnostic c_diagnostic = {0};
     XrLirCRequest emission = {lowered.module, lowered.entry, resources, module.canonical, NULL};
-    if (xr_lir_emit_c_scalar_export(&emission, export_symbol, &output, &c_diagnostic) != XR_LIR_C_OK) {
+    if (xr_lir_emit_c_scalar_export(&emission, spec->symbol, &output, &c_diagnostic) != XR_LIR_C_OK) {
         fprintf(stderr, "%s\n", c_diagnostic.message);
         goto done;
     }
@@ -168,7 +177,7 @@ static int produce(const char *stdlib, const char *destination) {
     if (write_output(resources, destination, &output)) result = 0;
 
 done:
-    if (result) fprintf(stderr, "stdlib scalar export %s.%s: cannot %s\n", module_name, export_name, error);
+    if (result) fprintf(stderr, "stdlib scalar export %s.%s: cannot %s\n", module_name, spec->name, error);
     xr_lir_c_output_free(&output);
     xr_lir_lowered_free(&lowered);
     xr_lir_lower_failure_free(&lower_failure);
@@ -180,21 +189,31 @@ done:
     return result;
 }
 
+static int run_producer(int argc, char **argv) {
+    if (argc != 3 && argc != 4) return 2;
+    const char *name = argc == 4 ? argv[3] : "lerp";
+    for (size_t i = 0; i < sizeof(scalar_exports) / sizeof(*scalar_exports); ++i) {
+        if (!strcmp(name, scalar_exports[i].name)) return produce(argv[1], argv[2], &scalar_exports[i]);
+    }
+    fputs("stdlib scalar export: unknown export selection\n", stderr);
+    return 2;
+}
+
 #ifdef XR_OS_WINDOWS
 int wmain(int argc, wchar_t **wide_argv) {
-    if (argc != 3) return 2;
+    if (argc != 3 && argc != 4) return 2;
     XrWinPathStatus status;
     char **argv = xr_win_utf16_arguments(argc, wide_argv, &status);
     if (!argv) {
         fputs("stdlib scalar export: invalid Windows arguments or argument allocation failed\n", stderr);
         return 1;
     }
-    int result = produce(argv[1], argv[2]);
+    int result = run_producer(argc, argv);
     xr_win_utf8_arguments_free(argc, argv);
     return result;
 }
 #else
 int main(int argc, char **argv) {
-    return argc == 3 ? produce(argv[1], argv[2]) : 2;
+    return run_producer(argc, argv);
 }
 #endif
