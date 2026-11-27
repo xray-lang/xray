@@ -161,7 +161,7 @@ static bool lower_array_instruction(LowerFunction *f, uint32_t b, uint32_t i, bo
         else good = lower_build(c, query);
     }
     if (good && op == f->checked_empty_array &&
-        lower_allocation_cleanup_shape(c, f->source, f->source->blocks[b].frontier)) {
+        (f->directory_loop.allocation || lower_allocation_cleanup_shape(c, f->source, f->source->blocks[b].frontier))) {
         xr_free(args);
         return lower_checked_empty_array(f, b, result, lower_array_element(c, array), intrinsic);
     }

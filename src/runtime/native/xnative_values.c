@@ -448,7 +448,8 @@ XRAY_API int64_t xrt_native_host_directory_open(const XrtManagedHeader *path, ui
 }
 
 typedef enum NativeDirectoryFailureKind {
-    NATIVE_DIRECTORY_PREPARE = 1, NATIVE_DIRECTORY_NEXT, NATIVE_DIRECTORY_CLOSE, NATIVE_DIRECTORY_POLL
+    NATIVE_DIRECTORY_PREPARE = 1, NATIVE_DIRECTORY_NEXT, NATIVE_DIRECTORY_CLOSE, NATIVE_DIRECTORY_POLL,
+    NATIVE_DIRECTORY_ALLOCATION
 } NativeDirectoryFailureKind;
 _Static_assert(XR_OS_IO_CLOCK_FAILURE <= UINT8_MAX && XRT_MANAGED_DUPLICATE_KEY <= UINT8_MAX,
     "directory status preserves both complete status domains");
@@ -467,7 +468,8 @@ static XrXirValueStatus directory_diagnostic(XrtNativeDirectoryStatus status) {
     XrOsIoStatus host = (XrOsIoStatus)((status >> 32) & 0xffu);
     XrtManagedStatus managed = (XrtManagedStatus)((status >> 40) & 0xffu);
     XR_CHECK(host <= XR_OS_IO_CLOCK_FAILURE && managed <= XRT_MANAGED_DUPLICATE_KEY &&
-        ((kind == NATIVE_DIRECTORY_PREPARE && host == XR_OS_IO_OK && managed != XRT_MANAGED_OK) ||
+        (((kind == NATIVE_DIRECTORY_PREPARE || kind == NATIVE_DIRECTORY_ALLOCATION) &&
+          host == XR_OS_IO_OK && managed != XRT_MANAGED_OK) ||
          (kind == NATIVE_DIRECTORY_NEXT && ((host == XR_OS_IO_OK || host == XR_OS_IO_END) == (managed != XRT_MANAGED_OK))) ||
          (kind == NATIVE_DIRECTORY_CLOSE && host == XR_OS_IO_BAD_ARGUMENT && managed == XRT_MANAGED_OK) ||
          (kind == NATIVE_DIRECTORY_POLL && host == XR_OS_IO_CANCELLED && managed == XRT_MANAGED_OK)),
@@ -563,11 +565,19 @@ XRAY_API_NORET void xrt_native_host_directory_cleanup_fail(XrtNativeDirectorySta
     XrtNativeDirectoryStatus secondary) {
     uint32_t source = (uint32_t)primary, close_source = (uint32_t)secondary;
     XR_CHECK(source && (!secondary || (close_source && directory_status_kind(secondary) == NATIVE_DIRECTORY_CLOSE &&
-        (directory_status_kind(primary) == NATIVE_DIRECTORY_PREPARE || directory_status_kind(primary) == NATIVE_DIRECTORY_NEXT))),
-        "only an in-flight directory read can carry a secondary close failure");
+        (directory_status_kind(primary) == NATIVE_DIRECTORY_PREPARE || directory_status_kind(primary) == NATIVE_DIRECTORY_NEXT ||
+         directory_status_kind(primary) == NATIVE_DIRECTORY_ALLOCATION))),
+        "only an in-flight directory operation can carry a secondary close failure");
     if (secondary) (void)directory_diagnostic(secondary);
     xrt_value_failure_publish((XrtValueFailure){.status=directory_diagnostic(primary),.source_id=source,
         .directory_close_source_id=close_source,.directory_primary=primary,.directory_secondary=secondary});
+}
+
+XRAY_API_NORET void xrt_native_managed_failure_with_directory(XrtManagedStatus status, uint32_t source,
+    XrtNativeDirectoryStatus close) {
+    if (!close) xrt_native_managed_failure(status, source);
+    xrt_native_host_directory_cleanup_fail(
+        directory_status(source, NATIVE_DIRECTORY_ALLOCATION, XR_OS_IO_OK, status), close);
 }
 
 XRAY_API bool xrt_native_host_file_close(uint32_t callable, const XrtValueImage *image, uint32_t type,

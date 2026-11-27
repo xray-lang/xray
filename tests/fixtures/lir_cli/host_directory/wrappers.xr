@@ -248,3 +248,32 @@ export fn directoryProbeLoopPathReused(directory: Path) -> i64 {
     }
     return -1
 }
+
+export fn directoryProbeLoopCheckedArray(directory: Path) -> i64 {
+    var token = __dirOpen(directory)
+    if (token == 0) { return -1 }
+    defer { __dirClose(token) }
+    var names: Array<string> = []
+    var count = 0
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return count + len(names) }
+        count = count + 1
+    }
+    return -1
+}
+
+export fn directoryProbeLoopCheckedArrayPriorOwner(directory: Path) -> i64 {
+    var token = __dirOpen(directory)
+    if (token == 0) { return -1 }
+    var earlier: Array<string> = ["marker"]
+    defer { __dirClose(token) }
+    var names: Array<string> = []
+    var count = 0
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return count + len(earlier) + len(names) }
+        count = count + 1
+    }
+    return -1
+}

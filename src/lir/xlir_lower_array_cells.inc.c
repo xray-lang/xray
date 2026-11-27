@@ -14,6 +14,22 @@ static bool lower_physical_cell(XrLirType type) {
     return type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_SET_I64_CELL;
 }
 #include "xlir_lower_view_cells.inc.c"
+static void lower_array_cells_scan_body(LowerArrayCells *cells, uint32_t b, const XrLirBlockData *block) {
+    for (uint32_t i = 0; i < block->instruction_count; ++i) {
+        const XrLirInstructionView *op = &block->instructions[i].view;
+        for (uint32_t a = 0; a < op->operand_count; ++a) {
+            uint32_t owner = cells->indices[op->operands[a] - 1];
+            if (owner) {
+                size_t at = (size_t)b * cells->count + owner - 1;
+                if (!cells->define[at]) cells->use[at] = 1;
+            }
+        }
+        uint32_t owner = op->result ? cells->indices[op->result - 1] : 0;
+        if (owner && op->op == XR_LIR_CELL_NEW)
+            cells->define[(size_t)b * cells->count + owner - 1] = 1;
+    }
+}
+
 static bool lower_array_cells_inventory(LowerFunction *f) {
     Lower *c = f->owner;
     const XrLirFunctionData *function = &c->module->functions[f->function.id - 1];
@@ -47,18 +63,13 @@ static bool lower_array_cells_inventory(LowerFunction *f) {
     }
     for (uint32_t b = 0; b < f->source->block_count; ++b) if (f->reachable[b]) {
         const XrLirBlockData *block = &function->blocks[f->blocks[b].id - 1];
-        for (uint32_t i = 0; i < block->instruction_count; ++i) {
-            const XrLirInstructionView *op = &block->instructions[i].view;
-            for (uint32_t a = 0; a < op->operand_count; ++a) {
-                uint32_t owner = cells->indices[op->operands[a] - 1];
-                if (owner) {
-                    size_t at = (size_t)b * count + owner - 1;
-                    if (!cells->define[at]) cells->use[at] = 1;
-                }
-            }
-            uint32_t owner = op->result ? cells->indices[op->result - 1] : 0;
-            if (owner && op->op == XR_LIR_CELL_NEW)
-                cells->define[(size_t)b * count + owner - 1] = 1;
+        lower_array_cells_scan_body(cells, b, block);
+        if (block->instruction_count) {
+            const XrLirInstructionView *term = &block->instructions[block->instruction_count - 1].view;
+            /* This split evaluates the Cell constructor only after the
+             * allocation succeeds. Its failure block owns no Array Cell. */
+            if (term->op == XR_LIR_CHECKED_EMPTY_ARRAY)
+                lower_array_cells_scan_body(cells, b, &function->blocks[term->edges[0].target - 1]);
         }
     }
     if (!lower_view_cell_uses(f)) return false;

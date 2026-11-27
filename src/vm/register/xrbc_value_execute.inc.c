@@ -1453,9 +1453,14 @@ static XrtManagedStatus rbc_value_checked_receive(XrRbcStack *stack, const XrRbc
 }
 
 static XrRbcStatus rbc_value_report_managed_failure(XrRbcStack *stack, const XrRbcFrame *frame,
-    const XrRbcValueCode *code, uint32_t operand, uint32_t source) {
-    const XrRbcRegister *fault = rbc_value_scalar_place(stack,frame,code,operand);
+    const XrRbcValueCode *code, XrRbcValueAccess access, uint32_t source) {
+    const XrRbcRegister *fault = rbc_value_scalar_place(stack,frame,code,access.source);
     if (!fault || !fault->bits || fault->bits > XRT_MANAGED_DUPLICATE_KEY) return XR_RBC_INVALID;
+    if (access.other) {
+        const XrRbcRegister *close = rbc_value_scalar_place(stack,frame,code,access.other);
+        if (!close) return XR_RBC_INVALID;
+        xrt_native_managed_failure_with_directory((XrtManagedStatus)fault->bits, source, close->bits);
+    }
     xrt_native_managed_failure((XrtManagedStatus)fault->bits,source);
 }
 
@@ -1691,7 +1696,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             (operation.operation != XR_RBC_VALUE_HOST_DIRECTORY_FRAME || source != code->directory_frame_source ||
              !pc || !rbc_directory_frame_entry(&module->functions[function],pc - 1))) return XR_RBC_INVALID;
         if (operation.operation == XR_RBC_VALUE_MANAGED_FAILURE)
-            return rbc_value_report_managed_failure(stack,frame,code,operation.source,source);
+            return rbc_value_report_managed_failure(stack,frame,code,operation,source);
         /* Only this failure chain can run with no typed activation. Its
          * original status and all cleanup operands fit the scalar banks. */
         if (operation.operation == XR_RBC_VALUE_CHECKED_ERROR &&
@@ -1836,7 +1841,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     } else if (access.operation == XR_RBC_VALUE_CHECKED_EMPTY_ARRAY) {
         status = rbc_value_checked_empty_array(module,stack,activation,access);
     } else if (access.operation == XR_RBC_VALUE_MANAGED_FAILURE) {
-        return rbc_value_report_managed_failure(stack,&stack->frames[activation->depth - 1],activation->code,access.source,source);
+        return rbc_value_report_managed_failure(stack,&stack->frames[activation->depth - 1],activation->code,access,source);
     } else if (access.operation >= XR_RBC_VALUE_HOST_DIRECTORY_FRAME && access.operation <= XR_RBC_VALUE_HOST_DIRECTORY_FAIL) {
         status = rbc_value_checked_directory(module,stack,activation,access,source);
     } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE) {

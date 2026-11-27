@@ -1,0 +1,4 @@
+import io
+import path
+
+print(io.directoryProbeLoopCheckedArrayPriorOwner(path.Path("one")))

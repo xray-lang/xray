@@ -1446,9 +1446,40 @@ static void managed_checked_empty_arrays(void) {
     xrt_billing_owner_drop(billing);
     xrt_locations_release(source);
 }
+static void managed_directory_allocation_failure(void *context) {
+    const bool fail_close = *(const bool *)context;
+    XrtNativeDirectoryStatus closed = fail_close ? xrt_native_host_directory_cleanup_close_checked(0, 2) : 0;
+    CHECK((closed != 0) == fail_close);
+    xrt_native_managed_failure_with_directory(XRT_MANAGED_OOM, 1, closed);
+}
+
+static void managed_directory_allocation_cleanup(void) {
+    const XrtSourceLocation positions[] = {
+        {"allocation.xr", sizeof("allocation.xr") - 1, 4, 9, 4, 28},
+        {"allocation.xr", sizeof("allocation.xr") - 1, 3, 13, 3, 13},
+    };
+    XrtLocationOwner *owner = NULL;
+    CHECK(xrt_locations_create(positions, 2, &owner) == XRT_LOCATION_OK);
+    for (unsigned trial = 0; trial < 2; ++trial) {
+        bool fail_close = trial != 0;
+        XrtValueRoot root = {0};
+        XrtExecutionFailure failure = {0};
+        CHECK(xrt_run_embedded_owned(owner, &failure, managed_directory_allocation_failure,
+            &fail_close, &root) == XRT_EXECUTION_FAILURE);
+        CHECK(failure.kind == XRT_FAILURE_VALUE && failure.detail.value.status == XR_XIR_VALUE_OOM &&
+            failure.detail.value.source_id == 1);
+        CHECK(failure.detail.value.directory_close_source_id == (fail_close ? 2u : 0u));
+        CHECK((failure.detail.value.directory_secondary != 0) == fail_close);
+        CHECK(xrt_value_root_empty(&root));
+        xrt_execution_failure_drop(&failure);
+    }
+    xrt_locations_release(owner);
+}
+
 int main(void) {
     managed_scopes();
     managed_checked_empty_arrays();
+    managed_directory_allocation_cleanup();
     managed_host_path_scratch();
     managed_metadata_retirement();
     managed_test_session_close_only();

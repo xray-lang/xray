@@ -143,7 +143,7 @@ typedef struct LowerViews {
 } LowerViews;
 typedef struct LowerDirectoryLoop {
     const XrXirInstruction *call, *tag;
-    const XrXirInstruction *unwrap, *length;
+    const XrXirInstruction *unwrap, *length, *allocation;
     uint32_t block;
 } LowerDirectoryLoop;
 
@@ -4013,7 +4013,8 @@ static bool lower_function(Lower *c, uint32_t index) {
     f.directory_first_tail = lower_directory_tail_frame(c, f.source);
     f.directory_loop = lower_directory_loop(c, f.source);
     const XrXirInstruction *directory_source = f.directory_first_tail ? f.directory_first_tail : f.directory_loop.call;
-    if (!directory_source) f.checked_empty_array = lower_empty_array_site(c, f.source);
+    if (f.directory_loop.allocation) f.checked_empty_array = f.directory_loop.allocation;
+    else if (!directory_source) f.checked_empty_array = lower_empty_array_site(c, f.source);
     f.literal_uses = lower_literal_uses(c, f.source);
     bool good = f.literal_uses && (!f.directory_loop.unwrap || lower_receive_type(c, f.directory_loop.call->type)) &&
                 lower_build(c, xr_lir_define_function(c->module, f.function)) && lower_order(&f) &&

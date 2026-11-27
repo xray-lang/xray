@@ -1,0 +1,8 @@
+import io
+import path
+
+const directory = path.Path("one")
+print(io.directoryProbeLoopCheckedArray(directory))
+print(io.directoryProbeLoopCheckedArray(directory))
+print(io.directoryProbeLoopCheckedArray(path.Path("empty")))
+print(io.directoryProbeLoopCheckedArray(path.Path("missing")))

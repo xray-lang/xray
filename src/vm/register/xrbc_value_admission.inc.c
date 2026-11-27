@@ -836,8 +836,16 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             a.result == (failed ? next.other : next.result) &&
             rbc_checked_receivers(function,code,pc-distance,a.index,next);
     }
-    case XR_RBC_VALUE_MANAGED_FAILURE:
-        return !a.result && !a.other && !a.index && rbc_value_scalar(code,function,a.source,XR_RBC_BITS);
+    case XR_RBC_VALUE_MANAGED_FAILURE: {
+        if (a.result || a.index || !rbc_value_scalar(code,function,a.source,XR_RBC_BITS)) return false;
+        if (!a.other) return true;
+        if (!code->directory_frame_source || !pc || !rbc_value_scalar(code,function,a.other,XR_RBC_BITS))
+            return false;
+        uint32_t previous = function->code[pc - 1], close = previous >> 16;
+        return (previous & 255u) == XR_RBC_VALUE_ACCESS && close < code->access_count &&
+            code->accesses[close].operation == XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED &&
+            code->accesses[close].result == a.other;
+    }
     case XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED:
         return !a.index && rbc_value_scalar(code,function,a.result,XR_RBC_BITS) &&
             rbc_value_scalar(code,function,a.source,XR_RBC_BITS) &&

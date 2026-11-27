@@ -64,8 +64,11 @@ static bool rbc_string_source(const RbcStringAdmission *s, uint32_t r) {
 
 static bool rbc_bits_destination(RbcStringAdmission *s, uint32_t r) {
     XrRbcRegisterKind kind = rbc_register_kind(s->function, r);
-    return (kind == XR_RBC_BITS || kind == XR_RBC_CALL_WINDOW) &&
-        s->state[r] != RBC_STRING_OWNED && s->state[r] != RBC_CELL_OWNED;
+    if ((kind != XR_RBC_BITS && kind != XR_RBC_CALL_WINDOW) ||
+        s->state[r] == RBC_STRING_OWNED || s->state[r] == RBC_CELL_OWNED) return false;
+    /* Only a checked producer or an explicit spill transfer can attach a status origin. */
+    s->origin[r] = 0;
+    return true;
 }
 static void rbc_string_forget_borrows(RbcStringAdmission *s, uint32_t owner) {
     for (uint32_t r = 0; r < s->function->register_count; ++r)
@@ -194,6 +197,7 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
             if (f->register_kinds) s->state[v.a + p] = RBC_EMPTY;
         }
         s->state[v.a] = RBC_BITS;
+        s->origin[v.a] = 0;
         return true;
     }
     const XrRbcFunction *callee = &s->module->functions[v.immediate];
@@ -221,7 +225,8 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
     s->state[v.a] = callee->result_kind == XR_RBC_FUNCTION ? RBC_FUNCTION_OWNED :
         callee->result_kind == XR_RBC_SLICE_I64 ? RBC_VIEW_SLICE :
         rbc_managed_kind(callee->result_kind) ? RBC_STRING_OWNED : RBC_BITS;
-    s->origin[v.a] = callee->result_kind == XR_RBC_FUNCTION ? s->module->callable_results[v.immediate] : callee->result_kind;
+    s->origin[v.a] = callee->result_kind == XR_RBC_FUNCTION ? s->module->callable_results[v.immediate] :
+        (s->state[v.a] == RBC_BITS ? 0 : callee->result_kind);
     if (callee->result_kind == XR_RBC_FUNCTION) rbc_scope_define(s, v.a, rbc_scope_current(s));
     return true;
 }
@@ -401,6 +406,10 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
                 *changed = true;
             }
         }
+        if (to->state[r] == RBC_BITS && to->origin[r] && to->origin[r] != from->origin[r]) {
+            to->origin[r] = 0;
+            *changed = true;
+        }
         if ((to->state[r] == RBC_STRING_BORROWED || rbc_cell_state(to->state[r]) ||
              rbc_function_state(to->state[r]) || to->state[r] == RBC_STATE_REFERENCE) &&
             to->origin[r] != from->origin[r]) return false;
@@ -423,6 +432,11 @@ static bool rbc_string_merge(RbcStringAdmission *to, const RbcStringAdmission *f
         if (to->spills[i].state==from->spills[i].state) {
             if (to->spills[i].state == RBC_STATE_REFERENCE &&
                 to->spills[i].origin != from->spills[i].origin) return false;
+            if (to->spills[i].state == RBC_BITS && to->spills[i].origin &&
+                to->spills[i].origin != from->spills[i].origin) {
+                to->spills[i].origin = 0;
+                *changed = true;
+            }
             continue;
         }
         if (i<from->function->reference_spill_count ||

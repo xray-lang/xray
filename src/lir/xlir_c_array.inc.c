@@ -359,9 +359,15 @@ static void c_array_instruction(LirC *c, const XrLirInstructionView *v, uint32_t
         return;
     }
     if (v->op == XR_LIR_MANAGED_FAILURE) {
-        c_text(c, "    xrt_native_managed_failure((XrtManagedStatus)");
+        c_text(c, v->operand_count == 2 ? "    xrt_native_managed_failure_with_directory((XrtManagedStatus)" :
+            "    xrt_native_managed_failure((XrtManagedStatus)");
         c_value(c, v->operands[0]);
-        c_format(c, ", UINT32_C(%" PRIu32 "));\n", source);
+        c_format(c, ", UINT32_C(%" PRIu32 ")", source);
+        if (v->operand_count == 2) {
+            c_text(c, ", ");
+            c_value(c, v->operands[1]);
+        }
+        c_text(c, ");\n");
         return;
     }
     XrLirArrayIntrinsic shape={0};

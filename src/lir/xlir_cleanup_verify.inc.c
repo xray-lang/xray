@@ -288,11 +288,16 @@ static bool lir_cleanup_scalar_frame(const XrLirFunctionData *f) {
     return true;
 }
 
-static bool lir_directory_predecessor(const XrLirFunctionData *f, const LirGraph *g, uint32_t b,
-    uint32_t edge) {
+static bool lir_checked_predecessor(const XrLirFunctionData *f, const LirGraph *g, uint32_t b,
+    uint32_t edge, XrLirOp op) {
     if (!lir_cleanup_one_predecessor(g, b)) return false;
     const XrLirInstructionView *next = lir_terminator(f, g->predecessors[g->offsets[b]]);
-    return next->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED && next->edges[edge].target == b + 1;
+    return next->op == op && next->edges[edge].target == b + 1;
+}
+
+static bool lir_directory_predecessor(const XrLirFunctionData *f, const LirGraph *g, uint32_t b,
+    uint32_t edge) {
+    return lir_checked_predecessor(f, g, b, edge, XR_LIR_HOST_DIRECTORY_NEXT_CHECKED);
 }
 
 enum { LIR_DIRECTORY_PRESENT = 1, LIR_DIRECTORY_ABSENT };
@@ -387,13 +392,22 @@ static bool lir_directory_frame(const XrLirModule *m, const XrLirFunctionData *f
             if ((lir_directory_string_result(m, value->type) &&
                  (lir_directory_predecessor(f, g, value->block - 1, 0) ||
                   (names && names[v]))) ||
-                (value->type == XR_LIR_U64 && lir_directory_predecessor(f, g, value->block - 1, 1))) continue;
+                (value->type == XR_LIR_ARRAY && value->array_element == XR_LIR_STRING &&
+                 lir_checked_predecessor(f, g, value->block - 1, 0, XR_LIR_CHECKED_EMPTY_ARRAY)) ||
+                (value->type == XR_LIR_U64 && (lir_directory_predecessor(f, g, value->block - 1, 1) ||
+                 lir_checked_predecessor(f, g, value->block - 1, 1, XR_LIR_CHECKED_EMPTY_ARRAY)))) continue;
             return false;
         }
         const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v + 1);
         if (definition && f->result == XR_LIR_I64 && !lir_cleanup_frontier(f, value->block) &&
             (value->type == XR_LIR_STRING || value->type == XR_LIR_ARRAY ||
              (value->type == XR_LIR_ARRAY_CELL && definition->op == XR_LIR_CELL_NEW))) continue;
+        if (definition && f->result == XR_LIR_I64 && value->type == XR_LIR_ARRAY_CELL &&
+            definition->op == XR_LIR_CELL_NEW) {
+            const XrLirValueData *array = &f->values[definition->operands[0] - 1];
+            if (array->parameter && array->block && array->array_element == XR_LIR_STRING &&
+                lir_checked_predecessor(f, g, array->block - 1, 0, XR_LIR_CHECKED_EMPTY_ARRAY)) continue;
+        }
         if (definition && f->result == XR_LIR_I64 && value->type == XR_LIR_ARRAY &&
             value->array_element == XR_LIR_STRING && definition->op == XR_LIR_CELL_READ &&
             f->values[definition->operands[0] - 1].type == XR_LIR_ARRAY_CELL) continue;
@@ -528,10 +542,14 @@ static const XrLirInstructionView *lir_allocation_cleanup_print(const XrLirModul
 }
 
 static bool lir_allocation_cleanup_chain(const XrLirModule *m, const XrLirFunctionData *f,
-    uint32_t owner, uint32_t frontier, const XrLirInstructionView *allocation) {
+    uint32_t owner, uint32_t frontier, const XrLirInstructionView *allocation, bool directory) {
     const XrLirBlockData *block = &f->blocks[allocation->edges[1].target - 1];
     if (block->cleanup || block->parameter_count != 1) return false;
-    uint32_t position = 0;
+    uint32_t position = 0, close = 0;
+    if (directory) {
+        if (!lir_directory_steps(m, owner, frontier, block, &position, &close)) return false;
+        frontier = 0;
+    }
     while (frontier) {
         const XrLirCleanupBlock *registration = lir_cleanup_registration(m, owner, frontier);
         if (!registration || (registration->capture_count && !registration->captures)) return false;
@@ -568,13 +586,14 @@ static bool lir_allocation_cleanup_chain(const XrLirModule *m, const XrLirFuncti
     if (position + 1 != block->instruction_count) return false;
     const XrLirInstructionView *exit = &block->instructions[position].view;
     return exit->op == XR_LIR_MANAGED_FAILURE && exit->operands[0] == block->parameters[0] &&
+        exit->operand_count == (directory ? 2u : 1u) && (!directory || exit->operands[1] == close) &&
         lir_cleanup_same_source(&exit->source, &allocation->source);
 }
 
 /* The cleanup suffix owns no slot before allocation. Non-scalar values
  * must be supplied on the normal edge or be defined after its receiver. */
-static bool lir_allocation_cleanup_frame(const XrLirFunctionData *f, const LirGraph *g,
-    const XrLirInstructionView *allocation) {
+static bool lir_allocation_cleanup_frame(const XrLirModule *m, const XrLirFunctionData *f, const LirGraph *g,
+    const XrLirInstructionView *allocation, bool directory) {
     uint32_t normal = f->blocks[allocation->edges[0].target - 1].parameters[0];
     uint32_t status = f->blocks[allocation->edges[1].target - 1].parameters[0];
     if (f->error || f->cleanup_owner || f->closure.callable) return false;
@@ -583,8 +602,11 @@ static bool lir_allocation_cleanup_frame(const XrLirFunctionData *f, const LirGr
         if (lir_cleanup_scalar(value->type) || i + 1 == normal || i + 1 == status) continue;
         const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, i + 1);
         if (value->type == XR_LIR_I64_CELL && definition && definition->op == XR_LIR_CELL_NEW) continue;
-        if ((value->type == XR_LIR_ARRAY || value->type == XR_LIR_ARRAY_CELL) && value->block &&
-            lir_dominates_use(f, g, normal, value->block - 1, value->instruction)) continue;
+        if ((directory || value->type == XR_LIR_ARRAY || value->type == XR_LIR_ARRAY_CELL) &&
+            value->block && lir_dominates_use(f, g, normal, value->block - 1, value->instruction)) continue;
+        if (directory && (xr_lir_class_payload(m, value->type, NULL) ||
+            (value->type == XR_LIR_U64 && value->block == allocation->edges[1].target &&
+             definition && definition->op == XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED))) continue;
         return false;
     }
     return true;
@@ -603,7 +625,8 @@ static bool lir_cleanup_verified_paths(const XrLirModule *m, const XrLirFunction
         const XrLirBlockData *block = &f->blocks[b];
         const XrLirCleanupBlock *meta = block->cleanup;
         const XrLirInstructionView *term = lir_terminator(f, b);
-        if (directory && (lir_directory_predecessor(f, g, b, 0) || lir_directory_predecessor(f, g, b, 1)))
+        if ((directory && (lir_directory_predecessor(f, g, b, 0) || lir_directory_predecessor(f, g, b, 1))) ||
+            (directory_loop && lir_checked_predecessor(f, g, b, 1, XR_LIR_CHECKED_EMPTY_ARRAY)))
             continue;
         uint32_t from = meta ? meta->frontier : 0, remaining = from;
         if (from && !lir_cleanup_registration(m, owner, from)) return false;
@@ -648,8 +671,8 @@ static bool lir_cleanup_verified_paths(const XrLirModule *m, const XrLirFunction
                 !lir_cleanup_one_predecessor(g, term->edges[0].target - 1) ||
                 !lir_cleanup_one_predecessor(g, term->edges[1].target - 1) ||
                 lir_cleanup_frontier(f, term->edges[0].target) != from ||
-                !lir_allocation_cleanup_frame(f, g, term) ||
-                !lir_allocation_cleanup_chain(m, f, owner, from, term)) return false;
+                !lir_allocation_cleanup_frame(m, f, g, term, directory_loop) ||
+                !lir_allocation_cleanup_chain(m, f, owner, from, term, directory_loop)) return false;
             continue;
         }
         if (term->op == XR_LIR_MANAGED_FAILURE) {

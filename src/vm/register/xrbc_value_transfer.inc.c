@@ -303,15 +303,28 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
     case XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED:
         return rbc_value_flow_bits(state,code,access.source) &&
             (!access.other || rbc_value_flow_bits(state,code,access.other)) &&
-            rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={0,RBC_BITS}});
+            rbc_value_flow_write(state,code,access.result,(RbcValueEdgeState){.value={index+1,RBC_BITS}});
     case XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD:
         return (!access.source || rbc_value_flow_read(state,code,access.source,&incoming)) &&
             rbc_value_flow_bits(state,code,access.other);
     case XR_RBC_VALUE_HOST_DIRECTORY_FAIL:
         return !rbc_scope_current(state) && rbc_value_flow_bits(state,code,access.source) &&
             rbc_value_flow_bits(state,code,access.other);
-    case XR_RBC_VALUE_MANAGED_FAILURE:
-        return !rbc_scope_current(state) && rbc_value_flow_bits(state,code,access.source);
+    case XR_RBC_VALUE_MANAGED_FAILURE: {
+        if (rbc_scope_current(state) || !rbc_value_flow_read(state,code,access.source,&incoming) ||
+            incoming.value.state!=RBC_BITS) return false;
+        if (!access.other) return true;
+        uint32_t primary=incoming.value.origin;
+        if (!primary || primary>code->access_count ||
+            code->accesses[primary-1].operation!=XR_RBC_VALUE_CHECKED_ERROR ||
+            code->accesses[primary-1].result!=access.source) return false;
+        if (!rbc_value_flow_read(state,code,access.other,&incoming) || incoming.value.state!=RBC_BITS)
+            return false;
+        uint32_t close=incoming.value.origin;
+        return close && close<=code->access_count &&
+            code->accesses[close-1].operation==XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED &&
+            code->accesses[close-1].result==access.other;
+    }
     case XR_RBC_VALUE_HOST_PATH_BOOL: case XR_RBC_VALUE_HOST_FILE_CLOSE:
         return rbc_value_flow_read(state,code,access.source,&incoming) &&
             (!access.other || rbc_value_flow_read(state,code,access.other,&incoming)) &&
@@ -366,8 +379,10 @@ static bool rbc_value_transfer(RbcStringAdmission *state, uint32_t index) {
             state->origin[call.window]!=access.index+1) return false;
         state->state[call.window]=RBC_EMPTY;
         state->origin[call.window]=0;
+        uint32_t producer=access.operation==XR_RBC_VALUE_CHECKED_ERROR &&
+            call.operation==XR_RBC_VALUE_CHECKED_EMPTY_ARRAY ? index+1 : 0;
         return !access.result || rbc_value_flow_write(state,code,access.result,
-            (RbcValueEdgeState){.value={0,RBC_BITS}});
+            (RbcValueEdgeState){.value={producer,RBC_BITS}});
     }
     case XR_RBC_VALUE_UNCAUGHT_ERROR:
         return !rbc_scope_current(state) && rbc_value_flow_read(state,code,access.source,&incoming);

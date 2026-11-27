@@ -176,6 +176,13 @@ XRAY_API XrtNativeDirectoryStatus xrt_native_host_directory_cleanup_poll_checked
 _Noreturn XRAY_API void xrt_native_host_directory_cleanup_fail(XrtNativeDirectoryStatus primary,
     XrtNativeDirectoryStatus secondary);
 #endif
+#ifdef __cplusplus
+[[noreturn]] XRAY_API void xrt_native_managed_failure_with_directory(XrtManagedStatus, uint32_t source_id,
+    XrtNativeDirectoryStatus close);
+#else
+_Noreturn XRAY_API void xrt_native_managed_failure_with_directory(XrtManagedStatus, uint32_t source_id,
+    XrtNativeDirectoryStatus close);
+#endif
 /* The frame is an active stable frame in this execution. Success publishes one
  * complete String owner into its empty slot; failure ends this execution with
  * the original status and source id. Bytes are borrowed until return only. */

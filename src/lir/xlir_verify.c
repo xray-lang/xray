@@ -473,7 +473,9 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
                 (v->op == XR_LIR_HOST_DIRECTORY_CLEANUP_CLOSE ? f->cleanup_owner && a == XR_LIR_I64 :
                     !f->cleanup_owner);
         case XR_LIR_CHECKED_EMPTY_ARRAY: return v->type == XR_LIR_ARRAY;
-        case XR_LIR_MANAGED_FAILURE: return v->type == XR_LIR_UNIT && a == XR_LIR_U64;
+        case XR_LIR_MANAGED_FAILURE:
+            return v->type == XR_LIR_UNIT && a == XR_LIR_U64 &&
+                (v->operand_count == 1 || (v->operand_count == 2 && b == XR_LIR_U64));
         case XR_LIR_HOST_DIRECTORY_FRAME: return v->type == XR_LIR_UNIT;
         case XR_LIR_HOST_DIRECTORY_NEXT_CHECKED:
             return a == XR_LIR_I64 && lir_directory_string_result(m, v->type) &&

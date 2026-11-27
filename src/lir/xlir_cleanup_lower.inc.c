@@ -350,6 +350,8 @@ static bool lower_allocation_cleanup_chain(LowerFunction *f, XrLirBlock block, u
     return true;
 }
 
+static bool lower_directory_close_chain(LowerFunction *, XrLirBlock, uint32_t, XrLirValue *);
+
 static bool lower_checked_empty_array(LowerFunction *f, uint32_t b, uint32_t result,
     XrLirType element, uint32_t intrinsic) {
     Lower *c = f->owner;
@@ -360,23 +362,26 @@ static bool lower_checked_empty_array(LowerFunction *f, uint32_t b, uint32_t res
     }
     XrLirBlock check = f->blocks[b], normal = {0}, failure = {0};
     XrLirType array_type = XR_LIR_ARRAY, failure_type = XR_LIR_U64;
-    XrLirValue status = {0};
+    XrLirValue failed[2] = {{0}};
+    bool directory = f->directory_loop.allocation != NULL;
     XrLirArrayShape shape = {element};
     XrLirSource source = lower_source(c);
     if (!lower_build(c, xr_lir_add_block(c->module, f->function, &array_type, 1, &normal)) ||
         !lower_build(c, xr_lir_add_block(c->module, f->function, &failure_type, 1, &failure)) ||
         !lower_build(c, xr_lir_block_parameter(c->module, normal, 0, &f->values[result])) ||
         !lower_build(c, xr_lir_set_array_shape(c->module, f->values[result], &shape)) ||
-        !lower_build(c, xr_lir_block_parameter(c->module, failure, 0, &status)) ||
+        !lower_build(c, xr_lir_block_parameter(c->module, failure, 0, &failed[0])) ||
         !lower_build(c, xr_lir_internal_cleanup_block(c->module, check, lower_cleanup_role(f, frontier),
             0, NULL, 0))) return false;
     XrLirInstruction construct = {.op=XR_LIR_CHECKED_EMPTY_ARRAY,.type=array_type,.bits=intrinsic,
         .edge_count=2,.edges={{.target=normal},{.target=failure}},.source=source};
     XrLirInstruction fail = {.op=XR_LIR_MANAGED_FAILURE,.type=XR_LIR_UNIT,
-        .operands=&status,.operand_count=1,.source=source};
-    if (!lower_build(c, xr_lir_set_terminator(c->module, check, &construct)) ||
-        !lower_allocation_cleanup_chain(f, failure, frontier) ||
-        !lower_build(c, xr_lir_set_terminator(c->module, failure, &fail))) return false;
+        .operands=failed,.operand_count=directory ? 2u : 1u,.source=source};
+    if (!lower_build(c, xr_lir_set_terminator(c->module, check, &construct))) return false;
+    if (directory) {
+        if (!lower_directory_close_chain(f, failure, frontier, &failed[1])) return false;
+    } else if (!lower_allocation_cleanup_chain(f, failure, frontier)) return false;
+    if (!lower_build(c, xr_lir_set_terminator(c->module, failure, &fail))) return false;
     f->blocks[b] = normal;
     return true;
 }
@@ -582,6 +587,20 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
         site = (LowerDirectoryLoop){.call=call,.tag=&f->instructions[tag],.block=b};
     }
     if (!site.call) return absent;
+    const XrXirInstruction *constructor = NULL;
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrXirBlock *block = &f->blocks[b];
+        for (uint32_t i = block->first; i < block->first + block->count; ++i) {
+            const XrXirInstruction *op = &f->instructions[i];
+            if (op->op != XR_XIR_ARRAY_NEW) continue;
+            if (block->frontier) {
+                if (constructor || op->args[1] || lower_array_element(c, op->type) != XR_LIR_STRING ||
+                    !lower_directory_frontier(c, f, block->frontier)) return absent;
+                site.allocation = op;
+            } else if (site.allocation) return absent;
+            constructor = op;
+        }
+    }
     uint32_t first = f->parameter_count + (uint32_t)(site.call - f->instructions);
     uint32_t last = f->parameter_count + (uint32_t)(site.tag - f->instructions);
     uint32_t name = UINT32_MAX, name_block = UINT32_MAX;
@@ -593,7 +612,7 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
              !lower_directory_cleanup_call(c, (uint32_t)term->immediate))) return absent;
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             const XrXirInstruction *op = &f->instructions[i];
-            if (lower_directory_loop_value(site, op)) continue;
+            if (lower_directory_loop_value(site, op) || op == site.allocation) continue;
             if (op->op == XR_XIR_NULLABLE_UNWRAP && op->type == XR_XIR_STRING &&
                 op->args[0] == first && site.tag->args[0] == first) {
                 if (site.unwrap || b == site.block) return absent;
@@ -609,8 +628,12 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
             bool place = b != site.block && op->op == XR_XIR_CELL_PLACE &&
                 lower_array_element(c, op->type) == XR_LIR_STRING &&
                 lower_type(c, xr_xir_operand_type(f, op->args[0])) == XR_LIR_ARRAY_CELL;
+            bool array = site.allocation && ((op->op == XR_XIR_CELL_NEW &&
+                xr_xir_cell_element(c->source->types, op->type) == site.allocation->type &&
+                op->args[0] == f->parameter_count + (uint32_t)(site.allocation - f->instructions)) ||
+                (op->op == XR_XIR_CELL_READ && op->type == site.allocation->type));
             if ((!lower_cleanup_frame_type(c, op->type) && !lower_directory_prefix_value(c, block, op->type) &&
-                 !place) ||
+                 !place && !array) ||
                 op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) return absent;
             if (op == site.tag + 1) continue;
             uint32_t count = xir_instruction_operand_count(f, op, c->source);
