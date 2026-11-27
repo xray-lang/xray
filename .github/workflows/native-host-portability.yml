@@ -902,9 +902,18 @@ jobs:
           CANDIDATE: ${{ github.sha }}
         run: |
           set -euo pipefail
+          git fetch --no-tags origin main
           base="$REQUESTED_BASELINE"
           if [ -z "$base" ]; then
-            base=$(gh api "repos/$REPOSITORY/actions/artifacts?name=host-release-comparison-point&per_page=1" --jq '.artifacts[0].workflow_run.head_sha // empty')
+            points=$(gh api --paginate "repos/$REPOSITORY/actions/artifacts?name=host-release-comparison-point&per_page=100" \
+              --jq '.artifacts[] | select(.expired == false and .workflow_run.head_sha != null) | [.created_at, .id, .workflow_run.head_sha] | @tsv' |
+              LC_ALL=C sort -t $'\t' -k1,1r -k2,2nr)
+            while IFS=$'\t' read -r _timestamp _artifact_id point; do
+              if [[ "$point" =~ ^[0-9a-f]{40}$ ]] && git merge-base --is-ancestor "$point" "$CANDIDATE" 2>/dev/null; then
+                base="$point"
+                break
+              fi
+            done <<< "$points"
           fi
           if [ -z "$base" ] && [ -f .github/comparison-baseline ]; then
             base=$(head -n 1 .github/comparison-baseline)
@@ -913,7 +922,6 @@ jobs:
             echo "No comparison point is available; pass comparison_baseline or complete one comparison first." >&2
             exit 1
           fi
-          git fetch --no-tags origin main
           if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
             git fetch --no-tags origin "$base" || true
           fi
