@@ -36,10 +36,9 @@ static XrXirCtfeStatus ctfe_panic_begin(CtfeCallExecution *execution,const XrXir
     frame->exit_kind=CTFE_EXIT_PANIC;frame->state.leaving=true;return XR_XIR_CTFE_OK;
 }
 static XrXirCtfeStatus ctfe_panic_fault(CtfeCallExecution *execution,XrXirCtfeStatus status,uint32_t at) {
-    uint32_t code=0;CtfeCallFrame *frame=execution->top;
-    const XrXirInstruction *op=&frame->run.function->instructions[at];
+    uint32_t code=0;
     switch (status) {
-    case XR_XIR_CTFE_DIVIDE_BY_ZERO: code=op->op==XR_XIR_REM_INT?XR_XIR_PANIC_REMAINDER:XR_XIR_PANIC_DIVIDE;break;
+    case XR_XIR_CTFE_DIVIDE_BY_ZERO: code=XR_XIR_PANIC_DIVIDE;break;
     case XR_XIR_CTFE_NUMERIC_RANGE: code=XR_XIR_PANIC_RANGE;break;
     case XR_XIR_CTFE_NULL_UNWRAP: code=XR_XIR_PANIC_NULL_UNWRAP;break;
     case XR_XIR_CTFE_BOUNDS:
@@ -49,6 +48,13 @@ static XrXirCtfeStatus ctfe_panic_fault(CtfeCallExecution *execution,XrXirCtfeSt
     case XR_XIR_CTFE_MATCH_FAILURE: code=XR_XIR_PANIC_MATCH;break;
     default: return status;
     }
+    /* A native callable may return a control status without a body. Only
+     * language panics need the instruction that owns the landing. */
+    CtfeCallFrame *frame=execution->top;
+    const XrXirFunction *body=frame->run.function;
+    if (!body->instructions || at>=body->instruction_count) return XR_XIR_CTFE_BAD_ARTIFACT;
+    const XrXirInstruction *op=&body->instructions[at];
+    if (code==XR_XIR_PANIC_DIVIDE && op->op==XR_XIR_REM_INT) code=XR_XIR_PANIC_REMAINDER;
     XrXirPanicPayload panic={.detail={code,0,0,0}};
     if (code==XR_XIR_PANIC_BOUNDS) {
         if (!xr_xir_fault_bounds_valid(execution->owned.fault)) return XR_XIR_CTFE_BAD_ARTIFACT;
