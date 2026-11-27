@@ -576,6 +576,16 @@ static bool rbc_invoke_result_home(const XrRbcModule *module,const XrRbcFunction
     }
     if (target->result_kind!=XR_RBC_BITS) return false;
     if (callee->error_unit) return !aggregate && !result;
+    if (!aggregate && kind==XRT_VALUE_NULLABLE) {
+        const XrLirValueHome *home=rbc_value_home(code,result);
+        const XrtValueImage *image=xr_rbc_module_value_image(module);
+        if (!home || !image || !image->types || !home->type || home->type>image->type_count ||
+            home->type!=rbc_result_value_type(callee)) return false;
+        const XrtValueImageType *type=&image->types[home->type-1];
+        return type->owned_count==1 && type->nullable_element && type->nullable_element<home->type &&
+            image->types[type->nullable_element-1].kind==XRT_VALUE_STRING &&
+            rbc_value_inline(module,code,result,true);
+    }
     if (!aggregate) return rbc_value_scalar(code,caller,result,XR_RBC_BITS);
     if (!rbc_value_pod(module,code,caller,result,aggregate)) return false;
     const XrLirValueHome *home=rbc_value_home(code,result);

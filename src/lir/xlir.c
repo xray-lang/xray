@@ -355,8 +355,9 @@ XR_FUNC bool xr_lir_internal_invoke_result_type(const XrLirModule *m, XrLirType 
         XrLirTypeLayout layout = {0};
         if (xr_lir_type_view(m, type, &shape) != XR_LIR_OK || shape.kind != XR_LIR_TYPE_NULLABLE ||
             shape.element >= type || xr_lir_type_layout(m, type, &layout) != XR_LIR_OK ||
-            !layout.size || layout.managed)
+            !layout.size)
             return false;
+        if (layout.managed) return shape.element == XR_LIR_STRING;
         type = shape.element;
     }
     return true;

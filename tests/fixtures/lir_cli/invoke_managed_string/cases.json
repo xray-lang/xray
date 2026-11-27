@@ -28,5 +28,10 @@
     "exit": 1,
     "stdout": "界\u0000é🙂\nordinary\n",
     "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  },
+  "nullable_result": {
+    "exit": 1,
+    "stdout": "ready!\nnone\n",
+    "stderr": "[Uncaught Panic] E0446: try! failed: ReplyError.Missing(-1)\n"
   }
 }

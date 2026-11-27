@@ -1,0 +1,16 @@
+enum ReplyError { Missing { received: i64 } }
+
+fn response(label: string, option: i64) throws(ReplyError) -> string? {
+    if (option < 0) { throw ReplyError.Missing { received: option } }
+    if (option == 0) { return null }
+    return label + "!"
+}
+
+fn inspect(option: i64) {
+    const result = try! response("ready", option)
+    if (result == null) { print("none"); return }
+    print(result!)
+}
+inspect(1)
+inspect(0)
+inspect(-1)

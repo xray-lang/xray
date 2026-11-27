@@ -254,6 +254,13 @@ static void c_values_function(LirC *c) {
         c->header_edges |= c->homes->edges[n].direct_header_move;
 }
 static bool c_values_owned_type(LirC *c, XrLirType type) {
+    XrLirTypeView shape = {0};
+    if (type >= XR_LIR_TYPE_COUNT &&
+        xr_lir_type_view(c->request->module, type, &shape) == XR_LIR_OK &&
+        shape.kind == XR_LIR_TYPE_NULLABLE && shape.element == XR_LIR_STRING) {
+        XrLirTypeLayout layout = {0};
+        return xr_lir_type_layout(c->request->module, type, &layout) == XR_LIR_OK && layout.managed;
+    }
     return c_managed_leaf(type) || (type >= XR_LIR_TYPE_COUNT &&
         type - XR_LIR_TYPE_COUNT < c->constructed_count && c->constructed_types[type - XR_LIR_TYPE_COUNT].layout.managed);
 }
