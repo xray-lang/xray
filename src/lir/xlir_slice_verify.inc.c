@@ -205,7 +205,7 @@ static bool lir_slice_instruction_conflict(const XrLirModule *m, const XrLirFunc
         v->op == XR_LIR_ARRAY_CELL_DROP || v->op == XR_LIR_STRING_CELL_DROP ||
         v->op == XR_LIR_STATE_WRITE || v->op == XR_LIR_STATE_PUBLISH;
     const XrLirArrayIntrinsic *array = v->op == XR_LIR_CALL_INTRINSIC ? xr_lir_internal_array_intrinsic(m, v->intrinsic) : NULL;
-    write |= array && (array->operation == XR_LIR_ARRAY_OP_SET || array->operation == XR_LIR_ARRAY_OP_PUSH);
+    write |= array && xr_lir_array_binding_update(array->operation);
     uint32_t string = xr_lir_string_role(m, v);
     write |= string == XR_LIR_STRING_OP_APPEND_CELL || string == XR_LIR_STRING_OP_APPEND_STATE ||
         string == XR_LIR_STRING_OP_APPEND_REF || string == XR_LIR_STRING_OP_WRITE_REF;

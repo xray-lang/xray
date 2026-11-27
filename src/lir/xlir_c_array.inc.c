@@ -220,6 +220,22 @@ static void c_array_call(LirC *c, const XrLirInstructionView *v,
         c_format(c,", UINT32_C(%" PRIu32 "));\n",source);
         c_values_publish_leaf(c,v->result,source);
         return;
+    case XR_LIR_ARRAY_OP_RANDOM_BYTES: {
+        const XrLirHomeWorkspace *workspace = c_array_workspace(c);
+        if (!workspace) return;
+        const XrLirHomeBinding *binding = &c->homes->bindings[v->operands[0]];
+        if (element != XR_LIR_U8 || !binding->type || workspace->type != binding->type ||
+            workspace->value != v->operands[0]) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "random byte fill lost its exact Array reference and workspace");
+            return;
+        }
+        c_text(c, "    xrt_native_array_update_place(");
+        c_value(c, v->operands[0]);
+        c_format(c, ", XRT_BACKING_ARRAY_U8, xrl_frame, %zu, "
+            "&(XrtArrayUpdate){.operation=XRT_ARRAY_UPDATE_RANDOM_BYTES,.item={.kind=XRT_BACKING_ARRAY_U8}}, "
+            "UINT32_C(%" PRIu32 "));\n", workspace->first_owner, source);
+        return;
+    }
     case XR_LIR_ARRAY_OP_SET: case XR_LIR_ARRAY_OP_PUSH: {
         const XrLirHomeWorkspace *workspace=c_array_workspace(c); if (!workspace) return;
         const XrLirHomeBinding *binding=&c->homes->bindings[v->operands[0]];

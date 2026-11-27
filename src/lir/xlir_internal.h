@@ -30,8 +30,8 @@
 
 enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
 /* One row per family for NEW..REPEAT, SET/PUSH, DISPLAY, CAPACITY/RESERVE and
- * WITH_CAPACITY, plus the single U8 COPY_STRING_BYTES row. */
-enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_RESERVE + 3) + 1 };
+ * WITH_CAPACITY, plus the U8 COPY_STRING_BYTES and RANDOM_BYTES rows. */
+enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_RESERVE + 3) + 2 };
 
 static inline bool xr_lir_class_array_element_supported(XrLirType element) {
     return element == XR_LIR_I64 || element == XR_LIR_U8;
@@ -137,6 +137,7 @@ struct XrLirModule {
     uint32_t inline_array_count;
     uint32_t array_operations[XR_LIR_ARRAY_FAMILY_COUNT][XR_LIR_ARRAY_OP_WITH_CAPACITY];
     uint32_t array_ref_operations[XR_LIR_ARRAY_FAMILY_COUNT][2];
+    uint32_t array_ref_random_bytes;
     XrLirStatus failure;
     XrLirDiagnostic failure_diagnostic;
     char *failure_path;

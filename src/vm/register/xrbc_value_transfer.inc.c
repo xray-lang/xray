@@ -110,7 +110,7 @@ static bool rbc_value_flow_binding(RbcStringAdmission *state,const XrRbcValueCod
 }
 static bool rbc_value_array_transfer(RbcStringAdmission *state,const XrRbcValueCode *code,XrRbcValueAccess access) {
     const uint32_t *args=access.count ? code->arguments+access.first : NULL;
-    if (access.index==XR_LIR_ARRAY_OP_SET || access.index==XR_LIR_ARRAY_OP_PUSH) {
+    if (xr_lir_array_binding_update((XrLirArrayOperation)access.index)) {
         if (!rbc_value_flow_binding(state,code,args[0],true)) return false;
         for (uint32_t p=1;p<access.count;++p) {
             RbcValueEdgeState input; if (!rbc_value_flow_read(state,code,args[p],&input)) return false;

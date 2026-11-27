@@ -103,7 +103,7 @@ XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirModule *m, const X
         array |= xr_lir_internal_array_type(entry->parameters[p]);
         if (entry->parameters[p] == XR_LIR_STATE || entry->parameters[p] == XR_LIR_STATE_REF ||
             (entry->parameters[p] == XR_LIR_ARRAY_REF && (p ||
-                (shape->operation != XR_LIR_ARRAY_OP_SET && shape->operation != XR_LIR_ARRAY_OP_PUSH))) ||
+                !xr_lir_array_binding_update(shape->operation))) ||
             entry->parameters[p] == XR_LIR_STRING_CELL || entry->parameters[p] == XR_LIR_I64_CELL)
             return false;
         if (xr_lir_internal_array_type(entry->parameters[p]) ?
@@ -150,6 +150,9 @@ XR_FUNC bool xr_lir_internal_array_intrinsic_valid(const XrLirModule *m, const X
         return entry->parameter_count == 2 &&
             (entry->parameters[0] == XR_LIR_ARRAY_CELL || entry->parameters[0] == XR_LIR_ARRAY_REF) &&
             entry->parameters[1] == element && entry->result == XR_LIR_UNIT;
+    case XR_LIR_ARRAY_OP_RANDOM_BYTES:
+        return entry->parameter_count == 1 && entry->parameters[0] == XR_LIR_ARRAY_REF &&
+            element == XR_LIR_U8 && entry->result == XR_LIR_UNIT;
     default: return false;
     }
 }
@@ -168,7 +171,8 @@ XR_FUNC XrLirStatus xr_lir_set_array_intrinsic(XrLirModule *m,
     uint32_t operation = (uint32_t)input->operation - 1;
     bool reference = m->intrinsics[index].parameter_count && m->intrinsics[index].parameters[0] == XR_LIR_ARRAY_REF;
     bool inline_array = family == UINT32_MAX;
-    uint32_t *operation_id = inline_array ? &m->types[element - XR_LIR_TYPE_COUNT].inline_array_operations[operation] :
+    uint32_t *operation_id = input->operation == XR_LIR_ARRAY_OP_RANDOM_BYTES ? &m->array_ref_random_bytes :
+        inline_array ? &m->types[element - XR_LIR_TYPE_COUNT].inline_array_operations[operation] :
         reference ? &m->array_ref_operations[family][(uint32_t)input->operation - XR_LIR_ARRAY_OP_SET] :
         &m->array_operations[family][operation];
     if (*operation_id)
@@ -209,8 +213,12 @@ XR_FUNC XrLirStatus xr_lir_array_mutator(const XrLirModule *m, XrLirType element
     if (id) *id = 0;
     if (!id || !m || m->failure != XR_LIR_OK || !xr_lir_internal_array_element(m, element) ||
         (receiver != XR_LIR_ARRAY_CELL && receiver != XR_LIR_ARRAY_REF) ||
-        (operation != XR_LIR_ARRAY_OP_SET && operation != XR_LIR_ARRAY_OP_PUSH))
-        return XR_LIR_INVALID_ARGUMENT;
+        !xr_lir_array_binding_update(operation)) return XR_LIR_INVALID_ARGUMENT;
+    if (operation == XR_LIR_ARRAY_OP_RANDOM_BYTES) {
+        if (receiver != XR_LIR_ARRAY_REF || element != XR_LIR_U8) return XR_LIR_UNSUPPORTED;
+        *id = m->array_ref_random_bytes;
+        return *id ? XR_LIR_OK : XR_LIR_UNSUPPORTED;
+    }
     if (receiver == XR_LIR_ARRAY_CELL) return xr_lir_array_operation(m, element, operation, id);
     if (xr_lir_inline_array_ordinal(m, element)) return XR_LIR_UNSUPPORTED;
     *id = m->array_ref_operations[xr_lir_internal_array_family(element)][(uint32_t)operation - XR_LIR_ARRAY_OP_SET];
@@ -249,6 +257,8 @@ static void lir_array_catalog_signature(LirArrayCatalogRow *row, XrLirIntrinsic 
     case XR_LIR_ARRAY_OP_PUSH:
         arity = 2; parameters[0] = reference ? XR_LIR_ARRAY_REF : XR_LIR_ARRAY_CELL;
         parameters[1] = element; break;
+    case XR_LIR_ARRAY_OP_RANDOM_BYTES:
+        parameters[0] = XR_LIR_ARRAY_REF; break;
     case XR_LIR_ARRAY_OP_REPEAT:
         arity = 2; parameters[0] = XR_LIR_I64; parameters[1] = element;
         shapes[0] = XR_LIR_TYPE_INVALID; result = XR_LIR_ARRAY; break;
@@ -298,9 +308,10 @@ static XrLirStatus lir_array_catalog(XrLirModule *m, const XrLirRegistry *extra)
     for (uint32_t i = 0; i < catalog; ++i) {
         while (used[next]) ++next;
         used[next] = 1;
-        if (i == catalog - 1) {
-            lir_array_catalog_signature(&parts[i], &entries[count + i], next,
-                XR_LIR_U8, XR_LIR_ARRAY_OP_COPY_STRING_BYTES, false);
+        if (i >= catalog - 2) {
+            XrLirArrayOperation operation = i == catalog - 2 ?
+                XR_LIR_ARRAY_OP_COPY_STRING_BYTES : XR_LIR_ARRAY_OP_RANDOM_BYTES;
+            lir_array_catalog_signature(&parts[i], &entries[count + i], next, XR_LIR_U8, operation, false);
             continue;
         }
         bool reference = i >= base_catalog && i < reference_end;

@@ -687,7 +687,7 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
         access.source=access.other=0; access.count=i->operand_count; access.window=UINT32_MAX;
         if (!rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first)) return false;
         if (map ? map==XR_LIR_MAP_OP_SET || map==XR_LIR_MAP_OP_REMOVE || map==XR_LIR_MAP_OP_CLEAR :
-            shape.operation==XR_LIR_ARRAY_OP_SET || shape.operation==XR_LIR_ARRAY_OP_PUSH) {
+            xr_lir_array_binding_update(shape.operation)) {
             for (size_t w=0;w<c->homes->workspace_count;++w) {
                 const XrLirHomeWorkspace *workspace=&c->homes->workspaces[w];
                 if (workspace->block==c->diagnostic->block && workspace->instruction==c->diagnostic->instruction) {
@@ -696,7 +696,10 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
                 }
             }
             if (access.window==UINT32_MAX) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"container mutator lost its common pending workspace");
-            if (!map && !rbc_lir_array_local_metadata(c,&access,i->operands[0])) return false;
+            if (!map && shape.operation==XR_LIR_ARRAY_OP_RANDOM_BYTES) {
+                access.other=rbc_lir_callable_event(c,XR_LIR_OWNERSHIP_ARRAY_OPERATION,i->operands[0]);
+                if (!access.other) return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"random byte fill lost its common operation");
+            } else if (!map && !rbc_lir_array_local_metadata(c,&access,i->operands[0])) return false;
             if (map == XR_LIR_MAP_OP_SET || map == XR_LIR_MAP_OP_REMOVE) {
                 access.source = rbc_local_map_binding_slot(c->homes, i->operands[0]);
                 if (access.source) access.other = rbc_local_borrow_slot(c->homes, i->operands[1]);

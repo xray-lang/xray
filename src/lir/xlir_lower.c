@@ -1715,6 +1715,13 @@ static XrNativeHostShape lower_host_abi(const Lower *c, uint32_t function, uint3
 
 #include "xlir_math_lower.inc.c"
 
+static bool lower_crypto_random_bytes(const Lower *c, uint32_t function) {
+    const XrXirModule *source = c->source;
+    return !source->functions[function].block_count &&
+        source->declarations->functions[function].native_callable == XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM &&
+        xir_native_callable_verify(source, function) == XR_XIR_OK;
+}
+
 static bool lower_admit_function(Lower *c, uint32_t function) {
     c->function = function;
     c->block = 0;
@@ -1772,7 +1779,8 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
             return true;
         }
         uint32_t fields[2];
-        return lower_math_unary_id(c, function) || lower_os_platform(c, function) ||
+        return lower_crypto_random_bytes(c, function) || lower_math_unary_id(c, function) ||
+            lower_os_platform(c, function) ||
             lower_host_abi(c, function, fields) != XR_NATIVE_HOST_NONE ||
             lower_unsupported(c, "function without a scalar body");
     }
@@ -3735,7 +3743,24 @@ static bool lower_strict_utf8_body(Lower *c, uint32_t index) {
         lower_build(c, xr_lir_set_terminator(c->module, failure, &thrown));
 }
 
+static bool lower_crypto_random_bytes_body(Lower *c, XrLirFunction function) {
+    XrLirBlock block = {0};
+    XrLirValue reference = {0};
+    XrLirInstruction fill = {.op=XR_LIR_CALL_INTRINSIC, .type=XR_LIR_UNIT, .operands=&reference,
+        .operand_count=1};
+    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT};
+    return lower_build(c, xr_lir_array_mutator(c->module, XR_LIR_U8, XR_LIR_ARRAY_REF,
+               XR_LIR_ARRAY_OP_RANDOM_BYTES, &fill.intrinsic)) &&
+        lower_build(c, xr_lir_define_function(c->module, function)) &&
+        lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &block)) &&
+        lower_build(c, xr_lir_set_entry(c->module, function, block)) &&
+        lower_build(c, xr_lir_function_parameter(c->module, function, 0, &reference)) &&
+        lower_build(c, xr_lir_emit_effect(c->module, block, &fill)) &&
+        lower_build(c, xr_lir_set_terminator(c->module, block, &ret));
+}
+
 static bool lower_host_function(Lower *c, uint32_t index) {
+    if (lower_crypto_random_bytes(c, index)) return lower_crypto_random_bytes_body(c, c->functions[index]);
     if (xir_strict_utf8_callable(c->source, index)) return lower_strict_utf8_body(c, index);
     if (lower_os_platform(c, index)) return lower_os_platform_body(c, c->functions[index]);
     uint32_t math = lower_math_unary_id(c, index);

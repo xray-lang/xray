@@ -259,18 +259,23 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     }
     XrtBackingArrayKind kind=(XrtBackingArrayKind)(value_kind-XRT_VALUE_ARRAY_I64);
     if ((unsigned)kind>=XRT_BACKING_ARRAY_COUNT) return XRT_MANAGED_ARGUMENT;
-    if (access.other && rbc_value_array_local_update(stack,activation,access)) return XRT_MANAGED_OK;
+    bool random_bytes=access.index==XR_LIR_ARRAY_OP_RANDOM_BYTES;
+    bool update_binding=xr_lir_array_binding_update((XrLirArrayOperation)access.index);
+    if (!random_bytes && access.other && rbc_value_array_local_update(stack,activation,access)) return XRT_MANAGED_OK;
     const XrtBackingTypes *types=NULL;
-    if (create || access.index==XR_LIR_ARRAY_OP_SET || access.index==XR_LIR_ARRAY_OP_PUSH || access.index==XR_LIR_ARRAY_OP_DISPLAY) {
+    if (create || update_binding || access.index==XR_LIR_ARRAY_OP_DISPLAY) {
         XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
         if (status!=XRT_MANAGED_OK) return status;
         activation->backings_ready=true;
     }
-    if (access.index==XR_LIR_ARRAY_OP_SET || access.index==XR_LIR_ARRAY_OP_PUSH) {
+    if (update_binding) {
         XrtExternalOwner external; XrtPlace binding;
         XrtManagedStatus status=rbc_value_binding_place(module,stack,rbc_value_origin(activation,args[0]),&external,&binding);
-        XrtArrayUpdate update={.operation=access.index==XR_LIR_ARRAY_OP_SET ? XRT_ARRAY_UPDATE_SET : XRT_ARRAY_UPDATE_PUSH};
-        if (status==XRT_MANAGED_OK) status=rbc_value_array_item(stack,activation,args[access.count-1],kind,&update.item);
+        XrtArrayUpdate update={.operation=random_bytes ? XRT_ARRAY_UPDATE_RANDOM_BYTES :
+            access.index==XR_LIR_ARRAY_OP_SET ? XRT_ARRAY_UPDATE_SET : XRT_ARRAY_UPDATE_PUSH,
+            .item={.kind=kind}};
+        if (status==XRT_MANAGED_OK && !random_bytes)
+            status=rbc_value_array_item(stack,activation,args[access.count-1],kind,&update.item);
         if (access.index==XR_LIR_ARRAY_OP_SET) {
             XrRbcRegister *index=rbc_value_register(stack,activation,args[1]);
             if (!index) return XRT_MANAGED_ARGUMENT;

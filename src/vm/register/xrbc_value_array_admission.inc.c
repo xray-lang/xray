@@ -315,7 +315,7 @@ static bool rbc_value_inline_class_push_valid(const XrRbcModule *module, const X
 static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcValueCode *code,
     const XrRbcFunction *function,XrRbcValueAccess a) {
     if (a.source || a.first>code->argument_count || a.count>code->argument_count-a.first ||
-        (a.count && !code->arguments) || a.index<XR_LIR_ARRAY_OP_NEW || a.index>XR_LIR_ARRAY_OP_WITH_CAPACITY) return false;
+        (a.count && !code->arguments) || a.index<XR_LIR_ARRAY_OP_NEW || a.index>XR_LIR_ARRAY_OP_RANDOM_BYTES) return false;
     for (uint32_t p=0;p<a.count;++p) if (!rbc_value_id(code,code->arguments[a.first+p])) return false;
     const uint32_t *args=a.count ? code->arguments+a.first : NULL;
     bool create=a.index==XR_LIR_ARRAY_OP_NEW || a.index==XR_LIR_ARRAY_OP_REPEAT ||
@@ -345,6 +345,19 @@ static bool rbc_value_array_access_valid(const XrRbcModule *module,const XrRbcVa
         if (a.index == XR_LIR_ARRAY_OP_LEN) return a.count == 1 && rbc_value_scalar(code,function,a.result,XR_RBC_BITS);
         return a.count == 2 && rbc_value_scalar(code,function,args[1],XR_RBC_BITS) &&
             rbc_value_inline_operand(module,code,function,a.result,element,true);
+    }
+    if (a.index==XR_LIR_ARRAY_OP_RANDOM_BYTES) {
+        if (a.result || a.count!=1 || kind!=XRT_VALUE_ARRAY_U8 ||
+            !rbc_value_binding_valid(module,code,function,args[0]) ||
+            rbc_value_binding(code,args[0])->kind==XR_LIR_HOME_BINDING_LOCAL) return false;
+        const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
+        size_t ordinal=(size_t)(function-module->functions);
+        if (!owner || ordinal>=owner->function_count || !owner->value_codes || owner->value_codes[ordinal]!=code ||
+            !owner->value_homes || owner->value_homes[ordinal]!=code->homes ||
+            !a.other || a.other>code->homes->event_count || !code->homes->events) return false;
+        const XrLirHomeEvent *event=&code->homes->events[a.other-1];
+        return event->kind==XR_LIR_OWNERSHIP_ARRAY_OPERATION && event->operation==XR_LIR_ARRAY_OP_RANDOM_BYTES &&
+            event->source==args[0] && rbc_value_binding_workspace(code,a,event,args[0],0);
     }
     if (a.index==XR_LIR_ARRAY_OP_SET || a.index==XR_LIR_ARRAY_OP_PUSH) {
         if (a.result || a.count!=(a.index==XR_LIR_ARRAY_OP_SET ? 3u : 2u) ||

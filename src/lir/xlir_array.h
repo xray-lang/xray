@@ -23,8 +23,14 @@ typedef enum XrLirArrayOperation {
     XR_LIR_ARRAY_OP_NEW, XR_LIR_ARRAY_OP_LEN, XR_LIR_ARRAY_OP_GET,
     XR_LIR_ARRAY_OP_SET, XR_LIR_ARRAY_OP_PUSH, XR_LIR_ARRAY_OP_REPEAT,
     XR_LIR_ARRAY_OP_DISPLAY, XR_LIR_ARRAY_OP_CAPACITY, XR_LIR_ARRAY_OP_RESERVE,
-    XR_LIR_ARRAY_OP_COPY_STRING_BYTES, XR_LIR_ARRAY_OP_WITH_CAPACITY
+    XR_LIR_ARRAY_OP_COPY_STRING_BYTES, XR_LIR_ARRAY_OP_WITH_CAPACITY,
+    XR_LIR_ARRAY_OP_RANDOM_BYTES
 } XrLirArrayOperation;
+
+static inline bool xr_lir_array_binding_update(XrLirArrayOperation operation) {
+    return operation == XR_LIR_ARRAY_OP_SET || operation == XR_LIR_ARRAY_OP_PUSH ||
+        operation == XR_LIR_ARRAY_OP_RANDOM_BYTES;
+}
 
 typedef struct XrLirArrayIntrinsic {
     uint32_t id;
@@ -51,7 +57,8 @@ XR_FUNC XrLirStatus xr_lir_array_operation(const XrLirModule *, XrLirType elemen
     XrLirArrayOperation, uint32_t *id);
 /* SET and PUSH have exact ARRAY_CELL and ARRAY_REF receiver signatures.
  * The operation query above selects ARRAY_CELL. This query selects either
- * mutable binding representation without reading or copying its current value. */
+ * mutable binding representation without reading or copying its current value.
+ * RANDOM_BYTES takes one exact Array<u8> reference. */
 XR_FUNC XrLirStatus xr_lir_array_mutator(const XrLirModule *, XrLirType element,
     XrLirType receiver, XrLirArrayOperation, uint32_t *id);
 

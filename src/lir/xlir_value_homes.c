@@ -286,7 +286,8 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
             lir_home_append(b,&b->workspaces,&workspace);
     }
     bool array = fact.kind == XR_LIR_OWNERSHIP_ARRAY_OPERATION &&
-        (fact.array_operation == XR_LIR_ARRAY_OP_SET || fact.array_operation == XR_LIR_ARRAY_OP_PUSH);
+        xr_lir_array_binding_update(fact.array_operation);
+    bool random_bytes = array && fact.array_operation == XR_LIR_ARRAY_OP_RANDOM_BYTES;
     bool map = fact.kind == XR_LIR_OWNERSHIP_MAP_OPERATION &&
         (fact.map_operation == XR_LIR_MAP_OP_SET || fact.map_operation == XR_LIR_MAP_OP_REMOVE || fact.map_operation == XR_LIR_MAP_OP_CLEAR);
     bool set = fact.kind == XR_LIR_OWNERSHIP_SET_OPERATION &&
@@ -302,9 +303,10 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
     if (!lir_home_binding_spec(b,type,&spec)) return false;
     if (borrowed_copy && spec.kind != XRT_VALUE_STRING && spec.kind != XRT_VALUE_MAP_STRING_I64 &&
         spec.kind != XRT_VALUE_SET_I64 && !xrt_value_kind_is_array(spec.kind)) return true;
+    bool bound_workspace = string || borrowed_copy || random_bytes;
     XrLirHomeWorkspace workspace = {.block=fact.block,.instruction=fact.instruction,
-        .type=type,.value=string || borrowed_copy ? fact.value : 0};
-    if (string || borrowed_copy) workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
+        .type=type,.value=bound_workspace ? fact.value : 0};
+    if (bound_workspace) workspace.temporary_offset = workspace.temporary_first_owner = SIZE_MAX;
     if (string && (fact.transfer_mode != XR_LIR_OWNERSHIP_TRANSFER_BORROW ||
         (fact.string_operation != XR_LIR_STRING_OP_APPEND_CELL && fact.string_operation != XR_LIR_STRING_OP_APPEND_STATE &&
          fact.string_operation != XR_LIR_STRING_OP_APPEND_REF) || !fact.target_value ||
