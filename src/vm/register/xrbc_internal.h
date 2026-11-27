@@ -11,6 +11,7 @@
 
 #include "xrbc.h"
 #include "xray_native_function.h"
+#include "xray_native_state.h"
 #include "base/xchecks.h"
 #include <string.h>
 enum { XR_RBC_FUNCTION_LANES = sizeof(XrtFunction) / sizeof(uint64_t) };
@@ -148,5 +149,8 @@ XR_FUNC XrRbcStatus xr_rbc_module_admit(const XrRbcModule *, const XrtLocationOw
  * checked. Public raw callers use xr_rbc_module_prepare instead. */
 XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *, uint32_t entry,
     const uint64_t *arguments, size_t argument_count, XrtLocationOwner *, XrRbcExecution **);
+/* Only the synchronous test-session owner supplies this matching State pair. */
+XR_FUNC XrRbcStatus xr_rbc_module_prepare_test_action(const XrRbcModule *, uint32_t entry,
+    XrtLocationOwner *, XrtModuleLayout *, XrtModuleState *, XrRbcExecution **);
 
 #endif // XRBC_INTERNAL_H

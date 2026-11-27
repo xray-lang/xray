@@ -244,6 +244,69 @@ static void managed_metadata_retirement(void) {
     xrt_locations_release(where);
 }
 
+static XrtTestSession *metadata_session;
+static unsigned session_initializations, session_successes;
+
+static void session_initialize(void *unused, XrtModuleState *state) {
+    (void)unused;
+    CHECK(!state);
+    ++session_initializations;
+    CHECK(xrt_test_session_active(metadata_session));
+    XrtExecutionFailure refused = {0};
+    CHECK(xrt_test_session_run_native(metadata_session, 1, &refused) == XRT_EXECUTION_INVALID);
+    CHECK(xrt_test_session_free(&metadata_session) == XR_OS_IO_BAD_ARGUMENT && metadata_session);
+}
+
+static void session_metadata_failure(void *unused, XrtModuleState *state) {
+    (void)unused;
+    CHECK(!state);
+    metadata_retirement->root = xrt_value_root_active();
+    metadata_root(metadata_retirement);
+}
+
+static void session_after_metadata(void *unused, XrtModuleState *state) {
+    (void)unused;
+    CHECK(!state && metadata_retirement->closes == 3);
+    CHECK(xrt_billing_owner_stats(metadata_retirement->billing).blocks == 1);
+    ++session_successes;
+}
+
+static void managed_test_session_close_only(void) {
+    XrtLocationOwner *where = locations("session-metadata-close.xr");
+    XrtSourceMap sources = {xrt_locations_get(where, 1), xrt_locations_count(where)};
+    XrtSynchronousStateRoot actions[] = {session_metadata_failure, session_after_metadata};
+    XrtNativeTestFile file = {&sources, NULL, session_initialize, actions, 2};
+    for (unsigned retire = 0; retire < 2; ++retire) {
+        MetadataRetirement call = {.fail_guest=true};
+        metadata_retirement = &call;
+        session_initializations = session_successes = 0;
+        managed_require(xrt_test_session_create_native_with_metadata_close(&file, metadata_close, &metadata_session));
+        XrtExecutionFailure first = {0}, second = {0};
+        CHECK(xrt_test_session_run_native(metadata_session, 2, &first) == XRT_EXECUTION_INVALID);
+        CHECK(!session_initializations);
+        CHECK(xrt_test_session_run_native(metadata_session, 0, &first) == XRT_EXECUTION_FAILURE);
+        CHECK(session_initializations == 1 && call.closes == 1 && call.metadata->handle == 17);
+        CHECK(first.kind == XRT_FAILURE_VALUE && first.detail.value.status == XR_XIR_VALUE_BAD_UTF8);
+        if (retire) {
+            CHECK(xrt_test_session_free(&metadata_session) == XR_OS_IO_IO && metadata_session);
+        } else {
+            CHECK(xrt_test_session_run_native(metadata_session, 1, &second) == XRT_EXECUTION_FAILURE);
+            CHECK(second.kind == XRT_FAILURE_VALUE && second.detail.value.status == XR_XIR_VALUE_IO);
+        }
+        CHECK(!session_successes && session_initializations == 1 && call.closes == 2 && call.metadata->handle == 17);
+        if (!retire) {
+            xrt_execution_failure_drop(&second);
+            CHECK(xrt_test_session_run_native(metadata_session, 1, &second) == XRT_EXECUTION_COMPLETED);
+        }
+        CHECK(xrt_test_session_free(&metadata_session) == XR_OS_IO_OK && !metadata_session);
+        CHECK(call.closes == 3 && call.visits == 1 && session_successes == (retire ? 0u : 1u));
+        CHECK(xrt_billing_owner_stats(call.billing).blocks == 1);
+        xrt_billing_owner_drop(call.billing);
+        metadata_retirement = NULL;
+    }
+    xrt_locations_release(where);
+}
+
 typedef struct HostStatControl {
     atomic_bool cancelled;
     unsigned polls;
@@ -1388,6 +1451,7 @@ int main(void) {
     managed_checked_empty_arrays();
     managed_host_path_scratch();
     managed_metadata_retirement();
+    managed_test_session_close_only();
     managed_host_stat_control();
     managed_host_file();
     managed_host_file_read();

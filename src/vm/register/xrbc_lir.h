@@ -77,4 +77,12 @@ XR_FUNC bool xr_rbc_program_receives_text_result(const XrRbcProgram *program);
 // before using it beyond Program destruction; release only references you own.
 XR_FUNC XrtLocationOwner *xr_rbc_program_locations(const XrRbcProgram *program);
 
+typedef struct XrRbcTestSession XrRbcTestSession;
+/* The caller selects authorized root-module roles from the same LIR plan.
+ * The session owns one immutable image and preserves State across actions. */
+XR_FUNC XrRbcCompileStatus xr_rbc_test_session_compile(const XrLirModule *, XrLirFunction initializer,
+    const XrLirFunction *actions, uint32_t count, XrRbcTestSession **, XrRbcCompileDiagnostic *);
+XR_FUNC XrRbcStatus xr_rbc_test_session_run(XrRbcTestSession *, uint32_t action, XrRbcOutcome **);
+XR_FUNC XrOsIoStatus xr_rbc_test_session_free(XrRbcTestSession **);
+
 #endif  // XRBC_LIR_H

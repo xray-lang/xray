@@ -185,3 +185,27 @@ static void c_state_root(LirC *c, XrLirType result) {
     if (result != XR_LIR_UNIT) c_text(c, "    return result;\n");
     c_text(c, "}\n\n");
 }
+
+static void c_test_session_root(LirC *c, XrLirFunction function, uint32_t index) {
+    XrLirFunctionView view;
+    xr_lir_function_view(c->request->module, function, &view);
+    c_format(c, "static void xrl_test_root_%" PRIu32 "(void *context, XrtModuleState *state) {\n", index);
+    c_text(c, "    (void)context;\n");
+    if (!view.parameter_count) c_text(c, "    (void)state;\n");
+    c_text(c, "    ");
+    c_function_name(c, function.id);
+    c_text(c, view.parameter_count ? "(state);\n}\n\n" : "();\n}\n\n");
+}
+
+static void c_test_session_roots(LirC *c) {
+    c_test_session_root(c, c->request->entry, 0);
+    for (uint32_t i = 0; i < c->test_action_count && c_request_poll(c); ++i)
+        c_test_session_root(c, c->test_actions[i], i + 1);
+    c_text(c, "static const XrtSynchronousStateRoot xrl_test_actions[] = {\n");
+    for (uint32_t i = 0; i < c->test_action_count && c_request_poll(c); ++i)
+        c_format(c, "    xrl_test_root_%" PRIu32 ",\n", i + 1);
+    c_text(c, "};\n\n");
+    c_format(c, "const XrtNativeTestFile xrl_test_file = {\n"
+        "    &xrt_standalone_source_map, %s, xrl_test_root_0, xrl_test_actions, %" PRIu32 "\n};\n",
+        c->state ? "&xrl_state_spec" : "NULL", c->test_action_count);
+}

@@ -63,6 +63,8 @@ typedef struct LirCArrayRegions {
 
 typedef struct LirC {
     const XrLirCRequest *request;
+    const XrLirFunction *test_actions;
+    uint32_t test_action_count;
     XrLirCDiagnostic *diagnostic;
     XrLirCStatus status;
     char *text;
@@ -724,6 +726,8 @@ static void c_admit(LirC *c) {
         return;
     c->seen = seen;
     c_visit(c, c->request->entry.id);
+    for (uint32_t i = 0; i < c->test_action_count; ++i)
+        c_visit(c, c->test_actions[i].id);
     for (uint32_t cursor = 0; cursor < c->closure_count && c->status == XR_LIR_C_OK; ++cursor) {
         c->block = c->instruction = 0;
         c->source = (XrLirSource) {0};
@@ -1430,6 +1434,8 @@ static void c_emit(LirC *c, XrLirType root_result) {
     XR_DCHECK(c->closure_count && c->closure[0] == c->request->entry.id,
               "emission starts from the explicit execution root");
     c_preamble(c);
+    if (c->test_action_count)
+        c_text(c, "#include \"runtime/native/xnative_test_session.h\"\n");
     if (c->callables) c_text(c,"#include \"xray_native_function.h\"\n");
     if (c->runtime || c->runtime_header)
         c_text(c, "#include \"xray_native_runtime.h\"\n\n");
@@ -1514,8 +1520,10 @@ static void c_emit(LirC *c, XrLirType root_result) {
         c_array_region_clones(c);
         c_text(c, "}\n\n");
     }
-    if (c->runtime && c->status == XR_LIR_C_OK)
-        c_standalone_root(c, root_result);
+    if (c->status == XR_LIR_C_OK) {
+        if (c->test_action_count) c_test_session_roots(c);
+        else if (c->runtime) c_standalone_root(c, root_result);
+    }
     XR_DCHECK(c->status != XR_LIR_C_OK || c->location_cursor == c->location_count,
               "ordinary output calls consume their own static location IDs");
 }
@@ -1558,10 +1566,11 @@ static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {
         xr_lir_type_view(module, type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_SLICE);
 }
 static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *output,
-    XrLirCDiagnostic *diagnostic, bool standalone) {
+    XrLirCDiagnostic *diagnostic, bool standalone, const XrLirFunction *actions, uint32_t action_count) {
     if (diagnostic)
         *diagnostic = (XrLirCDiagnostic) {0};
-    LirC c = {.request = request, .diagnostic = diagnostic};
+    LirC c = {.request = request, .diagnostic = diagnostic, .test_actions = actions,
+        .test_action_count = action_count};
     XrLirFunctionView entry;
     if (!request || !output || output->bytes || output->length || output->entry_result ||
         output->entry_shape.kind || output->entry_shape.element || output->entry_shape.count ||
@@ -1575,6 +1584,25 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         (entry.parameter_count && (entry.parameter_count != 1 || entry.parameter_types[0] != XR_LIR_STATE))) {
         c_error(&c, XR_LIR_C_BAD_ARGUMENT, "C emission requires empty output and a no-argument root");
         return c.status;
+    }
+    if (action_count) {
+        if (entry.result != XR_LIR_UNIT || action_count > xr_lir_function_count(request->module)) {
+            c_error(&c, XR_LIR_C_BAD_ARGUMENT, "invalid test session initializer or roles");
+            return c.status;
+        }
+        for (uint32_t i = 0; i < action_count; ++i) {
+            XrLirFunctionView action;
+            if (actions[i].id == request->entry.id ||
+                xr_lir_function_view(request->module, actions[i], &action) != XR_LIR_OK ||
+                action.kind != XR_LIR_FUNCTION_DEFINITION || action.cleanup_owner ||
+                action.initializer_module || action.error || action.result != XR_LIR_UNIT ||
+                (action.parameter_count &&
+                    (action.parameter_count != 1 || action.parameter_types[0] != XR_LIR_STATE))) {
+                c_error(&c, XR_LIR_C_BAD_ARGUMENT, "invalid test session action");
+                return c.status;
+            }
+        }
+        c.runtime = true;
     }
     if (entry.parameter_count) {
         XrLirFunction state_entry = {0};
@@ -1628,6 +1656,8 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
     }
     if (c.status == XR_LIR_C_OK)
         c_admit(&c);
+    if (c.status == XR_LIR_C_OK && action_count && c.host_text_result)
+        c_error(&c, XR_LIR_C_UNSUPPORTED, "test session requires synchronous actions without host text receiving");
     if (c.status == XR_LIR_C_OK)
         c_values_prepare(&c);
     if (c.status == XR_LIR_C_OK)
@@ -1700,10 +1730,21 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
 
 XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *output,
     XrLirCDiagnostic *diagnostic) {
-    return c_emit_output(request, output, diagnostic, false);
+    return c_emit_output(request, output, diagnostic, false, NULL, 0);
 }
 
 XR_FUNC XrLirCStatus xr_lir_emit_c_standalone(const XrLirCRequest *request, XrLirCOutput *output,
     XrLirCDiagnostic *diagnostic) {
-    return c_emit_output(request, output, diagnostic, true);
+    return c_emit_output(request, output, diagnostic, true, NULL, 0);
+}
+
+XR_FUNC XrLirCStatus xr_lir_emit_c_test_session(const XrLirCRequest *request,
+    const XrLirFunction *actions, uint32_t count, XrLirCOutput *output, XrLirCDiagnostic *diagnostic) {
+    if (!actions || !count) {
+        LirC c = {.request=request,.diagnostic=diagnostic};
+        if (diagnostic) *diagnostic = (XrLirCDiagnostic){0};
+        c_error(&c, XR_LIR_C_BAD_ARGUMENT, "test session requires an action");
+        return c.status;
+    }
+    return c_emit_output(request, output, diagnostic, false, actions, count);
 }

@@ -12,31 +12,36 @@
  */
 #include "lir/xlir_source.h"
 #include "lir/xlir_test_plan.h"
+#include "../lir/test_role_session_selection.h"
 #include "vm/register/xrbc_lir.h"
 #include "lir_vm_result_report.h"
 #include <stdio.h>
 #include <string.h>
 
-static XrRbcProgram *compile_file(const char *path, bool optimize, const char *stdlib,
-    const char *test_name, bool test_plan) {
+static void compile_file(const char *path, bool optimize, const char *stdlib,
+    const char *test_name, bool test_plan, const char *session_name,
+    XrRbcProgram **program, XrRbcTestSession **session, uint32_t *action_count) {
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
     XrCompileResources *resources = NULL;
     XrLirLowered lowered = {0};
     XrLirTestPlan *plan = NULL;
     XrLirSourceFailure failure = {0};
-    XrRbcProgram *program = NULL;
+    XrLirFunction *actions = NULL;
     if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK) {
         fprintf(stderr, "lir_vm_run: cannot prepare source input: %s\n", path);
-        return NULL;
+        return;
     }
     XrLirSourceRequest request = {resources, path, stdlib, optimize, NULL, NULL, XR_XIR_HOST_TARGET};
     XrLirSourceStatus status;
-    if (test_plan)
+    if (test_plan || session_name)
         status = xr_lir_compile_test_plan(&request, &plan, &failure);
     else if (test_name)
         status = xr_lir_compile_test_source(&request, test_name, &lowered, &failure);
     else
         status = xr_lir_compile_source(&request, &lowered, &failure);
+    if (status == XR_LIR_SOURCE_OK && session_name &&
+        !select_session_actions(plan, session_name, &actions, action_count))
+        status = XR_LIR_SOURCE_TEST_SELECTION_FAILED;
     if (status == XR_LIR_SOURCE_CHECK_FAILED) {
         fprintf(stderr, "lir_vm_run: source %s:%d:%d: %s\n",
             failure.source_failure.path ? failure.source_failure.path : path,
@@ -56,9 +61,11 @@ static XrRbcProgram *compile_file(const char *path, bool optimize, const char *s
         fprintf(stderr, "lir_vm_run: cannot prepare source input: %s\n", path);
     } else {
         XrRbcCompileDiagnostic diagnostic = {0};
-        XrLirFunction entry = test_plan ? xr_lir_test_plan_initializer(plan) : lowered.entry;
-        if (xr_rbc_compile(entry.module, entry, &program, &diagnostic) !=
-            XR_RBC_COMPILE_OK) {
+        XrLirFunction entry = plan ? xr_lir_test_plan_initializer(plan) : lowered.entry;
+        XrRbcCompileStatus compiled = session_name
+            ? xr_rbc_test_session_compile(entry.module, entry, actions, *action_count, session, &diagnostic)
+            : xr_rbc_compile(entry.module, entry, program, &diagnostic);
+        if (compiled != XR_RBC_COMPILE_OK) {
             fprintf(stderr, "lir_vm_run: bytecode %s:%u:%u: %s\n",
                 diagnostic.path[0] ? diagnostic.path : path,
                 diagnostic.line, diagnostic.column, diagnostic.message);
@@ -67,8 +74,8 @@ static XrRbcProgram *compile_file(const char *path, bool optimize, const char *s
     xr_lir_source_failure_free(&failure);
     xr_lir_lowered_free(&lowered);
     xr_lir_test_plan_free(plan);
+    free(actions);
     xr_compile_resources_release(resources);
-    return program;
 }
 
 static bool report_test_panic(const XrRbcOutcome *outcome) {
@@ -83,23 +90,62 @@ static bool report_test_panic(const XrRbcOutcome *outcome) {
     return true;
 }
 
+static int run_test_session(XrRbcTestSession *session, uint32_t action_count, bool retry_first) {
+    XrRbcOutcome *first = NULL;
+    XrRbcStatus first_status = xr_rbc_test_session_run(session, action_count, &first);
+    bool valid = first_status == XR_RBC_INVALID && !first;
+    bool failed = false;
+    for (uint32_t i = 0; valid && i < action_count; ++i) {
+        XrRbcOutcome *outcome = NULL;
+        XrRbcStatus status = xr_rbc_test_session_run(session, i, &outcome);
+        if (status == XR_RBC_INVALID) valid = failed && !outcome;
+        else if (status != XR_RBC_OK && !failed) {
+            first = outcome;
+            outcome = NULL;
+            first_status = status;
+            failed = true;
+        }
+        xr_rbc_outcome_free(&outcome);
+    }
+    if (valid && retry_first) {
+        XrRbcOutcome *discarded = NULL;
+        valid = failed && xr_rbc_test_session_run(session, 0, &discarded) == XR_RBC_INVALID && !discarded;
+        xr_rbc_outcome_free(&discarded);
+    }
+    if (xr_rbc_test_session_free(&session) != XR_OS_IO_OK) valid = false;
+    int result = valid ? 0 : 2;
+    if (valid && failed)
+        result = report_test_panic(first) ? 1 : lir_vm_result_report(first, first_status);
+    xr_rbc_outcome_free(&first);
+    return result;
+}
+
 int main(int argc, char **argv) {
-    bool twice = false, optimize = false, test_plan = false, valid = argc >= 2 && argc <= 8;
-    const char *stdlib = NULL, *test_name = NULL;
+    bool twice = false, optimize = false, test_plan = false, retry_first = false;
+    bool valid = argc >= 2 && argc <= 8;
+    const char *stdlib = NULL, *test_name = NULL, *session_name = NULL;
     for (int i = 2; i < argc; ++i) {
         if (!strcmp(argv[i], "--twice") && !twice) twice = true;
         else if (!strcmp(argv[i], "--optimize") && !optimize) optimize = true;
         else if (!strcmp(argv[i], "--stdlib") && !stdlib && i + 1 < argc) stdlib = argv[++i];
         else if (!strcmp(argv[i], "--test") && !test_name && i + 1 < argc) test_name = argv[++i];
         else if (!strcmp(argv[i], "--test-plan") && !test_plan) test_plan = true;
+        else if (!strcmp(argv[i], "--test-session") && !session_name && i + 1 < argc)
+            session_name = argv[++i];
+        else if (!strcmp(argv[i], "--retry-first") && !retry_first) retry_first = true;
         else valid = false;
     }
-    if (!valid || (test_plan && test_name)) {
+    if (!valid || (test_plan && test_name) || (session_name && (test_plan || test_name || twice)) ||
+        (retry_first && !session_name)) {
         fputs("usage: lir_vm_run <source.xr> [--twice] [--optimize] [--stdlib <directory>] "
-            "[--test NAME | --test-plan]\n", stderr);
+            "[--test NAME | --test-plan | --test-session NAME [--retry-first]]\n", stderr);
         return 2;
     }
-    XrRbcProgram *program = compile_file(argv[1], optimize, stdlib, test_name, test_plan);
+    XrRbcProgram *program = NULL;
+    XrRbcTestSession *session = NULL;
+    uint32_t action_count = 0;
+    compile_file(argv[1], optimize, stdlib, test_name, test_plan, session_name, &program, &session, &action_count);
+    if (session) return run_test_session(session, action_count, retry_first);
     if (!program) return 1;
     int result = 0;
     for (unsigned i = 0; i < (twice ? 2u : 1u) && !result; ++i) {

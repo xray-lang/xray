@@ -1,0 +1,49 @@
+import "./test-role-session-helper" as helper
+
+fn keep<T>(value: T) -> T {
+    return value
+}
+
+var state: i64 = keep(helper.initialValue() - 24)
+var note: string = "seed"
+
+@after_each
+fn after_action() {
+    assert(state == 22)
+    state = state + 5
+    print(state)
+    print(note)
+}
+
+@test
+fn failing_action() {
+    state = state + 2
+    note = note + "?"
+    print(state)
+    assert(false, "selected inner panic")
+    print(97)
+}
+
+@test(skip)
+fn skipped_action() {
+    print(98)
+}
+
+@test
+fn passing_action() {
+    state = state + 2
+    note = note + "."
+    print(state)
+}
+
+fn ordinary_action() {
+    print(99)
+}
+
+@before_each
+fn before_action() {
+    assert(state == 17)
+    state = state + 3
+    note = note + "!"
+    print(state)
+}

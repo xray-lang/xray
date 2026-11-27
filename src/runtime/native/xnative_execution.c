@@ -19,6 +19,7 @@
 #include "xray_native_string_value.h"
 #include "xray_native_pod.h"
 #include "base/xchecks.h"
+#include "base/xmalloc.h"
 #include "os/os_time.h"
 #include "shared/xerror_codes.h"
 #include "shared/xr_time_offset.h"
@@ -452,6 +453,145 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_with_metadata_close(const XrtL
     XrtMetadataCloser close_metadata) {
     const XrtExecutionHooks hooks = {.close_metadata=close_metadata};
     return run_embedded_owned(locations, failure, root, context, strings, hooks);
+}
+
+struct XrtTestSession {
+    XrtModuleLayout *layout;
+    XrtModuleState *state;
+    XrtValueRoot native_root;
+    const XrtNativeTestFile *native_file;
+    XrtLocationOwner *locations;
+    XrtMetadataCloser close_metadata;
+    bool active, initialized, initialization_failed;
+};
+
+XR_FUNC XrtManagedStatus xrt_test_session_create(const XrtModuleLayoutSpec *spec, XrtManagedLease code,
+    XrtTestSession **output) {
+    if (!output || *output) return XRT_MANAGED_ARGUMENT;
+    XrtTestSession *session = xr_calloc(1, sizeof(*session));
+    if (!session) return XRT_MANAGED_OOM;
+    XrtManagedStatus status = XRT_MANAGED_OK;
+    if (spec) {
+        XrtBillingOwner *billing = NULL;
+        status = xrt_billing_owner_new(NULL, SIZE_MAX, &billing);
+        if (status == XRT_MANAGED_OK)
+            status = xrt_module_layout_new(billing, spec, code, &session->layout);
+        if (status == XRT_MANAGED_OK)
+            status = xrt_module_state_new(session->layout, billing, &session->state);
+        if (billing) xrt_billing_owner_drop(billing);
+    }
+    if (status != XRT_MANAGED_OK) {
+        xrt_test_session_free(&session);
+        return status;
+    }
+    *output = session;
+    return XRT_MANAGED_OK;
+}
+
+XR_FUNC XrtExecutionStatus xrt_test_session_run(XrtTestSession *session, XrtTestSessionStep step,
+    void *context) {
+    if (!session || session->active || session->initialization_failed || !step)
+        return XRT_EXECUTION_INVALID;
+    session->active = true;
+    XrtExecutionStatus status = XRT_EXECUTION_COMPLETED;
+    if (!session->initialized) {
+        status = step(context, session->layout, session->state, true);
+        session->initialized = status == XRT_EXECUTION_COMPLETED;
+        session->initialization_failed = !session->initialized;
+    }
+    if (status == XRT_EXECUTION_COMPLETED)
+        status = step(context, session->layout, session->state, false);
+    session->active = false;
+    return status;
+}
+
+XR_FUNC XrOsIoStatus xrt_test_session_free(XrtTestSession **owner) {
+    if (!owner || !*owner) return XR_OS_IO_OK;
+    XrtTestSession *session = *owner;
+    if (session->active) return XR_OS_IO_BAD_ARGUMENT;
+    XrOsIoStatus status = session->close_metadata ?
+        xrt_value_root_drain_with(&session->native_root, session->close_metadata) : XR_OS_IO_OK;
+    if (status != XR_OS_IO_OK) return status;
+    *owner = NULL;
+    xrt_module_state_drop(&session->state);
+    xrt_module_layout_drop(&session->layout);
+    xrt_locations_release(session->locations);
+    xr_free(session);
+    return XR_OS_IO_OK;
+}
+
+XR_FUNC bool xrt_test_session_active(const XrtTestSession *session) {
+    return session && session->active;
+}
+
+typedef struct XrtNativeTestAction {
+    XrtTestSession *session;
+    XrtExecutionFailure *failure;
+    uint32_t action;
+} XrtNativeTestAction;
+
+static XrtExecutionStatus native_test_step(void *context, XrtModuleLayout *layout,
+    XrtModuleState *state, bool initialize) {
+    (void)layout;
+    XrtNativeTestAction *action = context;
+    XrtTestSession *session = action->session;
+    const XrtNativeTestFile *file = session->native_file;
+    XrtValueRoot *root = &session->native_root;
+    XrOsIoStatus closed = xrt_value_root_drain_with(root, session->close_metadata);
+    if (closed != XR_OS_IO_OK) {
+        *action->failure = (XrtExecutionFailure){.kind=XRT_FAILURE_VALUE,
+            .detail.value={.status=xrt_host_io_failure(closed)}};
+        return XRT_EXECUTION_FAILURE;
+    }
+    XrtBillingOwner *billing = NULL;
+    XrtManagedStatus status = xrt_native_values_prepare(root, &billing);
+    if (status != XRT_MANAGED_OK) {
+        *action->failure = (XrtExecutionFailure){.kind=XRT_FAILURE_VALUE,
+            .detail.value={.status=xrt_managed_value_status(status)}};
+        return XRT_EXECUTION_FAILURE;
+    }
+    if (state) xrt_native_values_use_state(root, state, file->state->values);
+    XrtStateInvocation invocation = {
+        initialize ? file->initializer : file->actions[action->action], NULL, state};
+    return xrt_run_embedded_owned_with_metadata_close(session->locations, action->failure, state_root_invoke,
+        &invocation, root, session->close_metadata);
+}
+
+XR_FUNC XrtManagedStatus xrt_test_session_create_native_with_metadata_close(const XrtNativeTestFile *file,
+    XrtMetadataCloser close_metadata, XrtTestSession **output) {
+    if (!file || !file->sources || !file->initializer || !file->actions || !file->action_count ||
+        !close_metadata || !output || *output) return XRT_MANAGED_ARGUMENT;
+    XrtTestSession *session = NULL;
+    XrtManagedStatus status = xrt_test_session_create(file->state, (XrtManagedLease){0}, &session);
+    if (status != XRT_MANAGED_OK) return status;
+    XrtLocationStatus located = xrt_locations_create(file->sources->locations, file->sources->count,
+        &session->locations);
+    if (located != XRT_LOCATION_OK) {
+        xrt_test_session_free(&session);
+        return located == XRT_LOCATION_OUT_OF_MEMORY ? XRT_MANAGED_OOM : XRT_MANAGED_ARGUMENT;
+    }
+    session->native_file = file;
+    session->close_metadata = close_metadata;
+    *output = session;
+    return XRT_MANAGED_OK;
+}
+
+XR_FUNC XrtManagedStatus xrt_test_session_create_native(const XrtNativeTestFile *file,
+    XrtTestSession **output) {
+    return xrt_test_session_create_native_with_metadata_close(file, xr_os_io_file_metadata_close, output);
+}
+
+XR_FUNC XrtLocationOwner *xrt_test_session_locations(const XrtTestSession *session) {
+    return session ? session->locations : NULL;
+}
+
+XR_FUNC XrtExecutionStatus xrt_test_session_run_native(XrtTestSession *session, uint32_t action,
+    XrtExecutionFailure *failure) {
+    const XrtNativeTestFile *file = session ? session->native_file : NULL;
+    if (!file || action >= file->action_count || !file->actions[action] || !failure)
+        return XRT_EXECUTION_INVALID;
+    XrtNativeTestAction request = {session, failure, action};
+    return xrt_test_session_run(session, native_test_step, &request);
 }
 XR_FUNC XrtExecutionStatus xrt_run_embedded_receiving_temp(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings,

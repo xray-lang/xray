@@ -524,18 +524,24 @@ static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
 #include "xrbc_dispatch.inc.c"
 }
 
-static XrRbcStatus xr_rbc_prepare_state(XrRbcExecution *execution, bool instantiate) {
+static XrRbcStatus xr_rbc_prepare_state(XrRbcExecution *execution, bool inject,
+    XrtModuleLayout *shared_layout, XrtModuleState *shared_state) {
     XrtBillingOwner *billing = NULL;
     XrtManagedStatus status = xrt_native_values_prepare(&execution->values, &billing);
     const XrRbcModule *module = execution->module;
     XrRbcCodeLease code = execution->code_lease;
-    if (status == XRT_MANAGED_OK)
-        status = xrt_module_layout_new(billing, module->state_spec,
-            (XrtManagedLease){code.owner, code.retain, code.release}, &execution->layout);
-    if (status == XRT_MANAGED_OK && instantiate)
+    if (status == XRT_MANAGED_OK) {
+        if (shared_layout) {
+            if (xrt_module_layout_retain(shared_layout)) execution->layout = shared_layout;
+            else status = XRT_MANAGED_REFCOUNT;
+        } else
+            status = xrt_module_layout_new(billing, module->state_spec,
+                (XrtManagedLease){code.owner, code.retain, code.release}, &execution->layout);
+    }
+    if (status == XRT_MANAGED_OK && inject && !shared_state)
         status = xrt_module_state_new(execution->layout, billing, &execution->state);
-    if (status == XRT_MANAGED_OK && instantiate)
-        status = xr_rbc_state_caches(execution->layout, execution->state,
+    if (status == XRT_MANAGED_OK && inject)
+        status = xr_rbc_state_caches(execution->layout, shared_state ? shared_state : execution->state,
             &execution->stack.module_accesses);
     if (status==XRT_MANAGED_OK) execution->stack.layout=execution->layout;
     return status == XRT_MANAGED_OK ? XR_RBC_OK :
@@ -549,6 +555,8 @@ typedef struct RbcPrepareRequest {
     size_t argument_count;
     XrtLocationOwner *locations;
     XrtFunction *owned_function;
+    XrtModuleLayout *shared_layout;
+    XrtModuleState *shared_state;
 } RbcPrepareRequest;
 static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution **output) {
     const XrRbcModule *module=request->module;
@@ -563,7 +571,11 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
     if (function->cleanup_only) return XR_RBC_INVALID;
     bool owned=request->owned_function!=NULL;
     size_t captures=owned ? function->capture_count : 0;
-    bool inject_state = !owned && module->state_spec && entry == module->state_entry;
+    if (!!request->shared_layout != !!request->shared_state ||
+        (request->shared_state && (owned || !module->state_spec))) return XR_RBC_INVALID;
+    bool session_state = request->shared_state && function->parameter_count &&
+        rbc_register_kind(function, function->parameter_count - 1) == XR_RBC_STATE;
+    bool inject_state = !owned && module->state_spec && (entry == module->state_entry || session_state);
     const XrRbcValueCode *value_code=xr_rbc_module_value_code(module,entry);
     if (value_code && value_code->error_type) return XR_RBC_INVALID;
     for (uint32_t p=0;value_code && value_code->parameters && p<value_code->parameter_count;++p)
@@ -673,7 +685,8 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
         execution->stack.aggregate_result = execution->pending->aggregate_bytes;
     }
     if (module->state_spec) {
-        XrRbcStatus status = xr_rbc_prepare_state(execution, inject_state);
+        XrRbcStatus status = xr_rbc_prepare_state(execution, inject_state,
+            request->shared_layout, request->shared_state);
         if (status != XR_RBC_OK) {
             xr_rbc_execution_free(&execution);
             return status;
@@ -682,7 +695,8 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
     xr_rbc_entry_clear(execution->stack.slots, &execution->entries[entry]);
     if (argument_count)
         for (size_t i = 0; i < argument_count; ++i) execution->stack.slots[captures+i].bits = arguments[i];
-    if (inject_state) execution->stack.slots[argument_count].state = execution->state;
+    if (inject_state) execution->stack.slots[argument_count].state =
+        request->shared_state ? request->shared_state : execution->state;
     if (function->reference_spill_count)
         memset(execution->stack.spills, 0, function->reference_spill_count * sizeof(*execution->stack.spills));
     execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0, 0, 0, 0, 0};
@@ -697,7 +711,16 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
 XR_FUNC XrRbcStatus xr_rbc_module_prepare_admitted(const XrRbcModule *module, uint32_t entry,
     const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
     XrRbcExecution **output) {
-    RbcPrepareRequest request={module,entry,arguments,argument_count,locations,NULL};
+    RbcPrepareRequest request={.module=module,.entry=entry,.arguments=arguments,
+        .argument_count=argument_count,.locations=locations};
+    return rbc_prepare(&request,output);
+}
+
+XR_FUNC XrRbcStatus xr_rbc_module_prepare_test_action(const XrRbcModule *module, uint32_t entry,
+    XrtLocationOwner *locations, XrtModuleLayout *layout, XrtModuleState *state, XrRbcExecution **output) {
+    if (!module || !!module->state_spec != !!state) return XR_RBC_INVALID;
+    RbcPrepareRequest request={.module=module,.entry=entry,.locations=locations,
+        .shared_layout=layout,.shared_state=state};
     return rbc_prepare(&request,output);
 }
 
@@ -713,8 +736,9 @@ XR_FUNC XrRbcStatus xr_rbc_owned_function_prepare(const XrtFunction *borrowed,
     if (native==XRT_MANAGED_OK && received.entry->kind==XR_RBC_CALLABLE_ENTRY_CODE) {
         status=xr_rbc_module_admit(received.code->module,received.code->locations);
         if (status==XR_RBC_OK) {
-            RbcPrepareRequest request={received.code->module,received.function,arguments,argument_count,
-                received.code->locations,&owned};
+            RbcPrepareRequest request={.module=received.code->module,.entry=received.function,
+                .arguments=arguments,.argument_count=argument_count,
+                .locations=received.code->locations,.owned_function=&owned};
             status=rbc_prepare(&request,empty);
         }
     }

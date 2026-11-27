@@ -126,5 +126,9 @@ XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *, XrLirCOutput *, XrLirC
 /* Emit the same typed root with a process main that discards its result. The
  * complete translation unit passes W1-W4 before publication. */
 XR_FUNC XrLirCStatus xr_lir_emit_c_standalone(const XrLirCRequest *, XrLirCOutput *, XrLirCDiagnostic *);
+/* Private test file. The caller selects authorized roles from the same plan.
+ * Emission owns a single initializer and a table of typed action callbacks. */
+XR_FUNC XrLirCStatus xr_lir_emit_c_test_session(const XrLirCRequest *, const XrLirFunction *actions,
+    uint32_t count, XrLirCOutput *, XrLirCDiagnostic *);
 XR_FUNC void xr_lir_c_output_free(XrLirCOutput *);
 #endif  // XLIR_C_H

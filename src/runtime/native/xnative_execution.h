@@ -18,6 +18,7 @@
 #include "os/os_native_output.h"
 #include "xnative_value.h"
 #include "xnative_managed.h"
+#include "xnative_test_session.h"
 
 typedef enum XrtOutputOperation { XRT_OUTPUT_FLUSH, XRT_OUTPUT_WRITE } XrtOutputOperation;
 typedef struct XrtOutputFailure {
@@ -126,6 +127,26 @@ XR_FUNC const XrtHostExecutionControl *xrt_execution_host_control(void);
 /* The closer is borrowed through the one drain at execution exit. */
 XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_with_metadata_close(const XrtLocationOwner *, XrtExecutionFailure *,
     XrtSynchronousRoot, void *context, XrtValueRoot *, XrtMetadataCloser);
+
+typedef struct XrtTestSession XrtTestSession;
+typedef XrtExecutionStatus (*XrtTestSessionStep)(void *, XrtModuleLayout *, XrtModuleState *, bool);
+/* The backend keeps its immutable code and borrowed image alive through owner
+ * retirement. Each step owns a fresh execution scope. An initialization
+ * failure makes every subsequent run invalid without reentering the guest. */
+XR_FUNC XrtManagedStatus xrt_test_session_create(const XrtModuleLayoutSpec *, XrtManagedLease,
+    XrtTestSession **);
+XR_FUNC XrtExecutionStatus xrt_test_session_run(XrtTestSession *, XrtTestSessionStep, void *);
+XR_FUNC bool xrt_test_session_active(const XrtTestSession *);
+/* Failed close keeps the owner live for a close-only retry. */
+XR_FUNC XrOsIoStatus xrt_test_session_free(XrtTestSession **);
+/* A generated file descriptor is immutable and lives through retirement.
+ * Failure storage is empty on entry; a failure can be retained independently. */
+XR_FUNC XrtManagedStatus xrt_test_session_create_native(const XrtNativeTestFile *, XrtTestSession **);
+XR_FUNC XrtManagedStatus xrt_test_session_create_native_with_metadata_close(const XrtNativeTestFile *,
+    XrtMetadataCloser, XrtTestSession **);
+XR_FUNC XrtLocationOwner *xrt_test_session_locations(const XrtTestSession *);
+XR_FUNC XrtExecutionStatus xrt_test_session_run_native(XrtTestSession *, uint32_t action,
+    XrtExecutionFailure *);
 /* The initialized receiver is separate from ordinary failure storage. It must
  * be empty and may not be shared with an active ancestor. A temporary effect
  * can never attach an owner to the ordinary failure, which is reusable after

@@ -2,6 +2,7 @@
 from pathlib import Path
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -25,17 +26,26 @@ def invoke(root, name, command):
     return completed.returncode, completed.stdout, completed.stderr
 
 
-def run_entry(args, root, source, label, *options):
+def run_entry(args, root, source, label, *options, session=False, retry_first=False):
     selection = ["--stdlib", args.source_root / "stdlib", *options]
     generated = root / (label + ".c")
-    vm = invoke(root, label + "-vm", [args.vm_driver, source, *selection])
+    retry = ["--retry-first"] if retry_first else []
+    vm = invoke(root, label + "-vm", [args.vm_driver, source, *selection, *retry])
     emission = invoke(root, label + "-emit", [args.driver, source, generated, *selection])
     assert emission == (0, b"", b""), (emission, root)
     assert b"({" not in generated.read_bytes(), (generated, root)
     binary = root / (label + (".exe" if args.kind == "msvc" else "-native"))
-    compilation = invoke(root, label + "-compile", compile_command(args, generated, binary))
+    command = compile_command(args, generated, binary)
+    if session:
+        host = args.source_root / "tests/lir/test_role_session_host.c"
+        command.insert(command.index(generated) + 1, host)
+        if args.kind == "msvc":
+            command = ["/Fo" + str(root) + os.sep if isinstance(arg, str) and arg.startswith("/Fo")
+                       else arg for arg in command]
+            command.insert(1, "/D_CRT_SECURE_NO_WARNINGS")
+    compilation = invoke(root, label + "-compile", command)
     assert compilation[0] == 0, (compilation, root)
-    native = invoke(root, label + "-native", [binary])
+    native = invoke(root, label + "-native", [binary, *retry])
     assert vm == native, (label, vm, native, root)
     return native
 
@@ -109,6 +119,18 @@ def main():
     typed_error = fixtures / "test-role-session-typed-error.xr"
     assert_rejected(args, root, typed_error, "session-typed-error", "--test-plan",
                     lowering=b"test-role startup signature or typed errors is not supported by LIR lowering yet")
+
+    actions = fixtures / "test-role-session-actions.xr"
+    assert run_entry(args, root, actions, "file-pass", "--test-session", "passing_action",
+                     session=True) == (0, b"17\n20\n22\n27\nseed!.\n", b""), root
+    assert_panic(run_entry(args, root, actions, "file-panic", "--test-session", "failing_action",
+                           "--optimize", session=True), actions, b"17\n20\n22\n27\nseed!?\n",
+                 b"selected inner panic")
+    assert_panic(run_entry(args, root, initializer_failure, "file-sticky", "--test-session", "blocked_test",
+                           session=True, retry_first=True),
+                 initializer_failure, b"17\n", b"initializer failure")
+    for name in ("skipped_action", "ordinary_action", "imported_session_test", "before_action", "missing"):
+        assert_rejected(args, root, actions, "file-" + name, "--test-session", name)
     complete_native_artifacts(root)
     print(f"Selected test startup, session initialization and rejection passed through both backends. Artifacts at {root}")
 
