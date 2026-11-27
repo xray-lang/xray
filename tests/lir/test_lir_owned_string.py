@@ -13,6 +13,121 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from xraytest.toolchain import archive_link_arguments, native_c11_options
 
 
+def msvc_release_entry_includes(args):
+    if (os.name != 'nt' or args.kind != 'msvc' or args.asan or args.no_main_reuse or
+            args.compiler.name.lower() != 'cl.exe' or not args.compiler.is_absolute() or
+            not args.include.is_absolute() or os.environ.get('CL') or os.environ.get('_CL_')):
+        return None
+    build = args.driver.resolve().parents[2]
+    try:
+        settings = (build / 'CMakeCache.txt').read_text(encoding='utf-8').splitlines()
+    except (OSError, UnicodeError):
+        return None
+    profile = 'CMAKE_BUILD_TYPE:STRING=Release'
+    sanitizer_off = {f'ENABLE_{name}:BOOL=OFF' for name in ('ASAN', 'UBSAN', 'TSAN', 'SANITIZERS')}
+    if profile not in settings or not sanitizer_off.issubset(settings):
+        return None
+    includes = tuple(os.environ.get(name, '') for name in ('INCLUDE', 'EXTERNAL_INCLUDE'))
+    if any(not Path(entry).is_absolute() for path in includes for entry in path.split(';') if entry):
+        return None
+    return includes
+
+
+class EntryDriverObjects:
+    """Own the two test drivers' reusable objects inside one suite invocation."""
+
+    def __init__(self, directory, compiler, includes):
+        self.directory = directory
+        self.compiler = str(compiler)
+        self.includes = includes
+        self.objects = {}
+
+    def compile(self, source, flags, run):
+        data = source.read_bytes()
+        source_hash = hashlib.sha256(data).hexdigest()
+        recipe = {
+            'compiler': self.compiler, 'flags': list(flags), 'cwd': str(self.directory),
+            'implicitIncludes': self.includes, 'sourceSHA256': source_hash,
+        }
+        key = hashlib.sha256(json.dumps(recipe, sort_keys=True).encode('utf-8')).hexdigest()
+        shared = self.objects.get(key)
+        if shared:
+            obj, receipt = shared
+            if hashlib.sha256(obj.read_bytes()).hexdigest() != receipt['objectSHA256']:
+                raise RuntimeError(f'Shared entry driver object changed: {obj}')
+            return obj, receipt, True
+
+        # Both entry drivers use system includes only. Their compile cwd and
+        # basename are fixed, independent of each generated program directory.
+        staged = self.directory / source_hash / 'main.c'
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        staged.write_bytes(data)
+        obj = self.directory / (key + '.obj')
+        label = 'compile-main-' + key
+        complete = False
+        try:
+            command = [self.compiler, *flags, '/c', staged, '/Fo:' + str(obj)]
+            result = run(label, command, self.directory)
+            if result.returncode != 0 or not obj.is_file() or obj.stat().st_size == 0:
+                raise RuntimeError(f'Entry driver compilation failed: {self.directory / label}')
+            receipt = {**recipe, 'source': str(staged), 'object': str(obj),
+                       'compileJournal': str(self.directory / (label + '.command.json')),
+                       'objectSHA256': hashlib.sha256(obj.read_bytes()).hexdigest()}
+            self.objects[key] = (obj, receipt)
+            complete = True
+        finally:
+            if not complete:
+                obj.unlink(missing_ok=True)
+        return obj, receipt, False
+
+
+def check_entry_driver_objects():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        scope = root / 'shared'
+        drivers = EntryDriverObjects(scope, 'cl.exe', ())
+        first, same, other = (root / name for name in ('first.c', 'same.c', 'other.c'))
+        first.write_bytes(b'first entry')
+        same.write_bytes(first.read_bytes())
+        other.write_bytes(b'other entry')
+        calls = 0
+        failure = None
+
+        def compile_entry(label, command, cwd):
+            nonlocal calls
+            calls += 1
+            assert cwd == scope and cwd == Path(command[-2]).parents[1]
+            if failure != 'missing':
+                Path(command[-1].removeprefix('/Fo:')).write_bytes(b'test object')
+            return subprocess.CompletedProcess(command, int(failure == 'partial'))
+
+        obj, original, reused = drivers.compile(first, ['/O2'], compile_entry)
+        assert not reused
+        assert drivers.compile(same, ['/O2'], compile_entry) == (obj, original, True)
+        debug, _, reused = drivers.compile(same, ['/Od'], compile_entry)
+        assert debug != obj and not reused
+        for failure in ('partial', 'missing'):
+            try:
+                drivers.compile(other, ['/O2'], compile_entry)
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError(f'Failed entry driver registered: {failure}')
+            assert len(drivers.objects) == 2 and len(list(scope.glob('*.obj'))) == 2
+        failure = None
+        distinct, _, reused = drivers.compile(other, ['/O2'], compile_entry)
+        assert distinct not in (obj, debug) and not reused and calls == 5
+        obj.write_bytes(b'changed object')
+        try:
+            drivers.compile(first, ['/O2'], compile_entry)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError('Changed entry driver object was reused')
+        assert calls == 5
+        print('PASS: MSVC entry driver source and flags isolate reuse, incomplete objects are rejected')
+
+
 def frame_observer_source(generated, minimum_frames=0, expected_result=0, string_result=False, watch_f64=False):
     """Measure real physical retirement before the enclosing execution drains."""
     stateful = 'xrt_run_standalone_state(' in generated.read_text(encoding='ascii')
@@ -217,6 +332,7 @@ def main():
     parser.add_argument('--kind', choices=('msvc', 'gnu'), required=True)
     parser.add_argument('--msvc-runtime', default='MultiThreaded')
     parser.add_argument('--asan', action='store_true')
+    parser.add_argument('--no-main-reuse', action='store_true')
     args = parser.parse_args()
     args.runtime_archives = args.library
     args.runtime_system_libraries = []
@@ -229,6 +345,9 @@ def main():
     root = Path(tempfile.mkdtemp(prefix='owned-string-', dir=args.work)).resolve()
     records = []
     products = set()
+    entry_includes = msvc_release_entry_includes(args)
+    shared_entries = None if entry_includes is None else EntryDriverObjects(
+        root / 'entry-drivers', args.compiler, entry_includes)
 
     def run(label, command, directory=root, stdout=subprocess.PIPE):
         command = list(map(str, command))
@@ -239,7 +358,7 @@ def main():
         (directory / (label + '.exit')).write_text(str(result.returncode))
         return result
 
-    def compile_run(folder, generated, main, optimization, expected):
+    def compile_run(folder, generated, main, optimization, expected, reuse_main=False):
         executable = folder / ('native-' + optimization + ('.exe' if args.kind == 'msvc' else ''))
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
@@ -256,6 +375,12 @@ def main():
                 flags += ['-fsanitize=address,undefined']
         objects = []
         for source in (generated, main):
+            if source == main and reuse_main and shared_entries is not None:
+                obj, receipt, reused = shared_entries.compile(main, flags, run)
+                (folder / ('main-object-' + optimization + '.json')).write_text(
+                    json.dumps({**receipt, 'reused': reused}, indent=2) + '\n', encoding='utf-8')
+                objects.append(obj)
+                continue
             obj = folder / (source.stem + '-' + optimization + ('.obj' if args.kind == 'msvc' else '.o'))
             command = [args.compiler, *flags, '/c', source, '/Fo:' + str(obj)] if args.kind == 'msvc' else [
                 args.compiler, *flags, '-c', source, '-o', obj]
@@ -414,7 +539,7 @@ def main():
                 main.write_text('#include <stdint.h>\nextern int64_t xray_lir_entry(void);\n'
                                 'int main(void){if(xray_lir_entry()!=0)return 1;return xray_lir_entry()!=0;}\n', encoding='ascii')
             for optimization in (('Od', 'O1', 'O2', 'Ox') if mode == 'raw' else ('O2',)):
-                compile_run(folder,generated,main,optimization,expected * 2)
+                compile_run(folder,generated,main,optimization,expected * 2,reuse_main=True)
             if name == 'literal-cache' and mode == 'raw':
                 # The initializer still owns its own reference. The append
                 # suffix only borrows the keeper inside the loop.
@@ -576,4 +701,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if sys.argv[1:] == ['--check-entry-driver-objects']:
+        check_entry_driver_objects()
+    else:
+        main()
