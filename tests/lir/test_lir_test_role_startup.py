@@ -25,18 +25,18 @@ def invoke(root, name, command):
     return completed.returncode, completed.stdout, completed.stderr
 
 
-def run_selected(args, root, source, test_name):
-    selection = [source, "--stdlib", args.source_root / "stdlib", "--test", test_name]
-    generated = root / (test_name + ".c")
-    vm = invoke(root, test_name + "-vm", [args.vm_driver, *selection])
-    emission = invoke(root, test_name + "-emit", [args.driver, source, generated, *selection[1:]])
+def run_entry(args, root, source, label, *options):
+    selection = ["--stdlib", args.source_root / "stdlib", *options]
+    generated = root / (label + ".c")
+    vm = invoke(root, label + "-vm", [args.vm_driver, source, *selection])
+    emission = invoke(root, label + "-emit", [args.driver, source, generated, *selection])
     assert emission == (0, b"", b""), (emission, root)
     assert b"({" not in generated.read_bytes(), (generated, root)
-    binary = root / (test_name + (".exe" if args.kind == "msvc" else "-native"))
-    compilation = invoke(root, test_name + "-compile", compile_command(args, generated, binary))
+    binary = root / (label + (".exe" if args.kind == "msvc" else "-native"))
+    compilation = invoke(root, label + "-compile", compile_command(args, generated, binary))
     assert compilation[0] == 0, (compilation, root)
-    native = invoke(root, test_name + "-native", [binary])
-    assert vm == native, (test_name, vm, native, root)
+    native = invoke(root, label + "-native", [binary])
+    assert vm == native, (label, vm, native, root)
     return native
 
 
@@ -52,14 +52,14 @@ def assert_panic(result, source, expected_stdout, message):
     assert location.endswith(f"{source.name}:{line}:{column}".encode("ascii")), result
 
 
-def assert_rejected(args, root, source, test_name, *, lowering=None):
-    generated = root / ("reject-" + test_name + ".c")
-    options = ["--stdlib", args.source_root / "stdlib", "--test", test_name]
-    vm = invoke(root, test_name + "-reject-vm", [args.vm_driver, source, *options])
-    native = invoke(root, test_name + "-reject-emit", [args.driver, source, generated, *options])
-    assert vm[:2] == native[:2] == (1, b"") and not generated.exists(), (test_name, vm, native, root)
+def assert_rejected(args, root, source, label, *entry_options, lowering=None):
+    generated = root / ("reject-" + label + ".c")
+    options = ["--stdlib", args.source_root / "stdlib", *entry_options]
+    vm = invoke(root, label + "-reject-vm", [args.vm_driver, source, *options])
+    native = invoke(root, label + "-reject-emit", [args.driver, source, generated, *options])
+    assert vm[:2] == native[:2] == (1, b"") and not generated.exists(), (label, vm, native, root)
     if lowering is None:
-        assert vm == native and vm[2].splitlines() == [REJECTED], (test_name, vm, native, root)
+        assert vm == native and vm[2].splitlines() == [REJECTED], (label, vm, native, root)
     else:
         assert native[2].splitlines() == [b"lowering: " + lowering], (native, root)
         lines = vm[2].splitlines()
@@ -83,23 +83,34 @@ def main():
     source = fixtures / "test-role-startup.xr"
     initializer_failure = fixtures / "test-role-init-failure.xr"
 
-    assert run_selected(args, root, source, "chosen_test") == (0, b"41\n42\n", b""), root
-    assert_panic(run_selected(args, root, source, "failing_test"), source,
+    assert run_entry(args, root, source, "chosen_test", "--test", "chosen_test") == (0, b"41\n42\n", b""), root
+    assert_panic(run_entry(args, root, source, "failing_test", "--test", "failing_test"), source,
                  b"41\n43\n", b"selected test failure")
-    assert_panic(run_selected(args, root, initializer_failure, "blocked_test"), initializer_failure,
+    assert_panic(run_entry(args, root, initializer_failure, "blocked_test", "--test", "blocked_test"), initializer_failure,
                  b"17\n", b"initializer failure")
 
     ordinary = invoke(root, "ordinary-vm", [args.vm_driver, source, "--stdlib", args.source_root / "stdlib"])
     assert ordinary == (0, b"41\n", b""), (ordinary, root)
 
     for name in ("skipped_test", "imported_test", "ordinary_helper", "local_hook", "chosen", "missing_test"):
-        assert_rejected(args, root, source, name)
-    assert_rejected(args, root, source, "deadline_test",
+        assert_rejected(args, root, source, name, "--test", name)
+    assert_rejected(args, root, source, "deadline_test", "--test", "deadline_test",
                     lowering=b"test-role startup with a deadline is not supported by LIR lowering yet")
-    assert_rejected(args, root, source, "typed_failure_test",
+    assert_rejected(args, root, source, "typed_failure_test", "--test", "typed_failure_test",
+                    lowering=b"test-role startup signature or typed errors is not supported by LIR lowering yet")
+
+    session = fixtures / "test-role-session.xr"
+    assert run_entry(args, root, session, "session-init", "--test-plan") == (0, b"17\n41\n", b""), root
+    assert run_entry(args, root, session, "session-optimized", "--test-plan", "--optimize") == (0, b"17\n41\n", b""), root
+    assert_panic(run_entry(args, root, initializer_failure, "session-blocked", "--test-plan"),
+                 initializer_failure, b"17\n", b"initializer failure")
+    assert_rejected(args, root, source, "session-deadline", "--test-plan",
+                    lowering=b"test-role startup with a deadline is not supported by LIR lowering yet")
+    typed_error = fixtures / "test-role-session-typed-error.xr"
+    assert_rejected(args, root, typed_error, "session-typed-error", "--test-plan",
                     lowering=b"test-role startup signature or typed errors is not supported by LIR lowering yet")
     complete_native_artifacts(root)
-    print(f"Selected test startup and rejection passed through both backends. Artifacts at {root}")
+    print(f"Selected test startup, session initialization and rejection passed through both backends. Artifacts at {root}")
 
 
 if __name__ == "__main__":

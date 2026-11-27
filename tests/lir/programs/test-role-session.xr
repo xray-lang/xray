@@ -1,0 +1,51 @@
+import "./test-role-session-helper" as helper
+
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+var state: i64 = identity(helper.initialValue())
+print(state)
+
+@after_each
+fn last_after_each() {
+    print(state)
+}
+
+@test
+fn z_first_test() {
+    state = state + 1
+    print(101)
+    skipped_test()
+}
+
+fn ordinary_helper() {
+    print(102)
+}
+
+@before_all
+fn suite_setup() {
+    ordinary_helper()
+    print(state)
+}
+
+@test(skip)
+fn skipped_test() {
+    print(103)
+}
+
+@after_all
+fn suite_teardown() {
+    print(104)
+}
+
+@test(timeout: 0)
+fn a_second_test() {
+    assert(state == 42)
+    print(105)
+}
+
+@before_each
+fn first_before_each() {
+    print(106)
+}

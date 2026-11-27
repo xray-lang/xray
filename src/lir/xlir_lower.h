@@ -13,6 +13,7 @@
 #ifndef XLIR_LOWER_H
 #define XLIR_LOWER_H
 #include "xlir.h"
+#include "xir/xxir_declarations.h"
 
 typedef struct XrXirArtifact XrXirArtifact;
 typedef struct XrXirSourceSnapshot XrXirSourceSnapshot;
@@ -30,6 +31,13 @@ typedef struct XrLirLowerFailure {
     char *owned_path;
 } XrLirLowerFailure;
 
+typedef struct XrLirTestBinding {
+    XrXirTestRole role;
+    uint32_t function;
+    const char *name;
+    size_t name_length;
+} XrLirTestBinding;
+
 /* Output and optional failure must initially be empty. The snapshot must
  * correspond to the source of the supplied specialization. An unsupported
  * operation never publishes a partial module or selects another executor.
@@ -45,6 +53,11 @@ XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *, XrLi
  * selected ordinal is from this Closed artifact. Each startup owns fresh state. */
 XR_FUNC XrLirStatus xr_lir_lower_test_checked(const XrLirLowerRequest *, uint32_t closed_function,
                                               XrLirLowered *, XrLirLowerFailure *);
+/* Lower ordinary initializers and the given root roles into one module. The
+ * entry runs only the initializers. On success each row's Closed ordinal is
+ * replaced by its LIR ordinal, or UINT32_MAX for a skipped row. */
+XR_FUNC XrLirStatus xr_lir_lower_test_plan_checked(const XrLirLowerRequest *,
+    XrLirTestBinding *, uint32_t count, XrLirLowered *, XrLirLowerFailure *);
 /* A local numerical observation skips initialization. The original program
  * must have no slots, and the retained selected function's transitive direct
  * calls must be scalar and effect-free. This is not a complete execution. */

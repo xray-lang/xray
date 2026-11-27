@@ -1,0 +1,8 @@
+print(17)
+
+enum TestRefusal { Denied }
+
+@test
+fn typed_failure() throws(TestRefusal) {
+    throw TestRefusal.Denied
+}

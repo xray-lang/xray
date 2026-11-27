@@ -1,0 +1,15 @@
+fn initialize() -> i64 {
+    print(17)
+    return 41
+}
+
+const initial: i64 = initialize()
+
+export fn initialValue() -> i64 {
+    return initial
+}
+
+@test
+fn imported_session_test() {
+    print(107)
+}

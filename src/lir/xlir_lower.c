@@ -3836,7 +3836,7 @@ static bool lower_wrapper(Lower *c, uint32_t entry, XrLirFunction *output) {
     bool stateful = c->state_layout.slot_count != 0;
     XrLirFunctionSpec spec = {.name = "main", .name_length = 4,
         .parameters = stateful ? &capability : NULL, .parameter_count = stateful ? 1u : 0u,
-        .result = lower_type(c, c->source->functions[entry].result)};
+        .result = entry == UINT32_MAX ? XR_LIR_UNIT : lower_type(c, c->source->functions[entry].result)};
     XrLirFunction wrapper = {0};
     XrLirBlock block = {0};
     XrLirValue result = {0}, state = {0};
@@ -3848,7 +3848,8 @@ static bool lower_wrapper(Lower *c, uint32_t entry, XrLirFunction *output) {
         !lower_build(c, xr_lir_set_entry(c->module, wrapper, block)) ||
         (stateful && !lower_build(c, xr_lir_function_parameter(c->module, wrapper, 0, &state))))
         return false;
-    for (uint32_t i = 0; i <= c->initialization_count; ++i) {
+    uint32_t call_count = c->initialization_count + (entry != UINT32_MAX);
+    for (uint32_t i = 0; i < call_count; ++i) {
         bool initializer = i < c->initialization_count;
         uint32_t module = initializer ? c->module_order[i] : d->root_module;
         uint32_t selected = initializer ? d->modules[module].initializer : entry;
@@ -4020,10 +4021,32 @@ static bool lower_error_types(Lower *c) {
 typedef enum LowerRootKind {
     LOWER_ROOT_PROGRAM,
     LOWER_ROOT_LOCAL,
-    LOWER_ROOT_TEST
+    LOWER_ROOT_TEST,
+    LOWER_ROOT_TEST_PLAN
 } LowerRootKind;
 
+static bool lower_test_role(Lower *c, uint32_t function, XrXirTestRole role) {
+    const XrXirDeclarations *d = c->source->declarations;
+    if (function >= c->source->function_count || !d->functions ||
+        role < XR_XIR_TEST_ROLE_TEST || role > XR_XIR_TEST_ROLE_AFTER_EACH ||
+        d->functions[function].module != d->root_module ||
+        d->functions[function].test_role != (uint32_t)role) {
+        lower_error(c, XR_LIR_INVALID_ARGUMENT, "expected a root-module @test declaration");
+        return false;
+    }
+    if (role == XR_XIR_TEST_ROLE_SKIP) return true;
+    c->function = function;
+    const XrXirFunction *test = &c->source->functions[function];
+    if (d->functions[function].test_timeout_milliseconds)
+        return lower_unsupported(c, "test-role startup with a deadline");
+    if (test->parameter_count || test->result != XR_XIR_UNIT || !test->block_count ||
+        !lower_empty_error(test->error_type))
+        return lower_unsupported(c, "test-role startup signature or typed errors");
+    return true;
+}
+
 static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t selected, LowerRootKind root_kind,
+                               XrLirTestBinding *roles, uint32_t role_count,
                                XrLirLowered *output, XrLirLowerFailure *failure) {
     if (!request || !request->closed || !request->snapshot || !output || output->module ||
         output->entry.module || output->entry.id || (failure && failure->owned_path))
@@ -4054,18 +4077,15 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         return lower_error(&c, XR_LIR_VERIFY_ERROR, "invalid Checked program entry");
     uint32_t program_entry = d->entry_function;
     if (root_kind == LOWER_ROOT_TEST) {
-        if (selected >= source->function_count || !d->functions ||
-            d->functions[selected].module != d->root_module ||
-            d->functions[selected].test_role != XR_XIR_TEST_ROLE_TEST)
-            return lower_error(&c, XR_LIR_INVALID_ARGUMENT, "expected a root-module @test declaration");
-        c.function = selected;
-        const XrXirFunction *test = &source->functions[selected];
-        if (d->functions[selected].test_timeout_milliseconds)
-            return lower_unsupported(&c, "test-role startup with a deadline"), c.status;
-        if (test->parameter_count || test->result != XR_XIR_UNIT || !test->block_count ||
-            !lower_empty_error(test->error_type))
-            return lower_unsupported(&c, "test-role startup signature or typed errors"), c.status;
+        if (!lower_test_role(&c, selected, XR_XIR_TEST_ROLE_TEST)) return c.status;
         program_entry = selected;
+    } else if (root_kind == LOWER_ROOT_TEST_PLAN) {
+        if (role_count > source->function_count || (role_count && !roles))
+            return lower_error(&c, XR_LIR_INVALID_ARGUMENT, "invalid test role inventory");
+        for (uint32_t i = 0; i < role_count; ++i)
+            if (!lower_test_role(&c, roles[i].function, roles[i].role)) return c.status;
+        c.function = d->modules[0].initializer;
+        program_entry = UINT32_MAX;
     }
     if (!lower_build(&c, xr_lir_module_create(NULL, &c.module))) return c.status;
     if (!lower_map_literals(&c) || !lower_modules(&c) || !lower_initializer_errors(&c) ||
@@ -4082,7 +4102,10 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     bool good = c.functions && c.active && c.queue;
     for (uint32_t m = 0; m < c.initialization_count && good; ++m)
         good = lower_mark(&c, d->modules[c.module_order[m]].initializer);
-    if (good) good = lower_mark(&c, program_entry);
+    if (good && program_entry != UINT32_MAX) good = lower_mark(&c, program_entry);
+    for (uint32_t i = 0; i < role_count && good; ++i)
+        if (roles[i].role != XR_XIR_TEST_ROLE_SKIP)
+            good = lower_mark(&c, roles[i].function);
     for (uint32_t at = 0; at < c.queued && good; ++at)
         good = lower_admit_function(&c, c.queue[at]);
     if (good) good = lower_owned_bindings(&c);
@@ -4160,6 +4183,10 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         good = lower_elide(&c, &entry);
     if (good) {
         XR_DCHECK(c.status == XR_LIR_OK, "only a complete successful module is published");
+        /* String elision retains function ordinals in the new module. */
+        for (uint32_t i = 0; i < role_count; ++i)
+            roles[i].function = roles[i].role == XR_XIR_TEST_ROLE_SKIP ? UINT32_MAX :
+                c.functions[roles[i].function].id - 1;
         *output = (XrLirLowered) {c.module, entry};
         c.module = NULL;
     }
@@ -4184,15 +4211,20 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
 
 XR_FUNC XrLirStatus xr_lir_lower_program_checked(const XrLirLowerRequest *request,
                                                  XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, 0, LOWER_ROOT_PROGRAM, output, failure);
+    return lower_checked(request, 0, LOWER_ROOT_PROGRAM, NULL, 0, output, failure);
 }
 
 XR_FUNC XrLirStatus xr_lir_lower_test_checked(const XrLirLowerRequest *request, uint32_t selected,
                                               XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, selected, LOWER_ROOT_TEST, output, failure);
+    return lower_checked(request, selected, LOWER_ROOT_TEST, NULL, 0, output, failure);
+}
+
+XR_FUNC XrLirStatus xr_lir_lower_test_plan_checked(const XrLirLowerRequest *request,
+    XrLirTestBinding *roles, uint32_t count, XrLirLowered *output, XrLirLowerFailure *failure) {
+    return lower_checked(request, 0, LOWER_ROOT_TEST_PLAN, roles, count, output, failure);
 }
 
 XR_FUNC XrLirStatus xr_lir_lower_local_checked(const XrLirLowerRequest *request, uint32_t selected,
                                                XrLirLowered *output, XrLirLowerFailure *failure) {
-    return lower_checked(request, selected, LOWER_ROOT_LOCAL, output, failure);
+    return lower_checked(request, selected, LOWER_ROOT_LOCAL, NULL, 0, output, failure);
 }

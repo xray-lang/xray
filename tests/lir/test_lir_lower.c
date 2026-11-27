@@ -15,6 +15,7 @@
 #include "base/xmalloc.h"
 #include "lir/xlir_lower.h"
 #include "lir/xlir_source.h"
+#include "lir/xlir_test_plan.h"
 #include "lir/xlir_builder.h"
 #include "lir/xlir_internal.h"
 #include "lir/xlir_rebuild.h"
@@ -1483,6 +1484,98 @@ static void checked_empty_array_contract(void) {
     xr_lir_lowered_free(&lowered);
 }
 
+
+static XrLirTestPlan *compile_test_plan(const char *path, bool optimize) {
+    XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
+    XrCompileResources *resources = NULL;
+    CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    XrLirSourceRequest request = {resources, path, NULL, optimize, NULL, NULL, XR_XIR_HOST_TARGET};
+    XrLirTestPlan *plan = NULL;
+    XrLirSourceFailure failure = {0};
+    XrLirSourceStatus status = xr_lir_compile_test_plan(&request, &plan, &failure);
+    if (status != XR_LIR_SOURCE_OK)
+        fprintf(stderr, "test plan: %u: %s %s\n", (unsigned)status, failure.source.message,
+            failure.lower.diagnostic.message);
+    CHECK(status == XR_LIR_SOURCE_OK && plan);
+    CHECK(xr_lir_compile_test_plan(&request, &plan, &failure) == XR_LIR_SOURCE_BAD_ARGUMENT);
+    xr_lir_source_failure_free(&failure);
+    xr_compile_resources_release(resources);
+    return plan;
+}
+
+static void test_role_inventory(const char *fixtures) {
+    char path[2048];
+    int length = snprintf(path, sizeof(path), "%s/test-role-session.xr", fixtures);
+    CHECK(length > 0 && (size_t)length < sizeof(path));
+    XrLirTestPlan *plain = compile_test_plan(path, false);
+    XrLirTestPlan *optimized = compile_test_plan(path, true);
+    XrLirFunction initializer = xr_lir_test_plan_initializer(optimized);
+    XrLirFunction plain_initializer = xr_lir_test_plan_initializer(plain);
+    CHECK(initializer.id && initializer.id == plain_initializer.id && initializer.module != plain_initializer.module);
+    XrLirFunction state_entry = {0};
+    OK(xr_lir_state_entry(initializer.module, &state_entry));
+    CHECK(state_entry.id == initializer.id);
+    static const struct {
+        const char *name;
+        XrXirTestRole role;
+    } expected[] = {
+        {"last_after_each", XR_XIR_TEST_ROLE_AFTER_EACH},
+        {"z_first_test", XR_XIR_TEST_ROLE_TEST},
+        {"suite_setup", XR_XIR_TEST_ROLE_BEFORE_ALL},
+        {"skipped_test", XR_XIR_TEST_ROLE_SKIP},
+        {"suite_teardown", XR_XIR_TEST_ROLE_AFTER_ALL},
+        {"a_second_test", XR_XIR_TEST_ROLE_TEST},
+        {"first_before_each", XR_XIR_TEST_ROLE_BEFORE_EACH}
+    };
+    uint32_t count = (uint32_t)(sizeof(expected) / sizeof(expected[0]));
+    CHECK(xr_lir_test_plan_role_count(plain) == count && xr_lir_test_plan_role_count(optimized) == count);
+    XrLirFunction ordinary = {0}, skipped = {0};
+    for (uint32_t i = 0; i < xr_lir_function_count(initializer.module); ++i) {
+        XrLirFunction f;
+        XrLirFunctionView body;
+        OK(xr_lir_function_at(initializer.module, i, &f));
+        OK(xr_lir_function_view(initializer.module, f, &body));
+        CHECK(!class_method_lir_name(&body, "imported_session_test"));
+        if (class_method_lir_name(&body, "ordinary_helper")) ordinary = f;
+        if (class_method_lir_name(&body, "skipped_test")) skipped = f;
+    }
+    CHECK(ordinary.id && skipped.id);
+    for (uint32_t i = 0; i < count; ++i) {
+        XrLirTestPlanRole role, original;
+        OK(xr_lir_test_plan_role_at(optimized, i, &role));
+        OK(xr_lir_test_plan_role_at(plain, i, &original));
+        CHECK(role.role == expected[i].role && role.role == original.role);
+        CHECK(role.name_length == strlen(expected[i].name) && !strcmp(role.name, expected[i].name));
+        CHECK(original.name_length == role.name_length && !strcmp(original.name, role.name));
+        CHECK(role.function.id == original.function.id);
+        CHECK(xr_lir_test_plan_check_role(optimized, i, initializer) == XR_LIR_INVALID_ARGUMENT);
+        CHECK(xr_lir_test_plan_check_role(optimized, i, ordinary) == XR_LIR_INVALID_ARGUMENT);
+        CHECK(xr_lir_test_plan_check_role(optimized, i, skipped) == XR_LIR_INVALID_ARGUMENT);
+        CHECK(xr_lir_test_plan_check_role(optimized, i, original.function) == XR_LIR_INVALID_ARGUMENT);
+        if (role.role == XR_XIR_TEST_ROLE_SKIP) {
+            CHECK(!role.function.module && !role.function.id);
+            continue;
+        }
+        XrLirFunctionView body;
+        CHECK(role.function.module == initializer.module);
+        OK(xr_lir_test_plan_check_role(optimized, i, role.function));
+        OK(xr_lir_function_view(initializer.module, role.function, &body));
+        CHECK(class_method_lir_name(&body, expected[i].name) && body.result == XR_LIR_UNIT && !body.error);
+        if (i == 1)
+            CHECK(body.parameter_count == 1 && body.parameter_types[0] == XR_LIR_STATE);
+    }
+    XrLirTestPlanRole first, second;
+    OK(xr_lir_test_plan_role_at(optimized, 0, &first));
+    OK(xr_lir_test_plan_role_at(optimized, 1, &second));
+    CHECK(xr_lir_test_plan_check_role(optimized, 0, second.function) == XR_LIR_INVALID_ARGUMENT);
+    CHECK(xr_lir_test_plan_role_at(optimized, count, &first) == XR_LIR_INVALID_ARGUMENT);
+    CHECK(first.role == expected[0].role && first.function.id && !strcmp(first.name, expected[0].name));
+    CHECK(xr_lir_test_plan_role_at(optimized, 0, NULL) == XR_LIR_INVALID_ARGUMENT);
+    CHECK(xr_lir_test_plan_check_role(optimized, count, initializer) == XR_LIR_INVALID_ARGUMENT);
+    xr_lir_test_plan_free(optimized);
+    xr_lir_test_plan_free(plain);
+}
+
 int main(int argc, char **argv) {
     CHECK(argc == 3);
     callable_source();
@@ -1491,6 +1584,7 @@ int main(int argc, char **argv) {
     class_method_local_control();
     class_method_evaluation_control();
     class_method_state_control();
+    test_role_inventory(argv[1]);
     inherited_class_layout_sources();
     module_i64_groups();
     view_cold_checked_sources(argv[1]);
