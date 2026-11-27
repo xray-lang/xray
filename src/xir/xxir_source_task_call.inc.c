@@ -155,6 +155,13 @@ static bool source_go_call(SourceContext *ctx, AstNode *node, SourceExpectedType
         ctx->functions[function].error_type,XR_XIR_CONSTRAINT_SENDABLE);
     if (status!=XR_XIR_OK)
         return source_fail(ctx,call,status,"Task worker declared error type must satisfy Sendable");
+    /* The published Task<T> needs the same proof for its instantiated result;
+     * proving it here locates the failure at the spawn instead of the type pool. */
+    XrXirProofContext caller={&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
+    status=xr_xir_compile_type_markers_prove(&ctx->compile,&caller,prepared.result,XR_XIR_CONSTRAINT_SENDABLE);
+    if (status!=XR_XIR_OK)
+        return source_fail(ctx,call,status,status==XR_XIR_BAD_TYPE ?
+            "Task result type must satisfy Sendable" : "Task result Sendable proof did not complete");
     XrXirInstruction op = {XR_XIR_GO, XR_XIR_UNIT, {0}, {0}, function, {0}};
     if(ctx->task_scope&&ctx->task_scope->function==ctx->function) {
         SourceTaskScope *scope=ctx->task_scope;

@@ -1,0 +1,18 @@
+// A plain class is not Sendable, so it cannot be a Task result.
+class Box {
+    value: i64
+    init(value: i64) {
+        this.value = value
+    }
+}
+
+fn build() -> Box {
+    return Box(41)
+}
+
+fn run() -> i64 {
+    var task = go build()
+    return (await task).value
+}
+
+print(run())

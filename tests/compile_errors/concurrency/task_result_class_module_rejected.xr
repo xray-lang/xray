@@ -1,0 +1,14 @@
+// The same rule applies when the Task is a module binding.
+class Box {
+    value: i64
+    init(value: i64) {
+        this.value = value
+    }
+}
+
+fn build() -> Box {
+    return Box(41)
+}
+
+var task = go build()
+print((await task).value)
