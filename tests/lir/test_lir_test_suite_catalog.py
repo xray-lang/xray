@@ -15,6 +15,7 @@ SOURCE = Path("demos/07-advanced/testing.xr")
 CRYPTO_SOURCES = (
     "tests/regression/10_stdlib/1400_crypto_hash.xr",
     "tests/regression/10_stdlib/1401_crypto_hmac.xr",
+    "tests/regression/10_stdlib/1402_crypto_random.xr",
     "tests/regression/10_stdlib/1403_crypto_sha512.xr",
 )
 HELPER = b'''export fn initialValue() -> i64 {
@@ -156,6 +157,59 @@ fn compare_nullable_strings() {
     assert vm_report.read_bytes() == native_report.read_bytes(), work
 
 
+def check_invoke_string_owners(args, work):
+    work.mkdir()
+    source = "invoke-string-owners.xr"
+    raw = b'''enum ProbeError { Stop { detail: i64 } }
+
+fn guarded(allow: bool) throws(ProbeError) -> i64 {
+    if (!allow) { throw ProbeError.Stop { detail: 19 } }
+    return 21
+}
+
+fn make(label: string) -> string {
+    return label + "!"
+}
+
+fn exercise(allow: bool) {
+    const first = make("first")
+    const a = try! guarded(true)
+    const second = make("second")
+    const b = try! guarded(allow)
+    assertEqual(first, "first!")
+    assertEqual(second, "second!")
+    assertEqual(a + b, 42)
+}
+
+@test
+fn owners_reach_normal_successor() {
+    exercise(true)
+}
+
+@test
+fn owners_retire_on_error_successor() {
+    exercise(false)
+}
+'''
+    (work / source).write_bytes(raw)
+    vm, generated, vm_report = vm_products(args, work, work, source)
+    assert vm[0] == 1 and not vm[2], vm
+    assert vm[1].splitlines() == [
+        b"VM owners_reach_normal_successor PASS",
+        b"VM owners_retire_on_error_successor FAIL",
+        b"original catalog: 1 PASS, 0 SKIP, 1 FAIL",
+    ], vm
+    result = catalog(vm_report, source, raw, (1, 0, 1))
+    assert [row["name"] for row in result["entries"]] == [
+        "owners_reach_normal_successor", "owners_retire_on_error_successor",
+    ], result
+    executable = native_executable(args, work, generated, "invoke-owners")
+    native_report = work / "native.json"
+    native = invoke(work, "suite-native", [executable, native_report])
+    assert native[0] == vm[0] and native[2] == vm[2], (native, vm)
+    assert vm_report.read_bytes() == native_report.read_bytes(), work
+
+
 def check_crypto_catalogs(args, root):
     manifest = json.loads((args.source_root / "tests/smoke/expected/crypto-catalog.json").read_bytes())
     by_source = {suite["source"]: suite for suite in manifest["suites"]}
@@ -225,6 +279,7 @@ def main():
     assert not generated.exists() and not report.exists(), missing_work
 
     check_nullable_string_comparisons(args, root / "nullable-string-comparisons")
+    check_invoke_string_owners(args, root / "invoke-string-owners")
     check_crypto_catalogs(args, root)
     print(f"Executed VM and generated C suite catalogs for LF, CRLF, a guest panic, and Crypto. Artifacts at {root}")
 

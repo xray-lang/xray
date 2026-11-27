@@ -162,8 +162,7 @@ static bool lower_selected_edges(LowerFunction *f, uint32_t b, XrLirInstruction 
                 positions[id.id - 1] = ++count;
             }
         }
-    bool good = !invoke || count;
-    if (!good) lower_unsupported(c,"invoke has no local String owner");
+    bool good = true;
     for (uint32_t e = 0; good && e < term->edge_count; ++e)
         for (uint32_t a = 0; a < term->edges[e].argument_count; ++a) {
             XrLirValue id = term->edges[e].arguments[a];
@@ -179,6 +178,7 @@ static bool lower_selected_edges(LowerFunction *f, uint32_t b, XrLirInstruction 
                 positions[id.id - 1] = ++count;
             }
         }
+    if (good && invoke && !count) good = lower_unsupported(c,"invoke has no local String owner");
     LowerEdgeOwners map = {owners, positions, count};
     for (uint32_t e = 0; e < term->edge_count && good; ++e)
         if (managed || lower_array_cells_edge(f, b, e))

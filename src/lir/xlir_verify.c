@@ -784,18 +784,22 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             if (forwarded_count != v->edges[1].argument_count || (forwarded_count &&
                 memcmp(v->edges[0].arguments, v->edges[1].arguments,
                     (size_t)forwarded_count * sizeof(*v->edges[0].arguments)))) goto invalid;
-            bool local_string = false;
             for (uint32_t a = 0; a < v->operand_count; ++a) {
                 uint32_t id = v->operands[a];
                 const XrLirValueData *actual = &f->values[id - 1];
                 if (actual->type != XR_LIR_STRING || (actual->parameter && !actual->block)) continue;
-                local_string = true;
                 bool forwarded = false;
                 for (uint32_t p = 0; p < forwarded_count; ++p)
                     forwarded |= v->edges[0].arguments[p] == id;
                 if (!forwarded) goto invalid;
             }
-            if ((forwarded_count != 0) != local_string) goto invalid;
+            for (uint32_t p=0; p<forwarded_count; ++p) {
+                uint32_t forwarded = v->edges[0].arguments[p];
+                if (!forwarded || forwarded > f->value_count) goto invalid;
+                const XrLirValueData *owner = &f->values[forwarded - 1];
+                if (owner->type != XR_LIR_STRING || (owner->parameter && !owner->block))
+                    goto invalid;
+            }
         }
         if (callee->kind == XR_LIR_FUNCTION_EXTERNAL && callee->extern_kind == XR_LIR_EXTERN_PRINT_STRING &&
             !lir_literal_call(m, f, v)) goto invalid;

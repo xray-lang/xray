@@ -279,9 +279,9 @@
       "gap": {
         "feature": "Task339 M2",
         "stage": "crypto-suite",
-        "source": "tests/regression/10_stdlib/1402_crypto_random.xr",
-        "first_diagnostic": "tests/regression/10_stdlib/1402_crypto_random.xr:40:9: managed state across invoke successor is not supported by LIR lowering yet",
-        "native_first_diagnostic": "lowering: managed state across invoke successor is not supported by LIR lowering yet"
+        "source": "tests/regression/10_stdlib/1404_crypto_aes.xr",
+        "first_diagnostic": "tests/regression/10_stdlib/1404_crypto_aes.xr:21:9: INVOKE is not supported by LIR lowering yet",
+        "native_first_diagnostic": "lowering: INVOKE is not supported by LIR lowering yet"
       }
     },
     {
@@ -832,9 +832,9 @@
       "gap": {
         "feature": "Task339 M2",
         "stage": "crypto-suite",
-        "source": "tests/regression/10_stdlib/1402_crypto_random.xr",
-        "first_diagnostic": "tests/regression/10_stdlib/1402_crypto_random.xr:40:9: managed state across invoke successor is not supported by LIR lowering yet",
-        "native_first_diagnostic": "lowering: managed state across invoke successor is not supported by LIR lowering yet"
+        "source": "tests/regression/10_stdlib/1404_crypto_aes.xr",
+        "first_diagnostic": "tests/regression/10_stdlib/1404_crypto_aes.xr:21:9: INVOKE is not supported by LIR lowering yet",
+        "native_first_diagnostic": "lowering: INVOKE is not supported by LIR lowering yet"
       }
     },
     {

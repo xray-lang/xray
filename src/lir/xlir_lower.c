@@ -3566,6 +3566,18 @@ static bool lower_invoke_forward(LowerFunction *f, uint32_t from, uint32_t targe
     return true;
 }
 
+static bool lower_invoke_has_live_string(const LowerFunction *f, const XrXirInstruction *term) {
+    const XrXirBlock *normal = &f->source->blocks[term->targets[0]];
+    const XrXirBlock *failure = &f->source->blocks[term->targets[1]];
+    if (normal->frontier || failure->frontier || normal->panic || failure->panic) return false;
+    const XrXirInstruction *exit = lower_invoke_landing_exit(f->source, failure);
+    if (!exit || exit->op != XR_XIR_PANIC_ERROR) return false;
+    for (uint32_t cell=0; cell<f->cell_count; ++cell)
+        if (f->cell_types[cell] == XR_LIR_STRING && lower_block_state_parameter(f, term->targets[0], cell))
+            return true;
+    return false;
+}
+
 static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstruction *term) {
     Lower *c=f->owner;
     uint32_t callee=(uint32_t)term->immediate, hidden=lower_hidden_state(c,callee);
@@ -3594,7 +3606,8 @@ static bool lower_invoke_terminator(LowerFunction *f,uint32_t b,const XrXirInstr
     XrLirBlock normal=f->blocks[b];
     bool typed=!lower_empty_error(c->source->functions[callee].error_type);
     bool owned_result=lower_managed_type(c,result);
-    if (good && typed && lower_invoke_local_string(c,f->source,term)) {
+    if (good && typed && (lower_invoke_local_string(c,f->source,term) ||
+        lower_invoke_has_live_string(f,term))) {
         /* The synchronous call borrows its operands. A receiver for each
          * possible return then transfers still-live owners or retires them. */
         call.op=XR_LIR_INVOKE;
