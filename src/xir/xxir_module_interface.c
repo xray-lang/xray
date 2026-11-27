@@ -197,6 +197,8 @@ XR_FUNC XrXirStatus xir_module_interface_project(const XrModuleGraph *graph,
         status = xir_receive_step(control, &progress);
         if (status != XR_XIR_OK) return status;
         const AstNode *node = spec->ast->as.program.statements[i];
+        /* Re-exports are public syntax without a declaration visibility flag. */
+        if (node->type == AST_EXPORT_STMT) return XR_XIR_UNSUPPORTED;
         if (!node->is_exported) continue;
         if (!interface_declared_function(node)) return XR_XIR_UNSUPPORTED;
         ++exports;

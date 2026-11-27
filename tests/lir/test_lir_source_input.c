@@ -728,6 +728,18 @@ static void module_interface_fingerprints(const char *stdlib_path) {
         CHECK(xir_source_module_interface(&request, &edit, 1, unsupported_id, &preserved, NULL) == XR_XIR_UNSUPPORTED);
         CHECK(!memcmp(original.bytes, preserved.bytes, sizeof(original.bytes)));
     }
+    const char *reexports[] = {"export { combine as add } from \"./leaf\"\n",
+        "export * from \"./leaf\"\n"};
+    for (size_t i = 0; i < sizeof(reexports) / sizeof(*reexports); ++i) {
+        const char *text = reexports[i];
+        const XrModuleOverlayInput edit = {authority, "unsupported.xr", unsupported, text, strlen(text)};
+        XrXirSourceDiagnostic diagnostic = {0};
+        /* Source currently rejects re-export syntax before interface projection. */
+        CHECK(xir_source_module_interface(&request, &edit, 1, unsupported_id, &preserved, &diagnostic) ==
+            XR_XIR_BAD_STRUCTURE);
+        CHECK(diagnostic.line == 1 && strstr(diagnostic.message, "this statement syntax"));
+        CHECK(!memcmp(original.bytes, preserved.bytes, sizeof(original.bytes)));
+    }
     xr_compile_session_free(session);
     xr_compile_resources_free(missing_id);
     xr_compile_resources_free(unsupported_id);
