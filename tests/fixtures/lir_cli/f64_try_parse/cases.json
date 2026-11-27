@@ -4,6 +4,11 @@
     "stdout": "none\nnone\nsome\nsome\nsome\nnone\nsome\nnone\nnone\nnone\nnone\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\n",
     "stderr": ""
   },
+  "toml_roundtrip": {
+    "exit": 0,
+    "stdout": "1.2345678901234567\n-0.0\n1.0\n1e+30\n5e-324\n1.7976931348623157e+308\ninf\n-inf\nnan\n2.00\n",
+    "stderr": ""
+  },
   "reject_type": {
     "source_error": ":2:0: error: expression cannot satisfy its declared type"
   },

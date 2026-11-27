@@ -1,0 +1,20 @@
+import toml
+
+fn finite(value: f64) {
+    const text = toml.TomlFloat(value).toString()
+    print(text)
+    const parsed = f64.tryParse(text)
+    assert(parsed != null)
+    assert(parsed! == value)
+}
+
+finite(1.2345678901234567)
+finite(-0.0)
+finite(1.0)
+finite(1.0e30)
+finite(5e-324)
+finite(1.7976931348623157e308)
+print(toml.TomlFloat(1.0 / 0.0).toString())
+print(toml.TomlFloat(-1.0 / 0.0).toString())
+print(toml.TomlFloat(0.0 / 0.0).toString())
+print(toml.TomlFloat(2.0, "2.00").toString())
