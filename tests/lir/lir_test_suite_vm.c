@@ -37,22 +37,28 @@ static bool catalog_roots(const XrLirTestPlan *plan, SuiteRow *rows, XrLirFuncti
     return true;
 }
 
+static bool write_c_string(FILE *output, const char *text) {
+    if (fputc('"', output) == EOF) return false;
+    for (const unsigned char *p = (const unsigned char *)text; *p; ++p)
+        if (fprintf(output, "\\x%02x", (unsigned)*p) < 0) return false;
+    return fputc('"', output) != EOF;
+}
+
 static bool write_metadata(FILE *output, const SuiteCatalog *catalog) {
     if (fputs("\n#include \"lir_test_suite_catalog.h\"\nstatic const SuiteRow xrl_suite_rows[] = {\n", output) < 0)
         return false;
     for (uint32_t i = 0; i < catalog->count; ++i) {
         const SuiteRow *row = &catalog->rows[i];
-        if (fputs("    {\"", output) < 0) return false;
-        for (const unsigned char *p = (const unsigned char *)row->name; *p; ++p)
-            if (fprintf(output, "\\x%02x", (unsigned)*p) < 0) return false;
-        if (fprintf(output, "\", UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "), "
+        if (fputs("    {", output) < 0 || !write_c_string(output, row->name)) return false;
+        if (fprintf(output, ", UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 "), "
                 "UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu32 ")},\n",
                 row->function, row->role, row->timeout, row->action) < 0) return false;
     }
     if (fputs("};\nconst SuiteCatalog xrl_suite_catalog = {{", output) < 0) return false;
     for (size_t i = 0; i < SUITE_DIGEST_SIZE; ++i)
         if (fprintf(output, "0x%02x,", (unsigned)catalog->source_sha256[i]) < 0) return false;
-    return fprintf(output, "}, xrl_suite_rows, UINT32_C(%" PRIu32 ")};\n", catalog->count) >= 0;
+    return fprintf(output, "}, xrl_suite_rows, UINT32_C(%" PRIu32 "), ", catalog->count) >= 0 &&
+        write_c_string(output, catalog->source) && fputs("};\n", output) >= 0;
 }
 
 static bool write_products(const char *c_path, const char *report_path, const XrLirCOutput *code,
@@ -98,8 +104,8 @@ static bool run_tests(XrRbcTestSession *session, const SuiteCatalog *catalog, Su
 }
 
 int main(int argc, char **argv) {
-    if (argc != 5) {
-        fputs("usage: lir_test_suite_vm ROOT STDLIB GENERATED-C REPORT\n", stderr);
+    if (argc != 6 || !argv[3][0]) {
+        fputs("usage: lir_test_suite_vm ROOT STDLIB RELATIVE-SOURCE GENERATED-C REPORT\n", stderr);
         return 2;
     }
     XrCompileResourceLimits limits = {XR_COMPILE_MEMORY_ORDINARY, 0, false};
@@ -108,25 +114,27 @@ int main(int argc, char **argv) {
 
     int result = 1;
     char *path = NULL;
-    size_t root_length = strlen(argv[1]);
+    const char *source = argv[3];
+    size_t root_length = strlen(argv[1]), source_length = strlen(source);
     XrLirTestPlan *plan = NULL;
     XrLirSourceFailure failure = {0};
     XrLirCOutput output = {0};
     XrRbcTestSession *session = NULL;
     SuiteRow *rows = NULL;
     XrLirFunction *roots = NULL;
-    if (root_length > SIZE_MAX - sizeof("/" SUITE_SOURCE) ||
-        xr_compile_resources_alloc(resources, root_length + sizeof("/" SUITE_SOURCE),
+    if (root_length > SIZE_MAX - 2 || source_length > SIZE_MAX - root_length - 2 ||
+        xr_compile_resources_alloc(resources, root_length + source_length + 2,
             (void **)&path) != XR_COMPILE_RESOURCE_OK) goto done;
     memcpy(path, argv[1], root_length);
-    memcpy(path + root_length, "/" SUITE_SOURCE, sizeof("/" SUITE_SOURCE));
+    path[root_length] = '/';
+    memcpy(path + root_length + 1, source, source_length + 1);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, argv[1]};
     XrLirSourceRequest request = {resources, path, argv[2], false, &authority, NULL, XR_XIR_HOST_TARGET};
     if (xr_lir_compile_test_catalog(&request, &plan, &failure) != XR_LIR_SOURCE_OK) {
         const char *message = failure.stage == XR_LIR_SOURCE_LOWER_FAILED ?
             failure.lower.diagnostic.message : failure.source.message;
         fprintf(stderr, "%s: suite compilation failed at stage %u: %s\n",
-            SUITE_SOURCE, (unsigned)failure.stage, message);
+            source, (unsigned)failure.stage, message);
         goto done;
     }
 
@@ -138,7 +146,7 @@ int main(int argc, char **argv) {
             XR_COMPILE_RESOURCE_OK) goto done;
 
     uint32_t actions = 0;
-    SuiteCatalog catalog = {.rows = rows, .count = metadata.count};
+    SuiteCatalog catalog = {.rows = rows, .count = metadata.count, .source = source};
     memcpy(catalog.source_sha256, metadata.source_sha256.bytes, sizeof(catalog.source_sha256));
     if (!catalog_roots(plan, rows, roots, metadata.count, &metadata, &actions) ||
         !suite_catalog_valid(&catalog, actions)) {
@@ -167,7 +175,7 @@ int main(int argc, char **argv) {
         _Exit(1);
     }
     if (!executed) goto done;
-    if (!write_products(argv[3], argv[4], &output, &catalog, results)) {
+    if (!write_products(argv[4], argv[5], &output, &catalog, results)) {
         fputs("cannot publish suite products\n", stderr);
         goto done;
     }

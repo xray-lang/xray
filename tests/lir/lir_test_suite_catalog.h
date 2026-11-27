@@ -14,8 +14,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define SUITE_SOURCE "demos/07-advanced/testing.xr"
-
 enum { SUITE_TEST = 1, SUITE_SKIP = 2, SUITE_DIGEST_SIZE = 32 };
 
 typedef struct SuiteRow {
@@ -27,6 +25,7 @@ typedef struct SuiteCatalog {
     uint8_t source_sha256[SUITE_DIGEST_SIZE];
     const SuiteRow *rows;
     uint32_t count;
+    const char *source;
 } SuiteCatalog;
 
 typedef struct SuiteResults {
@@ -36,7 +35,8 @@ typedef struct SuiteResults {
 /* The inventory authorizes no calls. Only the emitted runtime action table
  * is invoked, with a one-to-one correspondence for the runnable rows. */
 static inline bool suite_catalog_valid(const SuiteCatalog *catalog, uint32_t actions) {
-    if (!catalog || !catalog->rows || !catalog->count || !actions) return false;
+    if (!catalog || !catalog->source || !catalog->source[0] ||
+        !catalog->rows || !catalog->count || !actions) return false;
     uint32_t next = 0;
     for (uint32_t i = 0; i < catalog->count; ++i) {
         const SuiteRow *row = &catalog->rows[i];
@@ -65,7 +65,8 @@ static inline bool suite_json_string(FILE *out, const char *text) {
 }
 
 static inline bool suite_report(FILE *out, const SuiteCatalog *catalog, SuiteResults results) {
-    if (fputs("{\"schema\":1,\"source\":\"" SUITE_SOURCE "\",\"sourceSha256\":\"", out) < 0)
+    if (fputs("{\"schema\":1,\"source\":", out) < 0 || !suite_json_string(out, catalog->source) ||
+        fputs(",\"sourceSha256\":\"", out) < 0)
         return false;
     for (size_t i = 0; i < SUITE_DIGEST_SIZE; ++i)
         if (fprintf(out, "%02x", (unsigned)catalog->source_sha256[i]) < 0) return false;

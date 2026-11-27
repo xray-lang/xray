@@ -12,6 +12,10 @@ from test_lir_pipeline_eval import compile_command
 
 
 SOURCE = Path("demos/07-advanced/testing.xr")
+CRYPTO_SOURCES = (
+    "tests/regression/10_stdlib/1400_crypto_hash.xr",
+    "tests/regression/10_stdlib/1403_crypto_sha512.xr",
+)
 HELPER = b'''export fn initialValue() -> i64 {
     return 41
 }
@@ -43,19 +47,26 @@ def native_executable(args, root, generated, label):
     return executable
 
 
-def catalog(path, raw, expected_counts):
+def catalog(path, source, raw, expected_counts):
     report = json.loads(path.read_bytes())
     assert set(report) == {"schema", "source", "sourceSha256", "entries", "passed", "skipped", "failed"}, report
     assert type(report["schema"]) is int and report["schema"] == 1, report
-    assert report["source"] == SOURCE.as_posix(), report
+    assert report["source"] == source, report
     assert report["sourceSha256"] == hashlib.sha256(raw).hexdigest(), report
     assert all(type(report[key]) is int for key in ("passed", "skipped", "failed")), report
     assert tuple(report[key] for key in ("passed", "skipped", "failed")) == expected_counts, report
     rows = report["entries"]
     assert all(set(row) == {"name", "function", "role", "timeout"} for row in rows), report
     assert all(type(row[key]) is int for row in rows for key in ("function", "role", "timeout")), report
-    assert [(row["name"], row["function"], row["role"], row["timeout"]) for row in rows] == ENTRIES, report
+    assert len({row["function"] for row in rows}) == len(rows), report
     return report
+
+
+def vm_products(args, work, root, source):
+    generated = work / "suite.c"
+    report = work / "vm.json"
+    result = invoke(work, "suite-vm", [args.vm_driver, root, args.source_root / "stdlib", source, generated, report])
+    return result, generated, report
 
 
 def vm_suite(args, root, raw, helper=HELPER):
@@ -63,9 +74,7 @@ def vm_suite(args, root, raw, helper=HELPER):
     source.parent.mkdir(parents=True)
     source.write_bytes(raw)
     source.with_name("suite-catalog-helper.xr").write_bytes(helper)
-    generated = root / "suite.c"
-    report = root / "vm.json"
-    result = invoke(root, "suite-vm", [args.vm_driver, root, args.source_root / "stdlib", generated, report])
+    result, generated, report = vm_products(args, root, root, SOURCE.as_posix())
     return result, source, generated, report
 
 
@@ -73,14 +82,15 @@ def check_suite(args, root, raw, failing=False):
     vm, source, generated, vm_report = vm_suite(args, root, raw)
     assert generated.is_file() and generated.stat().st_size, (vm, root)
     counts = (1, 1, 1) if failing else (2, 1, 0)
-    result = catalog(vm_report, raw, counts)
+    result = catalog(vm_report, SOURCE.as_posix(), raw, counts)
+    assert [(row["name"], row["function"], row["role"], row["timeout"]) for row in result["entries"]] == ENTRIES
     # Native must use the catalog baked into the emitted C. The original
     # Source file is no longer available during native compilation or execution.
     source.unlink()
     binary = native_executable(args, root, generated, "suite")
     native_report = root / "native.json"
     native = invoke(root, "suite-native", [binary, native_report])
-    assert catalog(native_report, raw, counts) == result, root
+    assert catalog(native_report, SOURCE.as_posix(), raw, counts) == result, root
     assert native_report.read_bytes() == vm_report.read_bytes(), root
     assert native[2] == vm[2], (native, vm, root)
     for run, backend in ((vm, b"VM"), (native, b"native")):
@@ -100,6 +110,30 @@ def check_rejected(args, root, raw, failure, helper=HELPER):
     vm, _, generated, report = vm_suite(args, root, raw, helper)
     assert vm[0] == 1 and not vm[1] and failure in vm[2], (vm, root)
     assert not generated.exists() and not report.exists(), root
+
+
+def check_crypto_catalogs(args, root):
+    manifest = json.loads((args.source_root / "tests/smoke/expected/crypto-catalog.json").read_bytes())
+    by_source = {suite["source"]: suite for suite in manifest["suites"]}
+    for source in CRYPTO_SOURCES:
+        expected = by_source[source]
+        path = args.source_root / source
+        raw = path.read_bytes()
+        assert hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest() == expected["sourceCanonicalSha256"], source
+        work = root / path.stem
+        work.mkdir()
+        vm, generated, vm_report = vm_products(args, work, args.source_root, source)
+        assert vm[0] == 0 and not vm[2], (vm, source)
+        count = len(expected["entries"])
+        report = catalog(vm_report, source, raw, (count, 0, 0))
+        assert [{key: row[key] for key in ("name", "role", "timeout")} for row in report["entries"]] == expected["entries"]
+        assert b"({" not in generated.read_bytes(), generated
+
+        binary = native_executable(args, work, generated, "suite")
+        native_report = work / "native.json"
+        native = invoke(work, "suite-native", [binary, native_report])
+        assert native[0] == 0 and not native[2], (native, source)
+        assert native_report.read_bytes() == vm_report.read_bytes(), source
 
 
 def main():
@@ -139,7 +173,14 @@ def main():
         b"generated suite catalog does not match its action table",
     ], (reject, root)
     assert not reject_report.exists(), root
-    print(f"Executed VM and generated C suite catalogs for LF, CRLF and a guest panic. Artifacts at {root}")
+    missing_work = root / "missing-source"
+    missing_work.mkdir()
+    missing, generated, report = vm_products(args, missing_work, root, "missing.xr")
+    assert missing[0] == 1 and b"missing.xr: suite compilation failed" in missing[2], missing
+    assert not generated.exists() and not report.exists(), missing_work
+
+    check_crypto_catalogs(args, root)
+    print(f"Executed VM and generated C suite catalogs for LF, CRLF, a guest panic, and Crypto. Artifacts at {root}")
 
 
 if __name__ == "__main__":
