@@ -1,0 +1,81 @@
+fn relay_bits(callback: fn((i64, i64)) -> (i64, i64), pair: (i64, i64)) -> (i64, i64) {
+    return callback(pair)
+}
+
+fn relay_strings(callback: fn((string, (string, i64))) -> (string, (string, i64)),
+    pair: (string, (string, i64))) -> (string, (string, i64)) {
+    return callback(pair)
+}
+
+fn exercise(seed: i64) {
+    const bits = relay_bits(fn(pair: (i64, i64)) -> (i64, i64) {
+        return (pair.0 + seed, pair.1)
+    }, (17, 20))
+    print(bits.0 + bits.1)
+
+    const original = ("item-${seed}", ("entry-${seed}", 37))
+    const copied = relay_strings(fn(pair: (string, (string, i64))) -> (string, (string, i64)) {
+        return pair
+    }, original)
+    print(copied.0)
+    print(copied.1.0)
+    print(copied.1.1 + seed)
+    print(original.0)
+    print(original.1.0)
+}
+
+exercise(5)
+
+fn stored_identity(pair: (string, (string, i64))) -> (string, (string, i64)) {
+    return pair
+}
+const stored = stored_identity
+const received = stored(("kept", ("module", 42)))
+print(received.0)
+print(received.1.0)
+print(received.1.1)
+
+struct Entry {
+    name: string
+    number: i64
+}
+
+fn score(pair: (Entry, (string?, Array<i64>))) -> i64 {
+    print(pair.0.name)
+    print(pair.1.0 ?? "none")
+    return pair.0.number + pair.1.1[0]
+}
+
+const stored_score = score
+const entry = Entry{name: "record", number: 40}
+const label: string? = "some"
+const missing: string? = null
+print(stored_score((entry, (label, [2]))))
+print(stored_score((entry, (missing, [2]))))
+
+enum Signal { Waiting, Stopped }
+
+final class Payload {
+    private const label: string
+    private const signal: Signal
+    init(label: string) {
+        this.label = label
+        this.signal = Signal.Stopped
+    }
+    text() -> string { return this.label }
+    stopped() -> bool { return this.signal == Signal.Stopped }
+}
+
+fn read_wrapped(pair: (Payload?, Array<(string, i64)>?)) -> i64 {
+    const payload = pair.0!
+    assert(payload.stopped())
+    print(payload.text())
+    const item = pair.1![0]
+    print(item.0)
+    return item.1
+}
+
+const stored_wrapped = read_wrapped
+const payload: Payload? = Payload("class")
+const rows: Array<(string, i64)>? = [("inline array", 42)]
+print(stored_wrapped((payload, rows)))

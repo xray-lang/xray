@@ -15,7 +15,11 @@ static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram 
     }
     uint32_t family = type == XR_LIR_ARRAY ? rbc_lir_array_family(element) : XR_RBC_ARRAY_FAMILY_COUNT;
     bool inline_array = type == XR_LIR_ARRAY && family == XR_RBC_ARRAY_FAMILY_COUNT;
-    if (inline_array || (type >= XR_LIR_TYPE_COUNT && xr_lir_nullable_array_element(input, type))) {
+    XrLirTypeView shape = {0};
+    bool tuple = type >= XR_LIR_TYPE_COUNT &&
+        xr_lir_type_view(input, type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_TUPLE;
+    if (inline_array || tuple ||
+        (type >= XR_LIR_TYPE_COUNT && xr_lir_nullable_array_element(input, type))) {
         const XrtValuePlan *plan = NULL;
         uint32_t id = 0;
         if ((inline_array && !xr_lir_inline_array_ordinal(input, element)) ||

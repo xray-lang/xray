@@ -1,0 +1,7 @@
+fn relay(callback: fn((string, i64)) -> i64) -> i64 {
+    return callback((37, "wrong"))
+}
+
+print(relay(fn(pair: (string, i64)) -> i64 {
+    return len(pair.0) + pair.1
+}))

@@ -63,6 +63,40 @@ static XrtManagedStatus rbc_owned_plan_matches(const XrRbcCodeOwner *code,
                 valid=view.captures[n].offset==capture.offset &&
                     rbc_owned_dependency(plans,capture.type,view.captures[n].type,current);
             }
+        } else if (xrt_value_kind_has_fields(row->kind)) {
+            /* A callable signature can reach an inline tuple and its child
+             * plans. The field geometry and names have to match the image. */
+            valid=view.field_count==row->field_count;
+            for (uint32_t n=0;valid && n<row->field_count;++n) {
+                XrtValueImageSlot field = image->slots[row->first_field+n];
+                XrtValueSlotSpec actual = view.fields[n];
+                valid = actual.offset == field.offset && actual.flags == field.flags &&
+                    actual.name_length == field.name_length &&
+                    (!field.name_length ||
+                        !memcmp(actual.name, image->names + field.name_offset, field.name_length)) &&
+                    rbc_owned_dependency(plans, field.type, actual.type, current);
+            }
+        } else if (row->kind==XRT_VALUE_NULLABLE) {
+            valid=view.nullable.tag_offset==row->nullable_tag &&
+                view.nullable.payload_offset==row->nullable_payload &&
+                rbc_owned_dependency(plans,row->nullable_element,view.nullable.element,current);
+        } else if (row->kind==XRT_VALUE_ARRAY_INLINE) {
+            valid=rbc_owned_dependency(plans,row->element,view.element,current);
+        } else if (row->kind==XRT_VALUE_CLASS) {
+            valid=view.class_storage==row->class_storage &&
+                rbc_owned_dependency(plans,row->element,view.element,current) &&
+                (row->class_parent ? rbc_owned_dependency(plans,row->class_parent,view.class_parent,current) :
+                    !view.class_parent);
+        } else if (row->kind==XRT_VALUE_SUM) {
+            /* Only a payloadless sum can appear in an admitted Class field. */
+            valid = !row->field_count && !view.field_count &&
+                view.sum.tag_offset == row->sum_tag && view.sum.tag_size == row->sum_tag_size &&
+                view.sum.payload_offset == row->sum_payload && view.sum.variant_count == row->variant_count;
+            for (uint32_t n=0;valid && n<row->variant_count;++n) {
+                XrtValueImageVariant variant = image->variants[row->first_variant+n];
+                XrtValueSumVariantSpec actual = view.sum.variants[n];
+                valid = actual.field_begin == variant.first_field && !actual.field_count && !variant.field_count;
+            }
         } else if (row->kind==XRT_VALUE_CELL) {
             valid=row->element && row->element<current &&
                 (image->types[row->element-1].kind==XRT_VALUE_I64 ||

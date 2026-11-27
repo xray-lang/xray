@@ -16,6 +16,14 @@ static bool rbc_callable_home_type(const XrtValueImage *image, uint32_t type) {
         payload == XRT_VALUE_ARRAY_STRING || payload == XRT_VALUE_ARRAY_INLINE;
 }
 
+/* Tuple signatures use typed homes while ordinary tuple root results keep
+ * their separate output buffer. The Array home predicate also gates roots. */
+static bool rbc_callable_signature_home_type(const XrtValueImage *image, uint32_t type) {
+    return rbc_callable_home_type(image, type) ||
+        (image && image->types && type && type <= image->type_count &&
+            image->types[type - 1].kind == XRT_VALUE_TUPLE);
+}
+
 static bool rbc_callable_value_valid(const XrRbcModule *m, XrRbcCallableValue value, size_t before) {
     switch (value.kind) {
     case XR_RBC_CALLABLE_SCALAR:
@@ -27,7 +35,7 @@ static bool rbc_callable_value_valid(const XrRbcModule *m, XrRbcCallableValue va
     case XR_RBC_CALLABLE_FUNCTION: return value.type < before;
     case XR_RBC_CALLABLE_HOME: {
         const XrRbcCodeOwner *owner = xr_rbc_module_code_owner(m);
-        return owner && rbc_callable_home_type(owner->values, value.type);
+        return owner && rbc_callable_signature_home_type(owner->values, value.type);
     }
     default: return false;
     }
@@ -73,7 +81,8 @@ static bool rbc_callable_image_value(const XrRbcModule *module, uint32_t id, XrR
         XrtValueKind scalar;
         return xr_pod_value_kind((XrPodScalar)value.type,&scalar) && scalar==kind;
     }
-    if (value.kind == XR_RBC_CALLABLE_HOME) return id == value.type && rbc_callable_home_type(image, id);
+    if (value.kind == XR_RBC_CALLABLE_HOME)
+        return id == value.type && rbc_callable_signature_home_type(image, id);
     if (value.kind==XR_RBC_CALLABLE_REFERENCE)
         return value.type==XR_RBC_STRING ? kind==XRT_VALUE_STRING : value.type==XR_RBC_SET_I64 ?
             kind==XRT_VALUE_SET_I64 : value.type==XR_RBC_MAP_STRING_I64 ?
@@ -155,13 +164,16 @@ static bool rbc_callable_signatures_valid(const XrRbcModule *m) {
 static bool rbc_callable_home_parameter(const XrRbcModule *module, const XrRbcValueCode *code,
     uint32_t parameter, uint32_t type) {
     const XrtValueImage *image = xr_rbc_module_value_image(module);
-    if (!rbc_callable_home_type(image, type) || !code || !code->homes || !code->homes->values ||
+    if (!rbc_callable_signature_home_type(image, type) || !code || !code->homes || !code->homes->values ||
         !code->parameters || !code->locations || parameter >= code->parameter_count) return false;
     uint32_t id = code->parameters[parameter];
     if (!id || id > code->value_count || id > code->homes->value_count) return false;
     const XrLirValueHome *home = &code->homes->values[id];
     const XrtValueImageType *row = &image->types[type - 1];
-    return home->type == type && home->parameter == parameter + 1 && home->owner_count == 1 &&
+    /* Tuples use the complete inline row, including zero or several owner
+     * leaves. Array callable homes still carry exactly one owner. */
+    return home->type == type && home->parameter == parameter + 1 &&
+        (row->kind == XRT_VALUE_TUPLE || home->owner_count == 1) &&
         row->owned_count == home->owner_count && home->size == row->size &&
         code->locations[id].kind == XR_RBC_VALUE_NOWHERE;
 }
