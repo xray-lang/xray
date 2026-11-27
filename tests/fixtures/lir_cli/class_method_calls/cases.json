@@ -14,6 +14,19 @@
     "stdout": "42\n43\n",
     "stderr": ""
   },
+  "hir_scope_cross_module": {
+    "exit": 0,
+    "stdout": "11\n110\n",
+    "stderr": ""
+  },
+  "_hir_scope_import": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "hir_scope_bad_label": {
+    "source_error": ":3:17: error: E0327: unknown named argument"
+  },
   "method_named": {
     "lowering_error": ":3:11: CLASS_METHOD_REF is not supported by LIR lowering yet"
   },

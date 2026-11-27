@@ -77,7 +77,58 @@ static void declared_capture_projection_receivers(void) {
     xr_hir_body_free(foreign);xr_hir_body_free(body);xr_hir_items_free(items);
     xr_compile_resources_release(resources);CHECK(!physical_live&&!physical_bytes);
 }
+
+static void hir_scope_index_controls(void) {
+    XrCompileResources *resources=NULL;
+    XrCompileResourceLimits limits={XR_COMPILE_MEMORY_ORDINARY,0,false};
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrHirItems *items=NULL;
+    CHECK(xr_hir_items_new(resources,&items)==XR_COMPILE_RESOURCE_OK);
+    uint32_t parents[3];
+    for(uint32_t module=0;module<3;++module) {
+        XrHirItemSpec parent={"owner",module,0,1,1,1,XR_HIR_ITEM_DECLARATION};
+        CHECK(xr_hir_items_reserve(items,&parent,&parents[module])==XR_COMPILE_RESOURCE_OK);
+    }
+    const XrHirItemKind kinds[]={XR_HIR_ITEM_NAMED_FUNCTION_SCOPE,XR_HIR_ITEM_PARAMETER_SCOPE,XR_HIR_ITEM_METHOD};
+    uint32_t expected[48];
+    for(uint32_t i=0;i<48;++i) {
+        uint32_t module=i%3,node=100+i/3;
+        XrHirItemKind kind=kinds[(i/3)%3];
+        char name[24];
+        CHECK(snprintf(name,sizeof(name),"scope_%u",i)>0);
+        XrHirItemSpec spec={name,module,kind==XR_HIR_ITEM_METHOD?parents[module]+1:0,node,1,1,kind};
+        if(i==4) {
+            expected[i]=UINT32_MAX;
+            physical_fail=physical_attempts;
+            CHECK(xr_hir_items_reserve(items,&spec,&expected[i])==XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+            physical_fail=SIZE_MAX;
+            CHECK(expected[i]==UINT32_MAX&&!xr_hir_items_find_scope(items,module,node,&expected[i]));
+            CHECK(expected[i]==UINT32_MAX&&xr_hir_items_named_function(items,0,100));
+        }
+        CHECK(xr_hir_items_reserve(items,&spec,&expected[i])==XR_COMPILE_RESOURCE_OK);
+    }
+    for(uint32_t i=0;i<48;++i) {
+        uint32_t found=UINT32_MAX;
+        CHECK(xr_hir_items_find_scope(items,i%3,100+i/3,&found)&&found==expected[i]);
+    }
+    XrHirItemSpec ordinary={"ordinary",0,0,100,1,1,XR_HIR_ITEM_DECLARATION};
+    uint32_t found=UINT32_MAX;
+    CHECK(xr_hir_items_reserve(items,&ordinary,&found)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_hir_items_find_scope(items,0,100,&found)&&found==expected[0]);
+    XrHirItemSpec duplicate={"duplicate_scope",1,0,100,1,1,XR_HIR_ITEM_PARAMETER_SCOPE};
+    CHECK(xr_hir_items_reserve(items,&duplicate,&found)==XR_COMPILE_RESOURCE_OK);
+    found=UINT32_MAX;
+    CHECK(!xr_hir_items_find_scope(items,1,100,&found)&&found==UINT32_MAX);
+    CHECK(!xr_hir_items_named_function(items,1,100));
+    CHECK(xr_hir_items_find_scope(items,2,100,&found)&&found==expected[2]);
+    CHECK(!xr_hir_items_find_scope(items,3,100,&found)&&found==expected[2]);
+    xr_hir_items_free(items);
+    xr_compile_resources_release(resources);
+    CHECK(!physical_live&&!physical_bytes);
+}
+
 static void declared_closure_receivers(void) {
+    hir_scope_index_controls();
     declared_capture_projection_receivers();
     native_named_source_case("fn outer()->i64{const base=7;fn add(a:i64,b:i64=2)->i64{return base+a*10+b};return add(a:3)}\nprint(outer())\n");
     native_named_source_case("fn outer()->i64{const base=7;fn add(a:i64,b:i64)->i64{return base+a*10+b};return add(b:2,a:3)}\nprint(outer())\n");

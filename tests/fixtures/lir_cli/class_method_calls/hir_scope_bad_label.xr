@@ -1,0 +1,6 @@
+fn calculate(i: i64) -> i64 {
+    fn step(value: i64) -> i64 { return value + 1 }
+    return step(other: i)
+}
+
+print(calculate(10))

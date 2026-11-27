@@ -1,0 +1,4 @@
+export fn calculate(i: i64) -> i64 {
+    fn step(amount: i64) -> i64 { return amount + 100 }
+    return step(amount: i)
+}

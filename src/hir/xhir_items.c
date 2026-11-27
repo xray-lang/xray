@@ -15,11 +15,17 @@ typedef struct HirSource {
     const char *path,*text;size_t length;const uint8_t *revision;
     uint32_t module,report_source;
 } HirSource;
+typedef struct HirScopeSlot {
+    uint32_t item;
+    bool ambiguous;
+} HirScopeSlot;
 typedef union HirMemory {struct {union HirMemory *next;} link;union {long double floating;uint64_t integer;void *pointer;} alignment;} HirMemory;
 struct XrHirItems {
     XrCompileResources *resources;HirMemory *memory;
     HirItem *items;uint32_t count,capacity;
     uint32_t *name_index,*binding_index,index_capacity;
+    HirScopeSlot *scope_index;
+    uint32_t scope_count,scope_capacity;
     HirSource *sources;uint32_t source_count,source_capacity;
     XrFrontendReport *report;uint32_t errors;
 };
@@ -77,6 +83,46 @@ static XrCompileResourceStatus hir_indices_reserve(XrHirItems *h) {
     h->index_capacity = capacity;
     return XR_COMPILE_RESOURCE_OK;
 }
+
+static HirScopeSlot *hir_scope_slot(const XrHirItems *h,HirScopeSlot *slots,uint32_t capacity,
+    uint32_t module,uint32_t node) {
+    uint32_t key[]={module,node};
+    uint32_t bucket=xr_hash_bytes(key,sizeof(key))%capacity;
+    for (;;) {
+        HirScopeSlot *slot=&slots[bucket];
+        if(!slot->item)return slot;
+        const HirItem *item=&h->items[slot->item-1];
+        if(item->module==module&&item->node==node)return slot;
+        if(++bucket==capacity)bucket=0;
+    }
+}
+
+/* Scope keys are sparse in a module. Grow this index independently of the
+ * name and binding tables, then publish the replacement in one step. */
+static XrCompileResourceStatus hir_scope_reserve(XrHirItems *h,const XrHirItemSpec *spec,HirScopeSlot **out) {
+    if(h->scope_capacity) {
+        HirScopeSlot *slot=hir_scope_slot(h,h->scope_index,h->scope_capacity,spec->module,spec->node);
+        if(slot->item||h->scope_count<h->scope_capacity/2) {
+            *out=slot;
+            return XR_COMPILE_RESOURCE_OK;
+        }
+    }
+    if(h->scope_capacity>UINT32_MAX/2)return XR_COMPILE_RESOURCE_OVERFLOW;
+    uint32_t capacity=h->scope_capacity?h->scope_capacity*2:8;
+    XrCompileResourceStatus status=XR_COMPILE_RESOURCE_OK;
+    HirScopeSlot *slots=hir_allocate(h,capacity,sizeof(*slots),&status);
+    if(!slots)return status;
+    for(uint32_t i=0;i<h->scope_capacity;++i) {
+        HirScopeSlot old=h->scope_index[i];
+        if(!old.item)continue;
+        const HirItem *item=&h->items[old.item-1];
+        *hir_scope_slot(h,slots,capacity,item->module,item->node)=old;
+    }
+    h->scope_index=slots;
+    h->scope_capacity=capacity;
+    *out=hir_scope_slot(h,slots,capacity,spec->module,spec->node);
+    return XR_COMPILE_RESOURCE_OK;
+}
 XrCompileResourceStatus xr_hir_items_new(XrCompileResources *resources,XrHirItems **out) {
     if(!resources||!out||*out)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     XrHirItems *h=NULL;XrCompileResourceStatus s=xr_compile_resources_calloc(resources,1,sizeof(*h),(void **)&h);
@@ -129,6 +175,11 @@ XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *h,const XrHirItemSpec *
     XrCompileResourceStatus s=XR_COMPILE_RESOURCE_OK;
     if(!hir_grow(h,(void **)&h->items,&h->capacity,h->count,sizeof(*h->items),&s))return s;
     s=hir_indices_reserve(h);if(s!=XR_COMPILE_RESOURCE_OK)return s;
+    HirScopeSlot *scope=NULL;
+    if(spec->kind==XR_HIR_ITEM_PARAMETER_SCOPE||spec->kind==XR_HIR_ITEM_METHOD||
+        spec->kind==XR_HIR_ITEM_NAMED_FUNCTION_SCOPE) {
+        s=hir_scope_reserve(h,spec,&scope);if(s!=XR_COMPILE_RESOURCE_OK)return s;
+    }
     size_t length=strlen(spec->name);if(length==SIZE_MAX)return XR_COMPILE_RESOURCE_OVERFLOW;
     char *copy=hir_allocate(h,length+1,1,&s);if(!copy)return s;memcpy(copy,spec->name,length+1);
     if(previous!=UINT32_MAX) {
@@ -147,6 +198,10 @@ XrCompileResourceStatus xr_hir_items_reserve(XrHirItems *h,const XrHirItemSpec *
     h->items[h->count]=(HirItem){.name=copy,.module=spec->module,.parent=spec->parent,
         .node=spec->node,.line=spec->line,.column=spec->column,.kind=spec->kind};
     hir_index_item(h,h->count,h->name_index,h->binding_index,h->index_capacity);
+    if(scope) {
+        if(scope->item)scope->ambiguous=true;
+        else {scope->item=h->count+1;++h->scope_count;}
+    }
     ++h->count;
     return s;
 }
@@ -182,18 +237,10 @@ bool xr_hir_items_find(const XrHirItems *h,uint32_t module,uint32_t parent,const
     return true;
 }
 bool xr_hir_items_find_scope(const XrHirItems *h,uint32_t module,uint32_t node,uint32_t *out) {
-    if (!h || !node || !out)
-        return false;
-    uint32_t found = UINT32_MAX;
-    for(uint32_t i=0;i<h->count;++i)if((h->items[i].kind==XR_HIR_ITEM_PARAMETER_SCOPE||
-        h->items[i].kind==XR_HIR_ITEM_METHOD||h->items[i].kind==XR_HIR_ITEM_NAMED_FUNCTION_SCOPE)&&h->items[i].module==module&&h->items[i].node==node) {
-            if (found != UINT32_MAX)
-                return false;
-            found = i;
-    }
-    if (found == UINT32_MAX)
-        return false;
-    *out = found;
+    if(!h||!node||!out||!h->scope_capacity)return false;
+    const HirScopeSlot *slot=hir_scope_slot(h,h->scope_index,h->scope_capacity,module,node);
+    if(!slot->item||slot->ambiguous)return false;
+    *out=slot->item-1;
     return true;
 }
 bool xr_hir_items_named_function(const XrHirItems *h,uint32_t module,uint32_t node) {

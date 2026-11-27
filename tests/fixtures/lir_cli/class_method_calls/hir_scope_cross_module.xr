@@ -1,0 +1,9 @@
+import { calculate as imported } from "./_hir_scope_import"
+
+fn calculate(i: i64) -> i64 {
+    fn step(value: i64) -> i64 { return value + 1 }
+    return step(value: i)
+}
+
+print(calculate(10))
+print(imported(10))
