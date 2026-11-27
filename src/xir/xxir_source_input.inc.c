@@ -32,6 +32,7 @@ typedef struct SourceModuleInterfaceCapture {
 typedef struct SourceInput {
     bool supplied;
     bool call_observations;
+    bool validation_only;
     XrXirSourceText text;
     const XrModuleOverlayInput *overlays;
     size_t overlay_count;
@@ -162,7 +163,8 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     if (resource_status != XR_XIR_OK) {
         source_fail(&ctx, NULL, resource_status, "source session resources are unavailable"); goto done;
     }
-    if (request->linkage_kind != XR_XIR_PROGRAM && request->linkage_kind != XR_XIR_LIBRARY) {
+    if (request->linkage_kind != XR_XIR_PROGRAM &&
+        (input.validation_only || request->linkage_kind != XR_XIR_LIBRARY)) {
         source_fail(&ctx,NULL,XR_XIR_BAD_STRUCTURE,"source linkage kind is invalid"); goto done;
     }
     ctx.linkage_kind = request->linkage_kind;
@@ -244,7 +246,12 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
 done:
     /* A comptime receiver has already copied the complete final query from its
      * own construction. The original context publishes only its own result. */
-    if (!comptime_instances && !result.snapshot) source_query_publish(&ctx, &result);
+    if (input.validation_only) {
+        if (ctx.diagnostic.status == XR_XIR_OK && (!ctx.query_ready || !result.checked))
+            source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source validation has no complete checked result");
+    } else if (!comptime_instances && !result.snapshot) {
+        source_query_publish(&ctx, &result);
+    }
     XrFingerprint entry_sha256 = {0};
     if (input.entry_sha256 && ctx.diagnostic.status == XR_XIR_OK)
         source_entry_sha256(&ctx, &entry_sha256);
@@ -312,6 +319,15 @@ done:
 XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     return source_check_input(request, (SourceInput){0}, output, diagnostic, failure);
+}
+
+XR_FUNC XrXirStatus xr_xir_compile_source_validate(const XrXirSourceRequest *request,
+    XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
+    XrXirSourceResult result = {0};
+    XrXirStatus status = source_check_input(request, (SourceInput){.validation_only = true},
+        &result, diagnostic, failure);
+    xr_xir_compile_source_result_free(&result);
+    return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_check_entry_sha256(const XrXirSourceRequest *request,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure,

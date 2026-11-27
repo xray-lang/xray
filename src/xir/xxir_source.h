@@ -37,6 +37,11 @@ typedef struct XrXirSourceRequest {
  * one-based compiler bytes. Release failure with source_failure_free. */
 XR_FUNC XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);
+/* Validate a file-backed Program without publishing the final query snapshot.
+ * The checked artifact stays private to the operation. Failures retain the
+ * same diagnostic ownership as a Source check. */
+XR_FUNC XrXirStatus xr_xir_compile_source_validate(const XrXirSourceRequest *request,
+    XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);
 /* Borrowed only for one synchronous check; the result owns all published data. */
 typedef struct XrXirSourceText {
     const char *logical_path;

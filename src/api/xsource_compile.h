@@ -78,6 +78,10 @@ XR_FUNC XrTomlParseLimits xr_source_compile_default_manifest_limits(void);
 XR_FUNC XrSourceCompileStatus xr_source_compile_check(
     const XrSourceCompileRequest *request, XrXirSourceResult *output,
     XrSourceCompileDiagnostic *diagnostic);
+/* Check the same Program and report the same Source diagnostics to a caller
+ * that consumes no artifact or query result. */
+XR_FUNC XrSourceCompileStatus xr_source_compile_validate(
+    const XrSourceCompileRequest *request, XrSourceCompileDiagnostic *diagnostic);
 XR_FUNC void xr_source_compile_diagnostic_free(XrSourceCompileDiagnostic *diagnostic);
 XR_FUNC const char *xr_source_compile_status_name(XrSourceCompileStatus status);
 /* Normalize stage-owned failures for consumers of the Source diagnostic protocol. */

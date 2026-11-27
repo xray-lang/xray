@@ -32,6 +32,7 @@ static void observed_free(void *memory) { if(memory){CHECK(live);--live;}xr_free
 static unsigned resource_calls, source_calls;
 static XrCompileResourceLimits overridden;
 static bool override_limits;
+static bool publish_control;
 static XrCompileResourceStats last_stats;
 static size_t phases[3];
 static XrCompileResources *original;
@@ -50,17 +51,22 @@ static void observed_release(XrCompileResources *owner) {
     xr_compile_resources_release(owner);
 }
 static XrSourceCompileStatus observed_source(const XrSourceCompileRequest *request,
-    XrXirSourceResult *output,XrSourceCompileDiagnostic *diagnostic) {
+    XrSourceCompileDiagnostic *diagnostic) {
     ++source_calls;CHECK(request->context->resources==original);phases[1]=attempts;
-    return xr_source_compile_check(request,output,diagnostic);
+    if (!publish_control) return xr_source_compile_validate(request,diagnostic);
+    XrXirSourceResult source={0};
+    XrSourceCompileStatus status=xr_source_compile_check(request,&source,diagnostic);
+    CHECK(status==XR_SOURCE_COMPILE_OK && source.checked && source.snapshot);
+    xr_xir_compile_source_result_free(&source);
+    return status;
 }
 #define xr_compile_resources_new observed_new
 #define xr_compile_resources_release observed_release
-#define xr_source_compile_check observed_source
+#define xr_source_compile_validate observed_source
 #include "app/cli/xcmd_check.c"
 #undef xr_compile_resources_new
 #undef xr_compile_resources_release
-#undef xr_source_compile_check
+#undef xr_source_compile_validate
 static int checked_call(const XrCliInvocation *inv) {
     resource_calls=source_calls=0;attempts=0;original=NULL;
     DWORD handles_before=0,handles_after=0;
@@ -85,6 +91,16 @@ static void verify_boundaries(XrCliInvocation *inv) {
         for(size_t i=0;i<sizeof(selected)/sizeof(*selected);++i){fail_at=selected[i];CHECK(checked_call(inv)==4);}
     }
     fail_at=SIZE_MAX;
+    if (!xr_cli_opt_bool(&inv->options,"syntax-only")) {
+        publish_control=true;
+        CHECK(checked_call(inv)==0);
+        publish_control=false;
+        CHECK(source_calls==1 && last_stats.allocation_count>single.allocation_count &&
+            last_stats.allocated_bytes>single.allocated_bytes && last_stats.peak_bytes>=single.peak_bytes);
+        printf("CHECK_OWNER: final query publication adds %llu controlled allocations and %llu bytes\n",
+            (unsigned long long)(last_stats.allocation_count-single.allocation_count),
+            (unsigned long long)(last_stats.allocated_bytes-single.allocated_bytes));
+    }
     const char *twice[]={inv->positionals[0],inv->positionals[0]};
     const char **saved=inv->positionals;
     inv->positionals=twice;inv->positional_count=2;
