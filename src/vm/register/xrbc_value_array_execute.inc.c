@@ -61,6 +61,7 @@ static XrtManagedStatus rbc_value_array_item(XrRbcStack *stack,RbcValueActivatio
     if (!scalar) return XRT_MANAGED_ARGUMENT;
     if (kind==XRT_BACKING_ARRAY_I64) memcpy(&item->value.i64,&scalar->bits,8);
     else if (kind==XRT_BACKING_ARRAY_U8) item->value.u8=(uint8_t)scalar->bits;
+    else if (kind==XRT_BACKING_ARRAY_F64) memcpy(&item->value.f64,&scalar->bits,sizeof(item->value.f64));
     else item->value.u64=scalar->bits;
     return XRT_MANAGED_OK;
 }
@@ -74,7 +75,8 @@ static XrtManagedStatus rbc_value_array_new(XrRbcStack *stack,RbcValueActivation
         if (status!=XRT_MANAGED_OK) return status;
         const void *value=kind==XRT_BACKING_ARRAY_STRING ? (const void *)&item.value.string :
             kind==XRT_BACKING_ARRAY_U8 ? (const void *)&item.value.u8 :
-            kind==XRT_BACKING_ARRAY_I64 ? (const void *)&item.value.i64 : (const void *)&item.value.u64;
+            kind==XRT_BACKING_ARRAY_I64 ? (const void *)&item.value.i64 :
+            kind==XRT_BACKING_ARRAY_F64 ? (const void *)&item.value.f64 : (const void *)&item.value.u64;
         memcpy(activation->snapshots+(size_t)p*stride,value,stride);
     }
     size_t slot=rbc_value_home(activation->code,access.result)->temporary_first_owner;
@@ -84,6 +86,8 @@ static XrtManagedStatus rbc_value_array_new(XrRbcStack *stack,RbcValueActivation
         activation->snapshots,access.count,access.count);
     if (kind==XRT_BACKING_ARRAY_U64) return xrt_array_backing_u64_create(activation->frame,slot,types,
         (const uint64_t *)activation->snapshots,access.count,access.count);
+    if (kind==XRT_BACKING_ARRAY_F64) return xrt_array_backing_f64_create(activation->frame,slot,types,
+        (const double *)activation->snapshots,access.count,access.count);
     return xrt_array_backing_string_create(activation->frame,slot,types,
         (XrtStringBacking *const *)activation->snapshots,access.count,access.count);
 }
@@ -257,7 +261,7 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
             return rbc_value_inline_class_push(module, stack, activation, access, args);
         return rbc_value_array_inline(module, stack, activation, access, args);
     }
-    XrtBackingArrayKind kind=(XrtBackingArrayKind)(value_kind-XRT_VALUE_ARRAY_I64);
+    XrtBackingArrayKind kind=xrt_backing_array_kind_from_value(value_kind);
     if ((unsigned)kind>=XRT_BACKING_ARRAY_COUNT) return XRT_MANAGED_ARGUMENT;
     bool random_bytes=access.index==XR_LIR_ARRAY_OP_RANDOM_BYTES;
     bool update_binding=xr_lir_array_binding_update((XrLirArrayOperation)access.index);
@@ -355,6 +359,7 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
         return status==XRT_MANAGED_OK ? rbc_value_publish_leaf(activation,access.result) : status;
     }
     if (!output) return XRT_MANAGED_ARGUMENT;
-    output->bits=kind==XRT_BACKING_ARRAY_U8 ? item.value.u8 : kind==XRT_BACKING_ARRAY_U64 ? item.value.u64 : (uint64_t)item.value.i64;
+    if (kind==XRT_BACKING_ARRAY_F64) memcpy(&output->bits,&item.value.f64,sizeof(item.value.f64));
+    else output->bits=kind==XRT_BACKING_ARRAY_U8 ? item.value.u8 : kind==XRT_BACKING_ARRAY_U64 ? item.value.u64 : (uint64_t)item.value.i64;
     return XRT_MANAGED_OK;
 }

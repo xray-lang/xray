@@ -102,6 +102,7 @@ static XrtBackingArrayKind array_backing_kind(XrtValueKind kind) {
     case XRT_VALUE_ARRAY_I64: return XRT_BACKING_ARRAY_I64;
     case XRT_VALUE_ARRAY_STRING: return XRT_BACKING_ARRAY_STRING;
     case XRT_VALUE_ARRAY_U8: return XRT_BACKING_ARRAY_U8;
+    case XRT_VALUE_ARRAY_F64: return XRT_BACKING_ARRAY_F64;
     default: return XRT_BACKING_ARRAY_COUNT;
     }
 }

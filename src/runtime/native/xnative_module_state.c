@@ -182,6 +182,9 @@ static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType 
             spec->kind == XRT_VALUE_SET_I64) {
             XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
             if (!owner) return XRT_MANAGED_ARGUMENT;
+        } else if (spec->kind == XRT_VALUE_ARRAY_F64) {
+            XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
+            if (!xrt_backing_array_matches(owner, XRT_BACKING_ARRAY_F64)) return XRT_MANAGED_ARGUMENT;
         } else if (spec->kind == XRT_VALUE_ARRAY_INLINE) {
             XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
             if (!xrt_array_backing_inline_matches(owner, spec->element)) return XRT_MANAGED_ARGUMENT;

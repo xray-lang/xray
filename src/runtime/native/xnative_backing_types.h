@@ -17,7 +17,8 @@
 #include "xray_native_array.h"
 
 static inline size_t xrt_backing_array_stride(XrtBackingArrayKind kind) {
-    static const size_t strides[] = {sizeof(int64_t), sizeof(XrtManagedHeader *), sizeof(uint8_t), sizeof(uint64_t)};
+    static const size_t strides[XRT_BACKING_ARRAY_COUNT] = {
+        sizeof(int64_t), sizeof(XrtManagedHeader *), sizeof(uint8_t), sizeof(uint64_t), sizeof(double)};
     return (unsigned)kind < XRT_BACKING_ARRAY_COUNT ? strides[kind] : 0;
 }
 

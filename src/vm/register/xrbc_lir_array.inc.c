@@ -8,10 +8,11 @@
  */
 static uint32_t rbc_lir_array_family(XrLirType element) {
     switch (element) {
-    case XR_LIR_I64: return 0;
-    case XR_LIR_STRING: return 1;
-    case XR_LIR_U8: return 2;
-    case XR_LIR_U64: return 3;
+    case XR_LIR_I64: return XRT_BACKING_ARRAY_I64;
+    case XR_LIR_STRING: return XRT_BACKING_ARRAY_STRING;
+    case XR_LIR_U8: return XRT_BACKING_ARRAY_U8;
+    case XR_LIR_U64: return XRT_BACKING_ARRAY_U64;
+    case XR_LIR_F64: return XRT_BACKING_ARRAY_F64;
     default: return XR_RBC_ARRAY_FAMILY_COUNT;
     }
 }

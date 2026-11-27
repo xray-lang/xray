@@ -187,9 +187,14 @@ static XrLirType lower_array_element(const Lower *c, XrXirType type) {
     XrXirType element = xr_xir_array_element(c->source->types, type);
     XrLirType owned = lower_constructed_type(c, element);
     if (xr_lir_inline_array_ordinal(c->module, owned)) return owned;
-    return element == XR_XIR_I64 ? XR_LIR_I64 :
-        element == XR_XIR_STRING ? XR_LIR_STRING :
-        element == XR_XIR_U8 ? XR_LIR_U8 : element == XR_XIR_U64 ? XR_LIR_U64 : XR_LIR_TYPE_INVALID;
+    switch (element) {
+    case XR_XIR_I64: return XR_LIR_I64;
+    case XR_XIR_STRING: return XR_LIR_STRING;
+    case XR_XIR_U8: return XR_LIR_U8;
+    case XR_XIR_U64: return XR_LIR_U64;
+    case XR_XIR_F64: return XR_LIR_F64;
+    default: return XR_LIR_TYPE_INVALID;
+    }
 }
 
 static bool lower_set_borrow(LowerFunction *,uint32_t,XrLirValue *);

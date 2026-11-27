@@ -196,7 +196,7 @@ static void array_sources(void) {
             continue;
         }
         XrLirLowered output = lower_text(cases[i]);
-        CHECK(xr_lir_intrinsic_count(output.module) == 4 * (XR_LIR_ARRAY_OP_RESERVE + 3) + 2);
+        CHECK(xr_lir_intrinsic_count(output.module) == 5 * (XR_LIR_ARRAY_OP_RESERVE + 3) + 2);
         XrLirModule *copy = NULL;
         OK(xr_lir_rebuild(output.module, &copy));
         xr_lir_lowered_free(&output);

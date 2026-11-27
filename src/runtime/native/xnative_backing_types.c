@@ -18,7 +18,7 @@
 /* Builtin backing producer identities live for the process. These callbacks
  * certify the immutable family separately from its shared physical stride. */
 static const XrtBackingArrayKind array_plan_families[] = {
-    XRT_BACKING_ARRAY_I64, XRT_BACKING_ARRAY_STRING, XRT_BACKING_ARRAY_U8, XRT_BACKING_ARRAY_U64
+    XRT_BACKING_ARRAY_I64, XRT_BACKING_ARRAY_STRING, XRT_BACKING_ARRAY_U8, XRT_BACKING_ARRAY_U64, XRT_BACKING_ARRAY_F64
 };
 _Static_assert(sizeof(array_plan_families) / sizeof(*array_plan_families) == XRT_BACKING_ARRAY_COUNT,
     "every scalar Array producer has an identity");

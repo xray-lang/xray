@@ -28,7 +28,7 @@
 #include "xlir_callable_facts.h"
 #include "xlir_slice_facts.h"
 
-enum { XR_LIR_ARRAY_FAMILY_COUNT = 4 };
+enum { XR_LIR_ARRAY_FAMILY_COUNT = 5 };
 /* One row per family for NEW..REPEAT, SET/PUSH, DISPLAY, CAPACITY/RESERVE and
  * WITH_CAPACITY, plus the U8 COPY_STRING_BYTES and RANDOM_BYTES rows. */
 enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_RESERVE + 3) + 2 };
@@ -315,6 +315,7 @@ XR_FUNC XrLirStatus xr_lir_internal_finish_verify(XrLirModule *, XrLirDiagnostic
 XR_FUNC void xr_lir_internal_block_multiplicity_free(uint8_t *);
 XR_FUNC bool xr_lir_internal_array_element(const XrLirModule *, XrLirType);
 XR_FUNC uint32_t xr_lir_array_layout_family(const XrLirModule *, XrLirType);
+XR_FUNC XrLirType xr_lir_internal_array_element_at(uint32_t family);
 XR_FUNC XrLirStatus xr_lir_require_inline_array_element(XrLirModule *, XrLirType);
 /* The caller consumes Checked's allocation-cycle result before admitting this shape. */
 XR_FUNC XrLirStatus xr_lir_internal_class_type(XrLirModule *, XrLirType payload, XrLirType parent, XrLirType *);

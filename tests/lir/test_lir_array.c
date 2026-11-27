@@ -291,24 +291,28 @@ static void array_catalog(void) {
     XrLirRegistry registry = {&extra, 1};
     XrLirModule *m = NULL;
     OK(xr_lir_array_module_create(&registry, &m));
-    const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
-    for (uint32_t family = 0; family < sizeof(elements) / sizeof(*elements); ++family) {
+    const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64, XR_LIR_F64};
+    enum { families = sizeof(elements) / sizeof(*elements), basic_ops = XR_LIR_ARRAY_OP_REPEAT,
+        display_id = 2 + families * (basic_ops + 2), capacity_id_base = display_id + families,
+        reserve_init_id = capacity_id_base + 2 * families };
+    for (uint32_t family = 0; family < families; ++family) {
         XrLirType element = elements[family];
         for (uint32_t op = XR_LIR_ARRAY_OP_NEW; op <= XR_LIR_ARRAY_OP_RESERVE; ++op) {
             uint32_t id = 0;
             OK(xr_lir_array_operation(m, element, (XrLirArrayOperation)op, &id));
             CHECK(id && id != extra.id);
             CHECK(id == m->array_operations[family][op - 1]);
-            if (op <= XR_LIR_ARRAY_OP_REPEAT) CHECK(id == 2 + family * 6 + op - 1);
-            else if (op == XR_LIR_ARRAY_OP_DISPLAY) CHECK(id == 34 + family);
-            else CHECK(id == 38 + family * 2 + op - XR_LIR_ARRAY_OP_CAPACITY);
+            if (op <= XR_LIR_ARRAY_OP_REPEAT) CHECK(id == 2 + family * basic_ops + op - 1);
+            else if (op == XR_LIR_ARRAY_OP_DISPLAY) CHECK(id == display_id + family);
+            else CHECK(id == capacity_id_base + family * 2 + op - XR_LIR_ARRAY_OP_CAPACITY);
         }
         uint32_t capacity_id = 0;
         OK(xr_lir_array_operation(m, element, XR_LIR_ARRAY_OP_WITH_CAPACITY, &capacity_id));
-        CHECK(capacity_id == 46 + family && capacity_id == m->array_operations[family][XR_LIR_ARRAY_OP_WITH_CAPACITY - 1]);
+        CHECK(capacity_id == reserve_init_id + family &&
+              capacity_id == m->array_operations[family][XR_LIR_ARRAY_OP_WITH_CAPACITY - 1]);
         uint32_t copy_bytes = 0;
         XrLirStatus copy_status = xr_lir_array_operation(m,element,XR_LIR_ARRAY_OP_COPY_STRING_BYTES,&copy_bytes);
-        CHECK(element == XR_LIR_U8 ? copy_status == XR_LIR_OK && copy_bytes == 50 :
+        CHECK(element == XR_LIR_U8 ? copy_status == XR_LIR_OK && copy_bytes == reserve_init_id + families :
             copy_status == XR_LIR_UNSUPPORTED && !copy_bytes);
         for (uint32_t op = XR_LIR_ARRAY_OP_SET; op <= XR_LIR_ARRAY_OP_PUSH; ++op) {
             uint32_t cell = 0, reference = 0;
@@ -330,7 +334,10 @@ static void array_catalog(void) {
     XrLirArrayIntrinsic shape;
     OK(xr_lir_array_intrinsic_view(copy, id, &shape));
     CHECK(shape.variadic && shape.operation == XR_LIR_ARRAY_OP_NEW && shape.result_element == XR_LIR_STRING);
-    CHECK(xr_lir_array_operation(copy, XR_LIR_F64, XR_LIR_ARRAY_OP_NEW, &id) == XR_LIR_INVALID_ARGUMENT && !id);
+    OK(xr_lir_array_operation(copy, XR_LIR_F64, XR_LIR_ARRAY_OP_NEW, &id));
+    OK(xr_lir_array_intrinsic_view(copy, id, &shape));
+    CHECK(shape.variadic && shape.operation == XR_LIR_ARRAY_OP_NEW && shape.result_element == XR_LIR_F64);
+    CHECK(xr_lir_array_operation(copy, XR_LIR_F32, XR_LIR_ARRAY_OP_NEW, &id) == XR_LIR_INVALID_ARGUMENT && !id);
     OK(xr_lir_array_mutator(copy, XR_LIR_U64, XR_LIR_ARRAY_REF, XR_LIR_ARRAY_OP_PUSH, &id));
     OK(xr_lir_array_intrinsic_view(copy, id, &shape));
     CHECK(shape.operation == XR_LIR_ARRAY_OP_PUSH && shape.parameter_elements[0] == XR_LIR_U64);
@@ -347,7 +354,7 @@ static void array_catalog(void) {
 }
 
 static void array_repeat_owners(void) {
-    const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
+    const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64, XR_LIR_F64};
     for (unsigned family = 0; family < sizeof(elements) / sizeof(*elements); ++family) {
         XrLirType element = elements[family];
         XrLirModule *m = NULL;
@@ -418,7 +425,7 @@ static void array_shape_rejections(void) {
     OK(xr_lir_declare_function(m, &spec, &f));
     XrLirValue parameter;
     OK(xr_lir_function_parameter(m, f, 0, &parameter));
-    XrLirArrayShape shape = {XR_LIR_F64};
+    XrLirArrayShape shape = {XR_LIR_F32};
     CHECK(xr_lir_set_array_shape(m, parameter, &shape) == XR_LIR_INVALID_ARGUMENT);
     CHECK(xr_lir_module_finish(m, NULL) == XR_LIR_INVALID_ARGUMENT);
     xr_lir_module_destroy(m);

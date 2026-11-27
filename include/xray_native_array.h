@@ -18,11 +18,21 @@
 
 typedef enum XrtBackingArrayKind {
     XRT_BACKING_ARRAY_I64, XRT_BACKING_ARRAY_STRING,
-    XRT_BACKING_ARRAY_U8, XRT_BACKING_ARRAY_U64, XRT_BACKING_ARRAY_COUNT
+    XRT_BACKING_ARRAY_U8, XRT_BACKING_ARRAY_U64, XRT_BACKING_ARRAY_F64, XRT_BACKING_ARRAY_COUNT
 } XrtBackingArrayKind;
+
+static inline XrtBackingArrayKind xrt_backing_array_kind_from_value(XrtValueKind kind) {
+    if (kind == XRT_VALUE_ARRAY_F64) return XRT_BACKING_ARRAY_F64;
+    return xrt_value_kind_is_scalar_array(kind) ? (XrtBackingArrayKind)(kind - XRT_VALUE_ARRAY_I64) :
+        XRT_BACKING_ARRAY_COUNT;
+}
+static inline XrtValueKind xrt_backing_array_value_kind(XrtBackingArrayKind kind) {
+    if (kind == XRT_BACKING_ARRAY_F64) return XRT_VALUE_ARRAY_F64;
+    return (unsigned)kind < XRT_BACKING_ARRAY_COUNT ? (XrtValueKind)(XRT_VALUE_ARRAY_I64 + kind) : XRT_VALUE_UNIT;
+}
 typedef struct XrtArrayItem {
     XrtBackingArrayKind kind;
-    union { int64_t i64; XrtStringBacking *string; uint8_t u8; uint64_t u64; } value;
+    union { int64_t i64; XrtStringBacking *string; uint8_t u8; uint64_t u64; double f64; } value;
 } XrtArrayItem;
 typedef enum XrtArrayUpdateKind {
     XRT_ARRAY_UPDATE_SET, XRT_ARRAY_UPDATE_PUSH,
@@ -56,7 +66,7 @@ struct XrtArrayBacking {
 #endif
 _Static_assert(offsetof(XrtArrayBacking, length) == 16 && offsetof(XrtArrayBacking, capacity) == 24 &&
     offsetof(XrtArrayBacking, elements) == 32 && sizeof(XrtArrayBacking) == 32 &&
-    32 % _Alignof(uint64_t) == 0 && 32 % _Alignof(XrtManagedHeader *) == 0,
+    32 % _Alignof(uint64_t) == 0 && 32 % _Alignof(double) == 0 && 32 % _Alignof(XrtManagedHeader *) == 0,
     "every Array tail begins at the same aligned physical prefix");
 #endif
 #ifdef __cplusplus

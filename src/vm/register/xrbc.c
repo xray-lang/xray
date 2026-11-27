@@ -252,7 +252,7 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
             xr_rbc_array_ref_family(kind) < XR_RBC_ARRAY_FAMILY_COUNT) return false;
     }
     for (uint32_t i = 0; function->register_kinds && i < function->register_count; ++i)
-        if ((unsigned)function->register_kinds[i] > XR_RBC_BOXED ||
+        if ((unsigned)function->register_kinds[i] > XR_RBC_ARRAY_F64_REF ||
             (i < function->parameter_count &&
                 (function->register_kinds[i] == XR_RBC_CALL_WINDOW ||
                  function->register_kinds[i] == XR_RBC_STATE_REF || function->register_kinds[i] == XR_RBC_VIEW_FRAME ||
@@ -272,8 +272,8 @@ static bool xr_rbc_typed_container_function_valid(const XrRbcModule *module,cons
         if (function->result_kind!=XR_RBC_MAP_STRING_I64) return false;
     } else if (kind==XRT_VALUE_SET_I64) {
         if (function->result_kind!=XR_RBC_SET_I64) return false;
-    } else if (kind<XRT_VALUE_ARRAY_I64 || kind>XRT_VALUE_ARRAY_U64 ||
-        function->result_kind!=xr_rbc_array_kind_at((uint32_t)(kind-XRT_VALUE_ARRAY_I64))) return false;
+    } else if (!xrt_value_kind_is_scalar_array(kind) ||
+        function->result_kind!=xr_rbc_array_kind_at(xrt_backing_array_kind_from_value(kind))) return false;
     /* Only the sealed CodeOwner grants this extension. Keep the raw function
      * validator and every other physical descriptor obligation unchanged. */
     XrRbcFunction shape=*function; shape.result_kind=XR_RBC_BITS;

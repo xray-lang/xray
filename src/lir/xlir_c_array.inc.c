@@ -50,11 +50,18 @@ static const char *c_array_kind(XrLirType element) {
     case XR_LIR_STRING: return "XRT_BACKING_ARRAY_STRING";
     case XR_LIR_U8: return "XRT_BACKING_ARRAY_U8";
     case XR_LIR_U64: return "XRT_BACKING_ARRAY_U64";
+    case XR_LIR_F64: return "XRT_BACKING_ARRAY_F64";
     default: return NULL;
     }
 }
 static const char *c_array_member(XrLirType element) {
-    return element==XR_LIR_STRING ? "string" : element==XR_LIR_U8 ? "u8" : element==XR_LIR_U64 ? "u64" : "i64";
+    switch (element) {
+    case XR_LIR_STRING: return "string";
+    case XR_LIR_U8: return "u8";
+    case XR_LIR_U64: return "u64";
+    case XR_LIR_F64: return "f64";
+    default: return "i64";
+    }
 }
 static void c_array_require(LirC *c, uint32_t source) {
     c_format(c, "    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, UINT32_C(%" PRIu32 "));\n", source);

@@ -180,7 +180,7 @@ static bool lir_home_binding_spec(LirHomeBuilder *b, uint32_t type, XrtValuePlan
         xrt_value_plan_view(plan,spec) != XRT_MANAGED_OK || spec->size != sizeof(XrtManagedHeader *) ||
         spec->owned_count != 1 || !spec->owned_offsets || spec->owned_offsets[0] ||
         (spec->kind != XRT_VALUE_STRING && spec->kind != XRT_VALUE_SET_I64 &&
-         (spec->kind < XRT_VALUE_ARRAY_I64 || spec->kind > XRT_VALUE_MAP_STRING_I64) &&
+         !xrt_value_kind_is_scalar_array(spec->kind) && spec->kind != XRT_VALUE_MAP_STRING_I64 &&
          !(spec->kind == XRT_VALUE_ARRAY_INLINE && key.type == XR_LIR_ARRAY &&
             xr_lir_class_array_push_element(b->compiler.input, key.array_element))))
         return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"binding lost its exact Header payload plan");

@@ -86,7 +86,8 @@ static const char *c_value_scalar_type(XrtValueKind kind) {
     case XRT_VALUE_FUNCTION: return "XrtFunction";
     case XRT_VALUE_SLICE_I64: case XRT_VALUE_SLICE_U8: return "XrtReadonlyWindow";
     case XRT_VALUE_CELL: case XRT_VALUE_STRING: case XRT_VALUE_ARRAY_I64: case XRT_VALUE_ARRAY_STRING:
-    case XRT_VALUE_ARRAY_U8: case XRT_VALUE_ARRAY_U64: case XRT_VALUE_MAP_STRING_I64: case XRT_VALUE_MAP_STRING_STRING: case XRT_VALUE_SET_I64:
+    case XRT_VALUE_ARRAY_U8: case XRT_VALUE_ARRAY_U64: case XRT_VALUE_ARRAY_F64:
+    case XRT_VALUE_MAP_STRING_I64: case XRT_VALUE_MAP_STRING_STRING: case XRT_VALUE_SET_I64:
     case XRT_VALUE_ARRAY_INLINE: case XRT_VALUE_CLASS:
         return "XrtManagedHeader *";
     default: return NULL;

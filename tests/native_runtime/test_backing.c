@@ -128,7 +128,9 @@ static void setup_failures(void) {
     XrtBillingOwner *billing = NULL;
     billing_new(&audit, SIZE_MAX, &billing);
     XrtBillingStats baseline = xrt_billing_owner_stats(billing);
-    for (size_t allowed = 0; allowed < 14; ++allowed) {
+    // Each Array, String, Map and Set descriptor owns one plan and one Ops block.
+    const size_t blocks = 2 * (XRT_BACKING_ARRAY_COUNT + 3);
+    for (size_t allowed = 0; allowed < blocks; ++allowed) {
         XrtBackingTypes types = {0};
         xrt_billing_owner_fail_after(billing, allowed);
         CHECK(xrt_backing_types_init(billing, &types) == XRT_MANAGED_OOM);
@@ -137,10 +139,10 @@ static void setup_failures(void) {
         xrt_backing_types_drop(&types);
         same_bill(billing, baseline);
     }
-    xrt_billing_owner_fail_after(billing, 14);
+    xrt_billing_owner_fail_after(billing, blocks);
     XrtBackingTypes types = {0};
     OK(xrt_backing_types_init(billing, &types));
-    CHECK(xrt_billing_owner_stats(billing).blocks == baseline.blocks + 14 && types.map && types.set);
+    CHECK(xrt_billing_owner_stats(billing).blocks == baseline.blocks + blocks && types.map && types.set);
     XrtManagedOps *stable = types.string;
     BAD(xrt_backing_types_init(billing, &types));
     CHECK(types.string == stable);
@@ -407,6 +409,7 @@ static XrtArrayItem scalar_item(XrtBackingArrayKind kind, uint64_t bits) {
     XrtArrayItem item = {.kind=kind};
     if (kind == XRT_BACKING_ARRAY_I64) memcpy(&item.value.i64, &bits, sizeof(bits));
     else if (kind == XRT_BACKING_ARRAY_U8) item.value.u8 = (uint8_t)bits;
+    else if (kind == XRT_BACKING_ARRAY_F64) memcpy(&item.value.f64, &bits, sizeof(bits));
     else item.value.u64 = bits;
     return item;
 }
@@ -721,7 +724,7 @@ static void repeat_and_get(void) {
     fixture_init(&fixture, 16384);
     for (unsigned family = 0; family < XRT_BACKING_ARRAY_COUNT; ++family) {
         XrtBackingArrayKind kind = (XrtBackingArrayKind)family;
-        XrtArrayItem fill = scalar_item(kind, UINT64_MAX);
+        XrtArrayItem fill = scalar_item(kind, kind == XRT_BACKING_ARRAY_F64 ? UINT64_C(0x8000000000000000) : UINT64_MAX);
         if (kind == XRT_BACKING_ARRAY_STRING) {
             OK(xrt_string_backing_create(fixture.frame, 0, &fixture.types, "\303\251", 2, 0));
             fill.value.string = (XrtStringBacking *)borrow(&fixture, 0);
@@ -737,12 +740,17 @@ static void repeat_and_get(void) {
                 CHECK(item.value.string == fill.value.string && xr_signed_rc_read(&item.value.string->managed.references) == 6);
             } else if (kind == XRT_BACKING_ARRAY_I64) CHECK(item.value.i64 == -1);
             else if (kind == XRT_BACKING_ARRAY_U8) CHECK(item.value.u8 == UINT8_MAX);
+            else if (kind == XRT_BACKING_ARRAY_F64) CHECK(!memcmp(&item.value.f64, &fill.value.f64, sizeof(double)));
             else CHECK(item.value.u64 == UINT64_MAX);
         }
         XrtArrayItem unchanged = scalar_item(XRT_BACKING_ARRAY_U64, 37);
         CHECK(xrt_array_backing_get(array, kind, -1, &unchanged) == XRT_MANAGED_BOUNDS);
         CHECK(xrt_array_backing_get(array, kind, 5, &unchanged) == XRT_MANAGED_BOUNDS);
         CHECK(unchanged.kind == XRT_BACKING_ARRAY_U64 && unchanged.value.u64 == 37);
+        if (kind == XRT_BACKING_ARRAY_F64) {
+            CHECK(xrt_backing_array_matches(&array->managed, XRT_BACKING_ARRAY_F64));
+            CHECK(!xrt_backing_array_matches(&array->managed, XRT_BACKING_ARRAY_U64));
+        }
         BAD(xrt_array_backing_repeat_create(fixture.frame, 1, &fixture.types, &fill, -1));
         CHECK(borrow(&fixture, 1) == &array->managed && array->length == 5);
         if (kind == XRT_BACKING_ARRAY_STRING) {
@@ -773,8 +781,10 @@ static void array_displays(void) {
     static const char *const expected[] = {
         "[-9223372036854775808, 9223372036854775807]",
         "[\"a\"b\\c\n\", \"\344\275\240\345\245\275\360\237\214\215\"]",
-        "[0, 255]", "[9223372036854775808, 18446744073709551615]"
+        "[0, 255]", "[9223372036854775808, 18446744073709551615]", "[-0.0, 2.25]"
     };
+    _Static_assert(sizeof(expected) / sizeof(*expected) == XRT_BACKING_ARRAY_COUNT,
+        "every scalar Array family has a display case");
     Fixture fixture;
     fixture_init(&fixture, SIZE_MAX);
     for (unsigned family = 0; family < XRT_BACKING_ARRAY_COUNT; ++family) {
@@ -790,6 +800,9 @@ static void array_displays(void) {
         } else if (kind == XRT_BACKING_ARRAY_U8) {
             const uint8_t values[] = {0, UINT8_MAX};
             OK(xrt_array_backing_u8_create(fixture.frame, 0, &fixture.types, values, 2, 2));
+        } else if (kind == XRT_BACKING_ARRAY_F64) {
+            const double values[] = {-0.0, 2.25};
+            OK(xrt_array_backing_f64_create(fixture.frame, 0, &fixture.types, values, 2, 2));
         } else {
             const uint64_t values[] = {UINT64_C(1) << 63, UINT64_MAX};
             OK(xrt_array_backing_u64_create(fixture.frame, 0, &fixture.types, values, 2, 2));

@@ -33,7 +33,8 @@ typedef enum XrtValueKind {
      * payload. P1 admits owner-free payloads only, so the plan's owned leaf
      * list stays empty and the tag selects a field range, never an owner. */
     XRT_VALUE_SUM,
-    XRT_VALUE_MAP_STRING_STRING
+    XRT_VALUE_MAP_STRING_STRING,
+    XRT_VALUE_ARRAY_F64
 } XrtValueKind;
 /* Mutability received from the Checked field for the admitted Class Array
  * path. A flag describes the field and leaves access to the checked operation. */
@@ -48,8 +49,11 @@ static inline int xrt_value_inline_array_element_supported(XrtValueKind kind, ui
 static inline int xrt_value_kind_is_fixed_element(XrtValueKind kind) {
     return kind == XRT_VALUE_U8 || kind == XRT_VALUE_U32 || kind == XRT_VALUE_U64;
 }
+static inline int xrt_value_kind_is_scalar_array(XrtValueKind kind) {
+    return (kind >= XRT_VALUE_ARRAY_I64 && kind <= XRT_VALUE_ARRAY_U64) || kind == XRT_VALUE_ARRAY_F64;
+}
 static inline int xrt_value_kind_is_array(XrtValueKind kind) {
-    return (kind >= XRT_VALUE_ARRAY_I64 && kind <= XRT_VALUE_ARRAY_U64) || kind == XRT_VALUE_ARRAY_INLINE;
+    return xrt_value_kind_is_scalar_array(kind) || kind == XRT_VALUE_ARRAY_INLINE;
 }
 enum { XRT_VALUE_NO_SUSPEND = 1u, XRT_VALUE_C_ABI = 2u };
 /* Tuple and Nullable rows may carry a verified display closure. */

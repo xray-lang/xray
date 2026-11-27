@@ -12,7 +12,7 @@ static bool rbc_value_binding_valid(const XrRbcModule *module,const XrRbcValueCo
     bool inline_array = kind == XRT_VALUE_ARRAY_INLINE;
     bool owned_shape = inline_array || kind == XRT_VALUE_STRING || kind == XRT_VALUE_MAP_STRING_I64 ||
         kind == XRT_VALUE_SET_I64;
-    if (!binding || (!owned_shape && (kind < XRT_VALUE_ARRAY_I64 || kind > XRT_VALUE_ARRAY_U64))) return false;
+    if (!binding || (!owned_shape && !xrt_value_kind_is_scalar_array(kind))) return false;
     if (owned_shape) {
         const XrRbcCodeOwner *owner = xr_rbc_module_code_owner(module);
         if (!owner) return false;

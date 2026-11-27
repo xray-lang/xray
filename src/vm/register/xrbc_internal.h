@@ -10,6 +10,7 @@
 #define XRBC_INTERNAL_H
 
 #include "xrbc.h"
+#include "xray_native_array.h"
 #include "xray_native_function.h"
 #include "xray_native_state.h"
 #include "base/xchecks.h"
@@ -57,7 +58,7 @@ static inline XrRbcFunctionScopes rbc_function_scopes(const XrRbcModule *module,
     return module->function_scopes ? module->function_scopes[function - module->functions] : (XrRbcFunctionScopes){0};
 }
 
-enum { XR_RBC_ARRAY_FAMILY_COUNT = 4 };
+enum { XR_RBC_ARRAY_FAMILY_COUNT = XRT_BACKING_ARRAY_COUNT };
 enum { XR_RBC_AGGREGATE_INLINE_SCALARS = 16 };
 
 /* One fixed element keeps its own natural width inside the aggregate bytes,
@@ -140,12 +141,14 @@ static inline bool xr_rbc_aggregate_type_valid(const XrRbcModule *module, uint32
 }
 
 static inline XrRbcRegisterKind xr_rbc_array_kind_at(uint32_t family) {
-    static const XrRbcRegisterKind kinds[] = {XR_RBC_ARRAY_I64, XR_RBC_ARRAY_STRING, XR_RBC_ARRAY_U8, XR_RBC_ARRAY_U64};
+    static const XrRbcRegisterKind kinds[XR_RBC_ARRAY_FAMILY_COUNT] = {
+        XR_RBC_ARRAY_I64, XR_RBC_ARRAY_STRING, XR_RBC_ARRAY_U8, XR_RBC_ARRAY_U64, XR_RBC_ARRAY_F64};
     return family < XR_RBC_ARRAY_FAMILY_COUNT ? kinds[family] : XR_RBC_BITS;
 }
 static inline XrRbcRegisterKind xr_rbc_array_cell_at(uint32_t family) {
     static const XrRbcRegisterKind kinds[] = {
-        XR_RBC_ARRAY_I64_CELL, XR_RBC_ARRAY_STRING_CELL, XR_RBC_ARRAY_U8_CELL, XR_RBC_ARRAY_U64_CELL};
+        XR_RBC_ARRAY_I64_CELL, XR_RBC_ARRAY_STRING_CELL, XR_RBC_ARRAY_U8_CELL, XR_RBC_ARRAY_U64_CELL,
+        XR_RBC_ARRAY_F64_CELL};
     return family < XR_RBC_ARRAY_FAMILY_COUNT ? kinds[family] : XR_RBC_BITS;
 }
 static inline uint32_t xr_rbc_array_family(XrRbcRegisterKind kind) {
@@ -154,11 +157,12 @@ static inline uint32_t xr_rbc_array_family(XrRbcRegisterKind kind) {
     return XR_RBC_ARRAY_FAMILY_COUNT;
 }
 static inline bool xr_rbc_state_array(uint32_t kind) {
-    return kind >= XRT_VALUE_ARRAY_I64 && kind <= XRT_VALUE_ARRAY_U64;
+    return xrt_value_kind_is_scalar_array(kind);
 }
 static inline XrRbcRegisterKind xr_rbc_array_ref_at(uint32_t family) {
     static const XrRbcRegisterKind kinds[] = {
-        XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_STRING_REF, XR_RBC_ARRAY_U8_REF, XR_RBC_ARRAY_U64_REF};
+        XR_RBC_ARRAY_I64_REF, XR_RBC_ARRAY_STRING_REF, XR_RBC_ARRAY_U8_REF, XR_RBC_ARRAY_U64_REF,
+        XR_RBC_ARRAY_F64_REF};
     return family < XR_RBC_ARRAY_FAMILY_COUNT ? kinds[family] : XR_RBC_BITS;
 }
 static inline uint32_t xr_rbc_array_ref_family(XrRbcRegisterKind kind) {

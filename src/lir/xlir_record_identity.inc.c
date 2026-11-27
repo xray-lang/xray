@@ -22,8 +22,7 @@ static bool lir_record_argument_valid(const XrLirModule *m, XrLirRecordArgument 
     XrLirType type = argument.type;
     if (!xr_lir_internal_type_valid(m, type, true) || type >= XR_LIR_TYPE_COUNT + earlier) return false;
     if (type == XR_LIR_ARRAY)
-        return argument.array_element == XR_LIR_I64 || argument.array_element == XR_LIR_STRING ||
-               argument.array_element == XR_LIR_U8 || argument.array_element == XR_LIR_U64;
+        return xr_lir_internal_array_family(argument.array_element) < XR_LIR_ARRAY_FAMILY_COUNT;
     if (argument.array_element) return false;
     if (type < XR_LIR_TYPE_COUNT)
         return lir_pod_scalar(type) < XR_POD_SCALAR_COUNT || type == XR_LIR_STRING || type == XR_LIR_MAP_STRING_I64;

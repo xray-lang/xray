@@ -92,7 +92,6 @@ static void c_values_prepare(LirC *c) {
     if (!c_resource(c, xr_compile_resources_calloc(c->request->resources, type_count + arrays + function_count, 1, &flags))) return;
     uint8_t *needed = flags; bool projected = c->state || c->arrays || c->maps || c->sets;
     uint8_t *environments = needed + type_count + arrays;
-    static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
     for (uint32_t slot = 0; slot < c->state_layout.slot_count && c_request_poll(c); ++slot) {
         XrLirType payload = c->state_layout.slots[slot].payload;
         if (payload == XR_LIR_I64_CELL) {
@@ -165,7 +164,7 @@ static void c_values_prepare(LirC *c) {
     XrLirValueLayoutKey *roots = memory; size_t next = 0;
     for (size_t t = 1; t < type_count + XR_LIR_ARRAY_FAMILY_COUNT; ++t)
         if (needed[t]) roots[next++] = t < type_count ? (XrLirValueLayoutKey){(XrLirType)t, 0, 0} :
-            (XrLirValueLayoutKey){XR_LIR_ARRAY, elements[t-type_count], 0};
+            (XrLirValueLayoutKey){XR_LIR_ARRAY, xr_lir_internal_array_element_at((uint32_t)(t-type_count)), 0};
     for (uint32_t t = 0; module->inline_array_count && t < module->type_count; ++t) {
         uint32_t ordinal = module->types[t].inline_array_ordinal;
         if (ordinal && needed[type_count + XR_LIR_ARRAY_FAMILY_COUNT + ordinal - 1])

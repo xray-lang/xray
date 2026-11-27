@@ -885,6 +885,7 @@ XRAY_API void xrt_native_array_create(XrtManagedFrame *frame, size_t slot,
         case XRT_BACKING_ARRAY_STRING: status=xrt_array_backing_string_create(frame,slot,types,input->values,input->count,input->count); break;
         case XRT_BACKING_ARRAY_U8: status=xrt_array_backing_u8_create(frame,slot,types,input->values,input->count,input->count); break;
         case XRT_BACKING_ARRAY_U64: status=xrt_array_backing_u64_create(frame,slot,types,input->values,input->count,input->count); break;
+        case XRT_BACKING_ARRAY_F64: status=xrt_array_backing_f64_create(frame,slot,types,input->values,input->count,input->count); break;
         default: status=XRT_MANAGED_ARGUMENT; break;
         }
     }

@@ -114,6 +114,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_with_capacity_create(XrtManagedFra
     case XRT_BACKING_ARRAY_STRING: return xrt_array_backing_string_create(frame, slot, types, NULL, 0, rows);
     case XRT_BACKING_ARRAY_U8: return xrt_array_backing_u8_create(frame, slot, types, NULL, 0, rows);
     case XRT_BACKING_ARRAY_U64: return xrt_array_backing_u64_create(frame, slot, types, NULL, 0, rows);
+    case XRT_BACKING_ARRAY_F64: return xrt_array_backing_f64_create(frame, slot, types, NULL, 0, rows);
     default: return XRT_MANAGED_ARGUMENT;
     }
 }
@@ -128,6 +129,10 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_u8_create(XrtManagedFrame *frame, 
 XR_FUNCDEF XrtManagedStatus xrt_array_backing_u64_create(XrtManagedFrame *frame, size_t slot,
     const XrtBackingTypes *types, const uint64_t *values, size_t count, size_t capacity) {
     return array_create(frame, slot, types, (ArrayInput){XRT_BACKING_ARRAY_U64, values, NULL, count, capacity});
+}
+XR_FUNCDEF XrtManagedStatus xrt_array_backing_f64_create(XrtManagedFrame *frame, size_t slot,
+    const XrtBackingTypes *types, const double *values, size_t count, size_t capacity) {
+    return array_create(frame, slot, types, (ArrayInput){XRT_BACKING_ARRAY_F64, values, NULL, count, capacity});
 }
 
 /* These callbacks identify the Array producer, even when another physical

@@ -13,7 +13,7 @@ static bool rbc_callable_home_type(const XrtValueImage *image, uint32_t type) {
     if (row->kind != XRT_VALUE_NULLABLE || !row->nullable_element || row->nullable_element >= type) return false;
     XrtValueKind payload = image->types[row->nullable_element - 1].kind;
     return payload == XRT_VALUE_ARRAY_U8 || payload == XRT_VALUE_ARRAY_I64 ||
-        payload == XRT_VALUE_ARRAY_STRING || payload == XRT_VALUE_ARRAY_INLINE;
+        payload == XRT_VALUE_ARRAY_STRING || payload == XRT_VALUE_ARRAY_F64 || payload == XRT_VALUE_ARRAY_INLINE;
 }
 
 /* Tuple signatures use typed homes while ordinary tuple root results keep
@@ -87,7 +87,7 @@ static bool rbc_callable_image_value(const XrRbcModule *module, uint32_t id, XrR
         return value.type==XR_RBC_STRING ? kind==XRT_VALUE_STRING : value.type==XR_RBC_SET_I64 ?
             kind==XRT_VALUE_SET_I64 : value.type==XR_RBC_MAP_STRING_I64 ?
             kind==XRT_VALUE_MAP_STRING_I64 : rbc_array_kind((XrRbcRegisterKind)value.type) &&
-            kind==(XrtValueKind)(XRT_VALUE_ARRAY_I64+xr_rbc_array_family((XrRbcRegisterKind)value.type));
+            kind==xrt_backing_array_value_kind((XrtBackingArrayKind)xr_rbc_array_family((XrRbcRegisterKind)value.type));
     return false;
 }
 static bool rbc_callable_image_valid(const XrRbcModule *module) {

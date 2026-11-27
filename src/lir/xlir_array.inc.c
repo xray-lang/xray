@@ -7,8 +7,11 @@
  * xlir_array.inc.c - Copying closed Array signatures and producer queries
  */
 static const XrLirType lir_array_elements[XR_LIR_ARRAY_FAMILY_COUNT] = {
-    XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64
+    XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64, XR_LIR_F64
 };
+XR_FUNC XrLirType xr_lir_internal_array_element_at(uint32_t family) {
+    return family < XR_LIR_ARRAY_FAMILY_COUNT ? lir_array_elements[family] : XR_LIR_TYPE_INVALID;
+}
 XR_FUNC uint32_t xr_lir_internal_array_family(XrLirType type) {
     for (uint32_t family = 0; family < XR_LIR_ARRAY_FAMILY_COUNT; ++family)
         if (lir_array_elements[family] == type) return family;

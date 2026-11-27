@@ -46,7 +46,8 @@ static bool rbc_value_callable_argument(const XrRbcModule *module,const XrRbcVal
             (expected.type==XR_RBC_STRING ? kind==XRT_VALUE_STRING : expected.type==XR_RBC_SET_I64 ?
              kind==XRT_VALUE_SET_I64 : expected.type==XR_RBC_MAP_STRING_I64 ?
              kind==XRT_VALUE_MAP_STRING_I64 : rbc_array_kind((XrRbcRegisterKind)expected.type) &&
-             kind==(XrtValueKind)(XRT_VALUE_ARRAY_I64+xr_rbc_array_family((XrRbcRegisterKind)expected.type)));
+             xrt_value_kind_is_scalar_array(kind) && kind==xrt_backing_array_value_kind(
+                 (XrtBackingArrayKind)xr_rbc_array_family((XrRbcRegisterKind)expected.type)));
     }
     return expected.kind==XR_RBC_CALLABLE_SCALAR && rbc_value_scalar(code,function,value,XR_RBC_BITS);
 }

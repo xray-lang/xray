@@ -18,7 +18,6 @@
 #include <stdalign.h>
 #include <string.h>
 
-enum { VALUE_ARRAY_KINDS = 4 };
 typedef struct LayoutRow {
     XrLirValueLayoutKey key;
     uint32_t inline_array_ordinal;
@@ -72,10 +71,6 @@ static uint32_t declared_record_alignment(const XrLirModule *module, XrLirType t
     return module && type >= XR_LIR_TYPE_COUNT && type - XR_LIR_TYPE_COUNT < module->type_count ?
         xr_lir_record_alignment(module->types[type - XR_LIR_TYPE_COUNT].record.flags) : 0;
 }
-static XrLirType array_element(size_t family) {
-    static const XrLirType elements[] = {XR_LIR_I64, XR_LIR_STRING, XR_LIR_U8, XR_LIR_U64};
-    return elements[family];
-}
 static XrLirValueLayoutStatus key_index(const XrLirValueLayouts *set, XrLirValueLayoutKey key, size_t *index) {
     if (key.environment_function) {
         if (key.array_element || key.environment_function > set->functions) return XR_LIR_VALUE_LAYOUT_ARGUMENT;
@@ -84,12 +79,15 @@ static XrLirValueLayoutStatus key_index(const XrLirValueLayouts *set, XrLirValue
     }
     if (key.type == XR_LIR_ARRAY) {
         size_t arrays = XR_LIR_TYPE_COUNT + set->constructed;
-        for (size_t i = 0; i < VALUE_ARRAY_KINDS; ++i)
-            if (key.array_element == array_element(i)) { *index = arrays + i; return XR_LIR_VALUE_LAYOUT_OK; }
+        uint32_t family = xr_lir_internal_array_family(key.array_element);
+        if (family < XR_LIR_ARRAY_FAMILY_COUNT) {
+            *index = arrays + family;
+            return XR_LIR_VALUE_LAYOUT_OK;
+        }
         if (key.array_element >= XR_LIR_TYPE_COUNT && key.array_element < arrays) {
             uint32_t ordinal = set->values[key.array_element].inline_array_ordinal;
             if (ordinal) {
-                *index = arrays + VALUE_ARRAY_KINDS + ordinal - 1;
+                *index = arrays + XR_LIR_ARRAY_FAMILY_COUNT + ordinal - 1;
                 return XR_LIR_VALUE_LAYOUT_OK;
             }
         }
@@ -121,7 +119,7 @@ static XrLirValueLayoutStatus need_shaped_type(XrLirValueLayouts *set,
     return status;
 }
 static XrLirValueLayoutStatus mark_dependencies(const XrLirModule *module, XrLirValueLayouts *set) {
-    size_t first_inline = XR_LIR_TYPE_COUNT + set->constructed + VALUE_ARRAY_KINDS;
+    size_t first_inline = XR_LIR_TYPE_COUNT + set->constructed + XR_LIR_ARRAY_FAMILY_COUNT;
     size_t environments = XR_LIR_TYPE_COUNT + set->constructed + set->array_rows;
     for (size_t row = first_inline; row < environments; ++row)
         if (set->values[row].needed) set->values[set->values[row].key.array_element].needed = true;
@@ -214,7 +212,8 @@ static XrLirValueLayoutStatus scalar_spec(XrLirValueLayoutKey key, XrtValuePlanS
     case XR_LIR_ARRAY:
         kind = key.array_element == XR_LIR_I64 ? XRT_VALUE_ARRAY_I64 : key.array_element == XR_LIR_STRING ?
             XRT_VALUE_ARRAY_STRING : key.array_element == XR_LIR_U8 ? XRT_VALUE_ARRAY_U8 :
-            key.array_element == XR_LIR_U64 ? XRT_VALUE_ARRAY_U64 : XRT_VALUE_ARRAY_INLINE;
+            key.array_element == XR_LIR_U64 ? XRT_VALUE_ARRAY_U64 :
+            key.array_element == XR_LIR_F64 ? XRT_VALUE_ARRAY_F64 : XRT_VALUE_ARRAY_INLINE;
         size = alignment = 8;
         break;
     default: return XR_LIR_VALUE_LAYOUT_UNSUPPORTED;
@@ -532,7 +531,7 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
     if (!module || !module->finished || module->failure != XR_LIR_OK || !billing || !output || *output || (count && !roots))
         return XR_LIR_VALUE_LAYOUT_ARGUMENT;
     size_t rows = XR_LIR_TYPE_COUNT + (size_t)module->type_count, bytes = sizeof(XrLirValueLayouts);
-    size_t array_rows = (size_t)VALUE_ARRAY_KINDS + module->inline_array_count;
+    size_t array_rows = (size_t)XR_LIR_ARRAY_FAMILY_COUNT + module->inline_array_count;
     if (!extent_add(&rows, array_rows, 1) || !extent_add(&rows,module->function_count,1) ||
         !extent_add(&bytes, rows, sizeof(LayoutRow)) ||
         !extent_add(&bytes, rows, sizeof(LayoutRow *)) ||
@@ -549,14 +548,14 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
     set->types = (XrLirOwnershipTypeFact *)(set->ordered + rows);
     for (size_t i = 0; i < rows; ++i) set->values[i] = (LayoutRow){.key={(XrLirType)i, 0, 0}};
     size_t arrays = XR_LIR_TYPE_COUNT + set->constructed, environments = arrays + array_rows;
-    for (size_t i = 0; i < VALUE_ARRAY_KINDS; ++i)
-        set->values[arrays + i].key = (XrLirValueLayoutKey){XR_LIR_ARRAY, array_element(i),0};
+    for (size_t i = 0; i < XR_LIR_ARRAY_FAMILY_COUNT; ++i)
+        set->values[arrays + i].key = (XrLirValueLayoutKey){XR_LIR_ARRAY, xr_lir_internal_array_element_at((uint32_t)i),0};
     for (uint32_t t = 0; t < module->type_count; ++t) {
         uint32_t ordinal = module->types[t].inline_array_ordinal;
         if (!ordinal) continue;
         XrLirType element = XR_LIR_TYPE_COUNT + t;
         set->values[element].inline_array_ordinal = ordinal;
-        set->values[arrays + VALUE_ARRAY_KINDS + ordinal - 1].key = (XrLirValueLayoutKey){XR_LIR_ARRAY, element, 0};
+        set->values[arrays + XR_LIR_ARRAY_FAMILY_COUNT + ordinal - 1].key = (XrLirValueLayoutKey){XR_LIR_ARRAY, element, 0};
     }
     for (uint32_t f = 0; f < module->function_count; ++f)
         set->values[environments + f].key = (XrLirValueLayoutKey){module->functions[f].closure.callable,0,f + 1};
@@ -567,13 +566,13 @@ XR_FUNCDEF XrLirValueLayoutStatus xr_lir_value_layouts_create(const XrLirModule 
     }
     if (status == XR_LIR_VALUE_LAYOUT_OK) status = mark_dependencies(module, set);
     // Scalar Array families have no inline dependencies and precede aggregates.
-    for (size_t i = arrays; i < arrays + VALUE_ARRAY_KINDS && status == XR_LIR_VALUE_LAYOUT_OK; ++i)
+    for (size_t i = arrays; i < arrays + XR_LIR_ARRAY_FAMILY_COUNT && status == XR_LIR_VALUE_LAYOUT_OK; ++i)
         if (set->values[i].needed) status = build_row(module, set, i);
     for (size_t i = 1; i < arrays && status == XR_LIR_VALUE_LAYOUT_OK; ++i) {
         if (set->values[i].needed) status = build_row(module, set, i);
         uint32_t ordinal = set->values[i].inline_array_ordinal;
         if (ordinal && status == XR_LIR_VALUE_LAYOUT_OK) {
-            size_t row = arrays + VALUE_ARRAY_KINDS + ordinal - 1;
+            size_t row = arrays + XR_LIR_ARRAY_FAMILY_COUNT + ordinal - 1;
             if (set->values[row].needed) status = build_row(module, set, row);
         }
     }

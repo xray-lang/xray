@@ -236,7 +236,7 @@ static bool lower_receive_record_shapes(Lower *c, XrXirType type) {
             XrLirType array_element = element == XR_LIR_ARRAY ? lower_array_element(c, node->element) : XR_LIR_TYPE_INVALID;
             XrLirType *output = &c->constructed_types[(uint32_t)frame->type - XR_XIR_CONSTRUCTED_TYPE_BASE];
             if (inline_element || array_element == XR_LIR_U8 || array_element == XR_LIR_I64 ||
-                array_element == XR_LIR_STRING)
+                array_element == XR_LIR_STRING || array_element == XR_LIR_F64)
                 good = lower_build(c, xr_lir_nullable_array_type(c->module, array_element, output));
             else if (!element || element == XR_LIR_ARRAY) good = lower_unsupported(c, "Nullable payload has no inline POD layout");
             else good = lower_build(c, xr_lir_nullable_type(c->module, element, output));

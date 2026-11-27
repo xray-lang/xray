@@ -572,7 +572,7 @@ static bool rbc_invoke_result_home(const XrRbcModule *module,const XrRbcFunction
         uint32_t family=xr_rbc_array_family(target->result_kind);
         return !callee->error_unit && !aggregate && rbc_value_array(module,code,result,true) &&
             rbc_value_home(code,result)->type==rbc_result_value_type(callee) &&
-            (family < XR_RBC_ARRAY_FAMILY_COUNT ? kind==(XrtValueKind)(XRT_VALUE_ARRAY_I64+family) :
+            (family < XR_RBC_ARRAY_FAMILY_COUNT ? kind==xrt_backing_array_value_kind((XrtBackingArrayKind)family) :
                 target->result_kind==XR_RBC_BITS && kind==XRT_VALUE_ARRAY_INLINE);
     }
     if (target->result_kind!=XR_RBC_BITS) return false;

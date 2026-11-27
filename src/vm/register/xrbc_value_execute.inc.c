@@ -1469,7 +1469,7 @@ static XrtManagedStatus rbc_value_checked_empty_array(const XrRbcModule *module,
         status = xrt_native_array_inline_empty_checked(activation->frame,home->first_owner,
             activation->image,home->type);
     } else {
-        XrtBackingArrayKind family = (XrtBackingArrayKind)(kind - XRT_VALUE_ARRAY_I64);
+        XrtBackingArrayKind family = xrt_backing_array_kind_from_value(kind);
         status = xrt_native_array_empty_checked(activation->frame,home->first_owner,family);
         if (status == XRT_MANAGED_OK) activation->backings_ready = true;
     }

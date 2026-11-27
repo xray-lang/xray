@@ -15,6 +15,7 @@
 #include "base/xchecks.h"
 #include "os/os_random.h"
 #include "shared/xr_byte_compare_core.h"
+#include "shared/xr_float_to_decimal.h"
 #include <string.h>
 
 XRAY_API XrtManagedStatus xrt_native_array_timing_equal(const XrtManagedHeader *left,
@@ -72,6 +73,7 @@ static void array_store_scalar(unsigned char *destination, const XrtArrayItem *i
     case XRT_BACKING_ARRAY_I64: memcpy(destination, &item->value.i64, sizeof(item->value.i64)); break;
     case XRT_BACKING_ARRAY_U8: memcpy(destination, &item->value.u8, sizeof(item->value.u8)); break;
     case XRT_BACKING_ARRAY_U64: memcpy(destination, &item->value.u64, sizeof(item->value.u64)); break;
+    case XRT_BACKING_ARRAY_F64: memcpy(destination, &item->value.f64, sizeof(item->value.f64)); break;
     default: XR_CHECK(false, "only an admitted scalar item reaches scalar storage"); break;
     }
 }
@@ -228,6 +230,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_get(const XrtArrayBacking *array,
     case XRT_BACKING_ARRAY_I64: memcpy(&item.value.i64, element, sizeof(item.value.i64)); break;
     case XRT_BACKING_ARRAY_U8: memcpy(&item.value.u8, element, sizeof(item.value.u8)); break;
     case XRT_BACKING_ARRAY_U64: memcpy(&item.value.u64, element, sizeof(item.value.u64)); break;
+    case XRT_BACKING_ARRAY_F64: memcpy(&item.value.f64, element, sizeof(item.value.f64)); break;
     case XRT_BACKING_ARRAY_STRING:
         item.value.string = (XrtStringBacking *)array_owned_child(array, (size_t)index);
         if (!item.value.string) return XRT_MANAGED_ARGUMENT;
@@ -280,6 +283,12 @@ static int array_format_read(const void *context, XrValueFormatNode node, XrValu
     } else if (node.type == XRT_BACKING_ARRAY_I64) {
         view->kind = XR_VALUE_FORMAT_SIGNED;
         memcpy(&view->signed_value, node.value, sizeof(view->signed_value));
+    } else if (node.type == XRT_BACKING_ARRAY_F64) {
+        uint64_t bits;
+        memcpy(&bits, node.value, sizeof(bits));
+        view->kind = XR_VALUE_FORMAT_BYTES;
+        view->bytes = view->scalar_bytes;
+        return xr_float_to_decimal(64, bits, (char *)view->scalar_bytes, sizeof(view->scalar_bytes), &view->size);
     } else {
         view->kind = XR_VALUE_FORMAT_UNSIGNED;
         if (node.type == XRT_BACKING_ARRAY_U8) view->unsigned_value = *(const uint8_t *)node.value;

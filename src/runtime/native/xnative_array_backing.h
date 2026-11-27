@@ -30,6 +30,8 @@ XR_FUNC XrtManagedStatus xrt_array_backing_u8_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, const uint8_t *, size_t count, size_t capacity);
 XR_FUNC XrtManagedStatus xrt_array_backing_u64_create(XrtManagedFrame *, size_t,
     const XrtBackingTypes *, const uint64_t *, size_t count, size_t capacity);
+XR_FUNC XrtManagedStatus xrt_array_backing_f64_create(XrtManagedFrame *, size_t,
+    const XrtBackingTypes *, const double *, size_t count, size_t capacity);
 /* An empty Array whose allocated tail holds `capacity` rows. The capacity is
  * language-supplied rather than derived from input, so a negative request is
  * an argument failure and an unrepresentable one is an overflow failure. */
