@@ -91,6 +91,7 @@ typedef struct Lower {
     uint8_t *cleanup_leaves;
     XrLirType owned_i64_cell, owned_map_cell;
     XrLirFunction *functions, print, print_string, clocks[4];
+    XrLirFunction nullable_string_equal;
     uint8_t *active;
     uint32_t *queue, queued;
     uint32_t function, block, instruction;
@@ -2540,6 +2541,102 @@ static bool lower_payloadless_enum_equality(const LowerFunction *f, const XrXirI
         types, type, &description) == XR_XIR_OK && !description.field_count;
 }
 
+static bool lower_nullable_string_equality(Lower *c, XrLirType optional) {
+    const XrLirType parameters[2] = {optional, optional};
+    const XrLirType forwarded[3] = {optional, optional, XR_LIR_I1};
+    const XrLirFunctionSpec spec = {.name="xrt_nullable_string_equal",
+        .name_length=sizeof("xrt_nullable_string_equal")-1, .parameters=parameters,
+        .parameter_count=2, .result=XR_LIR_I1};
+    XrLirFunction function = {0};
+    XrLirBlock entry = {0}, left = {0}, both = {0}, finish = {0};
+    XrLirValue formals[2] = {{0}}, inputs[3] = {{0}}, left_values[3] = {{0}}, both_values[3] = {{0}}, finish_values[3] = {{0}};
+    if (!lower_build(c, xr_lir_declare_function(c->module, &spec, &function)) ||
+        !lower_build(c, xr_lir_define_function(c->module, function)) ||
+        !lower_build(c, xr_lir_add_block(c->module, function, NULL, 0, &entry)) ||
+        !lower_build(c, xr_lir_add_block(c->module, function, forwarded, 3, &left)) ||
+        !lower_build(c, xr_lir_add_block(c->module, function, forwarded, 3, &both)) ||
+        !lower_build(c, xr_lir_add_block(c->module, function, forwarded, 3, &finish)) ||
+        !lower_build(c, xr_lir_set_entry(c->module, function, entry))) return false;
+    for (uint32_t i=0; i<3; ++i) {
+        if ((i<2 && !lower_build(c, xr_lir_function_parameter(c->module, function, i, &formals[i]))) ||
+            !lower_build(c, xr_lir_block_parameter(c->module, left, i, &left_values[i])) ||
+            !lower_build(c, xr_lir_block_parameter(c->module, both, i, &both_values[i])) ||
+            !lower_build(c, xr_lir_block_parameter(c->module, finish, i, &finish_values[i]))) return false;
+    }
+    XrLirValue tags[2] = {{0}}, strings[2] = {{0}}, right = {0};
+    XrLirInstruction test = {.op=XR_LIR_NULLABLE_IS_SOME, .type=XR_LIR_I1, .operand_count=1};
+    for (uint32_t i=0; i<2; ++i) {
+        XrLirInstruction retain = {.op=XR_LIR_VALUE_RETAIN, .type=optional,
+            .operands=&formals[i], .operand_count=1};
+        if (!lower_build(c, xr_lir_emit_value(c->module, entry, &retain, &inputs[i]))) return false;
+        test.operands=&inputs[i];
+        if (!lower_build(c, xr_lir_emit_value(c->module, entry, &test, &tags[i]))) return false;
+    }
+    XrLirInstruction equal = {.op=XR_LIR_ICMP, .type=XR_LIR_I1, .predicate=XR_LIR_EQ,
+        .operand_count=2, .operands=tags};
+    XrLirInstruction left_branch = {.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT, .operand_count=1, .operands=&tags[0],
+        .edge_count=2, .edges={{.target=left,.arguments=inputs,.argument_count=3},
+            {.target=finish,.arguments=inputs,.argument_count=3}}};
+    XrLirInstruction right_branch = {.op=XR_LIR_CONDBR, .type=XR_LIR_UNIT, .operand_count=1, .operands=&right,
+        .edge_count=2, .edges={{.target=both,.arguments=left_values,.argument_count=3},
+            {.target=finish,.arguments=left_values,.argument_count=3}}};
+    test.operands=&left_values[1];
+    if (!lower_build(c, xr_lir_emit_value(c->module, entry, &equal, &inputs[2])) ||
+        !lower_build(c, xr_lir_set_terminator(c->module, entry, &left_branch)) ||
+        !lower_build(c, xr_lir_emit_value(c->module, left, &test, &right)) ||
+        !lower_build(c, xr_lir_set_terminator(c->module, left, &right_branch))) return false;
+    for (uint32_t i=0; i<2; ++i) {
+        XrLirInstruction unwrap = {.op=XR_LIR_NULLABLE_UNWRAP, .type=XR_LIR_STRING,
+            .operand_count=1, .operands=&both_values[i]};
+        if (!lower_build(c, xr_lir_emit_value(c->module, both, &unwrap, &strings[i]))) return false;
+    }
+    equal.op=XR_LIR_STRING_EQUAL;
+    equal.operands=strings;
+    if (!lower_build(c, xr_lir_emit_value(c->module, both, &equal, &both_values[2]))) return false;
+    for (uint32_t i=0; i<2; ++i) {
+        XrLirInstruction drop_string = {.op=XR_LIR_STRING_DROP, .type=XR_LIR_UNIT,
+            .operand_count=1, .operands=&strings[i]};
+        XrLirInstruction drop_optional = {.op=XR_LIR_VALUE_DROP, .type=XR_LIR_UNIT,
+            .operand_count=1, .operands=&finish_values[i]};
+        if (!lower_build(c, xr_lir_emit_effect(c->module, both, &drop_string)) ||
+            !lower_build(c, xr_lir_emit_effect(c->module, finish, &drop_optional))) return false;
+    }
+    XrLirInstruction done = {.op=XR_LIR_BR, .type=XR_LIR_UNIT, .edge_count=1,
+        .edges={{.target=finish,.arguments=both_values,.argument_count=3}}};
+    XrLirInstruction ret = {.op=XR_LIR_RET, .type=XR_LIR_UNIT,
+        .operand_count=1, .operands=&finish_values[2]};
+    if (!lower_build(c, xr_lir_set_terminator(c->module, both, &done)) ||
+        !lower_build(c, xr_lir_set_terminator(c->module, finish, &ret))) return false;
+    c->nullable_string_equal=function;
+    return true;
+}
+
+static bool lower_is_nullable_string_comparison(const LowerFunction *f, const XrXirInstruction *op) {
+    const XrXirTypes *types = f->owner->source->types;
+    XrXirType left = xr_xir_operand_type(f->source, op->args[0]);
+    return op->op == XR_XIR_EQUAL && left == xr_xir_operand_type(f->source, op->args[1]) &&
+        xr_xir_type_is_nullable(types, left) && xr_xir_nullable_element(types, left) == XR_XIR_STRING;
+}
+
+static bool lower_emit_nullable_string_comparison(LowerFunction *f, uint32_t b,
+    XrLirValue *inputs, XrLirPredicate predicate, XrLirValue *result) {
+    Lower *c = f->owner;
+    const XrLirType optional = c->module->functions[f->function.id - 1].values[inputs[0].id - 1].type;
+    if (!c->nullable_string_equal.id && !lower_nullable_string_equality(c, optional)) return false;
+    XrLirInstruction call = {.op=XR_LIR_CALL, .type=XR_LIR_I1, .callee=c->nullable_string_equal,
+        .operand_count=2, .operands=inputs, .source=lower_source(c)};
+    if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &call, result))) return false;
+    if (predicate == XR_LIR_EQ) return true;
+    XrLirInstruction zero = {.op=XR_LIR_CONST, .type=XR_LIR_I1};
+    XrLirValue operands[2] = {*result, {0}};
+    if (!lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &zero, &operands[1]))) return false;
+    XrLirInstruction invert = {.op=XR_LIR_ICMP, .type=XR_LIR_I1, .predicate=XR_LIR_EQ,
+        .operand_count=2, .operands=operands, .source=lower_source(c)};
+    return lower_build(c, xr_lir_emit_value(c->module, f->blocks[b], &invert, result));
+}
+
+
+
 static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
     Lower *c = f->owner;
     const XrXirInstruction *op = &f->source->instructions[i];
@@ -2847,6 +2944,8 @@ static bool lower_emit_scalar(LowerFunction *f, uint32_t b, uint32_t i) {
         for (uint32_t a = 0; a < instruction.operand_count; ++a)
             if (!lower_value(f, op->args[a], &operands[a]))
                 return false;
+        if (lower_is_nullable_string_comparison(f, op))
+            return lower_emit_nullable_string_comparison(f, b, operands, instruction.predicate, &f->values[result]);
         if (op->op == XR_XIR_EQUAL && lower_payloadless_enum_equality(f, op))
             for (uint32_t a = 0; a < 2; ++a)
                 if (!lower_enum_tag(f, b, operands[a], &operands[a])) return false;
@@ -3014,7 +3113,10 @@ static bool lower_call(LowerFunction *f, uint32_t b, uint32_t i) {
         XrLirInstruction compare={.op=lower_operation(&comparison_owner,&target->instructions[0]),
             .type=XR_LIR_I1,.predicate=lower_predicate(&target->instructions[0]),
             .operands=tagged?tags:arguments,.operand_count=2,.source=call.source};
-        if (good) good=lower_build(c,xr_lir_emit_value(c->module,f->blocks[b],&compare,&condition));
+        if (good && lower_is_nullable_string_comparison(&comparison_owner, &target->instructions[0]))
+            good = lower_emit_nullable_string_comparison(f, b, arguments, compare.predicate, &condition);
+        else if (good)
+            good=lower_build(c,xr_lir_emit_value(c->module,f->blocks[b],&compare,&condition));
         arguments[0]=condition; arguments[1]=arguments[2];
         call.op=XR_LIR_ASSERT_CONDITION; call.callee=(XrLirFunction){0}; call.operand_count=2;
     }
@@ -4243,6 +4345,17 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
     /* Slice contracts refer to the final function directory. Declare the
      * ordinary entry before receiving them; no source body is executed here. */
     if (good && c.views && !local && !exporting) good = lower_wrapper(&c, program_entry, &entry);
+    for (uint32_t f=0; good && !c.nullable_string_equal.id && f<source->function_count; ++f) {
+        if (!c.active[f]) continue;
+        const XrXirFunction *function = &source->functions[f];
+        LowerFunction context = {.owner=&c, .source=function};
+        for (uint32_t i=0; !c.nullable_string_equal.id && good && i<function->instruction_count; ++i) {
+            const XrXirInstruction *op = &function->instructions[i];
+            if (op->op != XR_XIR_EQUAL || !lower_is_nullable_string_comparison(&context,op)) continue;
+            XrLirType type = lower_type(&c, xr_xir_operand_type(function,op->args[0]));
+            good = lower_nullable_string_equality(&c,type);
+        }
+    }
     if (good) good = lower_slice_effects(&c);
     for (uint32_t f = 0; f < source->function_count && good; ++f)
         if (c.active[f] && !lower_core_assertion(&c, f))

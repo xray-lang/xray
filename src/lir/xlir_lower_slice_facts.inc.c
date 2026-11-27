@@ -108,6 +108,11 @@ static bool lower_slice_effects_receive(Lower *c, XirModuleEffectExportView sour
         }
         rows[target] = row;
     }
+    if (good && c->nullable_string_equal.id) {
+        const uint32_t target = c->nullable_string_equal.id;
+        rows[target] = (XrLirSliceFunctionFact){.function=target,.parameter_count=2,
+            .result_parameter=UINT32_MAX,.available=true};
+    }
     if (good) good = used == count && borrowed==loans && lower_build(c,xr_lir_internal_slice_effects_set(c->module,
         (XrLirSliceFactsView){.functions=rows,.terms=terms,.callback_loans=relations,
             .function_count=c->module->function_count,.term_count=used,.callback_loan_count=borrowed,

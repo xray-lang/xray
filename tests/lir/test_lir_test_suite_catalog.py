@@ -14,6 +14,7 @@ from test_lir_pipeline_eval import compile_command
 SOURCE = Path("demos/07-advanced/testing.xr")
 CRYPTO_SOURCES = (
     "tests/regression/10_stdlib/1400_crypto_hash.xr",
+    "tests/regression/10_stdlib/1401_crypto_hmac.xr",
     "tests/regression/10_stdlib/1403_crypto_sha512.xr",
 )
 HELPER = b'''export fn initialValue() -> i64 {
@@ -115,6 +116,46 @@ def check_rejected(args, root, raw, failure, helper=HELPER):
     assert not generated.exists() and not report.exists(), root
 
 
+def check_nullable_string_comparisons(args, work):
+    work.mkdir()
+    source = "nullable-string-comparisons.xr"
+    raw = b'''fn xrt_nullable_string_equal(left: string?, right: string?) -> bool {
+    return false
+}
+
+fn make_text(value: string) -> string? {
+    return value + "!"
+}
+
+@test
+fn compare_nullable_strings() {
+    const shared = make_text("live")
+    const other = make_text("other")
+    assert(!xrt_nullable_string_equal(shared, shared))
+    var numbers: Array<i64> = [11, 22]
+    const view: Slice<i64> = numbers[0:2]
+    const first = view[0]
+    const equal = shared == shared
+    const distinct = shared != other
+    const second = view[1]
+    assert(first == 11 && second == 22)
+    assert(equal && distinct)
+    assertEqual(shared, make_text("live"))
+    assert(shared != null)
+}
+'''
+    (work / source).write_bytes(raw)
+    vm, generated, vm_report = vm_products(args, work, work, source)
+    assert vm[0] == 0 and not vm[2], vm
+    result = catalog(vm_report, source, raw, (1, 0, 0))
+    assert [row["name"] for row in result["entries"]] == ["compare_nullable_strings"], result
+    executable = native_executable(args, work, generated, "comparison")
+    native_report = work / "native.json"
+    native = invoke(work, "suite-native", [executable, native_report])
+    assert native[0] == 0 and not native[2], native
+    assert vm_report.read_bytes() == native_report.read_bytes(), work
+
+
 def check_crypto_catalogs(args, root):
     manifest = json.loads((args.source_root / "tests/smoke/expected/crypto-catalog.json").read_bytes())
     by_source = {suite["source"]: suite for suite in manifest["suites"]}
@@ -183,6 +224,7 @@ def main():
     assert missing[0] == 1 and b"missing.xr: suite compilation failed" in missing[2], missing
     assert not generated.exists() and not report.exists(), missing_work
 
+    check_nullable_string_comparisons(args, root / "nullable-string-comparisons")
     check_crypto_catalogs(args, root)
     print(f"Executed VM and generated C suite catalogs for LF, CRLF, a guest panic, and Crypto. Artifacts at {root}")
 
