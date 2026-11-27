@@ -30,9 +30,12 @@ fn imported_test() {
 ENTRIES = [("z_first_test", 2, 1, 0), ("skipped_test", 3, 2, 0), ("a_second_test", 4, 1, 0)]
 
 
-def native_executable(args, root, generated, label):
+def native_executable(args, root, generated, label, *, optimize=True):
     executable = root / (label + (".exe" if args.kind == "msvc" else "-native"))
     command = compile_command(args, generated, executable)
+    if not optimize:
+        enabled, disabled = ("/O2", "/Od") if args.kind == "msvc" else ("-O2", "-O0")
+        command[command.index(enabled)] = disabled
     tests = args.source_root / "tests/lir"
     command[command.index(generated):command.index(generated)] = [
         ("/I" if args.kind == "msvc" else "-I") + str(tests),
@@ -129,7 +132,8 @@ def check_crypto_catalogs(args, root):
         assert [{key: row[key] for key in ("name", "role", "timeout")} for row in report["entries"]] == expected["entries"]
         assert b"({" not in generated.read_bytes(), generated
 
-        binary = native_executable(args, work, generated, "suite")
+        # Large generated Crypto suites need bounded compiler time under sanitizer instrumentation.
+        binary = native_executable(args, work, generated, "suite", optimize=False)
         native_report = work / "native.json"
         native = invoke(work, "suite-native", [binary, native_report])
         assert native[0] == 0 and not native[2], (native, source)
