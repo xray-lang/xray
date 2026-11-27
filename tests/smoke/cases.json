@@ -280,8 +280,8 @@
         "feature": "Task339 M2",
         "stage": "crypto-suite",
         "source": "tests/regression/10_stdlib/1404_crypto_aes.xr",
-        "first_diagnostic": "tests/regression/10_stdlib/1404_crypto_aes.xr:21:9: INVOKE is not supported by LIR lowering yet",
-        "native_first_diagnostic": "lowering: INVOKE is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:662:11: typed function error boundary is not supported by LIR lowering yet",
+        "native_first_diagnostic": "lowering: typed function error boundary is not supported by LIR lowering yet"
       }
     },
     {
@@ -833,8 +833,8 @@
         "feature": "Task339 M2",
         "stage": "crypto-suite",
         "source": "tests/regression/10_stdlib/1404_crypto_aes.xr",
-        "first_diagnostic": "tests/regression/10_stdlib/1404_crypto_aes.xr:21:9: INVOKE is not supported by LIR lowering yet",
-        "native_first_diagnostic": "lowering: INVOKE is not supported by LIR lowering yet"
+        "first_diagnostic": "stdlib/crypto/crypto.xr:662:11: typed function error boundary is not supported by LIR lowering yet",
+        "native_first_diagnostic": "lowering: typed function error boundary is not supported by LIR lowering yet"
       }
     },
     {
