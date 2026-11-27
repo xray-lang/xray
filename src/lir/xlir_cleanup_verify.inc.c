@@ -305,6 +305,9 @@ static bool lir_directory_frame(const XrLirModule *m, const XrLirFunctionData *f
             return false;
         }
         const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, v + 1);
+        if (definition && f->result == XR_LIR_I64 && !lir_cleanup_frontier(f, value->block) &&
+            (value->type == XR_LIR_STRING || value->type == XR_LIR_ARRAY ||
+             (value->type == XR_LIR_ARRAY_CELL && definition->op == XR_LIR_CELL_NEW))) continue;
         if (!definition || !((value->type == XR_LIR_I64_CELL && definition->op == XR_LIR_CELL_NEW) ||
             (value->type == XR_LIR_U64 && definition->op == XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED))) return false;
     }

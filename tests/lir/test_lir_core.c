@@ -417,14 +417,15 @@ static void directory_cleanup_requires_a_complete_exit(void) {
 
 static void directory_next_requires_exact_successors(void) {
     enum { COMPLETE, NO_FRAME, WRONG_SOURCE, WRONG_CAPTURE, WRONG_PRIMARY, LOOP,
-        LOOP_NOT_RETIRED, LOOP_EXIT_WRONG_SOURCE, LOOP_SECOND_NEXT };
+        LOOP_NOT_RETIRED, LOOP_EXIT_WRONG_SOURCE, LOOP_SECOND_NEXT, LOOP_RETIRED_CELL, LOOP_LIVE_CELL };
     const XrLirSource read = {"cleanup.xr", 10, 8, 12, 8, 12};
     const XrLirSource close = {"cleanup.xr", 10, 5, 9, 5, 9};
     const XrLirSource returned = {"cleanup.xr", 10, 8, 5, 8, 25};
-    for (unsigned fault = COMPLETE; fault <= LOOP_SECOND_NEXT; ++fault) {
+    for (unsigned fault = COMPLETE; fault <= LOOP_LIVE_CELL; ++fault) {
         bool loop = fault >= LOOP;
         XrLirModule *m = NULL;
-        OK(xr_lir_module_create(NULL, &m));
+        if (fault == LOOP_RETIRED_CELL || fault == LOOP_LIVE_CELL) OK(xr_lir_array_module_create(NULL, &m));
+        else OK(xr_lir_module_create(NULL, &m));
         XrLirType optional = XR_LIR_TYPE_INVALID, scalar = XR_LIR_I64, status = XR_LIR_U64;
         OK(xr_lir_nullable_type(m, XR_LIR_STRING, &optional));
         XrLirFunction owner = test_function(m, "owner", NULL, 0, loop ? scalar : optional), callback = {0};
@@ -448,6 +449,20 @@ static void directory_next_requires_exact_successors(void) {
         XrLirValue capture = {0}, wrong = {0};
         OK(xr_lir_emit_value(m, entry, &(XrLirInstruction){.op=XR_LIR_CONST,.type=scalar,.bits=1}, &capture));
         OK(xr_lir_emit_value(m, entry, &(XrLirInstruction){.op=XR_LIR_CONST,.type=scalar,.bits=2}, &wrong));
+        XrLirValue cell = {0};
+        XrLirInstruction drop = {.op=XR_LIR_ARRAY_CELL_DROP,.type=XR_LIR_UNIT,.operands=&cell,.operand_count=1};
+        if (fault == LOOP_RETIRED_CELL || fault == LOOP_LIVE_CELL) {
+            uint32_t intrinsic = 0;
+            XrLirValue array = {0};
+            OK(xr_lir_array_operation(m, XR_LIR_STRING, XR_LIR_ARRAY_OP_NEW, &intrinsic));
+            OK(xr_lir_emit_value(m, entry, &(XrLirInstruction){.op=XR_LIR_CALL_INTRINSIC,
+                .type=XR_LIR_ARRAY,.intrinsic=intrinsic}, &array));
+            OK(xr_lir_emit_value(m, entry, &(XrLirInstruction){.op=XR_LIR_CELL_NEW,
+                .type=XR_LIR_ARRAY_CELL,.operands=&array,.operand_count=1}, &cell));
+            OK(xr_lir_emit_effect(m, entry, &(XrLirInstruction){.op=XR_LIR_ARRAY_DROP,
+                .type=XR_LIR_UNIT,.operands=&array,.operand_count=1}));
+            if (fault == LOOP_RETIRED_CELL) OK(xr_lir_emit_effect(m, entry, &drop));
+        }
         OK(xr_lir_internal_cleanup_block(m, entry, 0, callback.id, &capture, 1));
         OK(xr_lir_set_terminator(m, entry, &(XrLirInstruction){.op=XR_LIR_BR,.type=XR_LIR_UNIT,
             .edge_count=1,.edges={{.target=active}}}));
@@ -499,6 +514,7 @@ static void directory_next_requires_exact_successors(void) {
             OK(xr_lir_set_terminator(m, normal, &(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
                 .operands=&tested,.operand_count=1,.edge_count=2,.edges={{.target=some},{.target=eof}}}));
             if (fault == LOOP_EXIT_WRONG_SOURCE) step.source = read;
+            if (fault == LOOP_LIVE_CELL) OK(xr_lir_emit_effect(m, eof, &drop));
             OK(xr_lir_emit_value(m, eof, &step, &success[1]));
             OK(xr_lir_emit_effect(m, eof, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,
                 .type=XR_LIR_UNIT,.operands=&success[1],.operand_count=1,.source=returned}));
@@ -517,7 +533,9 @@ static void directory_next_requires_exact_successors(void) {
 
         XrLirDiagnostic diagnostic = {0};
         XrLirStatus verified = xr_lir_module_finish(m, &diagnostic);
-        if (fault == COMPLETE || fault == LOOP) CHECK(verified == XR_LIR_OK);
+        if (fault == COMPLETE || fault == LOOP || fault == LOOP_RETIRED_CELL) CHECK(verified == XR_LIR_OK);
+        else if (fault == LOOP_LIVE_CELL) CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,
+            "checked directory read requires retired Managed Cells"));
         else CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,
             fault == LOOP_NOT_RETIRED ? "Managed owner is not released" : "cleanup frontier"));
         xr_lir_module_destroy(m);

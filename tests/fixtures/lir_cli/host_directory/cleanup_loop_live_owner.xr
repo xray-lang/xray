@@ -1,0 +1,4 @@
+import io
+import path
+
+print(io.directoryProbeLoopLiveArray(io.directoryProbeOpen(path.Path("one"))))

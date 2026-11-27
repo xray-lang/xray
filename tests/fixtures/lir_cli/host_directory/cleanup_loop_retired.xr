@@ -1,0 +1,5 @@
+import io
+import path
+
+print(io.directoryProbeLoopRetiredArray(io.directoryProbeOpen(path.Path("one")), true))
+print(io.directoryProbeLoopRetiredArray(io.directoryProbeOpen(path.Path("empty")), false))

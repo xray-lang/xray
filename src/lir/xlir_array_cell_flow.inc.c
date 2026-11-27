@@ -92,6 +92,11 @@ static XrLirStatus lir_array_cell_block(LirArrayCellFlow *flow, uint32_t functio
                     lir_cfg_reference(f->values[v->edges[e].arguments[a] - 1].type))
                     return xr_lir_internal_error(d, "Managed Cell handle cannot transfer on an edge",
                         function, block + 1, i + 1, &v->source);
+        if (v->op == XR_LIR_HOST_DIRECTORY_NEXT_CHECKED)
+            for (uint32_t c = 0; c < flow->count; ++c)
+                if (flow->current[c] != LIR_ARRAY_CELL_EMPTY)
+                    return xr_lir_internal_error(d, "checked directory read requires retired Managed Cells",
+                        function, block + 1, i + 1, &v->source);
         if (v->op == XR_LIR_RET)
             for (uint32_t c = 0; c < flow->count; ++c)
                 if (flow->current[c] != LIR_ARRAY_CELL_EMPTY)

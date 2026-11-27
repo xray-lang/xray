@@ -498,6 +498,15 @@ static bool lower_directory_loop_repeats(Lower *c, const XrXirFunction *f, Lower
     return repeats;
 }
 
+/* The ordinary Cell flow verifies that owners produced before registration
+ * have retired when the checked directory read is reached. */
+static bool lower_directory_prefix_value(const Lower *c, const XrXirBlock *block, XrXirType type) {
+    if (block->frontier) return false;
+    if (type == XR_XIR_STRING || lower_array_element(c, type) == XR_LIR_STRING) return true;
+    XrXirType element = xr_xir_cell_element(c->source->types, type);
+    return lower_array_element(c, element) == XR_LIR_STRING;
+}
+
 /* Only the next/tag pair (and its single local Cell round-trip) may
  * produce or consume the directory name. The tag itself is used by the
  * immediately following branch. No value from this sequence crosses it. */
@@ -528,7 +537,7 @@ static LowerDirectoryLoop lower_directory_loop(Lower *c, const XrXirFunction *f)
         for (uint32_t i = block->first; i < block->first + block->count; ++i) {
             const XrXirInstruction *op = &f->instructions[i];
             if (lower_directory_loop_value(site, op)) continue;
-            if (!lower_cleanup_frame_type(c, op->type) ||
+            if ((!lower_cleanup_frame_type(c, op->type) && !lower_directory_prefix_value(c, block, op->type)) ||
                 op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) return absent;
             if (op == site.tag + 1) continue;
             uint32_t count = xir_instruction_operand_count(f, op, c->source);
