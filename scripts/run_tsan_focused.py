@@ -1,24 +1,10 @@
 #!/usr/bin/env python3
-"""Focused ThreadSanitizer lane for runtime concurrency primitives.
+"""Focused ThreadSanitizer lane for runtime kernels and VM concurrency cases.
 
-The work-stealing scheduler and the two-band reference counter are exactly the
-code TSan exists for, and until this lane nothing ran them under it. The
-ownership audit's fail-closed record gate is also built and exercised here,
-because diagnostic-only sources are intentionally absent from release archives.
-
-Scope is the CURRENT canonical concurrency assets, not the three legacy
-directories an earlier analysis pointed at (tests/coroutine_safety,
-tests/work_stealing, tests/network) -- their own READMEs mark them as historical
-hand-run drafts on pre-clean-slate surface, superseded by
-tests/regression/11_coroutine and the diff nets.
-
-VM mode only: the TSan-instrumented binary is the compiler+runtime itself, and
-AOT child binaries are produced by the system cc, so they would not be
-instrumented and would prove nothing.
-
-Races are collected rather than halted on (halt_on_error=0), so one warning does
-not hide the rest. Every selected test must complete successfully, and any race
-warning fails the lane independently of process exit status.
+The kernel targets cover the runtime currently used by the VM. The canonical
+coroutine and progress inputs remain required for the VM execution verdict.
+Collect races across all selected tests. A failed command or any race warning
+fails the lane.
 
 Environment overrides:
     XR_TSAN_JOBS        parallel build jobs (default: all cores)
@@ -66,20 +52,24 @@ CASE_TIMEOUT = 60
 
 TSAN_WARNING = "WARNING: ThreadSanitizer"
 
-# These are the Task 276 concurrency boundaries that must be present in the
-# sanitized build and selected by CTest.  Target names and CTest identities are
-# deliberately the same, so one frozen tuple controls both surfaces.
-TASK276_TSAN_TESTS: tuple[str, ...] = (
-    "test_vm_decoded_cache",
-    "test_xtp_resource_stress",
-    "test_runtime_generation",
-    "test_entry_cell_runtime_archive",
-    "test_runtime_program_archive",
+# Explicit build target and CTest name pairs from the current Thread kernels gate.
+KERNELS: tuple[tuple[str, str], ...] = (
+    ("test_os_thread_token", "os_thread_token"),
+    ("test_xir_values", "test_xir_values"),
+    ("test_xir_signed_object_rc", "test_xir_signed_object_rc"),
+    ("test_native_managed_kernel", "native_managed_kernel"),
+    ("test_native_managed_root", "native_managed_root"),
+    ("test_native_backing", "native_backing"),
+    ("test_native_string_backing_ops", "native_string_backing_ops"),
+    ("test_native_place", "native_place"),
+    ("test_native_value_plan", "native_value_plan"),
+    ("test_native_managed_status", "native_managed_status"),
+    ("test_native_capture_backing", "native_capture_backing"),
+    ("test_rbc_code_owner", "rbc_code_owner"),
 )
-# CTest compiles this with CMake's own regular expression engine, which has
-# no non-capturing group: "(?:" makes it reject the pattern and print the
-# compile error ahead of the JSON, which the discovery below then cannot read.
-TASK276_TSAN_REGEX = "^(" + "|".join(TASK276_TSAN_TESTS) + ")$"
+CLOSED_THREADS_TARGET = "test_xir_value_allocations"
+KERNEL_TESTS = tuple(name for _, name in KERNELS)
+KERNEL_REGEX = "^(" + "|".join(KERNEL_TESTS) + ")$"
 TSAN_PROBE_TIMEOUT = 60
 
 
@@ -87,14 +77,8 @@ def focused_build_spec(build_dir: Path) -> sanitizer.BuildSpec:
     """Return the exact instrumented target set owned by this lane."""
     return sanitizer.BuildSpec(
         build_dir=build_dir,
-        sanitizer_flags=(
-            'CMAKE_C_FLAGS=-fsanitize=thread -fno-omit-frame-pointer',
-            'CMAKE_EXE_LINKER_FLAGS=-fsanitize=thread',
-        ),
-        targets=("xray", "test_ownership_audit", *TASK276_TSAN_TESTS),
-        # No ENABLE_* BOOL exists here, so reuse is verified by looking for the
-        # instrumentation flag itself in the cache.
-        verify_cache_contains=("-fsanitize=thread",),
+        sanitizer_flags=("ENABLE_TSAN=ON", "XR_XIR_PARANOID=ON"),
+        targets=("xray", *(target for target, _ in KERNELS), CLOSED_THREADS_TARGET),
     )
 
 
@@ -139,13 +123,13 @@ def tsan_runtime_available(log, *, run=proc.run,
     return True
 
 
-def discover_task276_ctests(build_dir: Path, log, *, run=proc.run,
-                            timeout: float | None = 120) -> tuple[str, ...] | None:
+def discover_kernel_ctests(build_dir: Path, log, *, run=proc.run,
+                           timeout: float | None = 120) -> tuple[str, ...] | None:
     """Return the exact focused CTest identities, failing closed on drift."""
     result = run(
         [
             "ctest", "--test-dir", build_dir, "--show-only=json-v1",
-            "-R", TASK276_TSAN_REGEX,
+            "-R", KERNEL_REGEX,
         ],
         timeout=timeout,
     )
@@ -165,9 +149,9 @@ def discover_task276_ctests(build_dir: Path, log, *, run=proc.run,
         log(f"focused CTest discovery returned invalid JSON: {exc}", error=True)
         return None
 
-    required = set(TASK276_TSAN_TESTS)
+    required = set(KERNEL_TESTS)
     selected = set(names)
-    if len(names) != len(TASK276_TSAN_TESTS) or selected != required:
+    if len(names) != len(KERNEL_TESTS) or selected != required:
         missing = sorted(required - selected)
         unexpected = sorted(selected - required)
         details = []
@@ -184,10 +168,10 @@ def discover_task276_ctests(build_dir: Path, log, *, run=proc.run,
     return names
 
 
-def run_task276_ctests(build_dir: Path, env: dict[str, str], timeout: float | None,
-                       log, *, run=proc.run) -> bool:
-    """Validate registration, then run every Task 276 concurrency target."""
-    selected = discover_task276_ctests(build_dir, log, run=run, timeout=timeout)
+def run_kernel_ctests(build_dir: Path, env: dict[str, str], timeout: float | None,
+                      log, *, run=proc.run) -> bool:
+    """Validate registration and run every required kernel test."""
+    selected = discover_kernel_ctests(build_dir, log, run=run, timeout=timeout)
     if selected is None:
         return False
     log("focused CTest identities: " + ", ".join(selected))
@@ -195,7 +179,7 @@ def run_task276_ctests(build_dir: Path, env: dict[str, str], timeout: float | No
         [
             "ctest", "--test-dir", build_dir, "--output-on-failure",
             "--no-tests=error", "-j", "1", "--timeout", "300",
-            "-R", TASK276_TSAN_REGEX,
+            "-R", KERNEL_REGEX,
         ],
         env=env,
         timeout=timeout,
@@ -203,9 +187,32 @@ def run_task276_ctests(build_dir: Path, env: dict[str, str], timeout: float | No
     sanitizer.write_console(sys.stdout, result.combined_text())
     if not result.ok:
         state = "timed out" if result.timed_out else f"exited {result.returncode}"
-        log(f"focused Task 276 CTest run {state}", error=True)
+        log(f"focused kernel CTest run {state}", error=True)
         return False
     return True
+
+
+def vm_test_report_error(path: Path) -> str | None:
+    """Check that the public test command actually executed the selected file."""
+    try:
+        report = json.loads(path.read_bytes())
+        if report["schema"] != 1 or len(report["files"]) != 1:
+            return "unexpected VM test report schema or file count"
+        row = report["files"][0]
+        counts = tuple(row[name] for name in (
+            "tests", "passed", "skipped", "failed", "errors", "timeouts",
+        ))
+        if any(type(count) is not int or count < 0 for count in counts):
+            return "invalid VM test report counts"
+        tests, passed, skipped, failed, errors, timeouts = counts
+        if passed == 0 or failed or errors or timeouts or tests != passed + skipped:
+            detail = row.get("error")
+            return detail if isinstance(detail, str) and detail else (
+                "VM test report has no successful execution or contains failures"
+            )
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        return f"cannot read VM test report: {exc}"
+    return None
 
 
 def main(argv: list[str]) -> int:
@@ -220,55 +227,22 @@ def main(argv: list[str]) -> int:
     if not tsan_runtime_available(log):
         return 1
 
-    # Instrument through raw compiler flags, NOT -DENABLE_TSAN=ON. The option
-    # additionally defines XR_BUILD_TSAN=1, which makes xray pass
-    # -fsanitize=thread to the C compiler it spawns for AOT children. This lane
-    # is VM-only by design (an AOT child built by the system cc would not be
-    # instrumented and would prove nothing), so that define is out of scope --
-    # switching to the option would silently widen what the lane builds.
     spec = focused_build_spec(build_dir)
-
-    xray = build_dir / platform.exe_name("xray")
-    unit_dir = build_dir / "tests" / "unit"
-    audit_test = unit_dir / platform.exe_name("test_ownership_audit")
-    focused_binaries = tuple(
-        unit_dir / platform.exe_name(name) for name in TASK276_TSAN_TESTS
-    )
-    reason = next(
-        (
-            f"{name}: {candidate}"
-            for name, binary in (
-                ("xray", xray),
-                ("ownership audit", audit_test),
-                *zip(TASK276_TSAN_TESTS, focused_binaries),
-            )
-            if (candidate := sanitizer.rebuild_reason(binary, PROJECT_DIR))
-        ),
-        None,
-    )
-    if reason:
-        log(f"building the explicit TSan target set (jobs={jobs}): {reason}")
+    if reason := sanitizer.verify_build_tree(spec, PROJECT_DIR):
+        log(reason)
         if not sanitizer.configure(spec, PROJECT_DIR, jobs, timeout, log):
             return 1
-        if not sanitizer.build(spec, jobs, timeout, log):
-            return 1
-    else:
-        log("reusing the up-to-date TSan build")
-
-    for name, binary in (
-        ("xray", xray),
-        ("ownership audit", audit_test),
-        *zip(TASK276_TSAN_TESTS, focused_binaries),
-    ):
-        if not (binary.is_file() and os.access(binary, os.X_OK)):
-            log(f"TSan {name} binary not found at {binary}", error=True)
-            return 1
-
-    problem = next((p for p in (sanitizer.verify_configured(build_dir, f)
-                                for f in spec.verification_targets()) if p), None)
-    if problem:
+    if not sanitizer.build(spec, jobs, timeout, log):
+        return 1
+    if problem := sanitizer.verify_build_tree(spec, PROJECT_DIR):
         log(problem, error=True)
         return 1
+    xray = build_dir / platform.exe_name("xray")
+    closed_threads = build_dir / "tests" / "unit" / platform.exe_name(CLOSED_THREADS_TARGET)
+    for binary in (xray, closed_threads):
+        if not (binary.is_file() and os.access(binary, os.X_OK)):
+            log(f"TSan executable not found at {binary}", error=True)
+            return 1
 
     print("=== TSan focused lane ===")
     print(f"Binary: {xray}")
@@ -278,38 +252,50 @@ def main(argv: list[str]) -> int:
         env = dict(os.environ)
         # Collect every race instead of aborting on the first: one warning must
         # not hide the others.
-        env["TSAN_OPTIONS"] = f"halt_on_error=0 exitcode=0 log_path={log_prefix}"
+        env["TSAN_OPTIONS"] = f"halt_on_error=0 exitcode=86 log_path={log_prefix}"
         env["XRAY_WORKERS"] = WORKERS
 
-        focused_failed = not run_task276_ctests(build_dir, env, timeout, log)
+        focused_failed = not run_kernel_ctests(build_dir, env, timeout, log)
 
-        sys.stdout.write("  ownership_audit_concurrency             ")
+        sys.stdout.write("  closed_thread_allocations               ")
         sys.stdout.flush()
-        audit_result = proc.run([audit_test], env=env, timeout=CASE_TIMEOUT)
-        audit_failed = audit_result.timed_out or not audit_result.ok
-        if audit_result.timed_out:
+        closed_result = proc.run([closed_threads, "--closed-threads"], env=env,
+                                 timeout=CASE_TIMEOUT)
+        if closed_result.timed_out:
             print(f"failed (timed out after {CASE_TIMEOUT}s)")
-        elif audit_result.ok:
+        elif closed_result.ok:
             print("passed")
         else:
-            print(f"failed (nonzero exit {audit_result.returncode})")
+            print(f"failed (nonzero exit {closed_result.returncode})")
+        if not closed_result.ok:
+            sanitizer.write_console(sys.stdout, closed_result.combined_text())
 
         failed_cases = []
         for mode, case in CASES:
             name = Path(case).stem
             sys.stdout.write(f"  {name:<40}")
             sys.stdout.flush()
-            result = proc.run([xray, mode, PROJECT_DIR / case], env=env,
-                              timeout=CASE_TIMEOUT)
+            command = [xray, mode]
+            report = None
+            if mode == "test":
+                report = ws.path(f"{name}.json")
+                command.extend(("--report", report))
+            command.append(PROJECT_DIR / case)
+            result = proc.run(command, env=env, timeout=CASE_TIMEOUT)
+            report_error = vm_test_report_error(report) if report is not None else None
             if result.timed_out:
                 print(f"failed (timed out after {CASE_TIMEOUT}s)")
-            elif result.ok:
-                print("passed")
-            else:
+            elif not result.ok:
                 print(f"failed (nonzero exit {result.returncode})")
-            if not result.ok:
+            elif report_error:
+                print("failed (no successful test report)")
+            else:
+                print("passed")
+            if not result.ok or report_error:
                 failed_cases.append(case)
                 sanitizer.write_console(sys.stdout, result.combined_text())
+                if report_error:
+                    sanitizer.write_console(sys.stdout, report_error + "\n")
 
         reports = []
         for path in sorted(ws.root.glob("tsan.*")):
@@ -334,13 +320,13 @@ def main(argv: list[str]) -> int:
             print(f"VERDICT: FAIL ({count} TSan warnings)")
             return 1
 
-    if focused_failed or audit_failed or failed_cases:
+    if focused_failed or not closed_result.ok or failed_cases:
         print("")
         failed_steps = []
         if focused_failed:
-            failed_steps.append("Task 276 focused CTest set")
-        if audit_failed:
-            failed_steps.append("ownership audit concurrency test")
+            failed_steps.append("focused kernel CTest set")
+        if not closed_result.ok:
+            failed_steps.append("closed thread allocations")
         if failed_cases:
             failed_steps.append("VM cases: " + ", ".join(failed_cases))
         print("VERDICT: FAIL (" + " and ".join(failed_steps) + " failed)")
@@ -349,7 +335,7 @@ def main(argv: list[str]) -> int:
     print("")
     print(
         "VERDICT: PASS (no ThreadSanitizer warnings across "
-        f"{len(TASK276_TSAN_TESTS)} Task 276 concurrency tests, ownership audit, "
+        f"{len(KERNEL_TESTS)} kernel CTests, closed thread allocations, "
         f"and {len(CASES)} VM cases)"
     )
     return 0

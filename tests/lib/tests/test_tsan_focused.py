@@ -1,4 +1,4 @@
-"""Fail-closed tests for the Task 276 focused ThreadSanitizer runner.
+"""Fail-closed tests for the focused ThreadSanitizer runner.
 
 These run on Windows with fake clang/CTest results.  They verify the commands
 and verdict logic without claiming that ThreadSanitizer itself ran there.
@@ -36,7 +36,7 @@ class Log:
 
 
 class BuildIdentityTest(unittest.TestCase):
-    def test_explicit_build_targets_cover_every_task276_boundary(self):
+    def test_explicit_build_targets_cover_current_runtime_kernels(self):
         build = Path("build-tsan-test")
         spec = tsan.focused_build_spec(build)
         self.assertEqual(spec.build_dir, build)
@@ -44,15 +44,24 @@ class BuildIdentityTest(unittest.TestCase):
             spec.targets,
             (
                 "xray",
-                "test_ownership_audit",
-                "test_vm_decoded_cache",
-                "test_xtp_resource_stress",
-                "test_runtime_generation",
-                "test_entry_cell_runtime_archive",
-                "test_runtime_program_archive",
+                "test_os_thread_token",
+                "test_xir_values",
+                "test_xir_signed_object_rc",
+                "test_native_managed_kernel",
+                "test_native_managed_root",
+                "test_native_backing",
+                "test_native_string_backing_ops",
+                "test_native_place",
+                "test_native_value_plan",
+                "test_native_managed_status",
+                "test_native_capture_backing",
+                "test_rbc_code_owner",
+                "test_xir_value_allocations",
             ),
         )
-        self.assertIn("-fsanitize=thread", " ".join(spec.sanitizer_flags))
+        self.assertEqual(spec.sanitizer_flags, ("ENABLE_TSAN=ON", "XR_XIR_PARANOID=ON"))
+        self.assertIn("os_thread_token", tsan.KERNEL_TESTS)
+        self.assertNotIn("test_os_thread_token", tsan.KERNEL_TESTS)
 
     def test_fake_cmake_build_command_names_the_exact_targets(self):
         spec = tsan.focused_build_spec(Path("build-tsan-test"))
@@ -142,15 +151,15 @@ class CTestSelectionTest(unittest.TestCase):
 
         def fake_run(argv, **kwargs):
             calls.append(tuple(str(arg) for arg in argv))
-            return self.discovery(reversed(tsan.TASK276_TSAN_TESTS))
+            return self.discovery(reversed(tsan.KERNEL_TESTS))
 
-        selected = tsan.discover_task276_ctests(self.build, self.log, run=fake_run)
-        self.assertEqual(set(selected), set(tsan.TASK276_TSAN_TESTS))
+        selected = tsan.discover_kernel_ctests(self.build, self.log, run=fake_run)
+        self.assertEqual(set(selected), set(tsan.KERNEL_TESTS))
         self.assertEqual(
             calls[0],
             (
                 "ctest", "--test-dir", str(self.build), "--show-only=json-v1",
-                "-R", tsan.TASK276_TSAN_REGEX,
+                "-R", tsan.KERNEL_REGEX,
             ),
         )
 
@@ -162,31 +171,31 @@ class CTestSelectionTest(unittest.TestCase):
         fails: CTest prints its compile error ahead of the JSON and discovery
         reports unreadable output instead of a bad pattern.
         """
-        self.assertNotIn("(?", tsan.TASK276_TSAN_REGEX)
-        self.assertTrue(tsan.TASK276_TSAN_REGEX.startswith("^("))
-        self.assertTrue(tsan.TASK276_TSAN_REGEX.endswith(")$"))
-        for name in tsan.TASK276_TSAN_TESTS:
-            self.assertIn(name, tsan.TASK276_TSAN_REGEX)
+        self.assertNotIn("(?", tsan.KERNEL_REGEX)
+        self.assertTrue(tsan.KERNEL_REGEX.startswith("^("))
+        self.assertTrue(tsan.KERNEL_REGEX.endswith(")$"))
+        for name in tsan.KERNEL_TESTS:
+            self.assertIn(name, tsan.KERNEL_REGEX)
 
     def test_zero_selected_fails_closed(self):
-        selected = tsan.discover_task276_ctests(
+        selected = tsan.discover_kernel_ctests(
             self.build, self.log, run=lambda argv, **kwargs: self.discovery(()))
         self.assertIsNone(selected)
         self.assertTrue(any("0 tests selected" in message
                             for message, _ in self.log.entries))
 
     def test_missing_target_fails_closed(self):
-        selected = tsan.discover_task276_ctests(
+        selected = tsan.discover_kernel_ctests(
             self.build,
             self.log,
-            run=lambda argv, **kwargs: self.discovery(tsan.TASK276_TSAN_TESTS[:-1]),
+            run=lambda argv, **kwargs: self.discovery(tsan.KERNEL_TESTS[:-1]),
         )
         self.assertIsNone(selected)
-        self.assertTrue(any(f"missing {tsan.TASK276_TSAN_TESTS[-1]}" in message
+        self.assertTrue(any(f"missing {tsan.KERNEL_TESTS[-1]}" in message
                             for message, _ in self.log.entries))
 
     def test_discovery_command_failure_propagates(self):
-        selected = tsan.discover_task276_ctests(
+        selected = tsan.discover_kernel_ctests(
             self.build,
             self.log,
             run=lambda argv, **kwargs: outcome(returncode=2, stderr=b"bad ctest"),
@@ -194,7 +203,7 @@ class CTestSelectionTest(unittest.TestCase):
         self.assertIsNone(selected)
 
     def test_invalid_json_fails_closed(self):
-        selected = tsan.discover_task276_ctests(
+        selected = tsan.discover_kernel_ctests(
             self.build,
             self.log,
             run=lambda argv, **kwargs: outcome(stdout=b"not json"),
@@ -207,57 +216,67 @@ class CTestSelectionTest(unittest.TestCase):
         def fake_run(argv, **kwargs):
             calls.append((tuple(str(arg) for arg in argv), kwargs))
             if len(calls) == 1:
-                return self.discovery(tsan.TASK276_TSAN_TESTS)
+                return self.discovery(tsan.KERNEL_TESTS)
             return outcome(stdout=b"all focused tests passed\n")
 
         env = {"TSAN_OPTIONS": "sentinel"}
         with redirect_stdout(io.StringIO()):
-            self.assertTrue(tsan.run_task276_ctests(
+            self.assertTrue(tsan.run_kernel_ctests(
                 self.build, env, 777, self.log, run=fake_run))
         self.assertEqual(calls[1][0], (
             "ctest", "--test-dir", str(self.build), "--output-on-failure",
             "--no-tests=error", "-j", "1", "--timeout", "300",
-            "-R", tsan.TASK276_TSAN_REGEX,
+            "-R", tsan.KERNEL_REGEX,
         ))
         self.assertIs(calls[1][1]["env"], env)
         self.assertEqual(calls[1][1]["timeout"], 777)
 
     def test_ctest_execution_failure_propagates(self):
         results = iter((
-            self.discovery(tsan.TASK276_TSAN_TESTS),
+            self.discovery(tsan.KERNEL_TESTS),
             outcome(returncode=8, stderr=b"one test failed"),
         ))
         with redirect_stdout(io.StringIO()):
-            self.assertFalse(tsan.run_task276_ctests(
+            self.assertFalse(tsan.run_kernel_ctests(
                 self.build, {}, 777, self.log,
                 run=lambda argv, **kwargs: next(results),
             ))
 
 
 class LaneVerdictTest(unittest.TestCase):
-    def run_lane(self, failed_case=None):
+    def run_lane(self, failed_case=None, *, empty_first_report=False,
+                 kernels_ok=True, closed_case=None):
         calls = []
 
         def fake_run(argv, **kwargs):
             calls.append(tuple(str(arg) for arg in argv))
-            # The first process is the ownership audit; every remaining
-            # process is an actual source case selected by the lane.
+            if len(calls) == 1:
+                return closed_case or outcome()
+            if argv[1] == "test":
+                passed = 0 if len(calls) == 2 and empty_first_report else 1
+                Path(argv[3]).write_text(json.dumps({"schema": 1, "files": [{
+                    "tests": passed, "passed": passed, "failed": 0,
+                    "errors": 0, "timeouts": 0, "skipped": 0,
+                }]}), encoding="utf-8")
             return failed_case if len(calls) == 2 and failed_case else outcome()
 
         output = io.StringIO()
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(tsan, "tsan_runtime_available", return_value=True))
-            stack.enter_context(mock.patch.object(tsan.sanitizer, "rebuild_reason", return_value=None))
-            stack.enter_context(mock.patch.object(tsan.sanitizer, "verify_configured", return_value=None))
-            stack.enter_context(mock.patch.object(tsan, "run_task276_ctests", return_value=True))
+            stack.enter_context(mock.patch.object(tsan.sanitizer, "verify_build_tree", return_value=None))
+            build = stack.enter_context(mock.patch.object(tsan.sanitizer, "build", return_value=True))
+            stack.enter_context(mock.patch.object(tsan, "run_kernel_ctests", return_value=kernels_ok))
             stack.enter_context(mock.patch.object(tsan.Path, "is_file", return_value=True))
             stack.enter_context(mock.patch.object(tsan.os, "access", return_value=True))
             stack.enter_context(mock.patch.object(tsan.proc, "run", side_effect=fake_run))
             stack.enter_context(redirect_stdout(output))
             result = tsan.main(["run_tsan_focused.py"])
+        build.assert_called_once()
         self.assertEqual(len(calls), len(tsan.CASES) + 1)
+        self.assertEqual(Path(calls[0][0]).stem, tsan.CLOSED_THREADS_TARGET)
+        self.assertEqual(calls[0][1:], ("--closed-threads",))
         self.assertEqual(
-            [(call[1], call[2]) for call in calls[1:]],
+            [(call[1], call[-1]) for call in calls[1:]],
             [(mode, str(tsan.PROJECT_DIR / path)) for mode, path in tsan.CASES],
         )
         return result, output.getvalue()
@@ -279,6 +298,22 @@ class LaneVerdictTest(unittest.TestCase):
                 self.assertIn("VERDICT: FAIL", output)
                 self.assertNotIn("VERDICT: PASS", output)
                 self.assertIn(failed.combined_text().strip(), output)
+
+    def test_zero_executed_source_tests_fail_even_with_zero_exit(self):
+        code, output = self.run_lane(empty_first_report=True)
+        self.assertEqual(code, 1)
+        self.assertIn("VM test report has no successful execution", output)
+        self.assertNotIn("VERDICT: PASS", output)
+
+    def test_kernel_failure_keeps_original_source_cases_and_fails_the_lane(self):
+        code, output = self.run_lane(kernels_ok=False)
+        self.assertEqual(code, 1)
+        self.assertIn("VERDICT: FAIL (focused kernel CTest set failed)", output)
+
+    def test_closed_thread_failure_propagates(self):
+        code, output = self.run_lane(closed_case=outcome(returncode=86))
+        self.assertEqual(code, 1)
+        self.assertIn("VERDICT: FAIL (closed thread allocations failed)", output)
 
 
 if __name__ == "__main__":
