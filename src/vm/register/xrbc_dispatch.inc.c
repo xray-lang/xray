@@ -405,23 +405,20 @@ XR_RBC_CASE(CALLN) {
         XR_RBC_REG(XR_RBC_A()) = (uint64_t)xrt_clock_monotonic_nanos((uint32_t)id); break;
     case XR_RBC_NATIVE_UTC_OFFSET_AT:
         XR_RBC_REG(XR_RBC_A()) = (uint64_t)xrt_clock_utc_offset_at(xr_rbc_signed(XR_RBC_REG(XR_RBC_A() + 1)), (uint32_t)id); break;
-    case XR_RBC_NATIVE_MATH_SIN:
-        XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(
-            xrt_f64_sin(xr_rbc_float(XR_RBC_REG(XR_RBC_A() + 1)), (uint32_t)id));
-        break;
-    case XR_RBC_NATIVE_MATH_COS:
-        XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(
-            xrt_f64_cos(xr_rbc_float(XR_RBC_REG(XR_RBC_A() + 1)), (uint32_t)id));
-        break;
-    case XR_RBC_NATIVE_MATH_SQRT:
-        XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(
-            xrt_f64_sqrt(xr_rbc_float(XR_RBC_REG(XR_RBC_A() + 1)), (uint32_t)id));
-        break;
-    case XR_RBC_NATIVE_MATH_HYPOT:
-        XR_RBC_REG(XR_RBC_A()) = xr_rbc_float_bits(
-            xrt_f64_hypot(xr_rbc_float(XR_RBC_REG(XR_RBC_A() + 1)),
-                xr_rbc_float(XR_RBC_REG(XR_RBC_A() + 2)), (uint32_t)id));
-        break;
+#define XR_MATH_RBC_INVOKE_1(name, base) \
+    xrt_f64_##name(xr_rbc_float(XR_RBC_REG((base) + 1)), (uint32_t)id)
+#define XR_MATH_RBC_INVOKE_2(name, base) \
+    xrt_f64_##name(xr_rbc_float(XR_RBC_REG((base) + 1)), xr_rbc_float(XR_RBC_REG((base) + 2)), (uint32_t)id)
+#define XR_MATH_RBC_INVOKE(tag, name, arity) \
+    case XR_RBC_NATIVE_MATH_##tag: { \
+        uint32_t base = XR_RBC_A(); \
+        XR_RBC_REG(base) = xr_rbc_float_bits(XR_MATH_RBC_INVOKE_##arity(name, base)); \
+        break; \
+    }
+    XR_MATH_HOST_OPERATIONS(XR_MATH_RBC_INVOKE)
+#undef XR_MATH_RBC_INVOKE
+#undef XR_MATH_RBC_INVOKE_2
+#undef XR_MATH_RBC_INVOKE_1
 #if defined(XR_RBC_LINKED_MATH_LERP)
     case XR_RBC_NATIVE_MATH_LERP: {
         uint32_t base = XR_RBC_A();

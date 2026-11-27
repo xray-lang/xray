@@ -63,6 +63,23 @@ XRAY_API double xrt_f64_sin(double value, uint32_t source_id);
 XRAY_API double xrt_f64_cos(double value, uint32_t source_id);
 XRAY_API double xrt_f64_sqrt(double value, uint32_t source_id);
 XRAY_API double xrt_f64_hypot(double left, double right, uint32_t source_id);
+XRAY_API double xrt_f64_pow(double left, double right, uint32_t source_id);
+XRAY_API double xrt_f64_tan(double value, uint32_t source_id);
+XRAY_API double xrt_f64_asin(double value, uint32_t source_id);
+XRAY_API double xrt_f64_acos(double value, uint32_t source_id);
+XRAY_API double xrt_f64_atan(double value, uint32_t source_id);
+XRAY_API double xrt_f64_atan2(double left, double right, uint32_t source_id);
+XRAY_API double xrt_f64_log(double value, uint32_t source_id);
+XRAY_API double xrt_f64_log10(double value, uint32_t source_id);
+XRAY_API double xrt_f64_log2(double value, uint32_t source_id);
+XRAY_API double xrt_f64_exp(double value, uint32_t source_id);
+XRAY_API double xrt_f64_sinh(double value, uint32_t source_id);
+XRAY_API double xrt_f64_cosh(double value, uint32_t source_id);
+XRAY_API double xrt_f64_tanh(double value, uint32_t source_id);
+XRAY_API double xrt_f64_cbrt(double value, uint32_t source_id);
+XRAY_API double xrt_f64_fmod(double left, double right, uint32_t source_id);
+XRAY_API double xrt_f64_log1p(double value, uint32_t source_id);
+XRAY_API double xrt_f64_expm1(double value, uint32_t source_id);
 
 // Define this strong external symbol once in the standalone program. The
 // descriptor, locations and path bytes remain immutable and image-owned.

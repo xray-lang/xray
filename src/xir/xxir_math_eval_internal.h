@@ -14,6 +14,7 @@
 #include "xxir_math_native.h"
 #include "xxir_value.h"
 #include "xxir_float.h"
+#include "../shared/xr_math_host_ops.h"
 #include <math.h>
 #include <string.h>
 
@@ -39,28 +40,15 @@ static inline XrXirRunStatus xir_math_native_evaluate(uint32_t id,const XrXirVal
     case XR_NATIVE_CALLABLE_MATH_FLOOR:result=floor(x);break;
     case XR_NATIVE_CALLABLE_MATH_CEIL:result=ceil(x);break;
     case XR_NATIVE_CALLABLE_MATH_ROUND:result=round(x);break;
-    case XR_NATIVE_CALLABLE_MATH_SQRT:result=sqrt(x);break;
-    case XR_NATIVE_CALLABLE_MATH_POW:result=pow(x,y);break;
-    case XR_NATIVE_CALLABLE_MATH_SIN:result=sin(x);break;
-    case XR_NATIVE_CALLABLE_MATH_COS:result=cos(x);break;
-    case XR_NATIVE_CALLABLE_MATH_TAN:result=tan(x);break;
-    case XR_NATIVE_CALLABLE_MATH_ASIN:result=asin(x);break;
-    case XR_NATIVE_CALLABLE_MATH_ACOS:result=acos(x);break;
-    case XR_NATIVE_CALLABLE_MATH_ATAN:result=atan(x);break;
-    case XR_NATIVE_CALLABLE_MATH_ATAN2:result=atan2(x,y);break;
-    case XR_NATIVE_CALLABLE_MATH_LOG:result=log(x);break;
-    case XR_NATIVE_CALLABLE_MATH_LOG10:result=log10(x);break;
-    case XR_NATIVE_CALLABLE_MATH_LOG2:result=log2(x);break;
-    case XR_NATIVE_CALLABLE_MATH_EXP:result=exp(x);break;
-    case XR_NATIVE_CALLABLE_MATH_SINH:result=sinh(x);break;
-    case XR_NATIVE_CALLABLE_MATH_COSH:result=cosh(x);break;
-    case XR_NATIVE_CALLABLE_MATH_TANH:result=tanh(x);break;
-    case XR_NATIVE_CALLABLE_MATH_HYPOT:result=hypot(x,y);break;
-    case XR_NATIVE_CALLABLE_MATH_CBRT:result=cbrt(x);break;
     case XR_NATIVE_CALLABLE_MATH_TRUNC:result=trunc(x);break;
-    case XR_NATIVE_CALLABLE_MATH_FMOD:result=fmod(x,y);break;
-    case XR_NATIVE_CALLABLE_MATH_LOG1P:result=log1p(x);break;
-    case XR_NATIVE_CALLABLE_MATH_EXPM1:result=expm1(x);break;
+#define XR_MATH_CTFE_CALL_1(name) name(x)
+#define XR_MATH_CTFE_CALL_2(name) name(x,y)
+#define XR_MATH_CTFE_CALL(tag, name, arity) \
+    case XR_NATIVE_CALLABLE_MATH_##tag: result=XR_MATH_CTFE_CALL_##arity(name); break;
+    XR_MATH_HOST_OPERATIONS(XR_MATH_CTFE_CALL)
+#undef XR_MATH_CTFE_CALL
+#undef XR_MATH_CTFE_CALL_2
+#undef XR_MATH_CTFE_CALL_1
     default:return XR_XIR_RUN_BAD_ARTIFACT;
     }
     uint64_t bits;memcpy(&bits,&result,sizeof(bits));

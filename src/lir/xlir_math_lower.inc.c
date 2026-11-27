@@ -19,10 +19,9 @@ static uint32_t lower_math_native_id(const Lower *c, uint32_t index) {
     case XR_NATIVE_CALLABLE_MATH_CEIL:
     case XR_NATIVE_CALLABLE_MATH_ROUND:
     case XR_NATIVE_CALLABLE_MATH_TRUNC:
-    case XR_NATIVE_CALLABLE_MATH_SIN:
-    case XR_NATIVE_CALLABLE_MATH_COS:
-    case XR_NATIVE_CALLABLE_MATH_SQRT:
-    case XR_NATIVE_CALLABLE_MATH_HYPOT:
+#define XR_MATH_CHECKED_ID(tag, name, arity) case XR_NATIVE_CALLABLE_MATH_##tag:
+    XR_MATH_HOST_OPERATIONS(XR_MATH_CHECKED_ID)
+#undef XR_MATH_CHECKED_ID
         return !identity->capture_owner && !identity->capture_count &&
             xir_native_callable_verify(c->source, index) == XR_XIR_OK ? identity->native_callable : 0;
     default:
@@ -44,10 +43,10 @@ static bool lower_math_return(Lower *c, XrLirBlock block, XrLirValue result) {
 
 static XrLirExternKind lower_math_external_kind(uint32_t id) {
     switch (id) {
-    case XR_NATIVE_CALLABLE_MATH_SIN: return XR_LIR_EXTERN_MATH_SIN;
-    case XR_NATIVE_CALLABLE_MATH_COS: return XR_LIR_EXTERN_MATH_COS;
-    case XR_NATIVE_CALLABLE_MATH_SQRT: return XR_LIR_EXTERN_MATH_SQRT;
-    case XR_NATIVE_CALLABLE_MATH_HYPOT: return XR_LIR_EXTERN_MATH_HYPOT;
+#define XR_MATH_CHECKED_EXTERN(tag, name, arity) \
+    case XR_NATIVE_CALLABLE_MATH_##tag: return XR_LIR_EXTERN_MATH_##tag;
+    XR_MATH_HOST_OPERATIONS(XR_MATH_CHECKED_EXTERN)
+#undef XR_MATH_CHECKED_EXTERN
     default: return XR_LIR_EXTERN_NONE;
     }
 }

@@ -18,6 +18,7 @@
 #define XRBC_H
 
 #include "base/xdefs.h"
+#include "shared/xr_math_host_ops.h"
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_module_state.h"
 #include "xray_native_values.h"
@@ -287,10 +288,9 @@ typedef enum XrRbcNativeKind {
     XR_RBC_NATIVE_CLOCK_MONOTONIC,
     XR_RBC_NATIVE_UTC_OFFSET_AT,
     XR_RBC_NATIVE_MATH_LERP,
-    XR_RBC_NATIVE_MATH_SIN,
-    XR_RBC_NATIVE_MATH_COS,
-    XR_RBC_NATIVE_MATH_SQRT,
-    XR_RBC_NATIVE_MATH_HYPOT,
+#define XR_MATH_RBC_NATIVE(tag, name, arity) XR_RBC_NATIVE_MATH_##tag,
+    XR_MATH_HOST_OPERATIONS(XR_MATH_RBC_NATIVE)
+#undef XR_MATH_RBC_NATIVE
     XR_RBC_NATIVE_COUNT
 } XrRbcNativeKind;
 

@@ -339,10 +339,10 @@ XR_FUNC bool xr_lir_math_lerp_external_signature(const char *name, size_t length
 
 XR_FUNC XrLirMathExternal xr_lir_math_external(XrLirExternKind kind) {
     switch (kind) {
-    case XR_LIR_EXTERN_MATH_SIN: return (XrLirMathExternal){"xrt_f64_sin", 1};
-    case XR_LIR_EXTERN_MATH_COS: return (XrLirMathExternal){"xrt_f64_cos", 1};
-    case XR_LIR_EXTERN_MATH_SQRT: return (XrLirMathExternal){"xrt_f64_sqrt", 1};
-    case XR_LIR_EXTERN_MATH_HYPOT: return (XrLirMathExternal){"xrt_f64_hypot", 2};
+#define XR_MATH_LIR_SHAPE(tag, name, arity) \
+    case XR_LIR_EXTERN_MATH_##tag: return (XrLirMathExternal){"xrt_f64_" #name, arity};
+    XR_MATH_HOST_OPERATIONS(XR_MATH_LIR_SHAPE)
+#undef XR_MATH_LIR_SHAPE
     default: return (XrLirMathExternal){0};
     }
 }

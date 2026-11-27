@@ -80,10 +80,10 @@ XR_STATIC_ASSERT(RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_COUNT <= RBC_LIR_ASSERT_ENT
 
 static XrRbcNativeKind rbc_lir_math_native(XrLirExternKind kind) {
     switch (kind) {
-    case XR_LIR_EXTERN_MATH_SIN: return XR_RBC_NATIVE_MATH_SIN;
-    case XR_LIR_EXTERN_MATH_COS: return XR_RBC_NATIVE_MATH_COS;
-    case XR_LIR_EXTERN_MATH_SQRT: return XR_RBC_NATIVE_MATH_SQRT;
-    case XR_LIR_EXTERN_MATH_HYPOT: return XR_RBC_NATIVE_MATH_HYPOT;
+#define XR_MATH_RBC_EXTERN(tag, name, arity) \
+    case XR_LIR_EXTERN_MATH_##tag: return XR_RBC_NATIVE_MATH_##tag;
+    XR_MATH_HOST_OPERATIONS(XR_MATH_RBC_EXTERN)
+#undef XR_MATH_RBC_EXTERN
     default: return XR_RBC_NATIVE_COUNT;
     }
 }

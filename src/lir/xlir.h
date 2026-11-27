@@ -15,6 +15,7 @@
 #define XLIR_H
 
 #include "../base/xdefs.h"
+#include "../shared/xr_math_host_ops.h"
 
 typedef struct XrLirModule XrLirModule;
 typedef enum XrLirStatus {
@@ -109,10 +110,9 @@ typedef enum XrLirExternKind {
     XR_LIR_EXTERN_UTC_OFFSET_AT,
     XR_LIR_EXTERN_ASSERT_CONDITION,
     XR_LIR_EXTERN_STDLIB_MATH_LERP,
-    XR_LIR_EXTERN_MATH_SIN,
-    XR_LIR_EXTERN_MATH_COS,
-    XR_LIR_EXTERN_MATH_SQRT,
-    XR_LIR_EXTERN_MATH_HYPOT
+#define XR_MATH_LIR_EXTERN(tag, name, arity) XR_LIR_EXTERN_MATH_##tag,
+    XR_MATH_HOST_OPERATIONS(XR_MATH_LIR_EXTERN)
+#undef XR_MATH_LIR_EXTERN
 } XrLirExternKind;
 
 typedef struct XrLirMathExternal {

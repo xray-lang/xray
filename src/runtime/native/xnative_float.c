@@ -13,6 +13,7 @@
  */
 #include "xray_native_runtime.h"
 #include "base/xchecks.h"
+#include "shared/xr_math_host_ops.h"
 #include <float.h>
 #include <limits.h>
 #include <math.h>
@@ -63,22 +64,18 @@ XRAY_API int64_t xrt_f64_to_i64(uint64_t bits, uint32_t source_id) {
     return (int64_t)value;
 }
 
-XRAY_API double xrt_f64_sin(double value, uint32_t source_id) {
-    (void)source_id;
-    return sin(value);
-}
-
-XRAY_API double xrt_f64_cos(double value, uint32_t source_id) {
-    (void)source_id;
-    return cos(value);
-}
-
-XRAY_API double xrt_f64_sqrt(double value, uint32_t source_id) {
-    (void)source_id;
-    return sqrt(value);
-}
-
-XRAY_API double xrt_f64_hypot(double left, double right, uint32_t source_id) {
-    (void)source_id;
-    return hypot(left, right);
-}
+#define XR_MATH_HOST_BODY_1(name) \
+    XRAY_API double xrt_f64_##name(double value, uint32_t source_id) { \
+        (void)source_id; \
+        return name(value); \
+    }
+#define XR_MATH_HOST_BODY_2(name) \
+    XRAY_API double xrt_f64_##name(double left, double right, uint32_t source_id) { \
+        (void)source_id; \
+        return name(left, right); \
+    }
+#define XR_MATH_HOST_BODY(tag, name, arity) XR_MATH_HOST_BODY_##arity(name)
+XR_MATH_HOST_OPERATIONS(XR_MATH_HOST_BODY)
+#undef XR_MATH_HOST_BODY
+#undef XR_MATH_HOST_BODY_2
+#undef XR_MATH_HOST_BODY_1

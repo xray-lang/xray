@@ -1,0 +1,2 @@
+import { __tan } from math
+print(__tan(0.0))

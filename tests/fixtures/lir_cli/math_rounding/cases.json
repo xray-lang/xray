@@ -47,5 +47,13 @@
     "exit": 1,
     "stdout": "1.25\n",
     "stderr": "[Uncaught Panic] E0422: numeric conversion is out of range\n"
+  },
+  "host_family": {
+    "exit": 0,
+    "stdout": "-8.0\n-0.0\n0.0\nnan\n0.0\n-0.0\n-0.0\ntrue\n0.0\n-inf\nnan\ntrue\n3.0\n1.0\ninf\n-0.0\n1.0\n-0.0\n-0.0\ntrue\n-3.0\nnan\n-0.0\ntrue\n-0.0\ntrue\n",
+    "stderr": ""
+  },
+  "private_tan": {
+    "source_error": ":1:1: error: import requires an exported declaration"
   }
 }

@@ -1,0 +1,32 @@
+import math
+
+fn apply(operation: fn(f64, f64) -> f64, a: f64, b: f64) -> f64 {
+    return operation(a, b)
+}
+
+print(math.pow(-2.0, 3.0))
+print(math.tan(-0.0))
+print(math.asin(0.0))
+print(math.asin(2.0))
+print(math.acos(1.0))
+print(math.atan(-0.0))
+print(apply(math.atan2, -0.0, 1.0))
+print(apply(math.atan2, 0.0, -1.0) > 3.0)
+print(math.log(1.0))
+print(math.log(0.0))
+print(math.log(-1.0))
+print(math.log10(100.0) > 1.999 && math.log10(100.0) < 2.001)
+print(math.log2(8.0))
+print(math.exp(0.0))
+print(math.exp(10000.0))
+print(math.sinh(-0.0))
+print(math.cosh(0.0))
+print(math.tanh(-0.0))
+print(math.cbrt(-0.0))
+print(math.cbrt(-27.0) > -3.001 && math.cbrt(-27.0) < -2.999)
+print(math.fmod(-7.0, 4.0))
+print(math.fmod(1.0, 0.0))
+print(math.log1p(-0.0))
+print(math.log1p(1.0e-20) > 0.0)
+print(math.expm1(-0.0))
+print(math.expm1(1.0e-20) > 0.0)
