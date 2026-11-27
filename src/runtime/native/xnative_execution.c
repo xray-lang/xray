@@ -709,16 +709,19 @@ XR_FUNC bool xrt_try_assert_report(const XrtTryAssertFailure *failure) {
 XR_FUNC bool xrt_uncaught_error_report(const XrtErrorSnapshot *failure) {
     return xrt_uncaught_error_format(failure,&(XrValueFormatSink){NULL,panic_write});
 }
-XR_FUNC bool xrt_message_panic_report(uint32_t code, const char *message, size_t length,
-    const XrtSourceLocation *source) {
-    XrValueFormatSink sink = {NULL, panic_write};
-    if (!xr_value_format_panic(sink, code, 0, 0, 0, 1, (const uint8_t *)message, length, 0)) return false;
+XR_FUNC bool xrt_message_panic_format(uint32_t code, const char *message, size_t length,
+    const XrtSourceLocation *source, const XrValueFormatSink *sink) {
+    if (!sink || !xr_value_format_panic(*sink, code, 0, 0, 0, 1, (const uint8_t *)message, length, 0)) return false;
     if (code != 445 || !source) return true;
     char position[48];
     int written = snprintf(position, sizeof(position), ":%u:%u\n", source->line, source->column);
     return written > 0 && (size_t)written < sizeof(position) &&
-        panic_write(NULL, "    at ", 7) && panic_write(NULL, source->path, source->path_length) &&
-        panic_write(NULL, position, (size_t)written);
+        xr_value_format_write(*sink, "    at ", 7) && xr_value_format_write(*sink, source->path, source->path_length) &&
+        xr_value_format_write(*sink, position, (size_t)written);
+}
+XR_FUNC bool xrt_message_panic_report(uint32_t code, const char *message, size_t length,
+    const XrtSourceLocation *source) {
+    return xrt_message_panic_format(code, message, length, source, &(XrValueFormatSink){NULL, panic_write});
 }
 static XR_NORET void native_failure_exit(const XrtSourceMap *map, XrtExecutionFailure *failure) {
     if (failure->kind == XRT_FAILURE_TEMP) {

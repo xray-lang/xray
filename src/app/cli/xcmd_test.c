@@ -11,6 +11,7 @@
 #include "xcli_fs.h"
 #include "xcli_lir.h"
 #include "base/xmalloc.h"
+#include "os/os_thread.h"
 #include "os/os_time.h"
 #include "shared/xr_utf8_core.h"
 #include "shared/xr_value_format_core.h"
@@ -27,9 +28,14 @@
 
 #include "xcmd_test_report.inc.c"
 
+#define TEST_WORKER_STACK_BYTES (8u * 1024u * 1024u)
+
+typedef struct TestJobs TestJobs;
+
 typedef struct TestOptions {
     const char *filter;
     bool quiet, verbose, fail_fast;
+    TestJobs *jobs;
 } TestOptions;
 
 typedef struct TestResults {
@@ -40,6 +46,11 @@ typedef struct TestRoleRange {
     uint32_t start, count;
 } TestRoleRange;
 
+typedef struct TestDiagnostics {
+    TestReportBytes bytes;
+    bool failed;
+} TestDiagnostics;
+
 typedef struct TestFile {
     const char *path;
     XrLirTestPlan *plan;
@@ -47,8 +58,56 @@ typedef struct TestFile {
     XrLirTestPlanRole *actions;
     TestRoleRange roles[XR_XIR_TEST_ROLE_AFTER_EACH + 1];
     TestReportFile report;
+    TestDiagnostics *diagnostics;
     bool initialization_failed;
 } TestFile;
+
+typedef struct TestFileResult {
+    TestResults counts;
+    TestReport row;
+    TestDiagnostics diagnostics;
+} TestFileResult;
+
+struct TestJobs {
+    const XrCliFileList *files;
+    TestOptions options;
+    TestFileResult *results;
+    xr_mutex_t lock;
+    xr_mutex_t stdout_lock;
+    int next;
+    bool stop, report;
+};
+
+static void test_stop_jobs(TestJobs *jobs) {
+    xr_mutex_lock(&jobs->lock);
+    jobs->stop = true;
+    xr_mutex_unlock(&jobs->lock);
+}
+
+static void test_note_failure(const TestOptions *options) {
+    if (options->fail_fast && options->jobs) test_stop_jobs(options->jobs);
+}
+
+static void test_diagnostic_format(TestFile *file, const char *format, ...) XR_PRINTF_FMT(2, 3);
+
+static void test_diagnostic_format(TestFile *file, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    if (!file->diagnostics) {
+        vfprintf(stderr, format, args);
+    } else if (!test_report_format_args(&file->diagnostics->bytes, format, args)) {
+        file->diagnostics->failed = true;
+    }
+    va_end(args);
+}
+
+static void test_diagnostic_write(TestFile *file, const char *bytes, size_t length) {
+    if (!file->diagnostics) {
+        (void)fwrite(bytes, 1, length, stderr);
+    } else if (!test_report_write(&file->diagnostics->bytes, bytes, length)) {
+        file->diagnostics->failed = true;
+    }
+}
 
 static const char *test_role_name(XrXirTestRole role) {
     switch (role) {
@@ -76,13 +135,13 @@ static bool test_collect_roles(TestFile *file, const TestOptions *options, TestR
         else if (view.function.id) ++selected;
         else ++skipped;
         if (options->verbose && (view.role != XR_XIR_TEST_ROLE_TEST || view.function.id)) {
-            fprintf(stderr, "  %-11s ", test_role_name(view.role));
-            fwrite(view.name, 1, view.name_length, stderr);
-            fputc('\n', stderr);
+            test_diagnostic_format(file, "  %-11s ", test_role_name(view.role));
+            test_diagnostic_write(file, view.name, view.name_length);
+            test_diagnostic_write(file, "\n", 1);
         }
     }
     if (options->verbose)
-        fprintf(stderr, "xray test: %s: %u test(s), %u skipped, %u hook(s)\n",
+        test_diagnostic_format(file, "xray test: %s: %u test(s), %u skipped, %u hook(s)\n",
             file->path, selected, skipped, hooks);
     results->skipped += skipped;
     return true;
@@ -100,7 +159,7 @@ static bool test_prepare_session(TestFile *file, const TestOptions *options) {
     XrLirFunction *roots = xr_calloc(actions, sizeof(*roots));
     bool ready = false;
     if (!file->actions || !roots) {
-        if (!options->quiet) xr_cli_error("test", "%s: cannot allocate test roles", file->path);
+        if (!options->quiet) test_diagnostic_format(file, "xray test: %s: cannot allocate test roles\n", file->path);
         test_report_suite_error(&file->report, "cannot allocate test roles");
         goto done;
     }
@@ -121,7 +180,7 @@ static bool test_prepare_session(TestFile *file, const TestOptions *options) {
     if (!ready) {
         const char *path = diagnostic.path[0] ? diagnostic.path : file->path;
         if (!options->quiet)
-            fprintf(stderr, "%s:%u:%u: %s\n", path, diagnostic.line, diagnostic.column, diagnostic.message);
+            test_diagnostic_format(file, "%s:%u:%u: %s\n", path, diagnostic.line, diagnostic.column, diagnostic.message);
         if (file->report.owner) {
             ++file->report.errors;
             if (!test_report_format(&file->report.error, "%s:%u:%u: %s", path, diagnostic.line,
@@ -130,7 +189,7 @@ static bool test_prepare_session(TestFile *file, const TestOptions *options) {
     }
     goto done;
 invalid:
-    if (!options->quiet) xr_cli_error("test", "%s: invalid test plan", file->path);
+    if (!options->quiet) test_diagnostic_format(file, "xray test: %s: invalid test plan\n", file->path);
     test_report_suite_error(&file->report, "invalid test plan");
 done:
     xr_free(roots);
@@ -138,11 +197,16 @@ done:
 }
 
 static int test_panic_write(void *context, const void *bytes, size_t length) {
-    (void)context;
+    TestDiagnostics *diagnostics = context;
+    if (diagnostics) {
+        if (test_report_write(&diagnostics->bytes, bytes, length)) return 1;
+        diagnostics->failed = true;
+        return 0;
+    }
     return !xrt_io_write(2, bytes, length).failed;
 }
 
-static void test_report_outcome(XrRbcStatus status, XrRbcOutcome *outcome) {
+static void test_report_outcome(TestFile *file, XrRbcStatus status, XrRbcOutcome *outcome) {
     const XrtLocationOwner *locations;
     const XrtErrorSnapshot *error = xr_rbc_outcome_uncaught_error(outcome);
     const XrtTryAssertFailure *assertion = xr_rbc_outcome_try_assert(outcome);
@@ -152,30 +216,33 @@ static void test_report_outcome(XrRbcStatus status, XrRbcOutcome *outcome) {
     XrtArithmeticPanic panic;
     XrXirValueStatus value;
     XrtHostClockFailure clock;
+    XrValueFormatSink sink = {file->diagnostics, test_panic_write};
     if (error) {
-        if (xrt_uncaught_error_report(error)) return;
+        if (xrt_uncaught_error_format(error, &sink)) return;
     } else if (assertion) {
-        if (xrt_try_assert_report(assertion)) return;
+        if (xrt_try_assert_format(assertion, &sink)) return;
     } else if (xr_rbc_outcome_message_panic(outcome, &code, &message, &length, &source, &locations)) {
-        if (xrt_message_panic_report(code, message, length, xrt_locations_get(locations, source))) return;
+        if (xrt_message_panic_format(code, message, length, xrt_locations_get(locations, source), &sink)) return;
     } else if (xr_rbc_outcome_arithmetic_panic(outcome, &panic, &locations)) {
-        XrValueFormatSink sink = {NULL, test_panic_write};
         if (xr_value_format_panic(sink, panic.code, 0, 0, 0, 0, NULL, 0, 0)) return;
     } else if (xr_rbc_outcome_null_unwrap(outcome, &source, &locations)) {
-        xrt_null_unwrap_report(xrt_locations_get(locations, source));
+        const XrtSourceLocation *site = xrt_locations_get(locations, source);
+        if (file->diagnostics) (void)xrt_null_unwrap_format(site, &sink);
+        else xrt_null_unwrap_report(site);
         return;
     } else if (xr_rbc_outcome_host_clock_failure(outcome, &clock, &locations)) {
         const XrtSourceLocation *site = xrt_locations_get(locations, clock.source_id);
-        fprintf(stderr, "host clock %u failed at %s:%u:%u\n", clock.kind,
+        test_diagnostic_format(file, "host clock %u failed at %s:%u:%u\n", clock.kind,
             site ? site->path : "unknown source", site ? site->line : 0, site ? site->column : 0);
         return;
     } else if (xr_rbc_outcome_value_failure(outcome, &value, &source, &locations)) {
-        uint32_t close = xr_rbc_outcome_directory_close_source(outcome);
-        xrt_value_failure_report_with_directory_close(value, xrt_locations_get(locations, source),
-            xrt_locations_get(locations, close));
+        const XrtSourceLocation *site = xrt_locations_get(locations, source);
+        const XrtSourceLocation *close = xrt_locations_get(locations, xr_rbc_outcome_directory_close_source(outcome));
+        if (file->diagnostics) (void)xrt_value_failure_format(value, site, close, &sink);
+        else xrt_value_failure_report_with_directory_close(value, site, close);
         return;
     }
-    fprintf(stderr, "register VM execution failed (%u)\n", (unsigned)status);
+    test_diagnostic_format(file, "register VM execution failed (%u)\n", (unsigned)status);
 }
 
 static bool test_report_action_message(TestReportBytes *out, XrRbcStatus status,
@@ -249,6 +316,7 @@ static bool test_run_action(TestFile *file, uint32_t action, const TestOptions *
     if (stage == XR_RBC_TEST_ACTION_INVOKE && role->role == XR_XIR_TEST_ROLE_TEST)
         ++results->executed;
     if (status != XR_RBC_OK) {
+        test_note_failure(options);
         file->initialization_failed = stage == XR_RBC_TEST_ACTION_INITIALIZATION;
         if (case_status && stage == XR_RBC_TEST_ACTION_INVOKE &&
             (status == XR_RBC_TYPED_PANIC || status == XR_RBC_MESSAGE_PANIC || status == XR_RBC_TRY_ASSERT ||
@@ -256,14 +324,14 @@ static bool test_run_action(TestFile *file, uint32_t action, const TestOptions *
             *case_status = TEST_REPORT_FAILED;
         test_report_action_failure(file, role, status, outcome, cause);
         if (!options->quiet) {
-            fprintf(stderr, "xray test: %s: ", file->path);
-            if (file->initialization_failed) fputs("module initialization failed\n", stderr);
+            test_diagnostic_format(file, "xray test: %s: ", file->path);
+            if (file->initialization_failed) test_diagnostic_format(file, "module initialization failed\n");
             else {
-                fprintf(stderr, "@%s ", test_role_name(role->role));
-                fwrite(role->name, 1, role->name_length, stderr);
-                fputs(" failed\n", stderr);
+                test_diagnostic_format(file, "@%s ", test_role_name(role->role));
+                test_diagnostic_write(file, role->name, role->name_length);
+                test_diagnostic_write(file, " failed\n", sizeof(" failed\n") - 1);
             }
-            test_report_outcome(status, outcome);
+            test_report_outcome(file, status, outcome);
         }
     }
     xr_rbc_outcome_free(&outcome);
@@ -315,14 +383,22 @@ static void test_run_selected(TestFile *file, const TestOptions *options, TestRe
 }
 
 static void test_run_file(const char *path, const TestOptions *options, TestResults *results,
-    TestReport *report) {
+    TestReport *report, TestDiagnostics *diagnostics) {
     XrCompileResources *resources = report ? report->json.resources : NULL;
-    TestFile file = {.path = path, .report = {.owner = report, .error = {.resources = resources}}};
-    XrCliTestCompileFailure cause = {.resources = resources};
-    int compiled = xr_cli_lir_compile_test_plan(path, options->filter, options->quiet, &file.plan,
-        report ? &cause : NULL);
+    TestFile file = {.path = path, .report = {.owner = report, .error = {.resources = resources}},
+        .diagnostics = diagnostics};
+    bool buffer_compile_diagnostic = diagnostics && !options->quiet;
+    XrCliTestCompileFailure cause = {.resources = report ? resources : buffer_compile_diagnostic ?
+        diagnostics->bytes.resources : NULL};
+    int compiled = xr_cli_lir_compile_test_plan(path, options->filter,
+        options->quiet || buffer_compile_diagnostic, &file.plan, cause.resources ? &cause : NULL);
     if (compiled != XR_CLI_EXIT_OK) {
+        test_note_failure(options);
         ++results->failed;
+        if (buffer_compile_diagnostic) {
+            if (cause.text) test_diagnostic_write(&file, cause.text, strlen(cause.text));
+            else diagnostics->failed = true;
+        }
         if (report) {
             if (cause.text) test_report_suite_error(&file.report, cause.text);
             else report->failed = true;
@@ -330,14 +406,18 @@ static void test_run_file(const char *path, const TestOptions *options, TestResu
             file.report.source_stage = cause.stage;
         }
     } else if (!test_collect_roles(&file, options, results)) {
-        if (!options->quiet) xr_cli_error("test", "%s: invalid test plan", path);
+        test_note_failure(options);
+        if (!options->quiet) test_diagnostic_format(&file, "xray test: %s: invalid test plan\n", path);
         test_report_suite_error(&file.report, "invalid test plan");
         ++results->failed;
     } else {
         if (report) test_report_collect(&file.report, file.plan);
         if (file.roles[XR_XIR_TEST_ROLE_TEST].count) {
             if (test_prepare_session(&file, options)) test_run_selected(&file, options, results);
-            else ++results->failed;
+            else {
+                test_note_failure(options);
+                ++results->failed;
+            }
         }
     }
     XrOsIoStatus retired = xr_rbc_test_session_free(&file.session);
@@ -352,6 +432,102 @@ static void test_run_file(const char *path, const TestOptions *options, TestResu
     xr_compile_resources_free(cause.text);
     xr_free(file.actions);
     xr_lir_test_plan_free(file.plan);
+}
+
+static int test_claim_file(TestJobs *jobs) {
+    xr_mutex_lock(&jobs->lock);
+    int claimed = jobs->stop || jobs->next == jobs->files->count ? -1 : jobs->next++;
+    xr_mutex_unlock(&jobs->lock);
+    return claimed;
+}
+
+static void test_stdout_guard(void *context, bool acquire) {
+    xr_mutex_t *lock = context;
+    if (acquire) xr_mutex_lock(lock);
+    else xr_mutex_unlock(lock);
+}
+
+static void *test_worker(void *context) {
+    TestJobs *jobs = context;
+    const TestOptions *options = &jobs->options;
+    bool capture = options->verbose || !options->quiet;
+    xrt_stdout_set_guard(test_stdout_guard, &jobs->stdout_lock);
+    for (int i = test_claim_file(jobs); i >= 0; i = test_claim_file(jobs)) {
+        TestFileResult *file = &jobs->results[i];
+        if ((capture || jobs->report) && !test_report_allocate(&file->row)) {
+            file->row.failed = true;
+            file->diagnostics.failed = true;
+            test_stop_jobs(jobs);
+            break;
+        }
+        file->diagnostics.bytes.resources = file->row.json.resources;
+        test_run_file(jobs->files->paths[i], options, &file->counts,
+            jobs->report ? &file->row : NULL, capture ? &file->diagnostics : NULL);
+        if (file->row.failed || file->diagnostics.failed) test_stop_jobs(jobs);
+    }
+    xrt_stdout_set_guard(NULL, NULL);
+    return NULL;
+}
+
+static void test_join_worker(xr_thread_t thread) {
+    for (unsigned attempt = 0; attempt < 3; ++attempt)
+        if (xr_thread_join(thread, NULL) == 0) return;
+    xr_cli_error("test", "cannot join a test worker");
+    fflush(stderr);
+    /* A live worker can still borrow the entire batch. */
+    _Exit(XR_CLI_EXIT_INTERNAL);
+}
+
+static void test_merge_counts(TestResults *results, TestResults file) {
+    results->passed += file.passed;
+    results->failed += file.failed;
+    results->skipped += file.skipped;
+    results->executed += file.executed;
+}
+
+static bool test_run_parallel(const XrCliFileList *files, const TestOptions *options, int count,
+    TestResults *results, TestReport *report) {
+    xr_thread_t *threads = xr_calloc((size_t)count, sizeof(*threads));
+    TestFileResult *parts = xr_calloc((size_t)files->count, sizeof(*parts));
+    if (!threads || !parts) {
+        xr_free(threads);
+        xr_free(parts);
+        xr_cli_error("test", "cannot allocate test workers");
+        return false;
+    }
+    TestJobs jobs = {.files = files, .options = *options, .results = parts, .report = report != NULL};
+    jobs.options.jobs = &jobs;
+    xr_mutex_init(&jobs.lock);
+    xr_mutex_init(&jobs.stdout_lock);
+    /* Delay the first claim until the full pool can start. A partial start
+     * closes the queue and joins its workers without executing any file. */
+    xr_mutex_lock(&jobs.lock);
+    int started = 0;
+    while (started < count && xr_thread_create_ex(&threads[started], test_worker, &jobs, TEST_WORKER_STACK_BYTES))
+        ++started;
+    bool completed = started == count;
+    jobs.stop = !completed;
+    xr_mutex_unlock(&jobs.lock);
+    for (int i = 0; i < started; ++i) test_join_worker(threads[i]);
+    xr_mutex_destroy(&jobs.stdout_lock);
+    xr_mutex_destroy(&jobs.lock);
+    if (!completed) xr_cli_error("test", "cannot start %d test workers", count);
+    for (int i = 0; i < jobs.next; ++i) {
+        TestFileResult *file = &parts[i];
+        test_merge_counts(results, file->counts);
+        if (file->diagnostics.failed) {
+            xr_cli_error("test", "%s: cannot preserve test diagnostics", files->paths[i]);
+            completed = false;
+        } else if (file->diagnostics.bytes.length) {
+            (void)fwrite(file->diagnostics.bytes.data, 1, file->diagnostics.bytes.length, stderr);
+        }
+        if (report && !report->failed && !test_report_append(report, &file->row)) report->failed = true;
+        xr_compile_resources_free(file->diagnostics.bytes.data);
+        test_report_close(&file->row);
+    }
+    xr_free(threads);
+    xr_free(parts);
+    return completed;
 }
 
 XR_FUNC int cmd_test(const XrCliInvocation *inv) {
@@ -371,10 +547,6 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     if (xr_cli_opt_present(&inv->options, "sandbox")) {
         xr_cli_error("test", "sandbox execution is temporarily unavailable");
         return XR_CLI_EXIT_FAIL;
-    }
-    if (jobs > 1) {
-        xr_cli_error("test", "parallel test execution is temporarily unavailable");
-        return XR_CLI_EXIT_USAGE;
     }
     const char *report_path = xr_cli_opt_string(&inv->options, "report", NULL);
     bool quiet = xr_cli_opt_present(&inv->options, "quiet");
@@ -408,18 +580,23 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
         return XR_CLI_EXIT_FAIL;
     }
     TestResults results = {0};
-    for (int f = 0; f < files.count; ++f) {
-        test_run_file(files.paths[f], &options, &results, report_path ? &report : NULL);
-        if (results.failed && options.fail_fast) {
-            if (!options.quiet) fputs("xray test: stopping after the first failure\n", stderr);
-            break;
+    TestReport *output = report_path ? &report : NULL;
+    bool completed = true;
+    if (jobs > 1 && files.count > 1) {
+        completed = test_run_parallel(&files, &options, jobs < files.count ? jobs : files.count, &results, output);
+    } else {
+        for (int f = 0; f < files.count; ++f) {
+            test_run_file(files.paths[f], &options, &results, output, NULL);
+            if (results.failed && options.fail_fast) break;
         }
     }
-    bool zero = !results.executed && !results.failed;
+    if (results.failed && options.fail_fast && !options.quiet)
+        fputs("xray test: stopping after the first failure\n", stderr);
+    bool zero = completed && !results.executed && !results.failed;
     bool published = true;
     if (report_path) {
         if (!quiet && zero) fprintf(stderr, "Error: 0 tests executed across %d file(s)\n", files.count);
-        published = test_report_publish(&report, report_path);
+        published = completed && test_report_publish(&report, report_path);
         test_report_close(&report);
     }
     xr_cli_filelist_free(&files);
@@ -428,5 +605,5 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
         fprintf(stderr, "xray test: %" PRIu64 " passed, %" PRIu64 " failed, %" PRIu64 " skipped\n",
             results.passed, results.failed, results.skipped);
     }
-    return results.failed || !results.executed || !published ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
+    return !completed || results.failed || !results.executed || !published ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }

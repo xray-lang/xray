@@ -61,4 +61,17 @@ add_test(NAME test_cli_resource_profiles_test_role
         --output ${CMAKE_CURRENT_BINARY_DIR}/resource-profiles-test-role --suite test-role)
 set_tests_properties(test_cli_resource_profiles_test_role PROPERTIES
     TIMEOUT 90 PROCESSORS 1 LABELS "cli;resources;test-role")
+
+add_test(NAME test_cli_test_jobs
+    COMMAND ${XRAY_PYTHON} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_program_test_entry_tests.py
+        --xray $<TARGET_FILE:xray> -v
+        ProgramTestCommand.test_files_have_isolated_instances
+        ProgramTestCommand.test_file_jobs_rendezvous_and_sorted_report
+        ProgramTestCommand.test_file_jobs_fail_fast_keeps_inflight_cleanup
+        ProgramTestCommand.test_file_jobs_console_owns_diagnostics_in_serial_file_order
+        ProgramTestCommand.test_cancelled_file_jobs_keep_prior_report
+        ProgramTestCommand.test_file_jobs_keep_string_and_integer_records_whole
+        ProgramTestCommand.test_file_jobs_broken_stdout_does_not_hold_record_lock)
+set_tests_properties(test_cli_test_jobs PROPERTIES
+    TIMEOUT 120 PROCESSORS 2 LABELS "cli;vm;concurrency;test-role")
 endif()

@@ -98,6 +98,7 @@ def vm_cases(binary: Path, directory: Path, short_timeout: float) -> list[Case]:
 
 def test_role_cases(binary: Path, directory: Path, root: Path, short_timeout: float) -> list[Case]:
     tests = source(directory, "profile_test.xr", TEST_SOURCE)
+    second = source(directory, "second_profile_test.xr", TEST_SOURCE)
     name = "test_" + "a" * 245 + "_after_marker"
     long_test = source(directory, "long_test.xr", f"@test\nfn {name}() {{ assert(true) }}\n")
     report = (f"  test        {name}\nxray test: {long_test}: 1 test(s), 0 skipped, 0 hook(s)\n"
@@ -107,6 +108,8 @@ def test_role_cases(binary: Path, directory: Path, root: Path, short_timeout: fl
     return [
         Case("test-run-small", [binary, "test", tests], short_timeout,
              stdout=b"", stderr=TEST_ROLE_REPORT),
+        Case("test-run-parallel", [binary, "test", "--jobs", "2", second, tests], short_timeout,
+             stdout=b"", stderr=b"xray test: 2 passed, 0 failed, 0 skipped\n"),
         Case("test-filter-full-name", [binary, "test", "--filter", "after_marker", "--verbose", long_test],
              short_timeout, stdout=b"", stderr=report),
         Case("test-run-filtered-state-and-hooks", [binary, "test", "--filter", "kept", selected],

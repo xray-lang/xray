@@ -19,6 +19,7 @@
     "lir_vm_output",
     "test_lir_test_role_startup",
     "test_lir_test_suite_catalog",
+    "test_cli_test_jobs",
     "skeleton_diff",
     "smoke",
     "test_lir_cli_effects",

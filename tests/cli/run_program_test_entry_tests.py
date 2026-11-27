@@ -135,6 +135,155 @@ fn isolated() { counter = counter + 1; assert(counter == 1) }
         self.invoke({"first_test.xr": source, "second_test.xr": source}, 0,
                     "--jobs", "2", contains=("2 passed",))
 
+    def job_files(self, root, *, failing=False, count=2):
+        fixture = ROOT / "tests/lir/programs/test-role-jobs-rendezvous.xr"
+        paths = []
+        for i in range(count):
+            text = fixture.read_text(encoding="utf-8")
+            for marker in (101, 201, 301):
+                text = text.replace(f"print({marker})", f"print({marker + i})")
+            if failing:
+                text = text.replace('assert(state == 1, "case state survived the rendezvous")',
+                                    f'assert(false, "failure in file {i + 1}")')
+            path = root / f"{i + 1}-file.xr"
+            path.write_text(text, encoding="utf-8")
+            paths.append(path)
+        return paths
+
+    def run_job_files(self, root, paths, options, markers, *, cancel=False, break_stdout=False):
+        with subprocess.Popen([XRAY, "test", *reversed(paths), *options], cwd=root,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              env={**os.environ, "NO_COLOR": "1"}) as child:
+            with ThreadPoolExecutor(max_workers=1) as reader:
+                try:
+                    first = [reader.submit(child.stdout.readline).result(timeout=15) for _ in markers]
+                    self.assertCountEqual(first, markers)
+                    self.assertIsNone(child.poll())
+                    if cancel:
+                        child.kill()
+                    else:
+                        if break_stdout:
+                            child.stdout.close()
+                            child.stdout = None
+                        (root / "release").touch()
+                    output, errors = child.communicate(timeout=15)
+                finally:
+                    if child.poll() is None:
+                        child.kill()
+                        child.wait(timeout=5)
+        return child.returncode, output, errors
+
+    def test_file_jobs_rendezvous_and_sorted_report(self):
+        with tempfile.TemporaryDirectory(prefix="xray-test-job-rendezvous-") as directory:
+            root = Path(directory)
+            paths = self.job_files(root)
+            report = root / "serial.json"
+            serial = self.run_job_files(root, paths, ["--jobs", "1", "--report", report], [b"101\n"])
+            self.assertEqual(serial, (0, b"201\n301\n102\n202\n302\n", b""))
+            (root / "release").unlink()
+            parallel_report = root / "parallel.json"
+            code, output, errors = self.run_job_files(root, paths,
+                ["--jobs", "2", "--report", parallel_report], [b"101\n", b"102\n"])
+            self.assertEqual((code, errors), (0, b""))
+            self.assertCountEqual(output.splitlines(), [b"201", b"202", b"301", b"302"])
+            serial_files = json.loads(report.read_bytes())["files"]
+            parallel_files = json.loads(parallel_report.read_bytes())["files"]
+            self.assertEqual(serial_files, parallel_files)
+            self.assertEqual([Path(row["path"]) for row in parallel_files], paths)
+            self.assertEqual([(file["passed"], file["skipped"]) for file in parallel_files], [(1, 1), (1, 1)])
+
+    def test_file_jobs_fail_fast_keeps_inflight_cleanup(self):
+        with tempfile.TemporaryDirectory(prefix="xray-test-job-fail-fast-") as directory:
+            root = Path(directory)
+            paths = self.job_files(root, failing=True, count=3)
+            report = root / "report.json"
+            code, output, errors = self.run_job_files(root, paths,
+                ["--jobs", "2", "--fail-fast", "--report", report], [b"101\n", b"102\n"])
+            self.assertEqual((code, errors), (1, b""))
+            self.assertCountEqual(output.splitlines(), [b"201", b"202", b"301", b"302"])
+            rows = json.loads(report.read_bytes())["files"]
+            self.assertEqual([Path(row["path"]) for row in rows], paths[:2])
+            self.assertEqual([(row["passed"], row["failed"], row["errors"], row["skipped"]) for row in rows],
+                             [(0, 1, 0, 1), (0, 1, 0, 1)])
+            self.assertEqual([row["cases"][0]["message"] for row in rows],
+                             [f"[Uncaught Panic] E0445: failure in file {i}" for i in (1, 2)])
+
+    def test_file_jobs_keep_string_and_integer_records_whole(self):
+        with tempfile.TemporaryDirectory(prefix="xray-test-job-output-") as directory:
+            root = Path(directory)
+            paths = self.job_files(root)
+            for i, path in enumerate(paths):
+                text = path.read_text(encoding="utf-8")
+                payload = chr(ord("A") + i) * 64
+                additional = f'    for (i in 0..750) {{ print("{payload}"); print({700 + i}) }}\n'
+                text = text.replace("    assert(state == 1,", additional + "    assert(state == 1,", 1)
+                path.write_text(text, encoding="utf-8")
+            report = root / "report.json"
+            code, output, errors = self.run_job_files(root, paths, ["--jobs", "2", "--report", report],
+                [b"101\n", b"102\n"])
+            self.assertEqual((code, errors), (0, b""))
+            lines = output.split(b"\n")
+            self.assertEqual(lines.pop(), b"")
+            self.assertCountEqual(lines, [b"A" * 64, b"B" * 64, b"700", b"701"] * 750 +
+                                             [b"201", b"202", b"301", b"302"])
+
+    def test_file_jobs_broken_stdout_does_not_hold_record_lock(self):
+        with tempfile.TemporaryDirectory(prefix="xray-test-job-output-failure-") as directory:
+            root = Path(directory)
+            paths = self.job_files(root)
+            for path in paths:
+                text = path.read_text(encoding="utf-8")
+                text = text.replace("    assert(state == 1,", '    print("write after the pipe closes")\n'
+                                    "    assert(state == 1,", 1)
+                path.write_text(text, encoding="utf-8")
+            report = root / "report.json"
+            code, output, errors = self.run_job_files(root, paths, ["--jobs", "2", "--report", report],
+                [b"101\n", b"102\n"], break_stdout=True)
+            self.assertEqual((code, output, errors), (1, None, b""))
+            rows = json.loads(report.read_bytes())["files"]
+            self.assertEqual([Path(row["path"]) for row in rows], paths)
+            self.assertEqual([(row["passed"], row["failed"], row["errors"]) for row in rows], [(0, 0, 2)] * 2)
+            for row in rows:
+                self.assertIn("test output failed", row["cases"][0]["message"])
+                self.assertIn("hook @after_each", row["cases"][0]["message"])
+                self.assertIn("hook @after_all", row["error"])
+
+    def test_file_jobs_console_owns_diagnostics_in_serial_file_order(self):
+        with tempfile.TemporaryDirectory(prefix="xray-test-job-diagnostics-") as directory:
+            root = Path(directory)
+            cases = {
+                "1-null chosen.xr": '@test\nfn rejected() { var empty: i64? = null; print(empty!) }\n',
+                "2-message.xr": '@test\nfn rejected() { assert(false, "a qualified message") }\n',
+                "3-source.xr": '@test\nfn rejected() { noSuchFunction() }\n',
+            }
+            paths = [root / name for name in cases]
+            for path, text in zip(paths, cases.values()):
+                path.write_text(text, encoding="utf-8")
+            runs = [subprocess.run([XRAY, "test", *reversed(paths), "--verbose", "--jobs", str(jobs)],
+                                   cwd=root, capture_output=True, timeout=15,
+                                   env={**os.environ, "NO_COLOR": "1"}) for jobs in (1, 2)]
+            self.assertEqual([(run.returncode, run.stdout) for run in runs], [(1, b""), (1, b"")])
+            self.assertEqual(runs[0].stderr, runs[1].stderr)
+            for text in (b"E0413: null value unwrapped", b"E0445: a qualified message",
+                         b"3-source.xr:2:17: error: name is not an initialized value",
+                         b"xray test: 0 passed, 3 failed, 0 skipped"):
+                self.assertIn(text, runs[1].stderr)
+            if os.name == "nt":
+                self.assertIn(b"\\x5c1-null chosen.xr:2:41-2:41", runs[1].stderr)
+
+    def test_cancelled_file_jobs_keep_prior_report(self):
+        with tempfile.TemporaryDirectory(prefix="xray-test-job-cancel-") as directory:
+            root = Path(directory)
+            paths = self.job_files(root)
+            report = root / "report.json"
+            report.write_bytes(b"prior report")
+            code, output, errors = self.run_job_files(root, paths, ["--jobs", "2", "--report", report],
+                [b"101\n", b"102\n"], cancel=True)
+            self.assertNotEqual(code, 0)
+            self.assertEqual((output, errors), (b"", b""))
+            self.assertEqual(report.read_bytes(), b"prior report")
+            self.assertEqual(sorted(root.iterdir()), [*paths, report])
+
     def test_timer_and_cpu_timeouts_release_the_invocation(self):
         for body in ("while (true) {}", "time.sleep(10000)"):
             with self.subTest(body=body):
@@ -239,7 +388,6 @@ fn selected() { print("test ran") }
             report.write_bytes(b"prior report")
             for expected, options, diagnosis in (
                 (2, ("--jobs", "0"), "parallel jobs must be at least one"),
-                (2, ("--jobs", "2"), "parallel test execution is temporarily unavailable"),
                 (1, ("--sandbox",), "sandbox execution is temporarily unavailable"),
             ):
                 with self.subTest(options=options):

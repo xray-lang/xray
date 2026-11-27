@@ -36,7 +36,7 @@ static const XrCliOptionSpec test_options[] = {
     {"fail-fast", 'F', XR_CLI_VALUE_NONE, false, false, NULL, "Stop on first failure"},
     {"filter", 'f', XR_CLI_VALUE_STRING, false, false, "PATTERN", "Only run matching tests"},
     {"quiet", 'q', XR_CLI_VALUE_NONE, false, false, NULL, "Suppress the runner's results and diagnostics"},
-    {"jobs", 'j', XR_CLI_VALUE_INT, false, false, "N", "Number of test jobs (currently 1)"},
+    {"jobs", 'j', XR_CLI_VALUE_INT, false, false, "N", "Maximum number of test files to run concurrently"},
     {"report", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
      "Write serial test outcomes as JSON to FILE"},
     XR_CLI_OPT_END};

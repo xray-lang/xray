@@ -68,16 +68,22 @@ static bool test_report_text(TestReportBytes *out, const char *text) {
 }
 
 static bool test_report_format(TestReportBytes *out, const char *format, ...) XR_PRINTF_FMT(2, 3);
-static bool test_report_format(TestReportBytes *out, const char *format, ...) {
-    va_list args, copy;
-    va_start(args, format);
+static bool test_report_format_args(TestReportBytes *out, const char *format, va_list args) {
+    va_list copy;
     va_copy(copy, args);
     int length = vsnprintf(NULL, 0, format, copy);
     va_end(copy);
     bool written = length >= 0 && test_report_reserve(out, (size_t)length + 1) &&
         vsnprintf(out->data + out->length, (size_t)length + 1, format, args) == length;
-    va_end(args);
     if (written) out->length += (size_t)length;
+    return written;
+}
+
+static bool test_report_format(TestReportBytes *out, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    bool written = test_report_format_args(out, format, args);
+    va_end(args);
     return written;
 }
 
@@ -109,10 +115,13 @@ static bool test_report_quote(TestReportBytes *out, const char *text, size_t len
     return test_report_text(out, "\"");
 }
 
-static bool test_report_open(TestReport *report) {
+static bool test_report_allocate(TestReport *report) {
     XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
-    if (xr_compile_resources_new(&limits, &report->json.resources) != XR_COMPILE_RESOURCE_OK)
-        return false;
+    return xr_compile_resources_new(&limits, &report->json.resources) == XR_COMPILE_RESOURCE_OK;
+}
+
+static bool test_report_open(TestReport *report) {
+    if (!test_report_allocate(report)) return false;
     report->start_ns = xr_time_monotonic_ns();
     return test_report_text(&report->json, "{\"schema\":1,\"files\":[");
 }
@@ -131,6 +140,15 @@ static bool test_report_publish(TestReport *report, const char *path) {
 static void test_report_close(TestReport *report) {
     xr_compile_resources_free(report->json.data);
     xr_compile_resources_release(report->json.resources);
+}
+
+/* Each worker has serialized its one row while the Source plan was still live. */
+static bool test_report_append(TestReport *report, const TestReport *part) {
+    if (part->failed || part->files != 1 || !part->json.length ||
+        (report->files && !test_report_text(&report->json, ",")) ||
+        !test_report_write(&report->json, part->json.data, part->json.length)) return false;
+    ++report->files;
+    return true;
 }
 
 static void test_report_collect(TestReportFile *file, const XrLirTestPlan *plan) {

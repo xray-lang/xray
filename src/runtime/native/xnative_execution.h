@@ -177,6 +177,11 @@ XR_FUNC XR_NORET void xrt_execution_temp_failure_take(XrtTempFailure *owned);
 // I/O helpers have already restored their OS state before this transfer.
 XR_FUNC XR_NORET void xrt_end_execution(XrtIoResult failure,
     XrtOutputOperation operation, uint32_t source_id);
+/* A parallel host may serialize stdout records on this thread. The context
+ * must remain live until the binding is cleared. The guard is always released
+ * before publishing a write failure into the execution boundary. */
+typedef void (*XrtStdoutGuard)(void *context, bool acquire);
+XR_FUNC void xrt_stdout_set_guard(XrtStdoutGuard, void *context);
 XR_FUNC XR_NORET void xrt_output_exit(const XrtSourceMap *map, XrtIoResult failure,
     XrtOutputOperation operation, uint32_t source_id);
 XR_FUNC XR_NORET void xrt_clock_exit(const XrtSourceMap *map, XrtHostClockFailure failure);
@@ -201,6 +206,11 @@ struct XrValueFormatSink;
 /* Format the owned cause synchronously without changing its lifetime or output stream. */
 XR_FUNC bool xrt_try_assert_format(const XrtTryAssertFailure *, const struct XrValueFormatSink *);
 XR_FUNC bool xrt_uncaught_error_format(const XrtErrorSnapshot *, const struct XrValueFormatSink *);
+XR_FUNC bool xrt_message_panic_format(uint32_t code, const char *, size_t, const XrtSourceLocation *,
+    const struct XrValueFormatSink *);
+XR_FUNC bool xrt_value_failure_format(XrXirValueStatus, const XrtSourceLocation *primary,
+    const XrtSourceLocation *close, const struct XrValueFormatSink *);
+XR_FUNC bool xrt_null_unwrap_format(const XrtSourceLocation *, const struct XrValueFormatSink *);
 XR_FUNC bool xrt_try_assert_report(const XrtTryAssertFailure *);
 XR_FUNC bool xrt_uncaught_error_report(const XrtErrorSnapshot *);
 #endif // XNATIVE_EXECUTION_H

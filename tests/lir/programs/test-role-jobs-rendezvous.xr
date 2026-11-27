@@ -1,0 +1,31 @@
+import io
+import path
+
+var state: i64 = 0
+
+@test
+fn isolated() {
+    assert(state == 0, "file instance was shared")
+    state = state + 1
+    print(101)
+    while (!io.exists(path.from("release"))) {}
+    assert(state == 1, "case state survived the rendezvous")
+}
+
+@test(skip)
+fn skipped() {
+    assert(false, "skipped guest ran")
+}
+
+@after_each
+fn cleanup_case() {
+    assert(state == 1)
+    state = state + 1
+    print(201)
+}
+
+@after_all
+fn cleanup_file() {
+    assert(state == 2)
+    print(301)
+}
