@@ -117,7 +117,42 @@ static bool rbc_value_array_region_before(const XrRbcModule *module,XrRbcStack *
     if (*status!=XRT_MANAGED_OK) rbc_value_array_region_forget(activation,role->region,RBC_ARRAY_REGION_BYPASS);
     return true;
 }
-static void rbc_value_array_region_after(RbcValueActivation *activation,uint32_t index) {
+/* A positive round at ordinary entry follows a completed round. The edge
+ * has published the canonical owner and both scalar receivers. Keep the
+ * original header and exit to retire the region and forward the final round. */
+static XR_NOINLINE void rbc_value_array_repeat_after_entry(XrRbcStack *stack,
+    RbcValueActivation *activation, uint32_t region) {
+    const XrRbcValueCode *code = activation->code;
+    if (!activation->owned_code || !activation->backings_ready || !code->array_repeat_limits) return;
+    const XrRbcArrayRepeatLimit *limit = &code->array_repeat_limits[region - 1];
+    if (!limit->available) return;
+    const XrLirArrayRegionBindings *bindings = code->array_regions;
+    const XrLirArrayRegionBinding *row = &bindings->regions[region - 1];
+    const XrLirArrayRepeatedAffine *affine = &row->region.repeated_affine;
+    XrRbcRegister *iv = rbc_value_register(stack, activation, row->region.range.iv);
+    XrRbcRegister *round = rbc_value_register(stack, activation, affine->round);
+    if (!iv || !round || iv == round || iv->bits || !round->bits || round->bits > INT64_MAX) return;
+    uint64_t end = limit->bits;
+    if (limit->value) {
+        XrRbcRegister *bound = rbc_value_register(stack, activation, limit->value);
+        if (!bound || bound == iv || bound == round) return;
+        end = bound->bits;
+    }
+    if (end > INT64_MAX || round->bits >= end) return;
+
+    const XrtArrayI64RegionContext context = {activation->frame, activation->payload,
+        &activation->frame_locations, &code->homes->frame};
+    const XrtArrayI64RegionSpec spec = {bindings->slots + row->first_slot, row->slot_count,
+        row->canonical_slot - row->first_slot};
+    XrtArrayI64RegionCache cache = {0};
+    if (!xrt_array_i64_region_try_begin(&context, &spec, true, &cache) || !cache.length) return;
+    uint64_t remaining = end - round->bits;
+    xrt_array_i64_region_repeat_affine(&cache, affine->scale, affine->bias, remaining);
+    iv->bits = cache.length;
+    round->bits = end - UINT64_C(1);
+}
+
+static void rbc_value_array_region_after(XrRbcStack *stack,RbcValueActivation *activation,uint32_t index) {
     if (!activation->array_regions) return;
     const XrRbcArrayRegionAccess *role=&activation->code->array_region_accesses[index];
     if (!role->region) return;
@@ -126,6 +161,8 @@ static void rbc_value_array_region_after(RbcValueActivation *activation,uint32_t
     const XrLirArrayRegionBindings *bindings=activation->code->array_regions;
     if (access.operation==XR_RBC_VALUE_EDGE) {
         XrLirArrayRegionEdgeKind kind=bindings->edges[access.index].kind;
+        if (kind==XR_LIR_ARRAY_REGION_EDGE_ENTRY && activation->code->array_repeat_limits)
+            rbc_value_array_repeat_after_entry(stack,activation,role->region);
         if (kind==XR_LIR_ARRAY_REGION_EDGE_LATCH && state->phase==RBC_ARRAY_REGION_COLD && state->completed_set)
             state->phase=RBC_ARRAY_REGION_ELIGIBLE;
         if (kind==XR_LIR_ARRAY_REGION_EDGE_EXIT)

@@ -18,6 +18,7 @@ static void rbc_lir_value_code_free(XrRbcValueCode *code) {
     xr_free((void *)code->array_read_folds);
     xr_lir_array_region_bindings_destroy(code->array_push_windows);
     xr_free((void *)code->array_push_limits);
+    xr_free((void *)code->array_repeat_limits);
     xr_lir_array_region_bindings_destroy(code->array_regions);
     xr_free(code);
 }
@@ -97,6 +98,39 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
 #include "xrbc_lir_array_region.inc.c"
 #include "xrbc_lir_array_read.inc.c"
 #include "xrbc_lir_array_push.inc.c"
+
+static bool rbc_lir_array_repeat_prepare(RbcLirCompiler *c) {
+    XrRbcValueCode *code = c->value_code;
+    if (!code->array_region_runtime) return true;
+    const XrLirArrayRegionBindings *bindings = code->array_regions;
+    const XrLirFunctionData *function = &c->input->functions[c->function.id - 1];
+    XrRbcArrayRepeatLimit *limits = NULL;
+    for (size_t n = 0; n < bindings->region_count; ++n) {
+        const XrLirArrayRegionBinding *row = &bindings->regions[n];
+        const XrLirArrayRepeatedAffine *affine = &row->region.repeated_affine;
+        if (!row->slot_count || !affine->round ||
+            !rbc_lir_array_push_scalar(code->locations[row->region.range.iv]) ||
+            !rbc_lir_array_push_scalar(code->locations[affine->round])) continue;
+        /* The proof accepts a constant or an immutable function parameter.
+         * The constant may live only in the enclosing header or an immediate. */
+        const XrLirInstructionView *definition =
+            xr_lir_internal_value_definition(function, affine->limit);
+        bool constant = definition && definition->op == XR_LIR_CONST && definition->type == XR_LIR_I64;
+        if (!constant && !rbc_lir_array_push_scalar(code->locations[affine->limit])) continue;
+        if (!limits) {
+            limits = xr_calloc(bindings->region_count, sizeof(*limits));
+            if (!limits) return rbc_lir_fail(c, XR_RBC_COMPILE_OUT_OF_MEMORY, "cannot own Array repeat limits");
+            code->array_repeat_limits = limits;
+        }
+        limits[n] = (XrRbcArrayRepeatLimit){
+            .bits = constant ? definition->bits : 0,
+            .value = constant ? 0 : affine->limit,
+            .available = true
+        };
+    }
+    return true;
+}
+
 static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
     if (!c->typed_values) return true;
     if (c->homes && c->homes->value_count != c->view.value_count)
@@ -160,7 +194,8 @@ static bool rbc_lir_value_code_prepare(RbcLirCompiler *c) {
         else if (c->slots[v] != UINT32_MAX)
             locations[v] = (XrRbcValueLocation){XR_RBC_VALUE_REGISTER,c->slots[v]};
     }
-    return rbc_lir_array_read_prepare(c) && rbc_lir_array_push_prepare(c);
+    return rbc_lir_array_read_prepare(c) && rbc_lir_array_push_prepare(c) &&
+        rbc_lir_array_repeat_prepare(c);
 }
 static bool rbc_lir_value_arguments(RbcLirCompiler *c, const uint32_t *values, uint32_t count, uint32_t *first) {
     XrRbcValueCode *code = c->value_code;

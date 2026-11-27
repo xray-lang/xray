@@ -1983,7 +1983,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
     else if (access.operation==XR_RBC_VALUE_DISPLAY) status=rbc_value_display(module,stack,activation,access,source);
     else return XR_RBC_INVALID;
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
-    if (activation->array_regions) rbc_value_array_region_after(activation,index);
+    if (activation->array_regions) rbc_value_array_region_after(stack,activation,index);
     stack->frames[stack->depth-1].pc=pc;
     return XR_RBC_OK;
 }

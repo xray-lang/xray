@@ -158,6 +158,12 @@ typedef struct XrRbcArrayPushLimit {
     bool available;
 } XrRbcArrayPushLimit;
 
+typedef struct XrRbcArrayRepeatLimit {
+    uint64_t bits;
+    uint32_t value; /* Zero denotes fixed bits. */
+    bool available;
+} XrRbcArrayRepeatLimit;
+
 typedef struct XrRbcValueCode {
     const XrLirValueHomes *homes;
     const XrRbcValueLocation *locations; /* SSA indexed, including unused zero. */
@@ -186,6 +192,7 @@ typedef struct XrRbcValueCode {
     const XrRbcArrayReadFold *array_read_folds; /* Indexed like array_regions->regions, or absent. */
     XrLirArrayRegionBindings *array_push_windows;
     const XrRbcArrayPushLimit *array_push_limits; /* Indexed like array_push_windows->regions. */
+    const XrRbcArrayRepeatLimit *array_repeat_limits; /* Indexed like array_regions->regions. */
 } XrRbcValueCode;
 
 /* A leaf needs no call, return or owning destination. Both emission and
