@@ -4,11 +4,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xnative_map_backing.h - Fixed String/I64 owners with independent insertion order
+ * xnative_map_backing.h - Fixed String-key owners with independent insertion order
  *
  * KEY CONCEPT:
- *   Each capacity row has one real key owner or NULL. Bucket, insertion-order
- *   and rank fields are scalar indexes, never additional ownership edges.
+ *   The scalar layout owns each key. The String layout owns each key and
+ *   value. Bucket, insertion order and rank are scalar indexes.
  */
 #ifndef XNATIVE_MAP_BACKING_H
 #define XNATIVE_MAP_BACKING_H
@@ -67,4 +67,19 @@ XR_FUNC XrtManagedStatus xrt_map_backing_update_create(XrtManagedFrame *, size_t
  * Both storage domains reject reentry through allocation and retirement. */
 XR_FUNC XrtManagedStatus xrt_map_update_place(XrtPlace, XrtManagedFrame *, size_t workspace,
     const XrtBackingTypes *, const XrtMapUpdate *, bool *removed);
+/* String-valued maps retain both row owners. Lookup keeps misses distinct
+ * from an owned empty String and only publishes a result owner on a hit. */
+XR_FUNC XrtManagedStatus xrt_map_string_value_ops(XrtBillingOwner *, XrtManagedOps **);
+XR_FUNC bool xrt_map_string_value_matches(const XrtManagedHeader *);
+XR_FUNC bool xrt_map_string_ops_match(const XrtManagedOps *);
+/* Both input arrays remain live and unchanged through the synchronous call. */
+XR_FUNC XrtManagedStatus xrt_map_string_create(XrtManagedFrame *, size_t, XrtManagedOps *,
+    XrtStringBacking *const *, XrtStringBacking *const *, size_t);
+XR_FUNC XrtManagedStatus xrt_map_string_literal_inputs_retain(const XrtMapLiteral *,
+    const XrtMapStringLiteralInput *, size_t *);
+XR_FUNC void xrt_map_string_literal_inputs_drop(const XrtMapLiteral *, const XrtMapStringLiteralInput *);
+XR_FUNC XrtManagedStatus xrt_map_string_literal_create(XrtManagedFrame *, size_t, XrtManagedOps *,
+    const XrtMapLiteral *, const XrtMapStringLiteralInput *, XrtMapLiteralDuplicate *);
+XR_FUNC XrtManagedStatus xrt_map_string_get(XrtManagedFrame *, size_t,
+    const XrtMapBacking *, const XrtStringBacking *, bool *);
 #endif // XNATIVE_MAP_BACKING_H

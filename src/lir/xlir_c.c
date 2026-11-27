@@ -232,13 +232,13 @@ static void c_format(LirC *c, const char *format, ...) {
     c_bytes(c, buffer, (size_t) length);
 }
 static bool c_managed_leaf(XrLirType type) {
-    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_SET_I64;
+    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || xr_lir_map_element(type) || type == XR_LIR_SET_I64;
 }
 static const char *c_builtin_type(XrLirType type) {
     if (type == XR_LIR_I64_CELL) return "int64_t *";
     if (type == XR_LIR_I64_REF) return "XrlI64Ref";
     if (type == XR_LIR_FUNCTION_SCOPE) return "uint32_t";
-    if (type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_SET_I64) return "XrtManagedHeader *";
+    if (type == XR_LIR_ARRAY || xr_lir_map_element(type) || type == XR_LIR_SET_I64) return "XrtManagedHeader *";
     if (type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF ||
         type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF ||
         type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF ||
@@ -378,7 +378,7 @@ static bool c_scalar(LirC *c, XrLirType type) {
     c->string_values |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL || type == XR_LIR_STRING_REF;
     c->state |= type == XR_LIR_STATE || type == XR_LIR_STATE_REF;
     c->arrays |= type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF;
-    c->maps |= type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
+    c->maps |= xr_lir_map_element(type) || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
     c->sets |= type == XR_LIR_SET_I64 || type == XR_LIR_SET_I64_CELL || type == XR_LIR_SET_I64_REF;
     c->views |= c_slice_type(c, type);
     c->i64_refs |= type == XR_LIR_I64_REF;

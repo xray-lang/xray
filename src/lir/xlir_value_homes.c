@@ -75,7 +75,7 @@ static bool lir_home_key(const XrLirModule *module, XrLirFunction function,
             shape.kind == XR_LIR_TYPE_SUM ||
             xr_lir_cell_value_type(module,type,NULL);
     }
-    if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64 &&
+    if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && !xr_lir_map_element(type) &&
         type != XR_LIR_SET_I64) return false;
     *key = (XrLirValueLayoutKey){type, 0, 0};
     if (type == XR_LIR_ARRAY) {
@@ -301,7 +301,7 @@ static bool lir_home_workspace(LirHomeBuilder *b, XrLirOwnershipFact fact) {
     uint32_t type = b->homes->bindings[fact.value].type;
     XrtValuePlanSpec spec;
     if (!lir_home_binding_spec(b,type,&spec)) return false;
-    if (borrowed_copy && spec.kind != XRT_VALUE_STRING && spec.kind != XRT_VALUE_MAP_STRING_I64 &&
+    if (borrowed_copy && spec.kind != XRT_VALUE_STRING && spec.kind != XRT_VALUE_MAP_STRING_I64 && spec.kind != XRT_VALUE_MAP_STRING_STRING &&
         spec.kind != XRT_VALUE_SET_I64 && !xrt_value_kind_is_array(spec.kind)) return true;
     bool bound_workspace = string || borrowed_copy || random_bytes;
     XrLirHomeWorkspace workspace = {.block=fact.block,.instruction=fact.instruction,

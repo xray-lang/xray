@@ -175,8 +175,10 @@ static bool rbc_value_capacities(const XrRbcValueCode *code, const XrtValueImage
         }
         if (access.operation == XR_RBC_VALUE_MAP_LITERAL) {
             size_t count = access.count;
-            if (count > SIZE_MAX / sizeof(XrtMapLiteralInput)) return false;
-            size_t bytes = count * sizeof(XrtMapLiteralInput);
+            size_t stride = sizeof(XrtMapStringLiteralInput) > sizeof(XrtMapLiteralInput) ?
+                sizeof(XrtMapStringLiteralInput) : sizeof(XrtMapLiteralInput);
+            if (count > SIZE_MAX / stride) return false;
+            size_t bytes = count * stride;
             if (bytes > *snapshots) *snapshots = bytes;
         }
         if (access.operation==XR_RBC_VALUE_FUNCTION_NEW) {
@@ -405,7 +407,7 @@ static XrtManagedStatus rbc_value_place(RbcValueOrigin origin, bool temporary, s
     if (!home || !image || !home->type || home->type>image->type_count) return XRT_MANAGED_ARGUMENT;
     XrtValueKind kind=image->types[home->type-1].kind;
     XrtPlaceNull nulls = kind == XRT_VALUE_STRING || xrt_value_kind_is_array(kind) ||
-        kind == XRT_VALUE_MAP_STRING_I64 || kind == XRT_VALUE_SET_I64 || kind == XRT_VALUE_CLASS ?
+        kind == XRT_VALUE_MAP_STRING_I64 || kind == XRT_VALUE_MAP_STRING_STRING || kind == XRT_VALUE_SET_I64 || kind == XRT_VALUE_CLASS ?
         XRT_PLACE_NONNULL : XRT_PLACE_NULLABLE;
     return xr_rbc_value_home_place((XrRbcHomeLocation){origin.activation->code->homes,
         origin.activation->frame,origin.value,temporary},leaf,nulls,out);

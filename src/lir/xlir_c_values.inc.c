@@ -70,7 +70,7 @@ static bool c_value_mark(LirC *c, uint8_t *needed, size_t count, XrLirType type)
      * bitmap; the bare Array tag cannot name a receiving value layout. */
     if (type==XR_LIR_SET_I64_CELL || type==XR_LIR_SET_I64_REF) type=XR_LIR_SET_I64;
     if ((type >= XR_LIR_UNIT && type <= XR_LIR_F64) || type==XR_LIR_STRING ||
-        type==XR_LIR_MAP_STRING_I64 || type==XR_LIR_SET_I64 || type >= XR_LIR_TYPE_COUNT)
+        xr_lir_map_element(type) || type==XR_LIR_SET_I64 || type >= XR_LIR_TYPE_COUNT)
         needed[type] = 1;
     return true;
 }

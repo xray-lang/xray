@@ -26,7 +26,7 @@
 static const char *const lir_type_names[] = {"invalid", "unit", "i1",  "i8",  "i16", "i32", "i64",
                                              "u8", "u16", "u32", "u64", "f32", "f64", "ptr", "i64_cell",
                                              "string", "string_cell", "state", "state_ref", "array", "array_cell", "array_ref", "view_frame", "view_cell", "slice_i64", "string_ref", "function_scope",
-                                             "map_string_i64", "map_string_i64_cell", "map_string_i64_ref", "set_i64", "set_i64_cell", "set_i64_ref", "i64_ref"};
+                                             "map_string_i64", "map_string_i64_cell", "map_string_i64_ref", "set_i64", "set_i64_cell", "set_i64_ref", "i64_ref", "map_string_string"};
 static const char *const lir_op_names[] = {
     "invalid",
 #define XR_LIR_OP(name, text, arity) text,
@@ -181,14 +181,15 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
     XrLirType b = v->operand_count > 1 ? f->values[v->operands[1] - 1].type : XR_LIR_TYPE_INVALID;
     switch (v->op) {
         case XR_LIR_MAP_LITERAL_NEW: {
-            if(v->type!=XR_LIR_MAP_STRING_I64 || !v->bits || v->bits>m->map_literal_count)return false;
+            XrLirType element = xr_lir_map_element(v->type);
+            if (!element || !v->bits || v->bits > m->map_literal_count) return false;
             const XrLirMapLiteral *literal=&m->map_literals[v->bits-1];uint32_t operand=0;
             for(uint32_t n=0;n<literal->count;++n) {
                 bool spread=literal->items[n].kind!=0;
                 uint32_t width=spread?1u:2u;
                 if(operand>v->operand_count || width>v->operand_count-operand ||
-                    f->values[v->operands[operand]-1].type!=(XrLirType)(spread?XR_LIR_MAP_STRING_I64:XR_LIR_STRING) ||
-                    (!spread && f->values[v->operands[operand+1]-1].type!=XR_LIR_I64))return false;
+                    f->values[v->operands[operand]-1].type!=(XrLirType)(spread ? v->type : XR_LIR_STRING) ||
+                    (!spread && f->values[v->operands[operand+1]-1].type != element))return false;
                 operand+=width;
             }
             return operand==v->operand_count;
@@ -367,8 +368,8 @@ static bool lir_scalar_instruction_types(const XrLirModule *m, const XrLirFuncti
             (a==XR_LIR_STATE_REF && f->values[v->operands[0]-1].state_reference.payload==XR_LIR_SET_I64 && f->values[v->operands[0]-1].state_reference.mutable));
         case XR_LIR_SET_REF_READ:return v->type==XR_LIR_SET_I64 && a==XR_LIR_SET_I64_REF;
         case XR_LIR_SET_REF_WRITE:return v->type==XR_LIR_UNIT && a==XR_LIR_SET_I64_REF && b==XR_LIR_SET_I64;
-        case XR_LIR_MAP_RETAIN: return v->type == XR_LIR_MAP_STRING_I64 && a == XR_LIR_MAP_STRING_I64;
-        case XR_LIR_MAP_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_MAP_STRING_I64;
+        case XR_LIR_MAP_RETAIN: return v->type == a && xr_lir_map_element(a);
+        case XR_LIR_MAP_DROP: return v->type == XR_LIR_UNIT && xr_lir_map_element(a);
         case XR_LIR_MAP_CELL_DROP: return v->type == XR_LIR_UNIT && a == XR_LIR_MAP_STRING_I64_CELL;
         case XR_LIR_MAP_BORROW: {
             XrLirCellType cell;
@@ -1303,7 +1304,8 @@ static XrLirStatus lir_frame_cell_constructors(const XrLirFunctionData *f,uint32
 #include "xlir_cleanup_verify.inc.c"
 
 static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f) {
-    if (f->result == XR_LIR_FUNCTION_SCOPE || f->result == XR_LIR_MAP_STRING_I64_CELL ||
+    if (f->result == XR_LIR_FUNCTION_SCOPE || f->result == XR_LIR_MAP_STRING_STRING ||
+        f->result == XR_LIR_MAP_STRING_I64_CELL ||
         f->result == XR_LIR_MAP_STRING_I64_REF || f->result == XR_LIR_SET_I64_CELL || f->result == XR_LIR_SET_I64_REF) return false;
     if (!f->name || !f->name_length || !xr_lir_internal_type_valid(m, f->result, true) ||
         f->result == XR_LIR_I64_CELL || f->result == XR_LIR_I64_REF || f->result == XR_LIR_STRING_REF || f->result == XR_LIR_STRING_CELL ||
@@ -1394,7 +1396,7 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
 static bool lir_managed_value(const XrLirModule *m, XrLirType type) {
     /* Lexical Cell identities have COPY edges and scope retirement; they do
      * not use this ordinary block-local owner's consuming edge protocol. */
-    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 ||
+    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || xr_lir_map_element(type) ||
         type == XR_LIR_SET_I64 || xr_lir_boxed_type(m, type);
 }
 static bool lir_managed_cell(XrLirType type) {

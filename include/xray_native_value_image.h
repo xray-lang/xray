@@ -32,7 +32,8 @@ typedef enum XrtValueKind {
     /* A tagged sum keeps a compiler-assigned tag and one active variant
      * payload. P1 admits owner-free payloads only, so the plan's owned leaf
      * list stays empty and the tag selects a field range, never an owner. */
-    XRT_VALUE_SUM
+    XRT_VALUE_SUM,
+    XRT_VALUE_MAP_STRING_STRING
 } XrtValueKind;
 /* Mutability received from the Checked field for the admitted Class Array
  * path. A flag describes the field and leaves access to the checked operation. */

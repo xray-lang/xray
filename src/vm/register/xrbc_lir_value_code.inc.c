@@ -74,7 +74,7 @@ static bool rbc_lir_value_needed(RbcLirCompiler *c) {
         if (xr_lir_string_binding(c->input,(XrLirValue){c->input,c->function.id,v}) ||
             rbc_lir_captured_cell(c->input,rbc_lir_value_type(c,v)) || rbc_lir_slice_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_callable_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_inline_type(c->input,rbc_lir_value_type(c,v)) || rbc_lir_value_type(c,v) == XR_LIR_STRING || rbc_lir_value_type(c,v) == XR_LIR_ARRAY ||
             rbc_lir_value_type(c,v) == XR_LIR_ARRAY_CELL || rbc_lir_value_type(c,v) == XR_LIR_ARRAY_REF ||
-            rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64 || rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_CELL ||
+            xr_lir_map_element(rbc_lir_value_type(c,v)) || rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_CELL ||
             rbc_lir_value_type(c,v) == XR_LIR_MAP_STRING_I64_REF ||
             rbc_lir_value_type(c,v) == XR_LIR_SET_I64 || rbc_lir_value_type(c,v) == XR_LIR_SET_I64_CELL ||
             rbc_lir_value_type(c,v) == XR_LIR_SET_I64_REF || rbc_lir_value_type(c,v) == XR_LIR_I64_REF) return true;

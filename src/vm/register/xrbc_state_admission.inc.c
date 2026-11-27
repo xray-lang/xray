@@ -46,7 +46,7 @@ static bool rbc_state_image_shape(const XrtValueImage *image) {
         !rbc_state_vector(image->names,image->name_bytes,1)) return false;
     for (uint32_t i = 0; i < image->type_count; ++i) {
         const XrtValueImageType *type = &image->types[i];
-        if ((uint32_t)type->kind > XRT_VALUE_SUM || !rbc_state_alignment(type->alignment) ||
+        if ((uint32_t)type->kind > XRT_VALUE_MAP_STRING_STRING || !rbc_state_alignment(type->alignment) ||
             type->size % type->alignment ||
             !rbc_state_span(type->first_owned,type->owned_count,image->owned_count) ||
             !rbc_state_span(type->first_field,type->field_count,image->slot_count) ||
@@ -61,6 +61,9 @@ static bool rbc_state_image_shape(const XrtValueImage *image) {
             const XrtValueImageType *element = &image->types[type->element - 1];
             if (!xrt_value_inline_array_element_supported(element->kind, element->class_storage)) return false;
         }
+        if (type->kind == XRT_VALUE_MAP_STRING_STRING &&
+            (type->size != sizeof(XrtManagedHeader *) || type->alignment != _Alignof(XrtManagedHeader *) ||
+             type->owned_count != 1 || image->owned_offsets[type->first_owned])) return false;
         if (type->kind == XRT_VALUE_CLASS &&
             (!type->element || image->types[type->element-1].kind != XRT_VALUE_RECORD ||
                 type->size != sizeof(XrtManagedHeader *) || type->alignment != _Alignof(XrtManagedHeader *) ||

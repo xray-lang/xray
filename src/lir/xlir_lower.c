@@ -193,20 +193,25 @@ static XrLirType lower_array_element(const Lower *c, XrXirType type) {
 
 static bool lower_set_borrow(LowerFunction *,uint32_t,XrLirValue *);
 static bool lower_managed_type(const Lower *c, XrLirType type) {
-    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_SET_I64 || xr_lir_boxed_type(c->module, type);
+    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || xr_lir_map_element(type) || type == XR_LIR_SET_I64 || xr_lir_boxed_type(c->module, type);
 }
 static XrLirOp lower_retain_operation(XrLirType type) {
     return type >= XR_LIR_TYPE_COUNT ? XR_LIR_VALUE_RETAIN : type == XR_LIR_ARRAY ? XR_LIR_ARRAY_RETAIN :
-        type == XR_LIR_MAP_STRING_I64 ? XR_LIR_MAP_RETAIN : type == XR_LIR_SET_I64 ? XR_LIR_SET_RETAIN : XR_LIR_STRING_RETAIN;
+        xr_lir_map_element(type) ? XR_LIR_MAP_RETAIN : type == XR_LIR_SET_I64 ? XR_LIR_SET_RETAIN : XR_LIR_STRING_RETAIN;
 }
 static XrLirOp lower_drop_operation(XrLirType type) {
     return type >= XR_LIR_TYPE_COUNT ? XR_LIR_VALUE_DROP : type == XR_LIR_ARRAY ? XR_LIR_ARRAY_DROP :
-        type == XR_LIR_MAP_STRING_I64 ? XR_LIR_MAP_DROP : type == XR_LIR_SET_I64 ? XR_LIR_SET_DROP : XR_LIR_STRING_DROP;
+        xr_lir_map_element(type) ? XR_LIR_MAP_DROP : type == XR_LIR_SET_I64 ? XR_LIR_SET_DROP : XR_LIR_STRING_DROP;
 }
 static bool lower_map_type(const Lower *c, XrXirType type) {
     return xr_xir_type_is_map(c->source->types, type) &&
         xr_xir_map_key(c->source->types, type) == XR_XIR_STRING &&
         xr_xir_map_element(c->source->types, type) == XR_XIR_I64;
+}
+static bool lower_string_map_type(const Lower *c, XrXirType type) {
+    return xr_xir_type_is_map(c->source->types, type) &&
+        xr_xir_map_key(c->source->types, type) == XR_XIR_STRING &&
+        xr_xir_map_element(c->source->types, type) == XR_XIR_STRING;
 }
 static bool lower_set_type(const Lower *c,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(c->source->types,type);
@@ -218,6 +223,7 @@ static XrLirType lower_type(const Lower *c, XrXirType type) {
     if (lower_set_type(c,type))return XR_LIR_SET_I64;
     if(xr_xir_type_is_cell(c->source->types,type) && lower_set_type(c,xr_xir_cell_element(c->source->types,type)))return XR_LIR_SET_I64_CELL;
     if (lower_map_type(c, type)) return XR_LIR_MAP_STRING_I64;
+    if (lower_string_map_type(c, type)) return XR_LIR_MAP_STRING_STRING;
     if (xr_xir_type_is_cell(c->source->types, type) &&
         lower_map_type(c, xr_xir_cell_element(c->source->types, type))) return XR_LIR_MAP_STRING_I64_CELL;
     if (lower_array_element(c, type)) return XR_LIR_ARRAY;
@@ -583,7 +589,14 @@ static bool lower_receive_type(Lower *c, XrXirType type) {
         return c->constructed_types[index] || lower_build(c,
             xr_lir_slice_type(c->module, element, &c->constructed_types[index]));
     }
-    if (node && node->kind == XR_XIR_TYPE_CALLABLE) return lower_receive_callable(c, type, node);
+    if (node && node->kind == XR_XIR_TYPE_CALLABLE) {
+        if (lower_string_map_type(c, node->result))
+            return lower_unsupported(c, "String Map callable signature");
+        for (uint32_t p = 0; p < node->parameter_count; ++p)
+            if (lower_string_map_type(c, node->parameters[p].type))
+                return lower_unsupported(c, "String Map callable signature");
+        return lower_receive_callable(c, type, node);
+    }
     if (node && node->kind == XR_XIR_TYPE_NULLABLE) {
         const XrXirTypeNode *child = xr_xir_type_node(c->source->types, node->element);
         if (child && (child->kind == XR_XIR_TYPE_SLICE || child->kind == XR_XIR_TYPE_MUT_SLICE))
@@ -1510,7 +1523,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     if (!lower_receive_type(c, payload)) return false;
     if (lower_array_element(c, op->type) || lower_type(c, op->type) == XR_LIR_ARRAY_CELL)
         c->arrays = true;
-    c->maps |= lower_map_type(c, payload);
+    c->maps |= lower_map_type(c, payload) || lower_string_map_type(c, payload);
     if (op->op == XR_XIR_OBJECT_PLACE)
         return xr_xir_type_is_class(c->source->types,op->type) || lower_unsupported(c,"OBJECT_PLACE");
     if (op->op == XR_XIR_FIELD_PLACE || op->op == XR_XIR_CLASS_SET) {
@@ -1523,7 +1536,7 @@ static bool lower_admit_instruction(Lower *c, const XrXirFunction *f, const XrXi
     }
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
         XrXirType type = op->op == XR_XIR_PLACE_WRITE ? xr_xir_operand_type(f, op->args[0]) : op->type;
-        if (!lower_array_element(c, type) && !lower_map_type(c, type) && !lower_set_type(c,type)) return lower_unsupported(c, "non-container place");
+        if (!lower_array_element(c, type) && !xr_lir_map_element(lower_type(c, type)) && !lower_set_type(c,type)) return lower_unsupported(c, "non-container place");
         return true;
     }
     if (op->op == XR_XIR_CELL_STRING_APPEND) {
@@ -1751,6 +1764,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         if (!xr_lir_error_sum_identity(c->module,lower_type(c,error),&identity))
             return lower_unsupported(c,"typed function error boundary");
     }
+    if (lower_string_map_type(c, f->result)) return lower_unsupported(c, "String Map function result");
     if (!lower_type(c, f->result) || lower_type(c, f->result) == XR_LIR_I64_CELL ||
         lower_type(c, f->result) == XR_LIR_ARRAY_CELL ||
         lower_type(c, f->result) == XR_LIR_MAP_STRING_I64_CELL)
@@ -1758,7 +1772,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
     bool slice_result = xr_lir_internal_slice_type(c->module, lower_type(c, f->result));
     c->views |= slice_result;
     c->arrays |= lower_array_element(c, f->result) != XR_LIR_TYPE_INVALID;
-    c->maps |= lower_map_type(c, f->result);
+    c->maps |= xr_lir_map_element(lower_type(c, f->result)) != XR_LIR_TYPE_INVALID;
     for (uint32_t p = 0; p < f->parameter_count; ++p) {
         if (!lower_receive_type(c, f->parameters[p])) return false;
         bool slice_parameter = xr_lir_internal_slice_type(c->module, lower_type(c, f->parameters[p]));
@@ -1766,7 +1780,7 @@ static bool lower_admit_function(Lower *c, uint32_t function) {
         c->string_appends |= lower_type(c, f->parameters[p]) == XR_LIR_STRING_CELL;
         c->arrays |= lower_type(c, f->parameters[p]) == XR_LIR_ARRAY ||
             lower_type(c, f->parameters[p]) == XR_LIR_ARRAY_CELL;
-        c->maps |= lower_type(c, f->parameters[p]) == XR_LIR_MAP_STRING_I64 ||
+        c->maps |= xr_lir_map_element(lower_type(c, f->parameters[p])) ||
             lower_type(c, f->parameters[p]) == XR_LIR_MAP_STRING_I64_CELL;
         c->scalar_bindings |= lower_type(c, f->parameters[p]) == XR_LIR_I64_CELL;
         if (lower_type(c, f->parameters[p]) <= XR_LIR_UNIT)

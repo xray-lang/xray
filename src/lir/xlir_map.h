@@ -30,6 +30,11 @@ typedef enum XrLirMapOperation {
     XR_LIR_MAP_OP_REMOVE,
     XR_LIR_MAP_OP_CLEAR
 } XrLirMapOperation;
+static inline XrLirType xr_lir_map_element(XrLirType type) {
+    if (type == XR_LIR_MAP_STRING_I64) return XR_LIR_I64;
+    if (type == XR_LIR_MAP_STRING_STRING) return XR_LIR_STRING;
+    return XR_LIR_TYPE_INVALID;
+}
 static inline bool xr_lir_map_reads_key(uint32_t operation) {
     return operation == XR_LIR_MAP_OP_GET || operation == XR_LIR_MAP_OP_INDEX || operation == XR_LIR_MAP_OP_CONTAINS;
 }

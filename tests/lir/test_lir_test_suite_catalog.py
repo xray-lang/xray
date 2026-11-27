@@ -236,8 +236,13 @@ def check_crypto_catalogs(args, root):
         assert native_report.read_bytes() == vm_report.read_bytes(), source
 
 
-def check_datetime_catalogs(args, root):
-    expected_counts = {"1421_datetime_format": 13, "1422_datetime_calc": 21}
+def check_original_catalogs(args, root):
+    translation = "1151_string_translate"
+    expected_counts = {translation: 5, "1421_datetime_format": 13, "1422_datetime_calc": 21}
+    translation_tests = [
+        "test_translate_basic_ascii", "test_translate_partial", "test_translate_unicode",
+        "test_translate_empty_table", "test_translate_with_reverse",
+    ]
     for name, count in expected_counts.items():
         source = f"tests/regression/10_stdlib/{name}.xr"
         path = args.source_root / source
@@ -248,6 +253,12 @@ def check_datetime_catalogs(args, root):
         assert vm[0] == 0 and not vm[2], (vm, source)
         plan = catalog(vm_report, source, raw, (count, 0, 0))
         assert all(row["role"] == 1 and row["timeout"] == 0 for row in plan["entries"]), source
+        if name == translation:
+            assert [row["name"] for row in plan["entries"]] == translation_tests
+            canonical = raw.replace(b"\r\n", b"\n")
+            assert hashlib.sha256(canonical).hexdigest() == (
+                "b51c56ce8f7735e9b92de4f91d459a600d5bb1cd7f4d36788491c249337c4f0a")
+            assert b"({" not in generated.read_bytes(), generated
 
         binary = native_executable(args, work, generated, "suite", optimize=False)
         native_report = work / "native.json"
@@ -302,9 +313,20 @@ def main():
 
     check_nullable_string_comparisons(args, root / "nullable-string-comparisons")
     check_invoke_string_owners(args, root / "invoke-string-owners")
+    check_rejected(args, root / "string-map-return", b'''fn makeTable() -> Map<string, string> {
+    return {"a": "b"}
+}
+@test
+fn tableReturn() { assert(len(makeTable()) == 1) }
+''', b"String Map function result")
+    check_rejected(args, root / "string-map-indirect", b'''fn tableSize(table: Map<string, string>) -> i64 { return len(table) }
+fn invokeSize(size: fn(Map<string, string>) -> i64) -> i64 { return size({"a": "b"}) }
+@test
+fn indirectTable() { assert(invokeSize(tableSize) == 1) }
+''', b"String Map callable signature")
     check_crypto_catalogs(args, root)
-    check_datetime_catalogs(args, root)
-    print(f"Executed VM and generated C suite catalogs for LF, CRLF, a guest panic, and Crypto. Artifacts at {root}")
+    check_original_catalogs(args, root)
+    print(f"Executed VM and generated C suite catalogs for LF, CRLF, a guest panic, Crypto, Text and Datetime. Artifacts at {root}")
 
 
 if __name__ == "__main__":

@@ -538,7 +538,7 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
             (!rbc_lir_scalar(type) && type != XR_LIR_I64_CELL && type != XR_LIR_I64_REF && type != XR_LIR_STRING && type != XR_LIR_STRING_CELL &&
              type != XR_LIR_STATE && type != XR_LIR_STATE_REF && type != XR_LIR_U32 &&
              type != XR_LIR_VIEW_FRAME && type != XR_LIR_VIEW_CELL && type != XR_LIR_SLICE_I64 && type != XR_LIR_FUNCTION_SCOPE &&
-             type != XR_LIR_MAP_STRING_I64 && type != XR_LIR_MAP_STRING_I64_CELL && type != XR_LIR_MAP_STRING_I64_REF &&
+             !xr_lir_map_element(type) && type != XR_LIR_MAP_STRING_I64_CELL && type != XR_LIR_MAP_STRING_I64_REF &&
              type != XR_LIR_SET_I64 && type != XR_LIR_SET_I64_CELL && type != XR_LIR_SET_I64_REF &&
              type != XR_LIR_ARRAY && type != XR_LIR_ARRAY_CELL && type != XR_LIR_ARRAY_REF && type != XR_LIR_STRING_REF &&
              !rbc_lir_inline_type(input, type) && !rbc_lir_aggregate_type(input, type) && !rbc_lir_callable_type(input, type) && !rbc_lir_captured_cell(input, type) && !rbc_lir_slice_type(input,type) &&
@@ -650,7 +650,7 @@ static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
         if (string_role || slice_operation || rbc_lir_map_role(input, i) || array_operation) return true;
         return xr_lir_range_point(input, i) || xr_lir_display_point(input, i);
     case XR_LIR_MAP_LITERAL_NEW:
-        return i->type == XR_LIR_MAP_STRING_I64 && i->bits && i->bits <= xr_lir_map_literal_count(input);
+        return xr_lir_map_element(i->type) && i->bits && i->bits <= xr_lir_map_literal_count(input);
     case XR_LIR_MAP_RETAIN: case XR_LIR_MAP_DROP: case XR_LIR_MAP_CELL_DROP:
     case XR_LIR_MAP_BORROW: case XR_LIR_MAP_REF_READ: case XR_LIR_MAP_REF_WRITE: return true;
     case XR_LIR_ARRAY_RETAIN: case XR_LIR_ARRAY_DROP: case XR_LIR_ARRAY_CELL_DROP:

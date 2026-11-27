@@ -27,7 +27,7 @@ static bool rbc_home_key(const XrLirModule *module, XrLirFunction function,
             shape.kind == XR_LIR_TYPE_FIXED_ARRAY || shape.kind == XR_LIR_TYPE_TUPLE || shape.kind == XR_LIR_TYPE_CLASS ||
             shape.kind == XR_LIR_TYPE_SUM;
     }
-    if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && type != XR_LIR_MAP_STRING_I64 && type != XR_LIR_SET_I64) return false;
+    if (!plain && type != XR_LIR_STRING && type != XR_LIR_ARRAY && !xr_lir_map_element(type) && type != XR_LIR_SET_I64) return false;
     *key = (XrLirValueLayoutKey){type,0,0};
     if (type == XR_LIR_ARRAY) {
         XrLirArrayShape shape = {0};

@@ -16,12 +16,11 @@ static int map_literal_message_write(void *context, const void *bytes, size_t co
     return 1;
 }
 static bool map_literal_message_format(MapLiteralMessage *message, const XrtMapLiteral *literal,
-    const XrtMapLiteralInput *inputs, XrtMapLiteralDuplicate duplicate) {
+    const XrtStringBacking *key, XrtMapLiteralDuplicate duplicate) {
     XR_CHECK(duplicate.first < literal->count && duplicate.second < literal->count &&
         !literal->items[duplicate.first].kind && !literal->items[duplicate.second].kind,
         "duplicate ordinals name two explicit Map literal inputs");
     XrtMapLiteralOrigin first = literal->items[duplicate.first], second = literal->items[duplicate.second];
-    const XrtStringBacking *key = inputs[duplicate.second].source.key;
     char left[32], right[32];
     int a = snprintf(left, sizeof(left), "%s%u:%u and ", literal->path_length ? ":" : "", first.line, first.column);
     int b = snprintf(right, sizeof(right), "%s%u:%u)", literal->path_length ? ":" : "", second.line, second.column);
@@ -35,10 +34,10 @@ static bool map_literal_message_format(MapLiteralMessage *message, const XrtMapL
         xr_value_format_write(sink, right, (size_t)b);
 }
 static XrtManagedStatus map_literal_message_create(XrtManagedFrame *parent, const XrtBackingTypes *types,
-    const XrtMapLiteral *literal, const XrtMapLiteralInput *inputs, XrtMapLiteralDuplicate duplicate,
+    const XrtMapLiteral *literal, const XrtStringBacking *key, XrtMapLiteralDuplicate duplicate,
     XrtManagedHeader **owned) {
     MapLiteralMessage message = {0};
-    if (!map_literal_message_format(&message, literal, inputs, duplicate) ||
+    if (!map_literal_message_format(&message, literal, key, duplicate) ||
         message.count > SIZE_MAX - sizeof(XrtStringBacking) - 1) return XRT_MANAGED_OVERFLOW;
     message.capacity = message.count;
     XrtManagedRoot *root = xrt_managed_frame_root(parent);
@@ -50,7 +49,7 @@ static XrtManagedStatus map_literal_message_create(XrtManagedFrame *parent, cons
         sizeof(XrtStringBacking) + message.capacity + 1, &text);
     if (status == XRT_MANAGED_OK) {
         message.bytes = text->bytes; message.count = 0;
-        if (!map_literal_message_format(&message, literal, inputs, duplicate) || message.count != message.capacity)
+        if (!map_literal_message_format(&message, literal, key, duplicate) || message.count != message.capacity)
             status = XRT_MANAGED_OVERFLOW;
         if (status == XRT_MANAGED_OK) {
             XrUtf8ScanResult scan = xr_utf8_core_scan_strict((const uint8_t *)text->bytes, message.count);
@@ -95,8 +94,66 @@ XRAY_API void xrt_native_map_literal_create(XrtManagedFrame *frame, size_t slot,
         status = xrt_map_backing_literal_create(frame, slot, types, literal, inputs, &duplicate);
     XrtManagedHeader *message = NULL;
     if (status == XRT_MANAGED_DUPLICATE_KEY)
-        status = map_literal_message_create(frame, types, literal, inputs, duplicate, &message);
+        status = map_literal_message_create(frame, types, literal, inputs[duplicate.second].source.key, duplicate, &message);
     if (held) map_literal_release_inputs(guard, literal, inputs);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
     if (message) xrt_message_panic_take(&message, 434, source_id);
+}
+
+XRAY_API void xrt_native_map_string_literal_create(XrtManagedFrame *frame, size_t slot,
+    const XrtMapLiteral *literal, const XrtMapStringLiteralInput *inputs, uint32_t source_id) {
+    XrtValueRoot *owner = xrt_value_root_current(source_id);
+    XrtManagedRoot *root = xrt_native_values_existing_root(owner);
+    if (!root || xrt_managed_frame_root(frame) != root)
+        xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source_id);
+    XrtManagedSlotLocation guard = {0};
+    XrtManagedStatus status = xrt_managed_slot_location(frame, slot, &guard);
+    if (status == XRT_MANAGED_OK) status = xrt_managed_domain_enter(guard);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+    size_t capacity = 0;
+    status = xrt_map_string_literal_inputs_retain(literal, inputs, &capacity);
+    if (status != XRT_MANAGED_OK) {
+        xrt_managed_domain_leave(guard);
+        xrt_native_managed_failure(status, source_id);
+    }
+    XrtBillingOwner *billing = NULL;
+    XrtManagedOps *ops = NULL;
+    const XrtBackingTypes *types = NULL;
+    status = xrt_native_values_prepare(owner, &billing);
+    if (status == XRT_MANAGED_OK) status = xrt_map_string_value_ops(billing, &ops);
+    if (status == XRT_MANAGED_OK) status = xrt_native_values_backings(owner, &types);
+    xrt_managed_domain_leave(guard);
+    XrtMapLiteralDuplicate duplicate = {0};
+    if (status == XRT_MANAGED_OK)
+        status = xrt_map_string_literal_create(frame, slot, ops, literal, inputs, &duplicate);
+    XrtManagedHeader *message = NULL;
+    if (status == XRT_MANAGED_DUPLICATE_KEY)
+        status = map_literal_message_create(frame, types, literal, inputs[duplicate.second].source.key, duplicate, &message);
+    XR_CHECK(xrt_managed_domain_enter(guard) == XRT_MANAGED_OK, "Map preparation owns its caller domain through input retirement");
+    xrt_map_string_literal_inputs_drop(literal, inputs);
+    xrt_managed_ops_drop(ops);
+    xrt_managed_domain_leave(guard);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
+    if (message) xrt_message_panic_take(&message, 434, source_id);
+}
+
+XR_FUNCDEF XrtManagedStatus xrt_map_string_get_publish(const XrtHostNullableSlots *output,
+    XrtManagedRoot *root, const XrtMapBacking *map, const XrtStringBacking *key) {
+    if (!root) return XRT_MANAGED_ARGUMENT;
+    XrtHostNullablePlaces places;
+    XrtManagedStatus status = xrt_host_nullable_prepare(output, root, &places);
+    if (status != XRT_MANAGED_OK) return status;
+    if (places.current && !xrt_backing_string_matches(places.current)) return XRT_MANAGED_ARGUMENT;
+    bool found = false;
+    status = xrt_map_string_get(output->frame, output->temporary, map, key, &found);
+    return status == XRT_MANAGED_OK ? xrt_host_nullable_publish(&places, found) : status;
+}
+XRAY_API void xrt_native_map_string_get(const XrtNativeMapStringGet *call, uint32_t source_id) {
+    if (!call) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, source_id);
+    const XrtHostNullableSlots output = {call->frame, call->destination, call->temporary,
+        call->offset, call->temporary_owner_offset};
+    XrtManagedRoot *root = xrt_native_values_existing_root(xrt_value_root_current(source_id));
+    XrtManagedStatus status = xrt_map_string_get_publish(&output, root,
+        (const XrtMapBacking *)call->map, call->key);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source_id);
 }

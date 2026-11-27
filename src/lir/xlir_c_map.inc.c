@@ -22,7 +22,8 @@ static bool c_map_literal_view(LirC *c, uint64_t ordinal, XrLirMapLiteral *liter
 }
 static bool c_map_literal_admit(LirC *c, const XrLirInstructionView *v) {
     XrLirMapLiteral literal = {0};
-    if (v->type != XR_LIR_MAP_STRING_I64 || !v->result || (v->operand_count && !v->operands) ||
+    XrLirType element = xr_lir_map_element(v->type);
+    if (!element || !v->result || (v->operand_count && !v->operands) ||
         !c_map_literal_view(c, v->bits, &literal)) {
         if (c->status == XR_LIR_C_OK) c_error(c, XR_LIR_C_INVALID_LIR, "Map literal requires its fixed Map result");
         return false;
@@ -31,11 +32,11 @@ static bool c_map_literal_admit(LirC *c, const XrLirInstructionView *v) {
     for (uint32_t n = 0; n < literal.count && c_request_poll(c); ++n) {
         XrLirMapLiteralOrigin origin = literal.items[n];
         uint32_t width = origin.kind ? 1u : 2u;
-        XrLirType key_type = origin.kind ? XR_LIR_MAP_STRING_I64 : XR_LIR_STRING;
+        XrLirType key_type = origin.kind ? v->type : XR_LIR_STRING;
         if (origin.kind > 1 || !origin.line || !origin.column || operand > v->operand_count ||
             width > v->operand_count - operand ||
             c_value_type(c, v->operands[operand]) != key_type ||
-            (!origin.kind && c_value_type(c, v->operands[operand + 1]) != XR_LIR_I64)) {
+            (!origin.kind && c_value_type(c, v->operands[operand + 1]) != element)) {
             c_error(c, XR_LIR_C_INVALID_LIR, "Map literal inputs differ from their fixed provenance rows"); return false;
         }
         operand += width;
@@ -125,6 +126,29 @@ static void c_map_call(LirC *c, const XrLirInstructionView *v, uint32_t role, ui
             role == XR_LIR_MAP_OP_DISPLAY ? "XRT_MAP_DISPLAY" :
             role == XR_LIR_MAP_OP_KEYS ? "XRT_MAP_KEYS" : "XRT_MAP_VALUES", source);
         c_values_publish_leaf(c, v->result, source);
+        return;
+    }
+    if (role == XR_LIR_MAP_OP_GET && c_value_type(c, v->operands[0]) == XR_LIR_MAP_STRING_STRING) {
+        const XrLirValueHome *home = &c->homes->values[v->result];
+        const XrtValuePlan *plan = NULL;
+        XrtValuePlanSpec optional = {0}, payload = {0};
+        uint32_t type_id = 0;
+        if (xr_lir_value_layouts_lookup(c->value_layouts, (XrLirValueLayoutKey){v->type,0,0},
+                &plan, &type_id) != XR_LIR_VALUE_LAYOUT_OK ||
+            xrt_value_plan_view(plan, &optional) != XRT_MANAGED_OK || optional.kind != XRT_VALUE_NULLABLE ||
+            xrt_value_plan_view(optional.nullable.element, &payload) != XRT_MANAGED_OK ||
+            payload.kind != XRT_VALUE_STRING || home->type != type_id || home->owner_count != 1 ||
+            home->temporary_offset == SIZE_MAX || optional.nullable.payload_offset > SIZE_MAX - home->temporary_offset) {
+            c_error(c, XR_LIR_C_INVALID_LIR, "String Map lookup lost its exact nullable owner layout"); return;
+        }
+        c_values_ensure(c, source);
+        c_format(c, "    xrt_native_map_string_get(&(XrtNativeMapStringGet){"
+            ".frame=xrl_frame, .destination=%zu, .temporary=%zu, .offset=%zu, .temporary_owner_offset=%zu, .map=",
+            home->first_owner, home->temporary_first_owner, home->offset,
+            home->temporary_offset + optional.nullable.payload_offset);
+        c_value(c, v->operands[0]);
+        c_text(c, ", .key=(const XrtStringBacking *)"); c_value(c, v->operands[1]);
+        c_format(c, "}, UINT32_C(%" PRIu32 "));\n", source);
         return;
     }
     if (role == XR_LIR_MAP_OP_GET || role == XR_LIR_MAP_OP_INDEX || role == XR_LIR_MAP_OP_CONTAINS) {
@@ -240,9 +264,11 @@ static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t s
         const XrtValuePlan *plan = NULL;
         XrtValuePlanSpec shape = {0};
         uint32_t type_id = 0;
+        bool strings = v->type == XR_LIR_MAP_STRING_STRING;
         bool typed = xr_lir_value_layouts_lookup(c->value_layouts,
-            (XrLirValueLayoutKey){XR_LIR_MAP_STRING_I64,0,0},&plan,&type_id) == XR_LIR_VALUE_LAYOUT_OK &&
-            xrt_value_plan_view(plan,&shape) == XRT_MANAGED_OK && shape.kind == XRT_VALUE_MAP_STRING_I64;
+            (XrLirValueLayoutKey){v->type,0,0},&plan,&type_id) == XR_LIR_VALUE_LAYOUT_OK &&
+            xrt_value_plan_view(plan,&shape) == XRT_MANAGED_OK &&
+            shape.kind == (strings ? XRT_VALUE_MAP_STRING_STRING : XRT_VALUE_MAP_STRING_I64);
         const XrtManagedFrameSpec *frame = &c->homes->frame;
         if (!typed || !home->type || type_id != home->type ||
             home->parameter || home->owner_count != 1 || home->size != sizeof(XrtManagedHeader *) ||
@@ -253,17 +279,22 @@ static void c_map_instruction(LirC *c, const XrLirInstructionView *v, uint32_t s
             c_error(c, XR_LIR_C_INVALID_LIR, "Map literal lost its distinct common receiving temporary"); return;
         }
         c_values_ensure(c, source);
-        c_format(c, "    xrt_native_map_literal_create(xrl_frame, %zu, &xrl_map_literal_%" PRIu64 ", ",
-            home->temporary_first_owner, v->bits);
+        c_format(c, "    xrt_native_map_%sliteral_create(xrl_frame, %zu, &xrl_map_literal_%" PRIu64 ", ",
+            strings ? "string_" : "", home->temporary_first_owner, v->bits);
         if (!literal.count) c_text(c, "NULL");
         else {
-            c_text(c, "(const XrtMapLiteralInput[]){"); uint32_t operand = 0;
+            c_text(c, strings ? "(const XrtMapStringLiteralInput[]){" : "(const XrtMapLiteralInput[]){");
+            uint32_t operand = 0;
             for (uint32_t n = 0; n < literal.count && c_request_poll(c); ++n) {
                 bool spread = literal.items[n].kind != 0;
                 c_format(c, "%s{.source={.%s=(const %s *)", n ? ", " : "", spread ? "spread" : "key",
                     spread ? "XrtMapBacking" : "XrtStringBacking");
                 c_value(c, v->operands[operand++]); c_text(c, "}, .value=");
-                if (spread) c_text(c, "INT64_C(0)"); else c_value(c, v->operands[operand++]);
+                if (spread) c_text(c, strings ? "NULL" : "INT64_C(0)");
+                else {
+                    if (strings) c_text(c, "(XrtStringBacking *)");
+                    c_value(c, v->operands[operand++]);
+                }
                 c_text(c, "}");
             }
             c_text(c, "}");

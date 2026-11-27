@@ -11,7 +11,7 @@
  *   Constructors, observations and mutations share the receiving registry.
  *   Nullable results retain their actual constructed I64 payload type.
  */
-enum { LIR_MAP_CATALOG_COUNT = 14 };
+enum { LIR_MAP_CATALOG_COUNT = 16 };
 typedef struct LirMapSignature {
     XrLirMapOperation operation;
     XrLirType result;
@@ -21,7 +21,7 @@ typedef struct LirMapSignature {
 static const LirMapSignature lir_map_signatures[LIR_MAP_CATALOG_COUNT] = {
     {XR_LIR_MAP_OP_NEW, XR_LIR_MAP_STRING_I64, {0}, 0},
     {XR_LIR_MAP_OP_LEN, XR_LIR_I64, {XR_LIR_MAP_STRING_I64}, 1},
-    {XR_LIR_MAP_OP_GET, XR_LIR_TYPE_INVALID, {XR_LIR_MAP_STRING_I64, XR_LIR_STRING}, 2},
+    {XR_LIR_MAP_OP_GET, XR_LIR_I64, {XR_LIR_MAP_STRING_I64, XR_LIR_STRING}, 2},
     {XR_LIR_MAP_OP_INDEX, XR_LIR_I64, {XR_LIR_MAP_STRING_I64, XR_LIR_STRING}, 2},
     {XR_LIR_MAP_OP_CONTAINS, XR_LIR_I1, {XR_LIR_MAP_STRING_I64, XR_LIR_STRING}, 2},
     {XR_LIR_MAP_OP_KEYS, XR_LIR_ARRAY, {XR_LIR_MAP_STRING_I64}, 1},
@@ -32,7 +32,9 @@ static const LirMapSignature lir_map_signatures[LIR_MAP_CATALOG_COUNT] = {
     {XR_LIR_MAP_OP_CLEAR, XR_LIR_UNIT, {XR_LIR_MAP_STRING_I64_CELL}, 1},
     {XR_LIR_MAP_OP_SET, XR_LIR_UNIT, {XR_LIR_MAP_STRING_I64_REF, XR_LIR_STRING, XR_LIR_I64}, 3},
     {XR_LIR_MAP_OP_REMOVE, XR_LIR_I1, {XR_LIR_MAP_STRING_I64_REF, XR_LIR_STRING}, 2},
-    {XR_LIR_MAP_OP_CLEAR, XR_LIR_UNIT, {XR_LIR_MAP_STRING_I64_REF}, 1}
+    {XR_LIR_MAP_OP_CLEAR, XR_LIR_UNIT, {XR_LIR_MAP_STRING_I64_REF}, 1},
+    {XR_LIR_MAP_OP_GET, XR_LIR_STRING, {XR_LIR_MAP_STRING_STRING, XR_LIR_STRING}, 2},
+    {XR_LIR_MAP_OP_LEN, XR_LIR_I64, {XR_LIR_MAP_STRING_STRING}, 1}
 };
 XR_FUNC bool xr_lir_map_intrinsic_valid(const XrLirModule *m, const XrLirIntrinsic *entry) {
     if (!m || !entry || !entry->scalar_sync || (entry->parameter_count && !entry->parameters)) return false;
@@ -42,7 +44,7 @@ XR_FUNC bool xr_lir_map_intrinsic_valid(const XrLirModule *m, const XrLirIntrins
         if (shape->operation == XR_LIR_MAP_OP_GET) {
             XrLirTypeView result = {0};
             if (xr_lir_type_view(m, entry->result, &result) != XR_LIR_OK ||
-                result.kind != XR_LIR_TYPE_NULLABLE || result.element != XR_LIR_I64) continue;
+                result.kind != XR_LIR_TYPE_NULLABLE || result.element != shape->result) continue;
         } else if (entry->result != shape->result) continue;
         bool same = true;
         for (uint32_t p = 0; p < shape->count; ++p)

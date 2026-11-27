@@ -18,6 +18,7 @@
 #include "os/os_native_output.h"
 #include "xnative_value.h"
 #include "xnative_managed.h"
+#include "xray_native_map.h"
 #include "xnative_test_session.h"
 
 typedef enum XrtOutputOperation { XRT_OUTPUT_FLUSH, XRT_OUTPUT_WRITE } XrtOutputOperation;
@@ -170,6 +171,8 @@ XR_FUNC XrtHostTempResult xrt_execution_temp_result(const XrtHostNullableSlots *
     uint32_t source_id);
 /* The same receiving binding carries both kinds of textual leaf. */
 XR_FUNC XrtHostTempResult xrt_execution_receiving_admission(uint32_t source_id);
+XR_FUNC XrtManagedStatus xrt_map_string_get_publish(const XrtHostNullableSlots *, XrtManagedRoot *,
+    const XrtMapBacking *, const XrtStringBacking *);
 XR_FUNC XrtHostLinkResult xrt_execution_link_result(const XrtHostNullableSlots *,
     const XrtManagedHeader *path, bool follow, uint32_t source_id);
 XR_FUNC XR_NORET void xrt_execution_temp_failure_take(XrtTempFailure *owned);

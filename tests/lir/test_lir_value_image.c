@@ -14,6 +14,9 @@
 #include "runtime/native/xnative_class_array.h"
 #include "runtime/native/xnative_array_backing.h"
 #include "runtime/native/xnative_string_backing.h"
+#include "runtime/native/xnative_map_backing.h"
+#include "runtime/native/xnative_execution.h"
+#include "xray_native_values.h"
 #include "base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -930,7 +933,170 @@ static void class_optional_i64_fields_keep_their_inline_layout(void) {
     CHECK(some.tag == 1 && some.payload == 0 && none.tag == 0);
     xrt_value_image_drop(&bound); owner_drop(&owner); CHECK(owner.audit.final == 1);
 }
+static void string_map_image_carries_independent_owner(void) {
+    Owner owner;
+    owner_new(&owner, SIZE_MAX);
+    XrLirModule *module = NULL;
+    LIR(xr_lir_module_create(NULL, &module));
+    XrLirType optional = 0;
+    LIR(xr_lir_nullable_type(module, XR_LIR_STRING, &optional));
+    LIR(xr_lir_module_finish(module, NULL));
+    const XrLirValueLayoutKey requests[] = {
+        {XR_LIR_MAP_STRING_I64, 0, 0}, {XR_LIR_MAP_STRING_STRING, 0, 0}, {optional, 0, 0}
+    };
+    XrLirValueLayouts *layouts = NULL;
+    LAYOUT(xr_lir_value_layouts_create(module, requests, 3, owner.billing, &layouts));
+    xr_lir_module_destroy(module);
+    uint32_t numeric_id = 0, string_id = 0, optional_id = 0;
+    const XrtValuePlan *plan = NULL;
+    LAYOUT(xr_lir_value_layouts_lookup(layouts, requests[0], &plan, &numeric_id));
+    LAYOUT(xr_lir_value_layouts_lookup(layouts, requests[1], &plan, &string_id));
+    LAYOUT(xr_lir_value_layouts_lookup(layouts, requests[2], &plan, &optional_id));
+    CHECK(string_id && numeric_id && optional_id && string_id != numeric_id);
+    XrLirValueImage *raw = NULL;
+    LAYOUT(xr_lir_value_image_create(layouts, owner.billing, &raw));
+    xr_lir_value_layouts_destroy(layouts);
+    const XrtValueImage *image = xr_lir_value_image_view(raw);
+    CHECK(image->types[numeric_id - 1].kind == XRT_VALUE_MAP_STRING_I64);
+    CHECK(image->types[string_id - 1].kind == XRT_VALUE_MAP_STRING_STRING);
+    CHECK(image->types[string_id - 1].owned_count == 1);
+    CHECK(!image->owned_offsets[image->types[string_id - 1].first_owned]);
+    CHECK(image->type_count == 4);
+    XrtValueImageType fields[4];
+    memcpy(fields, image->types, sizeof(fields));
+    XrtValueImage malformed = *image;
+    malformed.types = fields;
+    fields[string_id - 1].owned_count = 0;
+    XrtValueImagePlans *bound = NULL;
+    CHECK(xrt_value_image_bind(owner.billing, &malformed, (XrtManagedLease){0}, &bound) == XRT_MANAGED_ARGUMENT);
+    CHECK(!bound);
+    MANAGED(xrt_value_image_bind(owner.billing, image, (XrtManagedLease){0}, &bound));
+    xr_lir_value_image_destroy(raw);
+    plan = NULL;
+    MANAGED(xrt_value_image_get(bound, string_id, &plan));
+    XrtValuePlan *owned_plan = (XrtValuePlan *)plan;
+    CHECK(xrt_value_plan_retain(owned_plan));
+    plan = NULL;
+    MANAGED(xrt_value_image_get(bound, optional_id, &plan));
+    XrtValuePlan *optional_plan = (XrtValuePlan *)plan;
+    CHECK(xrt_value_plan_retain(optional_plan));
+    xrt_value_image_drop(&bound);
+    XrtValuePlanSpec spec = {0};
+    MANAGED(xrt_value_plan_view(owned_plan, &spec));
+    CHECK(spec.kind == XRT_VALUE_MAP_STRING_STRING && spec.size == sizeof(void *) && spec.owned_count == 1);
+
+    XrtBackingTypes types = {0};
+    XrtManagedOps *map_ops = NULL;
+    XrtManagedRoot *root = NULL;
+    XrtManagedFrame *frame = NULL;
+    MANAGED(xrt_backing_types_init(owner.billing, &types));
+    MANAGED(xrt_map_string_value_ops(owner.billing, &map_ops));
+    MANAGED(xrt_managed_root_new(owner.billing, &root));
+    MANAGED(xrt_managed_frame_enter(root, 3, &frame));
+    MANAGED(xrt_string_backing_create(frame, 0, &types, "key", 3, 0));
+    MANAGED(xrt_string_backing_create(frame, 1, &types, "value", 5, 0));
+    XrtManagedHeader *key = NULL, *value = NULL, *map = NULL;
+    MANAGED(xrt_managed_slot_borrow(frame, 0, &key));
+    MANAGED(xrt_managed_slot_borrow(frame, 1, &value));
+    XrtStringBacking *keys[] = {(XrtStringBacking *)key};
+    XrtStringBacking *values[] = {(XrtStringBacking *)value};
+    MANAGED(xrt_map_string_create(frame, 2, map_ops, keys, values, 1));
+    MANAGED(xrt_managed_slot_borrow(frame, 2, &map));
+    XrtManagedHeader *copy = NULL, *moved = NULL;
+    MANAGED(xrt_value_copy_empty(owned_plan, &map, &copy));
+    CHECK(copy == map && xr_signed_rc_read(&copy->references) == 2);
+    MANAGED(xrt_value_move_empty(owned_plan, &copy, &moved));
+    CHECK(!copy && moved == map);
+    MANAGED(xrt_managed_root_destroy(&root));
+    CHECK(xrt_map_string_value_matches(moved) && xr_signed_rc_read(&moved->references) == 1);
+
+    frame = NULL;
+    key = NULL;
+    MANAGED(xrt_managed_root_new(owner.billing, &root));
+    typedef struct MapLookupStorage { XrtHostNullableOwner result; XrtManagedHeader *stage; } MapLookupStorage;
+    const size_t offsets[] = {offsetof(MapLookupStorage, result.owner), offsetof(MapLookupStorage, stage), SIZE_MAX, SIZE_MAX};
+    const XrtManagedFrameSpec layout = {4, sizeof(MapLookupStorage), _Alignof(MapLookupStorage), offsets};
+    void *payload = NULL;
+    MANAGED(xrt_managed_frame_enter_payload(root, &layout, &frame, &payload));
+    MapLookupStorage *storage = payload;
+    const XrtHostNullableSlots output = {frame, 0, 1, 0, offsets[1]};
+    MANAGED(xrt_string_backing_create(frame, 2, &types, "key", 3, 0));
+    MANAGED(xrt_string_backing_create(frame, 3, &types, "miss", 4, 0));
+    MANAGED(xrt_managed_slot_borrow(frame, 2, &key));
+    XrtManagedHeader *miss = NULL;
+    MANAGED(xrt_managed_slot_borrow(frame, 3, &miss));
+    const int64_t integers[] = {9};
+    MANAGED(xrt_array_backing_i64_create(frame, 0, &types, integers, 1, 1));
+    storage->result.present = 1;
+    XrtManagedHeader *wrong = storage->result.owner;
+    XrtManagedRoot *foreign = NULL;
+    MANAGED(xrt_managed_root_new(owner.billing, &foreign));
+    const XrtMapBacking *backing = (const XrtMapBacking *)moved;
+    CHECK(xrt_map_string_get_publish(&output, NULL, backing, (XrtStringBacking *)key) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_map_string_get_publish(&output, foreign, backing, (XrtStringBacking *)key) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_map_string_get_publish(&output, root, backing, (XrtStringBacking *)key) == XRT_MANAGED_ARGUMENT);
+    CHECK(xrt_map_string_get_publish(&output, root, backing, (XrtStringBacking *)miss) == XRT_MANAGED_ARGUMENT);
+    CHECK(storage->result.owner == wrong && storage->result.present == 1 && !storage->stage &&
+        xr_signed_rc_read(&wrong->references) == 1);
+    MANAGED(xrt_managed_root_destroy(&foreign));
+
+    MANAGED(xrt_managed_slot_drop(frame, 0));
+    storage->result.present = 0;
+    MANAGED(xrt_string_backing_create(frame, 0, &types, "old", 3, 0));
+    storage->result.present = 1;
+    MANAGED(xrt_map_string_get_publish(&output, root, backing, (XrtStringBacking *)miss));
+    CHECK(!storage->result.present && !storage->result.owner && !storage->stage);
+    MANAGED(xrt_map_string_get_publish(&output, root, backing, (XrtStringBacking *)key));
+    CHECK(storage->result.present == 1 && storage->result.owner && !storage->stage);
+    OptionalString published = {0};
+    MANAGED(xrt_value_move_empty(optional_plan, &storage->result, &published));
+    xrt_value_drop(owned_plan, &moved);
+    CHECK(!moved && !storage->result.owner && !storage->result.present);
+    const XrtStringBacking *string = (const XrtStringBacking *)published.payload;
+    CHECK(published.tag == 1 && string->length == 5 && !memcmp(string->bytes, "value", 5));
+    xrt_value_drop(optional_plan, &published);
+    CHECK(!published.tag && !published.payload);
+    MANAGED(xrt_managed_root_destroy(&root));
+    xrt_managed_ops_drop(map_ops);
+    xrt_backing_types_drop(&types);
+    xrt_value_plan_drop(optional_plan);
+    xrt_value_plan_drop(owned_plan);
+    owner_drop(&owner);
+    CHECK(owner.audit.final == 1);
+}
+static void publish_string_map_into_foreign_frame(void *context) {
+    CHECK(xrt_native_managed_root(0));
+    const XrtMapLiteral empty = {0};
+    xrt_native_map_string_literal_create(context, 0, &empty, NULL, 0);
+}
+
+static void string_map_literal_requires_execution_root(void) {
+    Owner owner;
+    owner_new(&owner, SIZE_MAX);
+    XrtManagedRoot *foreign = NULL;
+    XrtManagedFrame *frame = NULL;
+    MANAGED(xrt_managed_root_new(owner.billing, &foreign));
+    MANAGED(xrt_managed_frame_enter(foreign, 1, &frame));
+    XrtLocationOwner *locations = NULL;
+    CHECK(xrt_locations_create(NULL, 0, &locations) == XRT_LOCATION_OK);
+    XrtExecutionFailure failure = {0};
+    XrtValueRoot execution = {0};
+    CHECK(xrt_run_embedded_owned(locations, &failure, publish_string_map_into_foreign_frame,
+        frame, &execution) == XRT_EXECUTION_FAILURE);
+    CHECK(failure.kind == XRT_FAILURE_VALUE && xrt_value_root_empty(&execution));
+    XrtManagedHeader *slot = NULL;
+    MANAGED(xrt_managed_slot_borrow(frame, 0, &slot));
+    CHECK(!slot);
+    xrt_execution_failure_drop(&failure);
+    xrt_locations_release(locations);
+    MANAGED(xrt_managed_root_destroy(&foreign));
+    owner_drop(&owner);
+    CHECK(owner.audit.final == 1);
+}
+
 int main(void) {
+    string_map_image_carries_independent_owner();
+    string_map_literal_requires_execution_root();
     class_arrays_keep_their_exact_backing();
     class_array_update_failure_preserves_the_field(false);
     class_array_update_failure_preserves_the_field(true);

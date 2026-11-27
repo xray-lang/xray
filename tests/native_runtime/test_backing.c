@@ -1128,7 +1128,171 @@ static void map_retirement_and_lifetimes(void) {
 #include "backing_array_region_cases.h"
 #include "backing_array_inline_cases.h"
 #include "backing_set_cases.h"
+static void string_map_lifetimes(void) {
+    Fixture fixture;
+    fixture_init(&fixture, SIZE_MAX);
+    XrtManagedOps *ops = NULL;
+    OK(xrt_map_string_value_ops(fixture.billing, &ops));
+    CHECK(ops != fixture.types.map && xrt_map_string_ops_match(ops));
+    CHECK(!xrt_map_string_ops_match(fixture.types.map));
+    OK(xrt_string_backing_create(fixture.frame, 0, &fixture.types, "key", 3, 0));
+    OK(xrt_string_backing_create(fixture.frame, 1, &fixture.types, "key", 3, 0));
+    OK(xrt_string_backing_create(fixture.frame, 2, &fixture.types, "old", 3, 0));
+    static const char value[] = "x\0\xe4\xb8\x96";
+    const size_t value_length = sizeof(value) - 1;
+    OK(xrt_string_backing_create(fixture.frame, 3, &fixture.types, value, value_length, 0));
+    OK(xrt_string_backing_create(fixture.frame, 4, &fixture.types, "", 0, 0));
+    OK(xrt_string_backing_create(fixture.frame, 5, &fixture.types, "miss", 4, 0));
+    XrtStringBacking *key = (XrtStringBacking *)borrow(&fixture, 0);
+    XrtStringBacking *replacement_key = (XrtStringBacking *)borrow(&fixture, 1);
+    XrtStringBacking *old = (XrtStringBacking *)borrow(&fixture, 2);
+    XrtStringBacking *next = (XrtStringBacking *)borrow(&fixture, 3);
+    XrtStringBacking *empty = (XrtStringBacking *)borrow(&fixture, 4);
+    XrtStringBacking *miss = (XrtStringBacking *)borrow(&fixture, 5);
+    XrtStringBacking *keys[] = {key, replacement_key, empty};
+    XrtStringBacking *values[] = {old, next, empty};
+    XrtBillingStats baseline = xrt_billing_owner_stats(fixture.billing);
+    xrt_billing_owner_fail_after(fixture.billing, 0);
+    CHECK(xrt_map_string_create(fixture.frame, 6, ops, keys, values, 3) == XRT_MANAGED_OOM);
+    same_bill(fixture.billing, baseline);
+    CHECK(xr_signed_rc_read(&key->managed.references) == 1);
+    CHECK(xr_signed_rc_read(&next->managed.references) == 1);
+    CHECK(xr_signed_rc_read(&empty->managed.references) == 1);
+    xrt_billing_owner_fail_after(fixture.billing, SIZE_MAX);
+    for (int32_t reserve = INT32_MAX; reserve >= INT32_MAX - 1; --reserve) {
+        atomic_store(&next->managed.references, reserve);
+        CHECK(xrt_map_string_create(fixture.frame, 6, ops, keys, values, 3) == XRT_MANAGED_REFCOUNT);
+        same_bill(fixture.billing, baseline);
+        CHECK(xr_signed_rc_read(&next->managed.references) == reserve);
+        CHECK(xr_signed_rc_read(&key->managed.references) == 1);
+        CHECK(xr_signed_rc_read(&old->managed.references) == 1);
+    }
+    atomic_store(&next->managed.references, 1);
+    OK(xrt_map_string_create(fixture.frame, 6, ops, keys, values, 3));
+    const XrtMapBacking *map = (XrtMapBacking *)borrow(&fixture, 6);
+    CHECK(xrt_map_string_value_matches(&map->managed));
+    CHECK(map->length == 2 && map->rows[0].key == key && map->rows[0].string_value == next);
+    CHECK(map->rows[1].key == empty && map->rows[1].string_value == empty);
+    CHECK(xr_signed_rc_read(&old->managed.references) == 1);
+    CHECK(xr_signed_rc_read(&empty->managed.references) == 3);
+    const XrtMapLiteralOrigin origins[] = {{0, 1, 5}, {1, 1, 8}, {0, 1, 15}};
+    const XrtMapLiteral literal = {.items=origins, .count=3};
+    XrtMapStringLiteralInput entries[] = {
+        {.source.key=key, .value=old},
+        {.source.spread=map},
+        {.source.key=replacement_key, .value=next}
+    };
+    XrtMapLiteralDuplicate duplicate = {99, 99};
+    XrtBillingStats before_literal = xrt_billing_owner_stats(fixture.billing);
+    CHECK(xrt_map_string_literal_create(fixture.frame, 9, ops, &literal, entries, &duplicate) == XRT_MANAGED_DUPLICATE_KEY);
+    CHECK(duplicate.first == 0 && duplicate.second == 2);
+    same_bill(fixture.billing, before_literal);
+    const XrtMapLiteral spread = {.items=origins + 1, .count=2};
+    entries[2].value = old;
+    OK(xrt_map_string_literal_create(fixture.frame, 9, ops, &spread, entries + 1, &duplicate));
+    const XrtMapBacking *spread_map = (XrtMapBacking *)borrow(&fixture, 9);
+    CHECK(spread_map->length == 2 && spread_map->rows[0].key == key && spread_map->rows[0].string_value == old);
+    CHECK(map->rows[0].string_value == next && spread_map->rows[1].string_value == empty);
+    struct XrtMapLiteralInput cross_family[] = {{.source.spread=map}};
+    const XrtMapLiteral one_spread = {.items=origins + 1, .count=1};
+    BAD(xrt_map_backing_literal_create(fixture.frame, 10, &fixture.types, &one_spread, cross_family, &duplicate));
+    OK(xrt_managed_slot_drop(fixture.frame, 9));
+    same_bill(fixture.billing, before_literal);
+    XrtStringBacking *old_keys[] = {key};
+    int64_t old_values[] = {17};
+    OK(xrt_map_backing_create(fixture.frame, 11, &fixture.types, old_keys, old_values, 1));
+    const XrtMapBacking *scalar = (XrtMapBacking *)borrow(&fixture, 11);
+    bool found = true;
+    BAD(xrt_map_string_get(fixture.frame, 7, scalar, key, &found));
+    CHECK(found);
+    int64_t result = 83;
+    BAD(xrt_map_backing_get(map, key, &result, &found));
+    CHECK(found && result == 83);
+    XrtMapUpdate update = {.operation=XRT_MAP_UPDATE_SET, .key=key, .value=63};
+    bool applied = false, removed = true;
+    BAD(xrt_map_backing_try_update((XrtMapBacking *)map, &update, &applied, &removed));
+    CHECK(!applied && removed && map->rows[0].string_value == next);
+    BAD(xrt_map_backing_update_create(fixture.frame, 10, &fixture.types, map, &update, &removed));
+    BAD(xrt_map_backing_snapshot_held(fixture.frame, 10, &fixture.types, map, false));
+    BAD(xrt_map_backing_display_held(fixture.frame, 10, &fixture.types, map));
+    XrtBackingTypes wrong = fixture.types;
+    wrong.map = ops;
+    BAD(xrt_map_backing_create(fixture.frame, 10, &wrong, old_keys, old_values, 1));
+    BAD(xrt_map_backing_literal_create(fixture.frame, 10, &wrong, &one_spread, cross_family, &duplicate));
+    BAD(xrt_map_backing_update_create(fixture.frame, 10, &wrong, scalar, &update, &removed));
+    OK(xrt_map_backing_get(scalar, key, &result, &found));
+    CHECK(found && result == 17);
+    OK(xrt_managed_slot_drop(fixture.frame, 11));
+    OK(xrt_map_string_get(fixture.frame, 7, map, key, &found));
+    CHECK(found && borrow(&fixture, 7) == &next->managed);
+    OK(xrt_map_string_get(fixture.frame, 8, map, miss, &found));
+    CHECK(!found);
+    OK(xrt_map_string_get(fixture.frame, 8, map, empty, &found));
+    CHECK(found && borrow(&fixture, 8) == &empty->managed);
+    for (size_t i = 0; i < 7; ++i) OK(xrt_managed_slot_drop(fixture.frame, i));
+    const XrtStringBacking *out = (XrtStringBacking *)borrow(&fixture, 7);
+    CHECK(out->length == value_length && !memcmp(out->bytes, value, value_length));
+    CHECK(xr_signed_rc_read(&out->managed.references) == 1);
+    CHECK(((XrtStringBacking *)borrow(&fixture, 8))->length == 0);
+    xrt_managed_ops_drop(ops);
+    fixture_done(&fixture);
+}
+typedef struct StringMapWatch {
+    Fixture *source, *destination;
+    uintptr_t replaced_address;
+    const XrtStringBacking *replacement;
+    const XrtManagedHeader *prior;
+    size_t allocations, retired_replaced;
+} StringMapWatch;
+
+static void string_map_observe(void *context, void *memory, bool allocating) {
+    StringMapWatch *watch = context;
+    XrtManagedHeader *current = borrow(watch->destination, 0);
+    BAD(xrt_managed_root_drain(watch->destination->root));
+    if (allocating) {
+        CHECK(current == watch->prior && !watch->allocations);
+        ++watch->allocations;
+        OK(xrt_managed_root_drain(watch->source->root));
+    } else if ((uintptr_t)memory == watch->replaced_address) {
+        const XrtMapBacking *map = (const XrtMapBacking *)current;
+        CHECK(map->length == 1);
+        CHECK(map->rows[0].string_value == watch->replacement);
+        ++watch->retired_replaced;
+    }
+}
+
+static void string_map_callback_lifetimes(void) {
+    Fixture source, destination;
+    fixture_init(&source, SIZE_MAX);
+    fixture_init(&destination, SIZE_MAX);
+    XrtManagedOps *ops = NULL;
+    OK(xrt_map_string_value_ops(destination.billing, &ops));
+    OK(xrt_map_string_create(destination.frame, 0, ops, NULL, NULL, 0));
+    XrtStringBacking *key = map_key(&source, 0, "key", 3);
+    XrtStringBacking *old = map_key(&source, 1, "old", 3);
+    XrtStringBacking *next = map_key(&source, 2, "new", 3);
+    XrtStringBacking *keys[] = {key, key};
+    XrtStringBacking *values[] = {old, next};
+    StringMapWatch watch = {&source, &destination, (uintptr_t)old, next, borrow(&destination, 0), 0, 0};
+    destination.audit.observe = source.audit.observe = string_map_observe;
+    destination.audit.observer = source.audit.observer = &watch;
+    OK(xrt_map_string_create(destination.frame, 0, ops, keys, values, 2));
+    source.audit.observe = destination.audit.observe = NULL;
+    CHECK(watch.allocations == 1 && watch.retired_replaced == 1);
+    const XrtMapBacking *map = (const XrtMapBacking *)borrow(&destination, 0);
+    bool present = false;
+    OK(xrt_map_string_get(destination.frame, 1, map, key, &present));
+    CHECK(present && borrow(&destination, 1) == &next->managed);
+    xrt_managed_ops_drop(ops);
+    fixture_retire(&source);
+    CHECK(!atomic_load(&source.audit.finalized));
+    fixture_done(&destination);
+    CHECK(atomic_load(&source.audit.finalized) == 1);
+}
+
 int main(void) {
+    string_map_lifetimes();
+    string_map_callback_lifetimes();
     setup_failures();
     string_values();
     scalar_arrays();

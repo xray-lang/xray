@@ -27,7 +27,7 @@ static bool lower_map_literals(Lower *c) {
 }
 static bool lower_map_read(LowerFunction *f, uint32_t block, XrLirValue receiver, XrLirValue *output) {
     XrLirType type = lower_value_type(f, receiver);
-    if (type == XR_LIR_MAP_STRING_I64) { *output = receiver; return true; }
+    if (xr_lir_map_element(type)) { *output = receiver; return true; }
     XrLirCellType cell;
     bool captured = xr_lir_cell_type_view(f->owner->module, type, &cell) == XR_LIR_OK &&
         cell.payload == XR_LIR_MAP_STRING_I64;
@@ -45,19 +45,20 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
     *handled = false;
     if(op->op==XR_XIR_MAP_LITERAL) {
         *handled=true;
-        if(!lower_map_type(c,op->type))return lower_unsupported(c,"Map operation requires the String/I64 physical family");
+        XrLirType type = lower_type(c, op->type);
+        if (!xr_lir_map_element(type)) return lower_unsupported(c, "Map literal requires an admitted physical family");
         XrLirValue *args=lower_alloc(c,op->args[1],sizeof(*args));
         if(op->args[1] && !args)return false;
         bool good=true;
         for(uint32_t n=0;n<op->args[1] && good;++n)good=lower_value(f,f->source->operands[op->args[0]+n],&args[n]);
-        XrLirInstruction literal={.op=XR_LIR_MAP_LITERAL_NEW,.type=XR_LIR_MAP_STRING_I64,
+        XrLirInstruction literal={.op=XR_LIR_MAP_LITERAL_NEW,.type=type,
             .bits=(uint64_t)op->immediate+1,.operands=args,.operand_count=op->args[1],.source=lower_source(c)};
         if(good)good=lower_build(c,xr_lir_emit_value(c->module,f->blocks[block],&literal,&f->values[result]));
         xr_free(args);return good;
     }
     if (op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE) {
         XrXirType type = op->op == XR_XIR_PLACE_WRITE ? xr_xir_operand_type(f->source, op->args[0]) : op->type;
-        if (!lower_map_type(c, type)) return true;
+        if (!xr_lir_map_element(lower_type(c, type))) return true;
         *handled = true;
         if (op->op == XR_XIR_CELL_PLACE) {
             if (f->array_places && f->array_places[result] != UINT32_MAX) return true;
@@ -104,7 +105,10 @@ static bool lower_map_instruction(LowerFunction *f, uint32_t block, uint32_t ind
     uint32_t count = grouped ? op->args[1] : lower_operand_count(f->source, op);
     uint32_t source = construct ? UINT32_MAX : lower_operand_at(f->source, op, 0);
     XrXirType type = construct ? op->type : xr_xir_operand_type(f->source, source);
-    if (!lower_map_type(c, type)) return lower_unsupported(c, "Map operation requires the String/I64 physical family");
+    XrLirType family = lower_type(c, type);
+    if (!xr_lir_map_element(family) ||
+        (family == XR_LIR_MAP_STRING_STRING && operation != XR_LIR_MAP_OP_GET && operation != XR_LIR_MAP_OP_LEN))
+        return lower_unsupported(c, "Map operation requires an admitted physical family");
     XrLirValue *args = lower_alloc(c, count, sizeof(*args));
     if (count && !args) return false;
     uint32_t cell = !construct && f->array_places ? f->array_places[source] : UINT32_MAX;

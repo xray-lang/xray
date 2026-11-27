@@ -11,8 +11,11 @@ static XrtManagedStatus rbc_value_map_literal(const XrRbcModule *module, XrRbcSt
     if (!access.index || access.index > module->map_literal_count || !module->map_literals)
         return XRT_MANAGED_ARGUMENT;
     const XrtMapLiteral *literal = &module->map_literals[access.index - 1];
-    if (literal->count > activation->snapshot_capacity / sizeof(XrtMapLiteralInput)) return XRT_MANAGED_ARGUMENT;
+    bool strings = rbc_value_kind(module, activation->code, access.result) == XRT_VALUE_MAP_STRING_STRING;
+    size_t stride = strings ? sizeof(XrtMapStringLiteralInput) : sizeof(XrtMapLiteralInput);
+    if (literal->count > activation->snapshot_capacity / stride) return XRT_MANAGED_ARGUMENT;
     XrtMapLiteralInput *inputs = (XrtMapLiteralInput *)activation->snapshots;
+    XrtMapStringLiteralInput *string_inputs = (XrtMapStringLiteralInput *)activation->snapshots;
     uint32_t operand = 0;
     for (size_t n = 0; n < literal->count; ++n) {
         if (operand >= access.count) return XRT_MANAGED_ARGUMENT;
@@ -21,23 +24,32 @@ static XrtManagedStatus rbc_value_map_literal(const XrRbcModule *module, XrRbcSt
             const XrtMapBacking *map = NULL;
             XrtManagedStatus status = rbc_value_map_borrow(module,activation,value,&map);
             if (status != XRT_MANAGED_OK) return status;
-            inputs[n] = (XrtMapLiteralInput){.source.spread=map};
+            if (strings) string_inputs[n] = (XrtMapStringLiteralInput){.source.spread=map};
+            else inputs[n] = (XrtMapLiteralInput){.source.spread=map};
         } else {
             const XrtStringBacking *key = NULL;
             XrtManagedStatus status = rbc_value_string_borrow(activation,value,&key);
             if (status != XRT_MANAGED_OK) return status;
             if (operand >= access.count) return XRT_MANAGED_ARGUMENT;
             value = activation->code->arguments[access.first + operand++];
-            XrRbcRegister *scalar = rbc_value_register(stack,activation,value);
-            if (!scalar) return XRT_MANAGED_ARGUMENT;
-            inputs[n] = (XrtMapLiteralInput){.source.key=key};
-            memcpy(&inputs[n].value,&scalar->bits,sizeof(inputs[n].value));
+            if (strings) {
+                const XrtStringBacking *replacement = NULL;
+                status = rbc_value_string_borrow(activation, value, &replacement);
+                if (status != XRT_MANAGED_OK) return status;
+                string_inputs[n] = (XrtMapStringLiteralInput){.source.key=key,.value=(XrtStringBacking *)replacement};
+            } else {
+                XrRbcRegister *scalar = rbc_value_register(stack,activation,value);
+                if (!scalar) return XRT_MANAGED_ARGUMENT;
+                inputs[n] = (XrtMapLiteralInput){.source.key=key};
+                memcpy(&inputs[n].value,&scalar->bits,sizeof(inputs[n].value));
+            }
         }
     }
     if (operand != access.count) return XRT_MANAGED_ARGUMENT;
     const XrLirValueHome *home = rbc_value_home(activation->code,access.result);
     if (!home) return XRT_MANAGED_ARGUMENT;
-    xrt_native_map_literal_create(activation->frame,home->temporary_first_owner,literal,inputs,source);
+    if (strings) xrt_native_map_string_literal_create(activation->frame,home->temporary_first_owner,literal,string_inputs,source);
+    else xrt_native_map_literal_create(activation->frame,home->temporary_first_owner,literal,inputs,source);
     return rbc_value_publish_leaf(activation,access.result);
 }
 static XrtManagedStatus rbc_value_map_new(XrRbcStack *stack,RbcValueActivation *activation,
@@ -176,6 +188,14 @@ static XrtManagedStatus rbc_map_read(const XrRbcModule *module, XrRbcStack *stac
         }
     }
     if (!key) return XRT_MANAGED_ARGUMENT;
+    if (rbc_value_kind(module, activation->code, args[0]) == XRT_VALUE_MAP_STRING_STRING) {
+        if (access->index != XR_LIR_MAP_OP_GET) return XRT_MANAGED_ARGUMENT;
+        const XrLirValueHome *home = rbc_value_home(activation->code, access->result);
+        const XrtHostNullableSlots output = {activation->frame, home->first_owner, home->temporary_first_owner,
+            home->offset, home->temporary_offset + offsetof(XrtHostNullableOwner, owner)};
+        *missing = false;
+        return xrt_map_string_get_publish(&output, stack->values->root, map, key);
+    }
 
     int64_t value = 0;
     bool found = false;

@@ -23,6 +23,7 @@ static const XrtBackingArrayKind array_plan_families[] = {
 _Static_assert(sizeof(array_plan_families) / sizeof(*array_plan_families) == XRT_BACKING_ARRAY_COUNT,
     "every scalar Array producer has an identity");
 static const uint8_t string_producer = 0;
+static const uint8_t map_string_producer = 1;
 static bool backing_producer_retain(void *producer) { return producer != NULL; }
 static void backing_producer_drop(void *producer) { (void)producer; }
 static const void *backing_producer(const XrtManagedHeader *owner) {
@@ -55,6 +56,25 @@ static XrtManagedStatus backing_bind(XrtBillingOwner *billing, XrtRuntimeTypeSpe
     if (status == XRT_MANAGED_OK) status = xrt_managed_ops_bind(billing, plan, output);
     xrt_runtime_type_plan_drop(plan);
     return status;
+}
+XR_FUNCDEF bool xrt_map_string_value_matches(const XrtManagedHeader *owner) {
+    return backing_producer(owner) == &map_string_producer;
+}
+XR_FUNCDEF bool xrt_map_string_ops_match(const XrtManagedOps *ops) {
+    const XrtRuntimeTypeSpec *spec = NULL;
+    return xrt_managed_ops_producer_borrow(ops, backing_producer_retain, backing_producer_drop, &spec)
+        == XRT_MANAGED_OK && spec->code.context == &map_string_producer;
+}
+XR_FUNCDEF XrtManagedStatus xrt_map_string_value_ops(XrtBillingOwner *billing, XrtManagedOps **output) {
+    if (!billing || !output || *output) return XRT_MANAGED_ARGUMENT;
+    size_t owners[] = {offsetof(XrtMapBackingRow, key), offsetof(XrtMapBackingRow, string_value)};
+    XrtRuntimeTypeSpec spec = {
+        .fixed_size = sizeof(XrtMapBacking), .alignment = alignof(XrtMapBacking),
+        .capacity_offset = offsetof(XrtMapBacking, capacity), .stride = sizeof(XrtMapBackingRow),
+        .tail_child_offsets = owners, .tail_child_count = 2,
+        .code = {(void *)&map_string_producer, backing_producer_retain, backing_producer_drop}
+    };
+    return backing_bind(billing, spec, SIZE_MAX, output);
 }
 XR_FUNCDEF void xrt_backing_types_drop(XrtBackingTypes *types) {
     if (!types) return;

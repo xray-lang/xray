@@ -63,6 +63,7 @@ enum XrLirBuiltinType {
     XR_LIR_SET_I64_CELL,
     XR_LIR_SET_I64_REF,
     XR_LIR_I64_REF,
+    XR_LIR_MAP_STRING_STRING,
     XR_LIR_TYPE_COUNT
 };
 

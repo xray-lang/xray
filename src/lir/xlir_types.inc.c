@@ -705,8 +705,11 @@ XR_FUNC bool xr_lir_boxed_type(const XrLirModule *m, XrLirType type) {
 
 XR_FUNC XrLirStatus xr_lir_callable_type(XrLirModule *m, const XrLirCallableType *signature,
     XrLirType *output) {
-    if (!signature) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
-    if (signature->throws) return lir_fail(m, XR_LIR_UNSUPPORTED);
+    if (!signature || signature->parameter_count > 65536 || (signature->parameter_count && !signature->parameters))
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    if (signature->throws || signature->result == XR_LIR_MAP_STRING_STRING) return lir_fail(m, XR_LIR_UNSUPPORTED);
+    for (uint32_t p = 0; p < signature->parameter_count; ++p)
+        if (signature->parameters[p].type == XR_LIR_MAP_STRING_STRING) return lir_fail(m, XR_LIR_UNSUPPORTED);
     return lir_intern_type(m, (XrLirTypeView){XR_LIR_TYPE_CALLABLE,
         signature->result, signature->parameter_count}, signature, 0, 0, NULL, (LirNominalType){0}, NULL, output);
 }
@@ -776,7 +779,7 @@ XR_FUNC XrLirStatus xr_lir_type_layout(const XrLirModule *m, XrLirType type,
             layout.size = 4; layout.alignment = 4; break;
         case XR_LIR_I64: case XR_LIR_U64: case XR_LIR_F64: case XR_LIR_PTR:
             layout.size = 8; layout.alignment = 8; break;
-        case XR_LIR_STRING: case XR_LIR_ARRAY: case XR_LIR_MAP_STRING_I64: case XR_LIR_SET_I64:
+        case XR_LIR_STRING: case XR_LIR_ARRAY: case XR_LIR_MAP_STRING_I64: case XR_LIR_MAP_STRING_STRING: case XR_LIR_SET_I64:
             layout.size = 8; layout.alignment = 8; layout.managed = true; break;
         default: return XR_LIR_UNSUPPORTED;
         }

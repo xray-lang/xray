@@ -73,14 +73,16 @@ static XrLirStatus lir_library_catalog(XrLirModule *m, uint32_t flags) {
         entries[count++] = (XrLirIntrinsic){library_id_base + 1 + string_count,
             range_parameters, 3, XR_LIR_UNIT, true, XR_LIR_RANGE_OP_CHECK};
     if (flags & LIR_LIBRARY_MAP) {
-        XrLirType nullable = XR_LIR_TYPE_INVALID;
-        status = xr_lir_nullable_type(m, XR_LIR_I64, &nullable);
-        if (status != XR_LIR_OK) { xr_free(entries); return status; }
         uint32_t first = library_id_base + 2 + string_count;
         for (uint32_t n = 0; n < LIR_MAP_CATALOG_COUNT; ++n) {
             const LirMapSignature *shape = &lir_map_signatures[n];
+            XrLirType result = shape->result;
+            if (shape->operation == XR_LIR_MAP_OP_GET) {
+                status = xr_lir_nullable_type(m, shape->result, &result);
+                if (status != XR_LIR_OK) { xr_free(entries); return status; }
+            }
             entries[count++] = (XrLirIntrinsic){first + n, shape->parameters, shape->count,
-                shape->operation == XR_LIR_MAP_OP_GET ? nullable : shape->result, true, (uint32_t)shape->operation};
+                result, true, (uint32_t)shape->operation};
         }
     }
     XrLirRegistry registry = {entries, count};

@@ -106,7 +106,8 @@ static bool rbc_value_array(const XrRbcModule *module,const XrRbcValueCode *code
 }
 static bool rbc_value_map(const XrRbcModule *module,const XrRbcValueCode *code,uint32_t value,bool destination) {
     const XrLirValueHome *home=rbc_value_home(code,value);
-    return home && rbc_value_kind(module,code,value)==XRT_VALUE_MAP_STRING_I64 && home->owner_count==1 &&
+    XrtValueKind kind = rbc_value_kind(module,code,value);
+    return home && (kind == XRT_VALUE_MAP_STRING_I64 || kind == XRT_VALUE_MAP_STRING_STRING) && home->owner_count==1 &&
         home->size==sizeof(XrtManagedHeader *) && code->locations[value].kind==XR_RBC_VALUE_NOWHERE &&
         (!destination || (!home->parameter && home->offset!=SIZE_MAX && home->temporary_offset!=SIZE_MAX &&
             home->temporary_first_owner<code->homes->frame.slot_count));
