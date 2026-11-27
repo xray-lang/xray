@@ -535,7 +535,7 @@ class EmptySelectionTest(unittest.TestCase):
             result = runner.main(["t.py", tier, *extra])
             manifest.assert_called_once()
             if expect_corpus:
-                corpus.assert_called_once_with(Path(directory).resolve())
+                corpus.assert_called_once_with(Path(environment["XR_BUILD_DIR"]))
             else:
                 corpus.assert_not_called()
             process.assert_not_called()
