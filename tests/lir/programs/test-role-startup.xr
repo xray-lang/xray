@@ -39,3 +39,16 @@ fn local_hook() {
 fn ordinary_helper() {
     print(94)
 }
+
+@test(timeout: 17)
+fn deadline_test() {
+    print(96)
+}
+
+enum TestRefusal { Denied }
+
+@test
+fn typed_failure_test() throws(TestRefusal) {
+    print(98)
+    throw TestRefusal.Denied
+}

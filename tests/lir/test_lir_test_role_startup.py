@@ -52,13 +52,20 @@ def assert_panic(result, source, expected_stdout, message):
     assert location.endswith(f"{source.name}:{line}:{column}".encode("ascii")), result
 
 
-def assert_rejected(args, root, source, test_name):
+def assert_rejected(args, root, source, test_name, *, lowering=None):
     generated = root / ("reject-" + test_name + ".c")
     options = ["--stdlib", args.source_root / "stdlib", "--test", test_name]
     vm = invoke(root, test_name + "-reject-vm", [args.vm_driver, source, *options])
     native = invoke(root, test_name + "-reject-emit", [args.driver, source, generated, *options])
-    assert vm == native and vm[:2] == (1, b""), (test_name, vm, native, root)
-    assert vm[2].splitlines() == [REJECTED] and not generated.exists(), (test_name, vm, root)
+    assert vm[:2] == native[:2] == (1, b"") and not generated.exists(), (test_name, vm, native, root)
+    if lowering is None:
+        assert vm == native and vm[2].splitlines() == [REJECTED], (test_name, vm, native, root)
+    else:
+        assert native[2].splitlines() == [b"lowering: " + lowering], (native, root)
+        lines = vm[2].splitlines()
+        assert len(lines) == 1 and lines[0].startswith(b"lir_vm_run: lower "), (vm, root)
+        problem, metadata, _ = lines[0].partition(b" [function=")
+        assert metadata and problem.endswith(b": " + lowering), (vm, root)
 
 
 def main():
@@ -87,6 +94,10 @@ def main():
 
     for name in ("skipped_test", "imported_test", "ordinary_helper", "local_hook", "chosen", "missing_test"):
         assert_rejected(args, root, source, name)
+    assert_rejected(args, root, source, "deadline_test",
+                    lowering=b"test-role startup with a deadline is not supported by LIR lowering yet")
+    assert_rejected(args, root, source, "typed_failure_test",
+                    lowering=b"test-role startup signature or typed errors is not supported by LIR lowering yet")
     complete_native_artifacts(root)
     print(f"Selected test startup and rejection passed through both backends. Artifacts at {root}")
 
