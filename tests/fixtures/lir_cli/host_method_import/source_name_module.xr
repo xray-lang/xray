@@ -1,0 +1,15 @@
+import {value as importedValue} from "./_source_name_leaf"
+
+const origin: i64 = 10
+
+fn value() -> i64 {
+    return origin + 1
+}
+
+fn score(value: i64) -> i64 {
+    return value + importedValue()
+}
+
+print(value())
+print(importedValue())
+print(score(1))

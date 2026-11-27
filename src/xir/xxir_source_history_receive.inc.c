@@ -89,7 +89,7 @@ static bool source_history_bindings(SourceContext *ctx,bool types_only) {
                 break;
             case SOURCE_SLOT:case SOURCE_UNIT_SLOT:case SOURCE_MODULE:case SOURCE_IMPORT:
                 if (types_only && (source->kind==SOURCE_SLOT || source->kind==SOURCE_UNIT_SLOT)) continue;
-                binding=add_name(ctx,&ctx->names[module],source_owned_text(ctx,source->name),NULL);
+                binding=add_module_name(ctx,module,source_owned_text(ctx,source->name),NULL);
                 if (!binding) return false;
                 binding->kind=source->kind;binding->module=module;
                 binding->mutable=source->mutable;binding->inferred=source->inferred;

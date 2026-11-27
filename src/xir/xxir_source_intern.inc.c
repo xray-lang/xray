@@ -65,28 +65,37 @@ static SourceName *source_member_name(SourceContext *ctx,SourceName *owner,Sourc
     return source_name_bind(ctx,head,name,node,item+1);
 }
 static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *name, AstNode *node) {
-    if(name && ctx->interactive && ctx->names && ctx->graph && ctx->graph->entry_index>=0 &&
-        head==&ctx->names[ctx->graph->entry_index] && source_text_same(ctx,node,name,"it")) {
-        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"it is reserved for the last successful non-Unit REPL result");return NULL;
+    if (!name || !*name || find_name(ctx, *head, name)) {
+        source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate or empty declaration name");
+        return NULL;
     }
-    uint32_t module_index=UINT32_MAX;
-    for(uint32_t m=0;ctx->names&&m<ctx->module_count;++m)if(head==&ctx->names[m]){module_index=m;break;}
-    bool module=module_index!=UINT32_MAX;
-    uint32_t item=0;
-    if(module && ctx->items && name && *name) {
-        XrHirItemSpec spec={name,module_index,0,node?node->node_id:0,
-            node?node->line:0,node?node->column:0,XR_HIR_ITEM_DECLARATION};
-        XrCompileResourceStatus status=xr_hir_items_claim(ctx->items,&spec,&item);
-        if(status!=XR_COMPILE_RESOURCE_OK || xr_hir_items_errors(ctx->items)) {
-            source_fail(ctx,node,status==XR_COMPILE_RESOURCE_MEMORY_LIMIT?XR_XIR_MEMORY_LIMIT:
-                status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
-                status==XR_COMPILE_RESOURCE_OVERFLOW?XR_XIR_OVERFLOW:XR_XIR_BAD_STRUCTURE,"duplicate or empty declaration name");
-            return NULL;
-        }
-    } else if (!name || !*name || find_name(ctx, *head, name)) {
-        source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate or empty declaration name"); return NULL;
+    return source_name_bind(ctx, head, name, node, 0);
+}
+/* The declaration's owner supplies the module ordinal directly. */
+static SourceName *add_module_name(SourceContext *ctx, uint32_t module, const char *name, AstNode *node) {
+    if (!ctx->names || module >= ctx->module_count) {
+        source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid declaration owner module");
+        return NULL;
     }
-    return source_name_bind(ctx,head,name,node,module&&ctx->items?item+1:0);
+    if (name && ctx->interactive && ctx->graph && ctx->graph->entry_index >= 0 &&
+        module == (uint32_t)ctx->graph->entry_index && source_text_same(ctx, node, name, "it")) {
+        source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "it is reserved for the last successful non-Unit REPL result");
+        return NULL;
+    }
+    SourceName **head = &ctx->names[module];
+    if (!ctx->items || !name || !*name) return add_name(ctx, head, name, node);
+    uint32_t item = 0;
+    XrHirItemSpec spec = {name, module, 0, node ? node->node_id : 0,
+        node ? node->line : 0, node ? node->column : 0, XR_HIR_ITEM_DECLARATION};
+    XrCompileResourceStatus status = xr_hir_items_claim(ctx->items, &spec, &item);
+    if (status != XR_COMPILE_RESOURCE_OK || xr_hir_items_errors(ctx->items)) {
+        source_fail(ctx, node, status == XR_COMPILE_RESOURCE_MEMORY_LIMIT ? XR_XIR_MEMORY_LIMIT :
+            status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
+            status == XR_COMPILE_RESOURCE_OVERFLOW ? XR_XIR_OVERFLOW : XR_XIR_BAD_STRUCTURE,
+            "duplicate or empty declaration name");
+        return NULL;
+    }
+    return source_name_bind(ctx, head, name, node, item + 1);
 }
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 static bool source_nominal_type(SourceContext *ctx, const char *name, XrXirType *type);

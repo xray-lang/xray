@@ -114,7 +114,7 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
         ctx->module=m;
         char *name=source_library_name(ctx,in->name);
         if (!name) return false;
-        SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);
+        SourceName *symbol=add_module_name(ctx,m,name,NULL);
         if (!symbol) return false;
         symbol->kind=SOURCE_NOMINAL; symbol->module=m; symbol->index=ctx->nominals.count++;
         unit->nominals[n]=symbol->index; ctx->nominal_sources[symbol->index]=symbol;
@@ -138,7 +138,7 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
         ctx->module=m;
         char *name=source_library_name(ctx,in->name);
         if (!name) return false;
-        SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);
+        SourceName *symbol=add_module_name(ctx,m,name,NULL);
         if (!symbol) return false;
         symbol->kind=SOURCE_INTERFACE; symbol->module=m; symbol->index=ctx->interfaces.count++;
         unit->interfaces[i]=symbol->index; ctx->interface_sources[symbol->index]=symbol;

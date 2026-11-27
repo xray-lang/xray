@@ -1,0 +1,7 @@
+fn value() -> i64 {
+    return 1
+}
+fn value() -> i64 {
+    return 2
+}
+print(value())

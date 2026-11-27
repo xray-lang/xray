@@ -89,7 +89,7 @@ static bool source_mem_declare(SourceContext *ctx) {
             if (!name || !signature || (count && !parameters) || !source_mem_term(ctx,native->member->result,&result)) return false;
             for (uint32_t p=0;p<count;++p)
                 if (!source_mem_term(ctx,native->member->parameters[p].type,&parameters[p])) return false;
-            SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);if (!symbol) return false;
+            SourceName *symbol=add_module_name(ctx,m,name,NULL);if (!symbol) return false;
             uint32_t index=ctx->function_count++;symbol->kind=SOURCE_FUNCTION;symbol->index=index;symbol->module=m;
             ctx->functions[index]=(XrXirFunction){.name=name,.name_length=(uint32_t)source_text_size(ctx,name),
                 .parameters=parameters,.parameter_count=count,.result=result,.error_type=XR_XIR_NEVER};

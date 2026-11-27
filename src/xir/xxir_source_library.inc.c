@@ -572,7 +572,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
         if (!source_library_source_name(ctx,name,original->name_length,&visible)) return false;
         if (!visible) return true;
     }
-    SourceName *symbol = add_name(ctx, &ctx->names[module], name, NULL);
+    SourceName *symbol = add_module_name(ctx, module, name, NULL);
     if (!symbol) return false;
     symbol->kind = SOURCE_FUNCTION; symbol->index = target; symbol->module = module; ctx->function = target;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_FUNCTION, 0,

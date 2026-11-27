@@ -18,7 +18,7 @@ static bool source_file_stat_declare(SourceContext *ctx,XrXirType *output) {
     if(!source_nominal_reserve(ctx))return false;
     uint32_t d=ctx->nominals.count;
     const char *name=source_owned_text(ctx,native->name);if(!name)return false;
-    SourceName *owner=add_name(ctx,&ctx->names[ctx->module],name,NULL);if(!owner)return false;
+    SourceName *owner=add_module_name(ctx,ctx->module,name,NULL);if(!owner)return false;
     owner->kind=SOURCE_NOMINAL;owner->index=d;owner->module=ctx->module;
     XrXirNominalField *fields=source_alloc(ctx,10,sizeof(*fields));
     XrXirType *types=source_alloc(ctx,10,sizeof(*types));

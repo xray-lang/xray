@@ -2587,7 +2587,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
         return source_fail_feature(ctx, node, XR_XIR_BAD_STRUCTURE, "this function declaration syntax");
     XrXirFunctionIdentity identity = {.module = ctx->module, .exported = node->is_exported};
     if (!source_test_role(ctx, node, &identity)) return false;
-    SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], decl->name, node);
+    SourceName *symbol = add_module_name(ctx, ctx->module, decl->name, node);
     if (!symbol) return false;
     symbol->kind = SOURCE_FUNCTION; symbol->index = index;
     SourceFunction *body = &ctx->bodies[index]; body->node = body->type_owner = node; body->module = ctx->module;
@@ -2898,7 +2898,7 @@ static bool collect_declarations(SourceContext *ctx) {
             else if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
                 if (node->is_exported && !source_exported_const_syntax(ctx,node))
                     return ctx->diagnostic.status==XR_XIR_OK ? source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"exported state is not admitted") : false;
-                SourceName *symbol = add_name(ctx, &ctx->names[m], node->as.var_decl.name, node);
+                SourceName *symbol = add_module_name(ctx, m, node->as.var_decl.name, node);
                 if (!symbol) return false;
                 symbol->kind = SOURCE_SLOT; symbol->index = slot; symbol->module=m; symbol->mutable = !node->as.var_decl.is_const;
                 if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, 0, source_query_range(ctx, node, symbol->name))) return false;
@@ -2910,7 +2910,7 @@ static bool collect_declarations(SourceContext *ctx) {
                     if(!((ctx)->diagnostic.status == XR_XIR_OK))return false;
                     const XrDestructurePattern *field=plan.fields[f].pattern;
                     if(node->is_exported) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"exported state is not admitted");
-                    SourceName *symbol=add_name(ctx,&ctx->names[m],field->as.identifier.name,node);
+                    SourceName *symbol=add_module_name(ctx,m,field->as.identifier.name,node);
                     if(!symbol)return false;
                     symbol->kind=SOURCE_SLOT;symbol->index=slot;symbol->module=m;symbol->mutable=!node->as.destructure_decl.is_const;
                     if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,source_destructure_range(ctx,field)))return false;

@@ -1,5 +1,18 @@
 {
   "missing_import": {
     "source_error": ":11:17: error: method requires importing the module that declares its receiver type"
+  },
+  "_source_name_leaf": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "source_name_module": {
+    "exit": 0,
+    "stdout": "11\n90\n91\n",
+    "stderr": ""
+  },
+  "source_name_duplicate": {
+    "source_error": ":4:4: error: duplicate declaration name"
   }
 }

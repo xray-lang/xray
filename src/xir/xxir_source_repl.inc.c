@@ -39,7 +39,7 @@ static bool source_repl_result(SourceContext *ctx,AstNode *tail) {
     char *name=source_alloc(ctx,64,1);if(!name)return false;
     if(source_format(ctx,name,64,"$result%llu",(unsigned long long)ctx->self_unit->serial)!=XR_DIAG_OK)
         return source_fail(ctx,tail,XR_XIR_BUDGET,"implicit result name exhausted");
-    SourceName *symbol=add_name(ctx,&ctx->names[ctx->module],name,tail);if(!symbol)return false;
+    SourceName *symbol=add_module_name(ctx,ctx->module,name,tail);if(!symbol)return false;
     symbol->kind=SOURCE_SLOT;symbol->index=ctx->slot_count++;symbol->module=ctx->module;symbol->inferred=true;symbol->hidden=true;
     ctx->slots[symbol->index]=(XrXirSlot){ctx->module,XR_XIR_UNIT,0};
     if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,source_query_range(ctx,tail,name)) ||
@@ -60,7 +60,7 @@ static bool source_repl_function_binding(SourceContext *ctx,AstNode *node) {
     char *name=source_alloc(ctx,64,1);if(!name)return false;
     if(source_format(ctx,name,64,"$function%llu_%u",(unsigned long long)ctx->self_unit->serial,function->index)!=XR_DIAG_OK)
         return source_fail(ctx,node,XR_XIR_BUDGET,"function value name exhausted");
-    SourceName *value=add_name(ctx,&ctx->names[ctx->module],name,node);if(!value)return false;
+    SourceName *value=add_module_name(ctx,ctx->module,name,node);if(!value)return false;
     value->kind=SOURCE_SLOT;value->index=ctx->slot_count++;value->module=ctx->module;value->inferred=true;value->hidden=true;
     ctx->slots[value->index]=(XrXirSlot){ctx->module,XR_XIR_UNIT,0};
     if(!source_query_declare(ctx,value,XR_XIR_SOURCE_BINDING,0,source_query_range(ctx,node,name)) ||

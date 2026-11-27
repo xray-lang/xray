@@ -44,7 +44,7 @@ static bool source_crypto_declare(SourceContext *ctx) {
             if(!source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_U8},&array))return false;
             for(uint32_t p=0;p<count;++p) parameter[p]=array;
             if(native->id==XR_NATIVE_CALLABLE_CRYPTO_FILL_RANDOM && !source_cell_type(ctx,array,&parameter[0]))return false;
-            SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);
+            SourceName *symbol=add_module_name(ctx,m,name,NULL);
             if (!symbol) return false;
             uint32_t index=ctx->function_count++;
             symbol->kind=SOURCE_FUNCTION;symbol->index=index;symbol->module=m;

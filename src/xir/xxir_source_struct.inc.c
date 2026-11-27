@@ -138,7 +138,7 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     XrGenericParam **parameters, uint32_t count, uint32_t kind) {
     if (count && !parameters)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nominal type parameters are missing");
-    SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], name, node);
+    SourceName *symbol = add_module_name(ctx, ctx->module, name, node);
     if (!symbol) return false;
     symbol->kind = SOURCE_NOMINAL; symbol->index = ctx->nominals.count++;
     symbol->module = ctx->module; ctx->nominal_sources[symbol->index] = symbol;

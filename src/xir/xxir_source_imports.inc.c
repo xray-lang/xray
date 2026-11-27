@@ -54,7 +54,7 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
     }
     for (int i = 0; i < (decl->member_count ? decl->member_count : 1); ++i) {
         const char *name = decl->member_count ? (decl->members[i].alias ? decl->members[i].alias : decl->members[i].name) : decl->alias;
-        SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], name, node);
+        SourceName *symbol = add_module_name(ctx, ctx->module, name, node);
         if (!symbol) return false;
         symbol->kind = decl->member_count ? SOURCE_IMPORT : SOURCE_MODULE;
         symbol->module = (uint32_t) target;

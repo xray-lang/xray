@@ -28,7 +28,7 @@ static bool source_interface_declare(SourceContext *ctx, AstNode *node) {
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate interface type parameter");
         }
     }
-    SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], declaration->name, node);
+    SourceName *symbol = add_module_name(ctx, ctx->module, declaration->name, node);
     if (!symbol) return false;
     uint32_t count = (uint32_t)declaration->type_param_count;
     XrXirConstraint *constraints = count ? source_alloc(ctx, count, sizeof(*constraints)) : NULL;

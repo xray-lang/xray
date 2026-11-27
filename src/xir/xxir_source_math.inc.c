@@ -41,7 +41,7 @@ static bool source_math_declare(SourceContext *ctx) {
             XrXirType *owned=shape->count?source_alloc(ctx,shape->count,sizeof(*owned)):NULL;
             if(!name || !signature || (shape->count&&!owned))return false;
             if(shape->count && !source_copy_bytes(ctx,NULL,owned,parameters,(size_t)shape->count*sizeof(*owned)))return false;
-            SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);if(!symbol)return false;
+            SourceName *symbol=add_module_name(ctx,m,name,NULL);if(!symbol)return false;
             uint32_t index=ctx->function_count++;
             symbol->kind=SOURCE_FUNCTION;symbol->index=index;symbol->module=m;
             ctx->functions[index]=(XrXirFunction){.name=name,.name_length=(uint32_t)strlen(name),

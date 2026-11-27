@@ -40,7 +40,7 @@ static bool source_unicode_declare(SourceContext *ctx) {
             XrXirType *parameter=source_alloc(ctx,count,sizeof(*parameter));
             if (!name || !signature || !parameter) return false;
             for (uint32_t p=0;p<count;++p) parameter[p]=native->id==XR_NATIVE_CALLABLE_UNICODE_PROPERTY_ID ? XR_XIR_STRING : XR_XIR_I64;
-            SourceName *symbol=add_name(ctx,&ctx->names[m],name,NULL);
+            SourceName *symbol=add_module_name(ctx,m,name,NULL);
             if (!symbol) return false;
             uint32_t index=ctx->function_count++;
             symbol->kind=SOURCE_FUNCTION;symbol->index=index;symbol->module=m;

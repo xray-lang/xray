@@ -1,0 +1,4 @@
+export const origin: i64 = 90
+export fn value() -> i64 {
+    return origin
+}

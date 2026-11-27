@@ -79,7 +79,7 @@ static bool source_library_public_slot(SourceContext *ctx,const XrXirModule *lib
     if (!name || !source_library_source_name(ctx,name,fact->name_length,&visible)) return false;
     if (!visible) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library public slot has no Source declaration spelling");
     uint32_t owner=ctx->slots[target].module;ctx->module=owner;
-    SourceName *symbol=add_name(ctx,&ctx->names[owner],name,NULL);
+    SourceName *symbol=add_module_name(ctx,owner,name,NULL);
     if (!symbol) return false;
     symbol->kind=ctx->slots[target].type==XR_XIR_UNIT?SOURCE_UNIT_SLOT:SOURCE_SLOT;symbol->index=target;symbol->module=owner;
     symbol->type=ctx->slots[target].type;symbol->checked_library=true;

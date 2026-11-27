@@ -38,7 +38,7 @@ static bool source_runtime_declare(SourceContext *ctx) {
             const char *name = source_owned_text(ctx, native->member->name);
             const char *signature = source_owned_text(ctx, native->member->signature);
             if (!name || !signature) return false;
-            SourceName *symbol = add_name(ctx, &ctx->names[m], name, NULL);
+            SourceName *symbol = add_module_name(ctx, m, name, NULL);
             if (!symbol) return false;
             uint32_t index = ctx->function_count++;
             symbol->kind = SOURCE_FUNCTION; symbol->index = index; symbol->module = m;
