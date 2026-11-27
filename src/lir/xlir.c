@@ -329,6 +329,14 @@ XR_FUNC XrLirStatus xr_lir_literal_address(XrLirModule *m, XrLirBlock block,
     return xr_lir_emit_value(m, block, &op, output);
 }
 
+XR_FUNC bool xr_lir_math_lerp_external_signature(const char *name, size_t length,
+    const XrLirType *parameters, uint32_t count, XrLirType result) {
+    static const char symbol[] = "xray_stdlib_math_lerp";
+    return name && length == sizeof(symbol) - 1 && !memcmp(name, symbol, sizeof(symbol) - 1) &&
+        parameters && count == 3 && result == XR_LIR_F64 &&
+        parameters[0] == XR_LIR_F64 && parameters[1] == XR_LIR_F64 && parameters[2] == XR_LIR_F64;
+}
+
 static const char *clock_external_name(XrLirExternKind kind) {
     switch (kind) {
     case XR_LIR_EXTERN_CLOCK_REALTIME: return "xrt_clock_realtime_nanos";
@@ -384,6 +392,9 @@ static bool lir_function_spec_valid(const XrLirModule *m, const XrLirFunctionSpe
     if (spec->kind != XR_LIR_FUNCTION_EXTERNAL) return false;
     if (spec->extern_kind == XR_LIR_EXTERN_ASSERT_CONDITION)
         return xr_lir_assertion_entry_signature(spec->parameters, spec->parameter_count, spec->result);
+    if (spec->extern_kind == XR_LIR_EXTERN_STDLIB_MATH_LERP)
+        return xr_lir_math_lerp_external_signature(spec->name, spec->name_length,
+            spec->parameters, spec->parameter_count, spec->result);
     const char *clock = clock_external_name(spec->extern_kind);
     if (clock) return spec->result == XR_LIR_I64 &&
         spec->parameter_count == (spec->extern_kind == XR_LIR_EXTERN_UTC_OFFSET_AT ? 1u : 0u) &&

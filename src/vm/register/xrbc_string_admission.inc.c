@@ -186,10 +186,10 @@ static bool rbc_strings_call(RbcStringAdmission *s, XrRbcOperands v) {
     if ((f->register_kinds && rbc_register_kind(f, v.a) != XR_RBC_CALL_WINDOW) ||
         s->state[v.a] == RBC_STRING_OWNED || s->state[v.a] == RBC_CELL_OWNED) return false;
     if (v.op == XR_RBC_CALLN) {
-        XrRbcNativeKind kind = s->module->natives[v.immediate];
-        if ((unsigned)kind >= XR_RBC_NATIVE_COUNT) return false;
-        uint32_t count = kind == XR_RBC_NATIVE_PRINT_I64 || kind == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u;
-        for (uint32_t p = 1; p <= count; ++p) {
+        XrRbcNativeShape shape = xr_rbc_native_shape(s->module->natives[v.immediate]);
+        if (!shape.window_inputs || (shape.requires_typed_window &&
+            s->state[v.a] != RBC_EMPTY && s->state[v.a] != RBC_BITS)) return false;
+        for (uint32_t p = 1; p <= shape.window_inputs; ++p) {
             if (s->state[v.a + p] != RBC_BITS) return false;
             if (f->register_kinds) s->state[v.a + p] = RBC_EMPTY;
         }
@@ -697,7 +697,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         range |= f->aggregate_accesses[n].operation == XR_RBC_RANGE_CHECK;
     }
-    bool numeric_conversion = false,scalar_cells=false;
+    bool numeric_conversion = false, scalar_cells = false, typed_native = false;
     for (uint32_t r = 0; f->register_kinds && r < f->register_count; ++r)
         managed |= rbc_managed_kind(f->register_kinds[r]) || f->register_kinds[r] == XR_RBC_MAP_STRING_I64_REF || f->register_kinds[r] == XR_RBC_STRING_CELL ||
             f->register_kinds[r] == XR_RBC_STRING_REF || f->register_kinds[r] == XR_RBC_STATE || f->register_kinds[r] == XR_RBC_STATE_REF ||
@@ -715,10 +715,12 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
             managed |= rbc_managed_kind(callee->result_kind);
             for (uint32_t p = 0; p < callee->parameter_count; ++p)
                 managed |= rbc_register_kind(callee, p) != XR_RBC_BITS;
+        } else if (op == XR_RBC_CALLN) {
+            typed_native |= xr_rbc_native_shape(module->natives[word >> 16]).requires_typed_window;
         }
     }
     if (!managed && !range && !f->spill_count && !numeric_conversion && !f->aggregate_value_count &&
-        !f->environment_count && !scalar_cells)
+        !f->environment_count && !scalar_cells && !typed_native)
         return XR_RBC_OK;
     if (!f->register_kinds && (managed || f->reference_spill_count)) return XR_RBC_INVALID;
     RbcStringGraph g = {.work = {.module = module, .function = f},

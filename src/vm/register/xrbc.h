@@ -286,7 +286,12 @@ typedef enum XrRbcNativeKind {
     XR_RBC_NATIVE_CLOCK_CPU,
     XR_RBC_NATIVE_CLOCK_MONOTONIC,
     XR_RBC_NATIVE_UTC_OFFSET_AT,
+    XR_RBC_NATIVE_MATH_LERP,
+#if defined(XR_RBC_LINKED_MATH_LERP)
     XR_RBC_NATIVE_COUNT
+#else
+    XR_RBC_NATIVE_COUNT = XR_RBC_NATIVE_MATH_LERP
+#endif
 } XrRbcNativeKind;
 
 typedef struct {

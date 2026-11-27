@@ -75,6 +75,8 @@ struct XrRbcProgram {
 #define RBC_LIR_PRINT_STRING (UINT32_MAX - 1)
 #define RBC_LIR_ASSERT_ENTRY (UINT32_MAX - 2)
 #define RBC_LIR_NATIVE_BASE (UINT32_MAX - 8)
+XR_STATIC_ASSERT(RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_COUNT <= RBC_LIR_ASSERT_ENTRY,
+    "native mappings do not overlap the special call entries");
 
 static bool rbc_lir_native(uint32_t mapping) {
     return mapping >= RBC_LIR_NATIVE_BASE && mapping < RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_COUNT;
@@ -791,6 +793,12 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                             mapping[i.callee - 1] = RBC_LIR_ASSERT_ENTRY;
                             continue;
                         }
+                        if (callee.kind == XR_LIR_FUNCTION_EXTERNAL &&
+                            callee.extern_kind == XR_LIR_EXTERN_STDLIB_MATH_LERP && i.op == XR_LIR_CALL &&
+                            xr_rbc_native_shape(XR_RBC_NATIVE_MATH_LERP).window_inputs) {
+                            mapping[i.callee - 1] = RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_MATH_LERP;
+                            continue;
+                        }
                         if (callee.kind != XR_LIR_FUNCTION_EXTERNAL ||
                             (callee.extern_kind < XR_LIR_EXTERN_PRINT_I64 ||
                              callee.extern_kind > XR_LIR_EXTERN_UTC_OFFSET_AT)) {
@@ -970,8 +978,8 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             if((i.op==XR_LIR_CALL || i.op==XR_LIR_INVOKE) && c->functions[i.callee-1]!=RBC_LIR_PRINT_STRING) {
                 uint32_t mapped=c->functions[i.callee-1];
                 uint32_t physical=rbc_lir_native(mapped)?
-                    (mapped==RBC_LIR_NATIVE_BASE+XR_RBC_NATIVE_PRINT_I64 ||
-                     mapped==RBC_LIR_NATIVE_BASE+XR_RBC_NATIVE_UTC_OFFSET_AT?2u:1u):rbc_lir_scalar_arguments(c->input, &i);
+                    xr_rbc_native_shape((XrRbcNativeKind)(mapped - RBC_LIR_NATIVE_BASE)).window_inputs :
+                    rbc_lir_scalar_arguments(c->input, &i);
                 if(physical==UINT32_MAX)
                     return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"call window exceeds index space");
                 if(window<physical+1)window=physical+1;
@@ -993,8 +1001,8 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 if (c->functions[i.callee - 1] == RBC_LIR_PRINT_STRING) continue;
                 uint32_t mapped = c->functions[i.callee - 1];
                 uint32_t physical = rbc_lir_native(mapped) ?
-                    (mapped == RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_PRINT_I64 ||
-                     mapped == RBC_LIR_NATIVE_BASE + XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u) : rbc_lir_scalar_arguments(c->input, &i);
+                    xr_rbc_native_shape((XrRbcNativeKind)(mapped - RBC_LIR_NATIVE_BASE)).window_inputs :
+                    rbc_lir_scalar_arguments(c->input, &i);
                 if (window < physical + 1) window = physical + 1;
             }
             if (i.op == XR_LIR_CONDBR && !c->scratch_count) c->scratch_count = 1;
@@ -1316,13 +1324,15 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
                 rbc_lir_emit(c, XR_RBC_PRINT_LITERAL, 0, 0, 0, ordinal);
         }
         if (rbc_lir_native(c->functions[i->callee - 1])) {
-            uint32_t kind = c->functions[i->callee - 1] - RBC_LIR_NATIVE_BASE;
-            bool argument = kind == XR_RBC_NATIVE_PRINT_I64 || kind == XR_RBC_NATIVE_UTC_OFFSET_AT;
-            uint32_t destination = c->register_count - (argument ? 3u : 2u);
-            if (argument && !rbc_lir_emit(c, XR_RBC_MOV, destination + 1,
-                    c->slots[i->operands[0]], 0, 0)) return false;
-            if (!rbc_lir_constant(c, destination + (argument ? 2u : 1u),
-                    i->source.path_length ? c->source_id : 0) ||
+            XrRbcNativeKind kind = (XrRbcNativeKind)(c->functions[i->callee - 1] - RBC_LIR_NATIVE_BASE);
+            uint32_t inputs = xr_rbc_native_shape(kind).window_inputs;
+            if (inputs != i->operand_count + 1u || inputs >= c->register_count)
+                return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "registered native call window differs from the signature");
+            uint32_t destination = c->register_count - inputs - 1u;
+            for (uint32_t a = 0; a < i->operand_count; ++a)
+                if (!rbc_lir_emit(c, XR_RBC_MOV, destination + a + 1, c->slots[i->operands[a]], 0, 0))
+                    return false;
+            if (!rbc_lir_constant(c, destination + inputs, i->source.path_length ? c->source_id : 0) ||
                 !rbc_lir_emit(c, XR_RBC_CALLN, destination, 0, 0, kind)) return false;
             return !i->result || rbc_lir_emit(c, XR_RBC_MOV, result, destination, 0, 0);
         }

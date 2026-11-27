@@ -14,6 +14,29 @@
 #include "xray_native_state.h"
 #include "base/xchecks.h"
 #include <string.h>
+
+typedef struct XrRbcNativeShape {
+    /* The result is at A. Arguments follow it, ending with the source ID. */
+    uint8_t window_inputs;
+    bool writes_result;
+    bool requires_typed_window;
+} XrRbcNativeShape;
+
+static inline XrRbcNativeShape xr_rbc_native_shape(XrRbcNativeKind kind) {
+    static const XrRbcNativeShape shapes[XR_RBC_NATIVE_COUNT] = {
+        [XR_RBC_NATIVE_PRINT_I64] = {.window_inputs = 2},
+        [XR_RBC_NATIVE_CLOCK_REALTIME] = {.window_inputs = 1, .writes_result = true},
+        [XR_RBC_NATIVE_CLOCK_CPU] = {.window_inputs = 1, .writes_result = true},
+        [XR_RBC_NATIVE_CLOCK_MONOTONIC] = {.window_inputs = 1, .writes_result = true},
+        [XR_RBC_NATIVE_UTC_OFFSET_AT] = {.window_inputs = 2, .writes_result = true},
+#if defined(XR_RBC_LINKED_MATH_LERP)
+        [XR_RBC_NATIVE_MATH_LERP] = {.window_inputs = 4, .writes_result = true,
+            .requires_typed_window = true},
+#endif
+    };
+    return (unsigned)kind < XR_RBC_NATIVE_COUNT ? shapes[kind] : (XrRbcNativeShape){0};
+}
+
 enum { XR_RBC_FUNCTION_LANES = sizeof(XrtFunction) / sizeof(uint64_t) };
 _Static_assert(sizeof(XrtFunction) % sizeof(uint64_t) == 0 &&
     _Alignof(XrtFunction) <= _Alignof(uint64_t), "indexed callable storage fits complete register lanes");

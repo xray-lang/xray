@@ -55,6 +55,10 @@ static uint64_t xr_rbc_float_bits(double value) {
     return bits;
 }
 
+#if defined(XR_RBC_LINKED_MATH_LERP)
+extern double xray_stdlib_math_lerp(double, double, double);
+#endif
+
 typedef union {
     uint64_t bits;
     XrtManagedHeader *string;
@@ -355,12 +359,17 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
             module->functions[index].aggregate_parameter_count || module->functions[index].aggregate_result_type ||
             a + 1 + module->functions[index].parameter_count != registers) return false;
         break;
-    case XR_RBC_CALLN:
-        if (index >= module->native_count ||
-            a + (module->natives[index] == XR_RBC_NATIVE_PRINT_I64 ||
-                module->natives[index] == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u) >= registers)
-            return false;
+    case XR_RBC_CALLN: {
+        if (index >= module->native_count) return false;
+        XrRbcNativeShape shape = xr_rbc_native_shape(module->natives[index]);
+        if (!shape.window_inputs || a + shape.window_inputs >= registers) return false;
+        if (shape.requires_typed_window) {
+            if (!function->register_kinds) return false;
+            for (uint32_t p = 0; p <= shape.window_inputs; ++p)
+                if (function->register_kinds[a + p] != XR_RBC_CALL_WINDOW) return false;
+        }
         break;
+    }
     case XR_RBC_ARITHMETIC_PANIC:
         return !a && xr_rbc_arithmetic_panic_code(index) && function->source_ids &&
             function->source_id_count == function->code_count && function->source_ids[pc] != 0;
@@ -450,7 +459,7 @@ XR_FUNC XrRbcStatus xr_rbc_module_admit(const XrRbcModule *module, const XrtLoca
     if (status != XR_RBC_OK) return status;
     if (!xr_rbc_source_maps_valid(module, locations)) return XR_RBC_INVALID;
     for (size_t i = 0; i < module->native_count; ++i)
-        if ((unsigned)module->natives[i] >= XR_RBC_NATIVE_COUNT) return XR_RBC_INVALID;
+        if (!xr_rbc_native_shape(module->natives[i]).window_inputs) return XR_RBC_INVALID;
     return XR_RBC_OK;
 }
 

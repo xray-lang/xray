@@ -87,9 +87,9 @@ static void xr_rbc_entry_instruction(const XrRbcModule *module, const XrRbcFunct
         writes = true;
         if (op == XR_RBC_CALL) count = module->functions[word >> 16].parameter_count;
         else {
-            XrRbcNativeKind kind = module->natives[word >> 16];
-            count = kind == XR_RBC_NATIVE_PRINT_I64 || kind == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2u : 1u;
-            writes = kind != XR_RBC_NATIVE_PRINT_I64;
+            XrRbcNativeShape shape = xr_rbc_native_shape(module->natives[word >> 16]);
+            count = shape.window_inputs;
+            writes = shape.writes_result;
         }
         for (uint32_t p = 1; p <= count; ++p) xr_rbc_entry_read(state, a + p);
         break;

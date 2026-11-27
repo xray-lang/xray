@@ -14,6 +14,12 @@
 
 #include "register_vm_programs.h"
 #include "vm/register/xrbc_internal.h"
+#include "vm/register/xrbc_lir.h"
+#include "lir/xlir_builder.h"
+#include "lir/xlir_verify.h"
+#if defined(XR_RBC_LINKED_MATH_LERP)
+#include "xir/xxir_builtin_stdlib.h"
+#endif
 #include "shared/xr_time_offset.h"
 #include "f64_family_vectors.h"
 #include <fenv.h>
@@ -1003,6 +1009,215 @@ static void test_offset_window(void) {
     native=XR_RBC_NATIVE_UTC_OFFSET_AT;immediate(code,1,XR_RBC_LOADI,254,1);result=91;
     CHECK(execute(&module,0,NULL,0,&result)==XR_RBC_INVALID && result==91);
 }
+
+static const char math_lerp_symbol[] = "xray_stdlib_math_lerp";
+static const XrLirType math_lerp_parameters[] = {XR_LIR_F64, XR_LIR_F64, XR_LIR_F64};
+
+static XrLirFunctionSpec math_lerp_spec(void) {
+    return (XrLirFunctionSpec){.name = math_lerp_symbol, .name_length = sizeof(math_lerp_symbol) - 1,
+        .parameters = math_lerp_parameters, .parameter_count = 3, .result = XR_LIR_F64,
+        .kind = XR_LIR_FUNCTION_EXTERNAL, .extern_kind = XR_LIR_EXTERN_STDLIB_MATH_LERP};
+}
+
+static void test_reject_math_lerp_signature(void) {
+    static const XrLirType wrong_parameters[] = {XR_LIR_F64, XR_LIR_I64, XR_LIR_F64};
+    static const char wrong_symbol[] = "xray_stdlib_math_abs";
+    XrLirFunctionSpec wrong_name = math_lerp_spec();
+    wrong_name.name = wrong_symbol;
+    wrong_name.name_length = sizeof(wrong_symbol) - 1;
+    XrLirFunctionSpec wrong_arity = math_lerp_spec();
+    wrong_arity.parameter_count = 2;
+    XrLirFunctionSpec wrong_parameter = math_lerp_spec();
+    wrong_parameter.parameters = wrong_parameters;
+    XrLirFunctionSpec wrong_result = math_lerp_spec();
+    wrong_result.result = XR_LIR_I64;
+    const XrLirFunctionSpec rejected[] = {wrong_name, wrong_arity, wrong_parameter, wrong_result};
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(*rejected); ++i) {
+        XrLirModule *module = NULL;
+        XrLirFunction external = {0};
+        CHECK(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+        CHECK(xr_lir_declare_function(module, &rejected[i], &external) != XR_LIR_OK && !external.id);
+        xr_lir_module_destroy(module);
+    }
+}
+
+#if defined(XR_RBC_LINKED_MATH_LERP)
+static const XrXirBuiltinScalarBinding *math_lerp_archive_binding(void) {
+    const XrXirBuiltinStdlibModule *module = &xray_stdlib_math_interface;
+    const XrXirBuiltinScalarBinding *binding = NULL;
+    for (uint32_t i = 0; i < module->binding_count; ++i) {
+        const XrXirBuiltinScalarBinding *candidate = &module->bindings[i];
+        CHECK(candidate->function_row < module->function_count);
+        const XrXirBuiltinFunction *function = &module->functions[candidate->function_row];
+        if (function->name.length != sizeof("lerp") - 1 ||
+            memcmp(function->name.bytes, "lerp", sizeof("lerp") - 1)) continue;
+        CHECK(!binding && candidate->abi == XR_XIR_BUILTIN_F64_TERNARY && candidate->entry.ternary);
+        CHECK(function->parameter_count == 3 && !function->result.array && function->result.scalar == XR_XIR_F64);
+        for (uint32_t p = 0; p < function->parameter_count; ++p)
+            CHECK(!function->parameters[p].type.array && function->parameters[p].type.scalar == XR_XIR_F64);
+        binding = candidate;
+    }
+    CHECK(binding);
+    return binding;
+}
+
+static uint64_t read_math_lerp_archive(const XrXirBuiltinScalarBinding *binding, const uint64_t bits[3]) {
+    double arguments[3];
+    memcpy(arguments, bits, sizeof(arguments));
+    double result = binding->entry.ternary(arguments[0], arguments[1], arguments[2]);
+    uint64_t output;
+    memcpy(&output, &result, sizeof(output));
+    return output;
+}
+#endif
+
+static XrRbcProgram *compile_math_lerp(void) {
+    XrLirModule *module = NULL;
+    CHECK(xr_lir_module_create(NULL, &module) == XR_LIR_OK);
+    XrLirFunction external = {0}, entry = {0};
+    XrLirFunctionSpec spec = math_lerp_spec();
+    CHECK(xr_lir_declare_function(module, &spec, &external) == XR_LIR_OK);
+    spec = (XrLirFunctionSpec){.name = "entry", .name_length = sizeof("entry") - 1,
+        .parameters = math_lerp_parameters, .parameter_count = 3, .result = XR_LIR_F64};
+    CHECK(xr_lir_declare_function(module, &spec, &entry) == XR_LIR_OK);
+    CHECK(xr_lir_define_function(module, entry) == XR_LIR_OK);
+    XrLirBlock block = {0};
+    CHECK(xr_lir_add_block(module, entry, NULL, 0, &block) == XR_LIR_OK);
+    CHECK(xr_lir_set_entry(module, entry, block) == XR_LIR_OK);
+    XrLirValue arguments[3] = {0}, result = {0};
+    for (uint32_t i = 0; i < 3; ++i)
+        CHECK(xr_lir_function_parameter(module, entry, i, &arguments[i]) == XR_LIR_OK);
+    const XrLirInstruction call = {.op = XR_LIR_CALL, .type = XR_LIR_F64,
+        .operands = arguments, .operand_count = 3, .callee = external,
+        .source = {.path = "math/math.xr", .path_length = sizeof("math/math.xr") - 1,
+            .line = 1, .column = 1, .end_line = 1, .end_column = 1}};
+    CHECK(xr_lir_emit_value(module, block, &call, &result) == XR_LIR_OK);
+    const XrLirInstruction ret = {.op = XR_LIR_RET, .type = XR_LIR_UNIT, .operands = &result, .operand_count = 1};
+    CHECK(xr_lir_set_terminator(module, block, &ret) == XR_LIR_OK);
+    CHECK(xr_lir_module_finish(module, NULL) == XR_LIR_OK);
+    CHECK(xr_lir_verify(module, NULL) == XR_LIR_OK);
+
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic = {0};
+#if defined(XR_RBC_LINKED_MATH_LERP)
+    CHECK(xr_rbc_compile(module, entry, &program, &diagnostic) == XR_RBC_COMPILE_OK && program);
+    const XrRbcModule *view = xr_rbc_program_view(program);
+    CHECK(view && view->function_count == 1);
+    const XrRbcFunction *function = &view->functions[0];
+    size_t calls = 0;
+    for (size_t pc = 0; pc < function->code_count; ++pc) {
+        uint32_t word = function->code[pc];
+        if ((word & 255u) != XR_RBC_CALLN) continue;
+        uint32_t native = word >> 16, base = (word >> 8) & 255u;
+        CHECK(native < view->native_count && view->natives[native] == XR_RBC_NATIVE_MATH_LERP);
+        CHECK(base + 5 == function->register_count);
+        for (uint32_t n = 0; n < 5; ++n)
+            CHECK(function->register_kinds[base + n] == XR_RBC_CALL_WINDOW);
+        ++calls;
+    }
+    CHECK(calls == 1);
+#else
+    CHECK(xr_rbc_compile(module, entry, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED && !program);
+    CHECK(strstr(diagnostic.message, "native call has no registered runtime leaf"));
+#endif
+    xr_lir_module_destroy(module);
+    return program;
+}
+
+static void test_stdlib_math_lerp(void) {
+    test_reject_math_lerp_signature();
+    XrRbcProgram *program = compile_math_lerp();
+    uint32_t code[7];
+    emit(code, 0, XR_RBC_MOV, 251, 0, 0);
+    emit(code, 1, XR_RBC_MOV, 252, 1, 0);
+    emit(code, 2, XR_RBC_MOV, 253, 2, 0);
+    immediate(code, 3, XR_RBC_LOADI, 254, 0);
+    immediate(code, 4, XR_RBC_CALLN, 250, 0);
+    emit(code, 5, XR_RBC_MOV, 0, 250, 0);
+    emit(code, 6, XR_RBC_RET, 0, 0, 0);
+    XrRbcNativeKind native = XR_RBC_NATIVE_MATH_LERP;
+    XrRbcFunction function = {.code = code, .code_count = 7,
+        .parameter_count = 3, .register_count = 255};
+    XrRbcModule module = {.functions = &function, .function_count = 1,
+        .natives = &native, .native_count = 1};
+    const uint64_t arguments[] = {UINT64_C(0x4000000000000000),
+        UINT64_C(0x4024000000000000), UINT64_C(0x3fd0000000000000)};
+    XrRbcRegisterKind kinds[255] = {XR_RBC_BITS};
+    for (size_t lane = 250; lane < 255; ++lane) kinds[lane] = XR_RBC_CALL_WINDOW;
+    function.register_kinds = kinds;
+    function.register_kind_count = 255;
+#if defined(XR_RBC_LINKED_MATH_LERP)
+    const XrXirBuiltinScalarBinding *binding = math_lerp_archive_binding();
+    static const struct {
+        uint64_t inputs[3], result;
+        bool nan;
+    } vectors[] = {
+        {{UINT64_C(0x4000000000000000), UINT64_C(0x4024000000000000), UINT64_C(0x3fd0000000000000)},
+            UINT64_C(0x4010000000000000), false},
+        {{UINT64_C(0x4014000000000000), UINT64_C(0xc008000000000000), UINT64_C(0x3ff8000000000000)},
+            UINT64_C(0xc01c000000000000), false},
+        /* The product rounds to one. Fusing the final add would produce a negative value. */
+        {{UINT64_C(0xbff0000000000000), UINT64_C(0x3cb0000000000000), UINT64_C(0x3feffffffffffffe)}, 0, false},
+        {{UINT64_C(0x8000000000000000), UINT64_C(0x8000000000000000), UINT64_C(0xbff0000000000000)},
+            UINT64_C(0x8000000000000000), false},
+        {{0, 1, UINT64_C(0x3ff0000000000000)}, 1, false},
+        {{UINT64_C(0x3ff0000000000000), UINT64_C(0x7ff0000000000000), UINT64_C(0x3ff0000000000000)},
+            UINT64_C(0x7ff0000000000000), false},
+        {{UINT64_C(0x3ff0000000000000), UINT64_C(0x7ff0000000000000), 0}, 0, true},
+    };
+    uint64_t result = 0;
+    for (size_t n = 0; n < sizeof(vectors) / sizeof(*vectors); ++n) {
+        CHECK(execute(&module, 0, vectors[n].inputs, 3, &result) == XR_RBC_OK);
+        CHECK(vectors[n].nan
+            ? (result & UINT64_C(0x7fffffffffffffff)) > UINT64_C(0x7ff0000000000000)
+            : result == vectors[n].result);
+        CHECK(result == read_math_lerp_archive(binding, vectors[n].inputs));
+        XrRbcExecution *execution = NULL;
+        CHECK(xr_rbc_program_prepare(program, vectors[n].inputs, 3, &execution) == XR_RBC_OK);
+        XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+        uint64_t lowered = 0;
+        CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK &&
+            xr_rbc_outcome_bits(outcome, &lowered) && lowered == result);
+        xr_rbc_outcome_free(&outcome);
+        CHECK(xr_rbc_execution_free(&execution) == XR_OS_IO_OK);
+    }
+    kinds[250] = XR_RBC_BITS;
+    reject_prepare(&module, 0, arguments, 3);
+    kinds[250] = XR_RBC_CALL_WINDOW;
+    kinds[253] = XR_RBC_BITS;
+    reject_prepare(&module, 0, arguments, 3);
+    kinds[253] = XR_RBC_CALL_WINDOW;
+    function.register_kinds = NULL;
+    function.register_kind_count = 0;
+    reject_prepare(&module, 0, arguments, 3);
+    function.register_kinds = kinds;
+    function.register_kind_count = 255;
+
+    immediate(code, 4, XR_RBC_CALLN, 251, 0);
+    reject_prepare(&module, 0, arguments, 3);
+    immediate(code, 4, XR_RBC_CALLN, 250, 0);
+    immediate(code, 2, XR_RBC_LOADI, 250, 0);
+    reject_prepare(&module, 0, arguments, 3);
+    emit(code, 2, XR_RBC_MOV, 253, 2, 0);
+    immediate(code, 3, XR_RBC_LOADI, 250, 0);
+    reject_prepare(&module, 0, arguments, 3);
+    immediate(code, 3, XR_RBC_LOADI, 254, 0);
+    emit(code, 5, XR_RBC_MOV, 0, 253, 0);
+    reject_prepare(&module, 0, arguments, 3);
+    emit(code, 5, XR_RBC_MOV, 0, 250, 0);
+    immediate(code, 3, XR_RBC_LOADI, 254, 1);
+    result = 91;
+    CHECK(execute(&module, 0, arguments, 3, &result) == XR_RBC_INVALID && result == 91);
+    immediate(code, 3, XR_RBC_LOADI, 254, 0);
+
+    native = (XrRbcNativeKind)XR_RBC_NATIVE_COUNT;
+    reject_prepare(&module, 0, arguments, 3);
+#else
+    reject_prepare(&module, 0, arguments, 3);
+#endif
+    xr_rbc_program_destroy(program);
+}
+
 static void test_spills(void) {
     uint32_t code[5];
     immediate(code,0,XR_RBC_LOADI,0,42);
@@ -1255,6 +1470,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     test_offset_window();
+    test_stdlib_math_lerp();
     test_literal_validation();
     test_cells(); test_sparse_cell_ordinals();
     test_encoding();

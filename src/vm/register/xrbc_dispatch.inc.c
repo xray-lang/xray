@@ -389,8 +389,9 @@ XR_RBC_CASE(CALL) {
 XR_RBC_CASE(CALLN) {
     uint32_t target = instruction >> 16;
     XrRbcNativeKind kind = module->natives[target];
-    uint64_t id = XR_RBC_REG(XR_RBC_A() + (kind == XR_RBC_NATIVE_PRINT_I64 ||
-        kind == XR_RBC_NATIVE_UTC_OFFSET_AT ? 2 : 1));
+    XrRbcNativeShape shape = xr_rbc_native_shape(kind);
+    if (!shape.window_inputs) return XR_RBC_INVALID;
+    uint64_t id = XR_RBC_REG(XR_RBC_A() + shape.window_inputs);
     if (id > UINT32_MAX || id > xrt_locations_count(stack->call_locations))
         return XR_RBC_INVALID;
     switch (kind) {
@@ -404,6 +405,16 @@ XR_RBC_CASE(CALLN) {
         XR_RBC_REG(XR_RBC_A()) = (uint64_t)xrt_clock_monotonic_nanos((uint32_t)id); break;
     case XR_RBC_NATIVE_UTC_OFFSET_AT:
         XR_RBC_REG(XR_RBC_A()) = (uint64_t)xrt_clock_utc_offset_at(xr_rbc_signed(XR_RBC_REG(XR_RBC_A() + 1)), (uint32_t)id); break;
+#if defined(XR_RBC_LINKED_MATH_LERP)
+    case XR_RBC_NATIVE_MATH_LERP: {
+        uint32_t base = XR_RBC_A();
+        double a = xr_rbc_float(XR_RBC_REG(base + 1));
+        double b = xr_rbc_float(XR_RBC_REG(base + 2));
+        double t = xr_rbc_float(XR_RBC_REG(base + 3));
+        XR_RBC_REG(base) = xr_rbc_float_bits(xray_stdlib_math_lerp(a, b, t));
+        break;
+    }
+#endif
     default: return XR_RBC_INVALID;
     }
     XR_RBC_NEXT();

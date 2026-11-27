@@ -106,8 +106,13 @@ typedef enum XrLirExternKind {
     XR_LIR_EXTERN_CLOCK_CPU,
     XR_LIR_EXTERN_CLOCK_MONOTONIC,
     XR_LIR_EXTERN_UTC_OFFSET_AT,
-    XR_LIR_EXTERN_ASSERT_CONDITION
+    XR_LIR_EXTERN_ASSERT_CONDITION,
+    XR_LIR_EXTERN_STDLIB_MATH_LERP
 } XrLirExternKind;
+
+/* The linked scalar leaf has a single admitted symbol and signature. */
+XR_FUNC bool xr_lir_math_lerp_external_signature(const char *, size_t,
+    const XrLirType *, uint32_t, XrLirType);
 
 /* Handles are valid only while their module is alive. Zero IDs are invalid. */
 typedef struct XrLirFunction {

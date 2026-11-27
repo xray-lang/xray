@@ -1406,8 +1406,19 @@ if(_XRAY_STDLIB_PRODUCER_RUNNABLE)
         C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     if(MSVC)
         target_compile_options(xray_stdlib_scalar_export PRIVATE /W4 /WX /utf-8)
+        if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+            target_compile_options(xray_stdlib_scalar_export PRIVATE /clang:-ffp-contract=off)
+        else()
+            target_compile_options(xray_stdlib_scalar_export PRIVATE /fp:precise)
+        endif()
     else()
-        target_compile_options(xray_stdlib_scalar_export PRIVATE -Wall -Wextra -Werror -pedantic)
+        target_compile_options(xray_stdlib_scalar_export PRIVATE -Wall -Wextra -Werror -pedantic -ffp-contract=off)
+    endif()
+    # The producer uses the native runtime through the C emitter. Only the
+    # VM consumes this archive, with a Checked interface for its exact target.
+    if(XRAY_STDLIB_CHECKED_INTERFACE_C)
+        target_link_libraries(xray_register_vm PRIVATE xray_stdlib_scalar_export)
+        target_compile_definitions(xray_register_vm PUBLIC XR_RBC_LINKED_MATH_LERP=1)
     endif()
     add_dependencies(xray xray_stdlib_scalar_export)
 endif()
@@ -1498,6 +1509,7 @@ if(BUILD_TESTS)
     set_tests_properties(commit_message_rules PROPERTIES LABELS "tooling;fast" TIMEOUT 30)
 
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/register_vm.cmake")
+    target_link_libraries(test_register_vm PRIVATE xray_lir_bytecode)
     include("${CMAKE_CURRENT_SOURCE_DIR}/bench/native/native_bench.cmake")
 
     # Exercise public commands and the installed native runtime.
