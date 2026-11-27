@@ -14,7 +14,9 @@ static bool rbc_lir_inline_type(const XrLirModule *module,XrLirType type) {
         (xr_lir_type_view(module,type,&shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_SUM);
 }
 static bool rbc_lir_aggregate_point(const XrLirInstructionView *instruction) {
-    return instruction->op == XR_LIR_FIXED_ARRAY_NEW || instruction->op == XR_LIR_FIXED_ARRAY_GET ||
+    /* Record constructors read field values from their register or spill homes. */
+    return instruction->op == XR_LIR_RECORD_NEW ||
+        instruction->op == XR_LIR_FIXED_ARRAY_NEW || instruction->op == XR_LIR_FIXED_ARRAY_GET ||
         (instruction->op >= XR_LIR_NULLABLE_NONE && instruction->op <= XR_LIR_NULLABLE_UNWRAP);
 }
 
@@ -214,6 +216,8 @@ static bool rbc_lir_aggregate_emit(RbcLirCompiler *c, const XrLirInstructionView
     if (instruction->op >= XR_LIR_NULLABLE_NONE && instruction->op <= XR_LIR_NULLABLE_UNWRAP)
         return rbc_lir_nullable_emit(c, instruction);
     bool construct = instruction->op == XR_LIR_FIXED_ARRAY_NEW;
+    if (!construct && instruction->op != XR_LIR_FIXED_ARRAY_GET)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "aggregate operation has no fixed-array encoding");
     XrRbcAggregateAccess access = {.operation = construct ? XR_RBC_AGGREGATE_NEW : XR_RBC_AGGREGATE_GET,
         .count = construct ? instruction->operand_count : 1};
     if (construct) access.destination = c->aggregate_home[instruction->result];
