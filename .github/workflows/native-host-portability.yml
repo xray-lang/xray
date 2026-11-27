@@ -69,6 +69,89 @@ jobs:
         if: runner.os == 'Windows'
         with:
           arch: x64
+      - name: Prepare a verified Windows compiler cache provider
+        id: windows-cache-provider
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $version = '4.14.3'
+          $archiveHash = 'c845c3d65be81954c75659145a522a793a27586bf940c5dcfe18af33fa1a67dd'
+          $package = "ccache-$version-windows-x86_64"
+          $directory = Join-Path $env:RUNNER_TEMP 'xray-msvc-ccache-provider'
+          $archive = Join-Path $directory "$package.zip"
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/ccache/ccache/releases/download/v$version/$package.zip" -OutFile $archive -TimeoutSec 30
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ine $archiveHash) {
+            throw 'The Windows ccache release archive failed SHA-256 verification'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $directory
+          $ccache = (Join-Path $directory "$package/ccache.exe").Replace('\', '/')
+          $providerVersion = @(& $ccache --version)[0]
+          if ($LASTEXITCODE -ne 0 -or $providerVersion -cne "ccache version $version") {
+            throw 'The verified Windows ccache executable did not report the pinned version'
+          }
+          $cl = (Get-Command cl.exe -CommandType Application).Source
+          $link = (Get-Command link.exe -CommandType Application).Source
+          if ($env:VSCMD_ARG_TGT_ARCH -ne 'x64' -or !$env:VCToolsVersion -or !$env:WindowsSDKVersion) {
+            throw 'The Windows x64 MSVC toolset and SDK could not be identified'
+          }
+          $configuration = @('max_size = 512M', 'compiler_check = content')
+          $configurationPath = Join-Path $directory 'ccache.conf'
+          $configuration | Set-Content -LiteralPath $configurationPath -Encoding utf8
+          $toolchain = [ordered]@{
+            provider = $providerVersion
+            archiveSha256 = $archiveHash
+            configuration = $configuration
+            runnerImage = $env:ImageVersion
+            workspace = $env:GITHUB_WORKSPACE
+            host = $env:VSCMD_ARG_HOST_ARCH
+            target = $env:VSCMD_ARG_TGT_ARCH
+            toolset = $env:VCToolsVersion
+            sdk = $env:WindowsSDKVersion
+            ucrt = $env:UCRTVersion
+            cl = $cl
+            clSha256 = (Get-FileHash -LiteralPath $cl -Algorithm SHA256).Hash
+            linkSha256 = (Get-FileHash -LiteralPath $link -Algorithm SHA256).Hash
+            includes = $env:INCLUDE
+            libraries = $env:LIB
+            libraryPath = $env:LIBPATH
+            clOptions = $env:CL
+            appendedClOptions = $env:_CL_
+            compilerLanguage = $env:VSLANG
+            cmake = @(& cmake --version)[0]
+            ninja = (& ninja --version)
+          }
+          $encoded = $toolchain | ConvertTo-Json -Compress
+          $fingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($encoded))).ToLowerInvariant()
+          New-Item -ItemType Directory -Path current-evidence -Force | Out-Null
+          $toolchain | ConvertTo-Json | Set-Content -LiteralPath current-evidence/msvc-cache-toolchain.json -Encoding utf8
+          @("fingerprint=$fingerprint", "executable=$ccache", "configuration=$configurationPath") >> $env:GITHUB_OUTPUT
+      - name: Restore matching Windows compiler objects
+        id: windows-cache-restore
+        if: runner.os == 'Windows' && steps.windows-cache-provider.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/xray-msvc-ccache-objects
+          key: xray-msvc-objects-v1-${{ runner.arch }}-${{ steps.windows-cache-provider.outputs.fingerprint }}-${{ github.sha }}
+          restore-keys: |
+            xray-msvc-objects-v1-${{ runner.arch }}-${{ steps.windows-cache-provider.outputs.fingerprint }}-
+      - name: Enable the Windows compiler cache for this build
+        id: windows-cache-start
+        if: runner.os == 'Windows' && steps.windows-cache-restore.outcome == 'success'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          CACHE_RESTORED_KEY: ${{ steps.windows-cache-restore.outputs.cache-matched-key }}
+          XRAY_WINDOWS_CCACHE: ${{ steps.windows-cache-provider.outputs.executable }}
+          CCACHE_CONFIGPATH: ${{ steps.windows-cache-provider.outputs.configuration }}
+          CCACHE_DIR: ${{ runner.temp }}/xray-msvc-ccache-objects
+        run: |
+          & $env:XRAY_WINDOWS_CCACHE --zero-stats
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to initialize Windows compiler cache counters' }
+          "Restored Windows object cache key: $env:CACHE_RESTORED_KEY"
+          @("XRAY_WINDOWS_CCACHE=$env:XRAY_WINDOWS_CCACHE", "CCACHE_CONFIGPATH=$env:CCACHE_CONFIGPATH", "CCACHE_DIR=$env:CCACHE_DIR") >> $env:GITHUB_ENV
       - name: Cache Unix compiler objects
         if: runner.os != 'Windows'
         uses: actions/cache@v4
@@ -97,7 +180,13 @@ jobs:
         shell: cmd
         run: |
           chcp 65001 >nul
-          python scripts/ci_build_log.py --log current-evidence/configure.log -- cmake --preset default
+          if defined XRAY_WINDOWS_CCACHE (
+            python scripts/ci_build_log.py --log current-evidence/configure.log -- cmake --preset default "-DXRAY_COMPILER_CACHE=%XRAY_WINDOWS_CCACHE%"
+          ) else (
+            echo Windows compiler cache unavailable. Building directly.
+            python scripts/ci_build_log.py --log current-evidence/configure.log -- cmake --preset default -DXRAY_USE_COMPILER_CACHE=OFF
+          )
+          exit /b %errorlevel%
       - name: Configure Unix Ninja Release
         if: runner.os != 'Windows'
         run: python scripts/ci_build_log.py --log current-evidence/configure.log -- cmake --preset default
@@ -107,6 +196,16 @@ jobs:
         run: |
           chcp 65001 >nul
           python scripts/ci_build_log.py --log current-evidence/build-all.log -- cmake --build build --parallel 4 --target all -- -k 0
+      - name: Record Windows compiler cache statistics
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.windows-cache-start.outcome == 'success' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $statistics = & $env:XRAY_WINDOWS_CCACHE --print-stats --format=json
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to read Windows compiler cache counters' }
+          $statistics | Set-Content -LiteralPath current-evidence/msvc-cache-stats.json -Encoding utf8
+          $stats = ($statistics -join "`n") | ConvertFrom-Json
+          "Windows MSVC objects: $($stats.direct_cache_hit) direct hits, $($stats.preprocessed_cache_hit) preprocessed hits, $($stats.cache_miss) misses"
       - name: Build Unix all without exclusions
         if: runner.os != 'Windows'
         run: python scripts/ci_build_log.py --log current-evidence/build-all.log -- cmake --build build --parallel 4 --target all -- -k 0
@@ -145,6 +244,19 @@ jobs:
         run: |
           chcp 65001 >nul
           python scripts/ci_build_log.py --log current-evidence/workspace-cleanup.log -- ctest --test-dir build --output-on-failure --no-tests=error -R "^(workspace_injected|workspace_production)$"
+      - name: Verify Windows compiler transitive header invalidation
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          chcp 65001 >nul
+          python scripts/ci_build_log.py --log current-evidence/msvc-cache-headers.log -- ctest --test-dir build --output-on-failure --no-tests=error -R "^msvc_ninja_showincludes_dependency_gate$"
+      - name: Save verified Windows compiler objects
+        if: runner.os == 'Windows' && steps.windows-cache-start.outcome == 'success' && steps.windows-cache-restore.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/xray-msvc-ccache-objects
+          key: ${{ steps.windows-cache-restore.outputs.cache-primary-key }}
       - name: Verify Unix pipe closure with unread bytes
         if: runner.os != 'Windows'
         run: >-
