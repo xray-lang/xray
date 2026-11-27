@@ -1,0 +1,9 @@
+fn denominator(value: i64) -> i64 {
+    return value - 7
+}
+
+fn quotient(value: i64, divisor: i64) -> i64 {
+    return value / divisor
+}
+
+print(quotient(84, denominator(7)))

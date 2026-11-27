@@ -13,6 +13,7 @@
  */
 
 #include "xrbc_internal.h"
+#include "xrbc_ctfe.h"
 #include "xrbc_value_code.h"
 #include "xrbc_code_owner.h"
 #include "lir/xlir_string.h"
@@ -1117,3 +1118,5 @@ XR_FUNC const char *xr_rbc_dispatch_name(void) {
     return "switch";
 #endif
 }
+
+#include "xrbc_ctfe.inc.c"

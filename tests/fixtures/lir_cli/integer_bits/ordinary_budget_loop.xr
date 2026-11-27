@@ -1,0 +1,15 @@
+fn advance(total: i64, step: i64) -> i64 {
+    return total + step
+}
+
+fn sumThrough(rounds: i64) -> i64 {
+    var total = 0
+    var step = 1
+    while (step <= rounds) {
+        total = advance(total, step)
+        step = step + 1
+    }
+    return total
+}
+
+print(sumThrough(4096))

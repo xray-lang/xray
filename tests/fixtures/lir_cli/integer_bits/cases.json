@@ -31,5 +31,15 @@
     "exit": 0,
     "stdout": "true\ntrue\ntrue\ntrue\n42\n",
     "stderr": ""
+  },
+  "ordinary_budget_loop": {
+    "exit": 0,
+    "stdout": "8390656\n",
+    "stderr": ""
+  },
+  "ordinary_budget_panic": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "[Uncaught Panic] E0420: division by zero\n"
   }
 }

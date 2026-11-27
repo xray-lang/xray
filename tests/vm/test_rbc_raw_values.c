@@ -8,6 +8,7 @@
  */
 #include "../lir/lir_test_programs.h"
 #include "lir/xlir_state.h"
+#include "vm/register/xrbc_ctfe.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_homes.h"
 #include "shared/xr_pod_state.h"
@@ -174,7 +175,154 @@ static void inline_targets(void) {
     CHECK(xr_rbc_compile(module,root,&program,&diagnostic)==XR_RBC_COMPILE_UNSUPPORTED && !program);
     CHECK(!strcmp(diagnostic.message,"inline value results require an internal typed caller")); xr_lir_module_destroy(module);
 }
+static void ctfe_encode(uint32_t *code, const XrRbcOperands *operations, size_t count) {
+    for (size_t index = 0; index < count; ++index) CHECK(xr_rbc_encode(&code[index], operations[index]));
+}
+
+static bool ctfe_current(void *context) {
+    unsigned *remaining = context;
+    if (!*remaining) return false;
+    --*remaining;
+    return true;
+}
+
+static XrtLocationOwner *ctfe_locations(void) {
+    char path[] = "ctfe-control.xr";
+    XrtSourceLocation points[] = {{path, sizeof(path) - 1, 10, 2, 0, 0},
+                                  {path, sizeof(path) - 1, 20, 4, 0, 0}};
+    XrtLocationOwner *owner = NULL;
+    CHECK(xrt_locations_create(points, 2, &owner) == XRT_LOCATION_OK);
+    memset(path, 'x', sizeof(path));
+    return owner;
+}
+
+static void ctfe_fuel_and_bounds(void) {
+    uint32_t loop[8], add[2];
+    ctfe_encode(loop, (XrRbcOperands[]){{.op=XR_RBC_LOADI, .a=1}, {.op=XR_RBC_MOV, .a=3},
+        {.op=XR_RBC_CALL, .a=2, .immediate=1}, {.op=XR_RBC_ADD, .a=1, .b=1, .c=2},
+        {.op=XR_RBC_SUBI, .immediate=1}, {.op=XR_RBC_GTI}, {.op=XR_RBC_JMP}, {.op=XR_RBC_RET, .a=1}}, 8);
+    CHECK(xr_rbc_jump(&loop[6], 6, 1, 8));
+    ctfe_encode(add, (XrRbcOperands[]){{.op=XR_RBC_ADDI, .a=1}, {.op=XR_RBC_RET, .a=1}}, 2);
+    uint32_t source_ids[] = {1, 1, 1, 1, 1, 1, 2, 1};
+    XrRbcFunction functions[] = {{.code=loop, .code_count=8, .register_count=4, .parameter_count=1,
+                                  .source_ids=source_ids, .source_id_count=8},
+                                 {.code=add, .code_count=2, .register_count=2, .parameter_count=1}};
+    uint64_t arg = 3;
+    XrtLocationOwner *locations = ctfe_locations();
+    XrRbcCtfeRequest request = {.functions=functions, .function_count=2, .arguments=&arg,
+        .argument_count=1, .locations=locations, .code_words=10, .memory_bytes=4096, .fuel=6};
+    XrRbcCtfeOutcome output = {0};
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_OK && output.bits == 6 && !output.locations);
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_INVALID && output.bits == 6);
+    xr_rbc_ctfe_outcome_free(&output);
+
+    request.fuel = 5;
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_FUEL_LIMIT && !output.bits && output.source_id == 1);
+    xr_rbc_ctfe_outcome_free(&output);
+    request.fuel = 4;
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_FUEL_LIMIT && !output.bits && output.source_id == 2);
+    CHECK(xrt_locations_get(output.locations, output.source_id)->line == 20);
+    xr_rbc_ctfe_outcome_free(&output);
+    request.fuel = 0;
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_FUEL_LIMIT && output.source_id == 1);
+    xr_rbc_ctfe_outcome_free(&output);
+
+    request.fuel = 6;
+    request.code_words = 9;
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_CODE_LIMIT && !output.bits && !output.locations);
+    request.code_words = 10;
+    request.memory_bytes = 1;
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_MEMORY_LIMIT && output.source_id == 1);
+    xr_rbc_ctfe_outcome_free(&output);
+    request.memory_bytes = 4096;
+    unsigned polls = 3;
+    XrtHostExecutionControl control = {ctfe_current, &polls};
+    request.control = &control;
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_CANCELLED && !output.bits && output.source_id == 2);
+    xr_rbc_ctfe_outcome_free(&output);
+    xrt_locations_release(locations);
+}
+
+static void ctfe_recursive_growth(void) {
+    uint32_t code[8];
+    ctfe_encode(code, (XrRbcOperands[]){{.op=XR_RBC_EQI}, {.op=XR_RBC_JMP},
+        {.op=XR_RBC_SUBI, .a=2, .immediate=1}, {.op=XR_RBC_CALL, .a=1},
+        {.op=XR_RBC_ADDI, .a=1, .b=1, .immediate=1}, {.op=XR_RBC_RET, .a=1},
+        {.op=XR_RBC_LOADI, .a=1}, {.op=XR_RBC_RET, .a=1}}, 8);
+    CHECK(xr_rbc_jump(&code[1], 1, 6, 8));
+    uint32_t source_ids[] = {1, 1, 1, 2, 1, 1, 1, 1};
+    XrRbcFunction function = {.code=code, .code_count=8, .register_count=3, .parameter_count=1,
+                              .source_ids=source_ids, .source_id_count=8};
+    uint64_t arg = 50;
+    XrtLocationOwner *locations = ctfe_locations();
+    XrRbcCtfeRequest request = {.functions=&function, .function_count=1, .arguments=&arg,
+        .argument_count=1, .locations=locations, .code_words=8, .memory_bytes=256, .fuel=51};
+    XrRbcCtfeOutcome output = {0};
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_MEMORY_LIMIT && output.source_id == 2);
+    xr_rbc_ctfe_outcome_free(&output);
+    request.memory_bytes = 16384;
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_OK && output.bits == arg);
+    xr_rbc_ctfe_outcome_free(&output);
+    xrt_locations_release(locations);
+}
+
+static void ctfe_admission_and_panic(void) {
+    uint32_t code[2], output_call[2];
+    ctfe_encode(code, (XrRbcOperands[]){{.op=XR_RBC_DIV, .c=1}, {.op=XR_RBC_RET}}, 2);
+    ctfe_encode(output_call, (XrRbcOperands[]){{.op=XR_RBC_CALLN}, {.op=XR_RBC_RET0}}, 2);
+    uint32_t source_ids[] = {2, 1};
+    XrRbcFunction functions[] = {{.code=code, .code_count=2, .register_count=2, .parameter_count=2,
+                                  .source_ids=source_ids, .source_id_count=2},
+                                {.code=output_call, .code_count=2, .register_count=3,
+                                  .source_ids=source_ids, .source_id_count=2}};
+    XrtLocationOwner *locations = ctfe_locations();
+    XrRbcNativeKind native = XR_RBC_NATIVE_PRINT_I64;
+    XrRbcModule ordinary = {.functions=functions, .function_count=2, .natives=&native, .native_count=1};
+    uint64_t args[] = {(uint64_t)INT64_MIN, 0};
+    XrRbcCtfeRequest request = {.functions=functions, .function_count=2, .arguments=args,
+        .argument_count=2, .locations=locations, .code_words=4, .memory_bytes=4096, .fuel=1};
+    XrRbcCtfeOutcome output = {0};
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_UNSUPPORTED && output.source_id == 2 && !output.panic_code);
+    xr_rbc_ctfe_outcome_free(&output);
+    request.function_count = 1;
+    source_ids[0] = 3;
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_INVALID && !output.locations);
+    source_ids[0] = 2;
+    uint32_t division = code[0];
+    CHECK(xr_rbc_encode(code, (XrRbcOperands){.op=XR_RBC_FADD, .c=1}));
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_UNSUPPORTED && output.source_id == 2);
+    xr_rbc_ctfe_outcome_free(&output);
+    code[0] = division;
+    code[1] = XR_RBC_JMP | (1u << 8);
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_INVALID && !output.locations);
+    code[1] = XR_RBC_RET;
+
+    CHECK(xr_rbc_ctfe_evaluate(&request, &output) == XR_RBC_CTFE_PANIC && output.panic_code == 420 && !output.bits);
+    XrRbcCtfeOutcome success = {0};
+    args[1] = UINT64_MAX;
+    CHECK(xr_rbc_ctfe_evaluate(&request, &success) == XR_RBC_CTFE_OK && success.bits == (uint64_t)INT64_MIN);
+    xr_rbc_ctfe_outcome_free(&success);
+    XrRbcExecution *execution = NULL;
+    // Ordinary preparation also admits the unreachable native caller.
+    CHECK(xr_rbc_module_prepare(&ordinary, 0, args, 2, locations, &execution) == XR_RBC_OK);
+    XrRbcOutcome *result = xr_rbc_execution_run(execution);
+    uint64_t bits = 0;
+    CHECK(xr_rbc_outcome_bits(result, &bits) && bits == (uint64_t)INT64_MIN);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_outcome_free(&result);
+
+    xrt_locations_release(locations);
+    memset(code, 0, sizeof(code));
+    memset(source_ids, 0, sizeof(source_ids));
+    const XrtSourceLocation *point = xrt_locations_get(output.locations, output.source_id);
+    CHECK(point && point->line == 20 && point->column == 4 && point->path_length == 15 &&
+        memcmp(point->path, "ctfe-control.xr", 15) == 0);
+    xr_rbc_ctfe_outcome_free(&output);
+    CHECK(!output.bits && !output.source_id && !output.panic_code && !output.locations);
+}
+
 int main(void) {
     scalar_and_mapping(); inline_targets(); state_code_retirement(); scalar_entry_receives_state_descriptions();
+    ctfe_fuel_and_bounds(); ctfe_recursive_growth(); ctfe_admission_and_panic();
     puts("raw CodeImage State metadata and independent prepare passed"); return 0;
 }

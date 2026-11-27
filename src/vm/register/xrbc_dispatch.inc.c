@@ -338,6 +338,9 @@ XR_RBC_CASE(JMP)
 xr_rbc_jump: {
     uint32_t bits = instruction >> 8;
     int32_t offset = bits <= XR_RBC_JUMP_MAX ? (int32_t) bits : (int32_t) bits - 16777216;
+#ifdef XR_RBC_CTFE_METERED
+    if (offset < 0 && !rbc_ctfe_charge(run, XR_RBC_SOURCE())) return XR_RBC_INVALID;
+#endif
     // Preparation checked the target; unsigned addition also handles backedges.
     pc += (size_t) offset;
     XR_RBC_NEXT();
@@ -346,6 +349,12 @@ XR_RBC_CASE(CALL) {
     uint32_t target = instruction >> 16;
     const XrRbcFunction *callee = &module->functions[target];
     size_t base = frame->base + XR_RBC_A() + 1;
+#ifdef XR_RBC_CTFE_METERED
+    uint32_t source = XR_RBC_SOURCE();
+    if (!rbc_ctfe_charge(run, source) || !rbc_ctfe_call_reserve(run, base, callee, source))
+        return XR_RBC_INVALID;
+    stack->frames[stack->depth - 1].pc = pc;
+#else
     frame->pc = pc;
     // Admission places the complete argument window at the caller's top.
     // Its end already fits the allocated stack, so this base cannot overflow.
@@ -355,13 +364,18 @@ XR_RBC_CASE(CALL) {
          callee->cell_count > stack->cell_capacity - stack->cell_count ||
          callee->spill_count > stack->spill_capacity - stack->spill_count) &&
         !xr_rbc_call_reserve(stack, base, callee)) return XR_RBC_OUT_OF_MEMORY;
+#endif
     // Reserve may move every stack array. Rebind both cached pointers before
     // touching the new frame or its arguments, including on partial growth.
     frame = &stack->frames[stack->depth++];
     *frame = (XrRbcFrame){target, 0, base, XR_RBC_A(), stack->cell_count, 0, stack->spill_count, 0};
     xr_rbc_cells_begin(stack,frame->cell_base,callee->cell_count);
     registers = stack->slots + base;
+#ifdef XR_RBC_CTFE_METERED
+    rbc_ctfe_clear(registers, callee);
+#else
     xr_rbc_entry_clear(registers, &entries[target]);
+#endif
     if (callee->reference_spill_count)
         memset(stack->spills + stack->spill_count, 0, callee->reference_spill_count * sizeof(*stack->spills));
     stack->cell_count += callee->cell_count;
