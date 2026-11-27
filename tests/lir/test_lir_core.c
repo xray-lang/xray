@@ -418,13 +418,14 @@ static void directory_cleanup_requires_a_complete_exit(void) {
 static void directory_next_requires_exact_successors(void) {
     enum { COMPLETE, NO_FRAME, WRONG_SOURCE, WRONG_CAPTURE, WRONG_PRIMARY, LOOP,
         LOOP_NOT_RETIRED, LOOP_EXIT_WRONG_SOURCE, LOOP_SECOND_NEXT, LOOP_RETIRED_CELL, LOOP_LIVE_CELL,
-        LOOP_CELL_CLEANUP, LOOP_NAME, LOOP_NAME_ON_EOF };
+        LOOP_CELL_CLEANUP, LOOP_CELL_DOUBLE_DROP, LOOP_NAME, LOOP_NAME_ON_EOF };
     const XrLirSource read = {"cleanup.xr", 10, 8, 12, 8, 12};
     const XrLirSource close = {"cleanup.xr", 10, 5, 9, 5, 9};
     const XrLirSource returned = {"cleanup.xr", 10, 8, 5, 8, 25};
     for (unsigned fault = COMPLETE; fault <= LOOP_NAME_ON_EOF; ++fault) {
         bool loop = fault >= LOOP;
-        bool cell_test = fault == LOOP_RETIRED_CELL || fault == LOOP_LIVE_CELL || fault == LOOP_CELL_CLEANUP;
+        bool live_cell = fault == LOOP_LIVE_CELL || fault == LOOP_CELL_CLEANUP || fault == LOOP_CELL_DOUBLE_DROP;
+        bool cell_test = fault == LOOP_RETIRED_CELL || live_cell;
         XrLirModule *m = NULL;
         if (cell_test) OK(xr_lir_array_module_create(NULL, &m));
         else OK(xr_lir_module_create(NULL, &m));
@@ -541,7 +542,7 @@ static void directory_next_requires_exact_successors(void) {
                 .edges={{some,forwards ? success : NULL,forwards},{eof,forwards ? success : NULL,forwards}}}));
             if (fault == LOOP_EXIT_WRONG_SOURCE) step.source = read;
             OK(xr_lir_emit_value(m, eof, &step, &success[1]));
-            if (fault == LOOP_LIVE_CELL || fault == LOOP_CELL_CLEANUP) OK(xr_lir_emit_effect(m, eof, &drop));
+            if (live_cell) OK(xr_lir_emit_effect(m, eof, &drop));
             OK(xr_lir_emit_effect(m, eof, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_RETURN_GUARD,
                 .type=XR_LIR_UNIT,.operands=&success[1],.operand_count=1,.source=returned}));
             OK(xr_lir_set_terminator(m, eof, &(XrLirInstruction){.op=XR_LIR_RET,.type=XR_LIR_UNIT,
@@ -554,7 +555,8 @@ static void directory_next_requires_exact_successors(void) {
                 .operands=success,.operand_count=1,.source=returned}));
         }
         if (fault == WRONG_PRIMARY) failed[0] = failed[1];
-        if (fault == LOOP_CELL_CLEANUP) OK(xr_lir_emit_effect(m, failure, &drop));
+        if (fault == LOOP_CELL_CLEANUP || fault == LOOP_CELL_DOUBLE_DROP) OK(xr_lir_emit_effect(m, failure, &drop));
+        if (fault == LOOP_CELL_DOUBLE_DROP) OK(xr_lir_emit_effect(m, failure, &drop));
         OK(xr_lir_set_terminator(m, failure, &(XrLirInstruction){.op=XR_LIR_HOST_DIRECTORY_FAIL,
             .type=XR_LIR_UNIT,.operands=failed,.operand_count=2,.source=read}));
 
@@ -565,6 +567,8 @@ static void directory_next_requires_exact_successors(void) {
             CHECK(verified == XR_LIR_OK);
         else if (fault == LOOP_LIVE_CELL) CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,
             "directory exit requires retired Managed Cells"));
+        else if (fault == LOOP_CELL_DOUBLE_DROP) CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,
+            "Managed Cell use follows release or precedes initialization"));
         else CHECK(verified == XR_LIR_VERIFY_ERROR && strstr(diagnostic.message,
             fault == LOOP_NOT_RETIRED ? "Managed owner is not released" : "cleanup frontier"));
         xr_lir_module_destroy(m);

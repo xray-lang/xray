@@ -144,6 +144,41 @@ export fn directoryProbeLoopLiveArray(token: i64) -> i64 {
     return -1
 }
 
+export fn directoryProbeLiveArrayIfAbsent(token: i64) -> i64 {
+    var names: Array<string> = ["marker"]
+    defer { __dirClose(token) }
+    var count = 0
+    while (true) {
+        const name = __dirNext(token)
+        if (name == null) { return count }
+        count = count + len(names)
+    }
+    return -1
+}
+
+export fn directoryProbeLiveArrayIfPresent(token: i64) -> i64 {
+    var names: Array<string> = ["marker"]
+    defer { __dirClose(token) }
+    var count = 0
+    while (true) {
+        const name = __dirNext(token)
+        if (name != null) { count = count + len(names) }
+        else { return count }
+    }
+    return -1
+}
+
+export fn directoryProbeLoopLiveClosePair(first: i64, second: i64) -> i64 {
+    var names: Array<string> = ["marker"]
+    defer { __dirClose(first) }
+    defer { __dirClose(second) } // live Array close-only failure
+    while (true) {
+        const name = __dirNext(first)
+        if (name == null) { return len(names) }
+    }
+    return -1
+}
+
 export fn directoryProbeLoopWrite(token: i64) -> i64 {
     defer { __dirClose(token) }
     var count = 0

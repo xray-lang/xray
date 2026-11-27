@@ -3,3 +3,7 @@ import path
 
 print(io.directoryProbeLoopLiveArray(io.directoryProbeOpen(path.Path("one"))))
 print(io.directoryProbeLoopLiveArray(io.directoryProbeOpen(path.Path("empty"))))
+print(io.directoryProbeLiveArrayIfAbsent(io.directoryProbeOpen(path.Path("one"))))
+print(io.directoryProbeLiveArrayIfAbsent(io.directoryProbeOpen(path.Path("empty"))))
+print(io.directoryProbeLiveArrayIfPresent(io.directoryProbeOpen(path.Path("one"))))
+print(io.directoryProbeLiveArrayIfPresent(io.directoryProbeOpen(path.Path("empty"))))
