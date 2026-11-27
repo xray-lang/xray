@@ -785,15 +785,15 @@ def string_gate_receipt(args, identity):
 def merged_string_gate(receipts, commit, blocks):
     """Reconstruct the full gate from three ordered Windows runner receipts."""
     by_shard = {}
-    hosts = set()
     for receipt in receipts:
         if not isinstance(receipt, dict):
             raise ValueError("invalid String gate receipt")
         shard, host = receipt.get("shard"), receipt.get("host")
         if type(shard) is not int or shard not in STRING_GATE_SHARDS or shard in by_shard:
             raise ValueError(f"invalid or duplicate String gate shard: {shard!r}")
-        if not isinstance(host, str) or not host.strip() or host in hosts:
-            raise ValueError(f"missing or repeated Windows host in String gate shard {shard}")
+        # Separate hosted VMs can report the same hostname.
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError(f"missing Windows hostname in String gate shard {shard}")
         identity = receipt.get("identity")
         compiler = receipt.get("compiler_sha256")
         python = receipt.get("python_version")
@@ -806,7 +806,6 @@ def merged_string_gate(receipts, commit, blocks):
                 not isinstance(python, str) or not python.strip()):
             raise ValueError(f"invalid build or toolchain identity for String gate shard {shard}")
         by_shard[shard] = receipt
-        hosts.add(host)
     if set(by_shard) != set(STRING_GATE_SHARDS):
         raise ValueError("missing String gate shard")
 
@@ -997,6 +996,9 @@ def main():
             receipts = [json.loads(path.read_text(encoding="utf-8")) for path in args.merge_string_gate_shards]
             gate = merged_string_gate(receipts, commit, args.samples)
         except (OSError, ValueError) as error:
+            from ci_build_log import escape_message
+
+            print(f"::error title=Windows String gate receipt::{escape_message(str(error))}")
             sys.exit(str(error))
         args.work.mkdir(parents=True, exist_ok=True)
         result = {"commit": commit, "string_gate": gate}

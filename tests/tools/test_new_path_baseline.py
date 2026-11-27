@@ -145,6 +145,8 @@ class StringBaselineTests(unittest.TestCase):
     def test_windows_shards_preserve_the_complete_ratio_gate(self):
         commit = "a" * 40
         receipts = windows_shard_receipts(commit)
+        for receipt in receipts:
+            receipt["host"] = "shared-windows-runner-name"
         merged = BASELINE.merged_string_gate(list(reversed(receipts)), commit, 6)
         self.assertEqual(merged, BASELINE.string_performance_gate(passing_samples(6), 6))
         self.assertEqual(merged["status"], "PASS")
@@ -166,7 +168,8 @@ class StringBaselineTests(unittest.TestCase):
         failures = {
             "missing shard": [first, second],
             "duplicate shard": [first, second, last, first],
-            "duplicate host": [first, second, dict(last, host=first["host"])],
+            "missing hostname": [first, second, dict(last, host=None)],
+            "blank hostname": [first, second, dict(last, host="  ")],
             "wrong SHA": [dict(first, identity=dict(identity, commit="b" * 40)), second, last],
             "wrong target": [dict(first, identity=dict(identity, target="linux-x86_64")), second, last],
             "dirty CLI": [dict(first, identity=dict(identity, dirty=True)), second, last],
@@ -178,6 +181,22 @@ class StringBaselineTests(unittest.TestCase):
         for name, receipts in failures.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
                 BASELINE.merged_string_gate(receipts, commit, 6)
+
+    def test_windows_merge_annotates_invalid_receipts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = pathlib.Path(directory)
+            receipt = work / "receipt.json"
+            receipt.write_text('{"shard": 1}\n', encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts/new_path_baseline.py"), "--root", str(ROOT),
+                 "--work", str(work), "--samples", "6", "--merge-string-gate-shards", str(receipt)],
+                capture_output=True, text=True, timeout=30,
+            )
+            message = "missing Windows hostname in String gate shard 1"
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout.strip(), f"::error title=Windows String gate receipt::{message}")
+            self.assertEqual(result.stderr.strip(), message)
+            self.assertFalse((work / "string-gate.json").exists())
 
     def test_windows_shards_reject_failed_or_inexact_functional_prechecks(self):
         commit = "a" * 40
