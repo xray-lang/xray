@@ -1,0 +1,3 @@
+enum Failure { Bad }
+fn maybe() throws(Failure)->i64{return 42}
+try { print((try? maybe()) ?? 0) } catch(e: Failure) { try { print(1) } catch(inner) {} }

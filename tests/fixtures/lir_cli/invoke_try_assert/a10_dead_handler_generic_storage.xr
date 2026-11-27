@@ -1,0 +1,12 @@
+enum Failure { Bad }
+fn maybe() throws(Failure) -> i64 { return 42 }
+fn identity<T>(value: T) -> T { return value }
+print(identity<i64>(1))
+try { print((try? maybe()) ?? 0) }
+catch (e: Failure) {
+    print(identity<i64>(2))
+    print(identity<i64>(3))
+    print(identity<i64>(4))
+}
+print(identity<i64>(5))
+print(identity<i64>(6))

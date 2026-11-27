@@ -22,5 +22,23 @@
   },
   "redundant": {
     "source_error": ":5:7: error: E0336: try expression has no business-error source; remove the marker and preserve the expression"
+  },
+  "markers": {
+    "exit": 0,
+    "stdout": "42\n42\n42\n42\n42\n",
+    "stderr": ""
+  },
+  "a10_consumed_sources": {
+    "exit": 0,
+    "stdout": "42\n42\nalive\n",
+    "stderr": ""
+  },
+  "a10_dead_handler_generic_storage": {
+    "exit": 0,
+    "stdout": "1\n42\n5\n6\n",
+    "stderr": ""
+  },
+  "a10_dead_handler_redundant": {
+    "source_error": ":3:56: error: E0336: try body has no business-error source; remove or revise the ordinary catch boundary, preserving its handler logic"
   }
 }

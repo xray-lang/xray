@@ -138,8 +138,10 @@ def main() -> None:
             if checked[0] != 1 or checked[1] or not lines or not lines[0].endswith(expected):
                 failures.append((first_name, "Source diagnostic", checked, expected))
             vm = vm_results[first_name]
-            if vm != checked or emitted != checked or generated.exists():
-                failures.append((first_name, "both backends must preserve the Source refusal", checked, vm, emitted))
+            built = build_native(label, source, executable)
+            if vm != checked or emitted != checked or built != checked or generated.exists() or executable.exists():
+                failures.append((first_name, "both backends must preserve the Source refusal",
+                                 checked, vm, emitted, built))
             continue
         if lowering_error is not None:
             expected = (1, b"", f"{source}{lowering_error}\n".encode("utf-8"))

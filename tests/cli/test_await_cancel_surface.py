@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -28,6 +29,15 @@ fn waiting(ready: Channel<i64>) throws(Failure) -> i64 {
     return 7
 }
 '''
+
+INVOKE_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/lir_cli/invoke_try_assert"
+INVOKE_CASES = json.loads((INVOKE_FIXTURES / "cases.json").read_text(encoding="utf-8"))
+
+
+def invoke_case(name: str) -> tuple[Path, str, int, str]:
+    case = INVOKE_CASES[name]
+    return INVOKE_FIXTURES / f"{name}.xr", case["stdout"], case["exit"], case["stderr"]
+
 
 CASES = {
     "never": ('''fn value() -> i64 { return 42 }
@@ -160,21 +170,7 @@ match(ch.recv()) { Recv.Value { value } => print(value), _ => assert(false), }
 }
 main()
 ''', "select-cleanup\n", 1, "[Uncaught Panic] E0702: cannot send on a closed channel\n"),
-    "markers": ('''enum Failure { Bad }
-fn value() -> i64 { return 42 }
-fn maybe() throws(Failure) -> i64 { return 42 }
-fn generic<E: Error>(action: fn() throws(E) -> i64) throws(E) -> i64 {
-    return try action()
-}
-fn main() throws(Failure) {
-    print(try maybe())
-    print((try? maybe()) ?? 0)
-    print(try! maybe())
-    try { print(maybe()) } catch(e) { print("unexpected") }
-    print(generic<Never>(value))
-}
-try main()
-''', "42\n42\n42\n42\n42\n", 0, ""),
+    "markers": invoke_case("markers"),
     "timeout_success": ('''fn value() -> i64 { return 42 }
 var task = go value()
 print(try Task.timeout(task, 100))
@@ -258,14 +254,7 @@ try { throw Failure.Bad }
 catch (e: Failure) { print("business") }
 catch panic { print("unexpected") }
 ''', "business\n", 0, ""),
-    "a10_consumed_sources": ('''enum Failure { Bad }
-fn maybe() throws(Failure) -> i64 { return 42 }
-try { print((try? maybe()) ?? 0) } catch (e: Failure) { print("unexpected") }
-try { print(try! maybe()) } catch (e: Failure) { print("unexpected") }
-try { try { maybe() } catch (e: Failure) {} }
-catch (e: Failure) { print("unexpected") }
-print("alive")
-''', "42\n42\nalive\n", 0, ""),
+    "a10_consumed_sources": invoke_case("a10_consumed_sources"),
     "a11_generic_business": ('''enum Failure { Bad }
 fn maybe() throws(Failure) -> i64 { return 42 }
 fn generic<E: Error>(action: fn() throws(E) -> i64) throws(E) -> i64 {
@@ -273,19 +262,7 @@ fn generic<E: Error>(action: fn() throws(E) -> i64) throws(E) -> i64 {
 }
 print(try generic<Failure>(maybe))
 ''', "42\n", 0, ""),
-    "a10_dead_handler_generic_storage": ('''enum Failure { Bad }
-fn maybe() throws(Failure) -> i64 { return 42 }
-fn identity<T>(value: T) -> T { return value }
-print(identity<i64>(1))
-try { print((try? maybe()) ?? 0) }
-catch (e: Failure) {
-    print(identity<i64>(2))
-    print(identity<i64>(3))
-    print(identity<i64>(4))
-}
-print(identity<i64>(5))
-print(identity<i64>(6))
-''', "1\n42\n5\n6\n", 0, ""),
+    "a10_dead_handler_generic_storage": invoke_case("a10_dead_handler_generic_storage"),
     "a12_declared_indirect": ('''enum Failure { Bad }
 fn maybe() throws(Failure) -> i64 { return 42 }
 var action: fn() throws(Failure) -> i64 = maybe
@@ -398,7 +375,7 @@ REJECTED = {
     "a07_panic_only_undeclared": "enum Failure { Bad }\nfn fail() throws(Failure){throw Failure.Bad}\nfn relay(){try { fail() } catch panic {}}\nrelay()\n",
     "a09_handler_only": "enum Failure { Bad }\nfn f() throws(Failure){try { print(1) } catch(e){throw Failure.Bad}}\ntry f()\n",
     "a11_caller_never": "fn value()->i64{return 42}\nfn generic<E: Error>(action:fn() throws(E)->i64) throws(E)->i64{return try action()}\nprint(try generic<Never>(value))\n",
-    "a10_dead_handler_redundant": "enum Failure { Bad }\nfn maybe() throws(Failure)->i64{return 42}\ntry { print((try? maybe()) ?? 0) } catch(e: Failure) { try { print(1) } catch(inner) {} }\n",
+    "a10_dead_handler_redundant": INVOKE_FIXTURES / "a10_dead_handler_redundant.xr",
     "a13_explicit_skips_default": "enum Failure { Bad }\nfn read() throws(Failure)->i64{throw Failure.Bad}\nfn value(x:i64=try read())->i64{return x}\nprint(try value(42))\n",
     "a14_panic_scope": "try scope { go fn(){assert(false)}() }\n",
     "a14_cancel_scope": "try scope { var task=go fn(){}(); task.cancel() }\n",
@@ -419,6 +396,13 @@ REJECTION_DIAGNOSTICS = {
 }
 
 
+def case_source(source: str | Path, temporary: Path) -> Path:
+    if isinstance(source, Path):
+        return source
+    temporary.write_text(source, encoding="utf-8")
+    return temporary
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", type=Path, required=True)
@@ -433,25 +417,29 @@ def main() -> int:
         for name, code in REJECTED.items():
             if args.case and args.case != name:
                 continue
-            source = Path(directory) / f"rejected_{name}.xr"
-            source.write_text(code, encoding="utf-8")
+            source = case_source(code, Path(directory) / f"rejected_{name}.xr")
             result = subprocess.run([str(binary), "check", str(source)], cwd=args.root,
                                     env=env, capture_output=True, timeout=30)
-            diagnostic = REJECTION_DIAGNOSTICS.get(name,
-                b"E0330:" if name.endswith("missing_try") else b"E0336:")
+            if isinstance(code, Path):
+                diagnostic = (source.name + INVOKE_CASES[name]["source_error"]).encode("utf-8")
+                lines = result.stderr.splitlines()
+                matches = bool(lines and lines[0].endswith(diagnostic))
+            else:
+                diagnostic = REJECTION_DIAGNOSTICS.get(name,
+                    b"E0330:" if name.endswith("missing_try") else b"E0336:")
+                matches = diagnostic in result.stderr
             code_matches = name not in ("a05_mixed_without_error", "a06_inner_try_send") or b"E0336:" in result.stderr
-            if result.returncode != 1 or result.stdout or diagnostic not in result.stderr or not code_matches:
+            if result.returncode != 1 or result.stdout or not matches or not code_matches:
                 failures.append(f"{name}: expected {diagnostic!r}, got {result.returncode}, {result.stderr!r}")
             else:
                 print(f"PASS {args.engine} rejected_{name}")
         for name, (code, stdout, status, stderr) in CASES.items():
             if args.case and args.case != name:
                 continue
-            source = Path(directory) / f"{name}.xr"
-            source.write_text(code, encoding="utf-8")
+            source = case_source(code, Path(directory) / f"{name}.xr")
             command = [str(binary), "run", str(source)]
             if args.engine == "native":
-                executable = source.with_suffix(".exe" if os.name == "nt" else "")
+                executable = Path(directory) / (name + (".exe" if os.name == "nt" else ""))
                 built = subprocess.run([str(binary), "build", str(source), "-o", str(executable)],
                                        cwd=args.root, env=env, capture_output=True, timeout=90)
                 if built.returncode:
