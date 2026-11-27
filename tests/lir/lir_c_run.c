@@ -17,9 +17,30 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Fixtures name a unique function in their already closed program. Module
+ * selection for a build producer must instead use Checked authority. */
+static XrLirFunction fixture_export(const XrLirModule *module, const char *name) {
+    XrLirFunction selected = {0};
+    size_t length = strlen(name);
+    for (uint32_t i = 0; i < xr_lir_function_count(module); ++i) {
+        XrLirFunction function = {0};
+        XrLirFunctionView view = {0};
+        if (xr_lir_function_at(module, i, &function) != XR_LIR_OK ||
+            xr_lir_function_view(module, function, &view) != XR_LIR_OK)
+            return (XrLirFunction){0};
+        const char *separator = memchr(view.name, '_', view.name_length);
+        if (!separator || view.name_length - (size_t)(separator + 1 - view.name) != length ||
+            memcmp(separator + 1, name, length))
+            continue;
+        if (selected.id) return (XrLirFunction){0};
+        selected = function;
+    }
+    return selected;
+}
+
 int main(int argc, char **argv) {
     bool optimize = false, test_plan = false, valid = argc >= 3 && argc <= 8;
-    const char *stdlib = NULL, *test_name = NULL, *session_name = NULL;
+    const char *stdlib = NULL, *test_name = NULL, *session_name = NULL, *export_name = NULL;
     for (int i = 3; i < argc; ++i) {
         if (!strcmp(argv[i], "--optimize") && !optimize) optimize = true;
         else if (!strcmp(argv[i], "--stdlib") && !stdlib && i + 1 < argc) stdlib = argv[++i];
@@ -27,11 +48,15 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--test-plan") && !test_plan) test_plan = true;
         else if (!strcmp(argv[i], "--test-session") && !session_name && i + 1 < argc)
             session_name = argv[++i];
+        else if (!strcmp(argv[i], "--scalar-export") && !export_name && i + 1 < argc)
+            export_name = argv[++i];
         else valid = false;
     }
-    if (!valid || (test_plan && test_name) || (session_name && (test_plan || test_name))) {
+    if (!valid || (test_plan && test_name) || (session_name && (test_plan || test_name)) ||
+        (export_name && (session_name || test_plan || test_name))) {
         fputs("usage: lir_c_run <absolute-source.xr> <output.c> [--optimize] "
-              "[--stdlib <directory>] [--test NAME | --test-plan | --test-session NAME]\n", stderr);
+              "[--stdlib <directory>] [--test NAME | --test-plan | --test-session NAME | "
+              "--scalar-export <fixture-function>]\n", stderr);
         return 2;
     }
     int result = 1;
@@ -74,7 +99,10 @@ int main(int argc, char **argv) {
         XrLirCRequest request = {entry.module, entry, resources, argv[1], NULL};
         XrLirCDiagnostic diagnostic = {0};
         XrLirCStatus emission;
-        if (session_name)
+        if (export_name) {
+            request.entry = fixture_export(lowered.module, export_name);
+            emission = xr_lir_emit_c_scalar_export(&request, "xray_stdlib_test_export", &output, &diagnostic);
+        } else if (session_name)
             emission = xr_lir_emit_c_test_session(&request, actions, action_count, &output, &diagnostic);
         else if (test_name || test_plan)
             emission = xr_lir_emit_c_standalone(&request, &output, &diagnostic);

@@ -505,6 +505,46 @@ static void division_admission(unsigned kind, XrLirOp op, const char *path) {
     module = NULL;
     xr_compile_resources_release(r);
 }
+static void scalar_export_publication(void) {
+    OK(xr_lir_module_create(NULL, &module));
+    XrLirType parameters[] = {XR_LIR_I64, XR_LIR_I64};
+    XrLirFunction definition = function("linked scalar", parameters, 2, XR_LIR_I64);
+    XrLirBlock b = block(definition, NULL, 0);
+    OK(xr_lir_set_entry(module, definition, b));
+    XrLirValue left = {0}, right = {0};
+    OK(xr_lir_function_parameter(module, definition, 0, &left));
+    OK(xr_lir_function_parameter(module, definition, 1, &right));
+    ret(b, operation(b, XR_LIR_ADD, XR_LIR_I64, left, right));
+    OK(xr_lir_module_finish(module, NULL));
+
+    XrCompileResources *r = resources();
+    XrLirCRequest request = {module, definition, r, "linked-scalar.xr", NULL};
+    XrLirCOutput output = {0};
+    XrLirCDiagnostic diagnostic = {0};
+    CHECK(xr_lir_emit_c(&request, &output, &diagnostic) == XR_LIR_C_BAD_ARGUMENT);
+    CHECK(!output.bytes && !output.length);
+    const char *invalid[] = {NULL, "", "xray_stdlib_", "main", "xray_stdlib_f;void"};
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+        CHECK(xr_lir_emit_c_scalar_export(&request, invalid[i], &output, &diagnostic) ==
+              XR_LIR_C_BAD_ARGUMENT);
+        CHECK(diagnostic.message[0] && !output.bytes && !output.length && !output.entry_result);
+    }
+    static const char symbol[] = "xray_stdlib_test_sum";
+    CHECK(xr_lir_emit_c_scalar_export(&request, symbol, &output, &diagnostic) == XR_LIR_C_OK);
+    CHECK(output.entry_result == XR_LIR_I64 && output.bytes && output.length);
+    char *published = output.bytes;
+    size_t published_length = output.length;
+    CHECK(xr_lir_emit_c_scalar_export(&request, symbol, &output, &diagnostic) ==
+          XR_LIR_C_BAD_ARGUMENT);
+    CHECK(output.bytes == published && output.length == published_length);
+    xr_lir_module_destroy(module);
+    module = NULL;
+    xr_compile_resources_release(r);
+    CHECK(strstr(output.bytes, "int64_t xray_stdlib_test_sum(int64_t p0, int64_t p1)") &&
+          !strstr(output.bytes, "xray_lir_entry") && !strstr(output.bytes, "xrt_"));
+    xr_lir_c_output_free(&output);
+}
+
 int main(int argc, char **argv) {
     if (argc == 3) {
         unsigned kind, opcode; char extra;
@@ -518,6 +558,7 @@ int main(int argc, char **argv) {
     }
     CHECK(argc == 1);
     nullable_float_scalar_transport();
+    scalar_export_publication();
     const char *cases[] = {"divrem", "arithmetic", "extremes", "overflow", "fib", "swap", "self",
         "same-true", "same-false", "unused", "unit", "bool",
         "nullable-f32-none", "fixed-1", "fixed-11", "fixed-16", "fixed-17", "fixed-256", "fixed-return",

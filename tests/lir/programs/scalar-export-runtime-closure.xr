@@ -1,0 +1,10 @@
+fn report(value: i64) -> i64 {
+    print(value)
+    return value
+}
+
+fn selected(value: i64) -> i64 {
+    return report(value)
+}
+
+selected(42)

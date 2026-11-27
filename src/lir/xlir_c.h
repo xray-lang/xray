@@ -130,5 +130,12 @@ XR_FUNC XrLirCStatus xr_lir_emit_c_standalone(const XrLirCRequest *, XrLirCOutpu
  * Emission owns a single initializer and a table of typed action callbacks. */
 XR_FUNC XrLirCStatus xr_lir_emit_c_test_session(const XrLirCRequest *, const XrLirFunction *actions,
     uint32_t count, XrLirCOutput *, XrLirCDiagnostic *);
+/* Build-time export for a definition already selected by the caller's
+ * module authority. The borrowed symbol supplies only C linkage and has the
+ * xray_stdlib_ prefix. The closed scalar call graph keeps its typed parameters
+ * and result, and cannot depend on execution state, managed values or guest
+ * fault handling. The ordinary emitter and W1-W4 own publication. */
+XR_FUNC XrLirCStatus xr_lir_emit_c_scalar_export(const XrLirCRequest *,
+    const char *symbol, XrLirCOutput *, XrLirCDiagnostic *);
 XR_FUNC void xr_lir_c_output_free(XrLirCOutput *);
 #endif  // XLIR_C_H

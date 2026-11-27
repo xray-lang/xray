@@ -175,7 +175,7 @@ add_test(NAME lir_c_value_types_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_S
 set_tests_properties(lir_c_value_types_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 30)
 add_test(NAME test_lir_c_native COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/test_lir_c_native.py"
     --driver $<TARGET_FILE:test_lir_c> --faults $<TARGET_FILE:test_lir_c_faults>
-    --source-driver $<TARGET_FILE:lir_c_run>
+    --source-driver $<TARGET_FILE:lir_c_run> --binary $<TARGET_FILE:xray>
     --compiler "${CMAKE_C_COMPILER}" --kind "${lir_c_provider_kind}"
     --work "${CMAKE_CURRENT_BINARY_DIR}/native" ${lir_c_native_options})
 set_tests_properties(test_lir_c_native PROPERTIES LABELS "unit;lir;native" TIMEOUT 120)

@@ -65,6 +65,7 @@ typedef struct LirC {
     const XrLirCRequest *request;
     const XrLirFunction *test_actions;
     uint32_t test_action_count;
+    const char *export_symbol;
     XrLirCDiagnostic *diagnostic;
     XrLirCStatus status;
     char *text;
@@ -260,7 +261,9 @@ static uint64_t c_mask(XrLirType type) {
     return width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
 }
 static void c_function_name(LirC *c, uint32_t id) {
-    if (id == c->request->entry.id && !c->runtime)
+    if (id == c->request->entry.id && c->export_symbol)
+        c_text(c, c->export_symbol);
+    else if (id == c->request->entry.id && !c->runtime)
         c_text(c, "xray_lir_entry");
     else
         c_format(c, "xrl_f%" PRIu32, id);
@@ -341,7 +344,14 @@ static void c_parameter(LirC *c, uint32_t p) {
 }
 #include "xlir_c_nullable.inc.c"
 #include "xlir_c_callable.inc.c"
+static bool c_export_type(XrLirType type) {
+    return (type >= XR_LIR_UNIT && type <= XR_LIR_U64) || type == XR_LIR_F64;
+}
 static bool c_scalar(LirC *c, XrLirType type) {
+    if (c->export_symbol && !c_export_type(type)) {
+        c_error(c, XR_LIR_C_UNSUPPORTED, "scalar export requires ordinary scalar values");
+        return false;
+    }
     XrLirTypeView shape = {0};
     XrLirCellType cell;
     if (c_cell_type(c,type,&cell)) {
@@ -512,9 +522,28 @@ static bool c_arithmetic_point(const LirC *c, const XrLirInstructionView *v) {
         ((v->op == XR_LIR_DIV || v->op == XR_LIR_REM) &&
         c->fixed_divisors && !c->fixed_divisors[v->operands[1]]);
 }
+/* A linked scalar leaf has no execution owner to receive a guest fault.
+ * Close the admissible instruction set before ordinary C admission. */
+static bool c_export_instruction(XrLirOp op) {
+    switch (op) {
+        case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
+        case XR_LIR_NEG: case XR_LIR_BIT_AND: case XR_LIR_BIT_OR: case XR_LIR_BIT_XOR:
+        case XR_LIR_SHL: case XR_LIR_SHR: case XR_LIR_ICMP: case XR_LIR_INTCAST:
+        case XR_LIR_FADD: case XR_LIR_FSUB: case XR_LIR_FMUL: case XR_LIR_FNEG:
+        case XR_LIR_FCMP: case XR_LIR_ITOF:
+        case XR_LIR_CALL: case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
+            return true;
+        default:
+            return false;
+    }
+}
 static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
     if (!c_request_poll(c))
         return;
+    if (c->export_symbol && !c_export_instruction(v->op)) {
+        c_error(c, XR_LIR_C_UNSUPPORTED, "scalar export requires a runtime-free call closure");
+        return;
+    }
     c_scalar(c, v->type);
     if (c_cell_point(c,v)) {
         c->runtime = c->cells = true;
@@ -693,9 +722,8 @@ static void c_admit_instruction(LirC *c, const XrLirInstructionView *v) {
             if (c_value_type(c,v->operands[0]) != XR_LIR_F64 ||
                 c_value_type(c,v->operands[1]) != XR_LIR_F64)
                 c_error(c,XR_LIR_C_UNSUPPORTED,"floating operation requires f64 operands");
-            else {
-                c->runtime=true;
-            }
+            else if (!c->export_symbol)
+                c->runtime = true;
             break;
         case XR_LIR_CALL: case XR_LIR_INVOKE:
             c_visit(c, v->callee);
@@ -733,6 +761,11 @@ static void c_admit(LirC *c) {
         c->source = (XrLirSource) {0};
         c->function = (XrLirFunction) {c->request->module, c->closure[cursor]};
         xr_lir_function_view(c->request->module, c->function, &c->view);
+        if (c->export_symbol && (c->view.kind != XR_LIR_FUNCTION_DEFINITION ||
+                c->view.error || c->view.cleanup_owner)) {
+            c_error(c, XR_LIR_C_UNSUPPORTED, "scalar export requires a runtime-free call closure");
+            return;
+        }
         for (uint32_t p = 0; p < c->view.callable_parameter_count; ++p) {
             XrLirCallableParameter contract = c->view.callable_parameters[p].contract;
             if (contract.mode != XR_PARAM_READ)
@@ -1565,12 +1598,28 @@ static bool c_input_slice_result(const XrLirModule *module, XrLirType type) {
     return type == XR_LIR_SLICE_I64 || (type >= XR_LIR_TYPE_COUNT &&
         xr_lir_type_view(module, type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_SLICE);
 }
+static bool c_export_symbol_valid(const char *symbol) {
+    static const char prefix[] = "xray_stdlib_";
+    if (strncmp(symbol, prefix, sizeof(prefix) - 1)) return false;
+    const char *suffix = symbol + sizeof(prefix) - 1;
+    if (!*suffix) return false;
+    for (const char *p = suffix; *p; ++p)
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+                (*p >= '0' && *p <= '9') || *p == '_'))
+            return false;
+    return true;
+}
 static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *output,
-    XrLirCDiagnostic *diagnostic, bool standalone, const XrLirFunction *actions, uint32_t action_count) {
+    XrLirCDiagnostic *diagnostic, bool standalone, const XrLirFunction *actions, uint32_t action_count,
+    const char *export_symbol) {
     if (diagnostic)
         *diagnostic = (XrLirCDiagnostic) {0};
     LirC c = {.request = request, .diagnostic = diagnostic, .test_actions = actions,
-        .test_action_count = action_count};
+        .test_action_count = action_count, .export_symbol = export_symbol};
+    if (export_symbol && !c_export_symbol_valid(export_symbol)) {
+        c_error(&c, XR_LIR_C_BAD_ARGUMENT, "scalar export requires a valid standard library C symbol");
+        return c.status;
+    }
     XrLirFunctionView entry;
     if (!request || !output || output->bytes || output->length || output->entry_result ||
         output->entry_shape.kind || output->entry_shape.element || output->entry_shape.count ||
@@ -1581,8 +1630,11 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         xr_lir_function_view(request->module, request->entry, &entry) != XR_LIR_OK ||
         entry.kind != XR_LIR_FUNCTION_DEFINITION || entry.error || entry.cleanup_owner ||
         c_input_slice_result(request->module, entry.result) ||
-        (entry.parameter_count && (entry.parameter_count != 1 || entry.parameter_types[0] != XR_LIR_STATE))) {
-        c_error(&c, XR_LIR_C_BAD_ARGUMENT, "C emission requires empty output and a no-argument root");
+        (!export_symbol && entry.parameter_count &&
+            (entry.parameter_count != 1 || entry.parameter_types[0] != XR_LIR_STATE))) {
+        c_error(&c, XR_LIR_C_BAD_ARGUMENT, export_symbol ?
+            "C emission requires empty output and a scalar definition" :
+            "C emission requires empty output and a no-argument root");
         return c.status;
     }
     if (action_count) {
@@ -1604,7 +1656,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         }
         c.runtime = true;
     }
-    if (entry.parameter_count) {
+    if (!export_symbol && entry.parameter_count) {
         XrLirFunction state_entry = {0};
         if (xr_lir_state_entry(request->module, &state_entry) != XR_LIR_OK ||
             state_entry.id != request->entry.id ||
@@ -1660,6 +1712,9 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         c_error(&c, XR_LIR_C_UNSUPPORTED, "test session requires synchronous actions without host text receiving");
     if (c.status == XR_LIR_C_OK)
         c_values_prepare(&c);
+    if (export_symbol && (c.runtime || c.runtime_header || c.state || c.callables ||
+            c.value_image || c.value_types))
+        c_error(&c, XR_LIR_C_UNSUPPORTED, "scalar export requires a runtime-free call closure");
     if (c.status == XR_LIR_C_OK)
         c_emit(&c, entry.result);
     if (c.status == XR_LIR_C_OK && standalone) {
@@ -1730,12 +1785,12 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
 
 XR_FUNC XrLirCStatus xr_lir_emit_c(const XrLirCRequest *request, XrLirCOutput *output,
     XrLirCDiagnostic *diagnostic) {
-    return c_emit_output(request, output, diagnostic, false, NULL, 0);
+    return c_emit_output(request, output, diagnostic, false, NULL, 0, NULL);
 }
 
 XR_FUNC XrLirCStatus xr_lir_emit_c_standalone(const XrLirCRequest *request, XrLirCOutput *output,
     XrLirCDiagnostic *diagnostic) {
-    return c_emit_output(request, output, diagnostic, true, NULL, 0);
+    return c_emit_output(request, output, diagnostic, true, NULL, 0, NULL);
 }
 
 XR_FUNC XrLirCStatus xr_lir_emit_c_test_session(const XrLirCRequest *request,
@@ -1746,5 +1801,10 @@ XR_FUNC XrLirCStatus xr_lir_emit_c_test_session(const XrLirCRequest *request,
         c_error(&c, XR_LIR_C_BAD_ARGUMENT, "test session requires an action");
         return c.status;
     }
-    return c_emit_output(request, output, diagnostic, false, actions, count);
+    return c_emit_output(request, output, diagnostic, false, actions, count, NULL);
+}
+
+XR_FUNC XrLirCStatus xr_lir_emit_c_scalar_export(const XrLirCRequest *request,
+    const char *symbol, XrLirCOutput *output, XrLirCDiagnostic *diagnostic) {
+    return c_emit_output(request, output, diagnostic, false, NULL, 0, symbol ? symbol : "");
 }

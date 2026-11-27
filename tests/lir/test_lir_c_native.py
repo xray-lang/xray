@@ -8,16 +8,86 @@ import subprocess
 import tempfile
 
 
-def run(arguments, **kwargs):
+def run(arguments, *, expected_exit=0, **kwargs):
     print('$ ' + json.dumps([str(value) for value in arguments]), flush=True)
     completed = subprocess.run([str(value) for value in arguments], capture_output=True, timeout=30, **kwargs)
     if completed.stdout:
         print(completed.stdout.decode('utf-8', errors='replace'), end='', flush=True)
     if completed.stderr:
         print(completed.stderr.decode('utf-8', errors='replace'), end='', flush=True)
-    if completed.returncode:
+    if completed.returncode != expected_exit:
         raise RuntimeError(f'command failed with exit {completed.returncode}')
     return completed
+
+
+
+def scalar_export(args, root):
+    repository = Path(__file__).resolve().parents[2]
+    programs = Path(__file__).resolve().parent / 'programs'
+    stdlib = repository / 'stdlib'
+    environment = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib))
+    fixture = programs / 'scalar-export-stdlib.xr'
+    emitted = root / 'scalar-export.c'
+    run([args.source_driver, fixture, emitted, '--stdlib', stdlib, '--scalar-export', 'lerp'], cwd=root)
+    text = emitted.read_text(encoding='ascii')
+    assert 'double xray_stdlib_test_export(double p0, double p1, double p2)' in text
+    assert all(fragment not in text for fragment in ('xray_lir_entry', 'xray_native_', 'xrt_', 'int main('))
+
+    consumer = root / 'scalar-export-consumer.c'
+    consumer.write_text(
+        '#include <stdio.h>\n'
+        '#if defined(_WIN32)\n#include <fcntl.h>\n#include <io.h>\n#endif\n'
+        'extern double xray_stdlib_test_export(double, double, double);\n'
+        'int main(void) {\n'
+        '#if defined(_WIN32)\n    if (_setmode(_fileno(stdout), _O_BINARY) == -1) return 1;\n#endif\n'
+        '    double a = xray_stdlib_test_export(2.0, 10.0, 0.25);\n'
+        '    double b = xray_stdlib_test_export(5.0, -3.0, 1.5);\n'
+        '    return printf("%.1f\\n%.1f\\n", a, b) < 0;\n'
+        '}\n', encoding='ascii')
+    executable = root / ('scalar-export-consumer.exe' if os.name == 'nt' else 'scalar-export-consumer')
+    if args.kind == 'msvc':
+        flags = [args.compiler, '/nologo', '/std:c11', '/W4', '/WX', '/O2', '/fp:precise']
+        if args.asan:
+            flags += ['/fsanitize=address', '/Zi']
+            if 'clang' in args.compiler.name.lower():
+                flags += ['/MD', '/clang:-fsanitize=undefined']
+        obj = root / 'scalar-export.obj'
+        run([*flags, '/c', emitted, '/Fo' + str(obj)], cwd=root)
+        link = [*flags, consumer, obj, '/Fe:' + str(executable)]
+        if args.asan:
+            link += ['/link', '/INCREMENTAL:NO']
+    else:
+        flags = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic',
+                 '-O2', '-ffp-contract=off']
+        if args.asan:
+            flags += ['-fsanitize=address,undefined', '-g']
+        obj = root / 'scalar-export.o'
+        run([*flags, '-c', emitted, '-o', obj], cwd=root)
+        link = [*flags, consumer, obj, '-o', executable]
+    run(link, cwd=root)
+
+    empty = root / 'scalar-export-no-source'
+    empty.mkdir()
+    native = run([executable], cwd=empty, env=dict(environment, XRAY_STDLIB_PATH=str(empty)))
+    vm = run([args.binary, 'run', fixture], cwd=root, env=environment)
+    assert not list(empty.iterdir())
+    assert native.stdout == vm.stdout == b'4.0\n-7.0\n'
+    assert native.stderr == vm.stderr == b''
+
+    rejected = root / 'scalar-export-rejected.c'
+    rejected.write_bytes(b'preserve an existing output')
+    effect = programs / 'scalar-export-runtime-closure.xr'
+    completed = run([args.source_driver, effect, rejected, '--scalar-export', 'selected'],
+                    cwd=root, expected_exit=1)
+    assert b'scalar export requires a runtime-free call closure' in completed.stderr
+    assert rejected.read_bytes() == b'preserve an existing output'
+
+    type_error = programs / 'scalar-export-stdlib-type-error.xr'
+    for command in ([args.binary, 'run', type_error],
+                    [args.binary, 'build', '-c', type_error, '-o', root / 'type-error.c']):
+        completed = run(command, cwd=root, env=environment, expected_exit=1)
+        assert not completed.stdout and b'expression cannot satisfy its declared type' in completed.stderr
+    assert not (root / 'type-error.c').exists()
 
 
 def main():
@@ -25,6 +95,7 @@ def main():
     parser.add_argument('--driver', required=True, type=Path)
     parser.add_argument('--faults', required=True, type=Path)
     parser.add_argument('--source-driver', required=True, type=Path)
+    parser.add_argument('--binary', required=True, type=Path)
     parser.add_argument('--compiler', required=True, type=Path)
     parser.add_argument('--kind', required=True, choices=['msvc', 'gnu'])
     parser.add_argument('--work', required=True, type=Path)
@@ -145,6 +216,8 @@ def main():
     assert text.count('xrt_run_standalone(') == 1
     assert re.search(r'xrt_print_i64\(v[0-9]+, UINT32_C\(1\)\);', text)
     results['ordinary-output-owned-text'] = 'PASS'
+    scalar_export(args, root)
+    results['scalar-stdlib-export-object-consumer'] = 'PASS'
     environment = dict(os.environ, XRAY_CGEN_ICE_DIR=str(root))
     child = subprocess.run([str(args.faults), '--ice'], cwd=root, env=environment, capture_output=True)
     print(child.stderr.decode('utf-8', errors='replace'), end='', flush=True)
