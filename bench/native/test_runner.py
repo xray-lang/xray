@@ -47,12 +47,19 @@ def process_exited(pid: int) -> bool:
         os.kill(pid, 0)
     except ProcessLookupError:
         return True
-    stat = Path(f"/proc/{pid}/stat")
-    if stat.exists() and stat.read_text().split(")", 1)[1].strip().startswith("Z"):
-        return True
+    if sys.platform == "linux":
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_bytes()
+        except (FileNotFoundError, ProcessLookupError):
+            return True
+        if stat.rpartition(b")")[2].split()[:1] == [b"Z"]:
+            return True
     # A failing regression still cleans up the fixture it started.
     import signal
-    os.kill(pid, signal.SIGKILL)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return True
     return False
 
 

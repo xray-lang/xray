@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import signal
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -157,6 +158,50 @@ class ProcessGroupCleanupTest(unittest.TestCase):
                         xray_process.run_child(["fixture"], timeout=2)
                 self.assertEqual(kill.call_args_list, [mock.call(child.pid, signal.SIGKILL), mock.call(child.pid, 0)])
                 sleep.assert_not_called()
+
+    def test_linux_waits_for_live_members_after_reaping_the_leader(self):
+        child = mock.Mock(pid=1234)
+        child.wait.return_value = 3
+
+        def members(group):
+            self.assertEqual(group, child.pid)
+            self.assertEqual(child.wait.call_args_list, [mock.call(timeout=2), mock.call()])
+            return probe.call_count == 1
+
+        with mock.patch.object(xray_process.sys, "platform", "linux"), \
+                mock.patch.object(xray_process.subprocess, "Popen", return_value=child), \
+                mock.patch.object(xray_process.os, "killpg") as kill, \
+                mock.patch.object(xray_process, "_linux_group_has_live_member", side_effect=members) as probe, \
+                mock.patch.object(xray_process.time, "sleep") as sleep:
+            self.assertEqual(xray_process.run_child(["fixture"], timeout=2), 3)
+        self.assertEqual(kill.call_args_list, [mock.call(child.pid, signal.SIGKILL),
+                                              mock.call(child.pid, 0), mock.call(child.pid, 0)])
+        sleep.assert_called_once()
+
+    def test_linux_distinguishes_zombie_and_running_group_members(self):
+        with tempfile.TemporaryDirectory() as directory:
+            entry = Path(directory) / "1235"
+            entry.mkdir()
+            stat = entry / "stat"
+            scandir = os.scandir
+            with mock.patch.object(xray_process.os, "scandir", side_effect=lambda _: scandir(directory)), \
+                    mock.patch.object(xray_process.os, "getpgid", return_value=1234), \
+                    mock.patch.object(xray_process.os, "killpg") as kill:
+                stat.write_bytes(b"1235 (fixture (child)) Z 1 1234 1234")
+                self.assertFalse(xray_process._linux_group_has_live_member(1234))
+                stat.write_bytes(b"1235 (fixture (child)) R 1 1234 1234")
+                self.assertTrue(xray_process._linux_group_has_live_member(1234))
+                kill.assert_not_called()
+
+    def test_linux_cannot_confirm_drain_from_an_empty_process_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            scandir = os.scandir
+            with mock.patch.object(xray_process.sys, "platform", "linux"), \
+                    mock.patch.object(xray_process.os, "scandir", side_effect=lambda _: scandir(directory)), \
+                    mock.patch.object(xray_process.os, "killpg") as kill:
+                with self.assertRaises(xray_process.RecoveryRequired):
+                    xray_process._wait_posix_group(1234, xray_process.time.monotonic())
+                self.assertEqual(kill.call_args_list, [mock.call(1234, 0), mock.call(1234, 0)])
 
     def test_real_command_exit_status_is_returned(self):
         self.assertEqual(xray_process.run_child([sys.executable, "-c", "raise SystemExit(3)"]), 3)

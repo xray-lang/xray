@@ -46,21 +46,57 @@ def _kill_group(group: int, deadline: float | None = None, *, leader_unreaped: b
             time.sleep(0.01)
 
 
-def _wait_darwin_group(group: int, deadline: float) -> None:
-    """Prove that an asynchronously signalled group has disappeared."""
+def _group_exists(group: int) -> bool:
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Darwin can report EPERM while the original group is exiting.
+        pass
+    return True
+
+
+def _linux_group_has_live_member(group: int) -> bool:
+    """Inspect a signalled group that still has a kernel process record."""
+    found_member = False
+    group_field = str(group).encode("ascii")
+    with os.scandir("/proc") as entries:
+        for entry in entries:
+            if not entry.name.isdecimal():
+                continue
+            try:
+                if os.getpgid(int(entry.name)) != group:
+                    continue
+                with open(os.path.join(entry.path, "stat"), "rb") as stat:
+                    fields = stat.read().rpartition(b")")[2].split()
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            if len(fields) < 3:
+                raise OSError(f"Cannot read process state for PID {entry.name}")
+            if fields[2] != group_field:
+                continue
+            found_member = True
+            if fields[0] != b"Z":
+                return True
+    # A zombie has finished execution even if its new parent has not reaped it.
+    # If no member was visible, require a fresh absence check.
+    return not found_member and _group_exists(group)
+
+
+def _wait_posix_group(group: int, deadline: float) -> None:
+    """Wait for a signalled group to stop executing without signalling it again."""
     while True:
         try:
-            os.killpg(group, 0)
-        except ProcessLookupError:
-            return
-        except PermissionError:
-            # Darwin can report EPERM while the original group still exists.
-            pass
+            if not _group_exists(group):
+                return
+            if sys.platform == "linux" and not _linux_group_has_live_member(group):
+                return
         except OSError as error:
             raise RecoveryRequired("Cannot verify command process group termination") from error
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise RecoveryRequired("Command process group did not disappear")
+            raise RecoveryRequired("Command process group did not drain")
         time.sleep(min(0.01, remaining))
 
 
@@ -70,8 +106,8 @@ def terminate_posix_group(group: int, *, leader_unreaped: bool = False):
     deadline = time.monotonic() + GROUP_EXIT_SECONDS
     needs_drain = _kill_group(group, deadline, leader_unreaped=leader_unreaped)
     yield deadline
-    if needs_drain and sys.platform == "darwin":
-        _wait_darwin_group(group, deadline)
+    if needs_drain and sys.platform in ("darwin", "linux"):
+        _wait_posix_group(group, deadline)
 
 
 def run_child(command: list[str], *, timeout: float | None = None, spawn_guard=nullcontext, **kwargs) -> int:
