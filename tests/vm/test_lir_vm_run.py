@@ -171,6 +171,25 @@ def main():
             assert result.stdout == b'1\n2\n99\n3\n3\n' * (2 if '--twice' in options else 1), \
                 (options, result.stdout)
             assert path.read_bytes() == original_cell
+        # A forwarded Slice argument and an object that cannot reach Array<u8> storage
+        # share a call. Objects that can reach it stay refused, including through a
+        # descendant field or a callable member; the refusal wording is the current one.
+        reach_head = 'fn code(data: Slice<u8>, h: H) -> i64 {\nreturn q(data, h)\n}\n'
+        run('view-reach-scalar-object', 'class H {\nn: i64\ninit() { this.n = 4 }\n}\n'
+            'fn q(data: Slice<u8>, h: H) -> i64 {\nreturn len(data) + h.n\n}\n' + reach_head +
+            'fn run() -> i64 {\nconst a: Array<u8> = [1, 2, 3, 4]\nreturn code(a[:], H())\n}\nprint(run())\n',
+            stdout=b'8\n')
+        for name, members in (('array-field', 'buf: Array<u8>\ninit() { this.buf = [] }\n'),
+                              ('callable-field', 'run: fn() -> i64\ninit() { this.run = fn() -> i64 { return one() } }\n')):
+            run('view-reach-' + name, 'fn one() -> i64 { return 1 }\nclass H {\n' + members + '}\n'
+                'fn q(data: Slice<u8>, h: H) -> i64 {\nreturn len(data)\n}\n' + reach_head +
+                'fn run() -> i64 {\nconst a: Array<u8> = [1, 2, 3, 4]\nreturn code(a[:], H())\n}\nprint(run())\n',
+                1, b'view lifetime normalization', located=False)
+        run('view-reach-descendant-field', 'class H {\nn: i64\ninit() { this.n = 0 }\n}\n'
+            'class D extends H {\nbuf: Array<u8>\ninit() {\nsuper()\nthis.buf = []\n}\n}\n'
+            'fn q(data: Slice<u8>, h: H) -> i64 {\nreturn len(data)\n}\n' + reach_head +
+            'fn run() -> i64 {\nconst a: Array<u8> = [1, 2, 3, 4]\nreturn code(a[:], H())\n}\nprint(run())\n',
+            1, b'view lifetime normalization', located=False)
         run('literal-zero', 'const n=0\nprint(n)\n', stdout=b'0\n')
         run('printing-closure', 'fn leaf(x:i64)->i64{print(x)\nreturn x}\n'
             'fn call(x:i64)->i64{return leaf(x)}\nprint(call(7))\n', stdout=b'7\n7\n')

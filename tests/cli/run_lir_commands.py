@@ -115,10 +115,15 @@ def main() -> None:
             assert not checked.stdout and not checked.stderr, name
 
         access = fixtures / "access"
+        # Objects whose member types cannot reach the borrowed element storage share a
+        # call with a live view whatever their provenance.
         accepted_access = ("default_class_positive.xr", "imported_default/root.xr",
                            "imported_generic/root.xr", "imported_callable/root.xr",
                            "pure_recursive.xr", "primitive_equality.xr",
-                           "latent_reference.xr", "immutable_scalar.xr", "bound_method_receiver.xr")
+                           "latent_reference.xr", "immutable_scalar.xr", "bound_method_receiver.xr",
+                           "default_class_borrowed_input.xr", "default_class_unknown.xr",
+                           "default_class_opaque.xr", "default_class_native.xr",
+                           "imported_ordinary/root.xr")
         for name in accepted_access:
             checked = run("access-" + name.replace("/", "-") + "-check",
                           [binary, "check", access / name], 0)
@@ -126,14 +131,9 @@ def main() -> None:
         rejected_access = (
             ("bound_method_owner_conflict.xr", b"constructed XIR failed checking during view lifetime normalization "
              b"at function 1 block 0 instruction 1 (CALL_INDIRECT)"),
-            ("default_class_borrowed_input.xr", b"(CALL)"),
             ("default_class_existing_alias.xr", b"(ARRAY_SET)"),
             ("default_class_existing_alias_read.xr", b"(CALL_DEFAULT)"),
-            ("default_class_unknown.xr", b"view lifetime normalization"),
             ("default_class_wrong_type.xr", b"expression cannot satisfy its declared type"),
-            ("default_class_opaque.xr", b"(CALL)"),
-            ("default_class_native.xr", b"(CALL)"),
-            ("imported_ordinary/root.xr", b"(CALL)"),
             ("imported_slot/root.xr", b"(CALL_DEFAULT)"),
             ("cleanup_hidden.xr", b"(CALL_DEFAULT)"),
             ("mutable_scalar.xr", b"(CALL_DEFAULT)"),
