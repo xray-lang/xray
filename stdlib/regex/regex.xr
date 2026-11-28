@@ -13,15 +13,11 @@
 // Layout of the compiled program image, the AST and every constant below is
 // fixed by analysis/r3-6-5-regex-xray-design.md.
 //
-// Two Xray facts shape the code, both measured on this build rather than
-// assumed:
-//   * A class-typed parameter is a read capability, so assigning a scalar
-//     field of a parameter is E0353; marking it `ref` then makes recursion
-//     impossible because a borrowed ref cannot be passed to another ref
-//     parameter (E0352). Array *elements* of a read parameter are writable, so
-//     all mutable state lives in Array<i64> fields.
-//   * Array<i64>(n) does not zero-fill: 255 of 256 elements came back non-zero
-//     from reused memory. Every sized allocation states its fill value.
+// One Xray fact shapes the code: a class-typed parameter is a read
+// capability, so assigning a scalar field of a parameter is E0353; marking it
+// `ref` then makes recursion impossible because a borrowed ref cannot be
+// passed to another ref parameter (E0352). Array *elements* of a read
+// parameter are writable, so all mutable state lives in Array<i64> fields.
 
 export final class Regex {
     pattern: string
@@ -822,9 +818,6 @@ fn rxExpandCase(ranges: ref Array<i64>, lo: i64, hi: i64) {
 // UTF-8 continuation bytes. Wrong for multi-byte characters, preserved because
 // changing it needs unicode set arithmetic and is its own piece of work.
 fn rxComplement(src: Array<i64>) -> Array<i64> {
-    // Array<i64>(n) does NOT zero-fill on this build (measured: 255 of 256
-    // elements came back non-zero from reused memory), so the fill value is
-    // given explicitly. Without it this function is non-deterministic.
     var mark: Array<i64> = Array<i64>(256, 0)
     var i = 0
     while (i < len(src)) {
