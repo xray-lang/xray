@@ -171,7 +171,6 @@ tests/diff/cases/semantics/ffi/rawptr_static_null.xr  # error: pointer member is
 tests/diff/cases/semantics/float_fmt/f32_rounding.xr  # float arithmetic on f32 is not supported by LIR lowering yet
 tests/diff/cases/semantics/float_fmt/ieee_arithmetic.xr  # numeric conversion involving a narrow scalar is not supported by LIR lowering yet
 tests/diff/cases/semantics/float_fmt/neg_zero_const_pool.xr  # float arithmetic on f32 is not supported by LIR lowering yet
-tests/diff/cases/semantics/float_fmt/rounding_boundary.xr  # function without a scalar body is not supported by LIR lowering yet
 tests/diff/cases/semantics/function_value_to_string.xr  # error: value has no admitted builtin display
 tests/diff/cases/semantics/functions/bare_lambda_expression_positions.xr  # error: type has no admitted default initializer
 tests/diff/cases/semantics/functions/function_type_surface.xr  # error: constructed XIR failed checking at function 6 block 4294967295 instruction 2 (status 10)
@@ -226,7 +225,6 @@ tests/diff/cases/semantics/modules/cleanup_init_import_once.xr  # error: E0335: 
 tests/diff/cases/semantics/modules/cleanup_init_panic.xr  # error: E0335: imported modules allow only declarations and state initialization; move the statement to the ent
 tests/diff/cases/semantics/modules/cross_module_borrowed_arg_release.xr  # error: name is not an initialized value
 tests/diff/cases/semantics/modules/exported_struct_methods.xr  # error: static constructor cannot have parameters
-tests/diff/cases/semantics/modules/native_module_scalar_call_target.xr  # function without a scalar body is not supported by LIR lowering yet
 tests/diff/cases/semantics/modules/value_struct_arg_alias_import.xr  # error: this fixed array element is not yet supported by the compiler
 tests/diff/cases/semantics/modules/value_struct_arg_without_type_import.xr  # error: this fixed array element is not yet supported by the compiler
 tests/diff/cases/semantics/modules/value_struct_copy_without_type_import.xr  # error: this fixed array element is not yet supported by the compiler
@@ -381,9 +379,7 @@ tests/diff/cases/semantics/stdlib/io_touch_shared_core.xr  # error: receiver may
 tests/diff/cases/semantics/stdlib/io_write_shared_core.xr  # error: len receiver family is not admitted
 tests/diff/cases/semantics/stdlib/log_level_enum_direct.xr  # error: method declaration contract is not admitted
 tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr  # error: method declaration contract is not admitted
-tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr  # ARRAY_NEW is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/math_random_int_arg_shared_core.xr  # error: name is not an initialized value
-tests/diff/cases/semantics/stdlib/math_random_system_direct.xr  # function without a scalar body is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr  # error: indexed view assignment requires an admitted MutSlice
 tests/diff/cases/semantics/stdlib/mem_bulk_shared_core.xr  # error: this function declaration syntax is not yet supported by the compiler
 tests/diff/cases/semantics/stdlib/mem_cache_maintenance_shared_core.xr  # class without a proven acyclic allocation layout is not supported by LIR lowering yet
