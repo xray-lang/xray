@@ -643,8 +643,12 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
         }
         execution->code_lease = module->code_lease;
     }
+    /* An authenticated code owner keeps its sealed description alive for this
+     * execution's lease, and it equals the caller's descriptor field for field.
+     * Run on it directly; only a raw descriptor needs a private copy. */
+    const XrRbcCodeOwner *sealed = xr_rbc_module_code_owner(module);
     execution->module_snapshot = *module;
-    execution->module = &execution->module_snapshot;
+    execution->module = sealed ? sealed->module : &execution->module_snapshot;
     module = execution->module;
 
     execution->pending = xr_calloc(1, sizeof(*execution->pending));

@@ -36,12 +36,13 @@ XR_FUNC const XrRbcCodeOwner *xr_rbc_code_owner_borrow(XrtManagedLease lease) {
     return owner->module && owner->locations && owner->entries &&
         owner->module->functions==owner->functions && owner->module->function_count==owner->function_count ? owner : NULL;
 }
-XR_FUNC const XrRbcCodeOwner *xr_rbc_module_code_owner(const XrRbcModule *module) {
+XR_FUNC const XrRbcCodeOwner *xr_rbc_module_code_owner_compared(const XrRbcModule *module) {
     if (!module || !module->code_lease.owner ||
         module->code_lease.retain != xr_rbc_code_owner_retain ||
         module->code_lease.release != xr_rbc_code_owner_release) return NULL;
     const XrRbcCodeOwner *owner = module->code_lease.owner;
     const XrRbcModule *raw=owner->module;
+    if (raw == module) return owner;
     if (!raw || owner->functions != module->functions || owner->function_count != module->function_count ||
         raw->natives!=module->natives || raw->native_count!=module->native_count ||
         raw->literals!=module->literals || raw->literal_count!=module->literal_count ||

@@ -638,7 +638,9 @@ static void prepared_after_program(unsigned kind) {
     if (!kind) CHECK(program->module.natives == program->image->natives && program->module.natives != program->natives);
     XrRbcExecution *execution = NULL;
     CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
-    CHECK(execution->module != &program->module && execution->module == &execution->module_snapshot);
+    // The execution runs on the sealed image description its lease keeps alive,
+    // never on the Program shell destroyed below.
+    CHECK(execution->module != &program->module && execution->module == &program->image->module);
     watched_program = program; watched_layout = execution->layout;
     program_freed = layout_freed = false;
     if (watched_layout) CHECK(atomic_load(&execution->layout->references) == -2);

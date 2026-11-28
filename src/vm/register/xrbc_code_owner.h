@@ -53,7 +53,17 @@ XR_FUNC void xr_rbc_code_owner_release(void *);
 /* A genuine producer lease protects its own raw snapshot, never a Program
  * shell or the caller's current module. The returned owner is only borrowed. */
 XR_FUNC const XrRbcCodeOwner *xr_rbc_code_owner_borrow(XrtManagedLease);
-XR_FUNC const XrRbcCodeOwner *xr_rbc_module_code_owner(const XrRbcModule *);
+XR_FUNC const XrRbcCodeOwner *xr_rbc_module_code_owner_compared(const XrRbcModule *);
+/* The sealed description an execution runs on authenticates by identity, which
+ * keeps every lookup on its hot paths cheap. Any other descriptor must equal
+ * the owner's raw snapshot field for field. */
+static inline const XrRbcCodeOwner *xr_rbc_module_code_owner(const XrRbcModule *module) {
+    if (module && module->code_lease.owner && module->code_lease.retain == xr_rbc_code_owner_retain &&
+        module->code_lease.release == xr_rbc_code_owner_release &&
+        ((const XrRbcCodeOwner *)module->code_lease.owner)->module == module)
+        return module->code_lease.owner;
+    return xr_rbc_module_code_owner_compared(module);
+}
 XR_FUNC const XrRbcCallableEntry *xr_rbc_module_callable_entries(const XrRbcModule *);
 XR_FUNC size_t xr_rbc_module_callable_entry_count(const XrRbcModule *);
 XR_FUNC const uint32_t *xr_rbc_module_type_callables(const XrRbcModule *);
