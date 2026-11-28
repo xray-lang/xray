@@ -1,0 +1,27 @@
+// A partial batch published by flush releases only the items it holds, so
+// pending returns to zero and the group can be reset.
+import sync
+
+const group = sync.ResultGroup(4)
+group.add(5)
+group.flush()
+print(group.pendingCount())
+const (first, found) = group.tryRecv()
+print(found)
+print(first!)
+print(group.pendingCount())
+group.add(1)
+group.add(2)
+group.add(3)
+group.add(4)
+const (full, ready) = group.tryRecv()
+print(ready)
+print(full!)
+print(group.pendingCount())
+print(group.reset(2))
+group.add(7)
+group.close()
+const (last, closed) = group.tryRecv()
+print(closed)
+print(last!)
+print(group.pendingCount())

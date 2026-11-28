@@ -421,6 +421,7 @@ tests/diff/cases/semantics/stdlib/sync_cache_padded.xr  # error: struct declarat
 tests/diff/cases/semantics/stdlib/sync_fence_alias.xr  # error: struct declaration contract is not admitted
 tests/diff/cases/semantics/stdlib/sync_module_import.xr  # error: struct declaration contract is not admitted
 tests/diff/cases/semantics/stdlib/sync_namespace_import.xr  # error: struct declaration contract is not admitted
+tests/diff/cases/semantics/stdlib/sync_result_group_partial_batch.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/sys_barrier_direct.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/sys_condvar_direct.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/sys_dylib_direct.xr  # error: import requires an exported declaration
