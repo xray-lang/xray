@@ -40,7 +40,7 @@
   },
   "array_f64": {
     "exit": 0,
-    "stdout": "-0.0\n0.5\n1.25\ntrue\n-0.0\n-3.5\ntrue\n[-0.0, -3.5]\n-0.0\n[1.25]\n2.25\n-1.0\n0\ntrue\n",
+    "stdout": "-0.0\n0.5\n1.25\ntrue\n-0.0\n-3.5\ntrue\n[-0.0, -3.5]\n-0.0\n[1.25]\n2.25\n-1.0\n0\ntrue\n-0.0\n2.25\n-0.0\n2.25\n3.5\ntrue\n",
     "stderr": ""
   },
   "array_f64_negative_capacity": {

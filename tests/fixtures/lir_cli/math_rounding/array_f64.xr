@@ -42,3 +42,17 @@ fn optionalSamples() {
     print(applyOptional(identity, null) == null)
 }
 optionalSamples()
+
+fn stateOptionalSamples(value: Array<f64>?) -> Array<f64>? { return value }
+const storedSamples = returnArray
+const storedOptionalSamples = stateOptionalSamples
+var stateInput: Array<f64> = [-0.0, 2.25]
+const stateSnapshot = storedSamples(stateInput)
+const stateOptionalSnapshot = storedOptionalSamples(stateInput)
+stateInput[1] = 3.5
+print(stateSnapshot[0])
+print(stateSnapshot[1])
+print(stateOptionalSnapshot![0])
+print(stateOptionalSnapshot![1])
+print(stateInput[1])
+print(storedOptionalSamples(null) == null)

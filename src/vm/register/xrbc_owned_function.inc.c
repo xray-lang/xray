@@ -104,6 +104,7 @@ static XrtManagedStatus rbc_owned_plan_matches(const XrRbcCodeOwner *code,
                 rbc_owned_dependency(plans,row->element,view.element,current);
         } else valid=row->kind==XRT_VALUE_UNIT || row->kind==XRT_VALUE_BOOL || row->kind==XRT_VALUE_I64 ||
             row->kind==XRT_VALUE_U8 || row->kind==XRT_VALUE_U64 || row->kind==XRT_VALUE_F64 || row->kind==XRT_VALUE_SET_I64 ||
+            row->kind==XRT_VALUE_ARRAY_F64 ||
             (row->kind>=XRT_VALUE_STRING && row->kind<=XRT_VALUE_MAP_STRING_I64);
     }
     xr_free(plans);
