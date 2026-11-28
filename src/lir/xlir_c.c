@@ -1639,6 +1639,7 @@ static XrLirCStatus c_emit_output(const XrLirCRequest *request, XrLirCOutput *ou
         request->entry.module != request->module ||
         xr_lir_function_view(request->module, request->entry, &entry) != XR_LIR_OK ||
         entry.kind != XR_LIR_FUNCTION_DEFINITION || entry.error || entry.cleanup_owner ||
+        request->module->functions[request->entry.id - 1].test_error_boundary ||
         c_input_slice_result(request->module, entry.result) ||
         (!export_symbol && entry.parameter_count &&
             (entry.parameter_count != 1 || entry.parameter_types[0] != XR_LIR_STATE))) {

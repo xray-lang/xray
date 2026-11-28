@@ -50,6 +50,7 @@ typedef struct XrRbcCodeImage {
     XrLirStateProjection *state_projection;
     XrRbcCallableEntry *callable_entries;
     uint32_t *type_callables;
+    bool *uncaught_error_roots;
     XrRbcNativeKind natives[XR_RBC_NATIVE_COUNT];
 } XrRbcCodeImage;
 XR_STATIC_ASSERT(offsetof(XrRbcCodeImage, code) == 0, "the real code owner is the enclosing allocation prefix");
@@ -1820,11 +1821,30 @@ static void rbc_code_retire(XrRbcCodeOwner *owner) {
     rbc_code_clear(image->module, image->locations);
     xr_free(image->callable_entries);
     xr_free(image->type_callables);
+    xr_free(image->uncaught_error_roots);
     xr_free(image);
 }
-static bool rbc_lir_seal(XrRbcProgram *program, bool startup) {
+static bool rbc_lir_seal(XrRbcProgram *program, bool startup, const XrLirFunction *actions,
+    const uint32_t *action_entries, uint32_t action_count) {
     XrRbcCodeImage *image = xr_calloc(1, sizeof(*image));
     if (!image) return false;
+    bool has_error_roots = startup;
+    for (uint32_t i = 0; i < action_count && !has_error_roots; ++i)
+        has_error_roots = actions[i].module->functions[actions[i].id - 1].test_error_boundary;
+    if (has_error_roots) {
+        size_t count = program->module.function_count;
+        image->uncaught_error_roots = xr_calloc(count, sizeof(*image->uncaught_error_roots));
+        if (!image->uncaught_error_roots) {
+            xr_free(image);
+            return false;
+        }
+        image->uncaught_error_roots[0] = startup;
+        for (uint32_t i = 0; i < action_count; ++i) {
+            XR_DCHECK(action_entries[i] < count, "physical action was resolved during compilation");
+            image->uncaught_error_roots[action_entries[i]] =
+                actions[i].module->functions[actions[i].id - 1].test_error_boundary;
+        }
+    }
     atomic_init(&image->code.references, 1);
     image->module = program->module;
     image->locations = program->locations;
@@ -1847,7 +1867,7 @@ static bool rbc_lir_seal(XrRbcProgram *program, bool startup) {
     }
     image->code.functions = image->module.functions;
     image->code.function_count = image->module.function_count;
-    image->code.startup_function = startup ? 1u : 0u;
+    image->code.uncaught_error_roots = image->uncaught_error_roots;
     image->code.value_homes = image->value_homes;
     image->code.value_codes = image->value_codes;
     image->code.values = image->value_image ? xr_lir_value_image_view(image->value_image) : NULL;
@@ -2079,7 +2099,8 @@ static XrRbcCompileStatus rbc_compile(const XrLirModule *input, XrLirFunction en
     *d = (XrRbcCompileDiagnostic) {0};
     XrLirFunctionView root;
     if (!output || *output || entry.module != input ||
-        xr_lir_function_view(input, entry, &root) != XR_LIR_OK || root.cleanup_owner)
+        xr_lir_function_view(input, entry, &root) != XR_LIR_OK || root.cleanup_owner ||
+        input->functions[entry.id - 1].test_error_boundary)
         return rbc_lir_error(d, XR_RBC_COMPILE_INVALID, "invalid module, root or output",
             (XrLirSource) {0});
 #if defined(XR_XIR_PARANOID) && XR_XIR_PARANOID
@@ -2232,7 +2253,7 @@ static XrRbcCompileStatus rbc_compile(const XrLirModule *input, XrLirFunction en
     status = rbc_lir_value_homes(input, ids, p, &preparation, d);
     if (status == XR_RBC_COMPILE_OK) status = rbc_lir_build(input, ids, mapping, p, preparation.layouts, d);
     if (status == XR_RBC_COMPILE_OK) {
-        if (!rbc_lir_seal(p, startup.id == entry.id)) {
+        if (!rbc_lir_seal(p, startup.id == entry.id, actions, action_entries, action_count)) {
             status = rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY,
                 "cannot own the immutable code image", (XrLirSource){0});
             goto done;

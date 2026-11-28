@@ -4133,7 +4133,7 @@ static bool lower_function(Lower *c, uint32_t index) {
     return good;
 }
 
-static bool lower_startup_invoke(Lower *c,XrLirFunction wrapper,XrLirBlock *block,
+static bool lower_uncaught_invoke(Lower *c,XrLirFunction wrapper,XrLirBlock *block,
     XrLirInstruction call,XrLirType error) {
     XrLirBlock success={0},failure={0};
     XrLirValue received={0};
@@ -4151,6 +4151,42 @@ static bool lower_startup_invoke(Lower *c,XrLirFunction wrapper,XrLirBlock *bloc
     if (!lower_build(c,xr_lir_set_terminator(c->module,*block,&call)) ||
         !lower_build(c,xr_lir_set_terminator(c->module,failure,&uncaught))) return false;
     *block=success;
+    return true;
+}
+
+/* Test sessions execute unit actions. Preserve the uncaught typed result at
+ * the action boundary while leaving the file initializer owned by the session. */
+static bool lower_test_action(Lower *c, uint32_t selected, XrLirFunction *output) {
+    if (!lower_function_error(c, selected)) {
+        *output = c->functions[selected];
+        return true;
+    }
+    char name[48];
+    int length = snprintf(name, sizeof(name), "$test_error_%u", selected);
+    XR_DCHECK(length > 0 && (size_t)length < sizeof(name), "test action name fits");
+    XrLirType capability = XR_LIR_STATE;
+    bool stateful = lower_hidden_state(c, selected);
+    XrLirFunctionSpec spec = {.name = name, .name_length = (size_t)length,
+        .parameters = stateful ? &capability : NULL, .parameter_count = stateful,
+        .result = XR_LIR_UNIT};
+    XrLirFunction wrapper = {0};
+    XrLirBlock block = {0};
+    XrLirValue state = {0};
+    if (!lower_build(c, xr_lir_declare_function(c->module, &spec, &wrapper)) ||
+        !lower_build(c, xr_lir_define_function(c->module, wrapper)) ||
+        !lower_build(c, xr_lir_add_block(c->module, wrapper, NULL, 0, &block)) ||
+        !lower_build(c, xr_lir_set_entry(c->module, wrapper, block)) ||
+        (stateful && !lower_build(c, xr_lir_function_parameter(c->module, wrapper, 0, &state))))
+        return false;
+    c->module->functions[wrapper.id - 1].test_error_boundary = true;
+    XrLirInstruction call = {.type = XR_LIR_UNIT, .callee = c->functions[selected],
+        .operands = stateful ? &state : NULL, .operand_count = stateful};
+    XrLirInstruction ret = {.op = XR_LIR_RET, .type = XR_LIR_UNIT};
+    XrLirType error = lower_type(c, lower_error_bound(c, selected));
+    if (!lower_uncaught_invoke(c, wrapper, &block, call, error) ||
+        !lower_build(c, xr_lir_set_terminator(c->module, block, &ret)))
+        return false;
+    *output = wrapper;
     return true;
 }
 
@@ -4188,7 +4224,7 @@ static bool lower_wrapper(Lower *c, uint32_t entry, XrLirFunction *output) {
             .callee = c->functions[selected], .operands = &state,
             .operand_count = lower_hidden_state(c, selected)};
         if (initializer && lower_function_error(c,selected)) {
-            if (!lower_startup_invoke(c,wrapper,&block,call,lower_type(c,lower_error_bound(c,selected)))) return false;
+            if (!lower_uncaught_invoke(c,wrapper,&block,call,lower_type(c,lower_error_bound(c,selected)))) return false;
         } else if (!lower_build(c, call.type == XR_LIR_UNIT
             ? xr_lir_emit_effect(c->module, block, &call)
             : xr_lir_emit_value(c->module, block, &call, &result))) return false;
@@ -4350,7 +4386,7 @@ typedef enum LowerRootKind {
     LOWER_ROOT_STDLIB_EXPORT
 } LowerRootKind;
 
-static bool lower_test_role(Lower *c, uint32_t function, XrXirTestRole role) {
+static bool lower_test_role(Lower *c, uint32_t function, XrXirTestRole role, bool session) {
     const XrXirDeclarations *d = c->source->declarations;
     if (function >= c->source->function_count || !d->functions ||
         role < XR_XIR_TEST_ROLE_TEST || role > XR_XIR_TEST_ROLE_AFTER_EACH ||
@@ -4365,7 +4401,7 @@ static bool lower_test_role(Lower *c, uint32_t function, XrXirTestRole role) {
     if (d->functions[function].test_timeout_milliseconds)
         return lower_unsupported(c, "test-role startup with a deadline");
     if (test->parameter_count || test->result != XR_XIR_UNIT || !test->block_count ||
-        !lower_empty_error(test->error_type))
+        (!lower_empty_error(test->error_type) && (!session || !lower_is_plain_error_enum(c, test->error_type))))
         return lower_unsupported(c, "test-role startup signature or typed errors");
     return true;
 }
@@ -4406,13 +4442,13 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         return lower_error(&c, XR_LIR_VERIFY_ERROR, "invalid Checked program entry");
     uint32_t program_entry = d->entry_function;
     if (root_kind == LOWER_ROOT_TEST) {
-        if (!lower_test_role(&c, selected, XR_XIR_TEST_ROLE_TEST)) return c.status;
+        if (!lower_test_role(&c, selected, XR_XIR_TEST_ROLE_TEST, false)) return c.status;
         program_entry = selected;
     } else if (root_kind == LOWER_ROOT_TEST_PLAN) {
         if (role_count > source->function_count || (role_count && !roles))
             return lower_error(&c, XR_LIR_INVALID_ARGUMENT, "invalid test role inventory");
         for (uint32_t i = 0; i < role_count; ++i)
-            if (!lower_test_role(&c, roles[i].function, roles[i].role)) return c.status;
+            if (!lower_test_role(&c, roles[i].function, roles[i].role, true)) return c.status;
         c.function = d->modules[0].initializer;
         program_entry = UINT32_MAX;
     }
@@ -4518,6 +4554,14 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         if (c.active[f])
             good = lower_declare(&c, f);
     XrLirFunction entry = {0};
+    XrLirFunction *test_actions = NULL;
+    if (good && role_count) {
+        test_actions = lower_alloc(&c, role_count, sizeof(*test_actions));
+        good = test_actions != NULL;
+        for (uint32_t i = 0; i < role_count && good; ++i)
+            if (roles[i].role != XR_XIR_TEST_ROLE_SKIP)
+                good = lower_test_action(&c, roles[i].function, &test_actions[i]);
+    }
     /* Slice contracts refer to the final function directory. Declare the
      * ordinary entry before receiving them; no source body is executed here. */
     if (good && c.views && !local && !exporting) good = lower_wrapper(&c, program_entry, &entry);
@@ -4549,10 +4593,11 @@ static XrLirStatus lower_checked(const XrLirLowerRequest *request, uint32_t sele
         /* String elision retains function ordinals in the new module. */
         for (uint32_t i = 0; i < role_count; ++i)
             roles[i].function = roles[i].role == XR_XIR_TEST_ROLE_SKIP ? UINT32_MAX :
-                c.functions[roles[i].function].id - 1;
+                test_actions[i].id - 1;
         *output = (XrLirLowered) {c.module, entry};
         c.module = NULL;
     }
+    xr_free(test_actions);
     xr_lir_module_destroy(c.module);
     xr_free(c.functions);
     xr_free(c.closure_types);

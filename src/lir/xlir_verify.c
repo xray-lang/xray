@@ -743,10 +743,13 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         return XR_LIR_OK;
     }
     if (v->op == XR_LIR_FUNCTION_REF || v->op == XR_LIR_CALL_INDIRECT || v->op == XR_LIR_FUNCTION_WEAKEN) {
-        if ((v->op==XR_LIR_FUNCTION_REF && m->startup_entry && v->callee==m->startup_entry) ||
-            (v->op==XR_LIR_FUNCTION_REF && v->callee && v->callee<=m->function_count &&
-             m->functions[v->callee-1].cleanup_owner) ||
-            !xr_lir_internal_callable_instruction(m, f, v)) goto invalid;
+        if (v->op == XR_LIR_FUNCTION_REF) {
+            if (!v->callee || v->callee > m->function_count || v->callee == m->startup_entry)
+                goto invalid;
+            const XrLirFunctionData *target = &m->functions[v->callee - 1];
+            if (target->cleanup_owner || target->test_error_boundary) goto invalid;
+        }
+        if (!xr_lir_internal_callable_instruction(m, f, v)) goto invalid;
         return XR_LIR_OK;
     }
     if (v->op == XR_LIR_ARITHMETIC_PANIC) {
@@ -778,7 +781,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             if (!v->source.path) goto invalid;
         } else {
             XrLirSource where=v->source;
-            if (function!=m->startup_entry || where.path || where.path_length ||
+            if ((function != m->startup_entry && !f->test_error_boundary) || where.path || where.path_length ||
                 where.line || where.column || where.end_line || where.end_column) goto invalid;
         }
         return XR_LIR_OK;
@@ -788,7 +791,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
             goto invalid;
         const XrLirFunctionData *callee = &m->functions[v->callee - 1];
         if ((callee->error != 0) != (v->op == XR_LIR_INVOKE) || v->callee==m->startup_entry ||
-            (callee->cleanup_owner && callee->cleanup_owner != function) ||
+            callee->test_error_boundary || (callee->cleanup_owner && callee->cleanup_owner != function) ||
             (v->op==XR_LIR_INVOKE && (!!callee->initializer_module!=(function==m->startup_entry)))) goto invalid;
         for (uint32_t p = 0; p < callee->callable_parameter_count; ++p) {
             XrLirFunctionCallableParameter parameter = callee->callable_parameters[p];
@@ -1171,6 +1174,10 @@ static bool lir_invoke_string_landing(const XrLirBlockData *block,
 static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirFunctionData *f,
     const LirGraph *g,uint8_t *discarded) {
     bool startup=function==m->startup_entry,optional=false;
+    if (f->test_error_boundary && (f->block_count != 3 ||
+        f->blocks[f->entry - 1].instruction_count != 1 ||
+        lir_terminator(f, f->entry - 1)->op != XR_LIR_INVOKE))
+        return false;
     if (f->strict_utf8) {
         const XrLirInstructionView *decode = &f->blocks[f->entry - 1].instructions[0].view;
         XrLirSliceIntrinsic role;
@@ -1192,7 +1199,7 @@ static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirF
             const XrLirInstructionView *exit=lir_terminator(f,target);
             if (term->edges[1].argument_count) {
                 const XrLirCleanupBlock *cleanup = f->blocks[b].cleanup;
-                if (startup || (cleanup && cleanup->frontier) ||
+                if (startup || f->test_error_boundary || (cleanup && cleanup->frontier) ||
                     !lir_invoke_string_landing(failed,exit)) return false;
                 continue;
             }
@@ -1200,6 +1207,12 @@ static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirF
             if (startup) {
                 if (exit->op!=XR_LIR_UNCAUGHT_ERROR || failed->instruction_count!=1 ||
                     !lir_startup_publication(m,f,b,term)) return false;
+            } else if (f->test_error_boundary) {
+                uint32_t success = term->edges[0].target - 1;
+                if (term->type != XR_LIR_UNIT || exit->op != XR_LIR_UNCAUGHT_ERROR ||
+                    failed->instruction_count != 1 || f->blocks[success].instruction_count != 1 ||
+                    lir_terminator(f, success)->op != XR_LIR_RET)
+                    return false;
             } else if (exit->op==XR_LIR_BR) {
                 /* A catch receives this exact edge result as its first parameter.
                  * The landing may first retire temporary Slice loans, or run a
@@ -1350,6 +1363,11 @@ static bool lir_function_shape(const XrLirModule *m, const XrLirFunctionData *f)
     if (f->initializer_module && (!m->startup_entry || f->initializer_module>m->startup_module_count ||
         !f->error || f->result!=XR_LIR_UNIT || f->kind!=XR_LIR_FUNCTION_DEFINITION ||
         f->parameter_count>1 || (f->parameter_count && f->parameter_types[0]!=XR_LIR_STATE))) return false;
+    if (f->test_error_boundary && (startup || m->state_entry == function || f->initializer_module ||
+        f->kind != XR_LIR_FUNCTION_DEFINITION || f->error || f->result != XR_LIR_UNIT ||
+        f->parameter_count > 1 || (f->parameter_count && f->parameter_types[0] != XR_LIR_STATE) ||
+        f->cleanup_owner || f->has_cleanups || f->closure.callable))
+        return false;
     if (f->cleanup_owner) {
         if (f->cleanup_owner >= function || f->kind != XR_LIR_FUNCTION_DEFINITION ||
             f->result != XR_LIR_UNIT || f->error || f->initializer_module || f->closure.callable ||

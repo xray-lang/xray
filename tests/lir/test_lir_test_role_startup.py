@@ -115,9 +115,20 @@ def main():
                  initializer_failure, b"17\n", b"initializer failure")
     assert_rejected(args, root, source, "session-deadline", "--test-plan",
                     lowering=b"test-role startup with a deadline is not supported by LIR lowering yet")
-    typed_error = fixtures / "test-role-session-typed-error.xr"
-    assert_rejected(args, root, typed_error, "session-typed-error", "--test-plan",
+    managed_error = root / "managed-test-error.xr"
+    managed_error.write_text(
+        'enum TestRefusal { Denied { reason: string } }\n'
+        '@test\nfn denied() throws(TestRefusal) { throw TestRefusal.Denied { reason: "unsupported" } }\n',
+        encoding="utf-8")
+    assert_rejected(args, root, managed_error, "session-managed-error", "--test-plan",
                     lowering=b"test-role startup signature or typed errors is not supported by LIR lowering yet")
+    typed_error = fixtures / "test-role-session-typed-error.xr"
+    assert run_entry(args, root, typed_error, "session-typed-init", "--test-plan") == (0, b"17\n", b""), root
+    assert run_entry(args, root, typed_error, "session-typed-error", "--test-session", "typed_failure",
+                     "--optimize", session=True) == (
+                         1, b"17\n18\n58\n", b"[Uncaught Error] TestRefusal.Denied(18)\n"), root
+    assert run_entry(args, root, typed_error, "session-typed-success", "--test-session", "typed_success",
+                     session=True) == (0, b"17\n19\n59\n", b""), root
 
     actions = fixtures / "test-role-session-actions.xr"
     assert run_entry(args, root, actions, "file-pass", "--test-session", "passing_action",

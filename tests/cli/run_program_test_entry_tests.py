@@ -312,6 +312,21 @@ fn continues() { assert(counter == 1) }
             '[Uncaught Error] Failure.Failed("from-test")', "1 passed", "1 failed"),
             absent=("execution failed (outcome=",))
 
+    def test_scalar_typed_error_and_teardown(self):
+        output = self.invoke({"main_test.xr": '''
+enum Failure { Denied { code: i64 } }
+var counter: i64 = 0
+@test
+fn fails() throws(Failure) { throw Failure.Denied { code: 17 } }
+@after_each
+fn cleanup() { counter = counter + 1 }
+@test
+fn continues() { assert(counter == 1); print(counter) }
+'''}, 1, "--jobs", "1", contains=(
+            "[Uncaught Error] Failure.Denied(17)", "1 passed", "1 failed"),
+            absent=("execution failed (outcome=",))
+        self.assertEqual(output, "1\n")
+
     def test_invalid_declarations_and_compile_errors_fail(self):
         for source in (
             "@test\nfn needsArgument(x: i64) {}\n",

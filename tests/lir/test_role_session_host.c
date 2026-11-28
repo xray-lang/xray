@@ -95,10 +95,14 @@ int main(int argc, char **argv) {
     }
     CHECK(xrt_test_session_free(&session) == XR_OS_IO_OK && !session);
     if (failed) {
-        CHECK(first.kind == XRT_FAILURE_MESSAGE_PANIC);
-        const XrtStringBacking *message = (const XrtStringBacking *)first.detail.message.message;
-        CHECK(message && xrt_message_panic_report(first.detail.message.code, message->bytes,
-            message->length, xrt_locations_get(locations, first.detail.message.source_id)));
+        if (first.kind == XRT_FAILURE_UNCAUGHT_ERROR) {
+            CHECK(xrt_uncaught_error_report(first.detail.error));
+        } else {
+            CHECK(first.kind == XRT_FAILURE_MESSAGE_PANIC);
+            const XrtStringBacking *message = (const XrtStringBacking *)first.detail.message.message;
+            CHECK(message && xrt_message_panic_report(first.detail.message.code, message->bytes,
+                message->length, xrt_locations_get(locations, first.detail.message.source_id)));
+        }
         xrt_execution_failure_drop(&first);
     }
     xrt_locations_release(locations);

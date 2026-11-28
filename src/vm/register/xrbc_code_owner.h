@@ -29,7 +29,7 @@ struct XrRbcCodeOwner {
     _Atomic(uint32_t) references;
     const XrRbcFunction *functions;
     size_t function_count;
-    uint32_t startup_function; /* One-based physical execution root. */
+    const bool *uncaught_error_roots; /* Indexed by physical function ordinal. */
     XrLirValueHomes *const *value_homes;
     XrRbcValueCode *const *value_codes;
     const XrtValueImage *values;

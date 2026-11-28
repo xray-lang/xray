@@ -84,7 +84,13 @@ static void compile_file(const char *path, bool optimize, const char *stdlib,
     xr_compile_resources_release(resources);
 }
 
-static bool report_test_panic(const XrRbcOutcome *outcome) {
+static bool report_test_failure(const XrRbcOutcome *outcome) {
+    const XrtErrorSnapshot *error = xr_rbc_outcome_uncaught_error(outcome);
+    if (error) {
+        if (!xrt_uncaught_error_report(error))
+            fputs("cannot render uncaught typed error\n", stderr);
+        return true;
+    }
     uint32_t code, source;
     const char *message;
     size_t length;
@@ -180,7 +186,7 @@ static int run_test_session(XrRbcTestSession *session, uint32_t action_count, bo
     if (xr_rbc_test_session_free(&session) != XR_OS_IO_OK) valid = false;
     int result = valid ? 0 : 2;
     if (valid && failed)
-        result = report_test_panic(first) ? 1 : lir_vm_result_report(first, first_status);
+        result = report_test_failure(first) ? 1 : lir_vm_result_report(first, first_status);
     xr_rbc_outcome_free(&first);
     if (defer_close && !session_close_finish(&close)) result = 2;
     return result;
@@ -232,7 +238,7 @@ int main(int argc, char **argv) {
             xr_rbc_program_destroy(program);
             program = NULL;
         }
-        result = (test_name || test_plan) && report_test_panic(outcome) ? 1 : lir_vm_result_report(outcome, status);
+        result = (test_name || test_plan) && report_test_failure(outcome) ? 1 : lir_vm_result_report(outcome, status);
         xr_rbc_outcome_free(&outcome);
     }
     xr_rbc_program_destroy(program);

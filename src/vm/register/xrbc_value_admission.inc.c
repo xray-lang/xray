@@ -1001,8 +1001,9 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_PANIC_ERROR: case XR_RBC_VALUE_UNCAUGHT_ERROR: {
         if (a.operation==XR_RBC_VALUE_UNCAUGHT_ERROR) {
             const XrRbcCodeOwner *owner=xr_rbc_module_code_owner(module);
-            if (!owner || !owner->startup_function || owner->startup_function>module->function_count ||
-                function!=module->functions+owner->startup_function-1 || code->error_type) return false;
+            size_t ordinal = (size_t)(function - module->functions);
+            if (!owner || !owner->uncaught_error_roots || ordinal >= owner->function_count ||
+                !owner->uncaught_error_roots[ordinal] || code->error_type) return false;
         }
         const XrLirValueHome *home=rbc_value_home(code,a.source);
         const XrtValueImage *image=xr_rbc_module_value_image(module);

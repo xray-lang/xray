@@ -82,7 +82,7 @@ typedef struct XrLirFunctionData {
     XrLirType error;
     uint32_t initializer_module;
     uint32_t cleanup_owner, cleanup_registration;
-    bool has_cleanups, strict_utf8;
+    bool has_cleanups, strict_utf8, test_error_boundary;
     XrLirClosureTarget closure;
     XrLirFunctionCallableParameter *callable_parameters;
     uint32_t callable_parameter_count;

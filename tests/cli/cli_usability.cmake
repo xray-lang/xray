@@ -66,6 +66,7 @@ add_test(NAME test_cli_test_jobs
     COMMAND ${XRAY_PYTHON} -X utf8 ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_program_test_entry_tests.py
         --xray $<TARGET_FILE:xray> -v
         ProgramTestCommand.test_files_have_isolated_instances
+        ProgramTestCommand.test_scalar_typed_error_and_teardown
         ProgramTestCommand.test_file_jobs_rendezvous_and_sorted_report
         ProgramTestCommand.test_file_jobs_fail_fast_keeps_inflight_cleanup
         ProgramTestCommand.test_file_jobs_console_owns_diagnostics_in_serial_file_order

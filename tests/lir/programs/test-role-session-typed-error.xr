@@ -1,8 +1,22 @@
-print(17)
+var state: i64 = 17
+print(state)
 
-enum TestRefusal { Denied }
+enum TestRefusal { Denied { code: i64 } }
 
 @test
 fn typed_failure() throws(TestRefusal) {
-    throw TestRefusal.Denied
+    state = state + 1
+    print(state)
+    throw TestRefusal.Denied { code: state }
+}
+
+@test
+fn typed_success() throws(TestRefusal) {
+    state = state + 2
+    print(state)
+}
+
+@after_each
+fn retire() {
+    print(state + 40)
 }
