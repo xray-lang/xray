@@ -1824,21 +1824,55 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         xrt_try_assert_panic((const uint8_t *)metadata->bytes,metadata->length,value.address,value.size,source);
     }
     XrtManagedStatus status=XRT_MANAGED_OK;
-    if (access.operation==XR_RBC_VALUE_CELL) status=rbc_value_cell_step(module,stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_STRING_APPEND_BINDING)
+    /* The ranges below name every member; growing one must extend its case list. */
+    _Static_assert(XR_RBC_VALUE_STRING_LITERAL == 0 && XR_RBC_VALUE_STRING_CONCAT == 3,
+        "the String factory operations are the first four");
+    _Static_assert(XR_RBC_VALUE_STATE_GROUP_INITIALIZE - XR_RBC_VALUE_STATE_READ == 4,
+        "the module state operations are five consecutive members");
+    _Static_assert(XR_RBC_VALUE_BINDING_DROP - XR_RBC_VALUE_ARRAY == 4,
+        "the Array and binding operations are five consecutive members");
+    _Static_assert(XR_RBC_VALUE_NULLABLE_UNWRAP - XR_RBC_VALUE_RECORD_NEW == 7,
+        "the inline record and nullable operations are eight consecutive members");
+    _Static_assert(XR_RBC_VALUE_HOST_DIRECTORY_FAIL - XR_RBC_VALUE_HOST_DIRECTORY_FRAME == 6,
+        "the checked directory operations are seven consecutive members");
+    switch (access.operation) {
+    case XR_RBC_VALUE_CELL:
+        status=rbc_value_cell_step(module,stack,activation,access,source);
+        break;
+    case XR_RBC_VALUE_STRING_APPEND_BINDING:
         status=rbc_value_string_binding_append(module,stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_STRING_APPEND_OWNED) status=rbc_value_string_append(activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_SLICE) status=rbc_value_slice_step(module,stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_FUNCTION_NEW) status=rbc_value_function_new(module,stack,activation,access);
-    else if (access.operation==XR_RBC_VALUE_FUNCTION_ALIAS || access.operation==XR_RBC_VALUE_FUNCTION_SCOPE_EXIT)
+        break;
+    case XR_RBC_VALUE_STRING_APPEND_OWNED:
+        status=rbc_value_string_append(activation,access,source);
+        break;
+    case XR_RBC_VALUE_SLICE:
+        status=rbc_value_slice_step(module,stack,activation,access,source);
+        break;
+    case XR_RBC_VALUE_FUNCTION_NEW:
+        status=rbc_value_function_new(module,stack,activation,access);
+        break;
+    case XR_RBC_VALUE_FUNCTION_ALIAS:
+    case XR_RBC_VALUE_FUNCTION_SCOPE_EXIT:
         status=rbc_value_function_alias(module,stack,activation,access,source);
-    else if (access.operation<=XR_RBC_VALUE_STRING_CONCAT) status=rbc_value_factory(module,stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_STRING_SLICE) status=rbc_value_string_slice(stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_STRING_REPLACE) status=rbc_value_string_replace(stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_COPY || access.operation==XR_RBC_VALUE_MOVE)
+        break;
+    case XR_RBC_VALUE_STRING_LITERAL:
+    case XR_RBC_VALUE_STRING_I64:
+    case XR_RBC_VALUE_STRING_F64:
+    case XR_RBC_VALUE_STRING_CONCAT:
+        status=rbc_value_factory(module,stack,activation,access,source);
+        break;
+    case XR_RBC_VALUE_STRING_SLICE:
+        status=rbc_value_string_slice(stack,activation,access,source);
+        break;
+    case XR_RBC_VALUE_STRING_REPLACE:
+        status=rbc_value_string_replace(stack,activation,access,source);
+        break;
+    case XR_RBC_VALUE_COPY:
+    case XR_RBC_VALUE_MOVE:
         status=rbc_value_replace(module,stack,activation,(RbcValueOrigin){activation,access.result},
             rbc_value_origin(activation,access.source),access.operation==XR_RBC_VALUE_COPY);
-    else if (access.operation==XR_RBC_VALUE_CLASS_ADOPT) {
+        break;
+    case XR_RBC_VALUE_CLASS_ADOPT: {
         /* Retaining retag: the destination acquires a new reference to the same
          * nominal handle, so later DROP on either side stays balanced. */
         const XrLirValueHome *home=rbc_value_home(activation->code,access.source);
@@ -1847,7 +1881,9 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         if (status==XRT_MANAGED_OK && !header) status=XRT_MANAGED_ARGUMENT;
         if (status==XRT_MANAGED_OK)
             status=rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.result},&header);
-    } else if (access.operation==XR_RBC_VALUE_CLASS_IS) {
+        break;
+    }
+    case XR_RBC_VALUE_CLASS_IS: {
         const XrLirValueHome *home=rbc_value_home(activation->code,access.source);
         const XrtManagedHeader *header=NULL;
         status=rbc_value_borrow_header(rbc_value_origin(activation,access.source),home,&header);
@@ -1880,33 +1916,47 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             if (status==XRT_MANAGED_OK && !output) status=XRT_MANAGED_ARGUMENT;
             if (status==XRT_MANAGED_OK) output->bits=matched ? 1u : 0u;
         }
+        break;
     }
-    else if (access.operation==XR_RBC_VALUE_DROP) {
+    case XR_RBC_VALUE_DROP: {
         const XrLirValueHome *home=rbc_value_home(activation->code,access.source);
         status=rbc_value_inline(module,activation->code,access.source,false) ?
             rbc_value_inline_replace(module,stack,(RbcValueOrigin){activation,access.source},NULL) :
             xrt_managed_slot_drop(activation->frame,home->first_owner);
-    } else if (access.operation==XR_RBC_VALUE_ASSERT_CONDITION) {
+        break;
+    }
+    case XR_RBC_VALUE_ASSERT_CONDITION: {
         const XrtStringBacking *message=NULL;
         status=rbc_value_string_borrow(activation,access.other,&message);
         XrRbcRegister *condition=rbc_value_register(stack,activation,access.source);
         if (status==XRT_MANAGED_OK && (!condition || condition->bits>1)) status=XRT_MANAGED_ARGUMENT;
         if (status==XRT_MANAGED_OK) xrt_assert_condition((uint8_t)condition->bits,message,source);
-    } else if (access.operation==XR_RBC_VALUE_HOST_FILE_OPEN_WRITE || access.operation==XR_RBC_VALUE_HOST_FILE_CLOSE ||
-        access.operation==XR_RBC_VALUE_HOST_FILE_WRITE || access.operation==XR_RBC_VALUE_HOST_PATH_CLASS ||
-        access.operation==XR_RBC_VALUE_HOST_FILE_READ) {
+        break;
+    }
+    case XR_RBC_VALUE_HOST_FILE_OPEN_WRITE:
+    case XR_RBC_VALUE_HOST_FILE_CLOSE:
+    case XR_RBC_VALUE_HOST_FILE_WRITE:
+    case XR_RBC_VALUE_HOST_PATH_CLASS:
+    case XR_RBC_VALUE_HOST_FILE_READ:
         status = rbc_value_host_file(module, stack, activation, access, source);
-    } else if (access.operation==XR_RBC_VALUE_HOST_ENV_GET) {
+        break;
+    case XR_RBC_VALUE_HOST_ENV_GET:
         status = rbc_value_host_environment_get(activation, access, source);
-    } else if (access.operation==XR_RBC_VALUE_HOST_TEXT_RESULT) {
+        break;
+    case XR_RBC_VALUE_HOST_TEXT_RESULT:
         status = rbc_value_host_text_result(activation, access, source);
-    } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY) {
+        break;
+    case XR_RBC_VALUE_HOST_DIRECTORY:
         status = rbc_value_host_directory(stack, activation, access, source);
-    } else if (access.operation == XR_RBC_VALUE_CHECKED_RESULT || access.operation == XR_RBC_VALUE_CHECKED_ERROR) {
+        break;
+    case XR_RBC_VALUE_CHECKED_RESULT:
+    case XR_RBC_VALUE_CHECKED_ERROR:
         status = rbc_value_checked_receive(stack,&stack->frames[activation->depth - 1],activation->code,access);
-    } else if (access.operation == XR_RBC_VALUE_CHECKED_EMPTY_ARRAY) {
+        break;
+    case XR_RBC_VALUE_CHECKED_EMPTY_ARRAY:
         status = rbc_value_checked_empty_array(module,stack,activation,access);
-    } else if (access.operation == XR_RBC_VALUE_CHECKED_ARRAY_PUSH) {
+        break;
+    case XR_RBC_VALUE_CHECKED_ARRAY_PUSH: {
         XrRbcRegister *output = rbc_value_register(stack,activation,access.result);
         if (!output) status = XRT_MANAGED_ARGUMENT;
         else {
@@ -1914,11 +1964,18 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             access.result = 0;
             output->bits = rbc_value_array_step(module,stack,activation,access,source);
         }
-    } else if (access.operation == XR_RBC_VALUE_MANAGED_FAILURE) {
+        break;
+    }
+    case XR_RBC_VALUE_MANAGED_FAILURE:
         return rbc_value_report_managed_failure(stack,&stack->frames[activation->depth - 1],activation->code,access,source);
-    } else if (access.operation >= XR_RBC_VALUE_HOST_DIRECTORY_FRAME && access.operation <= XR_RBC_VALUE_HOST_DIRECTORY_FAIL) {
+    case XR_RBC_VALUE_HOST_DIRECTORY_FRAME:
+    case XR_RBC_VALUE_HOST_DIRECTORY_NEXT_CHECKED:
+    case XR_RBC_VALUE_HOST_DIRECTORY_CLOSE_CHECKED:
+    case XR_RBC_VALUE_HOST_DIRECTORY_RETURN_GUARD:
+    case XR_RBC_VALUE_HOST_DIRECTORY_FAIL:
         status = rbc_value_checked_directory(module,stack,activation,access,source);
-    } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE) {
+        break;
+    case XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_CLOSE: {
         const XrRbcRegister *operand = rbc_value_register(stack, activation, access.source);
         if (!operand) status = XRT_MANAGED_ARGUMENT;
         else {
@@ -1926,9 +1983,12 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             memcpy(&token, &operand->bits, sizeof(token));
             xrt_native_host_directory_cleanup_close(token, source);
         }
-    } else if (access.operation == XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL) {
+        break;
+    }
+    case XR_RBC_VALUE_HOST_DIRECTORY_CLEANUP_POLL:
         xrt_native_host_directory_cleanup_poll(source);
-    } else if (access.operation==XR_RBC_VALUE_HOST_PATH_BOOL) {
+        break;
+    case XR_RBC_VALUE_HOST_PATH_BOOL: {
         const XrtStringBacking *path = NULL, *destination = NULL;
         status = rbc_value_string_borrow(activation, access.source, &path);
         if (status == XRT_MANAGED_OK && access.other)
@@ -1938,8 +1998,11 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
         if (status == XRT_MANAGED_OK)
             output->bits = access.other ? xrt_native_host_path_pair_bool(access.index, path, destination, source) :
                 xrt_native_host_path_bool(access.index, path, source);
-    } else if (access.operation==XR_RBC_VALUE_I64_TRY_PARSE || access.operation==XR_RBC_VALUE_F64_TRY_PARSE ||
-        access.operation==XR_RBC_VALUE_BOOL_TRY_PARSE) {
+        break;
+    }
+    case XR_RBC_VALUE_I64_TRY_PARSE:
+    case XR_RBC_VALUE_F64_TRY_PARSE:
+    case XR_RBC_VALUE_BOOL_TRY_PARSE: {
         const XrtStringBacking *string = NULL;
         RbcValuePayload destination;
         status = rbc_value_string_borrow(activation, access.source, &string);
@@ -1972,8 +2035,11 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
                 destination.address[0] = 1;
             }
         }
-    } else if (access.operation==XR_RBC_VALUE_STRING_PRINT || access.operation==XR_RBC_VALUE_STRING_LENGTH ||
-        access.operation==XR_RBC_VALUE_STRING_BYTE_LENGTH) {
+        break;
+    }
+    case XR_RBC_VALUE_STRING_PRINT:
+    case XR_RBC_VALUE_STRING_LENGTH:
+    case XR_RBC_VALUE_STRING_BYTE_LENGTH: {
         const XrtStringBacking *string=NULL;
         status=rbc_value_string_borrow(activation,access.source,&string);
         if (status==XRT_MANAGED_OK && access.operation==XR_RBC_VALUE_STRING_PRINT)
@@ -1985,7 +2051,9 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             else if (length>INT64_MAX) status=XRT_MANAGED_OVERFLOW;
             else output->bits=(uint64_t)length;
         }
-    } else if (access.operation==XR_RBC_VALUE_STRING_INDEX_OF) {
+        break;
+    }
+    case XR_RBC_VALUE_STRING_INDEX_OF: {
         const XrtStringBacking *text=NULL,*search=NULL;
         status=rbc_value_string_borrow(activation,access.source,&text);
         if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&search);
@@ -1999,7 +2067,9 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
                 output->bits=(uint64_t)xrt_native_string_index_of(text,search,from,source);
             }
         }
-    } else if (access.operation==XR_RBC_VALUE_STRING_ORDER) {
+        break;
+    }
+    case XR_RBC_VALUE_STRING_ORDER: {
         const XrtStringBacking *left=NULL,*right=NULL;
         status=rbc_value_string_borrow(activation,access.source,&left);
         if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&right);
@@ -2013,7 +2083,9 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
                 output->bits=result ? 1u : 0u;
             }
         }
-    } else if (access.operation==XR_RBC_VALUE_STRING_LAST_INDEX_OF) {
+        break;
+    }
+    case XR_RBC_VALUE_STRING_LAST_INDEX_OF: {
         const XrtStringBacking *text=NULL,*search=NULL;
         status=rbc_value_string_borrow(activation,access.source,&text);
         if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&search);
@@ -2022,7 +2094,9 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             if (!output) status=XRT_MANAGED_ARGUMENT;
             else output->bits=(uint64_t)xrt_native_string_last_index_of(text,search,source);
         }
-    } else if (access.operation==XR_RBC_VALUE_STRING_TEST) {
+        break;
+    }
+    case XR_RBC_VALUE_STRING_TEST: {
         const XrtStringBacking *text=NULL,*pattern=NULL;
         status=rbc_value_string_borrow(activation,access.source,&text);
         if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&pattern);
@@ -2031,7 +2105,10 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
             if (!output) status=XRT_MANAGED_ARGUMENT;
             else output->bits=xrt_native_string_test(text,pattern,access.index,source) ? 1u : 0u;
         }
-    } else if (access.operation==XR_RBC_VALUE_STRING_EQUAL || access.operation==XR_RBC_VALUE_STRING_NOT_EQUAL) {
+        break;
+    }
+    case XR_RBC_VALUE_STRING_EQUAL:
+    case XR_RBC_VALUE_STRING_NOT_EQUAL: {
         const XrtStringBacking *left=NULL,*right=NULL;
         status=rbc_value_string_borrow(activation,access.source,&left);
         if (status==XRT_MANAGED_OK) status=rbc_value_string_borrow(activation,access.other,&right);
@@ -2044,25 +2121,58 @@ static XR_NOINLINE XrRbcStatus xr_rbc_values_step(const XrRbcModule *module, XrR
                 output->bits=access.operation==XR_RBC_VALUE_STRING_NOT_EQUAL ? !equal : equal;
             }
         }
-    } else if (access.operation>=XR_RBC_VALUE_STATE_READ && access.operation<=XR_RBC_VALUE_STATE_GROUP_INITIALIZE)
+        break;
+    }
+    case XR_RBC_VALUE_STATE_READ:
+    case XR_RBC_VALUE_STATE_WRITE:
+    case XR_RBC_VALUE_STATE_CONSTRUCT:
+    case XR_RBC_VALUE_STATE_INITIALIZE:
+    case XR_RBC_VALUE_STATE_GROUP_INITIALIZE:
         status=rbc_value_state(module,stack,activation,access);
-    else if (access.operation==XR_RBC_VALUE_EDGE) {
+        break;
+    case XR_RBC_VALUE_EDGE:
         status=rbc_value_edge(module,stack,activation,access);
         if (status==XRT_MANAGED_OK && access.window) rbc_value_array_push_after_edge(stack,activation,access);
-    }
-    else if (access.operation>=XR_RBC_VALUE_ARRAY && access.operation<=XR_RBC_VALUE_BINDING_DROP)
+        break;
+    case XR_RBC_VALUE_ARRAY:
+    case XR_RBC_VALUE_BINDING_NEW:
+    case XR_RBC_VALUE_BINDING_READ:
+    case XR_RBC_VALUE_BINDING_WRITE:
+    case XR_RBC_VALUE_BINDING_DROP:
         status=rbc_value_array_step(module,stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_MAP) status=rbc_value_map_step(module,stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_SET) status=rbc_value_set_step(module,stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_MAP_LITERAL) status=rbc_value_map_literal(module,stack,activation,access,source);
-    else if ((access.operation>=XR_RBC_VALUE_RECORD_NEW && access.operation<=XR_RBC_VALUE_NULLABLE_UNWRAP) ||
-        access.operation==XR_RBC_VALUE_SUM_NEW || access.operation==XR_RBC_VALUE_SUM_TAG ||
-        access.operation==XR_RBC_VALUE_SUM_GET || access.operation==XR_RBC_VALUE_CLASS_SCALAR_WRITE ||
-        access.operation==XR_RBC_VALUE_CLASS_STRING_WRITE ||
-        access.operation==XR_RBC_VALUE_CLASS_ARRAY_WRITE || access.operation==XR_RBC_VALUE_CLASS_ARRAY_PUSH)
+        break;
+    case XR_RBC_VALUE_MAP:
+        status=rbc_value_map_step(module,stack,activation,access,source);
+        break;
+    case XR_RBC_VALUE_SET:
+        status=rbc_value_set_step(module,stack,activation,access,source);
+        break;
+    case XR_RBC_VALUE_MAP_LITERAL:
+        status=rbc_value_map_literal(module,stack,activation,access,source);
+        break;
+    case XR_RBC_VALUE_RECORD_NEW:
+    case XR_RBC_VALUE_RECORD_FIELD:
+    case XR_RBC_VALUE_CLASS_NEW:
+    case XR_RBC_VALUE_CLASS_FIELD:
+    case XR_RBC_VALUE_NULLABLE_NONE:
+    case XR_RBC_VALUE_NULLABLE_SOME:
+    case XR_RBC_VALUE_NULLABLE_IS_SOME:
+    case XR_RBC_VALUE_NULLABLE_UNWRAP:
+    case XR_RBC_VALUE_SUM_NEW:
+    case XR_RBC_VALUE_SUM_TAG:
+    case XR_RBC_VALUE_SUM_GET:
+    case XR_RBC_VALUE_CLASS_SCALAR_WRITE:
+    case XR_RBC_VALUE_CLASS_STRING_WRITE:
+    case XR_RBC_VALUE_CLASS_ARRAY_WRITE:
+    case XR_RBC_VALUE_CLASS_ARRAY_PUSH:
         status=rbc_value_inline_step(module,stack,activation,access,source);
-    else if (access.operation==XR_RBC_VALUE_DISPLAY) status=rbc_value_display(module,stack,activation,access,source);
-    else return XR_RBC_INVALID;
+        break;
+    case XR_RBC_VALUE_DISPLAY:
+        status=rbc_value_display(module,stack,activation,access,source);
+        break;
+    default:
+        return XR_RBC_INVALID;
+    }
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
     if (activation->array_regions) rbc_value_array_region_after(stack,activation,index);
     stack->frames[stack->depth-1].pc=pc;
