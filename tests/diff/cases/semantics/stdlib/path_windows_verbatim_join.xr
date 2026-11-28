@@ -1,0 +1,11 @@
+// Joining a rooted part onto a verbatim root keeps exactly one separator,
+// whether or not the root spelling ends in one.
+import "std/path/windows" as win
+print(win.join(win.from("\\\\?\\UNC\\server\\share"), win.from("\\logs")).raw)
+print(win.join(win.from("\\\\?\\UNC\\server\\share\\"), win.from("\\logs")).raw)
+print(win.join(win.from("\\\\?\\UNC\\server\\share\\dir"), win.from("\\logs")).raw)
+print(win.join(win.from("\\\\?\\C:\\dir"), win.from("\\logs")).raw)
+print(win.join(win.from("\\\\?\\Volume{abc}"), win.from("\\logs")).raw)
+print(win.join(win.from("\\\\server\\share"), win.from("\\logs")).raw)
+print(win.join(win.from("C:\\a"), win.from("\\logs")).raw)
+print(win.join(win.from("\\\\?\\UNC\\server\\share"), win.from("logs")).raw)

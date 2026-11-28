@@ -153,8 +153,13 @@ export fn joinAll(parts: Array<string>, windows: bool) -> string {
             }
             part=part.slice(next.end)
         } else if (windows && next.rooted) {
-            if (prior.verbatim) { out=_rootText(prior,true)+part.slice(next.end) }
-            else if (len(prior.drive)>0) { out=prior.drive+part } else { out=part }
+            // A verbatim root keeps its own spelling, which need not end in a
+            // separator (\\?\UNC\server\share); the rooted part supplies none.
+            if (prior.verbatim) {
+                var head=_rootText(prior,true)
+                if (!separator(head.slice(len(head)-1,len(head)),true,true)) { head=head+"\\" }
+                out=head+part.slice(next.end)
+            } else if (len(prior.drive)>0) { out=prior.drive+part } else { out=part }
             continue
         }
         out=_append(out,part,windows,prior.verbatim)
