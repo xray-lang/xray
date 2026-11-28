@@ -102,6 +102,9 @@
     X(OWNER_DROP, ABX) \
     X(OWNER_COPY, ABX) \
     X(OWNER_EDGE, ABX) \
+    X(OWNER_ARRAY_GET, ABX) \
+    X(OWNER_ARRAY_LEN, ABX) \
+    X(OWNER_CELL_READ, ABX) \
     X(ARITHMETIC_PANIC, ABX)
 
 typedef enum {

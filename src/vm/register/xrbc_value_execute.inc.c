@@ -2269,6 +2269,80 @@ static inline XrRbcStatus xr_rbc_owner_edge_step(const XrRbcModule *module, XrRb
     return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
 }
 
+/* The activation's own Frame holds this local owner. Reading its Header
+ * observes the same busy and pending state as the runtime borrow. */
+static inline const XrtManagedHeader *rbc_value_owner_header(const RbcValueActivation *activation, uint32_t value) {
+    const XrLirValueHome *home = &activation->code->homes->values[value];
+    const XrtManagedFrameLocations *locations = &activation->frame_locations;
+    const XrtManagedSlot *slot = &locations->slots[home->first_owner];
+    XR_DCHECK(locations->frame == activation->frame && locations->payload == activation->payload &&
+        slot->owner_offset == home->offset, "a local owner word reads its sealed Frame slot");
+    if (*locations->busy || slot->pending.value || slot->pending.allocation_bytes) return NULL;
+    return *(XrtManagedHeader *const *)((const uint8_t *)activation->payload + home->offset);
+}
+static inline XrtBackingArrayKind rbc_value_owner_array_kind(const RbcValueActivation *activation, uint32_t value) {
+    return xrt_backing_array_kind_from_value(
+        activation->image->types[activation->code->homes->values[value].type - 1].kind);
+}
+static inline XrRbcStatus xr_rbc_array_get_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+    const XrRbcValueCode *code = activation->code;
+    const XrRbcValueAccess *access = &code->accesses[index];
+    const uint32_t *args = code->arguments + access->first;
+    const XrtArrayBacking *array = (const XrtArrayBacking *)rbc_value_owner_header(activation, args[0]);
+    const XrRbcRegister *position = rbc_value_register(stack, activation, args[1]);
+    XrtBackingArrayKind kind = rbc_value_owner_array_kind(activation, args[0]);
+    XrtArrayItem item;
+    XrtManagedStatus status = XRT_MANAGED_ARGUMENT;
+    if (array && position) {
+        int64_t at; memcpy(&at, &position->bits, sizeof(at));
+        status = xrt_array_backing_get(array, kind, at, &item);
+    }
+    if (status == XRT_MANAGED_OK && kind == XRT_BACKING_ARRAY_STRING) {
+        const XrLirValueHome *result = &code->homes->values[access->result];
+        status = xrt_backing_slot_copy(activation->frame, result->temporary_first_owner, &item.value.string->managed);
+        if (status == XRT_MANAGED_OK)
+            status = xrt_place_frame_move_replace(activation->frame, result->first_owner, result->temporary_first_owner);
+    } else if (status == XRT_MANAGED_OK) {
+        XrRbcRegister *output = rbc_value_register(stack, activation, access->result);
+        if (!output) status = XRT_MANAGED_ARGUMENT;
+        else if (kind == XRT_BACKING_ARRAY_F64) memcpy(&output->bits, &item.value.f64, sizeof(item.value.f64));
+        else output->bits = kind == XRT_BACKING_ARRAY_U8 ? item.value.u8 :
+            kind == XRT_BACKING_ARRAY_U64 ? item.value.u64 : (uint64_t)item.value.i64;
+    }
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
+    return XR_RBC_OK;
+}
+static inline XrRbcStatus xr_rbc_array_len_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+    const XrRbcValueAccess *access = &activation->code->accesses[index];
+    const XrtArrayBacking *array = (const XrtArrayBacking *)rbc_value_owner_header(activation,
+        activation->code->arguments[access->first]);
+    XrRbcRegister *output = rbc_value_register(stack, activation, access->result);
+    XrtManagedStatus status = !array || !output ? XRT_MANAGED_ARGUMENT :
+        array->length > INT64_MAX ? XRT_MANAGED_OVERFLOW : XRT_MANAGED_OK;
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
+    output->bits = (uint64_t)array->length;
+    return XR_RBC_OK;
+}
+static inline XrRbcStatus xr_rbc_binding_copy_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+    const XrRbcValueAccess *access = &activation->code->accesses[index];
+    const XrLirValueHomes *homes = activation->code->homes;
+    XrtManagedStatus status = xrt_place_copy_replace(
+        (XrtPlace){.frame = activation->frame, .slot = homes->values[access->result].first_owner, .nulls = XRT_PLACE_NONNULL},
+        (XrtPlace){.frame = activation->frame, .slot = homes->bindings[access->source].first_owner, .nulls = XRT_PLACE_NONNULL},
+        NULL);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
+    return XR_RBC_OK;
+}
+
 /* A borrowed literal only materializes its Frame keeper. The ordinary
  * factory still owns first use and failure, including the source and cleanup. */
 static XR_NOINLINE XrRbcStatus xr_rbc_string_literal_borrow_step(const XrRbcModule *module,

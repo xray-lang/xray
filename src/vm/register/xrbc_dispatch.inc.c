@@ -513,6 +513,21 @@ XR_RBC_CASE(OWNER_EDGE) {
     if (status != XR_RBC_OK) return status;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(OWNER_ARRAY_GET) {
+    XrRbcStatus status = xr_rbc_array_get_step(module, stack, instruction >> 16, pc);
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(OWNER_ARRAY_LEN) {
+    XrRbcStatus status = xr_rbc_array_len_step(module, stack, instruction >> 16, pc);
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(OWNER_CELL_READ) {
+    XrRbcStatus status = xr_rbc_binding_copy_step(module, stack, instruction >> 16, pc);
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
 #endif
 #if !defined(__clang__) && !defined(__GNUC__)
 default:
@@ -535,6 +550,14 @@ default:
         XrRbcStatus status = op == XR_RBC_OWNER_DROP ? xr_rbc_owner_drop_step(module, stack, index, pc) :
             op == XR_RBC_OWNER_COPY ? xr_rbc_owner_copy_step(module, stack, index, pc) :
             xr_rbc_owner_edge_step(module, stack, index, pc);
+        if (status != XR_RBC_OK) return status;
+        XR_RBC_NEXT();
+    }
+    if (op == XR_RBC_OWNER_ARRAY_GET || op == XR_RBC_OWNER_ARRAY_LEN || op == XR_RBC_OWNER_CELL_READ) {
+        uint32_t index = instruction >> 16;
+        XrRbcStatus status = op == XR_RBC_OWNER_ARRAY_GET ? xr_rbc_array_get_step(module, stack, index, pc) :
+            op == XR_RBC_OWNER_ARRAY_LEN ? xr_rbc_array_len_step(module, stack, index, pc) :
+            xr_rbc_binding_copy_step(module, stack, index, pc);
         if (status != XR_RBC_OK) return status;
         XR_RBC_NEXT();
     }

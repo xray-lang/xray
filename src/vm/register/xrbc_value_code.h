@@ -229,6 +229,61 @@ static inline bool rbc_value_owner_edge(const XrRbcValueCode *code, XrRbcValueAc
     const XrLirHomeTransfer *transfer = &homes->transfers[edge->first];
     return code->arguments[access.first] == transfer->source && code->arguments[access.first + 1] == transfer->target;
 }
+static inline XrtValueKind rbc_value_home_kind(const XrtValueImage *image, const XrRbcValueCode *code, uint32_t value) {
+    return image->types[code->homes->values[value].type - 1].kind;
+}
+static inline bool rbc_value_register_operand(const XrRbcValueCode *code, uint32_t value) {
+    return code->locations && value && value <= code->value_count &&
+        (code->locations[value].kind == XR_RBC_VALUE_REGISTER || code->locations[value].kind == XR_RBC_VALUE_SPILL);
+}
+/* A local Array owner whose backing stores fixed scalars or Strings. */
+static inline bool rbc_value_backed_array(const XrtValueImage *image, const XrRbcValueCode *code, uint32_t value) {
+    if (!rbc_value_header_owner(image, code, value)) return false;
+    XrtValueKind kind = rbc_value_home_kind(image, code, value);
+    return kind == XRT_VALUE_ARRAY_I64 || kind == XRT_VALUE_ARRAY_U8 || kind == XRT_VALUE_ARRAY_U64 ||
+        kind == XRT_VALUE_ARRAY_F64 || kind == XRT_VALUE_ARRAY_STRING;
+}
+/* A local String owner that can also stage a new owner in its temporary. */
+static inline bool rbc_value_staged_string(const XrtValueImage *image, const XrRbcValueCode *code, uint32_t value) {
+    if (!rbc_value_header_owner(image, code, value) || rbc_value_home_kind(image, code, value) != XRT_VALUE_STRING)
+        return false;
+    const XrLirValueHome *home = &code->homes->values[value];
+    const XrtManagedFrameSpec *frame = &code->homes->frame;
+    return home->temporary_offset != SIZE_MAX && home->temporary_first_owner < frame->slot_count &&
+        home->temporary_first_owner != home->first_owner &&
+        frame->owned_offsets[home->temporary_first_owner] == home->temporary_offset;
+}
+static inline bool rbc_value_array_word(const XrtValueImage *image, const XrRbcValueCode *code,
+    XrRbcValueAccess access, uint32_t operation) {
+    if (access.operation != XR_RBC_VALUE_ARRAY || access.index != operation || access.source || access.other ||
+        access.window != UINT32_MAX || !code->arguments || access.first > code->argument_count ||
+        access.count > code->argument_count - access.first) return false;
+    const uint32_t *args = code->arguments + access.first;
+    if (operation == XR_LIR_ARRAY_OP_LEN)
+        return access.count == 1 && rbc_value_backed_array(image, code, args[0]) &&
+            rbc_value_register_operand(code, access.result);
+    if (access.count != 2 || !rbc_value_backed_array(image, code, args[0]) || !rbc_value_register_operand(code, args[1]))
+        return false;
+    return rbc_value_home_kind(image, code, args[0]) == XRT_VALUE_ARRAY_STRING ?
+        rbc_value_staged_string(image, code, access.result) : rbc_value_register_operand(code, access.result);
+}
+/* A read of a local Cell that is not forwarded copies its Header owner into a
+ * plain local owner of the same type. */
+static inline bool rbc_value_binding_copy(const XrtValueImage *image, const XrRbcValueCode *code,
+    XrRbcValueAccess access) {
+    const XrLirValueHomes *homes = code->homes;
+    if (access.operation != XR_RBC_VALUE_BINDING_READ || access.other || access.first || access.count ||
+        access.window || !homes || !homes->bindings || !access.source || access.source > code->value_count ||
+        access.source > homes->value_count || !rbc_value_header_owner(image, code, access.result)) return false;
+    if (access.index && (!homes->events || access.index > homes->event_count ||
+        homes->events[access.index - 1].forwarding_mode)) return false;
+    const XrLirHomeBinding *binding = &homes->bindings[access.source];
+    const XrLirValueHome *cell = &homes->values[access.source];
+    return binding->type && binding->kind == XR_LIR_HOME_BINDING_LOCAL && !binding->parameter && !binding->source &&
+        binding->type == homes->values[access.result].type && !cell->parameter && !cell->borrow_source &&
+        binding->first_owner < homes->frame.slot_count && homes->frame.owned_offsets &&
+        homes->frame.owned_offsets[binding->first_owner] == binding->offset;
+}
 /* Emission and admission select every word from the same admitted access
  * description and its image: a specialized word only where its static
  * premises hold and no Array region role claims the access. */
@@ -252,6 +307,9 @@ static inline XrRbcOp rbc_value_access_opcode(const XrtValueImage *image, const 
         return XR_RBC_OWNER_COPY;
     if (access.operation == XR_RBC_VALUE_EDGE && !access.result && !access.source && rbc_value_owner_edge(code, access))
         return XR_RBC_OWNER_EDGE;
+    if (rbc_value_array_word(image, code, access, XR_LIR_ARRAY_OP_GET)) return XR_RBC_OWNER_ARRAY_GET;
+    if (rbc_value_array_word(image, code, access, XR_LIR_ARRAY_OP_LEN)) return XR_RBC_OWNER_ARRAY_LEN;
+    if (rbc_value_binding_copy(image, code, access)) return XR_RBC_OWNER_CELL_READ;
     return XR_RBC_VALUE_ACCESS;
 }
 

@@ -131,6 +131,59 @@ static void local_map_edit(void) {
     xr_rbc_program_destroy(program);
 }
 
+/* Element reads, lengths and Cell reads of plain local owners use their own
+ * words. Admission rejects any other word for those accesses. */
+static void local_owner_array_words(void) {
+    XrRbcProgram *program = callable(
+        "fn words(n:i64)->i64 {\n"
+        "    var table={\"k0\":0}\n"
+        "    var names:Array<string>=[]\n"
+        "    var counts:Array<i64>=[]\n"
+        "    var i=0\n"
+        "    while (i<n) {\n"
+        "        const key=\"k\"+string(i)\n"
+        "        table[key]=i\n"
+        "        names.push(key)\n"
+        "        counts.push(i*2)\n"
+        "        i=i+1\n"
+        "    }\n"
+        "    var total=0\n"
+        "    var j=0\n"
+        "    while (j<len(names)) {\n"
+        "        total=total+(table[names[j]] ?? 0)+counts[j]+len(names[j])\n"
+        "        j=j+1\n"
+        "    }\n"
+        "    return total\n"
+        "}\nwords(3)\n");
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    const XrRbcFunction *entry = &module->functions[0];
+    uint32_t *words = (uint32_t *)(void *)entry->code;
+    size_t gets = 0, lengths = 0, reads = 0;
+    for (size_t pc = 0; pc < entry->code_count; ++pc) {
+        uint32_t op = words[pc] & 255u;
+        gets += op == XR_RBC_OWNER_ARRAY_GET; lengths += op == XR_RBC_OWNER_ARRAY_LEN; reads += op == XR_RBC_OWNER_CELL_READ;
+    }
+    CHECK(gets == 3 && lengths == 1 && reads == 1);
+    uint64_t argument = 3;
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(module, 0, &argument, 1, xr_rbc_program_locations(program), &execution) == XR_RBC_OK);
+    xr_rbc_execution_free(&execution);
+    for (size_t pc = 0; pc < entry->code_count; ++pc) {
+        uint32_t original = words[pc], op = original & 255u;
+        if (op != XR_RBC_OWNER_ARRAY_GET && op != XR_RBC_OWNER_ARRAY_LEN && op != XR_RBC_OWNER_CELL_READ) continue;
+        const uint32_t replacements[] = {XR_RBC_VALUE_ACCESS,
+            op == XR_RBC_OWNER_ARRAY_GET ? XR_RBC_OWNER_ARRAY_LEN : XR_RBC_OWNER_ARRAY_GET};
+        for (size_t r = 0; r < sizeof(replacements) / sizeof(*replacements); ++r) {
+            words[pc] = (original & ~255u) | replacements[r];
+            CHECK(xr_rbc_module_prepare(module, 0, &argument, 1, xr_rbc_program_locations(program),
+                &execution) == XR_RBC_INVALID && !execution);
+        }
+        words[pc] = original;
+    }
+    CHECK(run(program, 3) == 15 && run(program, 12) == 224);
+    xr_rbc_program_destroy(program);
+}
+
 static const char i64_equality_source[] =
     "fn equality(x:i64,y:i64)->i64{if(x==y){return 1}\n"
     "if(x!=y){return 2}\nreturn 3}\nprint(equality(1,2))\n";
@@ -806,6 +859,7 @@ int main(int argc, char **argv) {
     i64_equality();
     metadata_lifetime();
     local_map_edit();
+    local_owner_array_words();
     numerical_oracles();
     actual_entry_and_refusal();
     f64_transport();
