@@ -1756,6 +1756,32 @@ static void test_f64_constants_and_refusals(void) {
         diagnostic.column == 11 && diagnostic.instruction == 1);
 }
 
+/* A refusal of a whole function has no instruction of its own. It is
+ * reported at the function's first located instruction instead of 0:0. */
+static void test_function_refusal_location(void) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirType parameter = XR_LIR_U32;
+    XrLirFunction f = test_function(m, "refused_root", &parameter, 1, XR_LIR_I64);
+    XrLirBlock b = test_block(m, f, NULL, 0);
+    OK(xr_lir_set_entry(m, f, b));
+    (void)test_constant(m, b, XR_LIR_I64, 1);
+    XrLirValue located;
+    XrLirInstruction i = {.op = XR_LIR_CONST, .type = XR_LIR_I64, .bits = 2,
+        .source = {"function-refusal.xr", 19, 4, 5, 4, 9}};
+    OK(xr_lir_emit_value(m, b, &i, &located));
+    test_return(m, b, located);
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = NULL;
+    XrRbcCompileDiagnostic diagnostic;
+    CHECK(xr_rbc_compile(m, f, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED);
+    CHECK(!program);
+    xr_lir_module_destroy(m);
+    CHECK(strstr(diagnostic.message, "U32") != NULL);
+    CHECK(!strcmp(diagnostic.path, "function-refusal.xr") && diagnostic.line == 4 &&
+        diagnostic.column == 5 && diagnostic.function == f.id && diagnostic.instruction == 2);
+}
+
 static XrRbcProgram *panic_program(XrLirOp op, bool unknown, const char *path, unsigned located) {
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(NULL, &m));
@@ -2615,6 +2641,7 @@ int main(void) {
     test_call_capacity(300);
     test_unused_and_invalid();
     test_owned_diagnostic_and_rejection();
+    test_function_refusal_location();
     test_i64_to_f64_admission();
     test_f64_constants_and_refusals();
     puts("lir_bytecode: passed");

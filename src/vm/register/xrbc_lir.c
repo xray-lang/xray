@@ -2175,11 +2175,9 @@ static XrRbcCompileStatus rbc_lir_aggregate_types(const XrLirModule *input,
 
 #include "xrbc_lir_callable_types.inc.c"
 
-static XrRbcCompileStatus rbc_compile(const XrLirModule *input, XrLirFunction entry,
+static XrRbcCompileStatus rbc_compile_module(const XrLirModule *input, XrLirFunction entry,
     const XrLirFunction *actions, uint32_t action_count, uint32_t *action_entries,
-    XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic) {
-    XrRbcCompileDiagnostic local = {0};
-    XrRbcCompileDiagnostic *d = diagnostic ? diagnostic : &local;
+    XrRbcProgram **output, XrRbcCompileDiagnostic *d) {
     RbcValuePreparation preparation = {0};
     *d = (XrRbcCompileDiagnostic) {0};
     XrLirFunctionView root;
@@ -2360,6 +2358,38 @@ done:
     xr_rbc_program_destroy(p);
     xr_free(mapping);
     xr_free(ids);
+    return status;
+}
+
+/* Instruction failures carry their own source. A refusal of a whole function
+ * (its layout, signature or register budget) or of the module has none, so it
+ * is reported at the first located instruction of the refused function, or of
+ * the entry when no function was selected yet. Status and message are kept. */
+static XrRbcCompileStatus rbc_compile(const XrLirModule *input, XrLirFunction entry,
+    const XrLirFunction *actions, uint32_t action_count, uint32_t *action_entries,
+    XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic) {
+    XrRbcCompileDiagnostic local = {0};
+    XrRbcCompileDiagnostic *d = diagnostic ? diagnostic : &local;
+    XrRbcCompileStatus status =
+        rbc_compile_module(input, entry, actions, action_count, action_entries, output, d);
+    if (status == XR_RBC_COMPILE_OK || d->line || !input || entry.module != input) return status;
+    XrLirFunction refused = d->function ? (XrLirFunction){input, d->function} : entry;
+    XrLirFunctionView view;
+    if (xr_lir_function_view(input, refused, &view) != XR_LIR_OK) {
+        refused = entry;
+        if (xr_lir_function_view(input, refused, &view) != XR_LIR_OK) return status;
+    }
+    XrRbcCompileDiagnostic located = *d;
+    XrLirSource source = rbc_lir_value_source(input, refused, &view, 0, &located);
+    if (!source.path_length || !source.line) return status;
+    d->function = refused.id;
+    d->block = located.block;
+    d->instruction = located.instruction;
+    d->line = source.line;
+    d->column = source.column;
+    size_t length = source.path_length < sizeof(d->path) ? source.path_length : sizeof(d->path) - 1;
+    memcpy(d->path, source.path, length);
+    d->path[length] = 0;
     return status;
 }
 
