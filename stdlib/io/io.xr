@@ -342,7 +342,17 @@ fn _pump(input: File, output: File) -> bool {
     return true
 }
 
+// Copying a file onto itself would truncate it before reading it, through the
+// same name or another link to it, so it is refused when both names denote one
+// file (equal device and file number, as stat reports them for the target).
+fn _sameFile(a: Path, b: Path) -> bool {
+    var left = __stat(a)
+    var right = __stat(b)
+    return left != null && right != null && left!.device == right!.device && left!.inode == right!.inode
+}
+
 export fn copyFile(src: Path, dst: Path) -> bool {
+    if (_sameFile(src, dst)) { return false }
     var input = File.open(src)
     if (input == null) { return false }
     var output = File.openWrite(dst, false)
@@ -371,9 +381,10 @@ export fn isFile(path: Path) -> bool {
     var raw = __stat(path)
     return raw != null && raw!.isFile
 }
+// The question is about the named entry, not its target: a link whose target
+// is missing is still a link. Only a link has a link text to read.
 export fn isSymlink(path: Path) -> bool {
-    var raw = __stat(path)
-    return raw != null && raw!.isSymlink
+    return __readlink(path) != null
 }
 export fn mkdir(path: Path) -> bool { return __mkdir(path) }
 // Each mutation uses an exact original prefix. Lexical normalization could

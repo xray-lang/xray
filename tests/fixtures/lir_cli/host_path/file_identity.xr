@@ -1,0 +1,17 @@
+import io
+import path
+
+// A copy onto the same file through its own name, another hard link or a
+// symbolic link to it is refused and leaves the content intact.
+const sample = path.from("sample.txt")
+print(io.copyFile(sample, sample))
+print(io.copyFile(sample, path.from("hard-link")))
+print(io.copyFile(path.from("link"), sample))
+print(io.copyFile(sample, path.from("copy.txt")))
+// A distinct existing file on the same device is an ordinary destination.
+print(io.copyFile(sample, path.from("other.txt")))
+// A link is a link whether or not its target exists.
+print(io.isSymlink(path.from("dangling")))
+print(io.isSymlink(path.from("link")))
+print(io.isSymlink(sample))
+print(io.isSymlink(path.from("不存在")))

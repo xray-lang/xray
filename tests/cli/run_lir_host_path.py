@@ -68,6 +68,22 @@ def link_directory(directory):
     return link
 
 
+def identity_links(directory):
+    """A file, a hard link to it, a link to it and a link to nothing. Windows
+    creates directory junctions, which need no privilege."""
+    (directory / "sample.txt").write_bytes(b"sample")
+    (directory / "other.txt").write_bytes(b"old other")
+    os.link(directory / "sample.txt", directory / "hard-link")
+    if os.name == "nt":
+        (directory / "linked-dir").mkdir()
+        for link, target in (("link", "linked-dir"), ("dangling", "missing-dir")):
+            subprocess.run(["cmd.exe", "/d", "/c", "mklink", "/J", link, target],
+                           cwd=directory, capture_output=True, check=True, timeout=30)
+    else:
+        (directory / "link").symlink_to("sample.txt")
+        (directory / "dangling").symlink_to("missing-target")
+
+
 def check_stat_observer(work, stdlib, binary, run):
     directory = work / "stat-observer"
     directory.mkdir()
@@ -120,7 +136,7 @@ def main() -> None:
         for name in ("mkdir", "mkdirp", "nul_path", "rename", "rename_nul_source", "rename_nul_destination",
                      "remove", "remove_nul", "rmdir", "rmdir_nul", "unregistered",
                      "file_open_write", "file_open_refused", "file_stat", "file_stat_nul",
-                     "file_stat_public", *private_types):
+                     "file_stat_public", "file_identity", *private_types):
             source = fixtures / (name + ".xr")
             mirrored = stdlib if name in ("rmdir", "rmdir_nul") else None
             vm_dir, native_dir = work / (name + "-vm"), work / (name + "-native")
@@ -150,6 +166,8 @@ def main() -> None:
                 if name in ("file_stat", "file_stat_public"):
                     (cwd / "数据.txt").write_bytes(b"snapshot")
                     (cwd / "目录").mkdir()
+                if name == "file_identity":
+                    identity_links(cwd)
             limited = name == "file_open_write"
             vm = run([binary, "run", source], vm_dir, "run", limit=limited, stdlib=mirrored)
             output = native_dir / ("program.exe" if os.name == "nt" else "program")
@@ -220,6 +238,14 @@ def main() -> None:
                     for cwd in (vm_dir, native_dir):
                         assert (cwd / "数据.txt").read_bytes() == b"snapshot"
                         assert (cwd / "目录").is_dir() and not (cwd / "不存在").exists()
+                elif name == "file_identity":
+                    assert vm == (0, b"false\nfalse\nfalse\ntrue\ntrue\ntrue\ntrue\nfalse\nfalse\n", b""), vm
+                    for cwd in (vm_dir, native_dir):
+                        assert (cwd / "sample.txt").read_bytes() == b"sample", name
+                        assert (cwd / "hard-link").read_bytes() == b"sample", name
+                        assert (cwd / "copy.txt").read_bytes() == b"sample", name
+                        assert (cwd / "other.txt").read_bytes() == b"sample", name
+                        assert not (cwd / "不存在").exists(), name
                 elif name == "file_stat_public":
                     assert vm == (0, b"8\ntrue\n-7\n0\n0\ntrue\ntrue\ntrue\n", b""), vm
                     for cwd in (vm_dir, native_dir):
