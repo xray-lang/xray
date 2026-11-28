@@ -1,0 +1,6 @@
+{
+  "backends": [
+    "vm"
+  ],
+  "aot_reject": "call target has no consumable adapter authority"
+}

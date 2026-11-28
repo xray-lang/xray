@@ -132,7 +132,10 @@ class SidecarTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="xt_bd_sc.")
         self.dir = Path(self.tmp)
         self.case = self.dir / "c.xr"
-        self.case.write_text("// anchor: my-anchor\n// diff-backends: vm,aot\nprint(1)\n", encoding="utf-8")
+        self.case.write_text(
+            "// anchor: my-anchor\n// diff-backends: vm\n// diff-aot-reject: historical\nprint(1)\n",
+            encoding="utf-8",
+        )
 
     def tearDown(self):
         import shutil
@@ -142,10 +145,23 @@ class SidecarTest(unittest.TestCase):
     def test_reads_anchor_directive(self):
         self.assertEqual(rbd.read_first_directive(self.case, "// anchor: ", 1), "my-anchor")
 
-    def test_diff_backends_only_scanned_in_head(self):
-        self.assertEqual(
-            rbd.read_first_directive(self.case, "// diff-backends: ", 5), "vm,aot"
-        )
+    def test_frozen_comments_do_not_set_backend_policy(self):
+        policy = rbd.backend_cases.read_policy(self.case)
+        self.assertEqual(policy.backends, ())
+        self.assertEqual(policy.aot_reject, "")
+
+    def test_backend_sidecar_controls_comparison_and_rejection(self):
+        sidecar = self.case.with_suffix(".xr.backends.json")
+        sidecar.write_text('{"backends": ["vm"], "aot_reject": "current diagnostic"}', encoding="utf-8")
+        policy = rbd.backend_cases.read_policy(self.case)
+        self.assertEqual(policy.backends, ("vm",))
+        self.assertEqual(policy.aot_reject, "current diagnostic")
+
+    def test_backend_sidecar_rejects_an_inconsistent_contract(self):
+        sidecar = self.case.with_suffix(".xr.backends.json")
+        sidecar.write_text('{"backends": ["vm", "aot"], "aot_reject": "invalid"}', encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "requires a VM-only policy"):
+            rbd.backend_cases.read_policy(self.case)
 
     def test_args_first_line_split(self):
         (self.dir / "c.args").write_text("--a --b c\n", encoding="utf-8")

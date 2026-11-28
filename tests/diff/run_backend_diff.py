@@ -25,7 +25,7 @@ Infrastructure -- subprocess handling, cache keys, directory locks, parallelism,
 the ratchet -- comes from the shared xraytest runtime, so this file holds only
 what is specific to backend differencing: how a case is run on each backend, how
 their outputs are compared, and the per-case sidecars (.args, .stdin,
-.xr.expected, `// diff-backends:`, `// anchor:`) that shape a case.
+.xr.expected, .xr.backends.json, and the source anchor) that shape a case.
 
 Replaces run_backend_diff.sh and the earlier run_backend_diff_fast.py. There is
 no shell runner: Python is a hard build requirement, so a second implementation
@@ -50,7 +50,7 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import cache, platform, proc, progress, ratchet, scheduler  # noqa: E402
+from xraytest import backend_cases, cache, platform, proc, progress, ratchet, scheduler  # noqa: E402
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent.parent
@@ -58,7 +58,7 @@ CASE_DIR = SCRIPT_DIR / "cases"
 
 # Every form this runner knows, in the order a lane evaluates them. The first
 # enabled one is the reference the others are compared against.
-BACKEND_ORDER = ("vm", "aot")
+BACKEND_ORDER = backend_cases.BACKEND_ORDER
 
 # Forms that produce a standalone binary and therefore use the binary cache.
 BINARY_BACKENDS = ("aot",)
@@ -66,7 +66,7 @@ BINARY_BACKENDS = ("aot",)
 # A case directory's identity includes the .xr.expected oracle: a changed
 # expected file must change the key, or a stale AOT binary would be diffed
 # against the new oracle and pass by accident.
-CASE_DIR_GLOBS = ("*.xr", "*.args", "*.xr.expected", "*.toml")
+CASE_DIR_GLOBS = ("*.xr", "*.args", "*.xr.expected", "*.xr.backends.json", "*.toml")
 
 # stdout/stderr previews in a failure line: enough to see the divergence.
 _PREVIEW_LINES = 6
@@ -340,9 +340,9 @@ def run_backend(
 def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
     name = rel_path(case)
     anchor = read_first_directive(case, "// anchor: ", 1)
-    case_backends_raw = read_first_directive(case, "// diff-backends: ", 5)
-    aot_reject = read_first_directive(case, "// diff-aot-reject: ", 5)
-    case_backends = [b.strip() for b in case_backends_raw.split(",") if b.strip()]
+    policy = backend_cases.read_policy(case)
+    case_backends = policy.backends
+    aot_reject = policy.aot_reject
 
     enabled: list[str] = []
     excluded: list[str] = []
@@ -393,7 +393,7 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
             return CaseResult(order, "pass", prefix + "PASS (VM run + AOT rejection)", name)
         return CaseResult(
             order, "skip",
-            prefix + f"SKIP (need >=2 backends; case={case_backends_raw or 'all'} "
+            prefix + f"SKIP (need >=2 backends; case={','.join(case_backends) or 'all'} "
             f"global={','.join(config.backends)})", name,
         )
 
@@ -521,8 +521,7 @@ def binary_cache_hot(config: RunnerConfig, selected: list[tuple[int, Path]]) -> 
     if not kinds:
         return True
     for _order, case in selected:
-        case_backends_raw = read_first_directive(case, "// diff-backends: ", 5)
-        case_backends = [b.strip() for b in case_backends_raw.split(",") if b.strip()]
+        case_backends = backend_cases.read_policy(case).backends
         rel = rel_path(case)
         key = cache.dir_key(case.parent, CASE_DIR_GLOBS)
         for kind in kinds:

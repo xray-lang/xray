@@ -30,7 +30,7 @@ def _bootstrap() -> None:
 
 
 _bootstrap()
-from xraytest import scheduler  # noqa: E402
+from xraytest import backend_cases, scheduler  # noqa: E402
 
 EXPECTED_RUNTIME_PREFIXES = (
     "tests/diff/cases/semantics/coro/",
@@ -177,12 +177,8 @@ def is_expected_runtime_case(case: str) -> bool:
 
 
 def expects_closed_world_rejection(case: pathlib.Path) -> bool:
-    """A VM-only differential case is still checked, not silently skipped.
-
-    The sole VM-only fixture pins the intentional closed-world boundary: AOT
-    must reject its open callable target with the canonical user diagnostic.
-    """
-    return "// diff-backends: vm" in case.read_text(encoding="utf-8").splitlines()
+    """Keep the native sweep's rejection probe on explicit VM-only cases."""
+    return backend_cases.read_policy(case).backends == ("vm",)
 
 
 def run_closed_world_rejection(xray: pathlib.Path, case: pathlib.Path,

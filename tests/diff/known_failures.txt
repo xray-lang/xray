@@ -7,9 +7,6 @@
 # Measured on a clean Windows Release build at the first commit that drove the
 # CLI the product actually has; until then every case was refused for an
 # unknown option, so no entry here had ever been validated.
-tests/diff/cases/semantics/collections/array_member_reference_element_refused.xr  # historical program frozen by the legacy derivation model; native now accepts it
-# (see string_equality_by_content.xr), so the frozen `diff-aot-reject` annotation no
-# longer matches the product and this file may not change.
 tests/diff/cases/limits/reg_pressure_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs
 tests/diff/cases/limits/upval_capture_over_254.xr  # VM: instruction temporaries and call window exceed register capacity; native runs and prints 772
 tests/diff/cases/semantics/functions/unproven_callee_targets.xr  # VM half no longer runs: MAP_NEW is not supported by LIR lowering yet at 48:9
