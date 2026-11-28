@@ -252,7 +252,8 @@ XR_FUNC bool xrt_host_stat_row_matches(const XrtValuePlanSpec *spec) {
     static const size_t offsets[] = {offsetof(XrtHostStatRow, size), offsetof(XrtHostStatRow, mode),
         offsetof(XrtHostStatRow, mtime), offsetof(XrtHostStatRow, atime), offsetof(XrtHostStatRow, ctime),
         offsetof(XrtHostStatRow, uid), offsetof(XrtHostStatRow, gid), offsetof(XrtHostStatRow, is_file),
-        offsetof(XrtHostStatRow, is_dir), offsetof(XrtHostStatRow, is_symlink)};
+        offsetof(XrtHostStatRow, is_dir), offsetof(XrtHostStatRow, is_symlink), offsetof(XrtHostStatRow, device),
+        offsetof(XrtHostStatRow, inode)};
     if (!spec || spec->kind != XRT_VALUE_RECORD || spec->owned_count || spec->size != sizeof(XrtHostStatRow) ||
         spec->alignment != _Alignof(XrtHostStatRow) || !spec->fields ||
         spec->field_count != sizeof(offsets) / sizeof(*offsets)) return false;

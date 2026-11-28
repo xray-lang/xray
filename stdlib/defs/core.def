@@ -1197,7 +1197,7 @@ module io {
   }
 
   handle __FileStat {
-    fields: "const size: i64, const mode: i64, const mtime: i64, const atime: i64, const ctime: i64, const uid: i64?, const gid: i64?, const isFile: bool, const isDir: bool, const isSymlink: bool"
+    fields: "const size: i64, const mode: i64, const mtime: i64, const atime: i64, const ctime: i64, const uid: i64?, const gid: i64?, const isFile: bool, const isDir: bool, const isSymlink: bool, const device: i64, const inode: i64"
   }
 
   fn __chmod {

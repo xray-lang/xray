@@ -10,7 +10,9 @@
     X("gid", NULLABLE_I64) \
     X("isFile", BOOL) \
     X("isDir", BOOL) \
-    X("isSymlink", BOOL)
+    X("isSymlink", BOOL) \
+    X("device", I64) \
+    X("inode", I64)
 #endif
 
 XR_NATIVE_BLOCKING_ENV_GET(XR_NATIVE_CALLABLE_OS_GETENV)

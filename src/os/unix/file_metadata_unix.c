@@ -8,6 +8,7 @@
  */
 #include "../os_file_metadata.h"
 #include "../file_metadata_path.inc.h"
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -26,10 +27,15 @@ static XrOsIoStatus metadata_stat_fields(const struct stat *target, const struct
     uintmax_t uid = (uintmax_t)target->st_uid, gid = (uintmax_t)target->st_gid;
     if (target->st_size < 0 || uid > INT64_MAX || gid > INT64_MAX)
         return XR_OS_IO_OVERFLOW;
+    _Static_assert(sizeof(target->st_dev) <= sizeof(uint64_t) && sizeof(target->st_ino) <= sizeof(uint64_t),
+        "file identity fits the 64-bit output representation");
+    uint64_t device = (uint64_t)target->st_dev, inode = (uint64_t)target->st_ino;
     *output = (XrOsFileMetadata){true, (int64_t)target->st_size, (int64_t)(target->st_mode & 0777),
         (int64_t)target->st_mtime, (int64_t)target->st_atime, (int64_t)target->st_ctime,
         {true, (int64_t)uid}, {true, (int64_t)gid},
-        S_ISREG(target->st_mode), S_ISDIR(target->st_mode), S_ISLNK(leaf->st_mode)};
+        S_ISREG(target->st_mode), S_ISDIR(target->st_mode), S_ISLNK(leaf->st_mode), 0, 0};
+    memcpy(&output->device, &device, sizeof(device));
+    memcpy(&output->inode, &inode, sizeof(inode));
     return XR_OS_IO_OK;
 }
 XR_FUNC XrOsIoStatus xr_os_io_file_metadata(const XrOsIoPolicy *policy,

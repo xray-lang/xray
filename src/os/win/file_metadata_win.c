@@ -9,6 +9,7 @@
 #include "../os_file_metadata.h"
 #include "../file_metadata_path.inc.h"
 #include "../../base/xwindows_utf8.h"
+#include <string.h>
 #include <sys/stat.h>
 
 XR_FUNC XrOsIoStatus xr_os_io_file_metadata_close(XrOsFileMetadataOwner *owner) {
@@ -80,6 +81,10 @@ static XrOsIoStatus metadata_follow(const wchar_t *wide, bool (*current)(void *)
                 result->mtime = metadata_seconds(data.ftLastWriteTime);
                 result->atime = metadata_seconds(data.ftLastAccessTime);
                 result->ctime = metadata_seconds(data.ftCreationTime);
+                uint64_t device = data.dwVolumeSerialNumber;
+                uint64_t index = ((uint64_t)data.nFileIndexHigh << 32) | data.nFileIndexLow;
+                memcpy(&result->device, &device, sizeof(device));
+                memcpy(&result->inode, &index, sizeof(index));
             }
         }
     }

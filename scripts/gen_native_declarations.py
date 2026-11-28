@@ -1535,8 +1535,8 @@ def file_stat_fields(root):
     from stdlibgen import parse_handles
     candidates = [h for h in parse_handles(root) if h.module == 'io' and h.name == '__FileStat']
     expected = tuple(zip(('size', 'mode', 'mtime', 'atime', 'ctime', 'uid', 'gid',
-                         'isFile', 'isDir', 'isSymlink'),
-                        ('i64',) * 5 + ('i64?',) * 2 + ('bool',) * 3))
+                         'isFile', 'isDir', 'isSymlink', 'device', 'inode'),
+                        ('i64',) * 5 + ('i64?',) * 2 + ('bool',) * 3 + ('i64',) * 2))
     if len(candidates) != 1 or tuple((f.name, f.type) for f in candidates[0].fields) != expected or not all(f.is_const for f in candidates[0].fields):
         raise ValueError('File metadata requires its exact immutable governed fields')
     terms = {'i64': 'I64', 'i64?': 'NULLABLE_I64', 'bool': 'BOOL'}
@@ -1554,7 +1554,7 @@ def render_file_stat_identity(root, fields):
     return lines + ['};', 'static const XrNativeTypeDeclaration xr_native_file_stat = {',
         '    XR_NATIVE_DECLARATION_FILE_STAT, XR_NATIVE_DECLARATION_IDENTITY, "__FileStat", NULL, 0,',
         '    "stdlib/defs/core.def", "xray.native-type.v1/io/__FileStat", ' + fingerprint + ', 0, 0,',
-        '    xr_native_file_stat_members, 10', '};']
+        '    xr_native_file_stat_members, ' + str(len(fields)), '};']
 
 
 def render_internal_storage_table(root):

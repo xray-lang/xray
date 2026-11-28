@@ -16,6 +16,10 @@ typedef struct XrOsFileMetadata {
     int64_t mtime, atime, ctime;
     XrOsOptionalI64 uid, gid;
     bool is_file, is_dir, is_symlink;
+    /* The target file's identity: device and file number. Two names denote
+     * the same file exactly when both are equal. The bits are the platform's
+     * unsigned values; only equality is meaningful. */
+    int64_t device, inode;
 } XrOsFileMetadata;
 
 /* Owns one temporary file handle for metadata or controlled mutations. Only

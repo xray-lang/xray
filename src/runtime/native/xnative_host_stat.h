@@ -33,6 +33,7 @@ typedef struct XrtHostStatRow {
     int64_t size, mode, mtime, atime, ctime;
     XrtHostStatOptionalI64 uid, gid;
     uint8_t is_file, is_dir, is_symlink;
+    int64_t device, inode;
 } XrtHostStatRow;
 
 /* The runtime image must already authenticate the private class. Only its

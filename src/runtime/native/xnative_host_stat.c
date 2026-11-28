@@ -66,6 +66,8 @@ XR_FUNC void xrt_host_stat_row(const XrOsFileMetadata *metadata, XrtHostStatRow 
     bytes[offsetof(XrtHostStatRow, is_file)] = metadata->is_file;
     bytes[offsetof(XrtHostStatRow, is_dir)] = metadata->is_dir;
     bytes[offsetof(XrtHostStatRow, is_symlink)] = metadata->is_symlink;
+    memcpy(bytes + offsetof(XrtHostStatRow, device), &metadata->device, sizeof(metadata->device));
+    memcpy(bytes + offsetof(XrtHostStatRow, inode), &metadata->inode, sizeof(metadata->inode));
 }
 
 XR_FUNC XrtHostStatResult xrt_host_stat_publish(const XrtHostNullableSlots *output, XrtBoundClass binding,

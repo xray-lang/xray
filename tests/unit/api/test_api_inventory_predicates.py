@@ -61,7 +61,7 @@ class ConstraintPredicateInventoryTest(unittest.TestCase):
     def test_private_provider_inventory_keeps_source_denominator(self) -> None:
         data = inventory.build_inventory(ROOT)
         private = [row for row in data["items"] if row.get("internal")]
-        expected = {"crypto": 2, "io": 35, "math": 28, "mem": 19,
+        expected = {"crypto": 2, "io": 37, "math": 28, "mem": 19,
                     "net": 33, "os": 23, "path": 3, "regex": 2, "runtime": 5,
                     "sys": 16, "time": 5}
         self.assertEqual(sum(expected.values()), len(private))

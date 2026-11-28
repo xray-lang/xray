@@ -96,9 +96,9 @@ static void file_stat_payload_facts(void) {
         {integer, 0, "size", 4, 0}, {integer, 8, "mode", 4, 0}, {integer, 16, "mtime", 5, 0},
         {integer, 24, "atime", 5, 0}, {integer, 32, "ctime", 5, 0}, {nullable, 40, "uid", 3, 0},
         {nullable, 56, "gid", 3, 0}, {boolean, 72, "isFile", 6, 0}, {boolean, 73, "isDir", 5, 0},
-        {boolean, 74, "isSymlink", 9, 0},
+        {boolean, 74, "isSymlink", 9, 0}, {integer, 80, "device", 6, 0}, {integer, 88, "inode", 5, 0},
     };
-    const XrtValuePlanSpec type = {.kind=XRT_VALUE_RECORD, .size=80, .alignment=8,
+    const XrtValuePlanSpec type = {.kind=XRT_VALUE_RECORD, .size=96, .alignment=8,
         .fields=fields, .field_count=sizeof(fields) / sizeof(*fields)};
     OK(xrt_value_plan_new(billing, &type, &record));
     XrtValuePlanSpec received;
@@ -129,16 +129,17 @@ static void file_stat_payload_facts(void) {
     xrt_value_plan_drop(wrong_name);
 
     const XrOsFileMetadata metadata = {.present=true, .size=42, .mode=0644, .mtime=-30, .atime=40, .ctime=50,
-        .uid={true, 0}, .gid={false, 13}, .is_file=true, .is_dir=false, .is_symlink=true};
+        .uid={true, 0}, .gid={false, 13}, .is_file=true, .is_dir=false, .is_symlink=true, .device=-7, .inode=99};
     XrtHostStatRow row;
     memset(&row, 0xa5, sizeof(row));
     xrt_host_stat_row(&metadata, &row);
     CHECK(row.size == 42 && row.mode == 0644 && row.mtime == -30 && row.atime == 40 && row.ctime == 50);
     CHECK(row.uid.present == 1 && row.uid.value == 0 && row.gid.present == 0 && row.gid.value == 0);
-    CHECK(row.is_file == 1 && row.is_dir == 0 && row.is_symlink == 1);
-    unsigned char expected[80] = {0};
-    const int64_t required[] = {42, 0644, -30, 40, 50};
+    CHECK(row.is_file == 1 && row.is_dir == 0 && row.is_symlink == 1 && row.device == -7 && row.inode == 99);
+    unsigned char expected[96] = {0};
+    const int64_t required[] = {42, 0644, -30, 40, 50}, identity[] = {-7, 99};
     memcpy(expected, required, sizeof(required));
+    memcpy(expected + 80, identity, sizeof(identity));
     expected[40] = expected[72] = expected[74] = 1;
     CHECK(sizeof(row) == sizeof(expected) && !memcmp(&row, expected, sizeof(expected)));
 
