@@ -319,6 +319,6 @@ static void sccp_project(void *context, uint32_t block, uint32_t ordinal,
 
 XR_FUNC XrLirStatus xr_lir_sccp(const XrLirModule *input, XrLirModule **output) {
     Sccp c = {0};
-    const XrLirCopyPlan plan = {&c, sccp_begin, sccp_keep, sccp_project, sccp_end};
+    const XrLirCopyPlan plan = {&c, sccp_begin, sccp_keep, sccp_project, sccp_end, NULL, NULL};
     return xr_lir_internal_copy(input, output, &plan);
 }

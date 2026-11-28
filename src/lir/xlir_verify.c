@@ -665,7 +665,8 @@ static bool lir_held_instruction(const XrLirFunctionData *f, const XrLirInstruct
     if (array->type != XR_LIR_ARRAY || !xr_lir_array_holdable(array->array_element) || v->edge_count) return false;
     XrLirType element = array->array_element;
     switch (v->op) {
-    case XR_LIR_ARRAY_HOLD: case XR_LIR_ARRAY_UNHOLD: return v->type == XR_LIR_ARRAY;
+    case XR_LIR_ARRAY_HOLD: return v->type == XR_LIR_ARRAY && v->bits <= 1; /* 1: the chain mutates */
+    case XR_LIR_ARRAY_UNHOLD: return v->type == XR_LIR_ARRAY;
     case XR_LIR_ARRAY_HELD_GET: return v->type == element && f->values[v->operands[1] - 1].type == XR_LIR_I64;
     case XR_LIR_ARRAY_HELD_SET:
         return v->type == XR_LIR_UNIT && f->values[v->operands[1] - 1].type == XR_LIR_I64 &&
@@ -722,7 +723,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         v->op != XR_LIR_CLASS_ARRAY_WRITE && v->op != XR_LIR_CLASS_ARRAY_PUSH &&
         v->op != XR_LIR_STATE_GROUP_INITIALIZE && v->op != XR_LIR_SLICE_CLEANUP &&
         v->op != XR_LIR_SLICE_FORMAL_CLEANUP && v->op != XR_LIR_MAP_LITERAL_NEW &&
-        v->op != XR_LIR_STRING_TEST && v->op != XR_LIR_STRING_REPLACE && v->bits)
+        v->op != XR_LIR_STRING_TEST && v->op != XR_LIR_STRING_REPLACE && v->op != XR_LIR_ARRAY_HOLD && v->bits)
         goto invalid;
     if ((v->op != XR_LIR_CALL && v->op != XR_LIR_INVOKE && v->op != XR_LIR_FUNCTION_REF && v->callee) ||
         (v->op != XR_LIR_CALL_INTRINSIC && v->intrinsic))

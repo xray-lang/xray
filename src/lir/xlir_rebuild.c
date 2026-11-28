@@ -40,6 +40,8 @@ typedef struct {
     LirSliceCopyCleanups cleanups;
 } Rebuild;
 
+struct XrLirCopyEmitter { Rebuild *rebuild; XrLirBlock block; };
+
 static void *rebuild_storage(size_t count, size_t size) {
     return count && count <= SIZE_MAX / size ? xr_calloc(count, size) : NULL;
 }
@@ -183,6 +185,9 @@ static XrLirStatus rebuild_parameters(Rebuild *c) {
             status = xr_lir_block_parameter(c->output, *target, p, &c->values[view.parameters[p]]);
             if (status == XR_LIR_OK) status = lir_copy_array_value(c->input,
                 (XrLirValue){c->input, c->source.id, view.parameters[p]}, c->values[view.parameters[p]]);
+            if (status == XR_LIR_OK && c->plan && c->plan->held &&
+                c->plan->held(c->plan->context, block.id, view.parameters[p]))
+                status = xr_lir_set_array_held(c->output, c->values[view.parameters[p]]);
             if (status != XR_LIR_OK) return status;
             if (c->types[p] == XR_LIR_STATE_REF) {
                 XrLirStateReference shape;
@@ -254,7 +259,7 @@ static XrLirStatus rebuild_project(Rebuild *c, XrLirBlock block, uint32_t ordina
  * verification still decides whether the resulting value flow is valid. */
 static XrLirStatus rebuild_omit(Rebuild *c, const XrLirInstructionView *source, bool terminal) {
     if (terminal) return XR_LIR_VERIFY_ERROR;
-    if (!source->result) return XR_LIR_OK;
+    if (!source->result || !source->operand_count) return XR_LIR_OK;
     if (source->operand_count != 1 || source->edge_count) return XR_LIR_VERIFY_ERROR;
     uint32_t alias = source->operands[0];
     XrLirType type = XR_LIR_TYPE_INVALID;
@@ -278,16 +283,17 @@ static XrLirStatus rebuild_body(Rebuild *c) {
         XrLirInstructionView instruction;
         if (!c->blocks[block.id].emitted) {
             c->blocks[block.id].emitted = true;
+            XrLirCopyEmitter emitter = {c, c->blocks[block.id].handle};
+            bool around = c->plan && c->plan->around;
             for (uint32_t n = 0; n < view.instruction_count; ++n) {
-                XrLirStatus status = rebuild_project(c, block, n, &instruction);
+                bool terminal = n + 1 == view.instruction_count;
+                XrLirStatus status = around ? c->plan->around(c->plan->context, &emitter, block.id, n, false) : XR_LIR_OK;
+                if (status == XR_LIR_OK) status = rebuild_project(c, block, n, &instruction);
                 if (status != XR_LIR_OK) return status;
-                if (instruction.op == XR_LIR_OP_INVALID) {
-                    status = rebuild_omit(c, &instruction, n + 1 == view.instruction_count);
-                    if (status != XR_LIR_OK) return status;
-                    continue;
-                }
-                status = rebuild_instruction(c, c->blocks[block.id].handle,
-                    &instruction, n + 1 == view.instruction_count);
+                if (instruction.op == XR_LIR_OP_INVALID) status = rebuild_omit(c, &instruction, terminal);
+                else status = rebuild_instruction(c, c->blocks[block.id].handle, &instruction, terminal);
+                if (status == XR_LIR_OK && around && !terminal)
+                    status = c->plan->around(c->plan->context, &emitter, block.id, n, true);
                 if (status != XR_LIR_OK) return status;
             }
         }
@@ -336,6 +342,24 @@ static XrLirStatus rebuild_cleanup_roles(Rebuild *c, const XrLirFunctionData *so
         if (status != XR_LIR_OK) return status;
     }
     return XR_LIR_OK;
+}
+
+XR_FUNC XrLirStatus xr_lir_copy_emit(XrLirCopyEmitter *emitter, XrLirOp op, XrLirType type, uint64_t bits,
+    const uint32_t *operands, uint32_t count, uint32_t bind) {
+    Rebuild *c = emitter ? emitter->rebuild : NULL;
+    XrLirValue mapped[3];
+    if (!c || count > sizeof(mapped) / sizeof(*mapped) || (count && !operands) || bind > c->view.value_count ||
+        xr_lir_internal_terminal(op)) return XR_LIR_VERIFY_ERROR;
+    for (uint32_t n = 0; n < count; ++n) {
+        if (!operands[n] || operands[n] > c->view.value_count || !c->values[operands[n]].id) return XR_LIR_VERIFY_ERROR;
+        mapped[n] = c->values[operands[n]];
+    }
+    XrLirInstruction instruction = {.op=op,.type=type,.bits=bits,.operands=count ? mapped : NULL,.operand_count=count};
+    if (type == XR_LIR_UNIT) return bind ? XR_LIR_VERIFY_ERROR : xr_lir_emit_effect(c->output, emitter->block, &instruction);
+    XrLirValue result = {0};
+    XrLirStatus status = xr_lir_emit_value(c->output, emitter->block, &instruction, &result);
+    if (status == XR_LIR_OK && bind) c->values[bind] = result;
+    return status;
 }
 
 XR_FUNC XrLirStatus xr_lir_internal_copy(const XrLirModule *input, XrLirModule **output,

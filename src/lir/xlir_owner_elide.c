@@ -152,6 +152,6 @@ static void elide_project(void *context, uint32_t block, uint32_t ordinal,
 
 XR_FUNC XrLirStatus xr_lir_owner_elide(const XrLirModule *input, XrLirModule **output) {
     Elide c = {0};
-    const XrLirCopyPlan plan = {&c, elide_begin, elide_keep, elide_project, elide_end};
+    const XrLirCopyPlan plan = {&c, elide_begin, elide_keep, elide_project, elide_end, NULL, NULL};
     return xr_lir_internal_copy(input, output, &plan);
 }
