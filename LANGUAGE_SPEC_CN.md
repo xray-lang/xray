@@ -818,7 +818,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Timeout` | `Timeout` |
 | `NumberParseError` | `InvalidSyntax` \| `OutOfRange` |
 | `StringSliceError` | `InvalidByteRange` |
-| `CompressionError` | `InvalidData` |
+| `CompressionError` | `InvalidData` \| `OutputLimitExceeded` |
 | `CryptoError` | `InvalidLength` |
 | `StringPatternError` | `EmptyPattern` |
 | `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |

@@ -929,7 +929,7 @@ def channel_result_rows(root):
             ('Cancelled', 'CANCELLED', [('Cancelled','NONE')], 18, 0),
             ('Timeout', 'TASK_TIMEOUT', [('Timeout','NONE')], 0, 0),
             ('TaskResult', 'TASK_RESULT', [('Success','TYPE_PARAM_0'),('Error','ERROR'),('Panic','PANIC_INFO'),('Cancelled','NONE')], 19, 2),
-            ('CompressionError', 'COMPRESSION_ERROR', [('InvalidData','NONE')], 0, 0)]
+            ('CompressionError', 'COMPRESSION_ERROR', [('InvalidData','NONE'),('OutputLimitExceeded','NONE')], 0, 0)]
     for name, kind, variants, _, arity in rows:
         registrations = re.findall(r'^\s*XR_BUILTIN_ENUM\(\s*"'+name+r'"', prelude, re.M)
         matches = list(re.finditer(r'XR_BUILTIN_ENUM\("'+name+r'",\s*'+str(arity)+r',\s*'+kind+r',', prelude))

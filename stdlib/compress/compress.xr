@@ -77,6 +77,11 @@ const ADLER_NMAX: i64 = 5552
 // compression decision the module makes rather than forwards.
 const DEFAULT_COMPRESSION: i64 = 6
 
+// The output cap a decompressing caller gets when it does not choose one,
+// 256 MiB. A few hundred bytes of deflate can describe gigabytes of output, so
+// the input must not be what decides how much memory decoding takes.
+const DEFAULT_MAX_OUTPUT_BYTES: i64 = 268435456
+
 // gzip (RFC 1952) opens with the two magic bytes and a ten-byte header; zlib
 // (RFC 1950) opens with CMF and FLG, whose sixteen-bit value is a multiple of
 // thirty-one and whose low CMF nibble names the compression method.
@@ -573,16 +578,21 @@ fn deflateRaw(src: Slice<u8>, level: i64) -> Array<u8> {
 // receiver read-only and the cursor unadvanceable (E0353). Owning the
 // compressed bytes costs one copy of the smaller of the two buffers and buys a
 // decoder shaped like the format it reads.
+//
+// limit caps len(out). Every write checks it first, so a stream that expands
+// without bound stops at the cap instead of allocating past it.
 class Inflater {
     src: Array<u8>
     out: Array<u8>
+    limit: i64
     pos: i64
     bitBuf: i64
     bitCount: i64
 
-    init(src: Array<u8>) {
+    init(src: Array<u8>, limit: i64) {
         this.src = src
         this.out = Array<u8>()
+        this.limit = limit
         this.pos = 0
         this.bitBuf = 0
         this.bitCount = 0
@@ -639,6 +649,7 @@ class Inflater {
         if (blockNlen != ((~blockLen) & 65535)) { throw CompressionError.InvalidData }
         this.pos = this.pos + 4
         if (this.pos + blockLen > total) { throw CompressionError.InvalidData }
+        if (blockLen > this.limit - len(this.out)) { throw CompressionError.OutputLimitExceeded }
         var input = this.src
         this.out.appendFrom(input[this.pos:this.pos + blockLen])
         this.pos = this.pos + blockLen
@@ -692,6 +703,7 @@ class Inflater {
         while (true) {
             var symbol = try this.decodeSymbol(litTree)
             if (symbol < 256) {
+                if (len(this.out) >= this.limit) { throw CompressionError.OutputLimitExceeded }
                 this.out.push(symbol as u8)
             } else if (symbol == END_OF_BLOCK) {
                 return
@@ -711,6 +723,7 @@ class Inflater {
                 // A distance reaching back past the start of the output names
                 // bytes that were never written.
                 if (distance > len(this.out)) { throw CompressionError.InvalidData }
+                if (length > this.limit - len(this.out)) { throw CompressionError.OutputLimitExceeded }
                 this.out.repeatFrom(distance, length)
             }
         }
@@ -760,9 +773,9 @@ class Inflater {
     }
 }
 
-fn inflateRaw(src: Slice<u8>) throws(CompressionError) -> Array<u8> {
+fn inflateRaw(src: Slice<u8>, limit: i64) throws(CompressionError) -> Array<u8> {
     var owned = copy src[0:len(src)]
-    var decoder = Inflater(owned)
+    var decoder = Inflater(owned, limit)
     return try (move decoder).run()
 }
 
@@ -779,8 +792,8 @@ class InflatedPrefix {
     }
 }
 
-fn inflatePrefix(src: Slice<u8>) throws(CompressionError) -> InflatedPrefix {
-    var decoder = Inflater(copy src[0:len(src)])
+fn inflatePrefix(src: Slice<u8>, limit: i64) throws(CompressionError) -> InflatedPrefix {
+    var decoder = Inflater(copy src[0:len(src)], limit)
     var out = try decoder.run()
     // Whole bytes still buffered were read ahead of the final block's end.
     return InflatedPrefix(out, decoder.pos - decoder.bitCount / 8)
@@ -840,13 +853,13 @@ export fn gzip(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Array<u8> {
     return out
 }
 
-// Unwrap one gzip member at start and append its payload to out; returns
-// where the member ends. A member shorter than a header plus an empty payload
+// Unwrap one gzip member at start and append its payload to out, which may
+// grow to at most limit bytes; returns where the member ends. A member shorter than a header plus an empty payload
 // plus a trailer cannot be one, whatever its first two bytes say, and a method
 // other than deflate is one this decoder does not implement. Reserved flag
 // bits must be clear, and a header CRC, when present, must match the low half
 // of the CRC-32 of the header bytes before it.
-fn gunzipMember(data: Slice<u8>, start: i64, out: ref Array<u8>) throws(CompressionError) -> i64 {
+fn gunzipMember(data: Slice<u8>, start: i64, out: ref Array<u8>, limit: i64) throws(CompressionError) -> i64 {
     var total = len(data)
     if (total - start < GZIP_MIN_MEMBER_LEN || !isGzipBytes(data[start:total])) {
         throw CompressionError.InvalidData
@@ -879,7 +892,7 @@ fn gunzipMember(data: Slice<u8>, start: i64, out: ref Array<u8>) throws(Compress
     }
     if (pos + GZIP_TRAILER_LEN > total) { throw CompressionError.InvalidData }
 
-    var member = try inflatePrefix(data[pos:total])
+    var member = try inflatePrefix(data[pos:total], limit - len(out))
     var payload = member.out
     var trailer = pos + member.consumed
     if (trailer + GZIP_TRAILER_LEN > total) { throw CompressionError.InvalidData }
@@ -899,11 +912,12 @@ fn gunzipMember(data: Slice<u8>, start: i64, out: ref Array<u8>) throws(Compress
 
 // Decompress gzip data: one member or several concatenated, each verified and
 // their payloads joined, as gzip(1) reads them. Zero bytes after the last
-// member are padding; anything else there is not gzip data.
-export fn gunzip(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
+// member are padding; anything else there is not gzip data. The joined
+// payload may not exceed maxOutputBytes (OutputLimitExceeded).
+export fn gunzip(data: Slice<u8>, maxOutputBytes: i64 = DEFAULT_MAX_OUTPUT_BYTES) throws(CompressionError) -> Array<u8> {
     var total = len(data)
     var out = Array<u8>()
-    var pos = try gunzipMember(data, 0, ref out)
+    var pos = try gunzipMember(data, 0, ref out, maxOutputBytes)
     while (pos < total) {
         if ((data[pos] as i64) == 0) {
             while (pos < total) {
@@ -912,7 +926,7 @@ export fn gunzip(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
             }
             return out
         }
-        pos = try gunzipMember(data, pos, ref out)
+        pos = try gunzipMember(data, pos, ref out, maxOutputBytes)
     }
     return out
 }
@@ -956,8 +970,9 @@ export fn zlibCompress(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Arr
 
 // Unwrap a zlib stream and decompress it. A preset dictionary is announced by
 // FDICT and would name a dictionary this decoder was never given, so the four
-// bytes naming it are skipped and the stream is decoded without it.
-export fn zlibDecompress(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
+// bytes naming it are skipped and the stream is decoded without it. The output
+// may not exceed maxOutputBytes (OutputLimitExceeded).
+export fn zlibDecompress(data: Slice<u8>, maxOutputBytes: i64 = DEFAULT_MAX_OUTPUT_BYTES) throws(CompressionError) -> Array<u8> {
     if (!isZlibBytes(data)) { throw CompressionError.InvalidData }
     var total = len(data)
     if (total < ZLIB_MIN_STREAM_LEN) { throw CompressionError.InvalidData }
@@ -968,7 +983,7 @@ export fn zlibDecompress(data: Slice<u8>) throws(CompressionError) -> Array<u8> 
         if (total < headerLen + ZLIB_TRAILER_LEN) { throw CompressionError.InvalidData }
     }
 
-    var out = try inflateRaw(data[headerLen:total - ZLIB_TRAILER_LEN])
+    var out = try inflateRaw(data[headerLen:total - ZLIB_TRAILER_LEN], maxOutputBytes)
     if (readU32BE(data, total - ZLIB_TRAILER_LEN) != adler32Bytes(out[:])) {
         throw CompressionError.InvalidData
     }
@@ -1005,6 +1020,7 @@ export fn deflate(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Array<u8
 
 // Raw inflate. A deflate stream carries no header to check ahead of time, so
 // every input goes to the decoder and malformed ones come back as the error.
-export fn inflate(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
-    return try inflateRaw(data)
+// The output may not exceed maxOutputBytes (OutputLimitExceeded).
+export fn inflate(data: Slice<u8>, maxOutputBytes: i64 = DEFAULT_MAX_OUTPUT_BYTES) throws(CompressionError) -> Array<u8> {
+    return try inflateRaw(data, maxOutputBytes)
 }

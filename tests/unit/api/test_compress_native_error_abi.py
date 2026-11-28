@@ -72,7 +72,10 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
         # Decompression answers bytes and reports failure by throwing. A
         # nullable return would be the sentinel this gate exists to forbid.
         for name in ("gunzip", "inflate", "zlibDecompress"):
-            signature = f"export fn {name}(data: Slice<u8>) -> Array<u8>"
+            signature = (
+                f"export fn {name}(data: Slice<u8>, maxOutputBytes: i64 = DEFAULT_MAX_OUTPUT_BYTES)"
+                " throws(CompressionError) -> Array<u8>"
+            )
             self.assertIn(signature, source, f"{name} must publish the typed byte surface")
             body = _body(source, signature)
             self.assertNotIn("-> Array<u8>?", body)
@@ -80,7 +83,11 @@ class CompressNativeErrorAbiTest(unittest.TestCase):
         # gunzip and zlibDecompress refuse a header they do not recognise;
         # inflate has no header to check, so its refusal comes from the decoder.
         for name in ("gunzip", "zlibDecompress"):
-            body = _body(source, f"export fn {name}(data: Slice<u8>) -> Array<u8>")
+            body = _body(
+                source,
+                f"export fn {name}(data: Slice<u8>, maxOutputBytes: i64 = DEFAULT_MAX_OUTPUT_BYTES)"
+                " throws(CompressionError) -> Array<u8>",
+            )
             self.assertIn("throw CompressionError.InvalidData", body)
 
         # Compression cannot fail, so it does not answer null either.

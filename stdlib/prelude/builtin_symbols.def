@@ -205,7 +205,8 @@ XR_BUILTIN_ENUM("StringSliceError", 0, STRING_SLICE_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidByteRange", NONE))
 
 XR_BUILTIN_ENUM("CompressionError", 0, COMPRESSION_ERROR,
-                XR_BUILTIN_ENUM_VARIANT("InvalidData", NONE))
+                XR_BUILTIN_ENUM_VARIANT("InvalidData", NONE)
+                XR_BUILTIN_ENUM_VARIANT("OutputLimitExceeded", NONE))
 
 XR_BUILTIN_ENUM("CryptoError", 0, CRYPTO_ERROR,
                 XR_BUILTIN_ENUM_VARIANT("InvalidLength", NONE))

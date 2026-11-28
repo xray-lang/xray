@@ -548,7 +548,8 @@ class StringBuilder {
                 ('Timeout', 'TASK_TIMEOUT', [('Timeout', 'NONE')], 0, 0),
                 ('TaskResult', 'TASK_RESULT', [('Success', 'TYPE_PARAM_0'), ('Error', 'ERROR'),
                                             ('Panic', 'PANIC_INFO'), ('Cancelled', 'NONE')], 19, 2),
-                ('CompressionError', 'COMPRESSION_ERROR', [('InvalidData', 'NONE')], 0, 0)])
+                ('CompressionError', 'COMPRESSION_ERROR', [('InvalidData', 'NONE'),
+                                                            ('OutputLimitExceeded', 'NONE')], 0, 0)])
             for before, after in [('"Recv", 1, RECV', '"Recv", 0, RECV'),
                                   ('"Recv", 1, RECV', '"Recv", 1, SEND_RESULT'),
                                   ('"Value", TYPE_PARAM_0', '"Value", NONE'),

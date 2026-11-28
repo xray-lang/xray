@@ -1,0 +1,65 @@
+// Decompression stops at the caller's output cap with OutputLimitExceeded,
+// a failure distinct from corrupt input, and a cap equal to the payload size
+// is enough. Each decoder path that writes output checks the cap: a stored
+// block, Huffman literals, back-references, and the running total across
+// gzip members. The streams were made with zlib so the case does not depend
+// on this module's own encoder.
+import compress
+
+fn inflateWith(data: Array<u8>, cap: i64) -> string {
+    try {
+        const out = compress.inflate(data[:], cap)
+        return "ok ${len(out)}"
+    } catch (e: CompressionError) {
+        return e.toString()
+    }
+}
+
+fn inflateDefault(data: Array<u8>) -> string {
+    try {
+        const out = compress.inflate(data[:])
+        return "ok ${len(out)}"
+    } catch (e: CompressionError) {
+        return e.toString()
+    }
+}
+
+fn gunzipWith(data: Array<u8>, cap: i64) -> string {
+    try {
+        const out = compress.gunzip(data[:], cap)
+        return "ok ${len(out)}"
+    } catch (e: CompressionError) {
+        return e.toString()
+    }
+}
+
+fn zlibWith(data: Array<u8>, cap: i64) -> string {
+    try {
+        const out = compress.zlibDecompress(data[:], cap)
+        return "ok ${len(out)}"
+    } catch (e: CompressionError) {
+        return e.toString()
+    }
+}
+
+var storedBlock: Array<u8> = [1, 8, 0, 247, 255, 97, 98, 99, 100, 101, 102, 103, 104]
+var literals: Array<u8> = [75, 76, 74, 78, 73, 77, 75, 207, 0, 0]
+var backReferences: Array<u8> = [75, 76, 28, 5, 163, 96, 20, 12, 119, 0, 0]
+var emptyStream: Array<u8> = [3, 0]
+var twoMembers: Array<u8> = [31, 139, 8, 0, 0, 0, 0, 0, 0, 255, 203, 72, 205, 201, 201, 87, 0, 0, 246, 249, 129, 237, 6, 0, 0, 0, 31, 139, 8, 0, 0, 0, 0, 0, 0, 255, 43, 207, 47, 202, 73, 1, 0, 67, 17, 119, 58, 5, 0, 0, 0]
+var zlibStream: Array<u8> = [120, 218, 75, 76, 28, 5, 163, 96, 20, 12, 119, 0, 0, 249, 216, 122, 248]
+var notDeflate: Array<u8> = [110, 111, 116]
+
+print(inflateWith(storedBlock, 7))
+print(inflateWith(storedBlock, 8))
+print(inflateWith(literals, 4))
+print(inflateWith(literals, 8))
+print(inflateWith(backReferences, 999))
+print(inflateWith(backReferences, 1000))
+print(inflateDefault(backReferences))
+print(inflateWith(emptyStream, 0))
+print(gunzipWith(twoMembers, 10))
+print(gunzipWith(twoMembers, 11))
+print(zlibWith(zlibStream, 0))
+print(zlibWith(zlibStream, 1000))
+print(inflateWith(notDeflate, 5))

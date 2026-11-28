@@ -335,6 +335,7 @@ tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.xr  # error:
 tests/diff/cases/semantics/stdlib/compress_checksum_direct.xr  # XOR_INT is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/compress_external_codec_direct.xr  # throwing or variadic callable ABI is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/compress_gzip_members.xr  # INVOKE is not supported by LIR lowering yet
+tests/diff/cases/semantics/stdlib/compress_output_limit.xr  # INVOKE is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/compress_roundtrip_direct.xr  # throwing or variadic callable ABI is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/compress_truncated_direct.xr  # throwing or variadic callable ABI is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr  # error: name does not resolve to an admitted nominal type
