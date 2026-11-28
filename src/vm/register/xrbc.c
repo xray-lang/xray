@@ -292,6 +292,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     case XR_RBC_STRING_LITERAL_BORROW:
     case XR_RBC_MAP_READ:
     case XR_RBC_MAP_EDIT:
+    case XR_RBC_OWNER_DROP:
+    case XR_RBC_OWNER_COPY:
+    case XR_RBC_OWNER_EDGE:
     case XR_RBC_VALUE_ACCESS:
         return xr_rbc_value_instruction_valid(module, function, pc) &&
             (xr_rbc_value_return_word(module, function, word) || remaining > 1);

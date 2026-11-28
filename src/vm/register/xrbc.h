@@ -99,6 +99,9 @@
     X(STRING_LITERAL_BORROW, ABX) \
     X(STRING_LITERAL_MAP_READ, ABX) \
     X(MAP_EDIT, ABX) \
+    X(OWNER_DROP, ABX) \
+    X(OWNER_COPY, ABX) \
+    X(OWNER_EDGE, ABX) \
     X(ARITHMETIC_PANIC, ABX)
 
 typedef enum {

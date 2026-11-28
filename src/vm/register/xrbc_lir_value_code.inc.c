@@ -219,8 +219,9 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     if (!rbc_lir_grow(c,&storage,&c->value_access_capacity,code->access_count + 1,sizeof(*code->accesses))) return false;
     code->accesses = storage;
     ((XrRbcValueAccess *)code->accesses)[code->access_count] = access;
-    XrRbcOp op = rbc_value_access_opcode(code, access);
-    if (!rbc_lir_emit(c, op, 0, 0, 0, (int64_t)code->access_count++)) return false;
+    uint32_t index = (uint32_t)code->access_count++;
+    XrRbcOp op = rbc_value_access_opcode(xr_lir_value_image_view(c->literals->program->value_image), code, index);
+    if (!rbc_lir_emit(c, op, 0, 0, 0, (int64_t)index)) return false;
     if (op == XR_RBC_MAP_READ && c->code_count - c->blocks[c->diagnostic->block] >= 2) {
         uint32_t *literal = &c->code[c->code_count - 2];
         if ((*literal & 255u) == XR_RBC_STRING_LITERAL_BORROW &&

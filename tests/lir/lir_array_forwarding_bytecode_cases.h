@@ -45,7 +45,10 @@ static uint32_t array_forwarding_encoded_sites(const XrRbcModule *module) {
             if (!event->forwarding_mode) continue;
             CHECK(event->forwarding_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE &&
                 event->view_parameter==UINT32_MAX && pc+1<function->code_count && !a.window);
-            word=function->code[pc+1]; CHECK((word&65535u)==XR_RBC_VALUE_ACCESS);
+            /* The released Array of a forwarded NEW is a plain local owner and
+             * takes the specialized release word; a READ releases its Cell. */
+            word=function->code[pc+1];
+            CHECK((word&65535u)==(a.operation==XR_RBC_VALUE_BINDING_NEW ? XR_RBC_OWNER_DROP : XR_RBC_VALUE_ACCESS));
             XrRbcValueAccess drop=code->accesses[word>>16];
             CHECK(drop.operation==(a.operation==XR_RBC_VALUE_BINDING_NEW ? XR_RBC_VALUE_DROP : XR_RBC_VALUE_BINDING_DROP) &&
                 drop.source==a.source && !drop.index);
@@ -202,7 +205,8 @@ static void array_forwarding_branch_drop(void) {
         for (size_t pc=0;pc<function->code_count;++pc) if ((function->code[pc]&255)==XR_RBC_JMP) {
             uint32_t bits=function->code[pc]>>8; int32_t offset=bits<=XR_RBC_JUMP_MAX ? (int32_t)bits : (int32_t)bits-16777216;
             size_t target=pc+1+(size_t)offset; CHECK(target<function->code_count); uint32_t word=function->code[target];
-            direct+=(word&65535u)==XR_RBC_VALUE_ACCESS && code->accesses[word>>16].operation==XR_RBC_VALUE_DROP;
+            uint32_t op=word&65535u;
+            direct+=(op==XR_RBC_VALUE_ACCESS || op==XR_RBC_OWNER_DROP) && code->accesses[word>>16].operation==XR_RBC_VALUE_DROP;
         }
         CHECK(direct);
         array_forwarding_run_retired(program,&flag,1,flag ? 42u : 17u);
@@ -241,7 +245,8 @@ static void array_forwarding_probe_root(void *context) {
     const XrRbcModule *module=execution->module; XrRbcStack *stack=&execution->stack;
     CHECK(xr_rbc_values_begin(module,stack,0,0)==XR_RBC_OK);
     for (size_t pc=0;!probe->read && pc<probe->pc;++pc) {
-        uint32_t word=module->functions[0].code[pc]; CHECK((word&65535u)==XR_RBC_VALUE_ACCESS);
+        uint32_t word=module->functions[0].code[pc], op=word&65535u;
+        CHECK(op==XR_RBC_VALUE_ACCESS || op==XR_RBC_OWNER_DROP || op==XR_RBC_OWNER_COPY || op==XR_RBC_OWNER_EDGE);
         CHECK(xr_rbc_values_step(module,stack,word>>16,pc+1,0)==XR_RBC_OK);
     }
     RbcValueActivation *activation=stack->values->top; const XrRbcValueCode *code=activation->code;

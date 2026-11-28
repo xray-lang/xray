@@ -498,6 +498,21 @@ XR_RBC_CASE(MAP_READ) {
     if (status != XR_RBC_OK) return status;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(OWNER_DROP) {
+    XrRbcStatus status = xr_rbc_owner_drop_step(module, stack, instruction >> 16, pc);
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(OWNER_COPY) {
+    XrRbcStatus status = xr_rbc_owner_copy_step(module, stack, instruction >> 16, pc);
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(OWNER_EDGE) {
+    XrRbcStatus status = xr_rbc_owner_edge_step(module, stack, instruction >> 16, pc);
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
 #endif
 #if !defined(__clang__) && !defined(__GNUC__)
 default:
@@ -512,6 +527,14 @@ default:
     }
     if (op == XR_RBC_MAP_EDIT) {
         XrRbcStatus status = xr_rbc_map_edit_step(module, stack, instruction >> 16, pc);
+        if (status != XR_RBC_OK) return status;
+        XR_RBC_NEXT();
+    }
+    if (op == XR_RBC_OWNER_DROP || op == XR_RBC_OWNER_COPY || op == XR_RBC_OWNER_EDGE) {
+        uint32_t index = instruction >> 16;
+        XrRbcStatus status = op == XR_RBC_OWNER_DROP ? xr_rbc_owner_drop_step(module, stack, index, pc) :
+            op == XR_RBC_OWNER_COPY ? xr_rbc_owner_copy_step(module, stack, index, pc) :
+            xr_rbc_owner_edge_step(module, stack, index, pc);
         if (status != XR_RBC_OK) return status;
         XR_RBC_NEXT();
     }

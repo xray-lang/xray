@@ -179,12 +179,12 @@ static const XrLirHomeEvent *rbc_value_binding_forwarding_event(const XrRbcModul
 }
 /* Admission proves the actual next word as well as the logical release.
  * The owned activation can subsequently use the shared MOVE fact. */
-static bool rbc_value_binding_forwarding_words(const XrRbcFunction *function,const XrRbcValueCode *code,
-    uint32_t index,size_t pc) {
+static bool rbc_value_binding_forwarding_words(const XrtValueImage *image,const XrRbcFunction *function,
+    const XrRbcValueCode *code,uint32_t index,size_t pc) {
     if (index>=code->access_count || index>UINT16_MAX || pc>=function->code_count || function->code_count-pc<=2 ||
         function->code[pc]!=(XR_RBC_VALUE_ACCESS | (index<<16))) return false;
     uint32_t word=function->code[pc+1], drop_index=word>>16;
-    if ((word&65535u)!=XR_RBC_VALUE_ACCESS || drop_index>=code->access_count) return false;
+    if (drop_index>=code->access_count || (word&65535u)!=rbc_value_access_opcode(image,code,drop_index)) return false;
     XrRbcValueAccess access=code->accesses[index], drop=code->accesses[drop_index];
     bool create=access.operation==XR_RBC_VALUE_BINDING_NEW;
     const XrLirValueHomes *homes=code->homes;

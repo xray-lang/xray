@@ -2370,6 +2370,107 @@ static void test_mixed_edge_scalar_copies(void) {
     xr_rbc_program_destroy(program);
 }
 
+/* Plain local owner operations compile to their own words: a String carried
+ * around a loop, retained, released and passed to a formal that retains its
+ * argument. A retain from a formal keeps the generic word. Admission accepts
+ * only the word the shared selector names for each access. */
+static size_t owner_words(const XrRbcModule *module, uint32_t function, uint32_t op) {
+    size_t count=0;
+    for (size_t pc=0;pc<module->functions[function].code_count;++pc)
+        count+=(module->functions[function].code[pc]&255u)==op;
+    return count;
+}
+static void owner_word_reject(XrRbcProgram *program, uint32_t function, size_t pc, uint32_t op) {
+    uint32_t *words=(uint32_t *)xr_rbc_program_view(program)->functions[function].code, saved=words[pc];
+    words[pc]=(saved&~255u)|op;
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_module_prepare(xr_rbc_program_view(program),0,NULL,0,xr_rbc_program_locations(program),
+        &execution)==XR_RBC_INVALID && !execution);
+    words[pc]=saved;
+}
+static void test_owner_words(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirType text_type=XR_LIR_STRING, carried[]={XR_LIR_STRING,XR_LIR_I64};
+    XrLirFunction f=test_function(m,"owner_words",NULL,0,XR_LIR_I64);
+    XrLirFunction make=test_text_function(m,"owner_words_text",12345);
+    XrLirFunction g=test_function(m,"owner_words_formal",&text_type,1,XR_LIR_I64);
+    XrLirBlock g_body=test_block(m,g,NULL,0);OK(xr_lir_set_entry(m,g,g_body));
+    XrLirValue formal={0};OK(xr_lir_function_parameter(m,g,0,&formal));
+    XrLirValue kept={0},kept_length={0};
+    OK(xr_lir_emit_value(m,g_body,&(XrLirInstruction){.op=XR_LIR_STRING_RETAIN,.type=XR_LIR_STRING,
+        .operands=&formal,.operand_count=1},&kept));
+    OK(xr_lir_emit_value(m,g_body,&(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,
+        .operands=&kept,.operand_count=1},&kept_length));
+    frame_drop(m,g_body,kept,false);test_return(m,g_body,kept_length);
+    XrLirBlock entry=test_block(m,f,NULL,0),loop=test_block(m,f,carried,2),body=test_block(m,f,carried,2);
+    XrLirBlock done=test_block(m,f,carried,2);OK(xr_lir_set_entry(m,f,entry));
+    XrLirValue initial[]={test_text_call(m,entry,make),test_constant(m,entry,XR_LIR_I64,0)};
+    test_branch(m,entry,loop,initial,2);
+    XrLirValue at_loop[2],at_body[2],at_done[2];
+    for(unsigned n=0;n<2;++n){at_loop[n]=block_parameter(m,loop,n);at_body[n]=block_parameter(m,body,n);
+        at_done[n]=block_parameter(m,done,n);}
+    XrLirValue more=test_binary(m,loop,XR_LIR_ICMP,at_loop[1],test_constant(m,loop,XR_LIR_I64,400),XR_LIR_LT);
+    OK(xr_lir_set_terminator(m,loop,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+        .operands=&more,.operand_count=1,.edges={{body,at_loop,2},{done,at_loop,2}},.edge_count=2}));
+    XrLirValue copy={0},copy_length={0};
+    OK(xr_lir_emit_value(m,body,&(XrLirInstruction){.op=XR_LIR_STRING_RETAIN,.type=XR_LIR_STRING,
+        .operands=&at_body[0],.operand_count=1},&copy));
+    OK(xr_lir_emit_value(m,body,&(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,
+        .operands=&copy,.operand_count=1},&copy_length));
+    frame_drop(m,body,copy,false);
+    XrLirValue borrowed=test_call(m,body,g,at_body[0]);
+    XrLirValue step=test_binary(m,body,XR_LIR_ADD,copy_length,borrowed,XR_LIR_PREDICATE_NONE);
+    XrLirValue next=test_binary(m,body,XR_LIR_ADD,at_body[1],
+        test_binary(m,body,XR_LIR_ADD,step,test_constant(m,body,XR_LIR_I64,90),XR_LIR_PREDICATE_NONE),XR_LIR_PREDICATE_NONE);
+    XrLirValue back[]={at_body[0],next};test_branch(m,body,loop,back,2);
+    XrLirValue final_length={0};
+    OK(xr_lir_emit_value(m,done,&(XrLirInstruction){.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,
+        .operands=&at_done[0],.operand_count=1},&final_length));
+    frame_drop(m,done,at_done[0],false);
+    test_return(m,done,test_binary(m,done,XR_LIR_ADD,at_done[1],final_length,XR_LIR_PREDICATE_NONE));
+    OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,f);
+    const XrRbcModule *module=xr_rbc_program_view(program);
+    uint32_t root=UINT32_MAX,formal_function=UINT32_MAX;
+    for(uint32_t n=0;n<module->function_count;++n) {
+        const XrRbcValueCode *code=xr_rbc_module_value_code(module,n);
+        if(!code) continue;
+        bool parameter_copy=false;
+        for(size_t a=0;a<code->access_count;++a)
+            parameter_copy|=code->accesses[a].operation==XR_RBC_VALUE_COPY &&
+                code->homes->values[code->accesses[a].source].parameter;
+        if(parameter_copy) formal_function=n; else if(owner_words(module,n,XR_RBC_OWNER_EDGE)) root=n;
+    }
+    CHECK(root!=UINT32_MAX && formal_function!=UINT32_MAX);
+    CHECK(owner_words(module,root,XR_RBC_OWNER_COPY)==1 && owner_words(module,root,XR_RBC_OWNER_DROP)==2 &&
+        owner_words(module,root,XR_RBC_OWNER_EDGE)>=1);
+    CHECK(!owner_words(module,formal_function,XR_RBC_OWNER_COPY) && owner_words(module,formal_function,XR_RBC_OWNER_DROP)==1);
+    xr_lir_module_destroy(m);
+    // 400 / (5 + 5 + 90) = 4 turns; the final text adds its length once more.
+    CHECK(run(program,NULL,0)==405);
+    XrRbcExecution *accepted=NULL;
+    CHECK(root==0 && xr_rbc_module_prepare(module,0,NULL,0,xr_rbc_program_locations(program),&accepted)==XR_RBC_OK &&
+        accepted);
+    xr_rbc_execution_free(&accepted);
+    const XrRbcFunction *physical=&module->functions[root];
+    for(size_t pc=0;pc<physical->code_count;++pc) {
+        uint32_t op=physical->code[pc]&255u;
+        if(op==XR_RBC_OWNER_DROP||op==XR_RBC_OWNER_COPY||op==XR_RBC_OWNER_EDGE)
+            owner_word_reject(program,root,pc,XR_RBC_VALUE_ACCESS);
+        if(op==XR_RBC_OWNER_EDGE) owner_word_reject(program,root,pc,XR_RBC_OWNER_DROP);
+        if(op==XR_RBC_OWNER_DROP) owner_word_reject(program,root,pc,XR_RBC_OWNER_COPY);
+    }
+    const XrRbcFunction *formal_code=&module->functions[formal_function];
+    const XrRbcValueCode *code=xr_rbc_module_value_code(module,formal_function);
+    for(size_t pc=0;pc<formal_code->code_count;++pc) {
+        uint32_t word=formal_code->code[pc];
+        if((word&255u)==XR_RBC_VALUE_ACCESS && code->accesses[word>>16].operation==XR_RBC_VALUE_COPY)
+            owner_word_reject(program,formal_function,pc,XR_RBC_OWNER_COPY);
+    }
+    CHECK(run(program,NULL,0)==405);
+    xr_rbc_program_destroy(program);
+}
+
 static void test_backward_owned_dag(void) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType text_type=XR_LIR_STRING;
     XrLirFunction f=test_function(m,"backward_owned_dag",NULL,0,XR_LIR_I64);
@@ -2413,6 +2514,7 @@ int main(void) {
     test_scalar_edge_in_typed_function(true);
     test_fresh_string_stationary_edges();
     test_mixed_edge_scalar_copies();
+    test_owner_words();
     test_backward_owned_dag();
     test_string_binding_aliases();
     test_scalar_spill_branches();

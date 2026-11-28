@@ -17,6 +17,7 @@
 #include "xray_native_pod.h"
 #include "lir/xlir_array_region_binding.h"
 #include "lir/xlir_map.h"
+#include "xray_native_value_image.h"
 
 /* Check a typed word after its module and home directories are available. */
 XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *, const XrRbcFunction *, size_t pc);
@@ -195,9 +196,45 @@ typedef struct XrRbcValueCode {
     const XrRbcArrayRepeatLimit *array_repeat_limits; /* Indexed like array_regions->regions. */
 } XrRbcValueCode;
 
-/* A leaf needs no call, return or owning destination. Both emission and
- * admission select the word from the same admitted access description. */
-static inline XrRbcOp rbc_value_access_opcode(const XrRbcValueCode *code, XrRbcValueAccess access) {
+/* A plain local owner of one Header: a String or container value in its own
+ * Frame home, reached directly rather than through a binding, formal, borrow,
+ * literal cache, view or callable transport. The generic path re-derives
+ * exactly these facts on every execution; a specialized word relies on them. */
+static inline bool rbc_value_header_owner(const XrtValueImage *image, const XrRbcValueCode *code, uint32_t value) {
+    const XrLirValueHomes *homes = code->homes;
+    if (!image || !image->types || !homes || !homes->values || !code->locations || !value ||
+        value > code->value_count || value > homes->value_count) return false;
+    const XrLirValueHome *home = &homes->values[value];
+    if (!home->type || home->type > image->type_count || home->parameter || home->borrow_source ||
+        home->owner_count != 1 || home->size != sizeof(XrtManagedHeader *) || home->byte_count ||
+        home->transport != XR_LIR_CALLABLE_TRANSPORT_NONE || home->cell_transport || home->view_workspace ||
+        home->view_storage != XR_LIR_SLICE_STORAGE_NONE || home->literal_cache_borrow || home->offset == SIZE_MAX ||
+        home->first_owner >= homes->frame.slot_count || !homes->frame.owned_offsets ||
+        homes->frame.owned_offsets[home->first_owner] != home->offset ||
+        code->locations[value].kind != XR_RBC_VALUE_NOWHERE || (homes->bindings && homes->bindings[value].type))
+        return false;
+    XrtValueKind kind = image->types[home->type - 1].kind;
+    return kind == XRT_VALUE_STRING || xrt_value_kind_is_array(kind) || kind == XRT_VALUE_MAP_STRING_I64 ||
+        kind == XRT_VALUE_MAP_STRING_STRING || kind == XRT_VALUE_SET_I64;
+}
+/* An edge whose only remaining pair is one direct Header move. */
+static inline bool rbc_value_owner_edge(const XrRbcValueCode *code, XrRbcValueAccess access) {
+    const XrLirValueHomes *homes = code->homes;
+    if (access.index == UINT32_MAX || !homes || !homes->edges || access.index >= homes->edge_count ||
+        access.count != 1 || access.other || access.window || !code->arguments ||
+        access.first > code->argument_count || code->argument_count - access.first < 2) return false;
+    const XrLirHomeEdge *edge = &homes->edges[access.index];
+    if (!edge->direct_header_move || edge->string_window || edge->count != 1 || !homes->transfers ||
+        edge->first >= homes->transfer_count) return false;
+    const XrLirHomeTransfer *transfer = &homes->transfers[edge->first];
+    return code->arguments[access.first] == transfer->source && code->arguments[access.first + 1] == transfer->target;
+}
+/* Emission and admission select every word from the same admitted access
+ * description and its image: a specialized word only where its static
+ * premises hold and no Array region role claims the access. */
+static inline XrRbcOp rbc_value_access_opcode(const XrtValueImage *image, const XrRbcValueCode *code, uint32_t index) {
+    if (!code->accesses || index >= code->access_count) return XR_RBC_VALUE_ACCESS;
+    XrRbcValueAccess access = code->accesses[index];
     if (access.operation == XR_RBC_VALUE_MAP) {
         if (xr_lir_map_reads_key(access.index)) return XR_RBC_MAP_READ;
         if (access.source && (access.index == XR_LIR_MAP_OP_SET || access.index == XR_LIR_MAP_OP_REMOVE))
@@ -206,6 +243,15 @@ static inline XrRbcOp rbc_value_access_opcode(const XrRbcValueCode *code, XrRbcV
     if (access.operation == XR_RBC_VALUE_STRING_LITERAL && code->homes && code->homes->values &&
         access.result && access.result <= code->homes->value_count &&
         code->homes->values[access.result].literal_cache_borrow) return XR_RBC_STRING_LITERAL_BORROW;
+    if (code->array_region_accesses && code->array_region_accesses[index].region) return XR_RBC_VALUE_ACCESS;
+    if (access.operation == XR_RBC_VALUE_DROP && !access.result && !access.other &&
+        rbc_value_header_owner(image, code, access.source)) return XR_RBC_OWNER_DROP;
+    if (access.operation == XR_RBC_VALUE_COPY && !access.other && access.result != access.source &&
+        rbc_value_header_owner(image, code, access.result) && rbc_value_header_owner(image, code, access.source) &&
+        code->homes->values[access.result].type == code->homes->values[access.source].type)
+        return XR_RBC_OWNER_COPY;
+    if (access.operation == XR_RBC_VALUE_EDGE && !access.result && !access.source && rbc_value_owner_edge(code, access))
+        return XR_RBC_OWNER_EDGE;
     return XR_RBC_VALUE_ACCESS;
 }
 
@@ -216,8 +262,8 @@ static inline bool rbc_literal_map_pair(const XrRbcValueCode *code, uint32_t fir
         (first >> 16) >= code->access_count || (second >> 16) >= code->access_count) return false;
     const XrRbcValueAccess literal = code->accesses[first >> 16];
     const XrRbcValueAccess read = code->accesses[second >> 16];
-    return rbc_value_access_opcode(code, literal) == XR_RBC_STRING_LITERAL_BORROW &&
-        rbc_value_access_opcode(code, read) == XR_RBC_MAP_READ &&
+    return rbc_value_access_opcode(NULL, code, first >> 16) == XR_RBC_STRING_LITERAL_BORROW &&
+        rbc_value_access_opcode(NULL, code, second >> 16) == XR_RBC_MAP_READ &&
         read.other && read.other == rbc_local_borrow_slot(code->homes, literal.result) &&
         read.count == 2 && code->arguments && read.first <= code->argument_count &&
         code->argument_count - read.first >= 2 && code->arguments[(size_t)read.first + 1] == literal.result;

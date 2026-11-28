@@ -2221,6 +2221,54 @@ static XR_NOINLINE XrRbcStatus xr_rbc_map_edit_step(const XrRbcModule *module,
     return XR_RBC_OK;
 }
 
+/* Plain local owner words. Admission proved every static premise the
+ * generic step would re-derive: a local single-Header home, a direct origin
+ * and no Array region role. Only an activation that is not yet current takes
+ * the generic step, which enters it and performs the same operation. */
+static inline RbcValueActivation *rbc_value_owner_activation(XrRbcStack *stack, uint32_t index) {
+    RbcValueActivation *activation = stack->values ? stack->values->top : NULL;
+    if (!activation || activation->depth != stack->depth || !activation->owned_code ||
+        index >= activation->code->access_count) return NULL;
+    if (activation->active_array_region)
+        rbc_value_array_region_forget(activation, activation->active_array_region, RBC_ARRAY_REGION_BYPASS);
+    return activation;
+}
+static inline XrRbcStatus xr_rbc_owner_drop_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+    const XrRbcValueAccess *access = &activation->code->accesses[index];
+    XrtManagedStatus status = xrt_managed_slot_drop(activation->frame,
+        activation->code->homes->values[access->source].first_owner);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
+    return XR_RBC_OK;
+}
+static inline XrRbcStatus xr_rbc_owner_copy_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+    const XrRbcValueAccess *access = &activation->code->accesses[index];
+    const XrLirValueHome *homes = activation->code->homes->values;
+    XrtManagedStatus status = xrt_place_copy_replace(
+        (XrtPlace){.frame = activation->frame, .slot = homes[access->result].first_owner, .nulls = XRT_PLACE_NONNULL},
+        (XrtPlace){.frame = activation->frame, .slot = homes[access->source].first_owner, .nulls = XRT_PLACE_NONNULL},
+        NULL);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
+    return XR_RBC_OK;
+}
+/* The direct Header move refuses any Frame state it cannot publish at once;
+ * the generic edge transaction then handles that state. */
+static inline XrRbcStatus xr_rbc_owner_edge_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (activation) {
+        XrRbcValueAccess access = activation->code->accesses[index];
+        if (rbc_value_edge_move_header(stack, activation, access, &activation->code->homes->edges[access.index]))
+            return XR_RBC_OK;
+    }
+    return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+}
+
 /* A borrowed literal only materializes its Frame keeper. The ordinary
  * factory still owns first use and failure, including the source and cleanup. */
 static XR_NOINLINE XrRbcStatus xr_rbc_string_literal_borrow_step(const XrRbcModule *module,

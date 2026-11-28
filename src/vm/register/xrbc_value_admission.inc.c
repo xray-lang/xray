@@ -596,8 +596,8 @@ static bool rbc_invoke_result_home(const XrRbcModule *module,const XrRbcFunction
         type->kind==XRT_VALUE_NULLABLE && !type->owned_count;
 }
 
-static bool rbc_checked_receivers(const XrRbcFunction *function,const XrRbcValueCode *code,size_t pc,
-    uint32_t ordinal,XrRbcValueAccess access) {
+static bool rbc_checked_receivers(const XrtValueImage *image,const XrRbcFunction *function,
+    const XrRbcValueCode *code,size_t pc,uint32_t ordinal,XrRbcValueAccess access) {
     bool primitive = rbc_value_checked_primitive(access.operation);
     uint32_t forwards = primitive ? 0 : access.source, stride = 2 + forwards;
     if (forwards>1 || function->code_count-pc<3+2*stride ||
@@ -615,9 +615,9 @@ static bool rbc_checked_receivers(const XrRbcFunction *function,const XrRbcValue
         if (receiver.operation!=operation ||
             receiver.index!=ordinal || receiver.result!=(n ? access.result : access.other)) return false;
         if (forwards) {
-            uint32_t transfer=function->code[site+1];
-            if ((transfer&65535u)!=XR_RBC_VALUE_ACCESS || (transfer>>16)>=code->access_count ||
-                code->accesses[transfer>>16].operation!=XR_RBC_VALUE_EDGE) return false;
+            uint32_t transfer=function->code[site+1], edge=transfer>>16;
+            if (edge>=code->access_count || (transfer&65535u)!=rbc_value_access_opcode(image,code,edge) ||
+                code->accesses[edge].operation!=XR_RBC_VALUE_EDGE) return false;
         }
     }
     return true;
@@ -653,7 +653,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     XrRbcValueAccess a = code->accesses[index];
     if ((code->error_type || rbc_value_typed_error_op(a.operation)) && !xr_rbc_module_code_owner(module))
         return false;
-    XrRbcOp access_op = rbc_value_access_opcode(code, a);
+    XrRbcOp access_op = rbc_value_access_opcode(xr_rbc_module_value_image(module), code, (uint32_t)index);
     if (op == XR_RBC_STRING_LITERAL_MAP_READ) {
         if (access_op != XR_RBC_STRING_LITERAL_BORROW || function->code_count - pc < 2 ||
             !rbc_literal_map_pair(code, word, function->code[pc + 1])) return false;
@@ -828,7 +828,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             (a.operation == XR_RBC_VALUE_CHECKED_EMPTY_ARRAY ? !a.source && rbc_checked_array_home(module,code,function,a) :
                 !a.index && rbc_value_scalar(code,function,a.source,XR_RBC_BITS) &&
                 rbc_value_host_nullable_backing(module,code,a.result,XRT_VALUE_STRING)) &&
-            rbc_checked_receivers(function,code,pc,(uint32_t)index,a);
+            rbc_checked_receivers(xr_rbc_module_value_image(module),function,code,pc,(uint32_t)index,a);
     case XR_RBC_VALUE_CHECKED_RESULT: case XR_RBC_VALUE_CHECKED_ERROR: {
         bool failed = a.operation == XR_RBC_VALUE_CHECKED_ERROR;
         size_t distance = failed ? 3 : 5;
@@ -837,7 +837,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         XrRbcValueAccess next = code->accesses[a.index];
         return rbc_value_checked_primitive(next.operation) &&
             a.result == (failed ? next.other : next.result) &&
-            rbc_checked_receivers(function,code,pc-distance,a.index,next);
+            rbc_checked_receivers(xr_rbc_module_value_image(module),function,code,pc-distance,a.index,next);
     }
     case XR_RBC_VALUE_CHECKED_ARRAY_PUSH: {
         if (!code->directory_frame_source || a.index != XR_LIR_ARRAY_OP_PUSH || a.count != 2 || a.other || a.source ||
@@ -970,7 +970,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             return a.result!=a.other && rbc_register_kind(function,a.window)==XR_RBC_CALL_WINDOW &&
                 rbc_error_home(module,code,a.other,callee->error_type,true) &&
                 rbc_invoke_result_home(module,function,code,target,callee,a.result) &&
-                rbc_checked_receivers(function,code,pc,(uint32_t)index,a);
+                rbc_checked_receivers(xr_rbc_module_value_image(module),function,code,pc,(uint32_t)index,a);
         uint32_t result_type = rbc_result_value_type(callee);
         if (rbc_callable_home_type(xr_rbc_module_value_image(module), result_type))
             return !a.other && rbc_value_exact_home(module, code, a.result, result_type, true);
@@ -994,7 +994,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         size_t distance=failed ? 3u : 5u+origin.source;
         if (pc<distance || function->code[pc-distance]!=(XR_RBC_VALUE_ACCESS | (a.index<<16))) return false;
         return a.result==(failed ? origin.other : origin.result) &&
-            rbc_checked_receivers(function,code,pc-distance,a.index,origin);
+            rbc_checked_receivers(xr_rbc_module_value_image(module),function,code,pc-distance,a.index,origin);
     }
     case XR_RBC_VALUE_RETURN_ERROR:
         return !a.result && !a.other && !a.index && rbc_error_home(module,code,a.source,code->error_type,false);
@@ -1053,7 +1053,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_BINDING_WRITE: case XR_RBC_VALUE_BINDING_DROP:
         return rbc_value_binding_access_valid(module,code,function,a) &&
             (!a.index || !code->homes->events[a.index-1].forwarding_mode ||
-             rbc_value_binding_forwarding_words(function,code,(uint32_t)index,pc));
+             rbc_value_binding_forwarding_words(xr_rbc_module_value_image(module),function,code,(uint32_t)index,pc));
     case XR_RBC_VALUE_EDGE:
         return !a.result && !a.source && rbc_value_edge_valid(module,code,a) &&
             rbc_value_array_fold_valid(module,code,a) && rbc_value_array_push_edge_valid(module,code,function,a);

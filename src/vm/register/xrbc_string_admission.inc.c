@@ -246,6 +246,9 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
         case XR_RBC_STRING_LITERAL_BORROW:
         case XR_RBC_MAP_READ:
         case XR_RBC_MAP_EDIT:
+        case XR_RBC_OWNER_DROP:
+        case XR_RBC_OWNER_COPY:
+        case XR_RBC_OWNER_EDGE:
         case XR_RBC_VALUE_ACCESS: return rbc_value_transfer(s, (uint32_t)v.immediate);
         case XR_RBC_AGGREGATE_ACCESS: return rbc_aggregate_transfer(s, (uint32_t)v.immediate);
         case XR_RBC_MODULE_BEGIN: case XR_RBC_MODULE_READY:
