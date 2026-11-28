@@ -13,6 +13,7 @@
 #include "lir/xlir_c.h"
 #include "lir/xlir_sccp.h"
 #include "vm/register/xrbc_lir.h"
+#include "vm/register/xrbc_code_owner.h"
 #include "f64_family_vectors.h"
 #include "xray_native_string_value.h"
 #include <fenv.h>
@@ -231,6 +232,71 @@ static void local_string_words(void) {
         words[pc] = original;
     }
     CHECK(run(program, 5) == 21 && run(program, 12) == 27);
+    xr_rbc_program_destroy(program);
+}
+
+/* Direct calls whose arguments are plain scalars and plain local owners, and
+ * scalar returns to a receiving caller, use their own words; forwarding a
+ * formal keeps the generic call. Admission rejects any other choice. */
+static void owner_calls(void) {
+    XrRbcProgram *program = callable(
+        "fn mix(x:i64,s:string,y:i64)->i64 {\n"
+        "    return x*10+y+len(s)\n"
+        "}\n"
+        "fn twice(s:string)->string {\n"
+        "    return s+s\n"
+        "}\n"
+        "fn outer(s:string)->i64 {\n"
+        "    return mix(1,s,2)\n"
+        "}\n"
+        "fn calls(n:i64)->i64 {\n"
+        "    const a=string(n*7)\n"
+        "    var i=0\n"
+        "    var c=0\n"
+        "    while (i<3) {\n"
+        "        c=c+mix(i,a,2)\n"
+        "        i=i+1\n"
+        "    }\n"
+        "    const t=twice(a)\n"
+        "    return c+outer(a)+len(t)\n"
+        "}\ncalls(5)\n");
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    size_t calls = 0, returns = 0, generic_calls = 0;
+    for (size_t f = 0; f < module->function_count; ++f) {
+        const XrRbcFunction *function = &module->functions[f];
+        const XrRbcValueCode *code = xr_rbc_module_value_code(module, (uint32_t)f);
+        for (size_t pc = 0; pc < function->code_count; ++pc) {
+            uint32_t word = function->code[pc], op = word & 255u;
+            calls += op == XR_RBC_OWNER_CALL; returns += op == XR_RBC_OWNER_RETURN;
+            generic_calls += op == XR_RBC_VALUE_ACCESS && code && (word >> 16) < code->access_count &&
+                code->accesses[word >> 16].operation == XR_RBC_VALUE_CALL;
+        }
+    }
+    CHECK(calls == 3 && returns == 3 && generic_calls == 1);
+    uint64_t argument = 5;
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(module, 0, &argument, 1, xr_rbc_program_locations(program), &execution) == XR_RBC_OK);
+    xr_rbc_execution_free(&execution);
+    for (size_t f = 0; f < module->function_count; ++f) {
+        const XrRbcFunction *function = &module->functions[f];
+        const XrRbcValueCode *code = xr_rbc_module_value_code(module, (uint32_t)f);
+        uint32_t *words = (uint32_t *)(void *)function->code;
+        for (size_t pc = 0; pc < function->code_count; ++pc) {
+            uint32_t original = words[pc], op = original & 255u;
+            bool generic_call = op == XR_RBC_VALUE_ACCESS && code && (original >> 16) < code->access_count &&
+                code->accesses[original >> 16].operation == XR_RBC_VALUE_CALL;
+            if (op != XR_RBC_OWNER_CALL && op != XR_RBC_OWNER_RETURN && !generic_call) continue;
+            const uint32_t replacements[] = {generic_call ? XR_RBC_OWNER_CALL : XR_RBC_VALUE_ACCESS,
+                op == XR_RBC_OWNER_CALL ? XR_RBC_OWNER_RETURN : XR_RBC_OWNER_CALL};
+            for (size_t r = 0; r < sizeof(replacements) / sizeof(*replacements); ++r) {
+                words[pc] = (original & ~255u) | replacements[r];
+                CHECK(xr_rbc_module_prepare(module, 0, &argument, 1, xr_rbc_program_locations(program),
+                    &execution) == XR_RBC_INVALID && !execution);
+            }
+            words[pc] = original;
+        }
+    }
+    CHECK(run(program, 5) == 60 && run(program, 200) == 72);
     xr_rbc_program_destroy(program);
 }
 
@@ -911,6 +977,7 @@ int main(int argc, char **argv) {
     local_map_edit();
     local_owner_array_words();
     local_string_words();
+    owner_calls();
     numerical_oracles();
     actual_entry_and_refusal();
     f64_transport();

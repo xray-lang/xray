@@ -596,7 +596,7 @@ static bool rbc_invoke_result_home(const XrRbcModule *module,const XrRbcFunction
         type->kind==XRT_VALUE_NULLABLE && !type->owned_count;
 }
 
-static bool rbc_checked_receivers(const XrtValueImage *image,const XrRbcFunction *function,
+static bool rbc_checked_receivers(const XrRbcModule *module,const XrRbcFunction *function,
     const XrRbcValueCode *code,size_t pc,uint32_t ordinal,XrRbcValueAccess access) {
     bool primitive = rbc_value_checked_primitive(access.operation);
     uint32_t forwards = primitive ? 0 : access.source, stride = 2 + forwards;
@@ -616,7 +616,7 @@ static bool rbc_checked_receivers(const XrtValueImage *image,const XrRbcFunction
             receiver.index!=ordinal || receiver.result!=(n ? access.result : access.other)) return false;
         if (forwards) {
             uint32_t transfer=function->code[site+1], edge=transfer>>16;
-            if (edge>=code->access_count || (transfer&65535u)!=rbc_value_access_opcode(image,code,edge) ||
+            if (edge>=code->access_count || (transfer&65535u)!=xr_rbc_module_value_opcode(module,code,edge) ||
                 code->accesses[edge].operation!=XR_RBC_VALUE_EDGE) return false;
         }
     }
@@ -653,12 +653,16 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     XrRbcValueAccess a = code->accesses[index];
     if ((code->error_type || rbc_value_typed_error_op(a.operation)) && !xr_rbc_module_code_owner(module))
         return false;
-    XrRbcOp access_op = rbc_value_access_opcode(xr_rbc_module_value_image(module), code, (uint32_t)index);
+    XrRbcOp access_op = xr_rbc_module_value_opcode(module, code, (uint32_t)index);
+    /* Owned code carries exactly the selected word. Without a code owner an
+     * owner word takes the generic step for the same access, so raw code may
+     * carry either; Map and literal words read owned Frame state directly. */
+    bool owned = xr_rbc_module_code_owner(module) != NULL, fallback = rbc_value_owner_word(access_op);
     if (op == XR_RBC_STRING_LITERAL_MAP_READ) {
         if (access_op != XR_RBC_STRING_LITERAL_BORROW || function->code_count - pc < 2 ||
             !rbc_literal_map_pair(code, word, function->code[pc + 1])) return false;
-    } else if (op != access_op) return false;
-    if (op != XR_RBC_VALUE_ACCESS && (!xr_rbc_module_code_owner(module) ||
+    } else if (op != access_op && (owned || !fallback || op != XR_RBC_VALUE_ACCESS)) return false;
+    if (op != XR_RBC_VALUE_ACCESS && ((!owned && !fallback) ||
         (code->array_region_accesses && code->array_region_accesses[index].region))) return false;
     bool receiver = a.operation == XR_RBC_VALUE_CHECKED_RESULT || a.operation == XR_RBC_VALUE_CHECKED_ERROR;
     bool directory = (a.operation >= XR_RBC_VALUE_HOST_DIRECTORY_FRAME &&
@@ -828,7 +832,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             (a.operation == XR_RBC_VALUE_CHECKED_EMPTY_ARRAY ? !a.source && rbc_checked_array_home(module,code,function,a) :
                 !a.index && rbc_value_scalar(code,function,a.source,XR_RBC_BITS) &&
                 rbc_value_host_nullable_backing(module,code,a.result,XRT_VALUE_STRING)) &&
-            rbc_checked_receivers(xr_rbc_module_value_image(module),function,code,pc,(uint32_t)index,a);
+            rbc_checked_receivers(module,function,code,pc,(uint32_t)index,a);
     case XR_RBC_VALUE_CHECKED_RESULT: case XR_RBC_VALUE_CHECKED_ERROR: {
         bool failed = a.operation == XR_RBC_VALUE_CHECKED_ERROR;
         size_t distance = failed ? 3 : 5;
@@ -837,7 +841,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         XrRbcValueAccess next = code->accesses[a.index];
         return rbc_value_checked_primitive(next.operation) &&
             a.result == (failed ? next.other : next.result) &&
-            rbc_checked_receivers(xr_rbc_module_value_image(module),function,code,pc-distance,a.index,next);
+            rbc_checked_receivers(module,function,code,pc-distance,a.index,next);
     }
     case XR_RBC_VALUE_CHECKED_ARRAY_PUSH: {
         if (!code->directory_frame_source || a.index != XR_LIR_ARRAY_OP_PUSH || a.count != 2 || a.other || a.source ||
@@ -970,7 +974,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
             return a.result!=a.other && rbc_register_kind(function,a.window)==XR_RBC_CALL_WINDOW &&
                 rbc_error_home(module,code,a.other,callee->error_type,true) &&
                 rbc_invoke_result_home(module,function,code,target,callee,a.result) &&
-                rbc_checked_receivers(xr_rbc_module_value_image(module),function,code,pc,(uint32_t)index,a);
+                rbc_checked_receivers(module,function,code,pc,(uint32_t)index,a);
         uint32_t result_type = rbc_result_value_type(callee);
         if (rbc_callable_home_type(xr_rbc_module_value_image(module), result_type))
             return !a.other && rbc_value_exact_home(module, code, a.result, result_type, true);
@@ -994,7 +998,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         size_t distance=failed ? 3u : 5u+origin.source;
         if (pc<distance || function->code[pc-distance]!=(XR_RBC_VALUE_ACCESS | (a.index<<16))) return false;
         return a.result==(failed ? origin.other : origin.result) &&
-            rbc_checked_receivers(xr_rbc_module_value_image(module),function,code,pc-distance,a.index,origin);
+            rbc_checked_receivers(module,function,code,pc-distance,a.index,origin);
     }
     case XR_RBC_VALUE_RETURN_ERROR:
         return !a.result && !a.other && !a.index && rbc_error_home(module,code,a.source,code->error_type,false);
@@ -1053,7 +1057,7 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
     case XR_RBC_VALUE_BINDING_WRITE: case XR_RBC_VALUE_BINDING_DROP:
         return rbc_value_binding_access_valid(module,code,function,a) &&
             (!a.index || !code->homes->events[a.index-1].forwarding_mode ||
-             rbc_value_binding_forwarding_words(xr_rbc_module_value_image(module),function,code,(uint32_t)index,pc));
+             rbc_value_binding_forwarding_words(module,function,code,(uint32_t)index,pc));
     case XR_RBC_VALUE_EDGE:
         return !a.result && !a.source && rbc_value_edge_valid(module,code,a) &&
             rbc_value_array_fold_valid(module,code,a) && rbc_value_array_push_edge_valid(module,code,function,a);
@@ -1062,7 +1066,8 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
 }
 static bool xr_rbc_value_return_word(const XrRbcModule *module, const XrRbcFunction *function, uint32_t word) {
     const XrRbcValueCode *code = rbc_value_code(module,function);
-    if ((word&65535u)!=XR_RBC_VALUE_ACCESS || !code || !code->accesses || (word>>16)>=code->access_count) return false;
+    if (((word&65535u)!=XR_RBC_VALUE_ACCESS && (word&65535u)!=XR_RBC_OWNER_RETURN) || !code || !code->accesses ||
+        (word>>16)>=code->access_count) return false;
     XrRbcValueOperation op=code->accesses[word>>16].operation;
     return op==XR_RBC_VALUE_RETURN || op==XR_RBC_VALUE_RETURN_ERROR || op==XR_RBC_VALUE_PANIC_ERROR ||
         op==XR_RBC_VALUE_UNCAUGHT_ERROR || op==XR_RBC_VALUE_HOST_DIRECTORY_FAIL || op==XR_RBC_VALUE_MANAGED_FAILURE;

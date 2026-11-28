@@ -1153,6 +1153,39 @@ static XrtManagedStatus rbc_value_state(const XrRbcModule *module,XrRbcStack *st
     return status;
 }
 #include "xrbc_value_callable_execute.inc.c"
+/* Every typed call enters its callee the same way once its arguments are
+ * captured: the caller resumes at pc, and the callee frame, banks and
+ * activation are created at base. */
+static XrRbcStatus rbc_value_enter(const XrRbcModule *module, XrRbcStack *stack, uint32_t function,
+    size_t base, uint32_t destination, size_t pc, uint32_t source) {
+    size_t parent = stack->depth - 1;
+    const XrRbcFunction *callee = &module->functions[function];
+    stack->frames[parent].pc = pc;
+    size_t cell_base = stack->cell_count, spill_base = stack->spill_count;
+    stack->frames[stack->depth++] = (XrRbcFrame){function, 0, base, destination, cell_base, 0, spill_base, 0};
+    xr_rbc_cells_begin(stack, cell_base, callee->cell_count);
+    xr_rbc_entry_clear(stack->slots + base, &stack->entries[function]);
+    stack->cell_count += callee->cell_count; stack->spill_count += callee->spill_count;
+    if (callee->aggregate_size && !xr_rbc_aggregate_reserve(stack, &stack->frames[parent + 1], callee))
+        return XR_RBC_OUT_OF_MEMORY;
+    return xr_rbc_values_begin(module, stack, function, source);
+}
+/* Every typed return leaves its activation the same way once its result is
+ * delivered: Frame, invoke status, activation and banks. */
+static void rbc_value_leave(XrRbcStack *stack, RbcValueActivation *activation, XrRbcFrame frame, bool failed,
+    uint32_t source) {
+    if (activation->frame) {
+        XrtManagedStatus status = xrt_managed_frame_leave(stack->values->root, activation->frame);
+        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    }
+    if (activation->invoke_error) {
+        size_t base = stack->frames[stack->depth - 2].base;
+        stack->slots[base + activation->invoke_status].bits = failed ? 1u : 0u;
+    }
+    stack->values->top = activation->previous;
+    rbc_value_retire_activation(stack->values, activation);
+    stack->cell_count = frame.cell_base; stack->spill_count = frame.spill_base; --stack->depth;
+}
 static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
     RbcValueActivation *caller, XrRbcValueAccess access, size_t pc, uint32_t source) {
     size_t parent=stack->depth-1;
@@ -1226,15 +1259,7 @@ static XrRbcStatus rbc_value_call(const XrRbcModule *module, XrRbcStack *stack,
         caller->publications[p].destination.size=payload.size;
         captured+=payload.size;
     }
-    frame=&stack->frames[parent]; frame->pc=pc;
-    size_t cell_base=stack->cell_count,spill_base=stack->spill_count;
-    stack->frames[stack->depth++]=(XrRbcFrame){access.index,0,base,receiving ? access.result : access.window,
-        cell_base,0,spill_base,0};
-    xr_rbc_cells_begin(stack,cell_base,callee->cell_count);
-    xr_rbc_entry_clear(stack->slots+base,&stack->entries[access.index]);
-    stack->cell_count+=callee->cell_count; stack->spill_count+=callee->spill_count;
-    if (callee->aggregate_size && !xr_rbc_aggregate_reserve(stack,&stack->frames[parent+1],callee)) return XR_RBC_OUT_OF_MEMORY;
-    XrRbcStatus result=xr_rbc_values_begin(module,stack,access.index,source);
+    XrRbcStatus result=rbc_value_enter(module,stack,access.index,base,receiving ? access.result : access.window,pc,source);
     if (result!=XR_RBC_OK) return result;
     RbcValueActivation *child=receiving ? stack->values->top : NULL;
     if (child) {
@@ -1390,17 +1415,7 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
         } else stack->slots[0].bits=bits;
     }
     if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
-    if (activation->frame) {
-        status=xrt_managed_frame_leave(stack->values->root,activation->frame);
-        if (status!=XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
-    }
-    if (activation->invoke_error) {
-        size_t base=stack->frames[depth-2].base;
-        stack->slots[base+activation->invoke_status].bits=failed ? 1u : 0u;
-    }
-    stack->values->top=activation->previous;
-    rbc_value_retire_activation(stack->values,activation);
-    stack->cell_count=frame.cell_base; stack->spill_count=frame.spill_base; --stack->depth;
+    rbc_value_leave(stack,activation,frame,failed,source);
     return XR_RBC_OK;
 }
 static XrtManagedStatus rbc_value_publish_leaf(RbcValueActivation *activation,uint32_t result) {
@@ -2361,6 +2376,77 @@ static XR_NOINLINE XrRbcStatus xr_rbc_string_length_step(const XrRbcModule *modu
     size_t length = access->operation == XR_RBC_VALUE_STRING_BYTE_LENGTH ? string->length : string->runes;
     if (length > INT64_MAX) xrt_native_managed_failure(XRT_MANAGED_OVERFLOW, rbc_value_source(module, stack, pc));
     output->bits = (uint64_t)length;
+    return XR_RBC_OK;
+}
+
+/* The selected call passes plain scalars by value and lends plain local
+ * owners to owner formals, exactly as the generic call does for these kinds.
+ * Scalars are snapshotted first: reserve may move the banks and the callee
+ * window may overlap the caller's argument registers. */
+static XR_NOINLINE XrRbcStatus xr_rbc_owner_call_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    uint32_t source = rbc_value_source(module, stack, pc);
+    RbcValueActivation *caller = rbc_value_owner_activation(stack, index);
+    if (!caller) return xr_rbc_values_step(module, stack, index, pc, source);
+    const XrRbcValueAccess access = caller->code->accesses[index];
+    const uint32_t *arguments = caller->code->arguments + access.first;
+    const XrRbcFunction *callee = &module->functions[access.index];
+    const XrRbcValueCode *receiving = xr_rbc_module_value_code(module, access.index);
+    size_t parent = stack->depth - 1, window = (size_t)access.window + 1;
+    if (stack->frames[parent].base > SIZE_MAX - window) return XR_RBC_OUT_OF_MEMORY;
+    size_t base = stack->frames[parent].base + window;
+    if (!xr_rbc_call_reserve(stack, base, callee)) return XR_RBC_OUT_OF_MEMORY;
+    size_t scalars = 0;
+    for (uint32_t p = 0; p < access.count; ++p) {
+        if (!rbc_value_plain_scalar(receiving, receiving->parameters[p])) continue;
+        const XrRbcRegister *input = rbc_value_register(stack, caller, arguments[p]);
+        if (!input || caller->snapshot_capacity / 8u <= scalars) return XR_RBC_INVALID;
+        memcpy(caller->snapshots + 8u * scalars++, &input->bits, 8);
+    }
+    XrRbcStatus result = rbc_value_enter(module, stack, access.index, base, access.result, pc, source);
+    if (result != XR_RBC_OK) return result;
+    RbcValueActivation *child = stack->values->top;
+    child->receiving_call = true;
+    scalars = 0;
+    for (uint32_t p = 0; p < access.count; ++p) {
+        uint32_t to = receiving->parameters[p];
+        if (!rbc_value_plain_scalar(receiving, to)) {
+            child->parameters[p] = (RbcValueOrigin){caller, arguments[p]};
+            continue;
+        }
+        XrRbcRegister *output = rbc_value_register(stack, child, to);
+        if (!output) return XR_RBC_INVALID;
+        memcpy(&output->bits, caller->snapshots + 8u * scalars++, 8);
+    }
+    return xr_rbc_callable_arguments_valid(module, callee, stack->slots + base) ? XR_RBC_OK : XR_RBC_INVALID;
+}
+/* A scalar result returns to the receiving caller's register as the generic
+ * return does. Entry returns and invoked callees keep the generic word. */
+static XR_NOINLINE XrRbcStatus xr_rbc_owner_return_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    uint32_t source = rbc_value_source(module, stack, pc);
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    size_t depth = stack->depth;
+    RbcValueActivation *caller = activation ? activation->previous : NULL;
+    if (!activation || depth < 2 || !activation->receiving_call || activation->invoke_error || !caller ||
+        caller->depth != depth - 1) return xr_rbc_values_step(module, stack, index, pc, source);
+    const XrRbcFrame frame = stack->frames[depth - 1];
+    XrRbcStatus result = xr_rbc_closure_scope_return(module, stack, NULL, 0, source);
+    if (result != XR_RBC_OK) return result;
+    uint32_t value = activation->code->accesses[index].source;
+    uint64_t bits = 0;
+    if (value) {
+        const XrRbcRegister *input = rbc_value_register(stack, activation, value);
+        if (!input) return XR_RBC_INVALID;
+        bits = input->bits;
+    }
+    const XrRbcFunction *function = &module->functions[frame.function];
+    if (function->callable && !xr_rbc_callable_scalar_valid(module->callable_types[function->callable - 1].result, bits))
+        return XR_RBC_INVALID;
+    XrRbcRegister *output = rbc_value_register(stack, caller, frame.destination);
+    if (!output && value) return XR_RBC_INVALID;
+    if (output) output->bits = bits;
+    rbc_value_leave(stack, activation, frame, false, source);
     return XR_RBC_OK;
 }
 

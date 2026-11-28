@@ -300,6 +300,8 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     case XR_RBC_OWNER_CELL_READ:
     case XR_RBC_OWNER_STRING_EQUAL:
     case XR_RBC_OWNER_STRING_LENGTH:
+    case XR_RBC_OWNER_CALL:
+    case XR_RBC_OWNER_RETURN:
     case XR_RBC_VALUE_ACCESS:
         return xr_rbc_value_instruction_valid(module, function, pc) &&
             (xr_rbc_value_return_word(module, function, word) || remaining > 1);

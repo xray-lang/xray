@@ -1571,7 +1571,8 @@ static bool rbc_lir_compact_jumps(RbcLirCompiler *c) {
         if (op == XR_RBC_JMP) {
             successors[successors_count++] = rbc_lir_jump_target(c, pc);
         } else if (!xr_rbc_op_is_exit(op) &&
-            !(op == XR_RBC_VALUE_ACCESS && c->value_code && (c->code[pc] >> 16) < c->value_code->access_count &&
+            !((op == XR_RBC_VALUE_ACCESS || op == XR_RBC_OWNER_RETURN) && c->value_code &&
+                (c->code[pc] >> 16) < c->value_code->access_count &&
                 c->value_code->accesses[c->code[pc] >> 16].operation == XR_RBC_VALUE_RETURN) &&
             !xr_rbc_aggregate_return_word(c->aggregate_accesses, c->aggregate_access_count, c->code[pc])) {
             XR_DCHECK(pc + 1 < count, "emitted fallthrough stays inside its function");
@@ -1969,6 +1970,26 @@ done:
     return status;
 }
 
+/* A direct call's word depends on its callee's description, so calls are
+ * selected once every function has one. Every code word is an instruction
+ * and only the operation byte changes. */
+static void rbc_lir_select_calls(XrRbcProgram *p) {
+    if (!p->value_codes) return;
+    const XrtValueImage *image = p->value_image ? xr_lir_value_image_view(p->value_image) : NULL;
+    for (size_t f = 0; f < p->module.function_count; ++f) {
+        const XrRbcValueCode *code = p->value_codes[f];
+        XrRbcFunction *function = &((XrRbcFunction *)p->module.functions)[f];
+        uint32_t *words = (uint32_t *)function->code;
+        for (size_t pc = 0; code && pc < function->code_count; ++pc) {
+            uint32_t index = words[pc] >> 16;
+            if ((words[pc] & 65535u) != XR_RBC_VALUE_ACCESS || index >= code->access_count ||
+                code->accesses[index].operation != XR_RBC_VALUE_CALL ||
+                code->accesses[index].index >= p->module.function_count) continue;
+            const XrRbcValueCode *callee = p->value_codes[code->accesses[index].index];
+            words[pc] = (words[pc] & ~255u) | (uint32_t)rbc_value_access_opcode(image, code, index, callee);
+        }
+    }
+}
 static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t *ids,
     const uint32_t *mapping, XrRbcProgram *p, const XrLirValueLayouts *layouts, XrRbcCompileDiagnostic *d) {
     uint32_t source_id = 0;
@@ -2031,6 +2052,7 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         }
     }
     xr_free(pool.mapping);
+    rbc_lir_select_calls(p);
     return XR_RBC_COMPILE_OK;
 }
 

@@ -80,6 +80,16 @@ static inline const XrRbcValueCode *xr_rbc_module_value_code(const XrRbcModule *
         module->borrowed_value_code_count == module->function_count && function < module->function_count ?
         module->borrowed_value_codes[function] : NULL;
 }
+/* The word admission expects for a typed access of this module. A direct
+ * call is selected with its callee's description. */
+static inline XrRbcOp xr_rbc_module_value_opcode(const XrRbcModule *module, const XrRbcValueCode *code,
+    uint32_t index) {
+    if (!code || !code->accesses || index >= code->access_count) return XR_RBC_VALUE_ACCESS;
+    XrRbcValueAccess access = code->accesses[index];
+    const XrRbcValueCode *callee = access.operation == XR_RBC_VALUE_CALL && access.index < module->function_count ?
+        xr_rbc_module_value_code(module, access.index) : NULL;
+    return rbc_value_access_opcode(xr_rbc_module_value_image(module), code, index, callee);
+}
 XR_FUNC const XrRbcCallableEntry *xr_rbc_module_callable_entries(const XrRbcModule *);
 XR_FUNC size_t xr_rbc_module_callable_entry_count(const XrRbcModule *);
 XR_FUNC const uint32_t *xr_rbc_module_type_callables(const XrRbcModule *);

@@ -46,9 +46,18 @@
     } \
 } while (0)
 
+/* Value words that may enter or leave a frame reload the current frame. */
 #define XR_RBC_VALUE_EXECUTE() do { \
     XrRbcStatus status = xr_rbc_values_step(module, stack, instruction >> 16, pc, XR_RBC_SOURCE()); \
     if (status != XR_RBC_OK) return status; \
+    XR_RBC_FRAME_RELOAD(); \
+} while (0)
+#define XR_RBC_FRAME_STEP(step) do { \
+    XrRbcStatus status = step(module, stack, instruction >> 16, pc); \
+    if (status != XR_RBC_OK) return status; \
+    XR_RBC_FRAME_RELOAD(); \
+} while (0)
+#define XR_RBC_FRAME_RELOAD() do { \
     if (!stack->depth) { \
         if (function->result_kind == XR_RBC_BITS) *result = stack->slots[0]; \
         return XR_RBC_OK; \
@@ -538,6 +547,14 @@ XR_RBC_CASE(OWNER_STRING_LENGTH) {
     if (status != XR_RBC_OK) return status;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(OWNER_CALL) {
+    XR_RBC_FRAME_STEP(xr_rbc_owner_call_step);
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(OWNER_RETURN) {
+    XR_RBC_FRAME_STEP(xr_rbc_owner_return_step);
+    XR_RBC_NEXT();
+}
 #endif
 #if !defined(__clang__) && !defined(__GNUC__)
 default:
@@ -576,6 +593,14 @@ default:
         XrRbcStatus status = op == XR_RBC_OWNER_STRING_EQUAL ? xr_rbc_string_equal_step(module, stack, index, pc) :
             xr_rbc_string_length_step(module, stack, index, pc);
         if (status != XR_RBC_OK) return status;
+        XR_RBC_NEXT();
+    }
+    if (op == XR_RBC_OWNER_CALL) {
+        XR_RBC_FRAME_STEP(xr_rbc_owner_call_step);
+        XR_RBC_NEXT();
+    }
+    if (op == XR_RBC_OWNER_RETURN) {
+        XR_RBC_FRAME_STEP(xr_rbc_owner_return_step);
         XR_RBC_NEXT();
     }
     if (op == XR_RBC_MAP_READ || op == XR_RBC_STRING_LITERAL_MAP_READ) {
@@ -620,6 +645,8 @@ return XR_RBC_INVALID;
 #undef XR_RBC_SOURCE
 #undef XR_RBC_BINARY
 #undef XR_RBC_VALUE_EXECUTE
+#undef XR_RBC_FRAME_STEP
+#undef XR_RBC_FRAME_RELOAD
 #undef XR_RBC_AGGREGATE_EXECUTE
 #undef XR_RBC_CASE
 #undef XR_RBC_NEXT

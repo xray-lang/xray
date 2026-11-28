@@ -289,10 +289,52 @@ static inline bool rbc_value_binding_copy(const XrtValueImage *image, const XrRb
         binding->first_owner < homes->frame.slot_count && homes->frame.owned_offsets &&
         homes->frame.owned_offsets[binding->first_owner] == binding->offset;
 }
+/* A scalar without a typed home, a binding or a Frame home. */
+static inline bool rbc_value_plain_scalar(const XrRbcValueCode *code, uint32_t value) {
+    const XrLirValueHomes *homes = code->homes;
+    return rbc_value_register_operand(code, value) && (!homes || (homes->values && value <= homes->value_count &&
+        !homes->values[value].type && (!homes->bindings || !homes->bindings[value].type)));
+}
+/* A direct call whose every argument is a plain scalar for a scalar formal or
+ * a plain local owner its callee borrows through an owner formal of the same
+ * type. Its callee description is the only fact outside the caller's code. */
+static inline bool rbc_value_call_word(const XrtValueImage *image, const XrRbcValueCode *code,
+    const XrRbcValueCode *callee, XrRbcValueAccess access) {
+    if (access.operation != XR_RBC_VALUE_CALL || access.source || access.other || !callee || !callee->locations ||
+        callee->error_type || callee->directory_frame_source || callee->parameter_count != access.count ||
+        (access.count && (!callee->parameters || !code->arguments)) || access.first > code->argument_count ||
+        access.count > code->argument_count - access.first) return false;
+    const XrLirValueHomes *formals = callee->homes;
+    for (uint32_t p = 0; p < access.count; ++p) {
+        uint32_t from = code->arguments[access.first + p], to = callee->parameters[p];
+        if (!to || to > callee->value_count) return false;
+        if (rbc_value_plain_scalar(callee, to)) {
+            if (!rbc_value_plain_scalar(code, from)) return false;
+            continue;
+        }
+        if (!formals || !formals->values || to > formals->value_count ||
+            (formals->bindings && formals->bindings[to].type)) return false;
+        const XrLirValueHome *formal = &formals->values[to];
+        if (!rbc_value_header_owner(image, code, from) || !formal->type || formal->type != code->homes->values[from].type ||
+            formal->parameter != p + 1 || !formal->owner_count || formal->borrow_source ||
+            (callee->map_formal_reads && rbc_value_home_kind(image, code, from) == XRT_VALUE_MAP_STRING_I64))
+            return false;
+    }
+    return true;
+}
+/* Owner words run on an owned activation's Frame view and otherwise take the
+ * generic step for the same access. */
+static inline bool rbc_value_owner_word(XrRbcOp op) {
+    return op >= XR_RBC_OWNER_DROP && op <= XR_RBC_OWNER_RETURN;
+}
+XR_STATIC_ASSERT(XR_RBC_OWNER_RETURN - XR_RBC_OWNER_DROP == 9, "the ten owner words are adjacent");
 /* Emission and admission select every word from the same admitted access
  * description and its image: a specialized word only where its static
- * premises hold and no Array region role claims the access. */
-static inline XrRbcOp rbc_value_access_opcode(const XrtValueImage *image, const XrRbcValueCode *code, uint32_t index) {
+ * premises hold and no Array region role claims the access. A direct call
+ * also needs its callee's description, which emission supplies only once
+ * every function exists; without it a call keeps the generic word. */
+static inline XrRbcOp rbc_value_access_opcode(const XrtValueImage *image, const XrRbcValueCode *code, uint32_t index,
+    const XrRbcValueCode *callee) {
     if (!code->accesses || index >= code->access_count) return XR_RBC_VALUE_ACCESS;
     XrRbcValueAccess access = code->accesses[index];
     if (access.operation == XR_RBC_VALUE_MAP) {
@@ -323,6 +365,10 @@ static inline XrRbcOp rbc_value_access_opcode(const XrtValueImage *image, const 
         !access.other && !access.index && !access.first && !access.count && !access.window &&
         rbc_value_local_string(image, code, access.source) && rbc_value_register_operand(code, access.result))
         return XR_RBC_OWNER_STRING_LENGTH;
+    if (rbc_value_call_word(image, code, callee, access)) return XR_RBC_OWNER_CALL;
+    if (access.operation == XR_RBC_VALUE_RETURN && !access.index && !access.other && !access.result &&
+        !access.first && !access.count && !access.window &&
+        (!access.source || rbc_value_plain_scalar(code, access.source))) return XR_RBC_OWNER_RETURN;
     return XR_RBC_VALUE_ACCESS;
 }
 
@@ -333,8 +379,8 @@ static inline bool rbc_literal_map_pair(const XrRbcValueCode *code, uint32_t fir
         (first >> 16) >= code->access_count || (second >> 16) >= code->access_count) return false;
     const XrRbcValueAccess literal = code->accesses[first >> 16];
     const XrRbcValueAccess read = code->accesses[second >> 16];
-    return rbc_value_access_opcode(NULL, code, first >> 16) == XR_RBC_STRING_LITERAL_BORROW &&
-        rbc_value_access_opcode(NULL, code, second >> 16) == XR_RBC_MAP_READ &&
+    return rbc_value_access_opcode(NULL, code, first >> 16, NULL) == XR_RBC_STRING_LITERAL_BORROW &&
+        rbc_value_access_opcode(NULL, code, second >> 16, NULL) == XR_RBC_MAP_READ &&
         read.other && read.other == rbc_local_borrow_slot(code->homes, literal.result) &&
         read.count == 2 && code->arguments && read.first <= code->argument_count &&
         code->argument_count - read.first >= 2 && code->arguments[(size_t)read.first + 1] == literal.result;
