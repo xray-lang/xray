@@ -176,7 +176,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_create(XrtManagedFrame *fra
         for (size_t row = 0; row < count; ++row) {
             XrtManagedHeader *object = NULL;
             memcpy(&object, (const unsigned char *)rows + row * spec->stride, sizeof(object));
-            if (!xrt_class_backing_matches(object, spec->code.context)) return XRT_MANAGED_ARGUMENT;
+            if (!xrt_class_backing_assignable(object, spec->code.context)) return XRT_MANAGED_ARGUMENT;
         }
     }
     XrtManagedHeader *payload = NULL;
@@ -278,7 +278,7 @@ XR_FUNCDEF XrtManagedStatus xrt_array_backing_inline_class_append(XrtPlace bindi
     XrtManagedStatus status = xrt_managed_ops_producer_borrow(ops, array_element_retain, array_element_drop, &layout);
     if (status != XRT_MANAGED_OK) return status;
     if (layout->code.context != element || layout->stride != sizeof(item) ||
-        !xrt_class_backing_matches(item, element)) return XRT_MANAGED_ARGUMENT;
+        !xrt_class_backing_assignable(item, element)) return XRT_MANAGED_ARGUMENT;
 
     XrtPlaceReplacement replacement = {0};
     status = xrt_place_replacement_begin(binding, binding.frame, temporary, &replacement);

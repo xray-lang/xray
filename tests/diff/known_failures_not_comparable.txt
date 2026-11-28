@@ -232,8 +232,6 @@ tests/diff/cases/semantics/modules/value_struct_return_release.xr  # function wi
 tests/diff/cases/semantics/modules/xmod_class.xr  # error: method declaration contract is not admitted
 tests/diff/cases/semantics/modules/xmod_coro.xr  # GO is not supported by LIR lowering yet
 tests/diff/cases/semantics/modules/xmod_dead_net_helper.xr  # error: name is not an initialized value
-tests/diff/cases/semantics/modules/xmod_inherit.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
-tests/diff/cases/semantics/modules/xmod_inherit_lib_subclass.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/modules/xmod_namespace_generic.xr  # error: closure parameter requires an annotation or complete callable context
 tests/diff/cases/semantics/modules/xmod_nested_class_field.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
 tests/diff/cases/semantics/modules/xmod_ptr_offset_imported_const.xr  # error: this function declaration syntax is not yet supported by the compiler
@@ -242,7 +240,7 @@ tests/diff/cases/semantics/object/object_destructure.xr  # record field has no c
 tests/diff/cases/semantics/object/object_static_index_get_set.xr  # non-container place is not supported by LIR lowering yet
 tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr  # error: name is not an initialized value
 tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr  # error: omitted field requires an accessible declaration default
-tests/diff/cases/semantics/oop/class_field_copy_ref_local.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
+tests/diff/cases/semantics/oop/class_field_copy_ref_local.xr  # FIELD_PLACE is not supported by LIR lowering yet
 tests/diff/cases/semantics/oop/class_field_default_initializers.xr  # error: a derived class requires an explicit constructor
 tests/diff/cases/semantics/oop/class_fixed_array_field_storage.xr  # error: class field carrier is not implemented
 tests/diff/cases/semantics/oop/class_native_heap_instance.xr  # error: method declaration contract is not admitted
@@ -269,7 +267,6 @@ tests/diff/cases/semantics/oop/operator_overload_inherited.xr  # error: method d
 tests/diff/cases/semantics/oop/operator_overload_result_type.xr  # error: method declaration contract is not admitted
 tests/diff/cases/semantics/oop/optional_chain_class_field.xr  # error: a derived class requires an explicit constructor
 tests/diff/cases/semantics/oop/override_checked_valid.xr  # error: a derived class requires an explicit constructor
-tests/diff/cases/semantics/oop/polymorphic_dispatch_runtime.xr  # CLASS_METHOD_REF is not supported by LIR lowering yet
 tests/diff/cases/semantics/oop/repr_c_struct.xr  # error: equality requires its declaration predicate
 tests/diff/cases/semantics/oop/repr_c_struct_aggregate_param.xr  # error: source declaration type structure is invalid
 tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr  # error: struct declaration contract is not admitted

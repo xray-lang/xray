@@ -70,6 +70,158 @@ static bool lower_class_immediate_call(const XrXirFunction *body, uint32_t produ
         call->immediate == (int64_t)body->parameter_count + producer;
 }
 
+typedef struct LowerClassCandidate {
+    XirClassMethodTarget target;
+    uint32_t depth;
+} LowerClassCandidate;
+
+typedef struct LowerClassCandidates {
+    const XrXirCompileContext *memory;
+    const XrXirTypes *types;
+    LowerClassCandidate *items;
+    uint32_t count, capacity;
+} LowerClassCandidates;
+
+static XrXirStatus lower_class_candidate(void *context, const XirClassMethodTarget *target) {
+    LowerClassCandidates *list = context;
+    if (list->count == list->capacity) {
+        XrXirStatus status = XR_XIR_OK;
+        void *memory = xir_compile_array_grow(list->memory, list->items,
+            list->count, sizeof(*list->items), &list->capacity, &status);
+        if (status != XR_XIR_OK) return status;
+        list->items = memory;
+    }
+    const XrXirNominalTable *table = list->types->nominals;
+    const XrXirTypeNode *node = xr_xir_type_node(list->types, target->receiver_type);
+    if (!node || !table || node->nominal.declaration >= table->count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t id = node->nominal.declaration + 1, depth = 0;
+    while (id) {
+        if (id > table->count || depth == table->count) return XR_XIR_BAD_STRUCTURE;
+        ++depth;
+        id = table->declarations ? table->declarations[id - 1].parent : table->identities[id - 1].parent;
+    }
+    list->items[list->count++] = (LowerClassCandidate){*target, depth};
+    return XR_XIR_OK;
+}
+
+static int lower_class_deepest_first(const void *left, const void *right) {
+    const LowerClassCandidate *a = left, *b = right;
+    if (a->depth != b->depth) return a->depth > b->depth ? -1 : 1;
+    return (a->target.function > b->target.function) - (a->target.function < b->target.function);
+}
+
+static bool lower_class_target_fits(const Lower *c, const XrXirFunction *body,
+    const XrXirInstruction *ref, const XirClassMethodTarget *target) {
+    const XrXirInstruction *call = ref + 1;
+    const XrXirFunction *callee = &c->source->functions[target->function];
+    const XrXirTypeNode *signature = xr_xir_callable_signature(c->source->types, ref->type);
+    if (!signature || !lower_empty_error(signature->element) || !lower_empty_error(callee->error_type) ||
+        signature->parameter_count != call->args[1] || signature->parameter_count == UINT32_MAX ||
+        callee->parameter_count != signature->parameter_count + 1 ||
+        callee->parameters[0] != target->receiver_type || call->type != callee->result ||
+        xr_xir_declared_parameter_mode(c->source->types, target->receiver_type,
+            callee->consume_parameters, callee->consume_parameter_count, 0) != XR_PARAM_READ) return false;
+    for (uint32_t p = 0; p < signature->parameter_count; ++p) {
+        XrXirType expected = callee->parameters[p + 1];
+        if ((expected != XR_XIR_I64 && expected != XR_XIR_BOOL && expected != XR_XIR_STRING &&
+            !xr_xir_type_is_class(c->source->types, expected)) || expected != signature->parameters[p].type ||
+            expected != xr_xir_operand_type(body, body->operands[call->args[0] + p]) ||
+            xr_xir_declared_parameter_mode(c->source->types, expected, callee->consume_parameters,
+                callee->consume_parameter_count, p + 1) != XR_PARAM_READ) return false;
+    }
+    return true;
+}
+
+static LowerClassFamily *lower_class_family_slot(LowerClassFamily *families, size_t capacity,
+    uint32_t slot, XrXirType receiver) {
+    size_t at = (xr_hash_int(slot) ^ xr_hash_int(receiver)) % capacity;
+    while (families[at].slot && (families[at].slot != slot || families[at].receiver != receiver))
+        if (++at == capacity) at = 0;
+    return &families[at];
+}
+
+static LowerClassFamily *lower_class_family(Lower *c, const XrXirCompileContext *memory,
+    uint32_t slot, XrXirType receiver, XrXirStatus *status) {
+    size_t capacity = c->class_family_capacity;
+    if (capacity && c->class_family_count < capacity / 2)
+        return lower_class_family_slot(c->class_families, capacity, slot, receiver);
+    if (capacity > SIZE_MAX / 2) { *status = XR_XIR_OVERFLOW; return NULL; }
+    size_t next = capacity ? capacity * 2 : 16;
+    LowerClassFamily *families = xir_compile_calloc(memory, next, sizeof(*families), status);
+    if (!families) return NULL;
+    for (size_t i = 0; i < capacity; ++i) {
+        LowerClassFamily *old = &c->class_families[i];
+        if (old->slot) *lower_class_family_slot(families, next, old->slot, old->receiver) = *old;
+    }
+    xr_compile_resources_free(c->class_families);
+    c->class_families = families;
+    c->class_family_capacity = next;
+    return lower_class_family_slot(families, next, slot, receiver);
+}
+
+static void lower_class_prepare_family(Lower *c, const XrXirArtifact *closed,
+    LowerClassFamily *family, uint32_t function, uint32_t instruction, XrXirStatus *status) {
+    LowerClassCandidates candidates = {
+        .memory=xr_xir_compile_artifact_context(closed),.types=c->source->types};
+    *status = xir_compile_class_method_index_candidates(c->class_method_index, closed, function, instruction,
+        lower_class_candidate, &candidates, NULL);
+    if (*status == XR_XIR_BAD_TYPE || *status == XR_XIR_BAD_STRUCTURE || *status == XR_XIR_UNRESOLVED) {
+        *status = XR_XIR_OK;
+    } else if (*status == XR_XIR_OK && candidates.count) {
+        uint32_t count = candidates.count - 1;
+        uint32_t *overrides = xir_compile_calloc(candidates.memory, count, sizeof(*overrides), status);
+        if (*status == XR_XIR_OK) {
+            if (count > 1) qsort(candidates.items + 1, count, sizeof(*candidates.items), lower_class_deepest_first);
+            for (uint32_t i = 0; i < count; ++i) overrides[i] = candidates.items[i + 1].target.function;
+            family->call = (LowerClassCall){.callee=candidates.items[0].target.function + 1,
+                .overrides=overrides,.override_count=count};
+        }
+    }
+    xr_compile_resources_free(candidates.items);
+}
+
+static bool lower_class_target_index_fits(const Lower *c, const XrXirFunction *body,
+    const XrXirInstruction *ref, uint32_t function) {
+    XirClassMethodTarget target = {function, c->source->functions[function].parameters[0]};
+    return lower_class_target_fits(c, body, ref, &target);
+}
+
+static XrXirStatus lower_class_call_site(Lower *c, const XrXirArtifact *closed,
+    const XrXirFunction *body, uint32_t function, uint32_t instruction, LowerClassCall *output) {
+    const XrXirInstruction *ref = &body->instructions[instruction];
+    XirClassMethodTarget exact = {0};
+    XrXirStatus status = xir_compile_class_method_index_target(c->class_method_index, closed,
+        function, instruction, &exact, NULL);
+    if (status == XR_XIR_OK) {
+        if (lower_class_target_fits(c, body, ref, &exact))
+            *output = (LowerClassCall){.callee=exact.function + 1,.receiver=ref->args[0]};
+        return XR_XIR_OK;
+    }
+    if (status != XR_XIR_UNRESOLVED)
+        return status == XR_XIR_BAD_TYPE || status == XR_XIR_BAD_STRUCTURE ? XR_XIR_OK : status;
+    /* The index authenticated this site before returning UNRESOLVED. A method
+     * family depends only on that checked slot and static receiver. */
+    uint32_t slot = (uint32_t)ref->immediate + 1;
+    XrXirType receiver = xr_xir_operand_type(body, ref->args[0]);
+    status = XR_XIR_OK;
+    LowerClassFamily *family = lower_class_family(c, xr_xir_compile_artifact_context(closed), slot, receiver, &status);
+    if (!family) return status;
+    if (!family->slot) {
+        lower_class_prepare_family(c, closed, family, function, instruction, &status);
+        if (status != XR_XIR_OK) return status;
+        family->slot = slot;
+        family->receiver = receiver;
+        ++c->class_family_count;
+    }
+    const LowerClassCall *call = &family->call;
+    if (!call->callee || !lower_class_target_index_fits(c, body, ref, call->callee - 1)) return XR_XIR_OK;
+    for (uint32_t i = 0; i < call->override_count; ++i)
+        if (!lower_class_target_index_fits(c, body, ref, call->overrides[i])) return XR_XIR_OK;
+    *output = *call;
+    output->receiver = ref->args[0];
+    return XR_XIR_OK;
+}
+
 static bool lower_class_calls_plan(Lower *c, uint32_t function) {
     if (!c->allow_class_calls || (c->class_calls && c->class_calls[function].planned) ||
         c->source->declarations->functions[function].cleanup_owner)
@@ -108,35 +260,12 @@ static bool lower_class_calls_plan(Lower *c, uint32_t function) {
                 status = xir_compile_class_method_index_build(closed,&c->class_method_index,NULL);
                 if (status != XR_XIR_OK) break;
             }
-            XirClassMethodTarget target = {0};
-            if (xir_compile_class_method_index_target(c->class_method_index,closed,function,i,&target,NULL) != XR_XIR_OK)
-                continue;
-
-            const XrXirInstruction *ref = &body->instructions[i];
-            const XrXirInstruction *call = &body->instructions[i + 1];
-            const XrXirFunction *callee = &c->source->functions[target.function];
-            const XrXirTypeNode *signature = xr_xir_callable_signature(c->source->types,ref->type);
-            if (!signature || !lower_empty_error(signature->element) || !lower_empty_error(callee->error_type) ||
-                signature->parameter_count != call->args[1] || signature->parameter_count == UINT32_MAX ||
-                callee->parameter_count != signature->parameter_count + 1 ||
-                callee->parameters[0] != target.receiver_type || call->type != callee->result ||
-                xr_xir_declared_parameter_mode(c->source->types,target.receiver_type,
-                    callee->consume_parameters,callee->consume_parameter_count,0) != XR_PARAM_READ)
-                continue;
-            bool exact=true;
-            for (uint32_t p=0; p<signature->parameter_count && exact; ++p) {
-                XrXirType expected=callee->parameters[p+1];
-                exact=(expected==XR_XIR_I64 || expected==XR_XIR_BOOL || expected==XR_XIR_STRING || xr_xir_type_is_class(c->source->types,expected)) &&
-                    expected==signature->parameters[p].type &&
-                    expected==xr_xir_operand_type(body,body->operands[call->args[0]+p]) &&
-                    xr_xir_declared_parameter_mode(c->source->types,expected,
-                        callee->consume_parameters,callee->consume_parameter_count,p+1)==XR_PARAM_READ;
-            }
-            if (!exact) continue;
+            LowerClassCall call = {0};
+            status = lower_class_call_site(c, closed, body, function, i, &call);
+            if (status != XR_XIR_OK || !call.callee) continue;
             if (!plan->calls)
                 plan->calls = xir_compile_calloc(context,body->instruction_count,sizeof(*plan->calls),&status);
-            if (status == XR_XIR_OK)
-                plan->calls[i + 1] = (LowerClassCall){target.function + 1,ref->args[0]};
+            if (status == XR_XIR_OK) plan->calls[i + 1] = call;
         }
     }
     xr_compile_resources_free(uses);
@@ -149,5 +278,8 @@ static void lower_class_calls_free(Lower *c) {
             xr_compile_resources_free(c->class_calls[f].calls);
         xr_compile_resources_free(c->class_calls);
     }
+    for (size_t i = 0; i < c->class_family_capacity; ++i)
+        xr_compile_resources_free((void *)c->class_families[i].call.overrides);
+    xr_compile_resources_free(c->class_families);
     xir_compile_class_method_index_free(c->class_method_index);
 }

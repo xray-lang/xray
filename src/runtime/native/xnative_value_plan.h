@@ -120,10 +120,11 @@ XR_FUNC XrtManagedStatus xrt_class_backing_bind(XrtBillingOwner *,
 XR_FUNC XrtManagedStatus xrt_class_create(XrtManagedFrame *, size_t slot,
     XrtManagedOps *, const void *row);
 XR_FUNC bool xrt_class_backing_matches(const XrtManagedHeader *, const XrtValuePlan *expected);
+XR_FUNC bool xrt_class_backing_assignable(const XrtManagedHeader *, const XrtValuePlan *expected);
 static inline bool xrt_class_scalar_field_supported(XrtValueKind kind) {
     return kind == XRT_VALUE_BOOL || kind == XRT_VALUE_I64 || kind == XRT_VALUE_F64;
 }
-/* The live owner and exact nominal plan must remain live through a field
+/* The live owner and declared nominal plan must remain live through a field
  * borrow. A caller taking an independent value copies it before dropping the
  * class, using the returned field plan. A writable scalar is read before
  * another operation can mutate the same field. */

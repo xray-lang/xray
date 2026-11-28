@@ -1,0 +1,7 @@
+export class Base {
+    init() {}
+    show() -> string { return "base" }
+}
+export fn speak(value: Base) {
+    print(value.show())
+}

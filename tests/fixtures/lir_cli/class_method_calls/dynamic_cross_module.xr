@@ -1,0 +1,4 @@
+import { Base, speak } from "./_dynamic_base"
+import { Child } from "./_dynamic_child"
+speak(Base())
+speak(Child())

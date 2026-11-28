@@ -417,7 +417,7 @@ static void derived_classes_keep_concrete_identity(void) {
         {.kind=XRT_VALUE_I64,.size=8,.alignment=8},
         {.kind=XRT_VALUE_RECORD,.size=8,.alignment=8,.field_count=1},
         {.kind=XRT_VALUE_CLASS,.size=8,.alignment=8,.owned_count=1,.element=2},
-        {.kind=XRT_VALUE_RECORD,.size=16,.alignment=8,.first_field=1,.field_count=2},
+        {.kind=XRT_VALUE_RECORD,.size=32,.alignment=32,.first_field=1,.field_count=2},
         {.kind=XRT_VALUE_CLASS,.size=8,.alignment=8,.owned_count=1,.element=4,.class_parent=3}
     };
     XrtValueImageSlot fields[] = {{1,0,0,0,2},{1,0,0,0,2},{1,0,8,2,3}};
@@ -441,15 +441,23 @@ static void derived_classes_keep_concrete_identity(void) {
     MANAGED(xrt_value_plan_view(derived.plan,&spec)); CHECK(spec.class_parent==base.plan);
     XrtManagedRoot *root=NULL; XrtManagedFrame *frame=NULL;
     MANAGED(xrt_managed_root_new(owner.billing,&root)); MANAGED(xrt_managed_frame_enter(root,1,&frame));
-    const int64_t row[]={42,73};
+    _Alignas(32) const int64_t row[4]={42,73};
     MANAGED(xrt_class_create(frame,0,derived.ops,row));
     XrtManagedHeader *instance=NULL;
     MANAGED(xrt_managed_slot_borrow(frame,0,&instance));
     const XrtValuePlan *type=NULL;
     const void *bytes=NULL;
-    CHECK(xrt_class_field_borrow(instance,base.plan,0,&type,&bytes)==XRT_MANAGED_ARGUMENT);
-    MANAGED(xrt_class_field_borrow(instance,derived.plan,0,&type,&bytes));
+    MANAGED(xrt_class_field_borrow(instance,base.plan,0,&type,&bytes));
     CHECK(*(const int64_t *)bytes==42);
+    const XrtValuePlan *visible_type=NULL;
+    const void *visible_bytes=NULL;
+    MANAGED(xrt_class_field_borrow(instance,derived.plan,0,&visible_type,&visible_bytes));
+    CHECK(visible_type==type && visible_bytes==bytes);
+    type=NULL; bytes=NULL;
+    CHECK(xrt_class_field_borrow(instance,base.plan,1,&type,&bytes)==XRT_MANAGED_BOUNDS);
+    CHECK(!type && !bytes);
+    MANAGED(xrt_class_field_borrow(instance,derived.plan,1,&type,&bytes));
+    CHECK(*(const int64_t *)bytes==73);
     MANAGED(xrt_managed_root_destroy(&root)); xrt_value_image_drop(&bound); owner_drop(&owner);
     CHECK(owner.audit.final==1);
 }

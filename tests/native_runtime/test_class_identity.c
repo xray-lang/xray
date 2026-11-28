@@ -35,7 +35,8 @@
 
 enum { ROW_I64 = 1, ROW_BASE_PAYLOAD = 2, ROW_BASE = 3,
     ROW_DERIVED_PAYLOAD = 4, ROW_DERIVED = 5,
-    ROW_GRAND_PAYLOAD = 6, ROW_GRAND = 7 };
+    ROW_GRAND_PAYLOAD = 6, ROW_GRAND = 7,
+    ROW_UNRELATED_PAYLOAD = 8, ROW_UNRELATED = 9 };
 
 /* One field per payload keeps the three mirrors distinguishable only by their
  * nominal Class row and parent link, exactly like the compiler's layout. */
@@ -44,6 +45,7 @@ typedef struct Payload { int64_t fd; } Payload;
 static const char field_names[] = "fd";
 static const size_t class_owned[] = {0};
 static const XrtValueImageSlot slots[] = {
+    {ROW_I64, 0, 0, 0, 2},
     {ROW_I64, 0, 0, 0, 2},
     {ROW_I64, 0, 0, 0, 2},
     {ROW_I64, 0, 0, 0, 2},
@@ -59,6 +61,9 @@ static const XrtValueImageType rows[] = {
     /* 6 */ {.kind = XRT_VALUE_RECORD, .size = 8, .alignment = 8, .first_field = 2, .field_count = 1},
     /* 7 */ {.kind = XRT_VALUE_CLASS, .size = sizeof(void *), .alignment = alignof(void *),
         .first_owned = 0, .owned_count = 1, .element = ROW_GRAND_PAYLOAD, .class_parent = ROW_DERIVED},
+    /* 8 */ {.kind = XRT_VALUE_RECORD, .size = 8, .alignment = 8, .first_field = 3, .field_count = 1},
+    /* 9 */ {.kind = XRT_VALUE_CLASS, .size = sizeof(void *), .alignment = alignof(void *),
+        .first_owned = 0, .owned_count = 1, .element = ROW_UNRELATED_PAYLOAD},
 };
 static const XrtValueImage image = {
     .types = rows, .type_count = sizeof(rows) / sizeof(rows[0]),
@@ -411,19 +416,20 @@ static void check_inline_class_row(const XrtArrayBacking *array, const XrtValueP
 }
 
 static void inline_class_append(void) {
-    enum { FIRST, SECOND, OTHER, ARRAY, STAGING, ALIAS, SLOT_COUNT };
+    enum { FIRST, SECOND, OTHER, DERIVED, ARRAY, STAGING, ALIAS, SLOT_COUNT };
     const size_t limit = 65536;
     XrtBillingOwner *billing = NULL;
     XrtValueImagePlans *plans = NULL;
     XrtManagedOps *array_ops = NULL;
     XrtManagedRoot *root = NULL;
     XrtManagedFrame *frame = NULL;
-    XrtBoundClass base = {0}, other = {0};
+    XrtBoundClass base = {0}, other = {0}, derived = {0};
     OK(xrt_billing_owner_new(NULL, limit, &billing));
     const XrtBillingStats empty = xrt_billing_owner_stats(billing);
     OK(xrt_value_image_bind(billing, &image, (XrtManagedLease){0}, &plans));
     OK(xrt_value_image_class(plans, ROW_BASE, &base));
-    OK(xrt_value_image_class(plans, ROW_DERIVED, &other));
+    OK(xrt_value_image_class(plans, ROW_UNRELATED, &other));
+    OK(xrt_value_image_class(plans, ROW_DERIVED, &derived));
     OK(xrt_array_backing_inline_bind(billing, base.plan, &array_ops));
     OK(xrt_managed_root_new(billing, &root));
     OK(xrt_managed_frame_enter(root, SLOT_COUNT, &frame));
@@ -432,9 +438,14 @@ static void inline_class_append(void) {
     OK(xrt_class_create(frame, FIRST, base.ops, &one));
     OK(xrt_class_create(frame, SECOND, base.ops, &two));
     OK(xrt_class_create(frame, OTHER, other.ops, &three));
+    OK(xrt_class_create(frame, DERIVED, derived.ops, &three));
     XrtManagedHeader *first = slot_owner(frame, FIRST);
     XrtManagedHeader *second = slot_owner(frame, SECOND);
     XrtManagedHeader *wrong = slot_owner(frame, OTHER);
+    XrtManagedHeader *subclass = slot_owner(frame, DERIVED);
+    CHECK(!xrt_class_backing_matches(subclass, base.plan));
+    CHECK(xrt_class_backing_assignable(subclass, base.plan));
+    CHECK(!xrt_class_backing_assignable(first, derived.plan));
     XrtManagedHeader *rows_to_copy[] = {first, second};
     OK(xrt_array_backing_inline_create(frame, ARRAY, array_ops, rows_to_copy, 2, 4));
     XrtArrayBacking *old = (XrtArrayBacking *)slot_owner(frame, ARRAY);
@@ -450,9 +461,10 @@ static void inline_class_append(void) {
     CHECK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, first)
         != XRT_MANAGED_OK);
     OK(xrt_place_replacement_end(&occupied));
-    OK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, first));
+    OK(xrt_array_backing_inline_class_append(binding, STAGING, array_ops, base.plan, subclass));
     CHECK(slot_owner(frame, ARRAY) == &old->managed && old->length == 3 && old->capacity == 4);
-    check_inline_class_row(old, base.plan, 2, first);
+    check_inline_class_row(old, base.plan, 2, subclass);
+    CHECK(!xrt_array_backing_inline_matches(&old->managed, derived.plan));
     CHECK(xrt_managed_retain(&old->managed));
     XrtManagedHeader *snapshot = &old->managed;
     OK(xrt_managed_slot_adopt(frame, ALIAS, &snapshot));

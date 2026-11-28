@@ -331,11 +331,12 @@ static void unsupported(void) {
     rejected("print(1)\n", true, "overflow-checks");
 }
 
-static void class_parent_boundaries(const char *programs) {
+static void class_parent_views(const char *programs) {
     const char *names[] = {"class-parent-argument", "class-parent-assignment"};
     for (size_t n = 0; n < sizeof(names) / sizeof(*names); ++n) {
         char *text = read_file(programs, names[n], "xr");
-        rejected(text, false, "conversion from a subclass to its parent class");
+        XrLirLowered output = lower_text(text);
+        xr_lir_lowered_free(&output);
         xr_free(text);
     }
 }
@@ -1600,7 +1601,7 @@ int main(int argc, char **argv) {
     swapped_backedge();
     fixed_division(argv[1]);
     unsupported();
-    class_parent_boundaries(argv[1]);
+    class_parent_views(argv[1]);
     unsupported_terminators(argv[1]);
     argument_validation();
     literal_sources();

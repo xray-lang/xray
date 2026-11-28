@@ -190,7 +190,7 @@ static XrtManagedStatus module_validate(XrtModuleState *state, const ModuleType 
             if (!xrt_array_backing_inline_matches(owner, spec->element)) return XRT_MANAGED_ARGUMENT;
         } else if (spec->kind == XRT_VALUE_CLASS) {
             XrtManagedHeader *owner; memcpy(&owner, top->value, sizeof(owner));
-            if (!xrt_class_backing_matches(owner, top->plan)) return XRT_MANAGED_ARGUMENT;
+            if (!xrt_class_backing_assignable(owner, top->plan)) return XRT_MANAGED_ARGUMENT;
         } else if (spec->kind == XRT_VALUE_FUNCTION) {
             XrtManagedStatus status = module_function_storage(top->value);
             if (status != XRT_MANAGED_OK) return status;

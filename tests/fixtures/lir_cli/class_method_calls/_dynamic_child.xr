@@ -1,0 +1,5 @@
+import { Base } from "./_dynamic_base"
+export class Child extends Base {
+    init() { super() }
+    override show() -> string { return "child" }
+}

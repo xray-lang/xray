@@ -31,6 +31,11 @@ XR_FUNC XrXirStatus xir_compile_class_method_candidates(const XrXirModule *modul
 
 typedef struct XirClassMethodIndex XirClassMethodIndex;
 
+/* Enumerate implementations of an authenticated call using the same slot index. */
+XR_FUNC XrXirStatus xir_compile_class_method_index_candidates(const XirClassMethodIndex *,
+    const XrXirArtifact *, uint32_t caller, uint32_t instruction, XirClassMethodVisitor,
+    void *owner, XrCompileRequestControl *control);
+
 /* The index borrows one owned Checked Program instance through disposal.
  * A successful query identifies the producer's own slot in a class without
  * descendants. Call shape, lifetime and execution permission are separate. */

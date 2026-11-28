@@ -63,7 +63,10 @@ static XrXirStatus class_method_override(const XirClassMethodRead *input,uint32_
     for(uint32_t p=0;p<a.escaping_parameter_count;++p)if(a.escaping_parameters[p]!=b.escaping_parameters[p])return XR_XIR_BAD_TYPE;
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xir_compile_class_method_select_read(const XirClassMethodRead *input,
+static XrXirStatus class_method_index_find(const XirClassMethodIndex *index, uint32_t owner,
+    const XirClassMethodSignature *anchor, uint32_t *output, XrCompileRequestControl *control);
+
+static XrXirStatus class_method_select_read(const XirClassMethodRead *input, const XirClassMethodIndex *index,
     uint32_t slot,XrXirType actual,XirClassMethodTarget *output,XrCompileRequestControl *control) {
     if(!output)return XR_XIR_BAD_STRUCTURE;
     *output=(XirClassMethodTarget){0};
@@ -77,18 +80,25 @@ XR_FUNC XrXirStatus xir_compile_class_method_select_read(const XirClassMethodRea
     uint32_t selected=UINT32_MAX,previous=UINT32_MAX,steps=0;XrXirType receiver=XR_XIR_UNIT;
     for(uint32_t depth=0;depth<table->count;++depth) {
         uint32_t found=UINT32_MAX;
-        for(uint32_t f=0;f<domain->function_count;++f) {
+        if (index) {
+            status = class_method_index_find(index, owner + 1, &anchor, &found, control);
+            if (status != XR_XIR_OK) return status;
+        } else for(uint32_t f=0;f<domain->function_count;++f) {
             status=xir_receive_step(control,&steps);if(status!=XR_XIR_OK)return status;
             if(identities[f].nominal_owner!=owner+1)continue;
             XirClassMethodSignature method={0};status=class_method_header(input,f,&method);if(status!=XR_XIR_OK)return status;
             if(!class_method_name(&method,&anchor))continue;
             if(found!=UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
-            status=class_method_override(input,f,slot);if(status!=XR_XIR_OK)return status;
-            if(f!=slot && !(identities[f].promises&XR_XIR_FUNCTION_OVERRIDE))return XR_XIR_BAD_TYPE;
             found=f;
-            if(selected==UINT32_MAX)receiver=method.parameters[0];
         }
         if(found!=UINT32_MAX) {
+            status=class_method_override(input,found,slot);if(status!=XR_XIR_OK)return status;
+            if(found!=slot && !(identities[found].promises&XR_XIR_FUNCTION_OVERRIDE))return XR_XIR_BAD_TYPE;
+            if(selected==UINT32_MAX) {
+                XirClassMethodSignature method={0};status=class_method_header(input,found,&method);
+                if(status!=XR_XIR_OK)return status;
+                receiver=method.parameters[0];
+            }
             if(previous!=UINT32_MAX) {status=class_method_override(input,previous,found);if(status!=XR_XIR_OK)return status;}
             previous=found;if(selected==UINT32_MAX)selected=found;
         }
@@ -101,12 +111,16 @@ XR_FUNC XrXirStatus xir_compile_class_method_select_read(const XirClassMethodRea
     }
     return XR_XIR_BAD_STRUCTURE;
 }
-XR_FUNC XrXirStatus xir_compile_class_method_candidates_read(const XirClassMethodRead *input,
-    XrXirType static_receiver,uint32_t slot,XirClassMethodVisitor visit,
+XR_FUNC XrXirStatus xir_compile_class_method_select_read(const XirClassMethodRead *input,
+    uint32_t slot,XrXirType actual,XirClassMethodTarget *output,XrCompileRequestControl *control) {
+    return class_method_select_read(input, NULL, slot, actual, output, control);
+}
+static XrXirStatus class_method_candidates_read(const XirClassMethodRead *input,
+    const XirClassMethodIndex *index, XrXirType static_receiver,uint32_t slot,XirClassMethodVisitor visit,
     void *owner,XrCompileRequestControl *control) {
     if(!visit)return XR_XIR_BAD_STRUCTURE;
     XirClassMethodTarget initial={0};
-    XrXirStatus status=xir_compile_class_method_select_read(input,slot,static_receiver,&initial,control);
+    XrXirStatus status=class_method_select_read(input,index,slot,static_receiver,&initial,control);
     if(status==XR_XIR_OK)status=visit(owner,&initial);
     if(status!=XR_XIR_OK)return status;
     const XirMetadataDomain *domain=input->domain;XirClassMethodSignature anchor={0};
@@ -120,12 +134,17 @@ XR_FUNC XrXirStatus xir_compile_class_method_candidates_read(const XirClassMetho
         if(!class_method_name(&function,&anchor) || !function.parameter_count || !function.parameters ||
             !xr_xir_class_is_subtype(domain->types,function.parameters[0],static_receiver))continue;
         XirClassMethodTarget target={0};
-        status=xir_compile_class_method_select_read(input,slot,function.parameters[0],&target,control);
+        status=class_method_select_read(input,index,slot,function.parameters[0],&target,control);
         if(status!=XR_XIR_OK)return status;
         if(target.function!=f)return XR_XIR_BAD_STRUCTURE;
         status=visit(owner,&target);if(status!=XR_XIR_OK)return status;
     }
     return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xir_compile_class_method_candidates_read(const XirClassMethodRead *input,
+    XrXirType static_receiver,uint32_t slot,XirClassMethodVisitor visit,
+    void *owner,XrCompileRequestControl *control) {
+    return class_method_candidates_read(input, NULL, static_receiver, slot, visit, owner, control);
 }
 static XrXirStatus class_method_module_header(const void *owner,uint32_t entry,XirClassMethodSignature *output) {
     const XrXirModule *module=owner;
@@ -196,7 +215,44 @@ XR_FUNC XrXirStatus xir_compile_class_method_site(const XrXirModule *module,
 struct XirClassMethodIndex {
     const XrXirArtifact *artifact;
     uint8_t *has_child, *unique_member;
+    uint32_t *slots;
+    size_t capacity;
 };
+
+static XrXirStatus class_method_index_find(const XirClassMethodIndex *index, uint32_t owner,
+    const XirClassMethodSignature *anchor, uint32_t *output, XrCompileRequestControl *control) {
+    const XrXirModule *module = xr_xir_compile_artifact_module(index->artifact);
+    uint32_t hash = xr_hash_bytes_update(xr_hash_int(owner), anchor->name, anchor->name_length);
+    size_t at = hash % index->capacity;
+    uint32_t steps = 0;
+    while (index->slots[at]) {
+        XrXirStatus status = xir_receive_step(control, &steps);
+        if (status != XR_XIR_OK) return status;
+        uint32_t candidate = index->slots[at] - 1;
+        const XrXirFunction *method = &module->functions[candidate];
+        if (module->declarations->functions[candidate].nominal_owner == owner &&
+            method->name_length == anchor->name_length && !memcmp(method->name, anchor->name, method->name_length)) {
+            if (!index->unique_member[candidate]) return XR_XIR_BAD_STRUCTURE;
+            *output = candidate;
+            break;
+        }
+        if (++at == index->capacity) at = 0;
+    }
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_compile_class_method_index_candidates(const XirClassMethodIndex *index,
+    const XrXirArtifact *artifact, uint32_t caller, uint32_t instruction, XirClassMethodVisitor visit,
+    void *owner, XrCompileRequestControl *control) {
+    if (!index || index->artifact != artifact || !index->capacity) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    ClassMethodSite site = {0};
+    XrXirStatus status = class_method_site(module, caller, instruction, &site, control);
+    if (status != XR_XIR_OK) return status;
+    XirMetadataDomain domain = xir_metadata_domain_from_module(module);
+    XirClassMethodRead input = {&domain,module,class_method_module_header};
+    return class_method_candidates_read(&input, index, site.receiver, site.slot, visit, owner, control);
+}
 
 static XrXirStatus class_method_index_members(const XrXirCompileContext *context,
     const XrXirModule *module, uint32_t nominal_count, XirClassMethodIndex *index, XrCompileRequestControl *control) {
@@ -236,7 +292,8 @@ static XrXirStatus class_method_index_members(const XrXirCompileContext *context
             index->unique_member[f] = 1;
         }
     }
-    xr_compile_resources_free(slots);
+    index->slots = slots;
+    index->capacity = capacity;
     return status;
 }
 
@@ -244,6 +301,7 @@ XR_FUNC void xir_compile_class_method_index_free(XirClassMethodIndex *index) {
     if (!index) return;
     xr_compile_resources_free(index->has_child);
     xr_compile_resources_free(index->unique_member);
+    xr_compile_resources_free(index->slots);
     xr_compile_resources_free(index);
 }
 

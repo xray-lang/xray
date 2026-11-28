@@ -44,10 +44,14 @@
     "lowering_error": ":3:11: CLASS_METHOD_REF is not supported by LIR lowering yet"
   },
   "path_override_present": {
-    "lowering_error": ":6:42: CLASS_METHOD_REF is not supported by LIR lowering yet"
+    "exit": 0,
+    "stdout": "raw-route\nother\n",
+    "stderr": ""
   },
   "path_inherited_present": {
-    "lowering_error": ":5:42: CLASS_METHOD_REF is not supported by LIR lowering yet"
+    "exit": 0,
+    "stdout": "raw-route\nother\n",
+    "stderr": ""
   },
   "method_returned": {
     "lowering_error": ":4:5: CLASS_METHOD_REF is not supported by LIR lowering yet"
@@ -60,5 +64,30 @@
   },
   "cleanup": {
     "lowering_error": ":8:5: operation needs a panic landing with active cleanup is not supported by LIR lowering yet"
+  },
+  "dynamic_state": {
+    "exit": 0,
+    "stdout": "argument\nbase 5\nargument\nchild 12\nargument\ngrand 5\nargument\nchild 12\nargument\nbase 5\nargument\ngrand 5\n",
+    "stderr": ""
+  },
+  "_dynamic_base": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "_dynamic_child": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "dynamic_cross_module": {
+    "exit": 0,
+    "stdout": "base\nchild\n",
+    "stderr": ""
+  },
+  "dynamic_array_result": {
+    "exit": 0,
+    "stdout": "1\n1\n42\n2\n",
+    "stderr": ""
   }
 }

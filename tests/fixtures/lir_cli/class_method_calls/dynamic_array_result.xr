@@ -1,0 +1,15 @@
+class Base {
+    init() {}
+    items() -> Array<i64> { return [1] }
+}
+class Child extends Base {
+    init() { super() }
+    override items() -> Array<i64> { return [42, 43] }
+}
+fn show(value: Base) {
+    var result = value.items()
+    print(result[0])
+    print(len(result))
+}
+show(Base())
+show(Child())

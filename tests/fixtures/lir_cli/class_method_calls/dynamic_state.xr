@@ -1,0 +1,35 @@
+var suffix: i64 = 7
+class Base {
+    init() {}
+    show(arg: i64) -> string { return "base ${arg}" }
+}
+class Child extends Base {
+    init() { super() }
+    override show(arg: i64) -> string { return "child ${arg+suffix}" }
+}
+class Grandchild extends Child {
+    init() { super() }
+    override show(arg: i64) -> string { return "grand ${arg}" }
+}
+class Leaf extends Child {
+    init() { super() }
+}
+class Sibling extends Base {
+    init() { super() }
+}
+fn argument() -> i64 {
+    print("argument")
+    return 5
+}
+fn speak(value: Base) {
+    print(value.show(argument()))
+}
+fn speakAgain(value: Base) {
+    print(value.show(argument()))
+}
+speak(Base())
+speak(Child())
+speak(Grandchild())
+speak(Leaf())
+speak(Sibling())
+speakAgain(Grandchild())
