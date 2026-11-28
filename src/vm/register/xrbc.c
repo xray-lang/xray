@@ -827,7 +827,7 @@ static XrRbcOutcome *rbc_execution_run(XrRbcExecution *execution,
     XrtExecutionStatus status;
     if (test_close) {
         status = xrt_run_embedded_test_action(outcome->locations, &outcome->failure,
-            xr_rbc_root, execution, &execution->values, test_close, hook);
+            xr_rbc_root, execution, &execution->values, test_close, hook, control);
     } else status = receives_temp ?
         xrt_run_embedded_receiving_temp(outcome->locations, &outcome->failure, xr_rbc_root, execution,
             &execution->values, &outcome->temp) :
@@ -880,8 +880,9 @@ XR_FUNC XrRbcOutcome *xr_rbc_execution_run_receiving_temp(XrRbcExecution *execut
 }
 
 XR_FUNC XrRbcOutcome *xr_rbc_execution_run_test_action(XrRbcExecution *execution,
-    const XrtTestRetirementHook *hook, XrtMetadataCloser close_metadata) {
-    return close_metadata ? rbc_execution_run(execution, NULL, false, hook, close_metadata) : NULL;
+    const XrtTestRetirementHook *hook, XrtMetadataCloser close_metadata,
+    const XrtHostExecutionControl *control) {
+    return close_metadata ? rbc_execution_run(execution, control, false, hook, close_metadata) : NULL;
 }
 
 XR_FUNC bool xr_rbc_execution_root_retired(const XrRbcExecution *execution) {

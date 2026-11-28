@@ -22,15 +22,42 @@ extern const XrtNativeTestFile xrl_test_file;
     exit(2); \
 } } while (0)
 
+static int run_controlled_action(XrtTestSession *session, SessionRequestMode mode) {
+    CHECK(xrl_test_file.action_count == 2);
+    const XrtHostExecutionControl invalid = {0};
+    XrtExecutionFailure failure = {0};
+    CHECK(xrt_test_session_run_native_controlled(session, 0, &invalid, &failure) == XRT_EXECUTION_INVALID);
+    SessionRequestProbe probe = {.allow=mode == SESSION_REQUEST_ALLOW};
+    const XrtHostExecutionControl control = {session_request_current, &probe};
+    probe.control = &control;
+    XrtExecutionStatus status = xrt_test_session_run_native_controlled(session, 0, &control, &failure);
+    CHECK(probe.polls && !xrt_execution_host_control() && !xrt_value_root_active());
+    if (probe.allow) CHECK(status == XRT_EXECUTION_COMPLETED);
+    else {
+        CHECK(status == XRT_EXECUTION_FAILURE && failure.kind == XRT_FAILURE_VALUE &&
+            failure.detail.value.status == XR_XIR_VALUE_CANCELLED);
+        xrt_value_failure_report(failure.detail.value.status,
+            xrt_locations_get(xrt_test_session_locations(session), failure.detail.value.source_id));
+        xrt_execution_failure_drop(&failure);
+    }
+    unsigned polls = probe.polls;
+    CHECK(xrt_test_session_run_native(session, 1, &failure) == XRT_EXECUTION_COMPLETED);
+    CHECK(probe.polls == polls && !xrt_execution_host_control() && !xrt_value_root_active());
+    CHECK(xrt_test_session_free(&session) == XR_OS_IO_OK && !session);
+    return probe.allow ? 0 : 1;
+}
+
 int main(int argc, char **argv) {
     bool retry_first = argc == 2 && !strcmp(argv[1], "--retry-first");
     bool defer_close = argc == 2 && !strcmp(argv[1], "--defer-close");
-    CHECK(argc == 1 || retry_first || defer_close);
+    SessionRequestMode mode = argc == 2 ? session_request_mode(argv[1]) : SESSION_REQUEST_NONE;
+    CHECK(argc == 1 || retry_first || defer_close || mode != SESSION_REQUEST_NONE);
     XrtTestSession *session = NULL;
     XrtManagedStatus created = defer_close
         ? xrt_test_session_create_native_with_metadata_close(&xrl_test_file, session_close_attempt, &session)
         : xrt_test_session_create_native(&xrl_test_file, &session);
     CHECK(created == XRT_MANAGED_OK);
+    if (mode != SESSION_REQUEST_NONE) return run_controlled_action(session, mode);
     XrtLocationOwner *locations = xrt_test_session_locations(session);
     CHECK(xrt_locations_retain(locations));
     XrtExecutionFailure first = {0};

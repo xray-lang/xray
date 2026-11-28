@@ -115,6 +115,40 @@ static bool run_deferred_close(XrRbcTestSession *session, SessionCloseControl *c
     return valid;
 }
 
+static int run_controlled_action(XrRbcTestSession *session, uint32_t action_count, SessionRequestMode mode) {
+    const XrtHostExecutionControl invalid = {0};
+    XrRbcOutcome *outcome = NULL;
+    XrRbcTestActionStage stage = XR_RBC_TEST_ACTION_INVOKE;
+    bool valid = action_count == 2 &&
+        xr_rbc_test_session_run_controlled(session, 0, &invalid, &outcome, &stage) == XR_RBC_INVALID &&
+        !outcome && stage == XR_RBC_TEST_ACTION_REJECTED;
+    SessionRequestProbe probe = {.allow=mode == SESSION_REQUEST_ALLOW};
+    const XrtHostExecutionControl control = {session_request_current, &probe};
+    probe.control = &control;
+    if (valid) {
+        XrRbcStatus status = xr_rbc_test_session_run_controlled(session, 0, &control, &outcome, &stage);
+        valid = stage == XR_RBC_TEST_ACTION_INVOKE && probe.polls &&
+            !xrt_execution_host_control() && !xrt_value_root_active();
+        if (probe.allow) valid = valid && status == XR_RBC_OK;
+        else if (valid) {
+            XrXirValueStatus error = XR_XIR_VALUE_OK;
+            uint32_t source = 0;
+            const XrtLocationOwner *locations = NULL;
+            valid = status == XR_RBC_VALUE_FAILURE &&
+                xr_rbc_outcome_value_failure(outcome, &error, &source, &locations) &&
+                error == XR_XIR_VALUE_CANCELLED && locations;
+            if (valid) xrt_value_failure_report(error, xrt_locations_get(locations, source));
+        }
+    }
+    xr_rbc_outcome_free(&outcome);
+    unsigned polls = probe.polls;
+    valid = valid && xr_rbc_test_session_run(session, 1, &outcome) == XR_RBC_OK &&
+        probe.polls == polls && !xrt_execution_host_control() && !xrt_value_root_active();
+    xr_rbc_outcome_free(&outcome);
+    if (xr_rbc_test_session_free(&session) != XR_OS_IO_OK) valid = false;
+    return valid ? (probe.allow ? 0 : 1) : 2;
+}
+
 static int run_test_session(XrRbcTestSession *session, uint32_t action_count, bool retry_first, bool defer_close) {
     XrRbcOutcome *first = NULL;
     XrRbcStatus first_status = xr_rbc_test_session_run(session, action_count, &first);
@@ -154,6 +188,7 @@ static int run_test_session(XrRbcTestSession *session, uint32_t action_count, bo
 
 int main(int argc, char **argv) {
     bool twice = false, optimize = false, test_plan = false, retry_first = false, defer_close = false;
+    SessionRequestMode mode = SESSION_REQUEST_NONE;
     bool valid = argc >= 2 && argc <= 8;
     const char *stdlib = NULL, *test_name = NULL, *session_name = NULL;
     for (int i = 2; i < argc; ++i) {
@@ -166,12 +201,16 @@ int main(int argc, char **argv) {
             session_name = argv[++i];
         else if (!strcmp(argv[i], "--retry-first") && !retry_first) retry_first = true;
         else if (!strcmp(argv[i], "--defer-close") && !defer_close) defer_close = true;
-        else valid = false;
+        else if (mode == SESSION_REQUEST_NONE) {
+            mode = session_request_mode(argv[i]);
+            if (mode == SESSION_REQUEST_NONE) valid = false;
+        } else valid = false;
     }
     if (!valid || (test_plan && test_name) || (session_name && (test_plan || test_name || twice)) ||
-        ((retry_first || defer_close) && !session_name) || (retry_first && defer_close)) {
+        ((retry_first || defer_close || mode != SESSION_REQUEST_NONE) && !session_name) ||
+        (retry_first && defer_close) || (mode != SESSION_REQUEST_NONE && (retry_first || defer_close))) {
         fputs("usage: lir_vm_run <source.xr> [--twice] [--optimize] [--stdlib <directory>] "
-            "[--test NAME | --test-plan | --test-session NAME [--retry-first | --defer-close]]\n", stderr);
+            "[--test NAME | --test-plan | --test-session NAME [--retry-first | --defer-close | --allow-action | --cancel-action]]\n", stderr);
         return 2;
     }
     XrRbcProgram *program = NULL;
@@ -179,6 +218,7 @@ int main(int argc, char **argv) {
     uint32_t action_count = 0;
     compile_file(argv[1], optimize, stdlib, test_name, test_plan, session_name, defer_close,
         &program, &session, &action_count);
+    if (session && mode != SESSION_REQUEST_NONE) return run_controlled_action(session, action_count, mode);
     if (session) return run_test_session(session, action_count, retry_first, defer_close);
     if (!program) return 1;
     int result = 0;

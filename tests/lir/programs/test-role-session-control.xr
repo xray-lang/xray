@@ -1,0 +1,21 @@
+import io
+import path
+
+var state: i64 = 41
+assert(io.readDir(path.Path("test-action-empty")) != null)
+print(17)
+
+@test
+fn selected_control() {
+    state = state + 1
+    print(state)
+    assert(io.readDir(path.Path("test-action-empty")) != null)
+    print(99)
+}
+
+@after_each
+fn after_control() {
+    assert(state == 42)
+    assert(io.readDir(path.Path("test-action-empty")) != null)
+    print(43)
+}

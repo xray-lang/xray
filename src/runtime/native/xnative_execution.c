@@ -460,8 +460,9 @@ XR_FUNC XrtExecutionStatus xrt_run_embedded_owned_with_metadata_close(const XrtL
 
 XR_FUNC XrtExecutionStatus xrt_run_embedded_test_action(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings,
-    XrtMetadataCloser close_metadata, const XrtTestRetirementHook *retirement) {
-    const XrtExecutionHooks hooks = {.close_metadata=close_metadata, .retirement=retirement};
+    XrtMetadataCloser close_metadata, const XrtTestRetirementHook *retirement,
+    const XrtHostExecutionControl *control) {
+    const XrtExecutionHooks hooks = {.close_metadata=close_metadata, .control=control, .retirement=retirement};
     return run_embedded_owned(locations, failure, root, context, strings, hooks);
 }
 
@@ -539,6 +540,7 @@ typedef struct XrtNativeTestAction {
     XrtExecutionFailure *failure;
     uint32_t action;
     const XrtTestRetirementHook *hook;
+    const XrtHostExecutionControl *control;
 } XrtNativeTestAction;
 
 static XrtExecutionStatus native_test_step(void *context, XrtModuleLayout *layout,
@@ -565,7 +567,8 @@ static XrtExecutionStatus native_test_step(void *context, XrtModuleLayout *layou
     XrtStateInvocation invocation = {
         initialize ? file->initializer : file->actions[action->action], NULL, state};
     return xrt_run_embedded_test_action(session->locations, action->failure, state_root_invoke,
-        &invocation, root, session->close_metadata, initialize ? NULL : action->hook);
+        &invocation, root, session->close_metadata, initialize ? NULL : action->hook,
+        initialize ? NULL : action->control);
 }
 
 XR_FUNC XrtManagedStatus xrt_test_session_create_native_with_metadata_close(const XrtNativeTestFile *file,
@@ -596,18 +599,28 @@ XR_FUNC XrtLocationOwner *xrt_test_session_locations(const XrtTestSession *sessi
     return session ? session->locations : NULL;
 }
 
+static XrtExecutionStatus run_native_test_action(XrtTestSession *session, uint32_t action,
+    const XrtTestRetirementHook *hook, const XrtHostExecutionControl *control, XrtExecutionFailure *failure) {
+    const XrtNativeTestFile *file = session ? session->native_file : NULL;
+    if (!file || action >= file->action_count || !file->actions[action] || !failure ||
+        (control && !control->current)) return XRT_EXECUTION_INVALID;
+    XrtNativeTestAction request = {session, failure, action, hook, control};
+    return xrt_test_session_run(session, native_test_step, &request);
+}
+
 XR_FUNC XrtExecutionStatus xrt_test_session_run_native(XrtTestSession *session, uint32_t action,
     XrtExecutionFailure *failure) {
-    return xrt_test_session_run_native_with_retirement_hook(session, action, NULL, failure);
+    return run_native_test_action(session, action, NULL, NULL, failure);
+}
+
+XR_FUNC XrtExecutionStatus xrt_test_session_run_native_controlled(XrtTestSession *session, uint32_t action,
+    const XrtHostExecutionControl *control, XrtExecutionFailure *failure) {
+    return run_native_test_action(session, action, NULL, control, failure);
 }
 
 XR_FUNC XrtExecutionStatus xrt_test_session_run_native_with_retirement_hook(XrtTestSession *session,
     uint32_t action, const XrtTestRetirementHook *hook, XrtExecutionFailure *failure) {
-    const XrtNativeTestFile *file = session ? session->native_file : NULL;
-    if (!file || action >= file->action_count || !file->actions[action] || !failure)
-        return XRT_EXECUTION_INVALID;
-    XrtNativeTestAction request = {session, failure, action, hook};
-    return xrt_test_session_run(session, native_test_step, &request);
+    return run_native_test_action(session, action, hook, NULL, failure);
 }
 XR_FUNC XrtExecutionStatus xrt_run_embedded_receiving_temp(const XrtLocationOwner *locations,
     XrtExecutionFailure *failure, XrtSynchronousRoot root, void *context, XrtValueRoot *strings,

@@ -97,6 +97,9 @@ typedef enum XrRbcTestActionStage {
 /* Reports how far this request reached, including failures without an outcome. */
 XR_FUNC XrRbcStatus xr_rbc_test_session_run_detailed(XrRbcTestSession *, uint32_t action,
     XrRbcOutcome **, XrRbcTestActionStage *);
+/* Borrow control only for this action's execution, after module initialization. */
+XR_FUNC XrRbcStatus xr_rbc_test_session_run_controlled(XrRbcTestSession *, uint32_t action,
+    const XrtHostExecutionControl *, XrRbcOutcome **, XrRbcTestActionStage *);
 XR_FUNC XrOsIoStatus xr_rbc_test_session_free(XrRbcTestSession **);
 
 #endif  // XRBC_LIR_H

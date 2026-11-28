@@ -132,6 +132,18 @@ def main():
     assert_panic(run_entry(args, root, pending, "file-close", "--test-session", "selected_close",
                            session=True, run_options=("--defer-close",)),
                  pending, b"17\n42\n43\n", b"session close panic")
+    controlled = fixtures / "test-role-session-control.xr"
+    (root / "test-action-empty").mkdir()
+    assert run_entry(args, root, controlled, "file-allow", "--test-session", "selected_control",
+                     session=True, run_options=("--allow-action",)) == (0, b"17\n42\n99\n43\n", b""), root
+    cancelled_vm = invoke(root, "file-cancel-vm", [args.vm_driver, controlled, "--stdlib",
+        args.source_root / "stdlib", "--test-session", "selected_control", "--cancel-action"])
+    controlled_native = root / ("file-allow.exe" if args.kind == "msvc" else "file-allow-native")
+    cancelled_native = invoke(root, "file-cancel-native", [controlled_native, "--cancel-action"])
+    assert cancelled_vm == cancelled_native, (cancelled_vm, cancelled_native, root)
+    code, stdout, stderr = cancelled_native
+    assert (code, stdout) == (1, b"17\n42\n43\n"), (code, stdout, root)
+    assert stderr.startswith(b"[Uncaught Cancellation] at "), (stderr, root)
     for name in ("skipped_action", "ordinary_action", "imported_session_test", "before_action", "missing"):
         assert_rejected(args, root, actions, "file-" + name, "--test-session", name)
     complete_native_artifacts(root)

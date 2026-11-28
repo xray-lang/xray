@@ -8,10 +8,10 @@
 #ifndef TEST_ROLE_SESSION_SELECTION_H
 #define TEST_ROLE_SESSION_SELECTION_H
 #include <stdlib.h>
+#include <string.h>
 
 #if !defined(TEST_ROLE_SESSION_HOST_ONLY)
 #include "lir/xlir_test_plan.h"
-#include <string.h>
 
 static inline bool select_session_actions(const XrLirTestPlan *plan, const char *name,
     XrLirFunction **output, uint32_t *count) {
@@ -53,6 +53,29 @@ reject:
 #include "runtime/native/xnative_execution.h"
 #include "runtime/native/xnative_values.h"
 #include "os/os_file_metadata.h"
+
+typedef enum SessionRequestMode {
+    SESSION_REQUEST_NONE, SESSION_REQUEST_ALLOW, SESSION_REQUEST_CANCEL
+} SessionRequestMode;
+
+static inline SessionRequestMode session_request_mode(const char *argument) {
+    if (!strcmp(argument, "--allow-action")) return SESSION_REQUEST_ALLOW;
+    if (!strcmp(argument, "--cancel-action")) return SESSION_REQUEST_CANCEL;
+    return SESSION_REQUEST_NONE;
+}
+
+typedef struct SessionRequestProbe {
+    const XrtHostExecutionControl *control;
+    unsigned polls;
+    bool allow;
+} SessionRequestProbe;
+
+static inline bool session_request_current(void *context) {
+    SessionRequestProbe *probe = context;
+    if (!xrt_value_root_active() || xrt_execution_host_control() != probe->control) abort();
+    ++probe->polls;
+    return probe->allow;
+}
 
 typedef struct SessionCloseControl {
     XrtBillingOwner *billing;

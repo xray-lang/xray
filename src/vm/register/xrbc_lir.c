@@ -2322,6 +2322,7 @@ typedef struct RbcTestAction {
     uint32_t action;
     XrRbcOutcome **output;
     const XrtTestRetirementHook *hook;
+    const XrtHostExecutionControl *control;
     XrRbcTestActionStage stage;
 } RbcTestAction;
 
@@ -2341,7 +2342,7 @@ static XrtExecutionStatus rbc_test_step(void *context, XrtModuleLayout *layout, 
     if (action->status != XR_RBC_OK) return XRT_EXECUTION_FAILURE;
     if (!initialize) action->stage = XR_RBC_TEST_ACTION_INVOKE;
     XrRbcOutcome *outcome = xr_rbc_execution_run_test_action(session->pending,
-        initialize ? NULL : action->hook, session->close_metadata);
+        initialize ? NULL : action->hook, session->close_metadata, initialize ? NULL : action->control);
     action->status = xr_rbc_outcome_status(outcome);
     /* The bound action already tried closing its own handles. Keep a failed
      * drain in this owner for the next request, before any guest dispatch. */
@@ -2355,27 +2356,34 @@ static XrtExecutionStatus rbc_test_step(void *context, XrtModuleLayout *layout, 
 }
 
 static XrRbcStatus rbc_test_session_run(XrRbcTestSession *session, uint32_t action,
-    const XrtTestRetirementHook *hook, XrRbcOutcome **output, XrRbcTestActionStage *stage) {
+    const XrtTestRetirementHook *hook, const XrtHostExecutionControl *control,
+    XrRbcOutcome **output, XrRbcTestActionStage *stage) {
     if (stage) *stage = XR_RBC_TEST_ACTION_REJECTED;
-    if (!session || action >= session->count || !output || *output) return XR_RBC_INVALID;
-    RbcTestAction request = {session, XR_RBC_INVALID, action, output, hook, XR_RBC_TEST_ACTION_REJECTED};
+    if (!session || action >= session->count || !output || *output ||
+        (control && !control->current)) return XR_RBC_INVALID;
+    RbcTestAction request = {session, XR_RBC_INVALID, action, output, hook, control, XR_RBC_TEST_ACTION_REJECTED};
     xrt_test_session_run(session->owner, rbc_test_step, &request);
     if (stage) *stage = request.stage;
     return request.status;
 }
 
 XR_FUNC XrRbcStatus xr_rbc_test_session_run(XrRbcTestSession *session, uint32_t action, XrRbcOutcome **output) {
-    return rbc_test_session_run(session, action, NULL, output, NULL);
+    return rbc_test_session_run(session, action, NULL, NULL, output, NULL);
 }
 
 XR_FUNC XrRbcStatus xr_rbc_test_session_run_with_retirement_hook(XrRbcTestSession *session, uint32_t action,
     const XrtTestRetirementHook *hook, XrRbcOutcome **output) {
-    return rbc_test_session_run(session, action, hook, output, NULL);
+    return rbc_test_session_run(session, action, hook, NULL, output, NULL);
 }
 
 XR_FUNC XrRbcStatus xr_rbc_test_session_run_detailed(XrRbcTestSession *session, uint32_t action,
     XrRbcOutcome **output, XrRbcTestActionStage *stage) {
-    return rbc_test_session_run(session, action, NULL, output, stage);
+    return xr_rbc_test_session_run_controlled(session, action, NULL, output, stage);
+}
+
+XR_FUNC XrRbcStatus xr_rbc_test_session_run_controlled(XrRbcTestSession *session, uint32_t action,
+    const XrtHostExecutionControl *control, XrRbcOutcome **output, XrRbcTestActionStage *stage) {
+    return rbc_test_session_run(session, action, NULL, control, output, stage);
 }
 
 XR_FUNC XrOsIoStatus xr_rbc_test_session_free(XrRbcTestSession **owner) {
