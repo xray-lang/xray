@@ -141,8 +141,7 @@ static bool lower_tuple_finish(Lower *c, XrXirType type, const XrXirTypeNode *no
         XrXirType field_type = node->parameters[f].type;
         XrLirType field = lower_type(c, field_type);
         XrLirType element = field == XR_LIR_ARRAY ? lower_array_element(c, field_type) : XR_LIR_TYPE_INVALID;
-        if (field != XR_LIR_I64 && field != XR_LIR_I1 && field != XR_LIR_F64 && field != XR_LIR_STRING &&
-            !(field == XR_LIR_ARRAY && element == XR_LIR_I64) && !xr_lir_inline_aggregate_type(c->module, field)) {
+        if (!xr_lir_tuple_field_type(c->module, field, element)) {
             xr_free(fields);
             return lower_unsupported(c, "Tuple field has no canonical inline value carrier");
         }

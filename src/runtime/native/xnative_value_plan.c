@@ -164,7 +164,8 @@ static bool record_field(const XrtValuePlan *plan, bool named) {
     XrtValueKind kind = plan->view.kind;
     return kind == XRT_VALUE_I64 || kind == XRT_VALUE_BOOL || kind == XRT_VALUE_F64 ||
         kind == XRT_VALUE_STRING || kind == XRT_VALUE_ARRAY_I64 || xrt_value_kind_has_fields(kind) ||
-        (named && (kind == XRT_VALUE_ARRAY_U8 || kind == XRT_VALUE_CLASS || class_only_field(&plan->view))) ||
+        (kind == XRT_VALUE_CLASS && (named || !plan->view.class_storage)) ||
+        (named && (kind == XRT_VALUE_ARRAY_U8 || class_only_field(&plan->view))) ||
         (kind == XRT_VALUE_NULLABLE && managed_nullable(plan));
 }
 static bool capture_type(const XrtValuePlan *plan) {

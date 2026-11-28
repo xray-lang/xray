@@ -145,6 +145,8 @@ XR_FUNC XrLirStatus xr_lir_aggregate_fields(const XrLirModule *, XrLirType,
 XR_FUNC XrLirStatus xr_lir_record_identity(const XrLirModule *, XrLirType, XrLirRecordIdentity *);
 /* A class owns one Header and uses a fixed nominal Field payload plan. The
  * payload type describes the allocation's fields, not the class value ABI. */
+/* Shared tuple-field admission for Checked lowering and raw LIR types. */
+XR_FUNC bool xr_lir_tuple_field_type(const XrLirModule *, XrLirType, XrLirType array_element);
 XR_FUNC bool xr_lir_class_payload(const XrLirModule *, XrLirType, XrLirType *);
 XR_FUNC uint32_t xr_lir_class_storage(const XrLirModule *, XrLirType);
 /* Zero means a root class. This fact grants no implicit upcast or dispatch. */
