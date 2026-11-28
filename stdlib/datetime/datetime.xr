@@ -237,9 +237,7 @@ export fn utc() -> DateTime {
 
 export fn create(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0,
           second: i64 = 0) -> DateTime {
-    var wall = _timeFromCivil(year, month, day, hour, minute, second)
-    var off = time.localOffsetAt(wall)
-    return DateTime(wall - off * 60, 0, off, false)
+    return _fromLocalWall(_timeFromCivil(year, month, day, hour, minute, second), 0)
 }
 
 export fn createUTC(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0,
@@ -255,72 +253,58 @@ export fn fromTimestampMs(ts: i64) -> DateTime {
     return _fromTotalMilliseconds(ts, 0, true)
 }
 
+// An ISO 8601 subset. A date is YYYY-MM-DD or YYYY/MM/DD. A date-time joins it
+// to a time with 'T' or a space; a time is hh:mm[:ss] with an optional
+// fraction whose first three digits are milliseconds, then an optional zone,
+// Z or +hh[[:]mm] or -hh[[:]mm]. "date" accepts a date alone and "time" a
+// time alone, read on 1970-01-01. Every field is range checked and the whole
+// text must be consumed; anything else is null. Without a zone the reading is
+// local time.
 export fn parse(s: string, format: string = "ISO8601") -> DateTime? {
-    var year = 0
+    var year = 1970
     var month = 1
     var day = 1
-    var hour = 0
-    var minute = 0
-    var second = 0
+    var at = 0
+    if (format != "time") {
+        var date = _parseDate(s)
+        if (date == null) { return null }
+        year = date!.year
+        month = date!.month
+        day = date!.day
+        at = 10
+        if (at == len(s)) { return _fromLocalWall(_timeFromCivil(year, month, day, 0, 0, 0), 0) }
+        if (format == "date") { return null }
+        var joint = s.slice(at, at + 1)
+        if (joint != "T" && joint != "t" && joint != " ") { return null }
+        at = at + 1
+    }
+
+    var clock = _parseClock(s, at)
+    if (clock == null) { return null }
+    at = clock!.yearday
     var ms = 0
-    var timeStart = -1
-
-    if (format == "time") {
-        var tp = _parseTimeAt(s, 0)
-        if (tp == null) { return null }
-        hour = tp!.hour
-        minute = tp!.minute
-        second = tp!.second
-        year = 1970
-        month = 1
-        day = 1
-        timeStart = 0
-    } else {
-        var sep: string = "-"
-        if (s.contains("/")) { sep = "/" }
-        var d = _parseDateAt(s, 0, sep)
-        if (d == null) { return null }
-        year = d!.year
-        month = d!.month
-        day = d!.day
-
-        if (format != "date") {
-            var tIndex = _findTimeSeparator(s)
-            if (tIndex >= 0) {
-                timeStart = tIndex + 1
-                var tp = _parseTimeAt(s, timeStart)
-                if (tp == null) { return null }
-                hour = tp!.hour
-                minute = tp!.minute
-                second = tp!.second
-                ms = _parseMilliseconds(s, timeStart)
-            }
+    if (at < len(s) && s.slice(at, at + 1) == ".") {
+        var digits = 0
+        at = at + 1
+        while (at < len(s)) {
+            var d = _digit(s, at)
+            if (d < 0) { break }
+            if (digits < 3) { ms = ms * 10 + d }
+            digits = digits + 1
+            at = at + 1
+        }
+        if (digits == 0) { return null }
+        while (digits < 3) {
+            ms = ms * 10
+            digits = digits + 1
         }
     }
+    var wall = _timeFromCivil(year, month, day, clock!.hour, clock!.minute, clock!.second)
+    if (at == len(s)) { return _fromLocalWall(wall, ms) }
 
-    var isUtc = false
-    var tzOff = 0
-    if (timeStart >= 0) {
-        var z = _findTimezoneStart(s, timeStart)
-        if (z >= 0) {
-            if (s.slice(z, z + 1) == "Z") {
-                isUtc = true
-            } else {
-                var parsedOff = _parseTimezoneOffset(s, z)
-                if (parsedOff == null) { return null }
-                tzOff = parsedOff!
-                isUtc = true
-            }
-        }
-    }
-
-    var t = _timeFromCivil(year, month, day, hour, minute, second)
-    if (isUtc) {
-        t = t - tzOff * 60
-        return DateTime(t, ms, 0, true)
-    }
-    var off = time.localOffsetAt(t)
-    return DateTime(t - off * 60, ms, off, false)
+    var zone = _parseZone(s, at)
+    if (zone == null) { return null }
+    return DateTime(wall - zone! * 60, ms, 0, true)
 }
 
 export fn offset() -> i64 {
@@ -411,6 +395,32 @@ fn _partsFromRaw(timestamp: i64, tzOffset: i64, isUtc: bool) -> DateTimeParts {
     return p
 }
 
+// The instant a local wall time denotes. The offsets in force a day before and
+// a day after bracket any transition near it, and each gives a reading that is
+// valid when the zone really has that offset at the instant it names. Two
+// valid readings are an overlap and the earlier wins; none is a gap, read with
+// the offset before the transition so the wall time moves forward past it.
+fn _localInstant(wall: i64) -> i64 {
+    var early = time.localOffsetAt(wall - SECONDS_PER_DAY)
+    var late = time.localOffsetAt(wall + SECONDS_PER_DAY)
+    var first = wall - early * 60
+    if (early == late) { return first }
+    var second = wall - late * 60
+    var firstValid = time.localOffsetAt(first) == early
+    var secondValid = time.localOffsetAt(second) == late
+    if (firstValid && secondValid) {
+        if (second < first) { return second }
+        return first
+    }
+    if (secondValid) { return second }
+    return first
+}
+
+fn _fromLocalWall(wall: i64, millisecond: i64) -> DateTime {
+    var t = _localInstant(wall)
+    return DateTime(t, millisecond, time.localOffsetAt(t), false)
+}
+
 fn _createWithZone(year: i64, month: i64, day: i64, hour: i64, minute: i64, second: i64,
                    millisecond: i64, tzOffset: i64, isUtc: bool) -> DateTime {
     var wall = _timeFromCivil(year, month, day, hour, minute, second)
@@ -440,91 +450,73 @@ fn _pad(value: i64, width: i64) -> string {
     return sign + s
 }
 
+fn _digit(s: string, at: i64) -> i64 {
+    return "0123456789".indexOf(s.slice(at, at + 1))
+}
+
 fn _parseNDigits(s: string, start: i64, count: i64) -> i64? {
     if (start < 0 || start + count > len(s)) { return null }
     var out = 0
     for (var i = 0; i < count; i++) {
-        var c = "0123456789".indexOf(s.slice(start + i, start + i + 1))
+        var c = _digit(s, start + i)
         if (c < 0) { return null }
         out = out * 10 + c
     }
     return out
 }
 
-fn _parseDateAt(s: string, start: i64, sep: string) -> DateTimeParts? {
-    var y = _parseNDigits(s, start, 4)
-    if (y == null) { return null }
-    if (start + 4 >= len(s) || s.slice(start + 4, start + 4 + 1) != sep) { return null }
-    var m = _parseNDigits(s, start + 5, 2)
-    if (m == null) { return null }
-    if (start + 7 >= len(s) || s.slice(start + 7, start + 7 + 1) != sep) { return null }
-    var d = _parseNDigits(s, start + 8, 2)
-    if (d == null) { return null }
+// YYYY-MM-DD or YYYY/MM/DD at the start of s, with one separator used twice.
+fn _parseDate(s: string) -> DateTimeParts? {
+    if (len(s) < 10) { return null }
+    var sep = s.slice(4, 5)
+    if ((sep != "-" && sep != "/") || s.slice(7, 8) != sep) { return null }
+    var y = _parseNDigits(s, 0, 4)
+    var m = _parseNDigits(s, 5, 2)
+    var d = _parseNDigits(s, 8, 2)
+    if (y == null || m == null || d == null) { return null }
+    if (m! < 1 || m! > 12 || d! < 1 || d! > _daysInMonth(y!, m!)) { return null }
     return DateTimeParts(y!, m!, d!, 0, 0, 0, 0, 0)
 }
 
-fn _parseTimeAt(s: string, start: i64) -> DateTimeParts? {
+// hh:mm[:ss] at start. The position after it is returned in yearday.
+fn _parseClock(s: string, start: i64) -> DateTimeParts? {
     var h = _parseNDigits(s, start, 2)
-    if (h == null) { return null }
-    if (start + 2 >= len(s) || s.slice(start + 2, start + 2 + 1) != ":") { return null }
+    if (h == null || start + 2 >= len(s) || s.slice(start + 2, start + 3) != ":") { return null }
     var m = _parseNDigits(s, start + 3, 2)
     if (m == null) { return null }
     var sec = 0
-    if (start + 5 < len(s) && s.slice(start + 5, start + 5 + 1) == ":") {
-        var s2 = _parseNDigits(s, start + 6, 2)
+    var end = start + 5
+    if (end < len(s) && s.slice(end, end + 1) == ":") {
+        var s2 = _parseNDigits(s, end + 1, 2)
         if (s2 == null) { return null }
         sec = s2!
+        end = end + 3
     }
-    return DateTimeParts(1970, 1, 1, h!, m!, sec, 0, 0)
+    if (h! > 23 || m! > 59 || sec > 59) { return null }
+    return DateTimeParts(1970, 1, 1, h!, m!, sec, 0, end)
 }
 
-fn _parseMilliseconds(s: string, timeStart: i64) -> i64 {
-    var dot = s.indexOf(".", timeStart)
-    if (dot < 0 || dot + 1 >= len(s)) { return 0 }
-    var zone = _findTimezoneStart(s, timeStart)
-    if (zone >= 0 && zone < dot) { return 0 }
-    var ms = 0
-    var digits = 0
-    var p = dot + 1
-    while (p < len(s) && digits < 3) {
-        var c = "0123456789".indexOf(s.slice(p, p + 1))
-        if (c < 0) { break }
-        ms = ms * 10 + c
-        digits = digits + 1
-        p = p + 1
+// Z, or a sign with hh, hhmm or hh:mm, ending the text. Minutes east of UTC.
+fn _parseZone(s: string, start: i64) -> i64? {
+    var c = s.slice(start, start + 1)
+    if (c == "Z" || c == "z") {
+        if (start + 1 != len(s)) { return null }
+        return 0
     }
-    while (digits < 3) {
-        ms = ms * 10
-        digits = digits + 1
-    }
-    return ms
-}
-
-fn _firstMarker(left: i64, right: i64) -> i64 {
-    if (left < 0 || (right >= 0 && right < left)) { return right }
-    return left
-}
-
-fn _findTimeSeparator(s: string) -> i64 {
-    return _firstMarker(s.indexOf("T"), s.indexOf(" "))
-}
-
-fn _findTimezoneStart(s: string, start: i64) -> i64 {
-    var first = _firstMarker(s.indexOf("Z", start), s.indexOf("+", start))
-    return _firstMarker(first, s.indexOf("-", start))
-}
-
-fn _parseTimezoneOffset(s: string, start: i64) -> i64? {
-    if (start >= len(s)) { return null }
-    var sign = 1
-    if (s.slice(start, start + 1) == "-") { sign = -1 }
+    if (c != "+" && c != "-") { return null }
     var h = _parseNDigits(s, start + 1, 2)
     if (h == null) { return null }
+    var at = start + 3
     var m = 0
-    if (start + 3 < len(s) && s.slice(start + 3, start + 3 + 1) == ":") {
-        var mm = _parseNDigits(s, start + 4, 2)
+    if (at < len(s)) {
+        if (s.slice(at, at + 1) == ":") { at = at + 1 }
+        var mm = _parseNDigits(s, at, 2)
         if (mm == null) { return null }
         m = mm!
+        at = at + 2
     }
-    return sign * (h! * 60 + m)
+    if (at != len(s) || h! > 23 || m > 59) { return null }
+    var minutes = h! * 60 + m
+    if (c == "-") { return -minutes }
+    return minutes
 }

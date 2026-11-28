@@ -1,0 +1,7 @@
+{
+  "parse_strict": {
+    "exit": 0,
+    "stdout": "1705314645 123\n1705314645 500\n1705314645 123\n1710055800 0\n1710021600 0\n1710023400 0\n1710041400 0\n1709164800 0\n-1 999\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\n45296 700\n41696 0\nnull\nnull\ntrue\ntrue\ntrue\ntrue\n",
+    "stderr": ""
+  }
+}

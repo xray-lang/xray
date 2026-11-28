@@ -57,6 +57,25 @@ add_test(NAME test_lir_cli_integer_bits
 set_tests_properties(test_lir_cli_integer_bits PROPERTIES
     TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native")
 
+add_test(NAME test_lir_cli_datetime_parse
+    COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+        --fixtures tests/fixtures/lir_cli/datetime_parse --compiler "${CMAKE_C_COMPILER}"
+        --output ${PROJECT_BINARY_DIR}/lir-cli-datetime-parse)
+set_tests_properties(test_lir_cli_datetime_parse PROPERTIES
+    TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;stdlib")
+
+# The zone is a POSIX TZ rule, which only the POSIX C libraries read.
+if(NOT WIN32)
+    add_test(NAME test_lir_cli_datetime_local
+        COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
+            --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}
+            --fixtures tests/fixtures/lir_cli/datetime_local --compiler "${CMAKE_C_COMPILER}"
+            --output ${PROJECT_BINARY_DIR}/lir-cli-datetime-local)
+    set_tests_properties(test_lir_cli_datetime_local PROPERTIES
+        TIMEOUT 180 PROCESSORS 1 LABELS "cli;lir;native;stdlib")
+endif()
+
 add_test(NAME test_lir_cli_math_rounding
     COMMAND ${XRAY_PYTHON} -X utf8 ${PROJECT_SOURCE_DIR}/tests/cli/run_lir_invoke_try_assert.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR}

@@ -1,0 +1,48 @@
+import datetime
+
+// Zoned readings print their instant and millisecond; anything the grammar
+// or a field range rejects prints null.
+fn reading(text: string, format: string) -> string {
+    const value = datetime.parse(text, format)
+    if (value == null) { return "null" }
+    return "${value!.timestamp()} ${value!.millisecond()}"
+}
+
+print(reading("2024-01-15T10:30:45.123Z", "ISO8601"))
+print(reading("2024-01-15t10:30:45.5z", "ISO8601"))
+print(reading("2024-01-15 10:30:45.123456Z", "ISO8601"))
+print(reading("2024-03-10T03:30:00-04:00", "ISO8601"))
+print(reading("2024-03-10T03:30:00+0530", "ISO8601"))
+print(reading("2024-03-10T03:30:00+05", "ISO8601"))
+print(reading("2024/03/10T03:30Z", "ISO8601"))
+print(reading("2024-02-29T00:00:00Z", "ISO8601"))
+print(reading("1969-12-31T23:59:59.999Z", "ISO8601"))
+print(reading("2024-02-30T00:00:00Z", "ISO8601"))
+print(reading("2023-02-29T00:00:00Z", "ISO8601"))
+print(reading("2024-13-01T00:00Z", "ISO8601"))
+print(reading("2024-00-10T00:00Z", "ISO8601"))
+print(reading("2024-01-00T00:00Z", "ISO8601"))
+print(reading("2024-01-15T24:00Z", "ISO8601"))
+print(reading("2024-01-15T10:60Z", "ISO8601"))
+print(reading("2024-01-15T10:30:60Z", "ISO8601"))
+print(reading("2024-01-15T10:30:00Zjunk", "ISO8601"))
+print(reading("2024-01-15 junk", "ISO8601"))
+print(reading("2024-01/15T00:00Z", "ISO8601"))
+print(reading("2024-01-15T10:30:00+24:00", "ISO8601"))
+print(reading("2024-01-15T10:30:00+05:60", "ISO8601"))
+print(reading("2024-01-15T10:30:00.Z", "ISO8601"))
+print(reading("2024-01-15x", "ISO8601"))
+print(reading("2024-01-15T10:30:00+5", "ISO8601"))
+print(reading("2024-01-15T10:30:00+05:3", "ISO8601"))
+print(reading("2024-1-15T10:30Z", "ISO8601"))
+print(reading("", "ISO8601"))
+print(reading("2024-01-15T10:30:00+05:00junk", "ISO8601"))
+print(reading("2024-01-15T10:30:00-0500x", "ISO8601"))
+print(reading("12:34:56.7Z", "time"))
+print(reading("12:34:56+01:00", "time"))
+print(reading("2024-01-15T10:30Z", "date"))
+print(reading("25:00", "time"))
+print(datetime.parse("2024-02-29", "date") != null)
+print(datetime.parse("2024-02-29") != null)
+print(datetime.parse("2023-02-29", "date") == null)
+print(datetime.parse("12:34", "time") != null)

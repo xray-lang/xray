@@ -1,0 +1,22 @@
+import datetime
+
+// Local readings near both 2024 transitions of a UTC-5 zone with daylight
+// saving: a skipped wall time moves forward, a repeated one takes the earlier
+// instant, and the hours after a transition use the new offset.
+fn show(y: i64, mo: i64, d: i64, h: i64, mi: i64) {
+    const t = datetime.create(y, mo, d, h, mi)
+    print("${t.timestamp()} ${t.hour()}:${t.minute()} ${t.tzOffset()}")
+}
+show(2024, 3, 10, 1, 30)
+show(2024, 3, 10, 2, 30)
+show(2024, 3, 10, 3, 30)
+show(2024, 3, 10, 4, 30)
+show(2024, 3, 10, 6, 59)
+show(2024, 11, 3, 0, 30)
+show(2024, 11, 3, 1, 30)
+show(2024, 11, 3, 2, 30)
+show(2024, 7, 1, 12, 0)
+print(datetime.parse("2024-03-10T02:30")!.timestamp())
+print(datetime.parse("2024-03-10T03:30:00")!.timestamp())
+print(datetime.parse("2024-11-03 01:30")!.timestamp())
+print(datetime.parse("2024-11-03")!.timestamp())
