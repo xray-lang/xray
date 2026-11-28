@@ -343,6 +343,7 @@ tests/diff/cases/semantics/stdlib/coro_typed_local_sync.xr  # error: name is not
 tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/csv_pure_module_direct.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
+tests/diff/cases/semantics/stdlib/csv_quoted_empty_field.xr  # enum payload field type is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/datetime_int_arg_shared_core.xr  # error: name is not an initialized value
 tests/diff/cases/semantics/stdlib/encoding_core_direct.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/encoding_module.xr  # error: E0330: throwing call requires try or a try body

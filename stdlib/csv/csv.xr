@@ -316,7 +316,8 @@ fn _consumeRow(state: ref _CsvState, options: _CsvParseConfig) -> bool {
     var record = state.currentRecord
     state.currentRecord = state.currentRecord + 1
 
-    if (options.skipEmptyLines && _isEmptyRow(row)) {
+    // A quoted empty field ("") is a record of one empty value, not a blank line.
+    if (options.skipEmptyLines && !state.firstFieldQuoted && _isEmptyRow(row)) {
         _clearRow(ref state)
         return false
     }
@@ -606,6 +607,13 @@ fn _writeField(out: ref string, value: string, options: _CsvWriteConfig) {
 }
 
 fn _writeRow(out: ref string, row: Array<string>, options: _CsvWriteConfig) {
+    // A record of one empty field would otherwise be a blank line, which a
+    // reader skips; quoting it keeps the record.
+    if (len(row) == 1 && len(row[0]) == 0) {
+        out += "${options.quoteChar}${options.quoteChar}"
+        out += options.linebreak
+        return
+    }
     for (var i = 0; i < len(row); i++) {
         if (i > 0) { out += "${options.delimiter}" }
         _writeField(ref out, row[i], options)

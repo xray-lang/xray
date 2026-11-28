@@ -1,0 +1,14 @@
+// A quoted empty field is a record of one empty value, not a blank line,
+// when read and when written back.
+import csv
+
+try {
+    const doc = csv.parse("a\n\"\"\n\nb\n")
+    print(len(doc.rows))
+    for (row in doc.rows) { print("${len(row)}:${row[0]}") }
+    const text = csv.stringify(doc)
+    print(text)
+    print(len(csv.parse(text).rows))
+} catch (e) {
+    print("error")
+}
