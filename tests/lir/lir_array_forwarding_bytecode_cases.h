@@ -38,12 +38,13 @@ static uint32_t array_forwarding_encoded_sites(const XrRbcModule *module) {
         const XrRbcFunction *function=&module->functions[f];
         for (size_t pc=0;pc<function->code_count;++pc) {
             uint32_t word=function->code[pc];
-            if ((word&255)!=XR_RBC_VALUE_ACCESS) continue;
+            if ((word&255)!=XR_RBC_VALUE_ACCESS && (word&255)!=XR_RBC_OWNER_BINDING_MOVE) continue;
             XrRbcValueAccess a=code->accesses[word>>16];
             if ((a.operation!=XR_RBC_VALUE_BINDING_NEW && a.operation!=XR_RBC_VALUE_BINDING_READ) || !a.index) continue;
             const XrLirHomeEvent *event=&code->homes->events[a.index-1];
             if (!event->forwarding_mode) continue;
-            CHECK(event->forwarding_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE &&
+            /* A forwarding move has its own word. */
+            CHECK(event->forwarding_mode==XR_LIR_OWNERSHIP_TRANSFER_MOVE && (word&65535u)==XR_RBC_OWNER_BINDING_MOVE &&
                 event->view_parameter==UINT32_MAX && pc+1<function->code_count && !a.window);
             /* The released Array of a forwarded NEW is a plain local owner and
              * takes the specialized release word; a READ releases its Cell. */
@@ -84,7 +85,7 @@ static void array_forwarding_bytecode_corruptions(void) {
     uint32_t *words=(uint32_t *)module->functions[0].code;
     uint32_t tested=0;
     for (size_t pc=0;pc<module->functions[0].code_count;++pc) {
-        uint32_t word=words[pc]; if ((word&255)!=XR_RBC_VALUE_ACCESS) continue;
+        uint32_t word=words[pc]; if ((word&255)!=XR_RBC_VALUE_ACCESS && (word&255)!=XR_RBC_OWNER_BINDING_MOVE) continue;
         XrRbcValueAccess *access=&accesses[word>>16];
         if ((access->operation!=XR_RBC_VALUE_BINDING_NEW && access->operation!=XR_RBC_VALUE_BINDING_READ) || !access->index) continue;
         XrLirHomeEvent *event=&events[access->index-1]; XrLirHomeEvent original=*event;
@@ -240,13 +241,21 @@ static void array_forwarding_native_failures(XrRbcProgram *program) {
 #endif
 #if defined(XR_ARRAY_FORWARDING_ALLOC_CASES)
 typedef struct ArrayForwardProbe { XrRbcExecution *execution; uint32_t index; size_t pc; unsigned mode; bool read,checked; } ArrayForwardProbe;
+/* Runs the probed access through the step its actual word selects, as the
+ * interpreter does. */
+static XrRbcStatus array_forwarding_word_step(const XrRbcModule *module,XrRbcStack *stack,size_t pc) {
+    uint32_t word=module->functions[0].code[pc];
+    return (word&255u)==XR_RBC_OWNER_BINDING_MOVE ? xr_rbc_binding_move_step(module,stack,word>>16,pc+1) :
+        xr_rbc_values_step(module,stack,word>>16,pc+1,0);
+}
 static void array_forwarding_probe_root(void *context) {
     ArrayForwardProbe *probe=context; XrRbcExecution *execution=probe->execution;
     const XrRbcModule *module=execution->module; XrRbcStack *stack=&execution->stack;
     CHECK(xr_rbc_values_begin(module,stack,0,0)==XR_RBC_OK);
     for (size_t pc=0;!probe->read && pc<probe->pc;++pc) {
         uint32_t word=module->functions[0].code[pc], op=word&65535u;
-        CHECK(op==XR_RBC_VALUE_ACCESS || op==XR_RBC_OWNER_DROP || op==XR_RBC_OWNER_COPY || op==XR_RBC_OWNER_EDGE);
+        CHECK(op==XR_RBC_VALUE_ACCESS || op==XR_RBC_OWNER_DROP || op==XR_RBC_OWNER_COPY || op==XR_RBC_OWNER_EDGE ||
+            op==XR_RBC_OWNER_BINDING_MOVE || op==XR_RBC_OWNER_ARRAY_UPDATE);
         CHECK(xr_rbc_values_step(module,stack,word>>16,pc+1,0)==XR_RBC_OK);
     }
     RbcValueActivation *activation=stack->values->top; const XrRbcValueCode *code=activation->code;
@@ -275,12 +284,12 @@ static void array_forwarding_probe_root(void *context) {
     XrtManagedHeader *old_source=*from.owner,*old_target=*to.owner;
     int32_t references=old_source ? atomic_load(&old_source->references) : 0;
     if (probe->mode<2) {
-        CHECK(xr_rbc_values_step(module,stack,probe->index,probe->pc+1,0)==XR_RBC_OK &&
+        CHECK(array_forwarding_word_step(module,stack,probe->pc)==XR_RBC_OK &&
             stack->frames[0].pc==probe->pc+2 && !*from.owner && *to.owner==incoming && atomic_load(&incoming->references)==references);
     } else {
         CHECK(!rbc_value_binding_forward(activation,access) && *from.owner==old_source && *to.owner==old_target);
         if (probe->mode==2 || probe->mode==4) {
-            CHECK(xr_rbc_values_step(module,stack,probe->index,probe->pc+1,0)==XR_RBC_OK && stack->frames[0].pc==probe->pc+1 &&
+            CHECK(array_forwarding_word_step(module,stack,probe->pc)==XR_RBC_OK && stack->frames[0].pc==probe->pc+1 &&
                 *from.owner==incoming && *to.owner==incoming && atomic_load(&incoming->references)==references+(references<0 ? -1 : 1));
             uint32_t word=module->functions[0].code[probe->pc+1];
             CHECK(xr_rbc_values_step(module,stack,word>>16,probe->pc+2,0)==XR_RBC_OK && !*from.owner &&
@@ -304,7 +313,8 @@ static void array_forwarding_live_fallbacks(void) {
         const XrRbcModule *module=xr_rbc_program_view(program); const XrRbcValueCode *code=xr_rbc_module_value_code(module,0);
         ArrayForwardProbe probe={.mode=mode%9,.read=mode>=9,.pc=SIZE_MAX};
         for (size_t pc=0;pc<module->functions[0].code_count;++pc) { uint32_t word=module->functions[0].code[pc];
-            if ((word&65535u)==XR_RBC_VALUE_ACCESS && code->accesses[word>>16].operation==
+            if (((word&65535u)==XR_RBC_VALUE_ACCESS || (word&65535u)==XR_RBC_OWNER_BINDING_MOVE) &&
+                code->accesses[word>>16].operation==
                 (probe.read ? XR_RBC_VALUE_BINDING_READ : XR_RBC_VALUE_BINDING_NEW)) {
                 probe.pc=pc; probe.index=word>>16; break; } }
         CHECK(probe.pc!=SIZE_MAX && xr_rbc_program_prepare(program,NULL,0,&probe.execution)==XR_RBC_OK);

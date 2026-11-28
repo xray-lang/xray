@@ -547,6 +547,15 @@ XR_RBC_CASE(OWNER_STRING_LENGTH) {
     if (status != XR_RBC_OK) return status;
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(OWNER_BINDING_MOVE) {
+    XR_RBC_FRAME_STEP(xr_rbc_binding_move_step);
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(OWNER_ARRAY_UPDATE) {
+    XrRbcStatus status = xr_rbc_array_update_step(module, stack, instruction >> 16, pc);
+    if (status != XR_RBC_OK) return status;
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(OWNER_CALL) {
     XR_RBC_FRAME_STEP(xr_rbc_owner_call_step);
     XR_RBC_NEXT();
@@ -592,6 +601,15 @@ default:
         uint32_t index = instruction >> 16;
         XrRbcStatus status = op == XR_RBC_OWNER_STRING_EQUAL ? xr_rbc_string_equal_step(module, stack, index, pc) :
             xr_rbc_string_length_step(module, stack, index, pc);
+        if (status != XR_RBC_OK) return status;
+        XR_RBC_NEXT();
+    }
+    if (op == XR_RBC_OWNER_BINDING_MOVE) {
+        XR_RBC_FRAME_STEP(xr_rbc_binding_move_step);
+        XR_RBC_NEXT();
+    }
+    if (op == XR_RBC_OWNER_ARRAY_UPDATE) {
+        XrRbcStatus status = xr_rbc_array_update_step(module, stack, instruction >> 16, pc);
         if (status != XR_RBC_OK) return status;
         XR_RBC_NEXT();
     }

@@ -182,7 +182,7 @@ static const XrLirHomeEvent *rbc_value_binding_forwarding_event(const XrRbcModul
 static bool rbc_value_binding_forwarding_words(const XrRbcModule *module,const XrRbcFunction *function,
     const XrRbcValueCode *code,uint32_t index,size_t pc) {
     if (index>=code->access_count || index>UINT16_MAX || pc>=function->code_count || function->code_count-pc<=2 ||
-        function->code[pc]!=(XR_RBC_VALUE_ACCESS | (index<<16))) return false;
+        function->code[pc]!=((uint32_t)xr_rbc_module_value_opcode(module,code,index) | (index<<16))) return false;
     uint32_t word=function->code[pc+1], drop_index=word>>16;
     if (drop_index>=code->access_count || (word&65535u)!=xr_rbc_module_value_opcode(module,code,drop_index)) return false;
     XrRbcValueAccess access=code->accesses[index], drop=code->accesses[drop_index];

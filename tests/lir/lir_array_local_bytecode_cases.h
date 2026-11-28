@@ -151,8 +151,13 @@ static void array_local_bytecode_cases(void) {
     CHECK(tested==3);
     XrRbcModule raw=*module; raw.code_lease=(XrRbcCodeLease){0}; XrRbcExecution *execution=NULL;
     CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
-    /* Clearing the optional projection retains the original admitted kernel. */
+    /* Clearing the optional projection retains the original admitted kernel;
+     * those updates then select the generic word. */
     for (size_t n=0;n<code->access_count;++n) if (accesses[n].operation==XR_RBC_VALUE_ARRAY) accesses[n].other=0;
+    uint32_t *words=(uint32_t *)module->functions[0].code; size_t generic=0;
+    for (size_t pc=0;pc<module->functions[0].code_count;++pc)
+        if ((words[pc]&255u)==XR_RBC_OWNER_ARRAY_UPDATE) { words[pc]=(words[pc]&~255u)|XR_RBC_VALUE_ACCESS; ++generic; }
+    CHECK(generic);
     array_forwarding_run_retired(program,NULL,0,42);
 }
 

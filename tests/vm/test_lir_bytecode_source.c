@@ -300,6 +300,102 @@ static void owner_calls(void) {
     xr_rbc_program_destroy(program);
 }
 
+/* Set and push of a local i64 Array through its binding, and the binding
+ * moves around them, use their own words outside Array regions. Growth past
+ * capacity takes the update through the binding's place. */
+static void local_array_updates(void) {
+    XrRbcProgram *program = callable(
+        "fn bump(x:i64)->i64 {\n"
+        "    return x*3+1\n"
+        "}\n"
+        "fn updates(n:i64)->i64 {\n"
+        "    var a:Array<i64>=[]\n"
+        "    var i=0\n"
+        "    while (i<n) {\n"
+        "        a.push(bump(i))\n"
+        "        i=i+1\n"
+        "    }\n"
+        "    i=0\n"
+        "    while (i<n) {\n"
+        "        a[i]=bump(a[i])\n"
+        "        i=i+1\n"
+        "    }\n"
+        "    var s=0\n"
+        "    i=0\n"
+        "    while (i<n) {\n"
+        "        s=s+a[i]\n"
+        "        i=i+1\n"
+        "    }\n"
+        "    return s\n"
+        "}\nupdates(5)\n");
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    const XrRbcFunction *entry = &module->functions[0];
+    uint32_t *words = (uint32_t *)(void *)entry->code;
+    size_t updates = 0, moves = 0;
+    for (size_t pc = 0; pc < entry->code_count; ++pc) {
+        uint32_t op = words[pc] & 255u;
+        updates += op == XR_RBC_OWNER_ARRAY_UPDATE; moves += op == XR_RBC_OWNER_BINDING_MOVE;
+    }
+    CHECK(updates == 2 && moves == 4);
+    uint64_t argument = 5;
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(module, 0, &argument, 1, xr_rbc_program_locations(program), &execution) == XR_RBC_OK);
+    xr_rbc_execution_free(&execution);
+    for (size_t pc = 0; pc < entry->code_count; ++pc) {
+        uint32_t original = words[pc], op = original & 255u;
+        if (op != XR_RBC_OWNER_ARRAY_UPDATE && op != XR_RBC_OWNER_BINDING_MOVE) continue;
+        const uint32_t replacements[] = {XR_RBC_VALUE_ACCESS,
+            op == XR_RBC_OWNER_ARRAY_UPDATE ? XR_RBC_OWNER_BINDING_MOVE : XR_RBC_OWNER_ARRAY_UPDATE};
+        for (size_t r = 0; r < sizeof(replacements) / sizeof(*replacements); ++r) {
+            words[pc] = (original & ~255u) | replacements[r];
+            CHECK(xr_rbc_module_prepare(module, 0, &argument, 1, xr_rbc_program_locations(program),
+                &execution) == XR_RBC_INVALID && !execution);
+        }
+        words[pc] = original;
+    }
+    CHECK(run(program, 5) == 110 && run(program, 100) == 44950);
+    xr_rbc_program_destroy(program);
+}
+
+/* A push of an inline class element carries a local update ordinal too, but
+ * only i64 Arrays update in place, so it keeps the generic word. */
+static void inline_array_push_generic(void) {
+    XrRbcProgram *program = callable(
+        "final class Box {\n"
+        "    private v: i64\n"
+        "    init(v: i64) { this.v = v }\n"
+        "    value() -> i64 { return this.v }\n"
+        "}\n"
+        "fn boxes(n:i64)->i64 {\n"
+        "    var xs:Array<Box>=[]\n"
+        "    var i=0\n"
+        "    while (i<n) {\n"
+        "        xs.push(Box(i))\n"
+        "        i=i+1\n"
+        "    }\n"
+        "    var s=0\n"
+        "    i=0\n"
+        "    while (i<n) {\n"
+        "        s=s+xs[i].value()\n"
+        "        i=i+1\n"
+        "    }\n"
+        "    return s\n"
+        "}\nboxes(5)\n");
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    const XrRbcValueCode *code = xr_rbc_module_value_code(module, 0);
+    const XrRbcFunction *entry = &module->functions[0];
+    size_t pushes = 0;
+    for (size_t pc = 0; pc < entry->code_count; ++pc) {
+        uint32_t word = entry->code[pc];
+        CHECK((word & 255u) != XR_RBC_OWNER_ARRAY_UPDATE);
+        if ((word & 255u) != XR_RBC_VALUE_ACCESS || (word >> 16) >= code->access_count) continue;
+        XrRbcValueAccess access = code->accesses[word >> 16];
+        pushes += access.operation == XR_RBC_VALUE_ARRAY && access.index == XR_LIR_ARRAY_OP_PUSH && access.other;
+    }
+    CHECK(pushes == 1 && run(program, 5) == 10 && run(program, 100) == 4950);
+    xr_rbc_program_destroy(program);
+}
+
 static const char i64_equality_source[] =
     "fn equality(x:i64,y:i64)->i64{if(x==y){return 1}\n"
     "if(x!=y){return 2}\nreturn 3}\nprint(equality(1,2))\n";
@@ -978,6 +1074,8 @@ int main(int argc, char **argv) {
     local_owner_array_words();
     local_string_words();
     owner_calls();
+    local_array_updates();
+    inline_array_push_generic();
     numerical_oracles();
     actual_entry_and_refusal();
     f64_transport();

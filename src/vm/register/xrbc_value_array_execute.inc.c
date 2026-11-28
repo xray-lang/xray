@@ -249,6 +249,31 @@ static XrtManagedStatus rbc_value_array_inline(const XrRbcModule *module,XrRbcSt
     status=xrt_array_backing_inline_at((const XrtArrayBacking *)owner,binding.element,at,&row);
     return status==XRT_MANAGED_OK ? rbc_value_inline_extract(module,stack,activation,access.result,element,row) : status;
 }
+/* Set, push and random fill through the binding's place: every element kind
+ * and capacity, after any local i64 update declined. */
+static XrtManagedStatus rbc_value_array_binding_update(const XrRbcModule *module,XrRbcStack *stack,
+    RbcValueActivation *activation,XrRbcValueAccess access,XrtBackingArrayKind kind,uint32_t source) {
+    const XrtBackingTypes *types=NULL;
+    XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
+    if (status!=XRT_MANAGED_OK) return status;
+    activation->backings_ready=true;
+    const uint32_t *args=activation->code->arguments+access.first;
+    bool random_bytes=access.index==XR_LIR_ARRAY_OP_RANDOM_BYTES;
+    XrtExternalOwner external; XrtPlace binding;
+    status=rbc_value_binding_place(module,stack,rbc_value_origin(activation,args[0]),&external,&binding);
+    XrtArrayUpdate update={.operation=random_bytes ? XRT_ARRAY_UPDATE_RANDOM_BYTES :
+        access.index==XR_LIR_ARRAY_OP_SET ? XRT_ARRAY_UPDATE_SET : XRT_ARRAY_UPDATE_PUSH,
+        .item={.kind=kind}};
+    if (status==XRT_MANAGED_OK && !random_bytes)
+        status=rbc_value_array_item(stack,activation,args[access.count-1],kind,&update.item);
+    if (access.index==XR_LIR_ARRAY_OP_SET) {
+        XrRbcRegister *index=rbc_value_register(stack,activation,args[1]);
+        if (!index) return XRT_MANAGED_ARGUMENT;
+        memcpy(&update.index,&index->bits,8);
+    }
+    const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
+    return status==XRT_MANAGED_OK ? xrt_array_update_place(binding,kind,activation->frame,workspace->first_owner,types,&update) : status;
+}
 static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStack *stack,
     RbcValueActivation *activation,XrRbcValueAccess access,uint32_t source) {
     if (access.operation!=XR_RBC_VALUE_ARRAY) return rbc_value_binding_step(module,stack,activation,access,source);
@@ -266,27 +291,12 @@ static XrtManagedStatus rbc_value_array_step(const XrRbcModule *module,XrRbcStac
     bool random_bytes=access.index==XR_LIR_ARRAY_OP_RANDOM_BYTES;
     bool update_binding=xr_lir_array_binding_update((XrLirArrayOperation)access.index);
     if (!random_bytes && access.other && rbc_value_array_local_update(stack,activation,access)) return XRT_MANAGED_OK;
+    if (update_binding) return rbc_value_array_binding_update(module,stack,activation,access,kind,source);
     const XrtBackingTypes *types=NULL;
-    if (create || update_binding || access.index==XR_LIR_ARRAY_OP_DISPLAY) {
+    if (create || access.index==XR_LIR_ARRAY_OP_DISPLAY) {
         XrtManagedStatus status=xrt_native_values_backings(xrt_value_root_current(source),&types);
         if (status!=XRT_MANAGED_OK) return status;
         activation->backings_ready=true;
-    }
-    if (update_binding) {
-        XrtExternalOwner external; XrtPlace binding;
-        XrtManagedStatus status=rbc_value_binding_place(module,stack,rbc_value_origin(activation,args[0]),&external,&binding);
-        XrtArrayUpdate update={.operation=random_bytes ? XRT_ARRAY_UPDATE_RANDOM_BYTES :
-            access.index==XR_LIR_ARRAY_OP_SET ? XRT_ARRAY_UPDATE_SET : XRT_ARRAY_UPDATE_PUSH,
-            .item={.kind=kind}};
-        if (status==XRT_MANAGED_OK && !random_bytes)
-            status=rbc_value_array_item(stack,activation,args[access.count-1],kind,&update.item);
-        if (access.index==XR_LIR_ARRAY_OP_SET) {
-            XrRbcRegister *index=rbc_value_register(stack,activation,args[1]);
-            if (!index) return XRT_MANAGED_ARGUMENT;
-            memcpy(&update.index,&index->bits,8);
-        }
-        const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window];
-        return status==XRT_MANAGED_OK ? xrt_array_update_place(binding,kind,activation->frame,workspace->first_owner,types,&update) : status;
     }
     const XrLirValueHome *result=rbc_value_home(activation->code,access.result);
     if (create) {

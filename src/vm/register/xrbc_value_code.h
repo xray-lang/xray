@@ -289,6 +289,30 @@ static inline bool rbc_value_binding_copy(const XrtValueImage *image, const XrRb
         binding->first_owner < homes->frame.slot_count && homes->frame.owned_offsets &&
         homes->frame.owned_offsets[binding->first_owner] == binding->offset;
 }
+/* A binding created from or read back into its owner by a forwarding move,
+ * which admission pairs with the release word it replaces. */
+static inline bool rbc_value_binding_move(const XrRbcValueCode *code, XrRbcValueAccess access) {
+    const XrLirValueHomes *homes = code->homes;
+    return (access.operation == XR_RBC_VALUE_BINDING_NEW || access.operation == XR_RBC_VALUE_BINDING_READ) &&
+        access.index && homes && homes->events && access.index <= homes->event_count &&
+        homes->events[access.index - 1].forwarding_mode == XR_LIR_OWNERSHIP_TRANSFER_MOVE;
+}
+/* A Set or push of an i64 Array through its local binding, carrying the
+ * common operation ordinal of a local update. */
+static inline bool rbc_value_array_update(const XrtValueImage *image, const XrRbcValueCode *code,
+    XrRbcValueAccess access) {
+    const XrLirValueHomes *homes = code->homes;
+    if (access.operation != XR_RBC_VALUE_ARRAY || !access.other || access.count < 2 ||
+        (access.index != XR_LIR_ARRAY_OP_SET && access.index != XR_LIR_ARRAY_OP_PUSH) || !image || !image->types ||
+        !homes || !homes->bindings || !homes->workspaces || access.window >= homes->workspace_count ||
+        !code->arguments || access.first > code->argument_count || access.count > code->argument_count - access.first)
+        return false;
+    uint32_t receiver = code->arguments[access.first];
+    if (!receiver || receiver > homes->value_count) return false;
+    const XrLirHomeBinding *binding = &homes->bindings[receiver];
+    return binding->kind == XR_LIR_HOME_BINDING_LOCAL && binding->type && binding->type <= image->type_count &&
+        image->types[binding->type - 1].kind == XRT_VALUE_ARRAY_I64;
+}
 /* A scalar without a typed home, a binding or a Frame home. */
 static inline bool rbc_value_plain_scalar(const XrRbcValueCode *code, uint32_t value) {
     const XrLirValueHomes *homes = code->homes;
@@ -327,7 +351,7 @@ static inline bool rbc_value_call_word(const XrtValueImage *image, const XrRbcVa
 static inline bool rbc_value_owner_word(XrRbcOp op) {
     return op >= XR_RBC_OWNER_DROP && op <= XR_RBC_OWNER_RETURN;
 }
-XR_STATIC_ASSERT(XR_RBC_OWNER_RETURN - XR_RBC_OWNER_DROP == 9, "the ten owner words are adjacent");
+XR_STATIC_ASSERT(XR_RBC_OWNER_RETURN - XR_RBC_OWNER_DROP == 11, "the twelve owner words are adjacent");
 /* Emission and admission select every word from the same admitted access
  * description and its image: a specialized word only where its static
  * premises hold and no Array region role claims the access. A direct call
@@ -365,6 +389,8 @@ static inline XrRbcOp rbc_value_access_opcode(const XrtValueImage *image, const 
         !access.other && !access.index && !access.first && !access.count && !access.window &&
         rbc_value_local_string(image, code, access.source) && rbc_value_register_operand(code, access.result))
         return XR_RBC_OWNER_STRING_LENGTH;
+    if (rbc_value_binding_move(code, access)) return XR_RBC_OWNER_BINDING_MOVE;
+    if (rbc_value_array_update(image, code, access)) return XR_RBC_OWNER_ARRAY_UPDATE;
     if (rbc_value_call_word(image, code, callee, access)) return XR_RBC_OWNER_CALL;
     if (access.operation == XR_RBC_VALUE_RETURN && !access.index && !access.other && !access.result &&
         !access.first && !access.count && !access.window &&

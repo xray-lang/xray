@@ -254,6 +254,8 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
         case XR_RBC_OWNER_CELL_READ:
         case XR_RBC_OWNER_STRING_EQUAL:
         case XR_RBC_OWNER_STRING_LENGTH:
+        case XR_RBC_OWNER_BINDING_MOVE:
+        case XR_RBC_OWNER_ARRAY_UPDATE:
         case XR_RBC_OWNER_CALL:
         case XR_RBC_OWNER_RETURN:
         case XR_RBC_VALUE_ACCESS: return rbc_value_transfer(s, (uint32_t)v.immediate);

@@ -2379,6 +2379,37 @@ static XR_NOINLINE XrRbcStatus xr_rbc_string_length_step(const XrRbcModule *modu
     return XR_RBC_OK;
 }
 
+/* A forwarding binding move skips the release word it replaces. When the
+ * Frame cannot forward, the binding is copied and the release word runs. */
+static XR_NOINLINE XrRbcStatus xr_rbc_binding_move_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    uint32_t source = rbc_value_source(module, stack, pc);
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (!activation) return xr_rbc_values_step(module, stack, index, pc, source);
+    const XrRbcValueAccess access = activation->code->accesses[index];
+    bool forwarded = rbc_value_binding_forward(activation, access);
+    if (!forwarded) {
+        XrtManagedStatus status = rbc_value_array_step(module, stack, activation, access, source);
+        if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    }
+    stack->frames[stack->depth - 1].pc = forwarded ? pc + 1 : pc;
+    return XR_RBC_OK;
+}
+/* An i64 Array update first tries the local update in place; anything it
+ * declines, such as growth or the first update before backings are known,
+ * updates through the binding's place. */
+static XR_NOINLINE XrRbcStatus xr_rbc_array_update_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+    const XrRbcValueAccess access = activation->code->accesses[index];
+    if (rbc_value_array_local_update(stack, activation, access)) return XR_RBC_OK;
+    uint32_t source = rbc_value_source(module, stack, pc);
+    XrtManagedStatus status = rbc_value_array_binding_update(module, stack, activation, access,
+        xrt_backing_array_kind_from_value(XRT_VALUE_ARRAY_I64), source);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+    return XR_RBC_OK;
+}
 /* The selected call passes plain scalars by value and lends plain local
  * owners to owner formals, exactly as the generic call does for these kinds.
  * Scalars are snapshotted first: reserve may move the banks and the callee
