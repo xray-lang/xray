@@ -7,6 +7,7 @@
  * test_rbc_raw_values.c - Raw code metadata and independently prepared State
  */
 #include "../lir/lir_test_programs.h"
+#include "vm/register/xrbc_code_owner.h"
 #include "lir/xlir_state.h"
 #include "vm/register/xrbc_ctfe.h"
 #include "vm/register/xrbc_lir.h"

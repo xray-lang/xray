@@ -335,9 +335,5 @@ static inline uint32_t rbc_map_formal(const XrRbcValueCode *code, uint32_t value
         parameter : UINT32_MAX;
 }
 
-/* Descriptions borrow the actual code lease, as the existing common homes do.
- * Raw bytecode cannot acquire typed owning permissions from forged pointers.
- * Scalar-only code without any typed operation has no descriptor. */
-XR_FUNC const XrRbcValueCode *xr_rbc_module_value_code(const XrRbcModule *, uint32_t function);
 typedef struct XrRbcValueRuntime XrRbcValueRuntime;
 #endif // XRBC_VALUE_CODE_H

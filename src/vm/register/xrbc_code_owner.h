@@ -64,6 +64,22 @@ static inline const XrRbcCodeOwner *xr_rbc_module_code_owner(const XrRbcModule *
         return module->code_lease.owner;
     return xr_rbc_module_code_owner_compared(module);
 }
+/* Typed descriptions borrow the actual code lease, or the raw caller's
+ * explicit immutable storage when no owner is attached. Raw bytecode cannot
+ * acquire typed owning permissions from forged pointers, and scalar-only code
+ * without a typed operation has no descriptor. Every typed operation asks
+ * these, so they stay inline with the identity check above. */
+static inline const XrtValueImage *xr_rbc_module_value_image(const XrRbcModule *module) {
+    const XrRbcCodeOwner *owner = xr_rbc_module_code_owner(module);
+    return owner ? owner->values : module ? module->borrowed_value_image : NULL;
+}
+static inline const XrRbcValueCode *xr_rbc_module_value_code(const XrRbcModule *module, uint32_t function) {
+    const XrRbcCodeOwner *owner = xr_rbc_module_code_owner(module);
+    if (owner) return function < owner->function_count && owner->value_codes ? owner->value_codes[function] : NULL;
+    return module && module->functions && module->borrowed_value_codes &&
+        module->borrowed_value_code_count == module->function_count && function < module->function_count ?
+        module->borrowed_value_codes[function] : NULL;
+}
 XR_FUNC const XrRbcCallableEntry *xr_rbc_module_callable_entries(const XrRbcModule *);
 XR_FUNC size_t xr_rbc_module_callable_entry_count(const XrRbcModule *);
 XR_FUNC const uint32_t *xr_rbc_module_type_callables(const XrRbcModule *);

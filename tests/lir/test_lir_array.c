@@ -7,6 +7,7 @@
  * test_lir_array.c - Closed Array shapes survive receiving-owner transforms
  */
 #include "lir/xlir_internal.h"
+#include "vm/register/xrbc_code_owner.h"
 #include "lir/xlir_inline.h"
 #include "lir/xlir_rebuild.h"
 #include "lir/xlir_sccp.h"

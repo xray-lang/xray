@@ -7,6 +7,7 @@
  * test_lir_bytecode.c - Hand-built SSA execution, ownership and capacity tests.
  */
 #include "../lir/lir_test_programs.h"
+#include "vm/register/xrbc_code_owner.h"
 #include "../lir/lir_text_call_fixture.h"
 #include "base/xmalloc.h"
 #include "lir/xlir_internal.h"

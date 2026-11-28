@@ -31,9 +31,6 @@ typedef struct XrRbcHomeLocation {
  * descriptor. Cold homes stay outside the hot
  * function table so adding physical metadata cannot change interpreter stride. */
 XR_FUNC const XrLirValueHomes *xr_rbc_module_value_homes(const XrRbcModule *, uint32_t function);
-/* The same lease or the raw caller's explicit immutable storage protects this
- * metadata borrow. It grants no owning slot or escaping environment. */
-XR_FUNC const XrtValueImage *xr_rbc_module_value_image(const XrRbcModule *);
 /* A scalar-only or entirely borrowed activation creates no frame and performs
  * no payload initialization. Formal parameters borrow their caller's normalized
  * stable places; they never acquire references merely to enter a function. */

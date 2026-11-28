@@ -14,6 +14,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 #include "base/xmalloc.h"
+#include "vm/register/xrbc_code_owner.h"
 #include "lir/xlir_builder.h"
 #include "lir/xlir_c.h"
 #include "lir/xlir_inline.h"

@@ -1,6 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License.
  * Literal provenance remains owned across vector growth and rewrites. */
-#include "vm/register/xrbc_value_code.h"
+#include "vm/register/xrbc_code_owner.h"
 static void map_literal_metadata(void) {
     XrLirModule *m=NULL,*copy=NULL;OK(xr_lir_module_create(NULL,&m));OK(xr_lir_module_create(NULL,&copy));
     char path[]="app.xr";XrLirMapLiteralOrigin items[]={{0,3,12},{1,4,9}};

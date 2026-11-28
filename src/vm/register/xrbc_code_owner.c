@@ -78,14 +78,3 @@ XR_FUNC const XrLirValueHomes *xr_rbc_module_value_homes(const XrRbcModule *modu
     const XrRbcValueCode *code=xr_rbc_module_value_code(module,function);
     return code ? code->homes : NULL;
 }
-XR_FUNC const XrtValueImage *xr_rbc_module_value_image(const XrRbcModule *module) {
-    const XrRbcCodeOwner *owner = xr_rbc_module_code_owner(module);
-    return owner ? owner->values : module ? module->borrowed_value_image : NULL;
-}
-XR_FUNC const XrRbcValueCode *xr_rbc_module_value_code(const XrRbcModule *module, uint32_t function) {
-    const XrRbcCodeOwner *owner = xr_rbc_module_code_owner(module);
-    if (owner) return function < owner->function_count && owner->value_codes ? owner->value_codes[function] : NULL;
-    return module && module->functions && module->borrowed_value_codes &&
-        module->borrowed_value_code_count==module->function_count && function<module->function_count ?
-        module->borrowed_value_codes[function] : NULL;
-}
