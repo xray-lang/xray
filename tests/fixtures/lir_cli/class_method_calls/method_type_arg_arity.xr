@@ -1,0 +1,9 @@
+class Holder {
+    init() {}
+    identity<T>(value: T) -> T {
+        return value
+    }
+}
+
+const holder = Holder()
+print(holder.identity<i64, string>(1))

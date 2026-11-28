@@ -29,6 +29,14 @@
     "stdout": "",
     "stderr": ""
   },
+  "method_body_generic_call": {
+    "exit": 0,
+    "stdout": "42\n",
+    "stderr": ""
+  },
+  "method_type_arg_arity": {
+    "source_error": ":9:14: error: call requires its exact explicit type arguments or an omitted list"
+  },
   "hir_scope_bad_label": {
     "source_error": ":3:17: error: E0327: unknown named argument"
   },

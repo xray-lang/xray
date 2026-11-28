@@ -1,0 +1,15 @@
+class Box<T> {
+value: T
+init(value: T) { this.value = value }
+get() -> T { return this.value }
+}
+class Holder {
+n: i64
+init(n: i64) { this.n = n }
+total() -> i64 {
+const b = Box<i64>(2)
+return this.n + b.get()
+}
+}
+const h = Holder(40)
+print(h.total())

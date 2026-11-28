@@ -40,9 +40,11 @@ static XrXirStatus class_method_entry(const XirClassMethodRead *input,uint32_t e
     uint32_t kind=table->declarations?table->declarations[d].kind:table->identities[d].kind;
     uint32_t arity=table->declarations?table->declarations[d].parameter_count:table->identities[d].arity;
     uint32_t native=table->declarations?table->declarations[d].native.native_id:table->identities[d].native.native_id;
+    /* Only the method's own type parameters make it generic. Its type-argument
+     * pool serves the generic call sites in its body and is no dispatch fact. */
     if(kind!=XR_XIR_NOMINAL_CLASS || arity || native || !receiver || receiver->kind!=XR_XIR_TYPE_NOMINAL ||
         receiver->nominal.declaration!=d || receiver->nominal.argument_count || receiver->parameter_span ||
-        (domain->generics && (domain->generics[entry].parameter_count || domain->generics[entry].argument_count)))return XR_XIR_BAD_TYPE;
+        (domain->generics && domain->generics[entry].parameter_count))return XR_XIR_BAD_TYPE;
     return XR_XIR_OK;
 }
 static XrXirStatus class_method_override(const XirClassMethodRead *input,uint32_t derived,uint32_t base) {
