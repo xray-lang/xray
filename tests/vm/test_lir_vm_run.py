@@ -190,6 +190,16 @@ def main():
             'fn q(data: Slice<u8>, h: H) -> i64 {\nreturn len(data)\n}\n' + reach_head +
             'fn run() -> i64 {\nconst a: Array<u8> = [1, 2, 3, 4]\nreturn code(a[:], H())\n}\nprint(run())\n',
             1, b'view lifetime normalization', located=False)
+        for depth in (1, 12):
+            aliases = 'type Level0 = i64\n' + ''.join(
+                f'type Level{n} = (Array<Level{n - 1}>, Array<Level{n - 1}>)\n' for n in range(1, depth + 1))
+            composed = (aliases + f'class H {{\ncells: Array<Level{depth}>\ninit() {{ this.cells = [] }}\n}}\n'
+                'fn q(data: Slice<u8>, h: H) -> i64 { return len(data) }\n' + reach_head + 'print(8)\n')
+            name = f'view-reach-composite-{depth}'
+            if depth == 1:
+                run(name, composed, stdout=b'8\n')
+            else:
+                run(name, composed, 1, b'view lifetime normalization', located=False)
         run('literal-zero', 'const n=0\nprint(n)\n', stdout=b'0\n')
         run('printing-closure', 'fn leaf(x:i64)->i64{print(x)\nreturn x}\n'
             'fn call(x:i64)->i64{return leaf(x)}\nprint(call(7))\n', stdout=b'7\n7\n')

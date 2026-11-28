@@ -228,14 +228,20 @@ static XrXirStatus view_access_entry_module(ViewAccess *a,const XrXirViewLoanOri
  * (callable, Cell, view, pointer, buffer, task, channel, generic or native)
  * refuse the shortcut and leave the ordinary root analysis in charge. */
 #define VIEW_REACH_LIMIT 64u
+#define VIEW_REACH_WORK_LIMIT 4096u
 typedef struct ViewReach {
     const XrXirTypes *types;
     XrXirType element;
     /* A library may gain descendants of an exported open class in importers. */
     bool open_world;
     uint32_t visited[VIEW_REACH_LIMIT];
-    uint32_t visited_count;
+    uint32_t visited_count, steps_left;
 } ViewReach;
+static bool view_reach_step(ViewReach *r) {
+    if (!r->steps_left) return false;
+    --r->steps_left;
+    return true;
+}
 static bool view_reach_type_apart(ViewReach *r, XrXirType type, uint32_t depth);
 static bool view_reach_fields_apart(ViewReach *r, const XrXirNominalDeclaration *d, uint32_t depth) {
     if (d->native.native_id || d->parameter_count || d->kind > XR_XIR_NOMINAL_CLASS ||
@@ -244,19 +250,24 @@ static bool view_reach_fields_apart(ViewReach *r, const XrXirNominalDeclaration 
         if (!view_reach_type_apart(r, d->fields[f].type, depth + 1)) return false;
     return true;
 }
-static bool view_reach_descends(const XrXirNominalTable *table, uint32_t candidate, uint32_t ancestor, bool *known) {
+static bool view_reach_descends(ViewReach *r, uint32_t candidate, uint32_t ancestor, bool *descends) {
+    if (!view_reach_step(r)) return false;
+    const XrXirNominalTable *table = r->types->nominals;
+    *descends = false;
     uint32_t parent = table->declarations[candidate].parent;
     for (uint32_t step = 0; parent && step < VIEW_REACH_LIMIT; ++step) {
-        if (parent > table->count) { *known = false; return false; }
-        if (parent - 1u == ancestor) return true;
+        if (parent > table->count || !view_reach_step(r)) return false;
+        if (parent - 1u == ancestor) {
+            *descends = true;
+            return true;
+        }
         parent = table->declarations[parent - 1u].parent;
     }
-    *known = !parent;
-    return false;
+    return !parent;
 }
 static bool view_reach_declaration_apart(ViewReach *r, uint32_t declaration, uint32_t depth) {
     const XrXirNominalTable *table = r->types->nominals;
-    if (depth >= VIEW_REACH_LIMIT || declaration >= table->count) return false;
+    if (depth >= VIEW_REACH_LIMIT || declaration >= table->count || !view_reach_step(r)) return false;
     for (uint32_t v = 0; v < r->visited_count; ++v)
         if (r->visited[v] == declaration) return true;
     if (r->visited_count == VIEW_REACH_LIMIT) return false;
@@ -269,14 +280,15 @@ static bool view_reach_declaration_apart(ViewReach *r, uint32_t declaration, uin
     /* A class value carries every ancestor field and may be any descendant. */
     if (d->parent && !view_reach_declaration_apart(r, d->parent - 1u, depth + 1)) return false;
     for (uint32_t e = 0; e < table->count; ++e) {
-        bool known = true;
-        bool descends = view_reach_descends(table, e, declaration, &known);
-        if (!known || (descends && !view_reach_declaration_apart(r, e, depth + 1))) return false;
+        bool descends;
+        if (!view_reach_descends(r, e, declaration, &descends) ||
+            (descends && !view_reach_declaration_apart(r, e, depth + 1))) return false;
     }
     return true;
 }
 static bool view_reach_type_apart(ViewReach *r, XrXirType type, uint32_t depth) {
-    if (depth >= VIEW_REACH_LIMIT) return false;
+    /* Different paths can share a structural type, so depth alone cannot cap work. */
+    if (depth >= VIEW_REACH_LIMIT || !view_reach_step(r)) return false;
     if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE || type == XR_XIR_STRING ||
         type == XR_XIR_NEVER || xr_xir_type_is_number(type)) return true;
     const XrXirTypeNode *node = xr_xir_type_node(r->types, type);
@@ -311,8 +323,9 @@ static bool view_access_owner_unreachable(const ViewAccess *a, uint32_t value, u
     const XrXirTypeNode *node = xr_xir_type_node(types, object);
     if (!view || (view->kind != XR_XIR_TYPE_SLICE && view->kind != XR_XIR_TYPE_MUT_SLICE) ||
         !node || node->kind != XR_XIR_TYPE_NOMINAL) return false;
-    ViewReach reach = {types, view->element,
-        a->resolver->check.module->linkage_kind == XR_XIR_LIBRARY, {0}, 0};
+    ViewReach reach = {.types = types, .element = view->element,
+        .open_world = a->resolver->check.module->linkage_kind == XR_XIR_LIBRARY,
+        .steps_left = VIEW_REACH_WORK_LIMIT};
     return view_reach_type_apart(&reach, object, 0);
 }
 static XrXirStatus view_access_owner(ViewAccess *a,uint32_t value,uint32_t owner,bool writable,bool view,bool *blocked) {
