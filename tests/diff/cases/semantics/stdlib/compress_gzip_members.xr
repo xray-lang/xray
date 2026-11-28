@@ -1,0 +1,28 @@
+// gzip members are verified one after another and their payloads joined;
+// a header CRC is checked, zero padding after the last member is allowed,
+// and trailing data or a reserved flag bit is invalid. The bytes were made
+// with zlib so the case does not depend on this module's own encoder.
+import compress
+
+fn attempt(data: Array<u8>) -> string {
+    try {
+        const out = compress.gunzip(data[:])
+        return string.fromUtf8Lossy(out[:])
+    } catch (e: CompressionError) {
+        return "invalid"
+    }
+}
+
+var twoMembers: Array<u8> = [31, 139, 8, 0, 0, 0, 0, 0, 0, 255, 203, 72, 205, 201, 201, 87, 0, 0, 246, 249, 129, 237, 6, 0, 0, 0, 31, 139, 8, 0, 0, 0, 0, 0, 0, 255, 43, 207, 47, 202, 73, 1, 0, 67, 17, 119, 58, 5, 0, 0, 0]
+var headerChecked: Array<u8> = [31, 139, 8, 2, 0, 0, 0, 0, 0, 255, 144, 201, 75, 206, 72, 77, 206, 78, 77, 1, 0, 131, 186, 3, 173, 7, 0, 0, 0]
+var headerCorrupt: Array<u8> = [31, 139, 8, 2, 0, 0, 0, 0, 0, 255, 145, 201, 75, 206, 72, 77, 206, 78, 77, 1, 0, 131, 186, 3, 173, 7, 0, 0, 0]
+var zeroPadding: Array<u8> = [31, 139, 8, 0, 0, 0, 0, 0, 0, 255, 43, 72, 76, 73, 73, 77, 1, 0, 148, 203, 125, 183, 6, 0, 0, 0, 0, 0, 0, 0]
+var trailingGarbage: Array<u8> = [31, 139, 8, 0, 0, 0, 0, 0, 0, 255, 75, 79, 44, 74, 74, 76, 79, 5, 0, 109, 52, 153, 92, 7, 0, 0, 0, 65]
+var reservedFlag: Array<u8> = [31, 139, 8, 32, 0, 0, 0, 0, 0, 255, 43, 74, 45, 78, 45, 42, 75, 77, 1, 0, 194, 235, 162, 77, 8, 0, 0, 0]
+
+print(attempt(twoMembers))
+print(attempt(headerChecked))
+print(attempt(headerCorrupt))
+print(attempt(zeroPadding))
+print(attempt(trailingGarbage))
+print(attempt(reservedFlag))

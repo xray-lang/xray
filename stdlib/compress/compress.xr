@@ -153,6 +153,8 @@ const GZIP_FHCRC: i64 = 2
 const GZIP_FEXTRA: i64 = 4
 const GZIP_FNAME: i64 = 8
 const GZIP_FCOMMENT: i64 = 16
+// Bits 5 to 7 of FLG are reserved and must be zero.
+const GZIP_RESERVED_FLAGS: i64 = 224
 
 const ZLIB_CMF_DEFLATE_32K: i64 = 120
 const ZLIB_TRAILER_LEN: i64 = 4
@@ -763,6 +765,26 @@ fn inflateRaw(src: Slice<u8>) throws(CompressionError) -> Array<u8> {
     var decoder = Inflater(owned)
     return try (move decoder).run()
 }
+
+// One deflate stream at the start of src, with the number of bytes it spans.
+// A container whose stream is followed by more data (a gzip trailer and the
+// next member) needs that boundary, which inflateRaw does not report.
+class InflatedPrefix {
+    out: Array<u8>
+    consumed: i64
+
+    init(out: Array<u8>, consumed: i64) {
+        this.out = out
+        this.consumed = consumed
+    }
+}
+
+fn inflatePrefix(src: Slice<u8>) throws(CompressionError) -> InflatedPrefix {
+    var decoder = Inflater(copy src[0:len(src)])
+    var out = try decoder.run()
+    // Whole bytes still buffered were read ahead of the final block's end.
+    return InflatedPrefix(out, decoder.pos - decoder.bitCount / 8)
+}
 // ── Container framing ───────────────────────────────────────────────────────
 //
 // gzip and zlib are the same deflate stream under two different envelopes: a
@@ -818,19 +840,24 @@ export fn gzip(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION) -> Array<u8> {
     return out
 }
 
-// Unwrap a gzip member and decompress it. A member shorter than a header plus
-// an empty payload plus a trailer cannot be one, whatever its first two bytes
-// say, and a method other than deflate is one this decoder does not implement.
-export fn gunzip(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
-    if (!isGzipBytes(data)) { throw CompressionError.InvalidData }
+// Unwrap one gzip member at start and append its payload to out; returns
+// where the member ends. A member shorter than a header plus an empty payload
+// plus a trailer cannot be one, whatever its first two bytes say, and a method
+// other than deflate is one this decoder does not implement. Reserved flag
+// bits must be clear, and a header CRC, when present, must match the low half
+// of the CRC-32 of the header bytes before it.
+fn gunzipMember(data: Slice<u8>, start: i64, out: ref Array<u8>) throws(CompressionError) -> i64 {
     var total = len(data)
-    if (total < GZIP_MIN_MEMBER_LEN) { throw CompressionError.InvalidData }
-    if ((data[2] as i64) != GZIP_METHOD_DEFLATE) { throw CompressionError.InvalidData }
+    if (total - start < GZIP_MIN_MEMBER_LEN || !isGzipBytes(data[start:total])) {
+        throw CompressionError.InvalidData
+    }
+    if ((data[start + 2] as i64) != GZIP_METHOD_DEFLATE) { throw CompressionError.InvalidData }
 
     // The four optional fields are laid out in flag order, each sized either by
     // a count it carries or by its own terminating zero byte.
-    var flags = data[3] as i64
-    var pos = GZIP_HEADER_LEN
+    var flags = data[start + 3] as i64
+    if ((flags & GZIP_RESERVED_FLAGS) != 0) { throw CompressionError.InvalidData }
+    var pos = start + GZIP_HEADER_LEN
     if ((flags & GZIP_FEXTRA) != 0) {
         if (pos + 2 > total) { throw CompressionError.InvalidData }
         var extraLen = (data[pos] as i64) | ((data[pos + 1] as i64) << 8)
@@ -844,20 +871,48 @@ export fn gunzip(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
         while (pos < total && (data[pos] as i64) != 0) { pos++ }
         pos++
     }
-    if ((flags & GZIP_FHCRC) != 0) { pos = pos + 2 }
+    if ((flags & GZIP_FHCRC) != 0) {
+        if (pos + 2 > total) { throw CompressionError.InvalidData }
+        var stored = (data[pos] as i64) | ((data[pos + 1] as i64) << 8)
+        if ((crc32Bytes(data[start:pos]) & 65535) != stored) { throw CompressionError.InvalidData }
+        pos = pos + 2
+    }
     if (pos + GZIP_TRAILER_LEN > total) { throw CompressionError.InvalidData }
 
-    var out = try inflateRaw(data[pos:total - GZIP_TRAILER_LEN])
+    var member = try inflatePrefix(data[pos:total])
+    var payload = member.out
+    var trailer = pos + member.consumed
+    if (trailer + GZIP_TRAILER_LEN > total) { throw CompressionError.InvalidData }
 
     // Both trailer fields are checked. The length alone would miss a corrupted
     // byte, and the checksum alone would miss a stream truncated at a block
     // boundary of exactly the right shape.
-    var trailer = total - GZIP_TRAILER_LEN
-    if (readU32LE(data, trailer) != crc32Bytes(out[:])) {
+    if (readU32LE(data, trailer) != crc32Bytes(payload[:])) {
         throw CompressionError.InvalidData
     }
-    if (readU32LE(data, trailer + 4) != (len(out) & MASK32)) {
+    if (readU32LE(data, trailer + 4) != (len(payload) & MASK32)) {
         throw CompressionError.InvalidData
+    }
+    out.appendFrom(payload[:])
+    return trailer + GZIP_TRAILER_LEN
+}
+
+// Decompress gzip data: one member or several concatenated, each verified and
+// their payloads joined, as gzip(1) reads them. Zero bytes after the last
+// member are padding; anything else there is not gzip data.
+export fn gunzip(data: Slice<u8>) throws(CompressionError) -> Array<u8> {
+    var total = len(data)
+    var out = Array<u8>()
+    var pos = try gunzipMember(data, 0, ref out)
+    while (pos < total) {
+        if ((data[pos] as i64) == 0) {
+            while (pos < total) {
+                if ((data[pos] as i64) != 0) { throw CompressionError.InvalidData }
+                pos++
+            }
+            return out
+        }
+        pos = try gunzipMember(data, pos, ref out)
     }
     return out
 }
