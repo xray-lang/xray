@@ -2337,6 +2337,33 @@ static XR_NOINLINE XrRbcStatus xr_rbc_binding_copy_step(const XrRbcModule *modul
     return XR_RBC_OK;
 }
 
+static XR_NOINLINE XrRbcStatus xr_rbc_string_equal_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+    const XrRbcValueAccess *access = &activation->code->accesses[index];
+    const XrtStringBacking *left = (const XrtStringBacking *)rbc_value_owner_header(activation, access->source);
+    const XrtStringBacking *right = (const XrtStringBacking *)rbc_value_owner_header(activation, access->other);
+    XrRbcRegister *output = rbc_value_register(stack, activation, access->result);
+    if (!left || !right || !output) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, rbc_value_source(module, stack, pc));
+    bool equal = left->length == right->length && (!left->length || !memcmp(left->bytes, right->bytes, left->length));
+    output->bits = access->operation == XR_RBC_VALUE_STRING_NOT_EQUAL ? !equal : equal;
+    return XR_RBC_OK;
+}
+static XR_NOINLINE XrRbcStatus xr_rbc_string_length_step(const XrRbcModule *module, XrRbcStack *stack,
+    uint32_t index, size_t pc) {
+    RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
+    if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
+    const XrRbcValueAccess *access = &activation->code->accesses[index];
+    const XrtStringBacking *string = (const XrtStringBacking *)rbc_value_owner_header(activation, access->source);
+    XrRbcRegister *output = rbc_value_register(stack, activation, access->result);
+    if (!string || !output) xrt_native_managed_failure(XRT_MANAGED_ARGUMENT, rbc_value_source(module, stack, pc));
+    size_t length = access->operation == XR_RBC_VALUE_STRING_BYTE_LENGTH ? string->length : string->runes;
+    if (length > INT64_MAX) xrt_native_managed_failure(XRT_MANAGED_OVERFLOW, rbc_value_source(module, stack, pc));
+    output->bits = (uint64_t)length;
+    return XR_RBC_OK;
+}
+
 /* A borrowed literal only materializes its Frame keeper. The ordinary
  * factory still owns first use and failure, including the source and cleanup. */
 static XR_NOINLINE XrRbcStatus xr_rbc_string_literal_borrow_step(const XrRbcModule *module,

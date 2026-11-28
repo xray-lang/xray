@@ -243,10 +243,15 @@ static inline bool rbc_value_backed_array(const XrtValueImage *image, const XrRb
     return kind == XRT_VALUE_ARRAY_I64 || kind == XRT_VALUE_ARRAY_U8 || kind == XRT_VALUE_ARRAY_U64 ||
         kind == XRT_VALUE_ARRAY_F64 || kind == XRT_VALUE_ARRAY_STRING;
 }
+/* String reads use a plain local owner. A literal operand of equality or
+ * length is materialized: literal cache borrows only serve owned appends and
+ * borrowed Map keys. */
+static inline bool rbc_value_local_string(const XrtValueImage *image, const XrRbcValueCode *code, uint32_t value) {
+    return rbc_value_header_owner(image, code, value) && rbc_value_home_kind(image, code, value) == XRT_VALUE_STRING;
+}
 /* A local String owner that can also stage a new owner in its temporary. */
 static inline bool rbc_value_staged_string(const XrtValueImage *image, const XrRbcValueCode *code, uint32_t value) {
-    if (!rbc_value_header_owner(image, code, value) || rbc_value_home_kind(image, code, value) != XRT_VALUE_STRING)
-        return false;
+    if (!rbc_value_local_string(image, code, value)) return false;
     const XrLirValueHome *home = &code->homes->values[value];
     const XrtManagedFrameSpec *frame = &code->homes->frame;
     return home->temporary_offset != SIZE_MAX && home->temporary_first_owner < frame->slot_count &&
@@ -310,6 +315,14 @@ static inline XrRbcOp rbc_value_access_opcode(const XrtValueImage *image, const 
     if (rbc_value_array_word(image, code, access, XR_LIR_ARRAY_OP_GET)) return XR_RBC_OWNER_ARRAY_GET;
     if (rbc_value_array_word(image, code, access, XR_LIR_ARRAY_OP_LEN)) return XR_RBC_OWNER_ARRAY_LEN;
     if (rbc_value_binding_copy(image, code, access)) return XR_RBC_OWNER_CELL_READ;
+    if ((access.operation == XR_RBC_VALUE_STRING_EQUAL || access.operation == XR_RBC_VALUE_STRING_NOT_EQUAL) &&
+        !access.index && !access.first && !access.count && !access.window &&
+        rbc_value_local_string(image, code, access.source) && rbc_value_local_string(image, code, access.other) &&
+        rbc_value_register_operand(code, access.result)) return XR_RBC_OWNER_STRING_EQUAL;
+    if ((access.operation == XR_RBC_VALUE_STRING_LENGTH || access.operation == XR_RBC_VALUE_STRING_BYTE_LENGTH) &&
+        !access.other && !access.index && !access.first && !access.count && !access.window &&
+        rbc_value_local_string(image, code, access.source) && rbc_value_register_operand(code, access.result))
+        return XR_RBC_OWNER_STRING_LENGTH;
     return XR_RBC_VALUE_ACCESS;
 }
 

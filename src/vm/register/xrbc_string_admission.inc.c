@@ -252,6 +252,8 @@ static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
         case XR_RBC_OWNER_ARRAY_GET:
         case XR_RBC_OWNER_ARRAY_LEN:
         case XR_RBC_OWNER_CELL_READ:
+        case XR_RBC_OWNER_STRING_EQUAL:
+        case XR_RBC_OWNER_STRING_LENGTH:
         case XR_RBC_VALUE_ACCESS: return rbc_value_transfer(s, (uint32_t)v.immediate);
         case XR_RBC_AGGREGATE_ACCESS: return rbc_aggregate_transfer(s, (uint32_t)v.immediate);
         case XR_RBC_MODULE_BEGIN: case XR_RBC_MODULE_READY:

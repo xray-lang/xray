@@ -184,6 +184,56 @@ static void local_owner_array_words(void) {
     xr_rbc_program_destroy(program);
 }
 
+/* Equality and rune length of local Strings use their own words, including
+ * against materialized literals; admission rejects any other word for them. */
+static void local_string_words(void) {
+    XrRbcProgram *program = callable(
+        "fn strings(n:i64)->i64 {\n"
+        "    const a=\"abc\"+string(n)\n"
+        "    const b=\"abc\"+string(n)\n"
+        "    const u=\"\u00e9\"+string(n)\n"
+        "    const d=\"abd\"+string(n)\n"
+        "    var i=0\n"
+        "    var c=0\n"
+        "    while (i<3) {\n"
+        "        if (a==b) {c=c+len(a)}\n"
+        "        if (a!=\"abc\") {c=c+1}\n"
+        "        if (a==\"zzz\") {c=c+100}\n"
+        "        c=c+len(u)\n"
+        "        if (a==d) {c=c+1000}\n"
+        "        i=i+1\n"
+        "    }\n"
+        "    return c\n"
+        "}\nstrings(5)\n");
+    const XrRbcModule *module = xr_rbc_program_view(program);
+    const XrRbcFunction *entry = &module->functions[0];
+    uint32_t *words = (uint32_t *)(void *)entry->code;
+    size_t equals = 0, lengths = 0;
+    for (size_t pc = 0; pc < entry->code_count; ++pc) {
+        uint32_t op = words[pc] & 255u;
+        equals += op == XR_RBC_OWNER_STRING_EQUAL; lengths += op == XR_RBC_OWNER_STRING_LENGTH;
+    }
+    CHECK(equals == 4 && lengths == 2);
+    uint64_t argument = 5;
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_module_prepare(module, 0, &argument, 1, xr_rbc_program_locations(program), &execution) == XR_RBC_OK);
+    xr_rbc_execution_free(&execution);
+    for (size_t pc = 0; pc < entry->code_count; ++pc) {
+        uint32_t original = words[pc], op = original & 255u;
+        if (op != XR_RBC_OWNER_STRING_EQUAL && op != XR_RBC_OWNER_STRING_LENGTH) continue;
+        const uint32_t replacements[] = {XR_RBC_VALUE_ACCESS,
+            op == XR_RBC_OWNER_STRING_EQUAL ? XR_RBC_OWNER_STRING_LENGTH : XR_RBC_OWNER_STRING_EQUAL};
+        for (size_t r = 0; r < sizeof(replacements) / sizeof(*replacements); ++r) {
+            words[pc] = (original & ~255u) | replacements[r];
+            CHECK(xr_rbc_module_prepare(module, 0, &argument, 1, xr_rbc_program_locations(program),
+                &execution) == XR_RBC_INVALID && !execution);
+        }
+        words[pc] = original;
+    }
+    CHECK(run(program, 5) == 21 && run(program, 12) == 27);
+    xr_rbc_program_destroy(program);
+}
+
 static const char i64_equality_source[] =
     "fn equality(x:i64,y:i64)->i64{if(x==y){return 1}\n"
     "if(x!=y){return 2}\nreturn 3}\nprint(equality(1,2))\n";
@@ -860,6 +910,7 @@ int main(int argc, char **argv) {
     metadata_lifetime();
     local_map_edit();
     local_owner_array_words();
+    local_string_words();
     numerical_oracles();
     actual_entry_and_refusal();
     f64_transport();
