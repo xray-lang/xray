@@ -2233,7 +2233,7 @@ static inline RbcValueActivation *rbc_value_owner_activation(XrRbcStack *stack, 
         rbc_value_array_region_forget(activation, activation->active_array_region, RBC_ARRAY_REGION_BYPASS);
     return activation;
 }
-static inline XrRbcStatus xr_rbc_owner_drop_step(const XrRbcModule *module, XrRbcStack *stack,
+static XR_NOINLINE XrRbcStatus xr_rbc_owner_drop_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc) {
     RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
     if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
@@ -2243,7 +2243,7 @@ static inline XrRbcStatus xr_rbc_owner_drop_step(const XrRbcModule *module, XrRb
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
     return XR_RBC_OK;
 }
-static inline XrRbcStatus xr_rbc_owner_copy_step(const XrRbcModule *module, XrRbcStack *stack,
+static XR_NOINLINE XrRbcStatus xr_rbc_owner_copy_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc) {
     RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
     if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
@@ -2258,7 +2258,7 @@ static inline XrRbcStatus xr_rbc_owner_copy_step(const XrRbcModule *module, XrRb
 }
 /* The direct Header move refuses any Frame state it cannot publish at once;
  * the generic edge transaction then handles that state. */
-static inline XrRbcStatus xr_rbc_owner_edge_step(const XrRbcModule *module, XrRbcStack *stack,
+static XR_NOINLINE XrRbcStatus xr_rbc_owner_edge_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc) {
     RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
     if (activation) {
@@ -2284,7 +2284,7 @@ static inline XrtBackingArrayKind rbc_value_owner_array_kind(const RbcValueActiv
     return xrt_backing_array_kind_from_value(
         activation->image->types[activation->code->homes->values[value].type - 1].kind);
 }
-static inline XrRbcStatus xr_rbc_array_get_step(const XrRbcModule *module, XrRbcStack *stack,
+static XR_NOINLINE XrRbcStatus xr_rbc_array_get_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc) {
     RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
     if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
@@ -2315,7 +2315,7 @@ static inline XrRbcStatus xr_rbc_array_get_step(const XrRbcModule *module, XrRbc
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
     return XR_RBC_OK;
 }
-static inline XrRbcStatus xr_rbc_array_len_step(const XrRbcModule *module, XrRbcStack *stack,
+static XR_NOINLINE XrRbcStatus xr_rbc_array_len_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc) {
     RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
     if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
@@ -2329,7 +2329,7 @@ static inline XrRbcStatus xr_rbc_array_len_step(const XrRbcModule *module, XrRbc
     output->bits = (uint64_t)array->length;
     return XR_RBC_OK;
 }
-static inline XrRbcStatus xr_rbc_binding_copy_step(const XrRbcModule *module, XrRbcStack *stack,
+static XR_NOINLINE XrRbcStatus xr_rbc_binding_copy_step(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t index, size_t pc) {
     RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
     if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
