@@ -6,7 +6,7 @@
  *
  * lir_fixed_array_op_cases.h - Exact construction and trapping byte extraction
  */
-#include "lir/xlir_string_elide.h"
+#include "lir/xlir_owner_elide.h"
 
 static XrLirModule *fixed_ops_module(uint32_t count, bool negative_index) {
     XrLirModule *m = NULL;
@@ -78,7 +78,7 @@ static void fixed_array_operations(void) {
         OK(xr_lir_rebuild(source, &copies[0]));
         OK(xr_lir_inline(source, &copies[1]));
         OK(xr_lir_sccp(source, &copies[2]));
-        OK(xr_lir_string_elide(source, &copies[3]));
+        OK(xr_lir_owner_elide(source, &copies[3]));
         xr_lir_module_destroy(source);
         for (size_t i = 0; i < 4; ++i) {
             OK(xr_lir_verify(copies[i], NULL));

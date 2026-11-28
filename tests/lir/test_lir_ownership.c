@@ -8,7 +8,7 @@
  */
 #include "lir/xlir_ownership.h"
 #include "lir/xlir_internal.h"
-#include "lir/xlir_string_elide.h"
+#include "lir/xlir_owner_elide.h"
 #include "lir/xlir_sccp.h"
 #include "lir/xlir_verify.h"
 #include "lir/xlir_value_layout.h"
@@ -178,7 +178,7 @@ static void copies(void) {
         if (types[t] == XR_LIR_STRING) {
             XrLirModule *elided = NULL;
             XrLirOwnershipPlan *final = NULL;
-            OK(xr_lir_string_elide(m, &elided));
+            OK(xr_lir_owner_elide(m, &elided));
             OK(xr_lir_ownership_plan_create(&(XrLirOwnershipRequest){.module=elided}, &final, NULL));
             CHECK(count_kind(final, XR_LIR_OWNERSHIP_RESULT_OWNER) == 1 &&
                 count_kind(final, XR_LIR_OWNERSHIP_RETURN_TRANSFER) == 1 &&

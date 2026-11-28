@@ -1,6 +1,6 @@
 # Scalar SSA depends only on base headers, without legacy executor libraries.
 add_library(xray_lir STATIC xlir.c xlir_verify.c xlir_print.c xlir_rebuild.c xlir_sccp.c xlir_inline.c
-    xlir_string_elide.c)
+    xlir_owner_elide.c)
 add_dependencies(xray_lir gen-native-type-defs gen-target-query-registry)
 target_include_directories(xray_lir PUBLIC "${PROJECT_SOURCE_DIR}/src")
 target_include_directories(xray_lir PRIVATE "${PROJECT_SOURCE_DIR}/include")

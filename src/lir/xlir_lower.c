@@ -13,7 +13,7 @@
 #include "xlir_lower.h"
 #include "xlir_builder.h"
 #include "xlir_internal.h"
-#include "xlir_string_elide.h"
+#include "xlir_owner_elide.h"
 #include "xlir_array.h"
 #include "xlir_cell.h"
 #include "xlir_pod.h"
@@ -4245,10 +4245,10 @@ static bool lower_wrapper(Lower *c, uint32_t entry, XrLirFunction *output) {
  * source would otherwise only be dropped; the entry handle follows it. */
 static bool lower_elide(Lower *c, XrLirFunction *entry) {
     XrLirModule *elided = NULL;
-    XrLirStatus status = xr_lir_string_elide(c->module, &elided);
+    XrLirStatus status = xr_lir_owner_elide(c->module, &elided);
     if (status != XR_LIR_OK) {
         c->instruction = UINT32_MAX;
-        lower_error(c, status, "String reference elision failed");
+        lower_error(c, status, "owner reference elision failed");
         return false;
     }
     XR_DCHECK(entry->module == c->module, "the entry belongs to the elided module");

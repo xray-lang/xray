@@ -13,7 +13,7 @@
 #include "lir/xlir_rebuild.h"
 #include "lir/xlir_inline.h"
 #include "lir/xlir_sccp.h"
-#include "lir/xlir_string_elide.h"
+#include "lir/xlir_owner_elide.h"
 #include "xray_native_function.h"
 #include "runtime/native/xnative_array_backing.h"
 #include "runtime/native/xnative_map_backing.h"
@@ -593,7 +593,7 @@ static void string_borrow_only(XrLirType type) {
 }
 static void string_projections(void) {
     string_borrow_only(XR_LIR_STRING_CELL); string_borrow_only(XR_LIR_STRING_REF);
-    XrLirStatus (*transforms[])(const XrLirModule *,XrLirModule **)={xr_lir_rebuild,xr_lir_inline,xr_lir_sccp,xr_lir_string_elide};
+    XrLirStatus (*transforms[])(const XrLirModule *,XrLirModule **)={xr_lir_rebuild,xr_lir_inline,xr_lir_sccp,xr_lir_owner_elide};
     XrLirModule *module=string_roles_fixture(false),*copies[4]={0};
     for (size_t i=0;i<4;++i) OK(transforms[i](module,&copies[i]));
     project(module,true);

@@ -10,7 +10,7 @@
 #include "lir/xlir_types.h"
 #include "lir/xlir_inline.h"
 #include "lir/xlir_sccp.h"
-#include "lir/xlir_string_elide.h"
+#include "lir/xlir_owner_elide.h"
 
 static void fixed_length_observation(const XrLirModule *m) {
     uint32_t reads = 0;
@@ -93,7 +93,7 @@ static void fixed_sources(void) {
     OK(xr_lir_rebuild(output.module, &copies[0]));
     OK(xr_lir_inline(output.module, &copies[1]));
     OK(xr_lir_sccp(output.module, &copies[2]));
-    OK(xr_lir_string_elide(output.module, &copies[3]));
+    OK(xr_lir_owner_elide(output.module, &copies[3]));
     xr_lir_lowered_free(&output);
     for (size_t i = 0; i < 4; ++i) {
         OK(xr_lir_verify(copies[i], NULL));

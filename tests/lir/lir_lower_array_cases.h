@@ -114,7 +114,8 @@ static void array_push_exit_retained_source(void) {
             displayed|=shape.operation==XR_LIR_ARRAY_OP_DISPLAY;
         }
     }
-    CHECK(retained && displayed);
+    /* The display borrows the exit owner directly; the copy it used to take is elided. */
+    CHECK(!retained && displayed);
     OK(xr_lir_ownership_array_regions_verify(output.module,plan));
     xr_lir_ownership_plan_destroy(plan); xr_lir_lowered_free(&output);
 }

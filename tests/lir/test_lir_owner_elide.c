@@ -4,10 +4,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_lir_string_elide.c - Shared String references keep verified value flow
+ * test_lir_owner_elide.c - Shared owner references keep verified value flow
  */
 #include "lir_test_programs.h"
-#include "lir/xlir_string_elide.h"
+#include "lir/xlir_owner_elide.h"
+#include "lir/xlir_array.h"
+#include "lir/xlir_map.h"
 #include "lir/xlir_verify.h"
 #include "vm/register/xrbc_lir.h"
 
@@ -201,7 +203,7 @@ static void elided_shapes(void) {
     // retains and drops per function before and after: label, keep, pair, chain, branch, root
     static const uint32_t retains[2][6] = {{2, 1, 2, 2, 1, 1}, {0, 1, 2, 0, 0, 0}};
     static const uint32_t drops[2][6] = {{3, 0, 2, 2, 3, 6}, {1, 0, 2, 0, 2, 5}};
-    OK(xr_lir_string_elide(input, &output));
+    OK(xr_lir_owner_elide(input, &output));
     CHECK(output && output != input && xr_lir_module_is_readable(output));
     OK(xr_lir_verify(output, NULL));
     for (uint32_t f = 0; f < 6; ++f) {
@@ -215,7 +217,7 @@ static void elided_shapes(void) {
     // "row#row#" * 100 + "chain" * 10 + digits of 12345.
     CHECK(run_root(input) == 855 && run_root(output) == 855);
     XrLirModule *again = NULL;
-    OK(xr_lir_string_elide(output, &again));
+    OK(xr_lir_owner_elide(output, &again));
     for (uint32_t f = 0; f < 6; ++f) {
         CHECK(count(again, f, XR_LIR_STRING_RETAIN) == retains[1][f]);
         CHECK(count(again, f, XR_LIR_STRING_DROP) == drops[1][f]);
@@ -237,7 +239,7 @@ static void scalar_identity(void) {
     XrLirModule *inputs[] = {test_fib(), test_sum()};
     for (size_t i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
         XrLirModule *output = NULL;
-        OK(xr_lir_string_elide(inputs[i], &output));
+        OK(xr_lir_owner_elide(inputs[i], &output));
         OK(xr_lir_verify(output, NULL));
         CHECK(xr_lir_function_count(output) == xr_lir_function_count(inputs[i]));
         for (uint32_t f = 0; f < xr_lir_function_count(output); ++f)
@@ -250,20 +252,89 @@ static void scalar_identity(void) {
 
 static void rejected_arguments(void) {
     XrLirModule *input = fixture(), *occupied = input, *unfinished = NULL, *output = NULL;
-    CHECK(xr_lir_string_elide(NULL, &output) == XR_LIR_INVALID_ARGUMENT && !output);
-    CHECK(xr_lir_string_elide(input, NULL) == XR_LIR_INVALID_ARGUMENT);
-    CHECK(xr_lir_string_elide(input, &occupied) == XR_LIR_INVALID_ARGUMENT && occupied == input);
+    CHECK(xr_lir_owner_elide(NULL, &output) == XR_LIR_INVALID_ARGUMENT && !output);
+    CHECK(xr_lir_owner_elide(input, NULL) == XR_LIR_INVALID_ARGUMENT);
+    CHECK(xr_lir_owner_elide(input, &occupied) == XR_LIR_INVALID_ARGUMENT && occupied == input);
     OK(xr_lir_module_create(NULL, &unfinished));
-    CHECK(xr_lir_string_elide(unfinished, &output) == XR_LIR_INVALID_ARGUMENT && !output);
+    CHECK(xr_lir_owner_elide(unfinished, &output) == XR_LIR_INVALID_ARGUMENT && !output);
     xr_lir_module_destroy(unfinished);
     CHECK(xr_lir_module_is_readable(input) && run_root(input) == 855);
     xr_lir_module_destroy(input);
     puts("String elision preserves rejected inputs and occupied outputs");
 }
 
+/* Array copies of every identity-free element kind share their source's
+ * reference: a copy read and dropped while the source lives borrows it, and a
+ * copy that outlives its source carries the source's reference. */
+static void array_copies(XrLirType element) {
+    XrLirModule *m = NULL; OK(xr_lir_array_module_create(NULL, &m));
+    XrLirFunction f = test_function(m, "array_copies", NULL, 0, XR_LIR_I64);
+    XrLirBlock b = entry_block(m, f);
+    uint32_t repeat = 0, length = 0;
+    OK(xr_lir_array_operation(m, element, XR_LIR_ARRAY_OP_REPEAT, &repeat));
+    OK(xr_lir_array_operation(m, element, XR_LIR_ARRAY_OP_LEN, &length));
+    XrLirValue item = element == XR_LIR_STRING ? literal(m, b, "x") : test_constant(m, b, element, 7);
+    XrLirValue make[] = {test_constant(m, b, XR_LIR_I64, 3), item}, array = {0};
+    OK(xr_lir_emit_value(m, b, &(XrLirInstruction){.op = XR_LIR_CALL_INTRINSIC, .type = XR_LIR_ARRAY,
+        .intrinsic = repeat, .operands = make, .operand_count = 2}, &array));
+    if (element == XR_LIR_STRING) drop(m, b, item);
+    XrLirValue values[2];
+    for (unsigned n = 0; n < 2; ++n) {
+        XrLirValue copy = emit(m, b, XR_LIR_ARRAY_RETAIN, XR_LIR_ARRAY, &array, 1);
+        if (n) emit(m, b, XR_LIR_ARRAY_DROP, XR_LIR_UNIT, &array, 1);
+        OK(xr_lir_emit_value(m, b, &(XrLirInstruction){.op = XR_LIR_CALL_INTRINSIC, .type = XR_LIR_I64,
+            .intrinsic = length, .operands = &copy, .operand_count = 1}, &values[n]));
+        emit(m, b, XR_LIR_ARRAY_DROP, XR_LIR_UNIT, &copy, 1);
+    }
+    test_return(m, b, test_binary(m, b, XR_LIR_ADD, values[0], values[1], XR_LIR_PREDICATE_NONE));
+    OK(xr_lir_module_finish(m, NULL));
+    XrLirModule *elided = NULL; OK(xr_lir_owner_elide(m, &elided));
+    CHECK(count(m, 0, XR_LIR_ARRAY_RETAIN) == 2 && count(m, 0, XR_LIR_ARRAY_DROP) == 3);
+    CHECK(!count(elided, 0, XR_LIR_ARRAY_RETAIN) && count(elided, 0, XR_LIR_ARRAY_DROP) == 1);
+    XrLirFunction root; OK(xr_lir_function_at(elided, 0, &root));
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(elided, root, &program, NULL) == XR_RBC_COMPILE_OK);
+    XrRbcExecution *execution = NULL;
+    CHECK(xr_rbc_program_prepare(program, NULL, 0, &execution) == XR_RBC_OK);
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    uint64_t bits = 0;
+    CHECK(outcome && xr_rbc_outcome_status(outcome) == XR_RBC_OK && xr_rbc_outcome_bits(outcome, &bits) && bits == 6);
+    xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome); xr_rbc_program_destroy(program);
+    xr_lir_module_destroy(elided); xr_lir_module_destroy(m);
+}
+
+/* Only identity-free owners share references: a String-keyed integer Map
+ * copy is elided, while a Map of Strings, outside the predicate, keeps its own. */
+static void map_copies(XrLirType type, bool shared) {
+    XrLirModule *m = NULL; OK(xr_lir_module_create(NULL, &m));
+    OK(xr_lir_map_catalog_install(m, false, false, false, false, false));
+    XrLirFunction f = test_function(m, "map_copies", NULL, 0, XR_LIR_I64);
+    XrLirBlock b = entry_block(m, f);
+    XrLirMapLiteral empty = {"copies.xr", 9, NULL, 0}; uint32_t ordinal = 0, length = 0;
+    OK(xr_lir_map_literal_add(m, &empty, &ordinal));
+    OK(xr_lir_map_operation(m, XR_LIR_MAP_OP_LEN, type, &length));
+    XrLirValue map = {0}, count_value = {0};
+    OK(xr_lir_emit_value(m, b, &(XrLirInstruction){.op = XR_LIR_MAP_LITERAL_NEW, .type = type, .bits = ordinal}, &map));
+    XrLirValue copy = emit(m, b, XR_LIR_MAP_RETAIN, type, &map, 1);
+    OK(xr_lir_emit_value(m, b, &(XrLirInstruction){.op = XR_LIR_CALL_INTRINSIC, .type = XR_LIR_I64,
+        .intrinsic = length, .operands = &copy, .operand_count = 1}, &count_value));
+    emit(m, b, XR_LIR_MAP_DROP, XR_LIR_UNIT, &copy, 1);
+    emit(m, b, XR_LIR_MAP_DROP, XR_LIR_UNIT, &map, 1);
+    test_return(m, b, count_value);
+    OK(xr_lir_module_finish(m, NULL));
+    XrLirModule *elided = NULL; OK(xr_lir_owner_elide(m, &elided));
+    CHECK(count(elided, 0, XR_LIR_MAP_RETAIN) == (shared ? 0u : 1u) &&
+        count(elided, 0, XR_LIR_MAP_DROP) == (shared ? 1u : 2u));
+    xr_lir_module_destroy(elided); xr_lir_module_destroy(m);
+}
+
 int main(void) {
     elided_shapes();
     scalar_identity();
     rejected_arguments();
+    array_copies(XR_LIR_I64);
+    array_copies(XR_LIR_STRING);
+    map_copies(XR_LIR_MAP_STRING_I64, true);
+    map_copies(XR_LIR_MAP_STRING_STRING, false);
     return 0;
 }
