@@ -43,6 +43,7 @@ typedef struct XrLirValueData {
     bool parameter;
     XrLirStateReference state_reference;
     XrLirType array_element;
+    bool held; /* An Array on a held chain: a hold result or a held block parameter. */
 } XrLirValueData;
 typedef struct XrLirInstructionData {
     XrLirInstructionView view;

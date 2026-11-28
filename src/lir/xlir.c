@@ -798,6 +798,7 @@ static XrLirStatus lir_emit(XrLirModule *m, XrLirBlock handle, const XrLirInstru
         instruction.view.result = ++f->value_count;
         f->values[f->value_count - 1].array_element =
             xr_lir_internal_array_result(m, f, &instruction.view);
+        f->values[f->value_count - 1].held = input->op == XR_LIR_ARRAY_HOLD;
         uint32_t state_slot = (uint32_t)input->bits;
         if (input->op == XR_LIR_STATE_CONSTRUCT || input->op == XR_LIR_STATE_REFERENCE) {
             const XrLirStateSlot *slot = &m->state_layout.slots[state_slot];

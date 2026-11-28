@@ -124,7 +124,8 @@ static bool lir_plan_value(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
     XrLirOwnershipTransferMode mode = XR_LIR_OWNERSHIP_TRANSFER_NONE;
     if (kind == XR_LIR_OWNERSHIP_PARAMETER_BORROW || kind == XR_LIR_OWNERSHIP_OPERAND_BORROW)
         mode = XR_LIR_OWNERSHIP_TRANSFER_BORROW;
-    else if (kind == XR_LIR_OWNERSHIP_APPEND_TRANSFER || kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER)
+    else if (kind == XR_LIR_OWNERSHIP_APPEND_TRANSFER || kind == XR_LIR_OWNERSHIP_RETURN_TRANSFER ||
+        kind == XR_LIR_OWNERSHIP_HOLD_TRANSFER)
         mode = XR_LIR_OWNERSHIP_TRANSFER_MOVE;
     return lir_plan_add(plan, (XrLirOwnershipFact){.kind=kind, .function=function,
         .block=block, .instruction=instruction, .value=value, .argument=argument,
@@ -138,6 +139,8 @@ static XrLirOwnershipFactKind lir_plan_transfer(const XrLirModule *m, const XrLi
     if (v->op == XR_LIR_RET && v->operand_count && xr_lir_block_owner_type(m,f->result))
         return XR_LIR_OWNERSHIP_RETURN_TRANSFER;
     if (xr_lir_string_role(m,v) == XR_LIR_STRING_OP_APPEND_OWNED) return XR_LIR_OWNERSHIP_APPEND_TRANSFER;
+    /* Hold and unhold move the same owner into and out of its held chain. */
+    if (v->op == XR_LIR_ARRAY_HOLD || v->op == XR_LIR_ARRAY_UNHOLD) return XR_LIR_OWNERSHIP_HOLD_TRANSFER;
     if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP ||
         v->op == XR_LIR_VALUE_DROP || v->op == XR_LIR_MAP_DROP || v->op == XR_LIR_SET_DROP)
         return XR_LIR_OWNERSHIP_RELEASE;

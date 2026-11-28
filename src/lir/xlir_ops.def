@@ -183,3 +183,12 @@ XR_LIR_OP(HOST_DIRECTORY_FAIL, "host_directory_fail", 2)
 XR_LIR_OP(CHECKED_EMPTY_ARRAY, "checked_empty_array", 0)
 XR_LIR_OP(MANAGED_FAILURE, "managed_failure", -1)
 XR_LIR_OP(CHECKED_ARRAY_PUSH, "checked_array_push", 2)
+/* A held Array is a sole owner without alias between hold and unhold, so its
+ * elements, length and capacity stay valid across the chain. Hold makes a
+ * mutable owner unique first; unhold stores the length back. */
+XR_LIR_OP(ARRAY_HOLD, "array_hold", 1)
+XR_LIR_OP(ARRAY_UNHOLD, "array_unhold", 1)
+XR_LIR_OP(ARRAY_HELD_GET, "array_held_get", 2)
+XR_LIR_OP(ARRAY_HELD_SET, "array_held_set", 3)
+XR_LIR_OP(ARRAY_HELD_PUSH, "array_held_push", 2)
+XR_LIR_OP(ARRAY_HELD_LEN, "array_held_len", 1)

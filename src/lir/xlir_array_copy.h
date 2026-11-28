@@ -52,6 +52,8 @@ static inline XrLirStatus lir_copy_array_value(const XrLirModule *input,
     status = xr_lir_array_shape_view(input, source, &shape);
     if (status == XR_LIR_OK)
         status = xr_lir_set_array_shape((XrLirModule *)target.module, target, &shape);
+    if (status == XR_LIR_OK && xr_lir_array_held(input, source))
+        status = xr_lir_set_array_held((XrLirModule *)target.module, target);
     return status;
 }
 #endif // XLIR_ARRAY_COPY_H

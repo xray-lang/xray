@@ -80,6 +80,15 @@ XR_FUNC XrLirStatus xr_lir_set_array_result(XrLirModule *, XrLirFunction,
 XR_FUNC XrLirStatus xr_lir_set_array_intrinsic(XrLirModule *, const XrLirArrayIntrinsic *);
 XR_FUNC XrLirStatus xr_lir_array_shape_view(const XrLirModule *, XrLirValue,
     XrLirArrayShape *);
+/* Fixed scalar elements whose held Arrays release no element on cleanup. */
+static inline bool xr_lir_array_holdable(XrLirType element) {
+    return element == XR_LIR_I64 || element == XR_LIR_U8 || element == XR_LIR_U64 || element == XR_LIR_F64;
+}
+/* Marks an Array block parameter as held: every incoming edge must pass a held
+ * value. Hold results are held by construction. */
+XR_FUNC XrLirStatus xr_lir_set_array_held(XrLirModule *, XrLirValue parameter);
+/* Whether a finished Array value lies on a held chain. */
+XR_FUNC bool xr_lir_array_held(const XrLirModule *, XrLirValue);
 XR_FUNC XrLirStatus xr_lir_array_result_view(const XrLirModule *, XrLirFunction,
     XrLirArrayShape *);
 XR_FUNC XrLirStatus xr_lir_array_intrinsic_view(const XrLirModule *, uint32_t,

@@ -658,6 +658,24 @@ static bool lir_literal_call(const XrLirModule *m, const XrLirFunctionData *f,
         length->bits == m->literals[address->bits - 1].length;
 }
 
+/* Hold and unhold keep the operand's exact shape; the element operations read
+ * and write its fixed scalar element type through an I64 index. */
+static bool lir_held_instruction(const XrLirFunctionData *f, const XrLirInstructionView *v) {
+    const XrLirValueData *array = &f->values[v->operands[0] - 1];
+    if (array->type != XR_LIR_ARRAY || !xr_lir_array_holdable(array->array_element) || v->edge_count) return false;
+    XrLirType element = array->array_element;
+    switch (v->op) {
+    case XR_LIR_ARRAY_HOLD: case XR_LIR_ARRAY_UNHOLD: return v->type == XR_LIR_ARRAY;
+    case XR_LIR_ARRAY_HELD_GET: return v->type == element && f->values[v->operands[1] - 1].type == XR_LIR_I64;
+    case XR_LIR_ARRAY_HELD_SET:
+        return v->type == XR_LIR_UNIT && f->values[v->operands[1] - 1].type == XR_LIR_I64 &&
+            f->values[v->operands[2] - 1].type == element;
+    case XR_LIR_ARRAY_HELD_PUSH: return v->type == XR_LIR_UNIT && f->values[v->operands[1] - 1].type == element;
+    case XR_LIR_ARRAY_HELD_LEN: return v->type == XR_LIR_I64;
+    default: return false;
+    }
+}
+
 XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint32_t function,
                                                       const XrLirInstructionView *v,
                                                       XrLirDiagnostic *d) {
@@ -736,6 +754,10 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
         }
     if (v->op == XR_LIR_LITERAL_ADDR) {
         if (v->type != XR_LIR_PTR || !v->bits || v->bits > m->literal_count) goto invalid;
+        return XR_LIR_OK;
+    }
+    if (v->op >= XR_LIR_ARRAY_HOLD && v->op <= XR_LIR_ARRAY_HELD_LEN) {
+        if (!lir_held_instruction(f, v)) goto invalid;
         return XR_LIR_OK;
     }
     if (v->op == XR_LIR_STRING_LITERAL) {
@@ -1608,6 +1630,51 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
     return XR_LIR_OK;
 }
 
+/* A held chain runs from a hold result through held block parameters to an
+ * unhold. Its values have no alias: only the held element operations, unhold
+ * and edges into held parameters use them, and a block parameter is held
+ * exactly when every incoming argument is. Hold takes an unheld owner. */
+static XrLirStatus lir_held_chains(const XrLirFunctionData *f, uint32_t function, XrLirDiagnostic *d) {
+    bool any = false;
+    for (uint32_t i = 0; i < f->value_count && !any; ++i) any = f->values[i].held;
+    if (!any) {
+        for (uint32_t b = 0; b < f->block_count; ++b)
+            for (uint32_t i = 0; i < f->blocks[b].instruction_count; ++i) {
+                XrLirOp op = f->blocks[b].instructions[i].view.op;
+                if (op >= XR_LIR_ARRAY_UNHOLD && op <= XR_LIR_ARRAY_HELD_LEN)
+                    return xr_lir_internal_error(d, "held Array operation outside a held chain", function, b + 1, i + 1,
+                        &f->blocks[b].instructions[i].view.source);
+            }
+        return XR_LIR_OK;
+    }
+    for (uint32_t b = 0; b < f->block_count; ++b) {
+        const XrLirBlockData *block = &f->blocks[b];
+        for (uint32_t i = 0; i < block->instruction_count; ++i) {
+            const XrLirInstructionView *v = &block->instructions[i].view;
+            bool held_operation = v->op >= XR_LIR_ARRAY_UNHOLD && v->op <= XR_LIR_ARRAY_HELD_LEN;
+            for (uint32_t a = 0; a < v->operand_count; ++a) {
+                bool held = f->values[v->operands[a] - 1].held;
+                bool allowed = held_operation && !a;
+                if (held != allowed || (v->op == XR_LIR_ARRAY_HOLD && held))
+                    return xr_lir_internal_error(d, held ? "held Array has an alias outside its chain" :
+                        "held Array operation uses an unheld value", function, b + 1, i + 1, &v->source);
+            }
+            for (uint32_t e = 0; e < v->edge_count; ++e) {
+                const XrLirEdgeView *edge = &v->edges[e];
+                const XrLirBlockData *target = &f->blocks[edge->target - 1];
+                uint32_t offset = xr_lir_edge_parameter_offset(v, e);
+                for (uint32_t a = 0; a < edge->argument_count; ++a) {
+                    uint32_t parameter = target->parameters[offset + a];
+                    if (f->values[edge->arguments[a] - 1].held != f->values[parameter - 1].held)
+                        return xr_lir_internal_error(d, "held Array edge does not match its block parameter",
+                            function, b + 1, i + 1, &v->source);
+                }
+            }
+        }
+    }
+    return XR_LIR_OK;
+}
+
 #include "xlir_callable_facts.inc.c"
 #include "xlir_slice_facts.inc.c"
 #include "xlir_cell_verify.inc.c"
@@ -1831,6 +1898,7 @@ static XrLirStatus lir_verify_structure(const XrLirModule *m, XrLirDiagnostic *d
         if (status==XR_LIR_OK) status=lir_frame_cell_constructors(f,index+1,&graph,d);
         if (status == XR_LIR_OK)
             status = lir_managed_owners(m, f, index + 1, &graph, seen, d);
+        if (status == XR_LIR_OK) status = lir_held_chains(f, index + 1, d);
         if (status == XR_LIR_OK && scopes)
             status = lir_callable_scopes(m, f, index + 1, &graph, d, facts);
         else if (status == XR_LIR_OK)

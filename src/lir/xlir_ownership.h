@@ -42,7 +42,8 @@ typedef enum XrLirOwnershipFactKind {
     XR_LIR_OWNERSHIP_CELL_SCOPE_EXIT,
     XR_LIR_OWNERSHIP_STRING_OPERATION,
     XR_LIR_OWNERSHIP_SET_OPERATION,
-    XR_LIR_OWNERSHIP_CLASS_ARRAY_PUSH
+    XR_LIR_OWNERSHIP_CLASS_ARRAY_PUSH,
+    XR_LIR_OWNERSHIP_HOLD_TRANSFER
 } XrLirOwnershipFactKind;
 
 /* Transfer semantics belong to the verified event, not to a type's possible

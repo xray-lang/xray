@@ -223,6 +223,7 @@ static void lir_print_parameters(LirPrinter *p, const XrLirModule *m, const XrLi
         }
         XrLirType type = external ? f->parameter_types[i] : f->values[ids[i] - 1].type;
         lir_print_type(p, m, type);
+        if (!external && f->values[ids[i] - 1].held) lir_print_text(p, " held");
     }
 }
 

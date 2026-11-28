@@ -407,6 +407,27 @@ XR_FUNC XrLirStatus xr_lir_array_shape_view(const XrLirModule *m, XrLirValue val
     return XR_LIR_OK;
 }
 
+XR_FUNC XrLirStatus xr_lir_set_array_held(XrLirModule *m, XrLirValue value) {
+    XrLirStatus status = lir_writable(m);
+    if (status != XR_LIR_OK) return status;
+    if (value.module != m || !value.function || value.function > m->function_count)
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirFunctionData *f = &m->functions[value.function - 1];
+    if (!value.id || value.id > f->value_count) return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    XrLirValueData *v = &f->values[value.id - 1];
+    if (!v->parameter || !v->block || v->type != XR_LIR_ARRAY || !xr_lir_array_holdable(v->array_element))
+        return lir_fail(m, XR_LIR_INVALID_ARGUMENT);
+    v->held = true;
+    return XR_LIR_OK;
+}
+
+XR_FUNC bool xr_lir_array_held(const XrLirModule *m, XrLirValue value) {
+    if (!xr_lir_module_is_readable(m) || value.module != m || !value.function || value.function > m->function_count)
+        return false;
+    const XrLirFunctionData *f = &m->functions[value.function - 1];
+    return value.id && value.id <= f->value_count && f->values[value.id - 1].held;
+}
+
 XR_FUNC XrLirStatus xr_lir_array_result_view(const XrLirModule *m, XrLirFunction function,
     XrLirArrayShape *output) {
     if (output) *output = (XrLirArrayShape){0};
@@ -469,7 +490,8 @@ XR_FUNC XrLirType xr_lir_internal_array_result(const XrLirModule *m,
         return m->array_intrinsics ? m->array_intrinsics[index].result_element : XR_LIR_TYPE_INVALID;
     }
     if (input && (v->op == XR_LIR_CELL_NEW || v->op == XR_LIR_CELL_READ || v->op == XR_LIR_ARRAY_RETAIN ||
-        v->op == XR_LIR_ARRAY_BORROW || v->op == XR_LIR_ARRAY_REF_READ))
+        v->op == XR_LIR_ARRAY_BORROW || v->op == XR_LIR_ARRAY_REF_READ || v->op == XR_LIR_ARRAY_HOLD ||
+        v->op == XR_LIR_ARRAY_UNHOLD))
         return input->array_element;
     return XR_LIR_TYPE_INVALID;
 }
