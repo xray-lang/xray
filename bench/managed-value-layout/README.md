@@ -246,6 +246,10 @@ orders. Divide the total managed wall time by the total raw wall time within
 each block, then take the lower quartile of the six ratios. Report the full-run
 median ratio separately and retain individual process times and all block
 ratios. This keeps both engines in the same time window when host load changes.
+On Windows the ratio uses each root process's creation-to-exit wall time from
+the kernel. The receipt also retains the parent observer's timing and CPU
+accounting for diagnosis. An unavailable process lifetime makes the Windows
+measurement incomplete. Unix measures wall time with the blocking exit observer.
 Separate engine quartiles can select different load periods and exceeded 1.30
 for the same MSVC `map-take` binaries in two CI measurements.
 `record-escape` remains a separate ownership control, outside those eight modes.

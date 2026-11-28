@@ -33,6 +33,17 @@ ROUNDS = 12
 # nothing about product speed; only the measured runs keep the 30 s product
 # timeout. A cold Windows image spent 15 s on `--version` alone.
 PREPARE_TIMEOUT = 300
+LAYOUT_TIMING_METHOD = "windows-root-process-lifetime-v1" if os.name == "nt" else evidence.TIMING_METHOD
+
+
+def layout_wall_seconds(row: dict, windows: bool) -> float | None:
+    if not windows:
+        observed = row.get("processWallSeconds", 0)
+        return observed if observed > 0 else None
+    times = row.get("windowsProcess", {}).get("times100ns", {})
+    created = times.get("created", 0)
+    exited = times.get("exited", 0)
+    return (exited - created) / 10_000_000 if 0 < created < exited else None
 
 
 def source_identity() -> dict:
@@ -114,7 +125,7 @@ def prepare(args) -> None:
         if source_identity() != initial:
             raise ValueError("Source changed during preparation")
         result.update(state="PREPARED_NOT_MEASURED", rounds=ROUNDS, timeoutSeconds=30,
-                      timingMethod=evidence.TIMING_METHOD,
+                      timingMethod=LAYOUT_TIMING_METHOD,
                       rawCases=RAW_CASES, ratioCases=list(RATIO_CASES),
                       products=products, expected={name: (value + newline).encode().hex()
                                                    for name, value in CASES.items()},
@@ -130,13 +141,14 @@ def prepare(args) -> None:
 
 def measure(args) -> int:
     prepared = json.loads(args.prepared.read_text(encoding="utf-8"))
-    newline = "\r\n" if os.name == "nt" else "\n"
+    windows = os.name == "nt"
+    newline = "\r\n" if windows else "\n"
     expected = {name: (value + newline).encode().hex() for name, value in CASES.items()}
     if (prepared.get("prototypeSchema") != 2 or prepared["state"] != "PREPARED_NOT_MEASURED"
             or prepared["source"] != source_identity()
             or prepared["platform"] != sys.platform or prepared["rounds"] != ROUNDS
             or prepared["timeoutSeconds"] != 30 or set(prepared["products"]) != {"managed", "raw"}
-            or prepared.get("timingMethod") != evidence.TIMING_METHOD
+            or prepared.get("timingMethod") != LAYOUT_TIMING_METHOD
             or prepared["expected"] != expected or prepared.get("rawCases") != RAW_CASES
             or prepared.get("ratioCases") != list(RATIO_CASES)):
         raise ValueError("The prepared prototype identity or fixed workload schema differs")
@@ -146,7 +158,7 @@ def measure(args) -> int:
         raise ValueError("A measured executable is absent from the frozen inputs")
     args.work.mkdir(parents=True)
     result = {"state": "RUNNING", "prepared": evidence.fingerprint(args.prepared), "samples": [],
-              "timingMethod": evidence.TIMING_METHOD,
+              "timingMethod": LAYOUT_TIMING_METHOD,
               "timings": {}, "ratios": {}, "medianRatios": {}, "balancedBlockRatios": {},
               "ratioEstimator": "balancedBlockLowerQuartile",
               "prototypeOnly": True, "productQualification": "NOT_RUN",
@@ -160,8 +172,12 @@ def measure(args) -> int:
                     mode = RAW_CASES.get(case, case) if engine == "raw" else case
                     row = evidence.execute([prepared["products"][engine], mode], args.work,
                                            f"{case}-{round_index}-{engine}", evidence.environment(ROOT),
-                                           bytes.fromhex(prepared["expected"][case]))
-                    row.update(case=case, engine=engine, round=round_index)
+                                           bytes.fromhex(prepared["expected"][case]),
+                                           collect_process_accounting=windows)
+                    elapsed = layout_wall_seconds(row, windows)
+                    row.update(case=case, engine=engine, round=round_index, layoutWallSeconds=elapsed)
+                    if row["ok"] and elapsed is None:
+                        row.update(ok=False, error="Process lifetime is unavailable for layout timing")
                     result["samples"].append(row)
                     evidence.save(args.work / "result.json", result)
                     if row["state"] == "NEEDS_RECOVERY":
@@ -175,7 +191,7 @@ def measure(args) -> int:
             for engine in ("managed", "raw"):
                 rows = [row for row in result["samples"] if (row["case"], row["engine"]) == (case, engine)]
                 if len(rows) == ROUNDS and all(row["ok"] for row in rows):
-                    values = [row["processWallSeconds"] for row in rows]
+                    values = [row["layoutWallSeconds"] for row in rows]
                     timings[engine] = {"lowerQuartile": evidence.lower_quartile(values),
                                        "median": statistics.median(values),
                                        "min": min(values), "max": max(values), "all": values}
