@@ -78,7 +78,7 @@ static void payload_drop(XrtManagedHeader *value, void *context) {
         CHECK(!borrowed);
     }
 }
-static void fixture_init(Fixture *fixture) {
+static void fixture_init_slots(Fixture *fixture, size_t slots) {
     *fixture = (Fixture){0};
     atomic_init(&fixture->audit.owner_refs, 1); atomic_init(&fixture->audit.code_refs, 1);
     XrtManagedAllocator provider = {&fixture->audit, allocate, deallocate,
@@ -89,8 +89,9 @@ static void fixture_init(Fixture *fixture) {
     OK(xrt_runtime_type_plan_new(fixture->billing, &spec, &fixture->plan));
     OK(xrt_managed_ops_bind(fixture->billing, fixture->plan, &fixture->ops));
     OK(xrt_managed_root_new(fixture->billing, &fixture->root));
-    OK(xrt_managed_frame_enter(fixture->root, 16, &fixture->frame));
+    OK(xrt_managed_frame_enter(fixture->root, slots, &fixture->frame));
 }
+static void fixture_init(Fixture *fixture) { fixture_init_slots(fixture, 16); }
 static XrtPlace slot(Fixture *fixture, size_t index) { return (XrtPlace){fixture->frame, index, NULL, XRT_PLACE_NONNULL}; }
 static XrtManagedHeader **owner_field(Fixture *fixture, size_t index) {
     XrtManagedSlotLocation location;
@@ -302,6 +303,35 @@ static void edges_and_domains(void) {
     BAD(xrt_place_edge_transfer(invalid, 2, NULL));
     OK(xrt_place_edge_transfer(swap, 2, NULL));
     fixture_done(&fixture); fixture_done(&peer);
+}
+/* An edge with more owners than the stack table resolves every location once
+ * into an allocated table, with the same whole-edge validation. */
+static void wide_edges(void) {
+    enum { OWNERS = 20 };
+    Fixture fixture;
+    fixture_init_slots(&fixture, 3 * OWNERS);
+    XrtManagedHeader *values[OWNERS];
+    XrtPlaceEdge edges[OWNERS];
+    for (size_t n = 0; n < OWNERS; ++n) {
+        values[n] = make(&fixture, n, n + 1);
+        edges[n] = (XrtPlaceEdge){.destination=slot(&fixture, OWNERS + n), .source=slot(&fixture, n),
+            .temporary=slot(&fixture, 2 * OWNERS + n), .transfer=XRT_PLACE_TRANSFER_MOVE};
+        edges[n].destination.nulls = edges[n].temporary.nulls = XRT_PLACE_NULLABLE;
+    }
+    const XrtManagedHeader *borrowed = NULL;
+    XrtPlace kept = edges[OWNERS - 1].destination;
+    edges[OWNERS - 1].destination = edges[0].destination;
+    BAD(xrt_place_edge_transfer(edges, OWNERS, NULL));
+    for (size_t n = 0; n < OWNERS; ++n) {
+        OK(xrt_place_borrow(slot(&fixture, n), &borrowed)); CHECK(borrowed == values[n]);
+    }
+    edges[OWNERS - 1].destination = kept;
+    OK(xrt_place_edge_transfer(edges, OWNERS, NULL));
+    for (size_t n = 0; n < OWNERS; ++n) {
+        CHECK(!*owner_field(&fixture, n) && !*owner_field(&fixture, 2 * OWNERS + n));
+        OK(xrt_place_borrow(slot(&fixture, OWNERS + n), &borrowed)); CHECK(borrowed == values[n]);
+    }
+    fixture_done(&fixture);
 }
 static void escaped_lifetime(void) {
     Fixture fixture;
@@ -768,7 +798,7 @@ int main(void) {
     external_edge_copies(); nullable_edge_copies(); single_edge_boundaries();
     inline_home_transfers();
     root_transfers(); frame_move_transfers(); frame_move_inline_owner(); external_transfers();
-    edges_and_domains(); edge_guards_and_retirement(); escaped_lifetime();
+    edges_and_domains(); wide_edges(); edge_guards_and_retirement(); escaped_lifetime();
     puts("stable places: guarded replacement, whole-edge transfers and complete owner/code retirement passed");
     return 0;
 }
