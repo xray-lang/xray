@@ -13,8 +13,7 @@ typedef struct LirBindingForwardUse {
 
 static bool lir_forward_cell(const XrLirFunctionData *f, uint32_t value, XrLirType type) {
     const XrLirValueData *row=&f->values[value-1];
-    if (row->type!=type || row->parameter || !row->block ||
-        (type!=XR_LIR_MAP_STRING_I64_CELL && (type!=XR_LIR_ARRAY_CELL || row->array_element!=XR_LIR_I64)))
+    if (row->type!=type || row->parameter || !row->block || !xr_lir_identity_free_cell(type,row->array_element))
         return false;
     const XrLirInstructionView *definition=xr_lir_internal_value_definition(f,value);
     return definition && definition->op==XR_LIR_CELL_NEW;
@@ -34,7 +33,8 @@ static bool lir_forward_role(const XrLirModule *m, const XrLirInstructionView *o
     if (op->op==XR_LIR_ARRAY_CELL_DROP) return true;
     const XrLirArrayIntrinsic *shape=op->op==XR_LIR_CALL_INTRINSIC ?
         xr_lir_internal_array_intrinsic(m,op->intrinsic) : NULL;
-    return shape && shape->parameter_count && shape->parameter_elements && shape->parameter_elements[0]==XR_LIR_I64 &&
+    return shape && shape->parameter_count && shape->parameter_elements &&
+        xr_lir_identity_free_owner(XR_LIR_ARRAY,shape->parameter_elements[0]) &&
         (shape->operation==XR_LIR_ARRAY_OP_SET || shape->operation==XR_LIR_ARRAY_OP_PUSH);
 }
 static void lir_forward_use(LirBindingForwardUse *use, uint32_t block, uint32_t instruction) {
@@ -78,11 +78,12 @@ static XrLirStatus lir_plan_binding_forwarding(XrLirOwnershipPlan *plan,
         const LirBindingForwardUse *binding=&uses[fact->value];
         if (!binding->local || binding->blocked || binding->block!=fact->block) continue;
         bool map=fact->type==XR_LIR_MAP_STRING_I64_CELL;
-        if (!map && (fact->type!=XR_LIR_ARRAY_CELL || fact->array_element!=XR_LIR_I64)) continue;
+        if (!xr_lir_identity_free_cell(fact->type,fact->array_element)) continue;
         const XrLirValueData *cell=&f->values[fact->value-1],*value=&f->values[fact->target_value-1];
         const XrLirBlockData *block=&f->blocks[fact->block-1];
         if (cell->block!=fact->block || fact->instruction>=block->instruction_count ||
-            (map ? value->type!=XR_LIR_MAP_STRING_I64 : value->type!=XR_LIR_ARRAY || value->array_element!=XR_LIR_I64))
+            (map ? value->type!=XR_LIR_MAP_STRING_I64 : value->type!=XR_LIR_ARRAY ||
+                value->array_element!=fact->array_element))
             continue;
         const XrLirInstructionView *op=&block->instructions[fact->instruction-1].view;
         const XrLirInstructionView *drop=&block->instructions[fact->instruction].view;

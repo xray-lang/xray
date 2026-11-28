@@ -440,8 +440,7 @@ static bool lir_home_chain_bindings(LirHomeCompiler *c, const XrLirOwnershipPlan
         XrLirOwnershipFact fact;
         if (xr_lir_ownership_fact_at(plan, function.fact_offset + n, &fact) != XR_LIR_OK)
             return lir_home_fail(c, XR_LIR_VALUE_LAYOUT_ARGUMENT, "stationary binding fact disappeared");
-        bool array = fact.type == XR_LIR_ARRAY_CELL && fact.array_element == XR_LIR_I64;
-        if ((!array && fact.type != XR_LIR_MAP_STRING_I64_CELL) ||
+        if (!xr_lir_identity_free_cell(fact.type, fact.array_element) ||
             fact.forwarding_mode != XR_LIR_OWNERSHIP_TRANSFER_MOVE)
             continue;
         bool create = fact.kind == XR_LIR_OWNERSHIP_BINDING_NEW;
@@ -497,8 +496,7 @@ static void lir_home_chain_visit(LirHomeChain *chains, uint32_t value, uint32_t 
 }
 
 static bool lir_home_chain_type(const XrLirValueData *value) {
-    return value->type == XR_LIR_STRING || value->type == XR_LIR_MAP_STRING_I64 ||
-        (value->type == XR_LIR_ARRAY && value->array_element == XR_LIR_I64);
+    return xr_lir_identity_free_owner(value->type, value->array_element);
 }
 
 /* A String chain starts at an instruction that creates its own owner. String
@@ -905,8 +903,7 @@ static bool lir_home_function(LirHomeBuilder *b, const XrLirOwnershipPlan *owner
         if ((fact.forwarding_mode || fact.forwarding_drop) &&
             (fact.forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE ||
              (fact.kind!=XR_LIR_OWNERSHIP_BINDING_NEW && fact.kind!=XR_LIR_OWNERSHIP_BINDING_READ) ||
-             (fact.type!=XR_LIR_MAP_STRING_I64_CELL &&
-              (fact.type!=XR_LIR_ARRAY_CELL || fact.array_element!=XR_LIR_I64)) ||
+             !xr_lir_identity_free_cell(fact.type,fact.array_element) ||
              !fact.instruction || fact.instruction==UINT32_MAX || fact.forwarding_drop!=fact.instruction+1))
             return lir_home_fail(&b->compiler,XR_LIR_VALUE_LAYOUT_ARGUMENT,"invalid local binding forwarding preparation");
         uint32_t view_workspace = 0;

@@ -68,6 +68,22 @@ enum XrLirBuiltinType {
     XR_LIR_TYPE_COUNT
 };
 
+/* An owned payload with no identity and no finalizer: Strings, String-keyed
+ * integer Maps and Arrays whose elements are fixed scalars or Strings. One live
+ * owner of such a value can share a physical home along a MOVE chain, and a
+ * private Cell round trip can hand the same owner back instead of copying it.
+ * Every producer and consumer of those facts asks this one predicate. */
+static inline bool xr_lir_identity_free_owner(XrLirType type, XrLirType element) {
+    if (type == XR_LIR_STRING || type == XR_LIR_MAP_STRING_I64) return true;
+    return type == XR_LIR_ARRAY && (element == XR_LIR_I64 || element == XR_LIR_U8 ||
+        element == XR_LIR_U64 || element == XR_LIR_F64 || element == XR_LIR_STRING);
+}
+/* The Cell form of an identity-free owner whose round trip can be forwarded. */
+static inline bool xr_lir_identity_free_cell(XrLirType cell, XrLirType element) {
+    return cell == XR_LIR_MAP_STRING_I64_CELL ||
+        (cell == XR_LIR_ARRAY_CELL && xr_lir_identity_free_owner(XR_LIR_ARRAY, element));
+}
+
 /* String and Array instruction results own references. Ordinary call parameters borrow
  * through that call; a language binding explicitly retains its parameter.
  * Selected edges transfer each managed argument into an owned block parameter.

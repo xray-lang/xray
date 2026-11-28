@@ -437,7 +437,7 @@ static bool rbc_lir_binding_forwarding_metadata(RbcLirCompiler *c,XrRbcValueAcce
         if (event->kind!=(uint32_t)(create ? XR_LIR_OWNERSHIP_BINDING_NEW : XR_LIR_OWNERSHIP_BINDING_READ) ||
             event->source!=receiver || event->target!=value || event->forwarding_mode!=XR_LIR_OWNERSHIP_TRANSFER_MOVE ||
             event->instruction==UINT32_MAX || event->forwarding_drop!=event->instruction+1 ||
-            binding->kind!=XR_LIR_HOME_BINDING_LOCAL || (!map && kind!=XRT_VALUE_ARRAY_I64) || !valid_index ||
+            binding->kind!=XR_LIR_HOME_BINDING_LOCAL || (!map && !xrt_value_kind_is_array(kind)) || !valid_index ||
             xr_lir_instruction_view(c->input,(XrLirBlock){c->input,c->function.id,c->diagnostic->block},
                 c->diagnostic->instruction,&drop)!=XR_LIR_OK ||
             drop.op!=release || drop.result ||

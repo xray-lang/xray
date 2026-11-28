@@ -146,7 +146,7 @@ static const XrLirHomeEvent *rbc_value_binding_forwarding_event(const XrRbcModul
         home->owner_count!=1 || home->size!=sizeof(XrtManagedHeader *) || home->byte_count ||
         home->transport || home->cell_transport || home->view_workspace || home->view_storage ||
         code->locations[value].kind!=XR_RBC_VALUE_NOWHERE ||
-        (!map && kind!=XRT_VALUE_ARRAY_I64) || access.window!=(map && create ? UINT32_MAX : 0)) return NULL;
+        (!map && !xrt_value_kind_is_array(kind)) || access.window!=(map && create ? UINT32_MAX : 0)) return NULL;
     const XrtValueImage *image=xr_rbc_module_value_image(module);
     const XrtValueImageType *type=&image->types[binding->type-1];
     if (type->size!=sizeof(XrtManagedHeader *) || type->alignment!=_Alignof(XrtManagedHeader *) ||

@@ -179,6 +179,12 @@ def main() -> None:
                 continue
         elif b"({" in generated.read_bytes():
             failures.append((label, "C output contains a GNU statement expression"))
+        if generated.is_file():
+            # Optional exact occurrence counts pin the emitted shape of a source.
+            emitted_text = generated.read_text(encoding="utf-8", errors="replace")
+            for needle, count in first_case.get("c_count", {}).items():
+                if emitted_text.count(needle) != count:
+                    failures.append((label, "generated C occurrence count", needle, emitted_text.count(needle), count))
 
         built = build_native(label, source, executable)
         if built[0] or not executable.is_file():

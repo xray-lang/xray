@@ -56,12 +56,12 @@ static uint32_t array_forwarding_encoded_sites(const XrRbcModule *module) {
 }
 static void array_forwarding_bytecode_execution(void) {
     const uint32_t expected[]={2,1,1,0,0,0,2};
-    const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8,XR_LIR_U64,XR_LIR_STRING};
+    const XrLirType elements[]={XR_LIR_I64,XR_LIR_U8,XR_LIR_U64,XR_LIR_F64,XR_LIR_STRING};
     for (size_t e=0;e<sizeof(elements)/sizeof(*elements);++e)
         for (unsigned mode=0;mode<sizeof(expected)/sizeof(*expected);++mode) {
             XrRbcProgram *program=array_forwarding_compile(array_forward_fixture(elements[e],(enum ArrayForwardMode)mode));
             const XrRbcModule *module=xr_rbc_program_view(program);
-            CHECK(array_forwarding_encoded_sites(module)==(e ? 0u : expected[mode]));
+            CHECK(array_forwarding_encoded_sites(module)==expected[mode]);
             XrRbcExecution *execution=NULL; XrRbcModule raw=*module; raw.code_lease=(XrRbcCodeLease){0};
             CHECK(xr_rbc_module_prepare(&raw,0,NULL,0,xr_rbc_program_locations(program),&execution)==XR_RBC_INVALID && !execution);
             array_forwarding_run_retired(program,NULL,0,elements[e]==XR_LIR_STRING ? 0u : 1u);

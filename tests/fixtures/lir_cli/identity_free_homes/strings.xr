@@ -1,0 +1,61 @@
+// Array<string> bindings mutated in one loop and read in the next keep one
+// owner across the Cell round trip; reads, rewrites and early exits agree.
+fn names_total(n: i64) -> i64 {
+    var names: Array<string> = []
+    var i = 0
+    while (i < n) {
+        names.push("n" + string(i))
+        i = i + 1
+    }
+    var total = 0
+    var j = 0
+    while (j < len(names)) {
+        total = total + len(names[j])
+        j = j + 1
+    }
+    return total
+}
+
+fn decorated_total(n: i64) -> i64 {
+    var names: Array<string> = []
+    var i = 0
+    while (i < n) {
+        names.push("v" + string(i))
+        i = i + 1
+    }
+    var k = 0
+    while (k < n) {
+        names[k] = names[k] + "!"
+        k = k + 1
+    }
+    var total = 0
+    var j = 0
+    while (j < n) {
+        total = total + len(names[j])
+        j = j + 1
+    }
+    return total
+}
+
+fn find(n: i64, target: string) -> i64 {
+    var names: Array<string> = []
+    var i = 0
+    while (i < n) {
+        names.push("k" + string(i))
+        i = i + 1
+    }
+    var j = 0
+    while (j < len(names)) {
+        if (names[j] == target) {
+            return j
+        }
+        j = j + 1
+    }
+    return -1
+}
+
+print(names_total(1000))
+print(names_total(0))
+print(decorated_total(100))
+print(find(50, "k37"))
+print(find(50, "zz"))

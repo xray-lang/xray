@@ -35,12 +35,12 @@ static bool c_binding_forward_geometry(LirC *c, const XrLirHomeEvent *event,
         (!map && cell_type!=XR_LIR_ARRAY_CELL) || c_value_type(c,event->target)!=value_type ||
         op->operand_count!=1 || op->op!=copy_op || op->type!=copy_type ||
         op->result!=(create?event->source:event->target) || op->operands[0]!=(create?event->target:event->source)) return false;
-    XrLirArrayShape shape={0};
+    XrLirArrayShape cell_shape={0},value_shape={0};
     if (!map && (xr_lir_array_shape_view(c->request->module,
-        (XrLirValue){c->request->module,c->function.id,event->source},&shape)!=XR_LIR_OK ||
-        shape.element!=XR_LIR_I64 || xr_lir_array_shape_view(c->request->module,
-        (XrLirValue){c->request->module,c->function.id,event->target},&shape)!=XR_LIR_OK ||
-        shape.element!=XR_LIR_I64)) return false;
+        (XrLirValue){c->request->module,c->function.id,event->source},&cell_shape)!=XR_LIR_OK ||
+        xr_lir_array_shape_view(c->request->module,
+        (XrLirValue){c->request->module,c->function.id,event->target},&value_shape)!=XR_LIR_OK ||
+        cell_shape.element!=value_shape.element)) return false;
     XrLirInstructionView drop={0};
     if (xr_lir_instruction_view(c->request->module,(XrLirBlock){c->request->module,c->function.id,event->block},
         event->forwarding_drop-1,&drop)!=XR_LIR_OK || drop.op!=c_binding_forward_release(c,event) ||
@@ -53,7 +53,8 @@ static bool c_binding_forward_geometry(LirC *c, const XrLirHomeEvent *event,
         value->size!=sizeof(XrtManagedHeader *) || value->byte_count || value->transport || value->cell_transport ||
         value->view_workspace || value->view_storage) return false;
     const XrtValuePlanSpec *spec=&c->value_types->rows[binding->type-1].spec;
-    if (spec->kind!=(map ? XRT_VALUE_MAP_STRING_I64 : XRT_VALUE_ARRAY_I64) || spec->size!=sizeof(XrtManagedHeader *) ||
+    if ((map ? spec->kind!=XRT_VALUE_MAP_STRING_I64 : !xrt_value_kind_is_array(spec->kind)) ||
+        spec->size!=sizeof(XrtManagedHeader *) ||
         spec->alignment!=_Alignof(XrtManagedHeader *) ||
         spec->owned_count!=1 || !spec->owned_offsets || spec->owned_offsets[0]) return false;
     size_t slots[]={binding->first_owner,value->first_owner}, offsets[]={binding->offset,value->offset};

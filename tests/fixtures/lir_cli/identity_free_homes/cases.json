@@ -1,0 +1,18 @@
+{
+  "strings": {
+    "exit": 0,
+    "stdout": "3890\n0\n390\n37\n-1\n",
+    "stderr": "",
+    "c_count": {
+      "xrt_managed_frame_try_forward(": 8
+    }
+  },
+  "numbers": {
+    "exit": 0,
+    "stdout": "5.0\n33586\n",
+    "stderr": "",
+    "c_count": {
+      "xrt_managed_frame_try_forward(": 4
+    }
+  }
+}

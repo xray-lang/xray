@@ -1,0 +1,35 @@
+// Arrays of f64 and u8 elements follow the same identity-free home rules.
+fn halves(n: i64) -> f64 {
+    var xs: Array<f64> = []
+    var i = 0
+    while (i < n) {
+        xs.push(0.5)
+        i = i + 1
+    }
+    var sum = 0.0
+    var j = 0
+    while (j < len(xs)) {
+        sum = sum + xs[j]
+        j = j + 1
+    }
+    return sum
+}
+
+fn bytes_total(n: i64) -> i64 {
+    var bytes: Array<u8> = []
+    var i = 0
+    while (i < n) {
+        bytes.push((i % 256) as u8)
+        i = i + 1
+    }
+    var total = 0
+    var j = 0
+    while (j < len(bytes)) {
+        total = total + (bytes[j] as i64)
+        j = j + 1
+    }
+    return total
+}
+
+print(halves(10))
+print(bytes_total(300))

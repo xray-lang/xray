@@ -1,0 +1,19 @@
+// anchor: string-array-round-trip-oob
+// A read past the end after the round trip fails with every owner released.
+fn overrun(n: i64) -> i64 {
+    var names: Array<string> = []
+    var i = 0
+    while (i < n) {
+        names.push("p" + string(i))
+        i = i + 1
+    }
+    var total = 0
+    var j = 0
+    while (j <= n) {
+        total = total + len(names[j])
+        j = j + 1
+    }
+    return total
+}
+
+print(overrun(5))
