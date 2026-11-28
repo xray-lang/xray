@@ -215,7 +215,8 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
     c->slot_count=c->scalar_parameter_count;
     uint32_t physical=0;
     for(uint32_t p=0;p<c->view.parameter_count;++p)
-        if(!c->aggregate_home || c->aggregate_home[c->view.parameters[p]]==UINT32_MAX)
+        if((!c->aggregate_home || c->aggregate_home[c->view.parameters[p]]==UINT32_MAX) &&
+            physical<c->scalar_parameter_count)
             c->slots[c->view.parameters[p]]=physical++;
     /* Edge owners stay resident until selected-edge TAKE. Scalar conditions
      * reload by copy into instruction temporaries. */
@@ -248,8 +249,21 @@ static bool rbc_lir_spill_slots(RbcLirCompiler *c, uint32_t window) {
         if (!rbc_lir_pin_value(c,v,budget)) return false;
     }
     for(unsigned pool=0;pool<2;++pool) {
+        if (pool == 1 && c->spill_parameter_count) {
+            /* Spill parameters open the scalar suffix, where CALL places the
+             * caller's outgoing spill arguments. Only plain scalar functions
+             * take them, so no other value can claim a register home first. */
+            XR_DCHECK(c->spill_count == c->reference_spill_count, "the reference prefix precedes scalar spills");
+            for (uint32_t p = c->scalar_parameter_count; p < c->view.parameter_count; ++p) {
+                uint32_t value = c->view.parameters[p];
+                if (c->slots[value] != UINT32_MAX)
+                    return rbc_lir_fail(c,XR_RBC_COMPILE_INVALID,"spill parameter was given a register home");
+                c->spill_home[value] = c->spill_count++;
+            }
+        }
         for(uint32_t v=1;v<=c->view.value_count;++v) {
-            if(c->slots[v]!=UINT32_MAX || c->output.literals[v] || c->output.lengths[v])continue;
+            if(c->slots[v]!=UINT32_MAX || c->spill_home[v]!=UINT32_MAX ||
+                c->output.literals[v] || c->output.lengths[v])continue;
             /* Common homes already own these values. Creating another bank
              * slot would emit a second, unused owner declaration at pressure. */
             if (rbc_lir_common_value(c, v)) continue;

@@ -290,6 +290,16 @@ XR_RBC_CASE(ZEXT) {
     XR_RBC_REG(XR_RBC_A()) = XR_RBC_REG(XR_RBC_B()) & (UINT64_MAX >> (64u - XR_RBC_C()));
     XR_RBC_NEXT();
 }
+XR_RBC_CASE(SPILL_ARG) {
+    // The caller is the top activation, so its spill bank ends at spill_count.
+    size_t index = stack->spill_count + (instruction >> 16);
+    void *storage = stack->spills;
+    if (!xr_rbc_grow(&storage, &stack->spill_capacity, index + 1, sizeof(*stack->spills)))
+        return XR_RBC_OUT_OF_MEMORY;
+    stack->spills = storage;
+    stack->spills[index] = XR_RBC_SLOT(XR_RBC_A());
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(SEXT) {
     unsigned shift = 64u - XR_RBC_C();
     XR_RBC_REG(XR_RBC_A()) = xr_rbc_shift_right(XR_RBC_REG(XR_RBC_B()) << shift, shift);
@@ -395,6 +405,11 @@ XR_RBC_CASE(CALL) {
 #else
     xr_rbc_entry_clear(registers, &entries[target]);
 #endif
+    // Outgoing spill arguments sit at the callee's spill base. Move them past
+    // its reference prefix before that prefix is cleared.
+    if (callee->spill_parameter_count)
+        memmove(stack->spills + stack->spill_count + callee->reference_spill_count,
+            stack->spills + stack->spill_count, callee->spill_parameter_count * sizeof(*stack->spills));
     if (callee->reference_spill_count)
         memset(stack->spills + stack->spill_count, 0, callee->reference_spill_count * sizeof(*stack->spills));
     stack->cell_count += callee->cell_count;

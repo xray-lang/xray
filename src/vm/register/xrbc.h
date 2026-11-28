@@ -26,6 +26,12 @@
 
 #define XR_RBC_REGISTER_COUNT_MAX 255u
 #define XR_RBC_SPILL_COUNT_MAX 65535u
+/* A direct callee receives at most this many physical scalar parameters in
+ * its register window. Further scalar parameters arrive in its spill bank,
+ * like stack-passed arguments in a native calling convention. The bound keeps
+ * two full windows (its own parameters and an outgoing call) plus temporaries
+ * inside the 255 addressable registers of one activation. */
+#define XR_RBC_REGISTER_PARAMETER_MAX 64u
 #define XR_RBC_JUMP_MIN (-8388608)
 #define XR_RBC_JUMP_MAX 8388607
 
@@ -113,7 +119,8 @@
     X(OWNER_RETURN, ABX) \
     X(ARITHMETIC_PANIC, ABX) \
     X(ZEXT, ABS8) \
-    X(SEXT, ABS8)
+    X(SEXT, ABS8) \
+    X(SPILL_ARG, ABX)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
@@ -251,6 +258,12 @@ typedef struct {
     // Spills are activation-owned indexed storage. The managed prefix owns
     // references; the remaining slots contain scalar bits or capabilities.
     uint32_t spill_count, reference_spill_count;
+    /* Scalar parameters beyond the register window. A caller writes them
+     * with SPILL_ARG and the host passes an entry's in its argument array; on
+     * entry they occupy the first scalar spill slots, starting at
+     * reference_spill_count. Nonzero only for plain functions with exactly
+     * XR_RBC_REGISTER_PARAMETER_MAX register parameters. */
+    uint32_t spill_parameter_count;
     const XrRbcStateAccess *state_accesses;
     size_t state_access_count;
     /* NULL retains the String-only reference prefix. Otherwise every prefix
@@ -455,6 +468,10 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 // Registers hold 64-bit lanes, so a narrow integer result is computed at full
 // width and then normalized: ZEXT keeps the low C bits of B and clears the
 // rest, SEXT sign-extends them. C is the lane width, exactly 8, 16 or 32.
+// SPILL_ARG A,Bx copies A into outgoing argument Bx, just above the caller's
+// spill bank. A run of them, in order from zero, immediately precedes the CALL
+// whose callee has that many spill parameters; only MOV, LOADK, LOADI and
+// RELOAD may interleave. CALL then moves them to the callee's scalar spill slots.
 XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t entry,
     const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
     XrRbcExecution **output);

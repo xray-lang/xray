@@ -1409,11 +1409,13 @@ static void test_call_windows(void) {
     xr_rbc_program_destroy(program);
 }
 
+/* Parameters past the register window arrive in the spill bank, so a function
+ * compiles to an addressable register file however many parameters it takes. */
 static void test_capacity(uint32_t count, bool scratch) {
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(NULL, &m));
-    XrLirType types[256];
-    uint64_t arguments[256];
+    XrLirType types[300];
+    uint64_t arguments[300];
     for (uint32_t n = 0; n < count; ++n) { types[n] = XR_LIR_I64; arguments[n] = n; }
     if (scratch) types[0] = XR_LIR_I1;
     XrLirFunction root = test_function(m, "capacity", types, count, XR_LIR_I64);
@@ -1431,22 +1433,23 @@ static void test_capacity(uint32_t count, bool scratch) {
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic;
     XrRbcCompileStatus status = xr_rbc_compile(m, root, &program, &diagnostic);
-    if ((count == 255 && !scratch) || (count == 254 && scratch)) {
-        CHECK(status == XR_RBC_COMPILE_OK);
-        CHECK(xr_rbc_program_view(program)->functions[0].register_count == 255);
+    CHECK(status == XR_RBC_COMPILE_OK);
+    const XrRbcFunction *compiled = &xr_rbc_program_view(program)->functions[0];
+    uint32_t window = count < XR_RBC_REGISTER_PARAMETER_MAX ? count : XR_RBC_REGISTER_PARAMETER_MAX;
+    CHECK(compiled->register_count <= XR_RBC_REGISTER_COUNT_MAX && compiled->parameter_count == window &&
+        compiled->spill_parameter_count == count - window);
+    CHECK(run(program, arguments, count) == count - 1);
+    if (scratch) {
+        arguments[0] = 1;
         CHECK(run(program, arguments, count) == count - 1);
-        if (scratch) {
-            arguments[0] = 1;
-            CHECK(run(program, arguments, count) == count - 1);
-        }
-    } else CHECK(status == XR_RBC_COMPILE_LIMIT && !program);
+    }
     xr_lir_module_destroy(m);
     xr_rbc_program_destroy(program);
 }
 
 static void test_call_capacity(uint32_t count) {
     XrLirModule *m = NULL;
-    XrLirType types[254];
+    XrLirType types[300];
     for (uint32_t n = 0; n < count; ++n) types[n] = XR_LIR_I64;
     OK(xr_lir_module_create(NULL, &m));
     XrLirFunction callee = test_function(m, "callee", NULL, 0, XR_LIR_I64);
@@ -1460,12 +1463,10 @@ static void test_call_capacity(uint32_t count) {
     OK(xr_lir_module_finish(m, NULL));
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic;
-    XrRbcCompileStatus status = xr_rbc_compile(m, root, &program, &diagnostic);
-    if (count == 253) {
-        CHECK(status == XR_RBC_COMPILE_OK);
-        uint64_t arguments[254] = {0};
-        CHECK(run(program, arguments, count) == 71);
-    } else CHECK(status == XR_RBC_COMPILE_LIMIT && !program);
+    // Wide parameters leave room for an outgoing call window in the same frame.
+    CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    uint64_t arguments[300] = {0};
+    CHECK(run(program, arguments, count) == 71);
     xr_lir_module_destroy(m);
     xr_rbc_program_destroy(program);
 }
@@ -2602,12 +2603,16 @@ int main(void) {
     test_parallel_cycle();
     test_same_target_edges();
     test_call_windows();
+    test_capacity(64, false);
+    test_capacity(65, false);
     test_capacity(255, false);
     test_capacity(256, false);
+    test_capacity(300, false);
     test_capacity(254, true);
-    test_capacity(255, true);
+    test_capacity(300, true);
     test_call_capacity(253);
     test_call_capacity(254);
+    test_call_capacity(300);
     test_unused_and_invalid();
     test_owned_diagnostic_and_rejection();
     test_i64_to_f64_admission();

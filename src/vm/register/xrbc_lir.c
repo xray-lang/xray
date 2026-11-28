@@ -59,7 +59,9 @@ struct XrRbcProgram {
     XrRbcModule module;
     XrtLocationOwner *locations;
     XrRbcNativeKind natives[XR_RBC_NATIVE_COUNT];
-    XrLirType parameters[XR_RBC_REGISTER_COUNT_MAX];
+    /* Entry parameter types the host arguments are checked against. Owned,
+     * because an entry may take more parameters than one register window. */
+    XrLirType *parameters;
     uint32_t parameter_count;
     uint32_t *physical_aggregates;
     uint32_t *physical_callables;
@@ -133,6 +135,9 @@ typedef struct {
     uint32_t *scope_home;
     uint32_t *aggregate_parameters, *aggregate_arguments;
     uint32_t scalar_parameter_count, aggregate_parameter_count;
+    /* Scalar parameters received in the spill bank, and the bits temporary a
+     * spilled direct-call argument is reloaded through (UINT32_MAX if none). */
+    uint32_t spill_parameter_count, argument_scratch;
     size_t aggregate_argument_count, aggregate_argument_capacity;
     XrRbcAggregateValue *aggregate_values;
     uint32_t aggregate_value_count;
@@ -940,6 +945,44 @@ static bool rbc_lir_normalize(RbcLirCompiler *c, XrLirType type, uint32_t destin
     return rbc_lir_emit(c, sign ? XR_RBC_SEXT : XR_RBC_ZEXT, destination, source, 0, width);
 }
 
+/* The register window carries at most XR_RBC_REGISTER_PARAMETER_MAX physical
+ * scalar arguments; the rest travel as outgoing spill arguments. */
+static uint32_t rbc_lir_window_arguments(uint32_t physical) {
+    return physical < XR_RBC_REGISTER_PARAMETER_MAX ? physical : XR_RBC_REGISTER_PARAMETER_MAX;
+}
+
+/* A direct call to compiled code whose arguments are all scalars moves each
+ * argument straight into its window register or outgoing spill argument. A
+ * spilled argument reloads through one bits temporary, so the call needs no
+ * staging register per operand. */
+static bool rbc_lir_direct_scalar_call(RbcLirCompiler *c, const XrLirInstructionView *i) {
+    if (i->op != XR_LIR_CALL || rbc_lir_aggregate_call(c->input, i)) return false;
+    uint32_t mapped = c->functions[i->callee - 1];
+    if (mapped == RBC_LIR_PRINT_STRING || rbc_lir_native(mapped)) return false;
+    for (uint32_t a = 0; a < i->operand_count; ++a)
+        if (!rbc_lir_scalar(rbc_lir_value_type(c, i->operands[a]))) return false;
+    return true;
+}
+
+/* Physical scalar parameters beyond the register window arrive in the spill
+ * bank. Only a plain, non-throwing function of scalar parameters uses that
+ * convention, so every other call form keeps its register-only window. */
+static bool rbc_lir_spill_parameters(RbcLirCompiler *c) {
+    if (c->scalar_parameter_count <= XR_RBC_REGISTER_PARAMETER_MAX) return true;
+    XrLirClosureTarget target = {0};
+    xr_lir_closure_target_view(c->input, c->function, &target);
+    if (c->aggregate_parameter_count || target.capture_count || c->view.error)
+        return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED,
+            "only a plain function receives parameters beyond the register window");
+    for (uint32_t p = 0; p < c->view.parameter_count; ++p)
+        if (!rbc_lir_scalar(c->view.parameter_types[p]))
+            return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED,
+                "a function with parameters beyond the register window takes only scalars");
+    c->spill_parameter_count = c->scalar_parameter_count - XR_RBC_REGISTER_PARAMETER_MAX;
+    c->scalar_parameter_count = XR_RBC_REGISTER_PARAMETER_MAX;
+    return true;
+}
+
 static bool rbc_lir_layout(RbcLirCompiler *c) {
     uint32_t window = 0;
     for(uint32_t b=0;b<c->view.block_count;++b) {
@@ -967,7 +1010,8 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             uint64_t strings=0,bits=0,refs=0,maps=0,arrays[XR_RBC_ARRAY_FAMILY_COUNT]={0};
             if (rbc_lir_callable_scope_point(&i) || xr_lir_range_point(c->input, &i) || xr_lir_string_role(c->input, &i) || xr_lir_display_point(c->input, &i) || rbc_lir_map_point(c, &i) || rbc_lir_set_point(c, &i) || rbc_lir_array_point(c, &i) || rbc_lir_aggregate_point(&i) ||
                 rbc_lir_aggregate_state(c->input, c->function, &i)) continue;
-            for(uint32_t a=0;a<i.operand_count;++a) {
+            bool direct = rbc_lir_direct_scalar_call(c, &i);
+            for(uint32_t a=0;!direct && a<i.operand_count;++a) {
                 uint32_t v=i.operands[a];XrLirType type=rbc_lir_value_type(c,v);
                 if(c->output.literals[v] || c->output.lengths[v] ||
                     type==XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_MAP_STRING_I64_REF || type==XR_LIR_SET_I64_CELL || type==XR_LIR_SET_I64_REF || type==XR_LIR_STRING_CELL || type==XR_LIR_ARRAY_CELL || type==XR_LIR_ARRAY_REF || type==XR_LIR_STRING_REF ||
@@ -995,6 +1039,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE && i.type!=XR_LIR_VIEW_FRAME &&
                     i.type!=XR_LIR_VIEW_CELL && i.type!=XR_LIR_SLICE_I64 && i.type<XR_LIR_TYPE_COUNT)++bits;
             }
+            if (direct && bits < 2) bits = 2;
             if(strings>UINT32_MAX || bits>UINT32_MAX)
                 return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporary count exceeds index space");
             if(c->temporary_maps<maps)c->temporary_maps=(uint32_t)maps;
@@ -1012,14 +1057,15 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 uint32_t mapped=c->functions[i.callee-1];
                 uint32_t physical=rbc_lir_native(mapped)?
                     xr_rbc_native_shape((XrRbcNativeKind)(mapped - RBC_LIR_NATIVE_BASE)).window_inputs :
-                    rbc_lir_scalar_arguments(c->input, &i);
+                    rbc_lir_window_arguments(rbc_lir_scalar_arguments(c->input, &i));
                 if(physical==UINT32_MAX)
                     return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"call window exceeds index space");
                 if(window<physical+1)window=physical+1;
             }
         }
     }
-    if(c->view.value_count>XR_RBC_REGISTER_COUNT_MAX)return rbc_lir_spill_slots(c,window);
+    if(c->view.value_count>XR_RBC_REGISTER_COUNT_MAX || c->spill_parameter_count)
+        return rbc_lir_spill_slots(c,window);
     if (!rbc_lir_assign_slots(c)) return false;
     for (uint32_t b = 0; b < c->view.block_count; ++b) {
         XrLirBlock block;
@@ -1035,7 +1081,7 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 uint32_t mapped = c->functions[i.callee - 1];
                 uint32_t physical = rbc_lir_native(mapped) ?
                     xr_rbc_native_shape((XrRbcNativeKind)(mapped - RBC_LIR_NATIVE_BASE)).window_inputs :
-                    rbc_lir_scalar_arguments(c->input, &i);
+                    rbc_lir_window_arguments(rbc_lir_scalar_arguments(c->input, &i));
                 if (window < physical + 1) window = physical + 1;
             }
             if (i.op == XR_LIR_CONDBR && !c->scratch_count) c->scratch_count = 1;
@@ -1350,10 +1396,19 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
                 !rbc_lir_emit(c, XR_RBC_CALLN, destination, 0, 0, target)) return false;
             return !i->result || rbc_lir_emit(c, XR_RBC_MOV, result, destination, 0, 0);
         }
-        uint32_t destination = c->register_count - i->operand_count - 1;
-        for (uint32_t n = 0; n < i->operand_count; ++n)
-            if (!rbc_lir_emit(c, XR_RBC_MOV, destination + n + 1,
-                    c->slots[i->operands[n]], 0, 0)) return false;
+        uint32_t window = rbc_lir_window_arguments(i->operand_count);
+        uint32_t destination = c->register_count - window - 1;
+        for (uint32_t n = 0; n < i->operand_count; ++n) {
+            uint32_t value = i->operands[n], source = c->slots[value];
+            if (source == UINT32_MAX && c->spill_home[value] != UINT32_MAX) {
+                if (c->argument_scratch == UINT32_MAX)
+                    return rbc_lir_fail(c, XR_RBC_COMPILE_INVALID, "spilled call argument has no reload register");
+                source = c->argument_scratch;
+                if (!rbc_lir_emit(c, XR_RBC_RELOAD, source, 0, 0, c->spill_home[value])) return false;
+            }
+            if (!(n < window ? rbc_lir_emit(c, XR_RBC_MOV, destination + n + 1, source, 0, 0) :
+                    rbc_lir_emit(c, XR_RBC_SPILL_ARG, source, 0, 0, n - window))) return false;
+        }
         if (!rbc_lir_emit(c, XR_RBC_CALL, destination, 0, 0,
                 c->functions[i->callee - 1] - 1)) return false;
         return !i->result || rbc_lir_array_move(c,
@@ -1449,7 +1504,8 @@ static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstruction
     uint32_t staged[XR_RBC_REGISTER_COUNT_MAX],count=0;
     RbcLirTemporaryUse use = {0};
     uint32_t immediate = rbc_lir_immediate_operand(c, i);
-    for(uint32_t a=0;a<i->operand_count;++a) {
+    bool direct = rbc_lir_direct_scalar_call(c, i);
+    for(uint32_t a=0;!direct && a<i->operand_count;++a) {
         if (a == immediate) continue;
         uint32_t value=i->operands[a];
         if(c->spill_home[value]==UINT32_MAX || c->slots[value]!=UINT32_MAX)continue;
@@ -1465,7 +1521,12 @@ static bool rbc_lir_spilled_instruction(RbcLirCompiler *c,const XrLirInstruction
         c->slots[i->result]=rbc_lir_stage_slot(c,i->result,&use);
         if(c->slots[i->result]==UINT32_MAX)return false;
     }
+    if (direct && i->operand_count) {
+        c->argument_scratch = rbc_lir_stage_slot(c, i->operands[0], &use);
+        if (c->argument_scratch == UINT32_MAX) return false;
+    }
     bool valid=rbc_lir_instruction(c,i);
+    c->argument_scratch = UINT32_MAX;
     if(valid && result)
         valid=rbc_lir_emit(c,XR_RBC_SPILL,c->slots[i->result],0,0,c->spill_home[i->result]);
     for(uint32_t n=0;n<count;++n) {
@@ -1673,7 +1734,8 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
                 (XrRbcCallableValue){XR_RBC_CALLABLE_REFERENCE, XR_RBC_MAP_STRING_I64} :
                 (XrRbcCallableValue){XR_RBC_CALLABLE_SCALAR, lir_pod_scalar(c->view.parameter_types[p])};
     }
-    if (!rbc_lir_aggregate_homes(c) || !rbc_lir_callable_scope_homes(c) ||
+    c->argument_scratch = UINT32_MAX;
+    if (!rbc_lir_aggregate_homes(c) || !rbc_lir_spill_parameters(c) || !rbc_lir_callable_scope_homes(c) ||
         !rbc_lir_immediates(c) || !rbc_lir_layout(c) || !rbc_lir_kinds(c) || !rbc_lir_value_code_prepare(c)) return false;
     size_t count = (size_t) c->view.block_count + 1;
     if (count > SIZE_MAX / sizeof(*c->blocks))
@@ -1737,6 +1799,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
             xr_rbc_array_kind_at(rbc_lir_array_family(array_result.element)) :
             rbc_lir_callable_type(c->input, c->view.result) ? XR_RBC_FUNCTION : XR_RBC_BITS,
         .spill_count=c->spill_count,.reference_spill_count=c->reference_spill_count,
+        .spill_parameter_count=c->spill_parameter_count,
         .aggregate_values=c->aggregate_values, .aggregate_value_count=c->aggregate_value_count,
         .aggregate_size=c->aggregate_size, .aggregate_accesses=c->aggregate_accesses,
         .aggregate_access_count=c->aggregate_access_count, .aggregate_operands=c->aggregate_operands,
@@ -1901,6 +1964,7 @@ XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program) {
     }
     xr_free(program->physical_aggregates);
     xr_free(program->physical_callables);
+    xr_free(program->parameters);
     xr_free(program);
 }
 
@@ -2038,9 +2102,16 @@ static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t
         if (c.value_code) p->value_codes[f] = c.value_code;
         if (!f) {
             p->parameter_count = c.view.parameter_count - (p->module.state_spec ? 1u : 0u);
-            if (p->parameter_count)
+            if (p->parameter_count) {
+                p->parameters = xr_malloc((size_t)p->parameter_count * sizeof(*p->parameters));
+                if (!p->parameters) {
+                    xr_free(pool.mapping);
+                    return rbc_lir_error(d, XR_RBC_COMPILE_OUT_OF_MEMORY,
+                        "cannot own entry parameter types", (XrLirSource){0});
+                }
                 memcpy(p->parameters, c.view.parameter_types,
                     p->parameter_count * sizeof(*p->parameters));
+            }
         }
     }
     xr_free(pool.mapping);

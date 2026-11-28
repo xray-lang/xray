@@ -843,7 +843,7 @@ static bool rbc_lir_value_instruction(RbcLirCompiler *c, const XrLirInstructionV
             access.other=(uint32_t)c->value_call_cursor;
         }
         access.index = c->functions[i->callee - 1] - 1; access.count = i->operand_count;
-        access.window = c->register_count - rbc_lir_scalar_arguments(c->input,i) - 1;
+        access.window = c->register_count - rbc_lir_window_arguments(rbc_lir_scalar_arguments(c->input,i)) - 1;
         if (!rbc_lir_value_arguments(c,i->operands,i->operand_count,&access.first)) return false;
         break;
     case XR_LIR_RET:

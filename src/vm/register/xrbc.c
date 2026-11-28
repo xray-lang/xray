@@ -235,6 +235,12 @@ static bool xr_rbc_function_valid(const XrRbcFunction *function) {
            function->parameter_count <= function->register_count &&
            function->cell_count <= 65536 && function->spill_count <= XR_RBC_SPILL_COUNT_MAX &&
            function->reference_spill_count <= function->spill_count &&
+           function->spill_parameter_count <=
+               function->spill_count - function->reference_spill_count &&
+           (!function->spill_parameter_count ||
+            (function->parameter_count == XR_RBC_REGISTER_PARAMETER_MAX && !function->callable &&
+             !function->capture_count && !function->state_capture && !function->cleanup_only &&
+             !function->aggregate_parameter_count)) &&
            (!function->constant_count || function->constants) &&
            (function->state_accesses ? function->state_access_count <= 65536 :
             function->state_access_count == 0))) return false;
@@ -350,6 +356,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
         break;
     case XR_RBC_SPILL: case XR_RBC_RELOAD:
         if (a >= registers || index >= function->spill_count) return false;
+        break;
+    case XR_RBC_SPILL_ARG:
+        if (a >= registers || index >= XR_RBC_SPILL_COUNT_MAX) return false;
         break;
     case XR_RBC_LOADI:
         if (a >= registers) return false;
@@ -626,7 +635,8 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
         (inline_result && (function->aggregate_result_type || function->result_kind != XR_RBC_BITS ||
             !xr_rbc_module_code_owner(module))) ||
         captures>function->parameter_count ||
-        argument_count != function->parameter_count - captures - (inject_state ? 1u : 0u) ||
+        argument_count != (size_t)function->parameter_count + function->spill_parameter_count -
+            captures - (inject_state ? 1u : 0u) ||
         (function_result && (!owner || !image || !value_code || !value_code->homes ||
             !value_code->homes->result_type || value_code->homes->result_type>image->type_count ||
             image->types[value_code->homes->result_type-1].kind!=XRT_VALUE_FUNCTION)) ||
@@ -634,7 +644,8 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
          rbc_register_kind(function, function->parameter_count - 1) == XR_RBC_STATE)) return XR_RBC_INVALID;
     for (size_t p = 0; p < argument_count; ++p) {
         uint32_t parameter = (uint32_t)(captures + p);
-        if ((function->register_kinds && function->register_kinds[parameter] != XR_RBC_BITS) ||
+        if ((function->register_kinds && parameter < function->parameter_count &&
+             function->register_kinds[parameter] != XR_RBC_BITS) ||
             rbc_requires_typed_value(image, rbc_formal_value_type(value_code, parameter))) return XR_RBC_INVALID;
     }
     if (function->callable) {
@@ -722,8 +733,13 @@ static XrRbcStatus rbc_prepare(const RbcPrepareRequest *request, XrRbcExecution 
         }
     }
     xr_rbc_entry_clear(execution->stack.slots, &execution->entries[entry]);
-    if (argument_count)
-        for (size_t i = 0; i < argument_count; ++i) execution->stack.slots[captures+i].bits = arguments[i];
+    /* The host is the entry's caller: arguments past the register window go to
+     * the spill parameters, which only a capture-free plain function declares. */
+    for (size_t i = 0; i < argument_count; ++i) {
+        if (captures + i < function->parameter_count) execution->stack.slots[captures+i].bits = arguments[i];
+        else execution->stack.spills[function->reference_spill_count + (captures + i - function->parameter_count)] =
+            (XrRbcRegister){.bits = arguments[i]};
+    }
     if (inject_state) execution->stack.slots[argument_count].state =
         request->shared_state ? request->shared_state : execution->state;
     if (function->reference_spill_count)

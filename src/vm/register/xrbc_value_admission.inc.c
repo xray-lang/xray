@@ -939,7 +939,10 @@ XR_FUNC bool xr_rbc_value_instruction_valid(const XrRbcModule *module,
         const XrRbcFunction *target=&module->functions[a.index];
         bool invoke=a.operation==XR_RBC_VALUE_INVOKE;
         if (invoke != (callee && callee->error_type!=0)) return false;
-        if (target->parameter_count>function->register_count-a.window-1 ||
+        /* Only a receiving value code places formals by location, including
+         * spill parameters; a bare register window holds no spill parameter. */
+        if ((target->spill_parameter_count && !callee) ||
+            target->parameter_count>function->register_count-a.window-1 ||
             (callee && (callee->parameter_count!=a.count || (a.count && !callee->parameters))) ||
             (!callee && target->parameter_count!=a.count)) return false;
         for (uint32_t p=0;p<a.count;++p) {

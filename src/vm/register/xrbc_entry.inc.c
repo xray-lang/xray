@@ -79,7 +79,8 @@ static void xr_rbc_entry_instruction(const XrRbcModule *module, const XrRbcFunct
         writes = true;
         xr_rbc_entry_read(state, a);
         break;
-    case XR_RBC_RET: case XR_RBC_LTI: case XR_RBC_LEI: case XR_RBC_GTI: case XR_RBC_GEI: case XR_RBC_EQI:
+    case XR_RBC_RET: case XR_RBC_SPILL_ARG:
+    case XR_RBC_LTI: case XR_RBC_LEI: case XR_RBC_GTI: case XR_RBC_GEI: case XR_RBC_EQI:
         xr_rbc_entry_read(state, a);
         break;
     case XR_RBC_CALL: case XR_RBC_CALLN: {

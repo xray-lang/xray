@@ -1,0 +1,12 @@
+// Spill parameters carry every scalar kind; a String result returns normally.
+fn mixed(x0: f64, b1: bool, u2: u8, i3: i64, x4: f64, b5: bool, u6: u8, i7: i64, x8: f64, b9: bool, u10: u8, i11: i64, x12: f64, b13: bool, u14: u8, i15: i64, x16: f64, b17: bool, u18: u8, i19: i64, x20: f64, b21: bool, u22: u8, i23: i64, x24: f64, b25: bool, u26: u8, i27: i64, x28: f64, b29: bool, u30: u8, i31: i64, x32: f64, b33: bool, u34: u8, i35: i64, x36: f64, b37: bool, u38: u8, i39: i64, x40: f64, b41: bool, u42: u8, i43: i64, x44: f64, b45: bool, u46: u8, i47: i64, x48: f64, b49: bool, u50: u8, i51: i64, x52: f64, b53: bool, u54: u8, i55: i64, x56: f64, b57: bool, u58: u8, i59: i64, x60: f64, b61: bool, u62: u8, i63: i64, x64: f64, b65: bool, u66: u8, i67: i64, x68: f64, b69: bool, u70: u8, i71: i64) -> string {
+    var total = x68 + x0
+    if (b69) {
+        total = total + 1.0
+    }
+    if (b65) {
+        total = total + 100.0
+    }
+    return string(total) + "/" + string(u70) + "/" + string(i71)
+}
+print(mixed(0.5, true, 2, -3, 4.5, false, 6, -7, 8.5, true, 10, -11, 12.5, false, 14, -15, 16.5, true, 18, -19, 20.5, false, 22, -23, 24.5, true, 26, -27, 28.5, false, 30, -31, 32.5, true, 34, -35, 36.5, false, 38, -39, 40.5, true, 42, -43, 44.5, false, 46, -47, 48.5, true, 50, -51, 52.5, false, 54, -55, 56.5, true, 58, -59, 60.5, false, 62, -63, 64.5, true, 66, -67, 68.5, false, 70, -71))

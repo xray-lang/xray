@@ -1,0 +1,22 @@
+{
+  "boundaries": {
+    "exit": 0,
+    "stdout": "26198\n27143\n27907\n113042\n457343\n",
+    "stderr": ""
+  },
+  "nested": {
+    "exit": 0,
+    "stdout": "99070\n175349\n",
+    "stderr": ""
+  },
+  "closures": {
+    "exit": 0,
+    "stdout": "80\n156\n",
+    "stderr": ""
+  },
+  "mixed": {
+    "exit": 0,
+    "stdout": "169.0/70/-71\n",
+    "stderr": ""
+  }
+}

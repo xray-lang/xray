@@ -263,6 +263,109 @@ static void test_lane_normalization(void) {
     }
 }
 
+/* A caller passes 64 window arguments and three outgoing spill arguments.
+ * The callee sums its spill parameters and the two window ends. */
+enum { SPILL_CALL_WINDOW = XR_RBC_REGISTER_PARAMETER_MAX, SPILL_CALL_ROOT = SPILL_CALL_WINDOW + 8 };
+typedef struct SpillCall {
+    uint32_t root[SPILL_CALL_ROOT], callee[8];
+    XrRbcRegisterKind callee_kinds[SPILL_CALL_WINDOW + 2];
+    XrRbcFunction functions[2];
+    XrRbcModule module;
+} SpillCall;
+
+static void spill_call_init(SpillCall *s, uint32_t references) {
+    for (uint32_t k = 0; k < SPILL_CALL_WINDOW; ++k)
+        immediate(s->root, k, XR_RBC_LOADI, 2 + k, k + 1);
+    for (uint32_t j = 0; j < 3; ++j) {
+        immediate(s->root, SPILL_CALL_WINDOW + j * 2, XR_RBC_LOADI, 0, (j + 1) * 100);
+        immediate(s->root, SPILL_CALL_WINDOW + j * 2 + 1, XR_RBC_SPILL_ARG, 0, j);
+    }
+    immediate(s->root, SPILL_CALL_WINDOW + 6, XR_RBC_CALL, 1, 1);
+    emit(s->root, SPILL_CALL_WINDOW + 7, XR_RBC_RET, 1, 0, 0);
+    uint32_t window = SPILL_CALL_WINDOW;
+    immediate(s->callee, 0, XR_RBC_RELOAD, window, references);
+    immediate(s->callee, 1, XR_RBC_RELOAD, window + 1, references + 1);
+    emit(s->callee, 2, XR_RBC_ADD, window, window, window + 1);
+    immediate(s->callee, 3, XR_RBC_RELOAD, window + 1, references + 2);
+    emit(s->callee, 4, XR_RBC_ADD, window, window, window + 1);
+    emit(s->callee, 5, XR_RBC_ADD, window, window, 0);
+    emit(s->callee, 6, XR_RBC_ADD, window, window, window - 1);
+    emit(s->callee, 7, XR_RBC_RET, window, 0, 0);
+    s->functions[0] = (XrRbcFunction){.code=s->root, .code_count=SPILL_CALL_ROOT,
+        .register_count=SPILL_CALL_WINDOW + 2};
+    // A reference prefix makes the callee managed, so it declares its registers.
+    for (uint32_t r = 0; r < SPILL_CALL_WINDOW + 2; ++r) s->callee_kinds[r] = XR_RBC_BITS;
+    s->functions[1] = (XrRbcFunction){.code=s->callee, .code_count=8,
+        .register_count=SPILL_CALL_WINDOW + 2, .parameter_count=SPILL_CALL_WINDOW,
+        .spill_count=references + 3, .reference_spill_count=references, .spill_parameter_count=3,
+        .register_kinds=s->callee_kinds, .register_kind_count=SPILL_CALL_WINDOW + 2};
+    s->module = (XrRbcModule){.functions=s->functions, .function_count=2};
+}
+
+static void test_spill_parameters(void) {
+    // A reference prefix ahead of the spill parameters must be cleared, not
+    // overwritten by the arguments CALL moves past it.
+    for (uint32_t references = 0; references < 3; ++references) {
+        SpillCall s;
+        spill_call_init(&s, references);
+        uint64_t result = 0;
+        CHECK(execute(&s.module, 0, NULL, 0, &result) == XR_RBC_OK);
+        CHECK(result == 100 + 200 + 300 + 1 + SPILL_CALL_WINDOW);
+    }
+    SpillCall s;
+    spill_call_init(&s, 1);
+    const size_t first = SPILL_CALL_WINDOW + 1, call = SPILL_CALL_WINDOW + 6;
+    // Spill arguments run in order from zero and end at the matching CALL.
+    immediate(s.root, first, XR_RBC_SPILL_ARG, 0, 1); reject_prepare(&s.module, 0, NULL, 0);
+    immediate(s.root, first, XR_RBC_SPILL_ARG, 0, 0);
+    s.root[first + 4] = s.root[first + 3]; reject_prepare(&s.module, 0, NULL, 0);
+    spill_call_init(&s, 1);
+    emit(s.root, first + 1, XR_RBC_ADD, 0, 0, 0); reject_prepare(&s.module, 0, NULL, 0);
+    // A run admits no SPILL, even one whose value a RELOAD restores at once.
+    spill_call_init(&s, 1);
+    s.functions[0].spill_count = 1;
+    immediate(s.root, first + 1, XR_RBC_SPILL, 0, 0);
+    immediate(s.root, first + 2, XR_RBC_RELOAD, 0, 0);
+    immediate(s.root, first + 3, XR_RBC_SPILL_ARG, 0, 1);
+    immediate(s.root, first + 4, XR_RBC_SPILL_ARG, 0, 2);
+    reject_prepare(&s.module, 0, NULL, 0);
+    spill_call_init(&s, 1);
+    emit(s.root, call, XR_RBC_RET, 1, 0, 0); reject_prepare(&s.module, 0, NULL, 0);
+    spill_call_init(&s, 1);
+    s.functions[1].spill_parameter_count = 2; reject_prepare(&s.module, 0, NULL, 0);
+    s.functions[1].spill_parameter_count = 4; reject_prepare(&s.module, 0, NULL, 0);
+    spill_call_init(&s, 1);
+    // A run cannot cross a block boundary: a jump into it skips arguments.
+    CHECK(xr_rbc_jump(s.root + first + 1, first + 1, first + 2, SPILL_CALL_ROOT));
+    reject_prepare(&s.module, 0, NULL, 0);
+    spill_call_init(&s, 1);
+    s.functions[1].parameter_count = SPILL_CALL_WINDOW - 1; reject_prepare(&s.module, 0, NULL, 0);
+    spill_call_init(&s, 1);
+    s.functions[1].callable = 1; reject_prepare(&s.module, 0, NULL, 0);
+    // The host passes an entry's arguments past the window as spill parameters.
+    spill_call_init(&s, 1);
+    uint64_t arguments[SPILL_CALL_WINDOW + 3] = {0};
+    arguments[0] = 5; arguments[SPILL_CALL_WINDOW - 1] = 7;
+    arguments[SPILL_CALL_WINDOW] = 10; arguments[SPILL_CALL_WINDOW + 1] = 20; arguments[SPILL_CALL_WINDOW + 2] = 30;
+    uint64_t entered = 0;
+    CHECK(execute(&s.module, 1, arguments, SPILL_CALL_WINDOW + 3, &entered) == XR_RBC_OK && entered == 72);
+    reject_prepare(&s.module, 1, arguments, SPILL_CALL_WINDOW);
+    // A spill argument reads initialized scalar bits. With a spill bank the
+    // caller's registers start empty, so the unwritten window base is refused.
+    spill_call_init(&s, 1);
+    XrRbcRegisterKind kinds[SPILL_CALL_WINDOW + 2];
+    for (uint32_t r = 0; r < SPILL_CALL_WINDOW + 2; ++r) kinds[r] = r < 1 ? XR_RBC_BITS : XR_RBC_CALL_WINDOW;
+    s.functions[0].register_kinds = kinds; s.functions[0].register_kind_count = SPILL_CALL_WINDOW + 2;
+    s.functions[0].spill_count = 1;
+    uint64_t result = 0;
+    CHECK(execute(&s.module, 0, NULL, 0, &result) == XR_RBC_OK && result == 665);
+    immediate(s.root, first, XR_RBC_SPILL_ARG, 1, 0);
+    reject_prepare(&s.module, 0, NULL, 0);
+    uint32_t sentinel = UINT32_C(0xdeadbeef);
+    CHECK(!xr_rbc_encode(&sentinel, (XrRbcOperands){XR_RBC_SPILL_ARG, 0, 0, 0, XR_RBC_SPILL_COUNT_MAX}) &&
+        sentinel == UINT32_C(0xdeadbeef));
+}
+
 static void test_f64_negation(void) {
     static const uint64_t vectors[][2] = {
 #define XR_FNEG(input, expected) {UINT64_C(0x##input),UINT64_C(0x##expected)},
@@ -1510,6 +1613,7 @@ int main(int argc, char **argv) {
     test_float_constant_comparison();
     test_immediates();
     test_lane_normalization();
+    test_spill_parameters();
     test_scalar_reload_copies();
     test_spill_layout_and_overwrite();
     test_spill_loop();

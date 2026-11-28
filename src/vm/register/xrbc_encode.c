@@ -36,7 +36,7 @@ static const XrRbcFormat xr_rbc_formats[] = {
 };
 
 XR_FUNC bool xr_rbc_encode(uint32_t *out, XrRbcOperands o) {
-    if ((o.op==XR_RBC_SPILL || o.op==XR_RBC_RELOAD) &&
+    if ((o.op==XR_RBC_SPILL || o.op==XR_RBC_RELOAD || o.op==XR_RBC_SPILL_ARG) &&
         (o.immediate<0 || (uint64_t)o.immediate>=XR_RBC_SPILL_COUNT_MAX)) return false;
     if (!out || (unsigned) o.op >= XR_RBC_OP_COUNT)
         return false;

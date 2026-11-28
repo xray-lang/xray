@@ -23,6 +23,9 @@ typedef struct RbcStringAdmission {
     uint8_t *aggregates;
     RbcValueEdgeState *value_edges;
     size_t value_edge_capacity;
+    /* Outgoing spill arguments written since the last call. A run stays in
+     * one block and ends at the CALL whose callee expects exactly that many. */
+    uint32_t outgoing;
 } RbcStringAdmission;
 
 typedef struct RbcStringIncoming {
@@ -241,6 +244,17 @@ static bool rbc_string_exit(const RbcStringAdmission *s) {
 
 static bool rbc_string_step(RbcStringAdmission *s, XrRbcOperands v) {
     const XrRbcFunction *f = s->function;
+    if (v.op == XR_RBC_SPILL_ARG) {
+        if ((uint64_t)v.immediate != s->outgoing || s->state[v.a] != RBC_BITS) return false;
+        ++s->outgoing;
+        return true;
+    }
+    if (v.op == XR_RBC_CALL) {
+        if (s->outgoing != s->module->functions[v.immediate].spill_parameter_count) return false;
+        s->outgoing = 0;
+    } else if (s->outgoing && v.op != XR_RBC_MOV && v.op != XR_RBC_LOADK && v.op != XR_RBC_LOADI) {
+        return false;
+    }
         switch (v.op) {
         case XR_RBC_STRING_LITERAL_MAP_READ:
         case XR_RBC_STRING_LITERAL_BORROW:
@@ -587,6 +601,8 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
     }
     g->incoming[previous].end = f->code_count;
     g->work.spills = g->spills;
+    for (uint32_t p = 0; p < f->spill_parameter_count; ++p)
+        g->work.spills[f->reference_spill_count + p] = (RbcSpillState){0, RBC_BITS};
     size_t homes = rbc_flow_state_bytes(g->work.module, f);
     const XrRbcValueCode *typed=rbc_value_code(g->work.module,f);
     if (homes == SIZE_MAX) return XR_RBC_OUT_OF_MEMORY;
@@ -669,7 +685,8 @@ static XrRbcStatus rbc_string_graph_build(RbcStringGraph *g) {
  * can remove scalar guarantees and must schedule a fresh evaluation. */
 static bool rbc_string_propagate(RbcStringGraph *g, size_t target, bool backward) {
     uint32_t index = g->indices[target];
-    if (index == UINT32_MAX || (backward && !rbc_string_backedge(&g->work))) return false;
+    if (index == UINT32_MAX || g->work.outgoing || (backward && !rbc_string_backedge(&g->work)))
+        return false;
     RbcStringIncoming *next = &g->incoming[index];
     bool changed = false;
     if (!rbc_string_merge(&next->state, &g->work, &next->seen, &changed)) return false;
@@ -701,6 +718,7 @@ static bool rbc_string_block(RbcStringGraph *g, uint32_t index) {
             size_t target;
             return rbc_string_jump(f, pc, &target) && rbc_string_propagate(g, target, target <= pc);
         } else {
+            if (v.op == XR_RBC_SPILL && g->work.outgoing) return false;
             bool valid = v.op==XR_RBC_SPILL || v.op==XR_RBC_RELOAD ?
                 rbc_spill_transfer(&g->work,v) : rbc_string_step(&g->work,v);
             if (!valid) return false;
@@ -723,7 +741,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
     for (size_t n = 0; n < f->aggregate_access_count; ++n) {
         range |= f->aggregate_accesses[n].operation == XR_RBC_RANGE_CHECK;
     }
-    bool numeric_conversion = false, scalar_cells = false, typed_native = false;
+    bool numeric_conversion = false, scalar_cells = false, typed_native = false, spill_arguments = false;
     for (uint32_t r = 0; f->register_kinds && r < f->register_count; ++r)
         managed |= rbc_managed_kind(f->register_kinds[r]) || f->register_kinds[r] == XR_RBC_MAP_STRING_I64_REF || f->register_kinds[r] == XR_RBC_STRING_CELL ||
             f->register_kinds[r] == XR_RBC_STRING_REF || f->register_kinds[r] == XR_RBC_STATE || f->register_kinds[r] == XR_RBC_STATE_REF ||
@@ -736,8 +754,11 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
         uint32_t word = f->code[pc], op = word & 255;
         numeric_conversion |= op == XR_RBC_ITOF || op == XR_RBC_FTOI;
         scalar_cells|=op==XR_RBC_CELL_NEW || op==XR_RBC_CELL_READ || op==XR_RBC_CELL_WRITE;
+        spill_arguments |= op == XR_RBC_SPILL_ARG;
         if (op == XR_RBC_CALL) {
             const XrRbcFunction *callee = &module->functions[word >> 16];
+            // Even a scalar caller must prove each spill argument run complete.
+            spill_arguments |= callee->spill_parameter_count != 0;
             managed |= rbc_managed_kind(callee->result_kind);
             for (uint32_t p = 0; p < callee->parameter_count; ++p)
                 managed |= rbc_register_kind(callee, p) != XR_RBC_BITS;
@@ -746,7 +767,7 @@ static XrRbcStatus xr_rbc_strings_valid(const XrRbcModule *module, const XrRbcFu
         }
     }
     if (!managed && !range && !f->spill_count && !numeric_conversion && !f->aggregate_value_count &&
-        !f->environment_count && !scalar_cells && !typed_native)
+        !f->environment_count && !scalar_cells && !typed_native && !spill_arguments)
         return XR_RBC_OK;
     if (!f->register_kinds && (managed || f->reference_spill_count)) return XR_RBC_INVALID;
     RbcStringGraph g = {.work = {.module = module, .function = f},
