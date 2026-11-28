@@ -714,7 +714,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_toml_symbols[] = {
 
 // url module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(url: string): URL", "Parse URL text into a URL handle.", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(url: string): URL", "Parse URL text into a URL handle (RFC 3986 generic syntax).", NULL, 0},
     {"format", XLSP_SYM_FUNCTION, "fn(obj: URL): string", "Build URL text from a URL handle.", NULL, 0},
     {"encode", XLSP_SYM_FUNCTION, "fn(s: string): string", "RFC 3986 percent-encode a string.", NULL, 0},
     {"decode", XLSP_SYM_FUNCTION, "fn(s: string): string", "RFC 3986 percent-decode a string.", NULL, 0},

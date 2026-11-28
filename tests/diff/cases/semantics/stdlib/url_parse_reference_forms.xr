@@ -1,0 +1,29 @@
+// RFC 3986 reference forms: an authority only after "//", the userinfo up to
+// the last '@', and opaque or relative references without host or origin.
+// format writes "//" before an authority rather than after any scheme, and
+// resolve treats any reference with a scheme as already absolute.
+import url
+
+fn show(text: string) {
+    const u = url.parse(text)
+    print("${u.protocol}|${u.username}|${u.password}|${u.hostname}|${u.port}|${u.pathname}|${u.search}|${u.hash}|${u.origin}")
+    print("  ${url.format(u)}")
+}
+
+show("mailto:user@example.com")
+show("http://a@b@c.com:8080/x")
+show("urn:isbn:0451450523")
+show("example.com/path")
+show("//cdn.example.com/lib.js?v=1#top")
+show("1abc:x")
+show("http://user:pa:ss@h/")
+show("https://example.com")
+show("http://[::1]:8080/path")
+show("file:///etc/hosts")
+show("https://example.com:99999/p")
+
+print(url.resolve("http://a/b/c", "mailto:x@y"))
+print(url.resolve("http://a/b/c", "g:h"))
+print(url.resolve("http://a/b/c", "g/h:i"))
+print(url.resolve("http://a/b/c", "1x:y"))
+print(url.resolve("http://a/b/c", "//h2/p"))

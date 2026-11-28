@@ -1,0 +1,27 @@
+mailto:|||||user@example.com|||
+  mailto:user@example.com
+http:|a@b||c.com|8080|/x|||http://c.com:8080
+  http://a@b@c.com:8080/x
+urn:|||||isbn:0451450523|||
+  urn:isbn:0451450523
+|||||example.com/path|||
+  example.com/path
+|||cdn.example.com||/lib.js|?v=1|#top|cdn.example.com
+  //cdn.example.com/lib.js?v=1#top
+|||||1abc:x|||
+  1abc:x
+http:|user|pa:ss|h||/|||http://h
+  http://user:pa:ss@h/
+https:|||example.com||/|||https://example.com
+  https://example.com/
+http:|||[::1]|8080|/path|||http://[::1]:8080
+  http://[::1]:8080/path
+file:|||||/etc/hosts|||file://
+  file:///etc/hosts
+https:|||example.com||/p|||https://example.com
+  https://example.com/p
+mailto:x@y
+g:h
+http://a/b/g/h:i
+http://a/b/1x:y
+http://h2/p

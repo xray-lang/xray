@@ -291,7 +291,28 @@ fn portIsValid(port: string) -> bool {
     return v <= 65535
 }
 
-// parse - Parse URL text into a URL handle.
+// The scheme's end, or -1: a letter, then letters, digits, '+', '-' or '.',
+// then ':' (RFC 3986 section 3.1).
+fn schemeEnd(url: string) -> i64 {
+    var i = 0
+    var iter = url.runes()
+    while (iter.hasNext()) {
+        var cp = iter.next().toUInt32() as i64
+        var letter = (cp >= 65 && cp <= 90) || (cp >= 97 && cp <= 122)
+        if (cp == 58) { return i > 0 ? i : -1 }
+        if (!letter && (i == 0 || !((cp >= 48 && cp <= 57) || cp == 43 || cp == 45 || cp == 46))) {
+            return -1
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// parse - Parse URL text into a URL handle (RFC 3986 generic syntax).
+// An optional scheme, an authority only after "//", then path, query and
+// fragment. Without an authority (mailto:, urn:, a relative reference) host,
+// port, userinfo and origin are empty and the path is the rest. The userinfo
+// ends at the authority's last '@'.
 export fn parse(url: string) -> URL {
     var n = len(url)
     var protocol = ""
@@ -299,60 +320,62 @@ export fn parse(url: string) -> URL {
     var password = ""
     var hostname = ""
     var rawPort = ""
-    var pathname = "/"
     var search = ""
     var hash = ""
 
     var p = 0
-    var colon = findChar(url, ':', 0, n)
-    if (colon >= 0 && startsWithAt(url, colon, "://")) {
+    var colon = schemeEnd(url)
+    if (colon > 0) {
         protocol = url.slice(0, colon + 1)
-        p = colon + 3
+        p = colon + 1
     }
 
-    var authorityEnd = findAny3(url, '/', '?', '#', p, n)
-    if (authorityEnd < 0) { authorityEnd = n }
+    var hasAuthority = startsWithAt(url, p, "//")
+    if (hasAuthority) {
+        p = p + 2
+        var authorityEnd = findAny3(url, '/', '?', '#', p, n)
+        if (authorityEnd < 0) { authorityEnd = n }
 
-    var at = findChar(url, '@', p, authorityEnd)
-    var hostStart = p
-    if (at >= 0) {
-        var userColon = findChar(url, ':', p, at)
-        if (userColon >= 0) {
-            username = url.slice(p, userColon)
-            password = url.slice(userColon + 1, at)
-        } else {
-            username = url.slice(p, at)
+        var at = lastChar(url, '@', p, authorityEnd)
+        var hostStart = p
+        if (at >= 0) {
+            var userColon = findChar(url, ':', p, at)
+            if (userColon >= 0) {
+                username = url.slice(p, userColon)
+                password = url.slice(userColon + 1, at)
+            } else {
+                username = url.slice(p, at)
+            }
+            hostStart = at + 1
         }
-        hostStart = at + 1
-    }
 
-    if (hostStart < authorityEnd && url.runes().nth(hostStart) == '[') {
-        var bracket = findChar(url, ']', hostStart, authorityEnd)
-        if (bracket >= 0) {
-            hostname = url.slice(hostStart, bracket + 1)
-            if (bracket + 1 < authorityEnd && url.runes().nth(bracket + 1) == ':') {
-                rawPort = url.slice(bracket + 2, authorityEnd)
+        if (hostStart < authorityEnd && url.runes().nth(hostStart) == '[') {
+            var bracket = findChar(url, ']', hostStart, authorityEnd)
+            if (bracket >= 0) {
+                hostname = url.slice(hostStart, bracket + 1)
+                if (bracket + 1 < authorityEnd && url.runes().nth(bracket + 1) == ':') {
+                    rawPort = url.slice(bracket + 2, authorityEnd)
+                }
+            } else {
+                hostname = url.slice(hostStart, authorityEnd)
             }
         } else {
-            hostname = url.slice(hostStart, authorityEnd)
+            var portColon = lastChar(url, ':', hostStart, authorityEnd)
+            if (portColon >= 0) {
+                hostname = url.slice(hostStart, portColon)
+                rawPort = url.slice(portColon + 1, authorityEnd)
+            } else {
+                hostname = url.slice(hostStart, authorityEnd)
+            }
         }
-    } else {
-        var portColon = lastChar(url, ':', hostStart, authorityEnd)
-        if (portColon >= 0) {
-            hostname = url.slice(hostStart, portColon)
-            rawPort = url.slice(portColon + 1, authorityEnd)
-        } else {
-            hostname = url.slice(hostStart, authorityEnd)
-        }
+        p = authorityEnd
     }
 
-    p = authorityEnd
-    if (p < n && url.runes().nth(p) == '/') {
-        var pathEnd = findAny3(url, '?', '#', '\u{0}', p, n)
-        if (pathEnd < 0) { pathEnd = n }
-        pathname = url.slice(p, pathEnd)
-        p = pathEnd
-    }
+    var pathEnd = findAny3(url, '?', '#', '\u{0}', p, n)
+    if (pathEnd < 0) { pathEnd = n }
+    var pathname = url.slice(p, pathEnd)
+    if (hasAuthority && len(pathname) == 0) { pathname = "/" }
+    p = pathEnd
 
     if (p < n && url.runes().nth(p) == '?') {
         var searchEnd = findChar(url, '#', p, n)
@@ -371,18 +394,28 @@ export fn parse(url: string) -> URL {
     var host = hostname
     if (len(port) > 0) { host = host + ":" + port }
 
-    var origin = host
-    if (len(protocol) > 0) { origin = protocol + "//" + host }
+    var origin = ""
+    if (hasAuthority) {
+        origin = host
+        if (len(protocol) > 0) { origin = protocol + "//" + host }
+    }
 
     return URL(protocol, hostname, port, pathname, search, hash, username, password, host, origin, url)
 }
 
+// Whether u carries an authority. parse leaves host, port, userinfo and
+// origin all empty for a reference without one (mailto:, urn:, a path);
+// file:///p has an empty host, but its origin still records the authority.
+fn authorityPresent(u: URL) -> bool {
+    return len(u.hostname) > 0 || len(u.port) > 0 || len(u.username) > 0 ||
+        len(u.password) > 0 || len(u.origin) > 0
+}
+
 // format - Build URL text from a URL handle.
+// "//" precedes an authority, not a scheme (RFC 3986 section 5.3).
 export fn format(obj: URL) -> string {
-    var out = ""
-    if (len(obj.protocol) > 0) {
-        out = out + obj.protocol + "//"
-    }
+    var out = obj.protocol
+    if (authorityPresent(obj)) { out = out + "//" }
     if (len(obj.username) > 0) {
         out = out + obj.username
         if (len(obj.password) > 0) { out = out + ":" + obj.password }
@@ -444,10 +477,8 @@ export fn parseQuery(qs: string) throws(UrlError) -> QueryParams {
 }
 
 fn emitBaseAuthority(parts: URL) -> string {
-    var out = ""
-    if (len(parts.protocol) > 0) {
-        out = out + parts.protocol + "//"
-    }
+    var out = parts.protocol
+    if (authorityPresent(parts)) { out = out + "//" }
     out = out + parts.hostname
     if (len(parts.port) > 0) { out = out + ":" + parts.port }
     return out
@@ -515,10 +546,8 @@ fn dirnamePrefix(path: string) -> string {
 
 // resolve - Resolve a relative URL reference against a base URL.
 export fn resolve(base: string, relative: string) -> string {
-    var colon = findChar(relative, ':', 0, len(relative))
-    if (colon >= 0 && startsWithAt(relative, colon, "://")) {
-        return relative
-    }
+    // A reference with a scheme is already absolute, "//" or not (mailto:x).
+    if (schemeEnd(relative) > 0) { return relative }
 
     var bp = parse(base)
     var parts = splitReference(relative)
