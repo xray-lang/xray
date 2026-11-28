@@ -1418,12 +1418,6 @@ static XrLirStatus lir_literal_consumers(const XrLirFunctionData *f, uint32_t fu
     return XR_LIR_OK;
 }
 
-static bool lir_managed_value(const XrLirModule *m, XrLirType type) {
-    /* Lexical Cell identities have COPY edges and scope retirement; they do
-     * not use this ordinary block-local owner's consuming edge protocol. */
-    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || xr_lir_map_element(type) ||
-        type == XR_LIR_SET_I64 || xr_lir_boxed_type(m, type);
-}
 static bool lir_managed_cell(XrLirType type) {
     return type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL || type == XR_LIR_MAP_STRING_I64_CELL || type==XR_LIR_SET_I64_CELL;
 }
@@ -1506,7 +1500,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
     const LirGraph *g, uint8_t *owned, XrLirDiagnostic *d) {
     bool managed = false, cells = false, array_cells = false, string_references = false;
     for (uint32_t i = 0; i < f->value_count; ++i) {
-        managed |= lir_managed_value(m, f->values[i].type) || lir_managed_cell(f->values[i].type);
+        managed |= xr_lir_block_owner_type(m, f->values[i].type) || lir_managed_cell(f->values[i].type);
         cells |= f->values[i].type == XR_LIR_STRING_CELL;
         array_cells |= f->values[i].type == XR_LIR_ARRAY_CELL || f->values[i].type == XR_LIR_ARRAY_REF ||
             f->values[i].type == XR_LIR_MAP_STRING_I64_CELL || f->values[i].type == XR_LIR_MAP_STRING_I64_REF ||
@@ -1541,7 +1535,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
         memset(owned, 0, f->value_count);
         const XrLirBlockData *block = &f->blocks[b];
         for (uint32_t p = 0; p < block->parameter_count; ++p)
-            if (lir_managed_value(m, f->values[block->parameters[p] - 1].type)) {
+            if (xr_lir_block_owner_type(m, f->values[block->parameters[p] - 1].type)) {
                 owned[block->parameters[p] - 1] = 1;
             }
         for (uint32_t i = 0; i < block->instruction_count; ++i) {
@@ -1550,7 +1544,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
             for (uint32_t a = 0; a < v->operand_count; ++a) {
                 uint32_t id = v->operands[a];
                 const XrLirValueData *value = &f->values[id - 1];
-                if (lir_managed_value(m, value->type) &&
+                if (xr_lir_block_owner_type(m, value->type) &&
                     (!value->parameter || value->block) && !owned[id - 1])
                     return xr_lir_internal_error(d, "Managed use follows release or precedes ownership", function, b + 1, i + 1, &v->source);
             }
@@ -1560,7 +1554,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
                     return xr_lir_internal_error(d, "Managed transfer requires an owned reference", function, b + 1, i + 1, &v->source);
                 owned[id - 1] = 0;
             }
-            if (v->result && lir_managed_value(m, v->type)) {
+            if (v->result && xr_lir_block_owner_type(m, v->type)) {
                 owned[v->result - 1] = 1;
             }
         }
@@ -1569,7 +1563,7 @@ static XrLirStatus lir_managed_owners(const XrLirModule *m, const XrLirFunctionD
             const XrLirEdgeView *edge = &term->edges[e];
             for (uint32_t a = 0; a < edge->argument_count; ++a) {
                 uint32_t id = edge->arguments[a];
-                if (!lir_managed_value(m, f->values[id - 1].type)) continue;
+                if (!xr_lir_block_owner_type(m, f->values[id - 1].type)) continue;
                 bool borrowed = lir_borrowed_set_formal(f, id);
                 if (!owned[id - 1] && !borrowed)
                     return xr_lir_internal_error(d, "Managed edge requires a distinct owned reference", function, b + 1, 0, &term->source);

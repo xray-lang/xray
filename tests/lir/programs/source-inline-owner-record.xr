@@ -1,0 +1,11 @@
+struct P {
+x: i64
+y: i64
+}
+fn bump(v: i64) -> i64 {return v + 1}
+fn shift(p: P) -> i64 {
+const q = P{ x: p.x, y: p.y }
+const r = bump(q.x)
+return r + q.y
+}
+print(shift(P{ x: 1, y: 10 }))

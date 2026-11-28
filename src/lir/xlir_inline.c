@@ -99,9 +99,13 @@ static XrLirStatus inline_graph_storage(Inliner *c) {
         for (uint32_t v = 1; v <= info->view.value_count; ++v) {
             XrLirType type = XR_LIR_TYPE_INVALID;
             xr_lir_value_type(c->input, (XrLirValue){c->input, f + 1, v}, &type);
-            info->managed_owners |= type == XR_LIR_STRING || type == XR_LIR_STRING_CELL ||
-                type == XR_LIR_ARRAY || type == XR_LIR_ARRAY_CELL || type == XR_LIR_ARRAY_REF || type == XR_LIR_STRING_REF ||
-                type == XR_LIR_MAP_STRING_I64 || type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_MAP_STRING_I64_REF;
+            /* Owners come from the shared block-local protocol, so a family the
+             * verifier enforces cannot be split across an inlined call. */
+            info->managed_owners |= xr_lir_block_owner_type(c->input, type) ||
+                type == XR_LIR_STRING_CELL || type == XR_LIR_ARRAY_CELL ||
+                type == XR_LIR_MAP_STRING_I64_CELL || type == XR_LIR_SET_I64_CELL ||
+                type == XR_LIR_STRING_REF || type == XR_LIR_ARRAY_REF ||
+                type == XR_LIR_MAP_STRING_I64_REF || type == XR_LIR_SET_I64_REF;
         }
         info->first = c->edge_count;
         for (uint32_t b = 0; b < info->view.block_count; ++b) {
@@ -265,7 +269,7 @@ static XrLirStatus inline_plan(InlineBody *b) {
             XrLirInstructionView v = inline_view(b->owner, b->source, block + 1, n);
             if (v.op != XR_LIR_CALL) continue;
             const InlineFunction *callee = &b->owner->info[v.callee];
-            // Continuations cannot relocate physical storage or introduce String transfers.
+            // Continuations cannot relocate physical storage or carry managed owners.
             const InlineFunction *caller = &b->owner->info[b->source];
             if (!callee->eligible || caller->managed_owners || caller->cell_storage) continue;
             if (callee->view.value_count < callee->view.parameter_count) return XR_LIR_VERIFY_ERROR;

@@ -240,7 +240,6 @@ static void sccp_visit(Sccp *c, const SccpNode *node) {
     if (node->parameter) { sccp_parameter(c, node); return; }
     XrLirInstructionView v = sccp_instruction(c, node->block, node->ordinal);
     if (v.result) sccp_update(c, v.result, sccp_fold(c, &v));
-    if (v.op == XR_LIR_BR) sccp_activate_edge(c, node->block, 0);
     if (v.op == XR_LIR_CONDBR) {
         SccpCell condition = c->cells[v.operands[0]];
         if (condition.kind == SCCP_CONSTANT) sccp_activate_edge(c, node->block, condition.bits ? 0 : 1);
@@ -248,7 +247,12 @@ static void sccp_visit(Sccp *c, const SccpNode *node) {
             sccp_activate_edge(c, node->block, 0);
             sccp_activate_edge(c, node->block, 1);
         }
+        return;
     }
+    /* Only CONDBR has a modeled choice. Every other terminator, including
+     * INVOKE with its normal and error successors, keeps all verified edges. */
+    XR_DCHECK(v.edge_count <= 2, "Successor storage holds two edges per block");
+    for (uint32_t e = 0; e < v.edge_count; ++e) sccp_activate_edge(c, node->block, e);
 }
 static void sccp_propagate(Sccp *c) {
     while (c->pending || c->edge_head < c->edge_tail) {

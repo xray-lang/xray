@@ -150,6 +150,12 @@ XR_FUNC uint32_t xr_lir_class_storage(const XrLirModule *, XrLirType);
 /* Zero means a root class. This fact grants no implicit upcast or dispatch. */
 XR_FUNC XrLirType xr_lir_class_parent(const XrLirModule *, XrLirType);
 XR_FUNC bool xr_lir_boxed_type(const XrLirModule *, XrLirType);
+/* Values of these types follow the block-local consuming edge protocol: an
+ * owned value is released or passed as an edge argument on every successor.
+ * A transformation that splits a block must treat each such value it finds
+ * in the function as possibly live across the split. Cells and references
+ * keep their own lifetime rules and are not included. */
+XR_FUNC bool xr_lir_block_owner_type(const XrLirModule *, XrLirType);
 /* Selects the common inline plan for named and positional aggregate values,
  * including Nullable over an inline aggregate. It does not imply ownership. */
 XR_FUNC bool xr_lir_inline_aggregate_type(const XrLirModule *, XrLirType);

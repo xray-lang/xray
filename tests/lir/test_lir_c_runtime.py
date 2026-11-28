@@ -248,27 +248,28 @@ def main():
             adapter.write_text(adapter.read_text(encoding='ascii') + assertion, encoding='ascii')
             key = 'f64SourceWorker' if name == 'f64-source' else 'f64NegationSourceWorker'
             identity[key] = {'name': worker, 'type': 'double(double)', 'returnsParameter': name == 'f64-source'}
+        libraries = archive_link_arguments(args.library, driver=args.kind)
         if args.kind == 'msvc':
             crt = {'MultiThreaded': '/MT', 'MultiThreadedDebug': '/MTd',
                    'MultiThreadedDLL': '/MD', 'MultiThreadedDebugDLL': '/MDd'}[args.msvc_runtime]
-            command = [args.compiler, '/nologo', *native_c11_options(args.compiler, driver=args.kind), '/utf-8', '/W4', '/WX', '/O2', crt,
-                       '/I' + str(args.include), adapter, *archive_link_arguments(args.library, driver=args.kind), '/Fe:' + str(executable)]
+            compile_options = ['/nologo', *native_c11_options(args.compiler, driver=args.kind),
+                               '/utf-8', '/W4', '/WX', '/O2', crt, '/I' + str(args.include)]
+            link_options = [*libraries, '/Fe:' + str(executable)]
             if args.asan:
-                command += ['/fsanitize=address', '/Zi']
+                compile_options += ['/fsanitize=address', '/Zi']
                 if 'clang' in args.compiler.name.lower():
-                    command += ['/clang:-fsanitize=undefined']
-                command += ['/link', '/INCREMENTAL:NO']
+                    compile_options.append('/clang:-fsanitize=undefined')
+                link_options += ['/link', '/INCREMENTAL:NO']
         else:
-            command = [args.compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
-                       '-I' + str(args.include), adapter, *archive_link_arguments(args.library, driver=args.kind),
-                           ('-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'),
-                           '-pthread', '-o', executable]
+            compile_options = ['-std=c11', '-Wall', '-Wextra', '-Werror', '-pedantic', '-O2',
+                               '-I' + str(args.include)]
             if args.asan:
-                command += ['-fsanitize=address,undefined', '-g']
+                compile_options += ['-fsanitize=address,undefined', '-g']
+            strip = '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'
+            link_options = [*libraries, strip, '-pthread', '-o', executable]
+        command = [args.compiler, *compile_options, adapter, *link_options]
         if name in ('f64-source', 'f64-fneg-source', 'f64-fadd-source'):
-            options = [str(x) for x in command[1:] if isinstance(x, str) and x.startswith(('/', '-'))
-                       and not x.startswith(('/Fe:', '/INCREMENTAL:')) and x not in ('/link', '-o', '-pthread')]
-            profile = _f64_profile(args.compiler, args.kind, options, root)
+            profile = _f64_profile(args.compiler, args.kind, compile_options, root)
             key = {'f64-source': 'f64Source', 'f64-fneg-source': 'f64NegationSource',
                    'f64-fadd-source': 'f64AdditionSource'}[name]
             identity[key + 'Profile'] = profile

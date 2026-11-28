@@ -100,6 +100,14 @@ def main():
     for n, expected in ((0, b'0\n'), (1000, b'46995\n')):
         cases.append(('literal-loop-' + str(n), original.replace(
             needle, b'const n = ' + str(n).encode()), expected))
+    optimized = {
+        'inline-owner-class': b'2\n',
+        'inline-owner-record': b'12\n',
+        'inline-owner-set': b'3\n',
+        'throwing-try-bang': b'4\n',
+        'throwing-try-catch': b'4\n-1\n',
+    }
+    cases.extend((name, None, expected) for name, expected in optimized.items())
     for name, text, expected in cases:
         if not expected:
             raise AssertionError('Skeleton cases require nonempty expected output')
@@ -114,11 +122,16 @@ def main():
             else:
                 source.write_text(text, encoding='utf-8', newline='\n')
         (folder / 'expected.stdout').write_bytes(expected)
-        vm = invoke(folder, 'vm', [args.vm_driver, source])
+        options = ['--optimize'] if name in optimized else []
+        vm = invoke(folder, 'vm', [args.vm_driver, source, *options])
         if vm.stdout != expected or vm.stderr:
             raise AssertionError(f'VM output differs from expected bytes; see {folder}')
+        if options:
+            repeated = invoke(folder, 'vm-twice', [args.vm_driver, source, '--twice', *options])
+            if repeated.stdout != expected * 2 or repeated.stderr:
+                raise AssertionError(f'Repeated VM output differs from expected bytes; see {folder}')
         generated = folder / 'generated.c'
-        invoke(folder, 'emit-c', [args.c_driver, source, generated])
+        invoke(folder, 'emit-c', [args.c_driver, source, generated, *options])
         adapter = folder / 'adapter.c'
         # The synthetic Checked program entry returns i64. Include its actual
         # definition to check that C type; its value is not a process exit code.

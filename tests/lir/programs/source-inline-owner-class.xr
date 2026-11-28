@@ -1,0 +1,10 @@
+class Box {
+value: i64
+init(v: i64) {
+this.value = v
+}
+}
+fn next(b: Box) -> Box {
+return Box(b.value + 1)
+}
+print(next(Box(1)).value)

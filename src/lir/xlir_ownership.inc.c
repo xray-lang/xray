@@ -135,7 +135,7 @@ static bool lir_plan_value(XrLirOwnershipPlan *plan, const XrLirFunctionData *f,
 static XrLirOwnershipFactKind lir_plan_transfer(const XrLirModule *m, const XrLirFunctionData *f,
     const XrLirInstructionView *v) {
     if (v->operand_count && xr_lir_cell_value_type(m,f->values[v->operands[0] - 1].type,NULL)) return 0;
-    if (v->op == XR_LIR_RET && v->operand_count && lir_managed_value(m,f->result))
+    if (v->op == XR_LIR_RET && v->operand_count && xr_lir_block_owner_type(m,f->result))
         return XR_LIR_OWNERSHIP_RETURN_TRANSFER;
     if (xr_lir_string_role(m,v) == XR_LIR_STRING_OP_APPEND_OWNED) return XR_LIR_OWNERSHIP_APPEND_TRANSFER;
     if (v->op == XR_LIR_STRING_DROP || v->op == XR_LIR_ARRAY_DROP ||
@@ -369,7 +369,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
         XrLirStatus cell_status = lir_plan_cells(plan,f,function,callables);
         if (cell_status != XR_LIR_OK) return cell_status;
         for (uint32_t p = 0; p < f->parameter_count; ++p)
-            if ((lir_managed_value(m,f->parameter_types[p]) || f->parameter_types[p] == XR_LIR_STRING_CELL ||
+            if ((xr_lir_block_owner_type(m,f->parameter_types[p]) || f->parameter_types[p] == XR_LIR_STRING_CELL ||
                 f->parameter_types[p] == XR_LIR_STRING_REF) && !lir_plan_value(plan,f,
                 XR_LIR_OWNERSHIP_PARAMETER_BORROW,function,0,0,f->parameters[p],p)) return XR_LIR_OUT_OF_MEMORY;
         for (uint32_t p = 0; p < f->parameter_count; ++p)
@@ -381,7 +381,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
         for (uint32_t b = 0; b < f->block_count; ++b) {
             const XrLirBlockData *block = &f->blocks[b];
             for (uint32_t p = 0; p < block->parameter_count; ++p)
-                if (lir_managed_value(m,f->values[block->parameters[p] - 1].type) && !lir_plan_value(plan,f,
+                if (xr_lir_block_owner_type(m,f->values[block->parameters[p] - 1].type) && !lir_plan_value(plan,f,
                     XR_LIR_OWNERSHIP_BLOCK_OWNER,function,b + 1,0,block->parameters[p],p)) return XR_LIR_OUT_OF_MEMORY;
             for (uint32_t p = 0; p < block->parameter_count; ++p) {
                 uint32_t value = block->parameters[p];
@@ -402,13 +402,13 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                 XrLirOwnershipFactKind transfer = lir_plan_transfer(m,f,v);
                 for (uint32_t a = 0; a < v->operand_count; ++a) {
                     uint32_t id = v->operands[a];
-                    if (lir_managed_value(m,f->values[id - 1].type) && !(a == 0 && transfer) &&
+                    if (xr_lir_block_owner_type(m,f->values[id - 1].type) && !(a == 0 && transfer) &&
                         !lir_plan_value(plan,f,XR_LIR_OWNERSHIP_OPERAND_BORROW,function,b + 1,i + 1,id,a))
                         return XR_LIR_OUT_OF_MEMORY;
                 }
                 if (transfer && !lir_plan_value(plan,f,transfer,function,b + 1,i + 1,v->operands[0],0))
                     return XR_LIR_OUT_OF_MEMORY;
-                if (v->result && lir_managed_value(m,v->type) && !lir_plan_value(plan,f,
+                if (v->result && xr_lir_block_owner_type(m,v->type) && !lir_plan_value(plan,f,
                     XR_LIR_OWNERSHIP_RESULT_OWNER,function,b + 1,i + 1,v->result,0)) return XR_LIR_OUT_OF_MEMORY;
                 if (v->op == XR_LIR_CLASS_ARRAY_PUSH && !lir_plan_add(plan,(XrLirOwnershipFact){
                     .kind=XR_LIR_OWNERSHIP_CLASS_ARRAY_PUSH,.function=function,.block=b+1,.instruction=i+1,
@@ -487,7 +487,7 @@ static XrLirStatus lir_plan_collect(const XrLirModule *m, XrLirOwnershipPlan *pl
                                 f->values[id - 1].instruction : UINT32_MAX,
                             .transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_BORROW,
                             .hold_transfer_mode=XR_LIR_OWNERSHIP_TRANSFER_COPY})) return XR_LIR_OUT_OF_MEMORY;
-                    if (lir_managed_value(m,f->values[id - 1].type) &&
+                    if (xr_lir_block_owner_type(m,f->values[id - 1].type) &&
                         !lir_plan_add(plan,(XrLirOwnershipFact){.kind=XR_LIR_OWNERSHIP_SELECTED_EDGE_TRANSFER,
                             .function=function,.block=b + 1,.instruction=block->instruction_count,.value=id,
                             .argument=a,.edge=e + 1,.target_block=edge->target,

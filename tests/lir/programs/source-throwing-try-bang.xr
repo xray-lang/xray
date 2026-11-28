@@ -1,0 +1,9 @@
+enum MathError {
+DivByZero
+}
+fn half(v: i64) throws(MathError) -> i64 {
+if (v == 0) { throw MathError.DivByZero }
+return v / 2
+}
+const n = try! half(8)
+print(n)

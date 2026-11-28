@@ -1,0 +1,8 @@
+fn bump(v: i64) -> i64 {return v + 1}
+fn probe() -> i64 {
+const s: Set<i64> = Set()
+const k = bump(2)
+if (s.contains(k)) {return 0}
+return k
+}
+print(probe())

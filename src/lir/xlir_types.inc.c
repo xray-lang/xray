@@ -10,6 +10,7 @@
  *   Type metadata belongs to the SSA owner. Hash tables contain ordinals,
  *   and growth never leaves pointers into an old descriptor vector.
  */
+#include "xlir_map.h"
 #include "xlir_pod.h"
 #include "xlir_callable_types.inc.c"
 #include "xlir_record_identity.inc.c"
@@ -702,6 +703,11 @@ XR_FUNC bool xr_lir_boxed_type(const XrLirModule *m, XrLirType type) {
     if (!data || data->class_payload_only) return false;
     return data->shape.kind == XR_LIR_TYPE_RECORD || data->shape.kind == XR_LIR_TYPE_CLASS ||
         ((data->shape.kind == XR_LIR_TYPE_NULLABLE || data->shape.kind == XR_LIR_TYPE_TUPLE) && data->layout.managed);
+}
+
+XR_FUNC bool xr_lir_block_owner_type(const XrLirModule *m, XrLirType type) {
+    return type == XR_LIR_STRING || type == XR_LIR_ARRAY || xr_lir_map_element(type) ||
+        type == XR_LIR_SET_I64 || xr_lir_boxed_type(m, type);
 }
 
 XR_FUNC XrLirStatus xr_lir_callable_type(XrLirModule *m, const XrLirCallableType *signature,
