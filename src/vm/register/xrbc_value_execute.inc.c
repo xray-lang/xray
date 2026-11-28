@@ -474,8 +474,25 @@ static XrtManagedStatus rbc_value_place(RbcValueOrigin origin, bool temporary, s
     XrtPlaceNull nulls = kind == XRT_VALUE_STRING || xrt_value_kind_is_array(kind) ||
         kind == XRT_VALUE_MAP_STRING_I64 || kind == XRT_VALUE_MAP_STRING_STRING || kind == XRT_VALUE_SET_I64 || kind == XRT_VALUE_CLASS ?
         XRT_PLACE_NONNULL : XRT_PLACE_NULLABLE;
-    return xr_rbc_value_home_place((XrRbcHomeLocation){origin.activation->code->homes,
-        origin.activation->frame,origin.value,temporary},leaf,nulls,out);
+    const XrRbcHomeLocation location = {origin.activation->code->homes,origin.activation->frame,origin.value,temporary};
+    /* An owned activation entered its Frame from exactly this sealed layout,
+     * so a local home's slot is its layout ordinal plus the leaf. The full
+     * resolution below re-derives the same slot from the live Frame. */
+    const XrtManagedFrameLocations *frame = &origin.activation->frame_locations;
+    size_t first = temporary ? home->temporary_first_owner : home->first_owner;
+    if (origin.activation->owned_code && frame->frame && frame->frame == origin.activation->frame &&
+        !home->parameter && (temporary ? home->temporary_offset : home->offset) != SIZE_MAX &&
+        leaf < home->owner_count && first < frame->slot_count && leaf < frame->slot_count - first) {
+        *out = (XrtPlace){.frame = frame->frame, .slot = first + leaf, .nulls = nulls};
+#if XR_DCHECK_IS_ON()
+        XrtPlace resolved;
+        XR_DCHECK(xr_rbc_value_home_place(location,leaf,nulls,&resolved) == XRT_MANAGED_OK &&
+            resolved.frame == out->frame && resolved.slot == out->slot && !resolved.external,
+            "an owned local home resolves to its sealed layout slot");
+#endif
+        return XRT_MANAGED_OK;
+    }
+    return xr_rbc_value_home_place(location,leaf,nulls,out);
 }
 /* The real Frame view already binds the sealed home to its payload. Reading
  * a committed local Header calls no provider and cannot run guest code. The
