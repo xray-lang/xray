@@ -27,3 +27,17 @@ fn flagsDiffer(left: Flag, right: Flag) -> bool {
 
 exercise()
 print(flagsDiffer(Flag.Enabled, Flag.Disabled))
+
+const indirectChoose = choose
+const indirectCompare = compare
+indirectCompare(indirectChoose(0), indirectChoose(2))
+
+fn holdFlag(value: Flag) -> Flag { return value }
+const storedFlag = holdFlag
+print(storedFlag(Flag.Disabled) == Flag.Disabled)
+print(storedFlag(Flag.Enabled) == Flag.Disabled)
+
+enum Only { Here }
+fn holdOnly(value: Only) -> Only { return value }
+const storedOnly = holdOnly
+print(storedOnly(Only.Here) == Only.Here)

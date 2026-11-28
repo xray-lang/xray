@@ -18,6 +18,15 @@ static bool rbc_lir_inline_signature_home_type(const XrLirModule *input, XrLirTy
     return false;
 }
 
+static bool rbc_lir_payloadless_sum_signature(const XrLirModule *input, XrLirType type) {
+    const XrLirRecordField *fields;
+    const XrLirSumVariant *variants;
+    uint32_t field_count, variant_count;
+    return type >= XR_LIR_TYPE_COUNT &&
+        xr_lir_sum_variants(input, type, &fields, &field_count, &variants, &variant_count) &&
+        variant_count && !field_count;
+}
+
 static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram *program,
     const XrLirValueLayouts *layouts, XrLirType type, XrLirType element, XrRbcCallableValue *output) {
     XrPodScalar scalar = lir_pod_scalar(type);
@@ -28,6 +37,7 @@ static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram 
     uint32_t family = type == XR_LIR_ARRAY ? rbc_lir_array_family(element) : XR_RBC_ARRAY_FAMILY_COUNT;
     bool inline_array = type == XR_LIR_ARRAY && family == XR_RBC_ARRAY_FAMILY_COUNT;
     if (inline_array || rbc_lir_inline_signature_home_type(input, type) ||
+        rbc_lir_payloadless_sum_signature(input, type) ||
         (type >= XR_LIR_TYPE_COUNT && xr_lir_nullable_array_element(input, type))) {
         const XrtValuePlan *plan = NULL;
         uint32_t id = 0;

@@ -1,7 +1,7 @@
 {
   "payloadless": {
     "exit": 0,
-    "stdout": "false\ntrue\ntrue\nfalse\n73\ntrue\nfalse\ntrue\nfalse\n73\nfalse\ntrue\ntrue\nfalse\n37\ntrue\n",
+    "stdout": "false\ntrue\ntrue\nfalse\n73\ntrue\nfalse\ntrue\nfalse\n73\nfalse\ntrue\ntrue\nfalse\n37\ntrue\nfalse\ntrue\ntrue\nfalse\ntrue\n",
     "stderr": ""
   },
   "distinct_nominal": {

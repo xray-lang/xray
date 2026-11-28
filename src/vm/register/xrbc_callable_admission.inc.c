@@ -31,8 +31,16 @@ static bool rbc_callable_inline_signature_home_type(const XrtValueImage *image, 
     return false;
 }
 
+static bool rbc_callable_payloadless_sum_signature(const XrtValueImageType *row) {
+    return row->kind == XRT_VALUE_SUM && !row->field_count && !row->owned_count &&
+        !row->sum_tag && row->sum_payload == row->sum_tag_size &&
+        xrt_payloadless_sum_layout(row->variant_count, row->sum_tag_size, row->size, row->alignment);
+}
+
 static bool rbc_callable_signature_home_type(const XrtValueImage *image, uint32_t type) {
-    return rbc_callable_home_type(image, type) || rbc_callable_inline_signature_home_type(image, type);
+    return rbc_callable_home_type(image, type) || rbc_callable_inline_signature_home_type(image, type) ||
+        (image && image->types && type && type <= image->type_count &&
+            rbc_callable_payloadless_sum_signature(&image->types[type - 1]));
 }
 
 static bool rbc_callable_value_valid(const XrRbcModule *m, XrRbcCallableValue value, size_t before) {
