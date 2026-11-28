@@ -133,7 +133,15 @@ static _Noreturn void slice_observe_failure(XrtManagedStatus,uint32_t);
 #define xrt_inline_value_replace slice_observe_inline
 #define xrt_managed_retain slice_observe_retain
 #define xrt_native_managed_failure slice_observe_failure
+/* Typed activations come from billed metadata, not the hooked xr_malloc. */
+static size_t metadata_allocations;
+static XrtManagedStatus counted_metadata_allocate(XrtBillingOwner *billing,size_t bytes,void **empty) {
+    ++metadata_allocations;
+    return xrt_managed_metadata_allocate(billing,bytes,empty);
+}
+#define xrt_managed_metadata_allocate counted_metadata_allocate
 #include "vm/register/xrbc.c"
+#undef xrt_managed_metadata_allocate
 #undef xrt_native_managed_failure
 #undef xrt_managed_retain
 #undef xrt_inline_value_replace
@@ -1121,10 +1129,54 @@ static void compacted_frame_scalar_cells(void) {
     xr_rbc_execution_free(&execution); xr_rbc_outcome_free(&outcome); xrt_locations_release(locations);
     CHECK(!live_allocations);
 }
+/* Each typed call needs one activation block. A returning call leaves it for
+ * the next call of the same function, so repeating the call allocates no more. */
+static size_t repeated_text_call_attempts(unsigned calls) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirFunction text=test_function(m,"repeated_literal_text",NULL,0,XR_LIR_STRING);
+    XrLirBlock body=test_block(m,text,NULL,0);OK(xr_lir_set_entry(m,text,body));
+    XrLirLiteral literal={0};OK(xr_lir_add_literal(m,"abc",3,&literal));
+    XrLirValue value={0};
+    XrLirInstruction create={.op=XR_LIR_STRING_LITERAL,.type=XR_LIR_STRING,.bits=literal.id};
+    OK(xr_lir_emit_value(m,body,&create,&value));test_return(m,body,value);
+    XrLirFunction root=test_function(m,"repeated_text_calls",NULL,0,XR_LIR_I64);
+    XrLirBlock entry=test_block(m,root,NULL,0);OK(xr_lir_set_entry(m,root,entry));
+    XrLirValue total=test_constant(m,entry,XR_LIR_I64,0);
+    for(unsigned n=0;n<calls;++n) {
+        XrLirValue result=test_text_call(m,entry,text),length={0};
+        XrLirInstruction len={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&result,.operand_count=1};
+        OK(xr_lir_emit_value(m,entry,&len,&length));
+        XrLirInstruction drop={.op=XR_LIR_STRING_DROP,.type=XR_LIR_UNIT,.operands=&result,.operand_count=1};
+        OK(xr_lir_emit_effect(m,entry,&drop));
+        total=test_binary(m,entry,XR_LIR_ADD,total,length,XR_LIR_PREDICATE_NONE);
+    }
+    test_return(m,entry,total);OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=NULL;XrRbcCompileDiagnostic diagnostic={0};
+    CHECK(xr_rbc_compile(m,root,&program,&diagnostic)==XR_RBC_COMPILE_OK);
+    xr_lir_module_destroy(m);
+    XrRbcExecution *execution=NULL;
+    CHECK(xr_rbc_program_prepare(program,NULL,0,&execution)==XR_RBC_OK);
+    attempts=0;metadata_allocations=0;
+    XrRbcOutcome *outcome=xr_rbc_execution_run(execution);
+    size_t used=attempts+metadata_allocations;
+    uint64_t result=0;
+    CHECK(outcome && xr_rbc_outcome_status(outcome)==XR_RBC_OK && xr_rbc_outcome_bits(outcome,&result) &&
+        result==3u*calls);
+    xr_rbc_execution_free(&execution);xr_rbc_outcome_free(&outcome);
+    xr_rbc_program_destroy(program);CHECK(!live_allocations);
+    return used;
+}
+static void repeated_calls_reuse_activations(void) {
+    size_t few=repeated_text_call_attempts(2),many=repeated_text_call_attempts(8);
+    printf("Repeated typed calls: %zu run allocations for two calls, %zu for eight\n",few,many);
+    CHECK(few==many);
+}
+
 int main(void) {
     // Keep the last completed allocation fixture visible even after a fatal abort.
     CHECK(!setvbuf(stdout,NULL,_IONBF,0));
     compacted_frame_scalar_cells();
+    repeated_calls_reuse_activations();
     set_new_admission();
     owned_program_admission();
     record_compiler_failures();

@@ -78,10 +78,24 @@ struct RbcValueActivation {
     uint32_t pending_array_read_fold; /* Reset by the exact entry edge and consumed at its first latch. */
     uint32_t blocked_array_push; /* A declined capacity window stays ordinary until its next entry. */
 };
+/* An activation's metadata layout depends only on its immutable value code,
+ * value image and code owner, so an execution computes it once per function. */
+typedef struct RbcValueLayout {
+    size_t bytes, leaves, rows, snapshots, snapshot_alignment, regions, payload_alignment;
+} RbcValueLayout;
+/* A returning activation leaves its block here, still billed, for the next
+ * call of the same function; deeper recursion allocates as before. */
+typedef struct RbcValueFunctionCache {
+    RbcValueLayout layout;
+    RbcValueActivation *spare;
+    bool ready;
+} RbcValueFunctionCache;
 struct XrRbcValueRuntime {
     XrtBillingOwner *billing;
     XrtManagedRoot *root;
     RbcValueActivation *top;
+    RbcValueFunctionCache *functions;
+    uint32_t function_count;
     XrtValueImagePlans *plans;
     XrtCaptureType **environments;
     uint32_t environment_count;
@@ -248,6 +262,62 @@ static XrRbcStatus rbc_value_preparation_failure(XrtManagedStatus status, uint32
     return XR_RBC_OK;
 }
 
+static XrtManagedStatus rbc_value_layout(const XrRbcModule *module, const XrRbcValueCode *code,
+    const XrtValueImage *image, RbcValueLayout *output) {
+    RbcValueLayout layout = {.bytes = sizeof(RbcValueActivation)};
+    /* A borrowed raw description can still use the ordinary typed receiver.
+     * Only the exact immutable executable owner supplies the closed window. */
+    layout.regions = xr_rbc_module_code_owner(module) && code->array_region_runtime ?
+        code->array_regions->region_count : 0;
+    /* An inline record home keeps its declared alignment, so the one payload
+     * region reserves the padding its own rounding may consume. */
+    layout.payload_alignment = code->homes && code->homes->frame.payload_alignment ?
+        code->homes->frame.payload_alignment : 1;
+    if (layout.payload_alignment & (layout.payload_alignment - 1)) return XRT_MANAGED_OVERFLOW;
+    size_t payload_bytes = code->homes && !code->homes->owned_frame_needed ?
+        code->homes->frame.payload_size : 0;
+    if (payload_bytes && !rbc_value_extent(&payload_bytes,layout.payload_alignment - 1,1))
+        return XRT_MANAGED_OVERFLOW;
+    if (!rbc_value_capacities(code,image,&layout.leaves,&layout.rows,&layout.snapshots,&layout.snapshot_alignment) ||
+        layout.snapshots > SIZE_MAX - (layout.snapshot_alignment - 8) ||
+        !rbc_value_extent(&layout.bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
+        !rbc_value_extent(&layout.bytes,code->parameter_count,sizeof(const uint8_t *)) ||
+        !rbc_value_extent(&layout.bytes,code->parameter_count,sizeof(RbcParameterStorage)) ||
+        !rbc_value_extent(&layout.bytes,layout.leaves,sizeof(XrtPlaceEdge)) ||
+        !rbc_value_extent(&layout.bytes,layout.rows,sizeof(RbcValuePublication)) ||
+        !rbc_value_extent(&layout.bytes,layout.snapshots + layout.snapshot_alignment - 8,1) ||
+        !rbc_value_extent(&layout.bytes,layout.regions,sizeof(RbcArrayRegionState)) ||
+        !rbc_value_extent(&layout.bytes,payload_bytes,1))
+        return XRT_MANAGED_OVERFLOW;
+    *output = layout;
+    return XRT_MANAGED_OK;
+}
+static XrtManagedStatus rbc_value_function_cache(XrRbcValueRuntime *runtime, const XrRbcModule *module,
+    uint32_t function, RbcValueFunctionCache **output) {
+    if (!runtime->functions) {
+        if (!module->function_count || module->function_count > UINT32_MAX ||
+            module->function_count > SIZE_MAX / sizeof(*runtime->functions)) return XRT_MANAGED_OVERFLOW;
+        void *memory = NULL;
+        XrtManagedStatus status = xrt_managed_metadata_allocate(runtime->billing,
+            module->function_count * sizeof(*runtime->functions),&memory);
+        if (status != XRT_MANAGED_OK) return status;
+        memset(memory,0,module->function_count * sizeof(*runtime->functions));
+        runtime->functions = memory;
+        runtime->function_count = (uint32_t)module->function_count;
+    }
+    if (function >= runtime->function_count) return XRT_MANAGED_ARGUMENT;
+    *output = &runtime->functions[function];
+    return XRT_MANAGED_OK;
+}
+static void rbc_value_retire_activation(XrRbcValueRuntime *runtime, RbcValueActivation *activation) {
+    RbcValueFunctionCache *cache = runtime->functions && activation->function < runtime->function_count ?
+        &runtime->functions[activation->function] : NULL;
+    if (cache && cache->ready && !cache->spare && cache->layout.bytes == activation->bytes) {
+        cache->spare = activation;
+        return;
+    }
+    xrt_managed_metadata_free(runtime->billing,activation,activation->bytes);
+}
 static XrRbcStatus rbc_values_prepare(const XrRbcModule *module, XrRbcStack *stack,
     uint32_t function, uint32_t source, XrtManagedStatus *checked) {
     const XrRbcValueCode *code = xr_rbc_module_value_code(module,function);
@@ -261,35 +331,25 @@ static XrRbcStatus rbc_values_prepare(const XrRbcModule *module, XrRbcStack *sta
     if (status != XRT_MANAGED_OK) return rbc_value_preparation_failure(status,source,checked);
     XrRbcValueRuntime *runtime = stack->values;
     if (runtime->top && runtime->top->depth == stack->depth) return XR_RBC_INVALID;
-    size_t leaves, rows, snapshots, snapshot_alignment, bytes = sizeof(RbcValueActivation);
-    /* A borrowed raw description can still use the ordinary typed receiver.
-     * Only the exact immutable executable owner supplies the closed window. */
-    size_t regions=xr_rbc_module_code_owner(module) && code->array_region_runtime ?
-        code->array_regions->region_count : 0;
     const XrtValueImage *image=xr_rbc_module_value_image(module);
-    /* An inline record home keeps its declared alignment, so the one payload
-     * region reserves the padding its own rounding may consume. */
-    size_t payload_alignment = code->homes && code->homes->frame.payload_alignment ?
-        code->homes->frame.payload_alignment : 1;
-    if (payload_alignment & (payload_alignment - 1))
-        return rbc_value_preparation_failure(XRT_MANAGED_OVERFLOW,source,checked);
-    size_t payload_bytes = code->homes && !code->homes->owned_frame_needed ?
-        code->homes->frame.payload_size : 0;
-    if (payload_bytes && !rbc_value_extent(&payload_bytes,payload_alignment - 1,1))
-        return rbc_value_preparation_failure(XRT_MANAGED_OVERFLOW,source,checked);
-    if (!rbc_value_capacities(code,image,&leaves,&rows,&snapshots,&snapshot_alignment) ||
-        snapshots > SIZE_MAX - (snapshot_alignment - 8) ||
-        !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcValueOrigin)) ||
-        !rbc_value_extent(&bytes,code->parameter_count,sizeof(const uint8_t *)) ||
-        !rbc_value_extent(&bytes,code->parameter_count,sizeof(RbcParameterStorage)) ||
-        !rbc_value_extent(&bytes,leaves,sizeof(XrtPlaceEdge)) ||
-        !rbc_value_extent(&bytes,rows,sizeof(RbcValuePublication)) || !rbc_value_extent(&bytes,snapshots + snapshot_alignment - 8,1) ||
-        !rbc_value_extent(&bytes,regions,sizeof(RbcArrayRegionState)) ||
-        !rbc_value_extent(&bytes,payload_bytes,1))
-        return rbc_value_preparation_failure(XRT_MANAGED_OVERFLOW,source,checked);
-    void *memory = NULL;
-    status = xrt_managed_metadata_allocate(runtime->billing,bytes,&memory);
+    RbcValueFunctionCache *cache = NULL;
+    status = rbc_value_function_cache(runtime,module,function,&cache);
     if (status != XRT_MANAGED_OK) return rbc_value_preparation_failure(status,source,checked);
+    if (!cache->ready) {
+        status = rbc_value_layout(module,code,image,&cache->layout);
+        if (status != XRT_MANAGED_OK) return rbc_value_preparation_failure(status,source,checked);
+        cache->ready = true;
+    }
+    const RbcValueLayout layout = cache->layout;
+    size_t bytes = layout.bytes, leaves = layout.leaves, rows = layout.rows, snapshots = layout.snapshots;
+    size_t snapshot_alignment = layout.snapshot_alignment, regions = layout.regions;
+    size_t payload_alignment = layout.payload_alignment;
+    void *memory = cache->spare;
+    cache->spare = NULL;
+    if (!memory) {
+        status = xrt_managed_metadata_allocate(runtime->billing,bytes,&memory);
+        if (status != XRT_MANAGED_OK) return rbc_value_preparation_failure(status,source,checked);
+    }
     RbcValueActivation *activation = memory;
     *activation = (RbcValueActivation){.previous=runtime->top,.code=code,.image=image,
         .function=function,.depth=stack->depth,
@@ -369,6 +429,11 @@ static void xr_rbc_values_free(XrRbcStack *stack) {
         runtime->top = activation->previous;
         xrt_managed_metadata_free(billing,activation,activation->bytes);
     }
+    for (uint32_t n = 0; runtime->functions && n < runtime->function_count; ++n)
+        if (runtime->functions[n].spare)
+            xrt_managed_metadata_free(billing,runtime->functions[n].spare,runtime->functions[n].layout.bytes);
+    if (runtime->functions)
+        xrt_managed_metadata_free(billing,runtime->functions,(size_t)runtime->function_count * sizeof(*runtime->functions));
     rbc_value_environment_set_drop(runtime);
     xrt_managed_metadata_free(billing,runtime,sizeof(*runtime));
     xrt_billing_owner_drop(billing);
@@ -1317,7 +1382,7 @@ static XrRbcStatus rbc_value_return(const XrRbcModule *module, XrRbcStack *stack
         stack->slots[base+activation->invoke_status].bits=failed ? 1u : 0u;
     }
     stack->values->top=activation->previous;
-    xrt_managed_metadata_free(stack->values->billing,activation,activation->bytes);
+    rbc_value_retire_activation(stack->values,activation);
     stack->cell_count=frame.cell_base; stack->spill_count=frame.spill_base; --stack->depth;
     return XR_RBC_OK;
 }
