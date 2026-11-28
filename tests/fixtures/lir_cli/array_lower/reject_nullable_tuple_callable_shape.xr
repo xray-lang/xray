@@ -1,0 +1,8 @@
+fn score(pair: (i64, i64)?) -> i64 {
+    const row = pair ?? (0, 0)
+    return row.0 + row.1
+}
+
+const stored = score
+const wrong: (i64, string)? = (40, "two")
+print(stored(wrong))

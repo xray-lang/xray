@@ -6,6 +6,18 @@
  *
  * xrbc_lir_callable_types.inc.c - Receive exact invocation descriptors
  */
+static bool rbc_lir_inline_signature_home_type(const XrLirModule *input, XrLirType type) {
+    XrLirTypeView shape = {0};
+    while (type >= XR_LIR_TYPE_COUNT && xr_lir_type_view(input, type, &shape) == XR_LIR_OK) {
+        if (shape.kind == XR_LIR_TYPE_TUPLE ||
+            (shape.kind == XR_LIR_TYPE_RECORD && xr_lir_inline_aggregate_type(input, type))) return true;
+        if (shape.kind != XR_LIR_TYPE_NULLABLE || shape.element >= type) return false;
+        type = shape.element;
+        if (type == XR_LIR_STRING || xr_lir_class_payload(input, type, NULL)) return true;
+    }
+    return false;
+}
+
 static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram *program,
     const XrLirValueLayouts *layouts, XrLirType type, XrLirType element, XrRbcCallableValue *output) {
     XrPodScalar scalar = lir_pod_scalar(type);
@@ -15,10 +27,7 @@ static bool rbc_lir_callable_value(const XrLirModule *input, const XrRbcProgram 
     }
     uint32_t family = type == XR_LIR_ARRAY ? rbc_lir_array_family(element) : XR_RBC_ARRAY_FAMILY_COUNT;
     bool inline_array = type == XR_LIR_ARRAY && family == XR_RBC_ARRAY_FAMILY_COUNT;
-    XrLirTypeView shape = {0};
-    bool tuple = type >= XR_LIR_TYPE_COUNT &&
-        xr_lir_type_view(input, type, &shape) == XR_LIR_OK && shape.kind == XR_LIR_TYPE_TUPLE;
-    if (inline_array || tuple ||
+    if (inline_array || rbc_lir_inline_signature_home_type(input, type) ||
         (type >= XR_LIR_TYPE_COUNT && xr_lir_nullable_array_element(input, type))) {
         const XrtValuePlan *plan = NULL;
         uint32_t id = 0;

@@ -16,12 +16,23 @@ static bool rbc_callable_home_type(const XrtValueImage *image, uint32_t type) {
         payload == XRT_VALUE_ARRAY_STRING || payload == XRT_VALUE_ARRAY_F64 || payload == XRT_VALUE_ARRAY_INLINE;
 }
 
-/* Tuple signatures use typed homes while ordinary tuple root results keep
- * their separate output buffer. The Array home predicate also gates roots. */
+/* Only the Array home predicate also gates root results. Other indirect
+ * signatures use their own complete inline row. */
+static bool rbc_callable_inline_signature_home_type(const XrtValueImage *image, uint32_t type) {
+    while (image && image->types && type && type <= image->type_count) {
+        const XrtValueImageType *row = &image->types[type - 1];
+        if (row->kind == XRT_VALUE_TUPLE || row->kind == XRT_VALUE_RECORD) return true;
+        if (row->kind != XRT_VALUE_NULLABLE || !row->nullable_element || row->nullable_element >= type)
+            return false;
+        type = row->nullable_element;
+        XrtValueKind payload = image->types[type - 1].kind;
+        if (payload == XRT_VALUE_STRING || payload == XRT_VALUE_CLASS) return true;
+    }
+    return false;
+}
+
 static bool rbc_callable_signature_home_type(const XrtValueImage *image, uint32_t type) {
-    return rbc_callable_home_type(image, type) ||
-        (image && image->types && type && type <= image->type_count &&
-            image->types[type - 1].kind == XRT_VALUE_TUPLE);
+    return rbc_callable_home_type(image, type) || rbc_callable_inline_signature_home_type(image, type);
 }
 
 static bool rbc_callable_value_valid(const XrRbcModule *m, XrRbcCallableValue value, size_t before) {
@@ -170,10 +181,9 @@ static bool rbc_callable_home_parameter(const XrRbcModule *module, const XrRbcVa
     if (!id || id > code->value_count || id > code->homes->value_count) return false;
     const XrLirValueHome *home = &code->homes->values[id];
     const XrtValueImageType *row = &image->types[type - 1];
-    /* Tuples use the complete inline row, including zero or several owner
-     * leaves. Array callable homes still carry exactly one owner. */
+    /* Inline rows can have zero or several owners. Array homes have one. */
     return home->type == type && home->parameter == parameter + 1 &&
-        (row->kind == XRT_VALUE_TUPLE || home->owner_count == 1) &&
+        (!rbc_callable_home_type(image, type) || home->owner_count == 1) &&
         row->owned_count == home->owner_count && home->size == row->size &&
         code->locations[id].kind == XR_RBC_VALUE_NOWHERE;
 }

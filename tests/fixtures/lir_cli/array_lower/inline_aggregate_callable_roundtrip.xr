@@ -1,0 +1,102 @@
+fn optional_pair(show: bool) -> (i64, i64)? {
+    if (!show) { return null }
+    return (40, 2)
+}
+
+const get_pair = optional_pair
+const pair = get_pair(true) ?? (0, 0)
+print(pair.0 + pair.1)
+print(get_pair(false) == null)
+
+fn wrap<T>(item: T) -> T? { return item }
+
+fn read_optional(row: (string, i64)??) -> i64 {
+    if (row == null) {
+        print("outer")
+        return 0
+    }
+    const actual = row! ?? ("inner", 1)
+    print(actual.0)
+    return actual.1
+}
+
+const call_optional = read_optional
+const live: (string, i64)? = ("live", 42)
+const empty: (string, i64)? = null
+print(call_optional(wrap<(string, i64)?>(live)))
+print(call_optional(wrap<(string, i64)?>(empty)))
+print(call_optional(null))
+
+struct Entry {
+    title: string
+    note: string
+    value: i64
+}
+
+fn choose(item: Entry, keep: bool) -> Entry {
+    if (keep) { return item }
+    return Entry{title: "fresh", note: "created", value: 7}
+}
+
+fn apply(callback: fn(Entry, bool) -> Entry, item: Entry, keep: bool) -> Entry {
+    return callback(item, keep)
+}
+
+fn show(item: Entry) {
+    print(item.title)
+    print(item.note)
+    print(item.value)
+}
+
+fn show_optional(item: Entry?) {
+    if (item == null) { print("absent") }
+    else { show(item!) }
+}
+
+fn hold_record(item: Entry?) -> Entry? { return item }
+
+const call_record = choose
+const call_optional_record = show_optional
+const echo_record = hold_record
+const original = Entry{title: "source", note: "retained", value: 42}
+show(call_record(original, true))
+show(apply(choose, original, false))
+const present: Entry? = original
+call_optional_record(present)
+call_optional_record(null)
+show(echo_record(present)!)
+print(echo_record(null) == null)
+show(original)
+
+struct Bits {
+    value: i64
+    ready: bool
+}
+
+fn bits() -> Bits { return Bits{value: 42, ready: true} }
+const call_bits = bits
+const result = call_bits()
+print(result.value)
+print(result.ready)
+
+fn hold_text(item: string??) -> string?? { return item }
+const call_text = hold_text
+const missing_text: string? = null
+const label: string? = "label"
+print(call_text(null) == null)
+print(call_text(wrap<string?>(missing_text))! == null)
+print(call_text(wrap<string?>(label))!!)
+
+final class Counter {
+    private const value: i64
+    init(value: i64) { this.value = value }
+    read() -> i64 { return this.value }
+}
+
+fn hold_counter(item: Counter?) -> Counter? { return item }
+const call_counter = hold_counter
+const counter: Counter? = Counter(42)
+const echoed = call_counter(counter)
+print(call_counter(null) == null)
+print(echoed!.read())
+print(counter!.read())

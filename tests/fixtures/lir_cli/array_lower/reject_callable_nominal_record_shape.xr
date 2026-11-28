@@ -1,0 +1,13 @@
+struct Expected {
+    title: string
+    value: i64
+}
+
+struct Other {
+    title: string
+    value: i64
+}
+
+fn score(item: Expected) -> i64 { return item.value }
+const call = score
+print(call(Other{title: "wrong", value: 42}))

@@ -24,6 +24,7 @@ def main() -> None:
     args = parser.parse_args()
     cases = ("callable_values", "callable_contracts", "callable_frames", "callable_owned", "callable_compose", "callable_compose_weaken",
              "callable_inline_array_parameter", "callable_inline_array_result", "inline_tuple_callable_roundtrip",
+             "inline_aggregate_callable_roundtrip",
              "factory_bindings", "factory_loop", "factory_transfer_temporaries",
              "module_double", "module_snapshot", "module_counter", "counter_shared_binding",
              "tuple_values", "tuple_flow", "tuple_mixed_fields", "tuple_mixed_owned", "tuple_array_state", "tuple_array_return",
@@ -67,6 +68,8 @@ def main() -> None:
         "reject_i64_try_parse_shadow": b"'i64' is a keyword and cannot be used as an identifier",
         "reject_callable_inline_array_mismatch": b"callback argument requires exact shape and an admitted advertised bound",
         "reject_inline_tuple_callable_shape": b"expression cannot satisfy its declared type",
+        "reject_nullable_tuple_callable_shape": b"expression cannot satisfy its declared type",
+        "reject_callable_nominal_record_shape": b"expression cannot satisfy its declared type",
         "ref_global_alias": b"E0382: ref of module binding `shared` conflicts with access by `update` via `inspect`",
         "string_append_ref": b"E0382: ref of module binding `published` conflicts with access by `actual` via `actual`",
         "reject_display_nullable_fixed": b"value has no admitted builtin display",
