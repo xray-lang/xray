@@ -911,7 +911,7 @@ static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind
     return c->slot_count + offset;
 }
 
-static bool rbc_lir_value_edge(RbcLirCompiler *, XrLirEdgeView, uint32_t, uint32_t);
+static bool rbc_lir_value_edge(RbcLirCompiler *, XrLirEdgeView, uint32_t, uint32_t, bool);
 #include "xrbc_lir_registers.inc.c"
 
 static unsigned rbc_lir_narrow_shift_width(const XrLirInstructionView *i) {

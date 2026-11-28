@@ -229,7 +229,10 @@ static bool rbc_lir_value_append(RbcLirCompiler *c, XrRbcValueAccess access) {
     }
     return true;
 }
-static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal, uint32_t offset) {
+/* With owners_only, plain scalar pairs are left to the caller's parallel
+ * register copies and the operation carries only the typed transfers. */
+static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal, uint32_t offset,
+    bool owners_only) {
     XrRbcValueAccess access = {.operation=XR_RBC_VALUE_EDGE,.index=UINT32_MAX};
     if (c->value_edges) access.index = c->value_edges[((size_t)c->diagnostic->block - 1) * 2 + ordinal - 1];
     XrLirBlockView target;
@@ -242,6 +245,7 @@ static bool rbc_lir_value_edge(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t o
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
         uint32_t pair[] = {edge.arguments[p],target.parameters[p + offset]};
         if (xr_lir_home_stationary_edge(c->homes, pair[0], pair[1])) continue;
+        if (owners_only && !c->homes->values[pair[1]].type) continue;
         if (!rbc_lir_value_arguments(c,pair,2,&first)) return false;
         ++access.count;
     }
@@ -270,10 +274,10 @@ static bool rbc_lir_value_invoke(RbcLirCompiler *c,const XrLirInstructionView *i
         rbc_lir_emit(c,XR_RBC_EQI,access.window,0,0,0) &&
         rbc_lir_emit(c,XR_RBC_JMP,0,0,0,forwards ? 3 : 2) &&
         rbc_lir_value_append(c,failed) &&
-        (!forwards || rbc_lir_value_edge(c,i->edges[1],2,1)) &&
+        (!forwards || rbc_lir_value_edge(c,i->edges[1],2,1,false)) &&
         rbc_lir_jump(c,i->edges[1].target) &&
         rbc_lir_value_append(c,returned) &&
-        (!forwards || rbc_lir_value_edge(c,i->edges[0],1,xr_lir_edge_parameter_offset(i,0))) &&
+        (!forwards || rbc_lir_value_edge(c,i->edges[0],1,xr_lir_edge_parameter_offset(i,0),false)) &&
         rbc_lir_jump(c,i->edges[0].target);
 }
 static bool rbc_lir_checked_primitive(RbcLirCompiler *c, const XrLirInstructionView *i,

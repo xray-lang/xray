@@ -312,21 +312,57 @@ static bool rbc_lir_scalar_edge(RbcLirCompiler *c, XrLirEdgeView edge, const XrL
     }
     return true;
 }
+/* A mixed edge moves its typed owners in one value operation. Its plain
+ * register scalars can travel as ordinary parallel copies instead, because
+ * owners live in Frame homes and scalars in registers, so the two groups never
+ * alias. Consumers that read or rewrite the scalar pairs keep the combined
+ * operation: Array regions, push windows and String append windows. Spilled
+ * edges keep their snapshot protocol. Before the typed tables exist only the
+ * structural part is known; the caller then plans scratch conservatively. */
+static bool rbc_lir_split_edge(RbcLirCompiler *c, XrLirEdgeView edge, const XrLirBlockView *target,
+    uint32_t ordinal, bool planned) {
+    if (!c->homes || (c->typed_spills && rbc_lir_spilled_edge(c, edge, target))) return false;
+    bool owners = false, scalars = false;
+    for (uint32_t p = 0; p < edge.argument_count; ++p) {
+        uint32_t actual = edge.arguments[p], formal = target->parameters[p];
+        if (xr_lir_home_stationary_edge(c->homes, actual, formal)) continue;
+        if (c->homes->values[formal].type) { owners = true; continue; }
+        if (c->homes->values[actual].type || !rbc_lir_scalar(rbc_lir_value_type(c, actual)) ||
+            c->output.literals[actual] || c->output.lengths[actual] ||
+            (c->aggregate_home && c->aggregate_home[actual] != UINT32_MAX)) return false;
+        scalars = true;
+    }
+    if (!owners || !scalars) return false;
+    if (!planned) return true;
+    if (!c->value_edges) return false;
+    uint32_t index = c->value_edges[((size_t)c->diagnostic->block - 1) * 2 + ordinal - 1];
+    const XrRbcValueCode *code = c->value_code;
+    if (index == UINT32_MAX || index >= c->homes->edge_count || c->homes->edges[index].string_window) return false;
+    if (code->array_regions && index < code->array_regions->edge_count && code->array_regions->edges[index].region)
+        return false;
+    return !code->array_push_windows || index >= code->array_push_windows->edge_count ||
+        !code->array_push_windows->edges[index].region;
+}
 static bool rbc_lir_copies(RbcLirCompiler *c, XrLirEdgeView edge, uint32_t ordinal, bool emit,
     bool *scratch) {
     XrLirBlockView target;
     xr_lir_block_view(c->input,
         (XrLirBlock) {c->input, c->function.id, edge.target}, &target);
-    if (c->typed_values && !rbc_lir_scalar_edge(c, edge, &target))
-        return !emit || rbc_lir_value_edge(c, edge, ordinal, 0);
+    bool split = false;
+    if (c->typed_values && !rbc_lir_scalar_edge(c, edge, &target)) {
+        split = rbc_lir_split_edge(c, edge, &target, ordinal, emit);
+        if (!split) return !emit || rbc_lir_value_edge(c, edge, ordinal, 0, false);
+        if (emit && !rbc_lir_value_edge(c, edge, ordinal, 0, true)) return false;
+    }
     if (!c->typed_values && emit && !rbc_lir_aggregate_edge(c, edge)) return false;
-    bool spilled = c->typed_spills && rbc_lir_spilled_edge(c, edge, &target);
+    bool spilled = !split && c->typed_spills && rbc_lir_spilled_edge(c, edge, &target);
     if (spilled && emit && !rbc_lir_edge_spill_copy(c, edge, &target, false)) return false;
     uint32_t destinations[255], sources[255], count = 0;
     XrRbcRegisterKind kinds[255];
     for (uint32_t p = 0; p < edge.argument_count; ++p) {
         if (c->typed_values && xr_lir_home_stationary_edge(c->homes, edge.arguments[p], target.parameters[p]))
             continue;
+        if (split && c->homes->values[target.parameters[p]].type) continue;
         if (c->aggregate_home && c->aggregate_home[edge.arguments[p]] != UINT32_MAX) continue;
         if (spilled && rbc_lir_spill_edge_type(c, edge.arguments[p])) continue;
         uint32_t destination = c->slots[target.parameters[p]], source = c->slots[edge.arguments[p]];

@@ -2318,6 +2318,58 @@ static void test_fresh_string_stationary_edges(void) {
     xr_rbc_program_destroy(program);
 }
 
+/* A loop carries a String owner beside two scalars that swap on every turn.
+ * The typed edge operations move only the owner; the scalars travel as
+ * ordinary parallel copies, including the swap cycle. */
+static void test_mixed_edge_scalar_copies(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirType carried[]={XR_LIR_STRING,XR_LIR_I64,XR_LIR_I64,XR_LIR_I64};
+    XrLirFunction f=test_function(m,"mixed_edge_scalars",NULL,0,XR_LIR_I64);
+    XrLirFunction make=test_text_function(m,"mixed_edge_text",12345);
+    XrLirBlock entry=test_block(m,f,NULL,0),loop=test_block(m,f,carried,4),body=test_block(m,f,carried,4);
+    XrLirBlock done=test_block(m,f,carried,3);
+    OK(xr_lir_set_entry(m,f,entry));
+    XrLirValue text=test_text_call(m,entry,make);
+    XrLirValue initial[]={text,test_constant(m,entry,XR_LIR_I64,3),test_constant(m,entry,XR_LIR_I64,10),
+        test_constant(m,entry,XR_LIR_I64,0)};
+    test_branch(m,entry,loop,initial,4);
+    XrLirValue at_loop[4],at_body[4],at_done[3];
+    for(unsigned n=0;n<4;++n){at_loop[n]=block_parameter(m,loop,n);at_body[n]=block_parameter(m,body,n);}
+    for(unsigned n=0;n<3;++n)at_done[n]=block_parameter(m,done,n);
+    XrLirValue more=test_binary(m,loop,XR_LIR_ICMP,at_loop[3],test_constant(m,loop,XR_LIR_I64,5),XR_LIR_LT);
+    OK(xr_lir_set_terminator(m,loop,&(XrLirInstruction){.op=XR_LIR_CONDBR,.type=XR_LIR_UNIT,
+        .operands=&more,.operand_count=1,.edges={{body,at_loop,4},{done,at_loop,3}},.edge_count=2}));
+    XrLirValue next=test_binary(m,body,XR_LIR_ADD,at_body[3],test_constant(m,body,XR_LIR_I64,1),XR_LIR_PREDICATE_NONE);
+    XrLirValue swapped[]={at_body[0],at_body[2],at_body[1],next};
+    test_branch(m,body,loop,swapped,4);
+    XrLirValue length={0};
+    XrLirInstruction len={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&at_done[0],.operand_count=1};
+    OK(xr_lir_emit_value(m,done,&len,&length));frame_drop(m,done,at_done[0],false);
+    XrLirValue high=test_binary(m,done,XR_LIR_MUL,at_done[1],test_constant(m,done,XR_LIR_I64,1000),XR_LIR_PREDICATE_NONE);
+    XrLirValue low=test_binary(m,done,XR_LIR_MUL,at_done[2],test_constant(m,done,XR_LIR_I64,10),XR_LIR_PREDICATE_NONE);
+    XrLirValue sum=test_binary(m,done,XR_LIR_ADD,high,low,XR_LIR_PREDICATE_NONE);
+    test_return(m,done,test_binary(m,done,XR_LIR_ADD,sum,length,XR_LIR_PREDICATE_NONE));
+    OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,f);
+    const XrRbcValueCode *code=xr_rbc_module_value_code(xr_rbc_program_view(program),0);
+    CHECK(code && code->homes && code->homes->edge_count);
+    size_t owners=0;
+    for(size_t n=0;n<code->access_count;++n) {
+        XrRbcValueAccess access=code->accesses[n];
+        if(access.operation!=XR_RBC_VALUE_EDGE) continue;
+        CHECK(access.index!=UINT32_MAX);
+        for(uint32_t pair=0;pair<access.count;++pair) {
+            uint32_t target=code->arguments[access.first+(size_t)pair*2+1];
+            CHECK(code->homes->values[target].type);
+            ++owners;
+        }
+    }
+    CHECK(owners>=3);
+    xr_lir_module_destroy(m);
+    CHECK(run(program,NULL,0)==10035);
+    xr_rbc_program_destroy(program);
+}
+
 static void test_backward_owned_dag(void) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType text_type=XR_LIR_STRING;
     XrLirFunction f=test_function(m,"backward_owned_dag",NULL,0,XR_LIR_I64);
@@ -2360,6 +2412,7 @@ int main(void) {
     test_scalar_edge_in_typed_function(false);
     test_scalar_edge_in_typed_function(true);
     test_fresh_string_stationary_edges();
+    test_mixed_edge_scalar_copies();
     test_backward_owned_dag();
     test_string_binding_aliases();
     test_scalar_spill_branches();
