@@ -18,10 +18,20 @@ http:|||[::1]|8080|/path|||http://[::1]:8080
   http://[::1]:8080/path
 file:|||||/etc/hosts|||file://
   file:///etc/hosts
-https:|||example.com||/p|||https://example.com
-  https://example.com/p
+http:|||h||/p|||http://h
+  http://h/p
+http:|||h|080|/p|||http://h:080
+  http://h:080/p
+InvalidPort@20
+InvalidPort@11
+InvalidPort@9
+InvalidHost@7
+InvalidHost@12
+InvalidPort@18
 mailto:x@y
 g:h
 http://a/b/g/h:i
 http://a/b/1x:y
 http://h2/p
+InvalidPort@9
+mailto:x

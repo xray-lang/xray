@@ -242,7 +242,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:666:7: error: class field carrier is not implemented"
+        "first_diagnostic": "stdlib/http/http.xr:667:7: error: class field carrier is not implemented"
       }
     },
     {
@@ -450,7 +450,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:666:7: error: class field carrier is not implemented"
+        "first_diagnostic": "stdlib/http/http.xr:667:7: error: class field carrier is not implemented"
       }
     },
     {
@@ -1010,7 +1010,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:666:7: error: class field carrier is not implemented"
+        "first_diagnostic": "stdlib/http/http.xr:667:7: error: class field carrier is not implemented"
       }
     },
     {
@@ -1034,7 +1034,7 @@
       "stdout": "tests/smoke/expected/empty.txt",
       "gap": {
         "feature": "F02",
-        "first_diagnostic": "stdlib/http/http.xr:666:7: error: class field carrier is not implemented"
+        "first_diagnostic": "stdlib/http/http.xr:667:7: error: class field carrier is not implemented"
       }
     },
     {

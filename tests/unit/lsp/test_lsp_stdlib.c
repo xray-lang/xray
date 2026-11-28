@@ -116,7 +116,7 @@ TEST(generated_methods_use_def_overlay) {
     const XlspSymbolInfo *parse = xlsp_stdlib_find_symbol(url, "parse");
     ASSERT(parse != NULL);
     ASSERT(parse->kind == XLSP_SYM_FUNCTION);
-    ASSERT_STR_EQ(parse->signature, "fn(url: string): URL");
+    ASSERT_STR_EQ(parse->signature, "fn(url: string) throws(UrlError): URL");
     ASSERT(strstr(parse->documentation, "URL handle") != NULL);
 
     const XlspSymbolInfo *join = xlsp_stdlib_find_symbol(url, "join");

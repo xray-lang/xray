@@ -10,7 +10,13 @@ export enum UrlError {
     InvalidPercentEncoding { byteOffset: i64 },
     // The percent-decoded bytes of a query component are not UTF-8. The
     // offset is where that component starts.
-    InvalidUtf8 { byteOffset: i64 }
+    InvalidUtf8 { byteOffset: i64 },
+    // An IP literal's '[' is never closed, or its ']' is followed by
+    // something other than ":port". The offset is where that text starts.
+    InvalidHost { byteOffset: i64 },
+    // The port is not decimal digits naming a value up to 65535. The offset
+    // is where the port starts.
+    InvalidPort { byteOffset: i64 }
 }
 
 // QueryParams preserves insertion order, duplicate names, empty names, and
@@ -291,6 +297,13 @@ fn portIsValid(port: string) -> bool {
     return v <= 65535
 }
 
+// The byte offset of scalar index i, the unit UrlError reports.
+fn byteOffsetAt(s: string, i: i64) -> i64 {
+    var head = s.slice(0, i)
+    var bytes: Slice<u8> = head.bytes()
+    return len(bytes)
+}
+
 // The scheme's end, or -1: a letter, then letters, digits, '+', '-' or '.',
 // then ':' (RFC 3986 section 3.1).
 fn schemeEnd(url: string) -> i64 {
@@ -312,14 +325,17 @@ fn schemeEnd(url: string) -> i64 {
 // An optional scheme, an authority only after "//", then path, query and
 // fragment. Without an authority (mailto:, urn:, a relative reference) host,
 // port, userinfo and origin are empty and the path is the rest. The userinfo
-// ends at the authority's last '@'.
-export fn parse(url: string) -> URL {
+// ends at the authority's last '@'. An empty port ("h:") is no port; any other
+// port must be decimal up to 65535 (InvalidPort), and an IP literal must close
+// its bracket before an optional ":port" (InvalidHost).
+export fn parse(url: string) throws(UrlError) -> URL {
     var n = len(url)
     var protocol = ""
     var username = ""
     var password = ""
     var hostname = ""
     var rawPort = ""
+    var portAt = 0
     var search = ""
     var hash = ""
 
@@ -351,19 +367,23 @@ export fn parse(url: string) -> URL {
 
         if (hostStart < authorityEnd && url.runes().nth(hostStart) == '[') {
             var bracket = findChar(url, ']', hostStart, authorityEnd)
-            if (bracket >= 0) {
-                hostname = url.slice(hostStart, bracket + 1)
-                if (bracket + 1 < authorityEnd && url.runes().nth(bracket + 1) == ':') {
-                    rawPort = url.slice(bracket + 2, authorityEnd)
+            if (bracket < 0) {
+                throw UrlError.InvalidHost { byteOffset: byteOffsetAt(url, hostStart) }
+            }
+            hostname = url.slice(hostStart, bracket + 1)
+            if (bracket + 1 < authorityEnd) {
+                if (url.runes().nth(bracket + 1) != ':') {
+                    throw UrlError.InvalidHost { byteOffset: byteOffsetAt(url, bracket + 1) }
                 }
-            } else {
-                hostname = url.slice(hostStart, authorityEnd)
+                rawPort = url.slice(bracket + 2, authorityEnd)
+                portAt = bracket + 2
             }
         } else {
             var portColon = lastChar(url, ':', hostStart, authorityEnd)
             if (portColon >= 0) {
                 hostname = url.slice(hostStart, portColon)
                 rawPort = url.slice(portColon + 1, authorityEnd)
+                portAt = portColon + 1
             } else {
                 hostname = url.slice(hostStart, authorityEnd)
             }
@@ -388,8 +408,10 @@ export fn parse(url: string) -> URL {
         hash = url.slice(p, n)
     }
 
-    var port = ""
-    if (portIsValid(rawPort)) { port = rawPort }
+    if (len(rawPort) > 0 && !portIsValid(rawPort)) {
+        throw UrlError.InvalidPort { byteOffset: byteOffsetAt(url, portAt) }
+    }
+    var port = rawPort
 
     var host = hostname
     if (len(port) > 0) { host = host + ":" + port }
@@ -545,11 +567,12 @@ fn dirnamePrefix(path: string) -> string {
 }
 
 // resolve - Resolve a relative URL reference against a base URL.
-export fn resolve(base: string, relative: string) -> string {
+// The base must parse (see parse for the errors).
+export fn resolve(base: string, relative: string) throws(UrlError) -> string {
     // A reference with a scheme is already absolute, "//" or not (mailto:x).
     if (schemeEnd(relative) > 0) { return relative }
 
-    var bp = parse(base)
+    var bp = try parse(base)
     var parts = splitReference(relative)
     var relPath = parts.0
     var relQuery = parts.1

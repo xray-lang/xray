@@ -12,7 +12,7 @@ if __name__ == "__main__":
         "string_to_string": 'export fn probe() -> string { var xs = ["a", "b"]; return xs.toString() }',
         "integer_join": 'export fn probe() -> string { var xs = [1, 2]; return xs.join(",") }',
         "empty_join": 'export fn probe() -> string { var xs: Array<string> = []; return xs.join(",") }',
-        "url_resolve": 'import url\nexport fn probe() -> string { return url.resolve("https://example.org/a/b", "../c") }',
+        "url_resolve": 'import url\nexport fn probe() -> string { return try! url.resolve("https://example.org/a/b", "../c") }',
         "two_results": 'export fn probe() -> i64 { var xs = ["a", "b"]; var a = xs.join(","); var b = xs.toString(); return len(a) + len(b) }',
     }
     raise SystemExit(compile_cases(cases, case_timeouts={"url_resolve": 120}))

@@ -12,7 +12,8 @@ import {
     decodeForm,
     parse as parseUrl,
     parseQuery,
-    resolve as resolveUrl
+    resolve as resolveUrl,
+    URL
 } from url
 import crypto
 import http2
@@ -1571,13 +1572,13 @@ fn _keepAlive(version: string, headers: Headers) -> bool {
 }
 
 fn _httpUrlOk(raw: string) -> bool {
-    var p = parseUrl(raw)
-    var scheme = text.lower(p.protocol)
-    return (scheme == "http:" || scheme == "https:") && len(p.hostname) > 0
+    var p = try? parseUrl(raw)
+    if (p == null) { return false }
+    var scheme = text.lower(p!.protocol)
+    return (scheme == "http:" || scheme == "https:") && len(p!.hostname) > 0
 }
 
-fn _originPort(raw: string) -> i64 {
-    var p = parseUrl(raw)
+fn _originPort(p: URL) -> i64 {
     if (len(p.port) > 0) {
         var port = _parseIntStrict(p.port)
         if (port != null) { return port! }
@@ -1586,12 +1587,14 @@ fn _originPort(raw: string) -> i64 {
     return 80
 }
 
+// A URL that does not parse shares an origin with nothing.
 fn _sameOrigin(a: string, b: string) -> bool {
-    var pa = parseUrl(a)
-    var pb = parseUrl(b)
-    return text.lower(pa.protocol) == text.lower(pb.protocol) &&
-           text.lower(pa.hostname) == text.lower(pb.hostname) &&
-           _originPort(a) == _originPort(b)
+    var pa = try? parseUrl(a)
+    var pb = try? parseUrl(b)
+    if (pa == null || pb == null) { return false }
+    return text.lower(pa!.protocol) == text.lower(pb!.protocol) &&
+           text.lower(pa!.hostname) == text.lower(pb!.hostname) &&
+           _originPort(pa!) == _originPort(pb!)
 }
 
 class _HttpRequestUrl {
@@ -2689,8 +2692,8 @@ export fn redirectTarget(currentUrl: string, location: string) -> string? {
     var loc = text.trim(location)
     if (len(loc) == 0 || !_headerValueValid(loc)) { return null }
     if (!_httpUrlOk(currentUrl)) { return null }
-    var resolved = resolveUrl(currentUrl, loc)
-    if (!_httpUrlOk(resolved)) { return null }
+    var resolved = try? resolveUrl(currentUrl, loc)
+    if (resolved == null || !_httpUrlOk(resolved!)) { return null }
     return resolved
 }
 

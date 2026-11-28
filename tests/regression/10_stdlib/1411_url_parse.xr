@@ -11,7 +11,7 @@ import { UrlError } from url
 
 @test
 fn test_parse_full_url() {
-    var r = url.parse("https://example.com:8080/path/to/page?foo=bar#section")
+    var r = try! url.parse("https://example.com:8080/path/to/page?foo=bar#section")
     assertEqual(r.protocol, "https:")
     assertEqual(r.hostname, "example.com")
     assertEqual(r.port, "8080")
@@ -24,7 +24,7 @@ fn test_parse_full_url() {
 
 @test
 fn test_parse_http_url() {
-    var r = url.parse("http://www.example.org/index.html")
+    var r = try! url.parse("http://www.example.org/index.html")
     assertEqual(r.protocol, "http:")
     assertEqual(r.hostname, "www.example.org")
     assertEqual(r.pathname, "/index.html")
@@ -33,21 +33,21 @@ fn test_parse_http_url() {
 
 @test
 fn test_parse_with_query() {
-    var r = url.parse("https://api.example.com/search?q=hello&limit=10")
+    var r = try! url.parse("https://api.example.com/search?q=hello&limit=10")
     assertEqual(r.hostname, "api.example.com")
     assertEqual(r.search, "?q=hello&limit=10")
 }
 
 @test
 fn test_parse_localhost() {
-    var r = url.parse("https://localhost")
+    var r = try! url.parse("https://localhost")
     assertEqual(r.hostname, "localhost")
     assertEqual(r.pathname, "/")
 }
 
 @test
 fn test_parse_ip_with_port() {
-    var r = url.parse("http://127.0.0.1:3000/api/v1/users")
+    var r = try! url.parse("http://127.0.0.1:3000/api/v1/users")
     assertEqual(r.hostname, "127.0.0.1")
     assertEqual(r.port, "3000")
     assertEqual(r.pathname, "/api/v1/users")
@@ -55,20 +55,20 @@ fn test_parse_ip_with_port() {
 
 @test
 fn test_parse_no_path() {
-    var r = url.parse("https://example.com")
+    var r = try! url.parse("https://example.com")
     assertEqual(r.hostname, "example.com")
     assertEqual(r.pathname, "/")
 }
 
 @test
 fn test_parse_hash_only() {
-    var r = url.parse("https://example.com#top")
+    var r = try! url.parse("https://example.com#top")
     assertEqual(r.hash, "#top")
 }
 
 @test
 fn test_parse_query_only() {
-    var r = url.parse("https://example.com?key=value")
+    var r = try! url.parse("https://example.com?key=value")
     assertEqual(r.search, "?key=value")
 }
 
@@ -78,7 +78,7 @@ fn test_parse_query_only() {
 
 @test
 fn test_parse_userinfo() {
-    var r = url.parse("http://user:pass@example.com:8080/path")
+    var r = try! url.parse("http://user:pass@example.com:8080/path")
     assertEqual(r.username, "user")
     assertEqual(r.password, "pass")
     assertEqual(r.hostname, "example.com")
@@ -88,7 +88,7 @@ fn test_parse_userinfo() {
 
 @test
 fn test_parse_username_only() {
-    var r = url.parse("http://admin@example.com/")
+    var r = try! url.parse("http://admin@example.com/")
     assertEqual(r.username, "admin")
     assertEqual(r.password, "")
     assertEqual(r.hostname, "example.com")
@@ -100,7 +100,7 @@ fn test_parse_username_only() {
 
 @test
 fn test_parse_ipv6() {
-    var r = url.parse("http://[::1]:8080/path")
+    var r = try! url.parse("http://[::1]:8080/path")
     assertEqual(r.hostname, "[::1]")
     assertEqual(r.port, "8080")
     assertEqual(r.pathname, "/path")
@@ -108,7 +108,7 @@ fn test_parse_ipv6() {
 
 @test
 fn test_parse_ipv6_no_port() {
-    var r = url.parse("http://[2001:db8::1]/")
+    var r = try! url.parse("http://[2001:db8::1]/")
     assertEqual(r.hostname, "[2001:db8::1]")
     assertEqual(r.port, "")
 }
@@ -120,7 +120,7 @@ fn test_parse_ipv6_no_port() {
 @test
 fn test_format_roundtrip() {
     var orig = "https://example.com:8080/path?q=1#top"
-    var r = url.parse(orig)
+    var r = try! url.parse(orig)
     var rebuilt = url.format(r)
     assertEqual(rebuilt, orig)
 }
@@ -128,7 +128,7 @@ fn test_format_roundtrip() {
 @test
 fn test_format_with_userinfo() {
     var orig = "http://user:pass@example.com/path"
-    var r = url.parse(orig)
+    var r = try! url.parse(orig)
     var rebuilt = url.format(r)
     assertEqual(rebuilt, orig)
 }
@@ -203,10 +203,40 @@ fn test_query_invalid_percent_is_typed_error() {
     } catch (e: UrlError) {
         offset = match (e) {
             UrlError.InvalidPercentEncoding { byteOffset: at } => at,
-        UrlError.InvalidUtf8 { byteOffset: at } => -1 - at,
+            UrlError.InvalidUtf8 { byteOffset: at } => -1 - at,
+            UrlError.InvalidHost { byteOffset: at } => -1000 - at,
+            UrlError.InvalidPort { byteOffset: at } => -2000 - at,
         }
     }
     assertEqual(offset, 9)
+}
+
+// Where parse refused the text: the byte offset of a bad IP literal, or 1000
+// plus the byte offset of a bad port; -1 when it parsed.
+fn parseErrorOffset(text: string) -> i64 {
+    try {
+        url.parse(text)
+    } catch (e: UrlError) {
+        return match (e) {
+            UrlError.InvalidHost { byteOffset: at } => at,
+            UrlError.InvalidPort { byteOffset: at } => 1000 + at,
+            UrlError.InvalidPercentEncoding { byteOffset: at } => -2,
+            UrlError.InvalidUtf8 { byteOffset: at } => -3,
+        }
+    }
+    return -1
+}
+
+@test
+fn test_parse_invalid_authority_is_typed_error() {
+    assertEqual(parseErrorOffset("https://example.com:99999/p"), 1020)
+    assertEqual(parseErrorOffset("http://a:b:c/"), 1011)
+    assertEqual(parseErrorOffset("http://[::1/x"), 7)
+    assertEqual(parseErrorOffset("http://[::1]x/"), 12)
+    // Offsets count bytes: the two host characters take three bytes each.
+    assertEqual(parseErrorOffset("http://\u{4F8B}\u{5B50}.com:99999/"), 1018)
+    // An empty port is no port.
+    assertEqual(parseErrorOffset("http://h:/"), -1)
 }
 
 // ============================================================
@@ -237,43 +267,43 @@ fn test_encode_decode_consistency() {
 
 @test
 fn test_resolve_absolute_path() {
-    var result = url.resolve("https://example.com/a/b/c", "/new/path")
+    var result = try! url.resolve("https://example.com/a/b/c", "/new/path")
     assertEqual(result, "https://example.com/new/path")
 }
 
 @test
 fn test_resolve_relative_path() {
-    var result = url.resolve("https://example.com/a/b/c", "d.html")
+    var result = try! url.resolve("https://example.com/a/b/c", "d.html")
     assertEqual(result, "https://example.com/a/b/d.html")
 }
 
 @test
 fn test_resolve_absolute_url() {
-    var result = url.resolve("https://example.com/a", "http://other.com/b")
+    var result = try! url.resolve("https://example.com/a", "http://other.com/b")
     assertEqual(result, "http://other.com/b")
 }
 
 @test
 fn test_resolve_query_only_replaces_base_query() {
-    var result = url.resolve("https://example.com/a/b/c?old=1#top", "?new=2")
+    var result = try! url.resolve("https://example.com/a/b/c?old=1#top", "?new=2")
     assertEqual(result, "https://example.com/a/b/c?new=2")
 }
 
 @test
 fn test_resolve_fragment_only_preserves_base_query() {
-    var result = url.resolve("https://example.com/a/b/c?old=1", "#frag")
+    var result = try! url.resolve("https://example.com/a/b/c?old=1", "#frag")
     assertEqual(result, "https://example.com/a/b/c?old=1#frag")
 }
 
 @test
 fn test_resolve_network_path_keeps_base_scheme() {
-    var result = url.resolve("https://example.com/a/b/c", "//cdn.example.com/lib.js")
+    var result = try! url.resolve("https://example.com/a/b/c", "//cdn.example.com/lib.js")
     assertEqual(result, "https://cdn.example.com/lib.js")
 }
 
 @test
 fn test_resolve_dot_segments() {
-    var result = url.resolve("https://example.com/a/b/c", "../d/./e")
+    var result = try! url.resolve("https://example.com/a/b/c", "../d/./e")
     assertEqual(result, "https://example.com/a/d/e")
 }
 

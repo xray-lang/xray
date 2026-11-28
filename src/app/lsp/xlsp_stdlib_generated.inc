@@ -714,14 +714,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_toml_symbols[] = {
 
 // url module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(url: string): URL", "Parse URL text into a URL handle (RFC 3986 generic syntax).", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(url: string) throws(UrlError): URL", "Parse URL text into a URL handle (RFC 3986 generic syntax).", NULL, 0},
     {"format", XLSP_SYM_FUNCTION, "fn(obj: URL): string", "Build URL text from a URL handle.", NULL, 0},
     {"encode", XLSP_SYM_FUNCTION, "fn(s: string): string", "RFC 3986 percent-encode a string.", NULL, 0},
     {"decode", XLSP_SYM_FUNCTION, "fn(s: string): string", "RFC 3986 percent-decode a string.", NULL, 0},
     {"encodeForm", XLSP_SYM_FUNCTION, "fn(s: string): string", "Form URL encode a string, using plus for spaces.", NULL, 0},
     {"decodeForm", XLSP_SYM_FUNCTION, "fn(s: string): string", "Form URL decode a string, treating plus as space.", NULL, 0},
     {"parseQuery", XLSP_SYM_FUNCTION, "fn(qs: string) throws(UrlError): QueryParams", "Parse a form-encoded query while preserving order and duplicates.", NULL, 0},
-    {"resolve", XLSP_SYM_FUNCTION, "fn(base: string, relative: string): string", "Resolve a relative URL reference against a base URL.", NULL, 0},
+    {"resolve", XLSP_SYM_FUNCTION, "fn(base: string, relative: string) throws(UrlError): string", "Resolve a relative URL reference against a base URL.", NULL, 0},
     {"join", XLSP_SYM_FUNCTION, "fn(...parts: string): string", "Join URL path segments.", NULL, 0},
     {"UrlError", XLSP_SYM_CLASS, "type UrlError", "Enum type", NULL, 0},
     {"QueryParams", XLSP_SYM_CLASS, "type QueryParams", "Class type", NULL, 0},

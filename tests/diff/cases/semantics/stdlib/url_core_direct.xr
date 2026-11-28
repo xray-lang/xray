@@ -8,7 +8,7 @@ print(url.decode("hello%20%E4%B8%96%E7%95%8C%21"))
 print(url.encodeForm("a b+c"))
 print(url.decodeForm("a+b%2Bc"))
 
-var r = url.parse("https://example.com:8080/path?q=1#top")
+var r = try! url.parse("https://example.com:8080/path?q=1#top")
 print(r.protocol)
 print(r.hostname)
 print(r.port)
@@ -18,7 +18,7 @@ print(r.hash)
 print(r.host)
 print(r.origin)
 print(url.format(r))
-print(url.format(url.parse("http://user:pass@example.com/path")))
+print(url.format(try! url.parse("http://user:pass@example.com/path")))
 
 var q = try! url.parseQuery("msg=hello+world&key=a%26b")
 print(q.get("msg")!)
@@ -35,12 +35,14 @@ try {
     print(match (e) {
         UrlError.InvalidPercentEncoding { byteOffset: offset } => offset,
         UrlError.InvalidUtf8 { byteOffset: offset } => -1 - offset,
+        UrlError.InvalidHost { byteOffset: offset } => -1000 - offset,
+        UrlError.InvalidPort { byteOffset: offset } => -2000 - offset,
     })
 }
-print(url.resolve("https://example.com/a/b/c", "d.html"))
-print(url.resolve("https://example.com/a/b/c?old=1#top", "?new=2"))
-print(url.resolve("https://example.com/a/b/c?old=1", "#frag"))
-print(url.resolve("https://example.com/a/b/c", "//cdn.example.com/lib.js"))
-print(url.resolve("https://example.com/a/b/c", "../d/./e"))
+print(try! url.resolve("https://example.com/a/b/c", "d.html"))
+print(try! url.resolve("https://example.com/a/b/c?old=1#top", "?new=2"))
+print(try! url.resolve("https://example.com/a/b/c?old=1", "#frag"))
+print(try! url.resolve("https://example.com/a/b/c", "//cdn.example.com/lib.js"))
+print(try! url.resolve("https://example.com/a/b/c", "../d/./e"))
 print(url.join("/api/", "/v1/", "/users"))
 print(url.join("", "/api/", "", "v1", "/users"))

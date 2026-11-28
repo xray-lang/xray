@@ -1390,9 +1390,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     {.name = "encodeForm", .signature = "(s: string): string", .summary = "",},
     {.name = "format", .signature = "(obj: URL): string", .summary = "",},
     {.name = "join", .signature = "(...parts: string): string", .summary = "",},
-    {.name = "parse", .signature = "(url: string): URL", .summary = "",},
+    {.name = "parse", .signature = "(url: string) throws(UrlError): URL", .summary = "",},
     {.name = "parseQuery", .signature = "(qs: string) throws(UrlError): QueryParams", .summary = "",},
-    {.name = "resolve", .signature = "(base: string, relative: string): string", .summary = "",},
+    {.name = "resolve", .signature = "(base: string, relative: string) throws(UrlError): string", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
@@ -2122,7 +2122,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .summary = "URL parsing and construction",
         .body =
             "# url module\n" "\n" "URL parsing and construction.\n" "\n" "Usage: `import url` then call `url.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `QueryParams` | `QueryParams` |  |\n" "| `QueryParams.add` | `(name: string, value: string): ()` |  |\n" "| `QueryParams.encode` | `(): string` |  |\n" "| `QueryParams.entries` | `(): Array<(string, string)>` |  |\n" "| `QueryParams.get` | `(name: string): string?` |  |\n" "| `QueryParams.getAll` | `(name: string): Array<string>` |  |\n" "| `QueryParams.init` | `(): ()` |  |\n" "| `QueryParams.set` | `(name: string, value: string): ()` |  |\n" "| `URL` | `URL` |  |\n" "| `URL.hash` | `: string` |  |\n" "| `URL.host` | `: string` |  |\n" "| `URL.hostname` | `: string` |  |\n" "| `URL.href` | `: string` |  |\n"
-            "| `URL.init` | `(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()` |  |\n" "| `URL.origin` | `: string` |  |\n" "| `URL.password` | `: string` |  |\n" "| `URL.pathname` | `: string` |  |\n" "| `URL.port` | `: string` |  |\n" "| `URL.protocol` | `: string` |  |\n" "| `URL.search` | `: string` |  |\n" "| `URL.username` | `: string` |  |\n" "| `url.decode` | `(s: string): string` |  |\n" "| `url.decodeForm` | `(s: string): string` |  |\n" "| `url.encode` | `(s: string): string` |  |\n" "| `url.encodeForm` | `(s: string): string` |  |\n" "| `url.format` | `(obj: URL): string` |  |\n" "| `url.join` | `(...parts: string): string` |  |\n" "| `url.parse` | `(url: string): URL` |  |\n" "| `url.parseQuery` | `(qs: string) throws(UrlError): QueryParams` |  |\n" "| `url.resolve` | `(base: string, relative: string): string` |  |\n" "",
+            "| `URL.init` | `(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()` |  |\n" "| `URL.origin` | `: string` |  |\n" "| `URL.password` | `: string` |  |\n" "| `URL.pathname` | `: string` |  |\n" "| `URL.port` | `: string` |  |\n" "| `URL.protocol` | `: string` |  |\n" "| `URL.search` | `: string` |  |\n" "| `URL.username` | `: string` |  |\n" "| `url.decode` | `(s: string): string` |  |\n" "| `url.decodeForm` | `(s: string): string` |  |\n" "| `url.encode` | `(s: string): string` |  |\n" "| `url.encodeForm` | `(s: string): string` |  |\n" "| `url.format` | `(obj: URL): string` |  |\n" "| `url.join` | `(...parts: string): string` |  |\n" "| `url.parse` | `(url: string) throws(UrlError): URL` |  |\n" "| `url.parseQuery` | `(qs: string) throws(UrlError): QueryParams` |  |\n" "| `url.resolve` | `(base: string, relative: string) throws(UrlError): string` |  |\n" "",
         .symbols = _symbols_url,
         .symbol_count = (int)(sizeof(_symbols_url) / sizeof(_symbols_url[0])),
     },

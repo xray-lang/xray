@@ -1,13 +1,36 @@
 // RFC 3986 reference forms: an authority only after "//", the userinfo up to
 // the last '@', and opaque or relative references without host or origin.
 // format writes "//" before an authority rather than after any scheme, and
-// resolve treats any reference with a scheme as already absolute.
+// resolve treats any reference with a scheme as already absolute. A bad port
+// or IP literal is a typed error at its byte offset, also for resolve's base.
 import url
+import { UrlError } from url
+
+fn failure(e: UrlError) -> string {
+    return match (e) {
+        UrlError.InvalidHost { byteOffset: at } => "InvalidHost@${at}",
+        UrlError.InvalidPort { byteOffset: at } => "InvalidPort@${at}",
+        UrlError.InvalidPercentEncoding { byteOffset: at } => "InvalidPercentEncoding@${at}",
+        UrlError.InvalidUtf8 { byteOffset: at } => "InvalidUtf8@${at}",
+    }
+}
 
 fn show(text: string) {
-    const u = url.parse(text)
-    print("${u.protocol}|${u.username}|${u.password}|${u.hostname}|${u.port}|${u.pathname}|${u.search}|${u.hash}|${u.origin}")
-    print("  ${url.format(u)}")
+    try {
+        const u = url.parse(text)
+        print("${u.protocol}|${u.username}|${u.password}|${u.hostname}|${u.port}|${u.pathname}|${u.search}|${u.hash}|${u.origin}")
+        print("  ${url.format(u)}")
+    } catch (e: UrlError) {
+        print(failure(e))
+    }
+}
+
+fn resolveShow(base: string, relative: string) {
+    try {
+        print(url.resolve(base, relative))
+    } catch (e: UrlError) {
+        print(failure(e))
+    }
 }
 
 show("mailto:user@example.com")
@@ -20,10 +43,19 @@ show("http://user:pa:ss@h/")
 show("https://example.com")
 show("http://[::1]:8080/path")
 show("file:///etc/hosts")
+show("http://h:/p")
+show("http://h:080/p")
 show("https://example.com:99999/p")
+show("http://a:b:c/")
+show("http://h:8a/")
+show("http://[::1/x")
+show("http://[::1]x/")
+show("http://\u{4F8B}\u{5B50}.com:99999/")
 
-print(url.resolve("http://a/b/c", "mailto:x@y"))
-print(url.resolve("http://a/b/c", "g:h"))
-print(url.resolve("http://a/b/c", "g/h:i"))
-print(url.resolve("http://a/b/c", "1x:y"))
-print(url.resolve("http://a/b/c", "//h2/p"))
+resolveShow("http://a/b/c", "mailto:x@y")
+resolveShow("http://a/b/c", "g:h")
+resolveShow("http://a/b/c", "g/h:i")
+resolveShow("http://a/b/c", "1x:y")
+resolveShow("http://a/b/c", "//h2/p")
+resolveShow("http://h:99999/a", "b")
+resolveShow("http://h:99999/a", "mailto:x")
