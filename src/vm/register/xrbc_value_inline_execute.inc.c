@@ -135,12 +135,19 @@ static XrtManagedStatus rbc_value_inline_step(const XrRbcModule *module,XrRbcSta
             const XrtClassFieldAccess field_access={(XrtManagedHeader *)instance,binding.plan,access.index};
             if (class_push) {
                 const XrtBackingTypes *types=NULL;
-                XrRbcRegister *item=rbc_value_register(stack,activation,access.other);
-                if (!item) return XRT_MANAGED_ARGUMENT;
                 status=xrt_native_values_backings(xrt_value_root_current(source),&types);
+                if (status!=XRT_MANAGED_OK) return status;
                 const XrLirHomeWorkspace *workspace=&activation->code->homes->workspaces[access.window-1];
-                return status==XRT_MANAGED_OK ? xrt_class_array_field_push(&field_access,
-                    activation->frame,workspace->first_owner,types,(int64_t)item->bits) : status;
+                XrtValueImageSlot field=activation->image->slots[type->first_field+access.index];
+                if (activation->image->types[field.type-1].kind==XRT_VALUE_ARRAY_STRING) {
+                    const XrtStringBacking *item=NULL;
+                    status=rbc_value_string_borrow(activation,access.other,&item);
+                    return status==XRT_MANAGED_OK ? xrt_class_array_field_push_string(&field_access,
+                        activation->frame,workspace->first_owner,types,item) : status;
+                }
+                XrRbcRegister *item=rbc_value_register(stack,activation,access.other);
+                return item ? xrt_class_array_field_push(&field_access,
+                    activation->frame,workspace->first_owner,types,(int64_t)item->bits) : XRT_MANAGED_ARGUMENT;
             }
             if (class_write) {
                 const XrLirValueHome *incoming_home=rbc_value_home(activation->code,access.other);

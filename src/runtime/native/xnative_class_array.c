@@ -12,6 +12,7 @@
  */
 #include "xnative_class_array.h"
 #include "xnative_array_ops.h"
+#include "xnative_string_backing.h"
 
 XR_FUNCDEF XrtManagedStatus xrt_class_array_field_copy(const XrtClassFieldAccess *access,
     XrtManagedFrame *frame, size_t destination) {
@@ -49,11 +50,27 @@ XR_FUNCDEF XrtManagedStatus xrt_class_array_field_push(const XrtClassFieldAccess
     XrtBackingArrayKind kind;
     XrtManagedStatus status = xrt_class_array_binding(access,&field,&kind);
     if (status != XRT_MANAGED_OK) return status;
+    if (kind != XRT_BACKING_ARRAY_I64 && kind != XRT_BACKING_ARRAY_U8) return XRT_MANAGED_ARGUMENT;
     XrtArrayUpdate update = {.operation=XRT_ARRAY_UPDATE_PUSH,.item={.kind=kind}};
     if (kind == XRT_BACKING_ARRAY_U8) {
         if (item < 0 || item > UINT8_MAX) return XRT_MANAGED_ARGUMENT;
         update.item.value.u8 = (uint8_t)item;
     } else update.item.value.i64 = item;
+    return xrt_array_update_place((XrtPlace){.external=&field,.nulls=XRT_PLACE_NONNULL},
+        kind, frame, workspace, types, &update);
+}
+
+XR_FUNCDEF XrtManagedStatus xrt_class_array_field_push_string(const XrtClassFieldAccess *access,
+    XrtManagedFrame *frame, size_t workspace, const XrtBackingTypes *types, const XrtStringBacking *item) {
+    XrtExternalOwner field;
+    XrtBackingArrayKind kind;
+    XrtManagedStatus status = xrt_class_array_binding(access, &field, &kind);
+    if (status != XRT_MANAGED_OK) return status;
+    if (kind != XRT_BACKING_ARRAY_STRING || !xrt_backing_string_matches((const XrtManagedHeader *)item))
+        return XRT_MANAGED_ARGUMENT;
+    const XrtArrayUpdate update = {
+        .operation=XRT_ARRAY_UPDATE_PUSH, .item={.kind=kind,.value.string=(XrtStringBacking *)item}
+    };
     return xrt_array_update_place((XrtPlace){.external=&field,.nulls=XRT_PLACE_NONNULL},
         kind, frame, workspace, types, &update);
 }

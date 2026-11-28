@@ -628,8 +628,8 @@ static bool lir_edges_valid(const XrLirModule *m, const XrLirFunctionData *f, co
             for (uint32_t a = 0; a < edge->argument_count; ++a) {
                 uint32_t actual = edge->arguments[a], formal = target->parameters[a + offset];
                 if (!actual || actual > f->value_count || !formal || formal > f->value_count ||
-                    f->values[actual - 1].type != XR_LIR_STRING ||
-                    f->values[formal - 1].type != XR_LIR_STRING) return false;
+                    !xr_lir_invoke_edge_owner_type(m, f->values[actual - 1].type) ||
+                    f->values[actual - 1].type != f->values[formal - 1].type) return false;
             }
             continue;
         }
@@ -820,7 +820,7 @@ XR_FUNC XrLirStatus xr_lir_internal_instruction_check(const XrLirModule *m, uint
                 uint32_t forwarded = v->edges[0].arguments[p];
                 if (!forwarded || forwarded > f->value_count) goto invalid;
                 const XrLirValueData *owner = &f->values[forwarded - 1];
-                if (owner->type != XR_LIR_STRING || (owner->parameter && !owner->block))
+                if (!xr_lir_invoke_edge_owner_type(m, owner->type) || (owner->parameter && !owner->block))
                     goto invalid;
             }
         }
@@ -1155,15 +1155,17 @@ static bool lir_catch_receives_error(const XrLirBlockData *failed,
     return edge->argument_count && edge->arguments[0] == failed->parameters[0];
 }
 
-/* The selected edge has already published the original error and moved
- * its String owners. Only retire unused String owners before forwarding it. */
-static bool lir_invoke_string_landing(const XrLirBlockData *block,
-    const XrLirInstructionView *branch) {
+/* The selected edge publishes the original error and moves its owners.
+ * Only owners received here may be retired before forwarding the error. */
+static bool lir_invoke_owned_landing(const XrLirModule *m, const XrLirFunctionData *f,
+    const XrLirBlockData *block, const XrLirInstructionView *branch) {
     if (block->parameter_count < 2 || branch->op != XR_LIR_BR ||
         !branch->edges[0].argument_count || branch->edges[0].arguments[0] != block->parameters[0]) return false;
     for (uint32_t i = 0; i + 1 < block->instruction_count; ++i) {
         const XrLirInstructionView *v = &block->instructions[i].view;
-        if (v->op != XR_LIR_STRING_DROP) return false;
+        if (v->op != XR_LIR_STRING_DROP && v->op != XR_LIR_VALUE_DROP) return false;
+        XrLirType type = f->values[v->operands[0]-1].type;
+        if (!xr_lir_invoke_edge_owner_type(m, type)) return false;
         bool received = false;
         for (uint32_t p = 1; p < block->parameter_count; ++p) received |= v->operands[0] == block->parameters[p];
         if (!received) return false;
@@ -1200,7 +1202,7 @@ static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirF
             if (term->edges[1].argument_count) {
                 const XrLirCleanupBlock *cleanup = f->blocks[b].cleanup;
                 if (startup || f->test_error_boundary || (cleanup && cleanup->frontier) ||
-                    !lir_invoke_string_landing(failed,exit)) return false;
+                    !lir_invoke_owned_landing(m,f,failed,exit)) return false;
                 continue;
             }
             if (failed->parameter_count!=1) return false;
@@ -1243,7 +1245,7 @@ static bool lir_invoke_edges(const XrLirModule *m,uint32_t function,const XrLirF
         uint32_t predecessor = g->predecessors[g->offsets[b]], landing = b;
         const XrLirInstructionView *source = lir_terminator(f,predecessor);
         if (source->op == XR_LIR_BR) {
-            if (!lir_invoke_string_landing(&f->blocks[predecessor],source) ||
+            if (!lir_invoke_owned_landing(m,f,&f->blocks[predecessor],source) ||
                 g->offsets[predecessor + 1] - g->offsets[predecessor] != 1) return false;
             landing = predecessor;
             source = lir_terminator(f,g->predecessors[g->offsets[predecessor]]);

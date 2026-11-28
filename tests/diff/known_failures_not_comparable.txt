@@ -437,7 +437,6 @@ tests/diff/cases/semantics/stdlib/sys_threadlocal_nullable.xr  # module slot pay
 tests/diff/cases/semantics/stdlib/sys_threadlocal_recursive_init.xr  # error: name is not an initialized value
 tests/diff/cases/semantics/stdlib/text_contract_direct.xr  # GENERATOR_NEW is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr  # error: projected Class ref requires its own object borrow owner
-tests/diff/cases/semantics/stdlib/url_core_direct.xr  # record field has no canonical physical carrier is not supported by LIR lowering yet
 tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr  # error: E0330: throwing call requires try or a try body
 tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr  # error: Array member has no admitted value-operation contract

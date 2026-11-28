@@ -31,7 +31,7 @@ static bool rbc_writable_class_scalar(const XrtValueImage *image, const XrtValue
             image->types[type->nullable_element-1].kind==XRT_VALUE_I64);
 }
 static bool rbc_writable_class_array(XrtValueKind kind) {
-    return kind==XRT_VALUE_ARRAY_I64 || kind==XRT_VALUE_ARRAY_U8;
+    return kind==XRT_VALUE_ARRAY_I64 || kind==XRT_VALUE_ARRAY_U8 || kind==XRT_VALUE_ARRAY_STRING;
 }
 static bool rbc_writable_class_string(const XrtValueImage *image, const XrtValueImageType *type) {
     if (!image->owned_offsets) return false;
@@ -114,8 +114,10 @@ static bool rbc_value_inline_access_valid(const XrRbcModule *module,const XrRbcV
             rbc_class_string_operand(module,code,a.other,field->type,member->kind,false);
         if (!rbc_writable_class_array(member->kind)) return false;
         if (class_write) return !a.window && rbc_value_inline_operand(module,code,function,a.other,field->type,false);
-        if (!a.window || a.window>code->homes->workspace_count || !code->homes->workspaces ||
-            !rbc_value_scalar(code,function,a.other,XR_RBC_BITS)) return false;
+        if (!a.window || a.window>code->homes->workspace_count || !code->homes->workspaces) return false;
+        if (member->kind==XRT_VALUE_ARRAY_STRING) {
+            if (!rbc_value_string_borrow_operand(module,code,a.other)) return false;
+        } else if (!rbc_value_scalar(code,function,a.other,XR_RBC_BITS)) return false;
         const XrLirHomeWorkspace *workspace=&code->homes->workspaces[a.window-1];
         const XrtManagedFrameSpec *frame=&code->homes->frame;
         return workspace->kind==XR_LIR_HOME_WORKSPACE_CLASS_ARRAY_PUSH && workspace->type==field->type &&

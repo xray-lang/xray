@@ -34,7 +34,7 @@ enum { XR_LIR_ARRAY_FAMILY_COUNT = 5 };
 enum { XR_LIR_ARRAY_CATALOG_COUNT = XR_LIR_ARRAY_FAMILY_COUNT * (XR_LIR_ARRAY_OP_RESERVE + 3) + 2 };
 
 static inline bool xr_lir_class_array_element_supported(XrLirType element) {
-    return element == XR_LIR_I64 || element == XR_LIR_U8;
+    return element == XR_LIR_I64 || element == XR_LIR_U8 || element == XR_LIR_STRING;
 }
 
 typedef struct XrLirValueData {
@@ -336,6 +336,9 @@ XR_FUNC bool xr_lir_internal_state_layout_valid(const XrLirModule *, const XrLir
 XR_FUNC bool xr_lir_internal_state_payload(const XrLirModule *, XrLirType, uint32_t *, uint32_t *);
 XR_FUNC bool xr_lir_internal_terminal(XrLirOp op);
 XR_FUNC bool xr_lir_internal_invoke_result_type(const XrLirModule *, XrLirType);
+static inline bool xr_lir_invoke_edge_owner_type(const XrLirModule *m, XrLirType type) {
+    return type == XR_LIR_STRING || (xr_lir_class_payload(m, type, NULL) && !xr_lir_class_storage(m, type));
+}
 /* Cold backend collection immediately follows successful verification of this
  * exact unchanged finished module. Public plan_create still revalidates all IR.
  * This internal entry copies events only; it grants no admission or trust flag.

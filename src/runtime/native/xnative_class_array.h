@@ -26,4 +26,6 @@ XR_FUNC XrtManagedStatus xrt_class_array_field_copy(const XrtClassFieldAccess *,
 XR_FUNC XrtManagedStatus xrt_class_array_field_replace(const XrtClassFieldAccess *, const XrtManagedHeader *incoming);
 XR_FUNC XrtManagedStatus xrt_class_array_field_push(const XrtClassFieldAccess *,
     XrtManagedFrame *, size_t workspace, const XrtBackingTypes *, int64_t item);
+XR_FUNC XrtManagedStatus xrt_class_array_field_push_string(const XrtClassFieldAccess *,
+    XrtManagedFrame *, size_t workspace, const XrtBackingTypes *, const XrtStringBacking *item);
 #endif // XNATIVE_CLASS_ARRAY_H

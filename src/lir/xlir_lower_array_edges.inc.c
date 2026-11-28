@@ -168,7 +168,7 @@ static bool lower_selected_edges(LowerFunction *f, uint32_t b, XrLirInstruction 
             XrLirValue id = term->edges[e].arguments[a];
             const XrLirValueData *value = &c->module->functions[f->function.id - 1].values[id.id - 1];
             if (!lower_managed_type(f->owner, value->type)) continue;
-            if (invoke && value->type != XR_LIR_STRING) {
+            if (invoke && !xr_lir_invoke_edge_owner_type(c->module, value->type)) {
                 good = lower_unsupported(c,"non-String state across invoke successor");
                 break;
             }

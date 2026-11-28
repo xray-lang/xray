@@ -107,7 +107,7 @@ static XrtBackingArrayKind array_backing_kind(XrtValueKind kind) {
     }
 }
 static XrtBackingArrayKind writable_class_array_kind(XrtValueKind kind) {
-    return kind == XRT_VALUE_ARRAY_I64 || kind == XRT_VALUE_ARRAY_U8 ?
+    return kind == XRT_VALUE_ARRAY_I64 || kind == XRT_VALUE_ARRAY_U8 || kind == XRT_VALUE_ARRAY_STRING ?
         array_backing_kind(kind) : XRT_BACKING_ARRAY_COUNT;
 }
 
@@ -165,7 +165,8 @@ static bool record_field(const XrtValuePlan *plan, bool named) {
     return kind == XRT_VALUE_I64 || kind == XRT_VALUE_BOOL || kind == XRT_VALUE_F64 ||
         kind == XRT_VALUE_STRING || kind == XRT_VALUE_ARRAY_I64 || xrt_value_kind_has_fields(kind) ||
         (kind == XRT_VALUE_CLASS && (named || !plan->view.class_storage)) ||
-        (named && (kind == XRT_VALUE_ARRAY_U8 || class_only_field(&plan->view))) ||
+        (named && (kind == XRT_VALUE_ARRAY_U8 || kind == XRT_VALUE_ARRAY_STRING ||
+            class_only_field(&plan->view))) ||
         (kind == XRT_VALUE_NULLABLE && managed_nullable(plan));
 }
 static bool capture_type(const XrtValuePlan *plan) {
@@ -885,6 +886,11 @@ static XrtManagedStatus class_array_u8_preflight(void *context, XrtPlaceAction a
     XrtManagedHeader *const *field = context;
     return xrt_backing_array_matches(*field, XRT_BACKING_ARRAY_U8) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
 }
+static XrtManagedStatus class_array_string_preflight(void *context, XrtPlaceAction action) {
+    (void)action;
+    XrtManagedHeader *const *field = context;
+    return xrt_backing_array_matches(*field, XRT_BACKING_ARRAY_STRING) ? XRT_MANAGED_OK : XRT_MANAGED_ARGUMENT;
+}
 /* The admitted writable class is executor-confined. Its live receiver owns
  * both the field and its guard, including when another binding shares it. */
 XR_FUNCDEF XrtManagedStatus xrt_class_array_binding(const XrtClassFieldAccess *access, XrtExternalOwner *output,
@@ -899,9 +905,13 @@ XR_FUNCDEF XrtManagedStatus xrt_class_array_binding(const XrtClassFieldAccess *a
     unsigned char *payload = (unsigned char *)access->instance + class_payload_offset(row);
     XrtManagedHeader **slot = (XrtManagedHeader **)(payload + field->offset);
     bool *guards = (bool *)(payload + row->size);
+    static XrtManagedStatus (*const preflight[])(void *, XrtPlaceAction) = {
+        [XRT_BACKING_ARRAY_I64]=class_array_i64_preflight,
+        [XRT_BACKING_ARRAY_STRING]=class_array_string_preflight,
+        [XRT_BACKING_ARRAY_U8]=class_array_u8_preflight
+    };
     *output = (XrtExternalOwner){.owner=slot, .busy=&guards[access->index],
-        .preflight=field_kind == XRT_BACKING_ARRAY_U8 ? class_array_u8_preflight : class_array_i64_preflight,
-        .context=slot};
+        .preflight=preflight[field_kind], .context=slot};
     if (kind) *kind = field_kind;
     return XRT_MANAGED_OK;
 }

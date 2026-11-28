@@ -686,6 +686,15 @@ XRAY_API void xrt_native_class_array_field_push(const XrtNativeClassField *field
         status = xrt_class_array_field_push(&access,frame,workspace,types,item);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status,source);
 }
+XRAY_API void xrt_native_class_array_field_push_string(const XrtNativeClassField *field,
+    XrtManagedFrame *frame, size_t workspace, const XrtStringBacking *item, uint32_t source) {
+    XrtClassFieldAccess access = native_class_field(field, source);
+    const XrtBackingTypes *types = NULL;
+    XrtManagedStatus status = xrt_native_values_backings(xrt_value_root_current(source), &types);
+    if (status == XRT_MANAGED_OK)
+        status = xrt_class_array_field_push_string(&access, frame, workspace, types, item);
+    if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, source);
+}
 static XrtManagedStatus native_environment_type(struct XrtNativeValues *values,
     const XrtValuePlan *plan, const XrtCaptureType **output) {
     NativeEnvironmentType *type = values->environments;

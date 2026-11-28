@@ -73,6 +73,8 @@ XRAY_API void xrt_native_class_array_field_replace(const XrtNativeClassField *,
     const XrtManagedHeader *, uint32_t source_id);
 XRAY_API void xrt_native_class_array_field_push(const XrtNativeClassField *,
     XrtManagedFrame *, size_t workspace, int64_t item, uint32_t source_id);
+XRAY_API void xrt_native_class_array_field_push_string(const XrtNativeClassField *,
+    XrtManagedFrame *, size_t workspace, const XrtStringBacking *item, uint32_t source_id);
 /* Executes a numbered synchronous path operation. The String is borrowed for
  * this call only. Host refusals return false, while execution faults retire
  * the active execution after the OS kernel releases its temporary state. */

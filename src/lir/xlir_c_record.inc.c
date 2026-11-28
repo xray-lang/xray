@@ -95,12 +95,19 @@ static void c_class_array_field(LirC *c, const XrLirInstructionView *v, uint32_t
     XR_CHECK(!push || (workspace->kind == XR_LIR_HOME_WORKSPACE_CLASS_ARRAY_PUSH && workspace->value == v->operands[0]),
         "verified Class Array push has its own concrete replacement slot");
     if (read || push) c_values_ensure(c,source);
-    c_format(c,"    xrt_native_class_array_field_%s(&(XrtNativeClassField){",read ? "copy" : push ? "push" : "replace");
+    const char *operation = "replace";
+    if (read) operation = "copy";
+    bool string_item = push && c_value_type(c, v->operands[1]) == XR_LIR_STRING;
+    if (push) operation = string_item ? "push_string" : "push";
+    c_format(c, "    xrt_native_class_array_field_%s(&(XrtNativeClassField){", operation);
     c_value(c,v->operands[0]);
     c_format(c,", &xrl_value_image, UINT32_C(%" PRIu32 "), UINT32_C(%" PRIu64 ")}", object->type, v->bits);
     if (read) c_format(c,", xrl_frame, %zu", c->homes->values[v->result].temporary_first_owner);
     if (push) c_format(c,", xrl_frame, %zu", workspace->first_owner);
-    if (!read) { c_text(c,", "); c_value(c,v->operands[1]); }
+    if (!read) {
+        c_text(c, string_item ? ", (const XrtStringBacking *)" : ", ");
+        c_value(c, v->operands[1]);
+    }
     c_format(c,", UINT32_C(%" PRIu32 "));\n",source);
     if (read) c_values_publish_leaf(c,v->result,source);
 }
