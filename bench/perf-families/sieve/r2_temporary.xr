@@ -1,0 +1,26 @@
+fn main() {
+    const n = @N@
+    var flags: Array<i64> = []
+    var i = 0
+    while (i <= n) {
+        flags.push(1)
+        i = i + 1
+    }
+    var count = 0
+    var p = 2
+    while (p <= n) {
+        const flag = flags[p]
+        if (flag == 1) {
+            count = count + 1
+            const step = p
+            var m = p * step
+            while (m <= n) {
+                flags[m] = 0
+                m = m + step
+            }
+        }
+        p = p + 1
+    }
+    print(count)
+}
+main()

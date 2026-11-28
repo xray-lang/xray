@@ -3,16 +3,19 @@
   "origin": {
     "families": "Equivalent spellings of the same work. Every member of a family prints the same output at each scale, so outputs are checked exactly and timings compare like with like.",
     "rules": "R1 constants with different bit patterns; R2 value expressions and temporaries; R3 an unrelated statement; R4 independent statement order; R5 extracted functions; R6 data from parameters or results; R7 compound and expanded assignment; R8 loop step spellings.",
-    "scales": "Templates replace each @NAME@ placeholder. Native scales match the hand-written C reference; VM scales are smaller and are only compared within the family.",
+    "scales": "Templates replace each @NAME@ placeholder. Native scales match the hand-written C reference; VM scales are smaller and also expand the family's Lua reference.",
+    "lua": "Each family's Lua 5.x reference does the same work at the VM scale in idiomatic Lua and prints the VM output.",
     "seeds": "The push and inplace seeds expand to the exact bytes of the fixed Array gate programs."
   },
   "limits": {
     "familySpread": 1.5,
     "genericOverC": 3.0,
-    "source": "Task345 decisions: slowest / fastest member <= 1.5 for native and VM; every native member <= 3x the hand-written C; the fastest member meets the family's own C limit."
+    "vmOverLua": 1.5,
+    "source": "Task345 decisions: slowest / fastest member <= 1.5 for native and VM; every native member <= 3x the hand-written C; the fastest member meets the family's own C limit. Task351: every VM member <= 1.5x the family's Lua reference."
   },
   "families": {
     "push": {
+      "lua": "push.lua",
       "c": "../../array-access/push.c",
       "seedOrigin": "../../array-access/push.xr",
       "nativeOverC": 1.3,
@@ -31,6 +34,7 @@
       }
     },
     "inplace": {
+      "lua": "inplace.lua",
       "c": "../../array-access/inplace.c",
       "seedOrigin": "../../array-access/inplace.xr",
       "nativeOverC": 1.1,
@@ -49,6 +53,7 @@
       }
     },
     "append": {
+      "lua": "append.lua",
       "c": "append.c",
       "nativeOverC": 1.3,
       "limitSource": "Task328 P3 managed-value target: native <= 1.3 C.",
@@ -67,6 +72,7 @@
       }
     },
     "map": {
+      "lua": "map.lua",
       "c": "map.c",
       "nativeOverC": 1.3,
       "limitSource": "Task328 P3 managed-value target: native <= 1.3 C.",
@@ -80,6 +86,23 @@
         "r5_extracted_loop": "R5",
         "r6_helper_table": "R6",
         "r8_compound": "R8"
+      }
+    },
+    "sieve": {
+      "lua": "sieve.lua",
+      "c": "sieve.c",
+      "nativeOverC": 1.3,
+      "limitSource": "Task351: strided in-place Array writes and reads <= 1.3 C, the generic managed-value limit.",
+      "scales": {"native": {"@N@": "5000000"}, "vm": {"@N@": "1000000"}},
+      "stdout": {"native": "348513\n", "vm": "78498\n"},
+      "members": {
+        "seed": "seed",
+        "r1_flag_constants": "R1",
+        "r2_temporary": "R2",
+        "r3_extra_statement": "R3",
+        "r5_helper_mark": "R5",
+        "r6_parameter_size": "R6",
+        "r8_compound_step": "R8"
       }
     }
   }

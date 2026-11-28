@@ -2,7 +2,7 @@
 """Measure equivalent-spelling performance families against hand-written C.
 
 check --root .
-run --root . --build build --cc /absolute/compiler --work NEW [--family NAME] [--blocking]
+run --root . --build build --cc /absolute/compiler --work NEW [--lua /absolute/lua] [--family NAME] [--blocking]
 
 A family is a set of member programs that do the same work with different
 spellings. Every member expands at a native and a VM scale and must print the
@@ -13,6 +13,8 @@ rounds through array_access_benchmark's process observer and product timeout.
 The report judges, per family: slowest / fastest native member and slowest /
 fastest VM member against the spread limit; the fastest native member against
 the family's own C limit; the slowest native member against the generic C limit.
+With --lua, the family's Lua reference runs at the VM scale in the same rounds
+and the slowest VM member is judged against the Lua limit.
 A threshold miss is recorded as FAIL in result.json and summary.md. It changes
 the exit status only with --blocking; a failed or invalid sample always does.
 """
@@ -47,7 +49,7 @@ def validate(root: Path, manifest: dict) -> list:
     """Return every structural problem instead of stopping at the first one."""
     problems = []
     limits = manifest.get("limits", {})
-    for key in ("familySpread", "genericOverC"):
+    for key in ("familySpread", "genericOverC", "vmOverLua"):
         if not isinstance(limits.get(key), (int, float)) or limits[key] < 1:
             problems.append(f"limits.{key} must be a number >= 1")
     families = manifest.get("families")
@@ -72,6 +74,11 @@ def validate(root: Path, manifest: dict) -> list:
         reference = folder / family.get("c", "")
         if not family.get("c") or not reference.is_file():
             problems.append(f"{name}: missing hand-written C reference {family.get('c')}")
+        lua = folder / family.get("lua", "")
+        if not family.get("lua") or not lua.is_file():
+            problems.append(f"{name}: missing Lua reference {family.get('lua')}")
+        elif PLACEHOLDER.findall(expand(lua.read_text(encoding="utf-8"), scales.get("vm", {}))):
+            problems.append(f"{name}: the VM scale leaves placeholders in {family['lua']}")
         declared = set(members)
         on_disk = {path.stem for path in folder.glob("*.xr")}
         for extra in sorted(on_disk - declared):
@@ -122,9 +129,10 @@ def judge(name: str, family: dict, limits: dict, rows: dict, samples: list) -> d
         medians[key] = statistics.median(values) if len(values) == bench.ROUNDS else None
     native = {key: medians[key] for key, row in rows.items() if row["engine"] == "native"}
     vm = {row["member"]: medians[key] for key, row in rows.items() if row["engine"] == "VM"}
+    lua = medians.get("Lua")
     report = {"nativeOverC": family["nativeOverC"], "limitSource": family["limitSource"],
-              "cSeconds": medians["C"], "members": {}}
-    if medians["C"] is None or None in native.values() or None in vm.values():
+              "cSeconds": medians["C"], "luaSeconds": lua, "members": {}}
+    if medians["C"] is None or None in native.values() or None in vm.values() or ("Lua" in rows and lua is None):
         report.update(state="FAIL", reason="At least one entry has no valid five-sample median")
         return report
     fastest, slowest = min(native.values()), max(native.values())
@@ -135,13 +143,16 @@ def judge(name: str, family: dict, limits: dict, rows: dict, samples: list) -> d
         "fastestOverC": {"value": fastest / medians["C"], "limit": family["nativeOverC"]},
         "slowestOverC": {"value": slowest / medians["C"], "limit": limits["genericOverC"]},
     }
+    if lua is not None:
+        checks["vmSlowestOverLua"] = {"value": vm_slowest / lua, "limit": limits["vmOverLua"]}
     for item in checks.values():
         item["pass"] = item["value"] <= item["limit"]
     for member in native:
         report["members"][member] = {
             "rule": family["members"][member], "nativeSeconds": native[member],
             "nativeOverFastest": native[member] / fastest, "nativeOverC": native[member] / medians["C"],
-            "vmSeconds": vm[member], "vmOverFastest": vm[member] / vm_fastest}
+            "vmSeconds": vm[member], "vmOverFastest": vm[member] / vm_fastest,
+            "vmOverLua": vm[member] / lua if lua is not None else None}
     report.update(checks=checks, state="PASS" if all(item["pass"] for item in checks.values()) else "FAIL")
     return report
 
@@ -159,11 +170,15 @@ def summarize(result: dict) -> str:
             continue
         lines.append(" | ".join(f"{key} {item['value']:.2f} (limit {item['limit']})"
                                 + ("" if item["pass"] else " FAIL") for key, item in family["checks"].items()))
-        lines += ["", "| member | rule | native ms | x fastest | x C | VM ms | x fastest |", "|---|---|---|---|---|---|---|"]
+        lines += ["", "| member | rule | native ms | x fastest | x C | VM ms | x fastest | x Lua |",
+                  "|---|---|---|---|---|---|---|---|"]
         for member, row in family["members"].items():
+            ratio = "" if row["vmOverLua"] is None else f"{row['vmOverLua']:.2f}"
             lines.append(f"| {member} | {row['rule']} | {row['nativeSeconds'] * 1000:.1f} | {row['nativeOverFastest']:.2f} | "
-                         f"{row['nativeOverC']:.2f} | {row['vmSeconds'] * 1000:.1f} | {row['vmOverFastest']:.2f} |")
-        lines.append(f"| C reference | | {family['cSeconds'] * 1000:.1f} | | 1.00 | | |")
+                         f"{row['nativeOverC']:.2f} | {row['vmSeconds'] * 1000:.1f} | {row['vmOverFastest']:.2f} | {ratio} |")
+        lines.append(f"| C reference | | {family['cSeconds'] * 1000:.1f} | | 1.00 | | | |")
+        if family.get("luaSeconds") is not None:
+            lines.append(f"| Lua reference | | | | | {family['luaSeconds'] * 1000:.1f} | | 1.00 |")
     return "\n".join(lines) + "\n"
 
 
@@ -179,6 +194,7 @@ def run(args) -> int:
     env = bench.environment(root)
     binary = build / ("xray" + EXE)
     compiler = args.cc.resolve(strict=True)
+    lua = args.lua.resolve(strict=True) if args.lua else None
     result = {"schema": 1, "state": "PREPARING", "platform": sys.platform, "blocking": args.blocking,
               "driver": bench.fingerprint(Path(__file__)), "limits": manifest["limits"],
               "rounds": bench.ROUNDS, "timeoutSeconds": bench.PRODUCT_TIMEOUT,
@@ -226,6 +242,12 @@ def run(args) -> int:
                 prepare(f"{name}-C-compile", [compiler, *flags, "-c", reference, "-o", obj])
                 prepare(f"{name}-C-link", [compiler, obj, "-o", c_exe])
             rows = {"C": {"engine": "C", "argv": [str(c_exe)], "expectedHex": c_text.hex()}}
+            if lua:
+                script = out / "reference.lua"
+                script.write_bytes(expand((folder / family["lua"]).read_text(encoding="utf-8"),
+                                          family["scales"]["vm"]).encode())
+                rows["Lua"] = {"engine": "Lua", "argv": [str(lua), str(script)],
+                               "expectedHex": family["stdout"]["vm"].encode().hex()}
             for member, rule in family["members"].items():
                 text = (folder / (member + ".xr")).read_text(encoding="utf-8")
                 for engine in ENGINES:
@@ -291,6 +313,7 @@ def main() -> int:
     runner.add_argument("--build", type=Path, required=True)
     runner.add_argument("--cc", type=Path, required=True)
     runner.add_argument("--work", type=Path, required=True)
+    runner.add_argument("--lua", type=Path)
     runner.add_argument("--family", action="append")
     runner.add_argument("--blocking", action="store_true")
     args = parser.parse_args()
