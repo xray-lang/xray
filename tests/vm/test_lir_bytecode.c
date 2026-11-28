@@ -7,6 +7,7 @@
  * test_lir_bytecode.c - Hand-built SSA execution, ownership and capacity tests.
  */
 #include "../lir/lir_test_programs.h"
+#include "../lir/lir_text_call_fixture.h"
 #include "base/xmalloc.h"
 #include "lir/xlir_internal.h"
 #include "runtime/native/xnative_execution.h"
@@ -2284,15 +2285,48 @@ static void test_scalar_edge_in_typed_function(bool spill) {
     xr_rbc_program_destroy(program);
 }
 
+/* Locally produced Strings forwarded by MOVE share one stable home, so the
+ * edge carries no owner transfer however the String was made. */
+static void test_fresh_string_stationary_edges(void) {
+    XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));
+    XrLirType texts[]={XR_LIR_STRING,XR_LIR_STRING};
+    XrLirFunction f=test_function(m,"fresh_string_edges",NULL,0,XR_LIR_I64);
+    XrLirBlock entry=test_block(m,f,NULL,0),join=test_block(m,f,texts,2);
+    OK(xr_lir_set_entry(m,f,entry));
+    XrLirValue number=test_constant(m,entry,XR_LIR_I64,123),digits={0},joined={0};
+    XrLirInstruction create={.op=XR_LIR_STRING_I64,.type=XR_LIR_STRING,.operands=&number,.operand_count=1};
+    OK(xr_lir_emit_value(m,entry,&create,&digits));
+    XrLirValue pair[]={digits,digits};
+    XrLirInstruction concat={.op=XR_LIR_STRING_CONCAT,.type=XR_LIR_STRING,.operands=pair,.operand_count=2};
+    OK(xr_lir_emit_value(m,entry,&concat,&joined));
+    XrLirValue values[]={digits,joined};test_branch(m,entry,join,values,2);
+    XrLirValue parameters[2],lengths[2];
+    for(unsigned n=0;n<2;++n) {
+        OK(xr_lir_block_parameter(m,join,n,&parameters[n]));
+        XrLirInstruction len={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&parameters[n],.operand_count=1};
+        OK(xr_lir_emit_value(m,join,&len,&lengths[n]));
+        frame_drop(m,join,parameters[n],false);
+    }
+    test_return(m,join,test_binary(m,join,XR_LIR_ADD,lengths[0],lengths[1],XR_LIR_PREDICATE_NONE));
+    OK(xr_lir_module_finish(m,NULL));
+    XrRbcProgram *program=compile(m,f);
+    const XrLirValueHomes *homes=xr_rbc_module_value_homes(xr_rbc_program_view(program),0);
+    CHECK(homes && !homes->edge_count);
+    for(unsigned n=0;n<2;++n) CHECK(xr_lir_home_stationary_edge(homes,values[n].id,parameters[n].id));
+    xr_lir_module_destroy(m);
+    CHECK(run(program,NULL,0)==9);
+    xr_rbc_program_destroy(program);
+}
+
 static void test_backward_owned_dag(void) {
     XrLirModule *m=NULL;OK(xr_lir_module_create(NULL,&m));XrLirType text_type=XR_LIR_STRING;
     XrLirFunction f=test_function(m,"backward_owned_dag",NULL,0,XR_LIR_I64);
+    XrLirFunction make=test_text_function(m,"backward_owned_text",12345);
     XrLirBlock entry=test_block(m,f,NULL,0),join=test_block(m,f,&text_type,1),producer=test_block(m,f,NULL,0);
     OK(xr_lir_set_entry(m,f,entry));test_branch(m,entry,producer,NULL,0);
     for(uint32_t n=0;n<260;++n)(void)test_constant(m,producer,XR_LIR_I64,n);
-    XrLirValue number=test_constant(m,producer,XR_LIR_I64,12345),text={0};
-    XrLirInstruction create={.op=XR_LIR_STRING_I64,.type=XR_LIR_STRING,.operands=&number,.operand_count=1};
-    OK(xr_lir_emit_value(m,producer,&create,&text));test_branch(m,producer,join,&text,1);
+    // A call result keeps a real transfer; a local String producer would stay in one home.
+    XrLirValue text=test_text_call(m,producer,make);test_branch(m,producer,join,&text,1);
     XrLirValue value=block_parameter(m,join,0),length;
     XrLirInstruction op={.op=XR_LIR_STRING_LEN,.type=XR_LIR_I64,.operands=&value,.operand_count=1};
     OK(xr_lir_emit_value(m,join,&op,&length));frame_drop(m,join,value,false);test_return(m,join,length);
@@ -2325,6 +2359,7 @@ int main(void) {
     test_many_spilled_conditions();
     test_scalar_edge_in_typed_function(false);
     test_scalar_edge_in_typed_function(true);
+    test_fresh_string_stationary_edges();
     test_backward_owned_dag();
     test_string_binding_aliases();
     test_scalar_spill_branches();

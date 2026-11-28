@@ -7,6 +7,7 @@
  * test_lir_bytecode_alloc.c - Relocating compilation and representative OOMs.
  */
 #include "../lir/lir_test_programs.h"
+#include "../lir/lir_text_call_fixture.h"
 #include "base/xmalloc.h"
 #include "vm/register/xrbc_lir.h"
 #include "vm/register/xrbc_value_code.h"
@@ -615,12 +616,11 @@ static void compiled_string_edge_owners(bool stationary) {
             op.op=XR_LIR_STRING_LITERAL;
             op.bits=literal.id;
         } else {
-            XrLirInstruction constant={.op=XR_LIR_CONST,.type=XR_LIR_I64,.bits=n ? 1234 : 12345};
-            OK(xr_lir_emit_value(m,entry,&constant,&number));
-            op.op=XR_LIR_STRING_I64;
-            op.operands=&number;
-            op.operand_count=1;
+            // Call results keep real transfers; a local producer would stay in one home.
+            op.op=XR_LIR_CALL;
+            op.callee=test_text_function(m,n ? "moved_text_short" : "moved_text_long",n ? 1234 : 12345);
         }
+        (void)number;
         OK(xr_lir_emit_value(m,entry,&op,&values[n]));
         OK(xr_lir_block_parameter(m,join,n,&parameters[n]));
     }

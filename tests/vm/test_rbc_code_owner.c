@@ -11,6 +11,7 @@
  *   sweeps include both unsealed compilation and published image preparations.
  */
 #include "../lir/lir_test_programs.h"
+#include "../lir/lir_text_call_fixture.h"
 #include "base/xmalloc.h"
 #include "vm/register/xrbc_lir.h"
 #include "xray_native_string_value.h"

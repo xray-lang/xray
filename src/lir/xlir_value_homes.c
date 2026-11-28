@@ -501,17 +501,23 @@ static bool lir_home_chain_type(const XrLirValueData *value) {
         (value->type == XR_LIR_ARRAY && value->array_element == XR_LIR_I64);
 }
 
-/* The independent literal cache or caller's loan keeps the backing alive
- * throughout Frame cleanup. Coalescing its local owner therefore cannot move
- * the final release relative to other cleanup. Keep the original producer
- * and explicit DROP, including failure at the original retain. */
+/* A String chain starts at an instruction that creates its own owner. String
+ * values have no identity or finalizer, so like the fixed container payloads
+ * below their one live owner can share a physical slot along a MOVE chain:
+ * failure drain releases it from that slot, and no observer can tell when the
+ * final release happens relative to other cleanup. The producing and dropping
+ * instructions keep their sites, including a failure at a retain. */
 static bool lir_home_chain_producer(const XrLirFunctionData *f, uint32_t id) {
     const XrLirInstructionView *definition = xr_lir_internal_value_definition(f, id);
-    if (!definition) return false;
-    if (definition->op == XR_LIR_STRING_LITERAL) return true;
-    if (definition->op != XR_LIR_STRING_RETAIN && definition->op != XR_LIR_MAP_RETAIN) return false;
-    const XrLirValueData *source = &f->values[definition->operands[0] - 1];
-    return source->parameter && !source->block;
+    if (!definition || definition->type != XR_LIR_STRING) return false;
+    switch (definition->op) {
+    case XR_LIR_STRING_LITERAL: case XR_LIR_STRING_RETAIN: case XR_LIR_STRING_I64:
+    case XR_LIR_STRING_F64: case XR_LIR_STRING_CONCAT: case XR_LIR_STRING_SLICE:
+    case XR_LIR_STRING_REPLACE:
+        return true;
+    default:
+        return false;
+    }
 }
 
 static bool lir_home_container_chain_start(const XrLirModule *module, const XrLirFunctionData *f, uint32_t id) {
