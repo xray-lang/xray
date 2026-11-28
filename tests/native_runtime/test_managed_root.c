@@ -824,6 +824,7 @@ static void fixed_execution_boundary(void) {
 }
 #include "managed_frame_locations_cases.h"
 #include "managed_frame_forwarding_cases.h"
+#include "managed_frame_local_cases.h"
 /* A payload above the fundamental alignment is placed from the actual frame
  * address rather than a static offset, while fundamental alignments keep their
  * exact static placement. The shared limit refuses anything larger. */
@@ -865,6 +866,7 @@ int main(void) {
     combined_frame_boundary();
     canonical_frame_locations();
     managed_frame_forwarding();
+    managed_frame_local_transactions();
     inline_payload_rejection();
     inline_payload_jump();
     explicit_payload_alignment();

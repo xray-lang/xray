@@ -33,7 +33,9 @@ typedef struct XrtManagedFrameLocations {
     XrtManagedFrame *frame;
     void *payload;
     const XrtManagedSlot *slots;
-    const bool *busy;
+    /* The Root's real busy flag. Only the local transactions below enter it;
+     * every other holder of this view reads it. */
+    bool *busy;
     size_t slot_count;
 } XrtManagedFrameLocations;
 
@@ -175,6 +177,75 @@ static inline bool xrt_managed_frame_try_forward(XrtManagedFrame *frame, void *p
     *to=incoming;
     *from=NULL;
     return true;
+}
+
+/* Bounded ownership transactions on slots of the active Frame this view was
+ * returned for. They are exactly xrt_managed_slot_drop, xrt_place_copy_replace,
+ * xrt_place_move_replace and adopt-then-replace for two NONNULL payload slots
+ * of one Frame, without resolving Places: the Root busy flag excludes reentry
+ * while an old owner retires, a pending slot rejects the transaction, and a
+ * rejected transaction changes no owner. Trusted execution code proves that
+ * the indices name owner slots of this view; the checks below only refuse a
+ * slot without a payload owner field. */
+static inline XrtManagedHeader **xrt_managed_frame_local_owner(const XrtManagedFrameLocations *locations,
+    size_t slot) {
+    if (!locations || !locations->slots || !locations->busy || !locations->payload ||
+        slot >= locations->slot_count || locations->slots[slot].owner_offset == SIZE_MAX) return NULL;
+    return (XrtManagedHeader **)((unsigned char *)locations->payload + locations->slots[slot].owner_offset);
+}
+static inline bool xrt_managed_frame_local_pending(const XrtManagedFrameLocations *locations, size_t slot) {
+    return locations->slots[slot].pending.value || locations->slots[slot].pending.allocation_bytes;
+}
+static inline XrtManagedStatus xrt_managed_frame_local_drop(const XrtManagedFrameLocations *locations,
+    size_t slot) {
+    XrtManagedHeader **owner = xrt_managed_frame_local_owner(locations, slot);
+    if (!owner || *locations->busy) return XRT_MANAGED_ARGUMENT;
+    if (xrt_managed_frame_local_pending(locations, slot)) return XRT_MANAGED_ARGUMENT;
+    XrtManagedHeader *old = *owner;
+    *locations->busy = true;
+    *owner = NULL;
+    xrt_managed_drop(old);
+    *locations->busy = false;
+    return XRT_MANAGED_OK;
+}
+static inline XrtManagedStatus xrt_managed_frame_local_replace(const XrtManagedFrameLocations *locations,
+    size_t destination, size_t source, bool copy) {
+    XrtManagedHeader **to = xrt_managed_frame_local_owner(locations, destination);
+    XrtManagedHeader **from = xrt_managed_frame_local_owner(locations, source);
+    if (!to || !from || *locations->busy) return XRT_MANAGED_ARGUMENT;
+    if (xrt_managed_frame_local_pending(locations, source) || xrt_managed_frame_local_pending(locations, destination) ||
+        !*from) return XRT_MANAGED_ARGUMENT;
+    if (to == from) return XRT_MANAGED_OK;
+    XrtManagedHeader *value = *from;
+    *locations->busy = true;
+    if (copy && !xrt_managed_retain(value)) {
+        *locations->busy = false;
+        return XRT_MANAGED_REFCOUNT;
+    }
+    XrtManagedHeader *old = *to;
+    *to = value;
+    if (!copy) *from = NULL;
+    xrt_managed_drop(old);
+    *locations->busy = false;
+    return XRT_MANAGED_OK;
+}
+/* Retains a borrowed Header, such as a container element, into one slot and
+ * retires the slot's previous owner. */
+static inline XrtManagedStatus xrt_managed_frame_local_store(const XrtManagedFrameLocations *locations,
+    size_t slot, XrtManagedHeader *borrowed) {
+    XrtManagedHeader **owner = xrt_managed_frame_local_owner(locations, slot);
+    if (!owner || !borrowed || *locations->busy || xrt_managed_frame_local_pending(locations, slot))
+        return XRT_MANAGED_ARGUMENT;
+    *locations->busy = true;
+    if (!xrt_managed_retain(borrowed)) {
+        *locations->busy = false;
+        return XRT_MANAGED_REFCOUNT;
+    }
+    XrtManagedHeader *old = *owner;
+    *owner = borrowed;
+    xrt_managed_drop(old);
+    *locations->busy = false;
+    return XRT_MANAGED_OK;
 }
 #endif
 #ifdef __cplusplus

@@ -2238,7 +2238,7 @@ static XR_NOINLINE XrRbcStatus xr_rbc_owner_drop_step(const XrRbcModule *module,
     RbcValueActivation *activation = rbc_value_owner_activation(stack, index);
     if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
     const XrRbcValueAccess *access = &activation->code->accesses[index];
-    XrtManagedStatus status = xrt_managed_slot_drop(activation->frame,
+    XrtManagedStatus status = xrt_managed_frame_local_drop(&activation->frame_locations,
         activation->code->homes->values[access->source].first_owner);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
     return XR_RBC_OK;
@@ -2249,10 +2249,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_owner_copy_step(const XrRbcModule *module,
     if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
     const XrRbcValueAccess *access = &activation->code->accesses[index];
     const XrLirValueHome *homes = activation->code->homes->values;
-    XrtManagedStatus status = xrt_place_copy_replace(
-        (XrtPlace){.frame = activation->frame, .slot = homes[access->result].first_owner, .nulls = XRT_PLACE_NONNULL},
-        (XrtPlace){.frame = activation->frame, .slot = homes[access->source].first_owner, .nulls = XRT_PLACE_NONNULL},
-        NULL);
+    XrtManagedStatus status = xrt_managed_frame_local_replace(&activation->frame_locations,
+        homes[access->result].first_owner, homes[access->source].first_owner, true);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
     return XR_RBC_OK;
 }
@@ -2301,10 +2299,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_array_get_step(const XrRbcModule *module, 
         status = xrt_array_backing_get(array, kind, at, &item);
     }
     if (status == XRT_MANAGED_OK && kind == XRT_BACKING_ARRAY_STRING) {
-        const XrLirValueHome *result = &code->homes->values[access->result];
-        status = xrt_backing_slot_copy(activation->frame, result->temporary_first_owner, &item.value.string->managed);
-        if (status == XRT_MANAGED_OK)
-            status = xrt_place_frame_move_replace(activation->frame, result->first_owner, result->temporary_first_owner);
+        status = xrt_managed_frame_local_store(&activation->frame_locations,
+            code->homes->values[access->result].first_owner, &item.value.string->managed);
     } else if (status == XRT_MANAGED_OK) {
         XrRbcRegister *output = rbc_value_register(stack, activation, access->result);
         if (!output) status = XRT_MANAGED_ARGUMENT;
@@ -2335,10 +2331,8 @@ static XR_NOINLINE XrRbcStatus xr_rbc_binding_copy_step(const XrRbcModule *modul
     if (!activation) return xr_rbc_values_step(module, stack, index, pc, rbc_value_source(module, stack, pc));
     const XrRbcValueAccess *access = &activation->code->accesses[index];
     const XrLirValueHomes *homes = activation->code->homes;
-    XrtManagedStatus status = xrt_place_copy_replace(
-        (XrtPlace){.frame = activation->frame, .slot = homes->values[access->result].first_owner, .nulls = XRT_PLACE_NONNULL},
-        (XrtPlace){.frame = activation->frame, .slot = homes->bindings[access->source].first_owner, .nulls = XRT_PLACE_NONNULL},
-        NULL);
+    XrtManagedStatus status = xrt_managed_frame_local_replace(&activation->frame_locations,
+        homes->values[access->result].first_owner, homes->bindings[access->source].first_owner, true);
     if (status != XRT_MANAGED_OK) xrt_native_managed_failure(status, rbc_value_source(module, stack, pc));
     return XR_RBC_OK;
 }
