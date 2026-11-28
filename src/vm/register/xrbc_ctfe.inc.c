@@ -94,7 +94,7 @@ static bool rbc_ctfe_opcode(uint32_t op) {
     case XR_RBC_ADD: case XR_RBC_SUB: case XR_RBC_MUL: case XR_RBC_NEG:
     case XR_RBC_DIV: case XR_RBC_REM: case XR_RBC_REMI:
     case XR_RBC_AND: case XR_RBC_OR: case XR_RBC_XOR: case XR_RBC_SHL: case XR_RBC_SHR: case XR_RBC_USHR:
-    case XR_RBC_ADDI: case XR_RBC_SUBI: case XR_RBC_MULI:
+    case XR_RBC_ADDI: case XR_RBC_SUBI: case XR_RBC_MULI: case XR_RBC_ZEXT: case XR_RBC_SEXT:
     case XR_RBC_LT: case XR_RBC_LE: case XR_RBC_EQ: case XR_RBC_LTU: case XR_RBC_LEU:
     case XR_RBC_LTI: case XR_RBC_LEI: case XR_RBC_GTI: case XR_RBC_GEI: case XR_RBC_EQI:
     case XR_RBC_JMP: case XR_RBC_CALL: case XR_RBC_RET: case XR_RBC_RET0: case XR_RBC_ARITHMETIC_PANIC:

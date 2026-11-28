@@ -1053,6 +1053,53 @@ static void test_immediate_selection(void) {
     }
 }
 
+static void test_u8_immediate_selection(void) {
+    static const struct {
+        XrLirOp operation;
+        XrRbcOp opcode;
+        uint64_t argument, literal, expected;
+        bool literal_first;
+    } cases[] = {
+        {XR_LIR_ADD, XR_RBC_ADDI, 250, 127, 121, false},
+        {XR_LIR_SUB, XR_RBC_SUBI, 0, 1, 255, false},
+        {XR_LIR_MUL, XR_RBC_MULI, 200, 2, 144, true},
+        {XR_LIR_ADD, XR_RBC_ADD, 250, 128, 122, false},
+        {XR_LIR_SUB, XR_RBC_SUB, 2, 1, 255, true},
+    };
+    for (size_t n = 0; n < sizeof(cases) / sizeof(*cases); ++n) {
+        XrLirModule *module = NULL;
+        OK(xr_lir_module_create(NULL, &module));
+        XrLirType type = XR_LIR_U8;
+        XrLirFunction function = test_function(module, "byte_arithmetic", &type, 1, type);
+        XrLirBlock entry = test_block(module, function, NULL, 0);
+        OK(xr_lir_set_entry(module, function, entry));
+        XrLirValue input = parameter(module, function, 0);
+        XrLirValue literal = test_constant(module, entry, type, cases[n].literal);
+        XrLirValue operands[] = {
+            cases[n].literal_first ? literal : input,
+            cases[n].literal_first ? input : literal,
+        }, result;
+        OK(xr_lir_emit_value(module, entry, &(XrLirInstruction){
+            .op = cases[n].operation, .type = type, .operands = operands, .operand_count = 2,
+        }, &result));
+        test_return(module, entry, result);
+        OK(xr_lir_module_finish(module, NULL));
+        XrRbcProgram *program = compile(module, function);
+        xr_lir_module_destroy(module);
+
+        const XrRbcFunction *bytecode = &xr_rbc_program_view(program)->functions[0];
+        unsigned operations = 0, normalizations = 0;
+        for (size_t pc = 0; pc < bytecode->code_count; ++pc) {
+            unsigned op = bytecode->code[pc] & 255;
+            operations += op == (unsigned)cases[n].opcode;
+            normalizations += op == XR_RBC_ZEXT;
+        }
+        CHECK(operations == 1 && normalizations == 1);
+        CHECK(run(program, &cases[n].argument, 1) == cases[n].expected);
+        xr_rbc_program_destroy(program);
+    }
+}
+
 static void test_location_ownership(void) {
     XrLirModule *m = NULL;
     OK(xr_lir_module_create(NULL, &m));
@@ -2547,6 +2594,7 @@ int main(void) {
     test_u64_ordered_comparisons();
     test_recursive_and_loop();
     test_immediate_selection();
+    test_u8_immediate_selection();
     test_location_ownership();
     test_comparisons();
     test_arithmetic();

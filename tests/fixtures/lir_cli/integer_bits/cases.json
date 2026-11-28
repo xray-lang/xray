@@ -41,5 +41,13 @@
     "exit": 1,
     "stdout": "",
     "stderr": "[Uncaught Panic] E0420: division by zero\n"
+  },
+  "u8_bool_operand": {
+    "source_error": ":2:20: error: operator requires a declared concrete operand contract"
+  },
+  "u8_wrapping": {
+    "exit": 0,
+    "stdout": "44\n255\n16\n1\n255\n0\n0\n255\n144\n128\n1\n45\ntrue\n52\n251\n44\n",
+    "stderr": ""
   }
 }

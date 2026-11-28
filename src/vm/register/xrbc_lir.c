@@ -290,7 +290,8 @@ static bool rbc_lir_unsigned_operation(const XrLirModule *input, XrLirFunction f
     case XR_LIR_BR: case XR_LIR_RET:
     case XR_LIR_HOST_DIRECTORY_CLOSE_CHECKED: case XR_LIR_HOST_DIRECTORY_RETURN_GUARD:
     case XR_LIR_HOST_DIRECTORY_FAIL: case XR_LIR_MANAGED_FAILURE: case XR_LIR_CHECKED_ARRAY_PUSH: return true;
-    case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG: return i->type == XR_LIR_U64;
+    case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL: case XR_LIR_NEG:
+        return i->type == XR_LIR_U64 || i->type == XR_LIR_U8;
     case XR_LIR_BIT_AND: case XR_LIR_BIT_OR: case XR_LIR_BIT_XOR:
     case XR_LIR_SHL: case XR_LIR_SHR: return true;
     case XR_LIR_ICMP: return source == XR_LIR_U8 || source == XR_LIR_U64 ||
@@ -383,7 +384,7 @@ static uint32_t rbc_lir_immediate_operand(const RbcLirCompiler *c,
     if (i->op == XR_LIR_FCMP && i->predicate == XR_LIR_LE &&
         c->immediates[i->operands[1]].pooled) return 1;
     bool comparison = i->op == XR_LIR_ICMP || i->op == XR_LIR_CONDBR;
-    if (!comparison && (i->type != XR_LIR_I64 ||
+    if (!comparison && ((i->type != XR_LIR_I64 && i->type != XR_LIR_U8) ||
         (i->op != XR_LIR_ADD && i->op != XR_LIR_SUB &&
          i->op != XR_LIR_MUL && i->op != XR_LIR_REM))) return i->operand_count;
     for (uint32_t n = 2; n; --n) {
@@ -421,8 +422,11 @@ static bool rbc_lir_immediates(RbcLirCompiler *c) {
                 c->immediates[i.result].pooled = true;
                 c->immediates[i.result].constant = (uint16_t)index;
             }
-            if (i.op != XR_LIR_CONST || i.type != XR_LIR_I64 ||
-                (i.bits > INT16_MAX && i.bits < UINT64_MAX - 32767)) continue;
+            if (i.op != XR_LIR_CONST) continue;
+            bool signed_immediate = i.type == XR_LIR_I64 &&
+                (i.bits <= INT16_MAX || i.bits >= UINT64_MAX - 32767);
+            bool byte_immediate = i.type == XR_LIR_U8 && i.bits <= INT8_MAX;
+            if (!signed_immediate && !byte_immediate) continue;
             c->immediates[i.result].known = true;
             c->immediates[i.result].value = (int16_t)(i.bits <= INT16_MAX ?
                 (int64_t)i.bits : -1 - (int64_t)~i.bits);
@@ -914,16 +918,26 @@ static uint32_t rbc_lir_copy_temporary(RbcLirCompiler *c, XrRbcRegisterKind kind
 static bool rbc_lir_value_edge(RbcLirCompiler *, XrLirEdgeView, uint32_t, uint32_t, bool);
 #include "xrbc_lir_registers.inc.c"
 
-static unsigned rbc_lir_narrow_shift_width(const XrLirInstructionView *i) {
-    if (i->op != XR_LIR_SHL && i->op != XR_LIR_SHR) return 0;
-    if (i->op == XR_LIR_SHL && i->type >= XR_LIR_I8 && i->type < XR_LIR_I64)
-        return 8u << (unsigned)(i->type - XR_LIR_I8);
-    return i->type == XR_LIR_U8 ? 8u : 0;
+/* Registers carry 64-bit lanes. A narrow integer keeps its mathematical value
+ * in the lane: zero-extended when unsigned, sign-extended when signed. */
+static unsigned rbc_lir_lane_width(XrLirType type) {
+    switch (type) {
+    case XR_LIR_I8: case XR_LIR_U8: return 8;
+    case XR_LIR_I16: case XR_LIR_U16: return 16;
+    case XR_LIR_I32: case XR_LIR_U32: return 32;
+    default: return 0;
+    }
 }
 
-static bool rbc_lir_arithmetic_scratch(const XrLirInstructionView *i) {
-    return (i->op == XR_LIR_INTCAST && i->type == XR_LIR_U8) ||
-        rbc_lir_narrow_shift_width(i) != 0;
+/* Wrapping operations compute at full width and normalize the declared-width
+ * result in place. Right shifts and bitwise operations of normalized inputs
+ * already stay inside the lane, so they need no normalization. */
+static bool rbc_lir_normalize(RbcLirCompiler *c, XrLirType type, uint32_t destination,
+    uint32_t source) {
+    unsigned width = rbc_lir_lane_width(type);
+    if (!width) return rbc_lir_emit(c, XR_RBC_MOV, destination, source, 0, 0);
+    bool sign = type == XR_LIR_I8 || type == XR_LIR_I16 || type == XR_LIR_I32;
+    return rbc_lir_emit(c, sign ? XR_RBC_SEXT : XR_RBC_ZEXT, destination, source, 0, width);
 }
 
 static bool rbc_lir_layout(RbcLirCompiler *c) {
@@ -981,7 +995,6 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                     i.type!=XR_LIR_I64_CELL && i.type!=XR_LIR_STATE && i.type!=XR_LIR_VIEW_FRAME &&
                     i.type!=XR_LIR_VIEW_CELL && i.type!=XR_LIR_SLICE_I64 && i.type<XR_LIR_TYPE_COUNT)++bits;
             }
-            if (rbc_lir_arithmetic_scratch(&i)) ++bits;
             if(strings>UINT32_MAX || bits>UINT32_MAX)
                 return rbc_lir_fail(c,XR_RBC_COMPILE_LIMIT,"instruction temporary count exceeds index space");
             if(c->temporary_maps<maps)c->temporary_maps=(uint32_t)maps;
@@ -1026,7 +1039,6 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
                 if (window < physical + 1) window = physical + 1;
             }
             if (i.op == XR_LIR_CONDBR && !c->scratch_count) c->scratch_count = 1;
-            if (rbc_lir_arithmetic_scratch(&i) && !c->scratch_count) c->scratch_count = 1;
             for (uint32_t e = 0; e < i.edge_count; ++e) {
                 bool scratch = false;
                 if (!xr_lir_edge_parameter_offset(&i,e) && i.op != XR_LIR_INVOKE &&
@@ -1126,30 +1138,11 @@ static bool rbc_lir_constant(RbcLirCompiler *c, uint32_t slot, uint64_t bits) {
         rbc_lir_emit(c, XR_RBC_LOADK, slot, 0, 0, index);
 }
 
-static uint32_t rbc_lir_arithmetic_temporary(const RbcLirCompiler *c) {
-    if (!c->typed_spills) return c->slot_count;
-    return c->slot_count + c->temporary_strings +
-        (uint32_t)rbc_lir_array_temporaries(c, XR_RBC_ARRAY_FAMILY_COUNT) +
-        c->temporary_maps + c->temporary_refs + c->temporary_bits - 1;
-}
-
 static bool rbc_lir_shift(RbcLirCompiler *c, const XrLirInstructionView *i, uint32_t result) {
     uint32_t left = c->slots[i->operands[0]], right = c->slots[i->operands[1]];
-    XrRbcOp shift = i->op == XR_LIR_SHL ? XR_RBC_SHL :
-        i->type <= XR_LIR_I64 ? XR_RBC_SHR : XR_RBC_USHR;
-    unsigned width = rbc_lir_narrow_shift_width(i);
-    if (!width) return rbc_lir_emit(c, shift, result, left, right, 0);
-
-    uint32_t temporary = rbc_lir_arithmetic_temporary(c);
-    if (!rbc_lir_emit(c, shift, result, left, right, 0)) return false;
-    if (i->type == XR_LIR_U8)
-        return rbc_lir_constant(c, temporary, UINT8_MAX) &&
-            rbc_lir_emit(c, XR_RBC_AND, result, result, temporary, 0);
-    /* Signed lanes carry their mathematical value. Right shift preserves it;
-     * a left shift must narrow and sign-extend the declared-width result. */
-    return rbc_lir_constant(c, temporary, 64u - width) &&
-        rbc_lir_emit(c, XR_RBC_SHL, result, result, temporary, 0) &&
-        rbc_lir_emit(c, XR_RBC_SHR, result, result, temporary, 0);
+    if (i->op == XR_LIR_SHR)
+        return rbc_lir_emit(c, i->type <= XR_LIR_I64 ? XR_RBC_SHR : XR_RBC_USHR, result, left, right, 0);
+    return rbc_lir_emit(c, XR_RBC_SHL, result, left, right, 0) && rbc_lir_normalize(c, i->type, result, result);
 }
 
 static bool rbc_lir_predicate(RbcLirCompiler *c, const XrLirInstructionView *i) {
@@ -1279,12 +1272,7 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     case XR_LIR_SHL: case XR_LIR_SHR:
         return rbc_lir_shift(c, i, result);
     case XR_LIR_INTCAST:
-        if (i->type == XR_LIR_U8) {
-            uint32_t temporary = rbc_lir_arithmetic_temporary(c);
-            return rbc_lir_emit(c, XR_RBC_LOADI, temporary, 0, 0, UINT8_MAX) &&
-                rbc_lir_emit(c, XR_RBC_AND, result, c->slots[i->operands[0]], temporary, 0);
-        }
-        return rbc_lir_emit(c, XR_RBC_MOV, result, c->slots[i->operands[0]], 0, 0);
+        return rbc_lir_normalize(c, i->type, result, c->slots[i->operands[0]]);
     case XR_LIR_ITOF: case XR_LIR_FTOI:
         return rbc_lir_emit(c, i->op == XR_LIR_ITOF ? XR_RBC_ITOF : XR_RBC_FTOI,
             result, c->slots[i->operands[0]], 0, 0);
@@ -1384,7 +1372,8 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
             }
             return rbc_lir_emit(c, immediate,
                 result, c->slots[i->operands[1u - selected]], 0,
-                c->immediates[i->operands[selected]].value);
+                c->immediates[i->operands[selected]].value) &&
+                rbc_lir_normalize(c, i->type, result, result);
         }
         XrRbcOp op;
         switch (i->op) {
@@ -1404,8 +1393,11 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         case XR_LIR_FDIV: op = XR_RBC_FDIV; break;
         default: return rbc_lir_fail(c, XR_RBC_COMPILE_UNSUPPORTED, "unsupported operation");
         }
+        bool wraps = i->op == XR_LIR_ADD || i->op == XR_LIR_SUB || i->op == XR_LIR_MUL ||
+            i->op == XR_LIR_NEG;
         return rbc_lir_emit(c, op, result, c->slots[i->operands[0]],
-            i->operand_count == 2 ? c->slots[i->operands[1]] : 0, 0);
+            i->operand_count == 2 ? c->slots[i->operands[1]] : 0, 0) &&
+            (!wraps || rbc_lir_normalize(c, i->type, result, result));
     }
     }
 }

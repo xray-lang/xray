@@ -285,6 +285,16 @@ XR_RBC_CASE(REMI) {
 XR_RBC_CASE(ARITHMETIC_PANIC) {
     xrt_arithmetic_panic(instruction >> 16, XR_RBC_SOURCE());
 }
+XR_RBC_CASE(ZEXT) {
+    // Admission restricts the width to 8, 16 or 32, so both shifts are in range.
+    XR_RBC_REG(XR_RBC_A()) = XR_RBC_REG(XR_RBC_B()) & (UINT64_MAX >> (64u - XR_RBC_C()));
+    XR_RBC_NEXT();
+}
+XR_RBC_CASE(SEXT) {
+    unsigned shift = 64u - XR_RBC_C();
+    XR_RBC_REG(XR_RBC_A()) = xr_rbc_shift_right(XR_RBC_REG(XR_RBC_B()) << shift, shift);
+    XR_RBC_NEXT();
+}
 XR_RBC_CASE(AND) {
     XR_RBC_BINARY(XR_RBC_REG(XR_RBC_B()) & XR_RBC_REG(XR_RBC_C()));
     XR_RBC_NEXT();

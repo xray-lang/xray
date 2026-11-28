@@ -111,7 +111,9 @@
     X(OWNER_ARRAY_UPDATE, ABX) \
     X(OWNER_CALL, ABX) \
     X(OWNER_RETURN, ABX) \
-    X(ARITHMETIC_PANIC, ABX)
+    X(ARITHMETIC_PANIC, ABX) \
+    X(ZEXT, ABS8) \
+    X(SEXT, ABS8)
 
 typedef enum {
 #define XR_RBC_ENUM(name, format) XR_RBC_##name,
@@ -450,6 +452,9 @@ typedef struct XrRbcOutcome XrRbcOutcome;
 // field is a constant index, including 255, rather than a register operand.
 // PRINT_LITERAL reserves A as zero and selects immutable bytes by Bx; its
 // location is the instruction's source map entry, never a scalar register.
+// Registers hold 64-bit lanes, so a narrow integer result is computed at full
+// width and then normalized: ZEXT keeps the low C bits of B and clears the
+// rest, SEXT sign-extends them. C is the lane width, exactly 8, 16 or 32.
 XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t entry,
     const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
     XrRbcExecution **output);

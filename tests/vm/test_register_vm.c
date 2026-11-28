@@ -210,6 +210,59 @@ static void test_immediates(void) {
     }
 }
 
+static void test_lane_normalization(void) {
+    static const struct { uint64_t input, expected; int64_t width; XrRbcOp op; } cases[] = {
+        {300, 44, 8, XR_RBC_ZEXT},
+        {UINT64_MAX, 255, 8, XR_RBC_ZEXT},
+        {255, 255, 8, XR_RBC_ZEXT},
+        {UINT64_C(0x12345678), 0x5678, 16, XR_RBC_ZEXT},
+        {UINT64_MAX, UINT32_MAX, 32, XR_RBC_ZEXT},
+        {128, UINT64_MAX - 127, 8, XR_RBC_SEXT},
+        {127, 127, 8, XR_RBC_SEXT},
+        {384, UINT64_MAX - 127, 8, XR_RBC_SEXT},
+        {UINT64_MAX, UINT64_MAX, 8, XR_RBC_SEXT},
+        {0x8000, UINT64_MAX - 0x7fff, 16, XR_RBC_SEXT},
+        {UINT64_C(0x180000000), UINT64_C(0xffffffff80000000), 32, XR_RBC_SEXT},
+        {UINT64_C(0x7fffffff), 0x7fffffff, 32, XR_RBC_SEXT}
+    };
+    uint32_t code[2];
+    for (size_t n = 0; n < sizeof(cases) / sizeof(*cases); ++n) {
+        for (unsigned destination = 0; destination < 2; ++destination) {
+            uint32_t slot = destination ? 254 : 0;
+            CHECK(xr_rbc_encode(code, (XrRbcOperands){cases[n].op, slot, 0, 0, cases[n].width}));
+            emit(code, 1, XR_RBC_RET, slot, 0, 0);
+            XrRbcFunction f = {.code=code, .code_count=2, .register_count=255, .parameter_count=1};
+            CHECK(run_function(f, &cases[n].input, 1) == cases[n].expected);
+        }
+    }
+    // The width field is an immediate; only the three narrow lanes are admitted.
+    uint32_t root = XR_RBC_RET0;
+    XrRbcRegisterKind kinds[] = {XR_RBC_BITS, XR_RBC_BITS};
+    XrRbcFunction functions[] = {{.code=&root,.code_count=1,.register_count=1},
+        {.code=code,.code_count=2,.register_count=2,.register_kinds=kinds,.register_kind_count=2}};
+    XrRbcModule module = {.functions=functions,.function_count=2};
+    const XrRbcOp ops[] = {XR_RBC_ZEXT, XR_RBC_SEXT};
+    const int64_t widths[] = {0, 1, 7, 9, 24, 64, -8, 127};
+    emit(code, 1, XR_RBC_RET0, 0, 0, 0);
+    for (size_t o = 0; o < sizeof(ops) / sizeof(*ops); ++o) {
+        for (size_t w = 0; w < sizeof(widths) / sizeof(*widths); ++w) {
+            CHECK(xr_rbc_encode(code, (XrRbcOperands){ops[o], 1, 0, 0, widths[w]}));
+            reject_prepare(&module, 0, NULL, 0);
+        }
+        CHECK(xr_rbc_encode(code, (XrRbcOperands){ops[o], 2, 0, 0, 8}));
+        reject_prepare(&module, 0, NULL, 0);
+        CHECK(xr_rbc_encode(code, (XrRbcOperands){ops[o], 0, 2, 0, 8}));
+        reject_prepare(&module, 0, NULL, 0);
+        CHECK(xr_rbc_encode(code, (XrRbcOperands){ops[o], 1, 0, 0, 8}));
+        kinds[0] = XR_RBC_STRING; reject_prepare(&module, 0, NULL, 0); kinds[0] = XR_RBC_BITS;
+        uint32_t sentinel = UINT32_C(0xdeadbeef);
+        CHECK(!xr_rbc_encode(&sentinel, (XrRbcOperands){ops[o], 0, 0, 1, 8}) &&
+            sentinel == UINT32_C(0xdeadbeef));
+        CHECK(!xr_rbc_encode(&sentinel, (XrRbcOperands){ops[o], 0, 0, 0, 128}) &&
+            sentinel == UINT32_C(0xdeadbeef));
+    }
+}
+
 static void test_f64_negation(void) {
     static const uint64_t vectors[][2] = {
 #define XR_FNEG(input, expected) {UINT64_C(0x##input),UINT64_C(0x##expected)},
@@ -1456,6 +1509,7 @@ int main(int argc, char **argv) {
     test_module_capabilities();
     test_float_constant_comparison();
     test_immediates();
+    test_lane_normalization();
     test_scalar_reload_copies();
     test_spill_layout_and_overwrite();
     test_spill_loop();

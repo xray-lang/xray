@@ -323,6 +323,9 @@ static bool xr_rbc_instruction_valid(const XrRbcModule *module,
     case XR_RBC_ADDI: case XR_RBC_SUBI: case XR_RBC_MULI: case XR_RBC_REMI:
         if (a >= registers || b >= registers) return false;
         break;
+    case XR_RBC_ZEXT: case XR_RBC_SEXT:
+        if (a >= registers || b >= registers || (c != 8 && c != 16 && c != 32)) return false;
+        break;
     case XR_RBC_LTI: case XR_RBC_LEI: case XR_RBC_GTI: case XR_RBC_GEI: case XR_RBC_EQI:
         if (a >= registers || remaining <= 2 || (function->code[pc + 1] & 255) != XR_RBC_JMP)
             return false;

@@ -1,0 +1,44 @@
+// u8 arithmetic wraps at eight bits on both backends. The register VM
+// computes in 64-bit lanes and normalizes each narrow result.
+fn byte(value: u8) -> u8 {
+    return value
+}
+
+fn negate(value: u8) -> u8 {
+    return -value
+}
+
+fn next(value: u8) -> u8 {
+    return value + 1
+}
+
+fn previous(value: u8) -> u8 {
+    return value - 1
+}
+
+fn twice(value: u8) -> u8 {
+    return value * 2
+}
+
+print(byte(200) + byte(100))
+print(byte(0) - byte(1))
+print(byte(16) * byte(17))
+print(byte(255) * byte(255))
+print(negate(1))
+print(negate(0))
+print(next(255))
+print(previous(0))
+print(twice(200))
+print(byte(3) << byte(7))
+print(byte(1) << byte(64))
+print((byte(200) + byte(100)) as i64 + 1)
+print(byte(200) + byte(100) < byte(50))
+var total: u8 = 0
+var count = 0
+while (count < 300) {
+    total = total + byte(7)
+    count = count + 1
+}
+print(total)
+print(-5 as u8)
+print(300 as u8)
