@@ -7,7 +7,10 @@
 const HEX = "0123456789ABCDEF"
 
 export enum UrlError {
-    InvalidPercentEncoding { byteOffset: i64 }
+    InvalidPercentEncoding { byteOffset: i64 },
+    // The percent-decoded bytes of a query component are not UTF-8. The
+    // offset is where that component starts.
+    InvalidUtf8 { byteOffset: i64 }
 }
 
 // QueryParams preserves insertion order, duplicate names, empty names, and
@@ -203,7 +206,9 @@ fn decodeImpl(s: string, form: bool) -> string {
         oi = oi + 1
         i = i + 1
     }
-    return try! string.fromUtf8(out[:])
+    // Decoded octets come from untrusted text and need not be UTF-8. Each
+    // invalid sequence becomes U+FFFD rather than ending the program.
+    return string.fromUtf8Lossy(out[:])
 }
 
 fn decodeQueryComponent(s: string, baseOffset: i64) throws(UrlError) -> string {
@@ -234,7 +239,11 @@ fn decodeQueryComponent(s: string, baseOffset: i64) throws(UrlError) -> string {
         oi = oi + 1
         i = i + 1
     }
-    return try! string.fromUtf8(out[:])
+    try {
+        return string.fromUtf8(out[:])
+    } catch (e: Utf8Error) {
+        throw UrlError.InvalidUtf8 { byteOffset: baseOffset }
+    }
 }
 
 fn findChar(s: string, needle: rune, start: i64, end: i64) -> i64 {

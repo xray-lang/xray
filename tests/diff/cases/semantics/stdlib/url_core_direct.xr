@@ -34,6 +34,7 @@ try {
 } catch (e: UrlError) {
     print(match (e) {
         UrlError.InvalidPercentEncoding { byteOffset: offset } => offset,
+        UrlError.InvalidUtf8 { byteOffset: offset } => -1 - offset,
     })
 }
 print(url.resolve("https://example.com/a/b/c", "d.html"))

@@ -1,0 +1,10 @@
+// Percent-decoded octets that are not UTF-8 decode to U+FFFD on both
+// backends instead of ending the program.
+import url
+
+print(url.decode("ok%41"))
+print(url.decode("%FF"))
+print(url.decode("a%E4%B8b"))
+print(url.decodeForm("x+%FF+y"))
+print(url.decode("%E4%B8%AD%2B+"))
+print(url.decodeForm("%E4%B8%AD%2B+"))

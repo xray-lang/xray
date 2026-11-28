@@ -203,6 +203,7 @@ fn test_query_invalid_percent_is_typed_error() {
     } catch (e: UrlError) {
         offset = match (e) {
             UrlError.InvalidPercentEncoding { byteOffset: at } => at,
+        UrlError.InvalidUtf8 { byteOffset: at } => -1 - at,
         }
     }
     assertEqual(offset, 9)
